@@ -1,0 +1,11 @@
+[package]
+name = "rom-weaver-core"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+rayon.workspace = true
+serde.workspace = true
+thiserror.workspace = true

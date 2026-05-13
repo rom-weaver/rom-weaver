@@ -1,0 +1,9 @@
+[package]
+name = "rom-weaver-containers"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+rom-weaver-core = { path = "../rom-weaver-core" }

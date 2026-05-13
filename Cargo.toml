@@ -1,0 +1,26 @@
+[workspace]
+members = [
+    "crates/rom-weaver-checksum",
+    "crates/rom-weaver-cli",
+    "crates/rom-weaver-codecs",
+    "crates/rom-weaver-containers",
+    "crates/rom-weaver-core",
+    "crates/rom-weaver-patches",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2024"
+license = "MIT OR Apache-2.0"
+rust-version = "1.85"
+version = "0.1.0"
+
+[workspace.dependencies]
+assert_cmd = "2.1.1"
+assert_fs = "1.1.3"
+clap = { version = "4.5.51", features = ["derive"] }
+predicates = "3.1.3"
+rayon = "1.11.0"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+thiserror = "2.0.17"
