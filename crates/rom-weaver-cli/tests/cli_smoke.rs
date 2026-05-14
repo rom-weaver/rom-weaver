@@ -118,6 +118,48 @@ fn build_patch(app_header: Option<&[u8]>, windows: Vec<TestWindow>) -> Vec<u8> {
     bytes
 }
 
+const SIMPLE_BPS_PATCH: [u8; 25] = [
+    0x42, 0x50, 0x53, 0x31, 0x8C, 0x8E, 0x80, 0x94, 0x85, 0x5A, 0x5A, 0x96, 0x8C, 0x34, 0x2A, 0x6E,
+    0x5A, 0xB9, 0x87, 0x43, 0x50, 0xB0, 0xFC, 0x51, 0xA7,
+];
+
+enum TestIpsRecord {
+    Literal { offset: u32, data: Vec<u8> },
+    Rle { offset: u32, len: u16, value: u8 },
+}
+
+fn write_u24(bytes: &mut Vec<u8>, value: u32) {
+    assert!(value <= 0x00FF_FFFF);
+    bytes.push((value >> 16) as u8);
+    bytes.push((value >> 8) as u8);
+    bytes.push(value as u8);
+}
+
+fn build_ips_patch(records: Vec<TestIpsRecord>, truncate_size: Option<u32>) -> Vec<u8> {
+    let mut bytes = b"PATCH".to_vec();
+    for record in records {
+        match record {
+            TestIpsRecord::Literal { offset, data } => {
+                write_u24(&mut bytes, offset);
+                let len = u16::try_from(data.len()).expect("literal len");
+                bytes.extend_from_slice(&len.to_be_bytes());
+                bytes.extend_from_slice(&data);
+            }
+            TestIpsRecord::Rle { offset, len, value } => {
+                write_u24(&mut bytes, offset);
+                bytes.extend_from_slice(&0u16.to_be_bytes());
+                bytes.extend_from_slice(&len.to_be_bytes());
+                bytes.push(value);
+            }
+        }
+    }
+    bytes.extend_from_slice(b"EOF");
+    if let Some(size) = truncate_size {
+        write_u24(&mut bytes, size);
+    }
+    bytes
+}
+
 #[test]
 fn inspect_reports_known_container_as_unsupported() {
     let temp = setup_temp_dir();
@@ -255,12 +297,27 @@ fn compress_routes_through_registered_container_format() {
 }
 
 #[test]
-fn patch_apply_routes_through_registered_patch_format() {
+fn patch_apply_succeeds_for_valid_ips_patch() {
     let temp = setup_temp_dir();
-    temp.child("input.bin").write_str("old").expect("fixture");
-    temp.child("update.ips")
-        .write_str("patch")
-        .expect("fixture");
+    fs::write(temp.child("input.bin").path(), b"abcdefgh").expect("fixture");
+    fs::write(
+        temp.child("update.ips").path(),
+        build_ips_patch(
+            vec![
+                TestIpsRecord::Literal {
+                    offset: 2,
+                    data: b"XYZ".to_vec(),
+                },
+                TestIpsRecord::Rle {
+                    offset: 7,
+                    len: 4,
+                    value: b'!',
+                },
+            ],
+            Some(11),
+        ),
+    )
+    .expect("fixture");
 
     let output = Command::cargo_bin("rom-weaver")
         .expect("binary")
@@ -272,10 +329,12 @@ fn patch_apply_routes_through_registered_patch_format() {
             temp.child("update.ips").path().to_str().expect("path"),
             "--output",
             temp.child("output.bin").path().to_str().expect("path"),
+            "--threads",
+            "8",
             "--json",
         ])
         .assert()
-        .code(2)
+        .code(0)
         .get_output()
         .stdout
         .clone();
@@ -284,7 +343,14 @@ fn patch_apply_routes_through_registered_patch_format() {
     assert_eq!(json["command"], "patch-apply");
     assert_eq!(json["family"], "patch");
     assert_eq!(json["format"], "IPS");
-    assert_eq!(json["status"], "unsupported");
+    assert_eq!(json["requested_threads"], 8);
+    assert_eq!(json["effective_threads"], 1);
+    assert_eq!(json["used_parallelism"], false);
+    assert_eq!(json["status"], "succeeded");
+    assert_eq!(
+        fs::read(temp.child("output.bin").path()).expect("output"),
+        b"abXYZfg!!!!"
+    );
 }
 
 #[test]
@@ -557,6 +623,105 @@ fn patch_apply_succeeds_for_valid_xdelta_patch() {
         fs::read(temp.child("output.bin").path()).expect("output"),
         expected
     );
+}
+
+#[test]
+fn patch_apply_succeeds_for_valid_bps_patch() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("input.bin").path(), b"abcabcabcabc").expect("fixture");
+    fs::write(temp.child("update.bps").path(), SIMPLE_BPS_PATCH).expect("fixture");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            temp.child("input.bin").path().to_str().expect("path"),
+            "--patch",
+            temp.child("update.bps").path().to_str().expect("path"),
+            "--output",
+            temp.child("output.bin").path().to_str().expect("path"),
+            "--threads",
+            "8",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "patch-apply");
+    assert_eq!(json["family"], "patch");
+    assert_eq!(json["format"], "BPS");
+    assert_eq!(json["requested_threads"], 8);
+    assert_eq!(json["effective_threads"], 1);
+    assert_eq!(json["used_parallelism"], false);
+    assert_eq!(json["status"], "succeeded");
+    assert_eq!(
+        fs::read(temp.child("output.bin").path()).expect("output"),
+        b"abcabcZZabcabc"
+    );
+}
+
+#[test]
+fn patch_apply_uses_parallel_threads_for_large_ips_patch() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("input.bin").path(), []).expect("fixture");
+
+    let total_len = (2 * 1024 * 1024 + 321) as u32;
+    let mut records = Vec::new();
+    let mut offset = 0u32;
+    while offset < total_len {
+        let remaining = total_len - offset;
+        let len = remaining.min(u16::MAX as u32) as u16;
+        records.push(TestIpsRecord::Rle {
+            offset,
+            len,
+            value: b'Z',
+        });
+        offset += u32::from(len);
+    }
+
+    fs::write(
+        temp.child("update.ips").path(),
+        build_ips_patch(records, Some(total_len)),
+    )
+    .expect("fixture");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            temp.child("input.bin").path().to_str().expect("path"),
+            "--patch",
+            temp.child("update.ips").path().to_str().expect("path"),
+            "--output",
+            temp.child("output.bin").path().to_str().expect("path"),
+            "--threads",
+            "8",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "patch-apply");
+    assert_eq!(json["family"], "patch");
+    assert_eq!(json["format"], "IPS");
+    assert_eq!(json["requested_threads"], 8);
+    assert_eq!(json["effective_threads"], 2);
+    assert_eq!(json["used_parallelism"], true);
+    assert_eq!(json["status"], "succeeded");
+
+    let output_bytes = fs::read(temp.child("output.bin").path()).expect("output");
+    assert_eq!(output_bytes.len(), total_len as usize);
+    assert!(output_bytes.iter().all(|byte| *byte == b'Z'));
 }
 
 #[test]

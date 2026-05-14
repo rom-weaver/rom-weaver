@@ -6,6 +6,7 @@ rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
+crc32fast = "1.5.0"
 rom-weaver-core = { path = "../rom-weaver-core" }
 rayon.workspace = true
 xdelta3 = "0.1.5"

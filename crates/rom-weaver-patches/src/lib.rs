@@ -1,8 +1,12 @@
+mod bps;
+mod ips;
 mod vcdiff;
 mod xdelta_ffi;
 
 use std::{path::Path, sync::Arc};
 
+use bps::BpsPatchHandler;
+use ips::IpsPatchHandler;
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
     PatchCapabilities, PatchCreateRequest, PatchHandler, ProbeConfidence, Result,
@@ -96,8 +100,8 @@ impl PatchRegistry {
     pub fn new() -> Self {
         Self {
             handlers: vec![
-                Arc::new(StaticPatchHandler::new(&IPS)),
-                Arc::new(StaticPatchHandler::new(&BPS)),
+                Arc::new(IpsPatchHandler::new(&IPS)),
+                Arc::new(BpsPatchHandler::new(&BPS)),
                 Arc::new(StaticPatchHandler::new(&UPS)),
                 Arc::new(VcdiffPatchHandler::new(&VCDIFF)),
                 Arc::new(VcdiffPatchHandler::new(&XDELTA)),
