@@ -1,0 +1,1097 @@
+use std::{
+    cmp::{max, min},
+    fs::{self, File},
+    io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write},
+    path::{Path, PathBuf},
+};
+
+use rayon::prelude::*;
+use rom_weaver_core::{
+    ChunkPlanner, FileChunk, FormatDescriptor, OperationContext, OperationFamily, OperationReport,
+    PatchApplyRequest, PatchCapabilities, PatchCreateRequest, PatchHandler, ProbeConfidence,
+    Result, RomWeaverError, ThreadCapability,
+};
+
+const IPS_MAGIC: &[u8; 5] = b"PATCH";
+const IPS_EOF: &[u8; 3] = b"EOF";
+const COMPARE_BUFFER_SIZE: usize = 64 * 1024;
+const OUTPUT_CHUNK_SIZE: u64 = 2 * 1024 * 1024;
+const MAX_IPS_RECORD_LEN: usize = u16::MAX as usize;
+const MAX_IPS_OFFSET: u64 = 0x00FF_FFFF;
+const MIN_RLE_RECORD_LEN: usize = 4;
+
+pub struct IpsPatchHandler {
+    descriptor: &'static FormatDescriptor,
+}
+
+impl IpsPatchHandler {
+    pub const fn new(descriptor: &'static FormatDescriptor) -> Self {
+        Self { descriptor }
+    }
+}
+
+impl PatchHandler for IpsPatchHandler {
+    fn descriptor(&self) -> &'static FormatDescriptor {
+        self.descriptor
+    }
+
+    fn probe(&self, _patch_path: &Path) -> ProbeConfidence {
+        ProbeConfidence::Extension
+    }
+
+    fn parse(&self, patch_path: &Path, _context: &OperationContext) -> Result<OperationReport> {
+        let patch = parse_ips_file(patch_path)?;
+        let label = if let Some(size) = patch.truncate_size {
+            format!(
+                "parsed {} patch with {} record(s) and output size {}",
+                self.descriptor.name,
+                patch.records.len(),
+                size
+            )
+        } else {
+            format!(
+                "parsed {} patch with {} record(s)",
+                self.descriptor.name,
+                patch.records.len()
+            )
+        };
+
+        Ok(OperationReport::succeeded(
+            OperationFamily::Patch,
+            Some(self.descriptor.name.to_string()),
+            "parse",
+            label,
+            Some(1.0),
+            None,
+        ))
+    }
+
+    fn apply(
+        &self,
+        request: &PatchApplyRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        if request.patches.len() != 1 {
+            return Err(RomWeaverError::Validation(format!(
+                "{} apply expects exactly one patch file",
+                self.descriptor.name
+            )));
+        }
+
+        let patch = parse_ips_file(&request.patches[0])?;
+        let input_len = fs::metadata(&request.input)?.len();
+        let output_size = patch.resolved_output_size(input_len)?;
+        let max_parallel_chunks = max_parallel_chunks(output_size)?;
+        let (execution, pool) =
+            context.build_pool(ThreadCapability::parallel(Some(max_parallel_chunks)))?;
+        let tasks = build_chunk_tasks(&patch, output_size, context)?;
+
+        let render_result = pool.install(|| {
+            tasks
+                .par_iter()
+                .map(|task| render_chunk_task(task, &request.input, input_len, &patch, context))
+                .collect::<Result<Vec<_>>>()
+        });
+
+        if let Err(error) = render_result {
+            cleanup_chunk_files(&tasks);
+            return Err(error);
+        }
+
+        let assemble_result = assemble_output(&request.output, &tasks, context);
+        cleanup_chunk_files(&tasks);
+        assemble_result?;
+
+        Ok(OperationReport::succeeded(
+            OperationFamily::Patch,
+            Some(self.descriptor.name.to_string()),
+            "apply",
+            format!(
+                "applied {} patch with {} record(s)",
+                self.descriptor.name,
+                patch.records.len()
+            ),
+            Some(1.0),
+            Some(execution),
+        ))
+    }
+
+    fn create(
+        &self,
+        request: &PatchCreateRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let execution = context.plan_threads(ThreadCapability::single_threaded());
+        let original_len = fs::metadata(&request.original)?.len();
+        let modified_len = fs::metadata(&request.modified)?.len();
+
+        if let Some(parent) = request.output.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        let output_file = File::create(&request.output)?;
+        let mut output = BufWriter::new(output_file);
+        let create_result = create_ips_patch_streaming(
+            &request.original,
+            original_len,
+            &request.modified,
+            modified_len,
+            &mut output,
+            context,
+        )?;
+        output.flush()?;
+
+        Ok(OperationReport::succeeded(
+            OperationFamily::Patch,
+            Some(self.descriptor.name.to_string()),
+            "create",
+            format!(
+                "created {} patch with {} record(s)",
+                self.descriptor.name, create_result.record_count
+            ),
+            Some(1.0),
+            Some(execution),
+        ))
+    }
+
+    fn capabilities(&self) -> PatchCapabilities {
+        PatchCapabilities {
+            parse: true,
+            apply: true,
+            create: true,
+            threaded_scan: false,
+            threaded_diff: false,
+            threaded_output: false,
+        }
+    }
+}
+
+#[derive(Debug)]
+struct ParsedIpsPatch {
+    truncate_size: Option<u64>,
+    max_written_end: u64,
+    records: Vec<IpsRecord>,
+}
+
+impl ParsedIpsPatch {
+    fn resolved_output_size(&self, input_len: u64) -> Result<u64> {
+        let output_size = self
+            .truncate_size
+            .unwrap_or_else(|| input_len.max(self.max_written_end));
+        if self.max_written_end > output_size {
+            return Err(RomWeaverError::Validation(format!(
+                "IPS record exceeded declared output size {output_size}"
+            )));
+        }
+        Ok(output_size)
+    }
+}
+
+#[derive(Debug)]
+struct IpsRecord {
+    offset: u64,
+    len: u64,
+    data: IpsRecordData,
+}
+
+impl IpsRecord {
+    fn end(&self) -> Result<u64> {
+        checked_add(self.offset, self.len, "IPS record end")
+    }
+}
+
+#[derive(Debug)]
+enum IpsRecordData {
+    Literal(Vec<u8>),
+    Rle { byte: u8 },
+}
+
+#[derive(Debug)]
+struct ChunkTask {
+    chunk: FileChunk,
+    temp_path: PathBuf,
+    record_indexes: Vec<usize>,
+}
+
+#[derive(Debug, Default)]
+struct IpsCreateResult {
+    record_count: usize,
+    max_written_end: u64,
+}
+
+#[derive(Debug)]
+struct PendingDiff {
+    start_offset: u64,
+    bytes: Vec<u8>,
+}
+
+fn parse_ips_file(path: &Path) -> Result<ParsedIpsPatch> {
+    let bytes = fs::read(path)?;
+    parse_ips_bytes(&bytes)
+}
+
+fn parse_ips_bytes(bytes: &[u8]) -> Result<ParsedIpsPatch> {
+    if bytes.len() < IPS_MAGIC.len() + IPS_EOF.len() {
+        return Err(RomWeaverError::Validation(
+            "IPS patch is too small to contain a valid header and footer".into(),
+        ));
+    }
+
+    let mut parser = IpsParser::new(bytes);
+    if parser.read_exact(IPS_MAGIC.len())? != IPS_MAGIC {
+        return Err(RomWeaverError::Validation("Patch header invalid".into()));
+    }
+
+    let mut records = Vec::new();
+    let mut max_written_end = 0u64;
+
+    loop {
+        let marker = parser.read_exact(IPS_EOF.len())?;
+        if marker == IPS_EOF {
+            let truncate_size = match parser.remaining() {
+                0 => None,
+                3 => Some(u64::from(parser.read_u24()?)),
+                _ => {
+                    return Err(RomWeaverError::Validation(
+                        "IPS patch contained unexpected trailing data after EOF".into(),
+                    ));
+                }
+            };
+
+            if let Some(size) = truncate_size {
+                if max_written_end > size {
+                    return Err(RomWeaverError::Validation(format!(
+                        "IPS record exceeded declared output size {size}"
+                    )));
+                }
+            }
+
+            return Ok(ParsedIpsPatch {
+                truncate_size,
+                max_written_end,
+                records,
+            });
+        }
+
+        let offset = u64::from(read_u24(marker));
+        let size = parser.read_u16()?;
+        let (len, data) = if size == 0 {
+            let rle_len = u64::from(parser.read_u16()?);
+            if rle_len == 0 {
+                return Err(RomWeaverError::Validation(
+                    "IPS RLE record length must be greater than zero".into(),
+                ));
+            }
+            let byte = parser.read_exact(1)?[0];
+            (rle_len, IpsRecordData::Rle { byte })
+        } else {
+            let data = parser.read_exact(usize::from(size))?.to_vec();
+            (u64::from(size), IpsRecordData::Literal(data))
+        };
+
+        let end = checked_add(offset, len, "IPS record end")?;
+        max_written_end = max(max_written_end, end);
+        records.push(IpsRecord { offset, len, data });
+    }
+}
+
+fn max_parallel_chunks(output_size: u64) -> Result<usize> {
+    let chunk_count = if output_size == 0 {
+        1
+    } else {
+        output_size.div_ceil(OUTPUT_CHUNK_SIZE)
+    };
+    usize::try_from(chunk_count).map_err(|_| {
+        RomWeaverError::Validation(
+            "IPS output required more chunks than this platform can index".into(),
+        )
+    })
+}
+
+fn create_ips_patch_streaming(
+    original_path: &Path,
+    original_len: u64,
+    modified_path: &Path,
+    modified_len: u64,
+    output: &mut impl Write,
+    context: &OperationContext,
+) -> Result<IpsCreateResult> {
+    let mut original = BufReader::new(File::open(original_path)?);
+    let mut modified = BufReader::new(File::open(modified_path)?);
+    let mut original_buffer = vec![0u8; COMPARE_BUFFER_SIZE];
+    let mut modified_buffer = vec![0u8; COMPARE_BUFFER_SIZE];
+    let mut pending = None;
+    let mut created = IpsCreateResult::default();
+    let mut offset = 0u64;
+
+    output.write_all(IPS_MAGIC)?;
+
+    while offset < modified_len {
+        context.cancel().check()?;
+
+        let chunk_len = usize::try_from((modified_len - offset).min(COMPARE_BUFFER_SIZE as u64))
+            .map_err(|_| {
+                RomWeaverError::Validation("IPS compare chunk exceeded addressable memory".into())
+            })?;
+        modified.read_exact(&mut modified_buffer[..chunk_len])?;
+
+        let original_bytes = if offset >= original_len {
+            0
+        } else {
+            usize::try_from((original_len - offset).min(chunk_len as u64)).map_err(|_| {
+                RomWeaverError::Validation("IPS original chunk exceeded addressable memory".into())
+            })?
+        };
+        if original_bytes > 0 {
+            original.read_exact(&mut original_buffer[..original_bytes])?;
+        }
+        if original_bytes < chunk_len {
+            original_buffer[original_bytes..chunk_len].fill(0);
+        }
+
+        for index in 0..chunk_len {
+            let original_byte = original_buffer[index];
+            let modified_byte = modified_buffer[index];
+            if original_byte == modified_byte {
+                flush_pending_diff(&mut pending, output, &mut created)?;
+            } else {
+                if pending
+                    .as_ref()
+                    .is_some_and(|diff| diff.bytes.len() == MAX_IPS_RECORD_LEN)
+                {
+                    flush_pending_diff(&mut pending, output, &mut created)?;
+                }
+
+                let diff = pending.get_or_insert_with(|| PendingDiff {
+                    start_offset: offset,
+                    bytes: Vec::with_capacity(MAX_IPS_RECORD_LEN),
+                });
+                diff.bytes.push(modified_byte);
+            }
+            offset += 1;
+        }
+    }
+
+    flush_pending_diff(&mut pending, output, &mut created)?;
+    output.write_all(IPS_EOF)?;
+
+    if truncate_size_required(original_len, modified_len, created.max_written_end) {
+        write_u24(output, modified_len, "IPS truncate size")?;
+    }
+
+    Ok(created)
+}
+
+fn flush_pending_diff(
+    pending: &mut Option<PendingDiff>,
+    output: &mut impl Write,
+    created: &mut IpsCreateResult,
+) -> Result<()> {
+    let Some(diff) = pending.take() else {
+        return Ok(());
+    };
+    write_pending_diff(output, &diff, created)
+}
+
+fn write_pending_diff(
+    output: &mut impl Write,
+    diff: &PendingDiff,
+    created: &mut IpsCreateResult,
+) -> Result<()> {
+    if diff.bytes.is_empty() {
+        return Ok(());
+    }
+
+    if diff.bytes.len() >= MIN_RLE_RECORD_LEN
+        && diff.bytes.iter().all(|byte| *byte == diff.bytes[0])
+    {
+        write_rle_record(
+            output,
+            diff.start_offset,
+            diff.bytes.len(),
+            diff.bytes[0],
+            created,
+        )
+    } else {
+        write_literal_record(output, diff.start_offset, &diff.bytes, created)
+    }
+}
+
+fn write_literal_record(
+    output: &mut impl Write,
+    offset: u64,
+    data: &[u8],
+    created: &mut IpsCreateResult,
+) -> Result<()> {
+    if data.is_empty() {
+        return Ok(());
+    }
+
+    if data.len() > MAX_IPS_RECORD_LEN {
+        return Err(RomWeaverError::Validation(
+            "IPS literal record exceeded maximum encodable length".into(),
+        ));
+    }
+
+    write_u24(output, offset, "IPS record offset")?;
+    let data_len = u16::try_from(data.len()).map_err(|_| {
+        RomWeaverError::Validation("IPS literal record length exceeded encodable range".into())
+    })?;
+    output.write_all(&data_len.to_be_bytes())?;
+    output.write_all(data)?;
+
+    created.record_count += 1;
+    created.max_written_end = max(
+        created.max_written_end,
+        checked_add(offset, data.len() as u64, "IPS literal record end")?,
+    );
+    Ok(())
+}
+
+fn write_rle_record(
+    output: &mut impl Write,
+    offset: u64,
+    len: usize,
+    byte: u8,
+    created: &mut IpsCreateResult,
+) -> Result<()> {
+    if len == 0 {
+        return Ok(());
+    }
+    if len > MAX_IPS_RECORD_LEN {
+        return Err(RomWeaverError::Validation(
+            "IPS RLE record exceeded maximum encodable length".into(),
+        ));
+    }
+
+    write_u24(output, offset, "IPS record offset")?;
+    output.write_all(&0u16.to_be_bytes())?;
+    let rle_len = u16::try_from(len).map_err(|_| {
+        RomWeaverError::Validation("IPS RLE record length exceeded encodable range".into())
+    })?;
+    output.write_all(&rle_len.to_be_bytes())?;
+    output.write_all(&[byte])?;
+
+    created.record_count += 1;
+    created.max_written_end = max(
+        created.max_written_end,
+        checked_add(offset, len as u64, "IPS RLE record end")?,
+    );
+    Ok(())
+}
+
+fn truncate_size_required(original_len: u64, modified_len: u64, max_written_end: u64) -> bool {
+    modified_len < original_len || (modified_len > original_len && max_written_end < modified_len)
+}
+
+fn write_u24(output: &mut impl Write, value: u64, label: &str) -> Result<()> {
+    if value > MAX_IPS_OFFSET {
+        return Err(RomWeaverError::Validation(format!(
+            "{label} exceeded the IPS 24-bit limit"
+        )));
+    }
+
+    let value = u32::try_from(value)
+        .map_err(|_| RomWeaverError::Validation(format!("{label} exceeded u32")))?;
+    output.write_all(&[
+        ((value >> 16) & 0xff) as u8,
+        ((value >> 8) & 0xff) as u8,
+        (value & 0xff) as u8,
+    ])?;
+    Ok(())
+}
+
+fn build_chunk_tasks(
+    patch: &ParsedIpsPatch,
+    output_size: u64,
+    context: &OperationContext,
+) -> Result<Vec<ChunkTask>> {
+    let planner = ChunkPlanner::new(OUTPUT_CHUNK_SIZE)?;
+    let chunks = planner.plan(output_size);
+    let mut record_indexes = vec![Vec::new(); chunks.len()];
+
+    for (record_index, record) in patch.records.iter().enumerate() {
+        let start_chunk = usize::try_from(record.offset / OUTPUT_CHUNK_SIZE).map_err(|_| {
+            RomWeaverError::Validation("IPS record offset exceeded chunk index range".into())
+        })?;
+        let end_chunk = usize::try_from((record.end()? - 1) / OUTPUT_CHUNK_SIZE).map_err(|_| {
+            RomWeaverError::Validation("IPS record end exceeded chunk index range".into())
+        })?;
+
+        for chunk_index in start_chunk..=end_chunk {
+            record_indexes[chunk_index].push(record_index);
+        }
+    }
+
+    Ok(chunks
+        .into_iter()
+        .zip(record_indexes)
+        .map(|(chunk, record_indexes)| ChunkTask {
+            temp_path: context
+                .temp_paths()
+                .next_path(&format!("ips-chunk-{}", chunk.index), Some("bin")),
+            chunk,
+            record_indexes,
+        })
+        .collect())
+}
+
+fn render_chunk_task(
+    task: &ChunkTask,
+    input_path: &Path,
+    input_len: u64,
+    patch: &ParsedIpsPatch,
+    context: &OperationContext,
+) -> Result<()> {
+    context.cancel().check()?;
+
+    let chunk_len = usize::try_from(task.chunk.len).map_err(|_| {
+        RomWeaverError::Validation("IPS chunk length exceeded addressable memory".into())
+    })?;
+    let mut buffer = vec![0u8; chunk_len];
+    read_input_chunk(input_path, input_len, &task.chunk, &mut buffer)?;
+
+    let chunk_start = task.chunk.offset;
+    let chunk_end = checked_add(task.chunk.offset, task.chunk.len, "IPS chunk end")?;
+
+    for &record_index in &task.record_indexes {
+        context.cancel().check()?;
+        let record = &patch.records[record_index];
+        let record_end = record.end()?;
+        let overlap_start = max(chunk_start, record.offset);
+        let overlap_end = min(chunk_end, record_end);
+        if overlap_start >= overlap_end {
+            continue;
+        }
+
+        let dst_start = usize::try_from(overlap_start - chunk_start).map_err(|_| {
+            RomWeaverError::Validation(
+                "IPS chunk destination offset exceeded addressable memory".into(),
+            )
+        })?;
+        let overlap_len = usize::try_from(overlap_end - overlap_start).map_err(|_| {
+            RomWeaverError::Validation("IPS overlap length exceeded addressable memory".into())
+        })?;
+        let dst_end = dst_start + overlap_len;
+
+        match &record.data {
+            IpsRecordData::Literal(data) => {
+                let src_start = usize::try_from(overlap_start - record.offset).map_err(|_| {
+                    RomWeaverError::Validation(
+                        "IPS literal overlap offset exceeded addressable memory".into(),
+                    )
+                })?;
+                let src_end = src_start + overlap_len;
+                buffer[dst_start..dst_end].copy_from_slice(&data[src_start..src_end]);
+            }
+            IpsRecordData::Rle { byte } => {
+                buffer[dst_start..dst_end].fill(*byte);
+            }
+        }
+    }
+
+    if let Some(parent) = task.temp_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let mut writer = BufWriter::new(File::create(&task.temp_path)?);
+    writer.write_all(&buffer)?;
+    writer.flush()?;
+    Ok(())
+}
+
+fn read_input_chunk(
+    input_path: &Path,
+    input_len: u64,
+    chunk: &FileChunk,
+    buffer: &mut [u8],
+) -> Result<()> {
+    if buffer.is_empty() || chunk.offset >= input_len {
+        return Ok(());
+    }
+
+    let bytes_to_read =
+        usize::try_from((input_len - chunk.offset).min(chunk.len)).map_err(|_| {
+            RomWeaverError::Validation("IPS input chunk exceeded addressable memory".into())
+        })?;
+    if bytes_to_read == 0 {
+        return Ok(());
+    }
+
+    let mut input = File::open(input_path)?;
+    input.seek(SeekFrom::Start(chunk.offset))?;
+    input.read_exact(&mut buffer[..bytes_to_read])?;
+    Ok(())
+}
+
+fn assemble_output(
+    output_path: &Path,
+    tasks: &[ChunkTask],
+    context: &OperationContext,
+) -> Result<()> {
+    if let Some(parent) = output_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    let mut output = BufWriter::new(File::create(output_path)?);
+    for task in tasks {
+        context.cancel().check()?;
+        let mut reader = BufReader::new(File::open(&task.temp_path)?);
+        std::io::copy(&mut reader, &mut output)?;
+    }
+    output.flush()?;
+    Ok(())
+}
+
+fn cleanup_chunk_files(tasks: &[ChunkTask]) {
+    for task in tasks {
+        let _ = fs::remove_file(&task.temp_path);
+    }
+}
+
+fn checked_add(left: u64, right: u64, label: &str) -> Result<u64> {
+    left.checked_add(right)
+        .ok_or_else(|| RomWeaverError::Validation(format!("{label} overflowed available range")))
+}
+
+fn read_u24(bytes: &[u8]) -> u32 {
+    (u32::from(bytes[0]) << 16) | (u32::from(bytes[1]) << 8) | u32::from(bytes[2])
+}
+
+struct IpsParser<'a> {
+    bytes: &'a [u8],
+    offset: usize,
+}
+
+impl<'a> IpsParser<'a> {
+    fn new(bytes: &'a [u8]) -> Self {
+        Self { bytes, offset: 0 }
+    }
+
+    fn remaining(&self) -> usize {
+        self.bytes.len().saturating_sub(self.offset)
+    }
+
+    fn read_exact(&mut self, len: usize) -> Result<&'a [u8]> {
+        let end = self
+            .offset
+            .checked_add(len)
+            .ok_or_else(|| RomWeaverError::Validation("IPS parser offset overflowed".into()))?;
+        if end > self.bytes.len() {
+            return Err(RomWeaverError::Validation(
+                "IPS patch ended unexpectedly while reading record data".into(),
+            ));
+        }
+
+        let start = self.offset;
+        self.offset = end;
+        Ok(&self.bytes[start..end])
+    }
+
+    fn read_u16(&mut self) -> Result<u16> {
+        let bytes = self.read_exact(2)?;
+        Ok(u16::from_be_bytes([bytes[0], bytes[1]]))
+    }
+
+    fn read_u24(&mut self) -> Result<u32> {
+        let bytes = self.read_exact(3)?;
+        Ok(read_u24(bytes))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        env, fs,
+        path::PathBuf,
+        sync::Arc,
+        sync::atomic::{AtomicU64, Ordering},
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    use rom_weaver_core::{
+        CancellationToken, NoopProgressSink, OperationContext, PatchApplyRequest,
+        PatchCreateRequest, PatchHandler, ThreadBudget,
+    };
+
+    use super::{
+        IPS_EOF, IPS_MAGIC, IpsPatchHandler, IpsRecordData, MAX_IPS_RECORD_LEN, OUTPUT_CHUNK_SIZE,
+        parse_ips_bytes,
+    };
+    use crate::IPS;
+
+    static NEXT_TEST_DIR_ID: AtomicU64 = AtomicU64::new(0);
+
+    #[derive(Debug)]
+    enum TestIpsRecord {
+        Literal { offset: u32, data: Vec<u8> },
+        Rle { offset: u32, len: u16, value: u8 },
+    }
+
+    struct TestDir {
+        path: PathBuf,
+    }
+
+    impl TestDir {
+        fn new() -> Self {
+            let timestamp = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("time")
+                .as_nanos();
+            let sequence = NEXT_TEST_DIR_ID.fetch_add(1, Ordering::Relaxed);
+            let path = env::temp_dir().join(format!(
+                "rom-weaver-ips-tests-{}-{timestamp}-{sequence}",
+                std::process::id(),
+            ));
+            fs::create_dir_all(&path).expect("temp dir");
+            Self { path }
+        }
+
+        fn child(&self, name: &str) -> PathBuf {
+            self.path.join(name)
+        }
+    }
+
+    impl Drop for TestDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
+
+    #[test]
+    fn parse_rejects_records_beyond_declared_output_size() {
+        let patch = build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: 4,
+                data: b"toolong".to_vec(),
+            }],
+            Some(6),
+        );
+
+        let error = parse_ips_bytes(&patch).expect_err("invalid patch");
+        assert!(
+            error
+                .to_string()
+                .contains("IPS record exceeded declared output size")
+        );
+    }
+
+    #[test]
+    fn apply_round_trips_overlaps_and_truncation() {
+        let temp = TestDir::new();
+        let input_path = temp.child("input.bin");
+        let patch_path = temp.child("update.ips");
+        let output_path = temp.child("output.bin");
+        fs::write(&input_path, b"abcdefgh").expect("fixture");
+        fs::write(
+            &patch_path,
+            build_ips_patch(
+                vec![
+                    TestIpsRecord::Literal {
+                        offset: 1,
+                        data: b"12".to_vec(),
+                    },
+                    TestIpsRecord::Literal {
+                        offset: 2,
+                        data: b"XYZ".to_vec(),
+                    },
+                    TestIpsRecord::Rle {
+                        offset: 6,
+                        len: 3,
+                        value: b'!',
+                    },
+                ],
+                Some(9),
+            ),
+        )
+        .expect("fixture");
+
+        let handler = IpsPatchHandler::new(&IPS);
+        let report = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: input_path.clone(),
+                    patches: vec![patch_path.clone()],
+                    output: output_path.clone(),
+                },
+                &test_context_with_threads(&temp, 4),
+            )
+            .expect("report");
+
+        let execution = report.thread_execution.expect("thread execution");
+        assert_eq!(execution.effective_threads, 1);
+        assert_eq!(fs::read(&output_path).expect("output"), b"a1XYZf!!!");
+    }
+
+    #[test]
+    fn apply_uses_parallel_threads_for_large_output() {
+        let temp = TestDir::new();
+        let input_path = temp.child("input.bin");
+        let patch_path = temp.child("update.ips");
+        let output_path = temp.child("output.bin");
+        fs::write(&input_path, []).expect("fixture");
+
+        let total_len = (OUTPUT_CHUNK_SIZE + 321) as u32;
+        fs::write(&patch_path, large_rle_patch(total_len, b'Z')).expect("fixture");
+
+        let handler = IpsPatchHandler::new(&IPS);
+        let report = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: input_path.clone(),
+                    patches: vec![patch_path.clone()],
+                    output: output_path.clone(),
+                },
+                &test_context_with_threads(&temp, 8),
+            )
+            .expect("report");
+
+        let execution = report.thread_execution.expect("thread execution");
+        assert_eq!(execution.requested_threads, 8);
+        assert_eq!(execution.effective_threads, 2);
+        assert!(execution.used_parallelism);
+
+        let output = fs::read(&output_path).expect("output");
+        assert_eq!(output.len(), total_len as usize);
+        assert!(output.iter().all(|byte| *byte == b'Z'));
+    }
+
+    #[test]
+    fn create_round_trips_and_encodes_truncation_when_shrinking() {
+        let temp = TestDir::new();
+        let original_path = temp.child("input.bin");
+        let patch_path = temp.child("update.ips");
+        let output_path = temp.child("output.bin");
+        fs::write(&original_path, b"abcdefgh").expect("fixture");
+
+        let modified = b"a1XYZf!";
+        let modified_path = temp.child("modified.bin");
+        fs::write(&modified_path, modified).expect("fixture");
+
+        let handler = IpsPatchHandler::new(&IPS);
+        let report = handler
+            .create(
+                &PatchCreateRequest {
+                    original: original_path.clone(),
+                    modified: modified_path.clone(),
+                    output: patch_path.clone(),
+                    format: "IPS".into(),
+                },
+                &test_context_with_threads(&temp, 8),
+            )
+            .expect("report");
+
+        let execution = report.thread_execution.expect("thread execution");
+        assert_eq!(execution.requested_threads, 8);
+        assert_eq!(execution.effective_threads, 1);
+        assert!(!execution.used_parallelism);
+
+        let patch = parse_ips_bytes(&fs::read(&patch_path).expect("patch")).expect("parse");
+        assert_eq!(patch.truncate_size, Some(modified.len() as u64));
+        assert!(!patch.records.is_empty());
+
+        handler
+            .apply(
+                &PatchApplyRequest {
+                    input: original_path,
+                    patches: vec![patch_path],
+                    output: output_path.clone(),
+                },
+                &test_context_with_threads(&temp, 4),
+            )
+            .expect("apply");
+
+        assert_eq!(fs::read(&output_path).expect("output"), modified);
+    }
+
+    #[test]
+    fn create_can_grow_with_zero_tail_using_only_truncate_size() {
+        let temp = TestDir::new();
+        let original_path = temp.child("input.bin");
+        let patch_path = temp.child("update.ips");
+        let output_path = temp.child("output.bin");
+        let modified_path = temp.child("modified.bin");
+        fs::write(&original_path, []).expect("fixture");
+        fs::write(&modified_path, [0u8; 32]).expect("fixture");
+
+        let handler = IpsPatchHandler::new(&IPS);
+        handler
+            .create(
+                &PatchCreateRequest {
+                    original: original_path.clone(),
+                    modified: modified_path,
+                    output: patch_path.clone(),
+                    format: "IPS".into(),
+                },
+                &test_context_with_threads(&temp, 1),
+            )
+            .expect("create");
+
+        let patch = parse_ips_bytes(&fs::read(&patch_path).expect("patch")).expect("parse");
+        assert_eq!(patch.truncate_size, Some(32));
+        assert!(patch.records.is_empty());
+
+        handler
+            .apply(
+                &PatchApplyRequest {
+                    input: original_path,
+                    patches: vec![patch_path],
+                    output: output_path.clone(),
+                },
+                &test_context_with_threads(&temp, 1),
+            )
+            .expect("apply");
+
+        assert_eq!(fs::read(&output_path).expect("output"), vec![0u8; 32]);
+    }
+
+    #[test]
+    fn create_uses_rle_records_for_repeated_runs() {
+        let temp = TestDir::new();
+        let original_path = temp.child("input.bin");
+        let patch_path = temp.child("update.ips");
+        let modified_path = temp.child("modified.bin");
+        fs::write(&original_path, []).expect("fixture");
+        fs::write(&modified_path, vec![b'Z'; 32]).expect("fixture");
+
+        let handler = IpsPatchHandler::new(&IPS);
+        handler
+            .create(
+                &PatchCreateRequest {
+                    original: original_path,
+                    modified: modified_path,
+                    output: patch_path.clone(),
+                    format: "IPS".into(),
+                },
+                &test_context_with_threads(&temp, 1),
+            )
+            .expect("create");
+
+        let patch = parse_ips_bytes(&fs::read(&patch_path).expect("patch")).expect("parse");
+        assert_eq!(patch.truncate_size, None);
+        assert_eq!(patch.records.len(), 1);
+        assert_eq!(patch.records[0].offset, 0);
+        assert_eq!(patch.records[0].len, 32);
+        match &patch.records[0].data {
+            IpsRecordData::Rle { byte } => assert_eq!(*byte, b'Z'),
+            other => panic!("expected RLE record, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn create_splits_large_literal_runs_at_ips_record_limit() {
+        let temp = TestDir::new();
+        let original_path = temp.child("input.bin");
+        let patch_path = temp.child("update.ips");
+        let modified_path = temp.child("modified.bin");
+        fs::write(&original_path, []).expect("fixture");
+
+        let modified_len = MAX_IPS_RECORD_LEN + 17;
+        let modified = (0..modified_len)
+            .map(|index| u8::try_from((index % 255) + 1).expect("byte"))
+            .collect::<Vec<_>>();
+        fs::write(&modified_path, &modified).expect("fixture");
+
+        let handler = IpsPatchHandler::new(&IPS);
+        handler
+            .create(
+                &PatchCreateRequest {
+                    original: original_path,
+                    modified: modified_path,
+                    output: patch_path.clone(),
+                    format: "IPS".into(),
+                },
+                &test_context_with_threads(&temp, 1),
+            )
+            .expect("create");
+
+        let patch = parse_ips_bytes(&fs::read(&patch_path).expect("patch")).expect("parse");
+        assert_eq!(patch.truncate_size, None);
+        assert_eq!(patch.records.len(), 2);
+        assert_eq!(patch.records[0].offset, 0);
+        assert_eq!(patch.records[0].len, MAX_IPS_RECORD_LEN as u64);
+        assert_eq!(patch.records[1].offset, MAX_IPS_RECORD_LEN as u64);
+        assert_eq!(patch.records[1].len, 17);
+        assert!(matches!(patch.records[0].data, IpsRecordData::Literal(_)));
+        assert!(matches!(patch.records[1].data, IpsRecordData::Literal(_)));
+    }
+
+    #[test]
+    fn create_unchanged_files_produce_empty_patch() {
+        let temp = TestDir::new();
+        let original_path = temp.child("input.bin");
+        let patch_path = temp.child("update.ips");
+        let modified_path = temp.child("modified.bin");
+        let bytes = b"unchanged-input".repeat(1024);
+        fs::write(&original_path, &bytes).expect("fixture");
+        fs::write(&modified_path, &bytes).expect("fixture");
+
+        let handler = IpsPatchHandler::new(&IPS);
+        handler
+            .create(
+                &PatchCreateRequest {
+                    original: original_path,
+                    modified: modified_path,
+                    output: patch_path.clone(),
+                    format: "IPS".into(),
+                },
+                &test_context_with_threads(&temp, 1),
+            )
+            .expect("create");
+
+        let patch = fs::read(&patch_path).expect("patch");
+        assert_eq!(patch, b"PATCHEOF");
+    }
+
+    fn build_ips_patch(records: Vec<TestIpsRecord>, truncate_size: Option<u32>) -> Vec<u8> {
+        let mut bytes = IPS_MAGIC.to_vec();
+        for record in records {
+            match record {
+                TestIpsRecord::Literal { offset, data } => {
+                    write_u24(&mut bytes, offset);
+                    let len = u16::try_from(data.len()).expect("literal len");
+                    bytes.extend_from_slice(&len.to_be_bytes());
+                    bytes.extend_from_slice(&data);
+                }
+                TestIpsRecord::Rle { offset, len, value } => {
+                    write_u24(&mut bytes, offset);
+                    bytes.extend_from_slice(&0u16.to_be_bytes());
+                    bytes.extend_from_slice(&len.to_be_bytes());
+                    bytes.push(value);
+                }
+            }
+        }
+        bytes.extend_from_slice(IPS_EOF);
+        if let Some(size) = truncate_size {
+            write_u24(&mut bytes, size);
+        }
+        bytes
+    }
+
+    fn large_rle_patch(total_len: u32, value: u8) -> Vec<u8> {
+        let mut records = Vec::new();
+        let mut offset = 0u32;
+        while offset < total_len {
+            let remaining = total_len - offset;
+            let len = remaining.min(u16::MAX as u32) as u16;
+            records.push(TestIpsRecord::Rle { offset, len, value });
+            offset += u32::from(len);
+        }
+        build_ips_patch(records, Some(total_len))
+    }
+
+    fn write_u24(bytes: &mut Vec<u8>, value: u32) {
+        assert!(value <= 0x00FF_FFFF);
+        bytes.push((value >> 16) as u8);
+        bytes.push((value >> 8) as u8);
+        bytes.push(value as u8);
+    }
+
+    fn test_context_with_threads(temp: &TestDir, threads: usize) -> OperationContext {
+        OperationContext::new(
+            ThreadBudget::Fixed(threads),
+            temp.child("temp-root"),
+            Arc::new(NoopProgressSink),
+            CancellationToken::new(),
+        )
+    }
+}

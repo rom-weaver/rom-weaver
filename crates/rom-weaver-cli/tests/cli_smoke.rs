@@ -354,36 +354,73 @@ fn patch_apply_succeeds_for_valid_ips_patch() {
 }
 
 #[test]
-fn patch_create_routes_through_registered_patch_format() {
+fn patch_create_succeeds_for_ips_and_round_trips() {
     let temp = setup_temp_dir();
-    temp.child("old.bin").write_str("old").expect("fixture");
-    temp.child("new.bin").write_str("new").expect("fixture");
+    let original = temp.child("old.bin");
+    let modified = temp.child("new.bin");
+    let patch = temp.child("output.ips");
+    let output = temp.child("output.bin");
+    fs::write(original.path(), b"abcdefgh").expect("fixture");
+    fs::write(modified.path(), b"a1XYZf!!!").expect("fixture");
 
-    let output = Command::cargo_bin("rom-weaver")
+    let create_output = Command::cargo_bin("rom-weaver")
         .expect("binary")
         .args([
             "patch-create",
             "--original",
-            temp.child("old.bin").path().to_str().expect("path"),
+            original.path().to_str().expect("path"),
             "--modified",
-            temp.child("new.bin").path().to_str().expect("path"),
+            modified.path().to_str().expect("path"),
             "--format",
             "ips",
             "--output",
-            temp.child("output.ips").path().to_str().expect("path"),
+            patch.path().to_str().expect("path"),
+            "--threads",
+            "8",
             "--json",
         ])
         .assert()
-        .code(2)
+        .code(0)
         .get_output()
         .stdout
         .clone();
 
-    let json = parse_single_json_line(&output);
-    assert_eq!(json["command"], "patch-create");
-    assert_eq!(json["family"], "patch");
-    assert_eq!(json["format"], "IPS");
-    assert_eq!(json["status"], "unsupported");
+    let create_json = parse_single_json_line(&create_output);
+    assert_eq!(create_json["command"], "patch-create");
+    assert_eq!(create_json["family"], "patch");
+    assert_eq!(create_json["format"], "IPS");
+    assert_eq!(create_json["requested_threads"], 8);
+    assert_eq!(create_json["effective_threads"], 1);
+    assert_eq!(create_json["used_parallelism"], false);
+    assert_eq!(create_json["status"], "succeeded");
+
+    let apply_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let apply_json = parse_single_json_line(&apply_output);
+    assert_eq!(apply_json["command"], "patch-apply");
+    assert_eq!(apply_json["family"], "patch");
+    assert_eq!(apply_json["format"], "IPS");
+    assert_eq!(apply_json["status"], "succeeded");
+    assert_eq!(
+        fs::read(output.path()).expect("output"),
+        fs::read(modified.path()).expect("modified")
+    );
 }
 
 #[test]
@@ -448,6 +485,75 @@ fn patch_create_succeeds_for_vcdiff_and_round_trips() {
     let apply_json = parse_single_json_line(&apply_output);
     assert_eq!(apply_json["command"], "patch-apply");
     assert_eq!(apply_json["format"], "VCDIFF");
+    assert_eq!(apply_json["status"], "succeeded");
+    assert_eq!(
+        fs::read(output.path()).expect("output"),
+        fs::read(modified.path()).expect("modified")
+    );
+}
+
+#[test]
+fn patch_create_succeeds_for_bps_and_round_trips() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.bin");
+    let modified = temp.child("new.bin");
+    let patch = temp.child("update.bps");
+    let output = temp.child("output.bin");
+    fs::write(original.path(), b"hello old world").expect("fixture");
+    fs::write(modified.path(), b"hello new world").expect("fixture");
+
+    let create_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--format",
+            "bps",
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--threads",
+            "8",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let create_json = parse_single_json_line(&create_output);
+    assert_eq!(create_json["command"], "patch-create");
+    assert_eq!(create_json["family"], "patch");
+    assert_eq!(create_json["format"], "BPS");
+    assert_eq!(create_json["requested_threads"], 8);
+    assert_eq!(create_json["effective_threads"], 1);
+    assert_eq!(create_json["used_parallelism"], false);
+    assert_eq!(create_json["status"], "succeeded");
+
+    let apply_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let apply_json = parse_single_json_line(&apply_output);
+    assert_eq!(apply_json["command"], "patch-apply");
+    assert_eq!(apply_json["format"], "BPS");
     assert_eq!(apply_json["status"], "succeeded");
     assert_eq!(
         fs::read(output.path()).expect("output"),
