@@ -3,8 +3,8 @@ use std::path::PathBuf;
 
 use assert_cmd::Command;
 use assert_fs::{
-    TempDir,
     fixture::{FileWriteStr, PathChild},
+    TempDir,
 };
 use serde_json::Value;
 

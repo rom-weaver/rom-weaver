@@ -1,6 +1,6 @@
 use std::{
     fs::{self, File, OpenOptions},
-    io::{Read, Seek, SeekFrom, Write},
+    io::{self, BufReader, BufWriter, Read, Seek, SeekFrom, Write},
     path::Path,
 };
 
@@ -14,6 +14,11 @@ use rom_weaver_core::{
 const BPS_MAGIC: &[u8; 4] = b"BPS1";
 const BPS_FOOTER_SIZE: usize = 12;
 const COPY_BUFFER_SIZE: usize = 32 * 1024;
+const CREATE_STREAM_BUFFER_SIZE: usize = 32 * 1024;
+const RESYNC_LOOKAHEAD: usize = 4 * 1024;
+const RESYNC_MATCH_LIMIT: usize = 64;
+const MIN_RESYNC_MATCH: usize = 16;
+const TARGET_READ_FLUSH_SIZE: usize = 16 * 1024;
 
 pub struct BpsPatchHandler {
     descriptor: &'static FormatDescriptor,
@@ -22,13 +27,6 @@ pub struct BpsPatchHandler {
 impl BpsPatchHandler {
     pub const fn new(descriptor: &'static FormatDescriptor) -> Self {
         Self { descriptor }
-    }
-
-    fn unsupported_label(&self, operation: &str) -> String {
-        format!(
-            "{operation} is not implemented yet for {}",
-            self.descriptor.name
-        )
     }
 }
 
@@ -99,15 +97,40 @@ impl PatchHandler for BpsPatchHandler {
 
     fn create(
         &self,
-        _request: &PatchCreateRequest,
+        request: &PatchCreateRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let execution = context.plan_threads(ThreadCapability::single_threaded());
-        Ok(OperationReport::unsupported(
+        let original_len = fs::metadata(&request.original)?.len();
+        let modified_len = fs::metadata(&request.modified)?.len();
+        let source_checksum = crc32_path(&request.original)?;
+
+        if let Some(parent) = request.output.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        let output_file = File::create(&request.output)?;
+        let mut output = BufWriter::new(output_file);
+        let created = create_bps_patch_streaming(
+            &request.original,
+            original_len,
+            source_checksum,
+            &request.modified,
+            modified_len,
+            &mut output,
+            context,
+        )?;
+        output.flush()?;
+
+        Ok(OperationReport::succeeded(
             OperationFamily::Patch,
             Some(self.descriptor.name.to_string()),
             "create",
-            self.unsupported_label("create"),
+            format!(
+                "created {} patch with {} record(s)",
+                self.descriptor.name, created.action_count
+            ),
+            Some(1.0),
             Some(execution),
         ))
     }
@@ -116,7 +139,7 @@ impl PatchHandler for BpsPatchHandler {
         PatchCapabilities {
             parse: true,
             apply: true,
-            create: false,
+            create: true,
             threaded_scan: false,
             threaded_diff: false,
             threaded_output: false,
@@ -139,6 +162,24 @@ enum BpsAction {
     TargetRead { data: Vec<u8> },
     SourceCopy { length: u64, relative_offset: i128 },
     TargetCopy { length: u64, relative_offset: i128 },
+}
+
+#[derive(Debug, Default)]
+struct CreatedBpsPatch {
+    action_count: usize,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ResyncKind {
+    Insert,
+    Delete,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct ResyncCandidate {
+    kind: ResyncKind,
+    skip: usize,
+    match_len: usize,
 }
 
 fn parse_bps_file(path: &Path) -> Result<ParsedBpsPatch> {
@@ -316,6 +357,333 @@ fn apply_patch_actions(patch: &ParsedBpsPatch, source: &mut File, output: &mut F
     Ok(())
 }
 
+fn create_bps_patch_streaming(
+    original_path: &Path,
+    original_len: u64,
+    source_checksum: u32,
+    modified_path: &Path,
+    modified_len: u64,
+    output: &mut impl Write,
+    context: &OperationContext,
+) -> Result<CreatedBpsPatch> {
+    let mut original = BufferedByteStream::new(BufReader::new(File::open(original_path)?));
+    let mut modified = BufferedByteStream::new(BufReader::new(File::open(modified_path)?));
+    let mut target_checksum = Hasher::new();
+    let mut target_read = Vec::with_capacity(TARGET_READ_FLUSH_SIZE);
+    let mut created = CreatedBpsPatch::default();
+    let mut writer = BpsCreateWriter::new(output);
+    let mut source_relative_offset = 0i128;
+
+    writer.write_bytes(BPS_MAGIC)?;
+    writer.write_varint(original_len)?;
+    writer.write_varint(modified_len)?;
+    writer.write_varint(0)?;
+
+    while modified.has_byte()? {
+        context.cancel().check()?;
+
+        if original.position() == modified.position()
+            && current_bytes_equal(&mut original, &mut modified)?
+        {
+            flush_target_read(&mut writer, &mut target_read, &mut created)?;
+            let length = consume_shared_run(&mut original, &mut modified, &mut target_checksum)?;
+            if length > 0 {
+                writer.write_source_read(length)?;
+                created.action_count += 1;
+            }
+            continue;
+        }
+
+        if current_bytes_equal(&mut original, &mut modified)? {
+            flush_target_read(&mut writer, &mut target_read, &mut created)?;
+            let start = original.position();
+            let length = consume_shared_run(&mut original, &mut modified, &mut target_checksum)?;
+            if length > 0 {
+                writer.write_source_copy(length, start, &mut source_relative_offset)?;
+                created.action_count += 1;
+            }
+            continue;
+        }
+
+        if !original.has_byte()? {
+            drain_remaining_target(
+                &mut modified,
+                &mut target_read,
+                &mut target_checksum,
+                &mut writer,
+                &mut created,
+            )?;
+            break;
+        }
+
+        match find_resync(&mut original, &mut modified)? {
+            Some(ResyncCandidate {
+                kind: ResyncKind::Delete,
+                skip,
+                ..
+            }) => {
+                original.advance(skip)?;
+            }
+            Some(ResyncCandidate {
+                kind: ResyncKind::Insert,
+                skip,
+                ..
+            }) => {
+                append_target_read_bytes(
+                    &mut modified,
+                    skip,
+                    &mut target_read,
+                    &mut target_checksum,
+                    &mut writer,
+                    &mut created,
+                )?;
+            }
+            None => {
+                append_target_read_bytes(
+                    &mut modified,
+                    1,
+                    &mut target_read,
+                    &mut target_checksum,
+                    &mut writer,
+                    &mut created,
+                )?;
+            }
+        }
+    }
+
+    flush_target_read(&mut writer, &mut target_read, &mut created)?;
+    writer.finish(source_checksum, target_checksum.finalize())?;
+    Ok(created)
+}
+
+fn current_bytes_equal(
+    original: &mut BufferedByteStream<impl Read>,
+    modified: &mut BufferedByteStream<impl Read>,
+) -> Result<bool> {
+    match (original.peek(0)?, modified.peek(0)?) {
+        (Some(left), Some(right)) => Ok(left == right),
+        _ => Ok(false),
+    }
+}
+
+fn consume_shared_run(
+    original: &mut BufferedByteStream<impl Read>,
+    modified: &mut BufferedByteStream<impl Read>,
+    target_checksum: &mut Hasher,
+) -> Result<u64> {
+    let mut consumed = 0u64;
+
+    loop {
+        original.fill_at_least(1)?;
+        modified.fill_at_least(1)?;
+
+        let original_slice = original.available_slice();
+        let modified_slice = modified.available_slice();
+        if original_slice.is_empty() || modified_slice.is_empty() {
+            break;
+        }
+
+        let limit = original_slice.len().min(modified_slice.len());
+        let mut prefix = 0usize;
+        while prefix < limit && original_slice[prefix] == modified_slice[prefix] {
+            prefix += 1;
+        }
+
+        if prefix == 0 {
+            break;
+        }
+
+        target_checksum.update(&modified_slice[..prefix]);
+        original.advance(prefix)?;
+        modified.advance(prefix)?;
+        consumed = consumed
+            .checked_add(prefix as u64)
+            .ok_or_else(|| RomWeaverError::Validation("BPS create run overflowed".into()))?;
+
+        if prefix < limit {
+            break;
+        }
+    }
+
+    Ok(consumed)
+}
+
+fn find_resync(
+    original: &mut BufferedByteStream<impl Read>,
+    modified: &mut BufferedByteStream<impl Read>,
+) -> Result<Option<ResyncCandidate>> {
+    let mut best = None;
+
+    for skip in 1..=RESYNC_LOOKAHEAD {
+        if let Some(match_len) = resync_match_len(original, skip, modified, 0)? {
+            best = choose_resync(
+                best,
+                ResyncCandidate {
+                    kind: ResyncKind::Delete,
+                    skip,
+                    match_len,
+                },
+            );
+        }
+
+        if let Some(match_len) = resync_match_len(original, 0, modified, skip)? {
+            best = choose_resync(
+                best,
+                ResyncCandidate {
+                    kind: ResyncKind::Insert,
+                    skip,
+                    match_len,
+                },
+            );
+        }
+    }
+
+    Ok(best)
+}
+
+fn choose_resync(
+    current: Option<ResyncCandidate>,
+    candidate: ResyncCandidate,
+) -> Option<ResyncCandidate> {
+    match current {
+        None => Some(candidate),
+        Some(existing)
+            if candidate.skip < existing.skip
+                || (candidate.skip == existing.skip
+                    && candidate.match_len > existing.match_len)
+                || (candidate.skip == existing.skip
+                    && candidate.match_len == existing.match_len
+                    && candidate.kind == ResyncKind::Delete
+                    && existing.kind == ResyncKind::Insert) =>
+        {
+            Some(candidate)
+        }
+        Some(existing) => Some(existing),
+    }
+}
+
+fn resync_match_len(
+    original: &mut BufferedByteStream<impl Read>,
+    original_skip: usize,
+    modified: &mut BufferedByteStream<impl Read>,
+    modified_skip: usize,
+) -> Result<Option<usize>> {
+    let matched = common_prefix_len(
+        original,
+        original_skip,
+        modified,
+        modified_skip,
+        RESYNC_MATCH_LIMIT,
+    )?;
+    if matched >= MIN_RESYNC_MATCH {
+        return Ok(Some(matched));
+    }
+    if matched == 0 {
+        return Ok(None);
+    }
+
+    let next_original = original.peek(original_skip + matched)?;
+    let next_modified = modified.peek(modified_skip + matched)?;
+    if next_original.is_none() || next_modified.is_none() {
+        Ok(Some(matched))
+    } else {
+        Ok(None)
+    }
+}
+
+fn common_prefix_len(
+    original: &mut BufferedByteStream<impl Read>,
+    original_skip: usize,
+    modified: &mut BufferedByteStream<impl Read>,
+    modified_skip: usize,
+    limit: usize,
+) -> Result<usize> {
+    let mut matched = 0usize;
+    while matched < limit {
+        match (
+            original.peek(original_skip + matched)?,
+            modified.peek(modified_skip + matched)?,
+        ) {
+            (Some(left), Some(right)) if left == right => matched += 1,
+            _ => break,
+        }
+    }
+    Ok(matched)
+}
+
+fn append_target_read_bytes(
+    modified: &mut BufferedByteStream<impl Read>,
+    len: usize,
+    target_read: &mut Vec<u8>,
+    target_checksum: &mut Hasher,
+    writer: &mut BpsCreateWriter<'_, impl Write>,
+    created: &mut CreatedBpsPatch,
+) -> Result<()> {
+    let mut remaining = len;
+    while remaining > 0 {
+        modified.fill_at_least(1)?;
+        let available = modified.available_slice();
+        if available.is_empty() {
+            return Err(RomWeaverError::Validation(
+                "Modified file ended unexpectedly while building BPS patch".into(),
+            ));
+        }
+
+        let free = TARGET_READ_FLUSH_SIZE.saturating_sub(target_read.len());
+        let chunk = remaining.min(available.len()).min(free.max(1));
+        target_checksum.update(&available[..chunk]);
+        target_read.extend_from_slice(&available[..chunk]);
+        modified.advance(chunk)?;
+        remaining -= chunk;
+
+        if target_read.len() >= TARGET_READ_FLUSH_SIZE {
+            flush_target_read(writer, target_read, created)?;
+        }
+    }
+    Ok(())
+}
+
+fn drain_remaining_target(
+    modified: &mut BufferedByteStream<impl Read>,
+    target_read: &mut Vec<u8>,
+    target_checksum: &mut Hasher,
+    writer: &mut BpsCreateWriter<'_, impl Write>,
+    created: &mut CreatedBpsPatch,
+) -> Result<()> {
+    while modified.has_byte()? {
+        let available = modified.available_slice();
+        if available.is_empty() {
+            break;
+        }
+
+        let free = TARGET_READ_FLUSH_SIZE.saturating_sub(target_read.len());
+        let chunk = available.len().min(free.max(1));
+        target_checksum.update(&available[..chunk]);
+        target_read.extend_from_slice(&available[..chunk]);
+        modified.advance(chunk)?;
+
+        if target_read.len() >= TARGET_READ_FLUSH_SIZE {
+            flush_target_read(writer, target_read, created)?;
+        }
+    }
+    Ok(())
+}
+
+fn flush_target_read(
+    writer: &mut BpsCreateWriter<'_, impl Write>,
+    target_read: &mut Vec<u8>,
+    created: &mut CreatedBpsPatch,
+) -> Result<()> {
+    if target_read.is_empty() {
+        return Ok(());
+    }
+
+    writer.write_target_read(target_read)?;
+    created.action_count += 1;
+    target_read.clear();
+    Ok(())
+}
+
 fn copy_source_range(
     source: &mut File,
     output: &mut File,
@@ -450,9 +818,30 @@ fn adjust_relative_offset(current: i128, delta: i128, limit: u64, label: &str) -
     Ok(next)
 }
 
+fn encode_signed_offset(delta: i128) -> Result<u64> {
+    let magnitude = if delta < 0 {
+        delta.checked_neg().ok_or_else(|| {
+            RomWeaverError::Validation("BPS relative offset magnitude overflowed".into())
+        })?
+    } else {
+        delta
+    };
+
+    let magnitude = u64::try_from(magnitude)
+        .map_err(|_| RomWeaverError::Validation("BPS relative offset exceeded u64".into()))?;
+    let shifted = magnitude.checked_shl(1).ok_or_else(|| {
+        RomWeaverError::Validation("BPS relative offset exceeded encodable range".into())
+    })?;
+    Ok(shifted | u64::from(delta < 0))
+}
+
 fn decode_signed_offset(raw: u64) -> i128 {
     let magnitude = i128::from(raw >> 1);
-    if raw & 1 != 0 { -magnitude } else { magnitude }
+    if raw & 1 != 0 {
+        -magnitude
+    } else {
+        magnitude
+    }
 }
 
 fn read_u32_le(bytes: &[u8]) -> u32 {
@@ -463,7 +852,7 @@ fn crc32_bytes(bytes: &[u8]) -> u32 {
     crc32fast::hash(bytes)
 }
 
-fn crc32_reader(reader: &mut impl Read) -> std::io::Result<u32> {
+fn crc32_reader(reader: &mut impl Read) -> io::Result<u32> {
     let mut hasher = Hasher::new();
     let mut buffer = [0u8; COPY_BUFFER_SIZE];
     loop {
@@ -474,6 +863,222 @@ fn crc32_reader(reader: &mut impl Read) -> std::io::Result<u32> {
         hasher.update(&buffer[..bytes_read]);
     }
     Ok(hasher.finalize())
+}
+
+fn crc32_path(path: &Path) -> io::Result<u32> {
+    let mut reader = BufReader::new(File::open(path)?);
+    crc32_reader(&mut reader)
+}
+
+#[cfg(test)]
+fn push_varint(bytes: &mut Vec<u8>, mut data: u64) {
+    loop {
+        let value = (data & 0x7f) as u8;
+        data >>= 7;
+        if data == 0 {
+            bytes.push(0x80 | value);
+            break;
+        }
+        bytes.push(value);
+        data -= 1;
+    }
+}
+
+struct BpsCreateWriter<'a, W> {
+    output: &'a mut W,
+    patch_hasher: Hasher,
+}
+
+impl<'a, W: Write> BpsCreateWriter<'a, W> {
+    fn new(output: &'a mut W) -> Self {
+        Self {
+            output,
+            patch_hasher: Hasher::new(),
+        }
+    }
+
+    fn write_bytes(&mut self, bytes: &[u8]) -> Result<()> {
+        self.output.write_all(bytes)?;
+        self.patch_hasher.update(bytes);
+        Ok(())
+    }
+
+    fn write_varint(&mut self, mut data: u64) -> Result<()> {
+        let mut bytes = [0u8; 10];
+        let mut len = 0usize;
+
+        loop {
+            let value = (data & 0x7f) as u8;
+            data >>= 7;
+            if data == 0 {
+                bytes[len] = 0x80 | value;
+                len += 1;
+                break;
+            }
+            bytes[len] = value;
+            len += 1;
+            data -= 1;
+        }
+
+        self.write_bytes(&bytes[..len])
+    }
+
+    fn write_source_read(&mut self, length: u64) -> Result<()> {
+        self.write_varint(encode_action_header(length, 0)?)
+    }
+
+    fn write_target_read(&mut self, data: &[u8]) -> Result<()> {
+        let len = u64::try_from(data.len()).map_err(|_| {
+            RomWeaverError::Validation("BPS target-read data exceeded u64 length".into())
+        })?;
+        self.write_varint(encode_action_header(len, 1)?)?;
+        self.write_bytes(data)
+    }
+
+    fn write_source_copy(
+        &mut self,
+        length: u64,
+        start: u64,
+        source_relative_offset: &mut i128,
+    ) -> Result<()> {
+        self.write_varint(encode_action_header(length, 2)?)?;
+        let delta = i128::from(start)
+            .checked_sub(*source_relative_offset)
+            .ok_or_else(|| RomWeaverError::Validation("BPS source delta overflowed".into()))?;
+        self.write_varint(encode_signed_offset(delta)?)?;
+        let end = start
+            .checked_add(length)
+            .ok_or_else(|| RomWeaverError::Validation("BPS source-copy end overflowed".into()))?;
+        *source_relative_offset = i128::from(end);
+        Ok(())
+    }
+
+    fn finish(&mut self, source_checksum: u32, target_checksum: u32) -> Result<()> {
+        self.write_bytes(&source_checksum.to_le_bytes())?;
+        self.write_bytes(&target_checksum.to_le_bytes())?;
+        let patch_checksum = std::mem::replace(&mut self.patch_hasher, Hasher::new()).finalize();
+        self.output.write_all(&patch_checksum.to_le_bytes())?;
+        Ok(())
+    }
+}
+
+fn encode_action_header(length: u64, command: u64) -> Result<u64> {
+    if length == 0 {
+        return Err(RomWeaverError::Validation(
+            "BPS cannot encode a zero-length action".into(),
+        ));
+    }
+
+    let value = length
+        .checked_sub(1)
+        .ok_or_else(|| RomWeaverError::Validation("BPS action length underflowed".into()))?;
+    let shifted = value.checked_shl(2).ok_or_else(|| {
+        RomWeaverError::Validation("BPS action header exceeded encodable range".into())
+    })?;
+    shifted
+        .checked_add(command)
+        .ok_or_else(|| RomWeaverError::Validation("BPS action header overflowed".into()))
+}
+
+struct BufferedByteStream<R> {
+    reader: R,
+    buffer: Vec<u8>,
+    start: usize,
+    end: usize,
+    eof: bool,
+    position: u64,
+}
+
+impl<R: Read> BufferedByteStream<R> {
+    fn new(reader: R) -> Self {
+        Self {
+            reader,
+            buffer: vec![0u8; CREATE_STREAM_BUFFER_SIZE],
+            start: 0,
+            end: 0,
+            eof: false,
+            position: 0,
+        }
+    }
+
+    fn position(&self) -> u64 {
+        self.position
+    }
+
+    fn available_len(&self) -> usize {
+        self.end - self.start
+    }
+
+    fn available_slice(&self) -> &[u8] {
+        &self.buffer[self.start..self.end]
+    }
+
+    fn has_byte(&mut self) -> io::Result<bool> {
+        self.fill_at_least(1)?;
+        Ok(self.available_len() > 0)
+    }
+
+    fn peek(&mut self, offset: usize) -> io::Result<Option<u8>> {
+        self.fill_at_least(offset.saturating_add(1))?;
+        if offset < self.available_len() {
+            Ok(Some(self.buffer[self.start + offset]))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn advance(&mut self, count: usize) -> io::Result<()> {
+        let mut remaining = count;
+        while remaining > 0 {
+            self.fill_at_least(1)?;
+            let available = self.available_len();
+            if available == 0 {
+                return Err(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "stream ended unexpectedly while advancing",
+                ));
+            }
+
+            let chunk = remaining.min(available);
+            self.start += chunk;
+            self.position += chunk as u64;
+            remaining -= chunk;
+
+            if self.start == self.end {
+                self.start = 0;
+                self.end = 0;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn fill_at_least(&mut self, min_bytes: usize) -> io::Result<()> {
+        if min_bytes > self.buffer.len() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "requested BPS lookahead exceeded the streaming buffer",
+            ));
+        }
+
+        while self.available_len() < min_bytes && !self.eof {
+            if self.start > 0 {
+                let len = self.available_len();
+                self.buffer.copy_within(self.start..self.end, 0);
+                self.start = 0;
+                self.end = len;
+            }
+
+            let bytes_read = self.reader.read(&mut self.buffer[self.end..])?;
+            if bytes_read == 0 {
+                self.eof = true;
+                break;
+            }
+            self.end += bytes_read;
+        }
+
+        Ok(())
+    }
 }
 
 struct BpsParser<'a> {
@@ -529,5 +1134,412 @@ impl<'a> BpsParser<'a> {
                 RomWeaverError::Validation("BPS varint overflowed available range".into())
             })?;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        env, fs,
+        path::PathBuf,
+        sync::atomic::{AtomicU64, Ordering},
+        sync::Arc,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    use rom_weaver_core::{
+        CancellationToken, NoopProgressSink, OperationContext, PatchApplyRequest,
+        PatchCreateRequest, PatchHandler, ThreadBudget,
+    };
+
+    use super::{
+        crc32_bytes, encode_signed_offset, parse_bps_bytes, push_varint, BpsAction,
+        BpsPatchHandler, BPS_MAGIC,
+    };
+    use crate::BPS;
+
+    static NEXT_TEST_DIR_ID: AtomicU64 = AtomicU64::new(0);
+
+    #[derive(Debug)]
+    enum TestAction {
+        SourceRead(u64),
+        TargetRead(Vec<u8>),
+        SourceCopy { length: u64, relative_offset: i128 },
+        TargetCopy { length: u64, relative_offset: i128 },
+    }
+
+    struct TestDir {
+        path: PathBuf,
+    }
+
+    impl TestDir {
+        fn new() -> Self {
+            let timestamp = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("time")
+                .as_nanos();
+            let sequence = NEXT_TEST_DIR_ID.fetch_add(1, Ordering::Relaxed);
+            let path = env::temp_dir().join(format!(
+                "rom-weaver-bps-tests-{}-{timestamp}-{sequence}",
+                std::process::id(),
+            ));
+            fs::create_dir_all(&path).expect("temp dir");
+            Self { path }
+        }
+
+        fn child(&self, name: &str) -> PathBuf {
+            self.path.join(name)
+        }
+    }
+
+    impl Drop for TestDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
+
+    #[test]
+    fn parse_and_apply_round_trip_for_bps() {
+        let temp = TestDir::new();
+        let input_path = temp.child("input.bin");
+        let patch_path = temp.child("update.bps");
+        let output_path = temp.child("output.bin");
+        let source = b"abcabcabcabc";
+        let target = b"abcabcZZabcabc";
+        fs::write(&input_path, source).expect("fixture");
+        fs::write(
+            &patch_path,
+            build_bps_patch(
+                source,
+                target,
+                vec![
+                    TestAction::SourceRead(6),
+                    TestAction::TargetRead(b"ZZ".to_vec()),
+                    TestAction::SourceCopy {
+                        length: 6,
+                        relative_offset: 6,
+                    },
+                ],
+            ),
+        )
+        .expect("fixture");
+
+        let handler = BpsPatchHandler::new(&BPS);
+        let report = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: input_path,
+                    patches: vec![patch_path],
+                    output: output_path.clone(),
+                },
+                &test_context_with_threads(&temp, 4),
+            )
+            .expect("report");
+
+        let execution = report.thread_execution.expect("thread execution");
+        assert_eq!(execution.requested_threads, 4);
+        assert_eq!(execution.effective_threads, 1);
+        assert!(!execution.used_parallelism);
+        assert_eq!(fs::read(output_path).expect("output"), target);
+    }
+
+    #[test]
+    fn apply_supports_overlapping_target_copy() {
+        let temp = TestDir::new();
+        let input_path = temp.child("input.bin");
+        let patch_path = temp.child("update.bps");
+        let output_path = temp.child("output.bin");
+        fs::write(&input_path, []).expect("fixture");
+        fs::write(
+            &patch_path,
+            build_bps_patch(
+                b"",
+                b"AAAAAA",
+                vec![
+                    TestAction::TargetRead(vec![b'A']),
+                    TestAction::TargetCopy {
+                        length: 5,
+                        relative_offset: 0,
+                    },
+                ],
+            ),
+        )
+        .expect("fixture");
+
+        let handler = BpsPatchHandler::new(&BPS);
+        handler
+            .apply(
+                &PatchApplyRequest {
+                    input: input_path,
+                    patches: vec![patch_path],
+                    output: output_path.clone(),
+                },
+                &test_context_with_threads(&temp, 1),
+            )
+            .expect("apply");
+
+        assert_eq!(fs::read(output_path).expect("output"), b"AAAAAA");
+    }
+
+    #[test]
+    fn apply_rejects_multiple_patch_files() {
+        let temp = TestDir::new();
+        let input_path = temp.child("input.bin");
+        let patch_a = temp.child("a.bps");
+        let patch_b = temp.child("b.bps");
+        let output_path = temp.child("output.bin");
+        fs::write(&input_path, b"input").expect("fixture");
+        fs::write(&patch_a, []).expect("fixture");
+        fs::write(&patch_b, []).expect("fixture");
+
+        let handler = BpsPatchHandler::new(&BPS);
+        let error = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: input_path,
+                    patches: vec![patch_a, patch_b],
+                    output: output_path,
+                },
+                &test_context_with_threads(&temp, 2),
+            )
+            .expect_err("multiple patch files should fail");
+
+        assert!(error.to_string().contains("expects exactly one patch file"));
+    }
+
+    #[test]
+    fn apply_fails_when_input_checksum_does_not_match() {
+        let temp = TestDir::new();
+        let input_path = temp.child("input.bin");
+        let patch_path = temp.child("update.bps");
+        let output_path = temp.child("output.bin");
+        fs::write(&input_path, b"wrong input").expect("fixture");
+        fs::write(
+            &patch_path,
+            build_bps_patch(
+                b"expected input",
+                b"expected output",
+                vec![TestAction::TargetRead(b"expected output".to_vec())],
+            ),
+        )
+        .expect("fixture");
+
+        let handler = BpsPatchHandler::new(&BPS);
+        let error = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: input_path,
+                    patches: vec![patch_path],
+                    output: output_path,
+                },
+                &test_context_with_threads(&temp, 1),
+            )
+            .expect_err("checksum mismatch should fail");
+
+        assert!(
+            error.to_string().contains("Input size invalid")
+                || error.to_string().contains("Input checksum invalid")
+        );
+    }
+
+    #[test]
+    fn create_round_trips_for_small_patch() {
+        let temp = TestDir::new();
+        let original_path = temp.child("original.bin");
+        let modified_path = temp.child("modified.bin");
+        let patch_path = temp.child("update.bps");
+        let output_path = temp.child("output.bin");
+        fs::write(&original_path, b"hello old world").expect("fixture");
+        fs::write(&modified_path, b"hello new world").expect("fixture");
+
+        let handler = BpsPatchHandler::new(&BPS);
+        let report = handler
+            .create(
+                &PatchCreateRequest {
+                    original: original_path.clone(),
+                    modified: modified_path.clone(),
+                    output: patch_path.clone(),
+                    format: "BPS".into(),
+                },
+                &test_context_with_threads(&temp, 8),
+            )
+            .expect("create");
+
+        let execution = report.thread_execution.expect("thread execution");
+        assert_eq!(execution.requested_threads, 8);
+        assert_eq!(execution.effective_threads, 1);
+        assert!(!execution.used_parallelism);
+
+        let patch = parse_bps_bytes(&fs::read(&patch_path).expect("patch")).expect("parse");
+        assert!(!patch.actions.is_empty());
+
+        handler
+            .apply(
+                &PatchApplyRequest {
+                    input: original_path,
+                    patches: vec![patch_path],
+                    output: output_path.clone(),
+                },
+                &test_context_with_threads(&temp, 4),
+            )
+            .expect("apply");
+
+        assert_eq!(
+            fs::read(output_path).expect("output"),
+            fs::read(modified_path).expect("modified")
+        );
+    }
+
+    #[test]
+    fn create_uses_source_copy_to_resync_after_insertion() {
+        let temp = TestDir::new();
+        let original_path = temp.child("original.bin");
+        let modified_path = temp.child("modified.bin");
+        let patch_path = temp.child("update.bps");
+        let output_path = temp.child("output.bin");
+        let tail = vec![b'A'; 8192];
+        let mut modified = b"prefix-".to_vec();
+        modified.extend_from_slice(b"INSERT-");
+        modified.extend_from_slice(&tail);
+        let mut original = b"prefix-".to_vec();
+        original.extend_from_slice(&tail);
+        fs::write(&original_path, &original).expect("fixture");
+        fs::write(&modified_path, &modified).expect("fixture");
+
+        let handler = BpsPatchHandler::new(&BPS);
+        handler
+            .create(
+                &PatchCreateRequest {
+                    original: original_path.clone(),
+                    modified: modified_path.clone(),
+                    output: patch_path.clone(),
+                    format: "BPS".into(),
+                },
+                &test_context_with_threads(&temp, 2),
+            )
+            .expect("create");
+
+        let patch = parse_bps_bytes(&fs::read(&patch_path).expect("patch")).expect("parse");
+        assert!(patch
+            .actions
+            .iter()
+            .any(|action| matches!(action, BpsAction::SourceCopy { .. })));
+
+        handler
+            .apply(
+                &PatchApplyRequest {
+                    input: original_path,
+                    patches: vec![patch_path],
+                    output: output_path.clone(),
+                },
+                &test_context_with_threads(&temp, 2),
+            )
+            .expect("apply");
+
+        assert_eq!(fs::read(output_path).expect("output"), modified);
+    }
+
+    #[test]
+    fn create_uses_source_copy_to_resync_after_deletion() {
+        let temp = TestDir::new();
+        let original_path = temp.child("original.bin");
+        let modified_path = temp.child("modified.bin");
+        let patch_path = temp.child("update.bps");
+        let output_path = temp.child("output.bin");
+        let head = vec![b'B'; 4096];
+        let tail = vec![b'C'; 4096];
+        let mut original = head.clone();
+        original.extend_from_slice(b"REMOVE-ME");
+        original.extend_from_slice(&tail);
+        let mut modified = head;
+        modified.extend_from_slice(&tail);
+        fs::write(&original_path, &original).expect("fixture");
+        fs::write(&modified_path, &modified).expect("fixture");
+
+        let handler = BpsPatchHandler::new(&BPS);
+        handler
+            .create(
+                &PatchCreateRequest {
+                    original: original_path.clone(),
+                    modified: modified_path.clone(),
+                    output: patch_path.clone(),
+                    format: "BPS".into(),
+                },
+                &test_context_with_threads(&temp, 2),
+            )
+            .expect("create");
+
+        let patch = parse_bps_bytes(&fs::read(&patch_path).expect("patch")).expect("parse");
+        assert!(patch
+            .actions
+            .iter()
+            .any(|action| matches!(action, BpsAction::SourceCopy { .. })));
+
+        handler
+            .apply(
+                &PatchApplyRequest {
+                    input: original_path,
+                    patches: vec![patch_path],
+                    output: output_path.clone(),
+                },
+                &test_context_with_threads(&temp, 2),
+            )
+            .expect("apply");
+
+        assert_eq!(fs::read(output_path).expect("output"), modified);
+    }
+
+    fn build_bps_patch(source: &[u8], target: &[u8], actions: Vec<TestAction>) -> Vec<u8> {
+        let mut bytes = BPS_MAGIC.to_vec();
+        push_varint(&mut bytes, source.len() as u64);
+        push_varint(&mut bytes, target.len() as u64);
+        push_varint(&mut bytes, 0);
+
+        for action in actions {
+            match action {
+                TestAction::SourceRead(length) => {
+                    push_varint(&mut bytes, ((length - 1) << 2) & !0x03);
+                }
+                TestAction::TargetRead(data) => {
+                    push_varint(&mut bytes, (((data.len() as u64) - 1) << 2) | 1);
+                    bytes.extend_from_slice(&data);
+                }
+                TestAction::SourceCopy {
+                    length,
+                    relative_offset,
+                } => {
+                    push_varint(&mut bytes, ((length - 1) << 2) | 2);
+                    push_varint(
+                        &mut bytes,
+                        encode_signed_offset(relative_offset).expect("offset"),
+                    );
+                }
+                TestAction::TargetCopy {
+                    length,
+                    relative_offset,
+                } => {
+                    push_varint(&mut bytes, ((length - 1) << 2) | 3);
+                    push_varint(
+                        &mut bytes,
+                        encode_signed_offset(relative_offset).expect("offset"),
+                    );
+                }
+            }
+        }
+
+        bytes.extend_from_slice(&crc32_bytes(source).to_le_bytes());
+        bytes.extend_from_slice(&crc32_bytes(target).to_le_bytes());
+        let patch_checksum = crc32_bytes(&bytes);
+        bytes.extend_from_slice(&patch_checksum.to_le_bytes());
+        bytes
+    }
+
+    fn test_context_with_threads(temp: &TestDir, threads: usize) -> OperationContext {
+        OperationContext::new(
+            ThreadBudget::Fixed(threads),
+            temp.child("temp"),
+            Arc::new(NoopProgressSink),
+            CancellationToken::new(),
+        )
     }
 }
