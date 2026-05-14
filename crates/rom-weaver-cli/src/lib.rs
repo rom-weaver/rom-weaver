@@ -333,21 +333,6 @@ impl CliApp {
             }
         }
 
-        if let Some(codec) = args.codec.as_ref() {
-            if self.codecs.find_by_name(codec).is_none() {
-                return self.finish(
-                    "compress",
-                    OperationReport::failed(
-                        OperationFamily::Codec,
-                        Some(codec.clone()),
-                        "validate",
-                        format!("unknown codec `{codec}`"),
-                        probe_threads.clone(),
-                    ),
-                );
-            }
-        }
-
         let Some(handler) = self.containers.find_by_name(&args.format) else {
             return self.finish(
                 "compress",
@@ -360,6 +345,23 @@ impl CliApp {
                 ),
             );
         };
+
+        if handler.descriptor().name != "chd" {
+            if let Some(codec) = args.codec.as_ref() {
+                if self.codecs.find_by_name(codec).is_none() {
+                    return self.finish(
+                        "compress",
+                        OperationReport::failed(
+                            OperationFamily::Codec,
+                            Some(codec.clone()),
+                            "validate",
+                            format!("unknown codec `{codec}`"),
+                            probe_threads.clone(),
+                        ),
+                    );
+                }
+            }
+        }
 
         let request = ContainerCreateRequest {
             inputs: args.input,

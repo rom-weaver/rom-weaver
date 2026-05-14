@@ -6,4 +6,5 @@ rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
+rom-weaver-chd-sys = { path = "../rom-weaver-chd-sys" }
 rom-weaver-core = { path = "../rom-weaver-core" }

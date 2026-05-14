@@ -1,0 +1,16 @@
+[package]
+name = "rom-weaver-chd-sys"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+links = "rom_weaver_mame_chd"
+
+[lib]
+name = "rom_weaver_chd_sys"
+
+[dependencies]
+zstd-sys.workspace = true
+
+[build-dependencies]
+cc.workspace = true

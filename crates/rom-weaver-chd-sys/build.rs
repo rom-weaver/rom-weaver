@@ -1,0 +1,57 @@
+fn main() {
+    println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-changed=native/rom_weaver_mame_chd.cpp");
+    println!("cargo:rerun-if-changed=native/rom_weaver_mame_chdcodec.cpp");
+    println!("cargo:rerun-if-changed=native/mame_compat");
+    println!("cargo:rerun-if-changed=native/mame_upstream");
+
+    let mut lzma = cc::Build::new();
+    lzma.file("native/mame_upstream/lzma/C/CpuArch.c");
+    lzma.file("native/mame_upstream/lzma/C/LzFind.c");
+    lzma.file("native/mame_upstream/lzma/C/LzmaDec.c");
+    lzma.file("native/mame_upstream/lzma/C/LzmaEnc.c");
+    lzma.include("native/mame_upstream/lzma/C");
+    lzma.flag_if_supported("-std=c11");
+    lzma.flag_if_supported("-Wno-sign-compare");
+    lzma.flag_if_supported("-Wno-unused-parameter");
+    lzma.define("Z7_ST", None);
+    lzma.compile("rom_weaver_mame_lzma");
+
+    let mut build = cc::Build::new();
+    build.cpp(true);
+    build.file("native/rom_weaver_mame_chd.cpp");
+    build.file("native/rom_weaver_mame_chdcodec.cpp");
+    build.file("native/mame_compat/rom_weaver_mame_corefile.cpp");
+    build.file("native/mame_compat/rom_weaver_mame_ioprocs.cpp");
+    build.file("native/mame_compat/rom_weaver_mame_osdcore.cpp");
+    build.file("native/mame_upstream/chd.cpp");
+    build.file("native/mame_upstream/hashing.cpp");
+    build.file("native/mame_upstream/huffman.cpp");
+    build.file("native/mame_upstream/md5.cpp");
+    build.include("native/mame_compat");
+    build.include("native/mame_upstream");
+    build.include("native/mame_upstream/lzma/C");
+    for include in zstd_include_dirs() {
+        build.include(include);
+    }
+    build.flag_if_supported("-std=c++17");
+    build.flag_if_supported("-Wno-sign-compare");
+    build.flag_if_supported("-Wno-unused-parameter");
+    build.define("MAME_NOASM", None);
+    build.define("ROM_WEAVER_MAME_CHD_HAVE_BACKEND", None);
+    build.define("Z7_ST", None);
+    build.compile("rom_weaver_mame_chd_bridge");
+    println!("cargo:rustc-link-lib=z");
+    println!("cargo:rustc-env=ROM_WEAVER_MAME_CHD_BACKEND=embedded-zlib-zstd-lzma-huffman");
+}
+
+fn zstd_include_dirs() -> Vec<String> {
+    let includes = std::env::var("DEP_ZSTD_INCLUDE").expect(
+        "missing DEP_ZSTD_INCLUDE from zstd-sys; ensure zstd-sys is an immediate dependency",
+    );
+    includes
+        .split(';')
+        .filter(|path| !path.is_empty())
+        .map(ToOwned::to_owned)
+        .collect()
+}
