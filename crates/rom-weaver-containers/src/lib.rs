@@ -1,10 +1,14 @@
 use std::{
+    collections::BTreeSet,
     fs::{self, File},
     io::{self, BufReader, BufWriter, Read, Seek, SeekFrom, Write},
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
     sync::Arc,
 };
 
+use bzip2::{Compression as Bzip2Compression, read::BzDecoder as Bzip2Decoder, write::BzEncoder};
+use flate2::{Compression as GzipCompression, read::GzDecoder, write::GzEncoder};
+use liblzma::{read::XzDecoder, write::XzEncoder};
 use nod::{
     common::{Compression as NodCompression, Format as NodFormat},
     read::{DiscOptions as NodDiscOptions, DiscReader as NodDiscReader},
@@ -24,6 +28,15 @@ use rom_weaver_core::{
     ContainerCapabilities, ContainerCreateRequest, ContainerExtractRequest, ContainerHandler,
     ContainerInspectRequest, FormatDescriptor, OperationContext, OperationFamily, OperationReport,
     ProbeConfidence, Result, RomWeaverError, ThreadCapability,
+};
+use sevenz_rust::{
+    Password as SevenZPassword, SevenZArchiveEntry, SevenZMethod, SevenZMethodConfiguration,
+    SevenZReader, SevenZWriter,
+};
+use tar::{Archive as TarArchive, Builder as TarBuilder};
+use zip::{
+    CompressionMethod as ZipCompressionMethod, ZipArchive as ZipFileArchive,
+    ZipWriter as ZipFileWriter, write::FileOptions as ZipFileOptions,
 };
 use zstd::bulk::compress as zstd_compress;
 use zstd_seekable::Seekable;
@@ -103,13 +116,13 @@ impl ContainerRegistry {
     pub fn new() -> Self {
         Self {
             handlers: vec![
-                Arc::new(StaticContainerHandler::new(&ZIP)),
-                Arc::new(StaticContainerHandler::new(&ZIPX)),
-                Arc::new(StaticContainerHandler::new(&SEVEN_Z)),
-                Arc::new(StaticContainerHandler::new(&TAR)),
-                Arc::new(StaticContainerHandler::new(&TAR_GZ)),
-                Arc::new(StaticContainerHandler::new(&TAR_BZ2)),
-                Arc::new(StaticContainerHandler::new(&TAR_XZ)),
+                Arc::new(ZipContainerHandler::new(&ZIP, ZipContainerFlavor::Zip)),
+                Arc::new(ZipContainerHandler::new(&ZIPX, ZipContainerFlavor::Zipx)),
+                Arc::new(SevenZContainerHandler::new(&SEVEN_Z)),
+                Arc::new(TarContainerHandler::new(&TAR, TarCompression::None)),
+                Arc::new(TarContainerHandler::new(&TAR_GZ, TarCompression::Gzip)),
+                Arc::new(TarContainerHandler::new(&TAR_BZ2, TarCompression::Bzip2)),
+                Arc::new(TarContainerHandler::new(&TAR_XZ, TarCompression::Xz)),
                 Arc::new(ChdContainerHandler),
                 Arc::new(RvzContainerHandler),
                 Arc::new(Z3dsContainerHandler),
@@ -148,81 +161,1025 @@ impl ContainerRegistry {
     }
 }
 
-struct StaticContainerHandler {
+const SEVEN_Z_SIGNATURE: [u8; 6] = [b'7', b'z', 0xBC, 0xAF, 0x27, 0x1C];
+
+#[derive(Clone, Debug)]
+struct ArchiveInputEntry {
+    source: PathBuf,
+    archive_name: String,
+    is_dir: bool,
+}
+
+#[derive(Debug, Default)]
+struct SelectionMatcher {
+    requested: BTreeSet<String>,
+    matched: BTreeSet<String>,
+}
+
+impl SelectionMatcher {
+    fn new(requested: &[String]) -> Self {
+        let requested = requested
+            .iter()
+            .map(|value| normalize_archive_name(value))
+            .filter(|value| !value.is_empty())
+            .collect();
+        Self {
+            requested,
+            matched: BTreeSet::new(),
+        }
+    }
+
+    fn matches(&mut self, entry_name: &str) -> bool {
+        if self.requested.is_empty() {
+            return true;
+        }
+        let entry_name = normalize_archive_name(entry_name);
+        if entry_name.is_empty() {
+            return false;
+        }
+        for requested in &self.requested {
+            if entry_name == *requested || entry_name.starts_with(&format!("{requested}/")) {
+                self.matched.insert(requested.clone());
+                return true;
+            }
+        }
+        false
+    }
+
+    fn ensure_all_matched(&self) -> Result<()> {
+        let missing = self
+            .requested
+            .difference(&self.matched)
+            .cloned()
+            .collect::<Vec<_>>();
+        if missing.is_empty() {
+            Ok(())
+        } else {
+            Err(RomWeaverError::Validation(format!(
+                "requested selections were not found: {}",
+                missing.join(", ")
+            )))
+        }
+    }
+}
+
+fn normalize_archive_name(name: &str) -> String {
+    name.trim()
+        .replace('\\', "/")
+        .trim_start_matches("./")
+        .trim_matches('/')
+        .to_string()
+}
+
+fn sanitize_archive_relative_path_from_str(name: &str) -> Result<PathBuf> {
+    let normalized = name.replace('\\', "/");
+    let path = Path::new(&normalized);
+    sanitize_archive_relative_path(path)
+}
+
+fn sanitize_archive_relative_path(path: &Path) -> Result<PathBuf> {
+    let mut sanitized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::Normal(value) => sanitized.push(value),
+            Component::CurDir => {}
+            Component::Prefix(_) | Component::RootDir | Component::ParentDir => {
+                return Err(RomWeaverError::Validation(format!(
+                    "archive entry path is not safe for extraction: `{}`",
+                    path.display()
+                )));
+            }
+        }
+    }
+    if sanitized.as_os_str().is_empty() {
+        return Err(RomWeaverError::Validation(format!(
+            "archive entry path is empty: `{}`",
+            path.display()
+        )));
+    }
+    Ok(sanitized)
+}
+
+fn archive_path_to_name(path: &Path) -> Result<String> {
+    let mut parts = Vec::new();
+    for component in path.components() {
+        match component {
+            Component::Normal(value) => parts.push(value.to_string_lossy().to_string()),
+            Component::CurDir => {}
+            Component::Prefix(_) | Component::RootDir | Component::ParentDir => {
+                return Err(RomWeaverError::Validation(format!(
+                    "path cannot be represented inside archive: `{}`",
+                    path.display()
+                )));
+            }
+        }
+    }
+    if parts.is_empty() {
+        return Err(RomWeaverError::Validation(format!(
+            "path cannot be represented inside archive: `{}`",
+            path.display()
+        )));
+    }
+    Ok(parts.join("/"))
+}
+
+fn collect_archive_inputs(inputs: &[PathBuf]) -> Result<Vec<ArchiveInputEntry>> {
+    if inputs.is_empty() {
+        return Err(RomWeaverError::Validation(
+            "at least one input path is required".into(),
+        ));
+    }
+
+    let mut entries = Vec::new();
+    for input in inputs {
+        let root = input.parent().unwrap_or_else(|| Path::new(""));
+        collect_archive_inputs_from_path(input, root, &mut entries)?;
+    }
+    Ok(entries)
+}
+
+fn collect_archive_inputs_from_path(
+    source: &Path,
+    root: &Path,
+    entries: &mut Vec<ArchiveInputEntry>,
+) -> Result<()> {
+    let metadata = fs::metadata(source)?;
+    let relative = source.strip_prefix(root).map_err(|_| {
+        RomWeaverError::Validation(format!(
+            "failed to derive archive entry name from input `{}`",
+            source.display()
+        ))
+    })?;
+    let archive_name = archive_path_to_name(relative)?;
+
+    if metadata.is_dir() {
+        entries.push(ArchiveInputEntry {
+            source: source.to_path_buf(),
+            archive_name,
+            is_dir: true,
+        });
+
+        let mut children = fs::read_dir(source)?.collect::<io::Result<Vec<_>>>()?;
+        children.sort_by(|left, right| left.path().cmp(&right.path()));
+        for child in children {
+            let file_type = child.file_type()?;
+            if file_type.is_dir() || file_type.is_file() {
+                collect_archive_inputs_from_path(&child.path(), root, entries)?;
+            }
+        }
+    } else if metadata.is_file() {
+        entries.push(ArchiveInputEntry {
+            source: source.to_path_buf(),
+            archive_name,
+            is_dir: false,
+        });
+    } else {
+        return Err(RomWeaverError::Validation(format!(
+            "unsupported input type for archive creation: `{}`",
+            source.display()
+        )));
+    }
+
+    Ok(())
+}
+
+#[derive(Clone, Copy, Debug)]
+enum ZipContainerFlavor {
+    Zip,
+    Zipx,
+}
+
+struct ZipContainerHandler {
     descriptor: &'static FormatDescriptor,
+    flavor: ZipContainerFlavor,
 }
 
-impl StaticContainerHandler {
-    const fn new(descriptor: &'static FormatDescriptor) -> Self {
-        Self { descriptor }
+impl ZipContainerHandler {
+    const fn new(descriptor: &'static FormatDescriptor, flavor: ZipContainerFlavor) -> Self {
+        Self { descriptor, flavor }
     }
 
-    fn unsupported_label(&self, operation: &str) -> String {
-        format!(
-            "{operation} is not implemented yet for {}",
-            self.descriptor.name
-        )
+    fn parse_codec(
+        &self,
+        codec: Option<&str>,
+        level: Option<i32>,
+    ) -> Result<(ZipCompressionMethod, Option<i32>)> {
+        let default = match self.flavor {
+            ZipContainerFlavor::Zip => ZipCompressionMethod::Deflated,
+            ZipContainerFlavor::Zipx => ZipCompressionMethod::Zstd,
+        };
+        let method = match codec.map(|value| value.trim().to_ascii_lowercase()) {
+            None => default,
+            Some(name) if matches!(name.as_str(), "store" | "none" | "uncompressed") => {
+                ZipCompressionMethod::Stored
+            }
+            Some(name) if matches!(name.as_str(), "deflate" | "zlib" | "gzip") => {
+                ZipCompressionMethod::Deflated
+            }
+            Some(name) if matches!(name.as_str(), "bzip2" | "bz2") => ZipCompressionMethod::Bzip2,
+            Some(name) if matches!(name.as_str(), "zstd" | "zstandard") => {
+                ZipCompressionMethod::Zstd
+            }
+            Some(name) => {
+                return Err(RomWeaverError::Validation(format!(
+                    "unsupported {} codec `{name}`; supported codecs are store, deflate, bzip2, and zstd",
+                    self.descriptor.name
+                )));
+            }
+        };
+
+        if let Some(level) = level {
+            let in_range = match method {
+                ZipCompressionMethod::Stored => false,
+                ZipCompressionMethod::Deflated | ZipCompressionMethod::Bzip2 => {
+                    (0..=9).contains(&level)
+                }
+                ZipCompressionMethod::Zstd => (-7..=22).contains(&level),
+                _ => false,
+            };
+            if !in_range {
+                return Err(RomWeaverError::Validation(format!(
+                    "level `{level}` is invalid for {} codec `{}`",
+                    self.descriptor.name,
+                    self.method_name(method)
+                )));
+            }
+        }
+
+        if method == ZipCompressionMethod::Stored && level.is_some() {
+            return Err(RomWeaverError::Validation(format!(
+                "{} codec `store` does not accept --level",
+                self.descriptor.name
+            )));
+        }
+
+        Ok((method, level))
+    }
+
+    fn method_name(&self, method: ZipCompressionMethod) -> &'static str {
+        match method {
+            ZipCompressionMethod::Stored => "store",
+            ZipCompressionMethod::Deflated => "deflate",
+            ZipCompressionMethod::Bzip2 => "bzip2",
+            ZipCompressionMethod::Zstd => "zstd",
+            _ => "unknown",
+        }
+    }
+
+    fn build_options(&self, method: ZipCompressionMethod, level: Option<i32>) -> ZipFileOptions {
+        ZipFileOptions::default()
+            .compression_method(method)
+            .compression_level(level)
+    }
+
+    fn open_archive(&self, source: &Path) -> Result<ZipFileArchive<BufReader<File>>> {
+        let file = File::open(source)?;
+        ZipFileArchive::new(BufReader::new(file)).map_err(|error| {
+            RomWeaverError::Validation(format!(
+                "{} archive is invalid: {error}",
+                self.descriptor.name
+            ))
+        })
     }
 }
 
-impl ContainerHandler for StaticContainerHandler {
+impl ContainerHandler for ZipContainerHandler {
     fn descriptor(&self) -> &'static FormatDescriptor {
         self.descriptor
     }
 
-    fn probe(&self, _source: &Path) -> ProbeConfidence {
-        ProbeConfidence::Extension
+    fn probe(&self, source: &Path) -> ProbeConfidence {
+        if self.open_archive(source).is_ok() {
+            ProbeConfidence::Signature
+        } else {
+            ProbeConfidence::Extension
+        }
     }
 
     fn inspect(
         &self,
-        _request: &ContainerInspectRequest,
+        request: &ContainerInspectRequest,
         _context: &OperationContext,
     ) -> Result<OperationReport> {
-        Ok(OperationReport::unsupported(
+        let mut archive = self.open_archive(&request.source)?;
+        let mut files = 0usize;
+        let mut directories = 0usize;
+        let mut compressed_bytes = 0u64;
+        let mut logical_bytes = 0u64;
+
+        for index in 0..archive.len() {
+            let entry = archive.by_index(index).map_err(|error| {
+                RomWeaverError::Validation(format!(
+                    "{} inspect failed while reading entry {index}: {error}",
+                    self.descriptor.name
+                ))
+            })?;
+            if entry.is_dir() {
+                directories += 1;
+            } else {
+                files += 1;
+            }
+            compressed_bytes = compressed_bytes.saturating_add(entry.compressed_size());
+            logical_bytes = logical_bytes.saturating_add(entry.size());
+        }
+
+        Ok(OperationReport::succeeded(
             OperationFamily::Container,
             Some(self.descriptor.name.to_string()),
             "inspect",
-            self.unsupported_label("inspect"),
+            format!(
+                "{}: {} entries ({} files, {} directories), {} bytes compressed, {} bytes uncompressed",
+                self.descriptor.name,
+                archive.len(),
+                files,
+                directories,
+                compressed_bytes,
+                logical_bytes
+            ),
+            Some(100.0),
             None,
         ))
     }
 
     fn extract(
         &self,
-        _request: &ContainerExtractRequest,
+        request: &ContainerExtractRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let execution = context.plan_threads(ThreadCapability::single_threaded());
-        Ok(OperationReport::unsupported(
+        fs::create_dir_all(&request.out_dir)?;
+
+        let mut archive = self.open_archive(&request.source)?;
+        let mut selections = SelectionMatcher::new(&request.selections);
+        let mut extracted_files = 0usize;
+        let mut written_bytes = 0u64;
+
+        for index in 0..archive.len() {
+            let mut entry = archive.by_index(index).map_err(|error| {
+                RomWeaverError::Validation(format!(
+                    "{} extract failed while reading entry {index}: {error}",
+                    self.descriptor.name
+                ))
+            })?;
+            let entry_name = normalize_archive_name(entry.name());
+            if entry_name.is_empty() || !selections.matches(&entry_name) {
+                continue;
+            }
+
+            let relative = sanitize_archive_relative_path_from_str(entry.name())?;
+            let output_path = request.out_dir.join(relative);
+            if entry.is_dir() {
+                fs::create_dir_all(&output_path)?;
+                continue;
+            }
+
+            if let Some(parent) = output_path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            let mut output = BufWriter::new(File::create(&output_path)?);
+            let copied = io::copy(&mut entry, &mut output)?;
+            written_bytes = written_bytes.saturating_add(copied);
+            extracted_files += 1;
+        }
+
+        selections.ensure_all_matched()?;
+
+        Ok(OperationReport::succeeded(
             OperationFamily::Container,
             Some(self.descriptor.name.to_string()),
             "extract",
-            self.unsupported_label("extract"),
+            format!(
+                "extracted `{}` to `{}` ({} file(s), {} bytes written)",
+                request.source.display(),
+                request.out_dir.display(),
+                extracted_files,
+                written_bytes
+            ),
+            Some(100.0),
             Some(execution),
         ))
     }
 
     fn create(
         &self,
-        _request: &ContainerCreateRequest,
+        request: &ContainerCreateRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let execution = context.plan_threads(ThreadCapability::single_threaded());
-        Ok(OperationReport::unsupported(
+        let (method, level) = self.parse_codec(request.codec.as_deref(), request.level)?;
+        let entries = collect_archive_inputs(&request.inputs)?;
+
+        if let Some(parent) = request.output.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let file = File::create(&request.output)?;
+        let writer = BufWriter::new(file);
+        let mut archive = ZipFileWriter::new(writer);
+        let mut logical_bytes = 0u64;
+
+        for entry in &entries {
+            if entry.is_dir {
+                let directory_name = format!("{}/", entry.archive_name);
+                archive
+                    .add_directory(directory_name, self.build_options(method, level))
+                    .map_err(|error| {
+                        RomWeaverError::Validation(format!(
+                            "{} create failed for `{}`: {error}",
+                            self.descriptor.name, entry.archive_name
+                        ))
+                    })?;
+                continue;
+            }
+
+            archive
+                .start_file(
+                    entry.archive_name.clone(),
+                    self.build_options(method, level),
+                )
+                .map_err(|error| {
+                    RomWeaverError::Validation(format!(
+                        "{} create failed for `{}`: {error}",
+                        self.descriptor.name, entry.archive_name
+                    ))
+                })?;
+            let mut source = BufReader::new(File::open(&entry.source)?);
+            let copied = io::copy(&mut source, &mut archive)?;
+            logical_bytes = logical_bytes.saturating_add(copied);
+        }
+
+        archive.finish().map_err(|error| {
+            RomWeaverError::Validation(format!(
+                "{} create failed while finalizing archive: {error}",
+                self.descriptor.name
+            ))
+        })?;
+
+        Ok(OperationReport::succeeded(
             OperationFamily::Container,
             Some(self.descriptor.name.to_string()),
             "create",
-            self.unsupported_label("create"),
+            format!(
+                "created `{}` from {} input(s) with {} ({} bytes)",
+                request.output.display(),
+                request.inputs.len(),
+                self.method_name(method),
+                logical_bytes
+            ),
+            Some(100.0),
             Some(execution),
         ))
     }
 
     fn capabilities(&self) -> ContainerCapabilities {
         ContainerCapabilities {
-            inspect: false,
-            extract: false,
-            create: false,
+            inspect: true,
+            extract: true,
+            create: true,
+            extract_threads: ThreadCapability::single_threaded(),
+            create_threads: ThreadCapability::single_threaded(),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+enum TarCompression {
+    None,
+    Gzip,
+    Bzip2,
+    Xz,
+}
+
+struct TarContainerHandler {
+    descriptor: &'static FormatDescriptor,
+    compression: TarCompression,
+}
+
+impl TarContainerHandler {
+    const fn new(descriptor: &'static FormatDescriptor, compression: TarCompression) -> Self {
+        Self {
+            descriptor,
+            compression,
+        }
+    }
+
+    fn parse_codec_and_level(&self, codec: Option<&str>, level: Option<i32>) -> Result<u32> {
+        let codec = codec.map(|value| value.trim().to_ascii_lowercase());
+        match self.compression {
+            TarCompression::None => {
+                if let Some(codec) = codec {
+                    if !matches!(codec.as_str(), "store" | "none" | "uncompressed") {
+                        return Err(RomWeaverError::Validation(format!(
+                            "unsupported tar codec `{codec}`; use store or omit --codec"
+                        )));
+                    }
+                }
+                if level.is_some() {
+                    return Err(RomWeaverError::Validation(
+                        "tar does not accept --level".into(),
+                    ));
+                }
+                Ok(0)
+            }
+            TarCompression::Gzip => {
+                if let Some(codec) = codec {
+                    if !matches!(codec.as_str(), "gzip" | "gz" | "deflate" | "zlib") {
+                        return Err(RomWeaverError::Validation(format!(
+                            "unsupported tar.gz codec `{codec}`; use gzip"
+                        )));
+                    }
+                }
+                match level {
+                    None => Ok(6),
+                    Some(value) if (0..=9).contains(&value) => Ok(value as u32),
+                    Some(value) => Err(RomWeaverError::Validation(format!(
+                        "tar.gz level `{value}` is out of range (0..=9)"
+                    ))),
+                }
+            }
+            TarCompression::Bzip2 => {
+                if let Some(codec) = codec {
+                    if !matches!(codec.as_str(), "bzip2" | "bz2") {
+                        return Err(RomWeaverError::Validation(format!(
+                            "unsupported tar.bz2 codec `{codec}`; use bzip2"
+                        )));
+                    }
+                }
+                match level {
+                    None => Ok(6),
+                    Some(value) if (1..=9).contains(&value) => Ok(value as u32),
+                    Some(value) => Err(RomWeaverError::Validation(format!(
+                        "tar.bz2 level `{value}` is out of range (1..=9)"
+                    ))),
+                }
+            }
+            TarCompression::Xz => {
+                if let Some(codec) = codec {
+                    if !matches!(codec.as_str(), "xz" | "lzma" | "lzma2") {
+                        return Err(RomWeaverError::Validation(format!(
+                            "unsupported tar.xz codec `{codec}`; use xz"
+                        )));
+                    }
+                }
+                match level {
+                    None => Ok(6),
+                    Some(value) if (0..=9).contains(&value) => Ok(value as u32),
+                    Some(value) => Err(RomWeaverError::Validation(format!(
+                        "tar.xz level `{value}` is out of range (0..=9)"
+                    ))),
+                }
+            }
+        }
+    }
+
+    fn append_entries<W: Write>(
+        &self,
+        builder: &mut TarBuilder<W>,
+        entries: &[ArchiveInputEntry],
+    ) -> Result<u64> {
+        let mut logical_bytes = 0u64;
+        for entry in entries {
+            if entry.is_dir {
+                builder.append_dir(&entry.archive_name, &entry.source)?;
+            } else {
+                builder.append_path_with_name(&entry.source, &entry.archive_name)?;
+                logical_bytes = logical_bytes.saturating_add(fs::metadata(&entry.source)?.len());
+            }
+        }
+        Ok(logical_bytes)
+    }
+
+    fn open_reader(&self, source: &Path) -> Result<Box<dyn Read>> {
+        let file = File::open(source)?;
+        let reader: Box<dyn Read> = match self.compression {
+            TarCompression::None => Box::new(BufReader::new(file)),
+            TarCompression::Gzip => Box::new(GzDecoder::new(BufReader::new(file))),
+            TarCompression::Bzip2 => Box::new(Bzip2Decoder::new(BufReader::new(file))),
+            TarCompression::Xz => Box::new(XzDecoder::new(BufReader::new(file))),
+        };
+        Ok(reader)
+    }
+}
+
+impl ContainerHandler for TarContainerHandler {
+    fn descriptor(&self) -> &'static FormatDescriptor {
+        self.descriptor
+    }
+
+    fn inspect(
+        &self,
+        request: &ContainerInspectRequest,
+        _context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let reader = self.open_reader(&request.source)?;
+        let mut archive = TarArchive::new(reader);
+        let mut files = 0usize;
+        let mut directories = 0usize;
+        let mut logical_bytes = 0u64;
+        let mut entries_total = 0usize;
+
+        for entry in archive.entries()? {
+            let entry = entry?;
+            entries_total += 1;
+            let entry_type = entry.header().entry_type();
+            if entry_type.is_dir() {
+                directories += 1;
+            } else if entry_type.is_file() {
+                files += 1;
+                logical_bytes = logical_bytes.saturating_add(entry.header().size()?);
+            }
+        }
+
+        Ok(OperationReport::succeeded(
+            OperationFamily::Container,
+            Some(self.descriptor.name.to_string()),
+            "inspect",
+            format!(
+                "{}: {} entries ({} files, {} directories), {} bytes uncompressed",
+                self.descriptor.name, entries_total, files, directories, logical_bytes
+            ),
+            Some(100.0),
+            None,
+        ))
+    }
+
+    fn extract(
+        &self,
+        request: &ContainerExtractRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let execution = context.plan_threads(ThreadCapability::single_threaded());
+        fs::create_dir_all(&request.out_dir)?;
+
+        let reader = self.open_reader(&request.source)?;
+        let mut archive = TarArchive::new(reader);
+        let mut selections = SelectionMatcher::new(&request.selections);
+        let mut extracted_files = 0usize;
+        let mut written_bytes = 0u64;
+
+        for entry in archive.entries()? {
+            let mut entry = entry?;
+            let raw_path = entry.path()?;
+            let relative = sanitize_archive_relative_path(raw_path.as_ref())?;
+            let archive_name = archive_path_to_name(&relative)?;
+            if !selections.matches(&archive_name) {
+                continue;
+            }
+
+            let output_path = request.out_dir.join(&relative);
+            let entry_type = entry.header().entry_type();
+            if entry_type.is_dir() {
+                fs::create_dir_all(&output_path)?;
+                continue;
+            }
+            if !entry_type.is_file() {
+                return Err(RomWeaverError::Validation(format!(
+                    "{} extract does not support {} entries yet (`{}`)",
+                    self.descriptor.name,
+                    entry_type.as_byte(),
+                    archive_name
+                )));
+            }
+
+            if let Some(parent) = output_path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            let mut output = BufWriter::new(File::create(&output_path)?);
+            let copied = io::copy(&mut entry, &mut output)?;
+            extracted_files += 1;
+            written_bytes = written_bytes.saturating_add(copied);
+        }
+
+        selections.ensure_all_matched()?;
+
+        Ok(OperationReport::succeeded(
+            OperationFamily::Container,
+            Some(self.descriptor.name.to_string()),
+            "extract",
+            format!(
+                "extracted `{}` to `{}` ({} file(s), {} bytes written)",
+                request.source.display(),
+                request.out_dir.display(),
+                extracted_files,
+                written_bytes
+            ),
+            Some(100.0),
+            Some(execution),
+        ))
+    }
+
+    fn create(
+        &self,
+        request: &ContainerCreateRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let execution = context.plan_threads(ThreadCapability::single_threaded());
+        let level = self.parse_codec_and_level(request.codec.as_deref(), request.level)?;
+        let entries = collect_archive_inputs(&request.inputs)?;
+
+        if let Some(parent) = request.output.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        let logical_bytes = match self.compression {
+            TarCompression::None => {
+                let output = BufWriter::new(File::create(&request.output)?);
+                let mut builder = TarBuilder::new(output);
+                let bytes = self.append_entries(&mut builder, &entries)?;
+                builder.finish()?;
+                bytes
+            }
+            TarCompression::Gzip => {
+                let output = BufWriter::new(File::create(&request.output)?);
+                let encoder = GzEncoder::new(output, GzipCompression::new(level));
+                let mut builder = TarBuilder::new(encoder);
+                let bytes = self.append_entries(&mut builder, &entries)?;
+                let encoder = builder.into_inner()?;
+                let mut output = encoder.finish()?;
+                output.flush()?;
+                bytes
+            }
+            TarCompression::Bzip2 => {
+                let output = BufWriter::new(File::create(&request.output)?);
+                let encoder = BzEncoder::new(output, Bzip2Compression::new(level));
+                let mut builder = TarBuilder::new(encoder);
+                let bytes = self.append_entries(&mut builder, &entries)?;
+                let mut output = builder.into_inner()?.finish()?;
+                output.flush()?;
+                bytes
+            }
+            TarCompression::Xz => {
+                let output = BufWriter::new(File::create(&request.output)?);
+                let encoder = XzEncoder::new(output, level);
+                let mut builder = TarBuilder::new(encoder);
+                let bytes = self.append_entries(&mut builder, &entries)?;
+                let mut output = builder.into_inner()?.finish()?;
+                output.flush()?;
+                bytes
+            }
+        };
+
+        Ok(OperationReport::succeeded(
+            OperationFamily::Container,
+            Some(self.descriptor.name.to_string()),
+            "create",
+            format!(
+                "created `{}` from {} input(s) ({} bytes)",
+                request.output.display(),
+                request.inputs.len(),
+                logical_bytes
+            ),
+            Some(100.0),
+            Some(execution),
+        ))
+    }
+
+    fn capabilities(&self) -> ContainerCapabilities {
+        ContainerCapabilities {
+            inspect: true,
+            extract: true,
+            create: true,
+            extract_threads: ThreadCapability::single_threaded(),
+            create_threads: ThreadCapability::single_threaded(),
+        }
+    }
+}
+
+struct SevenZContainerHandler {
+    descriptor: &'static FormatDescriptor,
+}
+
+impl SevenZContainerHandler {
+    const fn new(descriptor: &'static FormatDescriptor) -> Self {
+        Self { descriptor }
+    }
+
+    fn open_reader(&self, source: &Path) -> Result<SevenZReader<File>> {
+        let file = File::open(source)?;
+        let len = file.metadata()?.len();
+        SevenZReader::new(file, len, SevenZPassword::empty())
+            .map_err(|error| RomWeaverError::Validation(format!("7z archive is invalid: {error}")))
+    }
+
+    fn parse_codec(
+        &self,
+        codec: Option<&str>,
+        level: Option<i32>,
+    ) -> Result<SevenZMethodConfiguration> {
+        if level.is_some() {
+            return Err(RomWeaverError::Validation(
+                "7z compression level tuning is not implemented yet; omit --level".into(),
+            ));
+        }
+        match codec.map(|value| value.trim().to_ascii_lowercase()) {
+            None => Ok(SevenZMethodConfiguration::new(SevenZMethod::LZMA2)),
+            Some(name) if name == "lzma2" => {
+                Ok(SevenZMethodConfiguration::new(SevenZMethod::LZMA2))
+            }
+            Some(name) if name == "lzma" => Ok(SevenZMethodConfiguration::new(SevenZMethod::LZMA)),
+            Some(name) => Err(RomWeaverError::Validation(format!(
+                "unsupported 7z codec `{name}`; supported codecs are lzma2 and lzma"
+            ))),
+        }
+    }
+
+    fn method_name(method: &SevenZMethodConfiguration) -> &'static str {
+        match method.method {
+            SevenZMethod::LZMA2 => "lzma2",
+            SevenZMethod::LZMA => "lzma",
+            _ => "unknown",
+        }
+    }
+}
+
+impl ContainerHandler for SevenZContainerHandler {
+    fn descriptor(&self) -> &'static FormatDescriptor {
+        self.descriptor
+    }
+
+    fn probe(&self, source: &Path) -> ProbeConfidence {
+        let mut signature = [0u8; SEVEN_Z_SIGNATURE.len()];
+        if let Ok(mut file) = File::open(source) {
+            if file.read_exact(&mut signature).is_ok() && signature == SEVEN_Z_SIGNATURE {
+                return ProbeConfidence::Signature;
+            }
+        }
+        ProbeConfidence::Extension
+    }
+
+    fn inspect(
+        &self,
+        request: &ContainerInspectRequest,
+        _context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let reader = self.open_reader(&request.source)?;
+        let archive = reader.archive();
+        let mut files = 0usize;
+        let mut directories = 0usize;
+        let mut compressed_bytes = 0u64;
+        let mut logical_bytes = 0u64;
+
+        for entry in &archive.files {
+            if entry.is_directory() {
+                directories += 1;
+            } else {
+                files += 1;
+            }
+            compressed_bytes = compressed_bytes.saturating_add(entry.compressed_size);
+            logical_bytes = logical_bytes.saturating_add(entry.size());
+        }
+
+        Ok(OperationReport::succeeded(
+            OperationFamily::Container,
+            Some(self.descriptor.name.to_string()),
+            "inspect",
+            format!(
+                "7z: {} entries ({} files, {} directories), {} bytes compressed, {} bytes uncompressed",
+                archive.files.len(),
+                files,
+                directories,
+                compressed_bytes,
+                logical_bytes
+            ),
+            Some(100.0),
+            None,
+        ))
+    }
+
+    fn extract(
+        &self,
+        request: &ContainerExtractRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let execution = context.plan_threads(ThreadCapability::single_threaded());
+        fs::create_dir_all(&request.out_dir)?;
+
+        let mut reader = self.open_reader(&request.source)?;
+        let mut selections = SelectionMatcher::new(&request.selections);
+        let mut extracted_files = 0usize;
+        let mut written_bytes = 0u64;
+
+        reader
+            .for_each_entries(|entry, source| {
+                let entry_name = normalize_archive_name(entry.name());
+                if entry_name.is_empty() || !selections.matches(&entry_name) {
+                    if entry.size() > 0 {
+                        io::copy(source, &mut io::sink()).map_err(sevenz_rust::Error::io)?;
+                    }
+                    return Ok(true);
+                }
+
+                let relative = sanitize_archive_relative_path_from_str(entry.name())
+                    .map_err(|error| sevenz_rust::Error::other(error.to_string()))?;
+                let output_path = request.out_dir.join(relative);
+
+                if entry.is_directory() {
+                    fs::create_dir_all(&output_path).map_err(sevenz_rust::Error::io)?;
+                    return Ok(true);
+                }
+
+                if let Some(parent) = output_path.parent() {
+                    fs::create_dir_all(parent).map_err(sevenz_rust::Error::io)?;
+                }
+                let mut output =
+                    BufWriter::new(File::create(&output_path).map_err(sevenz_rust::Error::io)?);
+                let copied = io::copy(source, &mut output).map_err(sevenz_rust::Error::io)?;
+                extracted_files += 1;
+                written_bytes = written_bytes.saturating_add(copied);
+                Ok(true)
+            })
+            .map_err(|error| RomWeaverError::Validation(format!("7z extract failed: {error}")))?;
+
+        selections.ensure_all_matched()?;
+
+        Ok(OperationReport::succeeded(
+            OperationFamily::Container,
+            Some(self.descriptor.name.to_string()),
+            "extract",
+            format!(
+                "extracted `{}` to `{}` ({} file(s), {} bytes written)",
+                request.source.display(),
+                request.out_dir.display(),
+                extracted_files,
+                written_bytes
+            ),
+            Some(100.0),
+            Some(execution),
+        ))
+    }
+
+    fn create(
+        &self,
+        request: &ContainerCreateRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let execution = context.plan_threads(ThreadCapability::single_threaded());
+        let method = self.parse_codec(request.codec.as_deref(), request.level)?;
+        let entries = collect_archive_inputs(&request.inputs)?;
+
+        if let Some(parent) = request.output.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let output = File::create(&request.output)?;
+        let mut writer = SevenZWriter::new(output).map_err(|error| {
+            RomWeaverError::Validation(format!("7z create failed to initialize writer: {error}"))
+        })?;
+        writer.set_content_methods(vec![method.clone()]);
+
+        let mut logical_bytes = 0u64;
+        for entry in &entries {
+            let archive_entry =
+                SevenZArchiveEntry::from_path(&entry.source, entry.archive_name.clone());
+            if entry.is_dir {
+                writer
+                    .push_archive_entry::<&[u8]>(archive_entry, None)
+                    .map_err(|error| {
+                        RomWeaverError::Validation(format!(
+                            "7z create failed for `{}`: {error}",
+                            entry.archive_name
+                        ))
+                    })?;
+                continue;
+            }
+
+            let source = File::open(&entry.source)?;
+            writer
+                .push_archive_entry(archive_entry, Some(source))
+                .map_err(|error| {
+                    RomWeaverError::Validation(format!(
+                        "7z create failed for `{}`: {error}",
+                        entry.archive_name
+                    ))
+                })?;
+            logical_bytes = logical_bytes.saturating_add(fs::metadata(&entry.source)?.len());
+        }
+
+        writer.finish().map_err(|error| {
+            RomWeaverError::Validation(format!(
+                "7z create failed while finalizing archive: {error}"
+            ))
+        })?;
+
+        Ok(OperationReport::succeeded(
+            OperationFamily::Container,
+            Some(self.descriptor.name.to_string()),
+            "create",
+            format!(
+                "created `{}` from {} input(s) with {} ({} bytes)",
+                request.output.display(),
+                request.inputs.len(),
+                Self::method_name(&method),
+                logical_bytes
+            ),
+            Some(100.0),
+            Some(execution),
+        ))
+    }
+
+    fn capabilities(&self) -> ContainerCapabilities {
+        ContainerCapabilities {
+            inspect: true,
+            extract: true,
+            create: true,
             extract_threads: ThreadCapability::single_threaded(),
             create_threads: ThreadCapability::single_threaded(),
         }

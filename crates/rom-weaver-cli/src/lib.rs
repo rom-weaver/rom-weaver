@@ -6,7 +6,6 @@ use std::{
 
 use clap::{Args, Parser, Subcommand};
 use rom_weaver_checksum::{NativeChecksumEngine, supported_algorithms};
-use rom_weaver_codecs::CodecRegistry;
 use rom_weaver_containers::ContainerRegistry;
 use rom_weaver_core::{
     CancellationToken, ChecksumEngine, ChecksumRequest, ContainerCreateRequest,
@@ -130,7 +129,6 @@ struct CliApp {
     containers: ContainerRegistry,
     patches: PatchRegistry,
     checksum: NativeChecksumEngine,
-    codecs: CodecRegistry,
 }
 
 impl CliApp {
@@ -140,7 +138,6 @@ impl CliApp {
             containers: ContainerRegistry::new(),
             patches: PatchRegistry::new(),
             checksum: NativeChecksumEngine,
-            codecs: CodecRegistry::new(),
         }
     }
 
@@ -345,23 +342,6 @@ impl CliApp {
                 ),
             );
         };
-
-        if !matches!(handler.descriptor().name, "chd" | "rvz" | "z3ds") {
-            if let Some(codec) = args.codec.as_ref() {
-                if self.codecs.find_by_name(codec).is_none() {
-                    return self.finish(
-                        "compress",
-                        OperationReport::failed(
-                            OperationFamily::Codec,
-                            Some(codec.clone()),
-                            "validate",
-                            format!("unknown codec `{codec}`"),
-                            probe_threads.clone(),
-                        ),
-                    );
-                }
-            }
-        }
 
         let request = ContainerCreateRequest {
             inputs: args.input,

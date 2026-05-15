@@ -287,21 +287,32 @@ fn build_ips_patch(records: Vec<TestIpsRecord>, truncate_size: Option<u32>) -> V
 }
 
 #[test]
-fn inspect_reports_known_container_as_unsupported() {
+fn inspect_reports_known_container_as_supported() {
     let temp = setup_temp_dir();
-    temp.child("sample.zip")
-        .write_str("placeholder")
+    temp.child("sample.bin")
+        .write_str("placeholder payload")
         .expect("fixture");
+    let archive = temp.child("sample.zip");
 
-    let output = Command::cargo_bin("rom-weaver")
+    Command::cargo_bin("rom-weaver")
         .expect("binary")
         .args([
-            "inspect",
-            temp.child("sample.zip").path().to_str().expect("path"),
+            "compress",
+            temp.child("sample.bin").path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            archive.path().to_str().expect("path"),
             "--json",
         ])
         .assert()
-        .code(2)
+        .code(0);
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args(["inspect", archive.path().to_str().expect("path"), "--json"])
+        .assert()
+        .code(0)
         .get_output()
         .stdout
         .clone();
@@ -310,22 +321,37 @@ fn inspect_reports_known_container_as_unsupported() {
     assert_eq!(json["command"], "inspect");
     assert_eq!(json["family"], "container");
     assert_eq!(json["format"], "zip");
-    assert_eq!(json["status"], "unsupported");
+    assert_eq!(json["status"], "succeeded");
 }
 
 #[test]
 fn extract_reports_thread_fallback_in_json() {
     let temp = setup_temp_dir();
-    temp.child("sample.zip")
-        .write_str("placeholder")
-        .expect("fixture");
+    let expected = b"zip payload for extract test".to_vec();
+    fs::write(temp.child("disc.iso").path(), &expected).expect("fixture");
+    let archive = temp.child("sample.zip");
+
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("disc.iso").path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            archive.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
     let out_dir = temp.child("out");
 
     let output = Command::cargo_bin("rom-weaver")
         .expect("binary")
         .args([
             "extract",
-            temp.child("sample.zip").path().to_str().expect("path"),
+            archive.path().to_str().expect("path"),
             "--select",
             "disc.iso",
             "--out-dir",
@@ -335,7 +361,7 @@ fn extract_reports_thread_fallback_in_json() {
             "--json",
         ])
         .assert()
-        .code(2)
+        .code(0)
         .get_output()
         .stdout
         .clone();
@@ -348,7 +374,11 @@ fn extract_reports_thread_fallback_in_json() {
     assert_eq!(json["effective_threads"], 1);
     assert_eq!(json["thread_mode"], "fixed");
     assert_eq!(json["used_parallelism"], false);
-    assert_eq!(json["status"], "unsupported");
+    assert_eq!(json["status"], "succeeded");
+    assert_eq!(
+        fs::read(out_dir.child("disc.iso").path()).expect("extract"),
+        expected
+    );
 }
 
 #[test]
@@ -415,6 +445,7 @@ fn compress_routes_through_registered_container_format() {
     temp.child("file.bin")
         .write_str("payload")
         .expect("fixture");
+    let output_path = temp.child("out.zip");
 
     let output = Command::cargo_bin("rom-weaver")
         .expect("binary")
@@ -424,11 +455,11 @@ fn compress_routes_through_registered_container_format() {
             "--format",
             "zip",
             "--output",
-            temp.child("out.zip").path().to_str().expect("path"),
+            output_path.path().to_str().expect("path"),
             "--json",
         ])
         .assert()
-        .code(2)
+        .code(0)
         .get_output()
         .stdout
         .clone();
@@ -437,7 +468,101 @@ fn compress_routes_through_registered_container_format() {
     assert_eq!(json["command"], "compress");
     assert_eq!(json["family"], "container");
     assert_eq!(json["format"], "zip");
-    assert_eq!(json["status"], "unsupported");
+    assert_eq!(json["status"], "succeeded");
+    assert!(output_path.path().exists());
+}
+
+fn run_archive_round_trip(format: &str, archive_name: &str, codec: Option<&str>) {
+    let temp = setup_temp_dir();
+    let payload = (0..8192)
+        .map(|index| ((index * 7) % 251) as u8)
+        .collect::<Vec<_>>();
+    fs::write(temp.child("source.bin").path(), &payload).expect("fixture");
+
+    let archive = temp.child(archive_name);
+    let mut compress = Command::cargo_bin("rom-weaver").expect("binary");
+    compress
+        .arg("compress")
+        .arg(temp.child("source.bin").path())
+        .arg("--format")
+        .arg(format)
+        .arg("--output")
+        .arg(archive.path());
+    if let Some(codec) = codec {
+        compress.arg("--codec").arg(codec);
+    }
+    compress.arg("--json");
+    let compress_output = compress.assert().code(0).get_output().stdout.clone();
+
+    let compress_json = parse_single_json_line(&compress_output);
+    assert_eq!(compress_json["command"], "compress");
+    assert_eq!(compress_json["family"], "container");
+    assert_eq!(compress_json["format"], format);
+    assert_eq!(compress_json["status"], "succeeded");
+
+    let inspect_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args(["inspect", archive.path().to_str().expect("path"), "--json"])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let inspect_json = parse_single_json_line(&inspect_output);
+    assert_eq!(inspect_json["command"], "inspect");
+    assert_eq!(inspect_json["family"], "container");
+    assert_eq!(inspect_json["format"], format);
+    assert_eq!(inspect_json["status"], "succeeded");
+
+    let out_dir = temp.child("extract");
+    let extract_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "extract",
+            archive.path().to_str().expect("path"),
+            "--select",
+            "source.bin",
+            "--out-dir",
+            out_dir.path().to_str().expect("path"),
+            "--threads",
+            "8",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let extract_json = parse_single_json_line(&extract_output);
+    assert_eq!(extract_json["command"], "extract");
+    assert_eq!(extract_json["family"], "container");
+    assert_eq!(extract_json["format"], format);
+    assert_eq!(extract_json["requested_threads"], 8);
+    assert_eq!(extract_json["effective_threads"], 1);
+    assert_eq!(extract_json["thread_mode"], "fixed");
+    assert_eq!(extract_json["used_parallelism"], false);
+    assert_eq!(extract_json["status"], "succeeded");
+
+    let extracted = fs::read(out_dir.child("source.bin").path()).expect("read extract");
+    assert_eq!(extracted, payload);
+}
+
+#[test]
+fn archive_container_formats_round_trip() {
+    let cases = [
+        ("zip", "sample.zip", None),
+        ("zipx", "sample.zipx", Some("zstd")),
+        ("7z", "sample.7z", Some("lzma2")),
+        ("tar", "sample.tar", None),
+        ("tar.gz", "sample.tar.gz", Some("gzip")),
+        ("tar.bz2", "sample.tar.bz2", Some("bzip2")),
+        ("tar.xz", "sample.tar.xz", Some("xz")),
+    ];
+
+    for (format, archive_name, codec) in cases {
+        run_archive_round_trip(format, archive_name, codec);
+    }
 }
 
 #[test]
