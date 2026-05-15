@@ -1,4 +1,6 @@
 use std::{
+    collections::{HashSet, VecDeque},
+    fs,
     path::{Path, PathBuf},
     process::ExitCode,
     sync::Arc,
@@ -10,8 +12,8 @@ use rom_weaver_containers::ContainerRegistry;
 use rom_weaver_core::{
     CancellationToken, ChecksumEngine, ChecksumRequest, ContainerCreateRequest,
     ContainerExtractRequest, ContainerInspectRequest, OperationContext, OperationFamily,
-    OperationReport, PatchApplyRequest, PatchCreateRequest, ProgressEvent, ProgressSink,
-    ThreadBudget, ThreadCapability,
+    OperationReport, OperationStatus, PatchApplyRequest, PatchCreateRequest, ProgressEvent,
+    ProgressSink, Result, RomWeaverError, ThreadBudget, ThreadCapability,
 };
 use rom_weaver_patches::PatchRegistry;
 
@@ -131,6 +133,9 @@ struct CliApp {
     checksum: NativeChecksumEngine,
 }
 
+const MAX_NESTED_EXTRACT_DEPTH: usize = 8;
+const MAX_NESTED_EXTRACT_ARCHIVES: usize = 256;
+
 impl CliApp {
     fn new(reporter: Arc<dyn ProgressSink>) -> Self {
         Self {
@@ -236,12 +241,14 @@ impl CliApp {
             );
         };
 
+        let source = args.source;
+        let out_dir = args.out_dir;
         let request = ContainerExtractRequest {
-            source: args.source,
+            source: source.clone(),
             selections: args.select,
-            out_dir: args.out_dir,
+            out_dir: out_dir.clone(),
         };
-        let report = handler.extract(&request, &context).unwrap_or_else(|error| {
+        let mut report = handler.extract(&request, &context).unwrap_or_else(|error| {
             OperationReport::failed(
                 OperationFamily::Container,
                 Some(handler.descriptor().name.to_string()),
@@ -250,6 +257,26 @@ impl CliApp {
                 Some(context.plan_threads(ThreadCapability::single_threaded())),
             )
         });
+        if report.status == OperationStatus::Succeeded {
+            match self.extract_nested_archives(&source, &out_dir, &context) {
+                Ok(0) => {}
+                Ok(nested_count) => {
+                    report.label = format!(
+                        "{}; recursively extracted {nested_count} nested container(s)",
+                        report.label
+                    );
+                }
+                Err(error) => {
+                    report = OperationReport::failed(
+                        OperationFamily::Container,
+                        Some(handler.descriptor().name.to_string()),
+                        "extract",
+                        error.to_string(),
+                        Some(context.plan_threads(ThreadCapability::single_threaded())),
+                    );
+                }
+            }
+        }
         self.finish("extract", report)
     }
 
@@ -507,6 +534,168 @@ impl CliApp {
         let status = report.status;
         self.reporter.emit(report.into_event(command));
         ExitCode::from(status.exit_code())
+    }
+
+    fn extract_nested_archives(
+        &self,
+        root_source: &Path,
+        root_out_dir: &Path,
+        context: &OperationContext,
+    ) -> Result<usize> {
+        let root_source =
+            fs::canonicalize(root_source).unwrap_or_else(|_| root_source.to_path_buf());
+        let mut nested_count = 0usize;
+        let mut processed = HashSet::new();
+        processed.insert(root_source);
+
+        let mut queue = VecDeque::new();
+        self.enqueue_nested_candidates(root_out_dir, 1, &processed, &mut queue)?;
+
+        while let Some((source, depth)) = queue.pop_front() {
+            if depth > MAX_NESTED_EXTRACT_DEPTH {
+                return Err(RomWeaverError::Validation(format!(
+                    "nested extract exceeded max depth of {MAX_NESTED_EXTRACT_DEPTH} at `{}`",
+                    source.display()
+                )));
+            }
+            if nested_count >= MAX_NESTED_EXTRACT_ARCHIVES {
+                return Err(RomWeaverError::Validation(format!(
+                    "nested extract exceeded max archive count of {MAX_NESTED_EXTRACT_ARCHIVES}"
+                )));
+            }
+
+            let canonical_source = fs::canonicalize(&source).unwrap_or_else(|_| source.clone());
+            if !processed.insert(canonical_source) {
+                continue;
+            }
+
+            let Some(handler) = self.containers.probe(&source) else {
+                continue;
+            };
+
+            // Only recurse into containers that successfully inspect, so extension-only matches
+            // do not fail nested extraction on non-container payload files.
+            let inspect_request = ContainerInspectRequest {
+                source: source.clone(),
+            };
+            if handler.inspect(&inspect_request, context).is_err() {
+                continue;
+            }
+
+            let nested_out_dir = self.next_nested_out_dir(&source);
+            let nested_request = ContainerExtractRequest {
+                source: source.clone(),
+                selections: Vec::new(),
+                out_dir: nested_out_dir.clone(),
+            };
+            handler.extract(&nested_request, context).map_err(|error| {
+                RomWeaverError::Validation(format!(
+                    "nested extract failed for `{}` ({}): {error}",
+                    source.display(),
+                    handler.descriptor().name
+                ))
+            })?;
+            nested_count = nested_count.saturating_add(1);
+
+            self.enqueue_nested_candidates(&nested_out_dir, depth + 1, &processed, &mut queue)?;
+        }
+
+        Ok(nested_count)
+    }
+
+    fn enqueue_nested_candidates(
+        &self,
+        root: &Path,
+        depth: usize,
+        processed: &HashSet<PathBuf>,
+        queue: &mut VecDeque<(PathBuf, usize)>,
+    ) -> Result<()> {
+        let mut directories = vec![root.to_path_buf()];
+        while let Some(directory) = directories.pop() {
+            let mut entries =
+                fs::read_dir(&directory)?.collect::<std::result::Result<Vec<_>, _>>()?;
+            entries.sort_by_key(|entry| entry.path());
+
+            for entry in entries {
+                let path = entry.path();
+                let file_type = entry.file_type()?;
+                if file_type.is_dir() {
+                    directories.push(path);
+                    continue;
+                }
+                if !file_type.is_file() || self.containers.probe(&path).is_none() {
+                    continue;
+                }
+                let canonical = fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
+                if processed.contains(&canonical)
+                    || queue
+                        .iter()
+                        .any(|(queued_path, _)| queued_path.as_path() == path)
+                {
+                    continue;
+                }
+                queue.push_back((path, depth));
+            }
+        }
+        Ok(())
+    }
+
+    fn next_nested_out_dir(&self, source: &Path) -> PathBuf {
+        let parent = source
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| PathBuf::from("."));
+        let file_name = source
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or("archive");
+        let base_name = self.nested_base_name(file_name);
+
+        let mut candidate = parent.join(&base_name);
+        if candidate != source && !candidate.exists() {
+            return candidate;
+        }
+
+        for index in 1usize.. {
+            candidate = parent.join(format!("{base_name}.nested-{index}"));
+            if candidate != source && !candidate.exists() {
+                return candidate;
+            }
+        }
+
+        unreachable!("nested output directory search is unbounded");
+    }
+
+    fn nested_base_name(&self, file_name: &str) -> String {
+        let file_name_lower = file_name.to_ascii_lowercase();
+        let mut longest_extension = 0usize;
+        for handler in self.containers.handlers() {
+            for extension in handler.descriptor().extensions {
+                let extension_lower = extension.to_ascii_lowercase();
+                if file_name_lower.ends_with(&extension_lower)
+                    && extension_lower.len() > longest_extension
+                {
+                    longest_extension = extension_lower.len();
+                }
+            }
+        }
+
+        let mut base = if longest_extension == 0 || longest_extension >= file_name.len() {
+            Path::new(file_name)
+                .file_stem()
+                .and_then(|value| value.to_str())
+                .unwrap_or("archive")
+                .to_string()
+        } else {
+            file_name[..file_name.len() - longest_extension].to_string()
+        };
+
+        base = base.trim().trim_matches('.').to_string();
+        if base.is_empty() {
+            "archive".to_string()
+        } else {
+            base
+        }
     }
 }
 

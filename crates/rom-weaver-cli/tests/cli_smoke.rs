@@ -566,6 +566,95 @@ fn archive_container_formats_round_trip() {
 }
 
 #[test]
+fn extract_recursively_handles_nested_containers() {
+    let temp = setup_temp_dir();
+    let payload = (0..24_576)
+        .map(|index| (index % 197) as u8)
+        .collect::<Vec<_>>();
+    fs::write(temp.child("disc.bin").path(), &payload).expect("fixture");
+
+    let chd_path = temp.child("disc.chd");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("disc.bin").path().to_str().expect("path"),
+            "--format",
+            "chd",
+            "--output",
+            chd_path.path().to_str().expect("path"),
+            "--codec",
+            "zstd",
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let zip_path = temp.child("inner.zip");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            chd_path.path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            zip_path.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let seven_z_path = temp.child("outer.7z");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            zip_path.path().to_str().expect("path"),
+            "--format",
+            "7z",
+            "--output",
+            seven_z_path.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let out_dir = temp.child("extract");
+    let extract_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "extract",
+            seven_z_path.path().to_str().expect("path"),
+            "--out-dir",
+            out_dir.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let extract_json = parse_single_json_line(&extract_output);
+    assert_eq!(extract_json["command"], "extract");
+    assert_eq!(extract_json["family"], "container");
+    assert_eq!(extract_json["format"], "7z");
+    assert_eq!(extract_json["status"], "succeeded");
+    assert!(
+        extract_json["label"]
+            .as_str()
+            .expect("label")
+            .contains("recursively extracted 2 nested container(s)")
+    );
+
+    assert_eq!(
+        fs::read(out_dir.child("inner/disc/disc.bin").path()).expect("nested extract payload"),
+        payload
+    );
+}
+
+#[test]
 fn chd_compress_and_extract_raw_round_trip() {
     let source = (0..16_384)
         .map(|index| (index % 251) as u8)
