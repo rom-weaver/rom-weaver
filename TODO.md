@@ -50,10 +50,10 @@
 | CTR-009 | container | rvz | done | done | done | n/a | n/a | per-block,codec-mapped | fixture-roundtrip,cli-smoke | done | Native rvz inspect/extract/create landed. |
 | CTR-010 | container | z3ds | done | done | done | n/a | n/a | per-block | fixture-roundtrip,cli-smoke | done | Native z3ds inspect/extract/create landed with parallel extract support. |
 | CTR-011 | container | rar | done | done | n/a | n/a | n/a | per-entry | fixture-roundtrip,cli-smoke | done | Native rar inspect/extract landed; create remains intentionally unsupported. |
-| CTR-012 | container | gz | todo | todo | todo | n/a | n/a | stream | fixture-roundtrip,cli-smoke | todo | Standalone gzip stream support (non-tar). |
-| CTR-013 | container | bz2 | todo | todo | todo | n/a | n/a | stream | fixture-roundtrip,cli-smoke | todo | Standalone bzip2 stream support (non-tar). |
-| CTR-014 | container | xz | todo | todo | todo | n/a | n/a | stream | fixture-roundtrip,cli-smoke | todo | Standalone xz stream support (non-tar). |
-| CTR-015 | container | zst | todo | todo | todo | n/a | n/a | stream | fixture-roundtrip,cli-smoke | todo | Standalone zstd stream support (non-tar). |
+| CTR-012 | container | gz | done | done | done | n/a | n/a | stream | fixture-roundtrip,cli-smoke | done | Standalone gzip stream support (non-tar) landed. |
+| CTR-013 | container | bz2 | done | done | done | n/a | n/a | stream | fixture-roundtrip,cli-smoke | done | Standalone bzip2 stream support (non-tar) landed. |
+| CTR-014 | container | xz | done | done | done | n/a | n/a | stream | fixture-roundtrip,cli-smoke | done | Standalone xz stream support (non-tar) landed. |
+| CTR-015 | container | zst | done | done | done | n/a | n/a | stream | fixture-roundtrip,cli-smoke | done | Standalone zstd stream support (non-tar) landed. |
 | CTR-016 | container | xiso | todo | todo | todo | n/a | n/a | per-file | fixture-roundtrip,cli-smoke | todo | Original Xbox XISO support; prioritize inspect/extract first, then rebuild/create. |
 
 ## Patch Formats

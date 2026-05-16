@@ -688,6 +688,10 @@ fn archive_container_formats_round_trip() {
         ("tar.gz", "sample.tar.gz", Some("gzip")),
         ("tar.bz2", "sample.tar.bz2", Some("bzip2")),
         ("tar.xz", "sample.tar.xz", Some("xz")),
+        ("gz", "source.bin.gz", Some("gzip")),
+        ("bz2", "source.bin.bz2", Some("bzip2")),
+        ("xz", "source.bin.xz", Some("xz")),
+        ("zst", "source.bin.zst", Some("zstd")),
     ];
 
     for (format, archive_name, codec) in cases {

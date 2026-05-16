@@ -40,6 +40,7 @@ use zip::{
     ZipWriter as ZipFileWriter, write::FileOptions as ZipFileOptions,
 };
 use zstd::bulk::compress as zstd_compress;
+use zstd::stream::{Decoder as ZstdDecoder, Encoder as ZstdEncoder};
 use zstd_seekable::Seekable;
 
 const ZIP: FormatDescriptor = FormatDescriptor {
@@ -90,6 +91,30 @@ const TAR_XZ: FormatDescriptor = FormatDescriptor {
     aliases: &["txz"],
     extensions: &[".tar.xz", ".txz"],
 };
+const GZ: FormatDescriptor = FormatDescriptor {
+    family: OperationFamily::Container,
+    name: "gz",
+    aliases: &["gzip"],
+    extensions: &[".gz"],
+};
+const BZ2: FormatDescriptor = FormatDescriptor {
+    family: OperationFamily::Container,
+    name: "bz2",
+    aliases: &["bzip2"],
+    extensions: &[".bz2"],
+};
+const XZ: FormatDescriptor = FormatDescriptor {
+    family: OperationFamily::Container,
+    name: "xz",
+    aliases: &["lzma", "lzma2"],
+    extensions: &[".xz"],
+};
+const ZST: FormatDescriptor = FormatDescriptor {
+    family: OperationFamily::Container,
+    name: "zst",
+    aliases: &["zstd", "zstandard"],
+    extensions: &[".zst"],
+};
 const CHD: FormatDescriptor = FormatDescriptor {
     family: OperationFamily::Container,
     name: "chd",
@@ -131,6 +156,10 @@ impl ContainerRegistry {
                 Arc::new(TarContainerHandler::new(&TAR_GZ, TarCompression::Gzip)),
                 Arc::new(TarContainerHandler::new(&TAR_BZ2, TarCompression::Bzip2)),
                 Arc::new(TarContainerHandler::new(&TAR_XZ, TarCompression::Xz)),
+                Arc::new(StreamContainerHandler::new(&GZ, StreamCompression::Gzip)),
+                Arc::new(StreamContainerHandler::new(&BZ2, StreamCompression::Bzip2)),
+                Arc::new(StreamContainerHandler::new(&XZ, StreamCompression::Xz)),
+                Arc::new(StreamContainerHandler::new(&ZST, StreamCompression::Zstd)),
                 Arc::new(ChdContainerHandler),
                 Arc::new(RvzContainerHandler),
                 Arc::new(Z3dsContainerHandler),
@@ -936,6 +965,293 @@ impl ContainerHandler for TarContainerHandler {
                 "created `{}` from {} input(s) ({} bytes)",
                 request.output.display(),
                 request.inputs.len(),
+                logical_bytes
+            ),
+            Some(100.0),
+            Some(execution),
+        ))
+    }
+
+    fn capabilities(&self) -> ContainerCapabilities {
+        ContainerCapabilities {
+            inspect: true,
+            extract: true,
+            create: true,
+            extract_threads: ThreadCapability::single_threaded(),
+            create_threads: ThreadCapability::single_threaded(),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+enum StreamCompression {
+    Gzip,
+    Bzip2,
+    Xz,
+    Zstd,
+}
+
+struct StreamContainerHandler {
+    descriptor: &'static FormatDescriptor,
+    compression: StreamCompression,
+}
+
+impl StreamContainerHandler {
+    const fn new(descriptor: &'static FormatDescriptor, compression: StreamCompression) -> Self {
+        Self {
+            descriptor,
+            compression,
+        }
+    }
+
+    fn parse_codec_and_level(&self, codec: Option<&str>, level: Option<i32>) -> Result<i32> {
+        let codec = codec.map(|value| value.trim().to_ascii_lowercase());
+        match self.compression {
+            StreamCompression::Gzip => {
+                if let Some(codec) = codec {
+                    if !matches!(codec.as_str(), "gzip" | "gz" | "deflate" | "zlib") {
+                        return Err(RomWeaverError::Validation(format!(
+                            "unsupported gz codec `{codec}`; use gzip"
+                        )));
+                    }
+                }
+                match level {
+                    None => Ok(6),
+                    Some(value) if (0..=9).contains(&value) => Ok(value),
+                    Some(value) => Err(RomWeaverError::Validation(format!(
+                        "gz level `{value}` is out of range (0..=9)"
+                    ))),
+                }
+            }
+            StreamCompression::Bzip2 => {
+                if let Some(codec) = codec {
+                    if !matches!(codec.as_str(), "bzip2" | "bz2") {
+                        return Err(RomWeaverError::Validation(format!(
+                            "unsupported bz2 codec `{codec}`; use bzip2"
+                        )));
+                    }
+                }
+                match level {
+                    None => Ok(6),
+                    Some(value) if (1..=9).contains(&value) => Ok(value),
+                    Some(value) => Err(RomWeaverError::Validation(format!(
+                        "bz2 level `{value}` is out of range (1..=9)"
+                    ))),
+                }
+            }
+            StreamCompression::Xz => {
+                if let Some(codec) = codec {
+                    if !matches!(codec.as_str(), "xz" | "lzma" | "lzma2") {
+                        return Err(RomWeaverError::Validation(format!(
+                            "unsupported xz codec `{codec}`; use xz"
+                        )));
+                    }
+                }
+                match level {
+                    None => Ok(6),
+                    Some(value) if (0..=9).contains(&value) => Ok(value),
+                    Some(value) => Err(RomWeaverError::Validation(format!(
+                        "xz level `{value}` is out of range (0..=9)"
+                    ))),
+                }
+            }
+            StreamCompression::Zstd => {
+                if let Some(codec) = codec {
+                    if !matches!(codec.as_str(), "zstd" | "zst" | "zstandard") {
+                        return Err(RomWeaverError::Validation(format!(
+                            "unsupported zst codec `{codec}`; use zstd"
+                        )));
+                    }
+                }
+                match level {
+                    None => Ok(3),
+                    Some(value) if (-7..=22).contains(&value) => Ok(value),
+                    Some(value) => Err(RomWeaverError::Validation(format!(
+                        "zst level `{value}` is out of range (-7..=22)"
+                    ))),
+                }
+            }
+        }
+    }
+
+    fn output_name(&self, source: &Path) -> String {
+        let file_name = source
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or(self.descriptor.name);
+        let file_name_lower = file_name.to_ascii_lowercase();
+        let mut longest_extension = 0usize;
+        for extension in self.descriptor.extensions {
+            let extension_lower = extension.to_ascii_lowercase();
+            if file_name_lower.ends_with(&extension_lower)
+                && extension_lower.len() > longest_extension
+            {
+                longest_extension = extension_lower.len();
+            }
+        }
+
+        let trimmed = if longest_extension > 0 && longest_extension < file_name.len() {
+            file_name[..file_name.len() - longest_extension].to_string()
+        } else {
+            Path::new(file_name)
+                .file_stem()
+                .and_then(|value| value.to_str())
+                .unwrap_or(file_name)
+                .to_string()
+        };
+
+        let normalized = trimmed.trim().trim_matches('.');
+        if normalized.is_empty() {
+            format!("{}.out", self.descriptor.name)
+        } else {
+            normalized.to_string()
+        }
+    }
+
+    fn open_reader(&self, source: &Path) -> Result<Box<dyn Read>> {
+        let file = File::open(source)?;
+        let reader: Box<dyn Read> = match self.compression {
+            StreamCompression::Gzip => Box::new(GzDecoder::new(BufReader::new(file))),
+            StreamCompression::Bzip2 => Box::new(Bzip2Decoder::new(BufReader::new(file))),
+            StreamCompression::Xz => Box::new(XzDecoder::new(BufReader::new(file))),
+            StreamCompression::Zstd => Box::new(ZstdDecoder::new(BufReader::new(file))?),
+        };
+        Ok(reader)
+    }
+}
+
+impl ContainerHandler for StreamContainerHandler {
+    fn descriptor(&self) -> &'static FormatDescriptor {
+        self.descriptor
+    }
+
+    fn inspect(
+        &self,
+        request: &ContainerInspectRequest,
+        _context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let compressed_bytes = fs::metadata(&request.source)?.len();
+        let mut reader = self.open_reader(&request.source)?;
+        let logical_bytes = io::copy(&mut reader, &mut io::sink())?;
+
+        Ok(OperationReport::succeeded(
+            OperationFamily::Container,
+            Some(self.descriptor.name.to_string()),
+            "inspect",
+            format!(
+                "{}: {} bytes compressed, {} bytes uncompressed",
+                self.descriptor.name, compressed_bytes, logical_bytes
+            ),
+            Some(100.0),
+            None,
+        ))
+    }
+
+    fn extract(
+        &self,
+        request: &ContainerExtractRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let execution = context.plan_threads(ThreadCapability::single_threaded());
+        fs::create_dir_all(&request.out_dir)?;
+
+        let output_name = self.output_name(&request.source);
+        let mut selections = SelectionMatcher::new(&request.selections);
+        if !selections.matches(&output_name) {
+            selections.ensure_all_matched()?;
+        }
+
+        let output_path = request.out_dir.join(&output_name);
+        let mut reader = self.open_reader(&request.source)?;
+        let mut output = BufWriter::new(File::create(&output_path)?);
+        let written = io::copy(&mut reader, &mut output)?;
+        output.flush()?;
+        selections.ensure_all_matched()?;
+
+        Ok(OperationReport::succeeded(
+            OperationFamily::Container,
+            Some(self.descriptor.name.to_string()),
+            "extract",
+            format!(
+                "extracted `{}` to `{}` (1 file, {} bytes written)",
+                request.source.display(),
+                output_path.display(),
+                written
+            ),
+            Some(100.0),
+            Some(execution),
+        ))
+    }
+
+    fn create(
+        &self,
+        request: &ContainerCreateRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        if request.inputs.len() != 1 {
+            return Err(RomWeaverError::Validation(format!(
+                "{} create currently requires exactly one input file",
+                self.descriptor.name
+            )));
+        }
+
+        let execution = context.plan_threads(ThreadCapability::single_threaded());
+        let level = self.parse_codec_and_level(request.codec.as_deref(), request.level)?;
+        let input = &request.inputs[0];
+        let metadata = fs::metadata(input)?;
+        if !metadata.is_file() {
+            return Err(RomWeaverError::Validation(format!(
+                "{} create requires a file input: `{}`",
+                self.descriptor.name,
+                input.display()
+            )));
+        }
+        let logical_bytes = metadata.len();
+
+        if let Some(parent) = request.output.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        let mut source = BufReader::new(File::open(input)?);
+        match self.compression {
+            StreamCompression::Gzip => {
+                let output = BufWriter::new(File::create(&request.output)?);
+                let mut encoder = GzEncoder::new(output, GzipCompression::new(level as u32));
+                io::copy(&mut source, &mut encoder)?;
+                let mut output = encoder.finish()?;
+                output.flush()?;
+            }
+            StreamCompression::Bzip2 => {
+                let output = BufWriter::new(File::create(&request.output)?);
+                let mut encoder = BzEncoder::new(output, Bzip2Compression::new(level as u32));
+                io::copy(&mut source, &mut encoder)?;
+                let mut output = encoder.finish()?;
+                output.flush()?;
+            }
+            StreamCompression::Xz => {
+                let output = BufWriter::new(File::create(&request.output)?);
+                let mut encoder = XzEncoder::new(output, level as u32);
+                io::copy(&mut source, &mut encoder)?;
+                let mut output = encoder.finish()?;
+                output.flush()?;
+            }
+            StreamCompression::Zstd => {
+                let output = BufWriter::new(File::create(&request.output)?);
+                let mut encoder = ZstdEncoder::new(output, level)?;
+                io::copy(&mut source, &mut encoder)?;
+                let mut output = encoder.finish()?;
+                output.flush()?;
+            }
+        }
+
+        Ok(OperationReport::succeeded(
+            OperationFamily::Container,
+            Some(self.descriptor.name.to_string()),
+            "create",
+            format!(
+                "created `{}` from `{}` ({} bytes)",
+                request.output.display(),
+                input.display(),
                 logical_bytes
             ),
             Some(100.0),
@@ -4242,8 +4558,8 @@ mod tests {
         assert_eq!(
             names,
             vec![
-                "zip", "zipx", "7z", "rar", "tar", "tar.gz", "tar.bz2", "tar.xz", "chd", "rvz",
-                "z3ds"
+                "zip", "zipx", "7z", "rar", "tar", "tar.gz", "tar.bz2", "tar.xz", "gz", "bz2",
+                "xz", "zst", "chd", "rvz", "z3ds"
             ]
         );
     }
