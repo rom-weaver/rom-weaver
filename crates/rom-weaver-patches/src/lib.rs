@@ -116,8 +116,8 @@ const MOD: FormatDescriptor = FormatDescriptor {
 const PDS: FormatDescriptor = FormatDescriptor {
     family: OperationFamily::Patch,
     name: "PDS",
-    aliases: &[],
-    extensions: &[".pds"],
+    aliases: &["dps"],
+    extensions: &[".pds", ".dps"],
 };
 
 pub struct PatchRegistry {
@@ -358,13 +358,13 @@ mod tests {
     }
 
     #[test]
-    fn pds_is_wired_to_parse_supported_handler() {
+    fn pds_is_wired_to_supported_handler() {
         let registry = PatchRegistry::new();
         let handler = registry.find_by_name("pds").expect("pds handler");
         let capabilities = handler.capabilities();
         assert!(capabilities.parse);
-        assert!(!capabilities.apply);
-        assert!(!capabilities.create);
+        assert!(capabilities.apply);
+        assert!(capabilities.create);
     }
 
     #[test]
@@ -445,6 +445,13 @@ mod tests {
     }
 
     #[test]
+    fn probe_routes_dps_extension_to_pds_handler() {
+        let registry = PatchRegistry::new();
+        let handler = registry.probe(Path::new("update.dps")).expect("dps probe");
+        assert_eq!(handler.descriptor().name, "PDS");
+    }
+
+    #[test]
     fn probe_routes_mod_extension_to_mod_handler() {
         let registry = PatchRegistry::new();
         let handler = registry.probe(Path::new("update.mod")).expect("mod probe");
@@ -474,6 +481,13 @@ mod tests {
         let registry = PatchRegistry::new();
         let handler = registry.find_by_name("pmsr").expect("pmsr alias");
         assert_eq!(handler.descriptor().name, "MOD");
+    }
+
+    #[test]
+    fn find_by_name_routes_dps_alias_to_pds_handler() {
+        let registry = PatchRegistry::new();
+        let handler = registry.find_by_name("dps").expect("dps alias");
+        assert_eq!(handler.descriptor().name, "PDS");
     }
 
     #[test]
