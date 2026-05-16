@@ -286,6 +286,31 @@ fn build_ips_patch(records: Vec<TestIpsRecord>, truncate_size: Option<u32>) -> V
     bytes
 }
 
+struct TestPpfRecord {
+    offset: u32,
+    data: Vec<u8>,
+}
+
+fn build_ppf1_patch(description: &str, records: Vec<TestPpfRecord>) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(b"PPF10");
+    bytes.push(0);
+
+    let mut desc = [0u8; 50];
+    let src = description.as_bytes();
+    let copy_len = src.len().min(desc.len());
+    desc[..copy_len].copy_from_slice(&src[..copy_len]);
+    bytes.extend_from_slice(&desc);
+
+    for record in records {
+        bytes.extend_from_slice(&record.offset.to_le_bytes());
+        bytes.push(record.data.len() as u8);
+        bytes.extend_from_slice(&record.data);
+    }
+
+    bytes
+}
+
 #[test]
 fn inspect_reports_known_container_as_supported() {
     let temp = setup_temp_dir();
@@ -1635,6 +1660,75 @@ fn patch_create_succeeds_for_ups_and_round_trips() {
 }
 
 #[test]
+fn patch_create_succeeds_for_ppf_and_round_trips() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.bin");
+    let modified = temp.child("new.bin");
+    let patch = temp.child("update.ppf");
+    let output = temp.child("output.bin");
+    fs::write(original.path(), b"hello old world").expect("fixture");
+    fs::write(modified.path(), b"hello new world\0\0").expect("fixture");
+
+    let create_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--format",
+            "ppf",
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--threads",
+            "8",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let create_json = parse_single_json_line(&create_output);
+    assert_eq!(create_json["command"], "patch-create");
+    assert_eq!(create_json["family"], "patch");
+    assert_eq!(create_json["format"], "PPF");
+    assert_eq!(create_json["requested_threads"], 8);
+    assert_eq!(create_json["effective_threads"], 1);
+    assert_eq!(create_json["used_parallelism"], false);
+    assert_eq!(create_json["status"], "succeeded");
+
+    let apply_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let apply_json = parse_single_json_line(&apply_output);
+    assert_eq!(apply_json["command"], "patch-apply");
+    assert_eq!(apply_json["format"], "PPF");
+    assert_eq!(apply_json["status"], "succeeded");
+    assert_eq!(
+        fs::read(output.path()).expect("output"),
+        fs::read(modified.path()).expect("modified")
+    );
+}
+
+#[test]
 fn patch_create_succeeds_for_xdelta_with_secondary_when_helpful() {
     let temp = setup_temp_dir();
     let original = temp.child("old.bin");
@@ -1841,6 +1935,56 @@ fn patch_apply_succeeds_for_valid_bps_patch() {
     assert_eq!(
         fs::read(temp.child("output.bin").path()).expect("output"),
         b"abcabcZZabcabc"
+    );
+}
+
+#[test]
+fn patch_apply_succeeds_for_valid_ppf_patch() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("input.bin").path(), b"abcabcabcabc").expect("fixture");
+    fs::write(
+        temp.child("update.ppf").path(),
+        build_ppf1_patch(
+            "cli test patch",
+            vec![TestPpfRecord {
+                offset: 6,
+                data: b"ZZ".to_vec(),
+            }],
+        ),
+    )
+    .expect("fixture");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            temp.child("input.bin").path().to_str().expect("path"),
+            "--patch",
+            temp.child("update.ppf").path().to_str().expect("path"),
+            "--output",
+            temp.child("output.bin").path().to_str().expect("path"),
+            "--threads",
+            "8",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "patch-apply");
+    assert_eq!(json["family"], "patch");
+    assert_eq!(json["format"], "PPF");
+    assert_eq!(json["requested_threads"], 8);
+    assert_eq!(json["effective_threads"], 1);
+    assert_eq!(json["used_parallelism"], false);
+    assert_eq!(json["status"], "succeeded");
+    assert_eq!(
+        fs::read(temp.child("output.bin").path()).expect("output"),
+        b"abcabcZZcabc"
     );
 }
 

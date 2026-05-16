@@ -1,5 +1,6 @@
 mod bps;
 mod ips;
+mod ppf;
 mod ups;
 mod vcdiff;
 mod xdelta_ffi;
@@ -8,6 +9,7 @@ use std::{path::Path, sync::Arc};
 
 use bps::BpsPatchHandler;
 use ips::IpsPatchHandler;
+use ppf::PpfPatchHandler;
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
     PatchCapabilities, PatchCreateRequest, PatchHandler, ProbeConfidence, Result,
@@ -110,7 +112,7 @@ impl PatchRegistry {
                 Arc::new(StaticPatchHandler::new(&APS)),
                 Arc::new(StaticPatchHandler::new(&APSGBA)),
                 Arc::new(StaticPatchHandler::new(&RUP)),
-                Arc::new(StaticPatchHandler::new(&PPF)),
+                Arc::new(PpfPatchHandler::new(&PPF)),
                 Arc::new(StaticPatchHandler::new(&EBP)),
                 Arc::new(StaticPatchHandler::new(&BDF_BSDIFF40)),
                 Arc::new(StaticPatchHandler::new(&PMSR)),
