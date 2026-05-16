@@ -255,6 +255,33 @@ const SIMPLE_BPS_PATCH: [u8; 25] = [
     0x5A, 0xB9, 0x87, 0x43, 0x50, 0xB0, 0xFC, 0x51, 0xA7,
 ];
 const APS_GBA_BLOCK_SIZE: usize = 0x01_0000;
+const DLDI_VERSION: u8 = 1;
+const DLDI_MAGIC: [u8; 12] = [
+    0xED, 0xA5, 0x8D, 0xBF, b' ', b'C', b'h', b'i', b's', b'h', b'm', 0x00,
+];
+const DLDI_FIX_ALL: u8 = 0x01;
+const DLDI_FIX_GLUE: u8 = 0x02;
+const DLDI_FIX_GOT: u8 = 0x04;
+const DLDI_FIX_BSS: u8 = 0x08;
+const DLDI_DO_MAGIC_STRING: usize = 0x00;
+const DLDI_DO_VERSION: usize = 0x0C;
+const DLDI_DO_DRIVER_SIZE: usize = 0x0D;
+const DLDI_DO_FIX_SECTIONS: usize = 0x0E;
+const DLDI_DO_ALLOCATED_SPACE: usize = 0x0F;
+const DLDI_DO_FRIENDLY_NAME: usize = 0x10;
+const DLDI_DO_TEXT_START: usize = 0x40;
+const DLDI_DO_DATA_END: usize = 0x44;
+const DLDI_DO_GLUE_START: usize = 0x48;
+const DLDI_DO_GLUE_END: usize = 0x4C;
+const DLDI_DO_GOT_START: usize = 0x50;
+const DLDI_DO_GOT_END: usize = 0x54;
+const DLDI_DO_BSS_START: usize = 0x58;
+const DLDI_DO_BSS_END: usize = 0x5C;
+const DLDI_DO_STARTUP: usize = 0x68;
+const DLDI_DO_READ_SECTORS: usize = 0x70;
+const DLDI_DO_WRITE_SECTORS: usize = 0x74;
+const DLDI_DO_SHUTDOWN: usize = 0x7C;
+const DLDI_DO_CODE: usize = 0x80;
 
 enum TestIpsRecord {
     Literal { offset: u32, data: Vec<u8> },
@@ -415,6 +442,79 @@ fn build_mod_patch(records: Vec<(u32, Vec<u8>)>) -> Vec<u8> {
         bytes.extend_from_slice(&data);
     }
     bytes
+}
+
+fn write_i32_le(bytes: &mut [u8], offset: usize, value: i32) {
+    bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
+}
+
+fn build_dldi_driver(driver_log2: u8, base_address: i32, friendly_name: &str) -> Vec<u8> {
+    let size = 1usize << driver_log2;
+    let mut bytes = vec![0u8; size];
+
+    bytes[DLDI_DO_MAGIC_STRING..DLDI_DO_MAGIC_STRING + DLDI_MAGIC.len()]
+        .copy_from_slice(&DLDI_MAGIC);
+    bytes[DLDI_DO_VERSION] = DLDI_VERSION;
+    bytes[DLDI_DO_DRIVER_SIZE] = driver_log2;
+    bytes[DLDI_DO_FIX_SECTIONS] = DLDI_FIX_ALL | DLDI_FIX_GLUE | DLDI_FIX_GOT | DLDI_FIX_BSS;
+    bytes[DLDI_DO_ALLOCATED_SPACE] = driver_log2;
+
+    let name_bytes = friendly_name.as_bytes();
+    let max_name_len = DLDI_DO_TEXT_START - DLDI_DO_FRIENDLY_NAME;
+    let copy_len = name_bytes.len().min(max_name_len.saturating_sub(1));
+    bytes[DLDI_DO_FRIENDLY_NAME..DLDI_DO_FRIENDLY_NAME + copy_len]
+        .copy_from_slice(&name_bytes[..copy_len]);
+
+    let size_i32 = i32::try_from(size).expect("size fits");
+    write_i32_le(&mut bytes, DLDI_DO_TEXT_START, base_address);
+    write_i32_le(&mut bytes, DLDI_DO_DATA_END, base_address + size_i32);
+    write_i32_le(&mut bytes, DLDI_DO_GLUE_START, base_address + 0xA0);
+    write_i32_le(&mut bytes, DLDI_DO_GLUE_END, base_address + 0xA8);
+    write_i32_le(&mut bytes, DLDI_DO_GOT_START, base_address + 0xA8);
+    write_i32_le(&mut bytes, DLDI_DO_GOT_END, base_address + 0xB0);
+    write_i32_le(&mut bytes, DLDI_DO_BSS_START, base_address + 0xB0);
+    write_i32_le(&mut bytes, DLDI_DO_BSS_END, base_address + 0xC0);
+    write_i32_le(
+        &mut bytes,
+        DLDI_DO_STARTUP,
+        base_address + i32::try_from(DLDI_DO_CODE).expect("fits"),
+    );
+    write_i32_le(
+        &mut bytes,
+        DLDI_DO_READ_SECTORS,
+        base_address + i32::try_from(DLDI_DO_CODE + 8).expect("fits"),
+    );
+    write_i32_le(
+        &mut bytes,
+        DLDI_DO_WRITE_SECTORS,
+        base_address + i32::try_from(DLDI_DO_CODE + 12).expect("fits"),
+    );
+    write_i32_le(
+        &mut bytes,
+        DLDI_DO_SHUTDOWN,
+        base_address + i32::try_from(DLDI_DO_CODE + 16).expect("fits"),
+    );
+
+    write_i32_le(&mut bytes, DLDI_DO_CODE + 4, base_address + 0xD0);
+    write_i32_le(&mut bytes, DLDI_DO_CODE + 12, base_address + 0xD8);
+    write_i32_le(&mut bytes, 0xA0, base_address + 0x80);
+    write_i32_le(&mut bytes, 0xA8, base_address + 0x84);
+    bytes[0xB0..0xC0].fill(0x7F);
+    bytes
+}
+
+fn build_nds_with_dldi_slot(
+    slot_offset: usize,
+    allocated_log2: u8,
+    base_address: i32,
+    friendly_name: &str,
+) -> Vec<u8> {
+    let slot_size = 1usize << allocated_log2;
+    let mut file = vec![0xCDu8; slot_offset + slot_size + 0x80];
+    let mut slot = build_dldi_driver(allocated_log2, base_address, friendly_name);
+    slot[DLDI_DO_ALLOCATED_SPACE] = allocated_log2;
+    file[slot_offset..slot_offset + slot_size].copy_from_slice(&slot);
+    file
 }
 
 #[test]
@@ -2791,6 +2891,113 @@ fn patch_create_succeeds_for_mod_and_round_trips() {
 }
 
 #[test]
+fn patch_create_succeeds_for_dldi_and_round_trips() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.nds");
+    let seed_patch = temp.child("seed.dldi");
+    let modified = temp.child("new.nds");
+    let patch = temp.child("update.dldi");
+    let output = temp.child("output.nds");
+
+    fs::write(
+        original.path(),
+        build_nds_with_dldi_slot(0x300, 12, 0x0200_0000, "Default driver"),
+    )
+    .expect("fixture");
+    fs::write(
+        seed_patch.path(),
+        build_dldi_driver(8, 0xBF80_0000u32 as i32, "Roundtrip driver"),
+    )
+    .expect("fixture");
+
+    let seed_apply_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            seed_patch.path().to_str().expect("path"),
+            "--output",
+            modified.path().to_str().expect("path"),
+            "--threads",
+            "8",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let seed_apply_json = parse_single_json_line(&seed_apply_output);
+    assert_eq!(seed_apply_json["command"], "patch-apply");
+    assert_eq!(seed_apply_json["family"], "patch");
+    assert_eq!(seed_apply_json["format"], "DLDI");
+    assert_eq!(seed_apply_json["requested_threads"], 8);
+    assert_eq!(seed_apply_json["effective_threads"], 1);
+    assert_eq!(seed_apply_json["used_parallelism"], false);
+    assert_eq!(seed_apply_json["status"], "succeeded");
+
+    let create_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--format",
+            "dldi",
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--threads",
+            "8",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let create_json = parse_single_json_line(&create_output);
+    assert_eq!(create_json["command"], "patch-create");
+    assert_eq!(create_json["family"], "patch");
+    assert_eq!(create_json["format"], "DLDI");
+    assert_eq!(create_json["requested_threads"], 8);
+    assert_eq!(create_json["effective_threads"], 1);
+    assert_eq!(create_json["used_parallelism"], false);
+    assert_eq!(create_json["status"], "succeeded");
+
+    let apply_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let apply_json = parse_single_json_line(&apply_output);
+    assert_eq!(apply_json["command"], "patch-apply");
+    assert_eq!(apply_json["format"], "DLDI");
+    assert_eq!(apply_json["status"], "succeeded");
+    assert_eq!(
+        fs::read(output.path()).expect("output"),
+        fs::read(modified.path()).expect("modified")
+    );
+}
+
+#[test]
 fn patch_create_succeeds_for_dps_alias_and_round_trips() {
     let temp = setup_temp_dir();
     let original = temp.child("old.bin");
@@ -3001,6 +3208,35 @@ fn inspect_succeeds_for_valid_mod_patch() {
     assert_eq!(json["command"], "inspect");
     assert_eq!(json["family"], "patch");
     assert_eq!(json["format"], "MOD");
+    assert_eq!(json["status"], "succeeded");
+}
+
+#[test]
+fn inspect_succeeds_for_valid_dldi_patch() {
+    let temp = setup_temp_dir();
+    fs::write(
+        temp.child("update.dldi").path(),
+        build_dldi_driver(8, 0xBF80_0000u32 as i32, "Inspect driver"),
+    )
+    .expect("fixture");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "inspect",
+            temp.child("update.dldi").path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "inspect");
+    assert_eq!(json["family"], "patch");
+    assert_eq!(json["format"], "DLDI");
     assert_eq!(json["status"], "succeeded");
 }
 

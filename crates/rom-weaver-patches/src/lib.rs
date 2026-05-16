@@ -1,6 +1,7 @@
 mod apsgba;
 mod bdf;
 mod bps;
+mod dldi;
 mod ips;
 mod pds;
 mod pmsr;
@@ -16,6 +17,7 @@ use std::{fs, path::Path, sync::Arc};
 use apsgba::ApsGbaPatchHandler;
 use bdf::BdfPatchHandler;
 use bps::BpsPatchHandler;
+use dldi::DldiPatchHandler;
 use ips::IpsPatchHandler;
 use pds::PdsPatchHandler;
 use pmsr::PmsrPatchHandler;
@@ -113,6 +115,12 @@ const MOD: FormatDescriptor = FormatDescriptor {
     aliases: &["pmsr"],
     extensions: &[".mod", ".pmsr"],
 };
+const DLDI: FormatDescriptor = FormatDescriptor {
+    family: OperationFamily::Patch,
+    name: "DLDI",
+    aliases: &[],
+    extensions: &[".dldi"],
+};
 const PDS: FormatDescriptor = FormatDescriptor {
     family: OperationFamily::Patch,
     name: "PDS",
@@ -148,6 +156,7 @@ impl PatchRegistry {
                 Arc::new(IpsPatchHandler::new_ebp(&EBP)),
                 Arc::new(BdfPatchHandler::new(&BDF_BSDIFF40)),
                 Arc::new(PmsrPatchHandler::new(&MOD)),
+                Arc::new(DldiPatchHandler::new(&DLDI)),
                 Arc::new(PdsPatchHandler::new(&PDS)),
             ],
         }
@@ -322,6 +331,7 @@ mod tests {
                 "EBP",
                 "BDF/BSDIFF40",
                 "MOD",
+                "DLDI",
                 "PDS",
             ]
         );
@@ -361,6 +371,16 @@ mod tests {
     fn pds_is_wired_to_supported_handler() {
         let registry = PatchRegistry::new();
         let handler = registry.find_by_name("pds").expect("pds handler");
+        let capabilities = handler.capabilities();
+        assert!(capabilities.parse);
+        assert!(capabilities.apply);
+        assert!(capabilities.create);
+    }
+
+    #[test]
+    fn dldi_is_wired_to_supported_handler() {
+        let registry = PatchRegistry::new();
+        let handler = registry.find_by_name("dldi").expect("dldi handler");
         let capabilities = handler.capabilities();
         assert!(capabilities.parse);
         assert!(capabilities.apply);
@@ -452,6 +472,15 @@ mod tests {
     }
 
     #[test]
+    fn probe_routes_dldi_extension_to_dldi_handler() {
+        let registry = PatchRegistry::new();
+        let handler = registry
+            .probe(Path::new("update.dldi"))
+            .expect("dldi probe");
+        assert_eq!(handler.descriptor().name, "DLDI");
+    }
+
+    #[test]
     fn probe_routes_mod_extension_to_mod_handler() {
         let registry = PatchRegistry::new();
         let handler = registry.probe(Path::new("update.mod")).expect("mod probe");
@@ -488,6 +517,13 @@ mod tests {
         let registry = PatchRegistry::new();
         let handler = registry.find_by_name("dps").expect("dps alias");
         assert_eq!(handler.descriptor().name, "PDS");
+    }
+
+    #[test]
+    fn find_by_name_routes_dldi_name_to_dldi_handler() {
+        let registry = PatchRegistry::new();
+        let handler = registry.find_by_name("dldi").expect("dldi name");
+        assert_eq!(handler.descriptor().name, "DLDI");
     }
 
     #[test]
