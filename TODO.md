@@ -37,6 +37,11 @@
 | CTR-008 | container | chd | todo | todo | todo | n/a | n/a | per-block | fixture-roundtrip,cli-smoke | todo | Phase 4 container target. |
 | CTR-009 | container | rvz | todo | todo | todo | n/a | n/a | per-block,codec-mapped | fixture-roundtrip,cli-smoke | todo | Phase 4 container target with shared zstd backend. |
 | CTR-010 | container | z3ds | todo | todo | todo | n/a | n/a | per-block | fixture-roundtrip,cli-smoke | todo | Phase 6 container target. |
+| CTR-011 | container | rar | todo | todo | n/a | n/a | n/a | per-entry | fixture-roundtrip,cli-smoke | todo | Extract-first target for patch bundle compatibility. |
+| CTR-012 | container | gz | todo | todo | todo | n/a | n/a | stream | fixture-roundtrip,cli-smoke | todo | Standalone gzip stream support (non-tar). |
+| CTR-013 | container | bz2 | todo | todo | todo | n/a | n/a | stream | fixture-roundtrip,cli-smoke | todo | Standalone bzip2 stream support (non-tar). |
+| CTR-014 | container | xz | todo | todo | todo | n/a | n/a | stream | fixture-roundtrip,cli-smoke | todo | Standalone xz stream support (non-tar). |
+| CTR-015 | container | zst | todo | todo | todo | n/a | n/a | stream | fixture-roundtrip,cli-smoke | todo | Standalone zstd stream support (non-tar). |
 
 ## Patch Formats
 
@@ -54,6 +59,10 @@
 | PAT-010 | patch | EBP | probe-only | n/a | n/a | todo | todo | scan,diff,write flags | fixture-parity,cli-smoke | todo | Registry entry exists. |
 | PAT-011 | patch | BDF/BSDIFF40 | probe-only | n/a | n/a | todo | todo | scan,diff,write flags | fixture-parity,cli-smoke | todo | Registry entry exists. |
 | PAT-012 | patch | PMSR | probe-only | n/a | n/a | todo | todo | scan,diff,write flags | fixture-parity,cli-smoke | todo | Registry entry exists. |
+| PAT-013 | patch | MOD | probe-only | n/a | n/a | todo | todo | scan,diff,write flags | fixture-parity,cli-smoke | todo | Star Rod/Paper Mario ecosystem compatibility target. |
+| PAT-014 | patch | BSPATCH alias | probe-only | n/a | n/a | todo | todo | scan,diff,write flags | fixture-parity,cli-smoke | todo | Accept `.bspatch` extension as BSDIFF40-compatible probe path. |
+| PAT-015 | patch | DLDI | probe-only | n/a | n/a | todo | todo | scan,diff,write flags | fixture-parity,cli-smoke | todo | Nintendo DS homebrew patching compatibility target. |
+| PAT-016 | patch | PDS | probe-only | n/a | n/a | todo | todo | scan,diff,write flags | fixture-parity,cli-smoke | todo | Nintendo DS patch ecosystem target; prioritize fixture/spec discovery first. |
 
 ## Codecs
 
@@ -64,6 +73,14 @@
 | COD-003 | codec | zstd | n/a | n/a | todo | n/a | n/a | block-ready | roundtrip,unit | todo | Shared backend target for `zipx`, `7z`, `rvz`, and compatible flows. |
 | COD-004 | codec | lzma2 | n/a | n/a | todo | n/a | n/a | block-ready | roundtrip,unit | todo | Required for `7z` and `tar.xz`. |
 | COD-005 | codec | bzip2 | n/a | n/a | todo | n/a | n/a | block-ready | roundtrip,unit | todo | Required for `tar.bz2`. |
+
+## Checksum Algorithms
+
+| ID | Family | Name | Inspect | Extract | Create/Compress | Apply | Create Patch | Threads | Tests | Status | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| CHK-001 | checksum | sha256 | n/a | n/a | n/a | n/a | n/a | threaded-fanout | unit,cli-smoke,json-contract | todo | Modern baseline hash for ROM set verification workflows. |
+| CHK-002 | checksum | blake3 | n/a | n/a | n/a | n/a | n/a | simd,threaded-tree | unit,cli-smoke,json-contract | todo | Fast modern hash option for large-file workflows. |
+| CHK-003 | checksum | crc32c | n/a | n/a | n/a | n/a | n/a | hw-accel,threaded-fanout | unit,cli-smoke,json-contract | todo | CRC32 variant with broad hardware acceleration support. |
 
 ## Cross-Cutting Tests
 
