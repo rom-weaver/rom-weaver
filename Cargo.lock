@@ -1606,7 +1606,9 @@ dependencies = [
  "qbsdiff",
  "rayon",
  "rom-weaver-core",
+ "serde_json",
  "xdelta3",
+ "zip",
 ]
 
 [[package]]

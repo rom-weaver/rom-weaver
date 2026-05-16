@@ -2,6 +2,7 @@ mod apsgba;
 mod bdf;
 mod bps;
 mod ips;
+mod pds;
 mod pmsr;
 mod ppf;
 mod rup;
@@ -15,6 +16,7 @@ use apsgba::ApsGbaPatchHandler;
 use bdf::BdfPatchHandler;
 use bps::BpsPatchHandler;
 use ips::IpsPatchHandler;
+use pds::PdsPatchHandler;
 use pmsr::PmsrPatchHandler;
 use ppf::PpfPatchHandler;
 use rom_weaver_core::{
@@ -130,7 +132,7 @@ impl PatchRegistry {
                 Arc::new(StaticPatchHandler::new(&EBP)),
                 Arc::new(BdfPatchHandler::new(&BDF_BSDIFF40)),
                 Arc::new(PmsrPatchHandler::new(&MOD)),
-                Arc::new(StaticPatchHandler::new(&PDS)),
+                Arc::new(PdsPatchHandler::new(&PDS)),
             ],
         }
     }
@@ -284,6 +286,16 @@ mod tests {
         assert!(capabilities.parse);
         assert!(capabilities.apply);
         assert!(capabilities.create);
+    }
+
+    #[test]
+    fn pds_is_wired_to_parse_supported_handler() {
+        let registry = PatchRegistry::new();
+        let handler = registry.find_by_name("pds").expect("pds handler");
+        let capabilities = handler.capabilities();
+        assert!(capabilities.parse);
+        assert!(!capabilities.apply);
+        assert!(!capabilities.create);
     }
 
     #[test]
