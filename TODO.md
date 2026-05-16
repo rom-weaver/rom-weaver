@@ -63,6 +63,7 @@
 | PAT-014 | patch | BSPATCH alias | probe-only | n/a | n/a | todo | todo | scan,diff,write flags | fixture-parity,cli-smoke | todo | Accept `.bspatch` extension as BSDIFF40-compatible probe path. |
 | PAT-015 | patch | DLDI | probe-only | n/a | n/a | todo | todo | scan,diff,write flags | fixture-parity,cli-smoke | todo | Nintendo DS homebrew patching compatibility target. |
 | PAT-016 | patch | PDS | probe-only | n/a | n/a | todo | todo | scan,diff,write flags | fixture-parity,cli-smoke | todo | Nintendo DS patch ecosystem target; prioritize fixture/spec discovery first. |
+| PAT-017 | patch | SPATCH (Double IPS) | probe-only | n/a | n/a | todo | todo | scan,diff,write flags | fixture-parity,cli-smoke | todo | Legacy double-IPS compatibility target for older ROM hacks. |
 
 ## Codecs
 
