@@ -1,6 +1,7 @@
 mod apsgba;
 mod bps;
 mod ips;
+mod pmsr;
 mod ppf;
 mod rup;
 mod ups;
@@ -12,6 +13,7 @@ use std::{path::Path, sync::Arc};
 use apsgba::ApsGbaPatchHandler;
 use bps::BpsPatchHandler;
 use ips::IpsPatchHandler;
+use pmsr::PmsrPatchHandler;
 use ppf::PpfPatchHandler;
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
@@ -87,11 +89,11 @@ const BDF_BSDIFF40: FormatDescriptor = FormatDescriptor {
     aliases: &["bdf", "bsdiff", "bsdiff40"],
     extensions: &[".bdf", ".bsdiff", ".bsdiff40"],
 };
-const PMSR: FormatDescriptor = FormatDescriptor {
+const MOD: FormatDescriptor = FormatDescriptor {
     family: OperationFamily::Patch,
-    name: "PMSR",
-    aliases: &[],
-    extensions: &[".pmsr"],
+    name: "MOD",
+    aliases: &["pmsr"],
+    extensions: &[".mod", ".pmsr"],
 };
 const PDS: FormatDescriptor = FormatDescriptor {
     family: OperationFamily::Patch,
@@ -125,7 +127,7 @@ impl PatchRegistry {
                 Arc::new(PpfPatchHandler::new(&PPF)),
                 Arc::new(StaticPatchHandler::new(&EBP)),
                 Arc::new(StaticPatchHandler::new(&BDF_BSDIFF40)),
-                Arc::new(StaticPatchHandler::new(&PMSR)),
+                Arc::new(PmsrPatchHandler::new(&MOD)),
                 Arc::new(StaticPatchHandler::new(&PDS)),
             ],
         }
@@ -256,7 +258,7 @@ mod tests {
                 "PPF",
                 "EBP",
                 "BDF/BSDIFF40",
-                "PMSR",
+                "MOD",
                 "PDS",
             ]
         );
@@ -293,5 +295,19 @@ mod tests {
         let registry = PatchRegistry::new();
         let handler = registry.probe(Path::new("update.pds")).expect("pds probe");
         assert_eq!(handler.descriptor().name, "PDS");
+    }
+
+    #[test]
+    fn probe_routes_mod_extension_to_mod_handler() {
+        let registry = PatchRegistry::new();
+        let handler = registry.probe(Path::new("update.mod")).expect("mod probe");
+        assert_eq!(handler.descriptor().name, "MOD");
+    }
+
+    #[test]
+    fn find_by_name_routes_pmsr_alias_to_mod_handler() {
+        let registry = PatchRegistry::new();
+        let handler = registry.find_by_name("pmsr").expect("pmsr alias");
+        assert_eq!(handler.descriptor().name, "MOD");
     }
 }

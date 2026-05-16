@@ -4,6 +4,7 @@
 
 ## Recent Updates (2026-05-16)
 
+- `uncommitted`: MOD/PMSR parse/apply/create support landed (`.mod`/`.pmsr`, `pmsr` alias) with module + CLI smoke coverage.
 - `69bdce6`: APS parse/apply/create support landed (`.aps` via APSGBA-compatible handler).
 - `0a0cf64`: APSGBA parse/apply/create support landed (`.apsgba`).
 - `fc6829e`: PPF parse/apply/create support landed.
@@ -71,8 +72,8 @@
 | PAT-009 | patch | PPF | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | PPF parse/apply/create landed (PPF1/2/3 parse, PPF3 create). |
 | PAT-010 | patch | EBP | probe-only | n/a | n/a | todo | todo | scan,diff,write flags | fixture-parity,cli-smoke | todo | Registry entry exists. |
 | PAT-011 | patch | BDF/BSDIFF40 | probe-only | n/a | n/a | todo | todo | scan,diff,write flags | fixture-parity,cli-smoke | todo | Registry entry exists. |
-| PAT-012 | patch | PMSR | probe-only | n/a | n/a | todo | todo | scan,diff,write flags | fixture-parity,cli-smoke | todo | Registry entry exists. |
-| PAT-013 | patch | MOD | probe-only | n/a | n/a | todo | todo | scan,diff,write flags | fixture-parity,cli-smoke | todo | Star Rod/Paper Mario ecosystem compatibility target. |
+| PAT-012 | patch | PMSR | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | Implemented through the MOD handler with `pmsr` alias support and `.pmsr` extension probing. |
+| PAT-013 | patch | MOD | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | Native parse/apply/create landed for Star Rod/Paper Mario `.mod` patches (PMSR magic), including CLI smoke and module coverage; create currently rejects shrinking outputs. |
 | PAT-014 | patch | BSPATCH alias | probe-only | n/a | n/a | todo | todo | scan,diff,write flags | fixture-parity,cli-smoke | todo | Accept `.bspatch` extension as BSDIFF40-compatible probe path. |
 | PAT-015 | patch | DLDI | probe-only | n/a | n/a | todo | todo | scan,diff,write flags | fixture-parity,cli-smoke | todo | Nintendo DS homebrew patching compatibility target. |
 | PAT-016 | patch | PDS | probe-only | n/a | n/a | todo | todo | scan,diff,write flags | fixture-parity,cli-smoke | todo | Nintendo DS patch ecosystem target; prioritize fixture/spec discovery first. |

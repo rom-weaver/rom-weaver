@@ -353,6 +353,18 @@ fn build_apsgba_patch(source: &[u8], target: &[u8]) -> Vec<u8> {
     bytes
 }
 
+fn build_mod_patch(records: Vec<(u32, Vec<u8>)>) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(b"PMSR");
+    bytes.extend_from_slice(&(records.len() as u32).to_be_bytes());
+    for (offset, data) in records {
+        bytes.extend_from_slice(&offset.to_be_bytes());
+        bytes.extend_from_slice(&(data.len() as u32).to_be_bytes());
+        bytes.extend_from_slice(&data);
+    }
+    bytes
+}
+
 #[test]
 fn inspect_reports_known_container_as_supported() {
     let temp = setup_temp_dir();
@@ -2010,6 +2022,75 @@ fn patch_create_succeeds_for_aps_and_round_trips() {
 }
 
 #[test]
+fn patch_create_succeeds_for_mod_and_round_trips() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.bin");
+    let modified = temp.child("new.bin");
+    let patch = temp.child("update.mod");
+    let output = temp.child("output.bin");
+    fs::write(original.path(), [0x01, 0x02]).expect("fixture");
+    fs::write(modified.path(), [0x01, 0x02, 0x00, 0x00]).expect("fixture");
+
+    let create_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--format",
+            "mod",
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--threads",
+            "8",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let create_json = parse_single_json_line(&create_output);
+    assert_eq!(create_json["command"], "patch-create");
+    assert_eq!(create_json["family"], "patch");
+    assert_eq!(create_json["format"], "MOD");
+    assert_eq!(create_json["requested_threads"], 8);
+    assert_eq!(create_json["effective_threads"], 1);
+    assert_eq!(create_json["used_parallelism"], false);
+    assert_eq!(create_json["status"], "succeeded");
+
+    let apply_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let apply_json = parse_single_json_line(&apply_output);
+    assert_eq!(apply_json["command"], "patch-apply");
+    assert_eq!(apply_json["format"], "MOD");
+    assert_eq!(apply_json["status"], "succeeded");
+    assert_eq!(
+        fs::read(output.path()).expect("output"),
+        fs::read(modified.path()).expect("modified")
+    );
+}
+
+#[test]
 fn patch_create_succeeds_for_xdelta_with_secondary_when_helpful() {
     let temp = setup_temp_dir();
     let original = temp.child("old.bin");
@@ -2121,6 +2202,35 @@ fn inspect_succeeds_for_valid_vcdiff_patch() {
     assert_eq!(json["command"], "inspect");
     assert_eq!(json["family"], "patch");
     assert_eq!(json["format"], "VCDIFF");
+    assert_eq!(json["status"], "succeeded");
+}
+
+#[test]
+fn inspect_succeeds_for_valid_mod_patch() {
+    let temp = setup_temp_dir();
+    fs::write(
+        temp.child("update.mod").path(),
+        build_mod_patch(vec![(1, b"X".to_vec())]),
+    )
+    .expect("fixture");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "inspect",
+            temp.child("update.mod").path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "inspect");
+    assert_eq!(json["family"], "patch");
+    assert_eq!(json["format"], "MOD");
     assert_eq!(json["status"], "succeeded");
 }
 
@@ -2318,6 +2428,50 @@ fn patch_apply_succeeds_for_valid_aps_patch() {
     assert_eq!(
         fs::read(temp.child("output.gba").path()).expect("output"),
         target
+    );
+}
+
+#[test]
+fn patch_apply_succeeds_for_valid_mod_patch() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("input.bin").path(), b"ORIGINAL").expect("fixture");
+    fs::write(
+        temp.child("update.mod").path(),
+        build_mod_patch(vec![(1, b"X".to_vec())]),
+    )
+    .expect("fixture");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            temp.child("input.bin").path().to_str().expect("path"),
+            "--patch",
+            temp.child("update.mod").path().to_str().expect("path"),
+            "--output",
+            temp.child("output.bin").path().to_str().expect("path"),
+            "--threads",
+            "8",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "patch-apply");
+    assert_eq!(json["family"], "patch");
+    assert_eq!(json["format"], "MOD");
+    assert_eq!(json["requested_threads"], 8);
+    assert_eq!(json["effective_threads"], 1);
+    assert_eq!(json["used_parallelism"], false);
+    assert_eq!(json["status"], "succeeded");
+    assert_eq!(
+        fs::read(temp.child("output.bin").path()).expect("output"),
+        b"OXIGINAL"
     );
 }
 
