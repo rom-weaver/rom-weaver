@@ -1,0 +1,6 @@
+No top-level LICENSE/COPYING/NOTICE file was found in the published crate package for zstd-seekable 0.1.23.
+
+Declared SPDX license expression from Cargo metadata:
+BSD-3-Clause
+
+For distribution compliance, treat the SPDX expression above as authoritative metadata for this crate.

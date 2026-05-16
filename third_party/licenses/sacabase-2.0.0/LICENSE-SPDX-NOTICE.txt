@@ -1,0 +1,6 @@
+No top-level LICENSE/COPYING/NOTICE file was found in the published crate package for sacabase 2.0.0.
+
+Declared SPDX license expression from Cargo metadata:
+MIT
+
+For distribution compliance, treat the SPDX expression above as authoritative metadata for this crate.

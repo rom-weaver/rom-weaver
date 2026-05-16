@@ -1,0 +1,34 @@
+rom-weaver Third-Party Notice
+
+This product includes third-party Rust crates.
+
+Inventory
+- Full crate inventory and SPDX expressions: THIRD_PARTY_LICENSES.md
+- Collected third-party license files: third_party/licenses/
+
+Compliance Notes
+- The current resolved normal/build dependency set contains 192 third-party crates.
+- No GPL/AGPL/LGPL dependency was detected in this resolved set.
+- Most dependencies are permissive licenses (MIT/Apache/BSD/Zlib/ISC/BSL/0BSD/Unlicense).
+
+UnRAR Special Terms
+- The `unrar-ng-sys` crate vendors UnRAR source code.
+- UnRAR terms include additional restrictions that are not captured by SPDX alone, including restrictions against using the UnRAR sources to build a RAR-compatible archiver or re-create the RAR compression algorithm.
+- If distributing modified UnRAR source, include the required UnRAR paragraph/notice text from the bundled license.
+- Bundled reference: third_party/licenses/unrar-ng-sys-0.7.7/UNRAR-LICENSE.txt
+
+Crates Without Top-Level License Files In Package
+- For crates where a top-level LICENSE/COPYING/NOTICE file was not present in the packaged source, a fallback metadata file was added:
+  third_party/licenses/<crate>-<version>/LICENSE-SPDX-NOTICE.txt
+- ansi_term 0.12.1
+- crc-catalog 2.5.0
+- crc32c 0.6.8
+- lzma-rust 0.1.7
+- nod 2.0.0-alpha.6
+- nt-time 0.8.1
+- sacabase 2.0.0
+- shlex 0.1.1
+- zstd-seekable 0.1.23
+
+Note
+- This notice bundle is generated from current resolved dependencies and should be regenerated when Cargo.lock/dependencies change.
