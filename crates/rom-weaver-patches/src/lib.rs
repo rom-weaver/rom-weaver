@@ -1,4 +1,5 @@
 mod apsgba;
+mod bdf;
 mod bps;
 mod ips;
 mod pmsr;
@@ -11,6 +12,7 @@ mod xdelta_ffi;
 use std::{path::Path, sync::Arc};
 
 use apsgba::ApsGbaPatchHandler;
+use bdf::BdfPatchHandler;
 use bps::BpsPatchHandler;
 use ips::IpsPatchHandler;
 use pmsr::PmsrPatchHandler;
@@ -126,7 +128,7 @@ impl PatchRegistry {
                 Arc::new(RupPatchHandler::new(&RUP)),
                 Arc::new(PpfPatchHandler::new(&PPF)),
                 Arc::new(StaticPatchHandler::new(&EBP)),
-                Arc::new(StaticPatchHandler::new(&BDF_BSDIFF40)),
+                Arc::new(BdfPatchHandler::new(&BDF_BSDIFF40)),
                 Arc::new(PmsrPatchHandler::new(&MOD)),
                 Arc::new(StaticPatchHandler::new(&PDS)),
             ],
@@ -268,6 +270,16 @@ mod tests {
     fn aps_is_wired_to_supported_handler() {
         let registry = PatchRegistry::new();
         let handler = registry.find_by_name("aps").expect("aps handler");
+        let capabilities = handler.capabilities();
+        assert!(capabilities.parse);
+        assert!(capabilities.apply);
+        assert!(capabilities.create);
+    }
+
+    #[test]
+    fn bdf_is_wired_to_supported_handler() {
+        let registry = PatchRegistry::new();
+        let handler = registry.find_by_name("bdf").expect("bdf handler");
         let capabilities = handler.capabilities();
         assert!(capabilities.parse);
         assert!(capabilities.apply);

@@ -582,6 +582,47 @@ fn checksum_reports_auto_thread_mode() {
 }
 
 #[test]
+fn checksum_supports_sha256_blake3_and_crc32c() {
+    let temp = setup_temp_dir();
+    temp.child("sample.bin")
+        .write_str("hello world")
+        .expect("fixture");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "checksum",
+            temp.child("sample.bin").path().to_str().expect("path"),
+            "--algo",
+            "sha256",
+            "--algo",
+            "blake3",
+            "--algo",
+            "crc32c",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "checksum");
+    assert_eq!(json["family"], "checksum");
+    assert_eq!(json["format"], "native");
+    assert_eq!(json["status"], "succeeded");
+    let label = json["label"].as_str().expect("label");
+    assert!(
+        label.contains("sha256=b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9")
+    );
+    assert!(
+        label.contains("blake3=d74981efa70a0c880b8d8c1985d075dbcbf679b99a5f9914e5aaf96b831a9e24")
+    );
+    assert!(label.contains("crc32c=c99465aa"));
+}
+
+#[test]
 fn compress_routes_through_registered_container_format() {
     let temp = setup_temp_dir();
     temp.child("file.bin")
@@ -1704,6 +1745,86 @@ fn patch_create_succeeds_for_bps_and_round_trips() {
     let apply_json = parse_single_json_line(&apply_output);
     assert_eq!(apply_json["command"], "patch-apply");
     assert_eq!(apply_json["format"], "BPS");
+    assert_eq!(apply_json["status"], "succeeded");
+    assert_eq!(
+        fs::read(output.path()).expect("output"),
+        fs::read(modified.path()).expect("modified")
+    );
+}
+
+#[test]
+fn patch_create_succeeds_for_bdf_and_round_trips() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.bin");
+    let modified = temp.child("new.bin");
+    let patch = temp.child("update.bdf");
+    let output = temp.child("output.bin");
+    fs::write(
+        original.path(),
+        b"The quick brown fox jumps over the lazy dog.",
+    )
+    .expect("fixture");
+    fs::write(
+        modified.path(),
+        b"The quick brown cat jumps over two lazy dogs!",
+    )
+    .expect("fixture");
+
+    let create_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--format",
+            "bdf",
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--threads",
+            "8",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let create_json = parse_single_json_line(&create_output);
+    assert_eq!(create_json["command"], "patch-create");
+    assert_eq!(create_json["family"], "patch");
+    assert_eq!(create_json["format"], "BDF/BSDIFF40");
+    assert_eq!(create_json["requested_threads"], 8);
+    assert_eq!(create_json["effective_threads"], 1);
+    assert_eq!(create_json["used_parallelism"], false);
+    assert_eq!(create_json["status"], "succeeded");
+
+    let patch_bytes = fs::read(patch.path()).expect("patch");
+    assert_eq!(&patch_bytes[..8], b"BSDIFF40");
+
+    let apply_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let apply_json = parse_single_json_line(&apply_output);
+    assert_eq!(apply_json["command"], "patch-apply");
+    assert_eq!(apply_json["format"], "BDF/BSDIFF40");
     assert_eq!(apply_json["status"], "succeeded");
     assert_eq!(
         fs::read(output.path()).expect("output"),

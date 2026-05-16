@@ -25,7 +25,7 @@
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | CMD-001 | command | inspect | done | n/a | n/a | n/a | n/a | n/a | cli-smoke,json-contract | done | Routes inspect through container and patch registries with text/JSON reporting. |
 | CMD-002 | command | extract | n/a | done | n/a | n/a | n/a | context-plumbed | cli-smoke,json-contract | done | Container extraction landed, including recursive nested archive extraction. |
-| CMD-003 | command | checksum | n/a | n/a | n/a | n/a | n/a | context-plumbed | cli-smoke,json-contract,thread-model | in-progress | Baseline engine landed (`crc32`, `md5`, `sha1`, `crc16`, `adler32`) with mmap + parallel crc32; planned algorithm expansion remains in `CHK-006`/`CHK-007`/`CHK-008`. |
+| CMD-003 | command | checksum | n/a | n/a | n/a | n/a | n/a | context-plumbed | cli-smoke,json-contract,thread-model | done | Native engine now covers `crc32`, `md5`, `sha1`, `sha256`, `blake3`, `crc32c`, `crc16`, and `adler32` with mmap + threaded fanout. |
 | CMD-004 | command | compress | n/a | n/a | done | n/a | n/a | context-plumbed | cli-smoke,json-contract | done | Container create/compress routing is wired through registered handlers (`--format`, optional `--codec`/`--level`). |
 | CMD-005 | command | patch-apply | n/a | n/a | n/a | done | n/a | context-plumbed | cli-smoke,json-contract | done | Patch apply routes through handler probing and emits thread-aware reports. |
 | CMD-006 | command | patch-create | n/a | n/a | n/a | n/a | done | context-plumbed | cli-smoke,json-contract | done | Patch create routes by format name through registered handlers. |
@@ -76,7 +76,7 @@
 | PAT-008 | patch | RUP | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | Native parse/apply/create landed with MD5-matched forward/undo apply, overflow mode handling (`A`/`M`), and round-trip fixture coverage. |
 | PAT-009 | patch | PPF | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | PPF parse/apply/create landed (PPF1/2/3 parse, PPF3 create). |
 | PAT-010 | patch | EBP | probe-only | n/a | n/a | todo | todo | scan,diff,write flags | fixture-parity,cli-smoke | todo | Registry entry exists. |
-| PAT-011 | patch | BDF/BSDIFF40 | probe-only | n/a | n/a | todo | todo | scan,diff,write flags | fixture-parity,cli-smoke | todo | Registry entry exists. |
+| PAT-011 | patch | BDF/BSDIFF40 | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | Native parse/apply/create landed with BSDIFF40-compatible patch bytes plus `bdf`/`bsdiff`/`bspatch` alias coverage. |
 | PAT-012 | patch | PMSR | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | Implemented through the MOD handler with `pmsr` alias support and `.pmsr` extension probing. |
 | PAT-013 | patch | MOD | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | Native parse/apply/create landed for Star Rod/Paper Mario `.mod` patches (PMSR magic), including CLI smoke and module coverage; create currently rejects shrinking outputs. |
 | PAT-014 | patch | BSPATCH alias | probe-only | n/a | n/a | todo | todo | scan,diff,write flags | fixture-parity,cli-smoke | done | Accept `.bspatch` and `.bspatch40` extensions plus `bspatch`/`bspatch40` format aliases as BSDIFF40-compatible probe paths. |
@@ -103,9 +103,9 @@
 | CHK-003 | checksum | sha1 | n/a | n/a | n/a | n/a | n/a | threaded-fanout | unit,cli-smoke,json-contract | done | Native checksum support landed. |
 | CHK-004 | checksum | crc16 | n/a | n/a | n/a | n/a | n/a | threaded-fanout | unit,cli-smoke,json-contract | done | Native checksum support landed. |
 | CHK-005 | checksum | adler32 | n/a | n/a | n/a | n/a | n/a | threaded-fanout | unit,cli-smoke,json-contract | done | Native checksum support landed. |
-| CHK-006 | checksum | sha256 | n/a | n/a | n/a | n/a | n/a | threaded-fanout | unit,cli-smoke,json-contract | todo | Modern baseline hash for ROM set verification workflows. |
-| CHK-007 | checksum | blake3 | n/a | n/a | n/a | n/a | n/a | simd,threaded-tree | unit,cli-smoke,json-contract | todo | Fast modern hash option for large-file workflows. |
-| CHK-008 | checksum | crc32c | n/a | n/a | n/a | n/a | n/a | hw-accel,threaded-fanout | unit,cli-smoke,json-contract | todo | CRC32 variant with broad hardware acceleration support. |
+| CHK-006 | checksum | sha256 | n/a | n/a | n/a | n/a | n/a | threaded-fanout | unit,cli-smoke,json-contract | done | Native checksum support landed in engine and CLI smoke coverage. |
+| CHK-007 | checksum | blake3 | n/a | n/a | n/a | n/a | n/a | simd,threaded-tree | unit,cli-smoke,json-contract | done | Native checksum support landed in engine and CLI smoke coverage. |
+| CHK-008 | checksum | crc32c | n/a | n/a | n/a | n/a | n/a | hw-accel,threaded-fanout | unit,cli-smoke,json-contract | done | Native checksum support landed in engine and CLI smoke coverage. |
 
 ## Cross-Cutting Tests
 
