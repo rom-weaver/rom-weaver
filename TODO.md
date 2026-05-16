@@ -12,6 +12,7 @@
 | CMD-004 | command | compress | n/a | n/a | scaffolded | n/a | n/a | context-plumbed | cli-smoke,json-contract | todo | CLI surface exists; container and codec rows gate real compression. |
 | CMD-005 | command | patch-apply | n/a | n/a | n/a | scaffolded | n/a | context-plumbed | cli-smoke,json-contract | todo | CLI surface exists; patch rows gate real apply support. |
 | CMD-006 | command | patch-create | n/a | n/a | n/a | n/a | scaffolded | context-plumbed | cli-smoke,json-contract | todo | CLI surface exists; patch rows gate real patch creation. |
+| CMD-007 | command | trim | n/a | n/a | scaffolded | n/a | n/a | context-plumbed | cli-smoke,json-contract,thread-model | todo | Dedicated image/file trimming workflow; target NDSTokyoTrim-compatible behavior for NDS/DSi trim boundaries and safety checks. |
 
 ## Threading Groundwork
 
@@ -42,6 +43,7 @@
 | CTR-013 | container | bz2 | todo | todo | todo | n/a | n/a | stream | fixture-roundtrip,cli-smoke | todo | Standalone bzip2 stream support (non-tar). |
 | CTR-014 | container | xz | todo | todo | todo | n/a | n/a | stream | fixture-roundtrip,cli-smoke | todo | Standalone xz stream support (non-tar). |
 | CTR-015 | container | zst | todo | todo | todo | n/a | n/a | stream | fixture-roundtrip,cli-smoke | todo | Standalone zstd stream support (non-tar). |
+| CTR-016 | container | xiso | todo | todo | todo | n/a | n/a | per-file | fixture-roundtrip,cli-smoke | todo | Original Xbox XISO support; prioritize inspect/extract first, then rebuild/create. |
 
 ## Patch Formats
 
@@ -94,3 +96,4 @@
 | TEST-005 | test | temp-output-cleanup | n/a | todo | todo | todo | todo | temp-path lifecycle | fixture | todo | Add cleanup assertions once commands start materializing temp files. |
 | TEST-006 | test | container-fixture-roundtrip | todo | todo | todo | n/a | n/a | real-handler coverage | fixture | todo | Required before container rows move to `done`. |
 | TEST-007 | test | patch-fixture-parity | n/a | n/a | n/a | todo | todo | real-handler coverage | fixture | todo | Required before patch rows move to `done`. |
+| TEST-008 | test | trim-parity | n/a | n/a | todo | n/a | n/a | deterministic-output | fixture,cli-smoke | todo | Verify deterministic outputs and parity vs NDSTokyoTrim-compatible fixtures for representative NDS/DSi edge cases. |
