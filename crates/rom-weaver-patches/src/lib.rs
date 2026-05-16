@@ -7,6 +7,7 @@ mod pds;
 mod pmsr;
 mod ppf;
 mod rup;
+mod solid;
 mod spatch;
 mod ups;
 mod vcdiff;
@@ -27,6 +28,7 @@ use rom_weaver_core::{
     PatchCapabilities, PatchCreateRequest, PatchHandler, ProbeConfidence, Result,
 };
 use rup::RupPatchHandler;
+use solid::SolidPatchHandler;
 use spatch::SpatchPatchHandler;
 use ups::UpsPatchHandler;
 use vcdiff::VcdiffPatchHandler;
@@ -48,6 +50,12 @@ const SPATCH: FormatDescriptor = FormatDescriptor {
     name: "SPATCH",
     aliases: &["double-ips", "doubleips"],
     extensions: &[".spatch"],
+};
+const SOLID: FormatDescriptor = FormatDescriptor {
+    family: OperationFamily::Patch,
+    name: "SOLID",
+    aliases: &["solidpatch", "solid-patch"],
+    extensions: &[".solid"],
 };
 const BPS: FormatDescriptor = FormatDescriptor {
     family: OperationFamily::Patch,
@@ -145,6 +153,7 @@ impl PatchRegistry {
                 Arc::new(IpsPatchHandler::new(&IPS)),
                 Arc::new(IpsPatchHandler::new_ips32(&IPS32)),
                 Arc::new(SpatchPatchHandler::new(&SPATCH)),
+                Arc::new(SolidPatchHandler::new(&SOLID)),
                 Arc::new(BpsPatchHandler::new(&BPS)),
                 Arc::new(UpsPatchHandler::new(&UPS)),
                 Arc::new(VcdiffPatchHandler::new(&VCDIFF)),
@@ -320,6 +329,7 @@ mod tests {
                 "IPS",
                 "IPS32",
                 "SPATCH",
+                "SOLID",
                 "BPS",
                 "UPS",
                 "VCDIFF",
@@ -410,6 +420,15 @@ mod tests {
             .probe(Path::new("update.spatch"))
             .expect("spatch probe");
         assert_eq!(handler.descriptor().name, "SPATCH");
+    }
+
+    #[test]
+    fn probe_routes_solid_extension_to_solid_handler() {
+        let registry = PatchRegistry::new();
+        let handler = registry
+            .probe(Path::new("update.solid"))
+            .expect("solid probe");
+        assert_eq!(handler.descriptor().name, "SOLID");
     }
 
     #[test]
@@ -532,6 +551,22 @@ mod tests {
         for alias in ["double-ips", "doubleips"] {
             let handler = registry.find_by_name(alias).expect("spatch alias");
             assert_eq!(handler.descriptor().name, "SPATCH");
+        }
+    }
+
+    #[test]
+    fn find_by_name_routes_solid_name_to_solid_handler() {
+        let registry = PatchRegistry::new();
+        let handler = registry.find_by_name("solid").expect("solid name");
+        assert_eq!(handler.descriptor().name, "SOLID");
+    }
+
+    #[test]
+    fn find_by_name_routes_solid_aliases_to_solid_handler() {
+        let registry = PatchRegistry::new();
+        for alias in ["solidpatch", "solid-patch"] {
+            let handler = registry.find_by_name(alias).expect("solid alias");
+            assert_eq!(handler.descriptor().name, "SOLID");
         }
     }
 
