@@ -1,6 +1,7 @@
 mod apsgba;
 mod bdf;
 mod bps;
+mod dldi;
 mod ips;
 mod pds;
 mod pmsr;
@@ -15,6 +16,7 @@ use std::{path::Path, sync::Arc};
 use apsgba::ApsGbaPatchHandler;
 use bdf::BdfPatchHandler;
 use bps::BpsPatchHandler;
+use dldi::DldiPatchHandler;
 use ips::IpsPatchHandler;
 use pds::PdsPatchHandler;
 use pmsr::PmsrPatchHandler;
@@ -105,6 +107,12 @@ const PDS: FormatDescriptor = FormatDescriptor {
     aliases: &[],
     extensions: &[".pds"],
 };
+const DLDI: FormatDescriptor = FormatDescriptor {
+    family: OperationFamily::Patch,
+    name: "DLDI",
+    aliases: &[],
+    extensions: &[".dldi"],
+};
 
 pub struct PatchRegistry {
     handlers: Vec<Arc<dyn PatchHandler>>,
@@ -133,6 +141,7 @@ impl PatchRegistry {
                 Arc::new(BdfPatchHandler::new(&BDF_BSDIFF40)),
                 Arc::new(PmsrPatchHandler::new(&MOD)),
                 Arc::new(PdsPatchHandler::new(&PDS)),
+                Arc::new(DldiPatchHandler::new(&DLDI)),
             ],
         }
     }
@@ -264,6 +273,7 @@ mod tests {
                 "BDF/BSDIFF40",
                 "MOD",
                 "PDS",
+                "DLDI",
             ]
         );
     }
@@ -299,6 +309,16 @@ mod tests {
     }
 
     #[test]
+    fn dldi_is_wired_to_supported_handler() {
+        let registry = PatchRegistry::new();
+        let handler = registry.find_by_name("dldi").expect("dldi handler");
+        let capabilities = handler.capabilities();
+        assert!(capabilities.parse);
+        assert!(capabilities.apply);
+        assert!(capabilities.create);
+    }
+
+    #[test]
     fn probe_routes_aps_extension_to_aps_handler() {
         let registry = PatchRegistry::new();
         let handler = registry.probe(Path::new("update.aps")).expect("aps probe");
@@ -319,6 +339,15 @@ mod tests {
         let registry = PatchRegistry::new();
         let handler = registry.probe(Path::new("update.pds")).expect("pds probe");
         assert_eq!(handler.descriptor().name, "PDS");
+    }
+
+    #[test]
+    fn probe_routes_dldi_extension_to_dldi_handler() {
+        let registry = PatchRegistry::new();
+        let handler = registry
+            .probe(Path::new("update.dldi"))
+            .expect("dldi probe");
+        assert_eq!(handler.descriptor().name, "DLDI");
     }
 
     #[test]

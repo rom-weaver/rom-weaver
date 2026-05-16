@@ -255,6 +255,71 @@ const SIMPLE_BPS_PATCH: [u8; 25] = [
     0x5A, 0xB9, 0x87, 0x43, 0x50, 0xB0, 0xFC, 0x51, 0xA7,
 ];
 const APS_GBA_BLOCK_SIZE: usize = 0x01_0000;
+const DLDI_MAGIC: [u8; 12] = [
+    0xED, 0xA5, 0x8D, 0xBF, b' ', b'C', b'h', b'i', b's', b'h', b'm', 0x00,
+];
+const DLDI_FIX_ALL: u8 = 0x01;
+const DLDI_FIX_GLUE: u8 = 0x02;
+const DLDI_FIX_GOT: u8 = 0x04;
+const DLDI_FIX_BSS: u8 = 0x08;
+
+fn write_i32_le(bytes: &mut [u8], offset: usize, value: i32) {
+    bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
+}
+
+fn build_dldi_driver(driver_log2: u8, base_address: i32, friendly_name: &str) -> Vec<u8> {
+    let size = 1usize << driver_log2;
+    let mut bytes = vec![0u8; size];
+
+    bytes[..DLDI_MAGIC.len()].copy_from_slice(&DLDI_MAGIC);
+    bytes[0x0C] = 1;
+    bytes[0x0D] = driver_log2;
+    bytes[0x0E] = DLDI_FIX_ALL | DLDI_FIX_GLUE | DLDI_FIX_GOT | DLDI_FIX_BSS;
+    bytes[0x0F] = driver_log2;
+
+    let name_bytes = friendly_name.as_bytes();
+    let copy_len = name_bytes.len().min(0x2F);
+    bytes[0x10..0x10 + copy_len].copy_from_slice(&name_bytes[..copy_len]);
+
+    let size_i32 = i32::try_from(size).expect("fits");
+    write_i32_le(&mut bytes, 0x40, base_address);
+    write_i32_le(&mut bytes, 0x44, base_address + size_i32);
+    write_i32_le(&mut bytes, 0x48, base_address + 0xA0);
+    write_i32_le(&mut bytes, 0x4C, base_address + 0xA8);
+    write_i32_le(&mut bytes, 0x50, base_address + 0xA8);
+    write_i32_le(&mut bytes, 0x54, base_address + 0xB0);
+    write_i32_le(&mut bytes, 0x58, base_address + 0xB0);
+    write_i32_le(&mut bytes, 0x5C, base_address + 0xC0);
+    write_i32_le(&mut bytes, 0x68, base_address + 0x80);
+    write_i32_le(&mut bytes, 0x70, base_address + 0x88);
+    write_i32_le(&mut bytes, 0x74, base_address + 0x8C);
+    write_i32_le(&mut bytes, 0x7C, base_address + 0x90);
+
+    write_i32_le(&mut bytes, 0x84, base_address + 0xD0);
+    write_i32_le(&mut bytes, 0x8C, base_address + 0xD8);
+    write_i32_le(&mut bytes, 0xA0, base_address + 0x80);
+    write_i32_le(&mut bytes, 0xA8, base_address + 0x84);
+
+    for byte in &mut bytes[0xB0..0xC0] {
+        *byte = 0x7F;
+    }
+
+    bytes
+}
+
+fn build_dldi_patchable_input(
+    slot_offset: usize,
+    allocated_log2: u8,
+    mem_offset: i32,
+    friendly_name: &str,
+) -> Vec<u8> {
+    let slot_size = 1usize << allocated_log2;
+    let mut file = vec![0xCCu8; slot_offset + slot_size + 0x80];
+    let mut slot = build_dldi_driver(allocated_log2, mem_offset, friendly_name);
+    slot[0x0F] = allocated_log2;
+    file[slot_offset..slot_offset + slot_size].copy_from_slice(&slot);
+    file
+}
 
 enum TestIpsRecord {
     Literal { offset: u32, data: Vec<u8> },
@@ -2212,6 +2277,101 @@ fn patch_create_succeeds_for_mod_and_round_trips() {
 }
 
 #[test]
+fn patch_create_succeeds_for_dldi_and_round_trips() {
+    let temp = setup_temp_dir();
+    let original = temp.child("original.nds");
+    let driver = temp.child("driver.dldi");
+    let modified = temp.child("modified.nds");
+    let created_patch = temp.child("created.dldi");
+    let replay_output = temp.child("replay.nds");
+
+    fs::write(
+        original.path(),
+        build_dldi_patchable_input(0x300, 12, 0x0200_0000, "Default driver"),
+    )
+    .expect("fixture");
+    fs::write(
+        driver.path(),
+        build_dldi_driver(8, 0xBF80_0000u32 as i32, "CLI DLDI Driver"),
+    )
+    .expect("fixture");
+
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            driver.path().to_str().expect("path"),
+            "--output",
+            modified.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let create_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--format",
+            "dldi",
+            "--output",
+            created_patch.path().to_str().expect("path"),
+            "--threads",
+            "8",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let create_json = parse_single_json_line(&create_output);
+    assert_eq!(create_json["command"], "patch-create");
+    assert_eq!(create_json["family"], "patch");
+    assert_eq!(create_json["format"], "DLDI");
+    assert_eq!(create_json["requested_threads"], 8);
+    assert_eq!(create_json["effective_threads"], 1);
+    assert_eq!(create_json["used_parallelism"], false);
+    assert_eq!(create_json["status"], "succeeded");
+
+    let replay_apply_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            created_patch.path().to_str().expect("path"),
+            "--output",
+            replay_output.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let replay_json = parse_single_json_line(&replay_apply_output);
+    assert_eq!(replay_json["command"], "patch-apply");
+    assert_eq!(replay_json["family"], "patch");
+    assert_eq!(replay_json["format"], "DLDI");
+    assert_eq!(replay_json["status"], "succeeded");
+    assert_eq!(
+        fs::read(replay_output.path()).expect("replay output"),
+        fs::read(modified.path()).expect("modified")
+    );
+}
+
+#[test]
 fn patch_create_succeeds_for_xdelta_with_secondary_when_helpful() {
     let temp = setup_temp_dir();
     let original = temp.child("old.bin");
@@ -2352,6 +2512,35 @@ fn inspect_succeeds_for_valid_mod_patch() {
     assert_eq!(json["command"], "inspect");
     assert_eq!(json["family"], "patch");
     assert_eq!(json["format"], "MOD");
+    assert_eq!(json["status"], "succeeded");
+}
+
+#[test]
+fn inspect_succeeds_for_valid_dldi_patch() {
+    let temp = setup_temp_dir();
+    fs::write(
+        temp.child("driver.dldi").path(),
+        build_dldi_driver(8, 0xBF80_0000u32 as i32, "Inspect DLDI"),
+    )
+    .expect("fixture");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "inspect",
+            temp.child("driver.dldi").path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "inspect");
+    assert_eq!(json["family"], "patch");
+    assert_eq!(json["format"], "DLDI");
     assert_eq!(json["status"], "succeeded");
 }
 
@@ -2593,6 +2782,54 @@ fn patch_apply_succeeds_for_valid_mod_patch() {
     assert_eq!(
         fs::read(temp.child("output.bin").path()).expect("output"),
         b"OXIGINAL"
+    );
+}
+
+#[test]
+fn patch_apply_succeeds_for_valid_dldi_patch() {
+    let temp = setup_temp_dir();
+    let input = build_dldi_patchable_input(0x240, 12, 0x0200_0000, "Default driver");
+    let patch = build_dldi_driver(8, 0xBF80_0000u32 as i32, "CLI Apply DLDI");
+
+    fs::write(temp.child("input.nds").path(), &input).expect("fixture");
+    fs::write(temp.child("driver.dldi").path(), patch).expect("fixture");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            temp.child("input.nds").path().to_str().expect("path"),
+            "--patch",
+            temp.child("driver.dldi").path().to_str().expect("path"),
+            "--output",
+            temp.child("output.nds").path().to_str().expect("path"),
+            "--threads",
+            "8",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "patch-apply");
+    assert_eq!(json["family"], "patch");
+    assert_eq!(json["format"], "DLDI");
+    assert_eq!(json["requested_threads"], 8);
+    assert_eq!(json["effective_threads"], 1);
+    assert_eq!(json["used_parallelism"], false);
+    assert_eq!(json["status"], "succeeded");
+
+    let output_bytes = fs::read(temp.child("output.nds").path()).expect("output");
+    assert_ne!(output_bytes, input);
+    let slot = &output_bytes[0x240..0x240 + (1 << 8)];
+    assert_eq!(&slot[..DLDI_MAGIC.len()], &DLDI_MAGIC);
+    assert!(
+        slot.windows(b"CLI Apply DLDI".len())
+            .any(|window| window == b"CLI Apply DLDI")
     );
 }
 
