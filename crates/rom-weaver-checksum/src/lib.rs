@@ -8,9 +8,11 @@ use std::{
 };
 
 use adler2::Adler32;
-use crc16::{ARC, State as Crc16State};
+use blake3::Hasher as Blake3Hasher;
+use crc16::{State as Crc16State, ARC};
+use crc32c::crc32c_append;
 use crc32fast::Hasher as Crc32Hasher;
-use md5::{Digest, Md5};
+use md5::{Digest as Md5Digest, Md5};
 use memmap2::{Mmap, MmapOptions};
 use rayon::prelude::*;
 use rom_weaver_core::{
@@ -20,8 +22,11 @@ use rom_weaver_core::{
 };
 use serde::{Deserialize, Serialize};
 use sha1::Sha1;
+use sha2::{Digest as Sha2Digest, Sha256};
 
-const SUPPORTED_ALGORITHMS: &[&str] = &["crc32", "md5", "sha1", "crc16", "adler32"];
+const SUPPORTED_ALGORITHMS: &[&str] = &[
+    "crc32", "md5", "sha1", "sha256", "blake3", "crc32c", "crc16", "adler32",
+];
 const CACHE_SCHEMA_VERSION: u32 = 1;
 const CACHE_DIR_NAME: &str = "cache/checksums-v1";
 const MIN_CHUNK_SIZE: usize = 256 * 1024;
@@ -121,6 +126,9 @@ enum Algorithm {
     Crc32,
     Md5,
     Sha1,
+    Sha256,
+    Blake3,
+    Crc32c,
     Crc16,
     Adler32,
 }
@@ -131,6 +139,9 @@ impl Algorithm {
             "crc32" => Some(Self::Crc32),
             "md5" => Some(Self::Md5),
             "sha1" => Some(Self::Sha1),
+            "sha256" => Some(Self::Sha256),
+            "blake3" => Some(Self::Blake3),
+            "crc32c" => Some(Self::Crc32c),
             "crc16" => Some(Self::Crc16),
             "adler32" => Some(Self::Adler32),
             _ => None,
@@ -142,6 +153,9 @@ impl Algorithm {
             Self::Crc32 => "crc32",
             Self::Md5 => "md5",
             Self::Sha1 => "sha1",
+            Self::Sha256 => "sha256",
+            Self::Blake3 => "blake3",
+            Self::Crc32c => "crc32c",
             Self::Crc16 => "crc16",
             Self::Adler32 => "adler32",
         }
@@ -152,6 +166,9 @@ enum HasherState {
     Crc32(Crc32Hasher),
     Md5(Md5),
     Sha1(Sha1),
+    Sha256(Sha256),
+    Blake3(Blake3Hasher),
+    Crc32c(u32),
     Crc16(Crc16State<ARC>),
     Adler32(Adler32),
 }
@@ -162,6 +179,9 @@ impl HasherState {
             Algorithm::Crc32 => Self::Crc32(Crc32Hasher::new()),
             Algorithm::Md5 => Self::Md5(Md5::new()),
             Algorithm::Sha1 => Self::Sha1(Sha1::new()),
+            Algorithm::Sha256 => Self::Sha256(Sha256::new()),
+            Algorithm::Blake3 => Self::Blake3(Blake3Hasher::new()),
+            Algorithm::Crc32c => Self::Crc32c(0),
             Algorithm::Crc16 => Self::Crc16(Crc16State::<ARC>::new()),
             Algorithm::Adler32 => Self::Adler32(Adler32::new()),
         }
@@ -172,6 +192,11 @@ impl HasherState {
             Self::Crc32(state) => state.update(bytes),
             Self::Md5(state) => state.update(bytes),
             Self::Sha1(state) => state.update(bytes),
+            Self::Sha256(state) => state.update(bytes),
+            Self::Blake3(state) => {
+                state.update(bytes);
+            }
+            Self::Crc32c(state) => *state = crc32c_append(*state, bytes),
             Self::Crc16(state) => state.update(bytes),
             Self::Adler32(state) => state.write_slice(bytes),
         }
@@ -182,6 +207,9 @@ impl HasherState {
             Self::Crc32(state) => format!("{:08x}", state.finalize()),
             Self::Md5(state) => hex_encode(&state.finalize()),
             Self::Sha1(state) => hex_encode(&state.finalize()),
+            Self::Sha256(state) => hex_encode(&state.finalize()),
+            Self::Blake3(state) => state.finalize().to_hex().to_string(),
+            Self::Crc32c(state) => format!("{state:08x}"),
             Self::Crc16(state) => format!("{:04x}", state.get()),
             Self::Adler32(state) => format!("{:08x}", state.checksum()),
         }
@@ -866,8 +894,8 @@ mod tests {
         fs::{self, File},
         io::Write,
         path::{Path, PathBuf},
-        sync::Arc,
         sync::atomic::{AtomicU64, Ordering},
+        sync::Arc,
         time::{SystemTime, UNIX_EPOCH},
     };
 
@@ -877,8 +905,8 @@ mod tests {
     };
 
     use super::{
-        CRC32_PARALLEL_MIN_BYTES_PER_THREAD, CRC32_PARALLEL_THRESHOLD, FANOUT_PARALLEL_THRESHOLD,
-        NativeChecksumEngine, supported_algorithms,
+        supported_algorithms, NativeChecksumEngine, CRC32_PARALLEL_MIN_BYTES_PER_THREAD,
+        CRC32_PARALLEL_THRESHOLD, FANOUT_PARALLEL_THRESHOLD,
     };
 
     static TEST_DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -939,7 +967,7 @@ mod tests {
     fn registry_contains_planned_algorithms() {
         assert_eq!(
             supported_algorithms(),
-            &["crc32", "md5", "sha1", "crc16", "adler32"]
+            &["crc32", "md5", "sha1", "sha256", "blake3", "crc32c", "crc16", "adler32",]
         );
     }
 
@@ -952,7 +980,14 @@ mod tests {
         let context = checksum_context(temp.path(), ThreadBudget::Fixed(4));
         let request = ChecksumRequest {
             source,
-            algorithms: vec!["crc32".into(), "md5".into(), "sha1".into()],
+            algorithms: vec![
+                "crc32".into(),
+                "md5".into(),
+                "sha1".into(),
+                "sha256".into(),
+                "blake3".into(),
+                "crc32c".into(),
+            ],
             start: None,
             length: None,
         };
@@ -964,16 +999,19 @@ mod tests {
         assert_eq!(report.stage, "checksum");
         assert_eq!(report.status, rom_weaver_core::OperationStatus::Succeeded);
         assert!(report.label.contains("crc32=0d4a1185"));
-        assert!(
-            report
-                .label
-                .contains("md5=5eb63bbbe01eeed093cb22bb8f5acdc3")
-        );
-        assert!(
-            report
-                .label
-                .contains("sha1=2aae6c35c94fcfb415dbe95f408b9ce91ee846ed")
-        );
+        assert!(report
+            .label
+            .contains("md5=5eb63bbbe01eeed093cb22bb8f5acdc3"));
+        assert!(report
+            .label
+            .contains("sha1=2aae6c35c94fcfb415dbe95f408b9ce91ee846ed"));
+        assert!(report
+            .label
+            .contains("sha256=b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"));
+        assert!(report
+            .label
+            .contains("blake3=d74981efa70a0c880b8d8c1985d075dbcbf679b99a5f9914e5aaf96b831a9e24"));
+        assert!(report.label.contains("crc32c=c99465aa"));
         let execution = report.thread_execution.expect("thread execution");
         assert_eq!(execution.effective_threads, 1);
         assert!(!execution.used_parallelism);
@@ -1067,16 +1105,12 @@ mod tests {
         assert_eq!(report.stage, "checksum-range");
         assert!(report.label.contains("range=6..11"));
         assert!(report.label.contains("crc32=3a771143"));
-        assert!(
-            report
-                .label
-                .contains("md5=7d793037a0760186574b0282f2f435e7")
-        );
-        assert!(
-            report
-                .label
-                .contains("sha1=7c211433f02071597741e6ff5a8ea34789abbf43")
-        );
+        assert!(report
+            .label
+            .contains("md5=7d793037a0760186574b0282f2f435e7"));
+        assert!(report
+            .label
+            .contains("sha1=7c211433f02071597741e6ff5a8ea34789abbf43"));
     }
 
     #[test]
@@ -1165,10 +1199,8 @@ mod tests {
             )
             .expect_err("range should fail");
 
-        assert!(
-            error
-                .to_string()
-                .contains("checksum range start 6 is past the end")
-        );
+        assert!(error
+            .to_string()
+            .contains("checksum range start 6 is past the end"));
     }
 }
