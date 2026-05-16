@@ -3129,7 +3129,7 @@ fn patch_create_succeeds_for_dldi_and_round_trips() {
 }
 
 #[test]
-fn patch_create_succeeds_for_dps_alias_and_round_trips() {
+fn patch_create_succeeds_for_dps_and_round_trips() {
     let temp = setup_temp_dir();
     let original = temp.child("old.bin");
     let modified = temp.child("new.bin");
@@ -3163,11 +3163,24 @@ fn patch_create_succeeds_for_dps_alias_and_round_trips() {
     let create_json = parse_single_json_line(&create_output);
     assert_eq!(create_json["command"], "patch-create");
     assert_eq!(create_json["family"], "patch");
-    assert_eq!(create_json["format"], "PDS");
+    assert_eq!(create_json["format"], "DPS");
     assert_eq!(create_json["requested_threads"], 8);
     assert_eq!(create_json["effective_threads"], 1);
     assert_eq!(create_json["used_parallelism"], false);
     assert_eq!(create_json["status"], "succeeded");
+    let patch_bytes = fs::read(patch.path()).expect("patch");
+    assert!(patch_bytes.len() >= 198);
+    assert_eq!(patch_bytes[193], 1);
+    assert_ne!(&patch_bytes[..2], b"PK");
+    assert_eq!(
+        u32::from_le_bytes([
+            patch_bytes[194],
+            patch_bytes[195],
+            patch_bytes[196],
+            patch_bytes[197],
+        ]),
+        15
+    );
 
     let apply_output = Command::cargo_bin("rom-weaver")
         .expect("binary")
@@ -3190,7 +3203,7 @@ fn patch_create_succeeds_for_dps_alias_and_round_trips() {
     let apply_json = parse_single_json_line(&apply_output);
     assert_eq!(apply_json["command"], "patch-apply");
     assert_eq!(apply_json["family"], "patch");
-    assert_eq!(apply_json["format"], "PDS");
+    assert_eq!(apply_json["format"], "DPS");
     assert_eq!(apply_json["status"], "succeeded");
     assert_eq!(
         fs::read(output.path()).expect("output"),
@@ -3409,7 +3422,7 @@ fn inspect_succeeds_for_valid_dps_patch() {
     let json = parse_single_json_line(&output);
     assert_eq!(json["command"], "inspect");
     assert_eq!(json["family"], "patch");
-    assert_eq!(json["format"], "PDS");
+    assert_eq!(json["format"], "DPS");
     assert_eq!(json["status"], "succeeded");
 }
 

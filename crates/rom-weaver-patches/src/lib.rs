@@ -2,6 +2,7 @@ mod apsgba;
 mod bdf;
 mod bps;
 mod dldi;
+mod dps;
 mod ips;
 mod pds;
 mod pmsr;
@@ -19,6 +20,7 @@ use apsgba::ApsGbaPatchHandler;
 use bdf::BdfPatchHandler;
 use bps::BpsPatchHandler;
 use dldi::DldiPatchHandler;
+use dps::DpsPatchHandler;
 use ips::IpsPatchHandler;
 use pds::PdsPatchHandler;
 use pmsr::PmsrPatchHandler;
@@ -129,11 +131,17 @@ const DLDI: FormatDescriptor = FormatDescriptor {
     aliases: &[],
     extensions: &[".dldi"],
 };
+const DPS: FormatDescriptor = FormatDescriptor {
+    family: OperationFamily::Patch,
+    name: "DPS",
+    aliases: &[],
+    extensions: &[".dps"],
+};
 const PDS: FormatDescriptor = FormatDescriptor {
     family: OperationFamily::Patch,
     name: "PDS",
-    aliases: &["dps"],
-    extensions: &[".pds", ".dps"],
+    aliases: &[],
+    extensions: &[".pds"],
 };
 
 pub struct PatchRegistry {
@@ -166,6 +174,7 @@ impl PatchRegistry {
                 Arc::new(BdfPatchHandler::new(&BDF_BSDIFF40)),
                 Arc::new(PmsrPatchHandler::new(&MOD)),
                 Arc::new(DldiPatchHandler::new(&DLDI)),
+                Arc::new(DpsPatchHandler::new(&DPS)),
                 Arc::new(PdsPatchHandler::new(&PDS)),
             ],
         }
@@ -342,6 +351,7 @@ mod tests {
                 "BDF/BSDIFF40",
                 "MOD",
                 "DLDI",
+                "DPS",
                 "PDS",
             ]
         );
@@ -391,6 +401,16 @@ mod tests {
     fn dldi_is_wired_to_supported_handler() {
         let registry = PatchRegistry::new();
         let handler = registry.find_by_name("dldi").expect("dldi handler");
+        let capabilities = handler.capabilities();
+        assert!(capabilities.parse);
+        assert!(capabilities.apply);
+        assert!(capabilities.create);
+    }
+
+    #[test]
+    fn dps_is_wired_to_supported_handler() {
+        let registry = PatchRegistry::new();
+        let handler = registry.find_by_name("dps").expect("dps handler");
         let capabilities = handler.capabilities();
         assert!(capabilities.parse);
         assert!(capabilities.apply);
@@ -484,10 +504,10 @@ mod tests {
     }
 
     #[test]
-    fn probe_routes_dps_extension_to_pds_handler() {
+    fn probe_routes_dps_extension_to_dps_handler() {
         let registry = PatchRegistry::new();
         let handler = registry.probe(Path::new("update.dps")).expect("dps probe");
-        assert_eq!(handler.descriptor().name, "PDS");
+        assert_eq!(handler.descriptor().name, "DPS");
     }
 
     #[test]
@@ -532,10 +552,10 @@ mod tests {
     }
 
     #[test]
-    fn find_by_name_routes_dps_alias_to_pds_handler() {
+    fn find_by_name_routes_dps_name_to_dps_handler() {
         let registry = PatchRegistry::new();
-        let handler = registry.find_by_name("dps").expect("dps alias");
-        assert_eq!(handler.descriptor().name, "PDS");
+        let handler = registry.find_by_name("dps").expect("dps name");
+        assert_eq!(handler.descriptor().name, "DPS");
     }
 
     #[test]
