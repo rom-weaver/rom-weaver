@@ -302,6 +302,12 @@ fn parse_spatch_bytes(bytes: &[u8]) -> Result<ParsedSpatchBytes> {
     ))
 }
 
+pub(crate) fn is_double_ips_stream(bytes: &[u8]) -> bool {
+    parse_spatch_bytes(bytes)
+        .ok()
+        .is_some_and(|parsed| parsed.secondary.is_some())
+}
+
 fn parse_ips_standalone(bytes: &[u8]) -> Result<ParsedIpsStream> {
     let core = parse_ips_core(bytes)?;
     let remaining = &bytes[core.eof_end..];
@@ -315,7 +321,7 @@ fn parse_ips_standalone(bytes: &[u8]) -> Result<ParsedIpsStream> {
         _ => {
             return Err(RomWeaverError::Validation(
                 "IPS patch contained unexpected trailing data after EOF".into(),
-            ))
+            ));
         }
     };
 

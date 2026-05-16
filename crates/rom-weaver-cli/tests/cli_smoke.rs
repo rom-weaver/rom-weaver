@@ -268,6 +268,10 @@ fn write_u24(bytes: &mut Vec<u8>, value: u32) {
     bytes.push(value as u8);
 }
 
+fn write_u32(bytes: &mut Vec<u8>, value: u32) {
+    bytes.extend_from_slice(&value.to_be_bytes());
+}
+
 fn build_ips_patch(records: Vec<TestIpsRecord>, truncate_size: Option<u32>) -> Vec<u8> {
     let mut bytes = b"PATCH".to_vec();
     for record in records {
@@ -293,10 +297,40 @@ fn build_ips_patch(records: Vec<TestIpsRecord>, truncate_size: Option<u32>) -> V
     bytes
 }
 
+fn build_ips32_patch(records: Vec<TestIpsRecord>) -> Vec<u8> {
+    let mut bytes = b"IPS32".to_vec();
+    for record in records {
+        match record {
+            TestIpsRecord::Literal { offset, data } => {
+                write_u32(&mut bytes, offset);
+                let len = u16::try_from(data.len()).expect("literal len");
+                bytes.extend_from_slice(&len.to_be_bytes());
+                bytes.extend_from_slice(&data);
+            }
+            TestIpsRecord::Rle { offset, len, value } => {
+                write_u32(&mut bytes, offset);
+                bytes.extend_from_slice(&0u16.to_be_bytes());
+                bytes.extend_from_slice(&len.to_be_bytes());
+                bytes.push(value);
+            }
+        }
+    }
+    bytes.extend_from_slice(b"EEOF");
+    bytes
+}
+
 fn build_ebp_patch(records: Vec<TestIpsRecord>, metadata_json: &str) -> Vec<u8> {
     let mut bytes = build_ips_patch(records, None);
     bytes.extend_from_slice(metadata_json.as_bytes());
     bytes
+}
+
+fn write_sparse_bytes(path: &std::path::Path, len: u64, offset: u64, bytes: &[u8]) {
+    let mut file = File::create(path).expect("create sparse file");
+    file.set_len(len).expect("set len");
+    file.seek(std::io::SeekFrom::Start(offset)).expect("seek");
+    file.write_all(bytes).expect("write bytes");
+    file.flush().expect("flush");
 }
 
 fn build_spatch_patch(primary: Vec<u8>, secondary: Vec<u8>) -> Vec<u8> {
@@ -1563,6 +1597,109 @@ fn patch_apply_succeeds_for_valid_ips_patch() {
 }
 
 #[test]
+fn patch_apply_succeeds_for_valid_ips32_patch() {
+    let temp = setup_temp_dir();
+    write_sparse_bytes(
+        temp.child("input.bin").path(),
+        0x0100_0002,
+        0x0100_0000,
+        b"ab",
+    );
+    fs::write(
+        temp.child("update.ips32").path(),
+        build_ips32_patch(vec![TestIpsRecord::Literal {
+            offset: 0x0100_0001,
+            data: b"Z".to_vec(),
+        }]),
+    )
+    .expect("fixture");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            temp.child("input.bin").path().to_str().expect("path"),
+            "--patch",
+            temp.child("update.ips32").path().to_str().expect("path"),
+            "--output",
+            temp.child("output.bin").path().to_str().expect("path"),
+            "--threads",
+            "8",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "patch-apply");
+    assert_eq!(json["family"], "patch");
+    assert_eq!(json["format"], "IPS32");
+    assert_eq!(json["requested_threads"], 8);
+    assert_eq!(json["effective_threads"], 8);
+    assert_eq!(json["used_parallelism"], true);
+    assert_eq!(json["status"], "succeeded");
+
+    let output_bytes = fs::read(temp.child("output.bin").path()).expect("output");
+    assert_eq!(output_bytes.len(), 0x0100_0002);
+    assert_eq!(output_bytes[0x0100_0000], b'a');
+    assert_eq!(output_bytes[0x0100_0001], b'Z');
+}
+
+#[test]
+fn patch_apply_succeeds_for_ips32_patch_with_ips_extension() {
+    let temp = setup_temp_dir();
+    write_sparse_bytes(
+        temp.child("input.bin").path(),
+        0x0100_0002,
+        0x0100_0000,
+        b"ab",
+    );
+    fs::write(
+        temp.child("update.ips").path(),
+        build_ips32_patch(vec![TestIpsRecord::Literal {
+            offset: 0x0100_0001,
+            data: b"Z".to_vec(),
+        }]),
+    )
+    .expect("fixture");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            temp.child("input.bin").path().to_str().expect("path"),
+            "--patch",
+            temp.child("update.ips").path().to_str().expect("path"),
+            "--output",
+            temp.child("output.bin").path().to_str().expect("path"),
+            "--threads",
+            "8",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "patch-apply");
+    assert_eq!(json["family"], "patch");
+    assert_eq!(json["format"], "IPS32");
+    assert_eq!(json["status"], "succeeded");
+
+    let output_bytes = fs::read(temp.child("output.bin").path()).expect("output");
+    assert_eq!(output_bytes.len(), 0x0100_0002);
+    assert_eq!(output_bytes[0x0100_0000], b'a');
+    assert_eq!(output_bytes[0x0100_0001], b'Z');
+}
+
+#[test]
 fn patch_create_succeeds_for_ips_and_round_trips() {
     let temp = setup_temp_dir();
     let original = temp.child("old.bin");
@@ -1630,6 +1767,78 @@ fn patch_create_succeeds_for_ips_and_round_trips() {
         fs::read(output.path()).expect("output"),
         fs::read(modified.path()).expect("modified")
     );
+}
+
+#[test]
+fn patch_create_succeeds_for_ips32_and_round_trips() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.bin");
+    let modified = temp.child("new.bin");
+    let patch = temp.child("output.ips32");
+    let output = temp.child("output.bin");
+    write_sparse_bytes(original.path(), 0x0100_0002, 0x0100_0000, b"ab");
+    write_sparse_bytes(modified.path(), 0x0100_0002, 0x0100_0000, b"aZ");
+
+    let create_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--format",
+            "ips32",
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--threads",
+            "8",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let create_json = parse_single_json_line(&create_output);
+    assert_eq!(create_json["command"], "patch-create");
+    assert_eq!(create_json["family"], "patch");
+    assert_eq!(create_json["format"], "IPS32");
+    assert_eq!(create_json["requested_threads"], 8);
+    assert_eq!(create_json["effective_threads"], 1);
+    assert_eq!(create_json["used_parallelism"], false);
+    assert_eq!(create_json["status"], "succeeded");
+
+    let patch_bytes = fs::read(patch.path()).expect("patch");
+    assert!(patch_bytes.starts_with(b"IPS32"));
+    assert!(patch_bytes.ends_with(b"EEOF"));
+
+    let apply_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let apply_json = parse_single_json_line(&apply_output);
+    assert_eq!(apply_json["command"], "patch-apply");
+    assert_eq!(apply_json["family"], "patch");
+    assert_eq!(apply_json["format"], "IPS32");
+    assert_eq!(apply_json["status"], "succeeded");
+    assert_eq!(fs::read(output.path()).expect("output")[0x0100_0000], b'a');
+    assert_eq!(fs::read(output.path()).expect("output")[0x0100_0001], b'Z');
 }
 
 #[test]
@@ -1818,6 +2027,64 @@ fn patch_apply_succeeds_for_valid_spatch_patch() {
     assert_eq!(json["requested_threads"], 8);
     assert_eq!(json["effective_threads"], 1);
     assert_eq!(json["used_parallelism"], false);
+    assert_eq!(json["status"], "succeeded");
+
+    let output_bytes = fs::read(temp.child("output.bin").path()).expect("output");
+    assert_eq!(output_bytes[0], 0);
+    assert_eq!(output_bytes[512], b'Z');
+}
+
+#[test]
+fn patch_apply_succeeds_for_spatch_patch_with_ips_extension() {
+    let temp = setup_temp_dir();
+    let base_input = b"abcdefgh".to_vec();
+    let headered_input = with_header(&base_input);
+    fs::write(temp.child("input.bin").path(), &headered_input).expect("fixture");
+    fs::write(
+        temp.child("update.ips").path(),
+        build_spatch_patch(
+            build_ips_patch(
+                vec![TestIpsRecord::Literal {
+                    offset: 0,
+                    data: b"Z".to_vec(),
+                }],
+                Some(headered_input.len() as u32),
+            ),
+            build_ips_patch(
+                vec![TestIpsRecord::Literal {
+                    offset: 512,
+                    data: b"Z".to_vec(),
+                }],
+                Some(headered_input.len() as u32),
+            ),
+        ),
+    )
+    .expect("fixture");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            temp.child("input.bin").path().to_str().expect("path"),
+            "--patch",
+            temp.child("update.ips").path().to_str().expect("path"),
+            "--output",
+            temp.child("output.bin").path().to_str().expect("path"),
+            "--threads",
+            "8",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "patch-apply");
+    assert_eq!(json["family"], "patch");
+    assert_eq!(json["format"], "SPATCH");
     assert_eq!(json["status"], "succeeded");
 
     let output_bytes = fs::read(temp.child("output.bin").path()).expect("output");
@@ -2699,6 +2966,114 @@ fn inspect_succeeds_for_valid_ebp_patch() {
     assert_eq!(json["command"], "inspect");
     assert_eq!(json["family"], "patch");
     assert_eq!(json["format"], "EBP");
+    assert_eq!(json["status"], "succeeded");
+}
+
+#[test]
+fn inspect_succeeds_for_valid_ips32_patch() {
+    let temp = setup_temp_dir();
+    fs::write(
+        temp.child("update.ips32").path(),
+        build_ips32_patch(vec![TestIpsRecord::Literal {
+            offset: 0x0100_0000,
+            data: b"A".to_vec(),
+        }]),
+    )
+    .expect("fixture");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "inspect",
+            temp.child("update.ips32").path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "inspect");
+    assert_eq!(json["family"], "patch");
+    assert_eq!(json["format"], "IPS32");
+    assert_eq!(json["status"], "succeeded");
+}
+
+#[test]
+fn inspect_succeeds_for_ips32_patch_with_ips_extension() {
+    let temp = setup_temp_dir();
+    fs::write(
+        temp.child("update.ips").path(),
+        build_ips32_patch(vec![TestIpsRecord::Literal {
+            offset: 0x0100_0000,
+            data: b"A".to_vec(),
+        }]),
+    )
+    .expect("fixture");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "inspect",
+            temp.child("update.ips").path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "inspect");
+    assert_eq!(json["family"], "patch");
+    assert_eq!(json["format"], "IPS32");
+    assert_eq!(json["status"], "succeeded");
+}
+
+#[test]
+fn inspect_succeeds_for_spatch_patch_with_ips_extension() {
+    let temp = setup_temp_dir();
+    fs::write(
+        temp.child("update.ips").path(),
+        build_spatch_patch(
+            build_ips_patch(
+                vec![TestIpsRecord::Literal {
+                    offset: 0,
+                    data: b"A".to_vec(),
+                }],
+                None,
+            ),
+            build_ips_patch(
+                vec![TestIpsRecord::Literal {
+                    offset: 1,
+                    data: b"B".to_vec(),
+                }],
+                None,
+            ),
+        ),
+    )
+    .expect("fixture");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "inspect",
+            temp.child("update.ips").path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "inspect");
+    assert_eq!(json["family"], "patch");
+    assert_eq!(json["format"], "SPATCH");
     assert_eq!(json["status"], "succeeded");
 }
 

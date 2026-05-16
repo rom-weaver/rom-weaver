@@ -15,17 +15,44 @@ use serde_json::{Map as JsonMap, Value as JsonValue};
 
 const IPS_MAGIC: &[u8; 5] = b"PATCH";
 const IPS_EOF: &[u8; 3] = b"EOF";
+const IPS32_MAGIC: &[u8; 5] = b"IPS32";
+const IPS32_EOF: &[u8; 4] = b"EEOF";
 const COMPARE_BUFFER_SIZE: usize = 64 * 1024;
 const OUTPUT_CHUNK_SIZE: u64 = 2 * 1024 * 1024;
 const MAX_IPS_RECORD_LEN: usize = u16::MAX as usize;
 const MAX_IPS_OFFSET: u64 = 0x00FF_FFFF;
+const MAX_IPS32_OFFSET: u64 = 0xFFFF_FFFF;
 const MIN_RLE_RECORD_LEN: usize = 4;
 const DEFAULT_EBP_METADATA_JSON: &str = r#"{"patcher":"EBPatcher","Author":"Unknown","Description":"No description","Title":"Untitled"}"#;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum IpsFlavor {
     Ips,
+    Ips32,
     Ebp,
+}
+
+impl IpsFlavor {
+    const fn header(self) -> &'static [u8] {
+        match self {
+            Self::Ips | Self::Ebp => IPS_MAGIC,
+            Self::Ips32 => IPS32_MAGIC,
+        }
+    }
+
+    const fn footer(self) -> &'static [u8] {
+        match self {
+            Self::Ips | Self::Ebp => IPS_EOF,
+            Self::Ips32 => IPS32_EOF,
+        }
+    }
+
+    const fn offset_len(self) -> usize {
+        match self {
+            Self::Ips | Self::Ebp => 3,
+            Self::Ips32 => 4,
+        }
+    }
 }
 
 pub struct IpsPatchHandler {
@@ -45,6 +72,13 @@ impl IpsPatchHandler {
         Self {
             descriptor,
             flavor: IpsFlavor::Ebp,
+        }
+    }
+
+    pub const fn new_ips32(descriptor: &'static FormatDescriptor) -> Self {
+        Self {
+            descriptor,
+            flavor: IpsFlavor::Ips32,
         }
     }
 }
@@ -239,14 +273,14 @@ fn parse_ips_file(path: &Path, flavor: IpsFlavor) -> Result<ParsedIpsPatch> {
 }
 
 fn parse_ips_bytes(bytes: &[u8], flavor: IpsFlavor) -> Result<ParsedIpsPatch> {
-    if bytes.len() < IPS_MAGIC.len() + IPS_EOF.len() {
+    if bytes.len() < flavor.header().len() + flavor.footer().len() {
         return Err(RomWeaverError::Validation(
             "IPS patch is too small to contain a valid header and footer".into(),
         ));
     }
 
     let mut parser = IpsParser::new(bytes);
-    if parser.read_exact(IPS_MAGIC.len())? != IPS_MAGIC {
+    if parser.read_exact(flavor.header().len())? != flavor.header() {
         return Err(RomWeaverError::Validation("Patch header invalid".into()));
     }
 
@@ -254,20 +288,33 @@ fn parse_ips_bytes(bytes: &[u8], flavor: IpsFlavor) -> Result<ParsedIpsPatch> {
     let mut max_written_end = 0u64;
 
     loop {
-        let marker = parser.read_exact(IPS_EOF.len())?;
-        if marker == IPS_EOF {
-            let (truncate_size, metadata) = match parser.remaining() {
-                0 => (None, None),
-                3 => (Some(u64::from(parser.read_u24()?)), None),
-                _ if flavor == IpsFlavor::Ebp => {
-                    let metadata = parse_ebp_metadata(parser.read_exact(parser.remaining())?)?;
-                    (None, Some(metadata))
-                }
-                _ => {
-                    return Err(RomWeaverError::Validation(
-                        "IPS patch contained unexpected trailing data after EOF".into(),
-                    ))
-                }
+        let marker = parser.read_exact(flavor.footer().len())?;
+        if marker == flavor.footer() {
+            let (truncate_size, metadata) = match flavor {
+                IpsFlavor::Ips => match parser.remaining() {
+                    0 => (None, None),
+                    3 => (Some(u64::from(parser.read_u24()?)), None),
+                    _ => {
+                        return Err(RomWeaverError::Validation(
+                            "IPS patch contained unexpected trailing data after EOF".into(),
+                        ));
+                    }
+                },
+                IpsFlavor::Ips32 => match parser.remaining() {
+                    0 => (None, None),
+                    _ => {
+                        return Err(RomWeaverError::Validation(
+                            "IPS32 patch contained unexpected trailing data after EEOF".into(),
+                        ));
+                    }
+                },
+                IpsFlavor::Ebp => match parser.remaining() {
+                    0 => (None, None),
+                    _ => {
+                        let metadata = parse_ebp_metadata(parser.read_exact(parser.remaining())?)?;
+                        (None, Some(metadata))
+                    }
+                },
             };
 
             if let Some(size) = truncate_size {
@@ -286,7 +333,11 @@ fn parse_ips_bytes(bytes: &[u8], flavor: IpsFlavor) -> Result<ParsedIpsPatch> {
             });
         }
 
-        let offset = u64::from(read_u24(marker));
+        let offset = match flavor.offset_len() {
+            3 => u64::from(read_u24(marker)),
+            4 => u64::from(read_u32(marker)),
+            _ => unreachable!("unsupported offset length"),
+        };
         let size = parser.read_u16()?;
         let (len, data) = if size == 0 {
             let rle_len = u64::from(parser.read_u16()?);
@@ -370,7 +421,7 @@ fn create_ips_patch_streaming(
     let mut created = IpsCreateResult::default();
     let mut offset = 0u64;
 
-    output.write_all(IPS_MAGIC)?;
+    output.write_all(flavor.header())?;
 
     while offset < modified_len {
         context.cancel().check()?;
@@ -399,13 +450,13 @@ fn create_ips_patch_streaming(
             let original_byte = original_buffer[index];
             let modified_byte = modified_buffer[index];
             if original_byte == modified_byte {
-                flush_pending_diff(&mut pending, output, &mut created)?;
+                flush_pending_diff(&mut pending, output, &mut created, flavor)?;
             } else {
                 if pending
                     .as_ref()
                     .is_some_and(|diff| diff.bytes.len() == MAX_IPS_RECORD_LEN)
                 {
-                    flush_pending_diff(&mut pending, output, &mut created)?;
+                    flush_pending_diff(&mut pending, output, &mut created, flavor)?;
                 }
 
                 let diff = pending.get_or_insert_with(|| PendingDiff {
@@ -418,8 +469,8 @@ fn create_ips_patch_streaming(
         }
     }
 
-    flush_pending_diff(&mut pending, output, &mut created)?;
-    output.write_all(IPS_EOF)?;
+    flush_pending_diff(&mut pending, output, &mut created, flavor)?;
+    output.write_all(flavor.footer())?;
 
     match flavor {
         IpsFlavor::Ips => {
@@ -427,6 +478,7 @@ fn create_ips_patch_streaming(
                 write_u24(output, modified_len, "IPS truncate size")?;
             }
         }
+        IpsFlavor::Ips32 => {}
         IpsFlavor::Ebp => {
             output.write_all(DEFAULT_EBP_METADATA_JSON.as_bytes())?;
         }
@@ -439,17 +491,19 @@ fn flush_pending_diff(
     pending: &mut Option<PendingDiff>,
     output: &mut impl Write,
     created: &mut IpsCreateResult,
+    flavor: IpsFlavor,
 ) -> Result<()> {
     let Some(diff) = pending.take() else {
         return Ok(());
     };
-    write_pending_diff(output, &diff, created)
+    write_pending_diff(output, &diff, created, flavor)
 }
 
 fn write_pending_diff(
     output: &mut impl Write,
     diff: &PendingDiff,
     created: &mut IpsCreateResult,
+    flavor: IpsFlavor,
 ) -> Result<()> {
     if diff.bytes.is_empty() {
         return Ok(());
@@ -464,9 +518,10 @@ fn write_pending_diff(
             diff.bytes.len(),
             diff.bytes[0],
             created,
+            flavor,
         )
     } else {
-        write_literal_record(output, diff.start_offset, &diff.bytes, created)
+        write_literal_record(output, diff.start_offset, &diff.bytes, created, flavor)
     }
 }
 
@@ -475,6 +530,7 @@ fn write_literal_record(
     offset: u64,
     data: &[u8],
     created: &mut IpsCreateResult,
+    flavor: IpsFlavor,
 ) -> Result<()> {
     if data.is_empty() {
         return Ok(());
@@ -486,7 +542,7 @@ fn write_literal_record(
         ));
     }
 
-    write_u24(output, offset, "IPS record offset")?;
+    write_offset(output, offset, flavor)?;
     let data_len = u16::try_from(data.len()).map_err(|_| {
         RomWeaverError::Validation("IPS literal record length exceeded encodable range".into())
     })?;
@@ -507,6 +563,7 @@ fn write_rle_record(
     len: usize,
     byte: u8,
     created: &mut IpsCreateResult,
+    flavor: IpsFlavor,
 ) -> Result<()> {
     if len == 0 {
         return Ok(());
@@ -517,7 +574,7 @@ fn write_rle_record(
         ));
     }
 
-    write_u24(output, offset, "IPS record offset")?;
+    write_offset(output, offset, flavor)?;
     output.write_all(&0u16.to_be_bytes())?;
     let rle_len = u16::try_from(len).map_err(|_| {
         RomWeaverError::Validation("IPS RLE record length exceeded encodable range".into())
@@ -537,6 +594,13 @@ fn truncate_size_required(original_len: u64, modified_len: u64, max_written_end:
     modified_len < original_len || (modified_len > original_len && max_written_end < modified_len)
 }
 
+fn write_offset(output: &mut impl Write, value: u64, flavor: IpsFlavor) -> Result<()> {
+    match flavor {
+        IpsFlavor::Ips | IpsFlavor::Ebp => write_u24(output, value, "IPS record offset"),
+        IpsFlavor::Ips32 => write_u32(output, value, "IPS32 record offset"),
+    }
+}
+
 fn write_u24(output: &mut impl Write, value: u64, label: &str) -> Result<()> {
     if value > MAX_IPS_OFFSET {
         return Err(RomWeaverError::Validation(format!(
@@ -551,6 +615,18 @@ fn write_u24(output: &mut impl Write, value: u64, label: &str) -> Result<()> {
         ((value >> 8) & 0xff) as u8,
         (value & 0xff) as u8,
     ])?;
+    Ok(())
+}
+
+fn write_u32(output: &mut impl Write, value: u64, label: &str) -> Result<()> {
+    if value > MAX_IPS32_OFFSET {
+        return Err(RomWeaverError::Validation(format!(
+            "{label} exceeded the IPS32 32-bit limit"
+        )));
+    }
+    let value = u32::try_from(value)
+        .map_err(|_| RomWeaverError::Validation(format!("{label} exceeded u32")))?;
+    output.write_all(&value.to_be_bytes())?;
     Ok(())
 }
 
@@ -710,6 +786,13 @@ fn read_u24(bytes: &[u8]) -> u32 {
     (u32::from(bytes[0]) << 16) | (u32::from(bytes[1]) << 8) | u32::from(bytes[2])
 }
 
+fn read_u32(bytes: &[u8]) -> u32 {
+    (u32::from(bytes[0]) << 24)
+        | (u32::from(bytes[1]) << 16)
+        | (u32::from(bytes[2]) << 8)
+        | u32::from(bytes[3])
+}
+
 struct IpsParser<'a> {
     bytes: &'a [u8],
     offset: usize,
@@ -755,9 +838,10 @@ impl<'a> IpsParser<'a> {
 mod tests {
     use std::{
         env, fs,
+        io::{Seek, SeekFrom, Write},
         path::PathBuf,
-        sync::atomic::{AtomicU64, Ordering},
         sync::Arc,
+        sync::atomic::{AtomicU64, Ordering},
         time::{SystemTime, UNIX_EPOCH},
     };
 
@@ -767,10 +851,11 @@ mod tests {
     };
 
     use super::{
-        parse_ips_bytes, IpsFlavor, IpsPatchHandler, IpsRecordData, JsonValue,
-        DEFAULT_EBP_METADATA_JSON, IPS_EOF, IPS_MAGIC, MAX_IPS_RECORD_LEN, OUTPUT_CHUNK_SIZE,
+        DEFAULT_EBP_METADATA_JSON, IPS_EOF, IPS_MAGIC, IPS32_EOF, IPS32_MAGIC, IpsFlavor,
+        IpsPatchHandler, IpsRecordData, JsonValue, MAX_IPS_RECORD_LEN, OUTPUT_CHUNK_SIZE,
+        parse_ips_bytes,
     };
-    use crate::{EBP, IPS};
+    use crate::{EBP, IPS, IPS32};
 
     static NEXT_TEST_DIR_ID: AtomicU64 = AtomicU64::new(0);
 
@@ -821,9 +906,11 @@ mod tests {
         );
 
         let error = parse_ips_bytes(&patch, IpsFlavor::Ips).expect_err("invalid patch");
-        assert!(error
-            .to_string()
-            .contains("IPS record exceeded declared output size"));
+        assert!(
+            error
+                .to_string()
+                .contains("IPS record exceeded declared output size")
+        );
     }
 
     #[test]
@@ -1098,6 +1185,97 @@ mod tests {
     }
 
     #[test]
+    fn parse_accepts_ips32_records_past_24bit_limit() {
+        let patch = build_ips32_patch(vec![TestIpsRecord::Literal {
+            offset: 0x0100_0000,
+            data: b"A".to_vec(),
+        }]);
+        let parsed = parse_ips_bytes(&patch, IpsFlavor::Ips32).expect("parse");
+        assert_eq!(parsed.records.len(), 1);
+        assert_eq!(parsed.records[0].offset, 0x0100_0000);
+        assert_eq!(parsed.truncate_size, None);
+    }
+
+    #[test]
+    fn apply_round_trips_for_ips32_patch() {
+        let temp = TestDir::new();
+        let input_path = temp.child("input.bin");
+        let patch_path = temp.child("update.ips32");
+        let output_path = temp.child("output.bin");
+        write_sparse_bytes(&input_path, 0x0100_0002, 0x0100_0000, b"ab");
+        fs::write(
+            &patch_path,
+            build_ips32_patch(vec![TestIpsRecord::Literal {
+                offset: 0x0100_0001,
+                data: b"Z".to_vec(),
+            }]),
+        )
+        .expect("fixture");
+
+        let handler = IpsPatchHandler::new_ips32(&IPS32);
+        handler
+            .apply(
+                &PatchApplyRequest {
+                    input: input_path,
+                    patches: vec![patch_path],
+                    output: output_path.clone(),
+                },
+                &test_context_with_threads(&temp, 4),
+            )
+            .expect("apply");
+
+        let output = fs::read(&output_path).expect("output");
+        assert_eq!(output.len(), 0x0100_0002);
+        assert_eq!(output[0x0100_0000], b'a');
+        assert_eq!(output[0x0100_0001], b'Z');
+    }
+
+    #[test]
+    fn create_round_trips_for_ips32_patch() {
+        let temp = TestDir::new();
+        let original_path = temp.child("input.bin");
+        let modified_path = temp.child("modified.bin");
+        let patch_path = temp.child("update.ips32");
+        let output_path = temp.child("output.bin");
+        write_sparse_bytes(&original_path, 0x0100_0002, 0x0100_0000, b"ab");
+        write_sparse_bytes(&modified_path, 0x0100_0002, 0x0100_0000, b"aZ");
+
+        let handler = IpsPatchHandler::new_ips32(&IPS32);
+        handler
+            .create(
+                &PatchCreateRequest {
+                    original: original_path.clone(),
+                    modified: modified_path.clone(),
+                    output: patch_path.clone(),
+                    format: "IPS32".into(),
+                },
+                &test_context_with_threads(&temp, 1),
+            )
+            .expect("create");
+
+        let patch = fs::read(&patch_path).expect("patch");
+        assert!(patch.starts_with(IPS32_MAGIC));
+        assert!(patch.ends_with(IPS32_EOF));
+        let parsed = parse_ips_bytes(&patch, IpsFlavor::Ips32).expect("parse");
+        assert_eq!(parsed.truncate_size, None);
+        assert_eq!(parsed.records.len(), 1);
+        assert_eq!(parsed.records[0].offset, 0x0100_0001);
+
+        handler
+            .apply(
+                &PatchApplyRequest {
+                    input: original_path,
+                    patches: vec![patch_path],
+                    output: output_path.clone(),
+                },
+                &test_context_with_threads(&temp, 4),
+            )
+            .expect("apply");
+        assert_eq!(fs::read(&output_path).expect("output")[0x0100_0000], b'a');
+        assert_eq!(fs::read(&output_path).expect("output")[0x0100_0001], b'Z');
+    }
+
+    #[test]
     fn parse_accepts_ebp_metadata_after_eof() {
         let patch = build_ebp_patch(
             vec![TestIpsRecord::Literal {
@@ -1247,6 +1425,28 @@ mod tests {
         bytes
     }
 
+    fn build_ips32_patch(records: Vec<TestIpsRecord>) -> Vec<u8> {
+        let mut bytes = IPS32_MAGIC.to_vec();
+        for record in records {
+            match record {
+                TestIpsRecord::Literal { offset, data } => {
+                    write_u32(&mut bytes, offset);
+                    let len = u16::try_from(data.len()).expect("literal len");
+                    bytes.extend_from_slice(&len.to_be_bytes());
+                    bytes.extend_from_slice(&data);
+                }
+                TestIpsRecord::Rle { offset, len, value } => {
+                    write_u32(&mut bytes, offset);
+                    bytes.extend_from_slice(&0u16.to_be_bytes());
+                    bytes.extend_from_slice(&len.to_be_bytes());
+                    bytes.push(value);
+                }
+            }
+        }
+        bytes.extend_from_slice(IPS32_EOF);
+        bytes
+    }
+
     fn large_rle_patch(total_len: u32, value: u8) -> Vec<u8> {
         let mut records = Vec::new();
         let mut offset = 0u32;
@@ -1264,6 +1464,18 @@ mod tests {
         bytes.push((value >> 16) as u8);
         bytes.push((value >> 8) as u8);
         bytes.push(value as u8);
+    }
+
+    fn write_u32(bytes: &mut Vec<u8>, value: u32) {
+        bytes.extend_from_slice(&value.to_be_bytes());
+    }
+
+    fn write_sparse_bytes(path: &PathBuf, len: u64, offset: u64, bytes: &[u8]) {
+        let mut file = fs::File::create(path).expect("create sparse file");
+        file.set_len(len).expect("set len");
+        file.seek(SeekFrom::Start(offset)).expect("seek");
+        file.write_all(bytes).expect("write bytes");
+        file.flush().expect("flush");
     }
 
     fn test_context_with_threads(temp: &TestDir, threads: usize) -> OperationContext {
