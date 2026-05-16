@@ -111,7 +111,7 @@ impl PatchRegistry {
                 Arc::new(UpsPatchHandler::new(&UPS)),
                 Arc::new(VcdiffPatchHandler::new(&VCDIFF)),
                 Arc::new(VcdiffPatchHandler::new(&XDELTA)),
-                Arc::new(StaticPatchHandler::new(&APS)),
+                Arc::new(ApsGbaPatchHandler::new(&APS)),
                 Arc::new(ApsGbaPatchHandler::new(&APSGBA)),
                 Arc::new(StaticPatchHandler::new(&RUP)),
                 Arc::new(PpfPatchHandler::new(&PPF)),
@@ -221,6 +221,8 @@ impl PatchHandler for StaticPatchHandler {
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
     use super::PatchRegistry;
 
     #[test]
@@ -248,5 +250,31 @@ mod tests {
                 "PMSR",
             ]
         );
+    }
+
+    #[test]
+    fn aps_is_wired_to_supported_handler() {
+        let registry = PatchRegistry::new();
+        let handler = registry.find_by_name("aps").expect("aps handler");
+        let capabilities = handler.capabilities();
+        assert!(capabilities.parse);
+        assert!(capabilities.apply);
+        assert!(capabilities.create);
+    }
+
+    #[test]
+    fn probe_routes_aps_extension_to_aps_handler() {
+        let registry = PatchRegistry::new();
+        let handler = registry.probe(Path::new("update.aps")).expect("aps probe");
+        assert_eq!(handler.descriptor().name, "APS");
+    }
+
+    #[test]
+    fn probe_routes_apsgba_extension_to_apsgba_handler() {
+        let registry = PatchRegistry::new();
+        let handler = registry
+            .probe(Path::new("update.apsgba"))
+            .expect("apsgba probe");
+        assert_eq!(handler.descriptor().name, "APSGBA");
     }
 }

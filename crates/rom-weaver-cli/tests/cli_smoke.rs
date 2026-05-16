@@ -1834,11 +1834,11 @@ fn patch_create_succeeds_for_ppf_and_round_trips() {
 }
 
 #[test]
-fn patch_create_succeeds_for_apsgba_and_round_trips() {
+fn patch_create_succeeds_for_aps_and_round_trips() {
     let temp = setup_temp_dir();
     let original = temp.child("old.gba");
     let modified = temp.child("new.gba");
-    let patch = temp.child("update.apsgba");
+    let patch = temp.child("update.aps");
     let output = temp.child("output.gba");
 
     let mut source = vec![0u8; APS_GBA_BLOCK_SIZE];
@@ -1861,7 +1861,7 @@ fn patch_create_succeeds_for_apsgba_and_round_trips() {
             "--modified",
             modified.path().to_str().expect("path"),
             "--format",
-            "apsgba",
+            "aps",
             "--output",
             patch.path().to_str().expect("path"),
             "--threads",
@@ -1877,7 +1877,7 @@ fn patch_create_succeeds_for_apsgba_and_round_trips() {
     let create_json = parse_single_json_line(&create_output);
     assert_eq!(create_json["command"], "patch-create");
     assert_eq!(create_json["family"], "patch");
-    assert_eq!(create_json["format"], "APSGBA");
+    assert_eq!(create_json["format"], "APS");
     assert_eq!(create_json["requested_threads"], 8);
     assert_eq!(create_json["effective_threads"], 1);
     assert_eq!(create_json["used_parallelism"], false);
@@ -1903,7 +1903,7 @@ fn patch_create_succeeds_for_apsgba_and_round_trips() {
 
     let apply_json = parse_single_json_line(&apply_output);
     assert_eq!(apply_json["command"], "patch-apply");
-    assert_eq!(apply_json["format"], "APSGBA");
+    assert_eq!(apply_json["format"], "APS");
     assert_eq!(apply_json["status"], "succeeded");
     assert_eq!(fs::read(output.path()).expect("output"), target);
 }
@@ -2169,7 +2169,7 @@ fn patch_apply_succeeds_for_valid_ppf_patch() {
 }
 
 #[test]
-fn patch_apply_succeeds_for_valid_apsgba_patch() {
+fn patch_apply_succeeds_for_valid_aps_patch() {
     let temp = setup_temp_dir();
     let mut source = vec![0u8; APS_GBA_BLOCK_SIZE];
     for (index, byte) in source.iter_mut().enumerate() {
@@ -2181,7 +2181,7 @@ fn patch_apply_succeeds_for_valid_apsgba_patch() {
 
     fs::write(temp.child("input.gba").path(), &source).expect("fixture");
     fs::write(
-        temp.child("update.apsgba").path(),
+        temp.child("update.aps").path(),
         build_apsgba_patch(&source, &target),
     )
     .expect("fixture");
@@ -2193,7 +2193,7 @@ fn patch_apply_succeeds_for_valid_apsgba_patch() {
             "--input",
             temp.child("input.gba").path().to_str().expect("path"),
             "--patch",
-            temp.child("update.apsgba").path().to_str().expect("path"),
+            temp.child("update.aps").path().to_str().expect("path"),
             "--output",
             temp.child("output.gba").path().to_str().expect("path"),
             "--threads",
@@ -2209,7 +2209,7 @@ fn patch_apply_succeeds_for_valid_apsgba_patch() {
     let json = parse_single_json_line(&output);
     assert_eq!(json["command"], "patch-apply");
     assert_eq!(json["family"], "patch");
-    assert_eq!(json["format"], "APSGBA");
+    assert_eq!(json["format"], "APS");
     assert_eq!(json["requested_threads"], 8);
     assert_eq!(json["effective_threads"], 1);
     assert_eq!(json["used_parallelism"], false);
