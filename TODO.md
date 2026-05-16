@@ -4,7 +4,12 @@
 
 ## Recent Updates (2026-05-16)
 
-- `uncommitted`: MOD/PMSR parse/apply/create support landed (`.mod`/`.pmsr`, `pmsr` alias) with module + CLI smoke coverage.
+- `6fd45bc`: BSPATCH alias probe support landed (`.bspatch`/`.bspatch40`, `bspatch`/`bspatch40` alias routing to BSDIFF40 compatibility paths).
+- `b9b66a5`: MOD/PMSR parse/apply/create support landed (`.mod`/`.pmsr`, `pmsr` alias) with module + CLI smoke coverage.
+- `6e2e7d1`: Standalone stream container support landed for `gz`, `bz2`, `xz`, and `zst` (`inspect`/`extract`/`create`).
+- `e4442c2`: PDS probe-only patch registration landed (`.pds` routing now reserved while apply/create remain pending).
+- `edf17b0`: RUP parse/apply/create support landed with MD5-matched forward/undo apply validation.
+- `70a1850`: Checksum command engine landed with mmap-backed hashing, parallel crc32 fanout, and CLI smoke coverage for baseline algorithms.
 - `69bdce6`: APS parse/apply/create support landed (`.aps` via APSGBA-compatible handler).
 - `0a0cf64`: APSGBA parse/apply/create support landed (`.apsgba`).
 - `fc6829e`: PPF parse/apply/create support landed.
@@ -20,7 +25,7 @@
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | CMD-001 | command | inspect | done | n/a | n/a | n/a | n/a | n/a | cli-smoke,json-contract | done | Routes inspect through container and patch registries with text/JSON reporting. |
 | CMD-002 | command | extract | n/a | done | n/a | n/a | n/a | context-plumbed | cli-smoke,json-contract | done | Container extraction landed, including recursive nested archive extraction. |
-| CMD-003 | command | checksum | n/a | n/a | n/a | n/a | n/a | context-plumbed | cli-smoke,json-contract,thread-model | in-progress | Core engine landed (`crc32`, `md5`, `sha1`, `crc16`, `adler32`) with mmap + parallel crc32; planned algorithm expansion remains. |
+| CMD-003 | command | checksum | n/a | n/a | n/a | n/a | n/a | context-plumbed | cli-smoke,json-contract,thread-model | in-progress | Baseline engine landed (`crc32`, `md5`, `sha1`, `crc16`, `adler32`) with mmap + parallel crc32; planned algorithm expansion remains in `CHK-006`/`CHK-007`/`CHK-008`. |
 | CMD-004 | command | compress | n/a | n/a | done | n/a | n/a | context-plumbed | cli-smoke,json-contract | done | Container create/compress routing is wired through registered handlers (`--format`, optional `--codec`/`--level`). |
 | CMD-005 | command | patch-apply | n/a | n/a | n/a | done | n/a | context-plumbed | cli-smoke,json-contract | done | Patch apply routes through handler probing and emits thread-aware reports. |
 | CMD-006 | command | patch-create | n/a | n/a | n/a | n/a | done | context-plumbed | cli-smoke,json-contract | done | Patch create routes by format name through registered handlers. |
@@ -76,7 +81,7 @@
 | PAT-013 | patch | MOD | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | Native parse/apply/create landed for Star Rod/Paper Mario `.mod` patches (PMSR magic), including CLI smoke and module coverage; create currently rejects shrinking outputs. |
 | PAT-014 | patch | BSPATCH alias | probe-only | n/a | n/a | todo | todo | scan,diff,write flags | fixture-parity,cli-smoke | done | Accept `.bspatch` and `.bspatch40` extensions plus `bspatch`/`bspatch40` format aliases as BSDIFF40-compatible probe paths. |
 | PAT-015 | patch | DLDI | probe-only | n/a | n/a | todo | todo | scan,diff,write flags | fixture-parity,cli-smoke | todo | Nintendo DS homebrew patching compatibility target. |
-| PAT-016 | patch | PDS | probe-only | n/a | n/a | todo | todo | scan,diff,write flags | fixture-parity,cli-smoke | todo | Nintendo DS patch ecosystem target; prioritize fixture/spec discovery first. |
+| PAT-016 | patch | PDS | probe-only | n/a | n/a | todo | todo | scan,diff,write flags | fixture-parity,cli-smoke | todo | Probe-only registry entry landed (`.pds`); prioritize fixture/spec discovery before apply/create implementation. |
 | PAT-017 | patch | SPATCH (Double IPS) | probe-only | n/a | n/a | todo | todo | scan,diff,write flags | fixture-parity,cli-smoke | todo | Legacy double-IPS compatibility target for older ROM hacks. |
 
 ## Codecs
