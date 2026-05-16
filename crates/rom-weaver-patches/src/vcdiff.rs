@@ -1,6 +1,6 @@
 use std::{
     ffi::CStr,
-    fs::{self, File},
+    fs::{self, File, OpenOptions},
     io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write},
     os::raw::{c_int, c_void},
     path::{Path, PathBuf},
@@ -97,11 +97,39 @@ impl PatchHandler for VcdiffPatchHandler {
         let patch_path = request.patches[0].clone();
         let mut patch_reader = BufReader::new(File::open(&patch_path)?);
         let patch = parse_patch(&mut patch_reader)?;
+        let input_len = std::fs::metadata(&request.input)?.len();
+
+        if patch
+            .windows
+            .iter()
+            .any(|window| matches!(window.source_kind, Some(WindowSourceKind::Target)))
+        {
+            apply_windows_with_target_sources(
+                &patch,
+                &patch_path,
+                &request.input,
+                &request.output,
+                input_len,
+            )?;
+
+            let execution = context.plan_threads(ThreadCapability::single_threaded());
+            return Ok(OperationReport::succeeded(
+                OperationFamily::Patch,
+                Some(self.descriptor.name.to_string()),
+                "apply",
+                format!(
+                    "applied {} patch with {} window(s)",
+                    self.descriptor.name,
+                    patch.windows.len()
+                ),
+                Some(1.0),
+                Some(execution),
+            ));
+        }
 
         let requested_threads = patch.windows.len().max(1);
         let (execution, pool) =
             context.build_pool(ThreadCapability::parallel(Some(requested_threads)))?;
-        let input_len = std::fs::metadata(&request.input)?.len();
         let tasks = patch
             .windows
             .iter()
@@ -275,38 +303,31 @@ struct WindowIndex {
     output_offset: u64,
 }
 
-impl WindowIndex {
-    fn source_segment<R: Read + Seek>(&self, input_len: u64, reader: &mut R) -> Result<Vec<u8>> {
-        match self.source_kind {
-            None => Ok(Vec::new()),
-            Some(WindowSourceKind::Target) => Err(RomWeaverError::Validation(
-                "VCD_TARGET windows are not supported yet".into(),
-            )),
-            Some(WindowSourceKind::Source) => {
-                let end = checked_add(
-                    self.source_segment_position,
-                    self.source_segment_size,
-                    "source segment range",
-                )?;
-                if end > input_len {
-                    return Err(RomWeaverError::Validation(format!(
-                        "source segment [{}..{}) exceeds input length {input_len}",
-                        self.source_segment_position, end
-                    )));
-                }
+impl WindowIndex {}
 
-                let size = usize::try_from(self.source_segment_size).map_err(|_| {
-                    RomWeaverError::Validation(
-                        "source segment is too large to fit in memory on this platform".into(),
-                    )
-                })?;
-                let mut source = vec![0; size];
-                reader.seek(SeekFrom::Start(self.source_segment_position))?;
-                reader.read_exact(&mut source)?;
-                Ok(source)
-            }
-        }
+fn read_source_segment<R: Read + Seek>(
+    reader: &mut R,
+    segment_position: u64,
+    segment_size: u64,
+    available_len: u64,
+    kind_label: &str,
+) -> Result<Vec<u8>> {
+    let end = checked_add(segment_position, segment_size, "source segment range")?;
+    if end > available_len {
+        return Err(RomWeaverError::Validation(format!(
+            "{kind_label} segment [{segment_position}..{end}) exceeds available length {available_len}"
+        )));
     }
+
+    let size = usize::try_from(segment_size).map_err(|_| {
+        RomWeaverError::Validation(
+            "source segment is too large to fit in memory on this platform".into(),
+        )
+    })?;
+    let mut segment = vec![0; size];
+    reader.seek(SeekFrom::Start(segment_position))?;
+    reader.read_exact(&mut segment)?;
+    Ok(segment)
 }
 
 #[derive(Clone, Debug)]
@@ -378,13 +399,10 @@ fn parse_patch<R: Read + Seek>(reader: &mut R) -> Result<ParsedPatch> {
     };
 
     if hdr_indicator & HDR_CODE_TABLE != 0 {
-        let near = read_u8(reader)?;
-        let same = read_u8(reader)?;
+        let _near = read_u8(reader)?;
+        let _same = read_u8(reader)?;
         let (code_table_len, _) = read_varint(reader)?;
         skip_bytes(reader, code_table_len)?;
-        return Err(RomWeaverError::Validation(format!(
-            "application-defined code tables are not supported yet (near={near}, same={same}, bytes={code_table_len})"
-        )));
     }
 
     if hdr_indicator & HDR_APP_HEADER != 0 {
@@ -493,12 +511,6 @@ fn read_window_index<R: Read + Seek>(
         )));
     }
 
-    if matches!(source_kind, Some(WindowSourceKind::Target)) {
-        return Err(RomWeaverError::Validation(
-            "VCD_TARGET windows are not supported yet".into(),
-        ));
-    }
-
     reader.seek(SeekFrom::Start(window_end))?;
 
     Ok(Some(WindowIndex {
@@ -528,7 +540,21 @@ fn decode_window_task(
     patch_header: &[u8],
 ) -> Result<DecodedWindow> {
     let mut input_reader = BufReader::new(File::open(input_path)?);
-    let source = task.window.source_segment(input_len, &mut input_reader)?;
+    let source = match task.window.source_kind {
+        None => Vec::new(),
+        Some(WindowSourceKind::Target) => {
+            return Err(RomWeaverError::Validation(
+                "parallel decoding cannot be used for VCD_TARGET windows".into(),
+            ));
+        }
+        Some(WindowSourceKind::Source) => read_source_segment(
+            &mut input_reader,
+            task.window.source_segment_position,
+            task.window.source_segment_size,
+            input_len,
+            "source",
+        )?,
+    };
     let mut patch_reader = BufReader::new(File::open(patch_path)?);
     let target = decode_window_with_xdelta(&mut patch_reader, patch_header, &task.window, &source)?;
 
@@ -543,6 +569,67 @@ fn decode_window_task(
         len: target.len() as u64,
         temp_path: task.temp_path.clone(),
     })
+}
+
+fn apply_windows_with_target_sources(
+    patch: &ParsedPatch,
+    patch_path: &Path,
+    input_path: &Path,
+    output_path: &Path,
+    input_len: u64,
+) -> Result<()> {
+    if let Some(parent) = output_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    let mut input_reader = BufReader::new(File::open(input_path)?);
+    let mut output = OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .read(true)
+        .write(true)
+        .open(output_path)?;
+    let mut assembled_output_size = 0u64;
+
+    for window in &patch.windows {
+        if window.output_offset != assembled_output_size {
+            return Err(RomWeaverError::Validation(format!(
+                "window output offset mismatch: expected {assembled_output_size}, got {}",
+                window.output_offset
+            )));
+        }
+
+        let source = match window.source_kind {
+            None => Vec::new(),
+            Some(WindowSourceKind::Source) => read_source_segment(
+                &mut input_reader,
+                window.source_segment_position,
+                window.source_segment_size,
+                input_len,
+                "source",
+            )?,
+            Some(WindowSourceKind::Target) => read_source_segment(
+                &mut output,
+                window.source_segment_position,
+                window.source_segment_size,
+                assembled_output_size,
+                "target",
+            )?,
+        };
+
+        let mut patch_reader = BufReader::new(File::open(patch_path)?);
+        let target =
+            decode_window_with_xdelta(&mut patch_reader, &patch.header_bytes, window, &source)?;
+        output.seek(SeekFrom::Start(assembled_output_size))?;
+        output.write_all(&target)?;
+        assembled_output_size = checked_add(
+            assembled_output_size,
+            target.len() as u64,
+            "assembled output size",
+        )?;
+    }
+
+    Ok(())
 }
 
 fn create_base_flags(descriptor: &FormatDescriptor) -> c_int {
@@ -962,7 +1049,13 @@ fn build_single_window_patch<R: Read + Seek>(
     let addr = read_section(patch_reader, window.addr_start, window.addr_len)?;
 
     let mut patch = patch_header.to_vec();
-    patch.push(window.win_indicator);
+    let mut win_indicator = window.win_indicator;
+    if matches!(window.source_kind, Some(WindowSourceKind::Target)) {
+        // We decode each window in isolation. For VCD_TARGET windows we provide the referenced
+        // target bytes as an explicit source segment and rewrite the window to VCD_SOURCE.
+        win_indicator = (win_indicator & !WIN_TARGET) | WIN_SOURCE;
+    }
+    patch.push(win_indicator);
     if window.source_kind.is_some() {
         encode_varint(&mut patch, window.source_segment_size);
         encode_varint(&mut patch, 0);
@@ -1260,23 +1353,64 @@ mod tests {
     }
 
     #[test]
-    fn parse_rejects_vcd_target_windows() {
+    fn apply_supports_vcd_target_windows_with_thread_fallback() {
+        let input = b"unused";
+        let expected = b"abcdef";
         let patch_bytes = build_patch(TestPatch {
-            windows: vec![TestWindow {
-                win_indicator: WIN_TARGET,
-                source_segment_size: Some(3),
-                source_segment_position: Some(0),
-                target_window_size: 3,
-                checksum: None,
-                data: Vec::new(),
-                inst: vec![4],
-                addr: Vec::new(),
-            }],
+            windows: vec![
+                TestWindow {
+                    win_indicator: 0,
+                    source_segment_size: None,
+                    source_segment_position: None,
+                    target_window_size: 3,
+                    checksum: None,
+                    data: b"abc".to_vec(),
+                    inst: vec![4],
+                    addr: Vec::new(),
+                },
+                TestWindow {
+                    win_indicator: WIN_TARGET,
+                    source_segment_size: Some(3),
+                    source_segment_position: Some(0),
+                    target_window_size: 3,
+                    checksum: None,
+                    data: b"def".to_vec(),
+                    inst: vec![4],
+                    addr: Vec::new(),
+                },
+            ],
             ..Default::default()
         });
 
-        let error = parse_patch(&mut Cursor::new(patch_bytes)).expect_err("unsupported target");
-        assert!(format!("{error}").contains("VCD_TARGET"));
+        let parsed = parse_patch(&mut Cursor::new(&patch_bytes)).expect("parse target windows");
+        assert_eq!(parsed.windows.len(), 2);
+        assert!(matches!(
+            parsed.windows[1].source_kind,
+            Some(WindowSourceKind::Target)
+        ));
+
+        let temp = create_temp_dir();
+        let input_path = temp.join("input.bin");
+        let patch_path = temp.join("update.vcdiff");
+        let output_path = temp.join("output.bin");
+        fs::write(&input_path, input).expect("write input");
+        fs::write(&patch_path, patch_bytes).expect("write patch");
+
+        let handler = VcdiffPatchHandler::new(&crate::VCDIFF);
+        let report = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: input_path,
+                    patches: vec![patch_path],
+                    output: output_path.clone(),
+                },
+                &test_context_with_threads(8),
+            )
+            .expect("apply target-window patch");
+        let execution = report.thread_execution.expect("thread execution");
+        assert!(!execution.used_parallelism);
+        assert_eq!(execution.effective_threads, 1);
+        assert_eq!(fs::read(output_path).expect("read output"), expected);
     }
 
     #[test]
@@ -1296,7 +1430,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_rejects_custom_code_tables() {
+    fn parse_accepts_custom_code_table_headers() {
         let patch_bytes = build_patch(TestPatch {
             header_flags: HDR_CODE_TABLE,
             code_table_near: Some(4),
@@ -1305,8 +1439,8 @@ mod tests {
             ..Default::default()
         });
 
-        let error = parse_patch(&mut Cursor::new(patch_bytes)).expect_err("unsupported code table");
-        assert!(format!("{error}").contains("application-defined code tables"));
+        let parsed = parse_patch(&mut Cursor::new(patch_bytes)).expect("parse custom code table");
+        assert!(parsed.windows.is_empty());
     }
 
     #[test]
