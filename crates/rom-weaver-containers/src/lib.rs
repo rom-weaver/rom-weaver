@@ -34,6 +34,7 @@ use sevenz_rust::{
     SevenZReader, SevenZWriter,
 };
 use tar::{Archive as TarArchive, Builder as TarBuilder};
+use unrar_ng::Archive as RarArchive;
 use zip::{
     CompressionMethod as ZipCompressionMethod, ZipArchive as ZipFileArchive,
     ZipWriter as ZipFileWriter, write::FileOptions as ZipFileOptions,
@@ -58,6 +59,12 @@ const SEVEN_Z: FormatDescriptor = FormatDescriptor {
     name: "7z",
     aliases: &["7zip"],
     extensions: &[".7z"],
+};
+const RAR: FormatDescriptor = FormatDescriptor {
+    family: OperationFamily::Container,
+    name: "rar",
+    aliases: &[],
+    extensions: &[".rar"],
 };
 const TAR: FormatDescriptor = FormatDescriptor {
     family: OperationFamily::Container,
@@ -119,6 +126,7 @@ impl ContainerRegistry {
                 Arc::new(ZipContainerHandler::new(&ZIP, ZipContainerFlavor::Zip)),
                 Arc::new(ZipContainerHandler::new(&ZIPX, ZipContainerFlavor::Zipx)),
                 Arc::new(SevenZContainerHandler::new(&SEVEN_Z)),
+                Arc::new(RarContainerHandler::new(&RAR)),
                 Arc::new(TarContainerHandler::new(&TAR, TarCompression::None)),
                 Arc::new(TarContainerHandler::new(&TAR_GZ, TarCompression::Gzip)),
                 Arc::new(TarContainerHandler::new(&TAR_BZ2, TarCompression::Bzip2)),
@@ -162,6 +170,8 @@ impl ContainerRegistry {
 }
 
 const SEVEN_Z_SIGNATURE: [u8; 6] = [b'7', b'z', 0xBC, 0xAF, 0x27, 0x1C];
+const RAR4_SIGNATURE: [u8; 7] = [b'R', b'a', b'r', b'!', 0x1A, 0x07, 0x00];
+const RAR5_SIGNATURE: [u8; 8] = [b'R', b'a', b'r', b'!', 0x1A, 0x07, 0x01, 0x00];
 
 #[derive(Clone, Debug)]
 struct ArchiveInputEntry {
@@ -1180,6 +1190,190 @@ impl ContainerHandler for SevenZContainerHandler {
             inspect: true,
             extract: true,
             create: true,
+            extract_threads: ThreadCapability::single_threaded(),
+            create_threads: ThreadCapability::single_threaded(),
+        }
+    }
+}
+
+struct RarContainerHandler {
+    descriptor: &'static FormatDescriptor,
+}
+
+impl RarContainerHandler {
+    const fn new(descriptor: &'static FormatDescriptor) -> Self {
+        Self { descriptor }
+    }
+
+    fn open_for_listing(
+        &self,
+        source: &Path,
+    ) -> Result<unrar_ng::OpenArchive<unrar_ng::List, unrar_ng::CursorBeforeHeader>> {
+        RarArchive::new(source)
+            .open_for_listing()
+            .map_err(|error| RomWeaverError::Validation(format!("rar archive is invalid: {error}")))
+    }
+
+    fn open_for_processing(
+        &self,
+        source: &Path,
+    ) -> Result<unrar_ng::OpenArchive<unrar_ng::Process, unrar_ng::CursorBeforeHeader>> {
+        RarArchive::new(source)
+            .open_for_processing()
+            .map_err(|error| RomWeaverError::Validation(format!("rar archive is invalid: {error}")))
+    }
+}
+
+impl ContainerHandler for RarContainerHandler {
+    fn descriptor(&self) -> &'static FormatDescriptor {
+        self.descriptor
+    }
+
+    fn probe(&self, source: &Path) -> ProbeConfidence {
+        let mut signature = [0u8; RAR5_SIGNATURE.len()];
+        if let Ok(mut file) = File::open(source) {
+            if let Ok(read) = file.read(&mut signature) {
+                if read >= RAR4_SIGNATURE.len()
+                    && signature[..RAR4_SIGNATURE.len()] == RAR4_SIGNATURE
+                {
+                    return ProbeConfidence::Signature;
+                }
+                if read >= RAR5_SIGNATURE.len() && signature == RAR5_SIGNATURE {
+                    return ProbeConfidence::Signature;
+                }
+            }
+        }
+        ProbeConfidence::Extension
+    }
+
+    fn inspect(
+        &self,
+        request: &ContainerInspectRequest,
+        _context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let mut archive = self.open_for_listing(&request.source)?;
+        let mut files = 0usize;
+        let mut directories = 0usize;
+        let mut logical_bytes = 0u64;
+        let mut entries_total = 0usize;
+
+        while let Some(entry) = archive.read_header().map_err(|error| {
+            RomWeaverError::Validation(format!("rar inspect failed while reading header: {error}"))
+        })? {
+            let header = entry.entry();
+            entries_total = entries_total.saturating_add(1);
+            if header.is_directory() {
+                directories = directories.saturating_add(1);
+            } else {
+                files = files.saturating_add(1);
+                logical_bytes = logical_bytes.saturating_add(header.unpacked_size);
+            }
+            let entry_name = normalize_archive_name(&header.filename.to_string_lossy());
+            archive = entry.skip().map_err(|error| {
+                RomWeaverError::Validation(format!(
+                    "rar inspect failed while skipping entry `{entry_name}`: {error}"
+                ))
+            })?;
+        }
+
+        Ok(OperationReport::succeeded(
+            OperationFamily::Container,
+            Some(self.descriptor.name.to_string()),
+            "inspect",
+            format!(
+                "rar: {} entries ({} files, {} directories), {} bytes uncompressed",
+                entries_total, files, directories, logical_bytes
+            ),
+            Some(100.0),
+            None,
+        ))
+    }
+
+    fn extract(
+        &self,
+        request: &ContainerExtractRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let execution = context.plan_threads(ThreadCapability::single_threaded());
+        fs::create_dir_all(&request.out_dir)?;
+
+        let mut archive = self.open_for_processing(&request.source)?;
+        let mut selections = SelectionMatcher::new(&request.selections);
+        let mut extracted_files = 0usize;
+        let mut written_bytes = 0u64;
+
+        while let Some(entry) = archive.read_header().map_err(|error| {
+            RomWeaverError::Validation(format!("rar extract failed while reading header: {error}"))
+        })? {
+            let entry_name = normalize_archive_name(&entry.entry().filename.to_string_lossy());
+            if entry_name.is_empty() || !selections.matches(&entry_name) {
+                archive = entry.skip().map_err(|error| {
+                    RomWeaverError::Validation(format!(
+                        "rar extract failed while skipping entry `{entry_name}`: {error}"
+                    ))
+                })?;
+                continue;
+            }
+
+            let relative =
+                sanitize_archive_relative_path_from_str(&entry.entry().filename.to_string_lossy())?;
+            let output_path = request.out_dir.join(relative);
+
+            if entry.entry().is_directory() {
+                fs::create_dir_all(&output_path)?;
+                archive = entry.skip().map_err(|error| {
+                    RomWeaverError::Validation(format!(
+                        "rar extract failed while skipping directory `{entry_name}`: {error}"
+                    ))
+                })?;
+                continue;
+            }
+
+            if let Some(parent) = output_path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            archive = entry.extract_to(&output_path).map_err(|error| {
+                RomWeaverError::Validation(format!(
+                    "rar extract failed for `{entry_name}`: {error}"
+                ))
+            })?;
+            extracted_files = extracted_files.saturating_add(1);
+            written_bytes = written_bytes.saturating_add(fs::metadata(&output_path)?.len());
+        }
+
+        selections.ensure_all_matched()?;
+
+        Ok(OperationReport::succeeded(
+            OperationFamily::Container,
+            Some(self.descriptor.name.to_string()),
+            "extract",
+            format!(
+                "extracted `{}` to `{}` ({} file(s), {} bytes written)",
+                request.source.display(),
+                request.out_dir.display(),
+                extracted_files,
+                written_bytes
+            ),
+            Some(100.0),
+            Some(execution),
+        ))
+    }
+
+    fn create(
+        &self,
+        _request: &ContainerCreateRequest,
+        _context: &OperationContext,
+    ) -> Result<OperationReport> {
+        Err(RomWeaverError::Validation(
+            "rar create is not supported".into(),
+        ))
+    }
+
+    fn capabilities(&self) -> ContainerCapabilities {
+        ContainerCapabilities {
+            inspect: true,
+            extract: true,
+            create: false,
             extract_threads: ThreadCapability::single_threaded(),
             create_threads: ThreadCapability::single_threaded(),
         }
@@ -4048,7 +4242,8 @@ mod tests {
         assert_eq!(
             names,
             vec![
-                "zip", "zipx", "7z", "tar", "tar.gz", "tar.bz2", "tar.xz", "chd", "rvz", "z3ds"
+                "zip", "zipx", "7z", "rar", "tar", "tar.gz", "tar.bz2", "tar.xz", "chd", "rvz",
+                "z3ds"
             ]
         );
     }

@@ -15,6 +15,7 @@ rom-weaver-chd-sys = { path = "../rom-weaver-chd-sys" }
 rom-weaver-core = { path = "../rom-weaver-core" }
 sevenz-rust.workspace = true
 tar.workspace = true
+unrar-ng.workspace = true
 zip.workspace = true
 zstd.workspace = true
 zstd-seekable.workspace = true

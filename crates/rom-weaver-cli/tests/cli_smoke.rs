@@ -130,6 +130,12 @@ fn fixture_path(name: &str) -> PathBuf {
         .join(name)
 }
 
+fn rar_fixture_path(name: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/fixtures/rar")
+        .join(name)
+}
+
 fn encode_varint(bytes: &mut Vec<u8>, mut value: u64) {
     if value == 0 {
         bytes.push(0);
@@ -248,6 +254,7 @@ const SIMPLE_BPS_PATCH: [u8; 25] = [
     0x42, 0x50, 0x53, 0x31, 0x8C, 0x8E, 0x80, 0x94, 0x85, 0x5A, 0x5A, 0x96, 0x8C, 0x34, 0x2A, 0x6E,
     0x5A, 0xB9, 0x87, 0x43, 0x50, 0xB0, 0xFC, 0x51, 0xA7,
 ];
+const APS_GBA_BLOCK_SIZE: usize = 0x01_0000;
 
 enum TestIpsRecord {
     Literal { offset: u32, data: Vec<u8> },
@@ -311,6 +318,41 @@ fn build_ppf1_patch(description: &str, records: Vec<TestPpfRecord>) -> Vec<u8> {
     bytes
 }
 
+fn crc16(bytes: &[u8]) -> u16 {
+    let mut crc = 0xffffu16;
+    for &value in bytes {
+        crc ^= u16::from(value) << 8;
+        for _ in 0..8 {
+            crc = if crc & 0x8000 != 0 {
+                (crc << 1) ^ 0x1021
+            } else {
+                crc << 1
+            };
+        }
+    }
+    crc
+}
+
+fn build_apsgba_patch(source: &[u8], target: &[u8]) -> Vec<u8> {
+    assert_eq!(source.len(), APS_GBA_BLOCK_SIZE);
+    assert_eq!(target.len(), APS_GBA_BLOCK_SIZE);
+
+    let mut xor_bytes = vec![0u8; APS_GBA_BLOCK_SIZE];
+    for (index, byte) in xor_bytes.iter_mut().enumerate() {
+        *byte = source[index] ^ target[index];
+    }
+
+    let mut bytes = Vec::with_capacity(12 + 4 + 2 + 2 + APS_GBA_BLOCK_SIZE);
+    bytes.extend_from_slice(b"APS1");
+    bytes.extend_from_slice(&(source.len() as u32).to_le_bytes());
+    bytes.extend_from_slice(&(target.len() as u32).to_le_bytes());
+    bytes.extend_from_slice(&0u32.to_le_bytes());
+    bytes.extend_from_slice(&crc16(source).to_le_bytes());
+    bytes.extend_from_slice(&crc16(target).to_le_bytes());
+    bytes.extend_from_slice(&xor_bytes);
+    bytes
+}
+
 #[test]
 fn inspect_reports_known_container_as_supported() {
     let temp = setup_temp_dir();
@@ -346,6 +388,28 @@ fn inspect_reports_known_container_as_supported() {
     assert_eq!(json["command"], "inspect");
     assert_eq!(json["family"], "container");
     assert_eq!(json["format"], "zip");
+    assert_eq!(json["status"], "succeeded");
+}
+
+#[test]
+fn inspect_reports_rar_container_as_supported() {
+    let temp = setup_temp_dir();
+    let source = temp.child("version.rar");
+    fs::copy(rar_fixture_path("version.rar"), source.path()).expect("copy fixture");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args(["inspect", source.path().to_str().expect("path"), "--json"])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "inspect");
+    assert_eq!(json["family"], "container");
+    assert_eq!(json["format"], "rar");
     assert_eq!(json["status"], "succeeded");
 }
 
@@ -403,6 +467,47 @@ fn extract_reports_thread_fallback_in_json() {
     assert_eq!(
         fs::read(out_dir.child("disc.iso").path()).expect("extract"),
         expected
+    );
+}
+
+#[test]
+fn extract_rar_reports_thread_fallback_in_json() {
+    let temp = setup_temp_dir();
+    let archive = temp.child("version.rar");
+    fs::copy(rar_fixture_path("version.rar"), archive.path()).expect("copy fixture");
+    let out_dir = temp.child("out");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "extract",
+            archive.path().to_str().expect("path"),
+            "--select",
+            "VERSION",
+            "--out-dir",
+            out_dir.path().to_str().expect("path"),
+            "--threads",
+            "8",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "extract");
+    assert_eq!(json["family"], "container");
+    assert_eq!(json["format"], "rar");
+    assert_eq!(json["requested_threads"], 8);
+    assert_eq!(json["effective_threads"], 1);
+    assert_eq!(json["thread_mode"], "fixed");
+    assert_eq!(json["used_parallelism"], false);
+    assert_eq!(json["status"], "succeeded");
+    assert_eq!(
+        fs::read(out_dir.child("VERSION").path()).expect("extract"),
+        b"unrar-0.4.0".to_vec()
     );
 }
 
@@ -1729,6 +1834,81 @@ fn patch_create_succeeds_for_ppf_and_round_trips() {
 }
 
 #[test]
+fn patch_create_succeeds_for_apsgba_and_round_trips() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.gba");
+    let modified = temp.child("new.gba");
+    let patch = temp.child("update.apsgba");
+    let output = temp.child("output.gba");
+
+    let mut source = vec![0u8; APS_GBA_BLOCK_SIZE];
+    for (index, byte) in source.iter_mut().enumerate() {
+        *byte = ((index * 17 + (index >> 5)) & 0xff) as u8;
+    }
+    let mut target = source.clone();
+    target[0x1234] ^= 0xff;
+    target[0x8000] = 0x5a;
+
+    fs::write(original.path(), &source).expect("fixture");
+    fs::write(modified.path(), &target).expect("fixture");
+
+    let create_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--format",
+            "apsgba",
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--threads",
+            "8",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let create_json = parse_single_json_line(&create_output);
+    assert_eq!(create_json["command"], "patch-create");
+    assert_eq!(create_json["family"], "patch");
+    assert_eq!(create_json["format"], "APSGBA");
+    assert_eq!(create_json["requested_threads"], 8);
+    assert_eq!(create_json["effective_threads"], 1);
+    assert_eq!(create_json["used_parallelism"], false);
+    assert_eq!(create_json["status"], "succeeded");
+
+    let apply_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let apply_json = parse_single_json_line(&apply_output);
+    assert_eq!(apply_json["command"], "patch-apply");
+    assert_eq!(apply_json["format"], "APSGBA");
+    assert_eq!(apply_json["status"], "succeeded");
+    assert_eq!(fs::read(output.path()).expect("output"), target);
+}
+
+#[test]
 fn patch_create_succeeds_for_xdelta_with_secondary_when_helpful() {
     let temp = setup_temp_dir();
     let original = temp.child("old.bin");
@@ -1985,6 +2165,58 @@ fn patch_apply_succeeds_for_valid_ppf_patch() {
     assert_eq!(
         fs::read(temp.child("output.bin").path()).expect("output"),
         b"abcabcZZcabc"
+    );
+}
+
+#[test]
+fn patch_apply_succeeds_for_valid_apsgba_patch() {
+    let temp = setup_temp_dir();
+    let mut source = vec![0u8; APS_GBA_BLOCK_SIZE];
+    for (index, byte) in source.iter_mut().enumerate() {
+        *byte = ((index * 17 + (index >> 5)) & 0xff) as u8;
+    }
+    let mut target = source.clone();
+    target[0x0123] ^= 0x3f;
+    target[0x8000] = 0x5a;
+
+    fs::write(temp.child("input.gba").path(), &source).expect("fixture");
+    fs::write(
+        temp.child("update.apsgba").path(),
+        build_apsgba_patch(&source, &target),
+    )
+    .expect("fixture");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            temp.child("input.gba").path().to_str().expect("path"),
+            "--patch",
+            temp.child("update.apsgba").path().to_str().expect("path"),
+            "--output",
+            temp.child("output.gba").path().to_str().expect("path"),
+            "--threads",
+            "8",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "patch-apply");
+    assert_eq!(json["family"], "patch");
+    assert_eq!(json["format"], "APSGBA");
+    assert_eq!(json["requested_threads"], 8);
+    assert_eq!(json["effective_threads"], 1);
+    assert_eq!(json["used_parallelism"], false);
+    assert_eq!(json["status"], "succeeded");
+    assert_eq!(
+        fs::read(temp.child("output.gba").path()).expect("output"),
+        target
     );
 }
 
