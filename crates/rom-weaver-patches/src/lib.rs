@@ -14,7 +14,7 @@ mod ups;
 mod vcdiff;
 mod xdelta_ffi;
 
-use std::{fs, path::Path, sync::Arc};
+use std::{fs, io::Read, path::Path, sync::Arc};
 
 use apsgba::ApsGbaPatchHandler;
 use bdf::BdfPatchHandler;
@@ -144,6 +144,23 @@ const PDS: FormatDescriptor = FormatDescriptor {
     extensions: &[".pds"],
 };
 
+const BPS_SIGNATURE: &[u8] = b"BPS1";
+const UPS_SIGNATURE: &[u8] = b"UPS1";
+const VCDIFF_SIGNATURE: [u8; 3] = [0xD6, 0xC3, 0xC4];
+const APS_SIGNATURE: &[u8] = b"APS1";
+const RUP_SIGNATURE: &[u8] = b"NINJA2";
+const PPF1_SIGNATURE: &[u8] = b"PPF1";
+const PPF2_SIGNATURE: &[u8] = b"PPF2";
+const PPF3_SIGNATURE: &[u8] = b"PPF3";
+const IPS_SIGNATURE: &[u8] = b"PATCH";
+const IPS32_SIGNATURE: &[u8] = b"IPS32";
+const SOLID_SIGNATURE: &[u8] = b"SP";
+const MOD_SIGNATURE: &[u8] = b"PMSR";
+const DLDI_SIGNATURE: [u8; 12] = [
+    0xED, 0xA5, 0x8D, 0xBF, b' ', b'C', b'h', b'i', b's', b'h', b'm', 0x00,
+];
+const BSDIFF_SIGNATURE: &[u8] = b"BSDIFF40";
+
 pub struct PatchRegistry {
     handlers: Vec<Arc<dyn PatchHandler>>,
 }
@@ -185,10 +202,13 @@ impl PatchRegistry {
     }
 
     pub fn probe(&self, path: &Path) -> Option<Arc<dyn PatchHandler>> {
-        if is_ips_extension(path)
-            && let Some(resolved) = self.probe_ambiguous_ips_by_signature(path)
-        {
+        let ips_extension = is_ips_extension(path);
+        if ips_extension && let Some(resolved) = self.probe_ambiguous_ips_by_signature(path) {
             return Some(resolved);
+        }
+
+        if let Some(signature_match) = self.probe_by_signature(path, ips_extension) {
+            return Some(signature_match);
         }
 
         self.handlers
@@ -217,12 +237,77 @@ impl PatchRegistry {
 
         None
     }
+
+    fn probe_by_signature(
+        &self,
+        path: &Path,
+        ips_extension: bool,
+    ) -> Option<Arc<dyn PatchHandler>> {
+        let prefix = read_signature_prefix(path, DLDI_SIGNATURE.len())?;
+
+        if prefix.starts_with(BPS_SIGNATURE) {
+            return self.find_by_name("bps");
+        }
+        if prefix.starts_with(UPS_SIGNATURE) {
+            return self.find_by_name("ups");
+        }
+        if prefix.starts_with(&VCDIFF_SIGNATURE) {
+            return self.find_by_name("vcdiff");
+        }
+        if prefix.starts_with(APS_SIGNATURE) {
+            return self.find_by_name("aps");
+        }
+        if prefix.starts_with(RUP_SIGNATURE) {
+            return self.find_by_name("rup");
+        }
+        if prefix.starts_with(PPF1_SIGNATURE)
+            || prefix.starts_with(PPF2_SIGNATURE)
+            || prefix.starts_with(PPF3_SIGNATURE)
+        {
+            return self.find_by_name("ppf");
+        }
+        if prefix.starts_with(IPS32_SIGNATURE) {
+            return self.find_by_name("ips32");
+        }
+        if prefix.starts_with(IPS_SIGNATURE) {
+            if ips_extension {
+                return self.find_by_name("ips");
+            }
+            let bytes = fs::read(path).ok()?;
+            if spatch::is_double_ips_stream(&bytes) {
+                return self.find_by_name("spatch");
+            }
+            return self.find_by_name("ips");
+        }
+        if prefix.starts_with(SOLID_SIGNATURE) {
+            return self.find_by_name("solid");
+        }
+        if prefix.starts_with(MOD_SIGNATURE) {
+            return self.find_by_name("mod");
+        }
+        if prefix.starts_with(&DLDI_SIGNATURE) {
+            return self.find_by_name("dldi");
+        }
+        if prefix.starts_with(BSDIFF_SIGNATURE) {
+            return self.find_by_name("bdf");
+        }
+
+        None
+    }
 }
 
 fn is_ips_extension(path: &Path) -> bool {
     path.file_name()
         .and_then(|value| value.to_str())
         .is_some_and(|name| name.to_ascii_lowercase().ends_with(".ips"))
+}
+
+fn read_signature_prefix(path: &Path, max_len: usize) -> Option<Vec<u8>> {
+    let mut bytes = vec![0u8; max_len];
+    let mut file = fs::File::open(path).ok()?;
+    let read = file.read(&mut bytes).ok()?;
+    bytes.truncate(read);
+    Some(bytes)
 }
 
 struct StaticPatchHandler {
@@ -314,13 +399,17 @@ mod tests {
     use super::PatchRegistry;
 
     fn temp_file_path(label: &str) -> PathBuf {
+        temp_file_path_with_extension(label, "ips")
+    }
+
+    fn temp_file_path_with_extension(label: &str, extension: &str) -> PathBuf {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("time")
             .as_nanos();
         env::temp_dir().join(format!(
-            "rom-weaver-patches-probe-{label}-{}-{timestamp}.ips",
-            std::process::id()
+            "rom-weaver-patches-probe-{label}-{}-{timestamp}.{extension}",
+            std::process::id(),
         ))
     }
 
@@ -492,6 +581,30 @@ mod tests {
         let registry = PatchRegistry::new();
         let handler = registry.probe(&path).expect("ips probe");
         assert_eq!(handler.descriptor().name, "IPS");
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn probe_routes_unknown_extension_with_bps_signature_to_bps_handler() {
+        let path = temp_file_path_with_extension("bps-signature", "bin");
+        fs::write(&path, b"BPS1\0\0\0\0").expect("fixture");
+
+        let registry = PatchRegistry::new();
+        let handler = registry.probe(&path).expect("bps probe");
+        assert_eq!(handler.descriptor().name, "BPS");
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn probe_routes_unknown_extension_with_double_ips_signature_to_spatch_handler() {
+        let path = temp_file_path_with_extension("double-ips-signature", "bin");
+        fs::write(&path, b"PATCHEOFPATCHEOF").expect("fixture");
+
+        let registry = PatchRegistry::new();
+        let handler = registry.probe(&path).expect("spatch probe");
+        assert_eq!(handler.descriptor().name, "SPATCH");
 
         let _ = fs::remove_file(path);
     }

@@ -190,7 +190,11 @@ impl ContainerRegistry {
                 }
             }
         }
-        extension_match
+        self.handlers
+            .iter()
+            .find(|handler| matches!(handler.probe(path), ProbeConfidence::Signature))
+            .cloned()
+            .or(extension_match)
     }
 
     pub fn find_by_name(&self, name: &str) -> Option<Arc<dyn ContainerHandler>> {
@@ -204,6 +208,25 @@ impl ContainerRegistry {
 const SEVEN_Z_SIGNATURE: [u8; 6] = [b'7', b'z', 0xBC, 0xAF, 0x27, 0x1C];
 const RAR4_SIGNATURE: [u8; 7] = [b'R', b'a', b'r', b'!', 0x1A, 0x07, 0x00];
 const RAR5_SIGNATURE: [u8; 8] = [b'R', b'a', b'r', b'!', 0x1A, 0x07, 0x01, 0x00];
+const GZIP_SIGNATURE: [u8; 2] = [0x1F, 0x8B];
+const BZIP2_SIGNATURE: [u8; 3] = [b'B', b'Z', b'h'];
+const XZ_SIGNATURE: [u8; 6] = [0xFD, b'7', b'z', b'X', b'Z', 0x00];
+const ZSTD_SIGNATURE: [u8; 4] = [0x28, 0xB5, 0x2F, 0xFD];
+const CHD_SIGNATURE: [u8; 8] = *b"MComprHD";
+
+fn file_starts_with(source: &Path, signature: &[u8]) -> bool {
+    let mut bytes = vec![0u8; signature.len()];
+    if let Ok(mut file) = File::open(source) {
+        return file.read_exact(&mut bytes).is_ok() && bytes == signature;
+    }
+    false
+}
+
+fn is_ustar_header(header: &[u8]) -> bool {
+    header.len() >= 512
+        && (header[257..263] == [b'u', b's', b't', b'a', b'r', 0x00]
+            || header[257..263] == [b'u', b's', b't', b'a', b'r', b' '])
+}
 
 #[derive(Clone, Debug)]
 struct ArchiveInputEntry {
@@ -862,11 +885,28 @@ impl TarContainerHandler {
         };
         Ok(reader)
     }
+
+    fn looks_like_tar_archive(&self, source: &Path) -> bool {
+        let mut reader = match self.open_reader(source) {
+            Ok(reader) => reader,
+            Err(_) => return false,
+        };
+        let mut header = [0u8; 512];
+        reader.read_exact(&mut header).is_ok() && is_ustar_header(&header)
+    }
 }
 
 impl ContainerHandler for TarContainerHandler {
     fn descriptor(&self) -> &'static FormatDescriptor {
         self.descriptor
+    }
+
+    fn probe(&self, source: &Path) -> ProbeConfidence {
+        if self.looks_like_tar_archive(source) {
+            ProbeConfidence::Signature
+        } else {
+            ProbeConfidence::Extension
+        }
     }
 
     fn inspect(
@@ -1242,11 +1282,28 @@ impl StreamContainerHandler {
         };
         Ok(reader)
     }
+
+    fn matches_signature(&self, source: &Path) -> bool {
+        match self.compression {
+            StreamCompression::Gzip => file_starts_with(source, &GZIP_SIGNATURE),
+            StreamCompression::Bzip2 => file_starts_with(source, &BZIP2_SIGNATURE),
+            StreamCompression::Xz => file_starts_with(source, &XZ_SIGNATURE),
+            StreamCompression::Zstd => file_starts_with(source, &ZSTD_SIGNATURE),
+        }
+    }
 }
 
 impl ContainerHandler for StreamContainerHandler {
     fn descriptor(&self) -> &'static FormatDescriptor {
         self.descriptor
+    }
+
+    fn probe(&self, source: &Path) -> ProbeConfidence {
+        if self.matches_signature(source) {
+            ProbeConfidence::Signature
+        } else {
+            ProbeConfidence::Extension
+        }
     }
 
     fn inspect(
@@ -1979,7 +2036,12 @@ impl ContainerHandler for RvzContainerHandler {
         &RVZ
     }
 
-    fn probe(&self, _source: &Path) -> ProbeConfidence {
+    fn probe(&self, source: &Path) -> ProbeConfidence {
+        if let Ok(disc) = self.open_disc(source)
+            && disc.meta().format == NodFormat::Rvz
+        {
+            return ProbeConfidence::Signature;
+        }
         ProbeConfidence::Extension
     }
 
@@ -5124,8 +5186,12 @@ impl ContainerHandler for ChdContainerHandler {
         &CHD
     }
 
-    fn probe(&self, _source: &Path) -> ProbeConfidence {
-        ProbeConfidence::Extension
+    fn probe(&self, source: &Path) -> ProbeConfidence {
+        if file_starts_with(source, &CHD_SIGNATURE) {
+            ProbeConfidence::Signature
+        } else {
+            ProbeConfidence::Extension
+        }
     }
 
     fn inspect(
@@ -5344,9 +5410,24 @@ impl ContainerHandler for ChdContainerHandler {
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
+    use std::{
+        env, fs,
+        path::{Path, PathBuf},
+        time::{SystemTime, UNIX_EPOCH},
+    };
 
     use super::{ContainerRegistry, Z3dsContainerHandler};
+
+    fn temp_file_path_with_extension(label: &str, extension: &str) -> PathBuf {
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        env::temp_dir().join(format!(
+            "rom-weaver-containers-probe-{label}-{}-{timestamp}.{extension}",
+            std::process::id(),
+        ))
+    }
 
     #[test]
     fn registry_contains_planned_formats() {
@@ -5402,5 +5483,29 @@ mod tests {
             handler.extract_name(Path::new("ROM.ZCCI")),
             "ROM.cci".to_string()
         );
+    }
+
+    #[test]
+    fn probe_prefers_signature_over_mismatched_extension() {
+        let path = temp_file_path_with_extension("seven-z-signature", "zip");
+        fs::write(&path, [b'7', b'z', 0xBC, 0xAF, 0x27, 0x1C]).expect("fixture");
+
+        let registry = ContainerRegistry::new();
+        let handler = registry.probe(&path).expect("7z probe");
+        assert_eq!(handler.descriptor().name, "7z");
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn probe_routes_unknown_extension_with_chd_signature_to_chd_handler() {
+        let path = temp_file_path_with_extension("chd-signature", "bin");
+        fs::write(&path, b"MComprHD\0\0\0\0").expect("fixture");
+
+        let registry = ContainerRegistry::new();
+        let handler = registry.probe(&path).expect("chd probe");
+        assert_eq!(handler.descriptor().name, "chd");
+
+        let _ = fs::remove_file(path);
     }
 }
