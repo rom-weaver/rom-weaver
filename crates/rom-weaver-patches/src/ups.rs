@@ -1,4 +1,9 @@
-use std::{cmp::max, fs, path::Path};
+use std::{
+    cmp::max,
+    fs::{self, File, OpenOptions},
+    io::{BufReader, Read, Seek, SeekFrom, Write},
+    path::Path,
+};
 
 use crc32fast::Hasher;
 use rom_weaver_checksum::checksum_file_values;
@@ -10,6 +15,7 @@ use rom_weaver_core::{
 
 const UPS_MAGIC: &[u8; 4] = b"UPS1";
 const UPS_FOOTER_SIZE: usize = 12;
+const UPS_IO_BUFFER_SIZE: usize = 64 * 1024;
 
 pub struct UpsPatchHandler {
     descriptor: &'static FormatDescriptor,
@@ -67,29 +73,29 @@ impl PatchHandler for UpsPatchHandler {
         let input_checksum = crc32_path_cached(&request.input, context)?;
         let (output_size, output_checksum) =
             resolve_apply_target(&patch, input_len, input_checksum, validate_checksums)?;
+        let working_size = max(patch.source_size, patch.target_size);
 
-        let input = fs::read(&request.input)?;
-        let mut output = apply_changes(&patch, &input)?;
-        let output_len = usize::try_from(output_size).map_err(|_| {
-            RomWeaverError::Validation("UPS output size exceeded addressable memory".into())
-        })?;
-        if output_len > output.len() {
-            return Err(RomWeaverError::Validation(
-                "UPS patch output size exceeded computed output buffer".into(),
-            ));
+        if let Some(parent) = request.output.parent() {
+            fs::create_dir_all(parent)?;
         }
-        output.truncate(output_len);
+        fs::copy(&request.input, &request.output)?;
+        let mut output = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&request.output)?;
+        output.set_len(working_size)?;
+        apply_changes_in_place(&patch, working_size, &mut output)?;
+        output.set_len(output_size)?;
+        output.flush()?;
 
         if validate_checksums {
-            let actual_output_checksum = crc32_bytes(&output);
+            let actual_output_checksum = crc32_path_cached(&request.output, context)?;
             if actual_output_checksum != output_checksum {
                 return Err(RomWeaverError::Validation(format!(
                     "Output checksum invalid; expected: {output_checksum:08x}, Actual: {actual_output_checksum:08x}"
                 )));
             }
         }
-
-        fs::write(&request.output, &output)?;
 
         let execution = context.plan_threads(ThreadCapability::single_threaded());
         let checksum_suffix = if validate_checksums {
@@ -118,14 +124,11 @@ impl PatchHandler for UpsPatchHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let execution = context.plan_threads(ThreadCapability::single_threaded());
-        let source = fs::read(&request.original)?;
-        let target = fs::read(&request.modified)?;
-
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
         }
 
-        let created = create_ups_patch_bytes(&source, &target)?;
+        let created = create_ups_patch_streaming(&request.original, &request.modified)?;
         fs::write(&request.output, created.bytes)?;
 
         Ok(OperationReport::succeeded(
@@ -312,6 +315,168 @@ fn apply_changes(patch: &ParsedUpsPatch, input: &[u8]) -> Result<Vec<u8>> {
     }
 
     Ok(output)
+}
+
+fn apply_changes_in_place(
+    patch: &ParsedUpsPatch,
+    output_len: u64,
+    output: &mut File,
+) -> Result<()> {
+    let mut buffer = vec![0u8; UPS_IO_BUFFER_SIZE];
+    for change in &patch.changes {
+        let change_len = u64::try_from(change.xor_bytes.len()).map_err(|_| {
+            RomWeaverError::Validation("UPS record length exceeded addressable memory".into())
+        })?;
+        let change_end = checked_add(change.offset, change_len, "UPS change end")?;
+        if change_end > output_len {
+            return Err(RomWeaverError::Validation(
+                "UPS change exceeds declared patch file bounds".into(),
+            ));
+        }
+
+        let mut remaining = change.xor_bytes.len();
+        let mut xor_cursor = 0usize;
+        let mut write_offset = change.offset;
+        while remaining > 0 {
+            let chunk_len = remaining.min(buffer.len());
+            output.seek(SeekFrom::Start(write_offset))?;
+            output.read_exact(&mut buffer[..chunk_len])?;
+            for (index, byte) in buffer[..chunk_len].iter_mut().enumerate() {
+                *byte ^= change.xor_bytes[xor_cursor + index];
+            }
+            output.seek(SeekFrom::Start(write_offset))?;
+            output.write_all(&buffer[..chunk_len])?;
+
+            write_offset = checked_add(
+                write_offset,
+                u64::try_from(chunk_len).expect("chunk len fits u64"),
+                "UPS output offset",
+            )?;
+            xor_cursor = checked_add_usize(xor_cursor, chunk_len, "UPS xor cursor")?;
+            remaining -= chunk_len;
+        }
+    }
+
+    Ok(())
+}
+
+fn create_ups_patch_streaming(source_path: &Path, target_path: &Path) -> Result<CreatedUpsPatch> {
+    let source_size = fs::metadata(source_path)?.len();
+    let target_size = fs::metadata(target_path)?.len();
+    let max_size = max(source_size, target_size);
+
+    let mut source = BufReader::new(File::open(source_path)?);
+    let mut target = BufReader::new(File::open(target_path)?);
+    let mut source_checksum = Hasher::new();
+    let mut target_checksum = Hasher::new();
+    let mut source_buffer = vec![0u8; UPS_IO_BUFFER_SIZE];
+    let mut target_buffer = vec![0u8; UPS_IO_BUFFER_SIZE];
+    let mut source_remaining = source_size;
+    let mut target_remaining = target_size;
+    let mut offset = 0u64;
+
+    let mut changes = Vec::<UpsChange>::new();
+    let mut pending_start: Option<u64> = None;
+    let mut pending_xor = Vec::<u8>::new();
+
+    while offset < max_size {
+        let chunk_len = usize::try_from((max_size - offset).min(UPS_IO_BUFFER_SIZE as u64))
+            .map_err(|_| RomWeaverError::Validation("UPS chunk length exceeded usize".into()))?;
+        let source_chunk_len =
+            usize::try_from(source_remaining.min(chunk_len as u64)).map_err(|_| {
+                RomWeaverError::Validation("UPS source chunk length exceeded usize".into())
+            })?;
+        let target_chunk_len =
+            usize::try_from(target_remaining.min(chunk_len as u64)).map_err(|_| {
+                RomWeaverError::Validation("UPS target chunk length exceeded usize".into())
+            })?;
+
+        if source_chunk_len > 0 {
+            source.read_exact(&mut source_buffer[..source_chunk_len])?;
+            source_checksum.update(&source_buffer[..source_chunk_len]);
+        }
+        if target_chunk_len > 0 {
+            target.read_exact(&mut target_buffer[..target_chunk_len])?;
+            target_checksum.update(&target_buffer[..target_chunk_len]);
+        }
+
+        for index in 0..chunk_len {
+            let source_byte = if index < source_chunk_len {
+                source_buffer[index]
+            } else {
+                0
+            };
+            let target_byte = if index < target_chunk_len {
+                target_buffer[index]
+            } else {
+                0
+            };
+            if source_byte != target_byte {
+                if pending_start.is_none() {
+                    pending_start = Some(offset);
+                }
+                pending_xor.push(source_byte ^ target_byte);
+            } else if !pending_xor.is_empty() {
+                let start = pending_start.expect("pending start exists");
+                changes.push(UpsChange {
+                    offset: start,
+                    xor_bytes: std::mem::take(&mut pending_xor),
+                });
+                pending_start = None;
+            }
+
+            offset = checked_add(offset, 1, "UPS scan offset")?;
+        }
+
+        source_remaining = source_remaining.saturating_sub(source_chunk_len as u64);
+        target_remaining = target_remaining.saturating_sub(target_chunk_len as u64);
+    }
+
+    if !pending_xor.is_empty() {
+        let start = pending_start.expect("pending start exists");
+        changes.push(UpsChange {
+            offset: start,
+            xor_bytes: pending_xor,
+        });
+    }
+
+    let source_checksum = source_checksum.finalize();
+    let target_checksum = target_checksum.finalize();
+
+    let mut bytes = UPS_MAGIC.to_vec();
+    push_varint(&mut bytes, source_size);
+    push_varint(&mut bytes, target_size);
+
+    for (index, change) in changes.iter().enumerate() {
+        let offset_to_encode = if index == 0 {
+            change.offset
+        } else {
+            let previous = &changes[index - 1];
+            let previous_len = u64::try_from(previous.xor_bytes.len()).map_err(|_| {
+                RomWeaverError::Validation(
+                    "UPS record length exceeded addressable memory while encoding".into(),
+                )
+            })?;
+            let previous_end =
+                checked_add(previous.offset, previous_len, "UPS previous record end")?;
+            let previous_next = checked_add(previous_end, 1, "UPS previous record separator")?;
+            checked_sub(change.offset, previous_next, "UPS relative record offset")?
+        };
+
+        push_varint(&mut bytes, offset_to_encode);
+        bytes.extend_from_slice(&change.xor_bytes);
+        bytes.push(0);
+    }
+
+    bytes.extend_from_slice(&source_checksum.to_le_bytes());
+    bytes.extend_from_slice(&target_checksum.to_le_bytes());
+    let patch_checksum = crc32_bytes(&bytes);
+    bytes.extend_from_slice(&patch_checksum.to_le_bytes());
+
+    Ok(CreatedUpsPatch {
+        bytes,
+        record_count: changes.len(),
+    })
 }
 
 fn create_ups_patch_bytes(source: &[u8], target: &[u8]) -> Result<CreatedUpsPatch> {

@@ -1,10 +1,11 @@
 use std::{
-    fs,
+    fs::{self, File},
     path::Path,
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use md5::{Digest, Md5};
+use memmap2::{Mmap, MmapOptions};
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
     PatchCapabilities, PatchChecksumValidation, PatchCreateRequest, PatchHandler, ProbeConfidence,
@@ -106,11 +107,11 @@ impl PatchHandler for SolidPatchHandler {
         let parsed = parse_solid_patch_bytes(&patch)?;
         let validate_checksums =
             context.patch_checksum_validation() == PatchChecksumValidation::Strict;
-        let input = fs::read(&request.input)?;
+        let input = map_file_read_only(&request.input)?;
         if validate_checksums {
-            validate_source_checksum(parsed.source_md5, &input)?;
+            validate_source_checksum(parsed.source_md5, input.as_ref())?;
         }
-        let output = apply_parsed_patch(&parsed, &input)?;
+        let output = apply_parsed_patch(&parsed, input.as_ref())?;
 
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
@@ -145,8 +146,8 @@ impl PatchHandler for SolidPatchHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let execution = context.plan_threads(ThreadCapability::single_threaded());
-        let original = fs::read(&request.original)?;
-        let modified = fs::read(&request.modified)?;
+        let original = map_file_read_only(&request.original)?;
+        let modified = map_file_read_only(&request.modified)?;
 
         let mod_action = if modified.len() < original.len() {
             MOD_ACTION_TRUNCATE
@@ -155,12 +156,12 @@ impl PatchHandler for SolidPatchHandler {
         };
         let uses_big_fields = original.len() > u32::MAX as usize
             || modified.len() > u32::MAX as usize
-            || diff_primitive_count(&original, &modified)? > u32::MAX as u64;
+            || diff_primitive_count(original.as_ref(), modified.as_ref())? > u32::MAX as u64;
         let addr_param = build_created_addr_param(mod_action, uses_big_fields);
 
-        let primitives = build_created_primitives(&original, &modified)?;
+        let primitives = build_created_primitives(original.as_ref(), modified.as_ref())?;
         let primitive_count = primitives.len() as u64;
-        let source_md5 = md5_bytes(&original);
+        let source_md5 = md5_bytes(original.as_ref());
         let date = current_patch_date();
         let descriptions = default_description_strings(&request.original, &request.output);
 
@@ -203,8 +204,8 @@ impl PatchHandler for SolidPatchHandler {
 
         // Validate that created patches are deterministic by replaying them.
         let parsed = parse_solid_patch_bytes(&patch)?;
-        let replay = apply_parsed_patch(&parsed, &original)?;
-        if replay != modified {
+        let replay = apply_parsed_patch(&parsed, original.as_ref())?;
+        if replay != modified.as_ref() {
             return Err(RomWeaverError::Validation(
                 "created SOLID patch does not round-trip to modified input".into(),
             ));
@@ -501,6 +502,13 @@ fn validate_source_checksum(expected: [u8; SOLID_MD5_LEN], input: &[u8]) -> Resu
         )));
     }
     Ok(())
+}
+
+fn map_file_read_only(path: &Path) -> Result<Mmap> {
+    let file = File::open(path)?;
+    // SAFETY: This mapping is read-only and the file handle lives through map creation.
+    let map = unsafe { MmapOptions::new().map(&file)? };
+    Ok(map)
 }
 
 fn build_created_addr_param(mod_action: u8, uses_big_fields: bool) -> u8 {

@@ -96,18 +96,18 @@
 | PAT-019 | patch | SOLID | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | Native SOLID v4 parse/apply/create landed with source MD5 validation, base-address primitive decoding, and `solid`/`solidpatch`/`solid-patch` format name support. |
 | PAT-020 | patch | DPS | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | Native parse/apply/create landed for Deufeufeu `.dps` patches using fixed-size header metadata and mode-based copy/data records. |
 | PAT-021 | patch | bdf-pds-threaded-create | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke,thread-model | done | Replace qbsdiff `ParallelScheme::Never` in BDF and PDS create paths with thread-budget-aware configuration and verify deterministic output parity. |
-| PAT-022 | patch | buffered-to-streaming-migration-wave-1 | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke,large-file | todo | Migrate heavy full-buffer handlers (`UPS`, `APSGBA`, `RUP`, `PMSR`, `DPS`, `DLDI`, `SOLID`, `BDF`, `PDS`) from `fs::read`-style apply/create to buffered/chunked IO where feasible. |
+| PAT-022 | patch | buffered-to-streaming-migration-wave-1 | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke,large-file | done | Migrated heavy patch handlers (`UPS`, `APSGBA`, `RUP`, `PMSR`, `DPS`, `DLDI`, `SOLID`, `BDF`, `PDS`) off direct `fs::read` full-buffer apply/create paths where feasible, using chunked readers, in-place output writes, and file-backed mappings. |
 
 ## Codecs
 
 | ID | Family | Name | Inspect | Extract | Create/Compress | Apply | Create Patch | Threads | Tests | Status | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| COD-001 | codec | store | n/a | n/a | todo | n/a | n/a | single-thread baseline | roundtrip,unit | todo | Registry entry exists. |
-| COD-002 | codec | deflate | n/a | n/a | todo | n/a | n/a | block-ready | roundtrip,unit | todo | Required for `zip` and `tar.gz`. |
-| COD-003 | codec | zstd | n/a | n/a | todo | n/a | n/a | block-ready | roundtrip,unit | todo | Shared backend target for `zipx`, `7z`, `rvz`, and compatible flows. |
-| COD-004 | codec | lzma2 | n/a | n/a | todo | n/a | n/a | block-ready | roundtrip,unit | todo | Required for `7z` and `tar.xz`. |
-| COD-005 | codec | bzip2 | n/a | n/a | todo | n/a | n/a | block-ready | roundtrip,unit | todo | Required for `tar.bz2`. |
-| COD-006 | codec | runtime-backend-implementation | n/a | n/a | todo | n/a | n/a | thread-budget-aware | roundtrip,unit,cli-smoke | todo | Replace `StaticCodecBackend` placeholders with real encode/decode implementations (store/deflate/zstd/lzma2/bzip2), including streaming IO and thread capability reporting. |
+| COD-001 | codec | store | n/a | n/a | done | n/a | n/a | single-thread baseline | roundtrip,unit | done | Native passthrough encode/decode landed with single-thread capability reporting, roundtrip unit coverage, and level validation. |
+| COD-002 | codec | deflate | n/a | n/a | done | n/a | n/a | block-ready | roundtrip,unit | done | Native deflate backend encode/decode landed with gzip-compatible streaming IO, default/validated level handling, and roundtrip unit coverage. |
+| COD-003 | codec | zstd | n/a | n/a | done | n/a | n/a | block-ready | roundtrip,unit | done | Native zstd backend encode/decode landed with streaming IO, default/validated level handling, and roundtrip unit coverage. |
+| COD-004 | codec | lzma2 | n/a | n/a | done | n/a | n/a | block-ready | roundtrip,unit | done | Native lzma2 backend encode/decode landed via xz streams with default/validated level handling and roundtrip unit coverage. |
+| COD-005 | codec | bzip2 | n/a | n/a | done | n/a | n/a | block-ready | roundtrip,unit | done | Native bzip2 backend encode/decode landed with streaming IO, default/validated level handling, and roundtrip unit coverage. |
+| COD-006 | codec | runtime-backend-implementation | n/a | n/a | done | n/a | n/a | thread-budget-aware | roundtrip,unit,cli-smoke | done | Replaced `StaticCodecBackend` placeholders with real encode/decode implementations (store/deflate/zstd/lzma2/bzip2), kept capability/thread reporting in codec reports, and wired stream container create/extract (`gz`/`bz2`/`xz`/`zst`) through codec backends. |
 
 ## Checksum Algorithms
 

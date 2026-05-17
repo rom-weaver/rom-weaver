@@ -1,4 +1,8 @@
-use std::{fs, path::Path};
+use std::{
+    fs::{self, File, OpenOptions},
+    io::{BufReader, Read, Seek, SeekFrom, Write},
+    path::Path,
+};
 
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
@@ -12,6 +16,7 @@ const DPS_PATCH_VERSION: u8 = 1;
 
 const DPS_RECORD_COPY_FROM_SOURCE: u8 = 0;
 const DPS_RECORD_EMBEDDED_DATA: u8 = 1;
+const DPS_IO_BUFFER_SIZE: usize = 64 * 1024;
 
 const DEFAULT_PATCH_AUTHOR: &str = "rom-weaver";
 const DEFAULT_PATCH_VERSION_TEXT: &str = "1";
@@ -73,8 +78,8 @@ impl PatchHandler for DpsPatchHandler {
         }
 
         let parsed = parse_dps_file(&request.patches[0])?;
-        let source = fs::read(&request.input)?;
-        let source_len_u32 = u32::try_from(source.len()).map_err(|_| {
+        let source_len_u64 = fs::metadata(&request.input)?.len();
+        let source_len_u32 = u32::try_from(source_len_u64).map_err(|_| {
             RomWeaverError::Validation(format!(
                 "{} source input exceeded maximum supported size of {} byte(s)",
                 self.descriptor.name,
@@ -94,7 +99,17 @@ impl PatchHandler for DpsPatchHandler {
                 self.descriptor.name
             ))
         })?;
-        let mut output = vec![0u8; output_len];
+        if let Some(parent) = request.output.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let mut source = File::open(&request.input)?;
+        let mut output = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(&request.output)?;
+        output.set_len(parsed.output_size)?;
 
         for record in &parsed.records {
             match record {
@@ -103,12 +118,22 @@ impl PatchHandler for DpsPatchHandler {
                     source_offset,
                     length,
                 } => {
-                    let (source_start, source_end) =
-                        checked_range(*source_offset, *length, source.len(), "DPS source copy")?;
+                    let (source_start, source_end) = checked_range(
+                        *source_offset,
+                        *length,
+                        source_len_u64 as usize,
+                        "DPS source copy",
+                    )?;
                     let (output_start, output_end) =
-                        checked_range(*output_offset, *length, output.len(), "DPS output write")?;
-                    output[output_start..output_end]
-                        .copy_from_slice(&source[source_start..source_end]);
+                        checked_range(*output_offset, *length, output_len, "DPS output write")?;
+                    debug_assert_eq!(source_end - source_start, output_end - output_start);
+                    copy_range_between_files(
+                        &mut source,
+                        &mut output,
+                        source_start as u64,
+                        output_start as u64,
+                        output_end - output_start,
+                    )?;
                 }
                 DpsRecord::EmbeddedData {
                     output_offset,
@@ -120,16 +145,13 @@ impl PatchHandler for DpsPatchHandler {
                         )
                     })?;
                     let (output_start, output_end) =
-                        checked_range(*output_offset, data_len, output.len(), "DPS output write")?;
-                    output[output_start..output_end].copy_from_slice(data);
+                        checked_range(*output_offset, data_len, output_len, "DPS output write")?;
+                    output.seek(SeekFrom::Start(output_start as u64))?;
+                    output.write_all(&data[..output_end - output_start])?;
                 }
             }
         }
-
-        if let Some(parent) = request.output.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        fs::write(&request.output, &output)?;
+        output.flush()?;
 
         let execution = context.plan_threads(ThreadCapability::single_threaded());
         Ok(OperationReport::succeeded(
@@ -154,9 +176,7 @@ impl PatchHandler for DpsPatchHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let execution = context.plan_threads(ThreadCapability::single_threaded());
-        let source = fs::read(&request.original)?;
-        let target = fs::read(&request.modified)?;
-        let source_size = u32::try_from(source.len()).map_err(|_| {
+        let source_size = u32::try_from(fs::metadata(&request.original)?.len()).map_err(|_| {
             RomWeaverError::Validation(format!(
                 "{} create does not support sources larger than {} byte(s)",
                 self.descriptor.name,
@@ -164,7 +184,7 @@ impl PatchHandler for DpsPatchHandler {
             ))
         })?;
 
-        let records = create_dps_records(&source, &target)?;
+        let records = create_dps_records_streaming(&request.original, &request.modified)?;
         let patch_name = request
             .output
             .file_name()
@@ -423,6 +443,144 @@ fn create_dps_records(source: &[u8], target: &[u8]) -> Result<Vec<DpsRecord>> {
     }
 
     Ok(records)
+}
+
+fn create_dps_records_streaming(source_path: &Path, target_path: &Path) -> Result<Vec<DpsRecord>> {
+    let source_len = fs::metadata(source_path)?.len();
+    let target_len = fs::metadata(target_path)?.len();
+    if target_len > u32::MAX as u64 {
+        return Err(RomWeaverError::Validation(format!(
+            "DPS create does not support targets larger than {} byte(s)",
+            u32::MAX
+        )));
+    }
+
+    let mut source = BufReader::new(File::open(source_path)?);
+    let mut target = BufReader::new(File::open(target_path)?);
+    let mut source_remaining = source_len;
+    let mut target_remaining = target_len;
+    let mut source_buffer = vec![0u8; DPS_IO_BUFFER_SIZE];
+    let mut target_buffer = vec![0u8; DPS_IO_BUFFER_SIZE];
+    let mut records = Vec::<DpsRecord>::new();
+    let mut offset = 0u64;
+
+    let mut pending_copy_start: Option<u32> = None;
+    let mut pending_copy_len = 0u32;
+    let mut pending_data_start: Option<u32> = None;
+    let mut pending_data = Vec::<u8>::new();
+
+    while target_remaining > 0 {
+        let chunk_len =
+            usize::try_from(target_remaining.min(DPS_IO_BUFFER_SIZE as u64)).map_err(|_| {
+                RomWeaverError::Validation("DPS target chunk length exceeded usize".into())
+            })?;
+        let source_chunk_len =
+            usize::try_from(source_remaining.min(chunk_len as u64)).map_err(|_| {
+                RomWeaverError::Validation("DPS source chunk length exceeded usize".into())
+            })?;
+
+        if source_chunk_len > 0 {
+            source.read_exact(&mut source_buffer[..source_chunk_len])?;
+        }
+        target.read_exact(&mut target_buffer[..chunk_len])?;
+
+        for index in 0..chunk_len {
+            let current_offset = u32::try_from(offset).map_err(|_| {
+                RomWeaverError::Validation("DPS output offset exceeded 32-bit range".into())
+            })?;
+            let equal = index < source_chunk_len && source_buffer[index] == target_buffer[index];
+            if equal {
+                if !pending_data.is_empty() {
+                    let start = pending_data_start.expect("pending data has start");
+                    records.push(DpsRecord::EmbeddedData {
+                        output_offset: start,
+                        data: std::mem::take(&mut pending_data),
+                    });
+                    pending_data_start = None;
+                }
+                if pending_copy_start.is_none() {
+                    pending_copy_start = Some(current_offset);
+                }
+                pending_copy_len = pending_copy_len.checked_add(1).ok_or_else(|| {
+                    RomWeaverError::Validation("DPS copy record length overflowed".into())
+                })?;
+            } else {
+                if pending_copy_len > 0 {
+                    let start = pending_copy_start.expect("pending copy has start");
+                    records.push(DpsRecord::CopyFromSource {
+                        output_offset: start,
+                        source_offset: start,
+                        length: pending_copy_len,
+                    });
+                    pending_copy_start = None;
+                    pending_copy_len = 0;
+                }
+                if pending_data_start.is_none() {
+                    pending_data_start = Some(current_offset);
+                }
+                pending_data.push(target_buffer[index]);
+            }
+            offset = offset
+                .checked_add(1)
+                .ok_or_else(|| RomWeaverError::Validation("DPS output offset overflowed".into()))?;
+        }
+
+        source_remaining = source_remaining.saturating_sub(source_chunk_len as u64);
+        target_remaining = target_remaining
+            .checked_sub(chunk_len as u64)
+            .ok_or_else(|| RomWeaverError::Validation("DPS target remaining underflowed".into()))?;
+    }
+
+    if pending_copy_len > 0 {
+        let start = pending_copy_start.expect("pending copy has start");
+        records.push(DpsRecord::CopyFromSource {
+            output_offset: start,
+            source_offset: start,
+            length: pending_copy_len,
+        });
+    } else if !pending_data.is_empty() {
+        let start = pending_data_start.expect("pending data has start");
+        records.push(DpsRecord::EmbeddedData {
+            output_offset: start,
+            data: pending_data,
+        });
+    }
+
+    Ok(records)
+}
+
+fn copy_range_between_files(
+    source: &mut File,
+    output: &mut File,
+    source_offset: u64,
+    output_offset: u64,
+    len: usize,
+) -> Result<()> {
+    if len == 0 {
+        return Ok(());
+    }
+
+    let mut remaining = len;
+    let mut source_cursor = source_offset;
+    let mut output_cursor = output_offset;
+    let mut buffer = vec![0u8; DPS_IO_BUFFER_SIZE];
+    while remaining > 0 {
+        let chunk_len = remaining.min(buffer.len());
+        source.seek(SeekFrom::Start(source_cursor))?;
+        source.read_exact(&mut buffer[..chunk_len])?;
+        output.seek(SeekFrom::Start(output_cursor))?;
+        output.write_all(&buffer[..chunk_len])?;
+
+        source_cursor = source_cursor
+            .checked_add(chunk_len as u64)
+            .ok_or_else(|| RomWeaverError::Validation("DPS source cursor overflowed".into()))?;
+        output_cursor = output_cursor
+            .checked_add(chunk_len as u64)
+            .ok_or_else(|| RomWeaverError::Validation("DPS output cursor overflowed".into()))?;
+        remaining -= chunk_len;
+    }
+
+    Ok(())
 }
 
 fn encode_dps_patch(

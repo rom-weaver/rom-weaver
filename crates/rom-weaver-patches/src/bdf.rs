@@ -1,5 +1,10 @@
-use std::{fs, io::Cursor, path::Path};
+use std::{
+    fs::{self, File},
+    io::{BufWriter, Write},
+    path::Path,
+};
 
+use memmap2::{Mmap, MmapOptions};
 use qbsdiff::{Bsdiff, Bspatch, ParallelScheme};
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
@@ -59,18 +64,16 @@ impl PatchHandler for BdfPatchHandler {
 
         let patch_bytes = fs::read(&request.patches[0])?;
         let patcher = Bspatch::new(&patch_bytes)?;
-        let input = fs::read(&request.input)?;
-
-        let output_capacity = usize::try_from(patcher.hint_target_size()).map_err(|_| {
-            RomWeaverError::Validation("BSDIFF40 output size exceeded addressable memory".into())
-        })?;
-        let mut output = Vec::with_capacity(output_capacity);
-        patcher.apply(&input, Cursor::new(&mut output))?;
+        let input = map_file_read_only(&request.input)?;
 
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
         }
-        fs::write(&request.output, &output)?;
+        let output_file = File::create(&request.output)?;
+        let mut output = BufWriter::new(output_file);
+        patcher.apply(input.as_ref(), &mut output)?;
+        output.flush()?;
+        let written = fs::metadata(&request.output)?.len();
 
         let execution = context.plan_threads(ThreadCapability::single_threaded());
         Ok(OperationReport::succeeded(
@@ -79,8 +82,7 @@ impl PatchHandler for BdfPatchHandler {
             "apply",
             format!(
                 "applied {} patch and wrote {} byte(s)",
-                self.descriptor.name,
-                output.len()
+                self.descriptor.name, written
             ),
             Some(100.0),
             Some(execution),
@@ -92,14 +94,14 @@ impl PatchHandler for BdfPatchHandler {
         request: &PatchCreateRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        let source = fs::read(&request.original)?;
+        let source = map_file_read_only(&request.original)?;
         if source.len() > qbsdiff::bsdiff::MAX_LENGTH {
             return Err(RomWeaverError::Validation(format!(
                 "BSDIFF40 source exceeds maximum supported size of {} byte(s)",
                 qbsdiff::bsdiff::MAX_LENGTH
             )));
         }
-        let target = fs::read(&request.modified)?;
+        let target = map_file_read_only(&request.modified)?;
         let (execution, pool) = context.build_pool(qbsdiff_thread_capability(target.len()))?;
         let parallel_scheme = qbsdiff_parallel_scheme(target.len());
 
@@ -107,13 +109,15 @@ impl PatchHandler for BdfPatchHandler {
             fs::create_dir_all(parent)?;
         }
 
-        let mut patch = Vec::new();
+        let patch_file = File::create(&request.output)?;
+        let mut patch = BufWriter::new(patch_file);
         pool.install(|| {
-            Bsdiff::new(&source, &target)
+            Bsdiff::new(source.as_ref(), target.as_ref())
                 .parallel_scheme(parallel_scheme)
-                .compare(Cursor::new(&mut patch))
+                .compare(&mut patch)
         })?;
-        fs::write(&request.output, &patch)?;
+        patch.flush()?;
+        let patch_len = fs::metadata(&request.output)?.len();
 
         Ok(OperationReport::succeeded(
             OperationFamily::Patch,
@@ -121,8 +125,7 @@ impl PatchHandler for BdfPatchHandler {
             "create",
             format!(
                 "created {} patch ({} byte(s))",
-                self.descriptor.name,
-                patch.len()
+                self.descriptor.name, patch_len
             ),
             Some(100.0),
             Some(execution),
@@ -155,6 +158,13 @@ fn qbsdiff_parallel_scheme(target_len: usize) -> ParallelScheme {
     } else {
         ParallelScheme::Never
     }
+}
+
+fn map_file_read_only(path: &Path) -> Result<Mmap> {
+    let file = File::open(path)?;
+    // SAFETY: This mapping is read-only and the file handle lives through map creation.
+    let map = unsafe { MmapOptions::new().map(&file)? };
+    Ok(map)
 }
 
 #[cfg(test)]

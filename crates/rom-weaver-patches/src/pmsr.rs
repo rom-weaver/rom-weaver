@@ -1,4 +1,8 @@
-use std::{fs, path::Path};
+use std::{
+    fs::{self, File, OpenOptions},
+    io::{BufReader, Read, Seek, SeekFrom, Write},
+    path::Path,
+};
 
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
@@ -8,6 +12,7 @@ use rom_weaver_core::{
 
 const PMSR_MAGIC: &[u8; 4] = b"PMSR";
 const PMSR_HEADER_SIZE: usize = 8;
+const PMSR_IO_BUFFER_SIZE: usize = 64 * 1024;
 
 pub struct PmsrPatchHandler {
     descriptor: &'static FormatDescriptor,
@@ -57,13 +62,20 @@ impl PatchHandler for PmsrPatchHandler {
         }
 
         let patch = parse_pmsr_file(&request.patches[0])?;
-        let source = fs::read(&request.input)?;
-        let output = apply_pmsr_patch(&patch, &source)?;
+        let source_len = fs::metadata(&request.input)?.len();
+        let output_len = patch.min_target_size.max(source_len);
 
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
         }
-        fs::write(&request.output, output)?;
+        fs::copy(&request.input, &request.output)?;
+        let mut output = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&request.output)?;
+        output.set_len(output_len)?;
+        apply_pmsr_patch_in_place(&patch, output_len, &mut output)?;
+        output.flush()?;
 
         let execution = context.plan_threads(ThreadCapability::single_threaded());
         Ok(OperationReport::succeeded(
@@ -86,9 +98,7 @@ impl PatchHandler for PmsrPatchHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let execution = context.plan_threads(ThreadCapability::single_threaded());
-        let original = fs::read(&request.original)?;
-        let modified = fs::read(&request.modified)?;
-        let patch = create_pmsr_patch_bytes(&original, &modified)?;
+        let patch = create_pmsr_patch_streaming(&request.original, &request.modified)?;
 
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
@@ -292,6 +302,158 @@ fn create_pmsr_patch_bytes(original: &[u8], modified: &[u8]) -> Result<CreatedPm
     bytes.extend_from_slice(PMSR_MAGIC);
     bytes.extend_from_slice(&record_count_u32.to_be_bytes());
 
+    for record in &records {
+        let offset_u32 = u32::try_from(record.offset).map_err(|_| {
+            RomWeaverError::Validation("MOD record offset exceeded 32-bit range".into())
+        })?;
+        let length_u32 = u32::try_from(record.data.len()).map_err(|_| {
+            RomWeaverError::Validation("MOD record length exceeded 32-bit range".into())
+        })?;
+        bytes.extend_from_slice(&offset_u32.to_be_bytes());
+        bytes.extend_from_slice(&length_u32.to_be_bytes());
+        bytes.extend_from_slice(&record.data);
+    }
+
+    Ok(CreatedPmsrPatch {
+        bytes,
+        record_count,
+    })
+}
+
+fn apply_pmsr_patch_in_place(
+    patch: &ParsedPmsrPatch,
+    output_len: u64,
+    output: &mut File,
+) -> Result<()> {
+    for record in &patch.records {
+        let end = checked_add(
+            record.offset,
+            u64::try_from(record.data.len())
+                .map_err(|_| RomWeaverError::Validation("MOD record length exceeded u64".into()))?,
+            "MOD record end",
+        )?;
+        if end > output_len {
+            return Err(RomWeaverError::Validation(
+                "MOD record exceeded declared output size".into(),
+            ));
+        }
+        if record.data.is_empty() {
+            continue;
+        }
+        output.seek(SeekFrom::Start(record.offset))?;
+        output.write_all(&record.data)?;
+    }
+    Ok(())
+}
+
+fn create_pmsr_patch_streaming(
+    original_path: &Path,
+    modified_path: &Path,
+) -> Result<CreatedPmsrPatch> {
+    let original_len = fs::metadata(original_path)?.len();
+    let modified_len = fs::metadata(modified_path)?.len();
+    if modified_len < original_len {
+        return Err(RomWeaverError::Validation(format!(
+            "MOD create does not support shrinking outputs (original: {}, modified: {})",
+            original_len, modified_len,
+        )));
+    }
+
+    let mut original = BufReader::new(File::open(original_path)?);
+    let mut modified = BufReader::new(File::open(modified_path)?);
+    let mut original_remaining = original_len;
+    let mut modified_remaining = modified_len;
+    let mut source_buffer = vec![0u8; PMSR_IO_BUFFER_SIZE];
+    let mut target_buffer = vec![0u8; PMSR_IO_BUFFER_SIZE];
+    let mut records = Vec::<PmsrRecord>::new();
+    let mut offset = 0u64;
+
+    let mut pending_start: Option<u64> = None;
+    let mut pending_data = Vec::<u8>::new();
+
+    while modified_remaining > 0 {
+        let chunk_len = usize::try_from(modified_remaining.min(PMSR_IO_BUFFER_SIZE as u64))
+            .map_err(|_| RomWeaverError::Validation("MOD chunk length exceeded usize".into()))?;
+        let source_chunk_len =
+            usize::try_from(original_remaining.min(chunk_len as u64)).map_err(|_| {
+                RomWeaverError::Validation("MOD source chunk length exceeded usize".into())
+            })?;
+
+        if source_chunk_len > 0 {
+            original.read_exact(&mut source_buffer[..source_chunk_len])?;
+        }
+        modified.read_exact(&mut target_buffer[..chunk_len])?;
+
+        for index in 0..chunk_len {
+            let source_byte = if index < source_chunk_len {
+                source_buffer[index]
+            } else {
+                0
+            };
+            let target_byte = target_buffer[index];
+            if source_byte == target_byte {
+                if !pending_data.is_empty() {
+                    let start = pending_start.expect("pending start exists");
+                    records.push(PmsrRecord {
+                        offset: start,
+                        data: std::mem::take(&mut pending_data),
+                    });
+                    pending_start = None;
+                }
+            } else {
+                if pending_start.is_none() {
+                    pending_start = Some(offset);
+                }
+                pending_data.push(target_byte);
+            }
+            offset = checked_add(offset, 1, "MOD scan offset")?;
+        }
+
+        original_remaining = original_remaining.saturating_sub(source_chunk_len as u64);
+        modified_remaining = modified_remaining
+            .checked_sub(chunk_len as u64)
+            .ok_or_else(|| RomWeaverError::Validation("MOD remaining underflowed".into()))?;
+    }
+
+    if !pending_data.is_empty() {
+        let start = pending_start.expect("pending start exists");
+        records.push(PmsrRecord {
+            offset: start,
+            data: pending_data,
+        });
+    }
+
+    let max_record_end = records.iter().try_fold(0u64, |current_max, record| {
+        let data_len = u64::try_from(record.data.len())
+            .map_err(|_| RomWeaverError::Validation("MOD record length exceeded u64".into()))?;
+        let end = checked_add(record.offset, data_len, "MOD record end")?;
+        Ok::<u64, RomWeaverError>(current_max.max(end))
+    })?;
+    if modified_len > max_record_end {
+        records.push(PmsrRecord {
+            offset: modified_len,
+            data: Vec::new(),
+        });
+    }
+
+    let record_count = records.len();
+    let record_count_u32 = u32::try_from(record_count).map_err(|_| {
+        RomWeaverError::Validation("MOD record count exceeded encodable range".into())
+    })?;
+    let payload_capacity = records.iter().try_fold(0usize, |accumulator, record| {
+        let next = accumulator
+            .checked_add(8)
+            .and_then(|value| value.checked_add(record.data.len()))
+            .ok_or_else(|| {
+                RomWeaverError::Validation("MOD patch size exceeded addressable memory".into())
+            })?;
+        Ok::<usize, RomWeaverError>(next)
+    })?;
+    let mut bytes = Vec::with_capacity(PMSR_HEADER_SIZE.checked_add(payload_capacity).ok_or_else(
+        || RomWeaverError::Validation("MOD patch size exceeded addressable memory".into()),
+    )?);
+    bytes.extend_from_slice(PMSR_MAGIC);
+    bytes.extend_from_slice(&record_count_u32.to_be_bytes());
     for record in &records {
         let offset_u32 = u32::try_from(record.offset).map_err(|_| {
             RomWeaverError::Validation("MOD record offset exceeded 32-bit range".into())

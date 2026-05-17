@@ -1678,6 +1678,7 @@ version = "0.1.0"
 dependencies = [
  "crc32fast",
  "md-5",
+ "memmap2",
  "qbsdiff",
  "rayon",
  "rom-weaver-checksum",

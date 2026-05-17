@@ -1,5 +1,9 @@
-use std::{fs, path::Path};
+use std::{
+    fs::{self, File},
+    path::Path,
+};
 
+use memmap2::{Mmap, MmapOptions};
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
     PatchCapabilities, PatchCreateRequest, PatchHandler, ProbeConfidence, Result, RomWeaverError,
@@ -87,8 +91,8 @@ impl PatchHandler for DldiPatchHandler {
         }
 
         let patch = fs::read(&request.patches[0])?;
-        let input = fs::read(&request.input)?;
-        let apply = apply_dldi_patch(&input, &patch)?;
+        let input = map_file_read_only(&request.input)?;
+        let apply = apply_dldi_patch(input.as_ref(), &patch)?;
 
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
@@ -115,15 +119,15 @@ impl PatchHandler for DldiPatchHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let execution = context.plan_threads(ThreadCapability::single_threaded());
-        let original = fs::read(&request.original)?;
-        let modified = fs::read(&request.modified)?;
+        let original = map_file_read_only(&request.original)?;
+        let modified = map_file_read_only(&request.modified)?;
 
-        let original_slot = find_dldi_slot(&original).ok_or_else(|| {
+        let original_slot = find_dldi_slot(original.as_ref()).ok_or_else(|| {
             RomWeaverError::Validation(
                 "original input does not contain a patchable DLDI section".into(),
             )
         })?;
-        let modified_slot = find_dldi_slot(&modified).ok_or_else(|| {
+        let modified_slot = find_dldi_slot(modified.as_ref()).ok_or_else(|| {
             RomWeaverError::Validation(
                 "modified input does not contain a patchable DLDI section".into(),
             )
@@ -135,7 +139,8 @@ impl PatchHandler for DldiPatchHandler {
             )));
         }
 
-        let modified_header = parse_dldi_at(&modified, modified_slot, "modified DLDI section")?;
+        let modified_header =
+            parse_dldi_at(modified.as_ref(), modified_slot, "modified DLDI section")?;
         let modified_slot_end = modified_slot
             .checked_add(modified_header.driver_size_bytes)
             .ok_or_else(|| {
@@ -152,8 +157,8 @@ impl PatchHandler for DldiPatchHandler {
 
         // DLDI create is defined as extracting the relocated driver bytes from `modified`.
         // Validate determinism by replaying that patch against `original`.
-        let replay = apply_dldi_patch(&original, &patch_bytes)?;
-        if replay.output != modified {
+        let replay = apply_dldi_patch(original.as_ref(), &patch_bytes)?;
+        if replay.output != modified.as_ref() {
             return Err(RomWeaverError::Validation(
                 "modified input is not representable as a pure DLDI patch over original".into(),
             ));
@@ -537,6 +542,13 @@ fn find_dldi_slot(input: &[u8]) -> Option<usize> {
     input
         .windows(DLDI_MAGIC.len())
         .position(|window| window == DLDI_MAGIC)
+}
+
+fn map_file_read_only(path: &Path) -> Result<Mmap> {
+    let file = File::open(path)?;
+    // SAFETY: This mapping is read-only and the file handle lives through map creation.
+    let map = unsafe { MmapOptions::new().map(&file)? };
+    Ok(map)
 }
 
 #[cfg(test)]

@@ -1,4 +1,8 @@
-use std::{fs, path::Path};
+use std::{
+    fs::{self, File, OpenOptions},
+    io::{BufReader, Read, Seek, SeekFrom, Write},
+    path::Path,
+};
 
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
@@ -11,6 +15,7 @@ const APS_GBA_HEADER_SIZE: usize = 12;
 const APS_GBA_BLOCK_SIZE: usize = 0x01_0000;
 const APS_GBA_RECORD_SIZE: usize = 4 + 2 + 2 + APS_GBA_BLOCK_SIZE;
 const CRC16_POLYNOMIAL: u16 = 0x1021;
+const APS_GBA_IO_BUFFER_SIZE: usize = 64 * 1024;
 
 pub struct ApsGbaPatchHandler {
     descriptor: &'static FormatDescriptor,
@@ -64,20 +69,27 @@ impl PatchHandler for ApsGbaPatchHandler {
         let patch = parse_apsgba_file(&request.patches[0])?;
         let validate_checksums =
             context.patch_checksum_validation() == PatchChecksumValidation::Strict;
-        let source = fs::read(&request.input)?;
-        let expected_input_size = usize::try_from(patch.source_size).expect("u32 fits usize");
-        if source.len() != expected_input_size {
+        let expected_input_size = u64::from(patch.source_size);
+        let actual_input_size = fs::metadata(&request.input)?.len();
+        if actual_input_size != expected_input_size {
             return Err(RomWeaverError::Validation(format!(
                 "APSGBA input size invalid; expected {expected_input_size}, got {}",
-                source.len()
+                actual_input_size
             )));
         }
 
-        let output = apply_apsgba_patch(&patch, &source, validate_checksums)?;
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
         }
-        fs::write(&request.output, output)?;
+        fs::copy(&request.input, &request.output)?;
+        let mut source = File::open(&request.input)?;
+        let mut output = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&request.output)?;
+        output.set_len(u64::from(patch.target_size))?;
+        apply_apsgba_patch_in_place(&patch, &mut source, &mut output, validate_checksums)?;
+        output.flush()?;
 
         let execution = context.plan_threads(ThreadCapability::single_threaded());
         let checksum_suffix = if validate_checksums {
@@ -106,14 +118,11 @@ impl PatchHandler for ApsGbaPatchHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let execution = context.plan_threads(ThreadCapability::single_threaded());
-        let source = fs::read(&request.original)?;
-        let target = fs::read(&request.modified)?;
-
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
         }
 
-        let created = create_apsgba_patch_bytes(&source, &target)?;
+        let created = create_apsgba_patch_streaming(&request.original, &request.modified)?;
         fs::write(&request.output, created.bytes)?;
 
         Ok(OperationReport::succeeded(
@@ -333,6 +342,176 @@ fn create_apsgba_patch_bytes(source: &[u8], target: &[u8]) -> Result<CreatedApsG
         bytes,
         record_count: records.len(),
     })
+}
+
+fn apply_apsgba_patch_in_place(
+    patch: &ParsedApsGbaPatch,
+    source: &mut File,
+    output: &mut File,
+    validate_checksums: bool,
+) -> Result<()> {
+    let output_len = usize::try_from(patch.target_size).expect("u32 fits usize");
+    let mut source_block = vec![0u8; APS_GBA_BLOCK_SIZE];
+    let mut patched_block = vec![0u8; APS_GBA_BLOCK_SIZE];
+
+    for record in &patch.records {
+        let offset = usize::try_from(record.offset).expect("u32 fits usize");
+        let source_len = read_at_most(source, u64::from(record.offset), &mut source_block)?;
+
+        if validate_checksums {
+            let actual_source_crc16 = crc16_bytes(&source_block[..source_len]);
+            if actual_source_crc16 != record.source_crc16 {
+                return Err(RomWeaverError::Validation(format!(
+                    "Source checksum invalid at offset {offset}; expected: {:04x}, Actual: {:04x}",
+                    record.source_crc16, actual_source_crc16
+                )));
+            }
+        }
+
+        let write_len = output_len.saturating_sub(offset).min(APS_GBA_BLOCK_SIZE);
+        for index in 0..write_len {
+            let source_byte = if index < source_len {
+                source_block[index]
+            } else {
+                0
+            };
+            patched_block[index] = source_byte ^ record.xor_bytes[index];
+        }
+
+        if write_len > 0 {
+            output.seek(SeekFrom::Start(u64::from(record.offset)))?;
+            output.write_all(&patched_block[..write_len])?;
+        }
+
+        if validate_checksums {
+            let actual_target_crc16 = crc16_bytes(&patched_block[..write_len]);
+            if actual_target_crc16 != record.target_crc16 {
+                return Err(RomWeaverError::Validation(format!(
+                    "Target checksum invalid at offset {offset}; expected: {:04x}, Actual: {:04x}",
+                    record.target_crc16, actual_target_crc16
+                )));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn create_apsgba_patch_streaming(
+    source_path: &Path,
+    target_path: &Path,
+) -> Result<CreatedApsGbaPatch> {
+    let source_size_u64 = fs::metadata(source_path)?.len();
+    let target_size_u64 = fs::metadata(target_path)?.len();
+    let source_size = u32::try_from(source_size_u64).map_err(|_| {
+        RomWeaverError::Validation("APSGBA source size exceeded 32-bit header range".into())
+    })?;
+    let target_size = u32::try_from(target_size_u64).map_err(|_| {
+        RomWeaverError::Validation("APSGBA target size exceeded 32-bit header range".into())
+    })?;
+
+    let mut source = BufReader::new(File::open(source_path)?);
+    let mut target = BufReader::new(File::open(target_path)?);
+    let mut source_remaining = source_size_u64;
+    let mut target_remaining = target_size_u64;
+    let max_len = source_size_u64.max(target_size_u64);
+    let block_count = max_len.div_ceil(APS_GBA_BLOCK_SIZE as u64);
+
+    let mut source_buffer = vec![0u8; APS_GBA_BLOCK_SIZE];
+    let mut target_buffer = vec![0u8; APS_GBA_BLOCK_SIZE];
+    let mut xor_bytes = vec![0u8; APS_GBA_BLOCK_SIZE];
+    let mut records = Vec::new();
+
+    for block_index in 0..block_count {
+        let source_chunk_len = usize::try_from(source_remaining.min(APS_GBA_IO_BUFFER_SIZE as u64))
+            .map_err(|_| {
+                RomWeaverError::Validation("APSGBA source chunk length exceeded usize".into())
+            })?;
+        let target_chunk_len = usize::try_from(target_remaining.min(APS_GBA_IO_BUFFER_SIZE as u64))
+            .map_err(|_| {
+                RomWeaverError::Validation("APSGBA target chunk length exceeded usize".into())
+            })?;
+
+        if source_chunk_len > 0 {
+            source.read_exact(&mut source_buffer[..source_chunk_len])?;
+        }
+        if target_chunk_len > 0 {
+            target.read_exact(&mut target_buffer[..target_chunk_len])?;
+        }
+
+        let source_crc16 = crc16_bytes(&source_buffer[..source_chunk_len]);
+        let target_crc16 = crc16_bytes(&target_buffer[..target_chunk_len]);
+        let mut changed = false;
+        for (index, xor_byte) in xor_bytes.iter_mut().enumerate() {
+            let source_byte = if index < source_chunk_len {
+                source_buffer[index]
+            } else {
+                0
+            };
+            let target_byte = if index < target_chunk_len {
+                target_buffer[index]
+            } else {
+                0
+            };
+            *xor_byte = source_byte ^ target_byte;
+            changed |= *xor_byte != 0;
+        }
+
+        if changed {
+            let record_offset =
+                u32::try_from(block_index * APS_GBA_BLOCK_SIZE as u64).map_err(|_| {
+                    RomWeaverError::Validation("APSGBA block offset exceeded 32-bit range".into())
+                })?;
+            records.push(ApsGbaRecord {
+                offset: record_offset,
+                source_crc16,
+                target_crc16,
+                xor_bytes: xor_bytes.clone(),
+            });
+        }
+
+        source_remaining = source_remaining.saturating_sub(source_chunk_len as u64);
+        target_remaining = target_remaining.saturating_sub(target_chunk_len as u64);
+    }
+
+    if records.is_empty() {
+        records.push(ApsGbaRecord {
+            offset: 0,
+            source_crc16: crc16_bytes(&[]),
+            target_crc16: crc16_bytes(&[]),
+            xor_bytes: vec![0u8; APS_GBA_BLOCK_SIZE],
+        });
+    }
+
+    let mut bytes = Vec::with_capacity(APS_GBA_HEADER_SIZE + records.len() * APS_GBA_RECORD_SIZE);
+    bytes.extend_from_slice(APS_GBA_MAGIC);
+    bytes.extend_from_slice(&source_size.to_le_bytes());
+    bytes.extend_from_slice(&target_size.to_le_bytes());
+
+    for record in &records {
+        bytes.extend_from_slice(&record.offset.to_le_bytes());
+        bytes.extend_from_slice(&record.source_crc16.to_le_bytes());
+        bytes.extend_from_slice(&record.target_crc16.to_le_bytes());
+        bytes.extend_from_slice(&record.xor_bytes);
+    }
+
+    Ok(CreatedApsGbaPatch {
+        bytes,
+        record_count: records.len(),
+    })
+}
+
+fn read_at_most(file: &mut File, offset: u64, buffer: &mut [u8]) -> Result<usize> {
+    file.seek(SeekFrom::Start(offset))?;
+    let mut total = 0usize;
+    while total < buffer.len() {
+        let read = file.read(&mut buffer[total..])?;
+        if read == 0 {
+            break;
+        }
+        total += read;
+    }
+    Ok(total)
 }
 
 fn crc16_range(bytes: &[u8], offset: usize, len: usize) -> u16 {

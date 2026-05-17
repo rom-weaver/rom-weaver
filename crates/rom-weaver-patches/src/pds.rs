@@ -1,11 +1,12 @@
 use std::{
     collections::BTreeMap,
     fs::{self, File},
-    io::{Cursor, Read, Write},
+    io::{BufWriter, Cursor, Read, Write},
     path::Path,
 };
 
 use crc32fast::Hasher;
+use memmap2::{Mmap, MmapOptions};
 use qbsdiff::{Bsdiff, Bspatch, ParallelScheme};
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
@@ -108,15 +109,17 @@ impl PatchHandler for PdsPatchHandler {
             context.patch_checksum_validation() == PatchChecksumValidation::Strict;
 
         let payload = read_named_payload(&request.patches[0], &payload_name)?;
-        let input = fs::read(&request.input)?;
-        validate_source_expectations(&parsed.manifest, &input, validate_checksums)?;
-        let output = apply_bdf_payload(&input, &payload)?;
-        validate_target_expectations(&parsed.manifest, &output, validate_checksums)?;
+        let input = map_file_read_only(&request.input)?;
+        validate_source_expectations_path(&parsed.manifest, &request.input, validate_checksums)?;
 
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
         }
-        fs::write(&request.output, &output)?;
+        let output_file = File::create(&request.output)?;
+        let mut output = BufWriter::new(output_file);
+        apply_bdf_payload_to_writer(input.as_ref(), &payload, &mut output)?;
+        output.flush()?;
+        validate_target_expectations_path(&parsed.manifest, &request.output, validate_checksums)?;
 
         let execution = context.plan_threads(ThreadCapability::single_threaded());
         let checksum_suffix = if validate_checksums {
@@ -142,25 +145,17 @@ impl PatchHandler for PdsPatchHandler {
         request: &PatchCreateRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        let source = fs::read(&request.original)?;
+        let source = map_file_read_only(&request.original)?;
         if source.len() > qbsdiff::bsdiff::MAX_LENGTH {
             return Err(RomWeaverError::Validation(format!(
                 "PDS source exceeds maximum supported size of {} byte(s)",
                 qbsdiff::bsdiff::MAX_LENGTH
             )));
         }
-        let target = fs::read(&request.modified)?;
+        let target = map_file_read_only(&request.modified)?;
         let (execution, pool) = context.build_pool(qbsdiff_thread_capability(target.len()))?;
         let parallel_scheme = qbsdiff_parallel_scheme(target.len());
-
-        let mut payload = Vec::new();
-        pool.install(|| {
-            Bsdiff::new(&source, &target)
-                .parallel_scheme(parallel_scheme)
-                .compare(Cursor::new(&mut payload))
-        })?;
-
-        let manifest = build_manifest(&source, &target, PDS_DEFAULT_PAYLOAD_NAME);
+        let manifest = build_manifest(source.as_ref(), target.as_ref(), PDS_DEFAULT_PAYLOAD_NAME);
 
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
@@ -184,7 +179,11 @@ impl PatchHandler for PdsPatchHandler {
                     "PDS archive could not write `{PDS_DEFAULT_PAYLOAD_NAME}`: {error}"
                 ))
             })?;
-        archive.write_all(&payload)?;
+        pool.install(|| {
+            Bsdiff::new(source.as_ref(), target.as_ref())
+                .parallel_scheme(parallel_scheme)
+                .compare(&mut archive)
+        })?;
         archive.finish().map_err(|error| {
             RomWeaverError::Validation(format!("PDS archive could not be finalized: {error}"))
         })?;
@@ -194,9 +193,8 @@ impl PatchHandler for PdsPatchHandler {
             Some(self.descriptor.name.to_string()),
             "create",
             format!(
-                "created PDS patch with BSDIFF40 payload `{}` ({} byte(s))",
-                PDS_DEFAULT_PAYLOAD_NAME,
-                payload.len()
+                "created PDS patch with BSDIFF40 payload `{}`",
+                PDS_DEFAULT_PAYLOAD_NAME
             ),
             Some(100.0),
             Some(execution),
@@ -521,6 +519,43 @@ fn validate_source_expectations(
     Ok(())
 }
 
+fn validate_source_expectations_path(
+    manifest: &PdsManifest,
+    source_path: &Path,
+    validate_checksums: bool,
+) -> Result<()> {
+    if let Some(expected_size) = manifest.source_size {
+        let actual_size = fs::metadata(source_path)?.len();
+        if expected_size != actual_size {
+            return Err(RomWeaverError::Validation(format!(
+                "PDS source size mismatch: expected {expected_size}, actual {actual_size}"
+            )));
+        }
+    }
+
+    if validate_checksums {
+        if let Some(expected_crc) = manifest.source_crc32 {
+            let actual_crc = crc32_path(source_path)?;
+            if expected_crc != actual_crc {
+                return Err(RomWeaverError::Validation(format!(
+                    "PDS source checksum mismatch: expected {:08x}, actual {:08x}",
+                    expected_crc, actual_crc
+                )));
+            }
+        }
+    }
+
+    if let Some(version) = manifest.version {
+        if version != PDS_VERSION {
+            return Err(RomWeaverError::Validation(format!(
+                "PDS manifest version `{version}` is not supported (expected {PDS_VERSION})"
+            )));
+        }
+    }
+
+    Ok(())
+}
+
 fn validate_target_expectations(
     manifest: &PdsManifest,
     target: &[u8],
@@ -538,6 +573,35 @@ fn validate_target_expectations(
     if validate_checksums {
         if let Some(expected_crc) = manifest.target_crc32 {
             let actual_crc = crc32(target);
+            if expected_crc != actual_crc {
+                return Err(RomWeaverError::Validation(format!(
+                    "PDS target checksum mismatch: expected {:08x}, actual {:08x}",
+                    expected_crc, actual_crc
+                )));
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_target_expectations_path(
+    manifest: &PdsManifest,
+    target_path: &Path,
+    validate_checksums: bool,
+) -> Result<()> {
+    if let Some(expected_size) = manifest.target_size {
+        let actual_size = fs::metadata(target_path)?.len();
+        if expected_size != actual_size {
+            return Err(RomWeaverError::Validation(format!(
+                "PDS target size mismatch: expected {expected_size}, actual {actual_size}"
+            )));
+        }
+    }
+
+    if validate_checksums {
+        if let Some(expected_crc) = manifest.target_crc32 {
+            let actual_crc = crc32_path(target_path)?;
             if expected_crc != actual_crc {
                 return Err(RomWeaverError::Validation(format!(
                     "PDS target checksum mismatch: expected {:08x}, actual {:08x}",
@@ -608,10 +672,38 @@ fn apply_bdf_payload(input: &[u8], payload: &[u8]) -> Result<Vec<u8>> {
     Ok(output)
 }
 
+fn apply_bdf_payload_to_writer(
+    input: &[u8],
+    payload: &[u8],
+    output: &mut impl Write,
+) -> Result<()> {
+    let patcher = Bspatch::new(payload).map_err(|error| {
+        RomWeaverError::Validation(format!(
+            "PDS payload patch is not a valid BSDIFF40 stream: {error}"
+        ))
+    })?;
+    patcher.apply(input, output)?;
+    Ok(())
+}
+
 fn crc32(bytes: &[u8]) -> u32 {
     let mut hasher = Hasher::new();
     hasher.update(bytes);
     hasher.finalize()
+}
+
+fn crc32_path(path: &Path) -> Result<u32> {
+    let mut file = File::open(path)?;
+    let mut buffer = vec![0u8; 64 * 1024];
+    let mut hasher = Hasher::new();
+    loop {
+        let read = file.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    Ok(hasher.finalize())
 }
 
 fn open_archive(path: &Path) -> Result<ZipArchive<File>> {
@@ -619,6 +711,13 @@ fn open_archive(path: &Path) -> Result<ZipArchive<File>> {
     ZipArchive::new(file).map_err(|error| {
         RomWeaverError::Validation(format!("PDS patch is not a valid ZIP archive: {error}"))
     })
+}
+
+fn map_file_read_only(path: &Path) -> Result<Mmap> {
+    let file = File::open(path)?;
+    // SAFETY: This mapping is read-only and the file handle lives through map creation.
+    let map = unsafe { MmapOptions::new().map(&file)? };
+    Ok(map)
 }
 
 fn is_manifest_entry(entry_name: &str) -> bool {
