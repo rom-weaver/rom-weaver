@@ -50,7 +50,7 @@ use xdvdfs::{
 };
 use zip::{
     CompressionMethod as ZipCompressionMethod, ZipArchive as ZipFileArchive,
-    ZipWriter as ZipFileWriter, write::SimpleFileOptions as ZipFileOptions,
+    ZipWriter as ZipFileWriter, write::FileOptions as ZipFileOptions,
 };
 use zstd::bulk::compress as zstd_compress;
 #[cfg(not(target_family = "wasm"))]
@@ -62,6 +62,7 @@ const ZIP: FormatDescriptor = FormatDescriptor {
     aliases: &[],
     extensions: &[".zip"],
 };
+#[cfg(not(target_family = "wasm"))]
 const ZIPX: FormatDescriptor = FormatDescriptor {
     family: OperationFamily::Container,
     name: "zipx",
@@ -194,9 +195,15 @@ impl ContainerRegistry {
     pub fn new() -> Self {
         let mut handlers: Vec<Arc<dyn ContainerHandler>> = vec![
             Arc::new(ZipContainerHandler::new(&ZIP, ZipContainerFlavor::Zip)),
-            Arc::new(ZipContainerHandler::new(&ZIPX, ZipContainerFlavor::Zipx)),
             Arc::new(SevenZContainerHandler::new(&SEVEN_Z)),
         ];
+        #[cfg(not(target_family = "wasm"))]
+        {
+            handlers.push(Arc::new(ZipContainerHandler::new(
+                &ZIPX,
+                ZipContainerFlavor::Zipx,
+            )));
+        }
         #[cfg(not(target_family = "wasm"))]
         {
             handlers.push(Arc::new(RarContainerHandler::new(&RAR)));
@@ -520,6 +527,7 @@ fn collect_archive_inputs_from_path(
 #[derive(Clone, Copy, Debug)]
 enum ZipContainerFlavor {
     Zip,
+    #[cfg(not(target_family = "wasm"))]
     Zipx,
 }
 
@@ -538,26 +546,34 @@ impl ZipContainerHandler {
         codec: Option<&str>,
         level: Option<i32>,
     ) -> Result<(ZipCompressionMethod, Option<i32>)> {
+        #[cfg(target_family = "wasm")]
+        let supported = "store and deflate";
+        #[cfg(not(target_family = "wasm"))]
+        let supported = "store, deflate, bzip2, and zstd";
+
         let default = match self.flavor {
             ZipContainerFlavor::Zip => ZipCompressionMethod::Deflated,
+            #[cfg(not(target_family = "wasm"))]
             ZipContainerFlavor::Zipx => ZipCompressionMethod::Zstd,
         };
         let method = match parse_requested_codec(codec) {
             RequestedCodec::Unspecified => default,
             RequestedCodec::Known(CanonicalCodec::Store) => ZipCompressionMethod::Stored,
             RequestedCodec::Known(CanonicalCodec::Deflate) => ZipCompressionMethod::Deflated,
+            #[cfg(not(target_family = "wasm"))]
             RequestedCodec::Known(CanonicalCodec::Bzip2) => ZipCompressionMethod::Bzip2,
+            #[cfg(not(target_family = "wasm"))]
             RequestedCodec::Known(CanonicalCodec::Zstd) => ZipCompressionMethod::Zstd,
             RequestedCodec::Known(codec) => {
                 return Err(RomWeaverError::Validation(format!(
-                    "unsupported {} codec `{}`; supported codecs are store, deflate, bzip2, and zstd",
+                    "unsupported {} codec `{}`; supported codecs are {supported}",
                     self.descriptor.name,
                     codec.name()
                 )));
             }
             RequestedCodec::Unknown(name) => {
                 return Err(RomWeaverError::Validation(format!(
-                    "unsupported {} codec `{name}`; supported codecs are store, deflate, bzip2, and zstd",
+                    "unsupported {} codec `{name}`; supported codecs are {supported}",
                     self.descriptor.name
                 )));
             }
@@ -566,9 +582,13 @@ impl ZipContainerHandler {
         if let Some(level) = level {
             let in_range = match method {
                 ZipCompressionMethod::Stored => false,
+                #[cfg(not(target_family = "wasm"))]
                 ZipCompressionMethod::Deflated | ZipCompressionMethod::Bzip2 => {
                     (0..=9).contains(&level)
                 }
+                #[cfg(target_family = "wasm")]
+                ZipCompressionMethod::Deflated => (0..=9).contains(&level),
+                #[cfg(not(target_family = "wasm"))]
                 ZipCompressionMethod::Zstd => (-7..=22).contains(&level),
                 _ => false,
             };
@@ -595,7 +615,9 @@ impl ZipContainerHandler {
         match method {
             ZipCompressionMethod::Stored => "store",
             ZipCompressionMethod::Deflated => "deflate",
+            #[cfg(not(target_family = "wasm"))]
             ZipCompressionMethod::Bzip2 => "bzip2",
+            #[cfg(not(target_family = "wasm"))]
             ZipCompressionMethod::Zstd => "zstd",
             _ => "unknown",
         }
@@ -604,7 +626,7 @@ impl ZipContainerHandler {
     fn build_options(&self, method: ZipCompressionMethod, level: Option<i32>) -> ZipFileOptions {
         ZipFileOptions::default()
             .compression_method(method)
-            .compression_level(level.map(i64::from))
+            .compression_level(level)
     }
 
     fn open_archive(&self, source: &Path) -> Result<ZipFileArchive<BufReader<File>>> {
@@ -7576,7 +7598,7 @@ mod tests {
         assert_eq!(
             names,
             vec![
-                "zip", "zipx", "7z", "rar", "tar", "tar.gz", "tar.bz2", "tar.xz", "gz", "bz2",
+                "zip", "7z", "zipx", "rar", "tar", "tar.gz", "tar.bz2", "tar.xz", "gz", "bz2",
                 "xz", "zst", "cso", "chd", "wua", "gcz", "rvz", "z3ds", "xiso"
             ]
         );
