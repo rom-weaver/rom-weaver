@@ -149,6 +149,12 @@ pub struct ContainerRegistry {
     handlers: Vec<Arc<dyn ContainerHandler>>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CompressFormatRecommendation {
+    pub format_name: &'static str,
+    pub reason: &'static str,
+}
+
 impl Default for ContainerRegistry {
     fn default() -> Self {
         Self::new()
@@ -211,6 +217,25 @@ impl ContainerRegistry {
             .iter()
             .find(|handler| handler.descriptor().matches_name(name))
             .cloned()
+    }
+
+    pub fn recommend_compress_format(&self, path: &Path) -> CompressFormatRecommendation {
+        let mut options = NodDiscOptions::default();
+        options.preloader_threads = 0;
+        if let Ok(disc) = NodDiscReader::new(path, &options) {
+            let header = disc.header();
+            if header.is_wii() || header.is_gamecube() {
+                return CompressFormatRecommendation {
+                    format_name: RVZ.name,
+                    reason: "wii-gc-disc",
+                };
+            }
+        }
+
+        CompressFormatRecommendation {
+            format_name: CHD.name,
+            reason: "not-wii-gc-or-unrecognized",
+        }
     }
 }
 
@@ -3519,10 +3544,13 @@ impl ContainerHandler for RvzContainerHandler {
         })?;
 
         let mut output = File::create(&request.output)?;
+        let mut process_options = NodProcessOptions::default();
+        process_options.processor_threads =
+            self.negotiated_threads(execution.used_parallelism, execution.effective_threads);
         let finalization = writer
             .process(
                 |data, _processed, _total| output.write_all(data.as_ref()),
-                &NodProcessOptions::default(),
+                &process_options,
             )
             .map_err(|error| RomWeaverError::Validation(format!("rvz create failed: {error}")))?;
         if !finalization.header.is_empty() {
@@ -6791,6 +6819,19 @@ mod tests {
         ))
     }
 
+    fn build_test_gamecube_iso(payload_len: usize) -> Vec<u8> {
+        let total_len = (0x440 + payload_len).max(0x440);
+        let mut bytes = vec![0_u8; total_len];
+        bytes[..6].copy_from_slice(b"RWTEST");
+        bytes[0x1C..0x20].copy_from_slice(&[0xC2, 0x33, 0x9F, 0x3D]);
+        let title = b"rom-weaver-test\0";
+        bytes[0x20..0x20 + title.len()].copy_from_slice(title);
+        for (index, byte) in bytes[0x440..].iter_mut().enumerate() {
+            *byte = (index % 251) as u8;
+        }
+        bytes
+    }
+
     #[test]
     fn registry_contains_planned_formats() {
         let registry = ContainerRegistry::new();
@@ -6901,6 +6942,32 @@ mod tests {
         let registry = ContainerRegistry::new();
         let handler = registry.probe(&path).expect("wua probe");
         assert_eq!(handler.descriptor().name, "wua");
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn recommend_compress_format_returns_rvz_for_gamecube_wii_discs() {
+        let path = temp_file_path_with_extension("recommend-rvz", "iso");
+        fs::write(&path, build_test_gamecube_iso(64 * 1024)).expect("fixture");
+
+        let registry = ContainerRegistry::new();
+        let recommendation = registry.recommend_compress_format(&path);
+        assert_eq!(recommendation.format_name, "rvz");
+        assert_eq!(recommendation.reason, "wii-gc-disc");
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn recommend_compress_format_returns_chd_for_unrecognized_inputs() {
+        let path = temp_file_path_with_extension("recommend-chd", "bin");
+        fs::write(&path, b"not-a-disc").expect("fixture");
+
+        let registry = ContainerRegistry::new();
+        let recommendation = registry.recommend_compress_format(&path);
+        assert_eq!(recommendation.format_name, "chd");
+        assert_eq!(recommendation.reason, "not-wii-gc-or-unrecognized");
 
         let _ = fs::remove_file(path);
     }

@@ -17,13 +17,25 @@ use nod::{
 };
 use serde_json::Value;
 
-fn parse_single_json_line(output: &[u8]) -> Value {
+fn parse_json_lines(output: &[u8]) -> Vec<Value> {
     let text = String::from_utf8(output.to_vec()).expect("utf8 stdout");
-    let line = text
-        .lines()
-        .find(|line| !line.trim().is_empty())
-        .expect("json line");
-    serde_json::from_str(line).expect("valid json")
+    text.lines()
+        .filter_map(|line| {
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(serde_json::from_str(trimmed).expect("valid json"))
+            }
+        })
+        .collect()
+}
+
+fn parse_single_json_line(output: &[u8]) -> Value {
+    parse_json_lines(output)
+        .into_iter()
+        .last()
+        .expect("json line")
 }
 
 fn label_digest_value<'a>(label: &'a str, key: &str) -> Option<&'a str> {
@@ -558,6 +570,153 @@ fn build_nds_with_dldi_slot(
 }
 
 #[test]
+fn json_mode_emits_running_progress_before_terminal_status() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("sample.bin").path(), b"progress-check").expect("fixture");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "checksum",
+            temp.child("sample.bin").path().to_str().expect("path"),
+            "--algo",
+            "crc32",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let events = parse_json_lines(&output);
+    assert!(
+        events.len() >= 2,
+        "expected at least one running event and one terminal event"
+    );
+    assert_eq!(events[0]["command"], "checksum");
+    assert_eq!(events[0]["status"], "running");
+
+    let terminal = events.last().expect("terminal event");
+    assert_eq!(terminal["command"], "checksum");
+    assert_eq!(terminal["status"], "succeeded");
+}
+
+#[test]
+fn terminal_progress_percent_uses_100_scale_for_core_commands() {
+    let temp = setup_temp_dir();
+    let input = temp.child("input.bin");
+    let archive = temp.child("archive.zip");
+    let extract_dir = temp.child("extract");
+    let original = temp.child("original.bin");
+    let modified = temp.child("modified.bin");
+    let patch = temp.child("update.ips");
+    let applied = temp.child("applied.bin");
+
+    fs::write(input.path(), b"progress-check").expect("fixture");
+    fs::write(original.path(), b"abcdefgh").expect("fixture");
+    fs::write(modified.path(), b"a1XYZf!!!").expect("fixture");
+
+    let compress_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            input.path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            archive.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let compress_terminal = parse_json_lines(&compress_output)
+        .into_iter()
+        .last()
+        .expect("compress terminal event");
+    assert_eq!(compress_terminal["command"], "compress");
+    assert_eq!(compress_terminal["status"], "succeeded");
+    assert_eq!(compress_terminal["percent"], 100.0);
+
+    let extract_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "extract",
+            archive.path().to_str().expect("path"),
+            "--out-dir",
+            extract_dir.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let extract_terminal = parse_json_lines(&extract_output)
+        .into_iter()
+        .last()
+        .expect("extract terminal event");
+    assert_eq!(extract_terminal["command"], "extract");
+    assert_eq!(extract_terminal["status"], "succeeded");
+    assert_eq!(extract_terminal["percent"], 100.0);
+
+    let patch_create_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--format",
+            "ips",
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let patch_create_terminal = parse_json_lines(&patch_create_output)
+        .into_iter()
+        .last()
+        .expect("patch-create terminal event");
+    assert_eq!(patch_create_terminal["command"], "patch-create");
+    assert_eq!(patch_create_terminal["status"], "succeeded");
+    assert_eq!(patch_create_terminal["percent"], 100.0);
+
+    let patch_apply_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            applied.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let patch_apply_terminal = parse_json_lines(&patch_apply_output)
+        .into_iter()
+        .last()
+        .expect("patch-apply terminal event");
+    assert_eq!(patch_apply_terminal["command"], "patch-apply");
+    assert_eq!(patch_apply_terminal["status"], "succeeded");
+    assert_eq!(patch_apply_terminal["percent"], 100.0);
+}
+
+#[test]
 fn inspect_reports_known_container_as_supported() {
     let temp = setup_temp_dir();
     temp.child("sample.bin")
@@ -593,6 +752,9 @@ fn inspect_reports_known_container_as_supported() {
     assert_eq!(json["family"], "container");
     assert_eq!(json["format"], "zip");
     assert_eq!(json["status"], "succeeded");
+    let label = json["label"].as_str().expect("label");
+    assert!(label.contains("recommended_compress_format=chd"));
+    assert!(label.contains("reason=not-wii-gc-or-unrecognized"));
 }
 
 #[test]
@@ -1027,6 +1189,148 @@ fn compress_routes_through_registered_container_format() {
     assert_eq!(json["format"], "zip");
     assert_eq!(json["status"], "succeeded");
     assert!(output_path.path().exists());
+}
+
+#[test]
+fn compress_without_format_auto_selects_rvz_for_disc_like_inputs() {
+    let temp = setup_temp_dir();
+    fs::write(
+        temp.child("source.iso").path(),
+        build_test_gamecube_iso(512 * 1024),
+    )
+    .expect("fixture");
+    let output_path = temp.child("out.rvz");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("source.iso").path().to_str().expect("path"),
+            "--output",
+            output_path.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "compress");
+    assert_eq!(json["family"], "container");
+    assert_eq!(json["format"], "rvz");
+    assert_eq!(json["status"], "succeeded");
+    let label = json["label"].as_str().expect("label");
+    assert!(label.contains("auto format=rvz"));
+    assert!(label.contains("reason=wii-gc-disc"));
+    assert!(output_path.path().exists());
+}
+
+#[test]
+fn compress_with_explicit_auto_format_selects_rvz_for_disc_like_inputs() {
+    let temp = setup_temp_dir();
+    fs::write(
+        temp.child("source.iso").path(),
+        build_test_gamecube_iso(512 * 1024),
+    )
+    .expect("fixture");
+    let output_path = temp.child("out.rvz");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("source.iso").path().to_str().expect("path"),
+            "--format",
+            "auto",
+            "--output",
+            output_path.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "compress");
+    assert_eq!(json["family"], "container");
+    assert_eq!(json["format"], "rvz");
+    assert_eq!(json["status"], "succeeded");
+    let label = json["label"].as_str().expect("label");
+    assert!(label.contains("auto format=rvz"));
+    assert!(label.contains("reason=wii-gc-disc"));
+    assert!(output_path.path().exists());
+}
+
+#[test]
+fn compress_without_format_auto_selects_chd_for_non_disc_inputs() {
+    let temp = setup_temp_dir();
+    let payload = (0..(256 * 1024))
+        .map(|index| ((index * 13) % 251) as u8)
+        .collect::<Vec<_>>();
+    fs::write(temp.child("source.bin").path(), payload).expect("fixture");
+    let output_path = temp.child("out.chd");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("source.bin").path().to_str().expect("path"),
+            "--output",
+            output_path.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "compress");
+    assert_eq!(json["family"], "container");
+    assert_eq!(json["format"], "chd");
+    assert_eq!(json["status"], "succeeded");
+    let label = json["label"].as_str().expect("label");
+    assert!(label.contains("auto format=chd"));
+    assert!(label.contains("reason=not-wii-gc-or-unrecognized"));
+    assert!(output_path.path().exists());
+}
+
+#[test]
+fn compress_auto_mode_rejects_multiple_inputs_without_explicit_format() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("source-a.bin").path(), b"a").expect("fixture");
+    fs::write(temp.child("source-b.bin").path(), b"b").expect("fixture");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("source-a.bin").path().to_str().expect("path"),
+            temp.child("source-b.bin").path().to_str().expect("path"),
+            "--output",
+            temp.child("out.auto").path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "compress");
+    assert_eq!(json["family"], "container");
+    assert_eq!(json["format"], "auto");
+    assert_eq!(json["stage"], "validate");
+    assert_eq!(json["status"], "failed");
+    let label = json["label"].as_str().expect("label");
+    assert!(label.contains("requires exactly one input file"));
+    assert!(label.contains("--format"));
 }
 
 #[test]
@@ -1974,6 +2278,9 @@ fn rvz_compress_and_extract_round_trips() {
     assert_eq!(extract_json["command"], "extract");
     assert_eq!(extract_json["family"], "container");
     assert_eq!(extract_json["format"], "rvz");
+    assert_eq!(extract_json["requested_threads"], 8);
+    assert_eq!(extract_json["effective_threads"], 8);
+    assert_eq!(extract_json["used_parallelism"], true);
     assert_eq!(extract_json["status"], "succeeded");
     assert_eq!(
         fs::read(out_dir.child("disc.iso").path()).expect("extracted iso"),
@@ -5131,4 +5438,7 @@ fn inspect_reports_unknown_formats_cleanly() {
     assert!(json["format"].is_null());
     assert_eq!(json["stage"], "probe");
     assert_eq!(json["status"], "failed");
+    let label = json["label"].as_str().expect("label");
+    assert!(label.contains("recommended_compress_format=chd"));
+    assert!(label.contains("reason=not-wii-gc-or-unrecognized"));
 }

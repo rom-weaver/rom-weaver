@@ -10,13 +10,13 @@ use std::{
 
 use clap::{Args, Parser, Subcommand};
 use rom_weaver_checksum::{NativeChecksumEngine, supported_algorithms};
-use rom_weaver_containers::ContainerRegistry;
+use rom_weaver_containers::{CompressFormatRecommendation, ContainerRegistry};
 use rom_weaver_core::{
     CancellationToken, ChecksumEngine, ChecksumRequest, ContainerCreateRequest,
     ContainerExtractRequest, ContainerInspectRequest, OperationContext, OperationFamily,
     OperationReport, OperationStatus, PatchApplyRequest, PatchChecksumValidation,
     PatchCreateRequest, ProgressEvent, ProgressSink, Result, RomWeaverError, ThreadBudget,
-    ThreadCapability,
+    ThreadCapability, ThreadExecution,
 };
 use rom_weaver_patches::PatchRegistry;
 
@@ -88,7 +88,7 @@ struct CompressCommand {
     #[arg(required = true)]
     input: Vec<PathBuf>,
     #[arg(long)]
-    format: String,
+    format: Option<String>,
     #[arg(long)]
     output: PathBuf,
     #[arg(long)]
@@ -147,12 +147,13 @@ pub fn main_entry() -> ExitCode {
     } else {
         Arc::new(StdoutReporter::text())
     };
-    let app = CliApp::new(reporter);
+    let app = CliApp::new(reporter, cli.json);
     app.run(cli.command)
 }
 
 struct CliApp {
     reporter: Arc<dyn ProgressSink>,
+    emit_progress_events: bool,
     containers: ContainerRegistry,
     patches: PatchRegistry,
     checksum: NativeChecksumEngine,
@@ -168,9 +169,10 @@ const GAME_BOY_NINTENDO_LOGO: [u8; 48] = [
 ];
 
 impl CliApp {
-    fn new(reporter: Arc<dyn ProgressSink>) -> Self {
+    fn new(reporter: Arc<dyn ProgressSink>, emit_progress_events: bool) -> Self {
         Self {
             reporter,
+            emit_progress_events,
             containers: ContainerRegistry::new(),
             patches: PatchRegistry::new(),
             checksum: NativeChecksumEngine,
@@ -196,8 +198,28 @@ impl CliApp {
         {
             return self.finish("inspect", report);
         }
+        let inspect_recommendation = self.inspect_compress_recommendation(&source);
+
+        self.emit_running(
+            "inspect",
+            OperationFamily::Command,
+            None,
+            "probe",
+            format!("probing handlers for `{}`", source.display()),
+            Some(0.0),
+            None,
+        );
 
         if let Some(handler) = self.containers.probe(&source) {
+            self.emit_running(
+                "inspect",
+                OperationFamily::Container,
+                Some(handler.descriptor().name),
+                "inspect",
+                format!("inspecting `{}`", source.display()),
+                Some(0.0),
+                Some(context.plan_threads(ThreadCapability::single_threaded())),
+            );
             let request = ContainerInspectRequest {
                 source: source.clone(),
             };
@@ -211,6 +233,15 @@ impl CliApp {
                 )
             });
             if report.status == OperationStatus::Succeeded && args.list {
+                self.emit_running(
+                    "inspect",
+                    OperationFamily::Container,
+                    Some(handler.descriptor().name),
+                    "list",
+                    format!("listing entries for `{}`", source.display()),
+                    None,
+                    Some(context.plan_threads(ThreadCapability::single_threaded())),
+                );
                 let listed = handler.list_entries(&request, &context).map_err(|error| {
                     OperationReport::failed(
                         OperationFamily::Container,
@@ -229,19 +260,34 @@ impl CliApp {
                     }
                 }
             }
+            report =
+                Self::append_recommended_compress_label(report, inspect_recommendation.as_ref());
             return self.finish("inspect", report);
         }
 
         if let Some(handler) = self.patches.probe(&source) {
+            self.emit_running(
+                "inspect",
+                OperationFamily::Patch,
+                Some(handler.descriptor().name),
+                "inspect",
+                format!("parsing `{}`", source.display()),
+                Some(0.0),
+                None,
+            );
             if args.list {
+                let report = OperationReport::failed(
+                    OperationFamily::Patch,
+                    Some(handler.descriptor().name.to_string()),
+                    "list",
+                    "inspect --list is only supported for container formats",
+                    None,
+                );
                 return self.finish(
                     "inspect",
-                    OperationReport::failed(
-                        OperationFamily::Patch,
-                        Some(handler.descriptor().name.to_string()),
-                        "list",
-                        "inspect --list is only supported for container formats",
-                        None,
+                    Self::append_recommended_compress_label(
+                        report,
+                        inspect_recommendation.as_ref(),
                     ),
                 );
             }
@@ -254,18 +300,21 @@ impl CliApp {
                     None,
                 )
             });
+            let report =
+                Self::append_recommended_compress_label(report, inspect_recommendation.as_ref());
             return self.finish("inspect", report);
         }
 
+        let report = OperationReport::failed(
+            OperationFamily::Command,
+            None,
+            "probe",
+            format!("no registered handler matched `{}`", source.display()),
+            None,
+        );
         self.finish(
             "inspect",
-            OperationReport::failed(
-                OperationFamily::Command,
-                None,
-                "probe",
-                format!("no registered handler matched `{}`", source.display()),
-                None,
-            ),
+            Self::append_recommended_compress_label(report, inspect_recommendation.as_ref()),
         )
     }
 
@@ -300,6 +349,16 @@ impl CliApp {
 
         let source = args.source;
         let out_dir = args.out_dir;
+        let extract_threads = Some(context.plan_threads(handler.capabilities().extract_threads));
+        self.emit_running(
+            "extract",
+            OperationFamily::Container,
+            Some(handler.descriptor().name),
+            "extract",
+            format!("extracting `{}`", source.display()),
+            Some(0.0),
+            extract_threads.clone(),
+        );
         let request = ContainerExtractRequest {
             source: source.clone(),
             selections: args.select,
@@ -315,6 +374,15 @@ impl CliApp {
             )
         });
         if report.status == OperationStatus::Succeeded {
+            self.emit_running(
+                "extract",
+                OperationFamily::Container,
+                Some(handler.descriptor().name),
+                "nested-extract",
+                format!("checking nested archives under `{}`", out_dir.display()),
+                None,
+                Some(context.plan_threads(ThreadCapability::single_threaded())),
+            );
             match self.extract_nested_archives(&source, &out_dir, &context) {
                 Ok(0) => {}
                 Ok(nested_count) => {
@@ -377,8 +445,27 @@ impl CliApp {
             );
         }
 
+        self.emit_running(
+            "checksum",
+            OperationFamily::Checksum,
+            Some(self.checksum.name()),
+            "checksum",
+            format!("computing {} checksum algorithm(s)", algo.len()),
+            Some(0.0),
+            thread_execution.clone(),
+        );
+
         let mut temp_paths = Vec::new();
         let checksum_source = if strip_header {
+            self.emit_running(
+                "checksum",
+                OperationFamily::Checksum,
+                Some(self.checksum.name()),
+                "prepare",
+                "stripping 512-byte header before checksum",
+                None,
+                thread_execution.clone(),
+            );
             let stripped_path = context
                 .temp_paths()
                 .next_path("checksum-input-noheader", Some("bin"));
@@ -446,6 +533,32 @@ impl CliApp {
             codec,
             threads,
         } = args;
+        let requested_format = match format {
+            Some(value) => {
+                let trimmed = value.trim();
+                if trimmed.is_empty() {
+                    return self.finish(
+                        "compress",
+                        OperationReport::failed(
+                            OperationFamily::Container,
+                            None,
+                            "validate",
+                            "--format cannot be empty",
+                            None,
+                        ),
+                    );
+                }
+                Some(trimmed.to_string())
+            }
+            None => None,
+        };
+        let requested_or_auto_format = requested_format
+            .clone()
+            .unwrap_or_else(|| "auto".to_string());
+        let auto_mode = requested_format
+            .as_deref()
+            .map(|value| value.eq_ignore_ascii_case("auto"))
+            .unwrap_or(true);
 
         let context = self.context(threads);
         let probe_threads = Some(context.plan_threads(ThreadCapability::single_threaded()));
@@ -453,42 +566,89 @@ impl CliApp {
             if let Some(report) = self.require_existing_path(
                 "compress",
                 OperationFamily::Container,
-                Some(format.clone()),
+                Some(requested_or_auto_format.clone()),
                 input,
                 probe_threads.clone(),
             ) {
                 return self.finish("compress", report);
             }
         }
-
-        let (codec, level) = match Self::resolve_codec_level(codec) {
-            Ok(value) => value,
-            Err(error) => {
-                return self.finish(
-                    "compress",
-                    OperationReport::failed(
-                        OperationFamily::Container,
-                        Some(format.clone()),
-                        "validate",
-                        error.to_string(),
-                        probe_threads,
-                    ),
-                );
-            }
-        };
-
-        let Some(handler) = self.containers.find_by_name(&format) else {
+        if auto_mode && input.len() != 1 {
             return self.finish(
                 "compress",
                 OperationReport::failed(
                     OperationFamily::Container,
-                    Some(format),
+                    Some("auto".to_string()),
+                    "validate",
+                    "auto format selection requires exactly one input file; pass --format <name> when compressing multiple inputs",
+                    probe_threads,
+                ),
+            );
+        }
+        let (resolved_format, auto_label_suffix) = if auto_mode {
+            let recommendation = self.containers.recommend_compress_format(&input[0]);
+            (
+                recommendation.format_name.to_string(),
+                Some(format!(
+                    "auto format={} reason={}",
+                    recommendation.format_name, recommendation.reason
+                )),
+            )
+        } else {
+            (
+                requested_format
+                    .clone()
+                    .expect("non-auto mode should keep an explicit format"),
+                None,
+            )
+        };
+
+        let (codec, level) = if auto_mode {
+            (None, None)
+        } else {
+            match Self::resolve_codec_level(codec) {
+                Ok(value) => value,
+                Err(error) => {
+                    return self.finish(
+                        "compress",
+                        OperationReport::failed(
+                            OperationFamily::Container,
+                            Some(resolved_format.clone()),
+                            "validate",
+                            error.to_string(),
+                            probe_threads,
+                        ),
+                    );
+                }
+            }
+        };
+
+        let Some(handler) = self.containers.find_by_name(&resolved_format) else {
+            return self.finish(
+                "compress",
+                OperationReport::failed(
+                    OperationFamily::Container,
+                    Some(resolved_format),
                     "probe",
                     "requested output format is not registered",
                     probe_threads,
                 ),
             );
         };
+
+        self.emit_running(
+            "compress",
+            OperationFamily::Container,
+            Some(handler.descriptor().name),
+            "create",
+            format!(
+                "creating {} archive from {} input(s)",
+                handler.descriptor().name,
+                input.len()
+            ),
+            Some(0.0),
+            Some(context.plan_threads(handler.capabilities().create_threads)),
+        );
 
         let request = ContainerCreateRequest {
             inputs: input,
@@ -497,7 +657,7 @@ impl CliApp {
             codec,
             level,
         };
-        let report = handler.create(&request, &context).unwrap_or_else(|error| {
+        let mut report = handler.create(&request, &context).unwrap_or_else(|error| {
             OperationReport::failed(
                 OperationFamily::Container,
                 Some(handler.descriptor().name.to_string()),
@@ -506,6 +666,11 @@ impl CliApp {
                 Some(context.plan_threads(ThreadCapability::single_threaded())),
             )
         });
+        if report.status == OperationStatus::Succeeded
+            && let Some(auto_label_suffix) = auto_label_suffix
+        {
+            report.label = format!("{}; {auto_label_suffix}", report.label);
+        }
         self.finish("compress", report)
     }
 
@@ -568,6 +733,15 @@ impl CliApp {
         let mut temp_paths = Vec::new();
         let mut stripped_header = None;
         let apply_input = if strip_header {
+            self.emit_running(
+                "patch-apply",
+                OperationFamily::Patch,
+                Some(handler.descriptor().name),
+                "prepare",
+                "stripping 512-byte header before patch apply",
+                None,
+                None,
+            );
             let stripped_path = context
                 .temp_paths()
                 .next_path("patch-apply-input-noheader", Some("bin"));
@@ -608,6 +782,15 @@ impl CliApp {
             patches: patch,
             output: apply_output.clone(),
         };
+        self.emit_running(
+            "patch-apply",
+            OperationFamily::Patch,
+            Some(handler.descriptor().name),
+            "apply",
+            format!("applying patch using {}", handler.descriptor().name),
+            Some(0.0),
+            None,
+        );
         let mut report = handler.apply(&request, &context).unwrap_or_else(|error| {
             OperationReport::failed(
                 OperationFamily::Patch,
@@ -618,6 +801,15 @@ impl CliApp {
             )
         });
         if report.status == OperationStatus::Succeeded && needs_postprocess {
+            self.emit_running(
+                "patch-apply",
+                OperationFamily::Patch,
+                Some(handler.descriptor().name),
+                "compat",
+                "finalizing compatibility output transforms",
+                None,
+                Some(context.plan_threads(ThreadCapability::single_threaded())),
+            );
             match Self::finalize_patch_apply_output(
                 &apply_output,
                 &output,
@@ -688,6 +880,15 @@ impl CliApp {
             output: args.output,
             format: handler.descriptor().name.to_string(),
         };
+        self.emit_running(
+            "patch-create",
+            OperationFamily::Patch,
+            Some(handler.descriptor().name),
+            "create",
+            format!("creating {} patch", handler.descriptor().name),
+            Some(0.0),
+            None,
+        );
         let report = handler.create(&request, &context).unwrap_or_else(|error| {
             OperationReport::failed(
                 OperationFamily::Patch,
@@ -698,6 +899,36 @@ impl CliApp {
             )
         });
         self.finish("patch-create", report)
+    }
+
+    fn emit_running(
+        &self,
+        command: &str,
+        family: OperationFamily,
+        format: Option<&str>,
+        stage: impl Into<String>,
+        label: impl Into<String>,
+        percent: Option<f32>,
+        thread_execution: Option<ThreadExecution>,
+    ) {
+        if !self.emit_progress_events {
+            return;
+        }
+
+        let thread_execution = thread_execution.as_ref();
+        self.reporter.emit(ProgressEvent {
+            command: command.to_string(),
+            family,
+            format: format.map(str::to_string),
+            stage: stage.into(),
+            label: label.into(),
+            percent,
+            requested_threads: thread_execution.map(|value| value.requested_threads),
+            effective_threads: thread_execution.map(|value| value.effective_threads),
+            thread_mode: thread_execution.map(|value| value.thread_mode),
+            used_parallelism: thread_execution.map(|value| value.used_parallelism),
+            status: OperationStatus::Running,
+        });
     }
 
     fn context(&self, thread_budget: ThreadBudget) -> OperationContext {
@@ -757,6 +988,38 @@ impl CliApp {
             "{base}; selectable entries ({}): {}",
             entries.len(),
             entries.join(", ")
+        )
+    }
+
+    fn inspect_compress_recommendation(
+        &self,
+        source: &Path,
+    ) -> Option<CompressFormatRecommendation> {
+        if source.is_file() {
+            Some(self.containers.recommend_compress_format(source))
+        } else {
+            None
+        }
+    }
+
+    fn append_recommended_compress_label(
+        mut report: OperationReport,
+        recommendation: Option<&CompressFormatRecommendation>,
+    ) -> OperationReport {
+        if let Some(recommendation) = recommendation {
+            report.label =
+                Self::append_compress_recommendation_label(&report.label, recommendation);
+        }
+        report
+    }
+
+    fn append_compress_recommendation_label(
+        base: &str,
+        recommendation: &CompressFormatRecommendation,
+    ) -> String {
+        format!(
+            "{base}; recommended_compress_format={} reason={}",
+            recommendation.format_name, recommendation.reason
         )
     }
 
@@ -901,7 +1164,7 @@ impl CliApp {
         family: OperationFamily,
         format: Option<String>,
         path: &Path,
-        thread_execution: Option<rom_weaver_core::ThreadExecution>,
+        thread_execution: Option<ThreadExecution>,
     ) -> Option<OperationReport> {
         if path.exists() {
             None
