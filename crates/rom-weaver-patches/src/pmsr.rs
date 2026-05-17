@@ -197,6 +197,7 @@ fn parse_pmsr_bytes(bytes: &[u8]) -> Result<ParsedPmsrPatch> {
     })
 }
 
+#[allow(dead_code)]
 fn create_pmsr_patch_bytes(original: &[u8], modified: &[u8]) -> Result<CreatedPmsrPatch> {
     if modified.len() < original.len() {
         return Err(RomWeaverError::Validation(format!(

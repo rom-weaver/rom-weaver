@@ -21,6 +21,7 @@ use nod::{
     },
 };
 use rayon::prelude::*;
+#[cfg(not(target_family = "wasm"))]
 use rom_weaver_chd_sys::{
     CD_FRAME_SIZE, CDROM_TRACK_METADATA2_TAG, CHD_MAX_COMPRESSORS, CHD_METADATA_FLAG_CHECKSUM,
     ChdCodec, ChdFile, ChdMediaKind, CreateOptions, DVD_METADATA_TAG, GDROM_TRACK_METADATA_TAG,
@@ -41,6 +42,7 @@ use sevenz_rust::{
 };
 use sha2::{Digest as Sha2Digest, Sha256};
 use tar::{Archive as TarArchive, Builder as TarBuilder};
+#[cfg(not(target_family = "wasm"))]
 use unrar_ng::Archive as RarArchive;
 use xdvdfs::{
     blockdev::OffsetWrapper as XdvdfsOffsetWrapper,
@@ -52,6 +54,7 @@ use zip::{
 };
 use zstd::bulk::compress as zstd_compress;
 use zstd::stream::Decoder as ZstdDecoder;
+#[cfg(not(target_family = "wasm"))]
 use zstd_seekable::Seekable;
 
 const ZIP: FormatDescriptor = FormatDescriptor {
@@ -72,6 +75,7 @@ const SEVEN_Z: FormatDescriptor = FormatDescriptor {
     aliases: &["7zip"],
     extensions: &[".7z"],
 };
+#[cfg(not(target_family = "wasm"))]
 const RAR: FormatDescriptor = FormatDescriptor {
     family: OperationFamily::Container,
     name: "rar",
@@ -181,28 +185,61 @@ impl Default for ContainerRegistry {
 
 impl ContainerRegistry {
     pub fn new() -> Self {
-        Self {
-            handlers: vec![
-                Arc::new(ZipContainerHandler::new(&ZIP, ZipContainerFlavor::Zip)),
-                Arc::new(ZipContainerHandler::new(&ZIPX, ZipContainerFlavor::Zipx)),
-                Arc::new(SevenZContainerHandler::new(&SEVEN_Z)),
-                Arc::new(RarContainerHandler::new(&RAR)),
-                Arc::new(TarContainerHandler::new(&TAR, TarCompression::None)),
-                Arc::new(TarContainerHandler::new(&TAR_GZ, TarCompression::Gzip)),
-                Arc::new(TarContainerHandler::new(&TAR_BZ2, TarCompression::Bzip2)),
-                Arc::new(TarContainerHandler::new(&TAR_XZ, TarCompression::Xz)),
-                Arc::new(StreamContainerHandler::new(&GZ, StreamCompression::Gzip)),
-                Arc::new(StreamContainerHandler::new(&BZ2, StreamCompression::Bzip2)),
-                Arc::new(StreamContainerHandler::new(&XZ, StreamCompression::Xz)),
-                Arc::new(StreamContainerHandler::new(&ZST, StreamCompression::Zstd)),
-                Arc::new(CsoContainerHandler::new(&CSO)),
-                Arc::new(ChdContainerHandler),
-                Arc::new(WuaContainerHandler),
-                Arc::new(RvzContainerHandler),
-                Arc::new(Z3dsContainerHandler),
-                Arc::new(XisoContainerHandler),
-            ],
+        let mut handlers: Vec<Arc<dyn ContainerHandler>> = vec![
+            Arc::new(ZipContainerHandler::new(&ZIP, ZipContainerFlavor::Zip)),
+            Arc::new(ZipContainerHandler::new(&ZIPX, ZipContainerFlavor::Zipx)),
+            Arc::new(SevenZContainerHandler::new(&SEVEN_Z)),
+        ];
+        #[cfg(not(target_family = "wasm"))]
+        {
+            handlers.push(Arc::new(RarContainerHandler::new(&RAR)));
         }
+        handlers.push(Arc::new(TarContainerHandler::new(
+            &TAR,
+            TarCompression::None,
+        )));
+        handlers.push(Arc::new(TarContainerHandler::new(
+            &TAR_GZ,
+            TarCompression::Gzip,
+        )));
+        handlers.push(Arc::new(TarContainerHandler::new(
+            &TAR_BZ2,
+            TarCompression::Bzip2,
+        )));
+        handlers.push(Arc::new(TarContainerHandler::new(
+            &TAR_XZ,
+            TarCompression::Xz,
+        )));
+        handlers.push(Arc::new(StreamContainerHandler::new(
+            &GZ,
+            StreamCompression::Gzip,
+        )));
+        handlers.push(Arc::new(StreamContainerHandler::new(
+            &BZ2,
+            StreamCompression::Bzip2,
+        )));
+        handlers.push(Arc::new(StreamContainerHandler::new(
+            &XZ,
+            StreamCompression::Xz,
+        )));
+        handlers.push(Arc::new(StreamContainerHandler::new(
+            &ZST,
+            StreamCompression::Zstd,
+        )));
+        handlers.push(Arc::new(CsoContainerHandler::new(&CSO)));
+        #[cfg(not(target_family = "wasm"))]
+        {
+            handlers.push(Arc::new(ChdContainerHandler));
+        }
+        handlers.push(Arc::new(WuaContainerHandler));
+        handlers.push(Arc::new(GczContainerHandler));
+        handlers.push(Arc::new(RvzContainerHandler));
+        #[cfg(not(target_family = "wasm"))]
+        {
+            handlers.push(Arc::new(Z3dsContainerHandler));
+        }
+        handlers.push(Arc::new(XisoContainerHandler));
+        Self { handlers }
     }
 
     pub fn handlers(&self) -> &[Arc<dyn ContainerHandler>] {
@@ -251,7 +288,14 @@ impl ContainerRegistry {
                 };
             }
         }
-
+        #[cfg(target_family = "wasm")]
+        {
+            return CompressFormatRecommendation {
+                format_name: ZST.name,
+                reason: "not-wii-gc-or-unrecognized-chd-unavailable-on-wasm",
+            };
+        }
+        #[cfg(not(target_family = "wasm"))]
         CompressFormatRecommendation {
             format_name: CHD.name,
             reason: "not-wii-gc-or-unrecognized",
@@ -260,13 +304,16 @@ impl ContainerRegistry {
 }
 
 const SEVEN_Z_SIGNATURE: [u8; 6] = [b'7', b'z', 0xBC, 0xAF, 0x27, 0x1C];
+#[cfg(not(target_family = "wasm"))]
 const RAR4_SIGNATURE: [u8; 7] = [b'R', b'a', b'r', b'!', 0x1A, 0x07, 0x00];
+#[cfg(not(target_family = "wasm"))]
 const RAR5_SIGNATURE: [u8; 8] = [b'R', b'a', b'r', b'!', 0x1A, 0x07, 0x01, 0x00];
 const GZIP_SIGNATURE: [u8; 2] = [0x1F, 0x8B];
 const BZIP2_SIGNATURE: [u8; 3] = [b'B', b'Z', b'h'];
 const XZ_SIGNATURE: [u8; 6] = [0xFD, b'7', b'z', b'X', b'Z', 0x00];
 const ZSTD_SIGNATURE: [u8; 4] = [0x28, 0xB5, 0x2F, 0xFD];
 const CSO_SIGNATURE: [u8; 4] = [b'C', b'I', b'S', b'O'];
+#[cfg(not(target_family = "wasm"))]
 const CHD_SIGNATURE: [u8; 8] = *b"MComprHD";
 
 fn file_starts_with(source: &Path, signature: &[u8]) -> bool {
@@ -2059,10 +2106,12 @@ impl ContainerHandler for SevenZContainerHandler {
     }
 }
 
+#[cfg(not(target_family = "wasm"))]
 struct RarContainerHandler {
     descriptor: &'static FormatDescriptor,
 }
 
+#[cfg(not(target_family = "wasm"))]
 impl RarContainerHandler {
     const fn new(descriptor: &'static FormatDescriptor) -> Self {
         Self { descriptor }
@@ -2087,6 +2136,7 @@ impl RarContainerHandler {
     }
 }
 
+#[cfg(not(target_family = "wasm"))]
 impl ContainerHandler for RarContainerHandler {
     fn descriptor(&self) -> &'static FormatDescriptor {
         self.descriptor
@@ -4019,8 +4069,10 @@ impl ContainerHandler for RvzContainerHandler {
     }
 }
 
+#[cfg(not(target_family = "wasm"))]
 struct Z3dsContainerHandler;
 
+#[cfg(not(target_family = "wasm"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Z3dsFileHeader {
     underlying_magic: [u8; 4],
@@ -4029,6 +4081,7 @@ struct Z3dsFileHeader {
     uncompressed_size: u64,
 }
 
+#[cfg(not(target_family = "wasm"))]
 impl Z3dsFileHeader {
     const MAGIC: [u8; 4] = *b"Z3DS";
     const VERSION: u16 = 1;
@@ -4106,12 +4159,14 @@ impl Z3dsFileHeader {
     }
 }
 
+#[cfg(not(target_family = "wasm"))]
 #[derive(Debug, Default)]
 struct Z3dsMetadata {
     version: Option<u8>,
     item_names: Vec<String>,
 }
 
+#[cfg(not(target_family = "wasm"))]
 impl Z3dsMetadata {
     const VERSION: u8 = 1;
     const TYPE_END: u8 = 0;
@@ -4194,6 +4249,7 @@ impl Z3dsMetadata {
     }
 }
 
+#[cfg(not(target_family = "wasm"))]
 struct Z3dsPayloadReader<R> {
     inner: R,
     start: u64,
@@ -4201,6 +4257,7 @@ struct Z3dsPayloadReader<R> {
     pos: u64,
 }
 
+#[cfg(not(target_family = "wasm"))]
 #[derive(Clone, Debug)]
 struct Z3dsExtractTask {
     index: usize,
@@ -4209,6 +4266,7 @@ struct Z3dsExtractTask {
     temp_path: PathBuf,
 }
 
+#[cfg(not(target_family = "wasm"))]
 #[derive(Clone, Debug)]
 struct Z3dsCreateTask {
     index: usize,
@@ -4217,6 +4275,7 @@ struct Z3dsCreateTask {
     temp_path: PathBuf,
 }
 
+#[cfg(not(target_family = "wasm"))]
 #[derive(Clone, Debug)]
 struct Z3dsCompressedFrame {
     index: usize,
@@ -4225,6 +4284,7 @@ struct Z3dsCompressedFrame {
     temp_path: PathBuf,
 }
 
+#[cfg(not(target_family = "wasm"))]
 impl<R: Read + Seek> Z3dsPayloadReader<R> {
     fn new(mut inner: R, start: u64, len: u64) -> io::Result<Self> {
         inner.seek(SeekFrom::Start(start))?;
@@ -4237,6 +4297,7 @@ impl<R: Read + Seek> Z3dsPayloadReader<R> {
     }
 }
 
+#[cfg(not(target_family = "wasm"))]
 impl<R: Read + Seek> Read for Z3dsPayloadReader<R> {
     fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
         if self.pos >= self.len {
@@ -4250,6 +4311,7 @@ impl<R: Read + Seek> Read for Z3dsPayloadReader<R> {
     }
 }
 
+#[cfg(not(target_family = "wasm"))]
 impl<R: Read + Seek> Seek for Z3dsPayloadReader<R> {
     fn seek(&mut self, position: SeekFrom) -> io::Result<u64> {
         let target = match position {
@@ -4281,6 +4343,7 @@ impl<R: Read + Seek> Seek for Z3dsPayloadReader<R> {
     }
 }
 
+#[cfg(not(target_family = "wasm"))]
 impl Z3dsContainerHandler {
     const DEFAULT_FRAME_SIZE: usize = 256 * 1024;
     const DEFAULT_LEVEL: i32 = 3;
@@ -4586,6 +4649,7 @@ impl Z3dsContainerHandler {
     }
 }
 
+#[cfg(not(target_family = "wasm"))]
 impl ContainerHandler for Z3dsContainerHandler {
     fn descriptor(&self) -> &'static FormatDescriptor {
         &Z3DS
@@ -4863,8 +4927,10 @@ impl ContainerHandler for Z3dsContainerHandler {
     }
 }
 
+#[cfg(not(target_family = "wasm"))]
 struct ChdContainerHandler;
 
+#[cfg(not(target_family = "wasm"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct HdGeometry {
     cylinders: u32,
@@ -4873,12 +4939,14 @@ struct HdGeometry {
     bytes_per_sector: u32,
 }
 
+#[cfg(not(target_family = "wasm"))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct DiscLayout {
     kind: DiscKind,
     tracks: Vec<DiscTrack>,
 }
 
+#[cfg(not(target_family = "wasm"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct AvProfile {
     frame_bytes: u32,
@@ -4891,6 +4959,7 @@ struct AvProfile {
     sample_rate: u32,
 }
 
+#[cfg(not(target_family = "wasm"))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct DiscTrack {
     number: u32,
@@ -4906,12 +4975,14 @@ struct DiscTrack {
     swap_audio_on_read: bool,
 }
 
+#[cfg(not(target_family = "wasm"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum DiscKind {
     CdRom,
     GdRom,
 }
 
+#[cfg(not(target_family = "wasm"))]
 impl DiscKind {
     fn metadata_tag(self) -> u32 {
         match self {
@@ -4921,6 +4992,7 @@ impl DiscKind {
     }
 }
 
+#[cfg(not(target_family = "wasm"))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum DiscTrackMode {
     Mode1,
@@ -4933,6 +5005,7 @@ enum DiscTrackMode {
     Audio,
 }
 
+#[cfg(not(target_family = "wasm"))]
 impl DiscTrackMode {
     fn cue_label(self) -> &'static str {
         match self {
@@ -4991,6 +5064,7 @@ impl DiscTrackMode {
     }
 }
 
+#[cfg(not(target_family = "wasm"))]
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum ChdCreateKind {
     Raw,
@@ -5000,12 +5074,18 @@ enum ChdCreateKind {
     Av(AvProfile),
 }
 
+#[cfg(not(target_family = "wasm"))]
 const CDROM_OLD_METADATA_TAG: u32 = make_tag(b'C', b'H', b'C', b'D');
+#[cfg(not(target_family = "wasm"))]
 const CDROM_TRACK_METADATA_TAG: u32 = make_tag(b'C', b'H', b'T', b'R');
+#[cfg(not(target_family = "wasm"))]
 const GDROM_OLD_METADATA_TAG: u32 = make_tag(b'C', b'H', b'G', b'T');
+#[cfg(not(target_family = "wasm"))]
 const AV_METADATA_TAG: u32 = make_tag(b'A', b'V', b'A', b'V');
+#[cfg(not(target_family = "wasm"))]
 const AV_LD_METADATA_TAG: u32 = make_tag(b'A', b'V', b'L', b'D');
 
+#[cfg(not(target_family = "wasm"))]
 enum ChdReadBackend {
     Native(ChdFile),
     Rust {
@@ -5013,6 +5093,7 @@ enum ChdReadBackend {
     },
 }
 
+#[cfg(not(target_family = "wasm"))]
 struct ChdReadSession {
     source: PathBuf,
     header: rom_weaver_chd_sys::ChdHeader,
@@ -5020,6 +5101,7 @@ struct ChdReadSession {
     backend: ChdReadBackend,
 }
 
+#[cfg(not(target_family = "wasm"))]
 impl ChdReadSession {
     fn open(source: &Path) -> Result<Self> {
         match ChdFile::open(source, None) {
@@ -5232,6 +5314,7 @@ impl ChdReadSession {
     }
 }
 
+#[cfg(not(target_family = "wasm"))]
 fn split_token(text: &str) -> Option<(&str, &str)> {
     let trimmed = text.trim_start();
     if trimmed.is_empty() {
@@ -5248,6 +5331,7 @@ fn split_token(text: &str) -> Option<(&str, &str)> {
     }
 }
 
+#[cfg(not(target_family = "wasm"))]
 impl ChdContainerHandler {
     const DEFAULT_HUNK_BYTES: u32 = 4096;
     const DVD_SECTOR_BYTES: u32 = 2048;
@@ -6999,6 +7083,7 @@ impl ChdContainerHandler {
     }
 }
 
+#[cfg(not(target_family = "wasm"))]
 impl ContainerHandler for ChdContainerHandler {
     fn descriptor(&self) -> &'static FormatDescriptor {
         &CHD
@@ -7236,9 +7321,10 @@ mod tests {
     };
 
     use super::{
-        ContainerCreateRequest, ContainerRegistry, WUA_FOOTER_MAGIC, WUA_FOOTER_SIZE,
-        WUA_FOOTER_VERSION, Z3dsContainerHandler,
+        CSO_DEFAULT_BLOCK_BYTES, ContainerCreateRequest, ContainerRegistry, WUA_FOOTER_MAGIC,
+        WUA_FOOTER_SIZE, WUA_FOOTER_VERSION, Z3dsContainerHandler,
     };
+    use ciso::write::write_ciso_image;
     use rom_weaver_core::{
         CancellationToken, NoopProgressSink, OperationContext, ThreadBudget, ThreadCapability,
     };
@@ -7285,6 +7371,12 @@ mod tests {
             *byte = (index % 251) as u8;
         }
         bytes
+    }
+
+    fn write_test_cso(input: &Path, output: &Path) {
+        let mut source = fs::File::open(input).expect("open cso source fixture");
+        let mut destination = fs::File::create(output).expect("create cso fixture");
+        write_ciso_image(&mut source, &mut destination, |_| {}).expect("write cso fixture");
     }
 
     #[test]

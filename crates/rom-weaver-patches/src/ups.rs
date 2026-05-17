@@ -449,6 +449,7 @@ fn create_ups_patch_streaming(source_path: &Path, target_path: &Path) -> Result<
     })
 }
 
+#[allow(dead_code)]
 fn create_ups_patch_bytes(source: &[u8], target: &[u8]) -> Result<CreatedUpsPatch> {
     let source_size = u64::try_from(source.len())
         .map_err(|_| RomWeaverError::Validation("UPS source size exceeded u64".into()))?;
@@ -494,6 +495,7 @@ fn create_ups_patch_bytes(source: &[u8], target: &[u8]) -> Result<CreatedUpsPatc
     })
 }
 
+#[allow(dead_code)]
 fn build_changes(source: &[u8], target: &[u8]) -> Result<Vec<UpsChange>> {
     let max_size = max(source.len(), target.len());
     let mut changes = Vec::new();

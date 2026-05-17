@@ -235,6 +235,7 @@ fn parse_apsgba_bytes(bytes: &[u8]) -> Result<ParsedApsGbaPatch> {
     })
 }
 
+#[allow(dead_code)]
 fn create_apsgba_patch_bytes(source: &[u8], target: &[u8]) -> Result<CreatedApsGbaPatch> {
     let source_size = u32::try_from(source.len()).map_err(|_| {
         RomWeaverError::Validation("APSGBA source size exceeded 32-bit header range".into())
@@ -471,6 +472,7 @@ fn read_at_most(file: &mut File, offset: u64, buffer: &mut [u8]) -> Result<usize
     Ok(total)
 }
 
+#[allow(dead_code)]
 fn crc16_range(bytes: &[u8], offset: usize, len: usize) -> u16 {
     if offset >= bytes.len() || len == 0 {
         return crc16_bytes(&[]);

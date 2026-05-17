@@ -426,6 +426,34 @@ fn with_header(bytes: &[u8]) -> Vec<u8> {
     headered
 }
 
+fn with_a78_header(bytes: &[u8]) -> Vec<u8> {
+    let mut headered = vec![0u8; 128];
+    headered[1..10].copy_from_slice(b"ATARI7800");
+    headered.extend_from_slice(bytes);
+    headered
+}
+
+fn with_lnx_header(bytes: &[u8]) -> Vec<u8> {
+    let mut headered = vec![0u8; 64];
+    headered[..4].copy_from_slice(b"LYNX");
+    headered.extend_from_slice(bytes);
+    headered
+}
+
+fn with_nes_header(bytes: &[u8]) -> Vec<u8> {
+    let mut headered = vec![0u8; 16];
+    headered[..4].copy_from_slice(b"NES\x1A");
+    headered.extend_from_slice(bytes);
+    headered
+}
+
+fn with_fds_header(bytes: &[u8]) -> Vec<u8> {
+    let mut headered = vec![0u8; 16];
+    headered[..3].copy_from_slice(b"FDS");
+    headered.extend_from_slice(bytes);
+    headered
+}
+
 fn sega_genesis_checksum(bytes: &[u8]) -> u16 {
     let mut sum = 0_u32;
     let mut cursor = 0x200usize;
@@ -1656,6 +1684,37 @@ fn inspect_reports_rar_container_as_supported() {
 }
 
 #[test]
+fn inspect_reports_known_rom_header_as_supported() {
+    let temp = setup_temp_dir();
+    let payload = b"header-aware inspect payload".to_vec();
+    fs::write(temp.child("headered.nes").path(), with_nes_header(&payload)).expect("fixture");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "inspect",
+            temp.child("headered.nes").path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "inspect");
+    assert_eq!(json["family"], "command");
+    assert_eq!(json["format"], "rom-header");
+    assert_eq!(json["status"], "succeeded");
+    let label = json["label"].as_str().expect("label");
+    assert!(label.contains("detected ROM header No-Intro_NES.xml"));
+    assert!(label.contains("stripped_bytes=16"));
+    assert!(label.contains("headered_extension=.nes"));
+    assert!(label.contains("headerless_extension=.nes"));
+}
+
+#[test]
 fn inspect_list_rejects_patch_inputs() {
     let temp = setup_temp_dir();
     fs::write(
@@ -1954,7 +2013,99 @@ fn checksum_strip_header_matches_unheadered_digests() {
         label_digest_value(plain_label, "sha1"),
         label_digest_value(headered_label, "sha1")
     );
-    assert!(headered_label.contains("input header stripped (512 bytes)"));
+    assert!(headered_label.contains("input header stripped (512 bytes"));
+}
+
+#[test]
+fn checksum_strip_header_supports_igir_header_profiles() {
+    let temp = setup_temp_dir();
+    let payload = (0..1536)
+        .map(|index| ((index * 13) % 251) as u8)
+        .collect::<Vec<_>>();
+    fs::write(temp.child("plain.bin").path(), &payload).expect("fixture");
+
+    let plain_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "checksum",
+            temp.child("plain.bin").path().to_str().expect("path"),
+            "--algo",
+            "crc32",
+            "--algo",
+            "sha1",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let plain_json = parse_single_json_line(&plain_output);
+    let plain_label = plain_json["label"].as_str().expect("plain label");
+
+    let cases = vec![
+        (
+            "headered.a78",
+            with_a78_header(&payload),
+            128,
+            "No-Intro_A7800.xml",
+        ),
+        (
+            "headered.lnx",
+            with_lnx_header(&payload),
+            64,
+            "No-Intro_LNX.xml",
+        ),
+        (
+            "headered.nes",
+            with_nes_header(&payload),
+            16,
+            "No-Intro_NES.xml",
+        ),
+        (
+            "headered.fds",
+            with_fds_header(&payload),
+            16,
+            "No-Intro_FDS.xml",
+        ),
+        ("headered.smc", with_header(&payload), 512, "SMC"),
+    ];
+
+    for (name, bytes, stripped_len, profile_name) in cases {
+        fs::write(temp.child(name).path(), bytes).expect("headered fixture");
+        let output = Command::cargo_bin("rom-weaver")
+            .expect("binary")
+            .args([
+                "checksum",
+                temp.child(name).path().to_str().expect("path"),
+                "--algo",
+                "crc32",
+                "--algo",
+                "sha1",
+                "--strip-header",
+                "--json",
+            ])
+            .assert()
+            .code(0)
+            .get_output()
+            .stdout
+            .clone();
+
+        let json = parse_single_json_line(&output);
+        assert_eq!(json["status"], "succeeded");
+        let label = json["label"].as_str().expect("headered label");
+        assert_eq!(
+            label_digest_value(plain_label, "crc32"),
+            label_digest_value(label, "crc32")
+        );
+        assert_eq!(
+            label_digest_value(plain_label, "sha1"),
+            label_digest_value(label, "sha1")
+        );
+        assert!(label.contains(&format!(
+            "input header stripped ({stripped_len} bytes, {profile_name})"
+        )));
+    }
 }
 
 #[test]
@@ -2105,7 +2256,7 @@ fn checksum_auto_trim_fix_supports_strip_header() {
         label_digest_value(source_label, "crc32"),
         label_digest_value(headered_label, "crc32")
     );
-    assert!(headered_label.contains("input header stripped (512 bytes)"));
+    assert!(headered_label.contains("input header stripped (512 bytes"));
     assert!(headered_label.contains("trimmed_input_bytes=14848"));
     assert!(headered_label.contains("mode=dsi"));
 }
@@ -4087,6 +4238,77 @@ fn patch_apply_succeeds_for_valid_ips_patch() {
 }
 
 #[test]
+fn patch_apply_applies_multiple_patches_in_order() {
+    let temp = setup_temp_dir();
+    let input = temp.child("input.bin");
+    let intermediate = temp.child("intermediate.bin");
+    let expected = temp.child("expected.bin");
+    let first_patch = temp.child("update-step-1.bps");
+    let second_patch = temp.child("update-step-2.ips");
+    let output = temp.child("output.bin");
+
+    fs::write(input.path(), b"abcabcabcabc").expect("fixture");
+    fs::write(intermediate.path(), b"abcabcZZabcabc").expect("fixture");
+    fs::write(expected.path(), b"abcabcYYabcabc").expect("fixture");
+    fs::write(first_patch.path(), SIMPLE_BPS_PATCH).expect("fixture");
+
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-create",
+            "--original",
+            intermediate.path().to_str().expect("path"),
+            "--modified",
+            expected.path().to_str().expect("path"),
+            "--format",
+            "ips",
+            "--output",
+            second_patch.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let apply_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            first_patch.path().to_str().expect("path"),
+            "--patch",
+            second_patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--threads",
+            "8",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&apply_output);
+    assert_eq!(json["command"], "patch-apply");
+    assert_eq!(json["family"], "patch");
+    assert_eq!(json["format"], "IPS");
+    assert_eq!(json["status"], "succeeded");
+    assert!(
+        json["label"]
+            .as_str()
+            .expect("label")
+            .contains("applied 2 patches sequentially")
+    );
+    assert_eq!(
+        fs::read(output.path()).expect("output"),
+        fs::read(expected.path()).expect("expected")
+    );
+}
+
+#[test]
 fn patch_apply_succeeds_for_valid_ips32_patch() {
     let temp = setup_temp_dir();
     write_sparse_bytes(
@@ -4661,6 +4883,94 @@ fn patch_apply_supports_strip_and_add_header_flags() {
     assert_eq!(
         fs::read(temp.child("output-headered.bin").path()).expect("output"),
         with_header(b"Zbcdefgh")
+    );
+}
+
+#[test]
+fn patch_apply_supports_nes_header_strip_and_add_flags() {
+    let temp = setup_temp_dir();
+    let base = b"abcdefgh".to_vec();
+    let headered = with_nes_header(&base);
+    fs::write(temp.child("input.nes").path(), &headered).expect("fixture");
+    fs::write(
+        temp.child("update.ips").path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: 0,
+                data: b"Z".to_vec(),
+            }],
+            Some(base.len() as u32),
+        ),
+    )
+    .expect("fixture");
+
+    let stripped_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            temp.child("input.nes").path().to_str().expect("path"),
+            "--patch",
+            temp.child("update.ips").path().to_str().expect("path"),
+            "--output",
+            temp.child("output-stripped.nes")
+                .path()
+                .to_str()
+                .expect("path"),
+            "--strip-header",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let stripped_json = parse_single_json_line(&stripped_output);
+    assert_eq!(stripped_json["command"], "patch-apply");
+    assert_eq!(stripped_json["family"], "patch");
+    assert_eq!(stripped_json["status"], "succeeded");
+    assert!(
+        stripped_json["label"]
+            .as_str()
+            .expect("label")
+            .contains("input header stripped (16 bytes, No-Intro_NES.xml)")
+    );
+    assert_eq!(
+        fs::read(temp.child("output-stripped.nes").path()).expect("output"),
+        b"Zbcdefgh".to_vec()
+    );
+
+    let headered_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            temp.child("input.nes").path().to_str().expect("path"),
+            "--patch",
+            temp.child("update.ips").path().to_str().expect("path"),
+            "--output",
+            temp.child("output-headered.nes")
+                .path()
+                .to_str()
+                .expect("path"),
+            "--strip-header",
+            "--add-header",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let headered_json = parse_single_json_line(&headered_output);
+    assert_eq!(headered_json["command"], "patch-apply");
+    assert_eq!(headered_json["family"], "patch");
+    assert_eq!(headered_json["status"], "succeeded");
+    assert_eq!(
+        fs::read(temp.child("output-headered.nes").path()).expect("output"),
+        with_nes_header(b"Zbcdefgh")
     );
 }
 

@@ -43,3 +43,13 @@ zip = { version = "0.6.6", default-features = false, features = ["deflate", "bzi
 zstd-sys = { version = "2.0.16", default-features = false }
 zstd-seekable = "0.1.23"
 zstd = "0.13.3"
+
+[profile.wasm-release]
+inherits = "release"
+codegen-units = 1
+debug = 0
+incremental = false
+lto = "fat"
+opt-level = 3
+panic = "abort"
+strip = "symbols"

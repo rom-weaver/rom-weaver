@@ -8,19 +8,21 @@ version.workspace = true
 [dependencies]
 bzip2.workspace = true
 ciso.workspace = true
-chd.workspace = true
 flate2.workspace = true
 liblzma.workspace = true
 nod.workspace = true
 rayon.workspace = true
-rom-weaver-chd-sys = { path = "../rom-weaver-chd-sys" }
 rom-weaver-codecs = { path = "../rom-weaver-codecs" }
 rom-weaver-core = { path = "../rom-weaver-core" }
 sevenz-rust.workspace = true
 sha2.workspace = true
 tar.workspace = true
-unrar-ng.workspace = true
 xdvdfs.workspace = true
 zip.workspace = true
 zstd.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+chd.workspace = true
+rom-weaver-chd-sys = { path = "../rom-weaver-chd-sys" }
+unrar-ng.workspace = true
 zstd-seekable.workspace = true

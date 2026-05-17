@@ -481,6 +481,7 @@ fn apply_overflow_in_place(
     Ok(())
 }
 
+#[allow(dead_code)]
 fn create_rup_patch_bytes(original: &[u8], modified: &[u8]) -> Result<CreatedRupPatch> {
     let source_file_size = u64::try_from(original.len())
         .map_err(|_| RomWeaverError::Validation("RUP source size exceeded u64".into()))?;
@@ -657,6 +658,7 @@ fn create_rup_patch_streaming(
     })
 }
 
+#[allow(dead_code)]
 fn build_xor_records(source: &[u8], target: &[u8]) -> Result<Vec<RupRecord>> {
     let mut records = Vec::new();
 
@@ -805,11 +807,13 @@ fn usize_from_u64(value: u64, label: &str) -> Result<usize> {
         .map_err(|_| RomWeaverError::Validation(format!("{label} exceeded usize")))
 }
 
+#[allow(dead_code)]
 fn checked_add_usize(lhs: usize, rhs: usize, label: &str) -> Result<usize> {
     lhs.checked_add(rhs)
         .ok_or_else(|| RomWeaverError::Validation(format!("{label} overflowed")))
 }
 
+#[allow(dead_code)]
 fn md5_bytes(bytes: &[u8]) -> [u8; 16] {
     let mut digest = [0u8; 16];
     digest.copy_from_slice(Md5::digest(bytes).as_slice());

@@ -36,7 +36,7 @@ impl ThreadBudget {
         match self {
             Self::Auto => std::thread::available_parallelism()
                 .map(usize::from)
-                .unwrap_or(1),
+                .unwrap_or(4),
             Self::Fixed(count) => count.max(1),
         }
     }

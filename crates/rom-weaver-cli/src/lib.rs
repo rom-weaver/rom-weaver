@@ -79,7 +79,10 @@ struct ChecksumCommand {
     source: PathBuf,
     #[arg(long = "algo", required = true)]
     algo: Vec<String>,
-    #[arg(long, help = "Remove a 512-byte copier header before checksum")]
+    #[arg(
+        long,
+        help = "Remove a detected ROM header before checksum (A78/LNX/NES/FDS/SMC; falls back to 512-byte copier header)"
+    )]
     strip_header: bool,
     #[arg(
         long,
@@ -160,15 +163,22 @@ struct TrimCommand {
 struct PatchApplyCommand {
     #[arg(long)]
     input: PathBuf,
-    #[arg(long = "patch", required = true)]
-    patch: Vec<PathBuf>,
+    #[arg(
+        long = "patch",
+        required = true,
+        help = "Patch file(s) to apply in order; repeat --patch for each step"
+    )]
+    patches: Vec<PathBuf>,
     #[arg(long)]
     output: PathBuf,
-    #[arg(long, help = "Remove a 512-byte copier header before patch apply")]
+    #[arg(
+        long,
+        help = "Remove a detected ROM header before patch apply (A78/LNX/NES/FDS/SMC; falls back to 512-byte copier header)"
+    )]
     strip_header: bool,
     #[arg(
         long,
-        help = "Add a 512-byte header after patch apply (reuses stripped header bytes when available)"
+        help = "Add header bytes after patch apply (reuses stripped header bytes when available; defaults to 512-byte copier header)"
     )]
     add_header: bool,
     #[arg(
@@ -221,6 +231,15 @@ struct CliApp {
 const MAX_NESTED_EXTRACT_DEPTH: usize = 8;
 const MAX_NESTED_EXTRACT_ARCHIVES: usize = 256;
 const ROM_HEADER_BYTES: usize = 512;
+const ROM_HEADER_SCAN_BYTES: usize = ROM_HEADER_BYTES;
+const A78_HEADER_MAGIC: [u8; 9] = *b"ATARI7800";
+const LNX_HEADER_MAGIC: [u8; 4] = *b"LYNX";
+const INES_HEADER_MAGIC: [u8; 4] = *b"NES\x1A";
+const FDS_HEADER_MAGIC: [u8; 3] = *b"FDS";
+const SMC_GAME_DOCTOR_1_MAGIC: [u8; 16] = [
+    0x00, 0x01, 0x4D, 0x45, 0x20, 0x44, 0x4F, 0x43, 0x54, 0x4F, 0x52, 0x20, 0x53, 0x46, 0x20, 0x33,
+];
+const SMC_GAME_DOCTOR_2_MAGIC: [u8; 16] = *b"GAME DOCTOR SF 3";
 const NDS_HEADER_TOTAL_BYTES: usize = 0x1000;
 const NDS_HEADER_UNIT_CODE_OFFSET: usize = 0x12;
 const NDS_HEADER_NTR_ROM_SIZE_OFFSET: usize = 0x80;
@@ -239,6 +258,130 @@ const GAME_BOY_NINTENDO_LOGO: [u8; 48] = [
     0x00, 0x08, 0x11, 0x1F, 0x88, 0x89, 0x00, 0x0E, 0xDC, 0xCC, 0x6E, 0xE6, 0xDD, 0xDD, 0xD9, 0x99,
     0xBB, 0xBB, 0x67, 0x63, 0x6E, 0x0E, 0xEC, 0xCC, 0xDD, 0xDC, 0x99, 0x9F, 0xBB, 0xB9, 0x33, 0x3E,
 ];
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum KnownRomHeader {
+    A78,
+    Lnx,
+    Nes,
+    Fds,
+    SmcZero,
+    SmcGameDoctor1,
+    SmcGameDoctor2,
+}
+
+impl KnownRomHeader {
+    const ALL: [Self; 7] = [
+        Self::A78,
+        Self::Lnx,
+        Self::Nes,
+        Self::Fds,
+        Self::SmcZero,
+        Self::SmcGameDoctor1,
+        Self::SmcGameDoctor2,
+    ];
+
+    const fn profile_name(self) -> &'static str {
+        match self {
+            Self::A78 => "No-Intro_A7800.xml",
+            Self::Lnx => "No-Intro_LNX.xml",
+            Self::Nes => "No-Intro_NES.xml",
+            Self::Fds => "No-Intro_FDS.xml",
+            Self::SmcZero => "SMC",
+            Self::SmcGameDoctor1 => "SMC_GAME_DOCTOR_1",
+            Self::SmcGameDoctor2 => "SMC_GAME_DOCTOR_2",
+        }
+    }
+
+    const fn headered_extension(self) -> &'static str {
+        match self {
+            Self::A78 => ".a78",
+            Self::Lnx => ".lnx",
+            Self::Nes => ".nes",
+            Self::Fds => ".fds",
+            Self::SmcZero | Self::SmcGameDoctor1 | Self::SmcGameDoctor2 => ".smc",
+        }
+    }
+
+    const fn headerless_extension(self) -> &'static str {
+        match self {
+            Self::Lnx => ".lyx",
+            Self::SmcZero | Self::SmcGameDoctor1 | Self::SmcGameDoctor2 => ".sfc",
+            Self::A78 | Self::Nes | Self::Fds => self.headered_extension(),
+        }
+    }
+
+    const fn data_offset_bytes(self) -> usize {
+        match self {
+            Self::A78 => 128,
+            Self::Lnx => 64,
+            Self::Nes => 16,
+            Self::Fds => 16,
+            Self::SmcZero | Self::SmcGameDoctor1 | Self::SmcGameDoctor2 => ROM_HEADER_BYTES,
+        }
+    }
+
+    const fn scan_bytes_required(self) -> usize {
+        match self {
+            Self::A78 => 1 + A78_HEADER_MAGIC.len(),
+            Self::Lnx => LNX_HEADER_MAGIC.len(),
+            Self::Nes => INES_HEADER_MAGIC.len(),
+            Self::Fds => FDS_HEADER_MAGIC.len(),
+            Self::SmcZero => ROM_HEADER_BYTES,
+            Self::SmcGameDoctor1 => SMC_GAME_DOCTOR_1_MAGIC.len(),
+            Self::SmcGameDoctor2 => SMC_GAME_DOCTOR_2_MAGIC.len(),
+        }
+    }
+
+    fn matches_extension(self, extension_with_dot: &str) -> bool {
+        self.headered_extension()
+            .eq_ignore_ascii_case(extension_with_dot)
+            || self
+                .headerless_extension()
+                .eq_ignore_ascii_case(extension_with_dot)
+    }
+
+    fn signature_matches(self, bytes: &[u8]) -> bool {
+        if bytes.len() < self.scan_bytes_required() {
+            return false;
+        }
+        match self {
+            Self::A78 => bytes[1..1 + A78_HEADER_MAGIC.len()] == A78_HEADER_MAGIC,
+            Self::Lnx => bytes[..LNX_HEADER_MAGIC.len()] == LNX_HEADER_MAGIC,
+            Self::Nes => bytes[..INES_HEADER_MAGIC.len()] == INES_HEADER_MAGIC,
+            Self::Fds => bytes[..FDS_HEADER_MAGIC.len()] == FDS_HEADER_MAGIC,
+            Self::SmcZero => bytes[3..ROM_HEADER_BYTES].iter().all(|value| *value == 0),
+            Self::SmcGameDoctor1 => {
+                bytes[..SMC_GAME_DOCTOR_1_MAGIC.len()] == SMC_GAME_DOCTOR_1_MAGIC
+            }
+            Self::SmcGameDoctor2 => {
+                bytes[..SMC_GAME_DOCTOR_2_MAGIC.len()] == SMC_GAME_DOCTOR_2_MAGIC
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct KnownRomHeaderMatch {
+    header: KnownRomHeader,
+    stripped_bytes: usize,
+}
+
+impl KnownRomHeaderMatch {
+    const fn profile_name(self) -> &'static str {
+        self.header.profile_name()
+    }
+
+    const fn stripped_bytes(self) -> usize {
+        self.stripped_bytes
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct StripHeaderResult {
+    header_bytes: Vec<u8>,
+    matched_header: Option<KnownRomHeaderMatch>,
+}
 
 type XisoTrimSourceDevice = XdvdfsOffsetWrapper<BufReader<File>, io::Error>;
 type XisoTrimSourceFilesystem = XdvdfsFilesystem<io::Error, XisoTrimSourceDevice>;
@@ -487,6 +630,43 @@ impl CliApp {
             return self.finish("inspect", report);
         }
 
+        if let Ok(Some(header_match)) = Self::detect_known_rom_header(&source) {
+            if args.list {
+                let report = OperationReport::failed(
+                    OperationFamily::Command,
+                    Some("rom-header".to_string()),
+                    "list",
+                    "inspect --list is only supported for container formats",
+                    None,
+                );
+                return self.finish(
+                    "inspect",
+                    Self::append_recommended_compress_label(
+                        report,
+                        inspect_recommendation.as_ref(),
+                    ),
+                );
+            }
+            let report = OperationReport::succeeded(
+                OperationFamily::Command,
+                Some("rom-header".to_string()),
+                "inspect",
+                format!(
+                    "detected ROM header {}; stripped_bytes={}; headered_extension={}; headerless_extension={}",
+                    header_match.profile_name(),
+                    header_match.stripped_bytes(),
+                    header_match.header.headered_extension(),
+                    header_match.header.headerless_extension()
+                ),
+                Some(100.0),
+                Some(context.plan_threads(ThreadCapability::single_threaded())),
+            );
+            return self.finish(
+                "inspect",
+                Self::append_recommended_compress_label(report, inspect_recommendation.as_ref()),
+            );
+        }
+
         let report = OperationReport::failed(
             OperationFamily::Command,
             None,
@@ -639,13 +819,14 @@ impl CliApp {
         );
 
         let mut temp_paths = Vec::new();
+        let mut stripped_header_match = None;
         let checksum_source = if strip_header {
             self.emit_running(
                 "checksum",
                 OperationFamily::Checksum,
                 Some(self.checksum.name()),
                 "prepare",
-                "stripping 512-byte header before checksum",
+                "stripping ROM header before checksum",
                 None,
                 thread_execution.clone(),
             );
@@ -657,7 +838,8 @@ impl CliApp {
                 .temp_paths()
                 .next_path("checksum-input-noheader", Some(stripped_extension));
             match Self::strip_header_to_temp(&source, &stripped_path) {
-                Ok(_) => {
+                Ok(result) => {
+                    stripped_header_match = result.matched_header;
                     temp_paths.push(stripped_path.clone());
                     stripped_path
                 }
@@ -725,7 +907,19 @@ impl CliApp {
         });
         if report.status == OperationStatus::Succeeded {
             if strip_header {
-                report.label = format!("{}; input header stripped (512 bytes)", report.label);
+                if let Some(header_match) = stripped_header_match {
+                    report.label = format!(
+                        "{}; input header stripped ({} bytes, {})",
+                        report.label,
+                        header_match.stripped_bytes(),
+                        header_match.profile_name()
+                    );
+                } else {
+                    report.label = format!(
+                        "{}; input header stripped ({} bytes)",
+                        report.label, ROM_HEADER_BYTES
+                    );
+                }
             }
             if let Some(plan) = trimmed_plan {
                 report.label = format!(
@@ -1142,7 +1336,7 @@ impl CliApp {
     fn run_patch_apply(&self, args: PatchApplyCommand) -> ExitCode {
         let PatchApplyCommand {
             input,
-            patch,
+            patches,
             output,
             strip_header,
             add_header,
@@ -1167,7 +1361,7 @@ impl CliApp {
         ) {
             return self.finish("patch-apply", report);
         }
-        for patch_path in &patch {
+        for patch_path in &patches {
             if let Some(report) = self.require_existing_path(
                 "patch-apply",
                 OperationFamily::Patch,
@@ -1179,125 +1373,232 @@ impl CliApp {
             }
         }
 
-        let Some(handler) = self.patches.probe(&patch[0]) else {
-            return self.finish(
-                "patch-apply",
-                OperationReport::failed(
+        let mut temp_paths = Vec::new();
+        let report = (|| {
+            if patches.is_empty() {
+                return OperationReport::failed(
                     OperationFamily::Patch,
                     None,
-                    "probe",
-                    format!(
-                        "no registered patch handler matched `{}`",
-                        patch[0].display()
-                    ),
-                    probe_threads,
-                ),
-            );
-        };
+                    "validate",
+                    "at least one --patch value is required",
+                    probe_threads.clone(),
+                );
+            }
 
-        let mut temp_paths = Vec::new();
-        let mut stripped_header = None;
-        let apply_input = if strip_header {
-            self.emit_running(
-                "patch-apply",
-                OperationFamily::Patch,
-                Some(handler.descriptor().name),
-                "prepare",
-                "stripping 512-byte header before patch apply",
-                None,
-                None,
-            );
-            let stripped_path = context
-                .temp_paths()
-                .next_path("patch-apply-input-noheader", Some("bin"));
-            match Self::strip_header_to_temp(&input, &stripped_path) {
-                Ok(header) => {
-                    stripped_header = Some(header);
-                    temp_paths.push(stripped_path.clone());
-                    stripped_path
-                }
-                Err(error) => {
-                    return self.finish(
-                        "patch-apply",
-                        OperationReport::failed(
+            let mut stripped_header = None;
+            let mut stripped_header_match = None;
+            let apply_input = if strip_header {
+                self.emit_running(
+                    "patch-apply",
+                    OperationFamily::Patch,
+                    None,
+                    "prepare",
+                    "stripping ROM header before patch apply",
+                    None,
+                    None,
+                );
+                let stripped_path = context
+                    .temp_paths()
+                    .next_path("patch-apply-input-noheader", Some("bin"));
+                match Self::strip_header_to_temp(&input, &stripped_path) {
+                    Ok(result) => {
+                        stripped_header = Some(result.header_bytes);
+                        stripped_header_match = result.matched_header;
+                        temp_paths.push(stripped_path.clone());
+                        stripped_path
+                    }
+                    Err(error) => {
+                        return OperationReport::failed(
                             OperationFamily::Patch,
-                            Some(handler.descriptor().name.to_string()),
+                            None,
                             "compat",
                             error.to_string(),
                             Some(context.plan_threads(ThreadCapability::single_threaded())),
-                        ),
-                    );
-                }
-            }
-        } else {
-            input.clone()
-        };
-        let needs_postprocess = add_header || repair_checksum;
-        let apply_output = if needs_postprocess {
-            let staged_path = context
-                .temp_paths()
-                .next_path("patch-apply-output-staged", Some("bin"));
-            temp_paths.push(staged_path.clone());
-            staged_path
-        } else {
-            output.clone()
-        };
-        let request = PatchApplyRequest {
-            input: apply_input,
-            patches: patch,
-            output: apply_output.clone(),
-        };
-        self.emit_running(
-            "patch-apply",
-            OperationFamily::Patch,
-            Some(handler.descriptor().name),
-            "apply",
-            format!("applying patch using {}", handler.descriptor().name),
-            Some(0.0),
-            None,
-        );
-        let mut report = handler.apply(&request, &context).unwrap_or_else(|error| {
-            OperationReport::failed(
-                OperationFamily::Patch,
-                Some(handler.descriptor().name.to_string()),
-                "apply",
-                error.to_string(),
-                Some(context.plan_threads(ThreadCapability::single_threaded())),
-            )
-        });
-        if report.status == OperationStatus::Succeeded && needs_postprocess {
-            self.emit_running(
-                "patch-apply",
-                OperationFamily::Patch,
-                Some(handler.descriptor().name),
-                "compat",
-                "finalizing compatibility output transforms",
-                None,
-                Some(context.plan_threads(ThreadCapability::single_threaded())),
-            );
-            match Self::finalize_patch_apply_output(
-                &apply_output,
-                &output,
-                add_header,
-                stripped_header.as_deref(),
-                repair_checksum,
-            ) {
-                Ok(repaired_kind) => {
-                    if let Some(kind) = repaired_kind {
-                        report.label = format!("{}; repaired checksum ({kind})", report.label);
+                        );
                     }
                 }
-                Err(error) => {
-                    report = OperationReport::failed(
+            } else {
+                input.clone()
+            };
+
+            let patch_count = patches.len();
+            let needs_postprocess = add_header || repair_checksum || patch_count > 1;
+            let staged_output = if needs_postprocess {
+                let staged_path = context
+                    .temp_paths()
+                    .next_path("patch-apply-output-staged", Some("bin"));
+                temp_paths.push(staged_path.clone());
+                staged_path
+            } else {
+                output.clone()
+            };
+
+            let mut current_input = apply_input;
+            let mut applied_formats = Vec::with_capacity(patch_count);
+            let mut report = OperationReport::failed(
+                OperationFamily::Patch,
+                None,
+                "apply",
+                "patch apply was not executed",
+                Some(context.plan_threads(ThreadCapability::single_threaded())),
+            );
+
+            for (index, patch_path) in patches.iter().enumerate() {
+                let Some(handler) = self.patches.probe(patch_path) else {
+                    return OperationReport::failed(
+                        OperationFamily::Patch,
+                        None,
+                        "probe",
+                        format!(
+                            "patch {}/{}: no registered patch handler matched `{}`",
+                            index + 1,
+                            patch_count,
+                            patch_path.display()
+                        ),
+                        probe_threads.clone(),
+                    );
+                };
+                applied_formats.push(handler.descriptor().name);
+
+                let is_last = index + 1 == patch_count;
+                let apply_output = if is_last {
+                    staged_output.clone()
+                } else {
+                    let intermediate_output = context
+                        .temp_paths()
+                        .next_path("patch-apply-output-step", Some("bin"));
+                    temp_paths.push(intermediate_output.clone());
+                    intermediate_output
+                };
+                if let Some(parent) = apply_output.parent()
+                    && let Err(error) = fs::create_dir_all(parent)
+                {
+                    return OperationReport::failed(
                         OperationFamily::Patch,
                         Some(handler.descriptor().name.to_string()),
-                        "compat",
-                        error.to_string(),
+                        "prepare",
+                        format!(
+                            "failed to prepare output path `{}`: {error}",
+                            apply_output.display()
+                        ),
                         Some(context.plan_threads(ThreadCapability::single_threaded())),
                     );
                 }
+
+                self.emit_running(
+                    "patch-apply",
+                    OperationFamily::Patch,
+                    Some(handler.descriptor().name),
+                    "apply",
+                    if patch_count == 1 {
+                        format!("applying patch using {}", handler.descriptor().name)
+                    } else {
+                        format!(
+                            "applying patch {}/{} using {} (`{}`)",
+                            index + 1,
+                            patch_count,
+                            handler.descriptor().name,
+                            patch_path.display()
+                        )
+                    },
+                    Some(0.0),
+                    None,
+                );
+
+                let request = PatchApplyRequest {
+                    input: current_input,
+                    patches: vec![patch_path.clone()],
+                    output: apply_output.clone(),
+                };
+                report = handler.apply(&request, &context).unwrap_or_else(|error| {
+                    OperationReport::failed(
+                        OperationFamily::Patch,
+                        Some(handler.descriptor().name.to_string()),
+                        "apply",
+                        error.to_string(),
+                        Some(context.plan_threads(ThreadCapability::single_threaded())),
+                    )
+                });
+                if report.status != OperationStatus::Succeeded {
+                    if patch_count > 1 {
+                        report.label = format!(
+                            "patch {}/{} (`{}`): {}",
+                            index + 1,
+                            patch_count,
+                            patch_path.display(),
+                            report.label
+                        );
+                    }
+                    return report;
+                }
+
+                current_input = apply_output;
             }
-        }
+
+            if report.status == OperationStatus::Succeeded && needs_postprocess {
+                self.emit_running(
+                    "patch-apply",
+                    OperationFamily::Patch,
+                    applied_formats.last().copied(),
+                    "compat",
+                    if add_header || repair_checksum {
+                        "finalizing compatibility output transforms"
+                    } else {
+                        "finalizing multi-patch output"
+                    },
+                    None,
+                    Some(context.plan_threads(ThreadCapability::single_threaded())),
+                );
+                match Self::finalize_patch_apply_output(
+                    &staged_output,
+                    &output,
+                    add_header,
+                    stripped_header.as_deref(),
+                    repair_checksum,
+                ) {
+                    Ok(repaired_kind) => {
+                        if let Some(kind) = repaired_kind {
+                            report.label = format!("{}; repaired checksum ({kind})", report.label);
+                        }
+                    }
+                    Err(error) => {
+                        return OperationReport::failed(
+                            OperationFamily::Patch,
+                            report.format.clone(),
+                            "compat",
+                            error.to_string(),
+                            Some(context.plan_threads(ThreadCapability::single_threaded())),
+                        );
+                    }
+                }
+            }
+
+            if patch_count > 1 {
+                report.label = format!(
+                    "applied {patch_count} patches sequentially ({}); {}",
+                    applied_formats.join(" -> "),
+                    report.label
+                );
+            }
+            if strip_header {
+                if let Some(header_match) = stripped_header_match {
+                    report.label = format!(
+                        "{}; input header stripped ({} bytes, {})",
+                        report.label,
+                        header_match.stripped_bytes(),
+                        header_match.profile_name()
+                    );
+                } else {
+                    report.label = format!(
+                        "{}; input header stripped ({} bytes)",
+                        report.label, ROM_HEADER_BYTES
+                    );
+                }
+            }
+
+            report
+        })();
+
         for temp_path in temp_paths {
             let _ = fs::remove_file(temp_path);
         }
@@ -2216,26 +2517,84 @@ impl CliApp {
         )
     }
 
-    fn strip_header_to_temp(input: &Path, stripped_path: &Path) -> Result<Vec<u8>> {
-        let input_len = fs::metadata(input)?.len();
-        if input_len < ROM_HEADER_BYTES as u64 {
-            return Err(RomWeaverError::Validation(format!(
-                "cannot strip 512-byte header from `{}` (file is only {input_len} byte(s))",
-                input.display()
-            )));
+    fn known_header_candidates_for_path(path: &Path) -> Vec<KnownRomHeader> {
+        let mut candidates = Vec::with_capacity(KnownRomHeader::ALL.len());
+        let extension_with_dot = path
+            .extension()
+            .and_then(|value| value.to_str())
+            .map(|value| format!(".{value}"));
+
+        if let Some(extension_with_dot) = extension_with_dot.as_deref() {
+            for header in KnownRomHeader::ALL {
+                if header.matches_extension(extension_with_dot) {
+                    candidates.push(header);
+                }
+            }
         }
+
+        for header in KnownRomHeader::ALL {
+            if !candidates.contains(&header) {
+                candidates.push(header);
+            }
+        }
+        candidates
+    }
+
+    fn detect_known_rom_header_from_prefix(
+        path: &Path,
+        prefix: &[u8],
+    ) -> Option<KnownRomHeaderMatch> {
+        for header in Self::known_header_candidates_for_path(path) {
+            if header.signature_matches(prefix) {
+                return Some(KnownRomHeaderMatch {
+                    header,
+                    stripped_bytes: header.data_offset_bytes(),
+                });
+            }
+        }
+        None
+    }
+
+    fn detect_known_rom_header(path: &Path) -> Result<Option<KnownRomHeaderMatch>> {
+        let mut source = BufReader::new(File::open(path)?);
+        let mut prefix = vec![0_u8; ROM_HEADER_SCAN_BYTES];
+        let bytes_read = source.read(&mut prefix)?;
+        prefix.truncate(bytes_read);
+        Ok(Self::detect_known_rom_header_from_prefix(path, &prefix))
+    }
+
+    fn strip_header_to_temp(input: &Path, stripped_path: &Path) -> Result<StripHeaderResult> {
+        let input_len = fs::metadata(input)?.len();
         if let Some(parent) = stripped_path.parent() {
             fs::create_dir_all(parent)?;
         }
 
         let mut source = BufReader::new(File::open(input)?);
-        let mut header = vec![0_u8; ROM_HEADER_BYTES];
+        let probe_len =
+            ROM_HEADER_SCAN_BYTES.min(usize::try_from(input_len).unwrap_or(ROM_HEADER_SCAN_BYTES));
+        let mut probe_bytes = vec![0_u8; probe_len];
+        source.read_exact(&mut probe_bytes)?;
+        let matched_header = Self::detect_known_rom_header_from_prefix(input, &probe_bytes);
+        let header_len = matched_header
+            .map(|value| value.stripped_bytes())
+            .unwrap_or(ROM_HEADER_BYTES);
+        if input_len < header_len as u64 {
+            return Err(RomWeaverError::Validation(format!(
+                "cannot strip {header_len}-byte header from `{}` (file is only {input_len} byte(s))",
+                input.display()
+            )));
+        }
+        source.seek(SeekFrom::Start(0))?;
+        let mut header = vec![0_u8; header_len];
         source.read_exact(&mut header)?;
 
         let mut stripped = BufWriter::new(File::create(stripped_path)?);
         io::copy(&mut source, &mut stripped)?;
         stripped.flush()?;
-        Ok(header)
+        Ok(StripHeaderResult {
+            header_bytes: header,
+            matched_header,
+        })
     }
 
     fn finalize_patch_apply_output(
