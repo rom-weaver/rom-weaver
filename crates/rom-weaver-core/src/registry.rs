@@ -1,7 +1,8 @@
 use std::path::{Path, PathBuf};
 
 use crate::{
-    OperationContext, OperationFamily, OperationStatus, Result, ThreadCapability, ThreadExecution,
+    OperationContext, OperationFamily, OperationStatus, Result, RomWeaverError, ThreadCapability,
+    ThreadExecution,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -224,6 +225,17 @@ pub trait ContainerHandler: Send + Sync {
         request: &ContainerInspectRequest,
         context: &OperationContext,
     ) -> Result<OperationReport>;
+    fn list_entries(
+        &self,
+        request: &ContainerInspectRequest,
+        context: &OperationContext,
+    ) -> Result<Vec<String>> {
+        let _ = (request, context);
+        Err(RomWeaverError::Unsupported(format!(
+            "{} does not support listing entries",
+            self.descriptor().name
+        )))
+    }
     fn extract(
         &self,
         request: &ContainerExtractRequest,

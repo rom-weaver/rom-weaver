@@ -26,6 +26,14 @@ fn parse_single_json_line(output: &[u8]) -> Value {
     serde_json::from_str(line).expect("valid json")
 }
 
+fn label_digest_value<'a>(label: &'a str, key: &str) -> Option<&'a str> {
+    let prefix = format!("{key}=");
+    label.split_whitespace().find_map(|part| {
+        part.strip_prefix(prefix.as_str())
+            .map(|value| value.trim_end_matches(';'))
+    })
+}
+
 fn setup_temp_dir() -> TempDir {
     TempDir::new().expect("temp dir")
 }
@@ -390,6 +398,20 @@ fn with_header(bytes: &[u8]) -> Vec<u8> {
     headered
 }
 
+fn sega_genesis_checksum(bytes: &[u8]) -> u16 {
+    let mut sum = 0_u32;
+    let mut cursor = 0x200usize;
+    while cursor + 1 < bytes.len() {
+        let word = u16::from_be_bytes([bytes[cursor], bytes[cursor + 1]]);
+        sum = sum.wrapping_add(u32::from(word));
+        cursor += 2;
+    }
+    if cursor < bytes.len() {
+        sum = sum.wrapping_add(u32::from(bytes[cursor]) << 8);
+    }
+    (sum & 0xFFFF) as u16
+}
+
 struct TestPpfRecord {
     offset: u32,
     data: Vec<u8>,
@@ -574,6 +596,50 @@ fn inspect_reports_known_container_as_supported() {
 }
 
 #[test]
+fn inspect_list_reports_selectable_zip_entries() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("sample.bin").path(), b"payload").expect("fixture");
+    let archive = temp.child("sample.zip");
+
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("sample.bin").path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            archive.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "inspect",
+            archive.path().to_str().expect("path"),
+            "--list",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "inspect");
+    assert_eq!(json["family"], "container");
+    assert_eq!(json["format"], "zip");
+    assert_eq!(json["status"], "succeeded");
+    let label = json["label"].as_str().expect("label");
+    assert!(label.contains("selectable entries"));
+    assert!(label.contains("sample.bin"));
+}
+
+#[test]
 fn inspect_reports_rar_container_as_supported() {
     let temp = setup_temp_dir();
     let source = temp.child("version.rar");
@@ -593,6 +659,47 @@ fn inspect_reports_rar_container_as_supported() {
     assert_eq!(json["family"], "container");
     assert_eq!(json["format"], "rar");
     assert_eq!(json["status"], "succeeded");
+}
+
+#[test]
+fn inspect_list_rejects_patch_inputs() {
+    let temp = setup_temp_dir();
+    fs::write(
+        temp.child("update.ips").path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: 0,
+                data: vec![0xAA],
+            }],
+            None,
+        ),
+    )
+    .expect("fixture");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "inspect",
+            temp.child("update.ips").path().to_str().expect("path"),
+            "--list",
+            "--json",
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "inspect");
+    assert_eq!(json["family"], "patch");
+    assert_eq!(json["status"], "failed");
+    assert!(
+        json["label"]
+            .as_str()
+            .expect("label")
+            .contains("only supported for container formats")
+    );
 }
 
 #[test]
@@ -790,6 +897,103 @@ fn checksum_supports_sha256_blake3_and_crc32c() {
         label.contains("blake3=d74981efa70a0c880b8d8c1985d075dbcbf679b99a5f9914e5aaf96b831a9e24")
     );
     assert!(label.contains("crc32c=c99465aa"));
+}
+
+#[test]
+fn checksum_strip_header_matches_unheadered_digests() {
+    let temp = setup_temp_dir();
+    let payload = (0..1024)
+        .map(|index| ((index * 11) % 251) as u8)
+        .collect::<Vec<_>>();
+    fs::write(temp.child("plain.bin").path(), &payload).expect("fixture");
+    fs::write(temp.child("headered.bin").path(), with_header(&payload)).expect("fixture");
+
+    let plain_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "checksum",
+            temp.child("plain.bin").path().to_str().expect("path"),
+            "--algo",
+            "crc32",
+            "--algo",
+            "sha1",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let headered_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "checksum",
+            temp.child("headered.bin").path().to_str().expect("path"),
+            "--algo",
+            "crc32",
+            "--algo",
+            "sha1",
+            "--strip-header",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let plain_json = parse_single_json_line(&plain_output);
+    let headered_json = parse_single_json_line(&headered_output);
+    assert_eq!(plain_json["command"], "checksum");
+    assert_eq!(headered_json["command"], "checksum");
+    assert_eq!(plain_json["status"], "succeeded");
+    assert_eq!(headered_json["status"], "succeeded");
+
+    let plain_label = plain_json["label"].as_str().expect("plain label");
+    let headered_label = headered_json["label"].as_str().expect("headered label");
+    assert_eq!(
+        label_digest_value(plain_label, "crc32"),
+        label_digest_value(headered_label, "crc32")
+    );
+    assert_eq!(
+        label_digest_value(plain_label, "sha1"),
+        label_digest_value(headered_label, "sha1")
+    );
+    assert!(headered_label.contains("input header stripped (512 bytes)"));
+}
+
+#[test]
+fn checksum_strip_header_rejects_small_input() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("tiny.bin").path(), b"small").expect("fixture");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "checksum",
+            temp.child("tiny.bin").path().to_str().expect("path"),
+            "--algo",
+            "crc32",
+            "--strip-header",
+            "--json",
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "checksum");
+    assert_eq!(json["family"], "checksum");
+    assert_eq!(json["status"], "failed");
+    assert!(
+        json["label"]
+            .as_str()
+            .expect("label")
+            .contains("cannot strip 512-byte header")
+    );
 }
 
 #[test]
@@ -2614,6 +2818,189 @@ fn patch_apply_succeeds_for_spatch_patch_with_ips_extension() {
     let output_bytes = fs::read(temp.child("output.bin").path()).expect("output");
     assert_eq!(output_bytes[0], 0);
     assert_eq!(output_bytes[512], b'Z');
+}
+
+#[test]
+fn patch_apply_supports_strip_and_add_header_flags() {
+    let temp = setup_temp_dir();
+    let base = b"abcdefgh".to_vec();
+    let headered = with_header(&base);
+    fs::write(temp.child("input.bin").path(), &headered).expect("fixture");
+    fs::write(
+        temp.child("update.ips").path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: 0,
+                data: b"Z".to_vec(),
+            }],
+            Some(base.len() as u32),
+        ),
+    )
+    .expect("fixture");
+
+    let stripped_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            temp.child("input.bin").path().to_str().expect("path"),
+            "--patch",
+            temp.child("update.ips").path().to_str().expect("path"),
+            "--output",
+            temp.child("output-stripped.bin")
+                .path()
+                .to_str()
+                .expect("path"),
+            "--strip-header",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let stripped_json = parse_single_json_line(&stripped_output);
+    assert_eq!(stripped_json["command"], "patch-apply");
+    assert_eq!(stripped_json["family"], "patch");
+    assert_eq!(stripped_json["status"], "succeeded");
+    assert_eq!(
+        fs::read(temp.child("output-stripped.bin").path()).expect("output"),
+        b"Zbcdefgh".to_vec()
+    );
+
+    let headered_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            temp.child("input.bin").path().to_str().expect("path"),
+            "--patch",
+            temp.child("update.ips").path().to_str().expect("path"),
+            "--output",
+            temp.child("output-headered.bin")
+                .path()
+                .to_str()
+                .expect("path"),
+            "--strip-header",
+            "--add-header",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let headered_json = parse_single_json_line(&headered_output);
+    assert_eq!(headered_json["command"], "patch-apply");
+    assert_eq!(headered_json["family"], "patch");
+    assert_eq!(headered_json["status"], "succeeded");
+    assert_eq!(
+        fs::read(temp.child("output-headered.bin").path()).expect("output"),
+        with_header(b"Zbcdefgh")
+    );
+}
+
+#[test]
+fn patch_apply_repair_checksum_repairs_genesis_header() {
+    let temp = setup_temp_dir();
+    let mut input = vec![0_u8; 0x260];
+    input[0x100..0x104].copy_from_slice(b"SEGA");
+    fs::write(temp.child("input.bin").path(), &input).expect("fixture");
+    fs::write(
+        temp.child("update.ips").path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: 0x200,
+                data: vec![0x12, 0x34, 0x56],
+            }],
+            Some(input.len() as u32),
+        ),
+    )
+    .expect("fixture");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            temp.child("input.bin").path().to_str().expect("path"),
+            "--patch",
+            temp.child("update.ips").path().to_str().expect("path"),
+            "--output",
+            temp.child("output.bin").path().to_str().expect("path"),
+            "--repair-checksum",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "patch-apply");
+    assert_eq!(json["family"], "patch");
+    assert_eq!(json["status"], "succeeded");
+    assert!(
+        json["label"]
+            .as_str()
+            .expect("label")
+            .contains("repaired checksum (sega-genesis)")
+    );
+
+    let output_bytes = fs::read(temp.child("output.bin").path()).expect("output");
+    let expected = sega_genesis_checksum(&output_bytes);
+    let actual = u16::from_be_bytes([output_bytes[0x18E], output_bytes[0x18F]]);
+    assert_eq!(actual, expected);
+}
+
+#[test]
+fn patch_apply_repair_checksum_rejects_unsupported_targets() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("input.bin").path(), b"plain-bytes").expect("fixture");
+    fs::write(
+        temp.child("update.ips").path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: 0,
+                data: vec![0x41],
+            }],
+            Some(10),
+        ),
+    )
+    .expect("fixture");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            temp.child("input.bin").path().to_str().expect("path"),
+            "--patch",
+            temp.child("update.ips").path().to_str().expect("path"),
+            "--output",
+            temp.child("output.bin").path().to_str().expect("path"),
+            "--repair-checksum",
+            "--json",
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "patch-apply");
+    assert_eq!(json["family"], "patch");
+    assert_eq!(json["status"], "failed");
+    assert!(
+        json["label"]
+            .as_str()
+            .expect("label")
+            .contains("could not auto-detect a supported checksum header")
+    );
 }
 
 #[test]

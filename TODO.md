@@ -20,16 +20,17 @@
 - `43ba2f3`: zip, zipx, 7z, and tar-family inspect/extract/create handlers landed.
 - `78ae8b9`: z3ds inspect/extract/create landed (parallel extract path for large files).
 - `67ef8fb`: rvz inspect/extract/create landed.
+- `this commit`: inspect now supports `--list` archive entry output; patch-apply gained `--strip-header`/`--add-header`/`--repair-checksum`; checksum gained `--strip-header`.
 
 ## Commands
 
 | ID | Family | Name | Inspect | Extract | Create/Compress | Apply | Create Patch | Threads | Tests | Status | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| CMD-001 | command | inspect | done | n/a | n/a | n/a | n/a | n/a | cli-smoke,json-contract | done | Routes inspect through container and patch registries with text/JSON reporting. |
+| CMD-001 | command | inspect | done | n/a | n/a | n/a | n/a | n/a | cli-smoke,json-contract | done | Routes inspect through container and patch registries with text/JSON reporting, and `--list` now surfaces selectable archive entry names for extraction workflows. |
 | CMD-002 | command | extract | n/a | done | n/a | n/a | n/a | context-plumbed | cli-smoke,json-contract | done | Container extraction landed, including recursive nested archive extraction. |
-| CMD-003 | command | checksum | n/a | n/a | n/a | n/a | n/a | context-plumbed | cli-smoke,json-contract,thread-model | done | Native engine now covers `crc32`, `md5`, `sha1`, `sha256`, `blake3`, `crc32c`, `crc16`, and `adler32` with mmap + threaded fanout. |
+| CMD-003 | command | checksum | n/a | n/a | n/a | n/a | n/a | context-plumbed | cli-smoke,json-contract,thread-model | done | Native engine now covers `crc32`, `md5`, `sha1`, `sha256`, `blake3`, `crc32c`, `crc16`, and `adler32` with mmap + threaded fanout; CLI also supports `--strip-header` for 512-byte copier-header compatibility. |
 | CMD-004 | command | compress | n/a | n/a | done | n/a | n/a | context-plumbed | cli-smoke,json-contract | done | Container create/compress routing is wired through registered handlers (`--format`, optional `--codec`/`--level`). |
-| CMD-005 | command | patch-apply | n/a | n/a | n/a | done | n/a | context-plumbed | cli-smoke,json-contract | done | Patch apply routes through handler probing and emits thread-aware reports. |
+| CMD-005 | command | patch-apply | n/a | n/a | n/a | done | n/a | context-plumbed | cli-smoke,json-contract | done | Patch apply routes through handler probing, emits thread-aware reports, and supports compatibility flags `--strip-header`, `--add-header`, and `--repair-checksum` (auto-detected Sega Genesis/Game Boy header repair). |
 | CMD-006 | command | patch-create | n/a | n/a | n/a | n/a | done | context-plumbed | cli-smoke,json-contract | done | Patch create routes by format name through registered handlers. |
 | CMD-007 | command | trim | n/a | n/a | scaffolded | n/a | n/a | context-plumbed | cli-smoke,json-contract,thread-model | todo | Dedicated image/file trimming workflow; target NDSTokyoTrim-compatible behavior for NDS/DSi trim boundaries and safety checks. |
 

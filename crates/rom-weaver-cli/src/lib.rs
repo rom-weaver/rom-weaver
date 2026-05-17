@@ -1,6 +1,8 @@
 use std::{
     collections::{HashSet, VecDeque},
     fs,
+    fs::File,
+    io::{self, BufReader, BufWriter, Read, Write},
     path::{Path, PathBuf},
     process::ExitCode,
     sync::Arc,
@@ -47,6 +49,11 @@ enum Commands {
 #[derive(Debug, Args)]
 struct InspectCommand {
     source: PathBuf,
+    #[arg(
+        long,
+        help = "List selectable archive entries in the inspect label when supported"
+    )]
+    list: bool,
 }
 
 #[derive(Debug, Args)]
@@ -65,6 +72,8 @@ struct ChecksumCommand {
     source: PathBuf,
     #[arg(long = "algo", required = true)]
     algo: Vec<String>,
+    #[arg(long, help = "Remove a 512-byte copier header before checksum")]
+    strip_header: bool,
     #[arg(long)]
     start: Option<u64>,
     #[arg(long)]
@@ -95,6 +104,18 @@ struct PatchApplyCommand {
     patch: Vec<PathBuf>,
     #[arg(long)]
     output: PathBuf,
+    #[arg(long, help = "Remove a 512-byte copier header before patch apply")]
+    strip_header: bool,
+    #[arg(
+        long,
+        help = "Add a 512-byte header after patch apply (reuses stripped header bytes when available)"
+    )]
+    add_header: bool,
+    #[arg(
+        long,
+        help = "Repair supported ROM header checksums after patch apply (auto-detect)"
+    )]
+    repair_checksum: bool,
     #[arg(long, default_value = "auto")]
     threads: ThreadBudget,
 }
@@ -133,6 +154,12 @@ struct CliApp {
 
 const MAX_NESTED_EXTRACT_DEPTH: usize = 8;
 const MAX_NESTED_EXTRACT_ARCHIVES: usize = 256;
+const ROM_HEADER_BYTES: usize = 512;
+const GAME_BOY_NINTENDO_LOGO: [u8; 48] = [
+    0xCE, 0xED, 0x66, 0x66, 0xCC, 0x0D, 0x00, 0x0B, 0x03, 0x73, 0x00, 0x83, 0x00, 0x0C, 0x00, 0x0D,
+    0x00, 0x08, 0x11, 0x1F, 0x88, 0x89, 0x00, 0x0E, 0xDC, 0xCC, 0x6E, 0xE6, 0xDD, 0xDD, 0xD9, 0x99,
+    0xBB, 0xBB, 0x67, 0x63, 0x6E, 0x0E, 0xEC, 0xCC, 0xDD, 0xDC, 0x99, 0x9F, 0xBB, 0xB9, 0x33, 0x3E,
+];
 
 impl CliApp {
     fn new(reporter: Arc<dyn ProgressSink>) -> Self {
@@ -157,23 +184,64 @@ impl CliApp {
 
     fn run_inspect(&self, args: InspectCommand) -> ExitCode {
         let context = self.context(ThreadBudget::Fixed(1));
-        if let Some(report) = self.require_existing_path(
-            "inspect",
-            OperationFamily::Command,
-            None,
-            &args.source,
-            None,
-        ) {
+        let source = args.source.clone();
+        if let Some(report) =
+            self.require_existing_path("inspect", OperationFamily::Command, None, &source, None)
+        {
             return self.finish("inspect", report);
         }
 
-        if let Some(handler) = self.containers.probe(&args.source) {
+        if let Some(handler) = self.containers.probe(&source) {
             let request = ContainerInspectRequest {
-                source: args.source,
+                source: source.clone(),
             };
-            let report = handler.inspect(&request, &context).unwrap_or_else(|error| {
+            let mut report = handler.inspect(&request, &context).unwrap_or_else(|error| {
                 OperationReport::failed(
                     OperationFamily::Container,
+                    Some(handler.descriptor().name.to_string()),
+                    "inspect",
+                    error.to_string(),
+                    None,
+                )
+            });
+            if report.status == OperationStatus::Succeeded && args.list {
+                let listed = handler.list_entries(&request, &context).map_err(|error| {
+                    OperationReport::failed(
+                        OperationFamily::Container,
+                        Some(handler.descriptor().name.to_string()),
+                        "list",
+                        error.to_string(),
+                        None,
+                    )
+                });
+                match listed {
+                    Ok(entries) => {
+                        report.label = Self::append_entry_list_label(&report.label, &entries);
+                    }
+                    Err(list_error) => {
+                        report = list_error;
+                    }
+                }
+            }
+            return self.finish("inspect", report);
+        }
+
+        if let Some(handler) = self.patches.probe(&source) {
+            if args.list {
+                return self.finish(
+                    "inspect",
+                    OperationReport::failed(
+                        OperationFamily::Patch,
+                        Some(handler.descriptor().name.to_string()),
+                        "list",
+                        "inspect --list is only supported for container formats",
+                        None,
+                    ),
+                );
+            }
+            let report = handler.parse(&source, &context).unwrap_or_else(|error| {
+                OperationReport::failed(
+                    OperationFamily::Patch,
                     Some(handler.descriptor().name.to_string()),
                     "inspect",
                     error.to_string(),
@@ -183,28 +251,13 @@ impl CliApp {
             return self.finish("inspect", report);
         }
 
-        if let Some(handler) = self.patches.probe(&args.source) {
-            let report = handler
-                .parse(&args.source, &context)
-                .unwrap_or_else(|error| {
-                    OperationReport::failed(
-                        OperationFamily::Patch,
-                        Some(handler.descriptor().name.to_string()),
-                        "inspect",
-                        error.to_string(),
-                        None,
-                    )
-                });
-            return self.finish("inspect", report);
-        }
-
         self.finish(
             "inspect",
             OperationReport::failed(
                 OperationFamily::Command,
                 None,
                 "probe",
-                format!("no registered handler matched `{}`", args.source.display()),
+                format!("no registered handler matched `{}`", source.display()),
                 None,
             ),
         )
@@ -279,20 +332,28 @@ impl CliApp {
     }
 
     fn run_checksum(&self, args: ChecksumCommand) -> ExitCode {
-        let context = self.context(args.threads);
+        let ChecksumCommand {
+            source,
+            algo,
+            strip_header,
+            start,
+            length,
+            threads,
+        } = args;
+        let context = self.context(threads);
         let thread_execution =
-            Some(context.plan_threads(ThreadCapability::parallel(Some(args.algo.len().max(1)))));
+            Some(context.plan_threads(ThreadCapability::parallel(Some(algo.len().max(1)))));
         if let Some(report) = self.require_existing_path(
             "checksum",
             OperationFamily::Checksum,
             Some(self.checksum.name().to_string()),
-            &args.source,
+            &source,
             thread_execution.clone(),
         ) {
             return self.finish("checksum", report);
         }
 
-        let invalid = args.algo.iter().find(|algo| {
+        let invalid = algo.iter().find(|algo| {
             !supported_algorithms()
                 .iter()
                 .any(|supported| supported.eq_ignore_ascii_case(algo))
@@ -310,17 +371,42 @@ impl CliApp {
             );
         }
 
-        let request = ChecksumRequest {
-            source: args.source,
-            algorithms: args
-                .algo
-                .into_iter()
-                .map(|algo| algo.to_ascii_lowercase())
-                .collect(),
-            start: args.start,
-            length: args.length,
+        let mut temp_paths = Vec::new();
+        let checksum_source = if strip_header {
+            let stripped_path = context
+                .temp_paths()
+                .next_path("checksum-input-noheader", Some("bin"));
+            match Self::strip_header_to_temp(&source, &stripped_path) {
+                Ok(_) => {
+                    temp_paths.push(stripped_path.clone());
+                    stripped_path
+                }
+                Err(error) => {
+                    return self.finish(
+                        "checksum",
+                        OperationReport::failed(
+                            OperationFamily::Checksum,
+                            Some(self.checksum.name().to_string()),
+                            "validate",
+                            error.to_string(),
+                            thread_execution,
+                        ),
+                    );
+                }
+            }
+        } else {
+            source.clone()
         };
-        let report = if request.start.is_some() || request.length.is_some() {
+        let request = ChecksumRequest {
+            source: checksum_source,
+            algorithms: algo
+                .into_iter()
+                .map(|algorithm| algorithm.to_ascii_lowercase())
+                .collect(),
+            start,
+            length,
+        };
+        let mut report = if request.start.is_some() || request.length.is_some() {
             self.checksum.checksum_range(&request, &context)
         } else {
             self.checksum.checksum_file(&request, &context)
@@ -337,6 +423,12 @@ impl CliApp {
                 ),
             )
         });
+        if report.status == OperationStatus::Succeeded && strip_header {
+            report.label = format!("{}; input header stripped (512 bytes)", report.label);
+        }
+        for temp_path in temp_paths {
+            let _ = fs::remove_file(temp_path);
+        }
         self.finish("checksum", report)
     }
 
@@ -412,30 +504,39 @@ impl CliApp {
     }
 
     fn run_patch_apply(&self, args: PatchApplyCommand) -> ExitCode {
-        let context = self.context(args.threads);
+        let PatchApplyCommand {
+            input,
+            patch,
+            output,
+            strip_header,
+            add_header,
+            repair_checksum,
+            threads,
+        } = args;
+        let context = self.context(threads);
         let probe_threads = Some(context.plan_threads(ThreadCapability::single_threaded()));
         if let Some(report) = self.require_existing_path(
             "patch-apply",
             OperationFamily::Patch,
             None,
-            &args.input,
+            &input,
             probe_threads.clone(),
         ) {
             return self.finish("patch-apply", report);
         }
-        for patch in &args.patch {
+        for patch_path in &patch {
             if let Some(report) = self.require_existing_path(
                 "patch-apply",
                 OperationFamily::Patch,
                 None,
-                patch,
+                patch_path,
                 probe_threads.clone(),
             ) {
                 return self.finish("patch-apply", report);
             }
         }
 
-        let Some(handler) = self.patches.probe(&args.patch[0]) else {
+        let Some(handler) = self.patches.probe(&patch[0]) else {
             return self.finish(
                 "patch-apply",
                 OperationReport::failed(
@@ -444,19 +545,57 @@ impl CliApp {
                     "probe",
                     format!(
                         "no registered patch handler matched `{}`",
-                        args.patch[0].display()
+                        patch[0].display()
                     ),
                     probe_threads,
                 ),
             );
         };
 
-        let request = PatchApplyRequest {
-            input: args.input,
-            patches: args.patch,
-            output: args.output,
+        let mut temp_paths = Vec::new();
+        let mut stripped_header = None;
+        let apply_input = if strip_header {
+            let stripped_path = context
+                .temp_paths()
+                .next_path("patch-apply-input-noheader", Some("bin"));
+            match Self::strip_header_to_temp(&input, &stripped_path) {
+                Ok(header) => {
+                    stripped_header = Some(header);
+                    temp_paths.push(stripped_path.clone());
+                    stripped_path
+                }
+                Err(error) => {
+                    return self.finish(
+                        "patch-apply",
+                        OperationReport::failed(
+                            OperationFamily::Patch,
+                            Some(handler.descriptor().name.to_string()),
+                            "compat",
+                            error.to_string(),
+                            Some(context.plan_threads(ThreadCapability::single_threaded())),
+                        ),
+                    );
+                }
+            }
+        } else {
+            input.clone()
         };
-        let report = handler.apply(&request, &context).unwrap_or_else(|error| {
+        let needs_postprocess = add_header || repair_checksum;
+        let apply_output = if needs_postprocess {
+            let staged_path = context
+                .temp_paths()
+                .next_path("patch-apply-output-staged", Some("bin"));
+            temp_paths.push(staged_path.clone());
+            staged_path
+        } else {
+            output.clone()
+        };
+        let request = PatchApplyRequest {
+            input: apply_input,
+            patches: patch,
+            output: apply_output.clone(),
+        };
+        let mut report = handler.apply(&request, &context).unwrap_or_else(|error| {
             OperationReport::failed(
                 OperationFamily::Patch,
                 Some(handler.descriptor().name.to_string()),
@@ -465,6 +604,33 @@ impl CliApp {
                 Some(context.plan_threads(ThreadCapability::single_threaded())),
             )
         });
+        if report.status == OperationStatus::Succeeded && needs_postprocess {
+            match Self::finalize_patch_apply_output(
+                &apply_output,
+                &output,
+                add_header,
+                stripped_header.as_deref(),
+                repair_checksum,
+            ) {
+                Ok(repaired_kind) => {
+                    if let Some(kind) = repaired_kind {
+                        report.label = format!("{}; repaired checksum ({kind})", report.label);
+                    }
+                }
+                Err(error) => {
+                    report = OperationReport::failed(
+                        OperationFamily::Patch,
+                        Some(handler.descriptor().name.to_string()),
+                        "compat",
+                        error.to_string(),
+                        Some(context.plan_threads(ThreadCapability::single_threaded())),
+                    );
+                }
+            }
+        }
+        for temp_path in temp_paths {
+            let _ = fs::remove_file(temp_path);
+        }
         self.finish("patch-apply", report)
     }
 
@@ -568,6 +734,152 @@ impl CliApp {
         })?;
 
         Ok((Some(codec_name.to_string()), Some(parsed_level)))
+    }
+
+    fn append_entry_list_label(base: &str, entries: &[String]) -> String {
+        if entries.is_empty() {
+            return format!("{base}; selectable entries: (none)");
+        }
+        format!(
+            "{base}; selectable entries ({}): {}",
+            entries.len(),
+            entries.join(", ")
+        )
+    }
+
+    fn strip_header_to_temp(input: &Path, stripped_path: &Path) -> Result<Vec<u8>> {
+        let input_len = fs::metadata(input)?.len();
+        if input_len < ROM_HEADER_BYTES as u64 {
+            return Err(RomWeaverError::Validation(format!(
+                "cannot strip 512-byte header from `{}` (file is only {input_len} byte(s))",
+                input.display()
+            )));
+        }
+        if let Some(parent) = stripped_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        let mut source = BufReader::new(File::open(input)?);
+        let mut header = vec![0_u8; ROM_HEADER_BYTES];
+        source.read_exact(&mut header)?;
+
+        let mut stripped = BufWriter::new(File::create(stripped_path)?);
+        io::copy(&mut source, &mut stripped)?;
+        stripped.flush()?;
+        Ok(header)
+    }
+
+    fn finalize_patch_apply_output(
+        staged_output: &Path,
+        final_output: &Path,
+        add_header: bool,
+        stripped_header: Option<&[u8]>,
+        repair_checksum: bool,
+    ) -> Result<Option<&'static str>> {
+        let header_bytes = if add_header {
+            Some(stripped_header.unwrap_or(&[0_u8; ROM_HEADER_BYTES]))
+        } else {
+            None
+        };
+
+        if repair_checksum {
+            let mut output_bytes = fs::read(staged_output)?;
+            let repaired_kind =
+                Self::repair_checksum_if_supported(&mut output_bytes).ok_or_else(|| {
+                    RomWeaverError::Validation(
+                        "could not auto-detect a supported checksum header to repair; currently supported targets are sega-genesis and game-boy"
+                            .into(),
+                    )
+                })?;
+            if let Some(parent) = final_output.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            let mut writer = BufWriter::new(File::create(final_output)?);
+            if let Some(header) = header_bytes {
+                writer.write_all(header)?;
+            }
+            writer.write_all(&output_bytes)?;
+            writer.flush()?;
+            return Ok(Some(repaired_kind));
+        }
+
+        Self::copy_with_optional_header(staged_output, final_output, header_bytes)?;
+        Ok(None)
+    }
+
+    fn copy_with_optional_header(
+        source: &Path,
+        destination: &Path,
+        header: Option<&[u8]>,
+    ) -> Result<()> {
+        if let Some(parent) = destination.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let mut reader = BufReader::new(File::open(source)?);
+        let mut writer = BufWriter::new(File::create(destination)?);
+        if let Some(header) = header {
+            writer.write_all(header)?;
+        }
+        io::copy(&mut reader, &mut writer)?;
+        writer.flush()?;
+        Ok(())
+    }
+
+    fn repair_checksum_if_supported(bytes: &mut [u8]) -> Option<&'static str> {
+        if Self::repair_sega_genesis_checksum(bytes) {
+            return Some("sega-genesis");
+        }
+        if Self::repair_game_boy_checksum(bytes) {
+            return Some("game-boy");
+        }
+        None
+    }
+
+    fn repair_sega_genesis_checksum(bytes: &mut [u8]) -> bool {
+        if bytes.len() <= 0x18F || bytes.len() < 0x200 {
+            return false;
+        }
+        if &bytes[0x100..0x104] != b"SEGA" {
+            return false;
+        }
+        let mut sum = 0_u32;
+        let mut cursor = 0x200usize;
+        while cursor + 1 < bytes.len() {
+            let word = u16::from_be_bytes([bytes[cursor], bytes[cursor + 1]]);
+            sum = sum.wrapping_add(u32::from(word));
+            cursor += 2;
+        }
+        if cursor < bytes.len() {
+            sum = sum.wrapping_add(u32::from(bytes[cursor]) << 8);
+        }
+        let checksum = (sum & 0xFFFF) as u16;
+        bytes[0x18E..=0x18F].copy_from_slice(&checksum.to_be_bytes());
+        true
+    }
+
+    fn repair_game_boy_checksum(bytes: &mut [u8]) -> bool {
+        if bytes.len() <= 0x14F {
+            return false;
+        }
+        if bytes[0x104..0x134] != GAME_BOY_NINTENDO_LOGO {
+            return false;
+        }
+
+        let mut header_checksum = 0_u8;
+        for value in &bytes[0x134..=0x14C] {
+            header_checksum = header_checksum.wrapping_sub(*value).wrapping_sub(1);
+        }
+        bytes[0x14D] = header_checksum;
+
+        let mut global_checksum = 0_u16;
+        for (index, value) in bytes.iter().copied().enumerate() {
+            if index == 0x14E || index == 0x14F {
+                continue;
+            }
+            global_checksum = global_checksum.wrapping_add(u16::from(value));
+        }
+        bytes[0x14E..=0x14F].copy_from_slice(&global_checksum.to_be_bytes());
+        true
     }
 
     fn require_existing_path(

@@ -544,6 +544,28 @@ impl ContainerHandler for ZipContainerHandler {
         ))
     }
 
+    fn list_entries(
+        &self,
+        request: &ContainerInspectRequest,
+        _context: &OperationContext,
+    ) -> Result<Vec<String>> {
+        let mut archive = self.open_archive(&request.source)?;
+        let mut entries = Vec::new();
+        for index in 0..archive.len() {
+            let entry = archive.by_index(index).map_err(|error| {
+                RomWeaverError::Validation(format!(
+                    "{} list failed while reading entry {index}: {error}",
+                    self.descriptor.name
+                ))
+            })?;
+            let entry_name = normalize_archive_name(entry.name());
+            if !entry_name.is_empty() {
+                entries.push(entry_name);
+            }
+        }
+        Ok(entries)
+    }
+
     fn extract(
         &self,
         request: &ContainerExtractRequest,
@@ -882,6 +904,26 @@ impl ContainerHandler for TarContainerHandler {
             Some(100.0),
             None,
         ))
+    }
+
+    fn list_entries(
+        &self,
+        request: &ContainerInspectRequest,
+        _context: &OperationContext,
+    ) -> Result<Vec<String>> {
+        let reader = self.open_reader(&request.source)?;
+        let mut archive = TarArchive::new(reader);
+        let mut entries = Vec::new();
+        for entry in archive.entries()? {
+            let entry = entry?;
+            let raw_path = entry.path()?;
+            let relative = sanitize_archive_relative_path(raw_path.as_ref())?;
+            let archive_name = archive_path_to_name(&relative)?;
+            if !archive_name.is_empty() {
+                entries.push(archive_name);
+            }
+        }
+        Ok(entries)
     }
 
     fn extract(
@@ -1229,6 +1271,14 @@ impl ContainerHandler for StreamContainerHandler {
         ))
     }
 
+    fn list_entries(
+        &self,
+        request: &ContainerInspectRequest,
+        _context: &OperationContext,
+    ) -> Result<Vec<String>> {
+        Ok(vec![self.output_name(&request.source)])
+    }
+
     fn extract(
         &self,
         request: &ContainerExtractRequest,
@@ -1456,6 +1506,23 @@ impl ContainerHandler for SevenZContainerHandler {
             Some(100.0),
             None,
         ))
+    }
+
+    fn list_entries(
+        &self,
+        request: &ContainerInspectRequest,
+        _context: &OperationContext,
+    ) -> Result<Vec<String>> {
+        let reader = self.open_reader(&request.source)?;
+        let archive = reader.archive();
+        let mut entries = Vec::new();
+        for entry in &archive.files {
+            let entry_name = normalize_archive_name(entry.name());
+            if !entry_name.is_empty() {
+                entries.push(entry_name);
+            }
+        }
+        Ok(entries)
     }
 
     fn extract(
@@ -1692,6 +1759,29 @@ impl ContainerHandler for RarContainerHandler {
         ))
     }
 
+    fn list_entries(
+        &self,
+        request: &ContainerInspectRequest,
+        _context: &OperationContext,
+    ) -> Result<Vec<String>> {
+        let mut archive = self.open_for_listing(&request.source)?;
+        let mut entries = Vec::new();
+        while let Some(entry) = archive.read_header().map_err(|error| {
+            RomWeaverError::Validation(format!("rar list failed while reading header: {error}"))
+        })? {
+            let entry_name = normalize_archive_name(&entry.entry().filename.to_string_lossy());
+            if !entry_name.is_empty() {
+                entries.push(entry_name.clone());
+            }
+            archive = entry.skip().map_err(|error| {
+                RomWeaverError::Validation(format!(
+                    "rar list failed while skipping entry `{entry_name}`: {error}"
+                ))
+            })?;
+        }
+        Ok(entries)
+    }
+
     fn extract(
         &self,
         request: &ContainerExtractRequest,
@@ -1922,6 +2012,14 @@ impl ContainerHandler for RvzContainerHandler {
             Some(100.0),
             Some(execution),
         ))
+    }
+
+    fn list_entries(
+        &self,
+        request: &ContainerInspectRequest,
+        _context: &OperationContext,
+    ) -> Result<Vec<String>> {
+        Ok(vec![self.extract_name(&request.source)])
     }
 
     fn extract(
@@ -2658,6 +2756,14 @@ impl ContainerHandler for Z3dsContainerHandler {
             Some(100.0),
             Some(execution),
         ))
+    }
+
+    fn list_entries(
+        &self,
+        request: &ContainerInspectRequest,
+        _context: &OperationContext,
+    ) -> Result<Vec<String>> {
+        Ok(vec![self.extract_name(&request.source)])
     }
 
     fn extract(
@@ -5031,6 +5137,51 @@ impl ContainerHandler for ChdContainerHandler {
             Some(100.0),
             Some(execution),
         ))
+    }
+
+    fn list_entries(
+        &self,
+        request: &ContainerInspectRequest,
+        _context: &OperationContext,
+    ) -> Result<Vec<String>> {
+        let chd = ChdReadSession::open(&request.source)?;
+        let media_kind = chd.media_kind();
+        let stem = request
+            .source
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .filter(|value| !value.is_empty())
+            .unwrap_or("output");
+        if media_kind == ChdMediaKind::CdRom {
+            let layout = self.read_disc_tracks(&chd, DiscKind::CdRom)?;
+            let first_data_bytes = layout
+                .tracks
+                .first()
+                .map(|track| track.mode.data_bytes())
+                .unwrap_or(2352);
+            let single_bin = layout
+                .tracks
+                .iter()
+                .all(|track| track.mode.data_bytes() == first_data_bytes);
+            let mut entries = vec![format!("{stem}.cue")];
+            if single_bin {
+                entries.push(format!("{stem}.bin"));
+            } else {
+                for track in &layout.tracks {
+                    entries.push(self.track_output_name(stem, track.number));
+                }
+            }
+            return Ok(entries);
+        }
+        if media_kind == ChdMediaKind::GdRom {
+            let layout = self.read_disc_tracks(&chd, DiscKind::GdRom)?;
+            let mut entries = vec![format!("{stem}.gdi")];
+            for track in &layout.tracks {
+                entries.push(self.track_output_name(stem, track.number));
+            }
+            return Ok(entries);
+        }
+        Ok(vec![self.extract_name(&request.source, media_kind)?])
     }
 
     fn extract(
