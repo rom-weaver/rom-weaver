@@ -24,7 +24,5 @@ zstd.workspace = true
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 chd.workspace = true
 rom-weaver-chd-sys = { path = "../rom-weaver-chd-sys" }
-sevenz-rust = { workspace = true, features = ["bzip2", "zstd"] }
 unrar-ng.workspace = true
-zip = { workspace = true, features = ["bzip2", "zstd"] }
 zstd-seekable.workspace = true
