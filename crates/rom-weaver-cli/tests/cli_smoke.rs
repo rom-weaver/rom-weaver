@@ -166,6 +166,30 @@ fn write_rvz_fixture_from_iso(iso_path: &std::path::Path, rvz_path: &std::path::
     output.flush().expect("flush rvz");
 }
 
+fn write_gcz_fixture_from_iso(iso_path: &std::path::Path, gcz_path: &std::path::Path) {
+    let disc = NodDiscReader::new(iso_path, &NodDiscOptions::default()).expect("open iso");
+    let options = NodFormatOptions {
+        format: NodFormat::Gcz,
+        compression: NodCompression::Deflate(6),
+        block_size: NodFormat::Gcz.default_block_size(),
+    };
+    let writer = NodDiscWriter::new(disc, &options).expect("create gcz writer");
+    let mut output = File::create(gcz_path).expect("create gcz");
+    let finalization = writer
+        .process(
+            |data, _processed, _total| output.write_all(data.as_ref()),
+            &NodProcessOptions::default(),
+        )
+        .expect("write gcz");
+    if !finalization.header.is_empty() {
+        output.rewind().expect("seek gcz");
+        output
+            .write_all(finalization.header.as_ref())
+            .expect("write gcz header");
+    }
+    output.flush().expect("flush gcz");
+}
+
 fn write_xiso_fixture_from_directory(source_dir: &std::path::Path, xiso_path: &std::path::Path) {
     fs::create_dir_all(source_dir.join("media")).expect("source tree");
     fs::write(source_dir.join("default.xbe"), b"XBE-STUB").expect("xbe fixture");
@@ -2399,6 +2423,50 @@ fn compress_routes_through_registered_container_format() {
 }
 
 #[test]
+fn compress_gcz_warns_and_rejects_output() {
+    let temp = setup_temp_dir();
+    let iso_bytes = build_test_gamecube_iso(0x4000);
+    fs::write(temp.child("disc.iso").path(), &iso_bytes).expect("iso fixture");
+    let output_path = temp.child("out.gcz");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("disc.iso").path().to_str().expect("path"),
+            "--format",
+            "gcz",
+            "--output",
+            output_path.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "compress");
+    assert_eq!(json["family"], "container");
+    assert_eq!(json["format"], "gcz");
+    assert_eq!(json["status"], "failed");
+    assert!(
+        json["label"]
+            .as_str()
+            .expect("label")
+            .contains("warning: gcz compression is not supported")
+    );
+    assert!(
+        json["label"]
+            .as_str()
+            .expect("label")
+            .contains("--format rvz")
+    );
+    assert!(!output_path.path().exists());
+}
+
+#[test]
 fn compress_xiso_rebuilds_valid_xbox_iso_and_output_is_readable_xdvdfs() {
     let temp = setup_temp_dir();
     let source_tree = temp.child("xiso-source");
@@ -3562,6 +3630,74 @@ fn chd_extract_selecting_gdi_descriptor_includes_tracks() {
     assert_eq!(
         fs::read(out_dir.child("disc.track02.bin").path()).expect("extract track02"),
         track02
+    );
+}
+
+#[test]
+fn gcz_inspect_reports_succeeded() {
+    let temp = setup_temp_dir();
+    let iso_bytes = build_test_gamecube_iso(0x6000);
+    fs::write(temp.child("disc.iso").path(), &iso_bytes).expect("iso fixture");
+    write_gcz_fixture_from_iso(temp.child("disc.iso").path(), temp.child("disc.gcz").path());
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "inspect",
+            temp.child("disc.gcz").path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "inspect");
+    assert_eq!(json["family"], "container");
+    assert_eq!(json["format"], "gcz");
+    assert_eq!(json["status"], "succeeded");
+    assert!(
+        json["label"]
+            .as_str()
+            .expect("label")
+            .to_ascii_lowercase()
+            .contains("compression")
+    );
+}
+
+#[test]
+fn gcz_extract_round_trips_to_iso() {
+    let temp = setup_temp_dir();
+    let iso_bytes = build_test_gamecube_iso(0x8000);
+    fs::write(temp.child("disc.iso").path(), &iso_bytes).expect("iso fixture");
+    write_gcz_fixture_from_iso(temp.child("disc.iso").path(), temp.child("disc.gcz").path());
+
+    let out_dir = temp.child("extract");
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "extract",
+            temp.child("disc.gcz").path().to_str().expect("path"),
+            "--out-dir",
+            out_dir.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "extract");
+    assert_eq!(json["family"], "container");
+    assert_eq!(json["format"], "gcz");
+    assert_eq!(json["status"], "succeeded");
+    assert_eq!(
+        fs::read(out_dir.child("disc.iso").path()).expect("extracted iso"),
+        iso_bytes
     );
 }
 

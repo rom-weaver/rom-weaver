@@ -136,11 +136,18 @@ const CSO: FormatDescriptor = FormatDescriptor {
     aliases: &["ciso"],
     extensions: &[".cso", ".ciso"],
 };
+#[cfg(not(target_family = "wasm"))]
 const CHD: FormatDescriptor = FormatDescriptor {
     family: OperationFamily::Container,
     name: "chd",
     aliases: &[],
     extensions: &[".chd"],
+};
+const GCZ: FormatDescriptor = FormatDescriptor {
+    family: OperationFamily::Container,
+    name: "gcz",
+    aliases: &[],
+    extensions: &[".gcz"],
 };
 const RVZ: FormatDescriptor = FormatDescriptor {
     family: OperationFamily::Container,
@@ -148,6 +155,7 @@ const RVZ: FormatDescriptor = FormatDescriptor {
     aliases: &[],
     extensions: &[".rvz"],
 };
+#[cfg(not(target_family = "wasm"))]
 const Z3DS: FormatDescriptor = FormatDescriptor {
     family: OperationFamily::Container,
     name: "z3ds",
@@ -3767,6 +3775,181 @@ fn wua_create_name_entry(
     names.push(name.to_string());
     name_lookup.insert(name.to_string(), index);
     Ok(index)
+}
+
+struct GczContainerHandler;
+
+impl GczContainerHandler {
+    fn read_options(&self, preloader_threads: usize) -> NodDiscOptions {
+        let mut options = NodDiscOptions::default();
+        options.preloader_threads = preloader_threads;
+        options
+    }
+
+    fn negotiated_threads(&self, used_parallelism: bool, effective_threads: usize) -> usize {
+        if used_parallelism {
+            effective_threads
+        } else {
+            0
+        }
+    }
+
+    fn open_disc(&self, source: &Path) -> Result<NodDiscReader> {
+        NodDiscReader::new(source, &self.read_options(0)).map_err(|error| {
+            RomWeaverError::Validation(format!(
+                "failed to open gcz source `{}`: {error}",
+                source.display()
+            ))
+        })
+    }
+
+    fn validate_gcz_meta(
+        &self,
+        source: &Path,
+        disc: &NodDiscReader,
+    ) -> Result<nod::read::DiscMeta> {
+        let meta = disc.meta();
+        if meta.format == NodFormat::Gcz {
+            Ok(meta)
+        } else {
+            Err(RomWeaverError::Validation(format!(
+                "source `{}` is not a gcz container (detected {})",
+                source.display(),
+                meta.format
+            )))
+        }
+    }
+
+    fn extract_name(&self, source: &Path) -> String {
+        let stem = source
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .filter(|value| !value.is_empty())
+            .unwrap_or("output");
+        format!("{stem}.iso")
+    }
+}
+
+impl ContainerHandler for GczContainerHandler {
+    fn descriptor(&self) -> &'static FormatDescriptor {
+        &GCZ
+    }
+
+    fn probe(&self, source: &Path) -> ProbeConfidence {
+        if let Ok(disc) = self.open_disc(source)
+            && disc.meta().format == NodFormat::Gcz
+        {
+            return ProbeConfidence::Signature;
+        }
+        ProbeConfidence::Extension
+    }
+
+    fn inspect(
+        &self,
+        request: &ContainerInspectRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let execution = context.plan_threads(ThreadCapability::single_threaded());
+        let disc = self.open_disc(&request.source)?;
+        let meta = self.validate_gcz_meta(&request.source, &disc)?;
+        let disc_size = meta.disc_size.unwrap_or_else(|| disc.disc_size());
+        let compression_label = normalize_codec_label(&meta.compression.to_string());
+        let block_label = meta
+            .block_size
+            .map(|size| format!("{size} bytes"))
+            .unwrap_or_else(|| "unknown".to_string());
+        Ok(OperationReport::succeeded(
+            OperationFamily::Container,
+            Some(GCZ.name.to_string()),
+            "inspect",
+            format!(
+                "gcz: {disc_size} bytes, compression={}, block={}, lossless={}, decrypted={}, needs_hash_recovery={}",
+                compression_label,
+                block_label,
+                meta.lossless,
+                meta.decrypted,
+                meta.needs_hash_recovery
+            ),
+            Some(100.0),
+            Some(execution),
+        ))
+    }
+
+    fn list_entries(
+        &self,
+        request: &ContainerInspectRequest,
+        _context: &OperationContext,
+    ) -> Result<Vec<String>> {
+        Ok(vec![self.extract_name(&request.source)])
+    }
+
+    fn extract(
+        &self,
+        request: &ContainerExtractRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        if !request.selections.is_empty() {
+            return Err(RomWeaverError::Validation(
+                "gcz extract does not support --select yet".into(),
+            ));
+        }
+
+        let execution = context.plan_threads(ThreadCapability::parallel(None));
+        let preloader_threads =
+            self.negotiated_threads(execution.used_parallelism, execution.effective_threads);
+        let mut disc = NodDiscReader::new(&request.source, &self.read_options(preloader_threads))
+            .map_err(|error| {
+            RomWeaverError::Validation(format!(
+                "failed to open gcz source `{}`: {error}",
+                request.source.display()
+            ))
+        })?;
+        let meta = self.validate_gcz_meta(&request.source, &disc)?;
+        let disc_size = meta.disc_size.unwrap_or_else(|| disc.disc_size());
+        let compression_label = normalize_codec_label(&meta.compression.to_string());
+
+        fs::create_dir_all(&request.out_dir)?;
+        let output_path = request.out_dir.join(self.extract_name(&request.source));
+        let mut output = BufWriter::new(File::create(&output_path)?);
+        let bytes_written = nod_buf_copy(&mut disc, &mut output)?;
+        output.flush()?;
+
+        Ok(OperationReport::succeeded(
+            OperationFamily::Container,
+            Some(GCZ.name.to_string()),
+            "extract",
+            format!(
+                "extracted `{}` to `{}` ({} bytes written, expected {}, compression={})",
+                request.source.display(),
+                output_path.display(),
+                bytes_written,
+                disc_size,
+                compression_label
+            ),
+            Some(100.0),
+            Some(execution),
+        ))
+    }
+
+    fn create(
+        &self,
+        _request: &ContainerCreateRequest,
+        _context: &OperationContext,
+    ) -> Result<OperationReport> {
+        Err(RomWeaverError::Validation(
+            "warning: gcz compression is not supported; use `--format rvz` instead".into(),
+        ))
+    }
+
+    fn capabilities(&self) -> ContainerCapabilities {
+        ContainerCapabilities {
+            inspect: true,
+            extract: true,
+            create: false,
+            extract_threads: ThreadCapability::parallel(None),
+            create_threads: ThreadCapability::single_threaded(),
+        }
+    }
 }
 
 struct RvzContainerHandler;
@@ -7391,7 +7574,7 @@ mod tests {
             names,
             vec![
                 "zip", "zipx", "7z", "rar", "tar", "tar.gz", "tar.bz2", "tar.xz", "gz", "bz2",
-                "xz", "zst", "cso", "chd", "wua", "rvz", "z3ds", "xiso"
+                "xz", "zst", "cso", "chd", "wua", "gcz", "rvz", "z3ds", "xiso"
             ]
         );
     }
@@ -7448,6 +7631,113 @@ mod tests {
             capabilities.create_threads,
             ThreadCapability::parallel(None)
         );
+    }
+
+    #[test]
+    fn gcz_capabilities_are_extract_only() {
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("gcz").expect("gcz handler");
+        let capabilities = handler.capabilities();
+        assert!(capabilities.inspect);
+        assert!(capabilities.extract);
+        assert!(!capabilities.create);
+        assert_eq!(
+            capabilities.extract_threads,
+            ThreadCapability::parallel(None)
+        );
+        assert_eq!(
+            capabilities.create_threads,
+            ThreadCapability::single_threaded()
+        );
+    }
+
+    #[test]
+    fn cso_capabilities_are_extract_only() {
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("cso").expect("cso handler");
+        let capabilities = handler.capabilities();
+        assert!(capabilities.inspect);
+        assert!(capabilities.extract);
+        assert!(!capabilities.create);
+        assert_eq!(
+            capabilities.extract_threads,
+            ThreadCapability::single_threaded()
+        );
+        assert_eq!(
+            capabilities.create_threads,
+            ThreadCapability::single_threaded()
+        );
+    }
+
+    #[test]
+    fn cso_extract_round_trips_to_iso_output() {
+        let temp_dir = temp_dir_path("cso-extract");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input_iso = temp_dir.join("disc.iso");
+        let compressed_cso = temp_dir.join("disc.cso");
+        let output_dir = temp_dir.join("out");
+
+        let source = (0..(CSO_DEFAULT_BLOCK_BYTES * 4))
+            .map(|index| (index % 251) as u8)
+            .collect::<Vec<_>>();
+        let mut source = source;
+        if let Some(last) = source.last_mut() {
+            *last = 0;
+        }
+        fs::write(&input_iso, &source).expect("write source fixture");
+        write_test_cso(&input_iso, &compressed_cso);
+
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("cso").expect("cso handler");
+        let report = handler
+            .extract(
+                &rom_weaver_core::ContainerExtractRequest {
+                    source: compressed_cso,
+                    out_dir: output_dir.clone(),
+                    selections: Vec::new(),
+                },
+                &test_context(&temp_dir, 1),
+            )
+            .expect("extract cso");
+
+        assert_eq!(report.status, rom_weaver_core::OperationStatus::Succeeded);
+        let extracted = fs::read(output_dir.join("disc.iso")).expect("read extracted output");
+        assert_eq!(extracted, source);
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn cso_create_returns_clear_error() {
+        let temp_dir = temp_dir_path("cso-create-error");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input_iso = temp_dir.join("input.iso");
+        let output_cso = temp_dir.join("output.cso");
+        fs::write(&input_iso, vec![0_u8; CSO_DEFAULT_BLOCK_BYTES]).expect("write fixture");
+
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("cso").expect("cso handler");
+        let error = handler
+            .create(
+                &ContainerCreateRequest {
+                    inputs: vec![input_iso],
+                    output: output_cso,
+                    format: "cso".to_string(),
+                    codec: None,
+                    level: None,
+                },
+                &test_context(&temp_dir, 1),
+            )
+            .expect_err("cso create should error");
+
+        assert!(
+            error
+                .to_string()
+                .contains("cso compression is not supported"),
+            "unexpected error message: {error}"
+        );
+
+        let _ = fs::remove_dir_all(temp_dir);
     }
 
     #[test]
