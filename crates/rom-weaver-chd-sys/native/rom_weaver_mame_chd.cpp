@@ -14,9 +14,24 @@
 
 namespace {
 
+extern "C" void rw_mame_chd_set_compression_level(int level);
+
 struct rw_mame_chd_handle {
     chd_file file;
     std::unique_ptr<chd_file> parent;
+};
+
+class rw_chd_level_scope {
+public:
+    explicit rw_chd_level_scope(int level)
+    {
+        rw_mame_chd_set_compression_level(level);
+    }
+
+    ~rw_chd_level_scope()
+    {
+        rw_mame_chd_set_compression_level(0);
+    }
 };
 
 class rw_path_compressor : public chd_file_compressor {
@@ -259,7 +274,7 @@ extern "C" {
 
 uint8_t rw_mame_chd_backend_available(void) { return 1U; }
 
-char const *rw_mame_chd_backend_name(void) { return "embedded-zlib-zstd-lzma-huffman"; }
+char const *rw_mame_chd_backend_name(void) { return "embedded-zlib-zstd-lzma-huffman-flac-avhuff"; }
 
 int32_t rw_mame_chd_open(
     char const *path,
@@ -312,6 +327,7 @@ int32_t rw_mame_chd_create(
     uint32_t hunk_bytes,
     uint32_t unit_bytes,
     uint32_t const *compression,
+    int32_t compression_level,
     void **out_handle,
     rw_mame_chd_header *out_header,
     char *error,
@@ -354,6 +370,7 @@ int32_t rw_mame_chd_create(
         compression[2],
         compression[3],
     };
+    rw_chd_level_scope level_scope(compression_level);
     std::error_condition condition = handle->parent
         ? handle->file.create(path, logical_bytes, hunk_bytes, codecs, *handle->parent)
         : handle->file.create(path, logical_bytes, hunk_bytes, unit_bytes, codecs);
@@ -379,6 +396,7 @@ int32_t rw_mame_chd_compress_file(
     uint32_t hunk_bytes,
     uint32_t unit_bytes,
     uint32_t const *compression,
+    int32_t compression_level,
     rw_mame_chd_header *out_header,
     char *error,
     size_t error_len
@@ -439,6 +457,7 @@ int32_t rw_mame_chd_compress_file(
         compression[3],
     };
 
+    rw_chd_level_scope level_scope(compression_level);
     rw_path_compressor compressor(input, resolved_logical_bytes);
     std::error_condition condition = parent
         ? compressor.create(output_path, resolved_logical_bytes, hunk_bytes, codecs, *parent)

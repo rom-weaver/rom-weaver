@@ -36,6 +36,78 @@ const BZIP2: CodecDescriptor = FormatDescriptor {
     extensions: &[],
 };
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum CanonicalCodec {
+    Store,
+    Deflate,
+    Zstd,
+    Lzma,
+    Lzma2,
+    Bzip2,
+    Huffman,
+}
+
+impl CanonicalCodec {
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Store => "store",
+            Self::Deflate => "deflate",
+            Self::Zstd => "zstd",
+            Self::Lzma => "lzma",
+            Self::Lzma2 => "lzma2",
+            Self::Bzip2 => "bzip2",
+            Self::Huffman => "huffman",
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RequestedCodec {
+    Unspecified,
+    Known(CanonicalCodec),
+    Unknown(String),
+}
+
+pub fn parse_requested_codec(codec: Option<&str>) -> RequestedCodec {
+    match codec {
+        None => RequestedCodec::Unspecified,
+        Some(value) => {
+            let normalized = value.trim().to_ascii_lowercase();
+            match normalized.as_str() {
+                "store" | "none" | "uncompressed" => RequestedCodec::Known(CanonicalCodec::Store),
+                "deflate" | "zlib" | "gzip" | "gz" => {
+                    RequestedCodec::Known(CanonicalCodec::Deflate)
+                }
+                "zstd" | "zst" | "zstandard" => RequestedCodec::Known(CanonicalCodec::Zstd),
+                "lzma" => RequestedCodec::Known(CanonicalCodec::Lzma),
+                "lzma2" | "xz" => RequestedCodec::Known(CanonicalCodec::Lzma2),
+                "bzip2" | "bz2" => RequestedCodec::Known(CanonicalCodec::Bzip2),
+                "huffman" | "huff" => RequestedCodec::Known(CanonicalCodec::Huffman),
+                _ => RequestedCodec::Unknown(normalized),
+            }
+        }
+    }
+}
+
+pub fn normalize_codec_label(raw: &str) -> String {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+
+    let split_at = trimmed
+        .char_indices()
+        .find(|(_, ch)| !(ch.is_ascii_alphanumeric() || *ch == '-' || *ch == '_'))
+        .map(|(index, _)| index)
+        .unwrap_or(trimmed.len());
+    let (head, tail) = trimmed.split_at(split_at);
+
+    match parse_requested_codec(Some(head)) {
+        RequestedCodec::Known(codec) => format!("{}{}", codec.name(), tail),
+        RequestedCodec::Unspecified | RequestedCodec::Unknown(_) => trimmed.to_ascii_lowercase(),
+    }
+}
+
 pub struct CodecRegistry {
     backends: Vec<Arc<dyn CodecBackend>>,
 }
@@ -134,7 +206,9 @@ impl CodecBackend for StaticCodecBackend {
 
 #[cfg(test)]
 mod tests {
-    use super::CodecRegistry;
+    use super::{
+        CanonicalCodec, CodecRegistry, RequestedCodec, normalize_codec_label, parse_requested_codec,
+    };
 
     #[test]
     fn registry_contains_planned_backends() {
@@ -145,5 +219,41 @@ mod tests {
             .map(|backend| backend.descriptor().name)
             .collect::<Vec<_>>();
         assert_eq!(names, vec!["store", "deflate", "zstd", "lzma2", "bzip2"]);
+    }
+
+    #[test]
+    fn parses_shared_codec_aliases() {
+        assert_eq!(
+            parse_requested_codec(Some("xz")),
+            RequestedCodec::Known(CanonicalCodec::Lzma2)
+        );
+        assert_eq!(
+            parse_requested_codec(Some("gzip")),
+            RequestedCodec::Known(CanonicalCodec::Deflate)
+        );
+        assert_eq!(
+            parse_requested_codec(Some("zst")),
+            RequestedCodec::Known(CanonicalCodec::Zstd)
+        );
+        assert_eq!(
+            parse_requested_codec(Some("huff")),
+            RequestedCodec::Known(CanonicalCodec::Huffman)
+        );
+    }
+
+    #[test]
+    fn unknown_codec_is_preserved() {
+        assert_eq!(
+            parse_requested_codec(Some("foo-codec")),
+            RequestedCodec::Unknown("foo-codec".to_string())
+        );
+    }
+
+    #[test]
+    fn normalizes_codec_labels_for_reporting() {
+        assert_eq!(normalize_codec_label("LZMA2 (6)"), "lzma2 (6)");
+        assert_eq!(normalize_codec_label("xz(9)"), "lzma2(9)");
+        assert_eq!(normalize_codec_label("Zstandard level=3"), "zstd level=3");
+        assert_eq!(normalize_codec_label("mystery-codec"), "mystery-codec");
     }
 }

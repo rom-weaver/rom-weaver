@@ -30,6 +30,7 @@ impl ChdCodec {
     pub const ZSTD: Self = Self(make_tag(b'z', b's', b't', b'd'));
     pub const LZMA: Self = Self(make_tag(b'l', b'z', b'm', b'a'));
     pub const HUFFMAN: Self = Self(make_tag(b'h', b'u', b'f', b'f'));
+    pub const AVHUFF: Self = Self(make_tag(b'a', b'v', b'h', b'u'));
     pub const FLAC: Self = Self(make_tag(b'f', b'l', b'a', b'c'));
     pub const CD_ZLIB: Self = Self(make_tag(b'c', b'd', b'z', b'l'));
     pub const CD_ZSTD: Self = Self(make_tag(b'c', b'd', b'z', b's'));
@@ -79,6 +80,7 @@ pub struct CreateOptions {
     pub hunk_bytes: u32,
     pub unit_bytes: u32,
     pub compression: [ChdCodec; CHD_MAX_COMPRESSORS],
+    pub compression_level: i32,
 }
 
 impl Default for CreateOptions {
@@ -88,6 +90,7 @@ impl Default for CreateOptions {
             hunk_bytes: 4096,
             unit_bytes: 1,
             compression: [ChdCodec::NONE; CHD_MAX_COMPRESSORS],
+            compression_level: 0,
         }
     }
 }
@@ -189,6 +192,7 @@ impl ChdFile {
                 options.hunk_bytes,
                 options.unit_bytes,
                 codecs.as_ptr(),
+                options.compression_level,
                 &mut handle,
                 &mut header,
                 error.as_mut_ptr(),
@@ -230,6 +234,7 @@ impl ChdFile {
                 options.hunk_bytes,
                 options.unit_bytes,
                 codecs.as_ptr(),
+                options.compression_level,
                 &mut header,
                 error.as_mut_ptr(),
                 ERROR_BUFFER_LEN,
@@ -539,6 +544,7 @@ unsafe extern "C" {
         hunk_bytes: u32,
         unit_bytes: u32,
         compression: *const u32,
+        compression_level: i32,
         out_handle: *mut *mut c_void,
         out_header: *mut RawChdHeader,
         error: *mut c_char,
@@ -552,6 +558,7 @@ unsafe extern "C" {
         hunk_bytes: u32,
         unit_bytes: u32,
         compression: *const u32,
+        compression_level: i32,
         out_header: *mut RawChdHeader,
         error: *mut c_char,
         error_len: usize,
@@ -644,6 +651,7 @@ mod tests {
                     super::ChdCodec::NONE,
                     super::ChdCodec::NONE,
                 ],
+                compression_level: 0,
             },
         )
         .expect("compress");

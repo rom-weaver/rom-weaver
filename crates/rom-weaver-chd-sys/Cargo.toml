@@ -14,3 +14,4 @@ zstd-sys.workspace = true
 
 [build-dependencies]
 cc.workspace = true
+pkg-config.workspace = true

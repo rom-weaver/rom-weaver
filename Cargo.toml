@@ -20,11 +20,13 @@ version = "0.1.0"
 assert_cmd = "2.1.1"
 assert_fs = "1.1.3"
 bzip2 = "0.6.1"
+chd = "0.3.4"
 cc = "1.2.43"
 clap = { version = "4.5.51", features = ["derive"] }
 flate2 = "1.1.5"
 liblzma = "0.4.6"
 nod = { version = "2.0.0-alpha.6", default-features = false, features = ["compress-bzip2-vendored", "compress-lzma-vendored", "compress-zstd-vendored"] }
+pkg-config = "0.3.32"
 predicates = "3.1.3"
 qbsdiff = "1.4.4"
 rayon = "1.11.0"

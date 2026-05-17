@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     fs::{self, File},
     io::{self, BufReader, BufWriter, Read, Seek, SeekFrom, Write},
     path::{Component, Path, PathBuf},
@@ -22,7 +22,10 @@ use rayon::prelude::*;
 use rom_weaver_chd_sys::{
     CD_FRAME_SIZE, CDROM_TRACK_METADATA2_TAG, CHD_MAX_COMPRESSORS, CHD_METADATA_FLAG_CHECKSUM,
     ChdCodec, ChdFile, ChdMediaKind, CreateOptions, DVD_METADATA_TAG, GDROM_TRACK_METADATA_TAG,
-    HARD_DISK_METADATA_TAG, build_info,
+    HARD_DISK_METADATA_TAG, build_info, make_tag,
+};
+use rom_weaver_codecs::{
+    CanonicalCodec, RequestedCodec, normalize_codec_label, parse_requested_codec,
 };
 use rom_weaver_core::{
     ContainerCapabilities, ContainerCreateRequest, ContainerExtractRequest, ContainerHandler,
@@ -407,19 +410,20 @@ impl ZipContainerHandler {
             ZipContainerFlavor::Zip => ZipCompressionMethod::Deflated,
             ZipContainerFlavor::Zipx => ZipCompressionMethod::Zstd,
         };
-        let method = match codec.map(|value| value.trim().to_ascii_lowercase()) {
-            None => default,
-            Some(name) if matches!(name.as_str(), "store" | "none" | "uncompressed") => {
-                ZipCompressionMethod::Stored
+        let method = match parse_requested_codec(codec) {
+            RequestedCodec::Unspecified => default,
+            RequestedCodec::Known(CanonicalCodec::Store) => ZipCompressionMethod::Stored,
+            RequestedCodec::Known(CanonicalCodec::Deflate) => ZipCompressionMethod::Deflated,
+            RequestedCodec::Known(CanonicalCodec::Bzip2) => ZipCompressionMethod::Bzip2,
+            RequestedCodec::Known(CanonicalCodec::Zstd) => ZipCompressionMethod::Zstd,
+            RequestedCodec::Known(codec) => {
+                return Err(RomWeaverError::Validation(format!(
+                    "unsupported {} codec `{}`; supported codecs are store, deflate, bzip2, and zstd",
+                    self.descriptor.name,
+                    codec.name()
+                )));
             }
-            Some(name) if matches!(name.as_str(), "deflate" | "zlib" | "gzip") => {
-                ZipCompressionMethod::Deflated
-            }
-            Some(name) if matches!(name.as_str(), "bzip2" | "bz2") => ZipCompressionMethod::Bzip2,
-            Some(name) if matches!(name.as_str(), "zstd" | "zstandard") => {
-                ZipCompressionMethod::Zstd
-            }
-            Some(name) => {
+            RequestedCodec::Unknown(name) => {
                 return Err(RomWeaverError::Validation(format!(
                     "unsupported {} codec `{name}`; supported codecs are store, deflate, bzip2, and zstd",
                     self.descriptor.name
@@ -702,11 +706,20 @@ impl TarContainerHandler {
     }
 
     fn parse_codec_and_level(&self, codec: Option<&str>, level: Option<i32>) -> Result<u32> {
-        let codec = codec.map(|value| value.trim().to_ascii_lowercase());
+        let codec = parse_requested_codec(codec);
         match self.compression {
             TarCompression::None => {
-                if let Some(codec) = codec {
-                    if !matches!(codec.as_str(), "store" | "none" | "uncompressed") {
+                match &codec {
+                    RequestedCodec::Unspecified | RequestedCodec::Known(CanonicalCodec::Store) => {
+                        // Allowed.
+                    }
+                    RequestedCodec::Known(codec) => {
+                        return Err(RomWeaverError::Validation(format!(
+                            "unsupported tar codec `{}`; use store or omit --codec",
+                            codec.name()
+                        )));
+                    }
+                    RequestedCodec::Unknown(codec) => {
                         return Err(RomWeaverError::Validation(format!(
                             "unsupported tar codec `{codec}`; use store or omit --codec"
                         )));
@@ -720,8 +733,18 @@ impl TarContainerHandler {
                 Ok(0)
             }
             TarCompression::Gzip => {
-                if let Some(codec) = codec {
-                    if !matches!(codec.as_str(), "gzip" | "gz" | "deflate" | "zlib") {
+                match &codec {
+                    RequestedCodec::Unspecified
+                    | RequestedCodec::Known(CanonicalCodec::Deflate) => {
+                        // Allowed.
+                    }
+                    RequestedCodec::Known(codec) => {
+                        return Err(RomWeaverError::Validation(format!(
+                            "unsupported tar.gz codec `{}`; use gzip",
+                            codec.name()
+                        )));
+                    }
+                    RequestedCodec::Unknown(codec) => {
                         return Err(RomWeaverError::Validation(format!(
                             "unsupported tar.gz codec `{codec}`; use gzip"
                         )));
@@ -736,8 +759,17 @@ impl TarContainerHandler {
                 }
             }
             TarCompression::Bzip2 => {
-                if let Some(codec) = codec {
-                    if !matches!(codec.as_str(), "bzip2" | "bz2") {
+                match &codec {
+                    RequestedCodec::Unspecified | RequestedCodec::Known(CanonicalCodec::Bzip2) => {
+                        // Allowed.
+                    }
+                    RequestedCodec::Known(codec) => {
+                        return Err(RomWeaverError::Validation(format!(
+                            "unsupported tar.bz2 codec `{}`; use bzip2",
+                            codec.name()
+                        )));
+                    }
+                    RequestedCodec::Unknown(codec) => {
                         return Err(RomWeaverError::Validation(format!(
                             "unsupported tar.bz2 codec `{codec}`; use bzip2"
                         )));
@@ -752,8 +784,19 @@ impl TarContainerHandler {
                 }
             }
             TarCompression::Xz => {
-                if let Some(codec) = codec {
-                    if !matches!(codec.as_str(), "xz" | "lzma" | "lzma2") {
+                match &codec {
+                    RequestedCodec::Unspecified
+                    | RequestedCodec::Known(CanonicalCodec::Lzma)
+                    | RequestedCodec::Known(CanonicalCodec::Lzma2) => {
+                        // Allowed.
+                    }
+                    RequestedCodec::Known(codec) => {
+                        return Err(RomWeaverError::Validation(format!(
+                            "unsupported tar.xz codec `{}`; use xz",
+                            codec.name()
+                        )));
+                    }
+                    RequestedCodec::Unknown(codec) => {
                         return Err(RomWeaverError::Validation(format!(
                             "unsupported tar.xz codec `{codec}`; use xz"
                         )));
@@ -1005,11 +1048,21 @@ impl StreamContainerHandler {
     }
 
     fn parse_codec_and_level(&self, codec: Option<&str>, level: Option<i32>) -> Result<i32> {
-        let codec = codec.map(|value| value.trim().to_ascii_lowercase());
+        let codec = parse_requested_codec(codec);
         match self.compression {
             StreamCompression::Gzip => {
-                if let Some(codec) = codec {
-                    if !matches!(codec.as_str(), "gzip" | "gz" | "deflate" | "zlib") {
+                match &codec {
+                    RequestedCodec::Unspecified
+                    | RequestedCodec::Known(CanonicalCodec::Deflate) => {
+                        // Allowed.
+                    }
+                    RequestedCodec::Known(codec) => {
+                        return Err(RomWeaverError::Validation(format!(
+                            "unsupported gz codec `{}`; use gzip",
+                            codec.name()
+                        )));
+                    }
+                    RequestedCodec::Unknown(codec) => {
                         return Err(RomWeaverError::Validation(format!(
                             "unsupported gz codec `{codec}`; use gzip"
                         )));
@@ -1024,8 +1077,17 @@ impl StreamContainerHandler {
                 }
             }
             StreamCompression::Bzip2 => {
-                if let Some(codec) = codec {
-                    if !matches!(codec.as_str(), "bzip2" | "bz2") {
+                match &codec {
+                    RequestedCodec::Unspecified | RequestedCodec::Known(CanonicalCodec::Bzip2) => {
+                        // Allowed.
+                    }
+                    RequestedCodec::Known(codec) => {
+                        return Err(RomWeaverError::Validation(format!(
+                            "unsupported bz2 codec `{}`; use bzip2",
+                            codec.name()
+                        )));
+                    }
+                    RequestedCodec::Unknown(codec) => {
                         return Err(RomWeaverError::Validation(format!(
                             "unsupported bz2 codec `{codec}`; use bzip2"
                         )));
@@ -1040,8 +1102,19 @@ impl StreamContainerHandler {
                 }
             }
             StreamCompression::Xz => {
-                if let Some(codec) = codec {
-                    if !matches!(codec.as_str(), "xz" | "lzma" | "lzma2") {
+                match &codec {
+                    RequestedCodec::Unspecified
+                    | RequestedCodec::Known(CanonicalCodec::Lzma)
+                    | RequestedCodec::Known(CanonicalCodec::Lzma2) => {
+                        // Allowed.
+                    }
+                    RequestedCodec::Known(codec) => {
+                        return Err(RomWeaverError::Validation(format!(
+                            "unsupported xz codec `{}`; use xz",
+                            codec.name()
+                        )));
+                    }
+                    RequestedCodec::Unknown(codec) => {
                         return Err(RomWeaverError::Validation(format!(
                             "unsupported xz codec `{codec}`; use xz"
                         )));
@@ -1056,8 +1129,17 @@ impl StreamContainerHandler {
                 }
             }
             StreamCompression::Zstd => {
-                if let Some(codec) = codec {
-                    if !matches!(codec.as_str(), "zstd" | "zst" | "zstandard") {
+                match &codec {
+                    RequestedCodec::Unspecified | RequestedCodec::Known(CanonicalCodec::Zstd) => {
+                        // Allowed.
+                    }
+                    RequestedCodec::Known(codec) => {
+                        return Err(RomWeaverError::Validation(format!(
+                            "unsupported zst codec `{}`; use zstd",
+                            codec.name()
+                        )));
+                    }
+                    RequestedCodec::Unknown(codec) => {
                         return Err(RomWeaverError::Validation(format!(
                             "unsupported zst codec `{codec}`; use zstd"
                         )));
@@ -1296,13 +1378,18 @@ impl SevenZContainerHandler {
                 "7z compression level tuning is not implemented yet; omit --level".into(),
             ));
         }
-        match codec.map(|value| value.trim().to_ascii_lowercase()) {
-            None => Ok(SevenZMethodConfiguration::new(SevenZMethod::LZMA2)),
-            Some(name) if name == "lzma2" => {
+        match parse_requested_codec(codec) {
+            RequestedCodec::Unspecified | RequestedCodec::Known(CanonicalCodec::Lzma2) => {
                 Ok(SevenZMethodConfiguration::new(SevenZMethod::LZMA2))
             }
-            Some(name) if name == "lzma" => Ok(SevenZMethodConfiguration::new(SevenZMethod::LZMA)),
-            Some(name) => Err(RomWeaverError::Validation(format!(
+            RequestedCodec::Known(CanonicalCodec::Lzma) => {
+                Ok(SevenZMethodConfiguration::new(SevenZMethod::LZMA))
+            }
+            RequestedCodec::Known(codec) => Err(RomWeaverError::Validation(format!(
+                "unsupported 7z codec `{}`; supported codecs are lzma2 and lzma",
+                codec.name()
+            ))),
+            RequestedCodec::Unknown(name) => Err(RomWeaverError::Validation(format!(
                 "unsupported 7z codec `{name}`; supported codecs are lzma2 and lzma"
             ))),
         }
@@ -1758,15 +1845,15 @@ impl RvzContainerHandler {
         codec: Option<&str>,
         level: Option<i32>,
     ) -> Result<NodCompression> {
-        match codec.map(|value| value.trim().to_ascii_lowercase()) {
-            None => {
+        match parse_requested_codec(codec) {
+            RequestedCodec::Unspecified => {
                 let mut compression = NodFormat::Rvz.default_compression();
                 if let Some(level) = level {
                     compression = NodCompression::Zstandard(self.to_i8_level(level, "zstd")?);
                 }
                 Ok(compression)
             }
-            Some(name) if matches!(name.as_str(), "store" | "none" | "uncompressed") => {
+            RequestedCodec::Known(CanonicalCodec::Store) => {
                 if level.is_some() {
                     return Err(RomWeaverError::Validation(
                         "rvz codec `store` does not accept --level".into(),
@@ -1774,19 +1861,23 @@ impl RvzContainerHandler {
                 }
                 Ok(NodCompression::None)
             }
-            Some(name) if matches!(name.as_str(), "bzip2" | "bz2") => Ok(NodCompression::Bzip2(
+            RequestedCodec::Known(CanonicalCodec::Bzip2) => Ok(NodCompression::Bzip2(
                 self.to_u8_level(level.unwrap_or(0), "bzip2")?,
             )),
-            Some(name) if name == "lzma" => Ok(NodCompression::Lzma(
+            RequestedCodec::Known(CanonicalCodec::Lzma) => Ok(NodCompression::Lzma(
                 self.to_u8_level(level.unwrap_or(0), "lzma")?,
             )),
-            Some(name) if matches!(name.as_str(), "lzma2" | "xz") => Ok(NodCompression::Lzma2(
+            RequestedCodec::Known(CanonicalCodec::Lzma2) => Ok(NodCompression::Lzma2(
                 self.to_u8_level(level.unwrap_or(0), "lzma2")?,
             )),
-            Some(name) if matches!(name.as_str(), "zstd" | "zst" | "zstandard") => Ok(
-                NodCompression::Zstandard(self.to_i8_level(level.unwrap_or(0), "zstd")?),
-            ),
-            Some(name) => Err(RomWeaverError::Validation(format!(
+            RequestedCodec::Known(CanonicalCodec::Zstd) => Ok(NodCompression::Zstandard(
+                self.to_i8_level(level.unwrap_or(0), "zstd")?,
+            )),
+            RequestedCodec::Known(codec) => Err(RomWeaverError::Validation(format!(
+                "unsupported rvz codec `{}`; supported codecs are store, zstd, bzip2, lzma, and lzma2",
+                codec.name()
+            ))),
+            RequestedCodec::Unknown(name) => Err(RomWeaverError::Validation(format!(
                 "unsupported rvz codec `{name}`; supported codecs are store, zstd, bzip2, lzma, and lzma2"
             ))),
         }
@@ -1811,6 +1902,7 @@ impl ContainerHandler for RvzContainerHandler {
         let disc = self.open_disc(&request.source)?;
         let meta = self.validate_rvz_meta(&request.source, &disc)?;
         let disc_size = meta.disc_size.unwrap_or_else(|| disc.disc_size());
+        let compression_label = normalize_codec_label(&meta.compression.to_string());
         let block_label = meta
             .block_size
             .map(|size| format!("{size} bytes"))
@@ -1821,7 +1913,7 @@ impl ContainerHandler for RvzContainerHandler {
             "inspect",
             format!(
                 "rvz: {disc_size} bytes, compression={}, block={}, lossless={}, decrypted={}, needs_hash_recovery={}",
-                meta.compression,
+                compression_label,
                 block_label,
                 meta.lossless,
                 meta.decrypted,
@@ -1847,6 +1939,7 @@ impl ContainerHandler for RvzContainerHandler {
         let mut disc = self.open_disc(&request.source)?;
         let meta = self.validate_rvz_meta(&request.source, &disc)?;
         let disc_size = meta.disc_size.unwrap_or_else(|| disc.disc_size());
+        let compression_label = normalize_codec_label(&meta.compression.to_string());
 
         fs::create_dir_all(&request.out_dir)?;
         let output_path = request.out_dir.join(self.extract_name(&request.source));
@@ -1864,7 +1957,7 @@ impl ContainerHandler for RvzContainerHandler {
                 output_path.display(),
                 bytes_written,
                 disc_size,
-                meta.compression
+                compression_label
             ),
             Some(100.0),
             Some(execution),
@@ -1929,7 +2022,7 @@ impl ContainerHandler for RvzContainerHandler {
                 "created rvz `{}` from `{}` (codec={}, block={} bytes, {} bytes)",
                 request.output.display(),
                 input.display(),
-                options.compression,
+                normalize_codec_label(&options.compression.to_string()),
                 options.block_size,
                 output_bytes
             ),
@@ -2260,15 +2353,16 @@ impl Z3dsContainerHandler {
             )));
         }
 
-        match codec.map(|value| value.trim().to_ascii_lowercase()) {
-            None => Ok(level),
-            Some(name) if matches!(name.as_str(), "zstd" | "zst" | "zstandard") => Ok(level),
-            Some(name) if matches!(name.as_str(), "store" | "none" | "uncompressed") => {
-                Err(RomWeaverError::Validation(
-                    "z3ds does not support uncompressed output; use zstd".into(),
-                ))
-            }
-            Some(name) => Err(RomWeaverError::Validation(format!(
+        match parse_requested_codec(codec) {
+            RequestedCodec::Unspecified | RequestedCodec::Known(CanonicalCodec::Zstd) => Ok(level),
+            RequestedCodec::Known(CanonicalCodec::Store) => Err(RomWeaverError::Validation(
+                "z3ds does not support uncompressed output; use zstd".into(),
+            )),
+            RequestedCodec::Known(codec) => Err(RomWeaverError::Validation(format!(
+                "unsupported z3ds codec `{}`; supported codec is zstd",
+                codec.name()
+            ))),
+            RequestedCodec::Unknown(name) => Err(RomWeaverError::Validation(format!(
                 "unsupported z3ds codec `{name}`; supported codec is zstd"
             ))),
         }
@@ -2784,6 +2878,18 @@ struct DiscLayout {
     tracks: Vec<DiscTrack>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct AvProfile {
+    frame_bytes: u32,
+    fps: u32,
+    fpsfrac: u32,
+    width: u32,
+    height: u32,
+    interlaced: u32,
+    channels: u32,
+    sample_rate: u32,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct DiscTrack {
     number: u32,
@@ -2890,6 +2996,239 @@ enum ChdCreateKind {
     HardDisk(HdGeometry),
     Dvd,
     Disc(DiscLayout),
+    Av(AvProfile),
+}
+
+const CDROM_OLD_METADATA_TAG: u32 = make_tag(b'C', b'H', b'C', b'D');
+const CDROM_TRACK_METADATA_TAG: u32 = make_tag(b'C', b'H', b'T', b'R');
+const GDROM_OLD_METADATA_TAG: u32 = make_tag(b'C', b'H', b'G', b'T');
+const AV_METADATA_TAG: u32 = make_tag(b'A', b'V', b'A', b'V');
+const AV_LD_METADATA_TAG: u32 = make_tag(b'A', b'V', b'L', b'D');
+
+enum ChdReadBackend {
+    Native(ChdFile),
+    Rust {
+        metadata_by_tag_and_index: BTreeMap<(u32, u32), Vec<u8>>,
+    },
+}
+
+struct ChdReadSession {
+    source: PathBuf,
+    header: rom_weaver_chd_sys::ChdHeader,
+    media_kind: ChdMediaKind,
+    backend: ChdReadBackend,
+}
+
+impl ChdReadSession {
+    fn open(source: &Path) -> Result<Self> {
+        match ChdFile::open(source, None) {
+            Ok(chd) => {
+                let media_kind = chd
+                    .media_kind()
+                    .map_err(|error| RomWeaverError::Validation(error.to_string()))?;
+                Ok(Self {
+                    source: source.to_path_buf(),
+                    header: chd.header(),
+                    media_kind,
+                    backend: ChdReadBackend::Native(chd),
+                })
+            }
+            Err(native_error) => Self::open_rust(source).map_err(|fallback_error| {
+                RomWeaverError::Validation(format!(
+                    "failed to open chd `{}` with native backend ({native_error}); fallback decoder failed ({fallback_error})",
+                    source.display()
+                ))
+            }),
+        }
+    }
+
+    fn open_rust(source: &Path) -> std::result::Result<Self, String> {
+        let file = File::open(source)
+            .map_err(|error| format!("failed to open `{}`: {error}", source.display()))?;
+        let mut reader = BufReader::new(file);
+        let mut chd = chd::Chd::open(&mut reader, None)
+            .map_err(|error| format!("failed to parse `{}`: {error}", source.display()))?;
+
+        let header = Self::convert_header(chd.header());
+        let mut metadata_by_tag_and_index = BTreeMap::new();
+        let metadatas: Vec<chd::metadata::Metadata> = chd
+            .metadata_refs()
+            .try_into()
+            .map_err(|error| format!("failed to read CHD metadata: {error}"))?;
+        for metadata in metadatas {
+            metadata_by_tag_and_index.insert((metadata.metatag, metadata.index), metadata.value);
+        }
+        let media_kind = Self::detect_media_kind(&metadata_by_tag_and_index);
+
+        Ok(Self {
+            source: source.to_path_buf(),
+            header,
+            media_kind,
+            backend: ChdReadBackend::Rust {
+                metadata_by_tag_and_index,
+            },
+        })
+    }
+
+    fn detect_media_kind(
+        metadata_by_tag_and_index: &BTreeMap<(u32, u32), Vec<u8>>,
+    ) -> ChdMediaKind {
+        let has_tag = |tag: u32| {
+            metadata_by_tag_and_index
+                .keys()
+                .any(|(candidate, _)| *candidate == tag)
+        };
+        if has_tag(GDROM_TRACK_METADATA_TAG) || has_tag(GDROM_OLD_METADATA_TAG) {
+            return ChdMediaKind::GdRom;
+        }
+        if has_tag(CDROM_TRACK_METADATA2_TAG)
+            || has_tag(CDROM_TRACK_METADATA_TAG)
+            || has_tag(CDROM_OLD_METADATA_TAG)
+        {
+            return ChdMediaKind::CdRom;
+        }
+        if has_tag(HARD_DISK_METADATA_TAG) {
+            return ChdMediaKind::HardDisk;
+        }
+        if has_tag(DVD_METADATA_TAG) {
+            return ChdMediaKind::Dvd;
+        }
+        if has_tag(AV_METADATA_TAG) || has_tag(AV_LD_METADATA_TAG) {
+            return ChdMediaKind::Av;
+        }
+        ChdMediaKind::Raw
+    }
+
+    fn codec_from_raw(raw: u32) -> ChdCodec {
+        match raw {
+            0 => ChdCodec::NONE,
+            1 | 2 => ChdCodec::ZLIB,
+            value if value == ChdCodec::ZLIB.raw() => ChdCodec::ZLIB,
+            value if value == ChdCodec::ZSTD.raw() => ChdCodec::ZSTD,
+            value if value == ChdCodec::LZMA.raw() => ChdCodec::LZMA,
+            value if value == ChdCodec::HUFFMAN.raw() => ChdCodec::HUFFMAN,
+            value if value == ChdCodec::AVHUFF.raw() => ChdCodec::AVHUFF,
+            value if value == ChdCodec::FLAC.raw() => ChdCodec::FLAC,
+            value if value == ChdCodec::CD_ZLIB.raw() => ChdCodec::CD_ZLIB,
+            value if value == ChdCodec::CD_ZSTD.raw() => ChdCodec::CD_ZSTD,
+            value if value == ChdCodec::CD_LZMA.raw() => ChdCodec::CD_LZMA,
+            value if value == ChdCodec::CD_FLAC.raw() => ChdCodec::CD_FLAC,
+            _ => ChdCodec::NONE,
+        }
+    }
+
+    fn convert_header(header: &chd::header::Header) -> rom_weaver_chd_sys::ChdHeader {
+        let compression = match header {
+            chd::header::Header::V1Header(value) | chd::header::Header::V2Header(value) => {
+                [value.compression, 0, 0, 0]
+            }
+            chd::header::Header::V3Header(value) => [value.compression, 0, 0, 0],
+            chd::header::Header::V4Header(value) => [value.compression, 0, 0, 0],
+            chd::header::Header::V5Header(value) => value.compression,
+        };
+        rom_weaver_chd_sys::ChdHeader {
+            version: header.version() as u32,
+            logical_bytes: header.logical_bytes(),
+            hunk_bytes: header.hunk_size(),
+            hunk_count: header.hunk_count(),
+            unit_bytes: header.unit_bytes(),
+            unit_count: header.unit_count(),
+            compressed: header.is_compressed(),
+            compression: compression.map(Self::codec_from_raw),
+        }
+    }
+
+    fn header(&self) -> rom_weaver_chd_sys::ChdHeader {
+        self.header
+    }
+
+    fn media_kind(&self) -> ChdMediaKind {
+        self.media_kind
+    }
+
+    fn read_metadata(&self, tag: u32, index: u32) -> Result<Option<Vec<u8>>> {
+        match &self.backend {
+            ChdReadBackend::Native(chd) => chd
+                .read_metadata(tag, index)
+                .map_err(|error| RomWeaverError::Validation(error.to_string())),
+            ChdReadBackend::Rust {
+                metadata_by_tag_and_index,
+            } => Ok(metadata_by_tag_and_index.get(&(tag, index)).cloned()),
+        }
+    }
+
+    fn extract_to_file(&self, output_path: &Path) -> Result<rom_weaver_chd_sys::ChdHeader> {
+        match &self.backend {
+            ChdReadBackend::Native(_) => match ChdFile::extract_to_file(&self.source, None, output_path)
+                .map_err(|error| RomWeaverError::Validation(error.to_string()))
+            {
+                Ok(header) => Ok(header),
+                Err(native_error) => Self::extract_to_file_with_rust(
+                    &self.source,
+                    self.header.logical_bytes,
+                    output_path,
+                )
+                .map_err(|fallback_error| {
+                    RomWeaverError::Validation(format!(
+                        "failed to extract chd `{}` with native backend ({native_error}); fallback decoder failed ({fallback_error})",
+                        self.source.display()
+                    ))
+                })
+                .map(|_| self.header),
+            },
+            ChdReadBackend::Rust { .. } => {
+                Self::extract_to_file_with_rust(&self.source, self.header.logical_bytes, output_path)
+                    .map_err(RomWeaverError::Validation)
+                    .map(|_| self.header)
+            }
+        }
+    }
+
+    fn extract_to_file_with_rust(
+        source: &Path,
+        logical_bytes: u64,
+        output_path: &Path,
+    ) -> std::result::Result<(), String> {
+        let file = File::open(source)
+            .map_err(|error| format!("failed to open `{}`: {error}", source.display()))?;
+        let mut reader = BufReader::new(file);
+        let mut chd = chd::Chd::open(&mut reader, None)
+            .map_err(|error| format!("failed to decode `{}`: {error}", source.display()))?;
+
+        let mut output = File::create(output_path)
+            .map_err(|error| format!("failed to create `{}`: {error}", output_path.display()))?;
+        let mut remaining = logical_bytes;
+        let mut hunk_buffer = chd.get_hunksized_buffer();
+        let mut compressed_buffer = Vec::new();
+        for hunk_index in 0..chd.header().hunk_count() {
+            if remaining == 0 {
+                break;
+            }
+            let mut hunk = chd.hunk(hunk_index).map_err(|error| {
+                format!(
+                    "failed to decode hunk {} of `{}`: {error}",
+                    hunk_index,
+                    source.display()
+                )
+            })?;
+            hunk.read_hunk_in(&mut compressed_buffer, &mut hunk_buffer)
+                .map_err(|error| {
+                    format!(
+                        "failed to read hunk {} of `{}`: {error}",
+                        hunk_index,
+                        source.display()
+                    )
+                })?;
+            let write_len = usize::try_from(remaining.min(hunk_buffer.len() as u64))
+                .map_err(|_| "decoded CHD chunk exceeded addressable memory".to_string())?;
+            output
+                .write_all(&hunk_buffer[..write_len])
+                .map_err(|error| format!("failed to write `{}`: {error}", output_path.display()))?;
+            remaining -= write_len as u64;
+        }
+
+        Ok(())
+    }
 }
 
 fn split_token(text: &str) -> Option<(&str, &str)> {
@@ -2914,6 +3253,11 @@ impl ChdContainerHandler {
     const HD_SECTOR_BYTES: u32 = 512;
     const CD_FRAME_BYTES: u32 = CD_FRAME_SIZE;
     const CD_HUNK_BYTES: u32 = CD_FRAME_SIZE * 8;
+    const ZLIB_LEVEL_MIN: i32 = 1;
+    const ZLIB_LEVEL_MAX: i32 = 9;
+    const ZSTD_LEVEL_MIN: i32 = -7;
+    const LZMA_LEVEL_MIN: i32 = 0;
+    const LZMA_LEVEL_MAX: i32 = 9;
 
     fn ensure_backend(&self) -> Result<()> {
         let info = build_info();
@@ -2943,18 +3287,74 @@ impl ChdContainerHandler {
     }
 
     fn map_codec(&self, codec: Option<&str>) -> Result<ChdCodec> {
-        match codec.map(|value| value.trim().to_ascii_lowercase()) {
-            None => Ok(ChdCodec::ZSTD),
-            Some(name) if matches!(name.as_str(), "store" | "none" | "uncompressed") => {
-                Ok(ChdCodec::NONE)
+        let normalized = codec
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(|value| value.to_ascii_lowercase());
+        if let Some(value) = normalized.as_deref() {
+            match value {
+                "flac" => return Ok(ChdCodec::FLAC),
+                "cdzl" => return Ok(ChdCodec::CD_ZLIB),
+                "cdzs" => return Ok(ChdCodec::CD_ZSTD),
+                "cdlz" => return Ok(ChdCodec::CD_LZMA),
+                "cdfl" => return Ok(ChdCodec::CD_FLAC),
+                "avhu" | "avhuff" => return Ok(ChdCodec::AVHUFF),
+                _ => {}
             }
-            Some(name) if matches!(name.as_str(), "deflate" | "zlib") => Ok(ChdCodec::ZLIB),
-            Some(name) if name == "zstd" => Ok(ChdCodec::ZSTD),
-            Some(name) if matches!(name.as_str(), "lzma" | "lzma2" | "xz") => Ok(ChdCodec::LZMA),
-            Some(name) if matches!(name.as_str(), "huffman" | "huff") => Ok(ChdCodec::HUFFMAN),
-            Some(name) => Err(RomWeaverError::Validation(format!(
-                "unsupported chd codec `{name}`; supported codecs are store, zlib, zstd, lzma, and huffman"
+        }
+
+        match parse_requested_codec(codec) {
+            RequestedCodec::Unspecified => Ok(ChdCodec::ZSTD),
+            RequestedCodec::Known(CanonicalCodec::Store) => Ok(ChdCodec::NONE),
+            RequestedCodec::Known(CanonicalCodec::Deflate) => Ok(ChdCodec::ZLIB),
+            RequestedCodec::Known(CanonicalCodec::Zstd) => Ok(ChdCodec::ZSTD),
+            RequestedCodec::Known(CanonicalCodec::Lzma)
+            | RequestedCodec::Known(CanonicalCodec::Lzma2) => Ok(ChdCodec::LZMA),
+            RequestedCodec::Known(CanonicalCodec::Huffman) => Ok(ChdCodec::HUFFMAN),
+            RequestedCodec::Known(codec) => Err(RomWeaverError::Validation(format!(
+                "unsupported chd codec `{}`; supported codecs are store, zlib, zstd, lzma, huffman, flac, cdlz, cdzl, cdzs, cdfl, and avhu",
+                codec.name()
             ))),
+            RequestedCodec::Unknown(name) => Err(RomWeaverError::Validation(format!(
+                "unsupported chd codec `{name}`; supported codecs are store, zlib, zstd, lzma, huffman, flac, cdlz, cdzl, cdzs, cdfl, and avhu"
+            ))),
+        }
+    }
+
+    fn resolve_compression_level(&self, codec: ChdCodec, level: Option<i32>) -> Result<i32> {
+        let Some(level) = level else {
+            return Ok(0);
+        };
+
+        let codec_label = self.codec_label(codec);
+        let zstd_max_level = zstd::zstd_safe::max_c_level() as i32;
+        let range = match codec {
+            ChdCodec::ZLIB | ChdCodec::CD_ZLIB => {
+                Some((Self::ZLIB_LEVEL_MIN, Self::ZLIB_LEVEL_MAX))
+            }
+            ChdCodec::ZSTD | ChdCodec::CD_ZSTD => Some((Self::ZSTD_LEVEL_MIN, zstd_max_level)),
+            ChdCodec::LZMA | ChdCodec::CD_LZMA => {
+                Some((Self::LZMA_LEVEL_MIN, Self::LZMA_LEVEL_MAX))
+            }
+            ChdCodec::NONE
+            | ChdCodec::HUFFMAN
+            | ChdCodec::FLAC
+            | ChdCodec::CD_FLAC
+            | ChdCodec::AVHUFF => None,
+            _ => None,
+        };
+
+        let Some((min, max)) = range else {
+            return Err(RomWeaverError::Validation(format!(
+                "chd codec `{codec_label}` does not accept --level"
+            )));
+        };
+        if (min..=max).contains(&level) {
+            Ok(level)
+        } else {
+            Err(RomWeaverError::Validation(format!(
+                "chd codec `{codec_label}` level `{level}` is out of range; expected {min}..={max}"
+            )))
         }
     }
 
@@ -2965,6 +3365,12 @@ impl ChdContainerHandler {
             ChdCodec::ZSTD => "zstd",
             ChdCodec::LZMA => "lzma",
             ChdCodec::HUFFMAN => "huffman",
+            ChdCodec::AVHUFF => "avhuff",
+            ChdCodec::FLAC => "flac",
+            ChdCodec::CD_ZLIB => "cdzl",
+            ChdCodec::CD_ZSTD => "cdzs",
+            ChdCodec::CD_LZMA => "cdlz",
+            ChdCodec::CD_FLAC => "cdfl",
             _ => "unknown",
         }
     }
@@ -2974,7 +3380,7 @@ impl ChdContainerHandler {
             .compression
             .into_iter()
             .filter(|codec| *codec != ChdCodec::NONE)
-            .map(|codec| self.codec_label(codec))
+            .map(|codec| normalize_codec_label(self.codec_label(codec)))
             .collect::<Vec<_>>();
         if codecs.is_empty() {
             "store".to_string()
@@ -2990,9 +3396,7 @@ impl ChdContainerHandler {
             ChdMediaKind::Dvd => Ok(".iso"),
             ChdMediaKind::CdRom => Ok(".cue"),
             ChdMediaKind::GdRom => Ok(".gdi"),
-            ChdMediaKind::Av => Err(RomWeaverError::Validation(
-                "chd extract does not support av images yet; current extract supports raw payloads, hd images, and dvd images".into(),
-            )),
+            ChdMediaKind::Av => Ok(".avi"),
         }
     }
 
@@ -3692,13 +4096,10 @@ impl ChdContainerHandler {
         })
     }
 
-    fn read_disc_tracks(&self, chd: &ChdFile, kind: DiscKind) -> Result<DiscLayout> {
+    fn read_disc_tracks(&self, chd: &ChdReadSession, kind: DiscKind) -> Result<DiscLayout> {
         let mut tracks = Vec::new();
         for index in 0..99_u32 {
-            let Some(metadata) = chd
-                .read_metadata(kind.metadata_tag(), index)
-                .map_err(|error| RomWeaverError::Validation(error.to_string()))?
-            else {
+            let Some(metadata) = chd.read_metadata(kind.metadata_tag(), index)? else {
                 break;
             };
             let text = String::from_utf8_lossy(&metadata)
@@ -3867,11 +4268,10 @@ impl ChdContainerHandler {
 
     fn extract_cd(
         &self,
+        chd: ChdReadSession,
         request: &ContainerExtractRequest,
         execution: rom_weaver_core::ThreadExecution,
     ) -> Result<OperationReport> {
-        let chd = ChdFile::open(&request.source, None)
-            .map_err(|error| RomWeaverError::Validation(error.to_string()))?;
         let header = chd.header();
         if header.unit_bytes != Self::CD_FRAME_BYTES {
             return Err(RomWeaverError::Validation(format!(
@@ -3891,8 +4291,7 @@ impl ChdContainerHandler {
             .unwrap_or("output");
         let cue_path = request.out_dir.join(format!("{stem}.cue"));
         let temp_path = self.create_temp_file_path("cd-extract", ".bin");
-        let extract_result = ChdFile::extract_to_file(&request.source, None, &temp_path)
-            .map_err(|error| RomWeaverError::Validation(error.to_string()));
+        let extract_result = chd.extract_to_file(&temp_path);
         if extract_result.is_err() {
             let _ = fs::remove_file(&temp_path);
         }
@@ -3907,139 +4306,220 @@ impl ChdContainerHandler {
             .tracks
             .iter()
             .all(|track| track.mode.data_bytes() == first_data_bytes);
+        let selection_requested = !request.selections.is_empty();
+        let cue_name = format!("{stem}.cue");
+        let mut selections = SelectionMatcher::new(&request.selections);
+        let write_cue = selections.matches(&cue_name);
+        let single_bin_name = format!("{stem}.bin");
+        let mut write_single_bin = single_bin && selections.matches(&single_bin_name);
+        let mut split_track_names = Vec::new();
+        let mut write_split_tracks = Vec::new();
+        if !single_bin {
+            for track in &layout.tracks {
+                let track_name = self.track_output_name(stem, track.number);
+                write_split_tracks.push(selections.matches(&track_name));
+                split_track_names.push(track_name);
+            }
+        }
+        if selection_requested && write_cue {
+            let any_selected = if single_bin {
+                write_single_bin
+            } else {
+                write_split_tracks.iter().any(|selected| *selected)
+            };
+            if !any_selected {
+                if single_bin {
+                    write_single_bin = true;
+                } else {
+                    for selected in &mut write_split_tracks {
+                        *selected = true;
+                    }
+                }
+            }
+        }
+        selections.ensure_all_matched()?;
 
-        let build_result: Result<(bool, Option<PathBuf>)> = (|| {
+        let build_result: Result<(bool, Vec<PathBuf>, bool)> = (|| {
             let mut reader = BufReader::new(File::open(&temp_path)?);
-            let mut cue_writer = BufWriter::new(File::create(&cue_path)?);
             let mut frame = vec![0_u8; Self::CD_FRAME_BYTES as usize];
             let mut omitted_subcode = false;
-            let single_bin_path = if single_bin {
-                Some(request.out_dir.join(format!("{stem}.bin")))
+            let mut produced_outputs = Vec::new();
+            let mut cue_writer = if write_cue {
+                produced_outputs.push(cue_path.clone());
+                Some(BufWriter::new(File::create(&cue_path)?))
             } else {
                 None
             };
+            let mut wrote_single_bin_output = false;
 
-            if let Some(bin_path) = single_bin_path.as_ref() {
-                cue_writer.write_all(format!("FILE \"{stem}.bin\" BINARY\n").as_bytes())?;
-                let mut bin_writer = BufWriter::new(File::create(bin_path)?);
+            if single_bin {
+                let bin_path = request.out_dir.join(&single_bin_name);
+                let mut bin_writer = if write_single_bin {
+                    wrote_single_bin_output = true;
+                    produced_outputs.push(bin_path.clone());
+                    Some(BufWriter::new(File::create(&bin_path)?))
+                } else {
+                    None
+                };
+                if let Some(writer) = cue_writer.as_mut() {
+                    writer.write_all(format!("FILE \"{single_bin_name}\" BINARY\n").as_bytes())?;
+                }
                 let mut output_frame_offset = 0_u32;
                 for track in &layout.tracks {
-                    cue_writer.write_all(
-                        format!("  TRACK {:02} {}\n", track.number, track.mode.cue_label())
-                            .as_bytes(),
-                    )?;
-                    if track.pregap_frames > 0 && track.pregap_has_data {
-                        cue_writer.write_all(
-                            format!("    INDEX 00 {}\n", self.format_msf(output_frame_offset))
+                    if let Some(writer) = cue_writer.as_mut() {
+                        writer.write_all(
+                            format!("  TRACK {:02} {}\n", track.number, track.mode.cue_label())
                                 .as_bytes(),
                         )?;
-                        cue_writer.write_all(
-                            format!(
-                                "    INDEX 01 {}\n",
-                                self.format_msf(output_frame_offset + track.pregap_frames)
-                            )
-                            .as_bytes(),
-                        )?;
-                    } else if track.pregap_frames > 0 {
-                        cue_writer.write_all(
-                            format!("    PREGAP {}\n", self.format_msf(track.pregap_frames))
+                        if track.pregap_frames > 0 && track.pregap_has_data {
+                            writer.write_all(
+                                format!("    INDEX 00 {}\n", self.format_msf(output_frame_offset))
+                                    .as_bytes(),
+                            )?;
+                            writer.write_all(
+                                format!(
+                                    "    INDEX 01 {}\n",
+                                    self.format_msf(output_frame_offset + track.pregap_frames)
+                                )
                                 .as_bytes(),
-                        )?;
-                        cue_writer.write_all(
-                            format!("    INDEX 01 {}\n", self.format_msf(output_frame_offset))
-                                .as_bytes(),
-                        )?;
-                    } else {
-                        cue_writer.write_all(
-                            format!("    INDEX 01 {}\n", self.format_msf(output_frame_offset))
-                                .as_bytes(),
-                        )?;
-                    }
-                    if track.postgap_frames > 0 {
-                        cue_writer.write_all(
-                            format!("    POSTGAP {}\n", self.format_msf(track.postgap_frames))
-                                .as_bytes(),
-                        )?;
+                            )?;
+                        } else if track.pregap_frames > 0 {
+                            writer.write_all(
+                                format!("    PREGAP {}\n", self.format_msf(track.pregap_frames))
+                                    .as_bytes(),
+                            )?;
+                            writer.write_all(
+                                format!("    INDEX 01 {}\n", self.format_msf(output_frame_offset))
+                                    .as_bytes(),
+                            )?;
+                        } else {
+                            writer.write_all(
+                                format!("    INDEX 01 {}\n", self.format_msf(output_frame_offset))
+                                    .as_bytes(),
+                            )?;
+                        }
+                        if track.postgap_frames > 0 {
+                            writer.write_all(
+                                format!("    POSTGAP {}\n", self.format_msf(track.postgap_frames))
+                                    .as_bytes(),
+                            )?;
+                        }
                     }
 
                     let data_frames = track.frames.saturating_sub(track.pad_frames);
                     for _ in 0..data_frames {
                         reader.read_exact(&mut frame)?;
                         let data = &mut frame[..track.mode.data_bytes()];
-                        if track.has_subcode {
+                        if write_single_bin && track.has_subcode {
                             omitted_subcode = true;
                         }
                         track.mode.swap_audio_bytes(data);
-                        bin_writer.write_all(data)?;
+                        if let Some(writer) = bin_writer.as_mut() {
+                            writer.write_all(data)?;
+                        }
                     }
                     for _ in 0..track.pad_frames {
                         reader.read_exact(&mut frame)?;
                     }
                     output_frame_offset = output_frame_offset.saturating_add(data_frames);
                 }
-                bin_writer.flush()?;
+                if let Some(writer) = bin_writer.as_mut() {
+                    writer.flush()?;
+                }
             } else {
-                for track in &layout.tracks {
-                    let track_name = self.track_output_name(stem, track.number);
-                    let track_path = request.out_dir.join(&track_name);
-                    cue_writer.write_all(format!("FILE \"{track_name}\" BINARY\n").as_bytes())?;
-                    cue_writer.write_all(
-                        format!("  TRACK {:02} {}\n", track.number, track.mode.cue_label())
-                            .as_bytes(),
-                    )?;
-                    if track.pregap_frames > 0 && track.pregap_has_data {
-                        cue_writer.write_all(b"    INDEX 00 00:00:00\n")?;
-                        cue_writer.write_all(
-                            format!("    INDEX 01 {}\n", self.format_msf(track.pregap_frames))
-                                .as_bytes(),
-                        )?;
-                    } else if track.pregap_frames > 0 {
-                        cue_writer.write_all(
-                            format!("    PREGAP {}\n", self.format_msf(track.pregap_frames))
-                                .as_bytes(),
-                        )?;
-                        cue_writer.write_all(b"    INDEX 01 00:00:00\n")?;
-                    } else {
-                        cue_writer.write_all(b"    INDEX 01 00:00:00\n")?;
-                    }
-                    if track.postgap_frames > 0 {
-                        cue_writer.write_all(
-                            format!("    POSTGAP {}\n", self.format_msf(track.postgap_frames))
-                                .as_bytes(),
-                        )?;
+                for (track_index, track) in layout.tracks.iter().enumerate() {
+                    let track_name = &split_track_names[track_index];
+                    let track_selected = write_split_tracks[track_index];
+                    let track_path = request.out_dir.join(track_name);
+                    if let Some(writer) = cue_writer.as_mut() {
+                        if track_selected {
+                            writer
+                                .write_all(format!("FILE \"{track_name}\" BINARY\n").as_bytes())?;
+                            writer.write_all(
+                                format!("  TRACK {:02} {}\n", track.number, track.mode.cue_label())
+                                    .as_bytes(),
+                            )?;
+                            if track.pregap_frames > 0 && track.pregap_has_data {
+                                writer.write_all(b"    INDEX 00 00:00:00\n")?;
+                                writer.write_all(
+                                    format!(
+                                        "    INDEX 01 {}\n",
+                                        self.format_msf(track.pregap_frames)
+                                    )
+                                    .as_bytes(),
+                                )?;
+                            } else if track.pregap_frames > 0 {
+                                writer.write_all(
+                                    format!(
+                                        "    PREGAP {}\n",
+                                        self.format_msf(track.pregap_frames)
+                                    )
+                                    .as_bytes(),
+                                )?;
+                                writer.write_all(b"    INDEX 01 00:00:00\n")?;
+                            } else {
+                                writer.write_all(b"    INDEX 01 00:00:00\n")?;
+                            }
+                            if track.postgap_frames > 0 {
+                                writer.write_all(
+                                    format!(
+                                        "    POSTGAP {}\n",
+                                        self.format_msf(track.postgap_frames)
+                                    )
+                                    .as_bytes(),
+                                )?;
+                            }
+                        }
                     }
 
-                    let mut track_writer = BufWriter::new(File::create(track_path)?);
+                    let mut track_writer = if track_selected {
+                        produced_outputs.push(track_path.clone());
+                        Some(BufWriter::new(File::create(track_path)?))
+                    } else {
+                        None
+                    };
                     let data_frames = track.frames.saturating_sub(track.pad_frames);
                     for _ in 0..data_frames {
                         reader.read_exact(&mut frame)?;
                         let data = &mut frame[..track.mode.data_bytes()];
-                        if track.has_subcode {
+                        if track_selected && track.has_subcode {
                             omitted_subcode = true;
                         }
                         track.mode.swap_audio_bytes(data);
-                        track_writer.write_all(data)?;
+                        if let Some(writer) = track_writer.as_mut() {
+                            writer.write_all(data)?;
+                        }
                     }
                     for _ in 0..track.pad_frames {
                         reader.read_exact(&mut frame)?;
                     }
-                    track_writer.flush()?;
+                    if let Some(writer) = track_writer.as_mut() {
+                        writer.flush()?;
+                    }
                 }
             }
 
-            cue_writer.flush()?;
-            Ok((omitted_subcode, single_bin_path))
+            if let Some(writer) = cue_writer.as_mut() {
+                writer.flush()?;
+            }
+            Ok((omitted_subcode, produced_outputs, wrote_single_bin_output))
         })();
 
         let _ = fs::remove_file(&temp_path);
-        let (omitted_subcode, single_bin_path) = build_result?;
+        let (omitted_subcode, produced_outputs, wrote_single_bin_output) = build_result?;
+        if selection_requested && produced_outputs.is_empty() {
+            return Err(RomWeaverError::Validation(
+                "requested selections resolved to no extractable cd outputs".into(),
+            ));
+        }
         let suffix = if omitted_subcode {
             "; subcode data was omitted from cue/bin output"
         } else {
             ""
         };
 
-        let label = if let Some(bin_path) = single_bin_path {
+        let label = if !selection_requested && wrote_single_bin_output {
+            let bin_path = request.out_dir.join(&single_bin_name);
             format!(
                 "extracted `{}` to `{}` and `{}` (cd, {}){}",
                 request.source.display(),
@@ -4048,11 +4528,24 @@ impl ChdContainerHandler {
                 self.header_codec_label(header),
                 suffix
             )
-        } else {
+        } else if !selection_requested {
             format!(
                 "extracted `{}` to `{}` and per-track bin files (cd, {}){}",
                 request.source.display(),
                 cue_path.display(),
+                self.header_codec_label(header),
+                suffix
+            )
+        } else {
+            let outputs = produced_outputs
+                .iter()
+                .map(|path| format!("`{}`", path.display()))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!(
+                "extracted `{}` to selected outputs: {} (cd, {}){}",
+                request.source.display(),
+                outputs,
                 self.header_codec_label(header),
                 suffix
             )
@@ -4070,11 +4563,10 @@ impl ChdContainerHandler {
 
     fn extract_gd(
         &self,
+        chd: ChdReadSession,
         request: &ContainerExtractRequest,
         execution: rom_weaver_core::ThreadExecution,
     ) -> Result<OperationReport> {
-        let chd = ChdFile::open(&request.source, None)
-            .map_err(|error| RomWeaverError::Validation(error.to_string()))?;
         let header = chd.header();
         if header.unit_bytes != Self::CD_FRAME_BYTES {
             return Err(RomWeaverError::Validation(format!(
@@ -4094,74 +4586,131 @@ impl ChdContainerHandler {
             .unwrap_or("output");
         let gdi_path = request.out_dir.join(format!("{stem}.gdi"));
         let temp_path = self.create_temp_file_path("gd-extract", ".bin");
-        let extract_result = ChdFile::extract_to_file(&request.source, None, &temp_path)
-            .map_err(|error| RomWeaverError::Validation(error.to_string()));
+        let extract_result = chd.extract_to_file(&temp_path);
         if extract_result.is_err() {
             let _ = fs::remove_file(&temp_path);
         }
         let _ = extract_result?;
 
-        let build_result: Result<bool> = (|| {
+        let selection_requested = !request.selections.is_empty();
+        let gdi_name = format!("{stem}.gdi");
+        let mut selections = SelectionMatcher::new(&request.selections);
+        let write_gdi = selections.matches(&gdi_name);
+        let mut track_names = Vec::with_capacity(layout.tracks.len());
+        let mut write_tracks = Vec::with_capacity(layout.tracks.len());
+        for track in &layout.tracks {
+            let track_name = self.track_output_name(stem, track.number);
+            write_tracks.push(selections.matches(&track_name));
+            track_names.push(track_name);
+        }
+        if selection_requested && write_gdi && !write_tracks.iter().any(|selected| *selected) {
+            for selected in &mut write_tracks {
+                *selected = true;
+            }
+        }
+        selections.ensure_all_matched()?;
+
+        let build_result: Result<(bool, Vec<PathBuf>)> = (|| {
             let mut reader = BufReader::new(File::open(&temp_path)?);
-            let mut gdi_writer = BufWriter::new(File::create(&gdi_path)?);
             let mut frame = vec![0_u8; Self::CD_FRAME_BYTES as usize];
             let mut omitted_subcode = false;
             let mut physframeofs = 0_u32;
+            let mut produced_outputs = Vec::new();
+            let mut gdi_lines = Vec::new();
 
-            gdi_writer.write_all(format!("{}\n", layout.tracks.len()).as_bytes())?;
-            for track in &layout.tracks {
+            for (track_index, track) in layout.tracks.iter().enumerate() {
                 let (track_type, sector_size) = track.mode.gdi_track_descriptor()?;
-                let track_name = self.track_output_name(stem, track.number);
-                let track_path = request.out_dir.join(&track_name);
-                gdi_writer.write_all(
-                    format!(
-                        "{} {} {} {} {} 0\n",
+                let track_name = &track_names[track_index];
+                let track_selected = write_tracks[track_index];
+                if track_selected {
+                    gdi_lines.push(format!(
+                        "{} {} {} {} {} 0",
                         track.number, physframeofs, track_type, sector_size, track_name
-                    )
-                    .as_bytes(),
-                )?;
-
-                let mut track_writer = BufWriter::new(File::create(track_path)?);
+                    ));
+                }
+                let track_path = request.out_dir.join(track_name);
+                let mut track_writer = if track_selected {
+                    produced_outputs.push(track_path.clone());
+                    Some(BufWriter::new(File::create(track_path)?))
+                } else {
+                    None
+                };
                 let data_frames = track.frames.saturating_sub(track.pad_frames);
                 for _ in 0..data_frames {
                     reader.read_exact(&mut frame)?;
                     let data = &mut frame[..track.mode.data_bytes()];
-                    if track.has_subcode {
+                    if track_selected && track.has_subcode {
                         omitted_subcode = true;
                     }
                     track.mode.swap_audio_bytes(data);
-                    track_writer.write_all(data)?;
+                    if let Some(writer) = track_writer.as_mut() {
+                        writer.write_all(data)?;
+                    }
                 }
                 for _ in 0..track.pad_frames {
                     reader.read_exact(&mut frame)?;
                 }
-                track_writer.flush()?;
+                if let Some(writer) = track_writer.as_mut() {
+                    writer.flush()?;
+                }
                 physframeofs = physframeofs.saturating_add(track.frames);
             }
 
-            gdi_writer.flush()?;
-            Ok(omitted_subcode)
+            if write_gdi {
+                let mut gdi_writer = BufWriter::new(File::create(&gdi_path)?);
+                produced_outputs.push(gdi_path.clone());
+                gdi_writer.write_all(format!("{}\n", gdi_lines.len()).as_bytes())?;
+                for line in &gdi_lines {
+                    gdi_writer.write_all(line.as_bytes())?;
+                    gdi_writer.write_all(b"\n")?;
+                }
+                gdi_writer.flush()?;
+            }
+
+            Ok((omitted_subcode, produced_outputs))
         })();
 
         let _ = fs::remove_file(&temp_path);
-        let omitted_subcode = build_result?;
+        let (omitted_subcode, produced_outputs) = build_result?;
+        if selection_requested && produced_outputs.is_empty() {
+            return Err(RomWeaverError::Validation(
+                "requested selections resolved to no extractable gd outputs".into(),
+            ));
+        }
         let suffix = if omitted_subcode {
             "; subcode data was omitted from gdi output"
         } else {
             ""
         };
 
-        Ok(OperationReport::succeeded(
-            OperationFamily::Container,
-            Some(CHD.name.to_string()),
-            "extract",
+        let label = if selection_requested {
+            let outputs = produced_outputs
+                .iter()
+                .map(|path| format!("`{}`", path.display()))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!(
+                "extracted `{}` to selected outputs: {} (gd, {}){}",
+                request.source.display(),
+                outputs,
+                self.header_codec_label(header),
+                suffix
+            )
+        } else {
             format!(
                 "extracted `{}` to `{}` and per-track gd files (gd, {}){}",
                 request.source.display(),
                 gdi_path.display(),
                 self.header_codec_label(header),
                 suffix
-            ),
+            )
+        };
+
+        Ok(OperationReport::succeeded(
+            OperationFamily::Container,
+            Some(CHD.name.to_string()),
+            "extract",
+            label,
             Some(100.0),
             Some(execution),
         ))
@@ -4173,6 +4722,7 @@ impl ChdContainerHandler {
         output: &Path,
         logical_bytes: u64,
         create_kind: &ChdCreateKind,
+        compression_level: i32,
     ) -> Result<rom_weaver_chd_sys::ChdHeader> {
         let hunk_bytes = self.hunk_bytes(create_kind, logical_bytes, ChdCodec::NONE);
         let mut chd = ChdFile::create(
@@ -4183,6 +4733,7 @@ impl ChdContainerHandler {
                 hunk_bytes,
                 unit_bytes: self.unit_bytes(create_kind),
                 compression: [ChdCodec::NONE; CHD_MAX_COMPRESSORS],
+                compression_level,
             },
         )
         .map_err(|error| RomWeaverError::Validation(error.to_string()))?;
@@ -4218,6 +4769,7 @@ impl ChdContainerHandler {
         logical_bytes: u64,
         create_kind: &ChdCreateKind,
         codec: ChdCodec,
+        compression_level: i32,
     ) -> Result<rom_weaver_chd_sys::ChdHeader> {
         let hunk_bytes = self.hunk_bytes(create_kind, logical_bytes, codec);
         ChdFile::compress_file(
@@ -4229,6 +4781,7 @@ impl ChdContainerHandler {
                 hunk_bytes,
                 unit_bytes: self.unit_bytes(create_kind),
                 compression: [codec, ChdCodec::NONE, ChdCodec::NONE, ChdCodec::NONE],
+                compression_level,
             },
         )
         .map_err(|error| RomWeaverError::Validation(error.to_string()))?;
@@ -4265,6 +4818,7 @@ impl ChdContainerHandler {
             ChdCreateKind::HardDisk(geometry) => geometry.bytes_per_sector,
             ChdCreateKind::Dvd => Self::DVD_SECTOR_BYTES,
             ChdCreateKind::Disc(_) => Self::CD_FRAME_BYTES,
+            ChdCreateKind::Av(_) => 1,
         }
     }
 
@@ -4282,6 +4836,7 @@ impl ChdContainerHandler {
                 }
             }
             ChdCreateKind::Disc(_) => Self::CD_HUNK_BYTES,
+            ChdCreateKind::Av(profile) => profile.frame_bytes,
             _ => Self::DEFAULT_HUNK_BYTES,
         }
     }
@@ -4327,6 +4882,60 @@ impl ChdContainerHandler {
         )))
     }
 
+    fn infer_av_profile(&self, input: &Path, logical_bytes: u64) -> Result<AvProfile> {
+        let mut reader = BufReader::new(File::open(input).map_err(|error| {
+            RomWeaverError::Validation(format!("failed to open `{}`: {error}", input.display()))
+        })?);
+        let mut header = [0_u8; 12];
+        reader.read_exact(&mut header).map_err(|error| {
+            RomWeaverError::Validation(format!(
+                "failed to read A/V header from `{}`: {error}",
+                input.display()
+            ))
+        })?;
+        if &header[..4] != b"chav" {
+            return Err(RomWeaverError::Validation(format!(
+                "chd codec `avhuff` requires `chav` frames; `{}` does not start with a `chav` header",
+                input.display()
+            )));
+        }
+
+        let metadata_bytes = u64::from(header[4]);
+        let channels = u64::from(header[5]);
+        let samples = u64::from(u16::from_be_bytes([header[6], header[7]]));
+        let width = u64::from(u16::from_be_bytes([header[8], header[9]]));
+        let height = u64::from(u16::from_be_bytes([header[10], header[11]]));
+
+        let frame_bytes = 12_u64
+            .saturating_add(metadata_bytes)
+            .saturating_add(channels.saturating_mul(samples).saturating_mul(2))
+            .saturating_add(width.saturating_mul(height).saturating_mul(2));
+        let frame_bytes_u32 = u32::try_from(frame_bytes).map_err(|_| {
+            RomWeaverError::Validation(format!(
+                "A/V frame size `{frame_bytes}` in `{}` exceeds supported limits",
+                input.display()
+            ))
+        })?;
+        if frame_bytes_u32 == 0 {
+            return Err(RomWeaverError::Validation(format!(
+                "A/V frame size in `{}` resolved to zero bytes",
+                input.display()
+            )));
+        }
+        self.ensure_multiple_of(logical_bytes, frame_bytes_u32, "av frame stream")?;
+
+        Ok(AvProfile {
+            frame_bytes: frame_bytes_u32,
+            fps: 1,
+            fpsfrac: 0,
+            width: width as u32,
+            height: height as u32,
+            interlaced: 0,
+            channels: channels as u32,
+            sample_rate: samples as u32,
+        })
+    }
+
     fn ensure_multiple_of(&self, logical_bytes: u64, unit_bytes: u32, label: &str) -> Result<()> {
         if logical_bytes % u64::from(unit_bytes) == 0 {
             Ok(())
@@ -4340,6 +4949,27 @@ impl ChdContainerHandler {
     fn write_create_metadata(&self, chd: &ChdFile, create_kind: &ChdCreateKind) -> Result<()> {
         match create_kind {
             ChdCreateKind::Raw => Ok(()),
+            ChdCreateKind::Av(profile) => {
+                let mut metadata = format!(
+                    "FPS:{}.{:06} WIDTH:{} HEIGHT:{} INTERLACED:{} CHANNELS:{} SAMPLERATE:{}",
+                    profile.fps,
+                    profile.fpsfrac,
+                    profile.width,
+                    profile.height,
+                    profile.interlaced,
+                    profile.channels,
+                    profile.sample_rate
+                )
+                .into_bytes();
+                metadata.push(0);
+                chd.write_metadata(rom_weaver_chd_sys::Metadata {
+                    tag: AV_METADATA_TAG,
+                    index: 0,
+                    flags: CHD_METADATA_FLAG_CHECKSUM,
+                    data: &metadata,
+                })
+                .map_err(|error| RomWeaverError::Validation(error.to_string()))
+            }
             ChdCreateKind::Dvd => chd
                 .write_metadata(rom_weaver_chd_sys::Metadata {
                     tag: DVD_METADATA_TAG,
@@ -4382,14 +5012,10 @@ impl ContainerHandler for ChdContainerHandler {
         request: &ContainerInspectRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        self.ensure_backend()?;
         let execution = context.plan_threads(ThreadCapability::single_threaded());
-        let chd = ChdFile::open(&request.source, None)
-            .map_err(|error| RomWeaverError::Validation(error.to_string()))?;
+        let chd = ChdReadSession::open(&request.source)?;
         let header = chd.header();
-        let media_kind = chd
-            .media_kind()
-            .map_err(|error| RomWeaverError::Validation(error.to_string()))?;
+        let media_kind = chd.media_kind();
         Ok(OperationReport::succeeded(
             OperationFamily::Container,
             Some(CHD.name.to_string()),
@@ -4412,31 +5038,24 @@ impl ContainerHandler for ChdContainerHandler {
         request: &ContainerExtractRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        self.ensure_backend()?;
-        if !request.selections.is_empty() {
-            return Err(RomWeaverError::Validation(
-                "chd extract does not support --select yet".into(),
-            ));
-        }
-
         let execution = context.plan_threads(ThreadCapability::single_threaded());
-        let chd = ChdFile::open(&request.source, None)
-            .map_err(|error| RomWeaverError::Validation(error.to_string()))?;
-        let media_kind = chd
-            .media_kind()
-            .map_err(|error| RomWeaverError::Validation(error.to_string()))?;
+        let chd = ChdReadSession::open(&request.source)?;
+        let media_kind = chd.media_kind();
         if media_kind == ChdMediaKind::CdRom {
-            return self.extract_cd(request, execution);
+            return self.extract_cd(chd, request, execution);
         }
         if media_kind == ChdMediaKind::GdRom {
-            return self.extract_gd(request, execution);
+            return self.extract_gd(chd, request, execution);
         }
         fs::create_dir_all(&request.out_dir)?;
-        let output_path = request
-            .out_dir
-            .join(self.extract_name(&request.source, media_kind)?);
-        let header = ChdFile::extract_to_file(&request.source, None, &output_path)
-            .map_err(|error| RomWeaverError::Validation(error.to_string()))?;
+        let output_name = self.extract_name(&request.source, media_kind)?;
+        let mut selections = SelectionMatcher::new(&request.selections);
+        if !selections.matches(&output_name) {
+            selections.ensure_all_matched()?;
+        }
+        selections.ensure_all_matched()?;
+        let output_path = request.out_dir.join(&output_name);
+        let header = chd.extract_to_file(&output_path)?;
         Ok(OperationReport::succeeded(
             OperationFamily::Container,
             Some(CHD.name.to_string()),
@@ -4465,17 +5084,24 @@ impl ContainerHandler for ChdContainerHandler {
                 "chd create currently requires exactly one input file".into(),
             ));
         }
-        if request.level.is_some() {
-            return Err(RomWeaverError::Validation(
-                "chd create does not support --level yet".into(),
-            ));
-        }
 
         let execution = context.plan_threads(ThreadCapability::single_threaded());
         let input = &request.inputs[0];
         let input_bytes = fs::metadata(input)?.len();
-        let create_kind = self.infer_create_kind(input, input_bytes)?;
+        let mut create_kind = self.infer_create_kind(input, input_bytes)?;
         let codec = self.resolve_codec(request.codec.as_deref(), &create_kind)?;
+        if codec == ChdCodec::AVHUFF {
+            create_kind = match create_kind {
+                ChdCreateKind::Raw => ChdCreateKind::Av(self.infer_av_profile(input, input_bytes)?),
+                ChdCreateKind::Av(profile) => ChdCreateKind::Av(profile),
+                _ => {
+                    return Err(RomWeaverError::Validation(
+                        "chd codec `avhuff` currently supports only raw `chav` frame inputs".into(),
+                    ));
+                }
+            };
+        }
+        let compression_level = self.resolve_compression_level(codec, request.level)?;
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
         }
@@ -4495,7 +5121,13 @@ impl ContainerHandler for ChdContainerHandler {
         };
 
         let create_result = if codec == ChdCodec::NONE {
-            self.create_uncompressed(source_path, &request.output, logical_bytes, &create_kind)
+            self.create_uncompressed(
+                source_path,
+                &request.output,
+                logical_bytes,
+                &create_kind,
+                compression_level,
+            )
         } else {
             self.create_compressed(
                 source_path,
@@ -4503,6 +5135,7 @@ impl ContainerHandler for ChdContainerHandler {
                 logical_bytes,
                 &create_kind,
                 codec,
+                compression_level,
             )
         };
         if let Some(path) = staged_input.as_ref() {

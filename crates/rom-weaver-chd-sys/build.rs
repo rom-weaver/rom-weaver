@@ -5,6 +5,8 @@ fn main() {
     println!("cargo:rerun-if-changed=native/mame_compat");
     println!("cargo:rerun-if-changed=native/mame_upstream");
 
+    let flac = flac_library();
+
     let mut lzma = cc::Build::new();
     lzma.file("native/mame_upstream/lzma/C/CpuArch.c");
     lzma.file("native/mame_upstream/lzma/C/LzFind.c");
@@ -21,6 +23,11 @@ fn main() {
     build.cpp(true);
     build.file("native/rom_weaver_mame_chd.cpp");
     build.file("native/rom_weaver_mame_chdcodec.cpp");
+    build.file("native/mame_compat/avhuff.cpp");
+    build.file("native/mame_compat/bitmap.cpp");
+    build.file("native/mame_compat/flac.cpp");
+    build.file("native/mame_compat/palette.cpp");
+    build.file("native/mame_compat/rom_weaver_mame_cdrom.cpp");
     build.file("native/mame_compat/rom_weaver_mame_corefile.cpp");
     build.file("native/mame_compat/rom_weaver_mame_ioprocs.cpp");
     build.file("native/mame_compat/rom_weaver_mame_osdcore.cpp");
@@ -31,6 +38,9 @@ fn main() {
     build.include("native/mame_compat");
     build.include("native/mame_upstream");
     build.include("native/mame_upstream/lzma/C");
+    for include in flac.include_paths {
+        build.include(include);
+    }
     for include in zstd_include_dirs() {
         build.include(include);
     }
@@ -42,7 +52,9 @@ fn main() {
     build.define("Z7_ST", None);
     build.compile("rom_weaver_mame_chd_bridge");
     println!("cargo:rustc-link-lib=z");
-    println!("cargo:rustc-env=ROM_WEAVER_MAME_CHD_BACKEND=embedded-zlib-zstd-lzma-huffman");
+    println!(
+        "cargo:rustc-env=ROM_WEAVER_MAME_CHD_BACKEND=embedded-zlib-zstd-lzma-huffman-flac-avhuff"
+    );
 }
 
 fn zstd_include_dirs() -> Vec<String> {
@@ -54,4 +66,14 @@ fn zstd_include_dirs() -> Vec<String> {
         .filter(|path| !path.is_empty())
         .map(ToOwned::to_owned)
         .collect()
+}
+
+fn flac_library() -> pkg_config::Library {
+    println!("cargo:rerun-if-env-changed=PKG_CONFIG_PATH");
+    println!("cargo:rerun-if-env-changed=PKG_CONFIG_LIBDIR");
+    println!("cargo:rerun-if-env-changed=PKG_CONFIG_SYSROOT_DIR");
+    pkg_config::Config::new()
+        .atleast_version("1.3.0")
+        .probe("flac")
+        .expect("libFLAC development files not found via pkg-config; install flac and pkg-config")
 }
