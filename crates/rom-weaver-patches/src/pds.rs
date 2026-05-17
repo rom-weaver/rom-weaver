@@ -13,7 +13,7 @@ use rom_weaver_core::{
     PatchCapabilities, PatchChecksumValidation, PatchCreateRequest, PatchHandler, ProbeConfidence,
     Result, RomWeaverError, ThreadCapability,
 };
-use zip::{CompressionMethod, ZipArchive, ZipWriter, write::SimpleFileOptions};
+use zip::{CompressionMethod, ZipArchive, ZipWriter, write::FileOptions};
 
 const PDS_MANIFEST_NAME: &str = "patch.dat";
 const PDS_DEFAULT_PAYLOAD_NAME: &str = "patch.bdf";
@@ -163,7 +163,7 @@ impl PatchHandler for PdsPatchHandler {
 
         let file = File::create(&request.output)?;
         let mut archive = ZipWriter::new(file);
-        let options = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        let options = FileOptions::default().compression_method(CompressionMethod::Deflated);
         archive
             .start_file(PDS_MANIFEST_NAME, options)
             .map_err(|error| {
@@ -672,7 +672,7 @@ mod tests {
         CancellationToken, NoopProgressSink, OperationContext, OperationStatus, PatchApplyRequest,
         PatchCreateRequest, PatchHandler, ThreadBudget,
     };
-    use zip::{CompressionMethod, ZipArchive, ZipWriter, write::SimpleFileOptions};
+    use zip::{CompressionMethod, ZipArchive, ZipWriter, write::FileOptions};
 
     use super::{PDS_DEFAULT_PAYLOAD_NAME, PDS_MANIFEST_NAME, PdsPatchHandler};
     use crate::PDS;
@@ -951,7 +951,7 @@ mod tests {
     fn write_archive(path: &Path, entries: &[(&str, &[u8])]) {
         let file = fs::File::create(path).expect("archive file");
         let mut writer = ZipWriter::new(file);
-        let options = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        let options = FileOptions::default().compression_method(CompressionMethod::Deflated);
         for (name, data) in entries {
             writer.start_file(*name, options).expect("start file");
             writer.write_all(data).expect("write file");
