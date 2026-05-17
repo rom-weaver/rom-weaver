@@ -28,6 +28,7 @@ const MANIFEST_KEY_SOURCE_CRC32: &str = "source_crc32";
 const MANIFEST_KEY_TARGET_CRC32: &str = "target_crc32";
 
 const BDF_FORMAT_ALIASES: &[&str] = &["bdf", "bsdiff", "bsdiff40", "bspatch", "bspatch40"];
+const QBSDIFF_MIN_PARALLEL_TARGET_BYTES: usize = 256 * 1024;
 
 pub struct PdsPatchHandler {
     descriptor: &'static FormatDescriptor,
@@ -141,7 +142,6 @@ impl PatchHandler for PdsPatchHandler {
         request: &PatchCreateRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        let execution = context.plan_threads(ThreadCapability::single_threaded());
         let source = fs::read(&request.original)?;
         if source.len() > qbsdiff::bsdiff::MAX_LENGTH {
             return Err(RomWeaverError::Validation(format!(
@@ -150,11 +150,15 @@ impl PatchHandler for PdsPatchHandler {
             )));
         }
         let target = fs::read(&request.modified)?;
+        let (execution, pool) = context.build_pool(qbsdiff_thread_capability(target.len()))?;
+        let parallel_scheme = qbsdiff_parallel_scheme(target.len());
 
         let mut payload = Vec::new();
-        Bsdiff::new(&source, &target)
-            .parallel_scheme(ParallelScheme::Never)
-            .compare(Cursor::new(&mut payload))?;
+        pool.install(|| {
+            Bsdiff::new(&source, &target)
+                .parallel_scheme(parallel_scheme)
+                .compare(Cursor::new(&mut payload))
+        })?;
 
         let manifest = build_manifest(&source, &target, PDS_DEFAULT_PAYLOAD_NAME);
 
@@ -205,9 +209,25 @@ impl PatchHandler for PdsPatchHandler {
             apply: true,
             create: true,
             threaded_scan: false,
-            threaded_diff: false,
+            threaded_diff: true,
             threaded_output: false,
         }
+    }
+}
+
+fn qbsdiff_thread_capability(target_len: usize) -> ThreadCapability {
+    if target_len > QBSDIFF_MIN_PARALLEL_TARGET_BYTES {
+        ThreadCapability::parallel(None)
+    } else {
+        ThreadCapability::single_threaded()
+    }
+}
+
+fn qbsdiff_parallel_scheme(target_len: usize) -> ParallelScheme {
+    if target_len > QBSDIFF_MIN_PARALLEL_TARGET_BYTES {
+        ParallelScheme::ChunkSize(QBSDIFF_MIN_PARALLEL_TARGET_BYTES)
+    } else {
+        ParallelScheme::Never
     }
 }
 
@@ -743,6 +763,10 @@ mod tests {
 
         assert_eq!(create.status, OperationStatus::Succeeded);
         assert!(create.label.contains("BSDIFF40 payload"));
+        let execution = create.thread_execution.expect("thread execution");
+        assert_eq!(execution.requested_threads, 8);
+        assert_eq!(execution.effective_threads, 1);
+        assert!(!execution.used_parallelism);
 
         let apply = handler
             .apply(
@@ -851,6 +875,61 @@ mod tests {
         assert!(manifest.contains("payload=patch.bdf"));
     }
 
+    #[test]
+    fn create_is_deterministic_across_thread_budgets() {
+        let temp = TestDir::new();
+        let original = temp.child("original-large.bin");
+        let modified = temp.child("modified-large.bin");
+        let single_patch = temp.child("single-thread.pds");
+        let parallel_patch = temp.child("parallel-thread.pds");
+
+        let source = build_large_fixture_bytes();
+        let mut target = source.clone();
+        for index in (0..target.len()).step_by(4096) {
+            target[index] = target[index].wrapping_add(31);
+        }
+        fs::write(&original, &source).expect("fixture");
+        fs::write(&modified, &target).expect("fixture");
+
+        let handler = PdsPatchHandler::new(&PDS);
+        let single_report = handler
+            .create(
+                &PatchCreateRequest {
+                    original: original.clone(),
+                    modified: modified.clone(),
+                    output: single_patch.clone(),
+                    format: "pds".into(),
+                },
+                &test_context_with_threads(&temp, 1),
+            )
+            .expect("single-thread create");
+        let parallel_report = handler
+            .create(
+                &PatchCreateRequest {
+                    original,
+                    modified,
+                    output: parallel_patch.clone(),
+                    format: "pds".into(),
+                },
+                &test_context_with_threads(&temp, 8),
+            )
+            .expect("parallel create");
+
+        let single_execution = single_report.thread_execution.expect("single execution");
+        assert_eq!(single_execution.effective_threads, 1);
+        assert!(!single_execution.used_parallelism);
+        let parallel_execution = parallel_report
+            .thread_execution
+            .expect("parallel execution");
+        assert_eq!(parallel_execution.requested_threads, 8);
+        assert_eq!(parallel_execution.effective_threads, 8);
+        assert!(parallel_execution.used_parallelism);
+
+        let single_bytes = fs::read(&single_patch).expect("single-thread patch");
+        let parallel_bytes = fs::read(&parallel_patch).expect("parallel-thread patch");
+        assert_eq!(single_bytes, parallel_bytes);
+    }
+
     fn write_archive(path: &Path, entries: &[(&str, &[u8])]) {
         let file = fs::File::create(path).expect("archive file");
         let mut writer = ZipWriter::new(file);
@@ -869,5 +948,13 @@ mod tests {
             Arc::new(NoopProgressSink),
             CancellationToken::new(),
         )
+    }
+
+    fn build_large_fixture_bytes() -> Vec<u8> {
+        let mut bytes = vec![0u8; 512 * 1024];
+        for (index, byte) in bytes.iter_mut().enumerate() {
+            *byte = ((index * 3) % 251) as u8;
+        }
+        bytes
     }
 }
