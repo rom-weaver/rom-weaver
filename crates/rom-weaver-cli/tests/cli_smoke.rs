@@ -2047,6 +2047,99 @@ fn rvz_extract_round_trips_to_iso() {
 }
 
 #[test]
+fn wua_compress_inspect_and_extract_round_trip() {
+    let temp = setup_temp_dir();
+    let game_dir = temp.child("game");
+    fs::create_dir_all(game_dir.child("content/maps").path()).expect("mkdirs");
+    fs::write(
+        game_dir.child("meta.xml").path(),
+        b"<title id=\"0005000013371337\"/>",
+    )
+    .expect("meta fixture");
+    let payload = (0..131_072)
+        .map(|index| (index % 241) as u8)
+        .collect::<Vec<_>>();
+    fs::write(game_dir.child("content/maps/stage.bin").path(), &payload).expect("payload");
+
+    let wua_path = temp.child("archive.wua");
+    let compress_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            game_dir.path().to_str().expect("path"),
+            "--format",
+            "wua",
+            "--output",
+            wua_path.path().to_str().expect("path"),
+            "--codec",
+            "zstd:6",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let compress_json = parse_single_json_line(&compress_output);
+    assert_eq!(compress_json["command"], "compress");
+    assert_eq!(compress_json["family"], "container");
+    assert_eq!(compress_json["format"], "wua");
+    assert_eq!(compress_json["status"], "succeeded");
+
+    let inspect_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args(["inspect", wua_path.path().to_str().expect("path"), "--json"])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let inspect_json = parse_single_json_line(&inspect_output);
+    assert_eq!(inspect_json["command"], "inspect");
+    assert_eq!(inspect_json["family"], "container");
+    assert_eq!(inspect_json["format"], "wua");
+    assert_eq!(inspect_json["status"], "succeeded");
+    assert!(
+        inspect_json["label"]
+            .as_str()
+            .expect("label")
+            .contains("entries")
+    );
+
+    let out_dir = temp.child("extract");
+    let extract_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "extract",
+            wua_path.path().to_str().expect("path"),
+            "--out-dir",
+            out_dir.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let extract_json = parse_single_json_line(&extract_output);
+    assert_eq!(extract_json["command"], "extract");
+    assert_eq!(extract_json["family"], "container");
+    assert_eq!(extract_json["format"], "wua");
+    assert_eq!(extract_json["status"], "succeeded");
+    assert_eq!(
+        fs::read(out_dir.child("game/meta.xml").path()).expect("meta extract"),
+        b"<title id=\"0005000013371337\"/>"
+    );
+    assert_eq!(
+        fs::read(out_dir.child("game/content/maps/stage.bin").path()).expect("payload extract"),
+        payload
+    );
+}
+
+#[test]
 fn z3ds_compress_inspect_and_extract_round_trip() {
     let temp = setup_temp_dir();
     let source = (0..65_536)

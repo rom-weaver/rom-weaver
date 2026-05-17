@@ -4,7 +4,9 @@
 
 ## Recent Updates (2026-05-16)
 
+- `2026-05-17 audit`: Added backlog rows for current threading/streaming gaps (RVZ/Z3DS capability parity, qbsdiff threading, patch streaming migrations off full-buffer reads, and real codec backend implementation).
 - `6fd45bc`: BSPATCH alias probe support landed (`.bspatch`/`.bspatch40`, `bspatch`/`bspatch40` alias routing to BSDIFF40 compatibility paths).
+- `this commit`: WUA inspect/extract/create landed via native ZArchive-compatible footer/tree/block handling (`.wua`/`.zar`).
 - `this commit`: Native SOLID v4 patch support landed (`.solid`, parse/apply/create, MD5 validation, primitive stream handling, and CLI smoke coverage).
 - `this commit`: PDS parse/apply/create landed with `patch.dat` manifest validation and embedded BSDIFF40 payload round-trip support.
 - `b9b66a5`: MOD/PMSR parse/apply/create support landed (`.mod`/`.pmsr`, `pmsr` alias) with module + CLI smoke coverage.
@@ -43,6 +45,7 @@
 | TG-003 | threading | thread-capability-reporting | n/a | n/a | n/a | n/a | n/a | requested vs effective threads | unit,json-contract | done | Reports fallback vs actual parallelism consistently. |
 | TG-004 | threading | json-reporting | n/a | n/a | n/a | n/a | n/a | stable event schema | cli-smoke,json-contract | done | All commands can emit progress-compatible JSON records. |
 | TG-005 | threading | temp-file-concurrency-safety | n/a | n/a | n/a | n/a | n/a | unique temp paths | unit | done | Temp path allocator namespaces per operation context. |
+| TG-006 | threading | capability-runtime-parity | n/a | n/a | n/a | n/a | n/a | capability assertions vs real execution paths | unit,json-contract | todo | Add parity checks so reported `ThreadCapability` and observed execution stay aligned (notably RVZ and Z3DS create paths). |
 
 ## Containers
 
@@ -64,6 +67,9 @@
 | CTR-014 | container | xz | done | done | done | n/a | n/a | stream | fixture-roundtrip,cli-smoke | done | Standalone xz stream support (non-tar) landed. |
 | CTR-015 | container | zst | done | done | done | n/a | n/a | stream | fixture-roundtrip,cli-smoke | done | Standalone zstd stream support (non-tar) landed. |
 | CTR-016 | container | xiso | todo | todo | todo | n/a | n/a | per-file | fixture-roundtrip,cli-smoke | todo | Original Xbox XISO support; prioritize inspect/extract first, then rebuild/create. |
+| CTR-017 | container | rvz-threading-parity | done | done | done | n/a | n/a | per-block,codec-mapped | fixture-roundtrip,cli-smoke,json-contract | todo | Align RVZ capability reporting with actual execution and/or add real parallel extract/create plumbing so `thread_execution` data is truthful. |
+| CTR-018 | container | z3ds-create-thread-capability | done | done | done | n/a | n/a | per-block | fixture-roundtrip,cli-smoke,json-contract | todo | Z3DS create already uses a parallel pool; update capability metadata/reporting to match runtime behavior. |
+| CTR-019 | container | wua | done | done | done | n/a | n/a | block,zstd | fixture-roundtrip,cli-smoke | done | Native Wii U archive (`.wua`) support landed using ZArchive-compatible 64KiB block compression, footer metadata, and directory tree traversal. |
 
 ## Patch Formats
 
@@ -89,6 +95,8 @@
 | PAT-018 | patch | IPS32 | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | Native parse/apply/create landed with 32-bit offset support via `IPS32`/`EEOF`, plus signature-aware `.ips` probe routing (IPS vs IPS32 vs SPATCH) and CLI smoke coverage. |
 | PAT-019 | patch | SOLID | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | Native SOLID v4 parse/apply/create landed with source MD5 validation, base-address primitive decoding, and `solid`/`solidpatch`/`solid-patch` format name support. |
 | PAT-020 | patch | DPS | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | Native parse/apply/create landed for Deufeufeu `.dps` patches using fixed-size header metadata and mode-based copy/data records. |
+| PAT-021 | patch | bdf-pds-threaded-create | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke,thread-model | todo | Replace qbsdiff `ParallelScheme::Never` in BDF and PDS create paths with thread-budget-aware configuration and verify deterministic output parity. |
+| PAT-022 | patch | buffered-to-streaming-migration-wave-1 | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke,large-file | todo | Migrate heavy full-buffer handlers (`UPS`, `APSGBA`, `RUP`, `PMSR`, `DPS`, `DLDI`, `SOLID`, `BDF`, `PDS`) from `fs::read`-style apply/create to buffered/chunked IO where feasible. |
 
 ## Codecs
 
@@ -99,6 +107,7 @@
 | COD-003 | codec | zstd | n/a | n/a | todo | n/a | n/a | block-ready | roundtrip,unit | todo | Shared backend target for `zipx`, `7z`, `rvz`, and compatible flows. |
 | COD-004 | codec | lzma2 | n/a | n/a | todo | n/a | n/a | block-ready | roundtrip,unit | todo | Required for `7z` and `tar.xz`. |
 | COD-005 | codec | bzip2 | n/a | n/a | todo | n/a | n/a | block-ready | roundtrip,unit | todo | Required for `tar.bz2`. |
+| COD-006 | codec | runtime-backend-implementation | n/a | n/a | todo | n/a | n/a | thread-budget-aware | roundtrip,unit,cli-smoke | todo | Replace `StaticCodecBackend` placeholders with real encode/decode implementations (store/deflate/zstd/lzma2/bzip2), including streaming IO and thread capability reporting. |
 
 ## Checksum Algorithms
 
@@ -125,3 +134,5 @@
 | TEST-006 | test | container-fixture-roundtrip | done | done | done | n/a | n/a | real-handler coverage | fixture | done | CLI smoke coverage now includes round-trip container paths for landed handlers. |
 | TEST-007 | test | patch-fixture-parity | n/a | n/a | n/a | done | done | real-handler coverage | fixture | done | CLI and module tests cover parity for implemented patch handlers. |
 | TEST-008 | test | trim-parity | n/a | n/a | todo | n/a | n/a | deterministic-output | fixture,cli-smoke | todo | Verify deterministic outputs and parity vs NDSTokyoTrim-compatible fixtures for representative NDS/DSi edge cases. |
+| TEST-009 | test | thread-capability-parity | done | done | done | done | done | requested/effective parity | unit,cli-smoke,json-contract | todo | Add assertions that capability declarations and reported `thread_execution` match runtime behavior for RVZ, Z3DS, IPS, and VCDIFF/xdelta fallback paths. |
+| TEST-010 | test | large-input-memory-ceilings | n/a | todo | todo | todo | todo | bounded-buffer guarantees | fixture,benchmark | todo | Add large-input fixtures and memory-ceiling checks for migrated patch handlers to prevent regressions back to full-file buffering. |

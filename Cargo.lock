@@ -1640,6 +1640,7 @@ dependencies = [
  "rom-weaver-codecs",
  "rom-weaver-core",
  "sevenz-rust",
+ "sha2",
  "tar",
  "unrar-ng",
  "zip",
