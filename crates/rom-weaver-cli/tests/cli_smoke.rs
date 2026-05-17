@@ -1259,6 +1259,114 @@ fn trim_3ds_uses_ff_padding_boundary() {
 }
 
 #[test]
+fn trim_xiso_rebuilds_and_warns_irreversible() {
+    let temp = setup_temp_dir();
+    let source_tree = temp.child("xiso-source");
+    fs::create_dir_all(source_tree.path()).expect("source tree root");
+    let source = temp.child("source.iso");
+    write_xiso_fixture_from_directory(source_tree.path(), source.path());
+
+    let mut source_file = File::options()
+        .append(true)
+        .open(source.path())
+        .expect("open xiso");
+    source_file
+        .write_all(&vec![0_u8; 64 * 1024])
+        .expect("append trailing padding");
+    source_file.flush().expect("flush xiso padding");
+    drop(source_file);
+
+    let original_len = fs::metadata(source.path()).expect("source metadata").len();
+    let output = temp.child("trimmed.xiso");
+
+    let trim_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "trim",
+            source.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let terminal = parse_single_json_line(&trim_output);
+    assert_eq!(terminal["command"], "trim");
+    assert_eq!(terminal["family"], "command");
+    assert_eq!(terminal["status"], "succeeded");
+    let label = terminal["label"].as_str().expect("label");
+    assert!(label.contains("mode=xiso"));
+    assert!(label.contains("revert_supported=false"));
+    assert!(label.contains(
+        "warning=trimmed xiso output cannot be reverted to original padding; keep backup"
+    ));
+
+    let trimmed_len = fs::metadata(output.path()).expect("trimmed metadata").len();
+    assert!(trimmed_len < original_len);
+
+    let output_file = File::open(output.path()).expect("trimmed xiso output");
+    let output_reader = std::io::BufReader::new(output_file);
+    let mut output_image = XdvdfsOffsetWrapper::new(output_reader).expect("offset wrapper");
+    let volume = xdvdfs::read::read_volume(&mut output_image).expect("xdvdfs volume");
+    let root_entries = volume
+        .root_table
+        .walk_dirent_tree(&mut output_image)
+        .expect("root entry tree");
+    let names = root_entries
+        .into_iter()
+        .map(|entry| {
+            entry
+                .name_str::<std::io::Error>()
+                .expect("entry name")
+                .into_owned()
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        names
+            .iter()
+            .any(|name| name.eq_ignore_ascii_case("default.xbe"))
+    );
+}
+
+#[test]
+fn trim_xiso_revert_is_rejected() {
+    let temp = setup_temp_dir();
+    let source_tree = temp.child("xiso-source");
+    fs::create_dir_all(source_tree.path()).expect("source tree root");
+    let source = temp.child("source.iso");
+    write_xiso_fixture_from_directory(source_tree.path(), source.path());
+
+    let trim_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "trim",
+            source.path().to_str().expect("path"),
+            "--revert",
+            "--json",
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .stdout
+        .clone();
+
+    let terminal = parse_single_json_line(&trim_output);
+    assert_eq!(terminal["command"], "trim");
+    assert_eq!(terminal["family"], "command");
+    assert_eq!(terminal["status"], "failed");
+    assert!(
+        terminal["label"]
+            .as_str()
+            .expect("label")
+            .contains("xiso trim revert is not supported")
+    );
+}
+
+#[test]
 fn trim_revert_restores_gba_to_next_power_of_two() {
     let temp = setup_temp_dir();
     let source = temp.child("sample.gba");

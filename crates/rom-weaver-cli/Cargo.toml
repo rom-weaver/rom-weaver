@@ -13,6 +13,7 @@ rom-weaver-containers = { path = "../rom-weaver-containers" }
 rom-weaver-core = { path = "../rom-weaver-core" }
 rom-weaver-patches = { path = "../rom-weaver-patches" }
 serde_json.workspace = true
+xdvdfs.workspace = true
 
 [dev-dependencies]
 assert_cmd.workspace = true
@@ -20,7 +21,6 @@ assert_fs.workspace = true
 nod.workspace = true
 predicates.workspace = true
 serde_json.workspace = true
-xdvdfs.workspace = true
 
 [[bin]]
 name = "rom-weaver"

@@ -4,8 +4,9 @@ use std::{
     fs::File,
     io::{self, BufReader, BufWriter, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
-    process::ExitCode,
+    process::{self, ExitCode},
     sync::Arc,
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use clap::{ArgAction, Args, Parser, Subcommand};
@@ -19,6 +20,10 @@ use rom_weaver_core::{
     ThreadCapability, ThreadExecution,
 };
 use rom_weaver_patches::PatchRegistry;
+use xdvdfs::{
+    blockdev::OffsetWrapper as XdvdfsOffsetWrapper,
+    write::{fs::XDVDFSFilesystem as XdvdfsFilesystem, img::create_xdvdfs_image},
+};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -132,7 +137,7 @@ struct TrimCommand {
         long,
         alias = "untrim",
         alias = "restore",
-        help = "Revert trimmed files by padding back to the nearest power-of-two size"
+        help = "Revert trimmed files by padding back to the nearest power-of-two size (not supported for xiso)"
     )]
     revert: bool,
     #[arg(
@@ -223,11 +228,15 @@ const NDS_HEADER_NTR_TWL_ROM_SIZE_OFFSET: usize = 0x210;
 const NDS_DOWNLOAD_PLAY_CERT_MAGIC: [u8; 2] = [0x61, 0x63];
 const NDS_DOWNLOAD_PLAY_CERT_SIZE_BYTES: u64 = 0x88;
 const TRIM_BINARY_SCAN_CHUNK_BYTES: usize = 128 * 1024;
+const XISO_TRIM_TEMP_SUFFIX: &str = "rom-weaver-trim-xiso.tmp";
 const GAME_BOY_NINTENDO_LOGO: [u8; 48] = [
     0xCE, 0xED, 0x66, 0x66, 0xCC, 0x0D, 0x00, 0x0B, 0x03, 0x73, 0x00, 0x83, 0x00, 0x0C, 0x00, 0x0D,
     0x00, 0x08, 0x11, 0x1F, 0x88, 0x89, 0x00, 0x0E, 0xDC, 0xCC, 0x6E, 0xE6, 0xDD, 0xDD, 0xD9, 0x99,
     0xBB, 0xBB, 0x67, 0x63, 0x6E, 0x0E, 0xEC, 0xCC, 0xDD, 0xDC, 0x99, 0x9F, 0xBB, 0xB9, 0x33, 0x3E,
 ];
+
+type XisoTrimSourceDevice = XdvdfsOffsetWrapper<BufReader<File>, io::Error>;
+type XisoTrimSourceFilesystem = XdvdfsFilesystem<io::Error, XisoTrimSourceDevice>;
 
 struct NdsTrimPlan {
     trimmed_size: u64,
@@ -242,6 +251,13 @@ struct NdsTrimOutcome {
     mode: &'static str,
     preserved_download_play_cert: bool,
     already_target_size: bool,
+    revert_supported: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct TrimSource {
+    path: PathBuf,
+    kind: TrimInputKind,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -279,10 +295,16 @@ enum TrimInputKind {
     NdsFamily,
     Gba,
     ThreeDs,
+    Xiso,
 }
 
 impl TrimInputKind {
     fn from_path(path: &Path) -> Option<Self> {
+        let file_name = path.file_name()?.to_str()?.to_ascii_lowercase();
+        if file_name.ends_with(".xiso") || file_name.ends_with(".xiso.iso") {
+            return Some(Self::Xiso);
+        }
+
         let extension = path.extension()?.to_str()?;
         if extension.eq_ignore_ascii_case("nds")
             || extension.eq_ignore_ascii_case("dsi")
@@ -304,13 +326,14 @@ impl TrimInputKind {
             Self::NdsFamily => "nds",
             Self::Gba => "gba",
             Self::ThreeDs => "3ds",
+            Self::Xiso => "xiso",
         }
     }
 
     const fn default_padding_byte(self) -> u8 {
         match self {
             Self::ThreeDs => 0xFF,
-            Self::NdsFamily | Self::Gba => 0x00,
+            Self::NdsFamily | Self::Gba | Self::Xiso => 0x00,
         }
     }
 }
@@ -860,7 +883,7 @@ impl CliApp {
 
         let mut skipped_non_nds = 0usize;
         let trim_sources =
-            match Self::collect_trim_input_files(&source, recursive, &mut skipped_non_nds) {
+            match self.collect_trim_input_files(&source, recursive, &mut skipped_non_nds) {
                 Ok(paths) => paths,
                 Err(error) => {
                     return self.finish(
@@ -909,14 +932,15 @@ impl CliApp {
         let mut first_error = None;
         let mut mode_counts: BTreeMap<&'static str, usize> = BTreeMap::new();
         let mut single_detail = None;
+        let mut irreversible_trimmed_count = 0usize;
 
         for trim_source in &trim_sources {
             let output_path = if in_place {
-                trim_source.clone()
+                trim_source.path.clone()
             } else if let Some(explicit_output) = output.as_ref() {
                 explicit_output.clone()
             } else {
-                Self::default_trim_output_path(trim_source, &extension)
+                Self::default_trim_output_path(&trim_source.path, &extension)
             };
             let output_label = if in_place {
                 "in-place".to_string()
@@ -932,16 +956,26 @@ impl CliApp {
                 format!(
                     "{} `{}` -> `{output_label}`",
                     operation.running_label(dry_run),
-                    trim_source.display()
+                    trim_source.path.display()
                 ),
                 Some(0.0),
                 thread_execution.clone(),
             );
 
-            match Self::trim_file(trim_source, &output_path, in_place, dry_run, operation) {
+            match Self::trim_file(
+                &trim_source.path,
+                &output_path,
+                in_place,
+                dry_run,
+                operation,
+                trim_source.kind,
+            ) {
                 Ok(outcome) => {
                     let mode_count = mode_counts.entry(outcome.mode).or_insert(0);
                     *mode_count = mode_count.saturating_add(1);
+                    if operation == TrimOperation::Trim && !outcome.revert_supported {
+                        irreversible_trimmed_count = irreversible_trimmed_count.saturating_add(1);
+                    }
                     if outcome.already_target_size {
                         already_trimmed_count = already_trimmed_count.saturating_add(1);
                     } else {
@@ -965,11 +999,12 @@ impl CliApp {
                             "reverted_size"
                         };
                         single_detail = Some(format!(
-                            "{status} mode={} original_size={} {result_size_label}={} preserved_download_play_cert={} output={}",
+                            "{status} mode={} original_size={} {result_size_label}={} preserved_download_play_cert={} revert_supported={} output={}",
                             outcome.mode,
                             outcome.original_size,
                             outcome.result_size,
                             outcome.preserved_download_play_cert,
+                            outcome.revert_supported,
                             outcome.output_path.display()
                         ));
                     }
@@ -977,7 +1012,7 @@ impl CliApp {
                 Err(error) => {
                     failed_count = failed_count.saturating_add(1);
                     if first_error.is_none() {
-                        first_error = Some(format!("{}: {error}", trim_source.display()));
+                        first_error = Some(format!("{}: {error}", trim_source.path.display()));
                     }
                 }
             }
@@ -1015,6 +1050,13 @@ impl CliApp {
             );
         }
 
+        let irreversible_warning =
+            if operation == TrimOperation::Trim && irreversible_trimmed_count > 0 {
+                "; warning=trimmed xiso output cannot be reverted to original padding; keep backup"
+            } else {
+                ""
+            };
+
         self.finish(
             "trim",
             OperationReport::succeeded(
@@ -1023,7 +1065,7 @@ impl CliApp {
                 "trim",
                 match single_detail {
                     Some(single_detail) => format!(
-                        "{single_detail}; {}; processed={} trimmed={} already_trimmed={} changed={} already_target={} skipped_non_nds={} mode_counts={}",
+                        "{single_detail}; {}; processed={} trimmed={} already_trimmed={} changed={} already_target={} skipped_non_nds={} mode_counts={}{}",
                         operation.summary_label(dry_run),
                         trim_sources.len(),
                         trimmed_count,
@@ -1032,9 +1074,10 @@ impl CliApp {
                         already_trimmed_count,
                         skipped_non_nds,
                         Self::format_mode_counts(&mode_counts),
+                        irreversible_warning,
                     ),
                     None => format!(
-                        "{}; processed={} trimmed={} already_trimmed={} changed={} already_target={} skipped_non_nds={} mode_counts={}",
+                        "{}; processed={} trimmed={} already_trimmed={} changed={} already_target={} skipped_non_nds={} mode_counts={}{}",
                         operation.summary_label(dry_run),
                         trim_sources.len(),
                         trimmed_count,
@@ -1043,6 +1086,7 @@ impl CliApp {
                         already_trimmed_count,
                         skipped_non_nds,
                         Self::format_mode_counts(&mode_counts),
+                        irreversible_warning,
                     ),
                 },
                 Some(100.0),
@@ -1391,15 +1435,28 @@ impl CliApp {
             .join(",")
     }
 
-    fn trim_eligible_extension(path: &Path) -> bool {
-        TrimInputKind::from_path(path).is_some()
+    fn trim_eligible_kind_for_path(&self, path: &Path) -> Option<TrimInputKind> {
+        if let Some(kind) = TrimInputKind::from_path(path) {
+            return Some(kind);
+        }
+
+        let extension = path.extension()?.to_str()?;
+        if extension.eq_ignore_ascii_case("iso")
+            && let Some(handler) = self.containers.probe(path)
+            && handler.descriptor().matches_name("xiso")
+        {
+            return Some(TrimInputKind::Xiso);
+        }
+
+        None
     }
 
     fn collect_trim_input_files(
+        &self,
         sources: &[PathBuf],
         recursive: bool,
         skipped_non_nds: &mut usize,
-    ) -> Result<Vec<PathBuf>> {
+    ) -> Result<Vec<TrimSource>> {
         let mut files = Vec::new();
         for source in sources {
             let metadata = fs::metadata(source).map_err(|error| {
@@ -1409,30 +1466,34 @@ impl CliApp {
                 ))
             })?;
             if metadata.is_file() {
-                if Self::trim_eligible_extension(source) {
-                    files.push(source.clone());
+                if let Some(kind) = self.trim_eligible_kind_for_path(source) {
+                    files.push(TrimSource {
+                        path: source.clone(),
+                        kind,
+                    });
                 } else {
                     *skipped_non_nds = skipped_non_nds.saturating_add(1);
                 }
                 continue;
             }
             if metadata.is_dir() {
-                Self::collect_trim_directory_files(source, recursive, &mut files, skipped_non_nds)?;
+                self.collect_trim_directory_files(source, recursive, &mut files, skipped_non_nds)?;
                 continue;
             }
 
             *skipped_non_nds = skipped_non_nds.saturating_add(1);
         }
 
-        files.sort();
-        files.dedup();
+        files.sort_by(|left, right| left.path.cmp(&right.path));
+        files.dedup_by(|left, right| left.path == right.path);
         Ok(files)
     }
 
     fn collect_trim_directory_files(
+        &self,
         root: &Path,
         recursive: bool,
-        files: &mut Vec<PathBuf>,
+        files: &mut Vec<TrimSource>,
         skipped_non_nds: &mut usize,
     ) -> Result<()> {
         let mut directories = vec![root.to_path_buf()];
@@ -1454,8 +1515,8 @@ impl CliApp {
                     *skipped_non_nds = skipped_non_nds.saturating_add(1);
                     continue;
                 }
-                if Self::trim_eligible_extension(&path) {
-                    files.push(path);
+                if let Some(kind) = self.trim_eligible_kind_for_path(&path) {
+                    files.push(TrimSource { path, kind });
                 } else {
                     *skipped_non_nds = skipped_non_nds.saturating_add(1);
                 }
@@ -1481,13 +1542,8 @@ impl CliApp {
         in_place: bool,
         dry_run: bool,
         operation: TrimOperation,
+        kind: TrimInputKind,
     ) -> Result<NdsTrimOutcome> {
-        let Some(kind) = TrimInputKind::from_path(source) else {
-            return Err(RomWeaverError::Validation(format!(
-                "unsupported trim input extension: `{}`",
-                source.display()
-            )));
-        };
         match kind {
             TrimInputKind::NdsFamily => {
                 Self::trim_nds_file(source, destination, in_place, dry_run, operation)
@@ -1500,6 +1556,9 @@ impl CliApp {
                 operation,
                 kind,
             ),
+            TrimInputKind::Xiso => {
+                Self::trim_xiso_file(source, destination, in_place, dry_run, operation)
+            }
         }
     }
 
@@ -1555,6 +1614,7 @@ impl CliApp {
                 mode: if plan.dsi_mode { "dsi" } else { "ds" },
                 preserved_download_play_cert: plan.preserved_download_play_cert,
                 already_target_size,
+                revert_supported: true,
             });
         }
 
@@ -1578,6 +1638,7 @@ impl CliApp {
             mode: if plan.dsi_mode { "dsi" } else { "ds" },
             preserved_download_play_cert: plan.preserved_download_play_cert,
             already_target_size,
+            revert_supported: true,
         })
     }
 
@@ -1622,6 +1683,7 @@ impl CliApp {
                 mode: kind.mode_label(),
                 preserved_download_play_cert: false,
                 already_target_size,
+                revert_supported: true,
             });
         }
 
@@ -1645,7 +1707,159 @@ impl CliApp {
             mode: kind.mode_label(),
             preserved_download_play_cert: false,
             already_target_size,
+            revert_supported: true,
         })
+    }
+
+    fn trim_xiso_file(
+        source: &Path,
+        destination: &Path,
+        in_place: bool,
+        dry_run: bool,
+        operation: TrimOperation,
+    ) -> Result<NdsTrimOutcome> {
+        if operation == TrimOperation::Revert {
+            return Err(RomWeaverError::Validation(
+                "xiso trim revert is not supported; trimmed padding cannot be reconstructed"
+                    .to_string(),
+            ));
+        }
+
+        let original_size = fs::metadata(source)?.len();
+        if original_size == 0 {
+            return Err(RomWeaverError::Validation(format!(
+                "input is empty and cannot be processed: `{}`",
+                source.display()
+            )));
+        }
+
+        if dry_run {
+            let result_size = Self::measure_trimmed_xiso_size(source).map_err(|error| {
+                RomWeaverError::Validation(format!(
+                    "xiso trim simulation failed while rebuilding `{}`: {error}",
+                    source.display()
+                ))
+            })?;
+            return Ok(NdsTrimOutcome {
+                original_size,
+                result_size,
+                output_path: if in_place {
+                    source.to_path_buf()
+                } else {
+                    destination.to_path_buf()
+                },
+                mode: TrimInputKind::Xiso.mode_label(),
+                preserved_download_play_cert: false,
+                already_target_size: result_size == original_size,
+                revert_supported: false,
+            });
+        }
+
+        if in_place || source == destination {
+            let temp_path = Self::temporary_xiso_trim_path(source);
+            Self::create_trimmed_xiso(source, &temp_path)?;
+            if let Err(rename_error) = fs::rename(&temp_path, source) {
+                fs::copy(&temp_path, source).map_err(|copy_error| {
+                    RomWeaverError::Validation(format!(
+                        "failed to replace `{}` with trimmed xiso (rename error: {rename_error}; copy fallback error: {copy_error})",
+                        source.display()
+                    ))
+                })?;
+                fs::remove_file(&temp_path).ok();
+            }
+            let result_size = fs::metadata(source)?.len();
+            return Ok(NdsTrimOutcome {
+                original_size,
+                result_size,
+                output_path: source.to_path_buf(),
+                mode: TrimInputKind::Xiso.mode_label(),
+                preserved_download_play_cert: false,
+                already_target_size: result_size == original_size,
+                revert_supported: false,
+            });
+        }
+
+        if let Some(parent) = destination.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        Self::create_trimmed_xiso(source, destination)?;
+        let result_size = fs::metadata(destination)?.len();
+        Ok(NdsTrimOutcome {
+            original_size,
+            result_size,
+            output_path: destination.to_path_buf(),
+            mode: TrimInputKind::Xiso.mode_label(),
+            preserved_download_play_cert: false,
+            already_target_size: result_size == original_size,
+            revert_supported: false,
+        })
+    }
+
+    fn open_xiso_trim_source_filesystem(source_path: &Path) -> Result<XisoTrimSourceFilesystem> {
+        let source_file = File::options()
+            .read(true)
+            .open(source_path)
+            .map_err(|error| {
+                RomWeaverError::Validation(format!(
+                    "failed to open xiso source `{}`: {error}",
+                    source_path.display()
+                ))
+            })?;
+        let source_reader = BufReader::new(source_file);
+        let source_device = XdvdfsOffsetWrapper::new(source_reader).map_err(|error| {
+            RomWeaverError::Validation(format!(
+                "source `{}` is not an Xbox XDVDFS image (raw/XGD probe failed: {error})",
+                source_path.display()
+            ))
+        })?;
+        XdvdfsFilesystem::new(source_device).ok_or_else(|| {
+            RomWeaverError::Validation(format!(
+                "source `{}` could not be read as an XDVDFS filesystem",
+                source_path.display()
+            ))
+        })
+    }
+
+    fn create_trimmed_xiso(source: &Path, destination: &Path) -> Result<()> {
+        let mut source_fs = Self::open_xiso_trim_source_filesystem(source)?;
+        let output = File::create(destination)?;
+        let mut output = BufWriter::new(output);
+        create_xdvdfs_image(&mut source_fs, &mut output, |_| {}).map_err(|error| {
+            RomWeaverError::Validation(format!(
+                "xiso trim failed while rebuilding `{}`: {error}",
+                source.display()
+            ))
+        })?;
+        output.flush()?;
+        Ok(())
+    }
+
+    fn measure_trimmed_xiso_size(source: &Path) -> Result<u64> {
+        let temp_path = Self::temporary_xiso_trim_path(source);
+        Self::create_trimmed_xiso(source, &temp_path)?;
+        let measured = fs::metadata(&temp_path)?.len();
+        fs::remove_file(&temp_path).ok();
+        Ok(measured)
+    }
+
+    fn temporary_xiso_trim_path(source: &Path) -> PathBuf {
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|value| value.as_nanos())
+            .unwrap_or_default();
+        let name = source
+            .file_name()
+            .map(|value| value.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "xiso".to_string());
+        let temp_name = format!(
+            ".{name}.{}-{}-{timestamp}",
+            XISO_TRIM_TEMP_SUFFIX,
+            process::id()
+        );
+        source
+            .parent()
+            .map(|parent| parent.join(&temp_name))
+            .unwrap_or_else(|| PathBuf::from(temp_name))
     }
 
     fn apply_file_size_target(
