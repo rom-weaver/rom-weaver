@@ -1298,6 +1298,8 @@ mod tests {
         fs::write(&patch_path, patch_bytes).expect("write patch");
 
         let handler = VcdiffPatchHandler::new(&crate::VCDIFF);
+        let capabilities = handler.capabilities();
+        assert!(capabilities.threaded_output);
         let report = handler
             .apply(
                 &PatchApplyRequest {
@@ -1585,6 +1587,8 @@ mod tests {
         fs::write(&patch_path, patch_bytes).expect("write patch");
 
         let handler = VcdiffPatchHandler::new(&crate::VCDIFF);
+        let capabilities = handler.capabilities();
+        assert!(capabilities.threaded_output);
         let inspect = handler
             .parse(&patch_path, &test_context())
             .expect("inspect patch");
@@ -1645,6 +1649,8 @@ mod tests {
         fs::write(&patch_path, patch_bytes).expect("write patch");
 
         let handler = VcdiffPatchHandler::new(&crate::XDELTA);
+        let capabilities = handler.capabilities();
+        assert!(capabilities.threaded_output);
         let report = handler
             .apply(
                 &PatchApplyRequest {

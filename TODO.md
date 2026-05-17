@@ -5,6 +5,7 @@
 ## Recent Updates (2026-05-16)
 
 - `2026-05-17 audit`: Added backlog rows for current threading/streaming gaps (RVZ/Z3DS capability parity, qbsdiff threading, patch streaming migrations off full-buffer reads, and real codec backend implementation).
+- `this commit`: Added thread capability/runtime validation groundwork (`ThreadCapability::supports_execution`) and parity assertions for IPS/VCDIFF apply execution paths.
 - `6fd45bc`: BSPATCH alias probe support landed (`.bspatch`/`.bspatch40`, `bspatch`/`bspatch40` alias routing to BSDIFF40 compatibility paths).
 - `this commit`: WUA inspect/extract/create landed via native ZArchive-compatible footer/tree/block handling (`.wua`/`.zar`).
 - `this commit`: Native SOLID v4 patch support landed (`.solid`, parse/apply/create, MD5 validation, primitive stream handling, and CLI smoke coverage).
@@ -45,7 +46,7 @@
 | TG-003 | threading | thread-capability-reporting | n/a | n/a | n/a | n/a | n/a | requested vs effective threads | unit,json-contract | done | Reports fallback vs actual parallelism consistently. |
 | TG-004 | threading | json-reporting | n/a | n/a | n/a | n/a | n/a | stable event schema | cli-smoke,json-contract | done | All commands can emit progress-compatible JSON records. |
 | TG-005 | threading | temp-file-concurrency-safety | n/a | n/a | n/a | n/a | n/a | unique temp paths | unit | done | Temp path allocator namespaces per operation context. |
-| TG-006 | threading | capability-runtime-parity | n/a | n/a | n/a | n/a | n/a | capability assertions vs real execution paths | unit,json-contract | todo | Add parity checks so reported `ThreadCapability` and observed execution stay aligned (notably RVZ and Z3DS create paths). |
+| TG-006 | threading | capability-runtime-parity | n/a | n/a | n/a | n/a | n/a | capability assertions vs real execution paths | unit,json-contract | todo | Added `ThreadCapability::supports_execution` validation and patch-handler parity assertions; RVZ/Z3DS create-path runtime parity checks are still pending. |
 
 ## Containers
 
@@ -134,5 +135,5 @@
 | TEST-006 | test | container-fixture-roundtrip | done | done | done | n/a | n/a | real-handler coverage | fixture | done | CLI smoke coverage now includes round-trip container paths for landed handlers. |
 | TEST-007 | test | patch-fixture-parity | n/a | n/a | n/a | done | done | real-handler coverage | fixture | done | CLI and module tests cover parity for implemented patch handlers. |
 | TEST-008 | test | trim-parity | n/a | n/a | todo | n/a | n/a | deterministic-output | fixture,cli-smoke | todo | Verify deterministic outputs and parity vs NDSTokyoTrim-compatible fixtures for representative NDS/DSi edge cases. |
-| TEST-009 | test | thread-capability-parity | done | done | done | done | done | requested/effective parity | unit,cli-smoke,json-contract | todo | Add assertions that capability declarations and reported `thread_execution` match runtime behavior for RVZ, Z3DS, IPS, and VCDIFF/xdelta fallback paths. |
+| TEST-009 | test | thread-capability-parity | done | done | done | done | done | requested/effective parity | unit,cli-smoke,json-contract | todo | Added IPS and VCDIFF/xdelta apply-path parity assertions; RVZ/Z3DS create-path capability/runtime parity assertions are still pending. |
 | TEST-010 | test | large-input-memory-ceilings | n/a | todo | todo | todo | todo | bounded-buffer guarantees | fixture,benchmark | todo | Add large-input fixtures and memory-ceiling checks for migrated patch handlers to prevent regressions back to full-file buffering. |

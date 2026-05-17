@@ -202,7 +202,7 @@ impl PatchHandler for IpsPatchHandler {
             create: true,
             threaded_scan: false,
             threaded_diff: false,
-            threaded_output: false,
+            threaded_output: true,
         }
     }
 }
@@ -944,6 +944,8 @@ mod tests {
         .expect("fixture");
 
         let handler = IpsPatchHandler::new(&IPS);
+        let capabilities = handler.capabilities();
+        assert!(capabilities.threaded_output);
         let report = handler
             .apply(
                 &PatchApplyRequest {
@@ -957,6 +959,7 @@ mod tests {
 
         let execution = report.thread_execution.expect("thread execution");
         assert_eq!(execution.effective_threads, 1);
+        assert!(!execution.used_parallelism);
         assert_eq!(fs::read(&output_path).expect("output"), b"a1XYZf!!!");
     }
 
@@ -972,6 +975,8 @@ mod tests {
         fs::write(&patch_path, large_rle_patch(total_len, b'Z')).expect("fixture");
 
         let handler = IpsPatchHandler::new(&IPS);
+        let capabilities = handler.capabilities();
+        assert!(capabilities.threaded_output);
         let report = handler
             .apply(
                 &PatchApplyRequest {

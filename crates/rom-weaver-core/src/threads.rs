@@ -111,6 +111,21 @@ impl ThreadCapability {
             }
         }
     }
+
+    pub fn supports_execution(&self, execution: &ThreadExecution) -> bool {
+        if execution.requested_threads == 0 || execution.effective_threads == 0 {
+            return false;
+        }
+        if execution.used_parallelism != (execution.effective_threads > 1) {
+            return false;
+        }
+        match self {
+            Self::SingleThreaded => execution.effective_threads == 1,
+            Self::Parallel { max_threads } => max_threads
+                .map(|limit| execution.effective_threads <= limit.max(1))
+                .unwrap_or(true),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -155,7 +170,7 @@ impl SharedThreadPool {
 
 #[cfg(test)]
 mod tests {
-    use super::{ThreadBudget, ThreadCapability, ThreadMode};
+    use super::{ThreadBudget, ThreadCapability, ThreadExecution, ThreadMode};
 
     #[test]
     fn auto_budget_resolves_to_a_positive_thread_count() {
@@ -184,5 +199,60 @@ mod tests {
         assert_eq!(execution.requested_threads, 8);
         assert_eq!(execution.effective_threads, 4);
         assert!(execution.used_parallelism);
+    }
+
+    #[test]
+    fn supports_execution_accepts_single_threaded_reports() {
+        let execution = ThreadExecution {
+            requested_threads: 8,
+            effective_threads: 1,
+            thread_mode: ThreadMode::Fixed,
+            used_parallelism: false,
+        };
+        assert!(ThreadCapability::single_threaded().supports_execution(&execution));
+    }
+
+    #[test]
+    fn supports_execution_rejects_parallel_report_for_single_thread_capability() {
+        let execution = ThreadExecution {
+            requested_threads: 8,
+            effective_threads: 2,
+            thread_mode: ThreadMode::Fixed,
+            used_parallelism: true,
+        };
+        assert!(!ThreadCapability::single_threaded().supports_execution(&execution));
+    }
+
+    #[test]
+    fn supports_execution_accepts_parallel_fallback_to_single_thread() {
+        let execution = ThreadExecution {
+            requested_threads: 8,
+            effective_threads: 1,
+            thread_mode: ThreadMode::Fixed,
+            used_parallelism: false,
+        };
+        assert!(ThreadCapability::parallel(None).supports_execution(&execution));
+    }
+
+    #[test]
+    fn supports_execution_rejects_effective_threads_above_cap() {
+        let execution = ThreadExecution {
+            requested_threads: 8,
+            effective_threads: 5,
+            thread_mode: ThreadMode::Fixed,
+            used_parallelism: true,
+        };
+        assert!(!ThreadCapability::parallel(Some(4)).supports_execution(&execution));
+    }
+
+    #[test]
+    fn supports_execution_rejects_inconsistent_parallelism_flag() {
+        let execution = ThreadExecution {
+            requested_threads: 4,
+            effective_threads: 1,
+            thread_mode: ThreadMode::Fixed,
+            used_parallelism: true,
+        };
+        assert!(!ThreadCapability::parallel(None).supports_execution(&execution));
     }
 }
