@@ -101,7 +101,7 @@ impl PatchHandler for IpsPatchHandler {
             Some(self.descriptor.name.to_string()),
             "parse",
             label,
-            Some(1.0),
+            Some(100.0),
             None,
         ))
     }
@@ -151,7 +151,7 @@ impl PatchHandler for IpsPatchHandler {
                 self.descriptor.name,
                 patch.records.len()
             ),
-            Some(1.0),
+            Some(100.0),
             Some(execution),
         ))
     }
@@ -190,7 +190,7 @@ impl PatchHandler for IpsPatchHandler {
                 "created {} patch with {} record(s)",
                 self.descriptor.name, create_result.record_count
             ),
-            Some(1.0),
+            Some(100.0),
             Some(execution),
         ))
     }

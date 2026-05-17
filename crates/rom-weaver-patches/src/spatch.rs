@@ -68,7 +68,7 @@ impl PatchHandler for SpatchPatchHandler {
             Some(self.descriptor.name.to_string()),
             "parse",
             label,
-            Some(1.0),
+            Some(100.0),
             None,
         ))
     }
@@ -200,7 +200,7 @@ impl PatchHandler for SpatchPatchHandler {
                 "created {} patch with primary ({primary_len} byte(s)) and secondary ({secondary_len} byte(s)) streams",
                 self.descriptor.name
             ),
-            Some(1.0),
+            Some(100.0),
             Some(execution),
         ))
     }

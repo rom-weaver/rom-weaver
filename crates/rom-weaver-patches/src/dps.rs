@@ -55,7 +55,7 @@ impl PatchHandler for DpsPatchHandler {
                 parsed.output_size,
                 parsed.patch_flag
             ),
-            Some(1.0),
+            Some(100.0),
             None,
         ))
     }
@@ -143,7 +143,7 @@ impl PatchHandler for DpsPatchHandler {
                 parsed.copy_record_count,
                 parsed.data_record_count
             ),
-            Some(1.0),
+            Some(100.0),
             Some(execution),
         ))
     }
@@ -203,7 +203,7 @@ impl PatchHandler for DpsPatchHandler {
                 copy_record_count,
                 data_record_count
             ),
-            Some(1.0),
+            Some(100.0),
             Some(execution),
         ))
     }

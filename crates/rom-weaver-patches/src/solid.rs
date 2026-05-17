@@ -85,7 +85,7 @@ impl PatchHandler for SolidPatchHandler {
             Some(self.descriptor.name.to_string()),
             "parse",
             label,
-            Some(1.0),
+            Some(100.0),
             None,
         ))
     }
@@ -134,7 +134,7 @@ impl PatchHandler for SolidPatchHandler {
                 pluralize(parsed.primitives.len(), "primitive", "primitives"),
                 checksum_suffix
             ),
-            Some(1.0),
+            Some(100.0),
             Some(execution),
         ))
     }
@@ -225,7 +225,7 @@ impl PatchHandler for SolidPatchHandler {
                 primitive_count,
                 pluralize(primitive_count as usize, "primitive", "primitives")
             ),
-            Some(1.0),
+            Some(100.0),
             Some(execution),
         ))
     }

@@ -53,7 +53,7 @@ impl PatchHandler for BpsPatchHandler {
                 patch.source_checksum,
                 patch.target_checksum
             ),
-            Some(1.0),
+            Some(100.0),
             None,
         ))
     }
@@ -115,7 +115,7 @@ impl PatchHandler for BpsPatchHandler {
                 patch.actions.len(),
                 checksum_suffix
             ),
-            Some(1.0),
+            Some(100.0),
             Some(execution),
         ))
     }
@@ -155,7 +155,7 @@ impl PatchHandler for BpsPatchHandler {
                 "created {} patch with {} record(s)",
                 self.descriptor.name, created.action_count
             ),
-            Some(1.0),
+            Some(100.0),
             Some(execution),
         ))
     }

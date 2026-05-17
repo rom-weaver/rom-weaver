@@ -38,7 +38,7 @@ impl PatchHandler for BdfPatchHandler {
                 self.descriptor.name,
                 patcher.hint_target_size()
             ),
-            Some(1.0),
+            Some(100.0),
             None,
         ))
     }
@@ -80,7 +80,7 @@ impl PatchHandler for BdfPatchHandler {
                 self.descriptor.name,
                 output.len()
             ),
-            Some(1.0),
+            Some(100.0),
             Some(execution),
         ))
     }
@@ -119,7 +119,7 @@ impl PatchHandler for BdfPatchHandler {
                 self.descriptor.name,
                 patch.len()
             ),
-            Some(1.0),
+            Some(100.0),
             Some(execution),
         ))
     }

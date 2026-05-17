@@ -69,7 +69,7 @@ impl PatchHandler for DldiPatchHandler {
                 "parsed {} patch for driver `{}` ({} byte(s))",
                 self.descriptor.name, header.friendly_name, header.driver_size_bytes
             ),
-            Some(1.0),
+            Some(100.0),
             None,
         ))
     }
@@ -104,7 +104,7 @@ impl PatchHandler for DldiPatchHandler {
                 "applied {} driver `{}` over `{}` at 0x{:08X}",
                 self.descriptor.name, apply.new_driver, apply.old_driver, apply.patch_offset
             ),
-            Some(1.0),
+            Some(100.0),
             Some(execution),
         ))
     }
@@ -174,7 +174,7 @@ impl PatchHandler for DldiPatchHandler {
                 modified_header.friendly_name,
                 patch_bytes.len()
             ),
-            Some(1.0),
+            Some(100.0),
             Some(execution),
         ))
     }

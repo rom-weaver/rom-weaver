@@ -39,7 +39,7 @@ impl PatchHandler for PmsrPatchHandler {
                 self.descriptor.name,
                 patch.records.len()
             ),
-            Some(1.0),
+            Some(100.0),
             None,
         ))
     }
@@ -75,7 +75,7 @@ impl PatchHandler for PmsrPatchHandler {
                 self.descriptor.name,
                 patch.records.len()
             ),
-            Some(1.0),
+            Some(100.0),
             Some(execution),
         ))
     }
@@ -103,7 +103,7 @@ impl PatchHandler for PmsrPatchHandler {
                 "created {} patch with {} record(s)",
                 self.descriptor.name, patch.record_count
             ),
-            Some(1.0),
+            Some(100.0),
             Some(execution),
         ))
     }

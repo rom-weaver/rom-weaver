@@ -44,7 +44,7 @@ impl PatchHandler for ApsGbaPatchHandler {
                 patch.source_size,
                 patch.target_size
             ),
-            Some(1.0),
+            Some(100.0),
             None,
         ))
     }
@@ -95,7 +95,7 @@ impl PatchHandler for ApsGbaPatchHandler {
                 patch.records.len(),
                 checksum_suffix
             ),
-            Some(1.0),
+            Some(100.0),
             Some(execution),
         ))
     }
@@ -124,7 +124,7 @@ impl PatchHandler for ApsGbaPatchHandler {
                 "created {} patch with {} record(s)",
                 self.descriptor.name, created.record_count
             ),
-            Some(1.0),
+            Some(100.0),
             Some(execution),
         ))
     }

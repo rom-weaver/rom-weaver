@@ -78,7 +78,7 @@ impl PatchHandler for PdsPatchHandler {
             Some(self.descriptor.name.to_string()),
             "parse",
             label,
-            Some(1.0),
+            Some(100.0),
             None,
         ))
     }
@@ -131,7 +131,7 @@ impl PatchHandler for PdsPatchHandler {
                 "applied PDS patch payload `{payload_name}` (format `{format_name}`){}",
                 checksum_suffix
             ),
-            Some(1.0),
+            Some(100.0),
             Some(execution),
         ))
     }
@@ -194,7 +194,7 @@ impl PatchHandler for PdsPatchHandler {
                 PDS_DEFAULT_PAYLOAD_NAME,
                 payload.len()
             ),
-            Some(1.0),
+            Some(100.0),
             Some(execution),
         ))
     }

@@ -59,7 +59,7 @@ impl PatchHandler for PpfPatchHandler {
             Some(self.descriptor.name.to_string()),
             "parse",
             label,
-            Some(1.0),
+            Some(100.0),
             None,
         ))
     }
@@ -124,7 +124,7 @@ impl PatchHandler for PpfPatchHandler {
                 parsed.records.len(),
                 checksum_suffix
             ),
-            Some(1.0),
+            Some(100.0),
             Some(execution),
         ))
     }
@@ -166,7 +166,7 @@ impl PatchHandler for PpfPatchHandler {
                 "created {} patch (PPF3) with {} record(s), {blockcheck_label}",
                 self.descriptor.name, created.record_count
             ),
-            Some(1.0),
+            Some(100.0),
             Some(execution),
         ))
     }

@@ -43,7 +43,7 @@ impl PatchHandler for UpsPatchHandler {
                 patch.source_checksum,
                 patch.target_checksum
             ),
-            Some(1.0),
+            Some(100.0),
             None,
         ))
     }
@@ -107,7 +107,7 @@ impl PatchHandler for UpsPatchHandler {
                 patch.changes.len(),
                 checksum_suffix
             ),
-            Some(1.0),
+            Some(100.0),
             Some(execution),
         ))
     }
@@ -136,7 +136,7 @@ impl PatchHandler for UpsPatchHandler {
                 "created {} patch with {} record(s)",
                 self.descriptor.name, created.record_count
             ),
-            Some(1.0),
+            Some(100.0),
             Some(execution),
         ))
     }

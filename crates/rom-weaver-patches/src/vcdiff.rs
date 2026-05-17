@@ -88,7 +88,7 @@ impl PatchHandler for VcdiffPatchHandler {
             Some(self.descriptor.name.to_string()),
             "parse",
             label,
-            Some(1.0),
+            Some(100.0),
             None,
         ))
     }
@@ -142,7 +142,7 @@ impl PatchHandler for VcdiffPatchHandler {
                     patch.windows.len(),
                     checksum_suffix
                 ),
-                Some(1.0),
+                Some(100.0),
                 Some(execution),
             ));
         }
@@ -216,7 +216,7 @@ impl PatchHandler for VcdiffPatchHandler {
                 patch.windows.len(),
                 checksum_suffix
             ),
-            Some(1.0),
+            Some(100.0),
             Some(execution),
         ))
     }
@@ -288,7 +288,7 @@ impl PatchHandler for VcdiffPatchHandler {
             Some(self.descriptor.name.to_string()),
             "create",
             label,
-            Some(1.0),
+            Some(100.0),
             Some(execution),
         ))
     }
