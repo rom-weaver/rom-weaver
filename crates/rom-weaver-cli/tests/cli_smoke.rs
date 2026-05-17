@@ -3590,6 +3590,60 @@ fn rvz_extract_round_trips_to_iso() {
 }
 
 #[test]
+fn rvz_extract_supports_single_output_selection() {
+    let temp = setup_temp_dir();
+    let iso_bytes = build_test_gamecube_iso(0x8000);
+    fs::write(temp.child("disc.iso").path(), &iso_bytes).expect("iso fixture");
+    write_rvz_fixture_from_iso(temp.child("disc.iso").path(), temp.child("disc.rvz").path());
+
+    let out_dir = temp.child("selected");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "extract",
+            temp.child("disc.rvz").path().to_str().expect("path"),
+            "--select",
+            "disc.iso",
+            "--out-dir",
+            out_dir.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    assert_eq!(
+        fs::read(out_dir.child("disc.iso").path()).expect("extracted iso"),
+        iso_bytes
+    );
+
+    let missing_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "extract",
+            temp.child("disc.rvz").path().to_str().expect("path"),
+            "--select",
+            "missing.iso",
+            "--out-dir",
+            out_dir.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .stdout
+        .clone();
+    let missing_json = parse_single_json_line(&missing_output);
+    assert_eq!(missing_json["format"], "rvz");
+    assert_eq!(missing_json["status"], "failed");
+    assert!(
+        missing_json["label"]
+            .as_str()
+            .expect("label")
+            .contains("requested selections were not found")
+    );
+}
+
+#[test]
 fn wua_compress_inspect_and_extract_round_trip() {
     let temp = setup_temp_dir();
     let game_dir = temp.child("game");
@@ -3822,6 +3876,78 @@ fn z3ds_extract_reports_parallel_threads_for_large_file() {
     assert_eq!(
         fs::read(out_dir.child("large.3ds").path()).expect("extracted 3ds"),
         source
+    );
+}
+
+#[test]
+fn z3ds_extract_supports_single_output_selection() {
+    let temp = setup_temp_dir();
+    let source = (0..65_536)
+        .map(|index| (index % 199) as u8)
+        .collect::<Vec<_>>();
+    fs::write(temp.child("disc.3ds").path(), &source).expect("fixture");
+
+    let z3ds_path = temp.child("disc.z3ds");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("disc.3ds").path().to_str().expect("path"),
+            "--format",
+            "z3ds",
+            "--output",
+            z3ds_path.path().to_str().expect("path"),
+            "--codec",
+            "zstd:4",
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let selected_out = temp.child("selected");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "extract",
+            z3ds_path.path().to_str().expect("path"),
+            "--select",
+            "disc.3ds",
+            "--out-dir",
+            selected_out.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    assert_eq!(
+        fs::read(selected_out.child("disc.3ds").path()).expect("extracted 3ds"),
+        source
+    );
+
+    let missing_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "extract",
+            z3ds_path.path().to_str().expect("path"),
+            "--select",
+            "missing.3ds",
+            "--out-dir",
+            selected_out.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .stdout
+        .clone();
+    let missing_json = parse_single_json_line(&missing_output);
+    assert_eq!(missing_json["format"], "z3ds");
+    assert_eq!(missing_json["status"], "failed");
+    assert!(
+        missing_json["label"]
+            .as_str()
+            .expect("label")
+            .contains("requested selections were not found")
     );
 }
 

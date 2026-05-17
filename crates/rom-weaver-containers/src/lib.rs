@@ -3892,11 +3892,12 @@ impl ContainerHandler for RvzContainerHandler {
         request: &ContainerExtractRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        if !request.selections.is_empty() {
-            return Err(RomWeaverError::Validation(
-                "rvz extract does not support --select yet".into(),
-            ));
+        let output_name = self.extract_name(&request.source);
+        let mut selections = SelectionMatcher::new(&request.selections);
+        if !selections.matches(&output_name) {
+            selections.ensure_all_matched()?;
         }
+        selections.ensure_all_matched()?;
 
         let execution = context.plan_threads(ThreadCapability::parallel(None));
         let preloader_threads =
@@ -3913,7 +3914,7 @@ impl ContainerHandler for RvzContainerHandler {
         let compression_label = normalize_codec_label(&meta.compression.to_string());
 
         fs::create_dir_all(&request.out_dir)?;
-        let output_path = request.out_dir.join(self.extract_name(&request.source));
+        let output_path = request.out_dir.join(&output_name);
         let mut output = BufWriter::new(File::create(&output_path)?);
         let bytes_written = nod_buf_copy(&mut disc, &mut output)?;
         output.flush()?;
@@ -4664,11 +4665,12 @@ impl ContainerHandler for Z3dsContainerHandler {
         request: &ContainerExtractRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        if !request.selections.is_empty() {
-            return Err(RomWeaverError::Validation(
-                "z3ds extract does not support --select yet".into(),
-            ));
+        let output_name = self.extract_name(&request.source);
+        let mut selections = SelectionMatcher::new(&request.selections);
+        if !selections.matches(&output_name) {
+            selections.ensure_all_matched()?;
         }
+        selections.ensure_all_matched()?;
 
         let mut file = File::open(&request.source)?;
         let header = self.read_header(&request.source, &mut file)?;
@@ -4678,7 +4680,7 @@ impl ContainerHandler for Z3dsContainerHandler {
             context.build_pool(ThreadCapability::parallel(Some(tasks.len().max(1))))?;
 
         fs::create_dir_all(&request.out_dir)?;
-        let output_path = request.out_dir.join(self.extract_name(&request.source));
+        let output_path = request.out_dir.join(&output_name);
 
         let source = request.source.clone();
         let decode_result = pool.install(|| {
