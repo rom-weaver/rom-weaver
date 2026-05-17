@@ -3267,8 +3267,22 @@ fn wua_create_name_entry(
 struct RvzContainerHandler;
 
 impl RvzContainerHandler {
+    fn read_options(&self, preloader_threads: usize) -> NodDiscOptions {
+        let mut options = NodDiscOptions::default();
+        options.preloader_threads = preloader_threads;
+        options
+    }
+
+    fn negotiated_threads(&self, used_parallelism: bool, effective_threads: usize) -> usize {
+        if used_parallelism {
+            effective_threads
+        } else {
+            0
+        }
+    }
+
     fn open_disc(&self, source: &Path) -> Result<NodDiscReader> {
-        NodDiscReader::new(source, &NodDiscOptions::default()).map_err(|error| {
+        NodDiscReader::new(source, &self.read_options(0)).map_err(|error| {
             RomWeaverError::Validation(format!(
                 "failed to open rvz source `{}`: {error}",
                 source.display()
@@ -3429,8 +3443,16 @@ impl ContainerHandler for RvzContainerHandler {
             ));
         }
 
-        let execution = context.plan_threads(ThreadCapability::single_threaded());
-        let mut disc = self.open_disc(&request.source)?;
+        let execution = context.plan_threads(ThreadCapability::parallel(None));
+        let preloader_threads =
+            self.negotiated_threads(execution.used_parallelism, execution.effective_threads);
+        let mut disc = NodDiscReader::new(&request.source, &self.read_options(preloader_threads))
+            .map_err(|error| {
+            RomWeaverError::Validation(format!(
+                "failed to open rvz source `{}`: {error}",
+                request.source.display()
+            ))
+        })?;
         let meta = self.validate_rvz_meta(&request.source, &disc)?;
         let disc_size = meta.disc_size.unwrap_or_else(|| disc.disc_size());
         let compression_label = normalize_codec_label(&meta.compression.to_string());
@@ -3469,7 +3491,7 @@ impl ContainerHandler for RvzContainerHandler {
             ));
         }
 
-        let execution = context.plan_threads(ThreadCapability::single_threaded());
+        let execution = context.plan_threads(ThreadCapability::parallel(None));
         let input = &request.inputs[0];
         let compression =
             self.resolve_create_compression(request.codec.as_deref(), request.level)?;
@@ -3483,8 +3505,10 @@ impl ContainerHandler for RvzContainerHandler {
             fs::create_dir_all(parent)?;
         }
 
+        let preloader_threads =
+            self.negotiated_threads(execution.used_parallelism, execution.effective_threads);
         let input_disc =
-            NodDiscReader::new(input, &NodDiscOptions::default()).map_err(|error| {
+            NodDiscReader::new(input, &self.read_options(preloader_threads)).map_err(|error| {
                 RomWeaverError::Validation(format!(
                     "failed to open input `{}` for rvz create: {error}",
                     input.display()

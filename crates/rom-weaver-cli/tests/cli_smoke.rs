@@ -1933,6 +1933,8 @@ fn rvz_compress_and_extract_round_trips() {
             rvz_path.path().to_str().expect("path"),
             "--codec",
             "lzma2:6",
+            "--threads",
+            "8",
             "--json",
         ])
         .assert()
@@ -1945,6 +1947,9 @@ fn rvz_compress_and_extract_round_trips() {
     assert_eq!(compress_json["command"], "compress");
     assert_eq!(compress_json["family"], "container");
     assert_eq!(compress_json["format"], "rvz");
+    assert_eq!(compress_json["requested_threads"], 8);
+    assert_eq!(compress_json["effective_threads"], 8);
+    assert_eq!(compress_json["used_parallelism"], true);
     assert_eq!(compress_json["status"], "succeeded");
 
     let out_dir = temp.child("extract");
@@ -1955,6 +1960,8 @@ fn rvz_compress_and_extract_round_trips() {
             rvz_path.path().to_str().expect("path"),
             "--out-dir",
             out_dir.path().to_str().expect("path"),
+            "--threads",
+            "8",
             "--json",
         ])
         .assert()

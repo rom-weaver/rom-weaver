@@ -67,7 +67,7 @@
 | CTR-014 | container | xz | done | done | done | n/a | n/a | stream | fixture-roundtrip,cli-smoke | done | Standalone xz stream support (non-tar) landed. |
 | CTR-015 | container | zst | done | done | done | n/a | n/a | stream | fixture-roundtrip,cli-smoke | done | Standalone zstd stream support (non-tar) landed. |
 | CTR-016 | container | xiso | todo | todo | todo | n/a | n/a | per-file | fixture-roundtrip,cli-smoke | todo | Original Xbox XISO support; prioritize inspect/extract first, then rebuild/create. |
-| CTR-017 | container | rvz-threading-parity | done | done | done | n/a | n/a | per-block,codec-mapped | fixture-roundtrip,cli-smoke,json-contract | todo | Align RVZ capability reporting with actual execution and/or add real parallel extract/create plumbing so `thread_execution` data is truthful. |
+| CTR-017 | container | rvz-threading-parity | done | done | done | n/a | n/a | per-block,codec-mapped | fixture-roundtrip,cli-smoke,json-contract | done | RVZ extract/create now negotiate parallel capability and forward thread budgets into `nod` preloader/processor options so `thread_execution` reporting matches runtime behavior. |
 | CTR-018 | container | z3ds-create-thread-capability | done | done | done | n/a | n/a | per-block | fixture-roundtrip,cli-smoke,json-contract | done | Z3DS create capability metadata now reports parallel threading, matching the existing parallel create runtime behavior and JSON thread reporting. |
 | CTR-019 | container | wua | done | done | done | n/a | n/a | block,zstd | fixture-roundtrip,cli-smoke | done | Native Wii U archive (`.wua`) support landed using ZArchive-compatible 64KiB block compression, footer metadata, and directory tree traversal. |
 
