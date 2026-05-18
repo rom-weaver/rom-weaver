@@ -1,7 +1,6 @@
 use std::{
     num::NonZeroU64,
     path::{Path, PathBuf},
-    process,
     sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -65,7 +64,7 @@ impl TempPathAllocator {
             .duration_since(UNIX_EPOCH)
             .map(|value| value.as_nanos())
             .unwrap_or_default();
-        let namespace = format!("rw-{}-{timestamp}", process::id());
+        let namespace = format!("rw-{}-{timestamp}", runtime_process_id());
         Self {
             root,
             namespace,
@@ -103,6 +102,16 @@ impl TempPathAllocator {
         }
         self.root.join(&self.namespace).join(file_name)
     }
+}
+
+#[cfg(target_family = "wasm")]
+fn runtime_process_id() -> u32 {
+    1
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn runtime_process_id() -> u32 {
+    std::process::id()
 }
 
 #[cfg(test)]

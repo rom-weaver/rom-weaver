@@ -6463,10 +6463,40 @@ impl ChdContainerHandler {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|value| value.as_nanos())
             .unwrap_or_default();
-        std::env::temp_dir().join(format!(
+        Self::runtime_temp_dir().join(format!(
             "rom-weaver-{stem}-{}-{timestamp}{extension}",
-            std::process::id()
+            Self::runtime_process_id()
         ))
+    }
+
+    fn runtime_temp_dir() -> PathBuf {
+        #[cfg(target_family = "wasm")]
+        {
+            if let Some(path) = std::env::var_os("ROM_WEAVER_TMPDIR")
+                && !path.is_empty()
+            {
+                return PathBuf::from(path);
+            }
+
+            return PathBuf::from("/tmp");
+        }
+
+        #[cfg(not(target_family = "wasm"))]
+        {
+            std::env::temp_dir()
+        }
+    }
+
+    fn runtime_process_id() -> u32 {
+        #[cfg(target_family = "wasm")]
+        {
+            return 1;
+        }
+
+        #[cfg(not(target_family = "wasm"))]
+        {
+            std::process::id()
+        }
     }
 
     fn track_output_name(&self, stem: &str, track_number: u32) -> String {

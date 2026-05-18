@@ -4,7 +4,7 @@ use std::{
     fs::File,
     io::{self, BufReader, BufWriter, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
-    process::{self, ExitCode},
+    process::ExitCode,
     sync::{Arc, OnceLock},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -2188,13 +2188,43 @@ impl CliApp {
     }
 
     fn context(&self, thread_budget: ThreadBudget) -> OperationContext {
-        let temp_root = std::env::temp_dir().join("rom-weaver");
+        let temp_root = Self::resolve_temp_dir().join("rom-weaver");
         OperationContext::new(
             thread_budget,
             temp_root,
             self.reporter.clone(),
             CancellationToken::new(),
         )
+    }
+
+    fn resolve_temp_dir() -> PathBuf {
+        #[cfg(target_family = "wasm")]
+        {
+            if let Some(path) = std::env::var_os("ROM_WEAVER_TMPDIR")
+                && !path.is_empty()
+            {
+                return PathBuf::from(path);
+            }
+
+            return PathBuf::from("/tmp");
+        }
+
+        #[cfg(not(target_family = "wasm"))]
+        {
+            std::env::temp_dir()
+        }
+    }
+
+    fn runtime_process_id() -> u32 {
+        #[cfg(target_family = "wasm")]
+        {
+            return 1;
+        }
+
+        #[cfg(not(target_family = "wasm"))]
+        {
+            std::process::id()
+        }
     }
 
     fn resolve_codec_level(codec: Option<String>) -> Result<(Option<String>, Option<i32>)> {
@@ -2746,7 +2776,7 @@ impl CliApp {
         let temp_name = format!(
             ".{name}.{}-{}-{timestamp}",
             XISO_TRIM_TEMP_SUFFIX,
-            process::id()
+            Self::runtime_process_id()
         );
         source
             .parent()
