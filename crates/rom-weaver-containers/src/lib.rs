@@ -46,7 +46,7 @@ use tar::{Archive as TarArchive, Builder as TarBuilder};
 use unrar_ng::Archive as RarArchive;
 use xdvdfs::{
     blockdev::OffsetWrapper as XdvdfsOffsetWrapper,
-    write::{fs::XDVDFSFilesystem as XdvdfsFilesystem, img::create_xdvdfs_image},
+    write::fs::XDVDFSFilesystem as XdvdfsFilesystem,
 };
 use zip::{
     CompressionMethod as ZipCompressionMethod, ZipArchive as ZipFileArchive,
@@ -3689,53 +3689,11 @@ impl ContainerHandler for XisoContainerHandler {
 
     fn create(
         &self,
-        request: &ContainerCreateRequest,
-        context: &OperationContext,
+        _request: &ContainerCreateRequest,
+        _context: &OperationContext,
     ) -> Result<OperationReport> {
-        if request.inputs.len() != 1 {
-            return Err(RomWeaverError::Validation(
-                "xiso create currently requires exactly one input file".into(),
-            ));
-        }
-
-        let execution = context.plan_threads(ThreadCapability::single_threaded());
-        let input = &request.inputs[0];
-        let input_metadata = fs::metadata(input)?;
-        if !input_metadata.is_file() {
-            return Err(RomWeaverError::Validation(format!(
-                "xiso create input must be a file: `{}`",
-                input.display()
-            )));
-        }
-
-        if let Some(parent) = request.output.parent() {
-            fs::create_dir_all(parent)?;
-        }
-
-        let mut source_fs = self.open_source_filesystem(input)?;
-        let output_file = File::create(&request.output)?;
-        let mut output = BufWriter::new(output_file);
-        create_xdvdfs_image(&mut source_fs, &mut output, |_| {}).map_err(|error| {
-            RomWeaverError::Validation(format!(
-                "xiso create failed while rebuilding `{}`: {error}",
-                input.display()
-            ))
-        })?;
-        output.flush()?;
-
-        let output_bytes = fs::metadata(&request.output)?.len();
-        Ok(OperationReport::succeeded(
-            OperationFamily::Container,
-            Some(XISO.name.to_string()),
-            "create",
-            format!(
-                "created xiso `{}` from `{}` ({} bytes)",
-                request.output.display(),
-                input.display(),
-                output_bytes
-            ),
-            Some(100.0),
-            Some(execution),
+        Err(RomWeaverError::Validation(
+            "xiso container create is not supported; xiso is trim-only (use `trim`)".into(),
         ))
     }
 
@@ -3743,7 +3701,7 @@ impl ContainerHandler for XisoContainerHandler {
         ContainerCapabilities {
             inspect: false,
             extract: false,
-            create: true,
+            create: false,
             extract_threads: ThreadCapability::single_threaded(),
             create_threads: ThreadCapability::single_threaded(),
         }
@@ -7744,13 +7702,13 @@ mod tests {
     }
 
     #[test]
-    fn xiso_capabilities_are_create_only() {
+    fn xiso_capabilities_disable_container_create() {
         let registry = ContainerRegistry::new();
         let handler = registry.find_by_name("xiso").expect("xiso handler");
         let capabilities = handler.capabilities();
         assert!(!capabilities.inspect);
         assert!(!capabilities.extract);
-        assert!(capabilities.create);
+        assert!(!capabilities.create);
         assert_eq!(
             capabilities.extract_threads,
             ThreadCapability::single_threaded()

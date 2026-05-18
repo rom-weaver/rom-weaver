@@ -2490,151 +2490,48 @@ fn compress_gcz_warns_and_rejects_output() {
 }
 
 #[test]
-fn compress_xiso_rebuilds_valid_xbox_iso_and_output_is_readable_xdvdfs() {
+fn compress_rejects_unregistered_output_format() {
     let temp = setup_temp_dir();
-    let source_tree = temp.child("xiso-source");
-    fs::create_dir_all(source_tree.path()).expect("source tree root");
-    let source_path = temp.child("source.iso");
-    write_xiso_fixture_from_directory(source_tree.path(), source_path.path());
-    let output_path = temp.child("out.xiso");
+    let source = temp.child("source.bin");
+    fs::write(source.path(), [0_u8; 16]).expect("fixture");
 
     let output = Command::cargo_bin("rom-weaver")
         .expect("binary")
         .args([
             "compress",
-            source_path.path().to_str().expect("path"),
+            source.path().to_str().expect("path"),
             "--format",
-            "xiso",
+            "not-a-format",
             "--output",
-            output_path.path().to_str().expect("path"),
+            temp.child("out.bin").path().to_str().expect("path"),
             "--json",
         ])
         .assert()
-        .code(0)
+        .code(1)
         .get_output()
         .stdout
         .clone();
 
-    let terminal = parse_json_lines(&output)
-        .into_iter()
-        .last()
-        .expect("compress terminal event");
-    assert_eq!(terminal["command"], "compress");
-    assert_eq!(terminal["family"], "container");
-    assert_eq!(terminal["format"], "xiso");
-    assert_eq!(terminal["status"], "succeeded");
-    assert_eq!(terminal["percent"], 100.0);
-    assert!(output_path.path().exists());
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "compress");
+    assert_eq!(json["family"], "container");
+    assert_eq!(json["status"], "failed");
+    assert!(
+        json["label"]
+            .as_str()
+            .expect("label")
+            .contains("requested output format is not registered")
+    );
+}
 
-    let output_file = File::open(output_path.path()).expect("xiso output");
-    let output_reader = std::io::BufReader::new(output_file);
-    let mut output_image = XdvdfsOffsetWrapper::new(output_reader).expect("offset wrapper");
-    let volume = xdvdfs::read::read_volume(&mut output_image).expect("xdvdfs volume");
-    let root_table = volume.root_table;
-    let root_region = root_table.region;
-    assert!(root_region.size > 0);
-    let root_entries = root_table
-        .walk_dirent_tree(&mut output_image)
-        .expect("root entry tree");
-    let names = root_entries
-        .into_iter()
-        .map(|entry| {
-            entry
-                .name_str::<std::io::Error>()
-                .expect("entry name")
-                .into_owned()
-        })
+#[test]
+fn compress_auto_mode_selects_chd_for_unrecognized_iso() {
+    let temp = setup_temp_dir();
+    let source_path = temp.child("source.iso");
+    let payload = (0..(256 * 1024))
+        .map(|index| ((index * 17) % 251) as u8)
         .collect::<Vec<_>>();
-    assert!(
-        names
-            .iter()
-            .any(|name| name.eq_ignore_ascii_case("default.xbe"))
-    );
-}
-
-#[test]
-fn compress_xiso_rejects_multiple_inputs() {
-    let temp = setup_temp_dir();
-    let source_tree = temp.child("xiso-source");
-    fs::create_dir_all(source_tree.path()).expect("source tree root");
-    let source_a = temp.child("source-a.iso");
-    write_xiso_fixture_from_directory(source_tree.path(), source_a.path());
-    let source_b = temp.child("source-b.iso");
-    fs::copy(source_a.path(), source_b.path()).expect("duplicate source");
-
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
-            "compress",
-            source_a.path().to_str().expect("path"),
-            source_b.path().to_str().expect("path"),
-            "--format",
-            "xiso",
-            "--output",
-            temp.child("out.xiso").path().to_str().expect("path"),
-            "--json",
-        ])
-        .assert()
-        .code(1)
-        .get_output()
-        .stdout
-        .clone();
-
-    let json = parse_single_json_line(&output);
-    assert_eq!(json["command"], "compress");
-    assert_eq!(json["family"], "container");
-    assert_eq!(json["format"], "xiso");
-    assert_eq!(json["status"], "failed");
-    assert!(
-        json["label"]
-            .as_str()
-            .expect("label")
-            .contains("requires exactly one input file")
-    );
-}
-
-#[test]
-fn compress_xiso_rejects_non_xbox_iso_input() {
-    let temp = setup_temp_dir();
-    fs::write(temp.child("source.iso").path(), b"not-an-xbox-image").expect("fixture");
-
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
-            "compress",
-            temp.child("source.iso").path().to_str().expect("path"),
-            "--format",
-            "xiso",
-            "--output",
-            temp.child("out.xiso").path().to_str().expect("path"),
-            "--json",
-        ])
-        .assert()
-        .code(1)
-        .get_output()
-        .stdout
-        .clone();
-
-    let json = parse_single_json_line(&output);
-    assert_eq!(json["command"], "compress");
-    assert_eq!(json["family"], "container");
-    assert_eq!(json["format"], "xiso");
-    assert_eq!(json["status"], "failed");
-    assert!(
-        json["label"]
-            .as_str()
-            .expect("label")
-            .contains("not an Xbox XDVDFS image")
-    );
-}
-
-#[test]
-fn compress_auto_mode_does_not_implicitly_select_xiso() {
-    let temp = setup_temp_dir();
-    let source_tree = temp.child("xiso-source");
-    fs::create_dir_all(source_tree.path()).expect("source tree root");
-    let source_path = temp.child("source.iso");
-    write_xiso_fixture_from_directory(source_tree.path(), source_path.path());
+    fs::write(source_path.path(), payload).expect("fixture");
     let output_path = temp.child("out.chd");
 
     let output = Command::cargo_bin("rom-weaver")

@@ -1050,6 +1050,19 @@ impl CliApp {
                 ),
             );
         };
+        let capabilities = handler.capabilities();
+        if !capabilities.inspect && !capabilities.extract && !capabilities.create {
+            return self.finish(
+                "compress",
+                OperationReport::failed(
+                    OperationFamily::Container,
+                    Some(resolved_format),
+                    "probe",
+                    "requested output format is not registered",
+                    probe_threads,
+                ),
+            );
+        }
 
         self.emit_running(
             "compress",
@@ -1062,7 +1075,7 @@ impl CliApp {
                 input.len()
             ),
             Some(0.0),
-            Some(context.plan_threads(handler.capabilities().create_threads)),
+            Some(context.plan_threads(capabilities.create_threads)),
         );
 
         let request = ContainerCreateRequest {
