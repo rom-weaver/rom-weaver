@@ -77,6 +77,17 @@ fn setup_temp_dir() -> TempDir {
     TempDir::new().expect("temp dir")
 }
 
+fn read_single_file_bytes(dir: &std::path::Path) -> Vec<u8> {
+    let mut files = fs::read_dir(dir)
+        .expect("read dir")
+        .map(|entry| entry.expect("dir entry").path())
+        .filter(|path| path.is_file())
+        .collect::<Vec<_>>();
+    files.sort();
+    assert_eq!(files.len(), 1, "expected one extracted file");
+    fs::read(&files[0]).expect("read extracted file")
+}
+
 fn run_chd_round_trip(input_name: &str, source: &[u8], codec: &str, expected_extract_name: &str) {
     let temp = setup_temp_dir();
     fs::write(temp.child(input_name).path(), source).expect("fixture");
@@ -898,6 +909,7 @@ fn terminal_progress_percent_uses_100_scale_for_core_commands() {
             patch.path().to_str().expect("path"),
             "--output",
             applied.path().to_str().expect("path"),
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -4788,6 +4800,7 @@ fn patch_apply_succeeds_for_valid_ips_patch() {
             temp.child("output.bin").path().to_str().expect("path"),
             "--threads",
             "8",
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -4807,6 +4820,297 @@ fn patch_apply_succeeds_for_valid_ips_patch() {
     assert_eq!(
         fs::read(temp.child("output.bin").path()).expect("output"),
         b"abXYZfg!!!!"
+    );
+}
+
+#[test]
+fn patch_apply_defaults_to_compressed_output_and_appends_extension() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.bin");
+    let modified = temp.child("new.bin");
+    let patch = temp.child("update.bps");
+    let output_base = temp.child("patched-output");
+
+    fs::write(original.path(), b"hello old world").expect("fixture");
+    fs::write(modified.path(), b"hello new world").expect("fixture");
+
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--format",
+            "bps",
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let apply_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output_base.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let apply_json = parse_single_json_line(&apply_output);
+    assert_eq!(apply_json["command"], "patch-apply");
+    assert_eq!(apply_json["family"], "patch");
+    assert_eq!(apply_json["format"], "BPS");
+    assert_eq!(apply_json["status"], "succeeded");
+    let apply_label = apply_json["label"].as_str().expect("label");
+    assert!(apply_label.contains("patch output compressed as 7z"));
+    assert!(apply_label.contains("auto format=7z reason=fallback-7z-lzma2"));
+
+    let compressed_path = temp.child("patched-output.7z");
+    assert!(compressed_path.path().exists());
+    assert!(!output_base.path().exists());
+
+    let out_dir = temp.child("extract");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "extract",
+            compressed_path.path().to_str().expect("path"),
+            "--out-dir",
+            out_dir.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+    assert_eq!(
+        read_single_file_bytes(out_dir.path()),
+        fs::read(modified.path()).expect("modified")
+    );
+}
+
+#[test]
+fn patch_apply_auto_prefers_outer_input_container_format() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.bin");
+    let modified = temp.child("new.bin");
+    let patch = temp.child("update.bps");
+    let input_zip = temp.child("input.zip");
+    let output_base = temp.child("patched-out");
+
+    fs::write(original.path(), b"hello old world").expect("fixture");
+    fs::write(modified.path(), b"hello new world").expect("fixture");
+
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--format",
+            "bps",
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            original.path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            input_zip.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let apply_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            input_zip.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output_base.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let apply_json = parse_single_json_line(&apply_output);
+    assert_eq!(apply_json["command"], "patch-apply");
+    assert_eq!(apply_json["family"], "patch");
+    assert_eq!(apply_json["format"], "BPS");
+    assert_eq!(apply_json["status"], "succeeded");
+    let apply_label = apply_json["label"].as_str().expect("label");
+    assert!(apply_label.contains("patch output compressed as zip"));
+    assert!(apply_label.contains("auto format=zip reason=outer-input-container"));
+
+    let compressed_path = temp.child("patched-out.zip");
+    assert!(compressed_path.path().exists());
+    assert!(!output_base.path().exists());
+
+    let out_dir = temp.child("extract");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "extract",
+            compressed_path.path().to_str().expect("path"),
+            "--out-dir",
+            out_dir.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+    assert_eq!(
+        read_single_file_bytes(out_dir.path()),
+        fs::read(modified.path()).expect("modified")
+    );
+}
+
+#[test]
+fn patch_apply_accepts_explicit_compress_format_and_codec() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.bin");
+    let modified = temp.child("new.bin");
+    let patch = temp.child("update.bps");
+    let output_base = temp.child("patched");
+
+    fs::write(original.path(), b"hello old world").expect("fixture");
+    fs::write(modified.path(), b"hello new world").expect("fixture");
+
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--format",
+            "bps",
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let apply_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output_base.path().to_str().expect("path"),
+            "--compress-format",
+            "zip",
+            "--compress-codec",
+            "deflate",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let apply_json = parse_single_json_line(&apply_output);
+    assert_eq!(apply_json["command"], "patch-apply");
+    assert_eq!(apply_json["family"], "patch");
+    assert_eq!(apply_json["format"], "BPS");
+    assert_eq!(apply_json["status"], "succeeded");
+    let apply_label = apply_json["label"].as_str().expect("label");
+    assert!(apply_label.contains("patch output compressed as zip"));
+    assert!(apply_label.contains("codec=deflate"));
+    assert!(apply_label.contains("explicit format=zip"));
+
+    let compressed_path = temp.child("patched.zip");
+    assert!(compressed_path.path().exists());
+    assert!(!output_base.path().exists());
+}
+
+#[test]
+fn patch_apply_rejects_no_compress_with_compress_flags() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.bin");
+    let modified = temp.child("new.bin");
+    let patch = temp.child("update.bps");
+    let output = temp.child("output.bin");
+
+    fs::write(original.path(), b"hello old world").expect("fixture");
+    fs::write(modified.path(), b"hello new world").expect("fixture");
+
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--format",
+            "bps",
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let apply_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--compress-format",
+            "zip",
+            "--json",
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .stdout
+        .clone();
+    let apply_json = parse_single_json_line(&apply_output);
+    assert_eq!(apply_json["command"], "patch-apply");
+    assert_eq!(apply_json["status"], "failed");
+    assert!(
+        apply_json["label"]
+            .as_str()
+            .expect("label")
+            .contains("--no-compress cannot be combined with --compress-format")
     );
 }
 
@@ -4856,6 +5160,7 @@ fn patch_apply_applies_multiple_patches_in_order() {
             output.path().to_str().expect("path"),
             "--threads",
             "8",
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -4911,6 +5216,7 @@ fn patch_apply_succeeds_for_valid_ips32_patch() {
             temp.child("output.bin").path().to_str().expect("path"),
             "--threads",
             "8",
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -4964,6 +5270,7 @@ fn patch_apply_succeeds_for_ips32_patch_with_ips_extension() {
             temp.child("output.bin").path().to_str().expect("path"),
             "--threads",
             "8",
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -5035,6 +5342,7 @@ fn patch_create_succeeds_for_ips_and_round_trips() {
             patch.path().to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -5109,6 +5417,7 @@ fn patch_create_succeeds_for_ips32_and_round_trips() {
             patch.path().to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -5161,6 +5470,7 @@ fn patch_apply_succeeds_for_valid_ebp_patch() {
             temp.child("output.bin").path().to_str().expect("path"),
             "--threads",
             "8",
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -5239,6 +5549,7 @@ fn patch_create_succeeds_for_ebp_and_round_trips() {
             patch.path().to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -5297,6 +5608,7 @@ fn patch_apply_succeeds_for_valid_spatch_patch() {
             temp.child("output.bin").path().to_str().expect("path"),
             "--threads",
             "8",
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -5358,6 +5670,7 @@ fn patch_apply_succeeds_for_spatch_patch_with_ips_extension() {
             temp.child("output.bin").path().to_str().expect("path"),
             "--threads",
             "8",
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -5409,6 +5722,7 @@ fn patch_apply_supports_strip_and_add_header_flags() {
                 .to_str()
                 .expect("path"),
             "--strip-header",
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -5441,6 +5755,7 @@ fn patch_apply_supports_strip_and_add_header_flags() {
                 .expect("path"),
             "--strip-header",
             "--add-header",
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -5491,6 +5806,7 @@ fn patch_apply_supports_nes_header_strip_and_add_flags() {
                 .to_str()
                 .expect("path"),
             "--strip-header",
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -5529,6 +5845,7 @@ fn patch_apply_supports_nes_header_strip_and_add_flags() {
                 .expect("path"),
             "--strip-header",
             "--add-header",
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -5576,6 +5893,7 @@ fn patch_apply_repair_checksum_repairs_genesis_header() {
             "--output",
             temp.child("output.bin").path().to_str().expect("path"),
             "--repair-checksum",
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -5628,6 +5946,7 @@ fn patch_apply_repair_checksum_rejects_unsupported_targets() {
             "--output",
             temp.child("output.bin").path().to_str().expect("path"),
             "--repair-checksum",
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -5687,6 +6006,7 @@ fn patch_apply_succeeds_for_valid_solid_patch() {
             output.path().to_str().expect("path"),
             "--threads",
             "8",
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -5763,6 +6083,7 @@ fn patch_create_succeeds_for_spatch_and_round_trips() {
             patch.path().to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -5791,6 +6112,7 @@ fn patch_create_succeeds_for_spatch_and_round_trips() {
             patch.path().to_str().expect("path"),
             "--output",
             headered_output.path().to_str().expect("path"),
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -5861,6 +6183,7 @@ fn patch_create_succeeds_for_solid_and_round_trips() {
             patch.path().to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -5931,6 +6254,7 @@ fn patch_create_succeeds_for_vcdiff_and_round_trips() {
             patch.path().to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -6000,6 +6324,7 @@ fn patch_create_succeeds_for_bps_and_round_trips() {
             patch.path().to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -6070,6 +6395,7 @@ fn patch_apply_auto_extracts_single_payload_by_default() {
             patch.path().to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -6148,6 +6474,7 @@ fn patch_apply_no_extract_uses_raw_container_bytes() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-extract",
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -6224,6 +6551,7 @@ fn patch_apply_auto_extract_ambiguity_requires_select() {
             patch.path().to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -6300,6 +6628,7 @@ fn patch_apply_auto_extract_select_resolves_ambiguity() {
             output.path().to_str().expect("path"),
             "--select",
             "alpha.bin",
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -6383,6 +6712,7 @@ fn patch_apply_auto_extract_ignores_sidecars_unless_no_ignore() {
             patch.path().to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -6409,6 +6739,7 @@ fn patch_apply_auto_extract_ignores_sidecars_unless_no_ignore() {
             "--output",
             output.path().to_str().expect("path"),
             "--no-ignore",
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -6463,6 +6794,7 @@ fn patch_apply_can_ignore_checksum_validation_for_bps() {
             patch.path().to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -6494,6 +6826,7 @@ fn patch_apply_can_ignore_checksum_validation_for_bps() {
             "--output",
             output.path().to_str().expect("path"),
             "--ignore-checksum-validation",
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -6559,6 +6892,7 @@ fn patch_apply_accepts_multiple_expected_input_checksums() {
             &format!("crc32={input_crc32}"),
             "--input-checksum",
             &format!("sha1={input_sha1}"),
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -6621,6 +6955,7 @@ fn patch_apply_fails_on_mismatched_expected_input_checksum() {
             output.path().to_str().expect("path"),
             "--input-checksum",
             "crc32=00000000",
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -6751,6 +7086,7 @@ fn patch_create_succeeds_for_bdf_and_round_trips() {
             patch.path().to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -6820,6 +7156,7 @@ fn patch_create_succeeds_for_ups_and_round_trips() {
             patch.path().to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -6890,6 +7227,7 @@ fn patch_create_succeeds_for_rup_and_round_trips() {
             patch.path().to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -6917,6 +7255,7 @@ fn patch_create_succeeds_for_rup_and_round_trips() {
             patch.path().to_str().expect("path"),
             "--output",
             reverse.path().to_str().expect("path"),
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -6986,6 +7325,7 @@ fn patch_create_succeeds_for_ppf_and_round_trips() {
             patch.path().to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -7064,6 +7404,7 @@ fn patch_create_succeeds_for_aps_and_round_trips() {
             patch.path().to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -7130,6 +7471,7 @@ fn patch_create_succeeds_for_mod_and_round_trips() {
             patch.path().to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -7180,6 +7522,7 @@ fn patch_create_succeeds_for_dldi_and_round_trips() {
             modified.path().to_str().expect("path"),
             "--threads",
             "8",
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -7237,6 +7580,7 @@ fn patch_create_succeeds_for_dldi_and_round_trips() {
             patch.path().to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -7319,6 +7663,7 @@ fn patch_create_succeeds_for_dps_and_round_trips() {
             patch.path().to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -7397,6 +7742,7 @@ fn patch_create_succeeds_for_xdelta_with_secondary_when_helpful() {
             patch.path().to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -7771,6 +8117,7 @@ fn patch_apply_succeeds_for_valid_xdelta_patch() {
             temp.child("output.bin").path().to_str().expect("path"),
             "--threads",
             "8",
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -7811,6 +8158,7 @@ fn patch_apply_succeeds_for_valid_bps_patch() {
             temp.child("output.bin").path().to_str().expect("path"),
             "--threads",
             "8",
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -7861,6 +8209,7 @@ fn patch_apply_succeeds_for_valid_ppf_patch() {
             temp.child("output.bin").path().to_str().expect("path"),
             "--threads",
             "8",
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -7913,6 +8262,7 @@ fn patch_apply_succeeds_for_valid_aps_patch() {
             temp.child("output.gba").path().to_str().expect("path"),
             "--threads",
             "8",
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -7957,6 +8307,7 @@ fn patch_apply_succeeds_for_valid_mod_patch() {
             temp.child("output.bin").path().to_str().expect("path"),
             "--threads",
             "8",
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -8016,6 +8367,7 @@ fn patch_apply_uses_parallel_threads_for_large_ips_patch() {
             temp.child("output.bin").path().to_str().expect("path"),
             "--threads",
             "8",
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -8065,6 +8417,7 @@ fn patch_apply_succeeds_for_secondary_xdelta_patch_with_parallel_threads() {
             temp.child("output.bin").path().to_str().expect("path"),
             "--threads",
             "8",
+            "--no-compress",
             "--json",
         ])
         .assert()
@@ -8133,6 +8486,7 @@ fn patch_apply_uses_parallel_threads_for_multi_window_xdelta_patch() {
             temp.child("output.bin").path().to_str().expect("path"),
             "--threads",
             "8",
+            "--no-compress",
             "--json",
         ])
         .assert()

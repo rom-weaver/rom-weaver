@@ -17,8 +17,8 @@ use rom_weaver_core::{
     CancellationToken, ChecksumEngine, ChecksumRequest, ContainerCreateRequest,
     ContainerExtractRequest, ContainerInspectRequest, OperationContext, OperationFamily,
     OperationReport, OperationStatus, PatchApplyRequest, PatchChecksumValidation,
-    PatchCreateRequest, ProgressEvent, ProgressSink, Result, RomWeaverError, ThreadBudget,
-    ThreadCapability, ThreadExecution,
+    PatchCreateRequest, ProbeConfidence, ProgressEvent, ProgressSink, Result, RomWeaverError,
+    ThreadBudget, ThreadCapability, ThreadExecution,
 };
 use rom_weaver_patches::PatchRegistry;
 use xdvdfs::{
@@ -196,6 +196,21 @@ struct PatchApplyCommand {
     patches: Vec<PathBuf>,
     #[arg(long)]
     output: PathBuf,
+    #[arg(
+        long,
+        help = "Write raw patched bytes without the default patch-output compression step"
+    )]
+    no_compress: bool,
+    #[arg(
+        long = "compress-format",
+        help = "Patch-output compression container format (default: auto). Use `auto` to force auto selection."
+    )]
+    compress_format: Option<String>,
+    #[arg(
+        long = "compress-codec",
+        help = "Patch-output compression codec[:level] override (for example: --compress-codec zstd:9)"
+    )]
+    compress_codec: Option<String>,
     #[arg(
         long = "input-checksum",
         value_name = "ALGO=HEX",
@@ -547,6 +562,25 @@ struct ChecksumExtractCandidate {
     source: PathBuf,
     display_name: String,
     ignored: bool,
+}
+
+#[derive(Clone, Debug)]
+struct PatchApplyCompressionOptions {
+    enabled: bool,
+    auto_mode: bool,
+    requested_format: Option<String>,
+    codec: Option<String>,
+    level: Option<i32>,
+}
+
+#[derive(Clone, Debug)]
+struct PatchApplyCompressionPlan {
+    format: String,
+    codec: Option<String>,
+    level: Option<i32>,
+    output_path: PathBuf,
+    extension_appended: bool,
+    auto_note: String,
 }
 
 impl CliApp {
@@ -1696,6 +1730,9 @@ impl CliApp {
             no_ignore,
             patches,
             output,
+            no_compress,
+            compress_format,
+            compress_codec,
             input_checksums,
             strip_header,
             add_header,
@@ -1711,6 +1748,25 @@ impl CliApp {
                     PatchChecksumValidation::Strict
                 });
         let probe_threads = Some(context.plan_threads(ThreadCapability::single_threaded()));
+        let compression_options = match Self::parse_patch_apply_compression_options(
+            no_compress,
+            compress_format,
+            compress_codec,
+        ) {
+            Ok(options) => options,
+            Err(error) => {
+                return self.finish(
+                    "patch-apply",
+                    OperationReport::failed(
+                        OperationFamily::Patch,
+                        None,
+                        "validate",
+                        error.to_string(),
+                        probe_threads.clone(),
+                    ),
+                );
+            }
+        };
         let expected_input_checksums = match Self::parse_patch_apply_expected_checksums(
             &input_checksums,
             "--input-checksum",
@@ -1783,6 +1839,12 @@ impl CliApp {
             extracted_archives,
             cleanup_paths,
         } = resolved_input;
+        let outer_container_format = if compression_options.enabled && compression_options.auto_mode
+        {
+            self.detect_patch_apply_outer_container_format(&input, &context)
+        } else {
+            None
+        };
 
         let mut temp_paths = cleanup_paths;
         let report = (|| {
@@ -1865,8 +1927,9 @@ impl CliApp {
             }
 
             let patch_count = patches.len();
-            let needs_postprocess = add_header || repair_checksum || patch_count > 1;
-            let staged_output = if needs_postprocess {
+            let requires_compat_finalize = add_header || repair_checksum || patch_count > 1;
+            let needs_staged_output = requires_compat_finalize || compression_options.enabled;
+            let staged_output = if needs_staged_output {
                 let staged_path = context
                     .temp_paths()
                     .next_path("patch-apply-output-staged", Some("bin"));
@@ -1978,7 +2041,8 @@ impl CliApp {
                 current_input = apply_output;
             }
 
-            if report.status == OperationStatus::Succeeded && needs_postprocess {
+            let mut raw_ready_output = staged_output.clone();
+            if report.status == OperationStatus::Succeeded && requires_compat_finalize {
                 self.emit_running(
                     "patch-apply",
                     OperationFamily::Patch,
@@ -1992,14 +2056,24 @@ impl CliApp {
                     None,
                     Some(context.plan_threads(ThreadCapability::single_threaded())),
                 );
+                let finalized_output_path = if compression_options.enabled {
+                    let raw_path = context
+                        .temp_paths()
+                        .next_path("patch-apply-output-raw-final", Some("bin"));
+                    temp_paths.push(raw_path.clone());
+                    raw_path
+                } else {
+                    output.clone()
+                };
                 match Self::finalize_patch_apply_output(
                     &staged_output,
-                    &output,
+                    &finalized_output_path,
                     add_header,
                     stripped_header.as_deref(),
                     repair_checksum,
                 ) {
                     Ok(repaired_kind) => {
+                        raw_ready_output = finalized_output_path;
                         if let Some(kind) = repaired_kind {
                             report.label = format!("{}; repaired checksum ({kind})", report.label);
                         }
@@ -2015,6 +2089,7 @@ impl CliApp {
                     }
                 }
             }
+
             if patch_count > 1 {
                 report.label = format!(
                     "applied {patch_count} patches sequentially ({}); {}",
@@ -2048,6 +2123,97 @@ impl CliApp {
                     "{}; {}",
                     report.label,
                     checksum_verification_labels.join("; ")
+                );
+            }
+
+            if report.status == OperationStatus::Succeeded && compression_options.enabled {
+                let compression_plan = match self.resolve_patch_apply_compression_plan(
+                    &output,
+                    &raw_ready_output,
+                    outer_container_format.as_deref(),
+                    &compression_options,
+                ) {
+                    Ok(plan) => plan,
+                    Err(error) => {
+                        return OperationReport::failed(
+                            OperationFamily::Patch,
+                            report.format.clone(),
+                            "compress",
+                            error.to_string(),
+                            Some(context.plan_threads(ThreadCapability::single_threaded())),
+                        );
+                    }
+                };
+                let Some(compress_handler) = self.containers.find_by_name(&compression_plan.format)
+                else {
+                    return OperationReport::failed(
+                        OperationFamily::Patch,
+                        report.format.clone(),
+                        "compress",
+                        "requested output format is not registered",
+                        Some(context.plan_threads(ThreadCapability::single_threaded())),
+                    );
+                };
+                let compress_threads =
+                    Some(context.plan_threads(compress_handler.capabilities().create_threads));
+                let codec_label = compression_plan
+                    .codec
+                    .as_deref()
+                    .unwrap_or("default")
+                    .to_string();
+                self.emit_running(
+                    "patch-apply",
+                    OperationFamily::Patch,
+                    report.format.as_deref(),
+                    "compress",
+                    format!(
+                        "compressing patched output as {} (codec={codec_label})",
+                        compression_plan.format
+                    ),
+                    Some(0.0),
+                    compress_threads,
+                );
+                let compress_request = ContainerCreateRequest {
+                    inputs: vec![raw_ready_output],
+                    output: compression_plan.output_path.clone(),
+                    format: compression_plan.format.clone(),
+                    codec: compression_plan.codec.clone(),
+                    level: compression_plan.level,
+                };
+                let compress_report = compress_handler
+                    .create(&compress_request, &context)
+                    .unwrap_or_else(|error| {
+                        OperationReport::failed(
+                            OperationFamily::Container,
+                            Some(compress_handler.descriptor().name.to_string()),
+                            "create",
+                            error.to_string(),
+                            Some(context.plan_threads(ThreadCapability::single_threaded())),
+                        )
+                    });
+                if compress_report.status != OperationStatus::Succeeded {
+                    return OperationReport::failed(
+                        OperationFamily::Patch,
+                        report.format.clone(),
+                        "compress",
+                        format!("patch output compression failed: {}", compress_report.label),
+                        compress_report.thread_execution,
+                    );
+                }
+                let extension_note = if compression_plan.extension_appended {
+                    "; output extension appended to match container format"
+                } else {
+                    ""
+                };
+                report.stage = "compress".to_string();
+                report.label = format!(
+                    "{}; patch output compressed as {} (codec={}, path=`{}`; {}){}",
+                    report.label,
+                    compression_plan.format,
+                    codec_label,
+                    compression_plan.output_path.display(),
+                    compression_plan.auto_note,
+                    extension_note
                 );
             }
 
@@ -2350,6 +2516,239 @@ impl CliApp {
         })?;
 
         Ok((Some(codec_name.to_string()), Some(parsed_level)))
+    }
+
+    fn parse_patch_apply_compression_options(
+        no_compress: bool,
+        compress_format: Option<String>,
+        compress_codec: Option<String>,
+    ) -> Result<PatchApplyCompressionOptions> {
+        if no_compress {
+            if compress_format.is_some() {
+                return Err(RomWeaverError::Validation(
+                    "--no-compress cannot be combined with --compress-format".to_string(),
+                ));
+            }
+            if compress_codec.is_some() {
+                return Err(RomWeaverError::Validation(
+                    "--no-compress cannot be combined with --compress-codec".to_string(),
+                ));
+            }
+            return Ok(PatchApplyCompressionOptions {
+                enabled: false,
+                auto_mode: false,
+                requested_format: None,
+                codec: None,
+                level: None,
+            });
+        }
+
+        let requested_format = match compress_format {
+            Some(value) => {
+                let trimmed = value.trim();
+                if trimmed.is_empty() {
+                    return Err(RomWeaverError::Validation(
+                        "--compress-format cannot be empty".to_string(),
+                    ));
+                }
+                if trimmed.eq_ignore_ascii_case("auto") {
+                    None
+                } else {
+                    Some(trimmed.to_string())
+                }
+            }
+            None => None,
+        };
+        let auto_mode = requested_format.is_none();
+        let (codec, level) = Self::resolve_codec_level(compress_codec)?;
+        Ok(PatchApplyCompressionOptions {
+            enabled: true,
+            auto_mode,
+            requested_format,
+            codec,
+            level,
+        })
+    }
+
+    fn detect_patch_apply_outer_container_format(
+        &self,
+        source: &Path,
+        context: &OperationContext,
+    ) -> Option<String> {
+        let handler = self.containers.probe(source)?;
+        if !handler.capabilities().create {
+            return None;
+        }
+        if matches!(handler.probe(source), ProbeConfidence::Extension)
+            && handler
+                .inspect(
+                    &ContainerInspectRequest {
+                        source: source.to_path_buf(),
+                    },
+                    context,
+                )
+                .is_err()
+        {
+            return None;
+        }
+        Some(handler.descriptor().name.to_string())
+    }
+
+    fn resolve_patch_apply_compression_plan(
+        &self,
+        requested_output: &Path,
+        raw_output: &Path,
+        outer_container_format: Option<&str>,
+        options: &PatchApplyCompressionOptions,
+    ) -> Result<PatchApplyCompressionPlan> {
+        if !options.enabled {
+            return Err(RomWeaverError::Validation(
+                "patch-output compression was not enabled".to_string(),
+            ));
+        }
+
+        let (resolved_format, auto_note) = if options.auto_mode {
+            if let Some(format_name) = outer_container_format
+                && self.patch_apply_format_supports_create(format_name)
+            {
+                (
+                    format_name.to_string(),
+                    format!("auto format={format_name} reason=outer-input-container"),
+                )
+            } else {
+                let recommendation = self.containers.recommend_compress_format(raw_output);
+                if recommendation.format_name.eq_ignore_ascii_case("rvz")
+                    && self.patch_apply_format_supports_create("rvz")
+                {
+                    (
+                        "rvz".to_string(),
+                        format!("auto format=rvz reason={}", recommendation.reason),
+                    )
+                } else if self.patch_apply_chd_auto_viable(raw_output) {
+                    (
+                        "chd".to_string(),
+                        "auto format=chd reason=viable-non-disc-output".to_string(),
+                    )
+                } else if self.patch_apply_format_supports_create("7z") {
+                    (
+                        "7z".to_string(),
+                        "auto format=7z reason=fallback-7z-lzma2".to_string(),
+                    )
+                } else if self.patch_apply_format_supports_create(recommendation.format_name) {
+                    (
+                        recommendation.format_name.to_string(),
+                        format!(
+                            "auto format={} reason={}",
+                            recommendation.format_name, recommendation.reason
+                        ),
+                    )
+                } else {
+                    return Err(RomWeaverError::Validation(
+                        "no registered container format can compress patch output".to_string(),
+                    ));
+                }
+            }
+        } else {
+            let explicit_format = options
+                .requested_format
+                .clone()
+                .expect("non-auto patch compression must carry a requested format");
+            (
+                explicit_format.clone(),
+                format!("explicit format={explicit_format}"),
+            )
+        };
+
+        let Some(handler) = self.containers.find_by_name(&resolved_format) else {
+            return Err(RomWeaverError::Validation(
+                "requested output format is not registered".to_string(),
+            ));
+        };
+        let capabilities = handler.capabilities();
+        if !capabilities.inspect && !capabilities.extract && !capabilities.create {
+            return Err(RomWeaverError::Validation(
+                "requested output format is not registered".to_string(),
+            ));
+        }
+
+        let mut codec = options.codec.clone();
+        let mut level = options.level;
+        if codec.is_none() && resolved_format.eq_ignore_ascii_case("7z") {
+            codec = Some("lzma2".to_string());
+            level = None;
+        }
+
+        let (output_path, extension_appended) = Self::append_output_extension_if_missing(
+            requested_output,
+            handler.descriptor().extensions,
+        );
+        Ok(PatchApplyCompressionPlan {
+            format: resolved_format,
+            codec,
+            level,
+            output_path,
+            extension_appended,
+            auto_note,
+        })
+    }
+
+    fn patch_apply_format_supports_create(&self, format_name: &str) -> bool {
+        self.containers
+            .find_by_name(format_name)
+            .is_some_and(|handler| handler.capabilities().create)
+    }
+
+    fn patch_apply_chd_auto_viable(&self, source: &Path) -> bool {
+        if !self.patch_apply_format_supports_create("chd") {
+            return false;
+        }
+        let Ok(metadata) = fs::metadata(source) else {
+            return false;
+        };
+        if !metadata.is_file() {
+            return false;
+        }
+        let logical_bytes = metadata.len();
+        // Prevent a known backend abort path for very small CHD inputs.
+        if logical_bytes <= 4096 {
+            return false;
+        }
+
+        let extension = source
+            .extension()
+            .and_then(|value| value.to_str())
+            .map(str::to_ascii_lowercase);
+        match extension.as_deref() {
+            Some("iso") => logical_bytes % 2048 == 0,
+            Some("img") | Some("ima") => logical_bytes % 512 == 0,
+            _ => true,
+        }
+    }
+
+    fn append_output_extension_if_missing(
+        requested_output: &Path,
+        extensions: &[&str],
+    ) -> (PathBuf, bool) {
+        let Some(primary_extension) = extensions.first().copied() else {
+            return (requested_output.to_path_buf(), false);
+        };
+
+        let Some(file_name) = requested_output.file_name() else {
+            return (requested_output.to_path_buf(), false);
+        };
+        let file_name_text = file_name.to_string_lossy().to_ascii_lowercase();
+        let has_matching_extension = extensions
+            .iter()
+            .any(|extension| file_name_text.ends_with(&extension.to_ascii_lowercase()));
+        if has_matching_extension {
+            return (requested_output.to_path_buf(), false);
+        }
+
+        let mut appended_name = file_name.to_os_string();
+        appended_name.push(primary_extension);
+        let mut appended_path = requested_output.to_path_buf();
+        appended_path.set_file_name(appended_name);
+        (appended_path, true)
     }
 
     fn normalize_trim_extension(extension: &str) -> Result<String> {

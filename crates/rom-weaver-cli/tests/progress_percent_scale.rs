@@ -64,6 +64,7 @@ fn patch_create_and_apply_report_percent_100() {
             patch.path().to_str().expect("path"),
             "--output",
             applied.path().to_str().expect("path"),
+            "--no-compress",
             "--json",
         ])
         .assert()
