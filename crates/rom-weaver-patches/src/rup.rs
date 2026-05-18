@@ -60,10 +60,10 @@ impl PatchHandler for RupPatchHandler {
             patch.files.len(),
             record_count
         );
-        if patch.files.len() == 1 {
-            let file = &patch.files[0];
+        for (index, file) in patch.files.iter().enumerate() {
             label.push_str(&format!(
-                "; source md5 {}; target md5 {}",
+                "; variant {} source md5 {}; target md5 {}",
+                index + 1,
                 format_md5_hex(file.source_md5),
                 format_md5_hex(file.target_md5)
             ));
@@ -951,7 +951,8 @@ mod tests {
     use rom_weaver_core::{PatchApplyRequest, PatchCreateRequest, PatchHandler};
 
     use super::{
-        RUP_COMMAND_OPEN_NEW_FILE, RupPatchHandler, create_rup_patch_bytes, parse_rup_bytes,
+        RUP_COMMAND_OPEN_NEW_FILE, RupFile, RupMetadata, RupPatchHandler, create_rup_patch_bytes,
+        encode_rup_patch, format_md5_hex, md5_bytes, parse_rup_bytes,
     };
     use crate::{
         RUP,
@@ -997,6 +998,61 @@ mod tests {
 
         let error = parse_rup_bytes(&bytes).expect_err("invalid overflow mode should fail");
         assert!(error.to_string().contains("invalid overflow mode"));
+    }
+
+    #[test]
+    fn parse_reports_md5_for_each_variant() {
+        let temp = TestDir::new();
+        let patch_path = temp.child("multi-variant.rup");
+        let source_md5_a = md5_bytes(b"source-a");
+        let target_md5_a = md5_bytes(b"target-a");
+        let source_md5_b = md5_bytes(b"source-b");
+        let target_md5_b = md5_bytes(b"target-b");
+        let patch = encode_rup_patch(
+            &RupMetadata::default(),
+            &[
+                RupFile {
+                    file_name: "variant-a.bin".to_string(),
+                    rom_type: 0,
+                    source_file_size: 8,
+                    target_file_size: 8,
+                    source_md5: source_md5_a,
+                    target_md5: target_md5_a,
+                    overflow_mode: None,
+                    overflow_data: Vec::new(),
+                    records: Vec::new(),
+                },
+                RupFile {
+                    file_name: "variant-b.bin".to_string(),
+                    rom_type: 0,
+                    source_file_size: 8,
+                    target_file_size: 8,
+                    source_md5: source_md5_b,
+                    target_md5: target_md5_b,
+                    overflow_mode: None,
+                    overflow_data: Vec::new(),
+                    records: Vec::new(),
+                },
+            ],
+        )
+        .expect("patch");
+        fs::write(&patch_path, patch).expect("fixture");
+
+        let handler = RupPatchHandler::new(&RUP);
+        let report = handler
+            .parse(&patch_path, &test_context_with_threads(&temp, 1))
+            .expect("parse report");
+
+        assert!(report.label.contains(&format!(
+            "variant 1 source md5 {}; target md5 {}",
+            format_md5_hex(source_md5_a),
+            format_md5_hex(target_md5_a)
+        )));
+        assert!(report.label.contains(&format!(
+            "variant 2 source md5 {}; target md5 {}",
+            format_md5_hex(source_md5_b),
+            format_md5_hex(target_md5_b)
+        )));
     }
 
     #[test]

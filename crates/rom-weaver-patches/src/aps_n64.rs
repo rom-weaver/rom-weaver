@@ -44,10 +44,14 @@ impl PatchHandler for ApsN64PatchHandler {
 
     fn parse(&self, patch_path: &Path, _context: &OperationContext) -> Result<OperationReport> {
         let patch = parse_aps_file(patch_path)?;
-        let validation_label = if patch.n64_header.is_some() {
-            "; includes N64 source validation info"
+        let validation_label = if let Some(n64_header) = &patch.n64_header {
+            format!(
+                "; n64 source cart id {}; n64 source crc {}",
+                format_cart_id(n64_header.cart_id),
+                format_bytes_hex(&n64_header.crc)
+            )
         } else {
-            ""
+            String::new()
         };
 
         Ok(OperationReport::succeeded(
@@ -133,6 +137,26 @@ impl PatchHandler for ApsN64PatchHandler {
 
     fn capabilities(&self) -> PatchCapabilities {
         crate::default_patch_capabilities()
+    }
+}
+
+fn format_cart_id(cart_id: [u8; 3]) -> String {
+    String::from_utf8_lossy(&cart_id).into_owned()
+}
+
+fn format_bytes_hex(bytes: &[u8]) -> String {
+    let mut rendered = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        rendered.push(hex_char(byte >> 4));
+        rendered.push(hex_char(byte & 0x0F));
+    }
+    rendered
+}
+
+fn hex_char(nibble: u8) -> char {
+    match nibble {
+        0..=9 => char::from(b'0' + nibble),
+        _ => char::from(b'a' + (nibble - 10)),
     }
 }
 
@@ -544,6 +568,32 @@ mod tests {
         bytes[..5].copy_from_slice(b"BAD10");
         let error = parse_aps_bytes(&bytes).expect_err("invalid header");
         assert!(error.to_string().contains("Patch header invalid"));
+    }
+
+    #[test]
+    fn parse_reports_concrete_n64_validation_values() {
+        let temp = TestDir::new();
+        let patch_path = temp.child("inspect.aps");
+        let patch = build_aps_patch(
+            APS_N64_MODE,
+            Some(TestN64Header {
+                original_format: 1,
+                cart_id: *b"ABC",
+                crc: [1, 2, 3, 4, 5, 6, 7, 8],
+                pad: [0; 5],
+            }),
+            0x100,
+            vec![],
+        );
+        fs::write(&patch_path, patch).expect("fixture");
+
+        let handler = ApsN64PatchHandler::new(&APS);
+        let report = handler
+            .parse(&patch_path, &test_context_with_threads(&temp, 1))
+            .expect("parse report");
+
+        assert!(report.label.contains("n64 source cart id ABC"));
+        assert!(report.label.contains("n64 source crc 0102030405060708"));
     }
 
     #[test]

@@ -47,11 +47,12 @@ impl PatchHandler for BpsPatchHandler {
             Some(self.descriptor.name.to_string()),
             "parse",
             format!(
-                "parsed {} patch with {} record(s); source crc32 {:08x}; target crc32 {:08x}",
+                "parsed {} patch with {} record(s); source crc32 {:08x}; target crc32 {:08x}; patch crc32 {:08x}",
                 self.descriptor.name,
                 patch.actions.len(),
                 patch.source_checksum,
-                patch.target_checksum
+                patch.target_checksum,
+                patch.patch_checksum
             ),
             Some(100.0),
             None,
@@ -172,6 +173,7 @@ struct ParsedBpsPatch {
     target_size: u64,
     source_checksum: u32,
     target_checksum: u32,
+    patch_checksum: u32,
     actions: Vec<BpsAction>,
 }
 
@@ -306,6 +308,7 @@ fn parse_bps_bytes_with_checksum_validation(
         target_size,
         source_checksum,
         target_checksum,
+        patch_checksum,
         actions,
     })
 }
@@ -1201,6 +1204,40 @@ mod tests {
         TargetRead(Vec<u8>),
         SourceCopy { length: u64, relative_offset: i128 },
         TargetCopy { length: u64, relative_offset: i128 },
+    }
+
+    #[test]
+    fn parse_reports_source_target_and_patch_crc32() {
+        let temp = TestDir::new();
+        let patch_path = temp.child("inspect.bps");
+        let patch = build_bps_patch(
+            b"source-data",
+            b"target-data",
+            vec![TestAction::TargetRead(b"target-data".to_vec())],
+        );
+        let parsed = parse_bps_bytes(&patch).expect("parse");
+        fs::write(&patch_path, patch).expect("fixture");
+
+        let handler = BpsPatchHandler::new(&BPS);
+        let report = handler
+            .parse(&patch_path, &test_context_with_threads(&temp, 1))
+            .expect("parse report");
+
+        assert!(
+            report
+                .label
+                .contains(&format!("source crc32 {:08x}", parsed.source_checksum))
+        );
+        assert!(
+            report
+                .label
+                .contains(&format!("target crc32 {:08x}", parsed.target_checksum))
+        );
+        assert!(
+            report
+                .label
+                .contains(&format!("patch crc32 {:08x}", parsed.patch_checksum))
+        );
     }
 
     #[test]

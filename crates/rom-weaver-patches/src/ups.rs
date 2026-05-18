@@ -43,11 +43,12 @@ impl PatchHandler for UpsPatchHandler {
             Some(self.descriptor.name.to_string()),
             "parse",
             format!(
-                "parsed {} patch with {} record(s); source crc32 {:08x}; target crc32 {:08x}",
+                "parsed {} patch with {} record(s); source crc32 {:08x}; target crc32 {:08x}; patch crc32 {:08x}",
                 self.descriptor.name,
                 patch.changes.len(),
                 patch.source_checksum,
-                patch.target_checksum
+                patch.target_checksum,
+                patch.patch_checksum
             ),
             Some(100.0),
             None,
@@ -137,6 +138,7 @@ struct ParsedUpsPatch {
     target_size: u64,
     source_checksum: u32,
     target_checksum: u32,
+    patch_checksum: u32,
     changes: Vec<UpsChange>,
 }
 
@@ -236,6 +238,7 @@ fn parse_ups_bytes_with_checksum_validation(
         target_size,
         source_checksum,
         target_checksum,
+        patch_checksum,
         changes,
     })
 }
@@ -641,6 +644,38 @@ mod tests {
         UPS,
         test_support::{TestDir, test_context_with_threads},
     };
+
+    #[test]
+    fn parse_reports_source_target_and_patch_crc32() {
+        let temp = TestDir::new();
+        let patch_path = temp.child("inspect.ups");
+        let patch = create_ups_patch_bytes(b"source-data", b"target-data")
+            .expect("patch")
+            .bytes;
+        let parsed = parse_ups_bytes(&patch).expect("parse");
+        fs::write(&patch_path, patch).expect("fixture");
+
+        let handler = UpsPatchHandler::new(&UPS);
+        let report = handler
+            .parse(&patch_path, &test_context_with_threads(&temp, 1))
+            .expect("parse report");
+
+        assert!(
+            report
+                .label
+                .contains(&format!("source crc32 {:08x}", parsed.source_checksum))
+        );
+        assert!(
+            report
+                .label
+                .contains(&format!("target crc32 {:08x}", parsed.target_checksum))
+        );
+        assert!(
+            report
+                .label
+                .contains(&format!("patch crc32 {:08x}", parsed.patch_checksum))
+        );
+    }
 
     #[test]
     fn parse_rejects_invalid_patch_checksum() {
