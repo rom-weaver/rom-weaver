@@ -25,6 +25,7 @@ chd = "0.3.4"
 cc = "1.2.43"
 clap = { version = "4.5.51", features = ["derive"] }
 flate2 = "1.1.5"
+globset = "0.4.16"
 liblzma = "0.4.6"
 nod = { version = "2.0.0-alpha.6", default-features = false, features = ["compress-bzip2-vendored", "compress-lzma-vendored", "compress-zlib-vendored", "compress-zstd-vendored", "threading"] }
 pkg-config = "0.3.32"

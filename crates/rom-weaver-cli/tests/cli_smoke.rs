@@ -1860,6 +1860,101 @@ fn extract_reports_thread_fallback_in_json() {
 }
 
 #[test]
+fn extract_select_supports_glob_patterns() {
+    let temp = setup_temp_dir();
+    fs::create_dir_all(temp.child("content").path()).expect("content dir");
+    let payload = (0..8192)
+        .map(|index| (index % 239) as u8)
+        .collect::<Vec<_>>();
+    fs::write(temp.child("content/disc.iso").path(), &payload).expect("iso fixture");
+    fs::write(temp.child("content/readme.txt").path(), b"notes").expect("sidecar fixture");
+
+    let archive = temp.child("sample.zip");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("content").path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            archive.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let out_dir = temp.child("selected");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "extract",
+            archive.path().to_str().expect("path"),
+            "--select",
+            "content/*.iso",
+            "--out-dir",
+            out_dir.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+    assert_eq!(
+        fs::read(out_dir.child("content/disc.iso").path()).expect("iso extract"),
+        payload
+    );
+    assert!(!out_dir.child("content/readme.txt").path().exists());
+}
+
+#[test]
+fn extract_select_glob_reports_missing_match() {
+    let temp = setup_temp_dir();
+    fs::create_dir_all(temp.child("content").path()).expect("content dir");
+    fs::write(temp.child("content/disc.iso").path(), b"iso").expect("iso fixture");
+
+    let archive = temp.child("sample.zip");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("content").path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            archive.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let out_dir = temp.child("selected");
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "extract",
+            archive.path().to_str().expect("path"),
+            "--select",
+            "content/*.cue",
+            "--out-dir",
+            out_dir.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .stdout
+        .clone();
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["format"], "zip");
+    assert_eq!(json["status"], "failed");
+    assert!(
+        json["label"]
+            .as_str()
+            .expect("label")
+            .contains("requested selections were not found")
+    );
+}
+
+#[test]
 fn extract_rar_reports_thread_fallback_in_json() {
     let temp = setup_temp_dir();
     let archive = temp.child("version.rar");
@@ -1997,6 +2092,428 @@ fn checksum_supports_sha256_blake3_and_crc32c() {
         label.contains("blake3=d74981efa70a0c880b8d8c1985d075dbcbf679b99a5f9914e5aaf96b831a9e24")
     );
     assert!(label.contains("crc32c=c99465aa"));
+}
+
+#[test]
+fn checksum_auto_extract_resolves_nested_container_payload() {
+    let temp = setup_temp_dir();
+    let payload = (0..32_768)
+        .map(|index| (index % 211) as u8)
+        .collect::<Vec<_>>();
+    fs::write(temp.child("game.bin").path(), &payload).expect("payload fixture");
+
+    let inner = temp.child("inner.zip");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("game.bin").path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            inner.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let outer = temp.child("outer.7z");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            inner.path().to_str().expect("path"),
+            "--format",
+            "7z",
+            "--output",
+            outer.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let expected = checksum_value(temp.child("game.bin").path(), "sha1");
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "checksum",
+            outer.path().to_str().expect("path"),
+            "--algo",
+            "sha1",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "checksum");
+    assert_eq!(json["status"], "succeeded");
+    let label = json["label"].as_str().expect("label");
+    let actual = label_digest_value(label, "sha1").expect("sha1 digest");
+    assert_eq!(actual, expected);
+    assert!(label.contains("checksum source resolved via 2 container extract step(s)"));
+}
+
+#[test]
+fn checksum_no_extract_hashes_container_bytes() {
+    let temp = setup_temp_dir();
+    let payload = (0..24_576)
+        .map(|index| (index % 199) as u8)
+        .collect::<Vec<_>>();
+    fs::write(temp.child("game.bin").path(), &payload).expect("payload fixture");
+
+    let inner = temp.child("inner.zip");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("game.bin").path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            inner.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let outer = temp.child("outer.7z");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            inner.path().to_str().expect("path"),
+            "--format",
+            "7z",
+            "--output",
+            outer.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let expected_payload = checksum_value(temp.child("game.bin").path(), "sha1");
+
+    let auto_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "checksum",
+            outer.path().to_str().expect("path"),
+            "--algo",
+            "sha1",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let auto_label = parse_single_json_line(&auto_output)["label"]
+        .as_str()
+        .expect("label")
+        .to_string();
+    let auto_digest = label_digest_value(&auto_label, "sha1")
+        .expect("auto digest")
+        .to_string();
+
+    let raw_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "checksum",
+            outer.path().to_str().expect("path"),
+            "--algo",
+            "sha1",
+            "--no-extract",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let raw_label = parse_single_json_line(&raw_output)["label"]
+        .as_str()
+        .expect("label")
+        .to_string();
+    let raw_digest = label_digest_value(&raw_label, "sha1")
+        .expect("raw digest")
+        .to_string();
+
+    assert_eq!(auto_digest, expected_payload);
+    assert_ne!(raw_digest, auto_digest);
+}
+
+#[test]
+fn checksum_auto_extract_ambiguity_requires_select() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("alpha.bin").path(), b"alpha").expect("alpha fixture");
+    fs::write(temp.child("beta.bin").path(), b"beta").expect("beta fixture");
+
+    let archive = temp.child("dupe.zip");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("alpha.bin").path().to_str().expect("path"),
+            temp.child("beta.bin").path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            archive.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "checksum",
+            archive.path().to_str().expect("path"),
+            "--algo",
+            "sha1",
+            "--json",
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .stdout
+        .clone();
+    let json = parse_single_json_line(&output);
+    let label = json["label"].as_str().expect("label");
+    assert_eq!(json["status"], "failed");
+    assert!(label.contains("ambiguous"));
+    assert!(label.contains("alpha.bin"));
+    assert!(label.contains("beta.bin"));
+    assert!(label.contains("--select"));
+}
+
+#[test]
+fn checksum_auto_extract_ignores_sidecars_unless_no_ignore() {
+    let temp = setup_temp_dir();
+    fs::create_dir_all(temp.child("__MACOSX").path()).expect("__MACOSX dir");
+
+    let payload = (0..16_384)
+        .map(|index| (index % 173) as u8)
+        .collect::<Vec<_>>();
+    fs::write(temp.child("game.bin").path(), &payload).expect("payload fixture");
+    fs::write(temp.child("notes.txt").path(), b"notes").expect("txt sidecar");
+    fs::write(temp.child("meta.json").path(), b"{}").expect("json sidecar");
+    fs::write(temp.child("maxcso-report.bin").path(), b"skip me").expect("maxcso sidecar");
+    fs::write(temp.child("__MACOSX/ghost.bin").path(), b"ghost").expect("macosx sidecar");
+
+    let archive = temp.child("bundle.zip");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("game.bin").path().to_str().expect("path"),
+            temp.child("notes.txt").path().to_str().expect("path"),
+            temp.child("meta.json").path().to_str().expect("path"),
+            temp.child("maxcso-report.bin")
+                .path()
+                .to_str()
+                .expect("path"),
+            temp.child("__MACOSX").path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            archive.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let expected = checksum_value(temp.child("game.bin").path(), "sha1");
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "checksum",
+            archive.path().to_str().expect("path"),
+            "--algo",
+            "sha1",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let label = parse_single_json_line(&output)["label"]
+        .as_str()
+        .expect("label")
+        .to_string();
+    let digest = label_digest_value(&label, "sha1")
+        .expect("digest")
+        .to_string();
+    assert_eq!(digest, expected);
+
+    let no_ignore_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "checksum",
+            archive.path().to_str().expect("path"),
+            "--algo",
+            "sha1",
+            "--no-ignore",
+            "--json",
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .stdout
+        .clone();
+    let no_ignore_json = parse_single_json_line(&no_ignore_output);
+    let no_ignore_label = no_ignore_json["label"].as_str().expect("label");
+    assert_eq!(no_ignore_json["status"], "failed");
+    assert!(no_ignore_label.contains("ambiguous"));
+    assert!(no_ignore_label.contains("--select"));
+}
+
+#[test]
+fn checksum_select_patterns_apply_at_each_recursion_depth() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("game.bin").path(), b"final payload").expect("payload fixture");
+    fs::write(temp.child("decoy.rom").path(), b"decoy payload").expect("decoy fixture");
+
+    let inner = temp.child("inner.bin");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("game.bin").path().to_str().expect("path"),
+            temp.child("decoy.rom").path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            inner.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+    fs::write(temp.child("note.txt").path(), b"ignore me").expect("note fixture");
+
+    let outer = temp.child("outer.zip");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            inner.path().to_str().expect("path"),
+            temp.child("note.txt").path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            outer.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let failed_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "checksum",
+            outer.path().to_str().expect("path"),
+            "--algo",
+            "sha1",
+            "--json",
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .stdout
+        .clone();
+    let failed_json = parse_single_json_line(&failed_output);
+    assert!(
+        failed_json["label"]
+            .as_str()
+            .expect("label")
+            .contains("ambiguous")
+    );
+
+    let selected_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "checksum",
+            outer.path().to_str().expect("path"),
+            "--algo",
+            "sha1",
+            "--select",
+            "*.bin",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let selected_json = parse_single_json_line(&selected_output);
+    let selected_label = selected_json["label"].as_str().expect("label");
+    let selected_digest = label_digest_value(selected_label, "sha1")
+        .expect("selected digest")
+        .to_string();
+    let expected = checksum_value(temp.child("game.bin").path(), "sha1");
+    assert_eq!(selected_digest, expected);
+}
+
+#[test]
+fn checksum_xiso_does_not_auto_extract_payload() {
+    let temp = setup_temp_dir();
+    let source_tree = temp.child("xiso-source");
+    let xiso = temp.child("disc.xiso");
+    write_xiso_fixture_from_directory(source_tree.path(), xiso.path());
+
+    let auto_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "checksum",
+            xiso.path().to_str().expect("path"),
+            "--algo",
+            "sha1",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let auto_label = parse_single_json_line(&auto_output)["label"]
+        .as_str()
+        .expect("label")
+        .to_string();
+    let auto_digest = label_digest_value(&auto_label, "sha1")
+        .expect("auto digest")
+        .to_string();
+
+    let raw_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "checksum",
+            xiso.path().to_str().expect("path"),
+            "--algo",
+            "sha1",
+            "--no-extract",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let raw_label = parse_single_json_line(&raw_output)["label"]
+        .as_str()
+        .expect("label")
+        .to_string();
+    let raw_digest = label_digest_value(&raw_label, "sha1")
+        .expect("raw digest")
+        .to_string();
+
+    let payload_digest = checksum_value(source_tree.child("default.xbe").path(), "sha1");
+    assert_eq!(auto_digest, raw_digest);
+    assert_ne!(auto_digest, payload_digest);
 }
 
 #[test]

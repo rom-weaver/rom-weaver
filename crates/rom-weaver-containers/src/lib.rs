@@ -10,6 +10,7 @@ use std::{
 use bzip2::{Compression as Bzip2Compression, read::BzDecoder as Bzip2Decoder, write::BzEncoder};
 use ciso::{read::CSOReader as CsoReader, split::SplitFileReader};
 use flate2::{Compression as GzipCompression, read::GzDecoder, write::GzEncoder};
+use globset::{GlobBuilder, GlobMatcher};
 use liblzma::{read::XzDecoder, write::XzEncoder};
 use nod::{
     common::{Compression as NodCompression, Format as NodFormat},
@@ -45,8 +46,7 @@ use tar::{Archive as TarArchive, Builder as TarBuilder};
 #[cfg(not(target_family = "wasm"))]
 use unrar_ng::Archive as RarArchive;
 use xdvdfs::{
-    blockdev::OffsetWrapper as XdvdfsOffsetWrapper,
-    write::fs::XDVDFSFilesystem as XdvdfsFilesystem,
+    blockdev::OffsetWrapper as XdvdfsOffsetWrapper, write::fs::XDVDFSFilesystem as XdvdfsFilesystem,
 };
 use zip::{
     CompressionMethod as ZipCompressionMethod, ZipArchive as ZipFileArchive,
@@ -344,9 +344,57 @@ struct ArchiveInputEntry {
     is_dir: bool,
 }
 
+#[derive(Clone, Debug)]
+enum SelectionPatternKind {
+    ExactOrPrefix,
+    Glob(GlobMatcher),
+}
+
+#[derive(Clone, Debug)]
+struct SelectionPattern {
+    requested: String,
+    kind: SelectionPatternKind,
+}
+
+impl SelectionPattern {
+    fn new(requested: String) -> Self {
+        if Self::contains_glob_syntax(&requested)
+            && let Ok(glob) = GlobBuilder::new(&requested)
+                .literal_separator(true)
+                .build()
+                .map(|glob| glob.compile_matcher())
+        {
+            return Self {
+                requested,
+                kind: SelectionPatternKind::Glob(glob),
+            };
+        }
+        Self {
+            requested,
+            kind: SelectionPatternKind::ExactOrPrefix,
+        }
+    }
+
+    fn contains_glob_syntax(value: &str) -> bool {
+        value
+            .bytes()
+            .any(|byte| matches!(byte, b'*' | b'?' | b'[' | b'{' | b']' | b'}'))
+    }
+
+    fn matches(&self, entry_name: &str) -> bool {
+        match &self.kind {
+            SelectionPatternKind::ExactOrPrefix => {
+                entry_name == self.requested
+                    || entry_name.starts_with(&format!("{}/", self.requested))
+            }
+            SelectionPatternKind::Glob(matcher) => matcher.is_match(entry_name),
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 struct SelectionMatcher {
-    requested: BTreeSet<String>,
+    requested: Vec<SelectionPattern>,
     matched: BTreeSet<String>,
 }
 
@@ -356,7 +404,10 @@ impl SelectionMatcher {
             .iter()
             .map(|value| normalize_archive_name(value))
             .filter(|value| !value.is_empty())
-            .collect();
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .map(SelectionPattern::new)
+            .collect::<Vec<_>>();
         Self {
             requested,
             matched: BTreeSet::new(),
@@ -372,8 +423,8 @@ impl SelectionMatcher {
             return false;
         }
         for requested in &self.requested {
-            if entry_name == *requested || entry_name.starts_with(&format!("{requested}/")) {
-                self.matched.insert(requested.clone());
+            if requested.matches(&entry_name) {
+                self.matched.insert(requested.requested.clone());
                 return true;
             }
         }
@@ -383,8 +434,11 @@ impl SelectionMatcher {
     fn ensure_all_matched(&self) -> Result<()> {
         let missing = self
             .requested
-            .difference(&self.matched)
-            .cloned()
+            .iter()
+            .filter_map(|requested| {
+                (!self.matched.contains(&requested.requested))
+                    .then_some(requested.requested.clone())
+            })
             .collect::<Vec<_>>();
         if missing.is_empty() {
             Ok(())
@@ -7465,8 +7519,8 @@ mod tests {
     };
 
     use super::{
-        CSO_DEFAULT_BLOCK_BYTES, ContainerCreateRequest, ContainerRegistry, WUA_FOOTER_MAGIC,
-        WUA_FOOTER_SIZE, WUA_FOOTER_VERSION, Z3dsContainerHandler,
+        CSO_DEFAULT_BLOCK_BYTES, ContainerCreateRequest, ContainerRegistry, SelectionMatcher,
+        WUA_FOOTER_MAGIC, WUA_FOOTER_SIZE, WUA_FOOTER_VERSION, Z3dsContainerHandler,
     };
     use ciso::write::write_ciso_image;
     use rom_weaver_core::{
@@ -7534,7 +7588,7 @@ mod tests {
         assert_eq!(
             names,
             vec![
-                "zip", "7z", "zipx", "rar", "tar", "tar.gz", "tar.bz2", "tar.xz", "gz", "bz2",
+                "zip", "zipx", "7z", "rar", "tar", "tar.gz", "tar.bz2", "tar.xz", "gz", "bz2",
                 "xz", "zst", "cso", "chd", "wua", "gcz", "rvz", "z3ds", "xiso"
             ]
         );
@@ -7856,5 +7910,38 @@ mod tests {
         assert_eq!(recommendation.reason, "not-wii-gc-or-unrecognized");
 
         let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn selection_matcher_preserves_exact_and_prefix_matches() {
+        let mut selections =
+            SelectionMatcher::new(&["content".to_string(), "disc.iso".to_string()]);
+        assert!(selections.matches("content/track01.bin"));
+        assert!(selections.matches("disc.iso"));
+        assert!(selections.ensure_all_matched().is_ok());
+    }
+
+    #[test]
+    fn selection_matcher_supports_glob_patterns() {
+        let mut selections =
+            SelectionMatcher::new(&["content/**/*.bin".to_string(), "cover.???".to_string()]);
+        assert!(selections.matches("content/disc.bin"));
+        assert!(selections.matches("content/tracks/track01.bin"));
+        assert!(selections.matches("cover.png"));
+        assert!(selections.ensure_all_matched().is_ok());
+    }
+
+    #[test]
+    fn selection_matcher_reports_missing_glob_matches() {
+        let mut selections = SelectionMatcher::new(&["*.cue".to_string()]);
+        assert!(!selections.matches("disc.bin"));
+        let error = selections
+            .ensure_all_matched()
+            .expect_err("missing selection");
+        assert!(
+            error
+                .to_string()
+                .contains("requested selections were not found: *.cue")
+        );
     }
 }

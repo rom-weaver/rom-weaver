@@ -7,6 +7,7 @@ version.workspace = true
 
 [dependencies]
 clap.workspace = true
+globset.workspace = true
 rom-weaver-checksum = { path = "../rom-weaver-checksum" }
 rom-weaver-codecs = { path = "../rom-weaver-codecs" }
 rom-weaver-containers = { path = "../rom-weaver-containers" }

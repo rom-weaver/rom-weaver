@@ -5,11 +5,12 @@ use std::{
     io::{self, BufReader, BufWriter, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
     process::{self, ExitCode},
-    sync::Arc,
+    sync::{Arc, OnceLock},
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use clap::{ArgAction, Args, Parser, Subcommand};
+use globset::{GlobBuilder, GlobSet, GlobSetBuilder};
 use rom_weaver_checksum::{NativeChecksumEngine, checksum_file_values, supported_algorithms};
 use rom_weaver_containers::{CompressFormatRecommendation, ContainerRegistry};
 use rom_weaver_core::{
@@ -79,6 +80,18 @@ struct ChecksumCommand {
     source: PathBuf,
     #[arg(long = "algo", required = true)]
     algo: Vec<String>,
+    #[arg(long = "select")]
+    select: Vec<String>,
+    #[arg(
+        long,
+        help = "Disable container auto-extract and checksum the source bytes directly"
+    )]
+    no_extract: bool,
+    #[arg(
+        long,
+        help = "Disable default ignore filtering during checksum container payload resolution"
+    )]
+    no_ignore: bool,
     #[arg(
         long,
         help = "Remove a detected ROM header before checksum (A78/LNX/NES/FDS/SMC; falls back to 512-byte copier header)"
@@ -259,6 +272,9 @@ const NDS_DOWNLOAD_PLAY_CERT_MAGIC: [u8; 2] = [0x61, 0x63];
 const NDS_DOWNLOAD_PLAY_CERT_SIZE_BYTES: u64 = 0x88;
 const TRIM_BINARY_SCAN_CHUNK_BYTES: usize = 128 * 1024;
 const XISO_TRIM_TEMP_SUFFIX: &str = "rom-weaver-trim-xiso.tmp";
+const CHECKSUM_IGNORE_SIDECAR_EXTENSIONS: &[&str] = &[
+    ".txt", ".nfo", ".diz", ".sfv", ".md5", ".sha1", ".sha256", ".sha512", ".crc", ".log", ".json",
+];
 const GAME_BOY_NINTENDO_LOGO: [u8; 48] = [
     0xCE, 0xED, 0x66, 0x66, 0xCC, 0x0D, 0x00, 0x0B, 0x03, 0x73, 0x00, 0x83, 0x00, 0x0C, 0x00, 0x0D,
     0x00, 0x08, 0x11, 0x1F, 0x88, 0x89, 0x00, 0x0E, 0xDC, 0xCC, 0x6E, 0xE6, 0xDD, 0xDD, 0xD9, 0x99,
@@ -496,6 +512,20 @@ impl TrimInputKind {
             Self::NdsFamily | Self::Gba | Self::Xiso => 0x00,
         }
     }
+}
+
+#[derive(Debug)]
+struct ResolvedChecksumSource {
+    source: PathBuf,
+    extracted_archives: usize,
+    cleanup_paths: Vec<PathBuf>,
+}
+
+#[derive(Debug)]
+struct ChecksumExtractCandidate {
+    source: PathBuf,
+    display_name: String,
+    ignored: bool,
 }
 
 impl CliApp {
@@ -777,6 +807,9 @@ impl CliApp {
         let ChecksumCommand {
             source,
             algo,
+            select,
+            no_extract,
+            no_ignore,
             strip_header,
             no_trim_fix,
             start,
@@ -814,6 +847,28 @@ impl CliApp {
             );
         }
 
+        let resolved =
+            match self.resolve_checksum_source(&source, &select, no_extract, no_ignore, &context) {
+                Ok(resolved) => resolved,
+                Err(error) => {
+                    return self.finish(
+                        "checksum",
+                        OperationReport::failed(
+                            OperationFamily::Checksum,
+                            Some(self.checksum.name().to_string()),
+                            "prepare",
+                            error.to_string(),
+                            thread_execution,
+                        ),
+                    );
+                }
+            };
+        let ResolvedChecksumSource {
+            source: resolved_source,
+            extracted_archives,
+            mut cleanup_paths,
+        } = resolved;
+
         self.emit_running(
             "checksum",
             OperationFamily::Checksum,
@@ -836,14 +891,14 @@ impl CliApp {
                 None,
                 thread_execution.clone(),
             );
-            let stripped_extension = source
+            let stripped_extension = resolved_source
                 .extension()
                 .and_then(|value| value.to_str())
                 .unwrap_or("bin");
             let stripped_path = context
                 .temp_paths()
                 .next_path("checksum-input-noheader", Some(stripped_extension));
-            match Self::strip_header_to_temp(&source, &stripped_path) {
+            match Self::strip_header_to_temp(&resolved_source, &stripped_path) {
                 Ok(result) => {
                     stripped_header_match = result.matched_header;
                     temp_paths.push(stripped_path.clone());
@@ -863,7 +918,7 @@ impl CliApp {
                 }
             }
         } else {
-            source.clone()
+            resolved_source.clone()
         };
         let mut trimmed_plan = None;
         let mut start = start;
@@ -885,6 +940,7 @@ impl CliApp {
                 trimmed_plan = Some(plan);
             }
         }
+        temp_paths.append(&mut cleanup_paths);
         let request = ChecksumRequest {
             source: checksum_source,
             algorithms: algo
@@ -933,11 +989,247 @@ impl CliApp {
                     report.label, plan.trimmed_size, plan.mode, plan.preserved_download_play_cert
                 );
             }
+            if extracted_archives > 0 {
+                report.label = format!(
+                    "{}; checksum source resolved via {extracted_archives} container extract step(s)",
+                    report.label
+                );
+            }
         }
         for temp_path in temp_paths {
-            let _ = fs::remove_file(temp_path);
+            match fs::metadata(&temp_path) {
+                Ok(metadata) if metadata.is_dir() => {
+                    let _ = fs::remove_dir_all(temp_path);
+                }
+                Ok(_) => {
+                    let _ = fs::remove_file(temp_path);
+                }
+                Err(_) => {}
+            }
         }
         self.finish("checksum", report)
+    }
+
+    fn resolve_checksum_source(
+        &self,
+        source: &Path,
+        select: &[String],
+        no_extract: bool,
+        no_ignore: bool,
+        context: &OperationContext,
+    ) -> Result<ResolvedChecksumSource> {
+        if no_extract {
+            return Ok(ResolvedChecksumSource {
+                source: source.to_path_buf(),
+                extracted_archives: 0,
+                cleanup_paths: Vec::new(),
+            });
+        }
+
+        let mut current_source = source.to_path_buf();
+        let mut extracted_archives = 0usize;
+        let mut depth = 0usize;
+        let mut cleanup_paths = Vec::new();
+
+        loop {
+            let Some(handler) = self.containers.probe(&current_source) else {
+                break;
+            };
+            if handler.descriptor().matches_name("xiso") || !handler.capabilities().extract {
+                break;
+            }
+
+            let inspect_request = ContainerInspectRequest {
+                source: current_source.clone(),
+            };
+            if handler.inspect(&inspect_request, context).is_err() {
+                break;
+            }
+
+            let next_depth = depth + 1;
+            if next_depth > MAX_NESTED_EXTRACT_DEPTH {
+                return Err(RomWeaverError::Validation(format!(
+                    "checksum extract exceeded max depth of {MAX_NESTED_EXTRACT_DEPTH} at `{}`",
+                    current_source.display()
+                )));
+            }
+            if extracted_archives >= MAX_NESTED_EXTRACT_ARCHIVES {
+                return Err(RomWeaverError::Validation(format!(
+                    "checksum extract exceeded max archive count of {MAX_NESTED_EXTRACT_ARCHIVES}"
+                )));
+            }
+
+            self.emit_running(
+                "checksum",
+                OperationFamily::Checksum,
+                Some(self.checksum.name()),
+                "prepare",
+                format!(
+                    "extracting checksum payload from `{}`",
+                    current_source.display()
+                ),
+                None,
+                Some(context.plan_threads(handler.capabilities().extract_threads)),
+            );
+
+            let out_dir = context.temp_paths().next_path("checksum-extract", None);
+            fs::create_dir_all(&out_dir)?;
+            let request = ContainerExtractRequest {
+                source: current_source.clone(),
+                selections: select.to_vec(),
+                out_dir: out_dir.clone(),
+            };
+            handler.extract(&request, context).map_err(|error| {
+                RomWeaverError::Validation(format!(
+                    "checksum payload extraction failed for `{}` ({}): {error}",
+                    current_source.display(),
+                    handler.descriptor().name
+                ))
+            })?;
+            cleanup_paths.push(out_dir.clone());
+            extracted_archives = extracted_archives.saturating_add(1);
+            depth = next_depth;
+
+            let candidates = self.collect_checksum_extract_candidates(&out_dir)?;
+            if candidates.is_empty() {
+                return Err(RomWeaverError::Validation(format!(
+                    "checksum payload extraction produced no files for `{}`",
+                    current_source.display()
+                )));
+            }
+            let candidates = if no_ignore {
+                candidates
+            } else {
+                let non_ignored = candidates
+                    .into_iter()
+                    .filter(|candidate| !candidate.ignored)
+                    .collect::<Vec<_>>();
+                if non_ignored.is_empty() {
+                    return Err(RomWeaverError::Validation(format!(
+                        "all extracted checksum candidates from `{}` were ignored by default filters; rerun with --no-ignore or pass --select <pattern>",
+                        current_source.display()
+                    )));
+                }
+                non_ignored
+            };
+            if candidates.len() > 1 {
+                let choices = candidates
+                    .iter()
+                    .map(|candidate| format!("`{}`", candidate.display_name))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                return Err(RomWeaverError::Validation(format!(
+                    "checksum payload resolution is ambiguous for `{}`; candidates: {choices}. Pass --select <pattern> to choose one payload",
+                    current_source.display()
+                )));
+            }
+
+            current_source = candidates
+                .into_iter()
+                .next()
+                .expect("checked candidate count")
+                .source;
+        }
+
+        Ok(ResolvedChecksumSource {
+            source: current_source,
+            extracted_archives,
+            cleanup_paths,
+        })
+    }
+
+    fn collect_checksum_extract_candidates(
+        &self,
+        root: &Path,
+    ) -> Result<Vec<ChecksumExtractCandidate>> {
+        let mut directories = vec![root.to_path_buf()];
+        let mut candidates = Vec::new();
+        while let Some(directory) = directories.pop() {
+            let mut entries =
+                fs::read_dir(&directory)?.collect::<std::result::Result<Vec<_>, _>>()?;
+            entries.sort_by_key(|entry| entry.path());
+
+            for entry in entries {
+                let path = entry.path();
+                let file_type = entry.file_type()?;
+                if file_type.is_dir() {
+                    directories.push(path);
+                    continue;
+                }
+                if !file_type.is_file() {
+                    continue;
+                }
+
+                let relative = path.strip_prefix(root).map_err(|_| {
+                    RomWeaverError::Validation(format!(
+                        "failed to derive checksum candidate path from `{}`",
+                        path.display()
+                    ))
+                })?;
+                let display_name = Self::normalize_checksum_candidate_name(relative);
+                if display_name.is_empty() {
+                    continue;
+                }
+                let ignored = Self::should_ignore_checksum_candidate(&display_name);
+                candidates.push(ChecksumExtractCandidate {
+                    source: path,
+                    display_name,
+                    ignored,
+                });
+            }
+        }
+
+        candidates.sort_by(|left, right| left.display_name.cmp(&right.display_name));
+        Ok(candidates)
+    }
+
+    fn normalize_checksum_candidate_name(path: &Path) -> String {
+        path.to_string_lossy()
+            .replace('\\', "/")
+            .trim_start_matches("./")
+            .trim_matches('/')
+            .to_string()
+    }
+
+    fn should_ignore_checksum_candidate(candidate_name: &str) -> bool {
+        let lower = candidate_name.to_ascii_lowercase();
+        if lower.contains("maxcso") {
+            return true;
+        }
+        Self::checksum_ignore_globs().is_match(candidate_name)
+    }
+
+    fn checksum_ignore_globs() -> &'static GlobSet {
+        static IGNORE_GLOBS: OnceLock<GlobSet> = OnceLock::new();
+        IGNORE_GLOBS.get_or_init(|| {
+            let mut patterns = vec![
+                "__MACOSX".to_string(),
+                "__MACOSX/**".to_string(),
+                "**/__MACOSX".to_string(),
+                "**/__MACOSX/**".to_string(),
+                ".DS_Store".to_string(),
+                "**/.DS_Store".to_string(),
+                "Thumbs.db".to_string(),
+                "**/Thumbs.db".to_string(),
+                "desktop.ini".to_string(),
+                "**/desktop.ini".to_string(),
+            ];
+            for extension in CHECKSUM_IGNORE_SIDECAR_EXTENSIONS {
+                patterns.push(format!("*{extension}"));
+                patterns.push(format!("**/*{extension}"));
+            }
+
+            let mut builder = GlobSetBuilder::new();
+            for pattern in patterns {
+                let glob = GlobBuilder::new(&pattern)
+                    .case_insensitive(true)
+                    .literal_separator(true)
+                    .build()
+                    .expect("checksum ignore glob pattern must be valid");
+                builder.add(glob);
+            }
+            builder.build().expect("checksum ignore globset must build")
+        })
     }
 
     fn run_compress(&self, args: CompressCommand) -> ExitCode {
@@ -1017,7 +1309,6 @@ impl CliApp {
                 None,
             )
         };
-
         let (codec, level) = if auto_mode {
             (None, None)
         } else {
