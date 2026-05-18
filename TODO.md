@@ -6,7 +6,6 @@
 
 - `2026-05-17 audit`: Added backlog rows for current threading/streaming gaps (RVZ/Z3DS capability parity, qbsdiff threading, patch streaming migrations off full-buffer reads, and real codec backend implementation).
 - `this commit`: Added thread capability/runtime validation groundwork (`ThreadCapability::supports_execution`) and parity assertions for IPS/VCDIFF apply execution paths.
-- `6fd45bc`: BSPATCH alias probe support landed (`.bspatch`/`.bspatch40`, `bspatch`/`bspatch40` alias routing to BSDIFF40 compatibility paths).
 - `this commit`: Native SOLID v4 patch support landed (`.solid`, parse/apply/create, MD5 validation, primitive stream handling, and CLI smoke coverage).
 - `this commit`: PDS parse/apply/create landed with `patch.dat` manifest validation and embedded BSDIFF40 payload round-trip support.
 - `b9b66a5`: MOD/PMSR parse/apply/create support landed (`.mod`/`.pmsr`, `pmsr` alias) with module + CLI smoke coverage.
@@ -90,10 +89,9 @@
 | PAT-008 | patch | RUP | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | Native parse/apply/create landed with MD5-matched forward/undo apply, overflow mode handling (`A`/`M`), and round-trip fixture coverage. |
 | PAT-009 | patch | PPF | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | PPF parse/apply/create landed (PPF1/2/3 parse, PPF3 create). |
 | PAT-010 | patch | EBP | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | Implemented as IPS-compatible records with EBP JSON metadata trailers for parse/apply/create support. |
-| PAT-011 | patch | BDF/BSDIFF40 | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | Native parse/apply/create landed with BSDIFF40-compatible patch bytes plus `bdf`/`bsdiff`/`bspatch` alias coverage. |
+| PAT-011 | patch | BDF/BSDIFF40 | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | Native parse/apply/create landed with BSDIFF40-compatible patch bytes plus `bdf`/`bsdiff` alias coverage. |
 | PAT-012 | patch | PMSR | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | Implemented through the MOD handler with `pmsr` alias support and `.pmsr` extension probing. |
 | PAT-013 | patch | MOD | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | Native parse/apply/create landed for Star Rod/Paper Mario `.mod` patches (PMSR magic), including CLI smoke and module coverage; create currently rejects shrinking outputs. |
-| PAT-014 | patch | BSPATCH alias | probe-only | n/a | n/a | n/a | n/a | scan,diff,write flags | fixture-parity,cli-smoke | done | Accept `.bspatch` and `.bspatch40` extensions plus `bspatch`/`bspatch40` format aliases as BSDIFF40-compatible probe paths. |
 | PAT-015 | patch | DLDI | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | Native parse/apply/create landed for `.dldi` patches with relocation-aware driver slot updates and CLI + module round-trip coverage. |
 | PAT-016 | patch | PDS | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | Native parse/apply/create landed for `.pds` archives via `patch.dat` manifest + embedded BSDIFF40 payload handling, with module and CLI smoke coverage. |
 | PAT-017 | patch | SPATCH (Double IPS) | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | Native parse/apply/create landed with `.spatch` probing plus `double-ips`/`doubleips` alias routing and dual-stream compatibility behavior. |

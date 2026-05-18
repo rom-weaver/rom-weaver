@@ -30,7 +30,7 @@ const MANIFEST_KEY_TARGET_SIZE: &str = "target_size";
 const MANIFEST_KEY_SOURCE_CRC32: &str = "source_crc32";
 const MANIFEST_KEY_TARGET_CRC32: &str = "target_crc32";
 
-const BDF_FORMAT_ALIASES: &[&str] = &["bdf", "bsdiff", "bsdiff40", "bspatch", "bspatch40"];
+const BDF_FORMAT_ALIASES: &[&str] = &["bdf", "bsdiff", "bsdiff40"];
 pub struct PdsPatchHandler {
     descriptor: &'static FormatDescriptor,
 }

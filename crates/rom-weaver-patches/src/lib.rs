@@ -128,8 +128,8 @@ const EBP: FormatDescriptor = FormatDescriptor {
 const BDF_BSDIFF40: FormatDescriptor = FormatDescriptor {
     family: OperationFamily::Patch,
     name: "BDF/BSDIFF40",
-    aliases: &["bdf", "bsdiff", "bsdiff40", "bspatch", "bspatch40"],
-    extensions: &[".bdf", ".bsdiff", ".bsdiff40", ".bspatch", ".bspatch40"],
+    aliases: &["bdf", "bsdiff", "bsdiff40"],
+    extensions: &[".bdf", ".bsdiff", ".bsdiff40"],
 };
 const MOD: FormatDescriptor = FormatDescriptor {
     family: OperationFamily::Patch,
@@ -687,20 +687,18 @@ mod tests {
     }
 
     #[test]
-    fn probe_routes_bspatch_extensions_to_bsdiff_handler() {
+    fn probe_does_not_route_bspatch_extensions() {
         let registry = PatchRegistry::new();
         for path in ["update.bspatch", "update.bspatch40"] {
-            let handler = registry.probe(Path::new(path)).expect("bspatch probe");
-            assert_eq!(handler.descriptor().name, "BDF/BSDIFF40");
+            assert!(registry.probe(Path::new(path)).is_none());
         }
     }
 
     #[test]
-    fn find_by_name_routes_bspatch_aliases_to_bsdiff_handler() {
+    fn find_by_name_does_not_route_bspatch_aliases() {
         let registry = PatchRegistry::new();
         for alias in ["bspatch", "bspatch40"] {
-            let handler = registry.find_by_name(alias).expect("bspatch alias");
-            assert_eq!(handler.descriptor().name, "BDF/BSDIFF40");
+            assert!(registry.find_by_name(alias).is_none());
         }
     }
 
