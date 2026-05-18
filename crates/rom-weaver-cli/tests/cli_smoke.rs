@@ -8992,7 +8992,8 @@ fn patch_apply_succeeds_for_valid_aps_patch() {
     let json = parse_single_json_line(&output);
     assert_eq!(json["command"], "patch-apply");
     assert_eq!(json["family"], "patch");
-    assert_eq!(json["format"], "APS");
+    // Signature-based probing routes APS1 payloads to APSGBA even if extension is .aps.
+    assert_eq!(json["format"], "APSGBA");
     assert_eq!(json["requested_threads"], 8);
     assert_eq!(json["effective_threads"], 1);
     assert_eq!(json["used_parallelism"], false);

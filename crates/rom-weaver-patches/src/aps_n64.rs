@@ -541,7 +541,7 @@ mod tests {
 
     use super::{
         APS_N64_CART_ID_OFFSET, APS_N64_CRC_OFFSET, APS_N64_MODE, ApsN64PatchHandler,
-        parse_aps_bytes,
+        create_aps_patch_bytes, parse_aps_bytes,
     };
     use crate::{
         APS,
@@ -737,6 +737,48 @@ mod tests {
             .expect("apply");
 
         assert_eq!(fs::read(output_path).expect("output"), modified);
+    }
+
+    #[test]
+    fn create_matches_rompatcher_js_n64_fixture() {
+        // Fixture generated from:
+        // https://github.com/marcrobledo/RomPatcher.js/blob/master/rom-patcher-js/modules/RomPatcher.format.aps_n64.js
+        // using BinFile.js + APS.buildFromRoms(...).export(...).
+        let original_path = std::path::Path::new("original.z64");
+        let mut original = vec![0u8; 0x200];
+        for (index, byte) in original.iter_mut().enumerate() {
+            *byte = (index % 251) as u8;
+        }
+        original[0..4].copy_from_slice(&[0x80, 0x37, 0x12, 0x40]);
+        original[APS_N64_CART_ID_OFFSET as usize..APS_N64_CART_ID_OFFSET as usize + 3]
+            .copy_from_slice(b"XYZ");
+        original[APS_N64_CRC_OFFSET as usize..APS_N64_CRC_OFFSET as usize + 8]
+            .copy_from_slice(&[0xA0, 0xB1, 0xC2, 0xD3, 0xE4, 0xF5, 0x16, 0x27]);
+
+        let mut modified = original.clone();
+        modified[0x20..0x28].fill(0xAA);
+        modified[0x60] = 0x11;
+        modified[0x61] = 0x22;
+        modified[0x62] = 0x33;
+
+        let created =
+            create_aps_patch_bytes(original_path, &original, &modified).expect("create fixture");
+        let expected = hex_to_bytes(
+            "415053313001006e6f206465736372697074696f6e0000000000000000000000000000000000000000000000000000000000000000000000000158595aa0b1c2d3e4f516270000000000000200002000000000aa086000000003112233",
+        );
+
+        assert_eq!(created.bytes, expected);
+        assert_eq!(created.record_count, 2);
+    }
+
+    fn hex_to_bytes(hex: &str) -> Vec<u8> {
+        assert_eq!(hex.len() % 2, 0, "hex fixture must have even length");
+        let mut bytes = Vec::with_capacity(hex.len() / 2);
+        for index in (0..hex.len()).step_by(2) {
+            let byte = u8::from_str_radix(&hex[index..index + 2], 16).expect("valid hex fixture");
+            bytes.push(byte);
+        }
+        bytes
     }
 
     fn build_aps_patch(
