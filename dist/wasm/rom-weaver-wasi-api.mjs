@@ -1,0 +1,282 @@
+import { mkdtempSync, openSync, closeSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { brotliDecompressSync } from 'node:zlib';
+import { WASI } from 'node:wasi';
+
+const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
+const WASM_PATH_CANDIDATES = [
+  join(MODULE_DIR, 'rom-weaver-cli.wasm'),
+  join(MODULE_DIR, '../rom-weaver-cli.wasm'),
+  join(MODULE_DIR, '../../dist/wasm/rom-weaver-cli.wasm'),
+  join(MODULE_DIR, '../../../dist/wasm/rom-weaver-cli.wasm'),
+];
+
+export const DEFAULT_WASM_PATH = WASM_PATH_CANDIDATES.find((candidate) => existsSync(candidate))
+  ?? WASM_PATH_CANDIDATES[0];
+
+export const DEFAULT_PREOPENS = {
+  '/': '/',
+  '/tmp': tmpdir(),
+};
+
+export class RomWeaverWasiRunner {
+  constructor(options = {}) {
+    const useDefaultPreopens = options.useDefaultPreopens ?? true;
+    this.wasmPath = options.wasmPath ?? DEFAULT_WASM_PATH;
+    this.argv0 = options.argv0 ?? 'rom-weaver';
+    this.env = { ...(options.env ?? {}) };
+    this.preopens = {
+      ...(useDefaultPreopens ? DEFAULT_PREOPENS : {}),
+      ...(options.preopens ?? {}),
+    };
+    this._compiledModulePromise = null;
+  }
+
+  async run(args = [], options = {}) {
+    const normalizedArgs = normalizeArgs(args);
+    const module = await this._loadModule();
+    const preopens = {
+      ...this.preopens,
+      ...(options.preopens ?? {}),
+    };
+    const env = {
+      ...this.env,
+      ...(options.env ?? {}),
+    };
+    const stdinBuffer = normalizeStdin(options.stdin);
+    const argv0 = options.argv0 ?? this.argv0;
+
+    const tempDir = mkdtempSync(join(tmpdir(), 'rom-weaver-wasi-run-'));
+    const stdinPath = join(tempDir, 'stdin.bin');
+    const stdoutPath = join(tempDir, 'stdout.log');
+    const stderrPath = join(tempDir, 'stderr.log');
+
+    writeFileSync(stdinPath, stdinBuffer);
+    writeFileSync(stdoutPath, '');
+    writeFileSync(stderrPath, '');
+
+    const stdinFd = openSync(stdinPath, 'r');
+    const stdoutFd = openSync(stdoutPath, 'w+');
+    const stderrFd = openSync(stderrPath, 'w+');
+
+    let exitCode = 1;
+    let trappedError = null;
+
+    try {
+      const wasi = new WASI({
+        version: 'preview1',
+        args: [argv0, ...normalizedArgs],
+        env,
+        preopens,
+        stdin: stdinFd,
+        stdout: stdoutFd,
+        stderr: stderrFd,
+        returnOnExit: true,
+      });
+
+      const instance = await WebAssembly.instantiate(module, {
+        wasi_snapshot_preview1: wasi.wasiImport,
+      });
+
+      exitCode = wasi.start(instance);
+    } catch (error) {
+      trappedError = error;
+    } finally {
+      closeSync(stdinFd);
+      closeSync(stdoutFd);
+      closeSync(stderrFd);
+    }
+
+    const stdout = readFileSync(stdoutPath, 'utf8');
+    const stderr = readFileSync(stderrPath, 'utf8');
+
+    rmSync(tempDir, { recursive: true, force: true });
+
+    const result = {
+      args: normalizedArgs,
+      exitCode,
+      stdout,
+      stderr,
+      ok: trappedError === null && exitCode === 0,
+    };
+
+    if (trappedError !== null) {
+      result.error = trappedError;
+    }
+
+    return result;
+  }
+
+  async runJson(args = [], options = {}) {
+    const result = await this.run(['--json', ...normalizeArgs(args)], options);
+    const parsed = parseJsonLines(result.stdout, {
+      onEvent: options.onEvent,
+      onNonJsonLine: options.onNonJsonLine,
+    });
+
+    return {
+      ...result,
+      events: parsed.events,
+      nonJsonLines: parsed.nonJsonLines,
+    };
+  }
+
+  async _loadModule() {
+    if (this._compiledModulePromise === null) {
+      const wasmBytes = loadWasmBytes(this.wasmPath);
+      this._compiledModulePromise = WebAssembly.compile(wasmBytes);
+    }
+
+    return this._compiledModulePromise;
+  }
+}
+
+export function createRomWeaverWasiRunner(options = {}) {
+  return new RomWeaverWasiRunner(options);
+}
+
+export function createNodeFsRunner(options = {}) {
+  const preopens = buildNodeFsPreopens(options);
+  return createRomWeaverWasiRunner({
+    ...options,
+    useDefaultPreopens: false,
+    preopens: {
+      ...preopens,
+      ...(options.preopens ?? {}),
+    },
+  });
+}
+
+export function buildNodeFsPreopens(options = {}) {
+  const {
+    includeHostRoot = false,
+    mountCwd = true,
+    cwdGuestPath = '/work',
+    mountTmp = true,
+    tmpGuestPath = '/tmp',
+    tmpHostPath = tmpdir(),
+    mounts = {},
+  } = options;
+  const preopens = {};
+
+  if (includeHostRoot) {
+    preopens['/'] = '/';
+  }
+  if (mountCwd) {
+    preopens[normalizeGuestMountPath(cwdGuestPath)] = resolve(process.cwd());
+  }
+  if (mountTmp) {
+    preopens[normalizeGuestMountPath(tmpGuestPath)] = resolveHostMountPath(tmpHostPath, 'tmpHostPath');
+  }
+
+  for (const [guestPath, hostPath] of Object.entries(mounts)) {
+    preopens[normalizeGuestMountPath(guestPath)] = resolveHostMountPath(
+      hostPath,
+      `mounts[${guestPath}]`,
+    );
+  }
+
+  return preopens;
+}
+
+export function parseJsonLines(text, options = {}) {
+  const events = [];
+  const nonJsonLines = [];
+  const onEvent = typeof options.onEvent === 'function' ? options.onEvent : null;
+  const onNonJsonLine = typeof options.onNonJsonLine === 'function'
+    ? options.onNonJsonLine
+    : null;
+
+  for (const line of text.split(/\r?\n/)) {
+    if (line.length === 0) {
+      continue;
+    }
+
+    try {
+      const event = JSON.parse(line);
+      events.push(event);
+      onEvent?.(event);
+    } catch {
+      nonJsonLines.push(line);
+      onNonJsonLine?.(line);
+    }
+  }
+
+  return { events, nonJsonLines };
+}
+
+function loadWasmBytes(inputPath) {
+  const resolvedPath = resolve(inputPath);
+
+  if (existsSync(resolvedPath)) {
+    const bytes = readFileSync(resolvedPath);
+    if (resolvedPath.endsWith('.br')) {
+      return brotliDecompressSync(bytes);
+    }
+
+    return bytes;
+  }
+
+  const brotliPath = `${resolvedPath}.br`;
+  if (existsSync(brotliPath)) {
+    return brotliDecompressSync(readFileSync(brotliPath));
+  }
+
+  throw new Error(
+    `WASM artifact not found. Looked for ${resolvedPath} and ${brotliPath}`,
+  );
+}
+
+function normalizeStdin(stdin) {
+  if (stdin === undefined || stdin === null) {
+    return Buffer.alloc(0);
+  }
+
+  if (typeof stdin === 'string') {
+    return Buffer.from(stdin);
+  }
+
+  if (stdin instanceof Uint8Array) {
+    return Buffer.from(stdin);
+  }
+
+  if (stdin instanceof ArrayBuffer) {
+    return Buffer.from(new Uint8Array(stdin));
+  }
+
+  throw new TypeError('stdin must be a string, Uint8Array, ArrayBuffer, or undefined');
+}
+
+function normalizeArgs(args) {
+  if (!Array.isArray(args)) {
+    throw new TypeError('args must be an array of strings');
+  }
+
+  return args.map((value) => String(value));
+}
+
+function normalizeGuestMountPath(pathLike) {
+  if (typeof pathLike !== 'string' || pathLike.trim().length === 0) {
+    throw new TypeError('guest mount path must be a non-empty string');
+  }
+
+  let normalized = pathLike.trim();
+  if (!normalized.startsWith('/')) {
+    normalized = `/${normalized}`;
+  }
+  if (normalized.length > 1) {
+    normalized = normalized.replace(/\/+$/, '');
+  }
+
+  return normalized;
+}
+
+function resolveHostMountPath(pathLike, label) {
+  if (typeof pathLike !== 'string' || pathLike.trim().length === 0) {
+    throw new TypeError(`${label} must be a non-empty string`);
+  }
+
+  return resolve(pathLike);
+}
