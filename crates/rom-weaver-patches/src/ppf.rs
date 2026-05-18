@@ -17,9 +17,12 @@ const PPF_VALIDATION_BLOCK_SIZE: usize = 1024;
 const PPF2_BLOCKCHECK_OFFSET: u64 = 0x9320;
 const PPF3_BIN_BLOCKCHECK_OFFSET: u64 = 0x9320;
 const PPF3_GI_BLOCKCHECK_OFFSET: u64 = 0x80A0;
+const FILE_ID_BEGIN_MARKER: &[u8] = b"@BEGIN_FILE_ID.DIZ";
+const FILE_ID_END_MARKER: &[u8] = b"@END_FILE_ID.DIZ";
 const FILE_ID_TRAILER_MAGIC: &[u8; 4] = b".DIZ";
 const PPF2_FILE_ID_OVERHEAD: usize = 38;
 const PPF3_FILE_ID_OVERHEAD: usize = 36;
+const PPF3_FILE_ID_PADDED_OVERHEAD: usize = 38;
 const PPF3_DEFAULT_DESCRIPTION: &str = "rom-weaver PPF3 patch";
 const PPF3_ENCODING_METHOD: u8 = 0x02;
 const CREATE_COMPARE_BUFFER_SIZE: usize = 64 * 1024;
@@ -393,15 +396,50 @@ fn write_ppf3_record(output: &mut impl Write, offset: u64, data: &[u8]) -> Resul
 
 fn detect_version(bytes: &[u8]) -> Result<PpfVersion> {
     let magic = bytes
-        .get(0..4)
+        .get(0..3)
         .ok_or_else(|| RomWeaverError::Validation("PPF patch header is truncated".into()))?;
 
-    match magic {
-        b"PPF1" => Ok(PpfVersion::V1),
-        b"PPF2" => Ok(PpfVersion::V2),
-        b"PPF3" => Ok(PpfVersion::V3),
-        _ => Err(RomWeaverError::Validation("Patch header invalid".into())),
+    if magic != b"PPF" {
+        return Err(RomWeaverError::Validation("Patch header invalid".into()));
     }
+
+    let version_digits = bytes.get(3..5).ok_or_else(|| {
+        RomWeaverError::Validation("PPF patch version digits are truncated".into())
+    })?;
+    let version_from_digits = match version_digits {
+        b"10" => PpfVersion::V1,
+        b"20" => PpfVersion::V2,
+        b"30" => PpfVersion::V3,
+        _ => {
+            return Err(RomWeaverError::Validation(
+                "PPF patch version digits are invalid".into(),
+            ));
+        }
+    };
+
+    let version_from_method = match bytes.get(5).copied() {
+        Some(0) => PpfVersion::V1,
+        Some(1) => PpfVersion::V2,
+        Some(2) => PpfVersion::V3,
+        Some(_) => {
+            return Err(RomWeaverError::Validation(
+                "PPF patch encoding method is invalid".into(),
+            ));
+        }
+        None => {
+            return Err(RomWeaverError::Validation(
+                "PPF patch encoding method is truncated".into(),
+            ));
+        }
+    };
+
+    if version_from_digits != version_from_method {
+        return Err(RomWeaverError::Validation(
+            "PPF patch version tuple is inconsistent".into(),
+        ));
+    }
+
+    Ok(version_from_digits)
 }
 
 fn parse_ppf_v1(bytes: &[u8]) -> Result<ParsedPpfPatch> {
@@ -422,7 +460,7 @@ fn parse_ppf_v2(bytes: &[u8]) -> Result<ParsedPpfPatch> {
     }
 
     let expected_input_len = u64::from(read_u32_le(bytes, 56)?);
-    let file_id_len = detect_file_id_len_v2(bytes)?;
+    let file_id_len = detect_file_id_len_v2(bytes, PPF2_HEADER_SIZE)?;
     let payload_end = bytes.len().checked_sub(file_id_len).ok_or_else(|| {
         RomWeaverError::Validation("PPF2 file_id length exceeded file size".into())
     })?;
@@ -479,7 +517,7 @@ fn parse_ppf_v3(bytes: &[u8]) -> Result<ParsedPpfPatch> {
         (PPF3_HEADER_BASE_SIZE, None)
     };
 
-    let file_id_len = detect_file_id_len_v3(bytes)?;
+    let file_id_len = detect_file_id_len_v3(bytes, payload_start)?;
     let payload_end = bytes.len().checked_sub(file_id_len).ok_or_else(|| {
         RomWeaverError::Validation("PPF3 file_id length exceeded file size".into())
     })?;
@@ -599,15 +637,97 @@ fn parse_records_v3(
     Ok(records)
 }
 
-fn detect_file_id_len_v2(bytes: &[u8]) -> Result<usize> {
-    detect_file_id_len(bytes, 4, PPF2_FILE_ID_OVERHEAD, "PPF2")
+fn detect_file_id_len_v2(bytes: &[u8], payload_start: usize) -> Result<usize> {
+    detect_file_id_len(bytes, payload_start, FileIdTrailerKind::V2)
 }
 
-fn detect_file_id_len_v3(bytes: &[u8]) -> Result<usize> {
-    detect_file_id_len(bytes, 2, PPF3_FILE_ID_OVERHEAD, "PPF3")
+fn detect_file_id_len_v3(bytes: &[u8], payload_start: usize) -> Result<usize> {
+    detect_file_id_len(bytes, payload_start, FileIdTrailerKind::V3)
 }
 
 fn detect_file_id_len(
+    bytes: &[u8],
+    payload_start: usize,
+    kind: FileIdTrailerKind,
+) -> Result<usize> {
+    if let Some(file_id_len) = detect_file_id_len_from_markers(bytes, payload_start, kind)? {
+        return Ok(file_id_len);
+    }
+
+    match kind {
+        FileIdTrailerKind::V2 => {
+            detect_file_id_len_from_footer_magic(bytes, 4, PPF2_FILE_ID_OVERHEAD, "PPF2")
+        }
+        FileIdTrailerKind::V3 => {
+            let unpadded =
+                detect_file_id_len_from_footer_magic(bytes, 2, PPF3_FILE_ID_OVERHEAD, "PPF3")?;
+            if unpadded != 0 {
+                return Ok(unpadded);
+            }
+            detect_file_id_len_from_footer_magic(bytes, 4, PPF3_FILE_ID_PADDED_OVERHEAD, "PPF3")
+        }
+    }
+}
+
+fn detect_file_id_len_from_markers(
+    bytes: &[u8],
+    payload_start: usize,
+    kind: FileIdTrailerKind,
+) -> Result<Option<usize>> {
+    let Some(begin_offset) = rfind_subslice(bytes, FILE_ID_BEGIN_MARKER) else {
+        return Ok(None);
+    };
+    if begin_offset < payload_start {
+        return Ok(None);
+    }
+
+    let diz_start = begin_offset
+        .checked_add(FILE_ID_BEGIN_MARKER.len())
+        .ok_or_else(|| RomWeaverError::Validation("PPF file_id begin offset overflowed".into()))?;
+    let Some(relative_end_offset) = find_subslice(&bytes[diz_start..], FILE_ID_END_MARKER) else {
+        return Ok(None);
+    };
+    let end_offset = diz_start
+        .checked_add(relative_end_offset)
+        .ok_or_else(|| RomWeaverError::Validation("PPF file_id end offset overflowed".into()))?;
+    let trailer_start = end_offset
+        .checked_add(FILE_ID_END_MARKER.len())
+        .ok_or_else(|| {
+            RomWeaverError::Validation("PPF file_id trailer offset overflowed".into())
+        })?;
+    if trailer_start > bytes.len() {
+        return Ok(None);
+    }
+
+    let diz_len = end_offset
+        .checked_sub(diz_start)
+        .ok_or_else(|| RomWeaverError::Validation("PPF file_id payload underflowed".into()))?;
+    let trailer = &bytes[trailer_start..];
+
+    let trailer_matches = match trailer.len() {
+        2 => usize::from(read_u16_le(trailer, 0)?) == diz_len,
+        4 => {
+            let u32_len = usize::try_from(read_u32_le(trailer, 0)?).map_err(|_| {
+                RomWeaverError::Validation("PPF file_id length exceeded platform limits".into())
+            })?;
+            let u16_len = usize::from(read_u16_le(trailer, 0)?);
+            if kind == FileIdTrailerKind::V2 {
+                u32_len == diz_len
+            } else {
+                u32_len == diz_len || (u16_len == diz_len && trailer[2] == 0 && trailer[3] == 0)
+            }
+        }
+        _ => false,
+    };
+
+    if !trailer_matches {
+        return Ok(None);
+    }
+
+    Ok(Some(bytes.len() - begin_offset))
+}
+
+fn detect_file_id_len_from_footer_magic(
     bytes: &[u8],
     length_size: usize,
     overhead: usize,
@@ -650,6 +770,30 @@ fn detect_file_id_len(
     }
 
     Ok(total)
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum FileIdTrailerKind {
+    V2,
+    V3,
+}
+
+fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    if needle.is_empty() {
+        return Some(0);
+    }
+    haystack
+        .windows(needle.len())
+        .position(|window| window == needle)
+}
+
+fn rfind_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    if needle.is_empty() {
+        return Some(haystack.len());
+    }
+    haystack
+        .windows(needle.len())
+        .rposition(|window| window == needle)
 }
 
 fn validate_blockcheck(input_path: &Path, blockcheck: &PpfBlockcheck) -> Result<()> {
@@ -753,8 +897,8 @@ mod tests {
     use rom_weaver_core::{PatchApplyRequest, PatchCreateRequest, PatchHandler};
 
     use super::{
-        PPF_VALIDATION_BLOCK_SIZE, PPF2_BLOCKCHECK_OFFSET, PpfPatchHandler, PpfVersion,
-        parse_ppf_bytes,
+        FILE_ID_BEGIN_MARKER, FILE_ID_END_MARKER, PPF_VALIDATION_BLOCK_SIZE,
+        PPF2_BLOCKCHECK_OFFSET, PpfPatchHandler, PpfVersion, parse_ppf_bytes,
     };
     use crate::{
         PPF,
@@ -1047,6 +1191,38 @@ mod tests {
     }
 
     #[test]
+    fn parse_accepts_ppf3_with_rompatcher_style_file_id_diz_trailer() {
+        let mut patch = build_ppf3_patch(
+            "with file id",
+            0,
+            false,
+            false,
+            None,
+            vec![V3Record {
+                offset: 1,
+                data: b"AB".to_vec(),
+                undo: Vec::new(),
+            }],
+        );
+        append_rompatcher_file_id_diz_trailer(&mut patch, "hello from file id");
+
+        let parsed = parse_ppf_bytes(&patch).expect("parse should succeed");
+        assert_eq!(parsed.version, PpfVersion::V3);
+        assert_eq!(parsed.records.len(), 1);
+        assert_eq!(parsed.records[0].offset, 1);
+        assert_eq!(parsed.records[0].data, b"AB");
+    }
+
+    #[test]
+    fn parse_rejects_inconsistent_version_tuple() {
+        let mut patch = build_ppf1_patch("bad version", Vec::new());
+        patch[5] = 2;
+
+        let error = parse_ppf_bytes(&patch).expect_err("inconsistent tuple should fail");
+        assert!(error.to_string().contains("version tuple is inconsistent"));
+    }
+
+    #[test]
     fn create_and_apply_round_trip_for_ppf3() {
         let temp = TestDir::new();
         let original_path = temp.child("original.bin");
@@ -1280,5 +1456,15 @@ mod tests {
         desc[..copy_len].copy_from_slice(&src[..copy_len]);
         bytes.extend_from_slice(&desc);
         bytes
+    }
+
+    fn append_rompatcher_file_id_diz_trailer(bytes: &mut Vec<u8>, diz: &str) {
+        bytes.extend_from_slice(FILE_ID_BEGIN_MARKER);
+        bytes.extend_from_slice(diz.as_bytes());
+        bytes.extend_from_slice(FILE_ID_END_MARKER);
+
+        let diz_len = u16::try_from(diz.len()).expect("diz length must fit u16");
+        bytes.extend_from_slice(&diz_len.to_le_bytes());
+        bytes.extend_from_slice(&0u16.to_le_bytes());
     }
 }
