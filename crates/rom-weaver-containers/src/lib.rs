@@ -292,7 +292,32 @@ impl ContainerRegistry {
             .cloned()
     }
 
+    pub fn recommend_compress_format_for_inputs(
+        &self,
+        inputs: &[PathBuf],
+    ) -> Option<CompressFormatRecommendation> {
+        if inputs.is_empty() {
+            return None;
+        }
+        if inputs.len() == 1 {
+            return Some(self.recommend_compress_format(&inputs[0]));
+        }
+        if Self::is_wii_u_host_fs_input_set(inputs) {
+            return Some(CompressFormatRecommendation {
+                format_name: WUA.name,
+                reason: "wii-u-host-fs-input-set",
+            });
+        }
+        None
+    }
+
     pub fn recommend_compress_format(&self, path: &Path) -> CompressFormatRecommendation {
+        if Self::is_wii_u_host_fs_layout(path) {
+            return CompressFormatRecommendation {
+                format_name: WUA.name,
+                reason: "wii-u-host-fs-layout",
+            };
+        }
         let mut options = NodDiscOptions::default();
         options.preloader_threads = 0;
         if let Ok(disc) = NodDiscReader::new(path, &options) {
@@ -316,6 +341,79 @@ impl ContainerRegistry {
             format_name: CHD.name,
             reason: "not-wii-gc-or-unrecognized",
         }
+    }
+
+    fn is_wii_u_host_fs_layout(path: &Path) -> bool {
+        let Ok(metadata) = fs::metadata(path) else {
+            return false;
+        };
+        if !metadata.is_dir() {
+            return false;
+        }
+
+        let mut has_code = false;
+        let mut has_content = false;
+        let mut meta_dir = None::<PathBuf>;
+
+        let Ok(entries) = fs::read_dir(path) else {
+            return false;
+        };
+        for entry in entries {
+            let Ok(entry) = entry else {
+                continue;
+            };
+            let Ok(file_type) = entry.file_type() else {
+                continue;
+            };
+            if !file_type.is_dir() {
+                continue;
+            }
+            let name = entry.file_name();
+            if name.eq_ignore_ascii_case("code") {
+                has_code = true;
+            } else if name.eq_ignore_ascii_case("content") {
+                has_content = true;
+            } else if name.eq_ignore_ascii_case("meta") {
+                meta_dir = Some(entry.path());
+            }
+        }
+
+        has_code
+            && has_content
+            && meta_dir
+                .as_ref()
+                .is_some_and(|path| path.join("meta.xml").is_file())
+    }
+
+    fn is_wii_u_host_fs_input_set(inputs: &[PathBuf]) -> bool {
+        let mut has_code = false;
+        let mut has_content = false;
+        let mut meta_dir = None::<PathBuf>;
+
+        for input in inputs {
+            let Ok(metadata) = fs::metadata(input) else {
+                return false;
+            };
+            if !metadata.is_dir() {
+                return false;
+            }
+            let Some(name) = input.file_name() else {
+                continue;
+            };
+            if name.eq_ignore_ascii_case("code") {
+                has_code = true;
+            } else if name.eq_ignore_ascii_case("content") {
+                has_content = true;
+            } else if name.eq_ignore_ascii_case("meta") {
+                meta_dir = Some(input.clone());
+            }
+        }
+
+        has_code
+            && has_content
+            && meta_dir
+                .as_ref()
+                .is_some_and(|path| path.join("meta.xml").is_file())
     }
 }
 
@@ -6202,6 +6300,13 @@ enum ChdCreateKind {
 }
 
 #[cfg(not(target_family = "wasm"))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ChdCompressionPlan {
+    codecs: [ChdCodec; CHD_MAX_COMPRESSORS],
+    primary_codec: ChdCodec,
+}
+
+#[cfg(not(target_family = "wasm"))]
 const CDROM_OLD_METADATA_TAG: u32 = make_tag(b'C', b'H', b'C', b'D');
 #[cfg(not(target_family = "wasm"))]
 const CDROM_TRACK_METADATA_TAG: u32 = make_tag(b'C', b'H', b'T', b'R');
@@ -6494,8 +6599,55 @@ impl ChdContainerHandler {
         }
     }
 
-    fn resolve_codec(&self, codec: Option<&str>, _create_kind: &ChdCreateKind) -> Result<ChdCodec> {
-        self.map_codec(codec)
+    fn resolve_compression_plan(
+        &self,
+        codec: Option<&str>,
+        create_kind: &ChdCreateKind,
+    ) -> Result<ChdCompressionPlan> {
+        if codec
+            .map(str::trim)
+            .is_some_and(|value| !value.is_empty())
+        {
+            let mapped = self.map_codec(codec)?;
+            return Ok(Self::single_codec_plan(mapped));
+        }
+        Ok(self.default_compression_plan(create_kind))
+    }
+
+    fn single_codec_plan(codec: ChdCodec) -> ChdCompressionPlan {
+        ChdCompressionPlan {
+            codecs: [codec, ChdCodec::NONE, ChdCodec::NONE, ChdCodec::NONE],
+            primary_codec: codec,
+        }
+    }
+
+    fn default_compression_plan(&self, create_kind: &ChdCreateKind) -> ChdCompressionPlan {
+        match create_kind {
+            ChdCreateKind::Disc(layout) => match layout.kind {
+                DiscKind::CdRom | DiscKind::GdRom => ChdCompressionPlan {
+                    codecs: [
+                        ChdCodec::CD_ZSTD,
+                        ChdCodec::CD_ZLIB,
+                        ChdCodec::CD_FLAC,
+                        ChdCodec::NONE,
+                    ],
+                    primary_codec: ChdCodec::CD_ZSTD,
+                },
+            },
+            ChdCreateKind::Dvd => ChdCompressionPlan {
+                codecs: [
+                    ChdCodec::ZSTD,
+                    ChdCodec::ZLIB,
+                    ChdCodec::HUFFMAN,
+                    ChdCodec::FLAC,
+                ],
+                primary_codec: ChdCodec::ZSTD,
+            },
+            _ => ChdCompressionPlan {
+                codecs: [ChdCodec::ZSTD, ChdCodec::NONE, ChdCodec::NONE, ChdCodec::NONE],
+                primary_codec: ChdCodec::ZSTD,
+            },
+        }
     }
 
     fn map_codec(&self, codec: Option<&str>) -> Result<ChdCodec> {
@@ -8030,10 +8182,11 @@ impl ChdContainerHandler {
         output: &Path,
         logical_bytes: u64,
         create_kind: &ChdCreateKind,
-        codec: ChdCodec,
+        codecs: [ChdCodec; CHD_MAX_COMPRESSORS],
+        primary_codec: ChdCodec,
         compression_level: i32,
     ) -> Result<rom_weaver_chd_sys::ChdHeader> {
-        let hunk_bytes = self.hunk_bytes(create_kind, logical_bytes, codec);
+        let hunk_bytes = self.hunk_bytes(create_kind, logical_bytes, primary_codec);
         ChdFile::compress_file(
             input,
             output,
@@ -8042,7 +8195,7 @@ impl ChdContainerHandler {
                 logical_bytes,
                 hunk_bytes,
                 unit_bytes: self.unit_bytes(create_kind),
-                compression: [codec, ChdCodec::NONE, ChdCodec::NONE, ChdCodec::NONE],
+                compression: codecs,
                 compression_level,
             },
         )
@@ -8408,8 +8561,9 @@ impl ContainerHandler for ChdContainerHandler {
         let input = &request.inputs[0];
         let input_bytes = fs::metadata(input)?.len();
         let mut create_kind = self.infer_create_kind(input, input_bytes)?;
-        let codec = self.resolve_codec(request.codec.as_deref(), &create_kind)?;
-        if codec == ChdCodec::AVHUFF {
+        let mut compression_plan =
+            self.resolve_compression_plan(request.codec.as_deref(), &create_kind)?;
+        if compression_plan.primary_codec == ChdCodec::AVHUFF {
             create_kind = match create_kind {
                 ChdCreateKind::Raw => ChdCreateKind::Av(self.infer_av_profile(input, input_bytes)?),
                 ChdCreateKind::Av(profile) => ChdCreateKind::Av(profile),
@@ -8420,7 +8574,9 @@ impl ContainerHandler for ChdContainerHandler {
                 }
             };
         }
-        let compression_level = self.resolve_compression_level(codec, request.level)?;
+        compression_plan = self.resolve_compression_plan(request.codec.as_deref(), &create_kind)?;
+        let compression_level =
+            self.resolve_compression_level(compression_plan.primary_codec, request.level)?;
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
         }
@@ -8439,7 +8595,7 @@ impl ContainerHandler for ChdContainerHandler {
             _ => (input, input_bytes),
         };
 
-        let create_result = if codec == ChdCodec::NONE {
+        let create_result = if compression_plan.primary_codec == ChdCodec::NONE {
             self.create_uncompressed(
                 source_path,
                 &request.output,
@@ -8453,7 +8609,8 @@ impl ContainerHandler for ChdContainerHandler {
                 &request.output,
                 logical_bytes,
                 &create_kind,
-                codec,
+                compression_plan.codecs,
+                compression_plan.primary_codec,
                 compression_level,
             )
         };
@@ -9290,6 +9447,43 @@ mod tests {
     }
 
     #[test]
+    fn recommend_compress_format_returns_wua_for_wii_u_host_fs_layout() {
+        let root = temp_dir_path("recommend-wua-layout");
+        fs::create_dir_all(root.join("code")).expect("code dir");
+        fs::create_dir_all(root.join("content")).expect("content dir");
+        fs::create_dir_all(root.join("meta")).expect("meta dir");
+        fs::write(root.join("meta").join("meta.xml"), b"<menu/>").expect("meta.xml");
+
+        let registry = ContainerRegistry::new();
+        let recommendation = registry.recommend_compress_format(&root);
+        assert_eq!(recommendation.format_name, "wua");
+        assert_eq!(recommendation.reason, "wii-u-host-fs-layout");
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn recommend_compress_format_for_inputs_returns_wua_for_host_fs_input_set() {
+        let root = temp_dir_path("recommend-wua-input-set");
+        let code = root.join("code");
+        let content = root.join("content");
+        let meta = root.join("meta");
+        fs::create_dir_all(&code).expect("code dir");
+        fs::create_dir_all(&content).expect("content dir");
+        fs::create_dir_all(&meta).expect("meta dir");
+        fs::write(meta.join("meta.xml"), b"<menu/>").expect("meta.xml");
+
+        let registry = ContainerRegistry::new();
+        let recommendation = registry
+            .recommend_compress_format_for_inputs(&[code, content, meta])
+            .expect("auto recommendation");
+        assert_eq!(recommendation.format_name, "wua");
+        assert_eq!(recommendation.reason, "wii-u-host-fs-input-set");
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn recommend_compress_format_returns_chd_for_unrecognized_inputs() {
         let path = temp_file_path_with_extension("recommend-chd", "bin");
         fs::write(&path, b"not-a-disc").expect("fixture");
@@ -9300,6 +9494,49 @@ mod tests {
         assert_eq!(recommendation.reason, "not-wii-gc-or-unrecognized");
 
         let _ = fs::remove_file(path);
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    #[test]
+    fn chd_default_codecs_for_cd_inputs_match_todo_policy() {
+        let handler = super::ChdContainerHandler;
+        let create_kind = super::ChdCreateKind::Disc(super::DiscLayout {
+            kind: super::DiscKind::CdRom,
+            tracks: Vec::new(),
+        });
+
+        let plan = handler
+            .resolve_compression_plan(None, &create_kind)
+            .expect("default cd plan");
+        assert_eq!(
+            plan.codecs,
+            [
+                rom_weaver_chd_sys::ChdCodec::CD_ZSTD,
+                rom_weaver_chd_sys::ChdCodec::CD_ZLIB,
+                rom_weaver_chd_sys::ChdCodec::CD_FLAC,
+                rom_weaver_chd_sys::ChdCodec::NONE,
+            ]
+        );
+        assert_eq!(plan.primary_codec, rom_weaver_chd_sys::ChdCodec::CD_ZSTD);
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    #[test]
+    fn chd_default_codecs_for_dvd_inputs_match_todo_policy() {
+        let handler = super::ChdContainerHandler;
+        let plan = handler
+            .resolve_compression_plan(None, &super::ChdCreateKind::Dvd)
+            .expect("default dvd plan");
+        assert_eq!(
+            plan.codecs,
+            [
+                rom_weaver_chd_sys::ChdCodec::ZSTD,
+                rom_weaver_chd_sys::ChdCodec::ZLIB,
+                rom_weaver_chd_sys::ChdCodec::HUFFMAN,
+                rom_weaver_chd_sys::ChdCodec::FLAC,
+            ]
+        );
+        assert_eq!(plan.primary_codec, rom_weaver_chd_sys::ChdCodec::ZSTD);
     }
 
     #[test]
