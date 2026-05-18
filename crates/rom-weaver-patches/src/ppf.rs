@@ -69,14 +69,8 @@ impl PatchHandler for PpfPatchHandler {
         request: &PatchApplyRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        if request.patches.len() != 1 {
-            return Err(RomWeaverError::Validation(format!(
-                "{} apply expects exactly one patch file",
-                self.descriptor.name
-            )));
-        }
-
-        let parsed = parse_ppf_file(&request.patches[0])?;
+        let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
+        let parsed = parse_ppf_file(patch_path)?;
         let validate_checksums =
             context.patch_checksum_validation() == PatchChecksumValidation::Strict;
         let input_len = fs::metadata(&request.input)?.len();

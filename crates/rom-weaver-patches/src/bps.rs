@@ -63,17 +63,10 @@ impl PatchHandler for BpsPatchHandler {
         request: &PatchApplyRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        if request.patches.len() != 1 {
-            return Err(RomWeaverError::Validation(format!(
-                "{} apply expects exactly one patch file",
-                self.descriptor.name
-            )));
-        }
-
+        let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
         let validate_checksums =
             context.patch_checksum_validation() == PatchChecksumValidation::Strict;
-        let patch =
-            parse_bps_file_with_checksum_validation(&request.patches[0], validate_checksums)?;
+        let patch = parse_bps_file_with_checksum_validation(patch_path, validate_checksums)?;
         let mut source = File::open(&request.input)?;
         validate_input_file(
             &request.input,

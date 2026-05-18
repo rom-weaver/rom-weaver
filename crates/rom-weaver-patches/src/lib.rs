@@ -7,6 +7,7 @@ mod ips;
 mod pds;
 mod pmsr;
 mod ppf;
+mod qbsdiff_support;
 mod rup;
 mod solid;
 mod spatch;
@@ -18,7 +19,12 @@ mod vcdiff;
 #[cfg(not(target_family = "wasm"))]
 mod xdelta_ffi;
 
-use std::{fs, io::Read, path::Path, sync::Arc};
+use std::{
+    fs,
+    io::Read,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use apsgba::ApsGbaPatchHandler;
 use bdf::BdfPatchHandler;
@@ -29,7 +35,7 @@ use ips::IpsPatchHandler;
 use pds::PdsPatchHandler;
 use pmsr::PmsrPatchHandler;
 use ppf::PpfPatchHandler;
-use rom_weaver_core::{FormatDescriptor, OperationFamily, PatchHandler};
+use rom_weaver_core::{FormatDescriptor, OperationFamily, PatchHandler, Result, RomWeaverError};
 use rup::RupPatchHandler;
 use solid::SolidPatchHandler;
 use spatch::SpatchPatchHandler;
@@ -165,6 +171,18 @@ const DLDI_SIGNATURE: [u8; 12] = [
     0xED, 0xA5, 0x8D, 0xBF, b' ', b'C', b'h', b'i', b's', b'h', b'm', 0x00,
 ];
 const BSDIFF_SIGNATURE: &[u8] = b"BSDIFF40";
+
+pub(crate) fn require_single_patch_file<'a>(
+    patches: &'a [PathBuf],
+    format_name: &str,
+) -> Result<&'a PathBuf> {
+    if patches.len() != 1 {
+        return Err(RomWeaverError::Validation(format!(
+            "{format_name} apply expects exactly one patch file"
+        )));
+    }
+    Ok(&patches[0])
+}
 
 pub struct PatchRegistry {
     handlers: Vec<Arc<dyn PatchHandler>>,

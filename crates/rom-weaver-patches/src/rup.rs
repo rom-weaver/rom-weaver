@@ -84,14 +84,8 @@ impl PatchHandler for RupPatchHandler {
         request: &PatchApplyRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        if request.patches.len() != 1 {
-            return Err(RomWeaverError::Validation(format!(
-                "{} apply expects exactly one patch file",
-                self.descriptor.name
-            )));
-        }
-
-        let patch = parse_rup_file(&request.patches[0])?;
+        let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
+        let patch = parse_rup_file(patch_path)?;
         let validate_checksums =
             context.patch_checksum_validation() == PatchChecksumValidation::Strict;
         let input_md5 = md5_file(&request.input)?;

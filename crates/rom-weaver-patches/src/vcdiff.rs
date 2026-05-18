@@ -98,14 +98,8 @@ impl PatchHandler for VcdiffPatchHandler {
         request: &PatchApplyRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        if request.patches.len() != 1 {
-            return Err(RomWeaverError::Validation(format!(
-                "{} apply expects exactly one patch file",
-                self.descriptor.name
-            )));
-        }
-
-        let patch_path = request.patches[0].clone();
+        let patch_path =
+            crate::require_single_patch_file(&request.patches, self.descriptor.name)?.clone();
         let mut patch_reader = BufReader::new(File::open(&patch_path)?);
         let patch = parse_patch(&mut patch_reader)?;
         let validate_checksums =

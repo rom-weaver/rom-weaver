@@ -59,17 +59,10 @@ impl PatchHandler for UpsPatchHandler {
         request: &PatchApplyRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        if request.patches.len() != 1 {
-            return Err(RomWeaverError::Validation(format!(
-                "{} apply expects exactly one patch file",
-                self.descriptor.name
-            )));
-        }
-
+        let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
         let validate_checksums =
             context.patch_checksum_validation() == PatchChecksumValidation::Strict;
-        let patch =
-            parse_ups_file_with_checksum_validation(&request.patches[0], validate_checksums)?;
+        let patch = parse_ups_file_with_checksum_validation(patch_path, validate_checksums)?;
         let input_len = fs::metadata(&request.input)?.len();
         let input_checksum = crc32_path_cached(&request.input, context)?;
         let (output_size, output_checksum) =
@@ -430,41 +423,13 @@ fn create_ups_patch_streaming(source_path: &Path, target_path: &Path) -> Result<
 
     let source_checksum = source_checksum.finalize();
     let target_checksum = target_checksum.finalize();
-
-    let mut bytes = UPS_MAGIC.to_vec();
-    push_varint(&mut bytes, source_size);
-    push_varint(&mut bytes, target_size);
-
-    for (index, change) in changes.iter().enumerate() {
-        let offset_to_encode = if index == 0 {
-            change.offset
-        } else {
-            let previous = &changes[index - 1];
-            let previous_len = u64::try_from(previous.xor_bytes.len()).map_err(|_| {
-                RomWeaverError::Validation(
-                    "UPS record length exceeded addressable memory while encoding".into(),
-                )
-            })?;
-            let previous_end =
-                checked_add(previous.offset, previous_len, "UPS previous record end")?;
-            let previous_next = checked_add(previous_end, 1, "UPS previous record separator")?;
-            checked_sub(change.offset, previous_next, "UPS relative record offset")?
-        };
-
-        push_varint(&mut bytes, offset_to_encode);
-        bytes.extend_from_slice(&change.xor_bytes);
-        bytes.push(0);
-    }
-
-    bytes.extend_from_slice(&source_checksum.to_le_bytes());
-    bytes.extend_from_slice(&target_checksum.to_le_bytes());
-    let patch_checksum = crc32_bytes(&bytes);
-    bytes.extend_from_slice(&patch_checksum.to_le_bytes());
-
-    Ok(CreatedUpsPatch {
-        bytes,
-        record_count: changes.len(),
-    })
+    encode_ups_patch(
+        &changes,
+        source_size,
+        target_size,
+        source_checksum,
+        target_checksum,
+    )
 }
 
 #[allow(dead_code)]
@@ -476,41 +441,13 @@ fn create_ups_patch_bytes(source: &[u8], target: &[u8]) -> Result<CreatedUpsPatc
     let source_checksum = crc32_bytes(source);
     let target_checksum = crc32_bytes(target);
     let changes = build_changes(source, target)?;
-
-    let mut bytes = UPS_MAGIC.to_vec();
-    push_varint(&mut bytes, source_size);
-    push_varint(&mut bytes, target_size);
-
-    for (index, change) in changes.iter().enumerate() {
-        let offset_to_encode = if index == 0 {
-            change.offset
-        } else {
-            let previous = &changes[index - 1];
-            let previous_len = u64::try_from(previous.xor_bytes.len()).map_err(|_| {
-                RomWeaverError::Validation(
-                    "UPS record length exceeded addressable memory while encoding".into(),
-                )
-            })?;
-            let previous_end =
-                checked_add(previous.offset, previous_len, "UPS previous record end")?;
-            let previous_next = checked_add(previous_end, 1, "UPS previous record separator")?;
-            checked_sub(change.offset, previous_next, "UPS relative record offset")?
-        };
-
-        push_varint(&mut bytes, offset_to_encode);
-        bytes.extend_from_slice(&change.xor_bytes);
-        bytes.push(0);
-    }
-
-    bytes.extend_from_slice(&source_checksum.to_le_bytes());
-    bytes.extend_from_slice(&target_checksum.to_le_bytes());
-    let patch_checksum = crc32_bytes(&bytes);
-    bytes.extend_from_slice(&patch_checksum.to_le_bytes());
-
-    Ok(CreatedUpsPatch {
-        bytes,
-        record_count: changes.len(),
-    })
+    encode_ups_patch(
+        &changes,
+        source_size,
+        target_size,
+        source_checksum,
+        target_checksum,
+    )
 }
 
 #[allow(dead_code)]
@@ -550,6 +487,49 @@ fn build_changes(source: &[u8], target: &[u8]) -> Result<Vec<UpsChange>> {
     }
 
     Ok(changes)
+}
+
+fn encode_ups_patch(
+    changes: &[UpsChange],
+    source_size: u64,
+    target_size: u64,
+    source_checksum: u32,
+    target_checksum: u32,
+) -> Result<CreatedUpsPatch> {
+    let mut bytes = UPS_MAGIC.to_vec();
+    push_varint(&mut bytes, source_size);
+    push_varint(&mut bytes, target_size);
+
+    for (index, change) in changes.iter().enumerate() {
+        let offset_to_encode = if index == 0 {
+            change.offset
+        } else {
+            let previous = &changes[index - 1];
+            let previous_len = u64::try_from(previous.xor_bytes.len()).map_err(|_| {
+                RomWeaverError::Validation(
+                    "UPS record length exceeded addressable memory while encoding".into(),
+                )
+            })?;
+            let previous_end =
+                checked_add(previous.offset, previous_len, "UPS previous record end")?;
+            let previous_next = checked_add(previous_end, 1, "UPS previous record separator")?;
+            checked_sub(change.offset, previous_next, "UPS relative record offset")?
+        };
+
+        push_varint(&mut bytes, offset_to_encode);
+        bytes.extend_from_slice(&change.xor_bytes);
+        bytes.push(0);
+    }
+
+    bytes.extend_from_slice(&source_checksum.to_le_bytes());
+    bytes.extend_from_slice(&target_checksum.to_le_bytes());
+    let patch_checksum = crc32_bytes(&bytes);
+    bytes.extend_from_slice(&patch_checksum.to_le_bytes());
+
+    Ok(CreatedUpsPatch {
+        bytes,
+        record_count: changes.len(),
+    })
 }
 
 fn checked_add(lhs: u64, rhs: u64, label: &str) -> Result<u64> {

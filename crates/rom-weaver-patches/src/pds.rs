@@ -7,13 +7,15 @@ use std::{
 
 use crc32fast::Hasher;
 use memmap2::{Mmap, MmapOptions};
-use qbsdiff::{Bsdiff, Bspatch, ParallelScheme};
+use qbsdiff::{Bsdiff, Bspatch};
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
     PatchCapabilities, PatchChecksumValidation, PatchCreateRequest, PatchHandler, ProbeConfidence,
     Result, RomWeaverError, ThreadCapability,
 };
 use zip::{CompressionMethod, ZipArchive, ZipWriter, write::SimpleFileOptions};
+
+use crate::qbsdiff_support::{qbsdiff_parallel_scheme, qbsdiff_thread_capability};
 
 const PDS_MANIFEST_NAME: &str = "patch.dat";
 const PDS_DEFAULT_PAYLOAD_NAME: &str = "patch.bdf";
@@ -29,8 +31,6 @@ const MANIFEST_KEY_SOURCE_CRC32: &str = "source_crc32";
 const MANIFEST_KEY_TARGET_CRC32: &str = "target_crc32";
 
 const BDF_FORMAT_ALIASES: &[&str] = &["bdf", "bsdiff", "bsdiff40", "bspatch", "bspatch40"];
-const QBSDIFF_MIN_PARALLEL_TARGET_BYTES: usize = 256 * 1024;
-
 pub struct PdsPatchHandler {
     descriptor: &'static FormatDescriptor,
 }
@@ -90,14 +90,8 @@ impl PatchHandler for PdsPatchHandler {
         request: &PatchApplyRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        if request.patches.len() != 1 {
-            return Err(RomWeaverError::Validation(format!(
-                "{} apply expects exactly one patch file",
-                self.descriptor.name
-            )));
-        }
-
-        let parsed = parse_pds_archive(&request.patches[0])?;
+        let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
+        let parsed = parse_pds_archive(patch_path)?;
         let payload_name = resolve_payload_name(&parsed)?;
         let format_name = resolve_payload_format(&parsed.manifest, &payload_name)?;
         if !is_bdf_alias(&format_name) {
@@ -108,7 +102,7 @@ impl PatchHandler for PdsPatchHandler {
         let validate_checksums =
             context.patch_checksum_validation() == PatchChecksumValidation::Strict;
 
-        let payload = read_named_payload(&request.patches[0], &payload_name)?;
+        let payload = read_named_payload(patch_path, &payload_name)?;
         let input = map_file_read_only(&request.input)?;
         validate_source_expectations_path(&parsed.manifest, &request.input, validate_checksums)?;
 
@@ -210,22 +204,6 @@ impl PatchHandler for PdsPatchHandler {
             threaded_diff: true,
             threaded_output: false,
         }
-    }
-}
-
-fn qbsdiff_thread_capability(target_len: usize) -> ThreadCapability {
-    if target_len > QBSDIFF_MIN_PARALLEL_TARGET_BYTES {
-        ThreadCapability::parallel(None)
-    } else {
-        ThreadCapability::single_threaded()
-    }
-}
-
-fn qbsdiff_parallel_scheme(target_len: usize) -> ParallelScheme {
-    if target_len > QBSDIFF_MIN_PARALLEL_TARGET_BYTES {
-        ParallelScheme::ChunkSize(QBSDIFF_MIN_PARALLEL_TARGET_BYTES)
-    } else {
-        ParallelScheme::Never
     }
 }
 

@@ -54,14 +54,8 @@ impl PatchHandler for PmsrPatchHandler {
         request: &PatchApplyRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        if request.patches.len() != 1 {
-            return Err(RomWeaverError::Validation(format!(
-                "{} apply expects exactly one patch file",
-                self.descriptor.name
-            )));
-        }
-
-        let patch = parse_pmsr_file(&request.patches[0])?;
+        let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
+        let patch = parse_pmsr_file(patch_path)?;
         let source_len = fs::metadata(&request.input)?.len();
         let output_len = patch.min_target_size.max(source_len);
 
@@ -238,57 +232,7 @@ fn create_pmsr_patch_bytes(original: &[u8], modified: &[u8]) -> Result<CreatedPm
 
     let modified_len_u64 = u64::try_from(modified.len())
         .map_err(|_| RomWeaverError::Validation("MOD target length exceeded u64".into()))?;
-    let max_record_end = records.iter().try_fold(0u64, |current_max, record| {
-        let data_len = u64::try_from(record.data.len())
-            .map_err(|_| RomWeaverError::Validation("MOD record length exceeded u64".into()))?;
-        let end = checked_add(record.offset, data_len, "MOD record end")?;
-        Ok::<u64, RomWeaverError>(current_max.max(end))
-    })?;
-
-    // PMSR does not encode target length directly. A zero-length trailing record
-    // preserves growth when the tail bytes are all zero.
-    if modified_len_u64 > max_record_end {
-        records.push(PmsrRecord {
-            offset: modified_len_u64,
-            data: Vec::new(),
-        });
-    }
-
-    let record_count = records.len();
-    let record_count_u32 = u32::try_from(record_count).map_err(|_| {
-        RomWeaverError::Validation("MOD record count exceeded encodable range".into())
-    })?;
-    let payload_capacity = records.iter().try_fold(0usize, |accumulator, record| {
-        let next = accumulator
-            .checked_add(8)
-            .and_then(|value| value.checked_add(record.data.len()))
-            .ok_or_else(|| {
-                RomWeaverError::Validation("MOD patch size exceeded addressable memory".into())
-            })?;
-        Ok::<usize, RomWeaverError>(next)
-    })?;
-    let mut bytes = Vec::with_capacity(PMSR_HEADER_SIZE.checked_add(payload_capacity).ok_or_else(
-        || RomWeaverError::Validation("MOD patch size exceeded addressable memory".into()),
-    )?);
-    bytes.extend_from_slice(PMSR_MAGIC);
-    bytes.extend_from_slice(&record_count_u32.to_be_bytes());
-
-    for record in &records {
-        let offset_u32 = u32::try_from(record.offset).map_err(|_| {
-            RomWeaverError::Validation("MOD record offset exceeded 32-bit range".into())
-        })?;
-        let length_u32 = u32::try_from(record.data.len()).map_err(|_| {
-            RomWeaverError::Validation("MOD record length exceeded 32-bit range".into())
-        })?;
-        bytes.extend_from_slice(&offset_u32.to_be_bytes());
-        bytes.extend_from_slice(&length_u32.to_be_bytes());
-        bytes.extend_from_slice(&record.data);
-    }
-
-    Ok(CreatedPmsrPatch {
-        bytes,
-        record_count,
-    })
+    finalize_created_pmsr_patch(records, modified_len_u64)
 }
 
 fn apply_pmsr_patch_in_place(
@@ -394,21 +338,38 @@ fn create_pmsr_patch_streaming(
         });
     }
 
+    finalize_created_pmsr_patch(records, modified_len)
+}
+
+fn finalize_created_pmsr_patch(
+    mut records: Vec<PmsrRecord>,
+    target_len: u64,
+) -> Result<CreatedPmsrPatch> {
     let max_record_end = records.iter().try_fold(0u64, |current_max, record| {
         let data_len = u64::try_from(record.data.len())
             .map_err(|_| RomWeaverError::Validation("MOD record length exceeded u64".into()))?;
         let end = checked_add(record.offset, data_len, "MOD record end")?;
         Ok::<u64, RomWeaverError>(current_max.max(end))
     })?;
-    if modified_len > max_record_end {
+
+    // PMSR does not encode target length directly. A zero-length trailing record
+    // preserves growth when the tail bytes are all zero.
+    if target_len > max_record_end {
         records.push(PmsrRecord {
-            offset: modified_len,
+            offset: target_len,
             data: Vec::new(),
         });
     }
 
-    let record_count = records.len();
-    let record_count_u32 = u32::try_from(record_count).map_err(|_| {
+    let bytes = encode_pmsr_records(&records)?;
+    Ok(CreatedPmsrPatch {
+        bytes,
+        record_count: records.len(),
+    })
+}
+
+fn encode_pmsr_records(records: &[PmsrRecord]) -> Result<Vec<u8>> {
+    let record_count_u32 = u32::try_from(records.len()).map_err(|_| {
         RomWeaverError::Validation("MOD record count exceeded encodable range".into())
     })?;
     let payload_capacity = records.iter().try_fold(0usize, |accumulator, record| {
@@ -425,7 +386,7 @@ fn create_pmsr_patch_streaming(
     )?);
     bytes.extend_from_slice(PMSR_MAGIC);
     bytes.extend_from_slice(&record_count_u32.to_be_bytes());
-    for record in &records {
+    for record in records {
         let offset_u32 = u32::try_from(record.offset).map_err(|_| {
             RomWeaverError::Validation("MOD record offset exceeded 32-bit range".into())
         })?;
@@ -436,11 +397,7 @@ fn create_pmsr_patch_streaming(
         bytes.extend_from_slice(&length_u32.to_be_bytes());
         bytes.extend_from_slice(&record.data);
     }
-
-    Ok(CreatedPmsrPatch {
-        bytes,
-        record_count,
-    })
+    Ok(bytes)
 }
 
 fn read_u32_be(bytes: &[u8], cursor: &mut usize, label: &str) -> Result<u32> {

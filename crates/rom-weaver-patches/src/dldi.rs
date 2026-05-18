@@ -83,14 +83,8 @@ impl PatchHandler for DldiPatchHandler {
         request: &PatchApplyRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        if request.patches.len() != 1 {
-            return Err(RomWeaverError::Validation(format!(
-                "{} apply expects exactly one patch file",
-                self.descriptor.name
-            )));
-        }
-
-        let patch = fs::read(&request.patches[0])?;
+        let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
+        let patch = fs::read(patch_path)?;
         let input = map_file_read_only(&request.input)?;
         let apply = apply_dldi_patch(input.as_ref(), &patch)?;
 

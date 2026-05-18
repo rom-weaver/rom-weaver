@@ -5,18 +5,18 @@ use std::{
 };
 
 use memmap2::{Mmap, MmapOptions};
-use qbsdiff::{Bsdiff, Bspatch, ParallelScheme};
+use qbsdiff::{Bsdiff, Bspatch};
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
     PatchCapabilities, PatchCreateRequest, PatchHandler, ProbeConfidence, Result, RomWeaverError,
     ThreadCapability,
 };
 
+use crate::qbsdiff_support::{qbsdiff_parallel_scheme, qbsdiff_thread_capability};
+
 pub struct BdfPatchHandler {
     descriptor: &'static FormatDescriptor,
 }
-
-const QBSDIFF_MIN_PARALLEL_TARGET_BYTES: usize = 256 * 1024;
 
 impl BdfPatchHandler {
     pub const fn new(descriptor: &'static FormatDescriptor) -> Self {
@@ -55,14 +55,8 @@ impl PatchHandler for BdfPatchHandler {
         request: &PatchApplyRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        if request.patches.len() != 1 {
-            return Err(RomWeaverError::Validation(format!(
-                "{} apply expects exactly one patch file",
-                self.descriptor.name
-            )));
-        }
-
-        let patch_bytes = fs::read(&request.patches[0])?;
+        let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
+        let patch_bytes = fs::read(patch_path)?;
         let patcher = Bspatch::new(&patch_bytes)?;
         let input = map_file_read_only(&request.input)?;
 
@@ -141,22 +135,6 @@ impl PatchHandler for BdfPatchHandler {
             threaded_diff: true,
             threaded_output: false,
         }
-    }
-}
-
-fn qbsdiff_thread_capability(target_len: usize) -> ThreadCapability {
-    if target_len > QBSDIFF_MIN_PARALLEL_TARGET_BYTES {
-        ThreadCapability::parallel(None)
-    } else {
-        ThreadCapability::single_threaded()
-    }
-}
-
-fn qbsdiff_parallel_scheme(target_len: usize) -> ParallelScheme {
-    if target_len > QBSDIFF_MIN_PARALLEL_TARGET_BYTES {
-        ParallelScheme::ChunkSize(QBSDIFF_MIN_PARALLEL_TARGET_BYTES)
-    } else {
-        ParallelScheme::Never
     }
 }
 

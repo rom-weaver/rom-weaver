@@ -70,14 +70,8 @@ impl PatchHandler for DpsPatchHandler {
         request: &PatchApplyRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        if request.patches.len() != 1 {
-            return Err(RomWeaverError::Validation(format!(
-                "{} apply expects exactly one patch file",
-                self.descriptor.name
-            )));
-        }
-
-        let parsed = parse_dps_file(&request.patches[0])?;
+        let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
+        let parsed = parse_dps_file(patch_path)?;
         let source_len_u64 = fs::metadata(&request.input)?.len();
         let source_len_u32 = u32::try_from(source_len_u64).map_err(|_| {
             RomWeaverError::Validation(format!(

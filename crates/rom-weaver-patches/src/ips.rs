@@ -111,14 +111,8 @@ impl PatchHandler for IpsPatchHandler {
         request: &PatchApplyRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        if request.patches.len() != 1 {
-            return Err(RomWeaverError::Validation(format!(
-                "{} apply expects exactly one patch file",
-                self.descriptor.name
-            )));
-        }
-
-        let patch = parse_ips_file(&request.patches[0], self.flavor)?;
+        let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
+        let patch = parse_ips_file(patch_path, self.flavor)?;
         let input_len = fs::metadata(&request.input)?.len();
         let output_size = patch.resolved_output_size(input_len)?;
         let max_parallel_chunks = max_parallel_chunks(output_size)?;
