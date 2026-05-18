@@ -6019,6 +6019,412 @@ fn patch_create_succeeds_for_bps_and_round_trips() {
 }
 
 #[test]
+fn patch_apply_auto_extracts_single_payload_by_default() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.bin");
+    let modified = temp.child("new.bin");
+    let patch = temp.child("update.bps");
+    let archive = temp.child("input.zip");
+    let output = temp.child("output.bin");
+    fs::write(original.path(), b"hello old world").expect("fixture");
+    fs::write(modified.path(), b"hello new world").expect("fixture");
+
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--format",
+            "bps",
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            original.path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            archive.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let apply_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            archive.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let apply_json = parse_single_json_line(&apply_output);
+    assert_eq!(apply_json["command"], "patch-apply");
+    assert_eq!(apply_json["family"], "patch");
+    assert_eq!(apply_json["format"], "BPS");
+    assert_eq!(apply_json["status"], "succeeded");
+    assert!(
+        apply_json["label"]
+            .as_str()
+            .expect("label")
+            .contains("patch apply input source resolved via 1 container extract step(s)")
+    );
+    assert_eq!(
+        fs::read(output.path()).expect("output"),
+        fs::read(modified.path()).expect("modified")
+    );
+}
+
+#[test]
+fn patch_apply_no_extract_uses_raw_container_bytes() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.bin");
+    let modified = temp.child("new.bin");
+    let patch = temp.child("update.bps");
+    let archive = temp.child("input.zip");
+    let output = temp.child("output.bin");
+    fs::write(original.path(), b"hello old world").expect("fixture");
+    fs::write(modified.path(), b"hello new world").expect("fixture");
+
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--format",
+            "bps",
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            original.path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            archive.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let apply_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            archive.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-extract",
+            "--json",
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .stdout
+        .clone();
+
+    let apply_json = parse_single_json_line(&apply_output);
+    assert_eq!(apply_json["command"], "patch-apply");
+    assert_eq!(apply_json["family"], "patch");
+    assert_eq!(apply_json["format"], "BPS");
+    assert_eq!(apply_json["status"], "failed");
+    assert!(
+        !apply_json["label"]
+            .as_str()
+            .expect("label")
+            .contains("patch apply input source resolved via")
+    );
+}
+
+#[test]
+fn patch_apply_auto_extract_ambiguity_requires_select() {
+    let temp = setup_temp_dir();
+    let alpha = temp.child("alpha.bin");
+    let alpha_modified = temp.child("alpha-modified.bin");
+    let beta = temp.child("beta.bin");
+    let patch = temp.child("update.bps");
+    let archive = temp.child("bundle.zip");
+    let output = temp.child("output.bin");
+    fs::write(alpha.path(), b"alpha payload").expect("alpha fixture");
+    fs::write(alpha_modified.path(), b"alpha payload patched").expect("alpha modified fixture");
+    fs::write(beta.path(), b"beta payload").expect("beta fixture");
+
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-create",
+            "--original",
+            alpha.path().to_str().expect("path"),
+            "--modified",
+            alpha_modified.path().to_str().expect("path"),
+            "--format",
+            "bps",
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            alpha.path().to_str().expect("path"),
+            beta.path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            archive.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let apply_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            archive.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .stdout
+        .clone();
+
+    let apply_json = parse_single_json_line(&apply_output);
+    assert_eq!(apply_json["command"], "patch-apply");
+    assert_eq!(apply_json["family"], "patch");
+    assert_eq!(apply_json["status"], "failed");
+    let label = apply_json["label"].as_str().expect("label");
+    assert!(label.contains("ambiguous"));
+    assert!(label.contains("alpha.bin"));
+    assert!(label.contains("beta.bin"));
+    assert!(label.contains("--select"));
+}
+
+#[test]
+fn patch_apply_auto_extract_select_resolves_ambiguity() {
+    let temp = setup_temp_dir();
+    let alpha = temp.child("alpha.bin");
+    let alpha_modified = temp.child("alpha-modified.bin");
+    let beta = temp.child("beta.bin");
+    let patch = temp.child("update.bps");
+    let archive = temp.child("bundle.zip");
+    let output = temp.child("output.bin");
+    fs::write(alpha.path(), b"alpha payload").expect("alpha fixture");
+    fs::write(alpha_modified.path(), b"alpha payload patched").expect("alpha modified fixture");
+    fs::write(beta.path(), b"beta payload").expect("beta fixture");
+
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-create",
+            "--original",
+            alpha.path().to_str().expect("path"),
+            "--modified",
+            alpha_modified.path().to_str().expect("path"),
+            "--format",
+            "bps",
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            alpha.path().to_str().expect("path"),
+            beta.path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            archive.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let apply_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            archive.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--select",
+            "alpha.bin",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let apply_json = parse_single_json_line(&apply_output);
+    assert_eq!(apply_json["command"], "patch-apply");
+    assert_eq!(apply_json["family"], "patch");
+    assert_eq!(apply_json["format"], "BPS");
+    assert_eq!(apply_json["status"], "succeeded");
+    assert!(
+        apply_json["label"]
+            .as_str()
+            .expect("label")
+            .contains("patch apply input source resolved via 1 container extract step(s)")
+    );
+    assert_eq!(
+        fs::read(output.path()).expect("output"),
+        fs::read(alpha_modified.path()).expect("alpha modified")
+    );
+}
+
+#[test]
+fn patch_apply_auto_extract_ignores_sidecars_unless_no_ignore() {
+    let temp = setup_temp_dir();
+    let original = temp.child("game.bin");
+    let modified = temp.child("game-modified.bin");
+    let sidecar_txt = temp.child("notes.txt");
+    let sidecar_json = temp.child("meta.json");
+    let patch = temp.child("update.bps");
+    let archive = temp.child("bundle.zip");
+    let output = temp.child("output.bin");
+    fs::write(original.path(), b"game payload").expect("fixture");
+    fs::write(modified.path(), b"game payload patched").expect("fixture");
+    fs::write(sidecar_txt.path(), b"ignore txt").expect("fixture");
+    fs::write(sidecar_json.path(), b"{}").expect("fixture");
+
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--format",
+            "bps",
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            original.path().to_str().expect("path"),
+            sidecar_txt.path().to_str().expect("path"),
+            sidecar_json.path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            archive.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let default_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            archive.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let default_json = parse_single_json_line(&default_output);
+    assert_eq!(default_json["command"], "patch-apply");
+    assert_eq!(default_json["status"], "succeeded");
+    assert_eq!(
+        fs::read(output.path()).expect("output"),
+        fs::read(modified.path()).expect("modified")
+    );
+
+    let no_ignore_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            archive.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-ignore",
+            "--json",
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .stdout
+        .clone();
+    let no_ignore_json = parse_single_json_line(&no_ignore_output);
+    assert_eq!(no_ignore_json["command"], "patch-apply");
+    assert_eq!(no_ignore_json["status"], "failed");
+    let no_ignore_label = no_ignore_json["label"].as_str().expect("label");
+    assert!(no_ignore_label.contains("ambiguous"));
+    assert!(no_ignore_label.contains("--select"));
+}
+
+#[test]
 fn patch_apply_can_ignore_checksum_validation_for_bps() {
     let temp = setup_temp_dir();
     let original = temp.child("old.bin");

@@ -176,6 +176,18 @@ struct TrimCommand {
 struct PatchApplyCommand {
     #[arg(long)]
     input: PathBuf,
+    #[arg(long = "select")]
+    select: Vec<String>,
+    #[arg(
+        long,
+        help = "Disable container auto-extract and patch the source bytes directly"
+    )]
+    no_extract: bool,
+    #[arg(
+        long,
+        help = "Disable default ignore filtering during patch-apply container payload resolution"
+    )]
+    no_ignore: bool,
     #[arg(
         long = "patch",
         required = true,
@@ -521,6 +533,15 @@ struct ResolvedChecksumSource {
     cleanup_paths: Vec<PathBuf>,
 }
 
+#[derive(Clone, Copy, Debug)]
+struct AutoExtractResolutionLabels<'a> {
+    command: &'a str,
+    family: OperationFamily,
+    format: Option<&'a str>,
+    source_label: &'a str,
+    temp_prefix: &'a str,
+}
+
 #[derive(Debug)]
 struct ChecksumExtractCandidate {
     source: PathBuf,
@@ -847,22 +868,34 @@ impl CliApp {
             );
         }
 
-        let resolved =
-            match self.resolve_checksum_source(&source, &select, no_extract, no_ignore, &context) {
-                Ok(resolved) => resolved,
-                Err(error) => {
-                    return self.finish(
-                        "checksum",
-                        OperationReport::failed(
-                            OperationFamily::Checksum,
-                            Some(self.checksum.name().to_string()),
-                            "prepare",
-                            error.to_string(),
-                            thread_execution,
-                        ),
-                    );
-                }
-            };
+        let resolved = match self.resolve_source_with_auto_extract(
+            &source,
+            &select,
+            no_extract,
+            no_ignore,
+            &context,
+            AutoExtractResolutionLabels {
+                command: "checksum",
+                family: OperationFamily::Checksum,
+                format: Some(self.checksum.name()),
+                source_label: "checksum",
+                temp_prefix: "checksum-extract",
+            },
+        ) {
+            Ok(resolved) => resolved,
+            Err(error) => {
+                return self.finish(
+                    "checksum",
+                    OperationReport::failed(
+                        OperationFamily::Checksum,
+                        Some(self.checksum.name().to_string()),
+                        "prepare",
+                        error.to_string(),
+                        thread_execution,
+                    ),
+                );
+            }
+        };
         let ResolvedChecksumSource {
             source: resolved_source,
             extracted_archives,
@@ -996,27 +1029,18 @@ impl CliApp {
                 );
             }
         }
-        for temp_path in temp_paths {
-            match fs::metadata(&temp_path) {
-                Ok(metadata) if metadata.is_dir() => {
-                    let _ = fs::remove_dir_all(temp_path);
-                }
-                Ok(_) => {
-                    let _ = fs::remove_file(temp_path);
-                }
-                Err(_) => {}
-            }
-        }
+        Self::cleanup_temp_paths(temp_paths);
         self.finish("checksum", report)
     }
 
-    fn resolve_checksum_source(
+    fn resolve_source_with_auto_extract(
         &self,
         source: &Path,
         select: &[String],
         no_extract: bool,
         no_ignore: bool,
         context: &OperationContext,
+        labels: AutoExtractResolutionLabels<'_>,
     ) -> Result<ResolvedChecksumSource> {
         if no_extract {
             return Ok(ResolvedChecksumSource {
@@ -1049,30 +1073,33 @@ impl CliApp {
             let next_depth = depth + 1;
             if next_depth > MAX_NESTED_EXTRACT_DEPTH {
                 return Err(RomWeaverError::Validation(format!(
-                    "checksum extract exceeded max depth of {MAX_NESTED_EXTRACT_DEPTH} at `{}`",
+                    "{} extract exceeded max depth of {MAX_NESTED_EXTRACT_DEPTH} at `{}`",
+                    labels.source_label,
                     current_source.display()
                 )));
             }
             if extracted_archives >= MAX_NESTED_EXTRACT_ARCHIVES {
                 return Err(RomWeaverError::Validation(format!(
-                    "checksum extract exceeded max archive count of {MAX_NESTED_EXTRACT_ARCHIVES}"
+                    "{} extract exceeded max archive count of {MAX_NESTED_EXTRACT_ARCHIVES}",
+                    labels.source_label
                 )));
             }
 
             self.emit_running(
-                "checksum",
-                OperationFamily::Checksum,
-                Some(self.checksum.name()),
+                labels.command,
+                labels.family,
+                labels.format,
                 "prepare",
                 format!(
-                    "extracting checksum payload from `{}`",
+                    "extracting {} payload from `{}`",
+                    labels.source_label,
                     current_source.display()
                 ),
                 None,
                 Some(context.plan_threads(handler.capabilities().extract_threads)),
             );
 
-            let out_dir = context.temp_paths().next_path("checksum-extract", None);
+            let out_dir = context.temp_paths().next_path(labels.temp_prefix, None);
             fs::create_dir_all(&out_dir)?;
             let request = ContainerExtractRequest {
                 source: current_source.clone(),
@@ -1081,7 +1108,8 @@ impl CliApp {
             };
             handler.extract(&request, context).map_err(|error| {
                 RomWeaverError::Validation(format!(
-                    "checksum payload extraction failed for `{}` ({}): {error}",
+                    "{} payload extraction failed for `{}` ({}): {error}",
+                    labels.source_label,
                     current_source.display(),
                     handler.descriptor().name
                 ))
@@ -1093,7 +1121,8 @@ impl CliApp {
             let candidates = self.collect_checksum_extract_candidates(&out_dir)?;
             if candidates.is_empty() {
                 return Err(RomWeaverError::Validation(format!(
-                    "checksum payload extraction produced no files for `{}`",
+                    "{} payload extraction produced no files for `{}`",
+                    labels.source_label,
                     current_source.display()
                 )));
             }
@@ -1106,7 +1135,8 @@ impl CliApp {
                     .collect::<Vec<_>>();
                 if non_ignored.is_empty() {
                     return Err(RomWeaverError::Validation(format!(
-                        "all extracted checksum candidates from `{}` were ignored by default filters; rerun with --no-ignore or pass --select <pattern>",
+                        "all extracted {} candidates from `{}` were ignored by default filters; rerun with --no-ignore or pass --select <pattern>",
+                        labels.source_label,
                         current_source.display()
                     )));
                 }
@@ -1119,7 +1149,8 @@ impl CliApp {
                     .collect::<Vec<_>>()
                     .join(", ");
                 return Err(RomWeaverError::Validation(format!(
-                    "checksum payload resolution is ambiguous for `{}`; candidates: {choices}. Pass --select <pattern> to choose one payload",
+                    "{} payload resolution is ambiguous for `{}`; candidates: {choices}. Pass --select <pattern> to choose one payload",
+                    labels.source_label,
                     current_source.display()
                 )));
             }
@@ -1136,6 +1167,20 @@ impl CliApp {
             extracted_archives,
             cleanup_paths,
         })
+    }
+
+    fn cleanup_temp_paths(temp_paths: Vec<PathBuf>) {
+        for temp_path in temp_paths {
+            match fs::metadata(&temp_path) {
+                Ok(metadata) if metadata.is_dir() => {
+                    let _ = fs::remove_dir_all(temp_path);
+                }
+                Ok(_) => {
+                    let _ = fs::remove_file(temp_path);
+                }
+                Err(_) => {}
+            }
+        }
     }
 
     fn collect_checksum_extract_candidates(
@@ -1646,6 +1691,9 @@ impl CliApp {
     fn run_patch_apply(&self, args: PatchApplyCommand) -> ExitCode {
         let PatchApplyCommand {
             input,
+            select,
+            no_extract,
+            no_ignore,
             patches,
             output,
             input_checksums,
@@ -1702,7 +1750,41 @@ impl CliApp {
             }
         }
 
-        let mut temp_paths = Vec::new();
+        let resolved_input = match self.resolve_source_with_auto_extract(
+            &input,
+            &select,
+            no_extract,
+            no_ignore,
+            &context,
+            AutoExtractResolutionLabels {
+                command: "patch-apply",
+                family: OperationFamily::Patch,
+                format: None,
+                source_label: "patch apply input",
+                temp_prefix: "patch-apply-input-extract",
+            },
+        ) {
+            Ok(resolved) => resolved,
+            Err(error) => {
+                return self.finish(
+                    "patch-apply",
+                    OperationReport::failed(
+                        OperationFamily::Patch,
+                        None,
+                        "prepare",
+                        error.to_string(),
+                        probe_threads.clone(),
+                    ),
+                );
+            }
+        };
+        let ResolvedChecksumSource {
+            source: resolved_input,
+            extracted_archives,
+            cleanup_paths,
+        } = resolved_input;
+
+        let mut temp_paths = cleanup_paths;
         let report = (|| {
             if patches.is_empty() {
                 return OperationReport::failed(
@@ -1730,7 +1812,7 @@ impl CliApp {
                 let stripped_path = context
                     .temp_paths()
                     .next_path("patch-apply-input-noheader", Some("bin"));
-                match Self::strip_header_to_temp(&input, &stripped_path) {
+                match Self::strip_header_to_temp(&resolved_input, &stripped_path) {
                     Ok(result) => {
                         stripped_header = Some(result.header_bytes);
                         stripped_header_match = result.matched_header;
@@ -1748,7 +1830,7 @@ impl CliApp {
                     }
                 }
             } else {
-                input.clone()
+                resolved_input.clone()
             };
             if !expected_input_checksums.is_empty() {
                 self.emit_running(
@@ -1955,6 +2037,12 @@ impl CliApp {
                     );
                 }
             }
+            if extracted_archives > 0 {
+                report.label = format!(
+                    "{}; patch apply input source resolved via {extracted_archives} container extract step(s)",
+                    report.label
+                );
+            }
             if !checksum_verification_labels.is_empty() {
                 report.label = format!(
                     "{}; {}",
@@ -1966,9 +2054,7 @@ impl CliApp {
             report
         })();
 
-        for temp_path in temp_paths {
-            let _ = fs::remove_file(temp_path);
-        }
+        Self::cleanup_temp_paths(temp_paths);
         self.finish("patch-apply", report)
     }
 
