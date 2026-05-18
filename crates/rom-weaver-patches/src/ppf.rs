@@ -98,7 +98,8 @@ impl PatchHandler for PpfPatchHandler {
             .read(true)
             .write(true)
             .open(&request.output)?;
-        apply_records(&mut output, &parsed.records)?;
+        let use_undo_data = should_apply_undo_data(&mut output, &parsed.records)?;
+        apply_records(&mut output, &parsed.records, use_undo_data)?;
         output.flush()?;
 
         let execution = context.plan_threads(ThreadCapability::single_threaded());
@@ -212,6 +213,7 @@ struct PpfBlockcheck {
 struct PpfRecord {
     offset: u64,
     data: Vec<u8>,
+    undo_data: Option<Vec<u8>>,
 }
 
 #[derive(Debug)]
@@ -525,6 +527,7 @@ fn parse_records_v1_v2(bytes: &[u8], mut cursor: usize, end: usize) -> Result<Ve
         records.push(PpfRecord {
             offset,
             data: bytes[cursor..data_end].to_vec(),
+            undo_data: None,
         });
         cursor = data_end;
     }
@@ -570,7 +573,7 @@ fn parse_records_v3(
         let data = bytes[cursor..data_end].to_vec();
         cursor = data_end;
 
-        if undo_enabled {
+        let undo_data = if undo_enabled {
             let undo_end = cursor
                 .checked_add(len)
                 .ok_or_else(|| RomWeaverError::Validation("PPF3 undo length overflowed".into()))?;
@@ -579,10 +582,18 @@ fn parse_records_v3(
                     "PPF3 undo data exceeded patch bounds".into(),
                 ));
             }
+            let undo_data = bytes[cursor..undo_end].to_vec();
             cursor = undo_end;
-        }
+            Some(undo_data)
+        } else {
+            None
+        };
 
-        records.push(PpfRecord { offset, data });
+        records.push(PpfRecord {
+            offset,
+            data,
+            undo_data,
+        });
     }
 
     Ok(records)
@@ -666,10 +677,35 @@ fn validate_blockcheck(input_path: &Path, blockcheck: &PpfBlockcheck) -> Result<
     Ok(())
 }
 
-fn apply_records(file: &mut File, records: &[PpfRecord]) -> Result<()> {
+fn should_apply_undo_data(file: &mut File, records: &[PpfRecord]) -> Result<bool> {
+    let Some(first_record) = records.first() else {
+        return Ok(false);
+    };
+    if first_record.undo_data.is_none() {
+        return Ok(false);
+    }
+
+    file.seek(SeekFrom::Start(first_record.offset))?;
+    let mut current_bytes = vec![0u8; first_record.data.len()];
+    if let Err(error) = file.read_exact(&mut current_bytes) {
+        if error.kind() == std::io::ErrorKind::UnexpectedEof {
+            return Ok(false);
+        }
+        return Err(error.into());
+    }
+
+    Ok(current_bytes == first_record.data)
+}
+
+fn apply_records(file: &mut File, records: &[PpfRecord], use_undo_data: bool) -> Result<()> {
     for record in records {
         file.seek(SeekFrom::Start(record.offset))?;
-        file.write_all(&record.data)?;
+        let payload = if use_undo_data {
+            record.undo_data.as_deref().unwrap_or(&record.data)
+        } else {
+            &record.data
+        };
+        file.write_all(payload)?;
     }
     Ok(())
 }
@@ -931,6 +967,59 @@ mod tests {
         let mut expected = input;
         expected[3..8].copy_from_slice(b"PATCH");
         assert_eq!(fs::read(output_path).expect("output"), expected);
+    }
+
+    #[test]
+    fn apply_uses_undo_data_when_reapplying_ppf3_undo_patch() {
+        let temp = TestDir::new();
+        let input_path = temp.child("input.bin");
+        let patch_path = temp.child("update.ppf");
+        let once_path = temp.child("once.bin");
+        let twice_path = temp.child("twice.bin");
+
+        let original = b"abcdefghij".to_vec();
+        fs::write(&input_path, &original).expect("fixture");
+        fs::write(
+            &patch_path,
+            build_ppf3_patch(
+                "PPF3 undo test",
+                0,
+                false,
+                true,
+                None,
+                vec![V3Record {
+                    offset: 2,
+                    data: b"XYZ".to_vec(),
+                    undo: b"cde".to_vec(),
+                }],
+            ),
+        )
+        .expect("fixture");
+
+        let handler = PpfPatchHandler::new(&PPF);
+        handler
+            .apply(
+                &PatchApplyRequest {
+                    input: input_path.clone(),
+                    patches: vec![patch_path.clone()],
+                    output: once_path.clone(),
+                },
+                &test_context_with_threads(&temp, 1),
+            )
+            .expect("first apply");
+        assert_eq!(fs::read(&once_path).expect("first output"), b"abXYZfghij");
+
+        handler
+            .apply(
+                &PatchApplyRequest {
+                    input: once_path,
+                    patches: vec![patch_path],
+                    output: twice_path.clone(),
+                },
+                &test_context_with_threads(&temp, 1),
+            )
+            .expect("second apply");
+        assert_eq!(fs::read(twice_path).expect("second output"), original);
     }
 
     #[test]
