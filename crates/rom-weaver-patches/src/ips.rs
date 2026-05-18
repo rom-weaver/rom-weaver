@@ -140,10 +140,13 @@ impl PatchHandler for IpsPatchHandler {
             OperationFamily::Patch,
             Some(self.descriptor.name.to_string()),
             "apply",
-            format!(
-                "applied {} patch with {} record(s)",
-                self.descriptor.name,
-                patch.records.len()
+            append_warning_labels(
+                format!(
+                    "applied {} patch with {} record(s)",
+                    self.descriptor.name,
+                    patch.records.len()
+                ),
+                &patch.warnings,
             ),
             Some(100.0),
             Some(execution),
@@ -205,6 +208,7 @@ impl PatchHandler for IpsPatchHandler {
 struct ParsedIpsPatch {
     truncate_size: Option<u64>,
     metadata: Option<JsonMap<String, JsonValue>>,
+    warnings: Vec<String>,
     max_written_end: u64,
     records: Vec<IpsRecord>,
 }
@@ -279,6 +283,7 @@ fn parse_ips_bytes(bytes: &[u8], flavor: IpsFlavor) -> Result<ParsedIpsPatch> {
     }
 
     let mut records = Vec::new();
+    let mut warnings = Vec::new();
     let mut max_written_end = 0u64;
 
     loop {
@@ -288,10 +293,11 @@ fn parse_ips_bytes(bytes: &[u8], flavor: IpsFlavor) -> Result<ParsedIpsPatch> {
                 IpsFlavor::Ips => match parser.remaining() {
                     0 => (None, None),
                     3 => (Some(u64::from(parser.read_u24()?)), None),
-                    _ => {
-                        return Err(RomWeaverError::Validation(
-                            "IPS patch contained unexpected trailing data after EOF".into(),
+                    trailing_len => {
+                        warnings.push(format!(
+                            "ignored {trailing_len} trailing byte(s) after EOF in IPS patch"
                         ));
+                        (None, None)
                     }
                 },
                 IpsFlavor::Ips32 => match parser.remaining() {
@@ -322,6 +328,7 @@ fn parse_ips_bytes(bytes: &[u8], flavor: IpsFlavor) -> Result<ParsedIpsPatch> {
             return Ok(ParsedIpsPatch {
                 truncate_size,
                 metadata,
+                warnings,
                 max_written_end,
                 records,
             });
@@ -335,12 +342,13 @@ fn parse_ips_bytes(bytes: &[u8], flavor: IpsFlavor) -> Result<ParsedIpsPatch> {
         let size = parser.read_u16()?;
         let (len, data) = if size == 0 {
             let rle_len = u64::from(parser.read_u16()?);
-            if rle_len == 0 {
-                return Err(RomWeaverError::Validation(
-                    "IPS RLE record length must be greater than zero".into(),
-                ));
-            }
             let byte = parser.read_exact(1)?[0];
+            if rle_len == 0 {
+                warnings.push(format!(
+                    "ignored zero-length IPS RLE record at offset {offset}"
+                ));
+                continue;
+            }
             (rle_len, IpsRecordData::Rle { byte })
         } else {
             let data = parser.read_exact(usize::from(size))?.to_vec();
@@ -363,6 +371,14 @@ fn parse_label(format_name: &str, patch: &ParsedIpsPatch) -> String {
     }
     if patch.metadata.is_some() {
         label.push_str(" and metadata");
+    }
+    append_warning_labels(label, &patch.warnings)
+}
+
+fn append_warning_labels(mut label: String, warnings: &[String]) -> String {
+    for warning in warnings {
+        label.push_str("; warning=");
+        label.push_str(warning);
     }
     label
 }
@@ -869,6 +885,128 @@ mod tests {
             error
                 .to_string()
                 .contains("IPS record exceeded declared output size")
+        );
+    }
+
+    #[test]
+    fn parse_accepts_zero_length_rle_records_with_warning() {
+        let patch = build_ips_patch(
+            vec![
+                TestIpsRecord::Rle {
+                    offset: 0,
+                    len: 0,
+                    value: 0xFF,
+                },
+                TestIpsRecord::Literal {
+                    offset: 1,
+                    data: b"A".to_vec(),
+                },
+            ],
+            None,
+        );
+
+        let parsed = parse_ips_bytes(&patch, IpsFlavor::Ips).expect("parse");
+        assert_eq!(parsed.records.len(), 1);
+        assert_eq!(parsed.records[0].offset, 1);
+        assert_eq!(parsed.records[0].len, 1);
+        assert_eq!(parsed.warnings.len(), 1);
+        assert!(
+            parsed.warnings[0].contains("ignored zero-length IPS RLE record at offset 0"),
+            "warning mismatch: {}",
+            parsed.warnings[0]
+        );
+    }
+
+    #[test]
+    fn parse_accepts_trailing_bytes_after_eof_with_warning() {
+        let mut patch = build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: 0,
+                data: b"A".to_vec(),
+            }],
+            None,
+        );
+        patch.extend_from_slice(&[0xDE, 0xAD]);
+
+        let parsed = parse_ips_bytes(&patch, IpsFlavor::Ips).expect("parse");
+        assert_eq!(parsed.records.len(), 1);
+        assert_eq!(parsed.truncate_size, None);
+        assert_eq!(parsed.warnings.len(), 1);
+        assert!(
+            parsed.warnings[0].contains("ignored 2 trailing byte(s) after EOF in IPS patch"),
+            "warning mismatch: {}",
+            parsed.warnings[0]
+        );
+    }
+
+    #[test]
+    fn parse_report_includes_warning_for_zero_length_rle_record() {
+        let temp = TestDir::new();
+        let patch_path = temp.child("zero-rle.ips");
+        fs::write(
+            &patch_path,
+            build_ips_patch(
+                vec![TestIpsRecord::Rle {
+                    offset: 0,
+                    len: 0,
+                    value: 0xFF,
+                }],
+                None,
+            ),
+        )
+        .expect("fixture");
+
+        let handler = IpsPatchHandler::new(&IPS);
+        let report = handler
+            .parse(&patch_path, &test_context_with_threads(&temp, 1))
+            .expect("parse report");
+
+        assert!(
+            report
+                .label
+                .contains("warning=ignored zero-length IPS RLE record at offset 0"),
+            "label mismatch: {}",
+            report.label
+        );
+    }
+
+    #[test]
+    fn apply_report_includes_warning_for_trailing_bytes_after_eof() {
+        let temp = TestDir::new();
+        let input_path = temp.child("input.bin");
+        let patch_path = temp.child("trailing-data.ips");
+        let output_path = temp.child("output.bin");
+        fs::write(&input_path, b"ab").expect("fixture");
+
+        let mut patch = build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: 1,
+                data: b"Z".to_vec(),
+            }],
+            None,
+        );
+        patch.extend_from_slice(&[0x00]);
+        fs::write(&patch_path, patch).expect("fixture");
+
+        let handler = IpsPatchHandler::new(&IPS);
+        let report = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: input_path,
+                    patches: vec![patch_path],
+                    output: output_path.clone(),
+                },
+                &test_context_with_threads(&temp, 1),
+            )
+            .expect("apply report");
+
+        assert_eq!(fs::read(&output_path).expect("output"), b"aZ");
+        assert!(
+            report
+                .label
+                .contains("warning=ignored 1 trailing byte(s) after EOF in IPS patch"),
+            "label mismatch: {}",
+            report.label
         );
     }
 
