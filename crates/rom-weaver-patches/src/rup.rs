@@ -121,12 +121,14 @@ impl PatchHandler for RupPatchHandler {
             fs::create_dir_all(parent)?;
         }
         fs::copy(&request.input, &request.output)?;
+        let mut input = File::open(&request.input)?;
+        let input_len = fs::metadata(&request.input)?.len();
         let mut output = OpenOptions::new()
             .read(true)
             .write(true)
             .open(&request.output)?;
         output.set_len(output_size)?;
-        apply_xor_records_in_place(file, output_len, &mut output)?;
+        apply_xor_records_in_place(file, output_len, input_len, &mut input, &mut output)?;
         apply_overflow_in_place(file, undo, output_len, &mut output)?;
         output.flush()?;
 
@@ -387,7 +389,13 @@ fn select_matching_file(patch: &ParsedRupPatch, input_md5: [u8; 16]) -> Option<(
     None
 }
 
-fn apply_xor_records_in_place(file: &RupFile, output_len: usize, output: &mut File) -> Result<()> {
+fn apply_xor_records_in_place(
+    file: &RupFile,
+    output_len: usize,
+    input_len: u64,
+    input: &mut File,
+    output: &mut File,
+) -> Result<()> {
     let mut buffer = vec![0u8; RUP_IO_BUFFER_SIZE];
     for record in &file.records {
         let start = usize_from_u64(record.offset, "RUP record offset")?;
@@ -406,8 +414,24 @@ fn apply_xor_records_in_place(file: &RupFile, output_len: usize, output: &mut Fi
         let mut write_offset = record.offset;
         while remaining > 0 {
             let chunk_len = remaining.min(buffer.len());
-            output.seek(SeekFrom::Start(write_offset))?;
-            output.read_exact(&mut buffer[..chunk_len])?;
+
+            let readable_u64 = if write_offset >= input_len {
+                0
+            } else {
+                (input_len - write_offset).min(chunk_len as u64)
+            };
+            let readable = usize::try_from(readable_u64).map_err(|_| {
+                RomWeaverError::Validation("RUP readable chunk length exceeded usize".into())
+            })?;
+
+            if readable > 0 {
+                input.seek(SeekFrom::Start(write_offset))?;
+                input.read_exact(&mut buffer[..readable])?;
+            }
+            if readable < chunk_len {
+                buffer[readable..chunk_len].fill(0);
+            }
+
             for (index, byte) in buffer[..chunk_len].iter_mut().enumerate() {
                 *byte ^= record.xor[xor_cursor + index];
             }
@@ -948,7 +972,9 @@ impl<'a> RupParser<'a> {
 mod tests {
     use std::fs;
 
-    use rom_weaver_core::{PatchApplyRequest, PatchCreateRequest, PatchHandler};
+    use rom_weaver_core::{
+        PatchApplyRequest, PatchChecksumValidation, PatchCreateRequest, PatchHandler,
+    };
 
     use super::{
         RUP_COMMAND_OPEN_NEW_FILE, RupFile, RupMetadata, RupPatchHandler, create_rup_patch_bytes,
@@ -1192,5 +1218,65 @@ mod tests {
             .expect_err("expected mismatch");
 
         assert!(error.to_string().contains("RUP input validation failed"));
+    }
+
+    #[test]
+    fn apply_uses_source_bytes_for_each_record_even_when_records_overlap() {
+        let temp = TestDir::new();
+        let source_path = temp.child("source.bin");
+        let target_path = temp.child("target.bin");
+        let patch_path = temp.child("overlap.rup");
+        let output_path = temp.child("output.bin");
+
+        let source = vec![0u8; 8];
+        let target = vec![0u8, 1, 2, 2, 0, 0, 0, 0];
+        fs::write(&source_path, &source).expect("source");
+        fs::write(&target_path, &target).expect("target");
+
+        let mut patch = create_rup_patch_bytes(&source, &target)
+            .expect("patch")
+            .bytes;
+
+        let command_offset = patch
+            .iter()
+            .position(|byte| *byte == RUP_COMMAND_OPEN_NEW_FILE)
+            .expect("open command");
+        let mut cursor = command_offset + 1;
+
+        let name_len = usize::from(patch[cursor]);
+        cursor += 1 + name_len;
+        cursor += 1;
+
+        let source_size_len = usize::from(patch[cursor]);
+        cursor += 1 + source_size_len;
+
+        let target_size_len = usize::from(patch[cursor]);
+        cursor += 1 + target_size_len;
+
+        cursor += 32;
+
+        patch.truncate(cursor);
+        patch.push(0x02);
+        patch.extend_from_slice(&[0x01, 0x01, 0x01, 0x02, 0x01, 0x01]);
+        patch.push(0x02);
+        patch.extend_from_slice(&[0x01, 0x02, 0x01, 0x02, 0x02, 0x02]);
+        patch.push(0x00);
+
+        fs::write(&patch_path, &patch).expect("patch file");
+
+        let handler = RupPatchHandler::new(&RUP);
+        handler
+            .apply(
+                &PatchApplyRequest {
+                    input: source_path,
+                    patches: vec![patch_path],
+                    output: output_path.clone(),
+                },
+                &test_context_with_threads(&temp, 1)
+                    .with_patch_checksum_validation(PatchChecksumValidation::Ignore),
+            )
+            .expect("apply");
+
+        assert_eq!(fs::read(output_path).expect("output"), target);
     }
 }
