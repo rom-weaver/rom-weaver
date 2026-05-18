@@ -7,7 +7,6 @@
 - `2026-05-17 audit`: Added backlog rows for current threading/streaming gaps (RVZ/Z3DS capability parity, qbsdiff threading, patch streaming migrations off full-buffer reads, and real codec backend implementation).
 - `this commit`: Added thread capability/runtime validation groundwork (`ThreadCapability::supports_execution`) and parity assertions for IPS/VCDIFF apply execution paths.
 - `6fd45bc`: BSPATCH alias probe support landed (`.bspatch`/`.bspatch40`, `bspatch`/`bspatch40` alias routing to BSDIFF40 compatibility paths).
-- `this commit`: WUA inspect/extract/create landed via native ZArchive-compatible footer/tree/block handling (`.wua`/`.zar`).
 - `this commit`: Native SOLID v4 patch support landed (`.solid`, parse/apply/create, MD5 validation, primitive stream handling, and CLI smoke coverage).
 - `this commit`: PDS parse/apply/create landed with `patch.dat` manifest validation and embedded BSDIFF40 payload round-trip support.
 - `b9b66a5`: MOD/PMSR parse/apply/create support landed (`.mod`/`.pmsr`, `pmsr` alias) with module + CLI smoke coverage.
@@ -36,8 +35,9 @@
 | CMD-005 | command | patch-apply | n/a | n/a | n/a | done | n/a | context-plumbed | cli-smoke,json-contract | done | Patch apply routes through handler probing, emits thread-aware reports, supports compatibility flags `--strip-header`, `--add-header`, and `--repair-checksum`, auto-resolves container payload inputs by default with `--no-extract`/`--select`/`--no-ignore`, and now compresses output by default (with `--no-compress`, `--compress-format`, and `--compress-codec` controls); `--strip-header` is Igir-style profile-aware for `.a78/.lnx/.nes/.fds/.smc`, while checksum repair remains auto-detected for Sega Genesis/Game Boy targets. |
 | CMD-006 | command | patch-create | n/a | n/a | n/a | n/a | done | context-plumbed | cli-smoke,json-contract | done | Patch create routes by format name through registered handlers. |
 | CMD-007 | command | trim | n/a | n/a | done | n/a | n/a | context-plumbed | cli-smoke,json-contract,thread-model | done | Dedicated image/file trimming workflow landed with NDSTokyoTrim-compatible NDS/DSi boundaries plus GBA, 3DS, and XISO trim handling (XISO revert intentionally unsupported). |
-| CMD-008 | command | extract-chd-splitbin | n/a | todo | n/a | n/a | n/a | context-plumbed | fixture-roundtrip,cli-smoke,json-contract | todo | Add CHD extract mode parity for `chdman extractcd -ob` style split BIN output (BIN chunks + CUE metadata), including deterministic naming and JSON reporting for emitted files. |
+| CMD-008 | command | extract-chd-splitbin | n/a | done | n/a | n/a | n/a | context-plumbed | fixture-roundtrip,cli-smoke,json-contract | done | CHD extract now supports `--split-bin` parity for `chdman extractcd -ob` style output, including deterministic per-track BIN naming, CUE metadata rewriting, and JSON labels that report emitted files. |
 | CMD-009 | command | patch-apply-splitbin-target | n/a | n/a | n/a | todo | n/a | context-plumbed | fixture-roundtrip,cli-smoke,json-contract | todo | When the extracted image is split into multiple BIN files, allow patch-apply to target a specific BIN (explicit selector) and fail clearly on ambiguous targets. |
+| CMD-010 | command | patch-apply-compress-level-controls | n/a | n/a | n/a | todo | n/a | context-plumbed | cli-smoke,json-contract | todo | Add output compression level controls for patch-apply so users can set compression strength directly (for example `--compress-level` / easy presets) alongside existing `--compress-format` and `--compress-codec` options. |
 
 ## Threading Groundwork
 
@@ -72,8 +72,9 @@
 | CTR-016 | container | xiso | n/a | n/a | n/a | n/a | n/a | per-file | fixture-roundtrip,cli-smoke | done | XISO is trim-only in this phase: container inspect/extract/create remain intentionally unsupported, and XISO operations are handled via the `trim` command. |
 | CTR-017 | container | rvz-threading-parity | done | done | done | n/a | n/a | per-block,codec-mapped | fixture-roundtrip,cli-smoke,json-contract | done | RVZ extract/create now negotiate parallel capability and forward thread budgets into `nod` preloader/processor options so `thread_execution` reporting matches runtime behavior. |
 | CTR-018 | container | z3ds-create-thread-capability | done | done | done | n/a | n/a | per-block | fixture-roundtrip,cli-smoke,json-contract | done | Z3DS create capability metadata now reports parallel threading, matching the existing parallel create runtime behavior and JSON thread reporting. |
-| CTR-019 | container | wua | done | done | done | n/a | n/a | block,zstd | fixture-roundtrip,cli-smoke | done | Native Wii U archive (`.wua`) support landed using ZArchive-compatible 64KiB block compression, footer metadata, and directory tree traversal. |
+| CTR-019 | container | wua | n/a | n/a | n/a | n/a | n/a | n/a | n/a | dropped | WUA support was removed from the active registry and CLI surfaces; `.wua`/`.zar` are no longer supported formats. |
 | CTR-020 | container | pbp | done | done | n/a | n/a | n/a | per-file | fixture-roundtrip,cli-smoke | done | Native PS1 `EBOOT.PBP` inspect/extract landed with deterministic outputs (`<stem>.cue/.bin` for single-disc, `<stem>.discNN.cue/.bin` for multi-disc). `--select` remains the only targeting surface (exact/prefix/glob), and selecting a disc CUE automatically extracts its paired BIN. |
+| CTR-021 | container | chd-create-default-codec-sets | n/a | n/a | done | n/a | n/a | codec-policy | cli-smoke,fixture-roundtrip | done | CHD create default codec sets landed: CD defaults to `cdzs`,`cdzl`,`cdfl`, DVD defaults to `zstd`,`zlib`,`huff`,`flac`, with regression coverage in container tests and CLI smoke paths. |
 
 ## Patch Formats
 
@@ -126,6 +127,12 @@
 | CHK-007 | checksum | blake3 | n/a | n/a | n/a | n/a | n/a | simd,threaded-tree | unit,cli-smoke,json-contract | done | Native checksum support landed in engine and CLI smoke coverage. |
 | CHK-008 | checksum | crc32c | n/a | n/a | n/a | n/a | n/a | hw-accel,threaded-fanout | unit,cli-smoke,json-contract | done | Native checksum support landed in engine and CLI smoke coverage. |
 
+## Observability
+
+| ID | Family | Name | Inspect | Extract | Create/Compress | Apply | Create Patch | Threads | Tests | Status | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| OBS-001 | observability | log-level-and-trace-across-stack | todo | todo | todo | todo | todo | context-plumbed,trace-spans | unit,cli-smoke,json-contract | todo | Add configurable log levels and trace logs across CLI, core, container, codec, and patch layers with consistent context propagation and filtering. |
+
 ## Cross-Cutting Tests
 
 | ID | Family | Name | Inspect | Extract | Create/Compress | Apply | Create Patch | Threads | Tests | Status | Notes |
@@ -138,5 +145,5 @@
 | TEST-006 | test | container-fixture-roundtrip | done | done | done | n/a | n/a | real-handler coverage | fixture | done | CLI smoke coverage now includes round-trip container paths for landed handlers. |
 | TEST-007 | test | patch-fixture-parity | n/a | n/a | n/a | done | done | real-handler coverage | fixture | done | CLI and module tests cover parity for implemented patch handlers. |
 | TEST-008 | test | trim-parity | n/a | n/a | todo | n/a | n/a | deterministic-output | fixture,cli-smoke | todo | Verify deterministic outputs and parity vs NDSTokyoTrim-compatible fixtures for representative NDS/DSi edge cases. |
-| TEST-009 | test | thread-capability-parity | done | done | done | done | done | requested/effective parity | unit,cli-smoke,json-contract | todo | Added IPS and VCDIFF/xdelta apply-path parity assertions; RVZ/Z3DS create-path capability/runtime parity assertions are still pending. |
+| TEST-009 | test | thread-capability-parity | done | done | done | done | done | requested/effective parity | unit,cli-smoke,json-contract | done | Thread capability/runtime parity assertions now cover IPS and VCDIFF/xdelta apply paths plus RVZ/Z3DS create paths, with requested/effective thread behavior validated across unit and CLI smoke coverage. |
 | TEST-010 | test | large-input-memory-ceilings | n/a | todo | todo | todo | todo | bounded-buffer guarantees | fixture,benchmark | todo | Add large-input fixtures and memory-ceiling checks for migrated patch handlers to prevent regressions back to full-file buffering. |
