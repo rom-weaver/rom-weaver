@@ -4,15 +4,18 @@ use std::{
     path::Path,
 };
 
+use crc32fast::Hasher;
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
-    PatchCapabilities, PatchCreateRequest, PatchHandler, ProbeConfidence, Result, RomWeaverError,
-    ThreadCapability,
+    PatchCapabilities, PatchChecksumValidation, PatchCreateRequest, PatchHandler, ProbeConfidence,
+    Result, RomWeaverError, ThreadCapability,
 };
 
 const PMSR_MAGIC: &[u8; 4] = b"PMSR";
 const PMSR_HEADER_SIZE: usize = 8;
 const PMSR_IO_BUFFER_SIZE: usize = 64 * 1024;
+const PAPER_MARIO_USA10_CRC32: u32 = 0xA7F5CD7E;
+const PAPER_MARIO_USA10_FILE_SIZE: u64 = 41_943_040;
 
 pub struct PmsrPatchHandler {
     descriptor: &'static FormatDescriptor,
@@ -40,7 +43,7 @@ impl PatchHandler for PmsrPatchHandler {
             Some(self.descriptor.name.to_string()),
             "parse",
             format!(
-                "parsed {} patch with {} record(s)",
+                "parsed {} patch with {} record(s); expected source CRC32 0x{PAPER_MARIO_USA10_CRC32:08X}",
                 self.descriptor.name,
                 patch.records.len()
             ),
@@ -56,6 +59,13 @@ impl PatchHandler for PmsrPatchHandler {
     ) -> Result<OperationReport> {
         let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
         let patch = parse_pmsr_file(patch_path)?;
+        let validate_source =
+            context.patch_checksum_validation() == PatchChecksumValidation::Strict;
+
+        if validate_source {
+            validate_paper_mario_source(&request.input)?;
+        }
+
         let source_len = fs::metadata(&request.input)?.len();
         let output_len = patch.min_target_size.max(source_len);
 
@@ -72,14 +82,20 @@ impl PatchHandler for PmsrPatchHandler {
         output.flush()?;
 
         let execution = context.plan_threads(ThreadCapability::single_threaded());
+        let checksum_suffix = if validate_source {
+            String::new()
+        } else {
+            "; checksum validation skipped".to_string()
+        };
         Ok(OperationReport::succeeded(
             OperationFamily::Patch,
             Some(self.descriptor.name.to_string()),
             "apply",
             format!(
-                "applied {} patch with {} record(s)",
+                "applied {} patch with {} record(s){}",
                 self.descriptor.name,
-                patch.records.len()
+                patch.records.len(),
+                checksum_suffix
             ),
             Some(100.0),
             Some(execution),
@@ -261,6 +277,32 @@ fn apply_pmsr_patch_in_place(
     Ok(())
 }
 
+fn validate_paper_mario_source(input_path: &Path) -> Result<()> {
+    let source_len = fs::metadata(input_path)?.len();
+    if source_len != PAPER_MARIO_USA10_FILE_SIZE {
+        return Err(RomWeaverError::Validation(
+            "Source ROM checksum mismatch".into(),
+        ));
+    }
+
+    let mut source = File::open(input_path)?;
+    let mut hasher = Hasher::new();
+    let mut buffer = vec![0u8; PMSR_IO_BUFFER_SIZE];
+    loop {
+        let read = source.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    if hasher.finalize() != PAPER_MARIO_USA10_CRC32 {
+        return Err(RomWeaverError::Validation(
+            "Source ROM checksum mismatch".into(),
+        ));
+    }
+    Ok(())
+}
+
 fn create_pmsr_patch_streaming(
     original_path: &Path,
     modified_path: &Path,
@@ -433,7 +475,9 @@ fn checked_add(offset: u64, len: u64, label: &str) -> Result<u64> {
 mod tests {
     use std::fs;
 
-    use rom_weaver_core::{PatchApplyRequest, PatchCreateRequest, PatchHandler};
+    use rom_weaver_core::{
+        PatchApplyRequest, PatchChecksumValidation, PatchCreateRequest, PatchHandler,
+    };
 
     use super::{PmsrPatchHandler, create_pmsr_patch_bytes, parse_pmsr_bytes};
     use crate::{
@@ -447,6 +491,22 @@ mod tests {
         bytes[..4].copy_from_slice(b"BAD!");
         let error = parse_pmsr_bytes(&bytes).expect_err("invalid header");
         assert!(error.to_string().contains("Patch header invalid"));
+    }
+
+    #[test]
+    fn parse_report_includes_expected_crc32() {
+        let temp = TestDir::new();
+        let patch_path = temp.child("update.mod");
+        let mut patch = Vec::new();
+        patch.extend_from_slice(b"PMSR");
+        patch.extend_from_slice(&0u32.to_be_bytes());
+        fs::write(&patch_path, patch).expect("fixture");
+
+        let handler = PmsrPatchHandler::new(&MOD);
+        let report = handler
+            .parse(&patch_path, &test_context_with_threads(&temp, 1))
+            .expect("parse");
+        assert!(report.label.contains("CRC32 0xA7F5CD7E"));
     }
 
     #[test]
@@ -474,7 +534,8 @@ mod tests {
                     patches: vec![patch_path],
                     output: output_path.clone(),
                 },
-                &test_context_with_threads(&temp, 2),
+                &test_context_with_threads(&temp, 2)
+                    .with_patch_checksum_validation(PatchChecksumValidation::Ignore),
             )
             .expect("apply");
 
@@ -515,7 +576,8 @@ mod tests {
                     patches: vec![patch_path],
                     output: output_path.clone(),
                 },
-                &test_context_with_threads(&temp, 1),
+                &test_context_with_threads(&temp, 1)
+                    .with_patch_checksum_validation(PatchChecksumValidation::Ignore),
             )
             .expect("apply");
 
@@ -532,5 +594,33 @@ mod tests {
                 .to_string()
                 .contains("MOD create does not support shrinking outputs")
         );
+    }
+
+    #[test]
+    fn apply_strict_rejects_non_paper_mario_source() {
+        let temp = TestDir::new();
+        let source_path = temp.child("source.bin");
+        let patch_path = temp.child("update.mod");
+        let output_path = temp.child("output.bin");
+
+        fs::write(&source_path, b"ORIGINAL").expect("fixture");
+        let mut patch = Vec::new();
+        patch.extend_from_slice(b"PMSR");
+        patch.extend_from_slice(&0u32.to_be_bytes());
+        fs::write(&patch_path, patch).expect("fixture");
+
+        let handler = PmsrPatchHandler::new(&MOD);
+        let error = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: source_path,
+                    patches: vec![patch_path],
+                    output: output_path,
+                },
+                &test_context_with_threads(&temp, 1)
+                    .with_patch_checksum_validation(PatchChecksumValidation::Strict),
+            )
+            .expect_err("strict validation should fail");
+        assert!(error.to_string().contains("Source ROM checksum mismatch"));
     }
 }
