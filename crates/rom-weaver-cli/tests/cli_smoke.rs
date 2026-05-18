@@ -7503,7 +7503,7 @@ fn patch_apply_can_ignore_checksum_validation_for_bps() {
 }
 
 #[test]
-fn patch_apply_accepts_multiple_expected_input_checksums() {
+fn patch_apply_accepts_multiple_validate_with_checksum_values() {
     let temp = setup_temp_dir();
     let original = temp.child("old.bin");
     let modified = temp.child("new.bin");
@@ -7542,9 +7542,9 @@ fn patch_apply_accepts_multiple_expected_input_checksums() {
             patch.path().to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
-            "--input-checksum",
+            "--validate-with-checksum",
             &format!("crc32={input_crc32}"),
-            "--input-checksum",
+            "--validate-with-checksum",
             &format!("sha1={input_sha1}"),
             "--no-compress",
             "--json",
@@ -7571,7 +7571,7 @@ fn patch_apply_accepts_multiple_expected_input_checksums() {
 }
 
 #[test]
-fn patch_apply_fails_on_mismatched_expected_input_checksum() {
+fn patch_apply_fails_on_mismatched_validate_with_checksum_value() {
     let temp = setup_temp_dir();
     let original = temp.child("old.bin");
     let modified = temp.child("new.bin");
@@ -7607,7 +7607,7 @@ fn patch_apply_fails_on_mismatched_expected_input_checksum() {
             patch.path().to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
-            "--input-checksum",
+            "--validate-with-checksum",
             "crc32=00000000",
             "--no-compress",
             "--json",
@@ -7627,6 +7627,70 @@ fn patch_apply_fails_on_mismatched_expected_input_checksum() {
             .as_str()
             .expect("label")
             .contains("input checksum mismatch for crc32")
+    );
+}
+
+#[test]
+fn patch_apply_uses_checksum_cache_for_validation() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.bin");
+    let modified = temp.child("new.bin");
+    let patch = temp.child("update.bps");
+    let output = temp.child("output.bin");
+    fs::write(original.path(), b"hello old world").expect("fixture");
+    fs::write(modified.path(), b"hello new world").expect("fixture");
+
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--format",
+            "bps",
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let apply_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--checksum-cache",
+            "sha1=0000000000000000000000000000000000000000",
+            "--validate-with-checksum",
+            "sha1=0000000000000000000000000000000000000000",
+            "--no-compress",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let apply_json = parse_single_json_line(&apply_output);
+    assert_eq!(apply_json["command"], "patch-apply");
+    assert_eq!(apply_json["family"], "patch");
+    assert_eq!(apply_json["format"], "BPS");
+    assert_eq!(apply_json["status"], "succeeded");
+    let label = apply_json["label"].as_str().expect("label");
+    assert!(label.contains("input checksum(s) verified"));
+    assert!(label.contains("sha1=0000000000000000000000000000000000000000"));
+    assert_eq!(
+        fs::read(output.path()).expect("output"),
+        fs::read(modified.path()).expect("modified")
     );
 }
 

@@ -133,6 +133,24 @@ pub fn checksum_file_values(
     Ok(compute_checksum_values(&request, context)?.values)
 }
 
+pub fn seed_checksum_file_cache(
+    source: &Path,
+    algorithms: &BTreeMap<String, String>,
+    context: &OperationContext,
+) -> Result<()> {
+    if algorithms.is_empty() {
+        return Ok(());
+    }
+
+    let range = ResolvedRange::from_request(source, None, None)?;
+    let fingerprint = SourceFingerprint::from_path(source)?;
+    let cache = ChecksumCache::new(context.temp_root());
+    let mut cached = cache.load(&fingerprint, &range).unwrap_or_default();
+    cached.extend(algorithms.clone());
+    cache.store(&fingerprint, &range, &cached)?;
+    Ok(())
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum Algorithm {
     Crc32,

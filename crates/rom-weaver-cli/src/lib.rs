@@ -11,7 +11,9 @@ use std::{
 
 use clap::{ArgAction, Args, Parser, Subcommand};
 use globset::{GlobBuilder, GlobSet, GlobSetBuilder};
-use rom_weaver_checksum::{NativeChecksumEngine, checksum_file_values, supported_algorithms};
+use rom_weaver_checksum::{
+    NativeChecksumEngine, checksum_file_values, seed_checksum_file_cache, supported_algorithms,
+};
 use rom_weaver_containers::{CompressFormatRecommendation, ContainerRegistry};
 use rom_weaver_core::{
     CancellationToken, ChecksumEngine, ChecksumRequest, ContainerCreateRequest,
@@ -220,11 +222,17 @@ struct PatchApplyCommand {
     )]
     compress_codec: Option<String>,
     #[arg(
-        long = "input-checksum",
+        long = "checksum-cache",
         value_name = "ALGO=HEX",
-        help = "Validate effective patch input checksum before apply; repeat for multiple algorithms (for example: --input-checksum crc32=1234abcd)"
+        help = "Seed effective patch input checksum cache before apply; repeat for multiple algorithms (for example: --checksum-cache crc32=1234abcd)"
     )]
-    input_checksums: Vec<String>,
+    checksum_cache: Vec<String>,
+    #[arg(
+        long = "validate-with-checksum",
+        value_name = "ALGO=HEX",
+        help = "Validate effective patch input checksum before apply; repeat for multiple algorithms (for example: --validate-with-checksum crc32=1234abcd)"
+    )]
+    validate_with_checksums: Vec<String>,
     #[arg(
         long,
         help = "Remove a detected ROM header before patch apply (A78/LNX/NES/FDS/SMC; falls back to 512-byte copier header)"
@@ -2028,7 +2036,8 @@ impl CliApp {
             no_compress,
             compress_format,
             compress_codec,
-            input_checksums,
+            checksum_cache,
+            validate_with_checksums,
             strip_header,
             add_header,
             repair_checksum,
@@ -2062,9 +2071,25 @@ impl CliApp {
                 );
             }
         };
-        let expected_input_checksums = match Self::parse_patch_apply_expected_checksums(
-            &input_checksums,
-            "--input-checksum",
+        let cached_input_checksums =
+            match Self::parse_patch_apply_checksum_values(&checksum_cache, "--checksum-cache") {
+                Ok(values) => values,
+                Err(error) => {
+                    return self.finish(
+                        "patch-apply",
+                        OperationReport::failed(
+                            OperationFamily::Patch,
+                            None,
+                            "validate",
+                            error.to_string(),
+                            probe_threads.clone(),
+                        ),
+                    );
+                }
+            };
+        let expected_input_checksums = match Self::parse_patch_apply_checksum_values(
+            &validate_with_checksums,
+            "--validate-with-checksum",
         ) {
             Ok(values) => values,
             Err(error) => {
@@ -2189,6 +2214,31 @@ impl CliApp {
             } else {
                 resolved_input.clone()
             };
+            if !cached_input_checksums.is_empty() {
+                self.emit_running(
+                    "patch-apply",
+                    OperationFamily::Patch,
+                    None,
+                    "prepare",
+                    format!(
+                        "seeding {} requested input checksum cache value(s)",
+                        cached_input_checksums.len()
+                    ),
+                    None,
+                    Some(context.plan_threads(ThreadCapability::single_threaded())),
+                );
+                if let Err(error) =
+                    seed_checksum_file_cache(&apply_input, &cached_input_checksums, &context)
+                {
+                    return OperationReport::failed(
+                        OperationFamily::Patch,
+                        None,
+                        "prepare",
+                        error.to_string(),
+                        Some(context.plan_threads(ThreadCapability::single_threaded())),
+                    );
+                }
+            }
             if !expected_input_checksums.is_empty() {
                 self.emit_running(
                     "patch-apply",
@@ -2581,7 +2631,7 @@ impl CliApp {
         self.finish("patch-create", report)
     }
 
-    fn parse_patch_apply_expected_checksums(
+    fn parse_patch_apply_checksum_values(
         values: &[String],
         flag_name: &str,
     ) -> Result<BTreeMap<String, String>> {
