@@ -3663,6 +3663,95 @@ fn compress_rejects_invalid_codec_level_spec() {
     );
 }
 
+#[test]
+fn compress_accepts_global_level_profiles() {
+    let profiles = [
+        "min",
+        "very-low",
+        "low",
+        "medium",
+        "high",
+        "very-high",
+        "max",
+    ];
+    for profile in profiles {
+        let temp = setup_temp_dir();
+        fs::write(temp.child("payload.bin").path(), vec![0x41; 16 * 1024]).expect("fixture");
+        let output_path = temp.child(format!("out-{profile}.zst"));
+
+        let output = Command::cargo_bin("rom-weaver")
+            .expect("binary")
+            .args([
+                "compress",
+                temp.child("payload.bin").path().to_str().expect("path"),
+                "--format",
+                "zst",
+                "--output",
+                output_path.path().to_str().expect("path"),
+                "--level",
+                profile,
+                "--json",
+            ])
+            .assert()
+            .code(0)
+            .get_output()
+            .stdout
+            .clone();
+
+        let json = parse_single_json_line(&output);
+        assert_eq!(json["command"], "compress");
+        assert_eq!(json["family"], "container");
+        assert_eq!(json["format"], "zst");
+        assert_eq!(json["status"], "succeeded");
+    }
+}
+
+#[test]
+fn compress_defaults_to_max_global_level_and_explicit_level_wins() {
+    let temp = setup_temp_dir();
+    let payload = vec![0x5A; 64 * 1024];
+    fs::write(temp.child("payload.bin").path(), &payload).expect("fixture");
+
+    let default_output = temp.child("default.zst");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("payload.bin").path().to_str().expect("path"),
+            "--format",
+            "zst",
+            "--output",
+            default_output.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let explicit_output = temp.child("explicit.zst");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("payload.bin").path().to_str().expect("path"),
+            "--format",
+            "zst",
+            "--output",
+            explicit_output.path().to_str().expect("path"),
+            "--codec",
+            "zstd:22",
+            "--level",
+            "min",
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    assert_eq!(
+        fs::read(default_output.path()).expect("default output"),
+        fs::read(explicit_output.path()).expect("explicit output")
+    );
+}
+
 fn run_archive_round_trip(format: &str, archive_name: &str, codec: Option<&str>) {
     let temp = setup_temp_dir();
     let payload = (0..8192)
@@ -3745,6 +3834,7 @@ fn archive_container_formats_round_trip() {
         ("zip", "sample.zip", None),
         ("zipx", "sample.zipx", Some("zstd:3")),
         ("7z", "sample.7z", Some("lzma2")),
+        ("7z", "sample-level.7z", Some("lzma2:9")),
         ("tar", "sample.tar", None),
         ("tar.gz", "sample.tar.gz", Some("gzip:6")),
         ("tar.bz2", "sample.tar.bz2", Some("bzip2:6")),
@@ -5624,6 +5714,8 @@ fn patch_apply_accepts_explicit_compress_format_and_codec() {
             "zip",
             "--compress-codec",
             "deflate",
+            "--compress-level",
+            "very-high",
             "--json",
         ])
         .assert()

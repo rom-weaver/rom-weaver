@@ -1929,12 +1929,7 @@ impl SevenZContainerHandler {
         codec: Option<&str>,
         level: Option<i32>,
     ) -> Result<SevenZMethodConfiguration> {
-        if level.is_some() {
-            return Err(RomWeaverError::Validation(
-                "7z compression level tuning is not implemented yet; omit --level".into(),
-            ));
-        }
-        match parse_requested_codec(codec) {
+        let mut method = match parse_requested_codec(codec) {
             RequestedCodec::Unspecified | RequestedCodec::Known(CanonicalCodec::Lzma2) => {
                 Ok(SevenZMethodConfiguration::new(SevenZMethod::LZMA2))
             }
@@ -1948,7 +1943,18 @@ impl SevenZContainerHandler {
             RequestedCodec::Unknown(name) => Err(RomWeaverError::Validation(format!(
                 "unsupported 7z codec `{name}`; supported codecs are lzma2 and lzma"
             ))),
+        }?;
+
+        if let Some(level) = level {
+            if !(0..=9).contains(&level) {
+                return Err(RomWeaverError::Validation(format!(
+                    "7z level `{level}` is out of range (0..=9)"
+                )));
+            }
+            method = method
+                .with_options(sevenz_rust::lzma::LZMA2Options::with_preset(level as u32).into());
         }
+        Ok(method)
     }
 
     fn method_name(method: &SevenZMethodConfiguration) -> &'static str {

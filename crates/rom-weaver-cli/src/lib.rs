@@ -9,11 +9,12 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use clap::{ArgAction, Args, Parser, Subcommand};
+use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
 use globset::{GlobBuilder, GlobSet, GlobSetBuilder};
 use rom_weaver_checksum::{
     NativeChecksumEngine, checksum_file_values, seed_checksum_file_cache, supported_algorithms,
 };
+use rom_weaver_codecs::{CanonicalCodec, RequestedCodec, parse_requested_codec};
 use rom_weaver_containers::{CompressFormatRecommendation, ContainerRegistry};
 use rom_weaver_core::{
     CancellationToken, ChecksumEngine, ChecksumRequest, ContainerCreateRequest,
@@ -54,6 +55,45 @@ enum Commands {
     Trim(TrimCommand),
     PatchApply(PatchApplyCommand),
     PatchCreate(PatchCreateCommand),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+enum CompressionLevelProfile {
+    Min,
+    #[value(name = "very-low")]
+    VeryLow,
+    Low,
+    Medium,
+    High,
+    #[value(name = "very-high")]
+    VeryHigh,
+    Max,
+}
+
+impl CompressionLevelProfile {
+    const fn standard_level(self) -> i32 {
+        match self {
+            Self::Min => 0,
+            Self::VeryLow => 2,
+            Self::Low => 3,
+            Self::Medium => 5,
+            Self::High => 7,
+            Self::VeryHigh => 8,
+            Self::Max => 9,
+        }
+    }
+
+    const fn zstd_level(self) -> i32 {
+        match self {
+            Self::Min => 0,
+            Self::VeryLow => 3,
+            Self::Low => 5,
+            Self::Medium => 12,
+            Self::High => 19,
+            Self::VeryHigh => 21,
+            Self::Max => 22,
+        }
+    }
 }
 
 #[derive(Debug, Args)]
@@ -130,6 +170,13 @@ struct CompressCommand {
     output: PathBuf,
     #[arg(long)]
     codec: Option<String>,
+    #[arg(
+        long,
+        value_enum,
+        default_value_t = CompressionLevelProfile::Max,
+        help = "Global compression level profile used when --codec does not include an explicit numeric level"
+    )]
+    level: CompressionLevelProfile,
     #[arg(long, default_value = "auto")]
     threads: ThreadBudget,
 }
@@ -221,6 +268,13 @@ struct PatchApplyCommand {
         help = "Patch-output compression codec[:level] override (for example: --compress-codec zstd:9)"
     )]
     compress_codec: Option<String>,
+    #[arg(
+        long = "compress-level",
+        value_enum,
+        default_value_t = CompressionLevelProfile::Max,
+        help = "Global patch-output compression level profile used when --compress-codec omits an explicit numeric level"
+    )]
+    compress_level: CompressionLevelProfile,
     #[arg(
         long = "checksum-cache",
         value_name = "ALGO=HEX",
@@ -596,6 +650,13 @@ enum ParsedSelectionInput {
     Invalid,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ProfileCodecKind {
+    Standard,
+    Zstd,
+    NoLevel,
+}
+
 #[derive(Clone, Debug)]
 struct PatchApplyCompressionOptions {
     enabled: bool,
@@ -603,6 +664,7 @@ struct PatchApplyCompressionOptions {
     requested_format: Option<String>,
     codec: Option<String>,
     level: Option<i32>,
+    profile: CompressionLevelProfile,
 }
 
 #[derive(Clone, Debug)]
@@ -835,10 +897,7 @@ impl CliApp {
                     OperationFamily::Container,
                     None,
                     "probe",
-                    format!(
-                        "no registered container matched `{}`",
-                        source.display()
-                    ),
+                    format!("no registered container matched `{}`", source.display()),
                     probe_threads,
                 ),
             );
@@ -1620,6 +1679,7 @@ impl CliApp {
             format,
             output,
             codec,
+            level: level_profile,
             threads,
         } = args;
         let requested_format = match format {
@@ -1691,25 +1751,32 @@ impl CliApp {
                 None,
             )
         };
-        let (codec, level) = if auto_mode {
-            (None, None)
-        } else {
-            match Self::resolve_codec_level(codec) {
-                Ok(value) => value,
-                Err(error) => {
-                    return self.finish(
-                        "compress",
-                        OperationReport::failed(
-                            OperationFamily::Container,
-                            Some(resolved_format.clone()),
-                            "validate",
-                            error.to_string(),
-                            probe_threads,
-                        ),
-                    );
-                }
+        let (codec, explicit_level) = match Self::resolve_codec_level(codec, "--codec") {
+            Ok(value) => value,
+            Err(error) => {
+                return self.finish(
+                    "compress",
+                    OperationReport::failed(
+                        OperationFamily::Container,
+                        Some(resolved_format.clone()),
+                        "validate",
+                        error.to_string(),
+                        probe_threads,
+                    ),
+                );
             }
         };
+        let (codec, explicit_level) = if auto_mode {
+            (None, None)
+        } else {
+            (codec, explicit_level)
+        };
+        let level = Self::resolve_compression_level_for_profile(
+            &resolved_format,
+            codec.as_deref(),
+            explicit_level,
+            level_profile,
+        );
 
         let Some(handler) = self.containers.find_by_name(&resolved_format) else {
             return self.finish(
@@ -2036,6 +2103,7 @@ impl CliApp {
             no_compress,
             compress_format,
             compress_codec,
+            compress_level,
             checksum_cache,
             validate_with_checksums,
             strip_header,
@@ -2056,6 +2124,7 @@ impl CliApp {
             no_compress,
             compress_format,
             compress_codec,
+            compress_level,
         ) {
             Ok(options) => options,
             Err(error) => {
@@ -2824,16 +2893,19 @@ impl CliApp {
         }
     }
 
-    fn resolve_codec_level(codec: Option<String>) -> Result<(Option<String>, Option<i32>)> {
+    fn resolve_codec_level(
+        codec: Option<String>,
+        flag_name: &str,
+    ) -> Result<(Option<String>, Option<i32>)> {
         let Some(codec) = codec else {
             return Ok((None, None));
         };
 
         let codec = codec.trim();
         if codec.is_empty() {
-            return Err(RomWeaverError::Validation(
-                "--codec cannot be empty".to_string(),
-            ));
+            return Err(RomWeaverError::Validation(format!(
+                "{flag_name} cannot be empty"
+            )));
         }
 
         let Some((raw_codec, raw_level)) = codec.split_once(':') else {
@@ -2842,31 +2914,102 @@ impl CliApp {
 
         let codec_name = raw_codec.trim();
         if codec_name.is_empty() {
-            return Err(RomWeaverError::Validation(
-                "codec name is missing before `:` in --codec".to_string(),
-            ));
+            return Err(RomWeaverError::Validation(format!(
+                "codec name is missing before `:` in {flag_name}"
+            )));
         }
 
         let level_text = raw_level.trim();
         if level_text.is_empty() {
-            return Err(RomWeaverError::Validation(
-                "codec level is missing after `:` in --codec".to_string(),
-            ));
+            return Err(RomWeaverError::Validation(format!(
+                "codec level is missing after `:` in {flag_name}"
+            )));
         }
 
         let parsed_level = level_text.parse::<i32>().map_err(|_| {
             RomWeaverError::Validation(format!(
-                "codec level `{level_text}` is not a valid integer in --codec"
+                "codec level `{level_text}` is not a valid integer in {flag_name}"
             ))
         })?;
 
         Ok((Some(codec_name.to_string()), Some(parsed_level)))
     }
 
+    fn resolve_compression_level_for_profile(
+        format_name: &str,
+        codec: Option<&str>,
+        explicit_level: Option<i32>,
+        profile: CompressionLevelProfile,
+    ) -> Option<i32> {
+        if explicit_level.is_some() {
+            return explicit_level;
+        }
+
+        let codec_kind = codec
+            .and_then(Self::profile_codec_kind_for_codec_name)
+            .or_else(|| Self::default_profile_codec_kind_for_format(format_name));
+        match codec_kind {
+            Some(ProfileCodecKind::Standard) => Some(profile.standard_level()),
+            Some(ProfileCodecKind::Zstd) => Some(profile.zstd_level()),
+            Some(ProfileCodecKind::NoLevel) | None => None,
+        }
+    }
+
+    fn default_profile_codec_kind_for_format(format_name: &str) -> Option<ProfileCodecKind> {
+        let normalized = format_name.trim().to_ascii_lowercase();
+        match normalized.as_str() {
+            "zip" | "7z" | "tar.gz" | "tar.bz2" | "tar.xz" | "gz" | "bz2" | "xz" => {
+                Some(ProfileCodecKind::Standard)
+            }
+            "zipx" | "zst" | "zstd" | "rvz" | "z3ds" | "3ds" | "chd" => {
+                Some(ProfileCodecKind::Zstd)
+            }
+            "tar" => Some(ProfileCodecKind::NoLevel),
+            _ => None,
+        }
+    }
+
+    fn profile_codec_kind_for_codec_name(codec_name: &str) -> Option<ProfileCodecKind> {
+        let codec = codec_name.trim();
+        if codec.is_empty() {
+            return None;
+        }
+        if codec.eq_ignore_ascii_case("cdzs")
+            || codec.eq_ignore_ascii_case("zstd")
+            || codec.eq_ignore_ascii_case("zst")
+            || codec.eq_ignore_ascii_case("zstandard")
+        {
+            return Some(ProfileCodecKind::Zstd);
+        }
+        if codec.eq_ignore_ascii_case("cdzl") || codec.eq_ignore_ascii_case("cdlz") {
+            return Some(ProfileCodecKind::Standard);
+        }
+        if codec.eq_ignore_ascii_case("store")
+            || codec.eq_ignore_ascii_case("none")
+            || codec.eq_ignore_ascii_case("uncompressed")
+            || codec.eq_ignore_ascii_case("huffman")
+            || codec.eq_ignore_ascii_case("huff")
+            || codec.eq_ignore_ascii_case("flac")
+            || codec.eq_ignore_ascii_case("cdfl")
+            || codec.eq_ignore_ascii_case("avhuff")
+            || codec.eq_ignore_ascii_case("avhu")
+        {
+            return Some(ProfileCodecKind::NoLevel);
+        }
+        match parse_requested_codec(Some(codec)) {
+            RequestedCodec::Known(CanonicalCodec::Store) => Some(ProfileCodecKind::NoLevel),
+            RequestedCodec::Known(CanonicalCodec::Zstd) => Some(ProfileCodecKind::Zstd),
+            RequestedCodec::Known(CanonicalCodec::Huffman) => Some(ProfileCodecKind::NoLevel),
+            RequestedCodec::Known(_) => Some(ProfileCodecKind::Standard),
+            RequestedCodec::Unspecified | RequestedCodec::Unknown(_) => None,
+        }
+    }
+
     fn parse_patch_apply_compression_options(
         no_compress: bool,
         compress_format: Option<String>,
         compress_codec: Option<String>,
+        compress_level: CompressionLevelProfile,
     ) -> Result<PatchApplyCompressionOptions> {
         if no_compress {
             if compress_format.is_some() {
@@ -2885,6 +3028,7 @@ impl CliApp {
                 requested_format: None,
                 codec: None,
                 level: None,
+                profile: CompressionLevelProfile::Max,
             });
         }
 
@@ -2905,13 +3049,14 @@ impl CliApp {
             None => None,
         };
         let auto_mode = requested_format.is_none();
-        let (codec, level) = Self::resolve_codec_level(compress_codec)?;
+        let (codec, level) = Self::resolve_codec_level(compress_codec, "--compress-codec")?;
         Ok(PatchApplyCompressionOptions {
             enabled: true,
             auto_mode,
             requested_format,
             codec,
             level,
+            profile: compress_level,
         })
     }
 
@@ -3017,11 +3162,15 @@ impl CliApp {
         }
 
         let mut codec = options.codec.clone();
-        let mut level = options.level;
         if codec.is_none() && resolved_format.eq_ignore_ascii_case("7z") {
             codec = Some("lzma2".to_string());
-            level = None;
         }
+        let level = Self::resolve_compression_level_for_profile(
+            &resolved_format,
+            codec.as_deref(),
+            options.level,
+            options.profile,
+        );
 
         let (output_path, extension_appended) = Self::append_output_extension_if_missing(
             requested_output,
@@ -4320,7 +4469,7 @@ impl ProgressSink for StdoutReporter {
 
 #[cfg(test)]
 mod tests {
-    use super::{CliApp, ParsedSelectionInput};
+    use super::{CliApp, CompressionLevelProfile, ParsedSelectionInput};
 
     #[test]
     fn parse_selection_input_accepts_valid_indexes() {
@@ -4372,5 +4521,67 @@ mod tests {
         assert!(!CliApp::is_selection_resolution_error(
             "validation failed: no registered handler matched `sample.bin`"
         ));
+    }
+
+    #[test]
+    fn compression_profile_defaults_to_max_levels() {
+        assert_eq!(
+            CliApp::resolve_compression_level_for_profile(
+                "zip",
+                None,
+                None,
+                CompressionLevelProfile::Max,
+            ),
+            Some(9)
+        );
+        assert_eq!(
+            CliApp::resolve_compression_level_for_profile(
+                "zst",
+                None,
+                None,
+                CompressionLevelProfile::Max,
+            ),
+            Some(22)
+        );
+    }
+
+    #[test]
+    fn compression_profile_respects_codec_and_explicit_levels() {
+        assert_eq!(
+            CliApp::resolve_compression_level_for_profile(
+                "zip",
+                Some("store"),
+                None,
+                CompressionLevelProfile::Max,
+            ),
+            None
+        );
+        assert_eq!(
+            CliApp::resolve_compression_level_for_profile(
+                "chd",
+                Some("cdzs"),
+                None,
+                CompressionLevelProfile::VeryHigh,
+            ),
+            Some(21)
+        );
+        assert_eq!(
+            CliApp::resolve_compression_level_for_profile(
+                "chd",
+                Some("cdlz"),
+                None,
+                CompressionLevelProfile::Max,
+            ),
+            Some(9)
+        );
+        assert_eq!(
+            CliApp::resolve_compression_level_for_profile(
+                "zst",
+                Some("zstd"),
+                Some(4),
+                CompressionLevelProfile::Max,
+            ),
+            Some(4)
+        );
     }
 }
