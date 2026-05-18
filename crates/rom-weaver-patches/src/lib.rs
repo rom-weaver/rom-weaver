@@ -10,6 +10,8 @@ mod ppf;
 mod rup;
 mod solid;
 mod spatch;
+#[cfg(test)]
+mod test_support;
 mod ups;
 #[cfg(not(target_family = "wasm"))]
 mod vcdiff;

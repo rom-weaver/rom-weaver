@@ -837,62 +837,27 @@ impl<'a> IpsParser<'a> {
 #[cfg(test)]
 mod tests {
     use std::{
-        env, fs,
+        fs,
         io::{Seek, SeekFrom, Write},
         path::PathBuf,
-        sync::Arc,
-        sync::atomic::{AtomicU64, Ordering},
-        time::{SystemTime, UNIX_EPOCH},
     };
 
-    use rom_weaver_core::{
-        CancellationToken, NoopProgressSink, OperationContext, PatchApplyRequest,
-        PatchCreateRequest, PatchHandler, ThreadBudget,
-    };
+    use rom_weaver_core::{OperationContext, PatchApplyRequest, PatchCreateRequest, PatchHandler};
 
     use super::{
         DEFAULT_EBP_METADATA_JSON, IPS_EOF, IPS_MAGIC, IPS32_EOF, IPS32_MAGIC, IpsFlavor,
         IpsPatchHandler, IpsRecordData, JsonValue, MAX_IPS_RECORD_LEN, OUTPUT_CHUNK_SIZE,
         parse_ips_bytes,
     };
-    use crate::{EBP, IPS, IPS32};
-
-    static NEXT_TEST_DIR_ID: AtomicU64 = AtomicU64::new(0);
+    use crate::{
+        EBP, IPS, IPS32,
+        test_support::{TestDir, test_context_with_threads_named},
+    };
 
     #[derive(Debug)]
     enum TestIpsRecord {
         Literal { offset: u32, data: Vec<u8> },
         Rle { offset: u32, len: u16, value: u8 },
-    }
-
-    struct TestDir {
-        path: PathBuf,
-    }
-
-    impl TestDir {
-        fn new() -> Self {
-            let timestamp = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("time")
-                .as_nanos();
-            let sequence = NEXT_TEST_DIR_ID.fetch_add(1, Ordering::Relaxed);
-            let path = env::temp_dir().join(format!(
-                "rom-weaver-ips-tests-{}-{timestamp}-{sequence}",
-                std::process::id(),
-            ));
-            fs::create_dir_all(&path).expect("temp dir");
-            Self { path }
-        }
-
-        fn child(&self, name: &str) -> PathBuf {
-            self.path.join(name)
-        }
-    }
-
-    impl Drop for TestDir {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.path);
-        }
     }
 
     #[test]
@@ -1484,11 +1449,6 @@ mod tests {
     }
 
     fn test_context_with_threads(temp: &TestDir, threads: usize) -> OperationContext {
-        OperationContext::new(
-            ThreadBudget::Fixed(threads),
-            temp.child("temp-root"),
-            Arc::new(NoopProgressSink),
-            CancellationToken::new(),
-        )
+        test_context_with_threads_named(temp, threads, "temp-root")
     }
 }

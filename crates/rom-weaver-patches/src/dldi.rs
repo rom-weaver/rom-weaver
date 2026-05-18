@@ -553,18 +553,9 @@ fn map_file_read_only(path: &Path) -> Result<Mmap> {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        env, fs,
-        path::PathBuf,
-        sync::Arc,
-        sync::atomic::{AtomicU64, Ordering},
-        time::{SystemTime, UNIX_EPOCH},
-    };
+    use std::fs;
 
-    use rom_weaver_core::{
-        CancellationToken, NoopProgressSink, OperationContext, PatchApplyRequest,
-        PatchCreateRequest, PatchHandler, ThreadBudget,
-    };
+    use rom_weaver_core::{PatchApplyRequest, PatchCreateRequest, PatchHandler};
 
     use super::{
         DLDI_MAGIC, DLDI_VERSION, DO_ALLOCATED_SPACE, DO_BSS_END, DO_BSS_START, DO_CODE,
@@ -573,39 +564,10 @@ mod tests {
         DO_TEXT_START, DO_VERSION, DO_WRITE_SECTORS, DldiPatchHandler, FIX_ALL, FIX_BSS, FIX_GLUE,
         FIX_GOT,
     };
-    use crate::DLDI;
-
-    static NEXT_TEST_DIR_ID: AtomicU64 = AtomicU64::new(0);
-
-    struct TestDir {
-        path: PathBuf,
-    }
-
-    impl TestDir {
-        fn new() -> Self {
-            let timestamp = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("time")
-                .as_nanos();
-            let sequence = NEXT_TEST_DIR_ID.fetch_add(1, Ordering::Relaxed);
-            let path = env::temp_dir().join(format!(
-                "rom-weaver-dldi-tests-{}-{timestamp}-{sequence}",
-                std::process::id(),
-            ));
-            fs::create_dir_all(&path).expect("temp dir");
-            Self { path }
-        }
-
-        fn child(&self, name: &str) -> PathBuf {
-            self.path.join(name)
-        }
-    }
-
-    impl Drop for TestDir {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.path);
-        }
-    }
+    use crate::{
+        DLDI,
+        test_support::{TestDir, test_context_with_threads_in_root as test_context_with_threads},
+    };
 
     #[test]
     fn parse_rejects_invalid_magic() {
@@ -829,14 +791,5 @@ mod tests {
 
     fn write_i32(bytes: &mut [u8], offset: usize, value: i32) {
         bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
-    }
-
-    fn test_context_with_threads(temp: &TestDir, threads: usize) -> OperationContext {
-        OperationContext::new(
-            ThreadBudget::Fixed(threads),
-            temp.path.clone(),
-            Arc::new(NoopProgressSink),
-            CancellationToken::new(),
-        )
     }
 }

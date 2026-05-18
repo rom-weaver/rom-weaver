@@ -952,55 +952,17 @@ impl<'a> RupParser<'a> {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        env, fs,
-        path::PathBuf,
-        sync::Arc,
-        sync::atomic::{AtomicU64, Ordering},
-        time::{SystemTime, UNIX_EPOCH},
-    };
+    use std::fs;
 
-    use rom_weaver_core::{
-        CancellationToken, NoopProgressSink, OperationContext, PatchApplyRequest,
-        PatchCreateRequest, PatchHandler, ThreadBudget,
-    };
+    use rom_weaver_core::{PatchApplyRequest, PatchCreateRequest, PatchHandler};
 
     use super::{
         RUP_COMMAND_OPEN_NEW_FILE, RupPatchHandler, create_rup_patch_bytes, parse_rup_bytes,
     };
-    use crate::RUP;
-
-    static NEXT_TEST_DIR_ID: AtomicU64 = AtomicU64::new(0);
-
-    struct TestDir {
-        path: PathBuf,
-    }
-
-    impl TestDir {
-        fn new() -> Self {
-            let timestamp = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("time")
-                .as_nanos();
-            let sequence = NEXT_TEST_DIR_ID.fetch_add(1, Ordering::Relaxed);
-            let path = env::temp_dir().join(format!(
-                "rom-weaver-rup-tests-{}-{timestamp}-{sequence}",
-                std::process::id(),
-            ));
-            fs::create_dir_all(&path).expect("temp dir");
-            Self { path }
-        }
-
-        fn child(&self, name: &str) -> PathBuf {
-            self.path.join(name)
-        }
-    }
-
-    impl Drop for TestDir {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.path);
-        }
-    }
+    use crate::{
+        RUP,
+        test_support::{TestDir, test_context_with_threads},
+    };
 
     #[test]
     fn parse_rejects_invalid_magic() {
@@ -1180,14 +1142,5 @@ mod tests {
             .expect_err("expected mismatch");
 
         assert!(error.to_string().contains("RUP input validation failed"));
-    }
-
-    fn test_context_with_threads(temp: &TestDir, threads: usize) -> OperationContext {
-        OperationContext::new(
-            ThreadBudget::Fixed(threads),
-            temp.child("temp"),
-            Arc::new(NoopProgressSink),
-            CancellationToken::new(),
-        )
     }
 }

@@ -1187,26 +1187,20 @@ impl<'a> BpsParser<'a> {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        env, fs,
-        path::PathBuf,
-        sync::Arc,
-        sync::atomic::{AtomicU64, Ordering},
-        time::{SystemTime, UNIX_EPOCH},
-    };
+    use std::fs;
 
     use rom_weaver_core::{
-        CancellationToken, NoopProgressSink, OperationContext, PatchApplyRequest,
-        PatchChecksumValidation, PatchCreateRequest, PatchHandler, ThreadBudget,
+        PatchApplyRequest, PatchChecksumValidation, PatchCreateRequest, PatchHandler,
     };
 
     use super::{
         BPS_MAGIC, BpsAction, BpsPatchHandler, crc32_bytes, encode_signed_offset, parse_bps_bytes,
         push_varint,
     };
-    use crate::BPS;
-
-    static NEXT_TEST_DIR_ID: AtomicU64 = AtomicU64::new(0);
+    use crate::{
+        BPS,
+        test_support::{TestDir, test_context_with_threads},
+    };
 
     #[derive(Debug)]
     enum TestAction {
@@ -1214,36 +1208,6 @@ mod tests {
         TargetRead(Vec<u8>),
         SourceCopy { length: u64, relative_offset: i128 },
         TargetCopy { length: u64, relative_offset: i128 },
-    }
-
-    struct TestDir {
-        path: PathBuf,
-    }
-
-    impl TestDir {
-        fn new() -> Self {
-            let timestamp = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("time")
-                .as_nanos();
-            let sequence = NEXT_TEST_DIR_ID.fetch_add(1, Ordering::Relaxed);
-            let path = env::temp_dir().join(format!(
-                "rom-weaver-bps-tests-{}-{timestamp}-{sequence}",
-                std::process::id(),
-            ));
-            fs::create_dir_all(&path).expect("temp dir");
-            Self { path }
-        }
-
-        fn child(&self, name: &str) -> PathBuf {
-            self.path.join(name)
-        }
-    }
-
-    impl Drop for TestDir {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.path);
-        }
     }
 
     #[test]
@@ -1632,14 +1596,5 @@ mod tests {
         let patch_checksum = crc32_bytes(&bytes);
         bytes.extend_from_slice(&patch_checksum.to_le_bytes());
         bytes
-    }
-
-    fn test_context_with_threads(temp: &TestDir, threads: usize) -> OperationContext {
-        OperationContext::new(
-            ThreadBudget::Fixed(threads),
-            temp.child("temp"),
-            Arc::new(NoopProgressSink),
-            CancellationToken::new(),
-        )
     }
 }

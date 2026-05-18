@@ -169,53 +169,15 @@ fn map_file_read_only(path: &Path) -> Result<Mmap> {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        env, fs,
-        path::PathBuf,
-        sync::Arc,
-        sync::atomic::{AtomicU64, Ordering},
-        time::{SystemTime, UNIX_EPOCH},
-    };
+    use std::fs;
 
-    use rom_weaver_core::{
-        CancellationToken, NoopProgressSink, OperationContext, PatchApplyRequest,
-        PatchCreateRequest, PatchHandler, ThreadBudget,
-    };
+    use rom_weaver_core::{PatchApplyRequest, PatchCreateRequest, PatchHandler};
 
     use super::BdfPatchHandler;
-    use crate::BDF_BSDIFF40;
-
-    static NEXT_TEST_DIR_ID: AtomicU64 = AtomicU64::new(0);
-
-    struct TestDir {
-        path: PathBuf,
-    }
-
-    impl TestDir {
-        fn new() -> Self {
-            let timestamp = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("time")
-                .as_nanos();
-            let sequence = NEXT_TEST_DIR_ID.fetch_add(1, Ordering::Relaxed);
-            let path = env::temp_dir().join(format!(
-                "rom-weaver-bdf-tests-{}-{timestamp}-{sequence}",
-                std::process::id(),
-            ));
-            fs::create_dir_all(&path).expect("temp dir");
-            Self { path }
-        }
-
-        fn child(&self, name: &str) -> PathBuf {
-            self.path.join(name)
-        }
-    }
-
-    impl Drop for TestDir {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.path);
-        }
-    }
+    use crate::{
+        BDF_BSDIFF40,
+        test_support::{TestDir, test_context_with_threads},
+    };
 
     #[test]
     fn parse_rejects_invalid_patch_header() {
@@ -372,16 +334,6 @@ mod tests {
         let parallel_patch = fs::read(&patch_parallel).expect("parallel-thread patch");
         assert_eq!(single_patch, parallel_patch);
     }
-
-    fn test_context_with_threads(temp: &TestDir, threads: usize) -> OperationContext {
-        OperationContext::new(
-            ThreadBudget::Fixed(threads),
-            temp.child("temp"),
-            Arc::new(NoopProgressSink),
-            CancellationToken::new(),
-        )
-    }
-
     fn build_large_fixture_bytes() -> Vec<u8> {
         let mut bytes = vec![0u8; 512 * 1024];
         for (index, byte) in bytes.iter_mut().enumerate() {

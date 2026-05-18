@@ -163,8 +163,7 @@ impl PatchHandler for PdsPatchHandler {
 
         let file = File::create(&request.output)?;
         let mut archive = ZipWriter::new(file);
-        let options =
-            SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        let options = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
         archive
             .start_file(PDS_MANIFEST_NAME, options)
             .map_err(|error| {
@@ -661,54 +660,19 @@ fn pluralize(count: usize, singular: &'static str, plural: &'static str) -> &'st
 #[cfg(test)]
 mod tests {
     use std::{
-        env, fs,
+        fs,
         io::{Read, Write},
-        path::{Path, PathBuf},
-        sync::Arc,
-        sync::atomic::{AtomicU64, Ordering},
-        time::{SystemTime, UNIX_EPOCH},
+        path::Path,
     };
 
-    use rom_weaver_core::{
-        CancellationToken, NoopProgressSink, OperationContext, OperationStatus, PatchApplyRequest,
-        PatchCreateRequest, PatchHandler, ThreadBudget,
-    };
+    use rom_weaver_core::{OperationStatus, PatchApplyRequest, PatchCreateRequest, PatchHandler};
     use zip::{CompressionMethod, ZipArchive, ZipWriter, write::SimpleFileOptions};
 
     use super::{PDS_DEFAULT_PAYLOAD_NAME, PDS_MANIFEST_NAME, PdsPatchHandler};
-    use crate::PDS;
-
-    static NEXT_TEST_DIR_ID: AtomicU64 = AtomicU64::new(0);
-
-    struct TestDir {
-        path: PathBuf,
-    }
-
-    impl TestDir {
-        fn new() -> Self {
-            let timestamp = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .expect("time")
-                .as_nanos();
-            let sequence = NEXT_TEST_DIR_ID.fetch_add(1, Ordering::Relaxed);
-            let path = env::temp_dir().join(format!(
-                "rom-weaver-pds-tests-{}-{timestamp}-{sequence}",
-                std::process::id(),
-            ));
-            fs::create_dir_all(&path).expect("temp dir");
-            Self { path }
-        }
-
-        fn child(&self, name: &str) -> PathBuf {
-            self.path.join(name)
-        }
-    }
-
-    impl Drop for TestDir {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.path);
-        }
-    }
+    use crate::{
+        PDS,
+        test_support::{TestDir, test_context_with_threads},
+    };
 
     #[test]
     fn parse_accepts_archive_with_patch_dat_manifest() {
@@ -952,24 +916,13 @@ mod tests {
     fn write_archive(path: &Path, entries: &[(&str, &[u8])]) {
         let file = fs::File::create(path).expect("archive file");
         let mut writer = ZipWriter::new(file);
-        let options =
-            SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
+        let options = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
         for (name, data) in entries {
             writer.start_file(*name, options).expect("start file");
             writer.write_all(data).expect("write file");
         }
         writer.finish().expect("finish archive");
     }
-
-    fn test_context_with_threads(temp: &TestDir, threads: usize) -> OperationContext {
-        OperationContext::new(
-            ThreadBudget::Fixed(threads),
-            temp.child("temp"),
-            Arc::new(NoopProgressSink),
-            CancellationToken::new(),
-        )
-    }
-
     fn build_large_fixture_bytes() -> Vec<u8> {
         let mut bytes = vec![0u8; 512 * 1024];
         for (index, byte) in bytes.iter_mut().enumerate() {
