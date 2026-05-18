@@ -1,3 +1,4 @@
+mod aps_n64;
 mod apsgba;
 mod bdf;
 mod bps;
@@ -26,6 +27,7 @@ use std::{
     sync::Arc,
 };
 
+use aps_n64::ApsN64PatchHandler;
 use apsgba::ApsGbaPatchHandler;
 use bdf::BdfPatchHandler;
 use bps::BpsPatchHandler;
@@ -158,7 +160,8 @@ const BPS_SIGNATURE: &[u8] = b"BPS1";
 const UPS_SIGNATURE: &[u8] = b"UPS1";
 #[cfg(not(target_family = "wasm"))]
 const VCDIFF_SIGNATURE: [u8; 3] = [0xD6, 0xC3, 0xC4];
-const APS_SIGNATURE: &[u8] = b"APS1";
+const APS_N64_SIGNATURE: &[u8] = b"APS10";
+const APS_GBA_SIGNATURE: &[u8] = b"APS1";
 const RUP_SIGNATURE: &[u8] = b"NINJA2";
 const PPF1_SIGNATURE: &[u8] = b"PPF1";
 const PPF2_SIGNATURE: &[u8] = b"PPF2";
@@ -259,7 +262,7 @@ impl PatchRegistry {
             handlers.push(Arc::new(VcdiffPatchHandler::new(&VCDIFF)));
             handlers.push(Arc::new(VcdiffPatchHandler::new(&XDELTA)));
         }
-        handlers.push(Arc::new(ApsGbaPatchHandler::new(&APS)));
+        handlers.push(Arc::new(ApsN64PatchHandler::new(&APS)));
         handlers.push(Arc::new(ApsGbaPatchHandler::new(&APSGBA)));
         handlers.push(Arc::new(RupPatchHandler::new(&RUP)));
         handlers.push(Arc::new(PpfPatchHandler::new(&PPF)));
@@ -277,19 +280,14 @@ impl PatchRegistry {
     }
 
     pub fn probe(&self, path: &Path) -> Option<Arc<dyn PatchHandler>> {
-        let ips_extension = is_ips_extension(path);
         let ebp_extension = is_ebp_extension(path);
         #[cfg(not(target_family = "wasm"))]
         let xdelta_extension = is_xdelta_extension(path);
-        if ips_extension && let Some(resolved) = self.probe_ambiguous_ips_by_signature(path) {
-            return Some(resolved);
-        }
 
         #[cfg(target_family = "wasm")]
-        let signature_match = self.probe_by_signature(path, ips_extension, ebp_extension);
+        let signature_match = self.probe_by_signature(path, ebp_extension);
         #[cfg(not(target_family = "wasm"))]
-        let signature_match =
-            self.probe_by_signature(path, ips_extension, ebp_extension, xdelta_extension);
+        let signature_match = self.probe_by_signature(path, ebp_extension, xdelta_extension);
         if let Some(signature_match) = signature_match {
             return Some(signature_match);
         }
@@ -324,7 +322,6 @@ impl PatchRegistry {
     fn probe_by_signature(
         &self,
         path: &Path,
-        ips_extension: bool,
         ebp_extension: bool,
         #[cfg(not(target_family = "wasm"))] xdelta_extension: bool,
     ) -> Option<Arc<dyn PatchHandler>> {
@@ -343,8 +340,11 @@ impl PatchRegistry {
             }
             return self.find_by_name("vcdiff");
         }
-        if prefix.starts_with(APS_SIGNATURE) {
+        if prefix.starts_with(APS_N64_SIGNATURE) {
             return self.find_by_name("aps");
+        }
+        if prefix.starts_with(APS_GBA_SIGNATURE) {
+            return self.find_by_name("apsgba");
         }
         if prefix.starts_with(RUP_SIGNATURE) {
             return self.find_by_name("rup");
@@ -359,15 +359,11 @@ impl PatchRegistry {
             return self.find_by_name("ips32");
         }
         if prefix.starts_with(IPS_SIGNATURE) {
-            if ips_extension {
-                return self.find_by_name("ips");
+            if let Some(resolved) = self.probe_ambiguous_ips_by_signature(path) {
+                return Some(resolved);
             }
             if ebp_extension {
                 return self.find_by_name("ebp");
-            }
-            let bytes = fs::read(path).ok()?;
-            if spatch::is_double_ips_stream(&bytes) {
-                return self.find_by_name("spatch");
             }
             return self.find_by_name("ips");
         }
@@ -386,12 +382,6 @@ impl PatchRegistry {
 
         None
     }
-}
-
-fn is_ips_extension(path: &Path) -> bool {
-    path.file_name()
-        .and_then(|value| value.to_str())
-        .is_some_and(|name| name.to_ascii_lowercase().ends_with(".ips"))
 }
 
 fn is_ebp_extension(path: &Path) -> bool {
@@ -544,6 +534,30 @@ mod tests {
     }
 
     #[test]
+    fn probe_prefers_aps_n64_signature_over_apsgba_extension() {
+        let path = temp_file_path_with_extension("aps10-over-apsgba-ext", "apsgba");
+        fs::write(&path, b"APS10\0\0\0\0").expect("fixture");
+
+        let registry = PatchRegistry::new();
+        let handler = registry.probe(&path).expect("aps probe");
+        assert_eq!(handler.descriptor().name, "APS");
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn probe_prefers_apsgba_signature_over_aps_extension() {
+        let path = temp_file_path_with_extension("aps1-over-aps-ext", "aps");
+        fs::write(&path, b"APS1\0\0\0\0").expect("fixture");
+
+        let registry = PatchRegistry::new();
+        let handler = registry.probe(&path).expect("apsgba probe");
+        assert_eq!(handler.descriptor().name, "APSGBA");
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
     fn probe_routes_spatch_extension_to_spatch_handler() {
         let registry = PatchRegistry::new();
         let handler = registry
@@ -626,6 +640,18 @@ mod tests {
         let registry = PatchRegistry::new();
         let handler = registry.probe(&path).expect("spatch probe");
         assert_eq!(handler.descriptor().name, "SPATCH");
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn probe_uses_ebp_extension_for_ambiguous_patch_signature() {
+        let path = temp_file_path_with_extension("patch-signature-ebp", "ebp");
+        fs::write(&path, b"PATCHEOF").expect("fixture");
+
+        let registry = PatchRegistry::new();
+        let handler = registry.probe(&path).expect("ebp probe");
+        assert_eq!(handler.descriptor().name, "EBP");
 
         let _ = fs::remove_file(path);
     }
