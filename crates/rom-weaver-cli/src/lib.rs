@@ -74,6 +74,11 @@ struct ExtractCommand {
     select: Vec<String>,
     #[arg(long)]
     out_dir: PathBuf,
+    #[arg(
+        long,
+        help = "For CHD CD extraction, force split CUE + per-track BIN output (`*.trackNN.bin`) instead of a single BIN when possible"
+    )]
+    split_bin: bool,
     #[arg(long, default_value = "auto")]
     threads: ThreadBudget,
 }
@@ -796,19 +801,26 @@ impl CliApp {
     }
 
     fn run_extract(&self, args: ExtractCommand) -> ExitCode {
-        let context = self.context(args.threads);
+        let ExtractCommand {
+            source,
+            select: selections,
+            out_dir,
+            split_bin,
+            threads,
+        } = args;
+        let context = self.context(threads);
         let probe_threads = Some(context.plan_threads(ThreadCapability::single_threaded()));
         if let Some(report) = self.require_existing_path(
             "extract",
             OperationFamily::Container,
             None,
-            &args.source,
+            &source,
             probe_threads.clone(),
         ) {
             return self.finish("extract", report);
         }
 
-        let Some(handler) = self.containers.probe(&args.source) else {
+        let Some(handler) = self.containers.probe(&source) else {
             return self.finish(
                 "extract",
                 OperationReport::failed(
@@ -817,16 +829,26 @@ impl CliApp {
                     "probe",
                     format!(
                         "no registered container matched `{}`",
-                        args.source.display()
+                        source.display()
                     ),
                     probe_threads,
                 ),
             );
         };
 
-        let source = args.source;
-        let out_dir = args.out_dir;
-        let selections = args.select;
+        let (extract_split_bin, split_bin_warning) =
+            if split_bin && !handler.descriptor().matches_name("chd") {
+                (
+                    false,
+                    Some(format!(
+                        "ignored --split-bin for non-CHD input; matched `{}`",
+                        handler.descriptor().name
+                    )),
+                )
+            } else {
+                (split_bin, None)
+            };
+
         let extract_threads = Some(context.plan_threads(handler.capabilities().extract_threads));
         self.emit_running(
             "extract",
@@ -843,6 +865,7 @@ impl CliApp {
                 &source,
                 &out_dir,
                 &selections,
+                extract_split_bin,
                 "extract input",
                 &context,
             )
@@ -855,6 +878,9 @@ impl CliApp {
                     Some(context.plan_threads(ThreadCapability::single_threaded())),
                 )
             });
+        if let Some(split_bin_warning) = split_bin_warning {
+            report.label = format!("{}; warning={split_bin_warning}", report.label);
+        }
         if report.status == OperationStatus::Succeeded {
             self.emit_running(
                 "extract",
@@ -1169,6 +1195,7 @@ impl CliApp {
                 &current_source,
                 &out_dir,
                 select,
+                false,
                 labels.source_label,
                 context,
             )
@@ -1273,6 +1300,7 @@ impl CliApp {
         source: &Path,
         out_dir: &Path,
         selections: &[String],
+        split_bin: bool,
         source_label: &str,
         context: &OperationContext,
     ) -> Result<OperationReport> {
@@ -1280,6 +1308,7 @@ impl CliApp {
             source: source.to_path_buf(),
             selections: selections.to_vec(),
             out_dir: out_dir.to_path_buf(),
+            split_bin,
         };
         match handler.extract(&request, context) {
             Ok(report) => Ok(report),
@@ -1303,6 +1332,7 @@ impl CliApp {
                     source: source.to_path_buf(),
                     selections: vec![selected_entry],
                     out_dir: out_dir.to_path_buf(),
+                    split_bin,
                 };
                 handler.extract(&retry_request, context)
             }
@@ -4058,6 +4088,7 @@ impl CliApp {
                 source: source.clone(),
                 selections: Vec::new(),
                 out_dir: nested_out_dir.clone(),
+                split_bin: false,
             };
             handler.extract(&nested_request, context).map_err(|error| {
                 RomWeaverError::Validation(format!(

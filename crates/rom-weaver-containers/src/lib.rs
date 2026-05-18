@@ -7544,10 +7544,11 @@ impl ChdContainerHandler {
             .first()
             .map(|track| track.mode.data_bytes())
             .unwrap_or(2352);
-        let single_bin = layout
+        let natural_single_bin = layout
             .tracks
             .iter()
             .all(|track| track.mode.data_bytes() == first_data_bytes);
+        let single_bin = natural_single_bin && !request.split_bin;
         let selection_requested = !request.selections.is_empty();
         let cue_name = format!("{stem}.cue");
         let mut selections = SelectionMatcher::new(&request.selections);
@@ -7760,23 +7761,41 @@ impl ChdContainerHandler {
             ""
         };
 
+        let split_bin_suffix = if request.split_bin {
+            let emitted_files = produced_outputs
+                .iter()
+                .map(|path| {
+                    path.strip_prefix(&request.out_dir)
+                        .unwrap_or(path.as_path())
+                        .to_string_lossy()
+                        .replace('\\', "/")
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+            format!("; splitbin=true emitted_files={emitted_files}")
+        } else {
+            String::new()
+        };
+
         let label = if !selection_requested && wrote_single_bin_output {
             let bin_path = request.out_dir.join(&single_bin_name);
             format!(
-                "extracted `{}` to `{}` and `{}` (cd, {}){}",
+                "extracted `{}` to `{}` and `{}` (cd, {}){}{}",
                 request.source.display(),
                 cue_path.display(),
                 bin_path.display(),
                 self.header_codec_label(header),
-                suffix
+                suffix,
+                split_bin_suffix
             )
         } else if !selection_requested {
             format!(
-                "extracted `{}` to `{}` and per-track bin files (cd, {}){}",
+                "extracted `{}` to `{}` and per-track bin files (cd, {}){}{}",
                 request.source.display(),
                 cue_path.display(),
                 self.header_codec_label(header),
-                suffix
+                suffix,
+                split_bin_suffix
             )
         } else {
             let outputs = produced_outputs
@@ -7785,11 +7804,12 @@ impl ChdContainerHandler {
                 .collect::<Vec<_>>()
                 .join(", ");
             format!(
-                "extracted `{}` to selected outputs: {} (cd, {}){}",
+                "extracted `{}` to selected outputs: {} (cd, {}){}{}",
                 request.source.display(),
                 outputs,
                 self.header_codec_label(header),
-                suffix
+                suffix,
+                split_bin_suffix
             )
         };
 
@@ -8333,6 +8353,13 @@ impl ContainerHandler for ChdContainerHandler {
         let execution = context.plan_threads(ThreadCapability::single_threaded());
         let chd = ChdReadSession::open(&request.source)?;
         let media_kind = chd.media_kind();
+        if request.split_bin && media_kind != ChdMediaKind::CdRom {
+            return Err(RomWeaverError::Validation(format!(
+                "chd extract --split-bin is only supported for cd media; `{}` is {}",
+                request.source.display(),
+                self.media_label(media_kind)
+            )));
+        }
         if media_kind == ChdMediaKind::CdRom {
             return self.extract_cd(chd, request, execution);
         }
@@ -8836,6 +8863,7 @@ mod tests {
                     source: compressed_cso,
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
+                    split_bin: false,
                 },
                 &test_context(&temp_dir, 1),
             )
@@ -8926,6 +8954,7 @@ mod tests {
                     source: source_path,
                     out_dir: out_dir.clone(),
                     selections: Vec::new(),
+                    split_bin: false,
                 },
                 &context,
             )
@@ -8981,6 +9010,7 @@ mod tests {
                     source: source_path.clone(),
                     out_dir: selected_cue_dir.clone(),
                     selections: vec!["multi.disc02.cue".to_string()],
+                    split_bin: false,
                 },
                 &context,
             )
@@ -9001,6 +9031,7 @@ mod tests {
                     source: source_path,
                     out_dir: selected_glob_dir.clone(),
                     selections: vec!["multi.disc0?.bin".to_string()],
+                    split_bin: false,
                 },
                 &context,
             )
@@ -9037,6 +9068,7 @@ mod tests {
                     source: source_path,
                     out_dir: temp_dir.join("out"),
                     selections: vec!["single.missing.cue".to_string()],
+                    split_bin: false,
                 },
                 &test_context(&temp_dir, 1),
             )

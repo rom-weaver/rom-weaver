@@ -138,6 +138,7 @@ pub struct ContainerExtractRequest {
     pub source: PathBuf,
     pub selections: Vec<String>,
     pub out_dir: PathBuf,
+    pub split_bin: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

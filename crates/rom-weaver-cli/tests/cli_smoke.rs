@@ -4020,6 +4020,184 @@ fn chd_compress_and_extract_cd_with_index00_round_trip() {
 }
 
 #[test]
+fn chd_extract_split_bin_forces_per_track_outputs_and_reports_emitted_files() {
+    let temp = setup_temp_dir();
+    let frames = 8_u32;
+    let source = (0..(frames as usize * 2352))
+        .map(|index| (index % 173) as u8)
+        .collect::<Vec<_>>();
+    fs::write(temp.child("disc.bin").path(), &source).expect("fixture");
+    temp.child("disc.cue")
+        .write_str(
+            "FILE \"disc.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n  TRACK 02 AUDIO\n    INDEX 00 00:00:04\n    INDEX 01 00:00:06\n",
+        )
+        .expect("cue fixture");
+
+    let chd_path = temp.child("disc.chd");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("disc.cue").path().to_str().expect("path"),
+            "--format",
+            "chd",
+            "--output",
+            chd_path.path().to_str().expect("path"),
+            "--codec",
+            "zstd",
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let out_dir = temp.child("extract-split");
+    let extract_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "extract",
+            chd_path.path().to_str().expect("path"),
+            "--split-bin",
+            "--out-dir",
+            out_dir.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let extract_json = parse_single_json_line(&extract_output);
+    assert_eq!(extract_json["format"], "chd");
+    assert_eq!(extract_json["status"], "succeeded");
+    let label = extract_json["label"].as_str().expect("label");
+    assert!(label.contains("splitbin=true"));
+    assert!(label.contains("emitted_files=disc.cue,disc.track01.bin,disc.track02.bin"));
+
+    assert!(out_dir.child("disc.cue").path().exists());
+    assert!(out_dir.child("disc.track01.bin").path().exists());
+    assert!(out_dir.child("disc.track02.bin").path().exists());
+    assert!(!out_dir.child("disc.bin").path().exists());
+    let cue = fs::read_to_string(out_dir.child("disc.cue").path()).expect("cue output");
+    assert!(cue.contains("FILE \"disc.track01.bin\" BINARY"));
+    assert!(cue.contains("FILE \"disc.track02.bin\" BINARY"));
+}
+
+#[test]
+fn chd_extract_split_bin_selecting_cue_fanouts_track_outputs() {
+    let temp = setup_temp_dir();
+    let frames = 8_u32;
+    let source = (0..(frames as usize * 2352))
+        .map(|index| (index % 173) as u8)
+        .collect::<Vec<_>>();
+    fs::write(temp.child("disc.bin").path(), &source).expect("fixture");
+    temp.child("disc.cue")
+        .write_str(
+            "FILE \"disc.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n  TRACK 02 AUDIO\n    INDEX 00 00:00:04\n    INDEX 01 00:00:06\n",
+        )
+        .expect("cue fixture");
+
+    let chd_path = temp.child("disc.chd");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("disc.cue").path().to_str().expect("path"),
+            "--format",
+            "chd",
+            "--output",
+            chd_path.path().to_str().expect("path"),
+            "--codec",
+            "zstd",
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let out_dir = temp.child("extract-selected-cue");
+    let extract_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "extract",
+            chd_path.path().to_str().expect("path"),
+            "--split-bin",
+            "--select",
+            "disc.cue",
+            "--out-dir",
+            out_dir.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let extract_json = parse_single_json_line(&extract_output);
+    assert_eq!(extract_json["format"], "chd");
+    assert_eq!(extract_json["status"], "succeeded");
+    let label = extract_json["label"].as_str().expect("label");
+    assert!(label.contains("splitbin=true"));
+
+    assert!(out_dir.child("disc.cue").path().exists());
+    assert!(out_dir.child("disc.track01.bin").path().exists());
+    assert!(out_dir.child("disc.track02.bin").path().exists());
+    assert!(!out_dir.child("disc.bin").path().exists());
+}
+
+#[test]
+fn chd_extract_split_bin_rejects_non_cd_media() {
+    let temp = setup_temp_dir();
+    let source = (0..16_384)
+        .map(|index| (index % 223) as u8)
+        .collect::<Vec<_>>();
+    fs::write(temp.child("disc.bin").path(), &source).expect("fixture");
+
+    let chd_path = temp.child("disc.chd");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("disc.bin").path().to_str().expect("path"),
+            "--format",
+            "chd",
+            "--output",
+            chd_path.path().to_str().expect("path"),
+            "--codec",
+            "zstd",
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let out_dir = temp.child("selected");
+    let missing_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "extract",
+            chd_path.path().to_str().expect("path"),
+            "--split-bin",
+            "--out-dir",
+            out_dir.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .stdout
+        .clone();
+    let missing_json = parse_single_json_line(&missing_output);
+    assert_eq!(missing_json["format"], "chd");
+    assert_eq!(missing_json["status"], "failed");
+    assert!(
+        missing_json["label"]
+            .as_str()
+            .expect("label")
+            .contains("only supported for cd media")
+    );
+}
+
+#[test]
 fn chd_compress_and_extract_wave_audio_cue_round_trip() {
     let temp = setup_temp_dir();
     let pcm = (0..(4 * 2352))
@@ -4066,6 +4244,64 @@ fn chd_compress_and_extract_wave_audio_cue_round_trip() {
     );
     let cue = fs::read_to_string(out_dir.child("disc.cue").path()).expect("cue output");
     assert!(cue.contains("TRACK 01 AUDIO"));
+}
+
+#[test]
+fn extract_split_bin_non_chd_is_ignored_with_warning() {
+    let temp = setup_temp_dir();
+    let expected = b"zip payload for extract split-bin ignore test".to_vec();
+    fs::write(temp.child("disc.iso").path(), &expected).expect("fixture");
+    let archive = temp.child("sample.zip");
+
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("disc.iso").path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            archive.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let out_dir = temp.child("out");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "extract",
+            archive.path().to_str().expect("path"),
+            "--split-bin",
+            "--select",
+            "disc.iso",
+            "--out-dir",
+            out_dir.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "extract");
+    assert_eq!(json["family"], "container");
+    assert_eq!(json["format"], "zip");
+    assert_eq!(json["status"], "succeeded");
+    assert!(
+        json["label"]
+            .as_str()
+            .expect("label")
+            .contains("ignored --split-bin for non-CHD input")
+    );
+    assert_eq!(
+        fs::read(out_dir.child("disc.iso").path()).expect("extract"),
+        expected
+    );
 }
 
 #[test]
