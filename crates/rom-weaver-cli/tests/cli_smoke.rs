@@ -1764,7 +1764,27 @@ fn trim_wbfs_uses_rvz_scrub_output() {
     let source_iso = temp.child("disc.iso");
     let source_wbfs = temp.child("disc.wbfs");
     fs::write(source_iso.path(), &iso_bytes).expect("iso fixture");
-    write_wbfs_fixture_from_iso(source_iso.path(), source_wbfs.path());
+    let disc = NodDiscReader::new(source_iso.path(), &NodDiscOptions::default()).expect("open iso");
+    let options = NodFormatOptions {
+        format: NodFormat::Wbfs,
+        compression: NodCompression::None,
+        block_size: NodFormat::Wbfs.default_block_size(),
+    };
+    let writer = NodDiscWriter::new(disc, &options).expect("create wbfs writer");
+    let mut output = File::create(source_wbfs.path()).expect("create wbfs");
+    let finalization = writer
+        .process(
+            |data, _processed, _total| output.write_all(data.as_ref()),
+            &NodProcessOptions::default(),
+        )
+        .expect("write wbfs");
+    if !finalization.header.is_empty() {
+        output.rewind().expect("seek wbfs");
+        output
+            .write_all(finalization.header.as_ref())
+            .expect("write wbfs header");
+    }
+    output.flush().expect("flush wbfs");
 
     let trim_output = Command::cargo_bin("rom-weaver")
         .expect("binary")
@@ -1822,7 +1842,27 @@ fn trim_wbfs_revert_is_rejected_for_rvz_scrub() {
     let source_iso = temp.child("disc.iso");
     let source_wbfs = temp.child("disc.wbfs");
     fs::write(source_iso.path(), &iso_bytes).expect("iso fixture");
-    write_wbfs_fixture_from_iso(source_iso.path(), source_wbfs.path());
+    let disc = NodDiscReader::new(source_iso.path(), &NodDiscOptions::default()).expect("open iso");
+    let options = NodFormatOptions {
+        format: NodFormat::Wbfs,
+        compression: NodCompression::None,
+        block_size: NodFormat::Wbfs.default_block_size(),
+    };
+    let writer = NodDiscWriter::new(disc, &options).expect("create wbfs writer");
+    let mut output = File::create(source_wbfs.path()).expect("create wbfs");
+    let finalization = writer
+        .process(
+            |data, _processed, _total| output.write_all(data.as_ref()),
+            &NodProcessOptions::default(),
+        )
+        .expect("write wbfs");
+    if !finalization.header.is_empty() {
+        output.rewind().expect("seek wbfs");
+        output
+            .write_all(finalization.header.as_ref())
+            .expect("write wbfs header");
+    }
+    output.flush().expect("flush wbfs");
 
     let trim_output = Command::cargo_bin("rom-weaver")
         .expect("binary")
