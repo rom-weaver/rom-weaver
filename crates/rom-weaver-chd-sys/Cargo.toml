@@ -10,8 +10,9 @@ links = "rom_weaver_mame_chd"
 name = "rom_weaver_chd_sys"
 
 [dependencies]
+libflac-sys.workspace = true
+libz-sys.workspace = true
 zstd-sys.workspace = true
 
 [build-dependencies]
 cc.workspace = true
-pkg-config.workspace = true

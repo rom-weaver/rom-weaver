@@ -9,12 +9,30 @@ JS_API_README="$ROOT_DIR/scripts/wasm/README.md"
 WASM_NPM_PACKAGE_SYNC="$ROOT_DIR/packages/rom-weaver-wasm/scripts/sync-dist.mjs"
 PTHREAD_COUNT="${PTHREAD_COUNT:-16}"
 
-WASI_SYSROOT="${WASI_SYSROOT:-/opt/homebrew/opt/wasi-libc/share/wasi-sysroot}"
-WASI_CLANG="${WASI_CLANG:-/opt/homebrew/opt/llvm/bin/clang}"
-WASI_CLANGXX="${WASI_CLANGXX:-/opt/homebrew/opt/llvm/bin/clang++}"
-WASI_AR="${WASI_AR:-/opt/homebrew/opt/llvm/bin/llvm-ar}"
-WASI_RANLIB="${WASI_RANLIB:-/opt/homebrew/opt/llvm/bin/llvm-ranlib}"
-WASI_STRIP="${WASI_STRIP:-/opt/homebrew/opt/llvm/bin/llvm-strip}"
+WASI_SDK_PATH="${WASI_SDK_PATH:-}"
+if [[ -z "$WASI_SDK_PATH" ]]; then
+  if [[ -d "/opt/wasi-sdk" ]]; then
+    WASI_SDK_PATH="/opt/wasi-sdk"
+  elif [[ -d "/opt/homebrew/opt/wasi-sdk" ]]; then
+    WASI_SDK_PATH="/opt/homebrew/opt/wasi-sdk"
+  fi
+fi
+
+if [[ -n "$WASI_SDK_PATH" ]]; then
+  WASI_SYSROOT="${WASI_SYSROOT:-$WASI_SDK_PATH/share/wasi-sysroot}"
+  WASI_CLANG="${WASI_CLANG:-$WASI_SDK_PATH/bin/clang}"
+  WASI_CLANGXX="${WASI_CLANGXX:-$WASI_SDK_PATH/bin/clang++}"
+  WASI_AR="${WASI_AR:-$WASI_SDK_PATH/bin/llvm-ar}"
+  WASI_RANLIB="${WASI_RANLIB:-$WASI_SDK_PATH/bin/llvm-ranlib}"
+  WASI_STRIP="${WASI_STRIP:-$WASI_SDK_PATH/bin/llvm-strip}"
+else
+  WASI_SYSROOT="${WASI_SYSROOT:-/opt/homebrew/opt/wasi-libc/share/wasi-sysroot}"
+  WASI_CLANG="${WASI_CLANG:-/opt/homebrew/opt/llvm/bin/clang}"
+  WASI_CLANGXX="${WASI_CLANGXX:-/opt/homebrew/opt/llvm/bin/clang++}"
+  WASI_AR="${WASI_AR:-/opt/homebrew/opt/llvm/bin/llvm-ar}"
+  WASI_RANLIB="${WASI_RANLIB:-/opt/homebrew/opt/llvm/bin/llvm-ranlib}"
+  WASI_STRIP="${WASI_STRIP:-/opt/homebrew/opt/llvm/bin/llvm-strip}"
+fi
 BROTLI_QUALITY="${BROTLI_QUALITY:-11}"
 SKIP_WASM_OPT="${SKIP_WASM_OPT:-0}"
 
@@ -57,9 +75,19 @@ export CC_wasm32_wasip1_threads="$WASI_CLANG --sysroot=$WASI_SYSROOT"
 export CXX_wasm32_wasip1_threads="$WASI_CLANGXX --sysroot=$WASI_SYSROOT"
 export AR_wasm32_wasip1_threads="$WASI_AR"
 export RANLIB_wasm32_wasip1_threads="$WASI_RANLIB"
+export WASI_SYSROOT
 
 NON_THREADED_RUSTFLAGS="-C target-feature=+bulk-memory,+mutable-globals,+sign-ext,+reference-types"
 THREADED_RUSTFLAGS="-C target-feature=+atomics,+bulk-memory,+mutable-globals,+sign-ext,+reference-types"
+
+WASI_CXX_DIR="${WASI_CXX_DIR:-$WASI_SYSROOT/lib/wasm32-wasip1/noeh}"
+WASI_CXX_THREADS_DIR="${WASI_CXX_THREADS_DIR:-$WASI_SYSROOT/lib/wasm32-wasip1-threads/noeh}"
+if [[ -d "$WASI_CXX_DIR" ]]; then
+  NON_THREADED_RUSTFLAGS+=" -L native=$WASI_CXX_DIR"
+fi
+if [[ -d "$WASI_CXX_THREADS_DIR" ]]; then
+  THREADED_RUSTFLAGS+=" -L native=$WASI_CXX_THREADS_DIR"
+fi
 
 build_target() {
   local target="$1"
@@ -94,6 +122,7 @@ postprocess_artifact() {
       --enable-bulk-memory
       --enable-bulk-memory-opt
       --enable-mutable-globals
+      --enable-nontrapping-float-to-int
       --enable-sign-ext
       --enable-reference-types
     )

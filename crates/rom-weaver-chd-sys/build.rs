@@ -5,7 +5,7 @@ fn main() {
     println!("cargo:rerun-if-changed=native/mame_compat");
     println!("cargo:rerun-if-changed=native/mame_upstream");
 
-    let flac = flac_library();
+    let flac_include_dirs = flac_include_dirs();
 
     let mut lzma = cc::Build::new();
     lzma.file("native/mame_upstream/lzma/C/CpuArch.c");
@@ -38,7 +38,10 @@ fn main() {
     build.include("native/mame_compat");
     build.include("native/mame_upstream");
     build.include("native/mame_upstream/lzma/C");
-    for include in flac.include_paths {
+    for include in flac_include_dirs {
+        build.include(include);
+    }
+    for include in zlib_include_dirs() {
         build.include(include);
     }
     for include in zstd_include_dirs() {
@@ -51,10 +54,29 @@ fn main() {
     build.define("ROM_WEAVER_MAME_CHD_HAVE_BACKEND", None);
     build.define("Z7_ST", None);
     build.compile("rom_weaver_mame_chd_bridge");
-    println!("cargo:rustc-link-lib=z");
     println!(
         "cargo:rustc-env=ROM_WEAVER_MAME_CHD_BACKEND=embedded-zlib-zstd-lzma-huffman-flac-avhuff"
     );
+}
+
+fn zlib_include_dirs() -> Vec<String> {
+    match std::env::var("DEP_Z_INCLUDE") {
+        Ok(includes) => includes
+            .split(';')
+            .filter(|path| !path.is_empty())
+            .map(ToOwned::to_owned)
+            .collect(),
+        Err(_) => {
+            let target = std::env::var("TARGET").unwrap_or_default();
+            if target.starts_with("wasm32") {
+                panic!(
+                    "missing DEP_Z_INCLUDE from libz-sys while building `{target}`; \
+                     ensure libz-sys is an immediate dependency"
+                );
+            }
+            Vec::new()
+        }
+    }
 }
 
 fn zstd_include_dirs() -> Vec<String> {
@@ -68,12 +90,20 @@ fn zstd_include_dirs() -> Vec<String> {
         .collect()
 }
 
-fn flac_library() -> pkg_config::Library {
-    println!("cargo:rerun-if-env-changed=PKG_CONFIG_PATH");
-    println!("cargo:rerun-if-env-changed=PKG_CONFIG_LIBDIR");
-    println!("cargo:rerun-if-env-changed=PKG_CONFIG_SYSROOT_DIR");
-    pkg_config::Config::new()
-        .atleast_version("1.3.0")
-        .probe("flac")
-        .expect("libFLAC development files not found via pkg-config; install flac and pkg-config")
+fn flac_include_dirs() -> Vec<String> {
+    let manifest_dir = std::path::PathBuf::from(
+        std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR is always set"),
+    );
+    let workspace_root = manifest_dir
+        .parent()
+        .and_then(std::path::Path::parent)
+        .expect("rom-weaver-chd-sys lives under workspace/crates/");
+    let vendored_include = workspace_root.join("vendor/libflac-sys-0.3.4/flac/include");
+    if !vendored_include.is_dir() {
+        panic!(
+            "missing FLAC include directory at `{}`",
+            vendored_include.display()
+        );
+    }
+    vec![vendored_include.to_string_lossy().into_owned()]
 }
