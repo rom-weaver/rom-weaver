@@ -62,7 +62,8 @@
   "scripts": {
     "prepare:dist": "node ./scripts/sync-dist.mjs",
     "prepack": "npm run prepare:dist",
-    "check": "node --check ./src/index.mjs && node --check ./src/rom-weaver-wasi-api.mjs && node --check ./src/rom-weaver-zenfs-api.mjs && node --check ./src/workers/runner-worker-core.mjs && node --check ./src/workers/node-runner-worker.mjs && node --check ./src/workers/browser-runner-worker.mjs && node --check ./src/workers/worker-client-core.mjs && node --check ./src/workers/node-worker-client.mjs && node --check ./src/workers/browser-worker-client.mjs && node --check ./src/workers/worker-protocol.mjs"
+    "check": "node --check ./src/index.mjs && node --check ./src/rom-weaver-wasi-api.mjs && node --check ./src/rom-weaver-zenfs-api.mjs && node --check ./src/workers/runner-worker-core.mjs && node --check ./src/workers/node-runner-worker.mjs && node --check ./src/workers/browser-runner-worker.mjs && node --check ./src/workers/worker-client-core.mjs && node --check ./src/workers/node-worker-client.mjs && node --check ./src/workers/browser-worker-client.mjs && node --check ./src/workers/worker-protocol.mjs",
+    "test": "node --test ./tests/*.test.mjs"
   },
   "peerDependencies": {
     "@bjorn3/browser_wasi_shim": "^0.4.2",
