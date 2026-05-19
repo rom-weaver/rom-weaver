@@ -215,13 +215,20 @@ pub struct CompressCommand {
     pub format: Option<String>,
     #[cfg_attr(not(target_arch = "wasm32"), arg(long))]
     pub output: PathBuf,
-    #[cfg_attr(not(target_arch = "wasm32"), arg(long))]
-    pub codec: Option<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            action = ArgAction::Append,
+            help = "Compression codec override; supports codec[:level]. Repeat --codec for multiple codecs (for example CHD: --codec cdzs[:19] --codec cdzl --codec cdfl). If :level is omitted, falls back to --level profile."
+        )
+    )]
+    pub codec: Vec<String>,
     #[cfg_attr(not(target_arch = "wasm32"), arg(
         long,
         value_enum,
         default_value_t = CompressionLevelProfile::Max,
-        help = "Global compression level profile used when --codec does not include an explicit numeric level"
+        help = "Global compression level profile (min|very-low|low|medium|high|very-high|max)"
     ))]
     pub level: CompressionLevelProfile,
     #[cfg_attr(not(target_arch = "wasm32"), arg(long, default_value = "auto"))]
@@ -346,15 +353,16 @@ pub struct PatchApplyCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "compress-codec",
-            help = "Patch-output compression codec[:level] override (for example: --compress-codec zstd:9)"
+            action = ArgAction::Append,
+            help = "Patch-output compression codec override; supports codec[:level]. Repeat --compress-codec for multiple codecs (for example CHD: --compress-codec cdzs[:19] --compress-codec cdzl --compress-codec cdfl). If :level is omitted, falls back to --compress-level profile."
         )
     )]
-    pub compress_codec: Option<String>,
+    pub compress_codec: Vec<String>,
     #[cfg_attr(not(target_arch = "wasm32"), arg(
         long = "compress-level",
         value_enum,
         default_value_t = CompressionLevelProfile::Max,
-        help = "Global patch-output compression level profile used when --compress-codec omits an explicit numeric level"
+        help = "Global patch-output compression level profile (min|very-low|low|medium|high|very-high|max)"
     ))]
     pub compress_level: CompressionLevelProfile,
     #[cfg_attr(
@@ -753,7 +761,7 @@ fn parse_wasm_compress(args: Vec<String>) -> std::result::Result<CompressCommand
     let mut input = Vec::new();
     let mut format: Option<String> = None;
     let mut output: Option<PathBuf> = None;
-    let mut codec: Option<String> = None;
+    let mut codec = Vec::new();
     let mut level = CompressionLevelProfile::Max;
     let mut threads = ThreadBudget::Auto;
     let mut index = 0usize;
@@ -780,12 +788,12 @@ fn parse_wasm_compress(args: Vec<String>) -> std::result::Result<CompressCommand
             continue;
         }
         if let Some(value) = arg.strip_prefix("--codec=") {
-            codec = Some(value.to_string());
+            codec.push(value.to_string());
             index += 1;
             continue;
         }
         if arg == "--codec" {
-            codec = Some(parse_wasm_required_value(&args, &mut index, "--codec")?);
+            codec.push(parse_wasm_required_value(&args, &mut index, "--codec")?);
             continue;
         }
         if let Some(value) = arg.strip_prefix("--level=") {
@@ -933,7 +941,7 @@ fn parse_wasm_patch_apply(args: Vec<String>) -> std::result::Result<PatchApplyCo
     let mut output: Option<PathBuf> = None;
     let mut no_compress = false;
     let mut compress_format: Option<String> = None;
-    let mut compress_codec: Option<String> = None;
+    let mut compress_codec = Vec::new();
     let mut compress_level = CompressionLevelProfile::Max;
     let mut checksum_cache = Vec::new();
     let mut validate_with_checksums = Vec::new();
@@ -1017,12 +1025,12 @@ fn parse_wasm_patch_apply(args: Vec<String>) -> std::result::Result<PatchApplyCo
             continue;
         }
         if let Some(value) = arg.strip_prefix("--compress-codec=") {
-            compress_codec = Some(value.to_string());
+            compress_codec.push(value.to_string());
             index += 1;
             continue;
         }
         if arg == "--compress-codec" {
-            compress_codec = Some(parse_wasm_required_value(
+            compress_codec.push(parse_wasm_required_value(
                 &args,
                 &mut index,
                 "--compress-codec",
@@ -3221,14 +3229,11 @@ impl CliApp {
                 );
             }
         };
-        let (codec, explicit_level) = if auto_mode {
-            (None, None)
-        } else {
-            (codec, explicit_level)
-        };
+        let codec = if auto_mode { None } else { codec };
+        let explicit_level = if auto_mode { None } else { explicit_level };
         let level = Self::resolve_compression_level_for_profile(
             &resolved_format,
-            codec.as_deref(),
+            Self::primary_codec_name(codec.as_deref()),
             explicit_level,
             level_profile,
         );
@@ -4456,45 +4461,90 @@ impl CliApp {
     }
 
     fn resolve_codec_level(
-        codec: Option<String>,
+        codecs: Vec<String>,
         flag_name: &str,
     ) -> Result<(Option<String>, Option<i32>)> {
-        let Some(codec) = codec else {
+        let profile_flag = if flag_name == "--compress-codec" {
+            "--compress-level"
+        } else {
+            "--level"
+        };
+        let parsed_codecs = Self::parse_codec_entries(codecs, flag_name)?;
+        if parsed_codecs.is_empty() {
             return Ok((None, None));
-        };
-
-        let codec = codec.trim();
-        if codec.is_empty() {
-            return Err(RomWeaverError::Validation(format!(
-                "{flag_name} cannot be empty"
-            )));
         }
 
-        let Some((raw_codec, raw_level)) = codec.split_once(':') else {
-            return Ok((Some(codec.to_string()), None));
-        };
+        let mut codec_entries = Vec::with_capacity(parsed_codecs.len());
+        let mut level: Option<i32> = None;
+        for entry in parsed_codecs {
+            let (codec_name, entry_level) = if let Some((name, level_text)) = entry.split_once(':')
+            {
+                let codec_name = name.trim();
+                if codec_name.is_empty() {
+                    return Err(RomWeaverError::Validation(format!(
+                        "{flag_name} contains an empty codec entry"
+                    )));
+                }
+                let trimmed_level = level_text.trim();
+                if trimmed_level.is_empty() {
+                    return Err(RomWeaverError::Validation(format!(
+                        "{flag_name} level cannot be empty"
+                    )));
+                }
+                let parsed_level = trimmed_level.parse::<i32>().map_err(|_| {
+                    RomWeaverError::Validation(format!(
+                        "{flag_name} level `{trimmed_level}` is not a valid integer"
+                    ))
+                })?;
+                (codec_name.to_string(), Some(parsed_level))
+            } else {
+                (entry, None)
+            };
 
-        let codec_name = raw_codec.trim();
-        if codec_name.is_empty() {
-            return Err(RomWeaverError::Validation(format!(
-                "codec name is missing before `:` in {flag_name}"
-            )));
+            if let Some(entry_level) = entry_level {
+                if let Some(existing_level) = level
+                    && existing_level != entry_level
+                {
+                    return Err(RomWeaverError::Validation(format!(
+                        "{flag_name} mixes conflicting codec levels ({existing_level} and {entry_level}); use one shared `:level` value or rely on {profile_flag} <min|very-low|low|medium|high|very-high|max>"
+                    )));
+                }
+                level = Some(entry_level);
+            }
+            codec_entries.push(codec_name);
         }
+        Ok((Some(codec_entries.join("+")), level))
+    }
 
-        let level_text = raw_level.trim();
-        if level_text.is_empty() {
-            return Err(RomWeaverError::Validation(format!(
-                "codec level is missing after `:` in {flag_name}"
-            )));
+    fn parse_codec_entries(codecs: Vec<String>, flag_name: &str) -> Result<Vec<String>> {
+        let mut entries = Vec::new();
+        for raw in codecs {
+            let trimmed = raw.trim();
+            if trimmed.is_empty() {
+                return Err(RomWeaverError::Validation(format!(
+                    "{flag_name} cannot be empty"
+                )));
+            }
+            for entry in trimmed.split([',', '+']) {
+                let entry = entry.trim();
+                if entry.is_empty() {
+                    return Err(RomWeaverError::Validation(format!(
+                        "{flag_name} contains an empty codec entry"
+                    )));
+                }
+                entries.push(entry.to_string());
+            }
         }
+        Ok(entries)
+    }
 
-        let parsed_level = level_text.parse::<i32>().map_err(|_| {
-            RomWeaverError::Validation(format!(
-                "codec level `{level_text}` is not a valid integer in {flag_name}"
-            ))
-        })?;
-
-        Ok((Some(codec_name.to_string()), Some(parsed_level)))
+    fn primary_codec_name(codec: Option<&str>) -> Option<&str> {
+        codec.and_then(|value| {
+            value
+                .split([',', '+'])
+                .map(str::trim)
+                .find(|entry| !entry.is_empty())
+        })
     }
 
     fn resolve_compression_level_for_profile(
@@ -4503,10 +4553,9 @@ impl CliApp {
         explicit_level: Option<i32>,
         profile: CompressionLevelProfile,
     ) -> Option<i32> {
-        if explicit_level.is_some() {
-            return explicit_level;
+        if let Some(level) = explicit_level {
+            return Some(level);
         }
-
         let codec_kind = codec
             .and_then(Self::profile_codec_kind_for_codec_name)
             .or_else(|| Self::default_profile_codec_kind_for_format(format_name));
@@ -4571,7 +4620,7 @@ impl CliApp {
     fn parse_patch_apply_compression_options(
         no_compress: bool,
         compress_format: Option<String>,
-        compress_codec: Option<String>,
+        compress_codec: Vec<String>,
         compress_level: CompressionLevelProfile,
     ) -> Result<PatchApplyCompressionOptions> {
         if no_compress {
@@ -4580,7 +4629,7 @@ impl CliApp {
                     "--no-compress cannot be combined with --compress-format".to_string(),
                 ));
             }
-            if compress_codec.is_some() {
+            if !compress_codec.is_empty() {
                 return Err(RomWeaverError::Validation(
                     "--no-compress cannot be combined with --compress-codec".to_string(),
                 ));
@@ -4730,7 +4779,7 @@ impl CliApp {
         }
         let level = Self::resolve_compression_level_for_profile(
             &resolved_format,
-            codec.as_deref(),
+            Self::primary_codec_name(codec.as_deref()),
             options.level,
             options.profile,
         );
@@ -7024,10 +7073,19 @@ mod tests {
             ),
             Some(22)
         );
+        assert_eq!(
+            CliApp::resolve_compression_level_for_profile(
+                "chd-dvd",
+                None,
+                None,
+                CompressionLevelProfile::Max,
+            ),
+            Some(22)
+        );
     }
 
     #[test]
-    fn compression_profile_respects_codec_and_explicit_levels() {
+    fn compression_profile_respects_codec_types() {
         assert_eq!(
             CliApp::resolve_compression_level_for_profile(
                 "zip",
@@ -7059,10 +7117,80 @@ mod tests {
             CliApp::resolve_compression_level_for_profile(
                 "zst",
                 Some("zstd"),
-                Some(4),
+                None,
                 CompressionLevelProfile::Max,
             ),
-            Some(4)
+            Some(22)
         );
+        assert_eq!(
+            CliApp::resolve_compression_level_for_profile(
+                "chd",
+                CliApp::primary_codec_name(Some("cdlz+cdzs+cdfl")),
+                None,
+                CompressionLevelProfile::Max,
+            ),
+            Some(9)
+        );
+    }
+
+    #[test]
+    fn compression_profile_prefers_explicit_codec_level() {
+        assert_eq!(
+            CliApp::resolve_compression_level_for_profile(
+                "chd",
+                Some("cdzs"),
+                Some(15),
+                CompressionLevelProfile::Max,
+            ),
+            Some(15)
+        );
+        assert_eq!(
+            CliApp::resolve_compression_level_for_profile(
+                "zip",
+                Some("store"),
+                Some(3),
+                CompressionLevelProfile::Max,
+            ),
+            Some(3)
+        );
+    }
+
+    #[test]
+    fn resolve_codec_level_supports_multi_codec_lists() {
+        let (codec, level) = CliApp::resolve_codec_level(
+            vec!["cdzs,cdzl".to_string(), "cdfl".to_string()],
+            "--codec",
+        )
+        .expect("codec list should parse");
+        assert_eq!(codec.as_deref(), Some("cdzs+cdzl+cdfl"));
+        assert_eq!(level, None);
+    }
+
+    #[test]
+    fn resolve_codec_level_supports_codec_level_syntax() {
+        let (codec, level) = CliApp::resolve_codec_level(
+            vec!["cdzs:19,cdzl".to_string(), "cdfl".to_string()],
+            "--codec",
+        )
+        .expect("codec:level should parse");
+        assert_eq!(codec.as_deref(), Some("cdzs+cdzl+cdfl"));
+        assert_eq!(level, Some(19));
+    }
+
+    #[test]
+    fn resolve_codec_level_rejects_invalid_level_values() {
+        let error = CliApp::resolve_codec_level(vec!["cdzs:fast".to_string()], "--codec")
+            .expect_err("invalid codec level should fail");
+        assert!(error.to_string().contains("not a valid integer"));
+    }
+
+    #[test]
+    fn resolve_codec_level_rejects_conflicting_levels() {
+        let error = CliApp::resolve_codec_level(
+            vec!["cdzs:19".to_string(), "cdzl:9".to_string()],
+            "--codec",
+        )
+        .expect_err("conflicting codec levels should fail");
+        assert!(error.to_string().contains("conflicting codec levels"));
     }
 }

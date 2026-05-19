@@ -4392,7 +4392,7 @@ fn compress_rejects_wua_output_format() {
 }
 
 #[test]
-fn compress_rejects_invalid_codec_level_spec() {
+fn compress_rejects_invalid_codec_level_value() {
     let temp = setup_temp_dir();
     temp.child("file.bin")
         .write_str("payload")
@@ -4474,7 +4474,7 @@ fn compress_accepts_global_level_profiles() {
 }
 
 #[test]
-fn compress_defaults_to_max_global_level_and_explicit_level_wins() {
+fn compress_defaults_to_max_global_level_profile() {
     let temp = setup_temp_dir();
     let payload = vec![0x5A; 64 * 1024];
     fs::write(temp.child("payload.bin").path(), &payload).expect("fixture");
@@ -5345,7 +5345,77 @@ fn chd_compress_accepts_cd_codec_aliases() {
 }
 
 #[test]
-fn chd_compress_rejects_level_for_unsupported_codecs() {
+fn chd_compress_accepts_multiple_codecs_from_repeated_flags() {
+    let temp = setup_temp_dir();
+    let frames = 10_u32;
+    let source = (0..(frames as usize * 2352))
+        .map(|index| (index % 157) as u8)
+        .collect::<Vec<_>>();
+    fs::write(temp.child("disc.bin").path(), &source).expect("fixture");
+    temp.child("disc.cue")
+        .write_str("FILE \"disc.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n")
+        .expect("cue fixture");
+
+    let chd_path = temp.child("disc.chd");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("disc.cue").path().to_str().expect("path"),
+            "--format",
+            "chd",
+            "--output",
+            chd_path.path().to_str().expect("path"),
+            "--codec",
+            "cdzs",
+            "--codec",
+            "cdzl",
+            "--codec",
+            "cdfl",
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let inspect_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args(["inspect", chd_path.path().to_str().expect("path"), "--json"])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let inspect_json = parse_single_json_line(&inspect_output);
+    assert_eq!(inspect_json["command"], "inspect");
+    assert_eq!(inspect_json["status"], "succeeded");
+    assert!(
+        inspect_json["label"]
+            .as_str()
+            .expect("label")
+            .contains("codec=cdzs+cdzl+cdfl")
+    );
+
+    let out_dir = temp.child("extract");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "extract",
+            chd_path.path().to_str().expect("path"),
+            "--out-dir",
+            out_dir.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    assert_eq!(
+        fs::read(out_dir.child("disc.bin").path()).expect("extract bytes"),
+        source
+    );
+}
+
+#[test]
+fn chd_compress_rejects_level_for_huffman_codec() {
     let temp = setup_temp_dir();
     let source = (0..16_384)
         .map(|index| (index % 179) as u8)
