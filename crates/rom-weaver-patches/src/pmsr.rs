@@ -5,6 +5,7 @@ use std::{
 };
 
 use crc32fast::Hasher;
+use memmap2::{Mmap, MmapOptions};
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
     PatchCapabilities, PatchChecksumValidation, PatchCreateRequest, PatchHandler, ProbeConfidence,
@@ -161,8 +162,15 @@ struct CreatedPmsrPatch {
 }
 
 fn parse_pmsr_file(path: &Path) -> Result<ParsedPmsrPatch> {
-    let bytes = fs::read(path)?;
+    let bytes = map_file_read_only(path)?;
     parse_pmsr_bytes(&bytes)
+}
+
+fn map_file_read_only(path: &Path) -> Result<Mmap> {
+    let file = File::open(path)?;
+    // SAFETY: This mapping is read-only and the file handle lives through map creation.
+    let map = unsafe { MmapOptions::new().map(&file)? };
+    Ok(map)
 }
 
 fn parse_pmsr_bytes(bytes: &[u8]) -> Result<ParsedPmsrPatch> {

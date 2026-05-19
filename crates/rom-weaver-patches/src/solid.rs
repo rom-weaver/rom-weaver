@@ -59,8 +59,8 @@ impl PatchHandler for SolidPatchHandler {
     }
 
     fn parse(&self, patch_path: &Path, _context: &OperationContext) -> Result<OperationReport> {
-        let patch = fs::read(patch_path)?;
-        let parsed = parse_solid_patch_bytes(&patch)?;
+        let patch = map_file_read_only(patch_path)?;
+        let parsed = parse_solid_patch_bytes(patch.as_ref())?;
 
         let mut label = format!(
             "parsed {} v{} patch with {} {}",
@@ -105,8 +105,8 @@ impl PatchHandler for SolidPatchHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
-        let patch = fs::read(patch_path)?;
-        let parsed = parse_solid_patch_bytes(&patch)?;
+        let patch = map_file_read_only(patch_path)?;
+        let parsed = parse_solid_patch_bytes(patch.as_ref())?;
         let validate_checksums =
             context.patch_checksum_validation() == PatchChecksumValidation::Strict;
         let input = map_file_read_only(&request.input)?;

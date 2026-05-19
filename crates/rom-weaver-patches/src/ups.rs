@@ -6,12 +6,14 @@ use std::{
 };
 
 use crc32fast::Hasher;
+use memmap2::{Mmap, MmapOptions};
 use rom_weaver_checksum::checksum_file_values;
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
     PatchCapabilities, PatchChecksumValidation, PatchCreateRequest, PatchHandler, ProbeConfidence,
     Result, RomWeaverError, ThreadCapability,
 };
+use serde_json::json;
 
 const UPS_MAGIC: &[u8; 4] = b"UPS1";
 const UPS_FOOTER_SIZE: usize = 12;
@@ -38,7 +40,7 @@ impl PatchHandler for UpsPatchHandler {
 
     fn parse(&self, patch_path: &Path, _context: &OperationContext) -> Result<OperationReport> {
         let patch = parse_ups_file(patch_path)?;
-        Ok(OperationReport::succeeded(
+        let mut report = OperationReport::succeeded(
             OperationFamily::Patch,
             Some(self.descriptor.name.to_string()),
             "parse",
@@ -52,7 +54,19 @@ impl PatchHandler for UpsPatchHandler {
             ),
             Some(100.0),
             None,
-        ))
+        );
+        report.details = Some(json!({
+            "patch": {
+                "format": self.descriptor.name,
+                "source_size": patch.source_size,
+                "target_size": patch.target_size,
+                "source_crc32": patch.source_checksum,
+                "target_crc32": patch.target_checksum,
+                "patch_crc32": patch.patch_checksum,
+                "record_count": patch.changes.len(),
+            }
+        }));
+        Ok(report)
     }
 
     fn apply(
@@ -162,8 +176,15 @@ fn parse_ups_file_with_checksum_validation(
     path: &Path,
     validate_patch_checksum: bool,
 ) -> Result<ParsedUpsPatch> {
-    let bytes = fs::read(path)?;
+    let bytes = map_file_read_only(path)?;
     parse_ups_bytes_with_checksum_validation(&bytes, validate_patch_checksum)
+}
+
+fn map_file_read_only(path: &Path) -> Result<Mmap> {
+    let file = File::open(path)?;
+    // SAFETY: This mapping is read-only and the file handle lives through map creation.
+    let map = unsafe { MmapOptions::new().map(&file)? };
+    Ok(map)
 }
 
 #[cfg(test)]

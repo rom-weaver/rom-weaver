@@ -337,7 +337,7 @@ impl PatchRegistry {
     }
 
     fn probe_ambiguous_ips_by_signature(&self, path: &Path) -> Option<Arc<dyn PatchHandler>> {
-        let bytes = fs::read(path).ok()?;
+        let bytes = read_signature_prefix(path, 5)?;
 
         if bytes.starts_with(b"IPS32") {
             return self.find_by_name("ips32");

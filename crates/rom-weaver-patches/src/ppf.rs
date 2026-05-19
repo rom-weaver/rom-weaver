@@ -4,10 +4,12 @@ use std::{
     path::Path,
 };
 
+use memmap2::{Mmap, MmapOptions};
+use rayon::prelude::*;
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
     PatchCapabilities, PatchChecksumValidation, PatchCreateRequest, PatchHandler, ProbeConfidence,
-    Result, RomWeaverError, ThreadCapability,
+    Result, RomWeaverError, SharedThreadPool, ThreadCapability,
 };
 
 const PPF_HEADER_MIN_SIZE: usize = 56;
@@ -26,6 +28,7 @@ const PPF3_FILE_ID_PADDED_OVERHEAD: usize = 38;
 const PPF3_DEFAULT_DESCRIPTION: &str = "rom-weaver PPF3 patch";
 const PPF3_ENCODING_METHOD: u8 = 0x02;
 const CREATE_COMPARE_BUFFER_SIZE: usize = 64 * 1024;
+const CREATE_THREAD_SCAN_CHUNK_BYTES: usize = 4 * 1024 * 1024;
 
 pub struct PpfPatchHandler {
     descriptor: &'static FormatDescriptor,
@@ -132,20 +135,22 @@ impl PatchHandler for PpfPatchHandler {
         request: &PatchCreateRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        let execution = context.plan_threads(ThreadCapability::single_threaded());
         let original_len = fs::metadata(&request.original)?.len();
         let modified_len = fs::metadata(&request.modified)?.len();
+        let (execution, pool) = context.build_pool(ppf_create_thread_capability(modified_len))?;
 
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
         }
         let output_file = File::create(&request.output)?;
         let mut output = BufWriter::new(output_file);
-        let created = create_ppf3_patch_streaming(
+        let created = create_ppf3_patch(
             &request.original,
             original_len,
             &request.modified,
             modified_len,
+            &pool,
+            execution.used_parallelism,
             &mut output,
         )?;
         output.flush()?;
@@ -175,7 +180,7 @@ impl PatchHandler for PpfPatchHandler {
             apply: true,
             create: true,
             threaded_scan: false,
-            threaded_diff: false,
+            threaded_diff: true,
             threaded_output: false,
         }
     }
@@ -226,8 +231,58 @@ struct CreatedPpfPatch {
 }
 
 fn parse_ppf_file(path: &Path) -> Result<ParsedPpfPatch> {
-    let bytes = fs::read(path)?;
+    let bytes = map_file_read_only(path)?;
     parse_ppf_bytes(&bytes)
+}
+
+fn map_file_read_only(path: &Path) -> Result<Mmap> {
+    let file = File::open(path)?;
+    // SAFETY: This mapping is read-only and the file handle lives through map creation.
+    let map = unsafe { MmapOptions::new().map(&file)? };
+    Ok(map)
+}
+
+fn ppf_create_thread_capability(modified_len: u64) -> ThreadCapability {
+    let chunk_count = ppf_create_chunk_count(modified_len).max(1);
+    ThreadCapability::parallel(Some(chunk_count))
+}
+
+fn ppf_create_chunk_count(modified_len: u64) -> usize {
+    if modified_len == 0 {
+        return 1;
+    }
+    let chunk_bytes = CREATE_THREAD_SCAN_CHUNK_BYTES as u64;
+    let chunk_count = modified_len.saturating_add(chunk_bytes - 1) / chunk_bytes;
+    usize::try_from(chunk_count).unwrap_or(usize::MAX)
+}
+
+fn create_ppf3_patch(
+    original_path: &Path,
+    original_len: u64,
+    modified_path: &Path,
+    modified_len: u64,
+    pool: &SharedThreadPool,
+    use_parallel_scan: bool,
+    output: &mut impl Write,
+) -> Result<CreatedPpfPatch> {
+    if use_parallel_scan {
+        create_ppf3_patch_parallel(
+            original_path,
+            original_len,
+            modified_path,
+            modified_len,
+            pool,
+            output,
+        )
+    } else {
+        create_ppf3_patch_streaming(
+            original_path,
+            original_len,
+            modified_path,
+            modified_len,
+            output,
+        )
+    }
 }
 
 fn parse_ppf_bytes(bytes: &[u8]) -> Result<ParsedPpfPatch> {
@@ -341,6 +396,142 @@ fn create_ppf3_patch_streaming(
         record_count,
         blockcheck_enabled,
     })
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct PpfDiffRun {
+    offset: u64,
+    len: u8,
+}
+
+fn create_ppf3_patch_parallel(
+    original_path: &Path,
+    original_len: u64,
+    modified_path: &Path,
+    modified_len: u64,
+    pool: &SharedThreadPool,
+    output: &mut impl Write,
+) -> Result<CreatedPpfPatch> {
+    if modified_len < original_len {
+        return Err(RomWeaverError::Validation(format!(
+            "PPF create does not support shrinking outputs (original: {}, modified: {})",
+            original_len, modified_len
+        )));
+    }
+
+    let blockcheck_enabled = write_ppf3_header(output, original_path, original_len)?;
+    let original = map_file_read_only(original_path)?;
+    let modified = map_file_read_only(modified_path)?;
+    let runs = collect_ppf_diff_runs_parallel(original.as_ref(), modified.as_ref(), pool);
+
+    for run in &runs {
+        let start = usize::try_from(run.offset).map_err(|_| {
+            RomWeaverError::Validation("PPF record offset exceeded platform limits".into())
+        })?;
+        let end = start
+            .checked_add(usize::from(run.len))
+            .ok_or_else(|| RomWeaverError::Validation("PPF record offset overflowed".into()))?;
+        let data = modified.get(start..end).ok_or_else(|| {
+            RomWeaverError::Validation("PPF record data exceeded modified file bounds".into())
+        })?;
+        write_ppf3_record(output, run.offset, data)?;
+    }
+
+    Ok(CreatedPpfPatch {
+        record_count: runs.len(),
+        blockcheck_enabled,
+    })
+}
+
+fn collect_ppf_diff_runs_parallel(
+    original: &[u8],
+    modified: &[u8],
+    pool: &SharedThreadPool,
+) -> Vec<PpfDiffRun> {
+    let chunk_ranges = (0..modified.len())
+        .step_by(CREATE_THREAD_SCAN_CHUNK_BYTES)
+        .map(|start| {
+            let end = start
+                .saturating_add(CREATE_THREAD_SCAN_CHUNK_BYTES)
+                .min(modified.len());
+            start..end
+        })
+        .collect::<Vec<_>>();
+
+    let per_chunk_runs = pool.install(|| {
+        chunk_ranges
+            .into_par_iter()
+            .map(|range| collect_ppf_chunk_diff_runs(original, modified, range.start, range.end))
+            .collect::<Vec<_>>()
+    });
+
+    let mut merged: Vec<PpfDiffRun> = Vec::new();
+    for runs in per_chunk_runs {
+        for run in runs {
+            if let Some(last) = merged.last_mut() {
+                let contiguous = last
+                    .offset
+                    .checked_add(u64::from(last.len))
+                    .is_some_and(|end| end == run.offset);
+                if contiguous {
+                    let combined_len = usize::from(last.len) + usize::from(run.len);
+                    if combined_len <= usize::from(u8::MAX) {
+                        last.len = combined_len as u8;
+                        continue;
+                    }
+                }
+            }
+            merged.push(run);
+        }
+    }
+    merged
+}
+
+fn collect_ppf_chunk_diff_runs(
+    original: &[u8],
+    modified: &[u8],
+    start: usize,
+    end: usize,
+) -> Vec<PpfDiffRun> {
+    let mut runs = Vec::new();
+    let mut pending_start: Option<usize> = None;
+    let mut pending_len = 0usize;
+
+    for index in start..end {
+        let differs = match original.get(index) {
+            Some(byte) => *byte != modified[index],
+            None => true,
+        };
+        if differs {
+            if pending_start.is_none() {
+                pending_start = Some(index);
+            }
+            pending_len = pending_len.saturating_add(1);
+            if pending_len == usize::from(u8::MAX) {
+                runs.push(PpfDiffRun {
+                    offset: pending_start.expect("pending start should exist") as u64,
+                    len: u8::MAX,
+                });
+                pending_start = None;
+                pending_len = 0;
+            }
+        } else if pending_len > 0 {
+            runs.push(PpfDiffRun {
+                offset: pending_start.expect("pending start should exist") as u64,
+                len: pending_len as u8,
+            });
+            pending_start = None;
+            pending_len = 0;
+        }
+    }
+
+    if pending_len > 0 {
+        runs.push(PpfDiffRun {
+            offset: pending_start.expect("pending start should exist") as u64,
+            len: pending_len as u8,
+        });
+    }
+    runs
 }
 
 fn write_ppf3_header(
@@ -897,8 +1088,9 @@ mod tests {
     use rom_weaver_core::{PatchApplyRequest, PatchCreateRequest, PatchHandler};
 
     use super::{
-        FILE_ID_BEGIN_MARKER, FILE_ID_END_MARKER, PPF_VALIDATION_BLOCK_SIZE,
-        PPF2_BLOCKCHECK_OFFSET, PpfPatchHandler, PpfVersion, parse_ppf_bytes,
+        CREATE_THREAD_SCAN_CHUNK_BYTES, FILE_ID_BEGIN_MARKER, FILE_ID_END_MARKER,
+        PPF_VALIDATION_BLOCK_SIZE, PPF2_BLOCKCHECK_OFFSET, PpfPatchHandler, PpfVersion,
+        parse_ppf_bytes,
     };
     use crate::{
         PPF,
@@ -1269,6 +1461,47 @@ mod tests {
             .expect("apply");
 
         assert_eq!(fs::read(output_path).expect("output"), modified);
+    }
+
+    #[test]
+    fn create_uses_parallel_threads_for_large_input() {
+        let temp = TestDir::new();
+        let original_path = temp.child("original-large.bin");
+        let modified_path = temp.child("modified-large.bin");
+        let patch_path = temp.child("update-large.ppf");
+
+        let mut original = vec![0u8; (CREATE_THREAD_SCAN_CHUNK_BYTES * 2) + 4096];
+        for (index, byte) in original.iter_mut().enumerate() {
+            *byte = (index as u8).wrapping_mul(7);
+        }
+        let mut modified = original.clone();
+        for byte in &mut modified[..1024] {
+            *byte = byte.wrapping_add(1);
+        }
+        let boundary = CREATE_THREAD_SCAN_CHUNK_BYTES;
+        for byte in &mut modified[(boundary - 128)..(boundary + 128)] {
+            *byte = byte.wrapping_add(3);
+        }
+
+        fs::write(&original_path, &original).expect("fixture");
+        fs::write(&modified_path, &modified).expect("fixture");
+
+        let handler = PpfPatchHandler::new(&PPF);
+        let create_report = handler
+            .create(
+                &PatchCreateRequest {
+                    original: original_path,
+                    modified: modified_path,
+                    output: patch_path,
+                    format: "PPF".into(),
+                },
+                &test_context_with_threads(&temp, 8),
+            )
+            .expect("create");
+        let execution = create_report.thread_execution.expect("thread execution");
+        assert_eq!(execution.requested_threads, 8);
+        assert!(execution.effective_threads >= 2);
+        assert!(execution.used_parallelism);
     }
 
     #[test]

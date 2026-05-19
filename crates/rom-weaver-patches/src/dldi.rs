@@ -63,8 +63,8 @@ impl PatchHandler for DldiPatchHandler {
     }
 
     fn parse(&self, patch_path: &Path, _context: &OperationContext) -> Result<OperationReport> {
-        let patch = fs::read(patch_path)?;
-        let header = parse_dldi_bytes(&patch, "DLDI patch")?;
+        let patch = map_file_read_only(patch_path)?;
+        let header = parse_dldi_bytes(patch.as_ref(), "DLDI patch")?;
 
         Ok(OperationReport::succeeded(
             OperationFamily::Patch,
@@ -85,10 +85,10 @@ impl PatchHandler for DldiPatchHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
-        let patch = fs::read(patch_path)?;
+        let patch = map_file_read_only(patch_path)?;
         let input = map_file_read_only(&request.input)?;
         let execution = context.plan_threads(ThreadCapability::single_threaded());
-        let apply = match apply_dldi_patch(input.as_ref(), &patch) {
+        let apply = match apply_dldi_patch(input.as_ref(), patch.as_ref()) {
             Ok(apply) => apply,
             Err(RomWeaverError::Validation(message)) if message == INPUT_NO_DLDI_SLOT_MESSAGE => {
                 return Ok(OperationReport::unsupported(

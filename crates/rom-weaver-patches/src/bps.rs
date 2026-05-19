@@ -5,12 +5,15 @@ use std::{
 };
 
 use crc32fast::Hasher;
+use memmap2::{Mmap, MmapOptions};
+use rayon::prelude::*;
 use rom_weaver_checksum::checksum_file_values;
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
     PatchCapabilities, PatchChecksumValidation, PatchCreateRequest, PatchHandler, ProbeConfidence,
-    Result, RomWeaverError, ThreadCapability,
+    Result, RomWeaverError, SharedThreadPool, ThreadCapability,
 };
+use serde_json::json;
 
 const BPS_MAGIC: &[u8; 4] = b"BPS1";
 const BPS_FOOTER_SIZE: usize = 12;
@@ -20,6 +23,7 @@ const RESYNC_LOOKAHEAD: usize = 4 * 1024;
 const RESYNC_MATCH_LIMIT: usize = 64;
 const MIN_RESYNC_MATCH: usize = 16;
 const TARGET_READ_FLUSH_SIZE: usize = 16 * 1024;
+const CREATE_THREAD_SCAN_CHUNK_BYTES: usize = 4 * 1024 * 1024;
 
 pub struct BpsPatchHandler {
     descriptor: &'static FormatDescriptor,
@@ -42,7 +46,7 @@ impl PatchHandler for BpsPatchHandler {
 
     fn parse(&self, patch_path: &Path, _context: &OperationContext) -> Result<OperationReport> {
         let patch = parse_bps_file(patch_path)?;
-        Ok(OperationReport::succeeded(
+        let mut report = OperationReport::succeeded(
             OperationFamily::Patch,
             Some(self.descriptor.name.to_string()),
             "parse",
@@ -56,7 +60,19 @@ impl PatchHandler for BpsPatchHandler {
             ),
             Some(100.0),
             None,
-        ))
+        );
+        report.details = Some(json!({
+            "patch": {
+                "format": self.descriptor.name,
+                "source_size": patch.source_size,
+                "target_size": patch.target_size,
+                "source_crc32": patch.source_checksum,
+                "target_crc32": patch.target_checksum,
+                "patch_crc32": patch.patch_checksum,
+                "record_count": patch.actions.len(),
+            }
+        }));
+        Ok(report)
     }
 
     fn apply(
@@ -120,9 +136,9 @@ impl PatchHandler for BpsPatchHandler {
         request: &PatchCreateRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        let execution = context.plan_threads(ThreadCapability::single_threaded());
         let original_len = fs::metadata(&request.original)?.len();
         let modified_len = fs::metadata(&request.modified)?.len();
+        let (execution, pool) = context.build_pool(bps_create_thread_capability(modified_len))?;
         let source_checksum = crc32_path_cached(&request.original, context)?;
 
         if let Some(parent) = request.output.parent() {
@@ -137,6 +153,8 @@ impl PatchHandler for BpsPatchHandler {
             source_checksum,
             &request.modified,
             modified_len,
+            &pool,
+            execution.used_parallelism,
             &mut output,
             context,
         )?;
@@ -161,7 +179,7 @@ impl PatchHandler for BpsPatchHandler {
             apply: true,
             create: true,
             threaded_scan: false,
-            threaded_diff: false,
+            threaded_diff: true,
             threaded_output: false,
         }
     }
@@ -203,6 +221,19 @@ struct ResyncCandidate {
     match_len: usize,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum BpsDiffKind {
+    Shared,
+    Different,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct BpsDiffRun {
+    kind: BpsDiffKind,
+    offset: u64,
+    len: u64,
+}
+
 fn parse_bps_file(path: &Path) -> Result<ParsedBpsPatch> {
     parse_bps_file_with_checksum_validation(path, true)
 }
@@ -211,8 +242,15 @@ fn parse_bps_file_with_checksum_validation(
     path: &Path,
     validate_patch_checksum: bool,
 ) -> Result<ParsedBpsPatch> {
-    let bytes = fs::read(path)?;
+    let bytes = map_file_read_only(path)?;
     parse_bps_bytes_with_checksum_validation(&bytes, validate_patch_checksum)
+}
+
+fn map_file_read_only(path: &Path) -> Result<Mmap> {
+    let file = File::open(path)?;
+    // SAFETY: The mapping is read-only and the file handle lives for map creation.
+    let map = unsafe { MmapOptions::new().map(&file)? };
+    Ok(map)
 }
 
 #[cfg(test)]
@@ -402,9 +440,24 @@ fn create_bps_patch_streaming(
     source_checksum: u32,
     modified_path: &Path,
     modified_len: u64,
+    pool: &SharedThreadPool,
+    use_parallel_scan: bool,
     output: &mut impl Write,
     context: &OperationContext,
 ) -> Result<CreatedBpsPatch> {
+    if use_parallel_scan {
+        return create_bps_patch_parallel(
+            original_path,
+            original_len,
+            source_checksum,
+            modified_path,
+            modified_len,
+            pool,
+            output,
+            context,
+        );
+    }
+
     let mut original = BufferedByteStream::new(BufReader::new(File::open(original_path)?));
     let mut modified = BufferedByteStream::new(BufReader::new(File::open(modified_path)?));
     let mut target_checksum = Hasher::new();
@@ -493,6 +546,172 @@ fn create_bps_patch_streaming(
     flush_target_read(&mut writer, &mut target_read, &mut created)?;
     writer.finish(source_checksum, target_checksum.finalize())?;
     Ok(created)
+}
+
+fn bps_create_thread_capability(modified_len: u64) -> ThreadCapability {
+    let chunks = bps_create_chunk_count(modified_len).max(1);
+    ThreadCapability::parallel(Some(chunks))
+}
+
+fn bps_create_chunk_count(modified_len: u64) -> usize {
+    if modified_len == 0 {
+        return 1;
+    }
+    let chunk_bytes = CREATE_THREAD_SCAN_CHUNK_BYTES as u64;
+    let chunks = modified_len.saturating_add(chunk_bytes - 1) / chunk_bytes;
+    usize::try_from(chunks).unwrap_or(usize::MAX)
+}
+
+fn create_bps_patch_parallel(
+    original_path: &Path,
+    original_len: u64,
+    source_checksum: u32,
+    modified_path: &Path,
+    modified_len: u64,
+    pool: &SharedThreadPool,
+    output: &mut impl Write,
+    context: &OperationContext,
+) -> Result<CreatedBpsPatch> {
+    let original = map_file_read_only(original_path)?;
+    let modified = map_file_read_only(modified_path)?;
+
+    if u64::try_from(modified.len()).ok() != Some(modified_len) {
+        return Err(RomWeaverError::Validation(
+            "BPS create modified size changed during processing".into(),
+        ));
+    }
+
+    let mut writer = BpsCreateWriter::new(output);
+    writer.write_bytes(BPS_MAGIC)?;
+    writer.write_varint(original_len)?;
+    writer.write_varint(modified_len)?;
+    writer.write_varint(0)?;
+
+    let runs = collect_bps_diff_runs_parallel(original.as_ref(), modified.as_ref(), pool);
+    let mut created = CreatedBpsPatch::default();
+    for run in runs {
+        context.cancel().check()?;
+        match run.kind {
+            BpsDiffKind::Shared => {
+                writer.write_source_read(run.len)?;
+                created.action_count = created.action_count.saturating_add(1);
+            }
+            BpsDiffKind::Different => {
+                let mut start = usize::try_from(run.offset).map_err(|_| {
+                    RomWeaverError::Validation(
+                        "BPS diff run offset exceeded platform limits".into(),
+                    )
+                })?;
+                let mut remaining = usize::try_from(run.len).map_err(|_| {
+                    RomWeaverError::Validation(
+                        "BPS diff run length exceeded platform limits".into(),
+                    )
+                })?;
+                while remaining > 0 {
+                    let chunk_len = remaining.min(TARGET_READ_FLUSH_SIZE);
+                    let end = start.checked_add(chunk_len).ok_or_else(|| {
+                        RomWeaverError::Validation("BPS diff run chunk overflowed".into())
+                    })?;
+                    writer.write_target_read(&modified[start..end])?;
+                    created.action_count = created.action_count.saturating_add(1);
+                    start = end;
+                    remaining -= chunk_len;
+                }
+            }
+        }
+    }
+
+    writer.finish(source_checksum, crc32_bytes(modified.as_ref()))?;
+    Ok(created)
+}
+
+fn collect_bps_diff_runs_parallel(
+    original: &[u8],
+    modified: &[u8],
+    pool: &SharedThreadPool,
+) -> Vec<BpsDiffRun> {
+    if modified.is_empty() {
+        return Vec::new();
+    }
+    let ranges = (0..modified.len())
+        .step_by(CREATE_THREAD_SCAN_CHUNK_BYTES)
+        .map(|start| {
+            let end = start
+                .saturating_add(CREATE_THREAD_SCAN_CHUNK_BYTES)
+                .min(modified.len());
+            start..end
+        })
+        .collect::<Vec<_>>();
+
+    let per_chunk = pool.install(|| {
+        ranges
+            .into_par_iter()
+            .map(|range| {
+                collect_bps_diff_runs_for_range(original, modified, range.start, range.end)
+            })
+            .collect::<Vec<_>>()
+    });
+
+    let mut merged: Vec<BpsDiffRun> = Vec::new();
+    for runs in per_chunk {
+        for run in runs {
+            if let Some(last) = merged.last_mut() {
+                let contiguous = last
+                    .offset
+                    .checked_add(last.len)
+                    .is_some_and(|end| end == run.offset);
+                if contiguous && last.kind == run.kind {
+                    last.len = last.len.saturating_add(run.len);
+                    continue;
+                }
+            }
+            merged.push(run);
+        }
+    }
+    merged
+}
+
+fn collect_bps_diff_runs_for_range(
+    original: &[u8],
+    modified: &[u8],
+    start: usize,
+    end: usize,
+) -> Vec<BpsDiffRun> {
+    let mut runs = Vec::new();
+    let mut current_kind: Option<BpsDiffKind> = None;
+    let mut run_start = start;
+    let mut run_len = 0usize;
+
+    for index in start..end {
+        let kind = match original.get(index) {
+            Some(byte) if *byte == modified[index] => BpsDiffKind::Shared,
+            _ => BpsDiffKind::Different,
+        };
+        if current_kind == Some(kind) {
+            run_len = run_len.saturating_add(1);
+            continue;
+        }
+
+        if let Some(previous) = current_kind {
+            runs.push(BpsDiffRun {
+                kind: previous,
+                offset: run_start as u64,
+                len: run_len as u64,
+            });
+        }
+        current_kind = Some(kind);
+        run_start = index;
+        run_len = 1;
+    }
+
+    if let Some(kind) = current_kind {
+        runs.push(BpsDiffRun {
+            kind,
+            offset: run_start as u64,
+            len: run_len as u64,
+        });
+    }
+    runs
 }
 
 fn current_bytes_equal(
@@ -1190,8 +1409,8 @@ mod tests {
     };
 
     use super::{
-        BPS_MAGIC, BpsAction, BpsPatchHandler, crc32_bytes, encode_signed_offset, parse_bps_bytes,
-        push_varint,
+        BPS_MAGIC, BpsAction, BpsPatchHandler, CREATE_THREAD_SCAN_CHUNK_BYTES, crc32_bytes,
+        encode_signed_offset, parse_bps_bytes, push_varint,
     };
     use crate::{
         BPS,
@@ -1478,6 +1697,58 @@ mod tests {
             fs::read(output_path).expect("output"),
             fs::read(modified_path).expect("modified")
         );
+    }
+
+    #[test]
+    fn create_uses_parallel_threads_for_large_patch() {
+        let temp = TestDir::new();
+        let original_path = temp.child("original-large.bin");
+        let modified_path = temp.child("modified-large.bin");
+        let patch_path = temp.child("update-large.bps");
+        let output_path = temp.child("output-large.bin");
+
+        let mut original = vec![0u8; (CREATE_THREAD_SCAN_CHUNK_BYTES * 2) + 4096];
+        for (index, byte) in original.iter_mut().enumerate() {
+            *byte = (index as u8).wrapping_mul(11);
+        }
+        let mut modified = original.clone();
+        modified[0] = modified[0].wrapping_add(1);
+        let boundary = CREATE_THREAD_SCAN_CHUNK_BYTES;
+        for byte in &mut modified[(boundary - 64)..(boundary + 64)] {
+            *byte = byte.wrapping_add(2);
+        }
+
+        fs::write(&original_path, &original).expect("fixture");
+        fs::write(&modified_path, &modified).expect("fixture");
+
+        let handler = BpsPatchHandler::new(&BPS);
+        let report = handler
+            .create(
+                &PatchCreateRequest {
+                    original: original_path.clone(),
+                    modified: modified_path.clone(),
+                    output: patch_path.clone(),
+                    format: "BPS".into(),
+                },
+                &test_context_with_threads(&temp, 8),
+            )
+            .expect("create");
+        let execution = report.thread_execution.expect("thread execution");
+        assert_eq!(execution.requested_threads, 8);
+        assert!(execution.effective_threads >= 2);
+        assert!(execution.used_parallelism);
+
+        handler
+            .apply(
+                &PatchApplyRequest {
+                    input: original_path,
+                    patches: vec![patch_path],
+                    output: output_path.clone(),
+                },
+                &test_context_with_threads(&temp, 4),
+            )
+            .expect("apply");
+        assert_eq!(fs::read(output_path).expect("output"), modified);
     }
 
     #[test]

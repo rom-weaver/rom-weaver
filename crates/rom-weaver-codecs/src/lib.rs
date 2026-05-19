@@ -11,6 +11,7 @@ use lzma_rust2::{XzOptions, XzReader, XzWriter};
 use rom_weaver_core::{
     CodecBackend, CodecCapabilities, CodecDescriptor, CodecOperationRequest, FormatDescriptor,
     OperationContext, OperationFamily, OperationReport, Result, RomWeaverError, ThreadCapability,
+    ThreadExecution,
 };
 use zstd::stream::{Decoder as ZstdDecoder, Encoder as ZstdEncoder};
 
@@ -243,7 +244,26 @@ impl NativeCodecBackend {
         Ok(resolved)
     }
 
-    fn encode_impl(&self, request: &CodecOperationRequest, level: Option<i32>) -> Result<u64> {
+    fn encode_thread_capability(&self) -> ThreadCapability {
+        match self.kind {
+            NativeCodecKind::Zstd => ThreadCapability::parallel(None),
+            NativeCodecKind::Store
+            | NativeCodecKind::Deflate
+            | NativeCodecKind::Lzma2
+            | NativeCodecKind::Bzip2 => ThreadCapability::single_threaded(),
+        }
+    }
+
+    fn decode_thread_capability(&self) -> ThreadCapability {
+        ThreadCapability::single_threaded()
+    }
+
+    fn encode_impl(
+        &self,
+        request: &CodecOperationRequest,
+        level: Option<i32>,
+        execution: &mut ThreadExecution,
+    ) -> Result<u64> {
         let bytes = match self.kind {
             NativeCodecKind::Store => fs::copy(&request.input, &request.output)?,
             NativeCodecKind::Deflate => {
@@ -260,6 +280,22 @@ impl NativeCodecBackend {
                 let mut source = BufReader::new(File::open(&request.input)?);
                 let output = BufWriter::new(File::create(&request.output)?);
                 let mut encoder = ZstdEncoder::new(output, level.unwrap_or(3))?;
+                if execution.effective_threads > 1 {
+                    match u32::try_from(execution.effective_threads) {
+                        Ok(workers) => {
+                            if let Err(error) = encoder
+                                .set_parameter(zstd::zstd_safe::CParameter::NbWorkers(workers))
+                            {
+                                execution.apply_pool_fallback(format!(
+                                    "zstd encoder rejected multithread setting: {error}"
+                                ));
+                            }
+                        }
+                        Err(_) => execution.apply_pool_fallback(
+                            "zstd encoder thread count exceeded supported range".to_string(),
+                        ),
+                    }
+                }
                 let copied = io::copy(&mut source, &mut encoder)?;
                 let mut output = encoder.finish()?;
                 output.flush()?;
@@ -335,8 +371,8 @@ impl NativeCodecBackend {
     ) -> Result<OperationReport> {
         let level = self.resolve_encode_level(request)?;
         Self::ensure_output_parent(&request.output)?;
-        let execution = context.plan_threads(ThreadCapability::single_threaded());
-        let bytes = self.encode_impl(request, level)?;
+        let mut execution = context.plan_threads(self.encode_thread_capability());
+        let bytes = self.encode_impl(request, level, &mut execution)?;
         Ok(OperationReport::succeeded(
             OperationFamily::Codec,
             Some(self.descriptor.name.to_string()),
@@ -360,7 +396,7 @@ impl NativeCodecBackend {
     ) -> Result<OperationReport> {
         self.validate_decode_level(request)?;
         Self::ensure_output_parent(&request.output)?;
-        let execution = context.plan_threads(ThreadCapability::single_threaded());
+        let execution = context.plan_threads(self.decode_thread_capability());
         let bytes = self.decode_impl(request)?;
         Ok(OperationReport::succeeded(
             OperationFamily::Codec,

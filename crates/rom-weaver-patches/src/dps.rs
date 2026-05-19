@@ -4,6 +4,7 @@ use std::{
     path::Path,
 };
 
+use memmap2::{Mmap, MmapOptions};
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
     PatchCapabilities, PatchChecksumValidation, PatchCreateRequest, PatchHandler, ProbeConfidence,
@@ -319,8 +320,15 @@ enum DpsParseMode {
 }
 
 fn parse_dps_file(path: &Path, mode: DpsParseMode) -> Result<ParsedDpsPatch> {
-    let bytes = fs::read(path)?;
+    let bytes = map_file_read_only(path)?;
     parse_dps_bytes(&bytes, mode)
+}
+
+fn map_file_read_only(path: &Path) -> Result<Mmap> {
+    let file = File::open(path)?;
+    // SAFETY: This mapping is read-only and the file handle lives through map creation.
+    let map = unsafe { MmapOptions::new().map(&file)? };
+    Ok(map)
 }
 
 fn parse_dps_bytes(bytes: &[u8], mode: DpsParseMode) -> Result<ParsedDpsPatch> {

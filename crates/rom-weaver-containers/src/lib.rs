@@ -1731,6 +1731,19 @@ impl StreamContainerHandler {
         }
     }
 
+    fn extract_thread_capability(&self) -> ThreadCapability {
+        ThreadCapability::single_threaded()
+    }
+
+    fn create_thread_capability(&self) -> ThreadCapability {
+        match self.compression {
+            StreamCompression::Zstd => ThreadCapability::parallel(None),
+            StreamCompression::Gzip | StreamCompression::Bzip2 | StreamCompression::Xz => {
+                ThreadCapability::single_threaded()
+            }
+        }
+    }
+
     fn codec_backend(&self) -> Result<Arc<dyn CodecBackend>> {
         let codec = self.backend_codec_name();
         CodecRegistry::new().find_by_name(codec).ok_or_else(|| {
@@ -1848,7 +1861,7 @@ impl ContainerHandler for StreamContainerHandler {
         request: &ContainerExtractRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        let execution = context.plan_threads(ThreadCapability::single_threaded());
+        let mut execution = context.plan_threads(self.extract_thread_capability());
         fs::create_dir_all(&request.out_dir)?;
 
         let output_name = self.output_name(&request.source);
@@ -1869,6 +1882,9 @@ impl ContainerHandler for StreamContainerHandler {
         )?;
         if decode_report.status != OperationStatus::Succeeded {
             return Err(RomWeaverError::Unsupported(decode_report.label));
+        }
+        if let Some(decode_execution) = decode_report.thread_execution {
+            execution = decode_execution;
         }
         let written = fs::metadata(&output_path)?.len();
         selections.ensure_all_matched()?;
@@ -1900,7 +1916,7 @@ impl ContainerHandler for StreamContainerHandler {
             )));
         }
 
-        let execution = context.plan_threads(ThreadCapability::single_threaded());
+        let mut execution = context.plan_threads(self.create_thread_capability());
         let level = self.parse_codec_and_level(request.codec.as_deref(), request.level)?;
         let input = &request.inputs[0];
         let metadata = fs::metadata(input)?;
@@ -1929,6 +1945,9 @@ impl ContainerHandler for StreamContainerHandler {
         if encode_report.status != OperationStatus::Succeeded {
             return Err(RomWeaverError::Unsupported(encode_report.label));
         }
+        if let Some(encode_execution) = encode_report.thread_execution {
+            execution = encode_execution;
+        }
 
         Ok(OperationReport::succeeded(
             OperationFamily::Container,
@@ -1950,8 +1969,8 @@ impl ContainerHandler for StreamContainerHandler {
             inspect: true,
             extract: true,
             create: true,
-            extract_threads: ThreadCapability::single_threaded(),
-            create_threads: ThreadCapability::single_threaded(),
+            extract_threads: self.extract_thread_capability(),
+            create_threads: self.create_thread_capability(),
         }
     }
 }
@@ -6730,9 +6749,8 @@ mod chd_native {
             codec: Option<&str>,
             create_kind: &ChdCreateKind,
         ) -> Result<ChdCompressionPlan> {
-            if codec.map(str::trim).is_some_and(|value| !value.is_empty()) {
-                let mapped = self.map_codec(codec)?;
-                return Ok(Self::single_codec_plan(mapped));
+            if let Some(codecs) = self.parse_explicit_codecs(codec)? {
+                return self.explicit_codec_plan(codecs);
             }
             Ok(self.default_compression_plan(create_kind))
         }
@@ -6757,11 +6775,52 @@ mod chd_native {
             Ok((plan.codecs, plan.primary_codec))
         }
 
-        fn single_codec_plan(codec: ChdCodec) -> ChdCompressionPlan {
-            ChdCompressionPlan {
-                codecs: [codec, ChdCodec::NONE, ChdCodec::NONE, ChdCodec::NONE],
-                primary_codec: codec,
+        #[cfg(test)]
+        pub(super) fn explicit_compression_plan_for_tests(
+            &self,
+            codecs: &str,
+        ) -> Result<([ChdCodec; CHD_MAX_COMPRESSORS], ChdCodec)> {
+            let plan = self.resolve_compression_plan(Some(codecs), &ChdCreateKind::Raw)?;
+            Ok((plan.codecs, plan.primary_codec))
+        }
+
+        fn explicit_codec_plan(&self, codecs: Vec<ChdCodec>) -> Result<ChdCompressionPlan> {
+            if codecs.is_empty() {
+                return Err(RomWeaverError::Validation(
+                    "chd codec list cannot be empty".to_string(),
+                ));
             }
+            if codecs.len() > CHD_MAX_COMPRESSORS {
+                return Err(RomWeaverError::Validation(format!(
+                    "chd supports at most {CHD_MAX_COMPRESSORS} codecs; received {}",
+                    codecs.len()
+                )));
+            }
+            if codecs[0] == ChdCodec::NONE && codecs.len() > 1 {
+                return Err(RomWeaverError::Validation(
+                    "chd codec `store` cannot be combined with additional codecs".to_string(),
+                ));
+            }
+            if codecs
+                .iter()
+                .enumerate()
+                .skip(1)
+                .any(|(_, codec)| *codec == ChdCodec::AVHUFF)
+            {
+                return Err(RomWeaverError::Validation(
+                    "chd codec `avhuff` must be the first codec when multiple codecs are provided"
+                        .to_string(),
+                ));
+            }
+            let primary_codec = codecs[0];
+            let mut resolved_codecs = [ChdCodec::NONE; CHD_MAX_COMPRESSORS];
+            for (index, codec) in codecs.into_iter().enumerate() {
+                resolved_codecs[index] = codec;
+            }
+            Ok(ChdCompressionPlan {
+                codecs: resolved_codecs,
+                primary_codec,
+            })
         }
 
         fn default_compression_plan(&self, create_kind: &ChdCreateKind) -> ChdCompressionPlan {
@@ -6798,24 +6857,41 @@ mod chd_native {
             }
         }
 
-        fn map_codec(&self, codec: Option<&str>) -> Result<ChdCodec> {
-            let normalized = codec
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .map(|value| value.to_ascii_lowercase());
-            if let Some(value) = normalized.as_deref() {
-                match value {
-                    "flac" => return Ok(ChdCodec::FLAC),
-                    "cdzl" => return Ok(ChdCodec::CD_ZLIB),
-                    "cdzs" => return Ok(ChdCodec::CD_ZSTD),
-                    "cdlz" => return Ok(ChdCodec::CD_LZMA),
-                    "cdfl" => return Ok(ChdCodec::CD_FLAC),
-                    "avhu" | "avhuff" => return Ok(ChdCodec::AVHUFF),
-                    _ => {}
-                }
+        fn parse_explicit_codecs(&self, codec: Option<&str>) -> Result<Option<Vec<ChdCodec>>> {
+            let Some(codec) = codec else {
+                return Ok(None);
+            };
+            let codec = codec.trim();
+            if codec.is_empty() {
+                return Ok(None);
             }
 
-            match parse_requested_codec(codec) {
+            let mut codecs = Vec::new();
+            for entry in codec.split([',', '+']) {
+                let entry = entry.trim();
+                if entry.is_empty() {
+                    return Err(RomWeaverError::Validation(
+                        "chd codec list contains an empty entry".to_string(),
+                    ));
+                }
+                codecs.push(self.map_codec(entry)?);
+            }
+            Ok(Some(codecs))
+        }
+
+        fn map_codec(&self, codec: &str) -> Result<ChdCodec> {
+            let normalized = codec.trim().to_ascii_lowercase();
+            match normalized.as_str() {
+                "flac" => return Ok(ChdCodec::FLAC),
+                "cdzl" => return Ok(ChdCodec::CD_ZLIB),
+                "cdzs" => return Ok(ChdCodec::CD_ZSTD),
+                "cdlz" => return Ok(ChdCodec::CD_LZMA),
+                "cdfl" => return Ok(ChdCodec::CD_FLAC),
+                "avhu" | "avhuff" => return Ok(ChdCodec::AVHUFF),
+                _ => {}
+            }
+
+            match parse_requested_codec(Some(codec)) {
                 RequestedCodec::Unspecified => Ok(ChdCodec::ZSTD),
                 RequestedCodec::Known(CanonicalCodec::Store) => Ok(ChdCodec::NONE),
                 RequestedCodec::Known(CanonicalCodec::Deflate) => Ok(ChdCodec::ZLIB),
@@ -9520,6 +9596,24 @@ mod tests {
     }
 
     #[test]
+    fn zst_stream_capabilities_report_parallel_create_threads() {
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("zst").expect("zst handler");
+        let capabilities = handler.capabilities();
+        assert!(capabilities.inspect);
+        assert!(capabilities.extract);
+        assert!(capabilities.create);
+        assert_eq!(
+            capabilities.extract_threads,
+            ThreadCapability::single_threaded()
+        );
+        assert_eq!(
+            capabilities.create_threads,
+            ThreadCapability::parallel(None)
+        );
+    }
+
+    #[test]
     fn zip_extract_runtime_threads_match_capability() {
         let temp_dir = temp_dir_path("zip-thread-parity");
         fs::create_dir_all(&temp_dir).expect("temp dir");
@@ -9658,6 +9752,67 @@ mod tests {
             assert_eq!(content, expected);
         }
 
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn zst_stream_create_runtime_threads_match_capability() {
+        let temp_dir = temp_dir_path("zst-stream-thread-parity");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let source_path = temp_dir.join("source.bin");
+        let archive_path = temp_dir.join("source.bin.zst");
+        let output_dir = temp_dir.join("out");
+        let payload = (0..(1024 * 1024))
+            .map(|index| (index as u8).wrapping_mul(13))
+            .collect::<Vec<_>>();
+        fs::write(&source_path, &payload).expect("write fixture");
+
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("zst").expect("zst handler");
+        let capabilities = handler.capabilities();
+        let create_report = handler
+            .create(
+                &ContainerCreateRequest {
+                    inputs: vec![source_path.clone()],
+                    output: archive_path.clone(),
+                    format: "zst".to_string(),
+                    codec: None,
+                    level: None,
+                },
+                &test_context(&temp_dir, 8),
+            )
+            .expect("create zst");
+        let create_execution = create_report.thread_execution.expect("thread execution");
+        assert!(
+            capabilities
+                .create_threads
+                .supports_execution(&create_execution)
+        );
+        assert_eq!(create_execution.requested_threads, 8);
+
+        let extract_report = handler
+            .extract(
+                &rom_weaver_core::ContainerExtractRequest {
+                    source: archive_path,
+                    out_dir: output_dir.clone(),
+                    selections: Vec::new(),
+                    split_bin: false,
+                },
+                &test_context(&temp_dir, 8),
+            )
+            .expect("extract zst");
+        let extract_execution = extract_report.thread_execution.expect("thread execution");
+        assert!(
+            capabilities
+                .extract_threads
+                .supports_execution(&extract_execution)
+        );
+        assert_eq!(extract_execution.requested_threads, 8);
+        assert_eq!(extract_execution.effective_threads, 1);
+        assert!(!extract_execution.used_parallelism);
+
+        let extracted = fs::read(output_dir.join("source.bin")).expect("read extracted payload");
+        assert_eq!(extracted, payload);
         let _ = fs::remove_dir_all(temp_dir);
     }
 
@@ -10619,6 +10774,35 @@ mod tests {
             ]
         );
         assert_eq!(primary_codec, rom_weaver_chd_sys::ChdCodec::ZSTD);
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    #[test]
+    fn chd_explicit_codec_lists_support_multiple_codecs() {
+        let handler = super::ChdContainerHandler;
+        let (codecs, primary_codec) = handler
+            .explicit_compression_plan_for_tests("cdzs,cdzl+cdfl")
+            .expect("explicit codec list");
+        assert_eq!(
+            codecs,
+            [
+                rom_weaver_chd_sys::ChdCodec::CD_ZSTD,
+                rom_weaver_chd_sys::ChdCodec::CD_ZLIB,
+                rom_weaver_chd_sys::ChdCodec::CD_FLAC,
+                rom_weaver_chd_sys::ChdCodec::NONE,
+            ]
+        );
+        assert_eq!(primary_codec, rom_weaver_chd_sys::ChdCodec::CD_ZSTD);
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    #[test]
+    fn chd_explicit_codec_lists_reject_too_many_entries() {
+        let handler = super::ChdContainerHandler;
+        let error = handler
+            .explicit_compression_plan_for_tests("cdzs,cdzl,cdfl,zstd,zlib")
+            .expect_err("too many codecs should fail");
+        assert!(error.to_string().contains("chd supports at most 4 codecs"));
     }
 
     #[test]

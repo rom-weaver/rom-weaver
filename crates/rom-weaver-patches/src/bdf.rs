@@ -34,8 +34,8 @@ impl PatchHandler for BdfPatchHandler {
     }
 
     fn parse(&self, patch_path: &Path, _context: &OperationContext) -> Result<OperationReport> {
-        let patch_bytes = fs::read(patch_path)?;
-        let patcher = Bspatch::new(&patch_bytes)?;
+        let patch_bytes = map_file_read_only(patch_path)?;
+        let patcher = Bspatch::new(patch_bytes.as_ref())?;
         Ok(OperationReport::succeeded(
             OperationFamily::Patch,
             Some(self.descriptor.name.to_string()),
@@ -56,8 +56,8 @@ impl PatchHandler for BdfPatchHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
-        let patch_bytes = fs::read(patch_path)?;
-        let patcher = Bspatch::new(&patch_bytes)?;
+        let patch_bytes = map_file_read_only(patch_path)?;
+        let patcher = Bspatch::new(patch_bytes.as_ref())?;
         let input = map_file_read_only(&request.input)?;
 
         if let Some(parent) = request.output.parent() {

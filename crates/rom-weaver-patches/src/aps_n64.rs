@@ -4,6 +4,7 @@ use std::{
     path::Path,
 };
 
+use memmap2::{Mmap, MmapOptions};
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
     PatchCapabilities, PatchChecksumValidation, PatchCreateRequest, PatchHandler, ProbeConfidence,
@@ -124,9 +125,10 @@ impl PatchHandler for ApsN64PatchHandler {
         request: &PatchCreateRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        let original = fs::read(&request.original)?;
-        let modified = fs::read(&request.modified)?;
-        let created = create_aps_patch_bytes(&request.original, &original, &modified)?;
+        let original = map_file_read_only(&request.original)?;
+        let modified = map_file_read_only(&request.modified)?;
+        let created =
+            create_aps_patch_bytes(&request.original, original.as_ref(), modified.as_ref())?;
         crate::finalize_single_threaded_patch_create(
             self.descriptor,
             request,
@@ -187,8 +189,15 @@ struct CreatedApsPatch {
 }
 
 fn parse_aps_file(path: &Path) -> Result<ParsedApsPatch> {
-    let bytes = fs::read(path)?;
+    let bytes = map_file_read_only(path)?;
     parse_aps_bytes(&bytes)
+}
+
+fn map_file_read_only(path: &Path) -> Result<Mmap> {
+    let file = File::open(path)?;
+    // SAFETY: The mapping is read-only and the file handle lives for map creation.
+    let map = unsafe { MmapOptions::new().map(&file)? };
+    Ok(map)
 }
 
 fn parse_aps_bytes(bytes: &[u8]) -> Result<ParsedApsPatch> {
