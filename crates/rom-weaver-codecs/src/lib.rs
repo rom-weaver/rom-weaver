@@ -440,7 +440,7 @@ impl CodecBackend for NativeCodecBackend {
         CodecCapabilities {
             encode: true,
             decode: true,
-            threads: ThreadCapability::single_threaded(),
+            threads: self.encode_thread_capability(),
         }
     }
 }
@@ -457,7 +457,7 @@ mod tests {
 
     use rom_weaver_core::{
         CancellationToken, CodecOperationRequest, NoopProgressSink, OperationContext,
-        OperationStatus, ThreadBudget,
+        OperationStatus, ThreadBudget, ThreadCapability,
     };
 
     use super::{
@@ -701,5 +701,21 @@ mod tests {
                 .to_string()
                 .contains("deflate decode does not accept a compression level")
         );
+    }
+
+    #[test]
+    fn capabilities_report_thread_support_per_codec_backend() {
+        let registry = CodecRegistry::new();
+
+        let zstd = registry.find_by_name("zstd").expect("zstd backend");
+        assert_eq!(zstd.capabilities().threads, ThreadCapability::parallel(None));
+
+        for codec in ["store", "deflate", "lzma2", "bzip2"] {
+            let backend = registry.find_by_name(codec).expect("codec backend");
+            assert_eq!(
+                backend.capabilities().threads,
+                ThreadCapability::single_threaded()
+            );
+        }
     }
 }
