@@ -58,6 +58,26 @@ struct Cli {
         arg(
             long,
             global = true,
+            conflicts_with = "no_progress",
+            help = "Force running progress events on"
+        )
+    )]
+    progress: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "no-progress",
+            global = true,
+            conflicts_with = "progress",
+            help = "Disable running progress events"
+        )
+    )]
+    no_progress: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            global = true,
             help = "Enable trace logs (also enabled by ROM_WEAVER_LOG or RUST_LOG)"
         )
     )]
@@ -444,16 +464,42 @@ pub struct PatchCreateCommand {
 pub struct RunCommandOptions {
     pub json: bool,
     pub trace: bool,
+    pub emit_progress_events: bool,
     pub interactive_selection_enabled: bool,
 }
 
 impl RunCommandOptions {
-    pub fn detect_for_terminal(json: bool, trace: bool) -> Self {
+    fn resolve_emit_progress_events(
+        json: bool,
+        progress: bool,
+        no_progress: bool,
+        stdout_is_tty: bool,
+    ) -> bool {
+        if no_progress {
+            return false;
+        }
+        if progress {
+            return true;
+        }
+        if json {
+            return true;
+        }
+        stdout_is_tty
+    }
+
+    pub fn detect_for_terminal(json: bool, trace: bool, progress: bool, no_progress: bool) -> Self {
         let interactive_selection_enabled =
             !json && io::stdin().is_terminal() && io::stderr().is_terminal();
+        let emit_progress_events = Self::resolve_emit_progress_events(
+            json,
+            progress,
+            no_progress,
+            io::stdout().is_terminal(),
+        );
         Self {
             json,
             trace,
+            emit_progress_events,
             interactive_selection_enabled,
         }
     }
@@ -462,7 +508,8 @@ impl RunCommandOptions {
 #[cfg(not(target_arch = "wasm32"))]
 pub fn main_entry() -> ExitCode {
     let cli = Cli::parse();
-    let options = RunCommandOptions::detect_for_terminal(cli.json, cli.trace);
+    let options =
+        RunCommandOptions::detect_for_terminal(cli.json, cli.trace, cli.progress, cli.no_progress);
     run_command(cli.command, options)
 }
 
@@ -475,7 +522,8 @@ pub fn main_entry() -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let options = RunCommandOptions::detect_for_terminal(cli.json, cli.trace);
+    let options =
+        RunCommandOptions::detect_for_terminal(cli.json, cli.trace, cli.progress, cli.no_progress);
     run_command(cli.command, options)
 }
 
@@ -483,6 +531,7 @@ pub fn run_command(command: Commands, options: RunCommandOptions) -> ExitCode {
     init_trace_logging(options.trace, options.json);
     trace!(
         json = options.json,
+        emit_progress_events = options.emit_progress_events,
         trace_requested = options.trace,
         command = ?command,
         "parsed command-line arguments"
@@ -494,7 +543,7 @@ pub fn run_command(command: Commands, options: RunCommandOptions) -> ExitCode {
     };
     let app = CliApp::new(
         reporter,
-        options.json,
+        options.emit_progress_events,
         options.interactive_selection_enabled,
     );
     app.run(command)
@@ -504,6 +553,8 @@ pub fn run_command(command: Commands, options: RunCommandOptions) -> ExitCode {
 fn parse_wasm_cli() -> std::result::Result<Cli, String> {
     let mut args = std::env::args().skip(1).collect::<Vec<_>>();
     let mut json = false;
+    let mut progress = false;
+    let mut no_progress = false;
     let mut trace = false;
 
     loop {
@@ -516,6 +567,20 @@ fn parse_wasm_cli() -> std::result::Result<Cli, String> {
         match arg.as_str() {
             "--json" => {
                 json = true;
+                args.remove(0);
+            }
+            "--progress" => {
+                if no_progress {
+                    return Err("cannot combine --progress and --no-progress".into());
+                }
+                progress = true;
+                args.remove(0);
+            }
+            "--no-progress" => {
+                if progress {
+                    return Err("cannot combine --progress and --no-progress".into());
+                }
+                no_progress = true;
                 args.remove(0);
             }
             "--trace" => {
@@ -545,6 +610,8 @@ fn parse_wasm_cli() -> std::result::Result<Cli, String> {
     };
     Ok(Cli {
         json,
+        progress,
+        no_progress,
         trace,
         command,
     })
@@ -2136,6 +2203,15 @@ impl CliApp {
             Some(0.0),
             extract_threads.clone(),
         );
+        self.emit_running(
+            "extract",
+            OperationFamily::Container,
+            Some(handler.descriptor().name),
+            "extract",
+            format!("preparing extraction for `{}`", source.display()),
+            Some(1.0),
+            extract_threads.clone(),
+        );
         let mut report = self
             .extract_with_selection_fallback(
                 handler.as_ref(),
@@ -2159,6 +2235,16 @@ impl CliApp {
             report.label = format!("{}; warning={split_bin_warning}", report.label);
         }
         if report.status == OperationStatus::Succeeded {
+            let progress_execution = report.thread_execution.clone();
+            self.emit_running(
+                "extract",
+                OperationFamily::Container,
+                Some(handler.descriptor().name),
+                "extract",
+                format!("extracting `{}`", source.display()),
+                Some(95.0),
+                progress_execution,
+            );
             self.emit_running(
                 "extract",
                 OperationFamily::Container,
@@ -2200,6 +2286,15 @@ impl CliApp {
                     );
                 }
             }
+            self.emit_running(
+                "extract",
+                OperationFamily::Container,
+                Some(handler.descriptor().name),
+                "extract",
+                format!("finalizing extracted output from `{}`", source.display()),
+                Some(99.0),
+                report.thread_execution.clone(),
+            );
         }
         self.finish("extract", report)
     }
@@ -3279,6 +3374,7 @@ impl CliApp {
             );
         }
 
+        let create_threads = Some(context.plan_threads(capabilities.create_threads.clone()));
         self.emit_running(
             "compress",
             OperationFamily::Container,
@@ -3290,7 +3386,16 @@ impl CliApp {
                 input.len()
             ),
             Some(0.0),
-            Some(context.plan_threads(capabilities.create_threads)),
+            create_threads.clone(),
+        );
+        self.emit_running(
+            "compress",
+            OperationFamily::Container,
+            Some(handler.descriptor().name),
+            "create",
+            format!("preparing {} archive build", handler.descriptor().name),
+            Some(1.0),
+            create_threads.clone(),
         );
 
         let expected_output = output.clone();
@@ -3316,6 +3421,15 @@ impl CliApp {
             report.label = format!("{}; {auto_label_suffix}", report.label);
         }
         if report.status == OperationStatus::Succeeded {
+            self.emit_running(
+                "compress",
+                OperationFamily::Container,
+                Some(handler.descriptor().name),
+                "create",
+                format!("finalizing `{}` archive", handler.descriptor().name),
+                Some(99.0),
+                report.thread_execution.clone(),
+            );
             report =
                 Self::attach_emitted_files_details(report, vec![expected_output], Some("archive"));
         }
@@ -4509,12 +4623,14 @@ impl CliApp {
 
     fn context(&self, thread_budget: ThreadBudget) -> OperationContext {
         let temp_root = Self::resolve_temp_dir().join("rom-weaver");
-        OperationContext::new(
-            thread_budget,
-            temp_root,
-            self.reporter.clone(),
-            CancellationToken::new(),
-        )
+        let reporter: Arc<dyn ProgressSink> = if self.emit_progress_events {
+            self.reporter.clone()
+        } else {
+            Arc::new(ProgressFilterReporter::suppress_running(
+                self.reporter.clone(),
+            ))
+        };
+        OperationContext::new(thread_budget, temp_root, reporter, CancellationToken::new())
     }
 
     fn resolve_temp_dir() -> PathBuf {
@@ -7124,6 +7240,29 @@ impl StdoutReporter {
     }
 }
 
+struct ProgressFilterReporter {
+    inner: Arc<dyn ProgressSink>,
+    allow_running: bool,
+}
+
+impl ProgressFilterReporter {
+    fn suppress_running(inner: Arc<dyn ProgressSink>) -> Self {
+        Self {
+            inner,
+            allow_running: false,
+        }
+    }
+}
+
+impl ProgressSink for ProgressFilterReporter {
+    fn emit(&self, event: ProgressEvent) {
+        if !self.allow_running && event.status == OperationStatus::Running {
+            return;
+        }
+        self.inner.emit(event);
+    }
+}
+
 impl ProgressSink for StdoutReporter {
     fn emit(&self, event: ProgressEvent) {
         match self.mode {
@@ -7170,7 +7309,30 @@ impl ProgressSink for StdoutReporter {
 
 #[cfg(test)]
 mod tests {
-    use super::{CliApp, CompressionLevelProfile, ParsedSelectionInput};
+    use super::{CliApp, CompressionLevelProfile, ParsedSelectionInput, RunCommandOptions};
+
+    #[test]
+    fn progress_defaults_follow_tty_and_json_mode() {
+        assert!(RunCommandOptions::resolve_emit_progress_events(
+            false, false, false, true
+        ));
+        assert!(!RunCommandOptions::resolve_emit_progress_events(
+            false, false, false, false
+        ));
+        assert!(RunCommandOptions::resolve_emit_progress_events(
+            true, false, false, false
+        ));
+    }
+
+    #[test]
+    fn progress_flags_override_defaults() {
+        assert!(RunCommandOptions::resolve_emit_progress_events(
+            false, true, false, false
+        ));
+        assert!(!RunCommandOptions::resolve_emit_progress_events(
+            true, false, true, true
+        ));
+    }
 
     #[test]
     fn parse_selection_input_accepts_valid_indexes() {

@@ -43,6 +43,42 @@ fn parse_single_json_line(output: &[u8]) -> Value {
         .expect("json line")
 }
 
+fn assert_running_percent_event(events: &[Value], command: &str, format: &str) {
+    assert!(
+        events.iter().any(|event| {
+            event["command"] == command
+                && event["status"] == "running"
+                && event["format"] == format
+                && event["percent"]
+                    .as_f64()
+                    .map(|percent| percent > 0.0 && percent < 100.0)
+                    .unwrap_or(false)
+        }),
+        "expected {command} ({format}) to emit running progress between 0 and 100"
+    );
+}
+
+fn assert_running_percent_event_in_range(
+    events: &[Value],
+    command: &str,
+    format: &str,
+    lower_exclusive: f64,
+    upper_exclusive: f64,
+) {
+    assert!(
+        events.iter().any(|event| {
+            event["command"] == command
+                && event["status"] == "running"
+                && event["format"] == format
+                && event["percent"]
+                    .as_f64()
+                    .map(|percent| percent > lower_exclusive && percent < upper_exclusive)
+                    .unwrap_or(false)
+        }),
+        "expected {command} ({format}) to emit running progress between {lower_exclusive} and {upper_exclusive}"
+    );
+}
+
 fn emitted_file_entry<'a>(json: &'a Value, file_name: &str) -> &'a Value {
     json["details"]["emitted_files"]
         .as_array()
@@ -147,7 +183,9 @@ fn run_chd_round_trip(input_name: &str, source: &[u8], codec: &str, expected_ext
         .stdout
         .clone();
 
-    let compress_json = parse_single_json_line(&compress_output);
+    let compress_events = parse_json_lines(&compress_output);
+    assert_running_percent_event(&compress_events, "compress", "chd");
+    let compress_json = compress_events.last().expect("compress terminal event");
     assert_eq!(compress_json["command"], "compress");
     assert_eq!(compress_json["family"], "container");
     assert_eq!(compress_json["format"], "chd");
@@ -169,7 +207,9 @@ fn run_chd_round_trip(input_name: &str, source: &[u8], codec: &str, expected_ext
         .stdout
         .clone();
 
-    let extract_json = parse_single_json_line(&extract_output);
+    let extract_events = parse_json_lines(&extract_output);
+    assert_running_percent_event(&extract_events, "extract", "chd");
+    let extract_json = extract_events.last().expect("extract terminal event");
     assert_eq!(extract_json["command"], "extract");
     assert_eq!(extract_json["family"], "container");
     assert_eq!(extract_json["format"], "chd");
@@ -1144,6 +1184,86 @@ fn json_mode_emits_running_progress_before_terminal_status() {
     assert_eq!(events[0]["command"], "checksum");
     assert_eq!(events[0]["status"], "running");
 
+    let terminal = events.last().expect("terminal event");
+    assert_eq!(terminal["command"], "checksum");
+    assert_eq!(terminal["status"], "succeeded");
+}
+
+#[test]
+fn non_json_default_suppresses_running_progress_without_tty() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("sample.bin").path(), b"progress-check").expect("fixture");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "checksum",
+            temp.child("sample.bin").path().to_str().expect("path"),
+            "--algo",
+            "crc32",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let text = String::from_utf8(output).expect("utf8 stdout");
+    assert!(!text.contains("status=Running"));
+    assert!(text.contains("status=Succeeded"));
+}
+
+#[test]
+fn progress_flag_enables_running_progress_without_json() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("sample.bin").path(), b"progress-check").expect("fixture");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "--progress",
+            "checksum",
+            temp.child("sample.bin").path().to_str().expect("path"),
+            "--algo",
+            "crc32",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let text = String::from_utf8(output).expect("utf8 stdout");
+    assert!(text.contains("status=Running"));
+    assert!(text.contains("status=Succeeded"));
+}
+
+#[test]
+fn no_progress_flag_suppresses_running_progress_in_json_mode() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("sample.bin").path(), b"progress-check").expect("fixture");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "--no-progress",
+            "checksum",
+            temp.child("sample.bin").path().to_str().expect("path"),
+            "--algo",
+            "crc32",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let events = parse_json_lines(&output);
+    assert!(
+        events.iter().all(|event| event["status"] != "running"),
+        "expected --no-progress to suppress running events"
+    );
     let terminal = events.last().expect("terminal event");
     assert_eq!(terminal["command"], "checksum");
     assert_eq!(terminal["status"], "succeeded");
@@ -2411,7 +2531,9 @@ fn extract_pbp_without_select_emits_all_discs() {
         .stdout
         .clone();
 
-    let json = parse_single_json_line(&output);
+    let events = parse_json_lines(&output);
+    assert_running_percent_event(&events, "extract", "pbp");
+    let json = events.last().expect("extract terminal event");
     assert_eq!(json["format"], "pbp");
     assert_eq!(json["status"], "succeeded");
     let emitted = json["details"]["emitted_files"]
@@ -2476,7 +2598,9 @@ fn extract_reports_thread_fallback_in_json() {
         .stdout
         .clone();
 
-    let json = parse_single_json_line(&output);
+    let events = parse_json_lines(&output);
+    assert_running_percent_event(&events, "extract", "zip");
+    let json = events.last().expect("extract terminal event");
     assert_eq!(json["command"], "extract");
     assert_eq!(json["family"], "container");
     assert_eq!(json["format"], "zip");
@@ -2692,7 +2816,9 @@ fn extract_rar_reports_thread_fallback_in_json() {
         .stdout
         .clone();
 
-    let json = parse_single_json_line(&output);
+    let events = parse_json_lines(&output);
+    assert_running_percent_event(&events, "extract", "rar");
+    let json = events.last().expect("extract terminal event");
     assert_eq!(json["command"], "extract");
     assert_eq!(json["family"], "container");
     assert_eq!(json["format"], "rar");
@@ -3806,7 +3932,9 @@ fn compress_gcz_warns_and_rejects_output() {
         .stdout
         .clone();
 
-    let json = parse_single_json_line(&output);
+    let events = parse_json_lines(&output);
+    assert_running_percent_event(&events, "compress", "gcz");
+    let json = events.last().expect("compress terminal event");
     assert_eq!(json["command"], "compress");
     assert_eq!(json["family"], "container");
     assert_eq!(json["format"], "gcz");
@@ -3852,7 +3980,9 @@ fn compress_wbfs_and_extract_round_trip() {
         .stdout
         .clone();
 
-    let compress_json = parse_single_json_line(&compress_output);
+    let compress_events = parse_json_lines(&compress_output);
+    assert_running_percent_event(&compress_events, "compress", "wbfs");
+    let compress_json = compress_events.last().expect("compress terminal event");
     assert_eq!(compress_json["command"], "compress");
     assert_eq!(compress_json["family"], "container");
     assert_eq!(compress_json["format"], "wbfs");
@@ -3880,7 +4010,9 @@ fn compress_wbfs_and_extract_round_trip() {
         .stdout
         .clone();
 
-    let extract_json = parse_single_json_line(&extract_output);
+    let extract_events = parse_json_lines(&extract_output);
+    assert_running_percent_event(&extract_events, "extract", "wbfs");
+    let extract_json = extract_events.last().expect("extract terminal event");
     assert_eq!(extract_json["command"], "extract");
     assert_eq!(extract_json["family"], "container");
     assert_eq!(extract_json["format"], "wbfs");
@@ -3925,7 +4057,9 @@ fn compress_cso_and_extract_round_trip() {
         .stdout
         .clone();
 
-    let compress_json = parse_single_json_line(&compress_output);
+    let compress_events = parse_json_lines(&compress_output);
+    assert_running_percent_event(&compress_events, "compress", "cso");
+    let compress_json = compress_events.last().expect("compress terminal event");
     assert_eq!(compress_json["command"], "compress");
     assert_eq!(compress_json["family"], "container");
     assert_eq!(compress_json["format"], "cso");
@@ -3951,7 +4085,9 @@ fn compress_cso_and_extract_round_trip() {
         .stdout
         .clone();
 
-    let extract_json = parse_single_json_line(&extract_output);
+    let extract_events = parse_json_lines(&extract_output);
+    assert_running_percent_event(&extract_events, "extract", "cso");
+    let extract_json = extract_events.last().expect("extract terminal event");
     assert_eq!(extract_json["command"], "extract");
     assert_eq!(extract_json["family"], "container");
     assert_eq!(extract_json["format"], "cso");
@@ -3990,7 +4126,9 @@ fn compress_wia_and_extract_round_trip() {
         .stdout
         .clone();
 
-    let compress_json = parse_single_json_line(&compress_output);
+    let compress_events = parse_json_lines(&compress_output);
+    assert_running_percent_event(&compress_events, "compress", "wia");
+    let compress_json = compress_events.last().expect("compress terminal event");
     assert_eq!(compress_json["command"], "compress");
     assert_eq!(compress_json["family"], "container");
     assert_eq!(compress_json["format"], "wia");
@@ -4018,7 +4156,9 @@ fn compress_wia_and_extract_round_trip() {
         .stdout
         .clone();
 
-    let extract_json = parse_single_json_line(&extract_output);
+    let extract_events = parse_json_lines(&extract_output);
+    assert_running_percent_event(&extract_events, "extract", "wia");
+    let extract_json = extract_events.last().expect("extract terminal event");
     assert_eq!(extract_json["command"], "extract");
     assert_eq!(extract_json["family"], "container");
     assert_eq!(extract_json["format"], "wia");
@@ -4056,7 +4196,9 @@ fn compress_nfs_warns_and_rejects_output() {
         .stdout
         .clone();
 
-    let json = parse_single_json_line(&output);
+    let events = parse_json_lines(&output);
+    assert_running_percent_event(&events, "compress", "nfs");
+    let json = events.last().expect("compress terminal event");
     assert_eq!(json["command"], "compress");
     assert_eq!(json["family"], "container");
     assert_eq!(json["format"], "nfs");
@@ -4094,7 +4236,9 @@ fn compress_tgc_routes_through_handler_and_reports_invalid_source() {
         .stdout
         .clone();
 
-    let json = parse_single_json_line(&output);
+    let events = parse_json_lines(&output);
+    assert_running_percent_event(&events, "compress", "tgc");
+    let json = events.last().expect("compress terminal event");
     assert_eq!(json["command"], "compress");
     assert_eq!(json["family"], "container");
     assert_eq!(json["format"], "tgc");
@@ -4103,6 +4247,102 @@ fn compress_tgc_routes_through_handler_and_reports_invalid_source() {
     assert!(
         label.contains("tgc writer") || label.contains("reading gcm header"),
         "unexpected label: {label}"
+    );
+}
+
+#[test]
+fn extract_nfs_invalid_source_emits_running_progress() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("disc.nfs").path(), b"not-a-real-nfs").expect("fixture");
+    let out_dir = temp.child("extract");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "extract",
+            temp.child("disc.nfs").path().to_str().expect("path"),
+            "--out-dir",
+            out_dir.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .stdout
+        .clone();
+
+    let events = parse_json_lines(&output);
+    assert_running_percent_event(&events, "extract", "nfs");
+    let json = events.last().expect("extract terminal event");
+    assert_eq!(json["command"], "extract");
+    assert_eq!(json["family"], "container");
+    assert_eq!(json["format"], "nfs");
+    assert_eq!(json["status"], "failed");
+}
+
+#[test]
+fn extract_tgc_invalid_source_emits_running_progress() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("disc.tgc").path(), b"not-a-real-tgc").expect("fixture");
+    let out_dir = temp.child("extract");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "extract",
+            temp.child("disc.tgc").path().to_str().expect("path"),
+            "--out-dir",
+            out_dir.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .stdout
+        .clone();
+
+    let events = parse_json_lines(&output);
+    assert_running_percent_event(&events, "extract", "tgc");
+    let json = events.last().expect("extract terminal event");
+    assert_eq!(json["command"], "extract");
+    assert_eq!(json["family"], "container");
+    assert_eq!(json["format"], "tgc");
+    assert_eq!(json["status"], "failed");
+}
+
+#[test]
+fn extract_xiso_unsupported_emits_running_progress() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("disc.xiso").path(), b"not-a-real-xiso").expect("fixture");
+    let out_dir = temp.child("extract");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "extract",
+            temp.child("disc.xiso").path().to_str().expect("path"),
+            "--out-dir",
+            out_dir.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .stdout
+        .clone();
+
+    let events = parse_json_lines(&output);
+    assert_running_percent_event(&events, "extract", "xiso");
+    let json = events.last().expect("extract terminal event");
+    assert_eq!(json["command"], "extract");
+    assert_eq!(json["family"], "container");
+    assert_eq!(json["format"], "xiso");
+    assert_eq!(json["status"], "failed");
+    assert!(
+        json["label"]
+            .as_str()
+            .expect("label")
+            .contains("xiso extract is not supported yet")
     );
 }
 
@@ -4571,7 +4811,9 @@ fn run_archive_round_trip(format: &str, archive_name: &str, codec: Option<&str>)
     compress.arg("--json");
     let compress_output = compress.assert().code(0).get_output().stdout.clone();
 
-    let compress_json = parse_single_json_line(&compress_output);
+    let compress_events = parse_json_lines(&compress_output);
+    assert_running_percent_event(&compress_events, "compress", format);
+    let compress_json = compress_events.last().expect("compress terminal event");
     assert_eq!(compress_json["command"], "compress");
     assert_eq!(compress_json["family"], "container");
     assert_eq!(compress_json["format"], format);
@@ -4611,7 +4853,9 @@ fn run_archive_round_trip(format: &str, archive_name: &str, codec: Option<&str>)
         .stdout
         .clone();
 
-    let extract_json = parse_single_json_line(&extract_output);
+    let extract_events = parse_json_lines(&extract_output);
+    assert_running_percent_event(&extract_events, "extract", format);
+    let extract_json = extract_events.last().expect("extract terminal event");
     assert_eq!(extract_json["command"], "extract");
     assert_eq!(extract_json["family"], "container");
     assert_eq!(extract_json["format"], format);
@@ -4650,6 +4894,177 @@ fn archive_container_formats_round_trip() {
     for (format, archive_name, codec) in cases {
         run_archive_round_trip(format, archive_name, codec);
     }
+}
+
+#[test]
+fn tar_gz_emits_incremental_running_progress() {
+    let temp = setup_temp_dir();
+    let input_dir = temp.child("input");
+    fs::create_dir_all(input_dir.path()).expect("input dir");
+    for index in 0..4usize {
+        let payload = vec![index as u8; 8_192 + index * 1_024];
+        fs::write(input_dir.child(format!("file-{index}.bin")).path(), payload).expect("fixture");
+    }
+
+    let archive = temp.child("sample.tar.gz");
+    let compress_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            input_dir.path().to_str().expect("path"),
+            "--format",
+            "tar.gz",
+            "--output",
+            archive.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let compress_events = parse_json_lines(&compress_output);
+    assert!(
+        compress_events.iter().any(|event| {
+            event["command"] == "compress"
+                && event["status"] == "running"
+                && event["format"] == "tar.gz"
+                && event["percent"]
+                    .as_f64()
+                    .map(|percent| percent > 0.0 && percent < 100.0)
+                    .unwrap_or(false)
+        }),
+        "expected tar.gz compress to emit running progress between 0 and 100"
+    );
+
+    let out_dir = temp.child("extract");
+    let extract_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "extract",
+            archive.path().to_str().expect("path"),
+            "--out-dir",
+            out_dir.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let extract_events = parse_json_lines(&extract_output);
+    assert!(
+        extract_events.iter().any(|event| {
+            event["command"] == "extract"
+                && event["status"] == "running"
+                && event["format"] == "tar.gz"
+                && event["percent"]
+                    .as_f64()
+                    .map(|percent| percent > 0.0 && percent < 100.0)
+                    .unwrap_or(false)
+        }),
+        "expected tar.gz extract to emit running progress between 0 and 100"
+    );
+}
+
+#[test]
+fn zip_emits_incremental_running_progress_beyond_placeholders() {
+    let temp = setup_temp_dir();
+    let input_dir = temp.child("input");
+    fs::create_dir_all(input_dir.path()).expect("input dir");
+    for index in 0..3usize {
+        let payload = vec![index as u8; 10_240 + (index * 2_048)];
+        fs::write(input_dir.child(format!("file-{index}.bin")).path(), payload).expect("fixture");
+    }
+
+    let archive = temp.child("sample.zip");
+    let compress_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            input_dir.path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            archive.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let compress_events = parse_json_lines(&compress_output);
+    assert_running_percent_event_in_range(&compress_events, "compress", "zip", 1.0, 99.0);
+
+    let out_dir = temp.child("extract");
+    let extract_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "extract",
+            archive.path().to_str().expect("path"),
+            "--out-dir",
+            out_dir.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let extract_events = parse_json_lines(&extract_output);
+    assert_running_percent_event_in_range(&extract_events, "extract", "zip", 1.0, 95.0);
+}
+
+#[test]
+fn seven_z_emits_incremental_running_progress_beyond_placeholders() {
+    let temp = setup_temp_dir();
+    let input_dir = temp.child("input");
+    fs::create_dir_all(input_dir.path()).expect("input dir");
+    for index in 0..3usize {
+        let payload = vec![index as u8; 12_288 + (index * 1_024)];
+        fs::write(input_dir.child(format!("file-{index}.bin")).path(), payload).expect("fixture");
+    }
+
+    let archive = temp.child("sample.7z");
+    let compress_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            input_dir.path().to_str().expect("path"),
+            "--format",
+            "7z",
+            "--output",
+            archive.path().to_str().expect("path"),
+            "--codec",
+            "lzma2",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let compress_events = parse_json_lines(&compress_output);
+    assert_running_percent_event_in_range(&compress_events, "compress", "7z", 1.0, 99.0);
+
+    let out_dir = temp.child("extract");
+    let extract_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "extract",
+            archive.path().to_str().expect("path"),
+            "--out-dir",
+            out_dir.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let extract_events = parse_json_lines(&extract_output);
+    assert_running_percent_event_in_range(&extract_events, "extract", "7z", 1.0, 95.0);
 }
 
 #[test]
@@ -4799,7 +5214,9 @@ fn chd_compress_and_extract_avhuff_round_trip() {
         .get_output()
         .stdout
         .clone();
-    let compress_json = parse_single_json_line(&compress_output);
+    let compress_events = parse_json_lines(&compress_output);
+    assert_running_percent_event(&compress_events, "compress", "chd");
+    let compress_json = compress_events.last().expect("compress terminal event");
     assert_eq!(compress_json["status"], "succeeded");
     assert!(
         compress_json["label"]
@@ -4858,7 +5275,9 @@ fn chd_compress_and_extract_cd_cue_round_trip() {
         .stdout
         .clone();
 
-    let compress_json = parse_single_json_line(&compress_output);
+    let compress_events = parse_json_lines(&compress_output);
+    assert_running_percent_event(&compress_events, "compress", "chd");
+    let compress_json = compress_events.last().expect("compress terminal event");
     assert_eq!(compress_json["format"], "chd");
     assert_eq!(compress_json["status"], "succeeded");
 
@@ -4878,7 +5297,9 @@ fn chd_compress_and_extract_cd_cue_round_trip() {
         .stdout
         .clone();
 
-    let extract_json = parse_single_json_line(&extract_output);
+    let extract_events = parse_json_lines(&extract_output);
+    assert_running_percent_event(&extract_events, "extract", "chd");
+    let extract_json = extract_events.last().expect("extract terminal event");
     assert_eq!(extract_json["format"], "chd");
     assert_eq!(extract_json["status"], "succeeded");
     assert_eq!(
@@ -4992,7 +5413,9 @@ fn chd_extract_split_bin_forces_per_track_outputs_and_reports_emitted_files() {
         .stdout
         .clone();
 
-    let extract_json = parse_single_json_line(&extract_output);
+    let extract_events = parse_json_lines(&extract_output);
+    assert_running_percent_event(&extract_events, "extract", "chd");
+    let extract_json = extract_events.last().expect("extract terminal event");
     assert_eq!(extract_json["format"], "chd");
     assert_eq!(extract_json["status"], "succeeded");
     let emitted = extract_json["details"]["emitted_files"]
@@ -5227,7 +5650,9 @@ fn extract_split_bin_non_chd_is_ignored_with_warning() {
         .stdout
         .clone();
 
-    let json = parse_single_json_line(&output);
+    let events = parse_json_lines(&output);
+    assert_running_percent_event(&events, "extract", "zip");
+    let json = events.last().expect("extract terminal event");
     assert_eq!(json["command"], "extract");
     assert_eq!(json["family"], "container");
     assert_eq!(json["format"], "zip");
@@ -5744,7 +6169,9 @@ fn gcz_extract_round_trips_to_iso() {
         .stdout
         .clone();
 
-    let json = parse_single_json_line(&output);
+    let events = parse_json_lines(&output);
+    assert_running_percent_event(&events, "extract", "gcz");
+    let json = events.last().expect("extract terminal event");
     assert_eq!(json["command"], "extract");
     assert_eq!(json["family"], "container");
     assert_eq!(json["format"], "gcz");
@@ -6090,7 +6517,9 @@ fn rvz_compress_and_extract_round_trips() {
         .stdout
         .clone();
 
-    let compress_json = parse_single_json_line(&compress_output);
+    let compress_events = parse_json_lines(&compress_output);
+    assert_running_percent_event(&compress_events, "compress", "rvz");
+    let compress_json = compress_events.last().expect("compress terminal event");
     assert_eq!(compress_json["command"], "compress");
     assert_eq!(compress_json["family"], "container");
     assert_eq!(compress_json["format"], "rvz");
@@ -6117,7 +6546,9 @@ fn rvz_compress_and_extract_round_trips() {
         .stdout
         .clone();
 
-    let extract_json = parse_single_json_line(&extract_output);
+    let extract_events = parse_json_lines(&extract_output);
+    assert_running_percent_event(&extract_events, "extract", "rvz");
+    let extract_json = extract_events.last().expect("extract terminal event");
     assert_eq!(extract_json["command"], "extract");
     assert_eq!(extract_json["family"], "container");
     assert_eq!(extract_json["format"], "rvz");
@@ -6287,7 +6718,9 @@ fn z3ds_compress_inspect_and_extract_round_trip() {
         .stdout
         .clone();
 
-    let compress_json = parse_single_json_line(&compress_output);
+    let compress_events = parse_json_lines(&compress_output);
+    assert_running_percent_event(&compress_events, "compress", "z3ds");
+    let compress_json = compress_events.last().expect("compress terminal event");
     assert_eq!(compress_json["command"], "compress");
     assert_eq!(compress_json["family"], "container");
     assert_eq!(compress_json["format"], "z3ds");
@@ -6333,7 +6766,9 @@ fn z3ds_compress_inspect_and_extract_round_trip() {
         .stdout
         .clone();
 
-    let extract_json = parse_single_json_line(&extract_output);
+    let extract_events = parse_json_lines(&extract_output);
+    assert_running_percent_event(&extract_events, "extract", "z3ds");
+    let extract_json = extract_events.last().expect("extract terminal event");
     assert_eq!(extract_json["command"], "extract");
     assert_eq!(extract_json["family"], "container");
     assert_eq!(extract_json["format"], "z3ds");
