@@ -8263,6 +8263,97 @@ fn patch_create_succeeds_for_dps_and_round_trips() {
 }
 
 #[test]
+fn patch_apply_can_ignore_checksum_validation_for_dps() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.bin");
+    let modified = temp.child("new.bin");
+    let mismatched_input = temp.child("old-mismatch.bin");
+    let patch = temp.child("update.dps");
+    let output = temp.child("output.bin");
+    fs::write(original.path(), b"hello old world").expect("fixture");
+    fs::write(modified.path(), b"hello new world + dps").expect("fixture");
+    fs::write(mismatched_input.path(), b"hello old world!").expect("fixture");
+
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--format",
+            "dps",
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let strict_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            mismatched_input.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .stdout
+        .clone();
+    let strict_json = parse_single_json_line(&strict_output);
+    assert_eq!(strict_json["command"], "patch-apply");
+    assert_eq!(strict_json["family"], "patch");
+    assert_eq!(strict_json["format"], "DPS");
+    assert_eq!(strict_json["status"], "failed");
+    assert!(strict_json["label"]
+        .as_str()
+        .expect("label")
+        .contains("source size mismatch"));
+
+    let ignored_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            mismatched_input.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--ignore-checksum-validation",
+            "--no-compress",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let ignored_json = parse_single_json_line(&ignored_output);
+    assert_eq!(ignored_json["command"], "patch-apply");
+    assert_eq!(ignored_json["family"], "patch");
+    assert_eq!(ignored_json["format"], "DPS");
+    assert_eq!(ignored_json["status"], "succeeded");
+    assert!(ignored_json["label"]
+        .as_str()
+        .expect("label")
+        .contains("checksum validation skipped"));
+    assert_eq!(
+        fs::read(output.path()).expect("output"),
+        fs::read(modified.path()).expect("modified")
+    );
+}
+
+#[test]
 fn patch_create_succeeds_for_xdelta_with_secondary_when_helpful() {
     let temp = setup_temp_dir();
     let original = temp.child("old.bin");

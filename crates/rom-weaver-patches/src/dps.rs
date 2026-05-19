@@ -6,8 +6,8 @@ use std::{
 
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
-    PatchCapabilities, PatchCreateRequest, PatchHandler, ProbeConfidence, Result, RomWeaverError,
-    ThreadCapability,
+    PatchCapabilities, PatchChecksumValidation, PatchCreateRequest, PatchHandler, ProbeConfidence,
+    Result, RomWeaverError, ThreadCapability,
 };
 
 const DPS_TEXT_FIELD_BYTES: usize = 64;
@@ -41,7 +41,7 @@ impl PatchHandler for DpsPatchHandler {
     }
 
     fn parse(&self, patch_path: &Path, _context: &OperationContext) -> Result<OperationReport> {
-        let parsed = parse_dps_file(patch_path)?;
+        let parsed = parse_dps_file(patch_path, DpsParseMode::Strict)?;
 
         Ok(OperationReport::succeeded(
             OperationFamily::Patch,
@@ -71,7 +71,14 @@ impl PatchHandler for DpsPatchHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
-        let parsed = parse_dps_file(patch_path)?;
+        let validate_source_size =
+            context.patch_checksum_validation() == PatchChecksumValidation::Strict;
+        let parse_mode = if validate_source_size {
+            DpsParseMode::Strict
+        } else {
+            DpsParseMode::WarnAndStopOnMalformedRecord
+        };
+        let parsed = parse_dps_file(patch_path, parse_mode)?;
         let source_len_u64 = fs::metadata(&request.input)?.len();
         let source_len_u32 = u32::try_from(source_len_u64).map_err(|_| {
             RomWeaverError::Validation(format!(
@@ -80,7 +87,7 @@ impl PatchHandler for DpsPatchHandler {
                 u32::MAX
             ))
         })?;
-        if source_len_u32 != parsed.source_size {
+        if validate_source_size && source_len_u32 != parsed.source_size {
             return Err(RomWeaverError::Validation(format!(
                 "{} source size mismatch: expected {} byte(s), actual {} byte(s)",
                 self.descriptor.name, parsed.source_size, source_len_u32
@@ -148,16 +155,28 @@ impl PatchHandler for DpsPatchHandler {
         output.flush()?;
 
         let execution = context.plan_threads(ThreadCapability::single_threaded());
+        let checksum_suffix = if validate_source_size {
+            String::new()
+        } else {
+            "; checksum validation skipped".to_string()
+        };
+        let malformed_warning_suffix = parsed
+            .malformed_record_warning
+            .as_deref()
+            .map(|warning| format!("; warning={warning}"))
+            .unwrap_or_default();
         Ok(OperationReport::succeeded(
             OperationFamily::Patch,
             Some(self.descriptor.name.to_string()),
             "apply",
             format!(
-                "applied {} patch with {} record(s): {} copy / {} data",
+                "applied {} patch with {} record(s): {} copy / {} data{}{}",
                 self.descriptor.name,
                 parsed.records.len(),
                 parsed.copy_record_count,
-                parsed.data_record_count
+                parsed.data_record_count,
+                checksum_suffix,
+                malformed_warning_suffix
             ),
             Some(100.0),
             Some(execution),
@@ -245,6 +264,7 @@ struct ParsedDpsPatch {
     copy_record_count: usize,
     data_record_count: usize,
     records: Vec<DpsRecord>,
+    malformed_record_warning: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -292,12 +312,18 @@ struct DpsHeaderMetadata<'a> {
     patch_flag: u8,
 }
 
-fn parse_dps_file(path: &Path) -> Result<ParsedDpsPatch> {
-    let bytes = fs::read(path)?;
-    parse_dps_bytes(&bytes)
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DpsParseMode {
+    Strict,
+    WarnAndStopOnMalformedRecord,
 }
 
-fn parse_dps_bytes(bytes: &[u8]) -> Result<ParsedDpsPatch> {
+fn parse_dps_file(path: &Path, mode: DpsParseMode) -> Result<ParsedDpsPatch> {
+    let bytes = fs::read(path)?;
+    parse_dps_bytes(&bytes, mode)
+}
+
+fn parse_dps_bytes(bytes: &[u8], mode: DpsParseMode) -> Result<ParsedDpsPatch> {
     if bytes.len() < DPS_HEADER_BYTES {
         return Err(RomWeaverError::Validation(format!(
             "DPS patch is too small to contain a valid header (expected at least {DPS_HEADER_BYTES} byte(s), found {})",
@@ -331,14 +357,52 @@ fn parse_dps_bytes(bytes: &[u8]) -> Result<ParsedDpsPatch> {
     let mut output_size = 0u64;
     let mut copy_record_count = 0usize;
     let mut data_record_count = 0usize;
+    let mut malformed_record_warning = None;
     while cursor < bytes.len() {
-        let mode = read_u8(bytes, &mut cursor, "DPS record mode")?;
-        let output_offset = read_u32_le(bytes, &mut cursor, "DPS output offset")?;
+        let record_start = cursor;
+        let mode_byte = match read_u8(bytes, &mut cursor, "DPS record mode") {
+            Ok(value) => value,
+            Err(error) if mode == DpsParseMode::WarnAndStopOnMalformedRecord => {
+                malformed_record_warning = Some(format!(
+                    "ignored malformed DPS record at byte offset {record_start}: {error}"
+                ));
+                break;
+            }
+            Err(error) => return Err(error),
+        };
+        let output_offset = match read_u32_le(bytes, &mut cursor, "DPS output offset") {
+            Ok(value) => value,
+            Err(error) if mode == DpsParseMode::WarnAndStopOnMalformedRecord => {
+                malformed_record_warning = Some(format!(
+                    "ignored malformed DPS record at byte offset {record_start}: {error}"
+                ));
+                break;
+            }
+            Err(error) => return Err(error),
+        };
 
-        let record = match mode {
+        let record = match mode_byte {
             DPS_RECORD_COPY_FROM_SOURCE => {
-                let source_offset = read_u32_le(bytes, &mut cursor, "DPS source offset")?;
-                let length = read_u32_le(bytes, &mut cursor, "DPS source length")?;
+                let source_offset = match read_u32_le(bytes, &mut cursor, "DPS source offset") {
+                    Ok(value) => value,
+                    Err(error) if mode == DpsParseMode::WarnAndStopOnMalformedRecord => {
+                        malformed_record_warning = Some(format!(
+                            "ignored malformed DPS record at byte offset {record_start}: {error}"
+                        ));
+                        break;
+                    }
+                    Err(error) => return Err(error),
+                };
+                let length = match read_u32_le(bytes, &mut cursor, "DPS source length") {
+                    Ok(value) => value,
+                    Err(error) if mode == DpsParseMode::WarnAndStopOnMalformedRecord => {
+                        malformed_record_warning = Some(format!(
+                            "ignored malformed DPS record at byte offset {record_start}: {error}"
+                        ));
+                        break;
+                    }
+                    Err(error) => return Err(error),
+                };
                 copy_record_count = copy_record_count.checked_add(1).ok_or_else(|| {
                     RomWeaverError::Validation("DPS record count overflowed".into())
                 })?;
@@ -349,19 +413,36 @@ fn parse_dps_bytes(bytes: &[u8]) -> Result<ParsedDpsPatch> {
                 }
             }
             DPS_RECORD_EMBEDDED_DATA => {
-                let length = read_u32_le(bytes, &mut cursor, "DPS embedded data length")?;
+                let length = match read_u32_le(bytes, &mut cursor, "DPS embedded data length") {
+                    Ok(value) => value,
+                    Err(error) if mode == DpsParseMode::WarnAndStopOnMalformedRecord => {
+                        malformed_record_warning = Some(format!(
+                            "ignored malformed DPS record at byte offset {record_start}: {error}"
+                        ));
+                        break;
+                    }
+                    Err(error) => return Err(error),
+                };
                 let length_usize = usize::try_from(length).map_err(|_| {
                     RomWeaverError::Validation(
                         "DPS embedded data length exceeded addressable memory".into(),
                     )
                 })?;
-                let data = read_exact(
+                let data = match read_exact(
                     bytes,
                     &mut cursor,
                     length_usize,
                     "DPS embedded record payload",
-                )?
-                .to_vec();
+                ) {
+                    Ok(value) => value.to_vec(),
+                    Err(error) if mode == DpsParseMode::WarnAndStopOnMalformedRecord => {
+                        malformed_record_warning = Some(format!(
+                            "ignored malformed DPS record at byte offset {record_start}: {error}"
+                        ));
+                        break;
+                    }
+                    Err(error) => return Err(error),
+                };
                 data_record_count = data_record_count.checked_add(1).ok_or_else(|| {
                     RomWeaverError::Validation("DPS record count overflowed".into())
                 })?;
@@ -371,8 +452,14 @@ fn parse_dps_bytes(bytes: &[u8]) -> Result<ParsedDpsPatch> {
                 }
             }
             _ => {
+                if mode == DpsParseMode::WarnAndStopOnMalformedRecord {
+                    malformed_record_warning = Some(format!(
+                        "ignored malformed DPS record at byte offset {record_start}: DPS record mode {mode_byte} is not supported"
+                    ));
+                    break;
+                }
                 return Err(RomWeaverError::Validation(format!(
-                    "DPS record mode {mode} is not supported"
+                    "DPS record mode {mode_byte} is not supported"
                 )));
             }
         };
@@ -391,6 +478,7 @@ fn parse_dps_bytes(bytes: &[u8]) -> Result<ParsedDpsPatch> {
         copy_record_count,
         data_record_count,
         records,
+        malformed_record_warning,
     })
 }
 
@@ -640,15 +728,17 @@ fn checked_range(start: u32, len: u32, limit: usize, label: &str) -> Result<(usi
 mod tests {
     use std::fs;
 
-    use rom_weaver_core::{PatchApplyRequest, PatchCreateRequest, PatchHandler};
+    use rom_weaver_core::{
+        PatchApplyRequest, PatchChecksumValidation, PatchCreateRequest, PatchHandler,
+    };
 
     use super::{
-        DPS_PATCH_VERSION, DpsHeaderMetadata, DpsPatchHandler, DpsRecord, encode_dps_patch,
-        parse_dps_bytes,
+        encode_dps_patch, parse_dps_bytes, DpsHeaderMetadata, DpsParseMode, DpsPatchHandler,
+        DpsRecord, DPS_PATCH_VERSION, DPS_RECORD_EMBEDDED_DATA,
     };
     use crate::{
+        test_support::{test_context_with_threads, TestDir},
         DPS,
-        test_support::{TestDir, test_context_with_threads},
     };
 
     #[test]
@@ -670,7 +760,7 @@ mod tests {
         .expect("patch");
         bytes[193] = DPS_PATCH_VERSION + 1;
 
-        let error = parse_dps_bytes(&bytes).expect_err("unsupported version");
+        let error = parse_dps_bytes(&bytes, DpsParseMode::Strict).expect_err("unsupported version");
         assert!(error.to_string().contains("is not supported"));
     }
 
@@ -765,5 +855,123 @@ mod tests {
             fs::read(output_path).expect("output"),
             fs::read(target_path).expect("target")
         );
+    }
+
+    #[test]
+    fn apply_ignores_source_size_validation_when_requested() {
+        let temp = TestDir::new();
+        let source_path = temp.child("source.bin");
+        let mismatched_source_path = temp.child("source-mismatch.bin");
+        let target_path = temp.child("target.bin");
+        let patch_path = temp.child("update.dps");
+        let output_path = temp.child("output.bin");
+
+        fs::write(&source_path, b"abcdefgh").expect("fixture");
+        fs::write(&mismatched_source_path, b"abcdefghZZ").expect("fixture");
+        fs::write(&target_path, b"abXYefgh").expect("fixture");
+
+        let handler = DpsPatchHandler::new(&DPS);
+        handler
+            .create(
+                &PatchCreateRequest {
+                    original: source_path.clone(),
+                    modified: target_path.clone(),
+                    output: patch_path.clone(),
+                    format: "dps".into(),
+                },
+                &test_context_with_threads(&temp, 1),
+            )
+            .expect("create");
+
+        let strict_error = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: mismatched_source_path.clone(),
+                    patches: vec![patch_path.clone()],
+                    output: output_path.clone(),
+                },
+                &test_context_with_threads(&temp, 1),
+            )
+            .expect_err("strict mismatch");
+        assert!(strict_error.to_string().contains("source size mismatch"));
+
+        let ignored_report = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: mismatched_source_path,
+                    patches: vec![patch_path],
+                    output: output_path.clone(),
+                },
+                &test_context_with_threads(&temp, 1)
+                    .with_patch_checksum_validation(PatchChecksumValidation::Ignore),
+            )
+            .expect("ignore mismatch");
+        assert!(ignored_report.label.contains("checksum validation skipped"));
+        assert_eq!(fs::read(output_path).expect("output"), b"abXYefgh");
+    }
+
+    #[test]
+    fn apply_warns_and_stops_on_malformed_records_when_ignore_requested() {
+        let temp = TestDir::new();
+        let source_path = temp.child("source.bin");
+        let patch_path = temp.child("update.dps");
+        let output_path = temp.child("output.bin");
+
+        fs::write(&source_path, b"abcdefgh").expect("fixture");
+        let mut patch = encode_dps_patch(
+            &[
+                DpsRecord::CopyFromSource {
+                    output_offset: 0,
+                    source_offset: 0,
+                    length: 4,
+                },
+                DpsRecord::EmbeddedData {
+                    output_offset: 4,
+                    data: b"XY".to_vec(),
+                },
+            ],
+            DpsHeaderMetadata {
+                patch_name: "malformed-tail.dps",
+                patch_author: "test",
+                patch_version_text: "1",
+                patch_flag: 0,
+            },
+            8,
+        )
+        .expect("patch");
+        patch.push(DPS_RECORD_EMBEDDED_DATA);
+        patch.extend_from_slice(&6u32.to_le_bytes());
+        patch.extend_from_slice(&3u32.to_le_bytes());
+        patch.extend_from_slice(b"Z");
+        fs::write(&patch_path, patch).expect("fixture");
+
+        let handler = DpsPatchHandler::new(&DPS);
+        let strict_error = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: source_path.clone(),
+                    patches: vec![patch_path.clone()],
+                    output: output_path.clone(),
+                },
+                &test_context_with_threads(&temp, 1),
+            )
+            .expect_err("strict malformed");
+        assert!(strict_error.to_string().contains("ended unexpectedly"));
+
+        let ignored_report = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: source_path,
+                    patches: vec![patch_path],
+                    output: output_path.clone(),
+                },
+                &test_context_with_threads(&temp, 1)
+                    .with_patch_checksum_validation(PatchChecksumValidation::Ignore),
+            )
+            .expect("ignore malformed");
+        assert!(ignored_report
+            .label
+            .contains("warning=ignored malformed DPS record"));
+        assert_eq!(fs::read(output_path).expect("output"), b"abcdXY");
     }
 }
