@@ -163,12 +163,31 @@ impl Xd3Stream {
     }
 }
 
+#[cfg(target_pointer_width = "64")]
 const _: [(); 152] = [(); mem::size_of::<Xd3Config>()];
+#[cfg(target_pointer_width = "64")]
 const _: [(); 8] = [(); mem::align_of::<Xd3Config>()];
+#[cfg(target_pointer_width = "64")]
 const _: [(); 120] = [(); mem::size_of::<Xd3Source>()];
+#[cfg(target_pointer_width = "64")]
 const _: [(); 8] = [(); mem::align_of::<Xd3Source>()];
+#[cfg(target_pointer_width = "64")]
 const _: [(); 1_208] = [(); mem::size_of::<Xd3Stream>()];
+#[cfg(target_pointer_width = "64")]
 const _: [(); 8] = [(); mem::align_of::<Xd3Stream>()];
+
+#[cfg(target_pointer_width = "32")]
+const _: [(); 120] = [(); mem::size_of::<Xd3Config>()];
+#[cfg(target_pointer_width = "32")]
+const _: [(); 4] = [(); mem::align_of::<Xd3Config>()];
+#[cfg(target_pointer_width = "32")]
+const _: [(); 68] = [(); mem::size_of::<Xd3Source>()];
+#[cfg(target_pointer_width = "32")]
+const _: [(); 4] = [(); mem::align_of::<Xd3Source>()];
+#[cfg(target_pointer_width = "32")]
+const _: [(); 1_164] = [(); mem::size_of::<Xd3Stream>()];
+#[cfg(target_pointer_width = "32")]
+const _: [(); 4] = [(); mem::align_of::<Xd3Stream>()];
 
 unsafe extern "C" {
     #[cfg(test)]

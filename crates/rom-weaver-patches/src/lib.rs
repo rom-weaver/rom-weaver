@@ -524,7 +524,10 @@ mod tests {
             "DPS",
         ]);
         #[cfg(feature = "bsp-js")]
-        expected.insert(expected.iter().position(|name| *name == "MOD").unwrap(), "BSP");
+        expected.insert(
+            expected.iter().position(|name| *name == "MOD").unwrap(),
+            "BSP",
+        );
         assert_eq!(names, expected);
     }
 

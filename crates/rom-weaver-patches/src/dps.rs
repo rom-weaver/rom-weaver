@@ -733,12 +733,12 @@ mod tests {
     };
 
     use super::{
-        encode_dps_patch, parse_dps_bytes, DpsHeaderMetadata, DpsParseMode, DpsPatchHandler,
-        DpsRecord, DPS_PATCH_VERSION, DPS_RECORD_EMBEDDED_DATA,
+        DPS_PATCH_VERSION, DPS_RECORD_EMBEDDED_DATA, DpsHeaderMetadata, DpsParseMode,
+        DpsPatchHandler, DpsRecord, encode_dps_patch, parse_dps_bytes,
     };
     use crate::{
-        test_support::{test_context_with_threads, TestDir},
         DPS,
+        test_support::{TestDir, test_context_with_threads},
     };
 
     #[test]
@@ -969,9 +969,11 @@ mod tests {
                     .with_patch_checksum_validation(PatchChecksumValidation::Ignore),
             )
             .expect("ignore malformed");
-        assert!(ignored_report
-            .label
-            .contains("warning=ignored malformed DPS record"));
+        assert!(
+            ignored_report
+                .label
+                .contains("warning=ignored malformed DPS record")
+        );
         assert_eq!(fs::read(output_path).expect("output"), b"abcdXY");
     }
 }

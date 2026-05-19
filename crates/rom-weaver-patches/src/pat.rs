@@ -336,10 +336,10 @@ mod tests {
 
     use rom_weaver_core::{PatchApplyRequest, PatchCreateRequest, PatchHandler};
 
-    use super::{has_pat_record_signature, parse_pat_record, PatPatchHandler};
+    use super::{PatPatchHandler, has_pat_record_signature, parse_pat_record};
     use crate::{
-        test_support::{test_context_with_threads, TestDir},
         PAT,
+        test_support::{TestDir, test_context_with_threads},
     };
 
     #[test]

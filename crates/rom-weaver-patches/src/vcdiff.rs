@@ -12,7 +12,6 @@ use rom_weaver_core::{
     PatchCapabilities, PatchChecksumValidation, PatchCreateRequest, PatchHandler, ProbeConfidence,
     Result, RomWeaverError, ThreadCapability,
 };
-use xdelta3 as _;
 
 use crate::xdelta_ffi;
 

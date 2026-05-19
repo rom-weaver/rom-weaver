@@ -9,7 +9,6 @@ version.workspace = true
 bzip2.workspace = true
 ciso.workspace = true
 flate2.workspace = true
-globset.workspace = true
 lzma-rust2.workspace = true
 nod.workspace = true
 rayon.workspace = true
