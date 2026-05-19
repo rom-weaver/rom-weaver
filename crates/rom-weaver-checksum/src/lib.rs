@@ -955,13 +955,14 @@ fn compute_parallel_crc32_stream(
     file.seek(SeekFrom::Start(range.start))?;
 
     let mut remaining = range.len;
-    let mut partials = Vec::new();
+    let estimated_chunks = range.len.div_ceil(chunk_size as u64) as usize;
+    let mut partials = Vec::with_capacity(estimated_chunks);
+    let mut buffer = vec![0u8; chunk_size];
 
     while remaining > 0 {
         cancel.check()?;
-        let limit = remaining.min(chunk_size as u64) as usize;
-        let mut buffer = vec![0u8; limit];
-        let bytes_read = file.read(&mut buffer)?;
+        let limit = remaining.min(buffer.len() as u64) as usize;
+        let bytes_read = file.read(&mut buffer[..limit])?;
         if bytes_read == 0 {
             return Err(RomWeaverError::Io(io::Error::new(
                 io::ErrorKind::UnexpectedEof,
@@ -969,10 +970,10 @@ fn compute_parallel_crc32_stream(
             )));
         }
 
-        buffer.truncate(bytes_read);
+        let chunk = &buffer[..bytes_read];
         let partial = pool.install(|| {
             let mut hasher = Crc32Hasher::new();
-            hasher.update(&buffer);
+            hasher.update(chunk);
             hasher
         });
         partials.push(Ok(partial));
@@ -1039,12 +1040,13 @@ fn compute_parallel_crc32c_stream(
     file.seek(SeekFrom::Start(range.start))?;
 
     let mut remaining = range.len;
-    let mut partials = Vec::new();
+    let estimated_chunks = range.len.div_ceil(chunk_size as u64) as usize;
+    let mut partials = Vec::with_capacity(estimated_chunks);
+    let mut buffer = vec![0u8; chunk_size];
     while remaining > 0 {
         cancel.check()?;
-        let limit = remaining.min(chunk_size as u64) as usize;
-        let mut buffer = vec![0u8; limit];
-        let bytes_read = file.read(&mut buffer)?;
+        let limit = remaining.min(buffer.len() as u64) as usize;
+        let bytes_read = file.read(&mut buffer[..limit])?;
         if bytes_read == 0 {
             return Err(RomWeaverError::Io(io::Error::new(
                 io::ErrorKind::UnexpectedEof,
@@ -1052,8 +1054,8 @@ fn compute_parallel_crc32c_stream(
             )));
         }
 
-        buffer.truncate(bytes_read);
-        let partial = pool.install(|| (crc32c_append(0, &buffer), buffer.len()));
+        let chunk = &buffer[..bytes_read];
+        let partial = pool.install(|| (crc32c_append(0, chunk), chunk.len()));
         partials.push(Ok(partial));
         remaining -= bytes_read as u64;
     }
@@ -1122,12 +1124,13 @@ fn compute_parallel_crc16_stream(
     file.seek(SeekFrom::Start(range.start))?;
 
     let mut remaining = range.len;
-    let mut partials = Vec::new();
+    let estimated_chunks = range.len.div_ceil(chunk_size as u64) as usize;
+    let mut partials = Vec::with_capacity(estimated_chunks);
+    let mut buffer = vec![0u8; chunk_size];
     while remaining > 0 {
         cancel.check()?;
-        let limit = remaining.min(chunk_size as u64) as usize;
-        let mut buffer = vec![0u8; limit];
-        let bytes_read = file.read(&mut buffer)?;
+        let limit = remaining.min(buffer.len() as u64) as usize;
+        let bytes_read = file.read(&mut buffer[..limit])?;
         if bytes_read == 0 {
             return Err(RomWeaverError::Io(io::Error::new(
                 io::ErrorKind::UnexpectedEof,
@@ -1135,11 +1138,11 @@ fn compute_parallel_crc16_stream(
             )));
         }
 
-        buffer.truncate(bytes_read);
+        let chunk = &buffer[..bytes_read];
         let partial = pool.install(|| {
             let mut state = Crc16State::<ARC>::new();
-            state.update(&buffer);
-            (state.get(), buffer.len())
+            state.update(chunk);
+            (state.get(), chunk.len())
         });
         partials.push(Ok(partial));
         remaining -= bytes_read as u64;
@@ -1207,12 +1210,13 @@ fn compute_parallel_adler32_stream(
     file.seek(SeekFrom::Start(range.start))?;
 
     let mut remaining = range.len;
-    let mut partials = Vec::new();
+    let estimated_chunks = range.len.div_ceil(chunk_size as u64) as usize;
+    let mut partials = Vec::with_capacity(estimated_chunks);
+    let mut buffer = vec![0u8; chunk_size];
     while remaining > 0 {
         cancel.check()?;
-        let limit = remaining.min(chunk_size as u64) as usize;
-        let mut buffer = vec![0u8; limit];
-        let bytes_read = file.read(&mut buffer)?;
+        let limit = remaining.min(buffer.len() as u64) as usize;
+        let bytes_read = file.read(&mut buffer[..limit])?;
         if bytes_read == 0 {
             return Err(RomWeaverError::Io(io::Error::new(
                 io::ErrorKind::UnexpectedEof,
@@ -1220,8 +1224,8 @@ fn compute_parallel_adler32_stream(
             )));
         }
 
-        buffer.truncate(bytes_read);
-        let partial = pool.install(|| (adler32_checksum(&buffer), buffer.len()));
+        let chunk = &buffer[..bytes_read];
+        let partial = pool.install(|| (adler32_checksum(chunk), chunk.len()));
         partials.push(Ok(partial));
         remaining -= bytes_read as u64;
     }
