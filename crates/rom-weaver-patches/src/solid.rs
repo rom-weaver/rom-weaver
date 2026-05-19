@@ -30,6 +30,14 @@ const MOD_ACTION_EXPAND: u8 = 1;
 const MOD_ACTION_TRUNCATE: u8 = 2;
 
 const CREATED_BASE_ADDR_FIELD: u8 = 7; // 8-byte base address deltas.
+const SOLID_PATCH_INFO7_ENV: &str = "ROM_WEAVER_SOLID_PATCH_INFO7";
+const SOLID_PATCH_SYSTEM_ENV: &str = "ROM_WEAVER_SOLID_SYSTEM";
+const SOLID_PATCH_GAME_ENV: &str = "ROM_WEAVER_SOLID_GAME";
+const SOLID_PATCH_HACK_ENV: &str = "ROM_WEAVER_SOLID_HACK";
+const SOLID_PATCH_VERSION_ENV: &str = "ROM_WEAVER_SOLID_VERSION";
+const SOLID_PATCH_AUTHOR_ENV: &str = "ROM_WEAVER_SOLID_AUTHOR";
+const SOLID_PATCH_CONTACT_ENV: &str = "ROM_WEAVER_SOLID_CONTACT";
+const SOLID_PATCH_COMMENT_ENV: &str = "ROM_WEAVER_SOLID_COMMENT";
 
 pub struct SolidPatchHandler {
     descriptor: &'static FormatDescriptor,
@@ -143,21 +151,27 @@ impl PatchHandler for SolidPatchHandler {
         let original = map_file_read_only(&request.original)?;
         let modified = map_file_read_only(&request.modified)?;
 
-        let mod_action = if modified.len() < original.len() {
+        let expansion = build_created_expansion(original.as_ref(), modified.as_ref())?;
+        let mod_action = if expansion.is_some() {
+            MOD_ACTION_EXPAND
+        } else if modified.len() < original.len() {
             MOD_ACTION_TRUNCATE
         } else {
             MOD_ACTION_NONE
         };
+        let descriptions = build_description_strings(&request.original, &request.output);
         let uses_big_fields = original.len() > u32::MAX as usize
             || modified.len() > u32::MAX as usize
-            || diff_primitive_count(original.as_ref(), modified.as_ref())? > u32::MAX as u64;
-        let addr_param = build_created_addr_param(mod_action, uses_big_fields);
+            || diff_primitive_count(original.as_ref(), modified.as_ref(), expansion.is_none())?
+                > u32::MAX as u64;
+        let addr_param =
+            build_created_addr_param(mod_action, uses_big_fields, descriptions.patch_info_flag);
 
-        let primitives = build_created_primitives(original.as_ref(), modified.as_ref())?;
+        let primitives =
+            build_created_primitives(original.as_ref(), modified.as_ref(), expansion.is_none())?;
         let primitive_count = primitives.len() as u64;
         let source_md5 = md5_bytes(original.as_ref());
         let date = current_patch_date();
-        let descriptions = default_description_strings(&request.original, &request.output);
 
         let mut patch = Vec::new();
         patch.extend_from_slice(SOLID_MAGIC);
@@ -171,16 +185,38 @@ impl PatchHandler for SolidPatchHandler {
         )?;
         patch.extend_from_slice(&source_md5);
         patch.extend_from_slice(&encode_patch_date(date));
-        for description in &descriptions {
+        for description in &descriptions.values {
             write_description_string(&mut patch, description)?;
         }
-        if mod_action == MOD_ACTION_TRUNCATE {
-            write_u64_le(
-                &mut patch,
-                modified.len() as u64,
-                if uses_big_fields { 8 } else { 4 },
-                "SOLID truncate size",
-            )?;
+        let field_width = if uses_big_fields { 8 } else { 4 };
+        match mod_action {
+            MOD_ACTION_EXPAND => {
+                let expansion = expansion.as_ref().ok_or_else(|| {
+                    RomWeaverError::Validation("SOLID expansion data missing during create".into())
+                })?;
+                write_u64_le(
+                    &mut patch,
+                    expansion.address,
+                    field_width,
+                    "SOLID resizeFileAddr",
+                )?;
+                write_u64_le(
+                    &mut patch,
+                    expansion.data.len() as u64,
+                    field_width,
+                    "SOLID resizeFileDataSize",
+                )?;
+            }
+            MOD_ACTION_TRUNCATE => {
+                write_u64_le(
+                    &mut patch,
+                    modified.len() as u64,
+                    field_width,
+                    "SOLID truncate size",
+                )?;
+            }
+            MOD_ACTION_NONE => {}
+            _ => unreachable!(),
         }
 
         let base_addr_len = decode_base_addr_len(addr_param)?;
@@ -194,6 +230,9 @@ impl PatchHandler for SolidPatchHandler {
                 "SOLID base address delta",
             )?;
             patch.extend_from_slice(&primitive.data);
+        }
+        if let Some(expansion) = expansion.as_ref() {
+            patch.extend_from_slice(&expansion.data);
         }
 
         // Validate that created patches are deterministic by replaying them.
@@ -278,6 +317,18 @@ enum PrimitivePayload {
 struct CreatedPrimitive {
     base_delta: u64,
     data: Vec<u8>,
+}
+
+#[derive(Debug)]
+struct CreatedExpansion {
+    address: u64,
+    data: Vec<u8>,
+}
+
+#[derive(Debug)]
+struct SolidDescriptionStrings {
+    values: Vec<String>,
+    patch_info_flag: bool,
 }
 
 fn parse_solid_patch_bytes(bytes: &[u8]) -> Result<ParsedSolidPatch> {
@@ -505,19 +556,26 @@ fn map_file_read_only(path: &Path) -> Result<Mmap> {
     Ok(map)
 }
 
-fn build_created_addr_param(mod_action: u8, uses_big_fields: bool) -> u8 {
+fn build_created_addr_param(mod_action: u8, uses_big_fields: bool, patch_info_flag: bool) -> u8 {
     let mut addr_param = CREATED_BASE_ADDR_FIELD | ((mod_action & 0b11) << 4);
     if uses_big_fields {
         addr_param |= BIG_FILE_FLAG;
     }
+    if patch_info_flag {
+        addr_param |= PATCH_INFO_FLAG;
+    }
     addr_param
 }
 
-fn diff_primitive_count(original: &[u8], modified: &[u8]) -> Result<u64> {
-    Ok(build_created_primitives(original, modified)?.len() as u64)
+fn diff_primitive_count(original: &[u8], modified: &[u8], include_suffix: bool) -> Result<u64> {
+    Ok(build_created_primitives(original, modified, include_suffix)?.len() as u64)
 }
 
-fn build_created_primitives(original: &[u8], modified: &[u8]) -> Result<Vec<CreatedPrimitive>> {
+fn build_created_primitives(
+    original: &[u8],
+    modified: &[u8],
+    include_suffix: bool,
+) -> Result<Vec<CreatedPrimitive>> {
     let shared_len = original.len().min(modified.len());
     let mut chunks = Vec::<(u64, &[u8])>::new();
 
@@ -535,7 +593,7 @@ fn build_created_primitives(original: &[u8], modified: &[u8]) -> Result<Vec<Crea
         chunks.push((start as u64, &modified[start..index]));
     }
 
-    if modified.len() > shared_len {
+    if include_suffix && modified.len() > shared_len {
         chunks.push((shared_len as u64, &modified[shared_len..]));
     }
 
@@ -569,7 +627,17 @@ fn build_created_primitives(original: &[u8], modified: &[u8]) -> Result<Vec<Crea
     Ok(primitives)
 }
 
-fn default_description_strings(original: &Path, output_patch: &Path) -> [String; 3] {
+fn build_created_expansion(original: &[u8], modified: &[u8]) -> Result<Option<CreatedExpansion>> {
+    if modified.len() <= original.len() {
+        return Ok(None);
+    }
+
+    let address = original.len() as u64;
+    let data = modified[original.len()..].to_vec();
+    Ok(Some(CreatedExpansion { address, data }))
+}
+
+fn build_description_strings(original: &Path, output_patch: &Path) -> SolidDescriptionStrings {
     let file_type = original
         .extension()
         .and_then(|value| value.to_str())
@@ -588,7 +656,39 @@ fn default_description_strings(original: &Path, output_patch: &Path) -> [String;
         .filter(|value| !value.is_empty())
         .unwrap_or("patch")
         .to_string();
-    [file_type, game, hack]
+
+    if solid_patch_info7_enabled() {
+        let system = read_env_string(SOLID_PATCH_SYSTEM_ENV).unwrap_or(file_type);
+        let game = read_env_string(SOLID_PATCH_GAME_ENV).unwrap_or(game);
+        let hack = read_env_string(SOLID_PATCH_HACK_ENV).unwrap_or(hack);
+        let version = read_env_string(SOLID_PATCH_VERSION_ENV).unwrap_or_default();
+        let author = read_env_string(SOLID_PATCH_AUTHOR_ENV).unwrap_or_default();
+        let contact = read_env_string(SOLID_PATCH_CONTACT_ENV).unwrap_or_default();
+        let comment = read_env_string(SOLID_PATCH_COMMENT_ENV).unwrap_or_default();
+        return SolidDescriptionStrings {
+            values: vec![system, game, hack, version, author, contact, comment],
+            patch_info_flag: true,
+        };
+    }
+
+    SolidDescriptionStrings {
+        values: vec![file_type, game, hack],
+        patch_info_flag: false,
+    }
+}
+
+fn solid_patch_info7_enabled() -> bool {
+    match std::env::var(SOLID_PATCH_INFO7_ENV) {
+        Ok(value) => {
+            let normalized = value.trim().to_ascii_lowercase();
+            matches!(normalized.as_str(), "1" | "true" | "yes" | "on")
+        }
+        Err(_) => false,
+    }
+}
+
+fn read_env_string(name: &str) -> Option<String> {
+    std::env::var(name).ok()
 }
 
 fn write_description_string(output: &mut Vec<u8>, value: &str) -> Result<()> {
@@ -833,15 +933,68 @@ impl ParsedPrimitive {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
+    use std::{
+        fs,
+        sync::{Mutex, OnceLock},
+    };
 
     use rom_weaver_core::{PatchApplyRequest, PatchCreateRequest, PatchHandler};
 
-    use super::SolidPatchHandler;
+    use super::*;
     use crate::{
         SOLID,
         test_support::{TestDir, test_context_with_threads_in_root as test_context_with_threads},
     };
+
+    static SOLID_ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+    struct EnvRestore {
+        entries: Vec<(&'static str, Option<String>)>,
+    }
+
+    impl Drop for EnvRestore {
+        fn drop(&mut self) {
+            for (name, value) in &self.entries {
+                if let Some(value) = value {
+                    set_env_var(name, value);
+                } else {
+                    remove_env_var(name);
+                }
+            }
+        }
+    }
+
+    fn set_env_vars(vars: &[(&'static str, Option<&str>)]) -> EnvRestore {
+        let mut entries = Vec::with_capacity(vars.len());
+        for (name, value) in vars {
+            entries.push((*name, std::env::var(name).ok()));
+            if let Some(value) = value {
+                set_env_var(name, value);
+            } else {
+                remove_env_var(name);
+            }
+        }
+        EnvRestore { entries }
+    }
+
+    fn set_env_var(name: &str, value: &str) {
+        // SAFETY: This test module serializes all environment mutation through
+        // SOLID_ENV_LOCK, and values are always restored via EnvRestore.
+        unsafe { std::env::set_var(name, value) };
+    }
+
+    fn remove_env_var(name: &str) {
+        // SAFETY: This test module serializes all environment mutation through
+        // SOLID_ENV_LOCK, and values are always restored via EnvRestore.
+        unsafe { std::env::remove_var(name) };
+    }
+
+    fn with_solid_env_vars(vars: &[(&'static str, Option<&str>)], run: impl FnOnce()) {
+        let lock = SOLID_ENV_LOCK.get_or_init(|| Mutex::new(()));
+        let _guard = lock.lock().expect("solid env lock");
+        let _restore = set_env_vars(vars);
+        run();
+    }
 
     #[test]
     fn parse_rejects_invalid_magic() {
@@ -893,6 +1046,121 @@ mod tests {
         assert_eq!(
             fs::read(output).expect("output"),
             fs::read(modified).expect("modified")
+        );
+    }
+
+    #[test]
+    fn create_and_apply_round_trip_for_expand_case() {
+        let temp = TestDir::new();
+        let original = temp.child("old.bin");
+        let modified = temp.child("new.bin");
+        let patch = temp.child("update.solid");
+        let output = temp.child("output.bin");
+
+        fs::write(&original, b"ABCDEF").expect("fixture");
+        fs::write(&modified, b"ABXCDEFZ").expect("fixture");
+
+        let handler = SolidPatchHandler::new(&SOLID);
+        handler
+            .create(
+                &PatchCreateRequest {
+                    original: original.clone(),
+                    modified: modified.clone(),
+                    output: patch.clone(),
+                    format: "solid".into(),
+                },
+                &test_context_with_threads(&temp, 2),
+            )
+            .expect("create");
+        handler
+            .apply(
+                &PatchApplyRequest {
+                    input: original,
+                    patches: vec![patch.clone()],
+                    output: output.clone(),
+                },
+                &test_context_with_threads(&temp, 1),
+            )
+            .expect("apply");
+
+        let patch_bytes = fs::read(&patch).expect("patch bytes");
+        assert_eq!(&patch_bytes[..SOLID_MAGIC.len()], SOLID_MAGIC);
+        let addr_param = patch_bytes[SOLID_MAGIC.len() + 1];
+        assert_eq!((addr_param & MOD_ACTION_MASK) >> 4, MOD_ACTION_EXPAND);
+
+        assert_eq!(
+            fs::read(output).expect("output"),
+            fs::read(modified).expect("modified")
+        );
+    }
+
+    #[test]
+    fn create_can_emit_patch_info_flag_with_seven_strings() {
+        with_solid_env_vars(
+            &[
+                (SOLID_PATCH_INFO7_ENV, Some("1")),
+                (SOLID_PATCH_SYSTEM_ENV, Some("NDS")),
+                (SOLID_PATCH_GAME_ENV, Some("Example Game")),
+                (SOLID_PATCH_HACK_ENV, Some("Example Hack")),
+                (SOLID_PATCH_VERSION_ENV, Some("v1.0")),
+                (SOLID_PATCH_AUTHOR_ENV, Some("rom-weaver")),
+                (SOLID_PATCH_CONTACT_ENV, Some("example@example.com")),
+                (SOLID_PATCH_COMMENT_ENV, Some("generated in tests")),
+            ],
+            || {
+                let temp = TestDir::new();
+                let original = temp.child("old.bin");
+                let modified = temp.child("new.bin");
+                let patch = temp.child("update.solid");
+                fs::write(&original, b"abcdefgh").expect("fixture");
+                fs::write(&modified, b"abcXefgh").expect("fixture");
+
+                let handler = SolidPatchHandler::new(&SOLID);
+                handler
+                    .create(
+                        &PatchCreateRequest {
+                            original,
+                            modified,
+                            output: patch.clone(),
+                            format: "solid".into(),
+                        },
+                        &test_context_with_threads(&temp, 1),
+                    )
+                    .expect("create");
+
+                let patch_bytes = fs::read(&patch).expect("patch bytes");
+                let addr_param = patch_bytes[SOLID_MAGIC.len() + 1];
+                assert_ne!(addr_param & PATCH_INFO_FLAG, 0);
+
+                let mut cursor = SOLID_MAGIC.len() + 2;
+                let width = if addr_param & BIG_FILE_FLAG != 0 {
+                    8
+                } else {
+                    4
+                };
+                let _primitive_count =
+                    read_u64_le(&patch_bytes, &mut cursor, width, "SOLID primitive count")
+                        .expect("primitive count");
+                let _source_md5 = read_md5(&patch_bytes, &mut cursor).expect("md5");
+                let _creation_date =
+                    read_exact(&patch_bytes, &mut cursor, SOLID_DATE_LEN).expect("date");
+
+                let mut description_strings = Vec::new();
+                for _ in 0..SOLID_MAX_DESCRIPTION_COUNT {
+                    description_strings.push(
+                        read_null_terminated_string(&patch_bytes, &mut cursor)
+                            .expect("description string"),
+                    );
+                }
+
+                assert_eq!(description_strings[0], "NDS");
+                assert_eq!(description_strings[1], "Example Game");
+                assert_eq!(description_strings[2], "Example Hack");
+                assert_eq!(description_strings[3], "v1.0");
+                assert_eq!(description_strings[4], "rom-weaver");
+                assert_eq!(description_strings[5], "example@example.com");
+                assert_eq!(description_strings[6], "generated in tests");
+            },
         );
     }
 
