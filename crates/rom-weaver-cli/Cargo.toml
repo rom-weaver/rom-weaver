@@ -15,7 +15,6 @@ tracing.workspace = true
 xdvdfs.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-clap = { version = "4.5.51", default-features = false, features = ["derive", "std"] }
 rom-weaver-patches = { path = "../rom-weaver-patches", default-features = false }
 tracing-subscriber = { version = "0.3.20", default-features = false, features = ["fmt", "std"] }
 

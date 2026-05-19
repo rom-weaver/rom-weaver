@@ -9,6 +9,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+#[cfg(not(target_arch = "wasm32"))]
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
 use rom_weaver_checksum::{
     NativeChecksumEngine, checksum_file_values, seed_checksum_file_cache, supported_algorithms,
@@ -31,30 +32,41 @@ use xdvdfs::{
     write::{fs::XDVDFSFilesystem as XdvdfsFilesystem, img::create_xdvdfs_image},
 };
 
-#[derive(Debug, Parser)]
-#[command(
-    name = "rom-weaver",
-    version,
-    about = "Native CLI groundwork for ROM inspection, extraction, checksums, compression, trimming, and patching."
+#[derive(Debug)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(Parser))]
+#[cfg_attr(
+    not(target_arch = "wasm32"),
+    command(
+        name = "rom-weaver",
+        version,
+        about = "Native CLI groundwork for ROM inspection, extraction, checksums, compression, trimming, and patching."
+    )
 )]
 struct Cli {
-    #[arg(
-        long,
-        global = true,
-        help = "Emit progress and terminal status as JSON lines"
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            global = true,
+            help = "Emit progress and terminal status as JSON lines"
+        )
     )]
     json: bool,
-    #[arg(
-        long,
-        global = true,
-        help = "Enable trace logs (also enabled by ROM_WEAVER_LOG or RUST_LOG)"
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            global = true,
+            help = "Enable trace logs (also enabled by ROM_WEAVER_LOG or RUST_LOG)"
+        )
     )]
     trace: bool,
-    #[command(subcommand)]
+    #[cfg_attr(not(target_arch = "wasm32"), command(subcommand))]
     command: Commands,
 }
 
-#[derive(Debug, Subcommand)]
+#[derive(Debug)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(Subcommand))]
 pub enum Commands {
     Inspect(InspectCommand),
     Extract(ExtractCommand),
@@ -65,15 +77,16 @@ pub enum Commands {
     PatchCreate(PatchCreateCommand),
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(ValueEnum))]
 pub enum CompressionLevelProfile {
     Min,
-    #[value(name = "very-low")]
+    #[cfg_attr(not(target_arch = "wasm32"), value(name = "very-low"))]
     VeryLow,
     Low,
     Medium,
     High,
-    #[value(name = "very-high")]
+    #[cfg_attr(not(target_arch = "wasm32"), value(name = "very-high"))]
     VeryHigh,
     Max,
 }
@@ -104,232 +117,311 @@ impl CompressionLevelProfile {
     }
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
 pub struct InspectCommand {
     pub source: PathBuf,
-    #[arg(
-        long,
-        help = "List selectable archive entries in the inspect label when supported"
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            help = "List selectable archive entries in the inspect label when supported"
+        )
     )]
     pub list: bool,
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
 pub struct ExtractCommand {
     pub source: PathBuf,
-    #[arg(
-        long = "select",
-        help = "Select extracted entries by exact name, prefix, or glob (repeatable). Examples: --select game.disc02.cue --select 'game.disc0?.bin'"
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "select",
+            help = "Select extracted entries by exact name, prefix, or glob (repeatable). Examples: --select game.disc02.cue --select 'game.disc0?.bin'"
+        )
     )]
     pub select: Vec<String>,
-    #[arg(long)]
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long))]
     pub out_dir: PathBuf,
-    #[arg(
-        long,
-        help = "For CHD CD extraction, force split CUE + per-track BIN output (`*.trackNN.bin`) instead of a single BIN when possible"
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            help = "For CHD CD extraction, force split CUE + per-track BIN output (`*.trackNN.bin`) instead of a single BIN when possible"
+        )
     )]
     pub split_bin: bool,
-    #[arg(long, default_value = "auto")]
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long, default_value = "auto"))]
     pub threads: ThreadBudget,
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
 pub struct ChecksumCommand {
     pub source: PathBuf,
-    #[arg(long = "algo", required = true)]
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long = "algo", required = true))]
     pub algo: Vec<String>,
-    #[arg(long = "select")]
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long = "select"))]
     pub select: Vec<String>,
-    #[arg(
-        long,
-        help = "Disable container auto-extract and checksum the source bytes directly"
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            help = "Disable container auto-extract and checksum the source bytes directly"
+        )
     )]
     pub no_extract: bool,
-    #[arg(
-        long,
-        help = "Disable default ignore filtering during checksum container payload resolution"
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            help = "Disable default ignore filtering during checksum container payload resolution"
+        )
     )]
     pub no_ignore: bool,
-    #[arg(
-        long,
-        help = "Remove a detected ROM header before checksum (A78/LNX/NES/FDS/SMC signatures; SNES/PCE copier-size rules)"
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            help = "Remove a detected ROM header before checksum (A78/LNX/NES/FDS/SMC signatures; SNES/PCE copier-size rules)"
+        )
     )]
     pub strip_header: bool,
-    #[arg(
-        long,
-        help = "Disable automatic trim-boundary checksum fixes for trim-eligible ROMs"
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            help = "Disable automatic trim-boundary checksum fixes for trim-eligible ROMs"
+        )
     )]
     pub no_trim_fix: bool,
-    #[arg(long)]
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long))]
     pub start: Option<u64>,
-    #[arg(long)]
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long))]
     pub length: Option<u64>,
-    #[arg(long, default_value = "auto")]
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long, default_value = "auto"))]
     pub threads: ThreadBudget,
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
 pub struct CompressCommand {
-    #[arg(required = true)]
+    #[cfg_attr(not(target_arch = "wasm32"), arg(required = true))]
     pub input: Vec<PathBuf>,
-    #[arg(long)]
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long))]
     pub format: Option<String>,
-    #[arg(long)]
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long))]
     pub output: PathBuf,
-    #[arg(long)]
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long))]
     pub codec: Option<String>,
-    #[arg(
+    #[cfg_attr(not(target_arch = "wasm32"), arg(
         long,
         value_enum,
         default_value_t = CompressionLevelProfile::Max,
         help = "Global compression level profile used when --codec does not include an explicit numeric level"
-    )]
+    ))]
     pub level: CompressionLevelProfile,
-    #[arg(long, default_value = "auto")]
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long, default_value = "auto"))]
     pub threads: ThreadBudget,
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
 pub struct TrimCommand {
-    #[arg(required = true)]
+    #[cfg_attr(not(target_arch = "wasm32"), arg(required = true))]
     pub source: Vec<PathBuf>,
-    #[arg(
-        long,
-        conflicts_with = "in_place",
-        help = "Destination file for trimmed output (single trim-eligible source only)"
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            conflicts_with = "in_place",
+            help = "Destination file for trimmed output (single trim-eligible source only)"
+        )
     )]
     pub output: Option<PathBuf>,
-    #[arg(
-        short = 'e',
-        long,
-        help = "Output extension for side-by-side output (supports `{ext}` placeholder, for example `trim.{ext}`)"
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            short = 'e',
+            long,
+            help = "Output extension for side-by-side output (supports `{ext}` placeholder, for example `trim.{ext}`)"
+        )
     )]
     pub extension: Option<String>,
-    #[arg(
-        short = 'i',
-        long = "in-place",
-        alias = "inplace",
-        help = "Trim the source file in place instead of writing a new file"
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            short = 'i',
+            long = "in-place",
+            alias = "inplace",
+            help = "Trim the source file in place instead of writing a new file"
+        )
     )]
     pub in_place: bool,
-    #[arg(
-        short = 's',
-        long = "simulate",
-        alias = "dry-run",
-        help = "Simulate trim operations without writing output files"
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            short = 's',
+            long = "simulate",
+            alias = "dry-run",
+            help = "Simulate trim operations without writing output files"
+        )
     )]
     pub dry_run: bool,
-    #[arg(
-        long,
-        alias = "untrim",
-        alias = "restore",
-        help = "Revert trimmed files by padding back to the nearest power-of-two size (not supported for xiso)"
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            alias = "untrim",
+            alias = "restore",
+            help = "Revert trimmed files by padding back to the nearest power-of-two size (not supported for xiso or rvz-scrub)"
+        )
     )]
     pub revert: bool,
-    #[arg(
+    #[cfg_attr(not(target_arch = "wasm32"), arg(
         long = "no-recursive",
         action = ArgAction::SetFalse,
         default_value_t = true,
         help = "Do not recursively scan subdirectories when input sources include folders"
-    )]
+    ))]
     pub recursive: bool,
-    #[arg(long, default_value = "auto")]
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long, default_value = "auto"))]
     pub threads: ThreadBudget,
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
 pub struct PatchApplyCommand {
-    #[arg(long)]
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long))]
     pub input: PathBuf,
-    #[arg(long = "select")]
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long = "select"))]
     pub select: Vec<String>,
-    #[arg(
-        long,
-        help = "Disable container auto-extract and patch the source bytes directly"
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            help = "Disable container auto-extract and patch the source bytes directly"
+        )
     )]
     pub no_extract: bool,
-    #[arg(
-        long,
-        help = "Disable default ignore filtering during patch-apply container payload resolution"
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            help = "Disable default ignore filtering during patch-apply container payload resolution"
+        )
     )]
     pub no_ignore: bool,
-    #[arg(
-        long = "patch",
-        required = true,
-        help = "Patch file(s) to apply in order; repeat --patch for each step"
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "patch",
+            required = true,
+            help = "Patch file(s) to apply in order; repeat --patch for each step"
+        )
     )]
     pub patches: Vec<PathBuf>,
-    #[arg(long)]
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long))]
     pub output: PathBuf,
-    #[arg(
-        long,
-        help = "Write raw patched bytes without the default patch-output compression step"
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            help = "Write raw patched bytes without the default patch-output compression step"
+        )
     )]
     pub no_compress: bool,
-    #[arg(
-        long = "compress-format",
-        help = "Patch-output compression container format (default: auto). Use `auto` to force auto selection."
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "compress-format",
+            help = "Patch-output compression container format (default: auto). Use `auto` to force auto selection."
+        )
     )]
     pub compress_format: Option<String>,
-    #[arg(
-        long = "compress-codec",
-        help = "Patch-output compression codec[:level] override (for example: --compress-codec zstd:9)"
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "compress-codec",
+            help = "Patch-output compression codec[:level] override (for example: --compress-codec zstd:9)"
+        )
     )]
     pub compress_codec: Option<String>,
-    #[arg(
+    #[cfg_attr(not(target_arch = "wasm32"), arg(
         long = "compress-level",
         value_enum,
         default_value_t = CompressionLevelProfile::Max,
         help = "Global patch-output compression level profile used when --compress-codec omits an explicit numeric level"
-    )]
+    ))]
     pub compress_level: CompressionLevelProfile,
-    #[arg(
-        long = "checksum-cache",
-        value_name = "ALGO=HEX",
-        help = "Seed effective patch input checksum cache before apply; repeat for multiple algorithms (for example: --checksum-cache crc32=1234abcd)"
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "checksum-cache",
+            value_name = "ALGO=HEX",
+            help = "Seed effective patch input checksum cache before apply; repeat for multiple algorithms (for example: --checksum-cache crc32=1234abcd)"
+        )
     )]
     pub checksum_cache: Vec<String>,
-    #[arg(
-        long = "validate-with-checksum",
-        value_name = "ALGO=HEX",
-        help = "Validate effective patch input checksum before apply; repeat for multiple algorithms (for example: --validate-with-checksum crc32=1234abcd)"
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "validate-with-checksum",
+            value_name = "ALGO=HEX",
+            help = "Validate effective patch input checksum before apply; repeat for multiple algorithms (for example: --validate-with-checksum crc32=1234abcd)"
+        )
     )]
     pub validate_with_checksums: Vec<String>,
-    #[arg(
-        long,
-        help = "Remove a detected ROM header before patch apply (A78/LNX/NES/FDS/SMC signatures; SNES/PCE copier-size rules)"
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            help = "Remove a detected ROM header before patch apply (A78/LNX/NES/FDS/SMC signatures; SNES/PCE copier-size rules)"
+        )
     )]
     pub strip_header: bool,
-    #[arg(
-        long,
-        help = "Add header bytes after patch apply (reuses stripped header bytes when available; defaults to 512-byte copier header)"
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            help = "Add header bytes after patch apply (reuses stripped header bytes when available; defaults to 512-byte copier header)"
+        )
     )]
     pub add_header: bool,
-    #[arg(
-        long,
-        help = "Repair supported ROM headers/checksums after patch apply (SNES/NES/GB/GBA/MD/SMS/N64/NDS and related profiles; auto-detect)"
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            help = "Repair supported ROM headers/checksums after patch apply (SNES/NES/GB/GBA/MD/SMS/N64/NDS and related profiles; auto-detect)"
+        )
     )]
     pub repair_checksum: bool,
-    #[arg(
-        long,
-        help = "Skip patch-provided checksum validation during patch apply (source, target, and patch-level checks when supported)"
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            help = "Skip patch-provided checksum validation during patch apply (source, target, and patch-level checks when supported)"
+        )
     )]
     pub ignore_checksum_validation: bool,
-    #[arg(long, default_value = "auto")]
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long, default_value = "auto"))]
     pub threads: ThreadBudget,
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
 pub struct PatchCreateCommand {
-    #[arg(long)]
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long))]
     pub original: PathBuf,
-    #[arg(long)]
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long))]
     pub modified: PathBuf,
-    #[arg(long)]
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long))]
     pub format: String,
-    #[arg(long)]
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long))]
     pub output: PathBuf,
-    #[arg(long, default_value = "auto")]
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long, default_value = "auto"))]
     pub threads: ThreadBudget,
 }
 
@@ -401,7 +493,10 @@ fn parse_wasm_cli() -> std::result::Result<Cli, String> {
 
     loop {
         let Some(arg) = args.first() else {
-            return Err("missing command (inspect|extract|checksum|compress|trim|patch-apply|patch-create)".into());
+            return Err(
+                "missing command (inspect|extract|checksum|compress|trim|patch-apply|patch-create)"
+                    .into(),
+            );
         };
         match arg.as_str() {
             "--json" => {
@@ -679,9 +774,7 @@ fn parse_wasm_compress(args: Vec<String>) -> std::result::Result<CompressCommand
         }
         if arg == "--output" {
             output = Some(PathBuf::from(parse_wasm_required_value(
-                &args,
-                &mut index,
-                "--output",
+                &args, &mut index, "--output",
             )?));
             continue;
         }
@@ -701,9 +794,7 @@ fn parse_wasm_compress(args: Vec<String>) -> std::result::Result<CompressCommand
         }
         if arg == "--level" {
             level = parse_wasm_compression_level(&parse_wasm_required_value(
-                &args,
-                &mut index,
-                "--level",
+                &args, &mut index, "--level",
             )?)?;
             continue;
         }
@@ -760,9 +851,7 @@ fn parse_wasm_trim(args: Vec<String>) -> std::result::Result<TrimCommand, String
         }
         if arg == "--output" {
             output = Some(PathBuf::from(parse_wasm_required_value(
-                &args,
-                &mut index,
-                "--output",
+                &args, &mut index, "--output",
             )?));
             continue;
         }
@@ -772,11 +861,7 @@ fn parse_wasm_trim(args: Vec<String>) -> std::result::Result<TrimCommand, String
             continue;
         }
         if arg == "--extension" || arg == "-e" {
-            extension = Some(parse_wasm_required_value(
-                &args,
-                &mut index,
-                "--extension",
-            )?);
+            extension = Some(parse_wasm_required_value(&args, &mut index, "--extension")?);
             continue;
         }
         if arg == "--in-place" || arg == "--inplace" || arg == "-i" {
@@ -867,9 +952,7 @@ fn parse_wasm_patch_apply(args: Vec<String>) -> std::result::Result<PatchApplyCo
         }
         if arg == "--input" {
             input = Some(PathBuf::from(parse_wasm_required_value(
-                &args,
-                &mut index,
-                "--input",
+                &args, &mut index, "--input",
             )?));
             continue;
         }
@@ -899,9 +982,7 @@ fn parse_wasm_patch_apply(args: Vec<String>) -> std::result::Result<PatchApplyCo
         }
         if arg == "--patch" {
             patches.push(PathBuf::from(parse_wasm_required_value(
-                &args,
-                &mut index,
-                "--patch",
+                &args, &mut index, "--patch",
             )?));
             continue;
         }
@@ -912,9 +993,7 @@ fn parse_wasm_patch_apply(args: Vec<String>) -> std::result::Result<PatchApplyCo
         }
         if arg == "--output" {
             output = Some(PathBuf::from(parse_wasm_required_value(
-                &args,
-                &mut index,
-                "--output",
+                &args, &mut index, "--output",
             )?));
             continue;
         }
@@ -1104,9 +1183,7 @@ fn parse_wasm_patch_create(args: Vec<String>) -> std::result::Result<PatchCreate
         }
         if arg == "--output" {
             output = Some(PathBuf::from(parse_wasm_required_value(
-                &args,
-                &mut index,
-                "--output",
+                &args, &mut index, "--output",
             )?));
             continue;
         }
@@ -1316,6 +1393,7 @@ const NDS_DOWNLOAD_PLAY_CERT_MAGIC: [u8; 2] = [0x61, 0x63];
 const NDS_DOWNLOAD_PLAY_CERT_SIZE_BYTES: u64 = 0x88;
 const TRIM_BINARY_SCAN_CHUNK_BYTES: usize = 128 * 1024;
 const XISO_TRIM_TEMP_SUFFIX: &str = "rom-weaver-trim-xiso.tmp";
+const RVZ_TRIM_TEMP_SUFFIX: &str = "rom-weaver-trim-rvz.tmp";
 const CHECKSUM_IGNORE_SIDECAR_EXTENSIONS: &[&str] = &[
     ".txt", ".nfo", ".diz", ".sfv", ".md5", ".sha1", ".sha256", ".sha512", ".crc", ".log", ".json",
 ];
@@ -1612,6 +1690,7 @@ enum TrimInputKind {
     Gba,
     ThreeDs,
     Xiso,
+    RvzScrub,
 }
 
 impl TrimInputKind {
@@ -1643,13 +1722,14 @@ impl TrimInputKind {
             Self::Gba => "gba",
             Self::ThreeDs => "3ds",
             Self::Xiso => "xiso",
+            Self::RvzScrub => "rvz-scrub",
         }
     }
 
     const fn default_padding_byte(self) -> u8 {
         match self {
             Self::ThreeDs => 0xFF,
-            Self::NdsFamily | Self::Gba | Self::Xiso => 0x00,
+            Self::NdsFamily | Self::Gba | Self::Xiso | Self::RvzScrub => 0x00,
         }
     }
 }
@@ -3152,7 +3232,8 @@ impl CliApp {
         let mut first_error = None;
         let mut mode_counts: BTreeMap<&'static str, usize> = BTreeMap::new();
         let mut single_detail = None;
-        let mut irreversible_trimmed_count = 0usize;
+        let mut irreversible_xiso = false;
+        let mut irreversible_rvz_scrub = false;
 
         for trim_source in &trim_sources {
             let output_path = if in_place {
@@ -3160,7 +3241,7 @@ impl CliApp {
             } else if let Some(explicit_output) = output.as_ref() {
                 explicit_output.clone()
             } else {
-                Self::default_trim_output_path(&trim_source.path, &extension)
+                Self::default_trim_output_path(trim_source, &extension)
             };
             let output_label = if in_place {
                 "in-place".to_string()
@@ -3182,19 +3263,25 @@ impl CliApp {
                 thread_execution.clone(),
             );
 
-            match Self::trim_file(
+            match self.trim_file(
                 &trim_source.path,
                 &output_path,
                 in_place,
                 dry_run,
                 operation,
                 trim_source.kind,
+                &context,
             ) {
                 Ok(outcome) => {
                     let mode_count = mode_counts.entry(outcome.mode).or_insert(0);
                     *mode_count = mode_count.saturating_add(1);
                     if operation == TrimOperation::Trim && !outcome.revert_supported {
-                        irreversible_trimmed_count = irreversible_trimmed_count.saturating_add(1);
+                        if outcome.mode == TrimInputKind::Xiso.mode_label() {
+                            irreversible_xiso = true;
+                        }
+                        if outcome.mode == TrimInputKind::RvzScrub.mode_label() {
+                            irreversible_rvz_scrub = true;
+                        }
                     }
                     if outcome.already_target_size {
                         already_trimmed_count = already_trimmed_count.saturating_add(1);
@@ -3270,12 +3357,17 @@ impl CliApp {
             );
         }
 
-        let irreversible_warning =
-            if operation == TrimOperation::Trim && irreversible_trimmed_count > 0 {
-                "; warning=trimmed xiso output cannot be reverted to original padding; keep backup"
-            } else {
-                ""
-            };
+        let irreversible_warning = if operation != TrimOperation::Trim {
+            ""
+        } else if irreversible_xiso && !irreversible_rvz_scrub {
+            "; warning=trimmed xiso output cannot be reverted to original padding; keep backup"
+        } else if irreversible_rvz_scrub && !irreversible_xiso {
+            "; warning=trimmed rvz-scrub output cannot be reverted to original source format; keep backup"
+        } else if irreversible_xiso && irreversible_rvz_scrub {
+            "; warning=some trimmed outputs cannot be reverted to original source format; keep backups"
+        } else {
+            ""
+        };
 
         self.finish(
             "trim",
@@ -4237,7 +4329,7 @@ impl CliApp {
     fn default_profile_codec_kind_for_format(format_name: &str) -> Option<ProfileCodecKind> {
         let normalized = format_name.trim().to_ascii_lowercase();
         match normalized.as_str() {
-            "zip" | "7z" | "tar.gz" | "tar.bz2" | "tar.xz" | "gz" | "bz2" | "xz" => {
+            "zip" | "7z" | "tar.gz" | "tar.bz2" | "tar.xz" | "gz" | "bz2" | "xz" | "wia" => {
                 Some(ProfileCodecKind::Standard)
             }
             "zipx" | "zst" | "zstd" | "rvz" | "z3ds" | "3ds" | "chd" => {
@@ -4563,15 +4655,26 @@ impl CliApp {
             return Some(kind);
         }
 
-        let extension = path.extension()?.to_str()?;
-        if extension.eq_ignore_ascii_case("iso")
+        if path
+            .extension()
+            .and_then(|value| value.to_str())
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("iso"))
             && let Some(handler) = self.containers.probe(path)
             && handler.descriptor().matches_name("xiso")
         {
             return Some(TrimInputKind::Xiso);
         }
 
+        if self.is_rvz_scrub_candidate(path) {
+            return Some(TrimInputKind::RvzScrub);
+        }
+
         None
+    }
+
+    fn is_rvz_scrub_candidate(&self, path: &Path) -> bool {
+        let recommendation = self.containers.recommend_compress_format(path);
+        recommendation.format_name.eq_ignore_ascii_case("rvz")
     }
 
     fn read_checksum_trim_plan(&self, source: &Path) -> Result<ChecksumTrimPlan> {
@@ -4628,6 +4731,10 @@ impl CliApp {
                     preserved_download_play_cert: false,
                 })
             }
+            TrimInputKind::RvzScrub => Err(RomWeaverError::Validation(format!(
+                "checksum trim-fix is not supported for rvz-scrub inputs: `{}`",
+                source.display()
+            ))),
         }
     }
 
@@ -4705,24 +4812,31 @@ impl CliApp {
         Ok(())
     }
 
-    fn default_trim_output_path(source: &Path, extension: &str) -> PathBuf {
-        let source_extension = source
-            .extension()
-            .and_then(|value| value.to_str())
-            .unwrap_or("bin");
+    fn default_trim_output_path(source: &TrimSource, extension: &str) -> PathBuf {
+        let source_extension = if source.kind == TrimInputKind::RvzScrub {
+            "rvz"
+        } else {
+            source
+                .path
+                .extension()
+                .and_then(|value| value.to_str())
+                .unwrap_or("bin")
+        };
         let extension = extension.replace("{ext}", source_extension);
-        let mut output = source.to_path_buf();
+        let mut output = source.path.to_path_buf();
         output.set_extension(extension);
         output
     }
 
     fn trim_file(
+        &self,
         source: &Path,
         destination: &Path,
         in_place: bool,
         dry_run: bool,
         operation: TrimOperation,
         kind: TrimInputKind,
+        context: &OperationContext,
     ) -> Result<NdsTrimOutcome> {
         match kind {
             TrimInputKind::NdsFamily => {
@@ -4738,6 +4852,9 @@ impl CliApp {
             ),
             TrimInputKind::Xiso => {
                 Self::trim_xiso_file(source, destination, in_place, dry_run, operation)
+            }
+            TrimInputKind::RvzScrub => {
+                self.trim_rvz_scrub_file(source, destination, in_place, dry_run, operation, context)
             }
         }
     }
@@ -4975,6 +5092,116 @@ impl CliApp {
         })
     }
 
+    fn trim_rvz_scrub_file(
+        &self,
+        source: &Path,
+        destination: &Path,
+        in_place: bool,
+        dry_run: bool,
+        operation: TrimOperation,
+        context: &OperationContext,
+    ) -> Result<NdsTrimOutcome> {
+        if operation == TrimOperation::Revert {
+            return Err(RomWeaverError::Validation(
+                "rvz-scrub trim revert is not supported; original source container layout cannot be reconstructed"
+                    .to_string(),
+            ));
+        }
+
+        let original_size = fs::metadata(source)?.len();
+        if original_size == 0 {
+            return Err(RomWeaverError::Validation(format!(
+                "input is empty and cannot be processed: `{}`",
+                source.display()
+            )));
+        }
+
+        if dry_run {
+            let result_size = self
+                .measure_rvz_scrubbed_size(source, context)
+                .map_err(|error| {
+                    RomWeaverError::Validation(format!(
+                        "rvz-scrub trim simulation failed while rebuilding `{}`: {error}",
+                        source.display()
+                    ))
+                })?;
+            return Ok(NdsTrimOutcome {
+                original_size,
+                result_size,
+                output_path: if in_place {
+                    source.to_path_buf()
+                } else {
+                    destination.to_path_buf()
+                },
+                mode: TrimInputKind::RvzScrub.mode_label(),
+                preserved_download_play_cert: false,
+                already_target_size: result_size == original_size,
+                revert_supported: false,
+            });
+        }
+
+        if in_place || source == destination {
+            return Err(RomWeaverError::Validation(
+                "rvz-scrub trim requires a separate output file; in-place replacement is not supported"
+                    .to_string(),
+            ));
+        }
+
+        self.create_rvz_scrubbed_output(source, destination, context)?;
+        let result_size = fs::metadata(destination)?.len();
+        Ok(NdsTrimOutcome {
+            original_size,
+            result_size,
+            output_path: destination.to_path_buf(),
+            mode: TrimInputKind::RvzScrub.mode_label(),
+            preserved_download_play_cert: false,
+            already_target_size: result_size == original_size,
+            revert_supported: false,
+        })
+    }
+
+    fn create_rvz_scrubbed_output(
+        &self,
+        source: &Path,
+        destination: &Path,
+        context: &OperationContext,
+    ) -> Result<()> {
+        if let Some(parent) = destination.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let handler = self.containers.find_by_name("rvz").ok_or_else(|| {
+            RomWeaverError::Unsupported(
+                "rvz handler is not registered; rvz-scrub trim is unavailable".to_string(),
+            )
+        })?;
+        handler
+            .create(
+                &ContainerCreateRequest {
+                    inputs: vec![source.to_path_buf()],
+                    output: destination.to_path_buf(),
+                    format: "rvz".to_string(),
+                    codec: None,
+                    level: None,
+                },
+                context,
+            )
+            .map_err(|error| {
+                RomWeaverError::Validation(format!(
+                    "rvz-scrub trim failed while rebuilding `{}`: {error}",
+                    source.display()
+                ))
+            })?;
+        Ok(())
+    }
+
+    fn measure_rvz_scrubbed_size(&self, source: &Path, context: &OperationContext) -> Result<u64> {
+        let temp_path = Self::temporary_rvz_trim_path(source);
+        self.create_rvz_scrubbed_output(source, &temp_path, context)?;
+        let measured = fs::metadata(&temp_path)?.len();
+        fs::remove_file(&temp_path).ok();
+        Ok(measured)
+    }
+
     fn open_xiso_trim_source_filesystem(source_path: &Path) -> Result<XisoTrimSourceFilesystem> {
         let source_file = File::options()
             .read(true)
@@ -5034,6 +5261,26 @@ impl CliApp {
         let temp_name = format!(
             ".{name}.{}-{}-{timestamp}",
             XISO_TRIM_TEMP_SUFFIX,
+            Self::runtime_process_id()
+        );
+        source
+            .parent()
+            .map(|parent| parent.join(&temp_name))
+            .unwrap_or_else(|| PathBuf::from(temp_name))
+    }
+
+    fn temporary_rvz_trim_path(source: &Path) -> PathBuf {
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|value| value.as_nanos())
+            .unwrap_or_default();
+        let name = source
+            .file_name()
+            .map(|value| value.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "rvz".to_string());
+        let temp_name = format!(
+            ".{name}.{}-{}-{timestamp}",
+            RVZ_TRIM_TEMP_SUFFIX,
             Self::runtime_process_id()
         );
         source
