@@ -183,10 +183,23 @@ impl ThreadExecution {
 #[derive(Clone)]
 pub struct SharedThreadPool {
     size: usize,
-    inner: Arc<ThreadPool>,
+    backend: ThreadPoolBackend,
+}
+
+#[derive(Clone)]
+enum ThreadPoolBackend {
+    Rayon(Arc<ThreadPool>),
+    Inline,
 }
 
 impl SharedThreadPool {
+    fn inline(size: usize) -> Self {
+        Self {
+            size: size.max(1),
+            backend: ThreadPoolBackend::Inline,
+        }
+    }
+
     pub fn with_size(size: usize) -> Result<Self> {
         let size = size.max(1);
         if let Some(reason) = Self::forced_build_failure_reason(size) {
@@ -199,7 +212,7 @@ impl SharedThreadPool {
             .map_err(|error| RomWeaverError::ThreadPoolBuild(error.to_string()))?;
         Ok(Self {
             size,
-            inner: Arc::new(inner),
+            backend: ThreadPoolBackend::Rayon(Arc::new(inner)),
         })
     }
 
@@ -211,6 +224,15 @@ impl SharedThreadPool {
             used_parallelism = execution.used_parallelism,
             "building thread pool from execution plan"
         );
+        if !execution.used_parallelism {
+            trace!(
+                requested_threads = execution.requested_threads,
+                effective_threads = execution.effective_threads,
+                thread_mode = ?execution.thread_mode,
+                "using inline single-thread execution pool"
+            );
+            return Ok(Self::inline(execution.effective_threads));
+        }
         Self::with_size(execution.effective_threads)
     }
 
@@ -263,7 +285,10 @@ impl SharedThreadPool {
     }
 
     pub fn install<R: Send>(&self, operation: impl FnOnce() -> R + Send) -> R {
-        self.inner.install(operation)
+        match &self.backend {
+            ThreadPoolBackend::Rayon(inner) => inner.install(operation),
+            ThreadPoolBackend::Inline => operation(),
+        }
     }
 
     fn forced_build_failure_reason(size: usize) -> Option<String> {
@@ -287,6 +312,8 @@ impl SharedThreadPool {
 mod tests {
     use super::{SharedThreadPool, ThreadBudget, ThreadCapability, ThreadExecution, ThreadMode};
     use crate::RomWeaverError;
+
+    static ENV_VAR_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     struct ScopedEnvVar {
         key: &'static str,
@@ -491,6 +518,7 @@ mod tests {
 
     #[test]
     fn test_force_mode_fails_multi_only() {
+        let _env_lock = ENV_VAR_LOCK.lock().expect("env var lock");
         let _guard = ScopedEnvVar::set("ROM_WEAVER_TEST_THREAD_POOL_FAIL", "multi");
         assert!(
             SharedThreadPool::with_size(4).is_err(),
@@ -500,5 +528,38 @@ mod tests {
             SharedThreadPool::with_size(1).is_ok(),
             "multi mode should allow single-thread pools"
         );
+    }
+
+    #[test]
+    fn with_execution_uses_inline_path_for_effective_single_thread() {
+        let _env_lock = ENV_VAR_LOCK.lock().expect("env var lock");
+        let _guard = ScopedEnvVar::set("ROM_WEAVER_TEST_THREAD_POOL_FAIL", "single");
+        let execution = ThreadCapability::parallel(Some(1)).negotiate(ThreadBudget::Fixed(8));
+        let pool = SharedThreadPool::with_execution(&execution)
+            .expect("single-thread execution should bypass rayon pool builds");
+        assert_eq!(pool.size(), 1);
+        assert_eq!(pool.install(|| 7usize), 7);
+    }
+
+    #[test]
+    fn fallback_to_single_thread_uses_inline_path_after_parallel_build_failure() {
+        let _env_lock = ENV_VAR_LOCK.lock().expect("env var lock");
+        let _guard = ScopedEnvVar::set("ROM_WEAVER_TEST_THREAD_POOL_FAIL", "all");
+        let planned = ThreadCapability::parallel(None).negotiate(ThreadBudget::Fixed(8));
+        let (execution, pool) =
+            SharedThreadPool::with_execution_fallback(planned).expect("fallback should succeed");
+        assert_eq!(execution.requested_threads, 8);
+        assert_eq!(execution.effective_threads, 1);
+        assert!(!execution.used_parallelism);
+        assert!(execution.thread_fallback);
+        assert!(
+            execution
+                .thread_fallback_reason
+                .as_deref()
+                .is_some_and(|reason| reason.contains("forced thread pool build failure")),
+            "fallback reason should include the build error"
+        );
+        assert_eq!(pool.size(), 1);
+        assert_eq!(pool.install(|| 3usize), 3);
     }
 }

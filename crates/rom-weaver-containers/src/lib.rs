@@ -1154,21 +1154,23 @@ impl ContainerHandler for ZipContainerHandler {
             let task_count = tasks.len().max(1);
             let (execution, pool) =
                 context.build_pool(ThreadCapability::parallel(Some(task_count)))?;
-            let worker_count = execution.effective_threads.max(1);
-            let chunk_size = tasks.len().div_ceil(worker_count).max(1);
             let source = request.source.clone();
-            let chunk_bytes = pool.install(|| {
-                tasks
-                    .par_chunks(chunk_size)
-                    .map(|chunk| self.extract_task_chunk(&source, chunk))
-                    .collect::<Result<Vec<_>>>()
-            })?;
-            (
-                execution,
+            let written_bytes = if execution.used_parallelism {
+                let worker_count = execution.effective_threads.max(1);
+                let chunk_size = tasks.len().div_ceil(worker_count).max(1);
+                let chunk_bytes = pool.install(|| {
+                    tasks
+                        .par_chunks(chunk_size)
+                        .map(|chunk| self.extract_task_chunk(&source, chunk))
+                        .collect::<Result<Vec<_>>>()
+                })?;
                 chunk_bytes
                     .into_iter()
-                    .fold(0u64, |acc, value| acc.saturating_add(value)),
-            )
+                    .fold(0u64, |acc, value| acc.saturating_add(value))
+            } else {
+                self.extract_task_chunk(&source, &tasks)?
+            };
+            (execution, written_bytes)
         };
 
         Ok(OperationReport::succeeded(
@@ -1203,12 +1205,19 @@ impl ContainerHandler for ZipContainerHandler {
         } else {
             let (execution, pool) =
                 context.build_pool(ThreadCapability::parallel(Some(create_tasks.len())))?;
-            let staged_result = pool.install(|| {
+            let staged_result = if execution.used_parallelism {
+                pool.install(|| {
+                    create_tasks
+                        .par_iter()
+                        .map(|task| self.compress_create_task(task, method, level))
+                        .collect::<Result<Vec<_>>>()
+                })
+            } else {
                 create_tasks
-                    .par_iter()
+                    .iter()
                     .map(|task| self.compress_create_task(task, method, level))
                     .collect::<Result<Vec<_>>>()
-            });
+            };
             let mut staged_artifacts = match staged_result {
                 Ok(staged_artifacts) => staged_artifacts,
                 Err(error) => {
@@ -6285,14 +6294,28 @@ impl ContainerHandler for Z3dsContainerHandler {
         let output_path = request.out_dir.join(&output_name);
 
         let source = request.source.clone();
-        let decode_result = pool.install(|| {
+        let decode_result = if execution.used_parallelism {
+            pool.install(|| {
+                tasks
+                    .par_iter()
+                    .map(|task| {
+                        self.extract_chunk_task(
+                            &source,
+                            payload_start,
+                            header.compressed_size,
+                            task,
+                        )
+                    })
+                    .collect::<Result<Vec<_>>>()
+            })
+        } else {
             tasks
-                .par_iter()
+                .iter()
                 .map(|task| {
                     self.extract_chunk_task(&source, payload_start, header.compressed_size, task)
                 })
                 .collect::<Result<Vec<_>>>()
-        });
+        };
         if let Err(error) = decode_result {
             self.cleanup_extract_tasks(&tasks);
             return Err(error);
@@ -6373,12 +6396,19 @@ impl ContainerHandler for Z3dsContainerHandler {
         }
 
         let source = input_path.clone();
-        let compress_result = pool.install(|| {
+        let compress_result = if execution.used_parallelism {
+            pool.install(|| {
+                create_tasks
+                    .par_iter()
+                    .map(|task| self.compress_create_task(&source, level, task))
+                    .collect::<Result<Vec<_>>>()
+            })
+        } else {
             create_tasks
-                .par_iter()
+                .iter()
                 .map(|task| self.compress_create_task(&source, level, task))
                 .collect::<Result<Vec<_>>>()
-        });
+        };
         let mut frames = match compress_result {
             Ok(frames) => frames,
             Err(error) => {
@@ -9851,6 +9881,62 @@ mod tests {
     }
 
     #[test]
+    fn zip_runtime_threads_fall_back_to_single_thread_for_single_entry() {
+        let temp_dir = temp_dir_path("zip-thread-single-entry");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input_dir = temp_dir.join("input");
+        fs::create_dir_all(&input_dir).expect("input dir");
+        let input_path = input_dir.join("single.bin");
+        let source = (0..65_536)
+            .map(|index| (index % 239) as u8)
+            .collect::<Vec<_>>();
+        fs::write(&input_path, &source).expect("write fixture");
+        let archive_path = temp_dir.join("payload.zip");
+        let output_dir = temp_dir.join("out");
+
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("zip").expect("zip handler");
+
+        let create_report = handler
+            .create(
+                &ContainerCreateRequest {
+                    inputs: vec![input_dir.clone()],
+                    output: archive_path.clone(),
+                    format: "zip".to_string(),
+                    codec: None,
+                    level: None,
+                },
+                &test_context(&temp_dir, 8),
+            )
+            .expect("create zip");
+        let create_execution = create_report.thread_execution.expect("thread execution");
+        assert_eq!(create_execution.requested_threads, 8);
+        assert_eq!(create_execution.effective_threads, 1);
+        assert!(!create_execution.used_parallelism);
+
+        let extract_report = handler
+            .extract(
+                &rom_weaver_core::ContainerExtractRequest {
+                    source: archive_path,
+                    out_dir: output_dir.clone(),
+                    selections: Vec::new(),
+                    split_bin: false,
+                },
+                &test_context(&temp_dir, 8),
+            )
+            .expect("extract zip");
+        let extract_execution = extract_report.thread_execution.expect("thread execution");
+        assert_eq!(extract_execution.requested_threads, 8);
+        assert_eq!(extract_execution.effective_threads, 1);
+        assert!(!extract_execution.used_parallelism);
+
+        let extracted = fs::read(output_dir.join("input/single.bin")).expect("read extracted file");
+        assert_eq!(extracted, source);
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
     fn tar_xz_runtime_threads_match_capabilities_for_create_and_extract() {
         let temp_dir = temp_dir_path("tar-xz-thread-parity");
         fs::create_dir_all(&temp_dir).expect("temp dir");
@@ -10684,6 +10770,64 @@ mod tests {
         assert_eq!(execution.effective_threads, 1);
         assert!(!execution.used_parallelism);
         assert!(output_path.exists());
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn z3ds_extract_runtime_threads_match_capability_with_single_chunk_input() {
+        let temp_dir = temp_dir_path("z3ds-extract-thread-parity");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input_path = temp_dir.join("disc.3ds");
+        let archive_path = temp_dir.join("disc.z3ds");
+        let output_dir = temp_dir.join("out");
+        let source = (0..65_536)
+            .map(|index| (index % 223) as u8)
+            .collect::<Vec<_>>();
+        fs::write(&input_path, &source).expect("fixture");
+
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("z3ds").expect("z3ds handler");
+        let capabilities = handler.capabilities();
+        let create_report = handler
+            .create(
+                &ContainerCreateRequest {
+                    inputs: vec![input_path.clone()],
+                    output: archive_path.clone(),
+                    format: "z3ds".to_string(),
+                    codec: None,
+                    level: None,
+                },
+                &test_context(&temp_dir, 8),
+            )
+            .expect("z3ds create");
+        let create_execution = create_report.thread_execution.expect("thread execution");
+        assert_eq!(create_execution.effective_threads, 1);
+        assert!(!create_execution.used_parallelism);
+
+        let extract_report = handler
+            .extract(
+                &rom_weaver_core::ContainerExtractRequest {
+                    source: archive_path,
+                    out_dir: output_dir.clone(),
+                    selections: Vec::new(),
+                    split_bin: false,
+                },
+                &test_context(&temp_dir, 8),
+            )
+            .expect("z3ds extract");
+        let extract_execution = extract_report.thread_execution.expect("thread execution");
+        assert!(
+            capabilities
+                .extract_threads
+                .supports_execution(&extract_execution)
+        );
+        assert_eq!(extract_execution.requested_threads, 8);
+        assert_eq!(extract_execution.effective_threads, 1);
+        assert!(!extract_execution.used_parallelism);
+
+        let extracted = fs::read(output_dir.join("disc.3ds")).expect("read extracted file");
+        assert_eq!(extracted, source);
 
         let _ = fs::remove_dir_all(temp_dir);
     }
