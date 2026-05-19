@@ -2,12 +2,16 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
 import {
   createNodeFsRunner,
   createRomWeaverWasiRunner,
 } from '../src/rom-weaver-wasi-api.mjs';
+
+const TEST_DIR = fileURLToPath(new URL('.', import.meta.url));
+const BROTLI_WASM_PATH = join(TEST_DIR, '..', 'rom-weaver-cli.wasm.br');
 
 async function withTempFixture(run) {
   const dir = await mkdtemp(join(tmpdir(), 'rom-weaver-wasm-test-'));
@@ -73,4 +77,84 @@ test('nodefs runner supports mounted guest paths', async () => {
     assert.equal(terminal.status, 'succeeded');
     assert.equal(terminal.command, 'checksum');
   });
+});
+
+test('runJson emits trace events when --trace is enabled', async () => {
+  await withTempFixture(async ({ sourcePath }) => {
+    const runner = createRomWeaverWasiRunner();
+    let streamedTraceEvents = 0;
+    let streamedTraceLines = 0;
+    const result = await runner.runJson(
+      [
+        '--trace',
+        'checksum',
+        sourcePath,
+        '--algo',
+        'crc32',
+        '--no-extract',
+      ],
+      {
+        onTraceEvent() {
+          streamedTraceEvents += 1;
+        },
+        onTraceNonJsonLine() {
+          streamedTraceLines += 1;
+        },
+      },
+    );
+
+    assert.equal(result.exitCode, 0);
+    assert.equal(result.ok, true);
+    assert.ok((result.traceEvents.length + result.traceNonJsonLines.length) > 0);
+    assert.ok((streamedTraceEvents + streamedTraceLines) > 0);
+  });
+});
+
+test('runner supports explicit .wasm.br module paths', async () => {
+  await withTempFixture(async ({ sourcePath }) => {
+    const runner = createRomWeaverWasiRunner({ wasmPath: BROTLI_WASM_PATH });
+    const result = await runner.runJson([
+      'checksum',
+      sourcePath,
+      '--algo',
+      'crc32',
+      '--no-extract',
+    ]);
+
+    assert.equal(result.exitCode, 0);
+    assert.equal(result.ok, true);
+    const terminal = result.events.at(-1);
+    assert.equal(terminal.status, 'succeeded');
+  });
+});
+
+test('runner rejects missing wasm artifacts', async () => {
+  const runner = createRomWeaverWasiRunner({
+    wasmPath: join(TEST_DIR, '..', 'missing-rom-weaver-cli.wasm'),
+  });
+  await assert.rejects(
+    runner.run(['--help']),
+    /WASM artifact not found/i,
+  );
+});
+
+test('runner stdin normalization accepts supported types and rejects invalid input', async () => {
+  const runner = createRomWeaverWasiRunner();
+  const unknownCommand = ['definitely-not-a-command'];
+  const validStdinValues = [
+    'stdin text',
+    new Uint8Array([1, 2, 3]),
+    new Uint8Array([4, 5, 6]).buffer,
+  ];
+
+  for (const stdin of validStdinValues) {
+    const result = await runner.run(unknownCommand, { stdin });
+    assert.notEqual(result.exitCode, 0);
+    assert.equal(result.ok, false);
+  }
+
+  await assert.rejects(
+    runner.run(unknownCommand, { stdin: 123 }),
+    /stdin must be a string, Uint8Array, ArrayBuffer, or undefined/i,
+  );
 });

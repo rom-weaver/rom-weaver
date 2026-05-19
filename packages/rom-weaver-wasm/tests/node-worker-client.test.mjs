@@ -41,3 +41,44 @@ test('node worker client initializes and runs checksum with runJson', async () =
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test('node worker client rejects runJson before init', async () => {
+  const client = createNodeWorkerClient();
+  try {
+    await assert.rejects(
+      client.runJson(['checksum', '/tmp/does-not-exist.bin', '--algo', 'crc32', '--no-extract']),
+      /worker is not initialized/i,
+    );
+  } finally {
+    await client.terminate();
+  }
+});
+
+test('node worker client handles concurrent runJson calls after init', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'rom-weaver-wasm-worker-parallel-'));
+  const sourceAPath = join(dir, 'a.bin');
+  const sourceBPath = join(dir, 'b.bin');
+  const client = createNodeWorkerClient();
+
+  try {
+    await writeFile(sourceAPath, Buffer.from('parallel fixture a', 'utf8'));
+    await writeFile(sourceBPath, Buffer.from('parallel fixture b', 'utf8'));
+    await client.init('wasi');
+
+    const [resultA, resultB] = await Promise.all([
+      client.runJson(['checksum', sourceAPath, '--algo', 'crc32', '--no-extract']),
+      client.runJson(['checksum', sourceBPath, '--algo', 'crc32', '--no-extract']),
+    ]);
+
+    for (const result of [resultA, resultB]) {
+      assert.equal(result.exitCode, 0);
+      assert.equal(result.ok, true);
+      const terminal = result.events.at(-1);
+      assert.equal(terminal.status, 'succeeded');
+      assert.equal(terminal.command, 'checksum');
+    }
+  } finally {
+    await client.terminate();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
