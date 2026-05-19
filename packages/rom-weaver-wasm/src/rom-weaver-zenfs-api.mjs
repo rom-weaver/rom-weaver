@@ -5,6 +5,8 @@ import {
   parseTraceJsonLines,
 } from './rom-weaver-wasi-api.mjs';
 
+let runJsonProgressFlagSupport = null;
+
 export async function createRomWeaverZenFsNode(options = {}) {
   const zenfs = await import('@zenfs/core');
   const nodeFs = await import('node:fs');
@@ -527,8 +529,46 @@ function normalizeArgs(args) {
   return args.map((value) => String(value));
 }
 
+function prepareRunJsonArgs(args) {
+  const normalizedArgs = normalizeArgs(args);
+  const hasProgressToggle = hasExplicitProgressToggle(normalizedArgs);
+  return hasProgressToggle
+    ? ['--json', ...normalizedArgs]
+    : ['--json', '--progress', ...normalizedArgs];
+}
+
+function hasExplicitProgressToggle(args) {
+  const normalizedArgs = Array.isArray(args) ? args.map((value) => String(value)) : normalizeArgs(args);
+  return normalizedArgs.includes('--progress') || normalizedArgs.includes('--no-progress');
+}
+
+function prepareLegacyRunJsonArgs(args) {
+  return ['--json', ...normalizeArgs(args)];
+}
+
+function shouldRetryRunJsonWithoutProgress(result, attemptedArgs) {
+  if (!attemptedArgs.includes('--progress')) {
+    return false;
+  }
+  if (!result || result.exitCode === 0) {
+    return false;
+  }
+  const stderr = typeof result.stderr === 'string' ? result.stderr : '';
+  return /unknown (command|option)\s+`--progress`/i.test(stderr);
+}
+
 async function runJsonWithParsers(run, args = [], runOptions = {}) {
-  const result = await run(['--json', ...normalizeArgs(args)], runOptions);
+  const explicitProgressToggle = hasExplicitProgressToggle(args);
+  const attemptedArgs = !explicitProgressToggle && runJsonProgressFlagSupport === false
+    ? prepareLegacyRunJsonArgs(args)
+    : prepareRunJsonArgs(args);
+  let result = await run(attemptedArgs, runOptions);
+  if (!explicitProgressToggle && shouldRetryRunJsonWithoutProgress(result, attemptedArgs)) {
+    runJsonProgressFlagSupport = false;
+    result = await run(prepareLegacyRunJsonArgs(args), runOptions);
+  } else if (!explicitProgressToggle && attemptedArgs.includes('--progress') && result.exitCode === 0) {
+    runJsonProgressFlagSupport = true;
+  }
   const parsed = parseJsonLines(result.stdout, {
     onEvent: runOptions.onEvent,
     onNonJsonLine: runOptions.onNonJsonLine,
