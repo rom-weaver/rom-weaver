@@ -2,6 +2,7 @@ mod aps_n64;
 mod apsgba;
 mod bdf;
 mod bps;
+mod bsp;
 mod dldi;
 mod dps;
 mod gdiff;
@@ -32,6 +33,7 @@ use aps_n64::ApsN64PatchHandler;
 use apsgba::ApsGbaPatchHandler;
 use bdf::BdfPatchHandler;
 use bps::BpsPatchHandler;
+use bsp::BspPatchHandler;
 use dldi::DldiPatchHandler;
 use dps::DpsPatchHandler;
 use gdiff::GdiffPatchHandler;
@@ -139,6 +141,12 @@ const BDF_BSDIFF40: FormatDescriptor = FormatDescriptor {
     name: "BDF/BSDIFF40",
     aliases: &["bdf", "bsdiff", "bsdiff40"],
     extensions: &[".bdf", ".bsdiff", ".bsdiff40"],
+};
+const BSP: FormatDescriptor = FormatDescriptor {
+    family: OperationFamily::Patch,
+    name: "BSP",
+    aliases: &[],
+    extensions: &[".bsp"],
 };
 const MOD: FormatDescriptor = FormatDescriptor {
     family: OperationFamily::Patch,
@@ -279,6 +287,7 @@ impl PatchRegistry {
         handlers.push(Arc::new(PatPatchHandler::new(&PAT)));
         handlers.push(Arc::new(IpsPatchHandler::new_ebp(&EBP)));
         handlers.push(Arc::new(BdfPatchHandler::new(&BDF_BSDIFF40)));
+        handlers.push(Arc::new(BspPatchHandler::new(&BSP)));
         handlers.push(Arc::new(PmsrPatchHandler::new(&MOD)));
         handlers.push(Arc::new(DldiPatchHandler::new(&DLDI)));
         handlers.push(Arc::new(DpsPatchHandler::new(&DPS)));
@@ -542,6 +551,7 @@ mod tests {
             "PAT",
             "EBP",
             "BDF/BSDIFF40",
+            "BSP",
             "MOD",
             "DLDI",
             "DPS",
@@ -568,6 +578,16 @@ mod tests {
         assert!(capabilities.parse);
         assert!(capabilities.apply);
         assert!(capabilities.create);
+    }
+
+    #[test]
+    fn bsp_is_wired_to_supported_handler() {
+        let registry = PatchRegistry::new();
+        let handler = registry.find_by_name("bsp").expect("bsp handler");
+        let capabilities = handler.capabilities();
+        assert!(capabilities.parse);
+        assert!(capabilities.apply);
+        assert!(!capabilities.create);
     }
 
     #[test]
@@ -838,6 +858,13 @@ mod tests {
     }
 
     #[test]
+    fn probe_routes_bsp_extension_to_bsp_handler() {
+        let registry = PatchRegistry::new();
+        let handler = registry.probe(Path::new("update.bsp")).expect("bsp probe");
+        assert_eq!(handler.descriptor().name, "BSP");
+    }
+
+    #[test]
     fn probe_does_not_route_bspatch_extensions() {
         let registry = PatchRegistry::new();
         for path in ["update.bspatch", "update.bspatch40"] {
@@ -872,6 +899,13 @@ mod tests {
         let registry = PatchRegistry::new();
         let handler = registry.find_by_name("gdiff").expect("gdiff name");
         assert_eq!(handler.descriptor().name, "GDIFF");
+    }
+
+    #[test]
+    fn find_by_name_routes_bsp_name_to_bsp_handler() {
+        let registry = PatchRegistry::new();
+        let handler = registry.find_by_name("bsp").expect("bsp name");
+        assert_eq!(handler.descriptor().name, "BSP");
     }
 
     #[test]
