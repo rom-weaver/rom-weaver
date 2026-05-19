@@ -43,6 +43,7 @@ use ppf::PpfPatchHandler;
 use rom_weaver_core::{FormatDescriptor, OperationFamily, PatchHandler, Result, RomWeaverError};
 use rup::RupPatchHandler;
 use solid::SolidPatchHandler;
+use tracing::trace;
 use ups::UpsPatchHandler;
 #[cfg(not(target_family = "wasm"))]
 use vcdiff::VcdiffPatchHandler;
@@ -282,7 +283,12 @@ impl PatchRegistry {
         handlers.push(Arc::new(DldiPatchHandler::new(&DLDI)));
         handlers.push(Arc::new(DpsPatchHandler::new(&DPS)));
         handlers.push(Arc::new(PdsPatchHandler::new(&PDS)));
-        Self { handlers }
+        Self {
+            handlers: handlers
+                .into_iter()
+                .map(rom_weaver_core::traced_patch_handler)
+                .collect(),
+        }
     }
 
     pub fn handlers(&self) -> &[Arc<dyn PatchHandler>] {
@@ -295,17 +301,50 @@ impl PatchRegistry {
         let xdelta_extension = is_xdelta_extension(path);
 
         #[cfg(target_family = "wasm")]
+        trace!(
+            patch = %path.display(),
+            ebp_extension,
+            "patch registry probe start"
+        );
+        #[cfg(not(target_family = "wasm"))]
+        trace!(
+            patch = %path.display(),
+            ebp_extension,
+            xdelta_extension,
+            "patch registry probe start"
+        );
+
+        #[cfg(target_family = "wasm")]
         let signature_match = self.probe_by_signature(path, ebp_extension);
         #[cfg(not(target_family = "wasm"))]
         let signature_match = self.probe_by_signature(path, ebp_extension, xdelta_extension);
         if let Some(signature_match) = signature_match {
+            trace!(
+                patch = %path.display(),
+                format = signature_match.descriptor().name,
+                "patch registry probe matched by signature"
+            );
             return Some(signature_match);
         }
 
-        self.handlers
+        let extension_match = self
+            .handlers
             .iter()
             .find(|handler| handler.descriptor().matches_path(path))
-            .cloned()
+            .cloned();
+        if let Some(handler) = extension_match.as_ref() {
+            trace!(
+                patch = %path.display(),
+                format = handler.descriptor().name,
+                "patch registry probe matched by extension fallback"
+            );
+        } else {
+            trace!(
+                patch = %path.display(),
+                "patch registry probe found no matching handler"
+            );
+        }
+        extension_match
     }
 
     pub fn find_by_name(&self, name: &str) -> Option<Arc<dyn PatchHandler>> {
@@ -331,68 +370,108 @@ impl PatchRegistry {
         ebp_extension: bool,
         #[cfg(not(target_family = "wasm"))] xdelta_extension: bool,
     ) -> Option<Arc<dyn PatchHandler>> {
-        let prefix = read_signature_prefix(path, DLDI_SIGNATURE.len())?;
+        let Some(prefix) = read_signature_prefix(path, DLDI_SIGNATURE.len()) else {
+            trace!(
+                patch = %path.display(),
+                "patch signature probe skipped (unable to read signature bytes)"
+            );
+            return None;
+        };
 
         if prefix.starts_with(BPS_SIGNATURE) {
-            return self.find_by_name("bps");
+            return self.probe_signature_match(path, "BPS1", "bps");
         }
         if prefix.starts_with(UPS_SIGNATURE) {
-            return self.find_by_name("ups");
+            return self.probe_signature_match(path, "UPS1", "ups");
         }
         #[cfg(not(target_family = "wasm"))]
         if prefix.starts_with(&VCDIFF_SIGNATURE) {
             if xdelta_extension {
-                return self.find_by_name("xdelta");
+                return self.probe_signature_match(path, "VCDIFF+xdelta extension", "xdelta");
             }
-            return self.find_by_name("vcdiff");
+            return self.probe_signature_match(path, "VCDIFF", "vcdiff");
         }
         if prefix.starts_with(&GDIFF_SIGNATURE) {
-            return self.find_by_name("gdiff");
+            return self.probe_signature_match(path, "GDIFF", "gdiff");
         }
         if prefix.starts_with(APS_N64_SIGNATURE) {
-            return self.find_by_name("aps");
+            return self.probe_signature_match(path, "APS N64", "aps");
         }
         if prefix.starts_with(APS_GBA_SIGNATURE) {
-            return self.find_by_name("apsgba");
+            return self.probe_signature_match(path, "APS GBA", "apsgba");
         }
         if prefix.starts_with(RUP_SIGNATURE) {
-            return self.find_by_name("rup");
+            return self.probe_signature_match(path, "RUP", "rup");
         }
         if prefix.starts_with(PPF1_SIGNATURE)
             || prefix.starts_with(PPF2_SIGNATURE)
             || prefix.starts_with(PPF3_SIGNATURE)
         {
-            return self.find_by_name("ppf");
+            return self.probe_signature_match(path, "PPF", "ppf");
         }
         if prefix.starts_with(IPS32_SIGNATURE) {
-            return self.find_by_name("ips32");
+            return self.probe_signature_match(path, "IPS32", "ips32");
         }
         if prefix.starts_with(IPS_SIGNATURE) {
             if let Some(resolved) = self.probe_ambiguous_ips_by_signature(path) {
+                trace!(
+                    patch = %path.display(),
+                    format = resolved.descriptor().name,
+                    "patch signature probe resolved ambiguous IPS variant"
+                );
                 return Some(resolved);
             }
             if ebp_extension {
-                return self.find_by_name("ebp");
+                return self.probe_signature_match(path, "IPS+ebp extension", "ebp");
             }
-            return self.find_by_name("ips");
+            return self.probe_signature_match(path, "IPS", "ips");
         }
         if prefix.starts_with(SOLID_SIGNATURE) {
-            return self.find_by_name("solid");
+            return self.probe_signature_match(path, "SOLID", "solid");
         }
         if prefix.starts_with(MOD_SIGNATURE) {
-            return self.find_by_name("mod");
+            return self.probe_signature_match(path, "PMSR/MOD", "mod");
         }
         if prefix.starts_with(&DLDI_SIGNATURE) {
-            return self.find_by_name("dldi");
+            return self.probe_signature_match(path, "DLDI", "dldi");
         }
         if prefix.starts_with(BSDIFF_SIGNATURE) {
-            return self.find_by_name("bdf");
+            return self.probe_signature_match(path, "BSDIFF40", "bdf");
         }
         if has_pat_record_signature(path) {
-            return self.find_by_name("pat");
+            return self.probe_signature_match(path, "PAT record", "pat");
         }
 
+        trace!(
+            patch = %path.display(),
+            "patch signature probe found no signature match"
+        );
         None
+    }
+
+    fn probe_signature_match(
+        &self,
+        path: &Path,
+        signature: &'static str,
+        handler_name: &'static str,
+    ) -> Option<Arc<dyn PatchHandler>> {
+        let handler = self.find_by_name(handler_name);
+        if let Some(resolved) = handler.as_ref() {
+            trace!(
+                patch = %path.display(),
+                signature = signature,
+                format = resolved.descriptor().name,
+                "patch signature probe matched"
+            );
+        } else {
+            trace!(
+                patch = %path.display(),
+                signature = signature,
+                handler = handler_name,
+                "patch signature probe matched bytes but no handler was registered"
+            );
+        }
+        handler
     }
 }
 

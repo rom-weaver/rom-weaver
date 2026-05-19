@@ -14,6 +14,7 @@ rom-weaver-checksum = { path = "../rom-weaver-checksum" }
 rom-weaver-core = { path = "../rom-weaver-core" }
 rayon.workspace = true
 serde_json.workspace = true
+tracing.workspace = true
 zip.workspace = true
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

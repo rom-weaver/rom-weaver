@@ -1309,7 +1309,22 @@ impl CliApp {
         context: &OperationContext,
         labels: AutoExtractResolutionLabels<'_>,
     ) -> Result<ResolvedChecksumSource> {
+        trace!(
+            source = %source.display(),
+            selections = select.len(),
+            no_extract,
+            no_ignore,
+            command = labels.command,
+            family = ?labels.family,
+            format = ?labels.format,
+            source_label = labels.source_label,
+            "starting auto-extract source resolution"
+        );
         if no_extract {
+            trace!(
+                source = %source.display(),
+                "auto-extract source resolution disabled by flag"
+            );
             return Ok(ResolvedChecksumSource {
                 source: source.to_path_buf(),
                 extracted_archives: 0,
@@ -1323,22 +1338,53 @@ impl CliApp {
         let mut cleanup_paths = Vec::new();
 
         loop {
+            trace!(
+                current_source = %current_source.display(),
+                depth,
+                extracted_archives,
+                "auto-extract iteration"
+            );
             let Some(handler) = self.containers.probe(&current_source) else {
+                trace!(
+                    current_source = %current_source.display(),
+                    "auto-extract stopped: no container handler matched source"
+                );
                 break;
             };
-            if handler.descriptor().matches_name("xiso") || !handler.capabilities().extract {
+            let is_xiso = handler.descriptor().matches_name("xiso");
+            let can_extract = handler.capabilities().extract;
+            if is_xiso || !can_extract {
+                trace!(
+                    current_source = %current_source.display(),
+                    format = handler.descriptor().name,
+                    is_xiso,
+                    can_extract,
+                    "auto-extract stopped: matched handler is not eligible for extract"
+                );
                 break;
             }
 
             let inspect_request = ContainerInspectRequest {
                 source: current_source.clone(),
             };
-            if handler.inspect(&inspect_request, context).is_err() {
+            if let Err(error) = handler.inspect(&inspect_request, context) {
+                trace!(
+                    current_source = %current_source.display(),
+                    format = handler.descriptor().name,
+                    error = %error,
+                    "auto-extract stopped: handler inspect failed"
+                );
                 break;
             }
 
             let next_depth = depth + 1;
             if next_depth > MAX_NESTED_EXTRACT_DEPTH {
+                trace!(
+                    current_source = %current_source.display(),
+                    next_depth,
+                    max_depth = MAX_NESTED_EXTRACT_DEPTH,
+                    "auto-extract failed: exceeded max recursion depth"
+                );
                 return Err(RomWeaverError::Validation(format!(
                     "{} extract exceeded max depth of {MAX_NESTED_EXTRACT_DEPTH} at `{}`",
                     labels.source_label,
@@ -1346,6 +1392,12 @@ impl CliApp {
                 )));
             }
             if extracted_archives >= MAX_NESTED_EXTRACT_ARCHIVES {
+                trace!(
+                    source = %source.display(),
+                    extracted_archives,
+                    max_archives = MAX_NESTED_EXTRACT_ARCHIVES,
+                    "auto-extract failed: exceeded max archive count"
+                );
                 return Err(RomWeaverError::Validation(format!(
                     "{} extract exceeded max archive count of {MAX_NESTED_EXTRACT_ARCHIVES}",
                     labels.source_label
@@ -1388,9 +1440,26 @@ impl CliApp {
             cleanup_paths.push(out_dir.clone());
             extracted_archives = extracted_archives.saturating_add(1);
             depth = next_depth;
+            trace!(
+                source = %current_source.display(),
+                format = handler.descriptor().name,
+                out_dir = %out_dir.display(),
+                extracted_archives,
+                depth,
+                "auto-extract archive extraction completed"
+            );
 
             let all_candidates = self.collect_checksum_extract_candidates(&out_dir)?;
+            trace!(
+                source = %current_source.display(),
+                candidate_count = all_candidates.len(),
+                "auto-extract collected extracted candidates"
+            );
             if all_candidates.is_empty() {
+                trace!(
+                    source = %current_source.display(),
+                    "auto-extract failed: extracted archive produced no candidates"
+                );
                 return Err(RomWeaverError::Validation(format!(
                     "{} payload extraction produced no files for `{}`",
                     labels.source_label,
@@ -1406,6 +1475,12 @@ impl CliApp {
                     .filter(|candidate| !candidate.ignored)
                     .cloned()
                     .collect::<Vec<_>>();
+                trace!(
+                    source = %current_source.display(),
+                    candidate_count = all_candidates.len(),
+                    non_ignored_count = non_ignored.len(),
+                    "auto-extract applied candidate ignore filters"
+                );
                 if non_ignored.is_empty() {
                     if self.interactive_selection_enabled {
                         if let Some(selected) = self.prompt_for_checksum_candidate(
@@ -1414,14 +1489,28 @@ impl CliApp {
                             labels.source_label,
                             true,
                         )? {
+                            trace!(
+                                source = %current_source.display(),
+                                selected = %selected.display_name,
+                                selected_path = %selected.source.display(),
+                                "auto-extract continued with interactively selected ignored candidate"
+                            );
                             current_source = selected.source;
                             continue;
                         }
+                        trace!(
+                            source = %current_source.display(),
+                            "auto-extract failed: interactive selection cancelled while all candidates were ignored"
+                        );
                         return Err(RomWeaverError::Validation(format!(
                             "interactive selection was cancelled for `{}`",
                             current_source.display()
                         )));
                     }
+                    trace!(
+                        source = %current_source.display(),
+                        "auto-extract failed: all candidates ignored and no interactive selection"
+                    );
                     return Err(RomWeaverError::Validation(format!(
                         "all extracted {} candidates from `{}` were ignored by default filters; rerun with --no-ignore or pass --select <pattern>",
                         labels.source_label,
@@ -1438,9 +1527,20 @@ impl CliApp {
                         labels.source_label,
                         false,
                     )? {
+                        trace!(
+                            source = %current_source.display(),
+                            selected = %selected.display_name,
+                            selected_path = %selected.source.display(),
+                            "auto-extract continued with interactively selected candidate"
+                        );
                         current_source = selected.source;
                         continue;
                     }
+                    trace!(
+                        source = %current_source.display(),
+                        candidate_count = candidates.len(),
+                        "auto-extract failed: interactive ambiguous candidate selection cancelled"
+                    );
                     return Err(RomWeaverError::Validation(format!(
                         "interactive selection was cancelled for `{}`",
                         current_source.display()
@@ -1451,6 +1551,12 @@ impl CliApp {
                     .map(|candidate| format!("`{}`", candidate.display_name))
                     .collect::<Vec<_>>()
                     .join(", ");
+                trace!(
+                    source = %current_source.display(),
+                    candidate_count = candidates.len(),
+                    candidates = %choices,
+                    "auto-extract failed: ambiguous candidates without interactive selection"
+                );
                 return Err(RomWeaverError::Validation(format!(
                     "{} payload resolution is ambiguous for `{}`; candidates: {choices}. Pass --select <pattern> to choose one payload",
                     labels.source_label,
@@ -1458,13 +1564,26 @@ impl CliApp {
                 )));
             }
 
-            current_source = candidates
+            let selected_candidate = candidates
                 .into_iter()
                 .next()
-                .expect("checked candidate count")
-                .source;
+                .expect("checked candidate count");
+            trace!(
+                source = %current_source.display(),
+                selected = %selected_candidate.display_name,
+                selected_path = %selected_candidate.source.display(),
+                "auto-extract selected single candidate"
+            );
+            current_source = selected_candidate.source;
         }
 
+        trace!(
+            source = %source.display(),
+            resolved_source = %current_source.display(),
+            extracted_archives,
+            cleanup_paths = cleanup_paths.len(),
+            "completed auto-extract source resolution"
+        );
         Ok(ResolvedChecksumSource {
             source: current_source,
             extracted_archives,
@@ -4426,6 +4545,11 @@ impl CliApp {
         root_out_dir: &Path,
         context: &OperationContext,
     ) -> Result<usize> {
+        trace!(
+            root_source = %root_source.display(),
+            root_out_dir = %root_out_dir.display(),
+            "starting nested archive extraction scan"
+        );
         let root_source =
             fs::canonicalize(root_source).unwrap_or_else(|_| root_source.to_path_buf());
         let mut nested_count = 0usize;
@@ -4434,15 +4558,38 @@ impl CliApp {
 
         let mut queue = VecDeque::new();
         self.enqueue_nested_candidates(root_out_dir, 1, &processed, &mut queue)?;
+        trace!(
+            initial_queue_len = queue.len(),
+            "nested archive extraction initial queue prepared"
+        );
 
         while let Some((source, depth)) = queue.pop_front() {
+            trace!(
+                source = %source.display(),
+                depth,
+                queue_remaining = queue.len(),
+                extracted_nested_archives = nested_count,
+                "processing nested archive candidate"
+            );
             if depth > MAX_NESTED_EXTRACT_DEPTH {
+                trace!(
+                    source = %source.display(),
+                    depth,
+                    max_depth = MAX_NESTED_EXTRACT_DEPTH,
+                    "nested archive extraction failed: exceeded max depth"
+                );
                 return Err(RomWeaverError::Validation(format!(
                     "nested extract exceeded max depth of {MAX_NESTED_EXTRACT_DEPTH} at `{}`",
                     source.display()
                 )));
             }
             if nested_count >= MAX_NESTED_EXTRACT_ARCHIVES {
+                trace!(
+                    source = %source.display(),
+                    extracted_nested_archives = nested_count,
+                    max_archives = MAX_NESTED_EXTRACT_ARCHIVES,
+                    "nested archive extraction failed: exceeded max archive count"
+                );
                 return Err(RomWeaverError::Validation(format!(
                     "nested extract exceeded max archive count of {MAX_NESTED_EXTRACT_ARCHIVES}"
                 )));
@@ -4450,10 +4597,18 @@ impl CliApp {
 
             let canonical_source = fs::canonicalize(&source).unwrap_or_else(|_| source.clone());
             if !processed.insert(canonical_source) {
+                trace!(
+                    source = %source.display(),
+                    "skipping nested archive candidate already processed"
+                );
                 continue;
             }
 
             let Some(handler) = self.containers.probe(&source) else {
+                trace!(
+                    source = %source.display(),
+                    "skipping nested archive candidate with no container handler"
+                );
                 continue;
             };
 
@@ -4462,11 +4617,23 @@ impl CliApp {
             let inspect_request = ContainerInspectRequest {
                 source: source.clone(),
             };
-            if handler.inspect(&inspect_request, context).is_err() {
+            if let Err(error) = handler.inspect(&inspect_request, context) {
+                trace!(
+                    source = %source.display(),
+                    format = handler.descriptor().name,
+                    error = %error,
+                    "skipping nested archive candidate because inspect failed"
+                );
                 continue;
             }
 
             let nested_out_dir = self.next_nested_out_dir(&source);
+            trace!(
+                source = %source.display(),
+                format = handler.descriptor().name,
+                nested_out_dir = %nested_out_dir.display(),
+                "extracting nested archive candidate"
+            );
             let nested_request = ContainerExtractRequest {
                 source: source.clone(),
                 selections: Vec::new(),
@@ -4481,10 +4648,28 @@ impl CliApp {
                 ))
             })?;
             nested_count = nested_count.saturating_add(1);
+            trace!(
+                source = %source.display(),
+                nested_out_dir = %nested_out_dir.display(),
+                format = handler.descriptor().name,
+                extracted_nested_archives = nested_count,
+                "nested archive extraction completed"
+            );
 
             self.enqueue_nested_candidates(&nested_out_dir, depth + 1, &processed, &mut queue)?;
+            trace!(
+                source = %source.display(),
+                queue_len = queue.len(),
+                next_depth = depth + 1,
+                "queued additional nested archive candidates"
+            );
         }
 
+        trace!(
+            extracted_nested_archives = nested_count,
+            processed_sources = processed.len(),
+            "completed nested archive extraction scan"
+        );
         Ok(nested_count)
     }
 
@@ -4495,7 +4680,15 @@ impl CliApp {
         processed: &HashSet<PathBuf>,
         queue: &mut VecDeque<(PathBuf, usize)>,
     ) -> Result<()> {
+        trace!(
+            root = %root.display(),
+            depth,
+            processed_count = processed.len(),
+            existing_queue_len = queue.len(),
+            "scanning nested extract candidates"
+        );
         let mut directories = vec![root.to_path_buf()];
+        let mut queued_count = 0usize;
         while let Some(directory) = directories.pop() {
             let mut entries =
                 fs::read_dir(&directory)?.collect::<std::result::Result<Vec<_>, _>>()?;
@@ -4520,8 +4713,24 @@ impl CliApp {
                     continue;
                 }
                 queue.push_back((path, depth));
+                queued_count = queued_count.saturating_add(1);
+                if let Some((queued_path, queued_depth)) = queue.back() {
+                    trace!(
+                        source = %queued_path.display(),
+                        depth = *queued_depth,
+                        queue_len = queue.len(),
+                        "queued nested extract candidate"
+                    );
+                }
             }
         }
+        trace!(
+            root = %root.display(),
+            depth,
+            queued_count,
+            final_queue_len = queue.len(),
+            "completed nested candidate scan"
+        );
         Ok(())
     }
 
