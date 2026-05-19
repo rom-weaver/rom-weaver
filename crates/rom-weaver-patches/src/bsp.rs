@@ -1,30 +1,12 @@
 use std::{fs, path::Path};
 
-#[cfg(all(not(feature = "bsp-native"), feature = "bsp-js"))]
-use boa_engine::{
-    Context as JsContext, JsValue, Source, js_string, native_function::NativeFunction,
-    object::builtins::JsArrayBuffer, property::Attribute,
-};
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
     PatchCapabilities, PatchCreateRequest, PatchHandler, Result, RomWeaverError, ThreadCapability,
 };
 
-#[cfg(any(test, all(not(feature = "bsp-native"), feature = "bsp-js")))]
+#[cfg(test)]
 const BSP_VM_SOURCE: &str = include_str!("bsp_vm_runtime.js");
-#[cfg(all(not(feature = "bsp-native"), feature = "bsp-js"))]
-const BSP_APPLY_SCRIPT: &str = r#"
-const __rom_weaver_patcher = new BSPPatcher(__rom_weaver_patch, __rom_weaver_input);
-__rom_weaver_patcher.print = function (_message) {
-  __rom_weaver_patcher.run();
-};
-__rom_weaver_patcher.menu = function (_options) {
-  throw "interactive menu instructions are not supported in this runtime";
-};
-__rom_weaver_patcher.run();
-globalThis.__rom_weaver_state = __rom_weaver_patcher.state;
-globalThis.__rom_weaver_result = __rom_weaver_patcher.result;
-"#;
 
 pub struct BspPatchHandler {
     descriptor: &'static FormatDescriptor,
@@ -110,138 +92,7 @@ impl PatchHandler for BspPatchHandler {
 }
 
 fn apply_bsp_patch_bytes(patch_bytes: Vec<u8>, input_bytes: Vec<u8>) -> Result<Vec<u8>> {
-    #[cfg(feature = "bsp-native")]
-    {
-        return crate::bsp_native_vm::apply_bsp_patch_bytes_native(patch_bytes, input_bytes);
-    }
-
-    #[cfg(all(not(feature = "bsp-native"), feature = "bsp-js"))]
-    {
-        let mut context = JsContext::default();
-        register_set_timeout_polyfill(&mut context)?;
-
-        let patch_buffer =
-            JsArrayBuffer::from_byte_block(patch_bytes, &mut context).map_err(map_js_error)?;
-        let input_buffer =
-            JsArrayBuffer::from_byte_block(input_bytes, &mut context).map_err(map_js_error)?;
-
-        context
-            .register_global_property(
-                js_string!("__rom_weaver_patch"),
-                patch_buffer,
-                Attribute::all(),
-            )
-            .map_err(map_js_error)?;
-        context
-            .register_global_property(
-                js_string!("__rom_weaver_input"),
-                input_buffer,
-                Attribute::all(),
-            )
-            .map_err(map_js_error)?;
-
-        context
-            .eval(Source::from_bytes(BSP_VM_SOURCE.as_bytes()))
-            .map_err(map_js_error)?;
-        context
-            .eval(Source::from_bytes(BSP_APPLY_SCRIPT.as_bytes()))
-            .map_err(map_js_error)?;
-
-        let state_value = context
-            .global_object()
-            .get(js_string!("__rom_weaver_state"), &mut context)
-            .map_err(map_js_error)?;
-        let result_value = context
-            .global_object()
-            .get(js_string!("__rom_weaver_result"), &mut context)
-            .map_err(map_js_error)?;
-
-        let Some(state) = state_value.as_number().map(|value| value as i32) else {
-            return Err(RomWeaverError::Validation(
-                "BSP runtime returned an invalid completion state".into(),
-            ));
-        };
-
-        match state {
-            4 => {
-                let Some(result_object) = result_value.as_object() else {
-                    return Err(RomWeaverError::Validation(
-                        "BSP runtime returned success without an output buffer".into(),
-                    ));
-                };
-                let result_buffer =
-                    JsArrayBuffer::from_object(result_object.clone()).map_err(map_js_error)?;
-                let Some(bytes) = result_buffer.data() else {
-                    return Err(RomWeaverError::Validation(
-                        "BSP runtime returned a detached output buffer".into(),
-                    ));
-                };
-                Ok(bytes.to_vec())
-            }
-            3 => {
-                let exit_status = result_value.as_number().unwrap_or(-1.0);
-                Err(RomWeaverError::Validation(format!(
-                    "BSP patch script exited with failure status {}",
-                    exit_status as i64
-                )))
-            }
-            2 => Err(RomWeaverError::Validation(format!(
-                "BSP patch execution failed: {}",
-                describe_js_value(&result_value, &mut context)
-            ))),
-            _ => Err(RomWeaverError::Validation(format!(
-                "BSP runtime ended in unsupported state {}",
-                state
-            ))),
-        }
-    }
-
-    #[cfg(not(any(feature = "bsp-native", feature = "bsp-js")))]
-    {
-        let _ = patch_bytes;
-        let _ = input_bytes;
-        Err(RomWeaverError::Unsupported(
-            "BSP patch apply is not enabled in this build".into(),
-        ))
-    }
-}
-
-#[cfg(all(not(feature = "bsp-native"), feature = "bsp-js"))]
-fn register_set_timeout_polyfill(context: &mut JsContext) -> Result<()> {
-    context
-        .register_global_builtin_callable(
-            js_string!("setTimeout"),
-            2,
-            NativeFunction::from_fn_ptr(|_, args, context| {
-                if let Some(callback_value) = args.first() {
-                    if let Some(callback) = callback_value.as_object() {
-                        if callback.is_callable() {
-                            callback.call(&JsValue::undefined(), &[], context)?;
-                        }
-                    }
-                }
-                Ok(JsValue::new(0))
-            }),
-        )
-        .map_err(map_js_error)
-}
-
-#[cfg(all(not(feature = "bsp-native"), feature = "bsp-js"))]
-fn map_js_error(error: boa_engine::JsError) -> RomWeaverError {
-    RomWeaverError::Validation(format!("BSP runtime error: {error}"))
-}
-
-#[cfg(all(not(feature = "bsp-native"), feature = "bsp-js"))]
-fn describe_js_value(value: &JsValue, context: &mut JsContext) -> String {
-    if let Some(string) = value.as_string() {
-        return string.to_std_string_escaped();
-    }
-
-    if let Ok(string) = value.to_string(context) {
-        return string.to_std_string_escaped();
-    }
-
-    value.display().to_string()
+    crate::bsp_native_vm::apply_bsp_patch_bytes_native(patch_bytes, input_bytes)
 }
 
 #[cfg(test)]
@@ -359,7 +210,7 @@ const patchBuffer = patch.buffer.slice(patch.byteOffset, patch.byteOffset + patc
 const inputBuffer = input.buffer.slice(input.byteOffset, input.byteOffset + input.byteLength);
 const patcher = new ctx.BSPPatcher(patchBuffer, inputBuffer);
 patcher.print = function (_message) { patcher.run(); };
-patcher.menu = function (_options) { throw new Error("menu unsupported in parity harness"); };
+patcher.menu = function (_options) { patcher.run(0); };
 patcher.success = function (out) {
   const output = Buffer.from(new Uint8Array(out)).toString("hex");
   process.stdout.write(JSON.stringify({ state: 4, out: output }));
@@ -534,6 +385,64 @@ patcher.run();
                 }
             }
         }
+    }
+
+    #[test]
+    fn apply_matches_reference_runtime_menu_selection() {
+        if Command::new("node").arg("--version").output().is_err() {
+            eprintln!("skipping BSP reference parity test because Node.js is unavailable");
+            return;
+        }
+
+        let temp = TestDir::new();
+        let runtime_path = temp.child("reference_bsppatch.js");
+        fs::write(&runtime_path, BSP_VM_SOURCE).expect("reference runtime fixture");
+
+        fn push_word(buffer: &mut Vec<u8>, value: u32) {
+            buffer.extend_from_slice(&value.to_le_bytes());
+        }
+
+        let mut patch = Vec::new();
+        patch.push(0x60); // seek 0
+        push_word(&mut patch, 0);
+        patch.push(0x6a); // menu v0, table
+        patch.push(0x00);
+        push_word(&mut patch, 64);
+        patch.push(0x54); // ifne v0, 0, alt
+        patch.push(0x00);
+        push_word(&mut patch, 0);
+        push_word(&mut patch, 31);
+        patch.push(0x18); // writebyte 'A'
+        patch.push(0x41);
+        patch.push(0x06); // exit 0
+        push_word(&mut patch, 0);
+        patch.push(0x18); // alt: writebyte 'B'
+        patch.push(0x42);
+        patch.push(0x06); // exit 0
+        push_word(&mut patch, 0);
+
+        while patch.len() < 64 {
+            patch.push(0);
+        }
+        push_word(&mut patch, 80);
+        push_word(&mut patch, 82);
+        push_word(&mut patch, 0xFFFF_FFFF);
+        while patch.len() < 80 {
+            patch.push(0);
+        }
+        patch.extend_from_slice(b"A\0B\0");
+
+        let input = vec![0x00];
+        let reference = run_reference_patcher(&runtime_path, &patch, &input);
+        let ours = apply_bsp_patch_bytes(patch, input).expect("native apply");
+        let expected = match reference {
+            ReferenceOutcome::Success(bytes) => bytes,
+            ReferenceOutcome::Failure(code) => panic!("reference failed with status {code}"),
+            ReferenceOutcome::Error(error) => panic!("reference errored: {error}"),
+        };
+
+        assert_eq!(ours, expected, "menu selection parity mismatch");
+        assert_eq!(ours, vec![0x41]);
     }
 
     #[test]

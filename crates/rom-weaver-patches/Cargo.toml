@@ -5,13 +5,7 @@ license.workspace = true
 rust-version.workspace = true
 version.workspace = true
 
-[features]
-default = ["bsp-js"]
-bsp-js = ["dep:boa_engine"]
-bsp-native = ["dep:sha1"]
-
 [dependencies]
-boa_engine = { workspace = true, optional = true }
 crc32fast.workspace = true
 md-5.workspace = true
 memmap2.workspace = true
@@ -20,7 +14,7 @@ rom-weaver-checksum = { path = "../rom-weaver-checksum" }
 rom-weaver-core = { path = "../rom-weaver-core" }
 rayon.workspace = true
 serde_json.workspace = true
-sha1 = { workspace = true, optional = true }
+sha1.workspace = true
 tracing.workspace = true
 
 [build-dependencies]

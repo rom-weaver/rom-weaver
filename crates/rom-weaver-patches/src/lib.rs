@@ -2,9 +2,7 @@ mod aps_n64;
 mod apsgba;
 mod bdf;
 mod bps;
-#[cfg(any(feature = "bsp-js", feature = "bsp-native"))]
 mod bsp;
-#[cfg(feature = "bsp-native")]
 mod bsp_native_vm;
 mod dldi;
 mod dps;
@@ -33,7 +31,6 @@ use aps_n64::ApsN64PatchHandler;
 use apsgba::ApsGbaPatchHandler;
 use bdf::BdfPatchHandler;
 use bps::BpsPatchHandler;
-#[cfg(any(feature = "bsp-js", feature = "bsp-native"))]
 use bsp::BspPatchHandler;
 use dldi::DldiPatchHandler;
 use dps::DpsPatchHandler;
@@ -139,7 +136,6 @@ const BDF_BSDIFF40: FormatDescriptor = FormatDescriptor {
     aliases: &["bdf", "bsdiff", "bsdiff40"],
     extensions: &[".bdf", ".bsdiff", ".bsdiff40"],
 };
-#[cfg(any(feature = "bsp-js", feature = "bsp-native"))]
 const BSP: FormatDescriptor = FormatDescriptor {
     family: OperationFamily::Patch,
     name: "BSP",
@@ -264,7 +260,6 @@ impl PatchRegistry {
         handlers.push(Arc::new(PatPatchHandler::new(&PAT)));
         handlers.push(Arc::new(IpsPatchHandler::new_ebp(&EBP)));
         handlers.push(Arc::new(BdfPatchHandler::new(&BDF_BSDIFF40)));
-        #[cfg(any(feature = "bsp-js", feature = "bsp-native"))]
         handlers.push(Arc::new(BspPatchHandler::new(&BSP)));
         handlers.push(Arc::new(PmsrPatchHandler::new(&MOD)));
         handlers.push(Arc::new(DldiPatchHandler::new(&DLDI)));
@@ -514,7 +509,6 @@ mod tests {
             "DLDI",
             "DPS",
         ]);
-        #[cfg(any(feature = "bsp-js", feature = "bsp-native"))]
         expected.insert(
             expected.iter().position(|name| *name == "MOD").unwrap(),
             "BSP",
@@ -542,7 +536,6 @@ mod tests {
         assert!(capabilities.create);
     }
 
-    #[cfg(any(feature = "bsp-js", feature = "bsp-native"))]
     #[test]
     fn bsp_is_wired_to_supported_handler() {
         let registry = PatchRegistry::new();
@@ -803,7 +796,6 @@ mod tests {
         assert_eq!(handler.descriptor().name, "MOD");
     }
 
-    #[cfg(any(feature = "bsp-js", feature = "bsp-native"))]
     #[test]
     fn probe_routes_bsp_extension_to_bsp_handler() {
         let registry = PatchRegistry::new();
@@ -848,7 +840,6 @@ mod tests {
         assert_eq!(handler.descriptor().name, "GDIFF");
     }
 
-    #[cfg(any(feature = "bsp-js", feature = "bsp-native"))]
     #[test]
     fn find_by_name_routes_bsp_name_to_bsp_handler() {
         let registry = PatchRegistry::new();

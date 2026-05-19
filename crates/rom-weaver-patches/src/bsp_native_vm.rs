@@ -779,22 +779,31 @@ impl BspVm {
             0x6A | 0x6B => {
                 let variable = args[0] as u8;
                 let mut address = args[1];
-                let mut options = 0usize;
+                let mut option_addresses = Vec::new();
                 loop {
                     let option = self.get_patch_word(address)?;
                     if option == 0xFFFF_FFFF {
                         break;
                     }
-                    options += 1;
+                    option_addresses.push(option);
                     address = address.checked_add(4).ok_or_else(|| {
                         "attempted to read past the end of the patch space".to_string()
                     })?;
                 }
-                if options == 0 {
+
+                if option_addresses.is_empty() {
                     self.set_variable(variable, 0xFFFF_FFFF);
                     return Ok(StepControl::Continue);
                 }
-                Err("interactive menu instructions are not supported in this runtime".to_string())
+
+                // Native BSP is non-interactive today, so menu instructions pick the first entry.
+                // We still decode all strings to preserve UTF-8 validation semantics.
+                for option_address in option_addresses {
+                    let _ = self.utf8_decode(option_address)?;
+                }
+
+                self.set_variable(variable, 0);
+                Ok(StepControl::Continue)
             }
             0x6C | 0x6D | 0x6E | 0x6F => {
                 let start = args[0];
