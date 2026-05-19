@@ -8,6 +8,10 @@ use std::{
 };
 
 #[allow(unused_imports)]
+use libflac_sys as _;
+#[allow(unused_imports)]
+use libz_sys as _;
+#[allow(unused_imports)]
 use zstd_sys as _;
 
 const ERROR_BUFFER_LEN: usize = 1024;
