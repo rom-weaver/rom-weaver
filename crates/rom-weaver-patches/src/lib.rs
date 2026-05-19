@@ -6,6 +6,7 @@ mod dldi;
 mod dps;
 mod gdiff;
 mod ips;
+mod pat;
 mod pds;
 mod pmsr;
 mod ppf;
@@ -35,6 +36,7 @@ use dldi::DldiPatchHandler;
 use dps::DpsPatchHandler;
 use gdiff::GdiffPatchHandler;
 use ips::IpsPatchHandler;
+use pat::{has_pat_record_signature, PatPatchHandler};
 use pds::PdsPatchHandler;
 use pmsr::PmsrPatchHandler;
 use ppf::PpfPatchHandler;
@@ -118,6 +120,12 @@ const PPF: FormatDescriptor = FormatDescriptor {
     name: "PPF",
     aliases: &[],
     extensions: &[".ppf"],
+};
+const PAT: FormatDescriptor = FormatDescriptor {
+    family: OperationFamily::Patch,
+    name: "PAT",
+    aliases: &["ffp", "fireflower"],
+    extensions: &[".pat", ".ffp"],
 };
 const EBP: FormatDescriptor = FormatDescriptor {
     family: OperationFamily::Patch,
@@ -267,6 +275,7 @@ impl PatchRegistry {
         handlers.push(Arc::new(ApsGbaPatchHandler::new(&APSGBA)));
         handlers.push(Arc::new(RupPatchHandler::new(&RUP)));
         handlers.push(Arc::new(PpfPatchHandler::new(&PPF)));
+        handlers.push(Arc::new(PatPatchHandler::new(&PAT)));
         handlers.push(Arc::new(IpsPatchHandler::new_ebp(&EBP)));
         handlers.push(Arc::new(BdfPatchHandler::new(&BDF_BSDIFF40)));
         handlers.push(Arc::new(PmsrPatchHandler::new(&MOD)));
@@ -379,6 +388,9 @@ impl PatchRegistry {
         if prefix.starts_with(BSDIFF_SIGNATURE) {
             return self.find_by_name("bdf");
         }
+        if has_pat_record_signature(path) {
+            return self.find_by_name("pat");
+        }
 
         None
     }
@@ -448,6 +460,7 @@ mod tests {
             "APSGBA",
             "RUP",
             "PPF",
+            "PAT",
             "EBP",
             "BDF/BSDIFF40",
             "MOD",
@@ -482,6 +495,16 @@ mod tests {
     fn ebp_is_wired_to_supported_handler() {
         let registry = PatchRegistry::new();
         let handler = registry.find_by_name("ebp").expect("ebp handler");
+        let capabilities = handler.capabilities();
+        assert!(capabilities.parse);
+        assert!(capabilities.apply);
+        assert!(capabilities.create);
+    }
+
+    #[test]
+    fn pat_is_wired_to_supported_handler() {
+        let registry = PatchRegistry::new();
+        let handler = registry.find_by_name("pat").expect("pat handler");
         let capabilities = handler.capabilities();
         assert!(capabilities.parse);
         assert!(capabilities.apply);
@@ -682,6 +705,32 @@ mod tests {
     }
 
     #[test]
+    fn probe_routes_pat_extension_to_pat_handler() {
+        let registry = PatchRegistry::new();
+        let handler = registry.probe(Path::new("update.pat")).expect("pat probe");
+        assert_eq!(handler.descriptor().name, "PAT");
+    }
+
+    #[test]
+    fn probe_routes_ffp_extension_to_pat_handler() {
+        let registry = PatchRegistry::new();
+        let handler = registry.probe(Path::new("update.ffp")).expect("ffp probe");
+        assert_eq!(handler.descriptor().name, "PAT");
+    }
+
+    #[test]
+    fn probe_routes_unknown_extension_with_pat_content_to_pat_handler() {
+        let path = temp_file_path_with_extension("pat-signature", "txt");
+        fs::write(&path, b"comment\n00000000 61 41\n").expect("fixture");
+
+        let registry = PatchRegistry::new();
+        let handler = registry.probe(&path).expect("pat probe");
+        assert_eq!(handler.descriptor().name, "PAT");
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
     fn probe_routes_unknown_extension_with_gdiff_signature_to_gdiff_handler() {
         let path = temp_file_path_with_extension("gdiff-signature", "bin");
         fs::write(&path, [0xD1, 0xFF, 0xD1, 0xFF, 4, 0]).expect("fixture");
@@ -744,6 +793,15 @@ mod tests {
         let registry = PatchRegistry::new();
         let handler = registry.find_by_name("gdiff").expect("gdiff name");
         assert_eq!(handler.descriptor().name, "GDIFF");
+    }
+
+    #[test]
+    fn find_by_name_routes_pat_aliases_to_pat_handler() {
+        let registry = PatchRegistry::new();
+        for alias in ["pat", "ffp", "fireflower"] {
+            let handler = registry.find_by_name(alias).expect("pat alias");
+            assert_eq!(handler.descriptor().name, "PAT");
+        }
     }
 
     #[test]
