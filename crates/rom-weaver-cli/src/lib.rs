@@ -55,7 +55,7 @@ struct Cli {
 }
 
 #[derive(Debug, Subcommand)]
-enum Commands {
+pub enum Commands {
     Inspect(InspectCommand),
     Extract(ExtractCommand),
     Checksum(ChecksumCommand),
@@ -66,7 +66,7 @@ enum Commands {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
-enum CompressionLevelProfile {
+pub enum CompressionLevelProfile {
     Min,
     #[value(name = "very-low")]
     VeryLow,
@@ -105,253 +105,258 @@ impl CompressionLevelProfile {
 }
 
 #[derive(Debug, Args)]
-struct InspectCommand {
-    source: PathBuf,
+pub struct InspectCommand {
+    pub source: PathBuf,
     #[arg(
         long,
         help = "List selectable archive entries in the inspect label when supported"
     )]
-    list: bool,
+    pub list: bool,
 }
 
 #[derive(Debug, Args)]
-struct ExtractCommand {
-    source: PathBuf,
+pub struct ExtractCommand {
+    pub source: PathBuf,
     #[arg(
         long = "select",
         help = "Select extracted entries by exact name, prefix, or glob (repeatable). Examples: --select game.disc02.cue --select 'game.disc0?.bin'"
     )]
-    select: Vec<String>,
+    pub select: Vec<String>,
     #[arg(long)]
-    out_dir: PathBuf,
+    pub out_dir: PathBuf,
     #[arg(
         long,
         help = "For CHD CD extraction, force split CUE + per-track BIN output (`*.trackNN.bin`) instead of a single BIN when possible"
     )]
-    split_bin: bool,
+    pub split_bin: bool,
     #[arg(long, default_value = "auto")]
-    threads: ThreadBudget,
+    pub threads: ThreadBudget,
 }
 
 #[derive(Debug, Args)]
-struct ChecksumCommand {
-    source: PathBuf,
+pub struct ChecksumCommand {
+    pub source: PathBuf,
     #[arg(long = "algo", required = true)]
-    algo: Vec<String>,
+    pub algo: Vec<String>,
     #[arg(long = "select")]
-    select: Vec<String>,
+    pub select: Vec<String>,
     #[arg(
         long,
         help = "Disable container auto-extract and checksum the source bytes directly"
     )]
-    no_extract: bool,
+    pub no_extract: bool,
     #[arg(
         long,
         help = "Disable default ignore filtering during checksum container payload resolution"
     )]
-    no_ignore: bool,
+    pub no_ignore: bool,
     #[arg(
         long,
         help = "Remove a detected ROM header before checksum (A78/LNX/NES/FDS/SMC signatures; SNES/PCE copier-size rules)"
     )]
-    strip_header: bool,
+    pub strip_header: bool,
     #[arg(
         long,
         help = "Disable automatic trim-boundary checksum fixes for trim-eligible ROMs"
     )]
-    no_trim_fix: bool,
+    pub no_trim_fix: bool,
     #[arg(long)]
-    start: Option<u64>,
+    pub start: Option<u64>,
     #[arg(long)]
-    length: Option<u64>,
+    pub length: Option<u64>,
     #[arg(long, default_value = "auto")]
-    threads: ThreadBudget,
+    pub threads: ThreadBudget,
 }
 
 #[derive(Debug, Args)]
-struct CompressCommand {
+pub struct CompressCommand {
     #[arg(required = true)]
-    input: Vec<PathBuf>,
+    pub input: Vec<PathBuf>,
     #[arg(long)]
-    format: Option<String>,
+    pub format: Option<String>,
     #[arg(long)]
-    output: PathBuf,
+    pub output: PathBuf,
     #[arg(long)]
-    codec: Option<String>,
+    pub codec: Option<String>,
     #[arg(
         long,
         value_enum,
         default_value_t = CompressionLevelProfile::Max,
         help = "Global compression level profile used when --codec does not include an explicit numeric level"
     )]
-    level: CompressionLevelProfile,
+    pub level: CompressionLevelProfile,
     #[arg(long, default_value = "auto")]
-    threads: ThreadBudget,
+    pub threads: ThreadBudget,
 }
 
 #[derive(Debug, Args)]
-struct TrimCommand {
+pub struct TrimCommand {
     #[arg(required = true)]
-    source: Vec<PathBuf>,
+    pub source: Vec<PathBuf>,
     #[arg(
         long,
         conflicts_with = "in_place",
         help = "Destination file for trimmed output (single trim-eligible source only)"
     )]
-    output: Option<PathBuf>,
+    pub output: Option<PathBuf>,
     #[arg(
         short = 'e',
         long,
         help = "Output extension for side-by-side output (supports `{ext}` placeholder, for example `trim.{ext}`)"
     )]
-    extension: Option<String>,
+    pub extension: Option<String>,
     #[arg(
         short = 'i',
         long = "in-place",
         alias = "inplace",
         help = "Trim the source file in place instead of writing a new file"
     )]
-    in_place: bool,
+    pub in_place: bool,
     #[arg(
         short = 's',
         long = "simulate",
         alias = "dry-run",
         help = "Simulate trim operations without writing output files"
     )]
-    dry_run: bool,
+    pub dry_run: bool,
     #[arg(
         long,
         alias = "untrim",
         alias = "restore",
         help = "Revert trimmed files by padding back to the nearest power-of-two size (not supported for xiso)"
     )]
-    revert: bool,
+    pub revert: bool,
     #[arg(
         long = "no-recursive",
         action = ArgAction::SetFalse,
         default_value_t = true,
         help = "Do not recursively scan subdirectories when input sources include folders"
     )]
-    recursive: bool,
+    pub recursive: bool,
     #[arg(long, default_value = "auto")]
-    threads: ThreadBudget,
+    pub threads: ThreadBudget,
 }
 
 #[derive(Debug, Args)]
-struct PatchApplyCommand {
+pub struct PatchApplyCommand {
     #[arg(long)]
-    input: PathBuf,
+    pub input: PathBuf,
     #[arg(long = "select")]
-    select: Vec<String>,
+    pub select: Vec<String>,
     #[arg(
         long,
         help = "Disable container auto-extract and patch the source bytes directly"
     )]
-    no_extract: bool,
+    pub no_extract: bool,
     #[arg(
         long,
         help = "Disable default ignore filtering during patch-apply container payload resolution"
     )]
-    no_ignore: bool,
+    pub no_ignore: bool,
     #[arg(
         long = "patch",
         required = true,
         help = "Patch file(s) to apply in order; repeat --patch for each step"
     )]
-    patches: Vec<PathBuf>,
+    pub patches: Vec<PathBuf>,
     #[arg(long)]
-    output: PathBuf,
+    pub output: PathBuf,
     #[arg(
         long,
         help = "Write raw patched bytes without the default patch-output compression step"
     )]
-    no_compress: bool,
+    pub no_compress: bool,
     #[arg(
         long = "compress-format",
         help = "Patch-output compression container format (default: auto). Use `auto` to force auto selection."
     )]
-    compress_format: Option<String>,
+    pub compress_format: Option<String>,
     #[arg(
         long = "compress-codec",
         help = "Patch-output compression codec[:level] override (for example: --compress-codec zstd:9)"
     )]
-    compress_codec: Option<String>,
+    pub compress_codec: Option<String>,
     #[arg(
         long = "compress-level",
         value_enum,
         default_value_t = CompressionLevelProfile::Max,
         help = "Global patch-output compression level profile used when --compress-codec omits an explicit numeric level"
     )]
-    compress_level: CompressionLevelProfile,
+    pub compress_level: CompressionLevelProfile,
     #[arg(
         long = "checksum-cache",
         value_name = "ALGO=HEX",
         help = "Seed effective patch input checksum cache before apply; repeat for multiple algorithms (for example: --checksum-cache crc32=1234abcd)"
     )]
-    checksum_cache: Vec<String>,
+    pub checksum_cache: Vec<String>,
     #[arg(
         long = "validate-with-checksum",
         value_name = "ALGO=HEX",
         help = "Validate effective patch input checksum before apply; repeat for multiple algorithms (for example: --validate-with-checksum crc32=1234abcd)"
     )]
-    validate_with_checksums: Vec<String>,
+    pub validate_with_checksums: Vec<String>,
     #[arg(
         long,
         help = "Remove a detected ROM header before patch apply (A78/LNX/NES/FDS/SMC signatures; SNES/PCE copier-size rules)"
     )]
-    strip_header: bool,
+    pub strip_header: bool,
     #[arg(
         long,
         help = "Add header bytes after patch apply (reuses stripped header bytes when available; defaults to 512-byte copier header)"
     )]
-    add_header: bool,
+    pub add_header: bool,
     #[arg(
         long,
         help = "Repair supported ROM headers/checksums after patch apply (SNES/NES/GB/GBA/MD/SMS/N64/NDS and related profiles; auto-detect)"
     )]
-    repair_checksum: bool,
+    pub repair_checksum: bool,
     #[arg(
         long,
         help = "Skip patch-provided checksum validation during patch apply (source, target, and patch-level checks when supported)"
     )]
-    ignore_checksum_validation: bool,
+    pub ignore_checksum_validation: bool,
     #[arg(long, default_value = "auto")]
-    threads: ThreadBudget,
+    pub threads: ThreadBudget,
 }
 
 #[derive(Debug, Args)]
-struct PatchCreateCommand {
+pub struct PatchCreateCommand {
     #[arg(long)]
-    original: PathBuf,
+    pub original: PathBuf,
     #[arg(long)]
-    modified: PathBuf,
+    pub modified: PathBuf,
     #[arg(long)]
-    format: String,
+    pub format: String,
     #[arg(long)]
-    output: PathBuf,
+    pub output: PathBuf,
     #[arg(long, default_value = "auto")]
-    threads: ThreadBudget,
+    pub threads: ThreadBudget,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct RunCommandOptions {
+    pub json: bool,
+    pub trace: bool,
+    pub interactive_selection_enabled: bool,
+}
+
+impl RunCommandOptions {
+    pub fn detect_for_terminal(json: bool, trace: bool) -> Self {
+        let interactive_selection_enabled =
+            !json && io::stdin().is_terminal() && io::stderr().is_terminal();
+        Self {
+            json,
+            trace,
+            interactive_selection_enabled,
+        }
+    }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn main_entry() -> ExitCode {
     let cli = Cli::parse();
-    init_trace_logging(cli.trace, cli.json);
-    trace!(
-        json = cli.json,
-        trace_requested = cli.trace,
-        command = ?cli.command,
-        "parsed command-line arguments"
-    );
-    let reporter: Arc<dyn ProgressSink> = if cli.json {
-        Arc::new(StdoutReporter::json())
-    } else {
-        Arc::new(StdoutReporter::text())
-    };
-    let interactive_selection_enabled =
-        !cli.json && io::stdin().is_terminal() && io::stderr().is_terminal();
-    let app = CliApp::new(reporter, cli.json, interactive_selection_enabled);
-    app.run(cli.command)
+    let options = RunCommandOptions::detect_for_terminal(cli.json, cli.trace);
+    run_command(cli.command, options)
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -363,22 +368,29 @@ pub fn main_entry() -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    init_trace_logging(cli.trace, cli.json);
+    let options = RunCommandOptions::detect_for_terminal(cli.json, cli.trace);
+    run_command(cli.command, options)
+}
+
+pub fn run_command(command: Commands, options: RunCommandOptions) -> ExitCode {
+    init_trace_logging(options.trace, options.json);
     trace!(
-        json = cli.json,
-        trace_requested = cli.trace,
-        command = ?cli.command,
+        json = options.json,
+        trace_requested = options.trace,
+        command = ?command,
         "parsed command-line arguments"
     );
-    let reporter: Arc<dyn ProgressSink> = if cli.json {
+    let reporter: Arc<dyn ProgressSink> = if options.json {
         Arc::new(StdoutReporter::json())
     } else {
         Arc::new(StdoutReporter::text())
     };
-    let interactive_selection_enabled =
-        !cli.json && io::stdin().is_terminal() && io::stderr().is_terminal();
-    let app = CliApp::new(reporter, cli.json, interactive_selection_enabled);
-    app.run(cli.command)
+    let app = CliApp::new(
+        reporter,
+        options.json,
+        options.interactive_selection_enabled,
+    );
+    app.run(command)
 }
 
 #[cfg(target_arch = "wasm32")]
