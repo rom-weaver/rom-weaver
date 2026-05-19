@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, HashSet, VecDeque},
+    collections::{BTreeMap, HashMap, HashSet, VecDeque},
     fs,
     fs::File,
     io::{self, BufReader, BufWriter, IsTerminal, Read, Seek, SeekFrom, Write},
@@ -24,6 +24,7 @@ use rom_weaver_core::{
     ThreadBudget, ThreadCapability, ThreadExecution,
 };
 use rom_weaver_patches::PatchRegistry;
+use serde_json::{Map, Value, json};
 use tracing::trace;
 #[cfg(not(target_arch = "wasm32"))]
 use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
@@ -1397,6 +1398,15 @@ const RVZ_TRIM_TEMP_SUFFIX: &str = "rom-weaver-trim-rvz.tmp";
 const CHECKSUM_IGNORE_SIDECAR_EXTENSIONS: &[&str] = &[
     ".txt", ".nfo", ".diz", ".sfv", ".md5", ".sha1", ".sha256", ".sha512", ".crc", ".log", ".json",
 ];
+const EMITTED_ARCHIVE_EXTENSIONS: &[&str] = &[
+    ".7z", ".zip", ".zipx", ".tar", ".tgz", ".tar.gz", ".tbz2", ".tar.bz2", ".txz", ".tar.xz",
+    ".zst", ".zstd", ".gz", ".bz2", ".xz", ".chd", ".rvz", ".gcz", ".wbfs", ".wia", ".cso",
+    ".ciso", ".rar", ".pbp", ".z3d", ".z3ds",
+];
+const EMITTED_ROM_EXTENSIONS: &[&str] = &[
+    ".iso", ".img", ".bin", ".gdi", ".nds", ".dsi", ".srl", ".gba", ".3ds", ".n64", ".z64", ".v64",
+    ".nes", ".fds", ".sfc", ".smc", ".gen", ".md", ".gb", ".gbc", ".pce", ".a78", ".lnx", ".msx",
+];
 const GAME_BOY_NINTENDO_LOGO: [u8; 48] = [
     0xCE, 0xED, 0x66, 0x66, 0xCC, 0x0D, 0x00, 0x0B, 0x03, 0x73, 0x00, 0x83, 0x00, 0x0C, 0x00, 0x0D,
     0x00, 0x08, 0x11, 0x1F, 0x88, 0x89, 0x00, 0x0E, 0xDC, 0xCC, 0x6E, 0xE6, 0xDD, 0xDD, 0xD9, 0x99,
@@ -1764,6 +1774,12 @@ struct SelectionPromptCandidate {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct FileSnapshot {
+    size_bytes: u64,
+    modified_unix_nanos: Option<u128>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ParsedSelectionInput {
     Cancelled,
     Selected(usize),
@@ -2048,6 +2064,7 @@ impl CliApp {
             split_bin,
             threads,
         } = args;
+        let out_dir_before = Self::snapshot_file_tree(&out_dir).unwrap_or_default();
         let context = self.context(threads);
         let probe_threads = Some(context.plan_threads(ThreadCapability::single_threaded()));
         if let Some(report) = self.require_existing_path(
@@ -2143,6 +2160,20 @@ impl CliApp {
                         "extract",
                         error.to_string(),
                         Some(context.plan_threads(ThreadCapability::single_threaded())),
+                    );
+                }
+            }
+        }
+        if report.status == OperationStatus::Succeeded {
+            match Self::collect_changed_files(&out_dir, &out_dir_before) {
+                Ok(emitted_files) => {
+                    report = Self::attach_emitted_files_details(report, emitted_files, None);
+                }
+                Err(error) => {
+                    trace!(
+                        out_dir = %out_dir.display(),
+                        error = %error,
+                        "failed to collect extract emitted output metadata"
                     );
                 }
             }
@@ -2881,6 +2912,138 @@ impl CliApp {
         }
     }
 
+    fn snapshot_file_tree(root: &Path) -> Result<HashMap<PathBuf, FileSnapshot>> {
+        if !root.exists() {
+            return Ok(HashMap::new());
+        }
+
+        if root.is_file() {
+            let mut snapshot = HashMap::new();
+            snapshot.insert(root.to_path_buf(), Self::file_snapshot_for_path(root)?);
+            return Ok(snapshot);
+        }
+        if !root.is_dir() {
+            return Ok(HashMap::new());
+        }
+
+        let mut snapshot = HashMap::new();
+        let mut directories = vec![root.to_path_buf()];
+        while let Some(directory) = directories.pop() {
+            let mut entries =
+                fs::read_dir(&directory)?.collect::<std::result::Result<Vec<_>, _>>()?;
+            entries.sort_by_key(|entry| entry.path());
+
+            for entry in entries {
+                let path = entry.path();
+                let file_type = entry.file_type()?;
+                if file_type.is_dir() {
+                    directories.push(path);
+                    continue;
+                }
+                if !file_type.is_file() {
+                    continue;
+                }
+                snapshot.insert(path.clone(), Self::file_snapshot_for_path(&path)?);
+            }
+        }
+        Ok(snapshot)
+    }
+
+    fn file_snapshot_for_path(path: &Path) -> Result<FileSnapshot> {
+        let metadata = fs::metadata(path)?;
+        let modified_unix_nanos = metadata
+            .modified()
+            .ok()
+            .and_then(|value| value.duration_since(UNIX_EPOCH).ok())
+            .map(|value| value.as_nanos());
+        Ok(FileSnapshot {
+            size_bytes: metadata.len(),
+            modified_unix_nanos,
+        })
+    }
+
+    fn collect_changed_files(
+        root: &Path,
+        baseline: &HashMap<PathBuf, FileSnapshot>,
+    ) -> Result<Vec<PathBuf>> {
+        let after = Self::snapshot_file_tree(root)?;
+        let mut changed = after
+            .into_iter()
+            .filter_map(|(path, snapshot)| match baseline.get(&path) {
+                Some(previous) if previous == &snapshot => None,
+                _ => Some(path),
+            })
+            .collect::<Vec<_>>();
+        changed.sort();
+        Ok(changed)
+    }
+
+    fn attach_emitted_files_details(
+        mut report: OperationReport,
+        emitted_files: Vec<PathBuf>,
+        default_kind: Option<&str>,
+    ) -> OperationReport {
+        if report.status != OperationStatus::Succeeded {
+            return report;
+        }
+
+        let mut details = match report.details.take() {
+            Some(Value::Object(map)) => map,
+            _ => Map::new(),
+        };
+        let emitted = emitted_files
+            .into_iter()
+            .filter_map(|path| Self::build_emitted_file_detail(&path, default_kind))
+            .collect::<Vec<_>>();
+        details.insert("emitted_files".to_string(), Value::Array(emitted));
+        report.details = Some(Value::Object(details));
+        report
+    }
+
+    fn build_emitted_file_detail(path: &Path, default_kind: Option<&str>) -> Option<Value> {
+        let metadata = fs::metadata(path).ok()?;
+        if !metadata.is_file() {
+            return None;
+        }
+
+        let canonical = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+        let file_name = canonical.file_name()?.to_string_lossy().into_owned();
+        let mut entry = Map::new();
+        entry.insert(
+            "path".to_string(),
+            json!(canonical.to_string_lossy().replace('\\', "/")),
+        );
+        entry.insert("file_name".to_string(), json!(file_name));
+        entry.insert("size_bytes".to_string(), json!(metadata.len()));
+        if let Some(kind) = Self::infer_emitted_file_kind(&canonical).or(default_kind) {
+            entry.insert("kind".to_string(), json!(kind));
+        }
+        Some(Value::Object(entry))
+    }
+
+    fn infer_emitted_file_kind(path: &Path) -> Option<&'static str> {
+        let file_name = path.file_name()?.to_string_lossy().to_ascii_lowercase();
+        if file_name.ends_with(".cue") {
+            return Some("cue");
+        }
+        if file_name.ends_with(".bin") {
+            return Some("bin");
+        }
+        if EMITTED_ARCHIVE_EXTENSIONS
+            .iter()
+            .any(|extension| file_name.ends_with(extension))
+        {
+            return Some("archive");
+        }
+        if EMITTED_ROM_EXTENSIONS
+            .iter()
+            .any(|extension| file_name.ends_with(extension))
+        {
+            return Some("rom");
+        }
+        None
+    }
+
     fn collect_checksum_extract_candidates(
         &self,
         root: &Path,
@@ -3110,6 +3273,7 @@ impl CliApp {
             Some(context.plan_threads(capabilities.create_threads)),
         );
 
+        let expected_output = output.clone();
         let request = ContainerCreateRequest {
             inputs: input,
             output,
@@ -3130,6 +3294,10 @@ impl CliApp {
             && let Some(auto_label_suffix) = auto_label_suffix
         {
             report.label = format!("{}; {auto_label_suffix}", report.label);
+        }
+        if report.status == OperationStatus::Succeeded {
+            report =
+                Self::attach_emitted_files_details(report, vec![expected_output], Some("archive"));
         }
         self.finish("compress", report)
     }
@@ -3687,6 +3855,7 @@ impl CliApp {
             } else {
                 output.clone()
             };
+            let mut terminal_output_path = output.clone();
 
             let mut current_input = apply_input;
             let mut applied_formats = Vec::with_capacity(patch_count);
@@ -3976,6 +4145,20 @@ impl CliApp {
                     compression_plan.output_path.display(),
                     compression_plan.auto_note,
                     extension_note
+                );
+                terminal_output_path = compression_plan.output_path;
+            }
+
+            if report.status == OperationStatus::Succeeded {
+                let kind_hint = if compression_options.enabled {
+                    Some("archive")
+                } else {
+                    None
+                };
+                report = Self::attach_emitted_files_details(
+                    report,
+                    vec![terminal_output_path],
+                    kind_hint,
                 );
             }
 

@@ -43,6 +43,40 @@ fn parse_single_json_line(output: &[u8]) -> Value {
         .expect("json line")
 }
 
+fn emitted_file_entry<'a>(json: &'a Value, file_name: &str) -> &'a Value {
+    json["details"]["emitted_files"]
+        .as_array()
+        .expect("emitted_files array")
+        .iter()
+        .find(|entry| entry["file_name"].as_str() == Some(file_name))
+        .unwrap_or_else(|| panic!("missing emitted file `{file_name}`"))
+}
+
+fn expected_event_path(path: &std::path::Path) -> String {
+    fs::canonicalize(path)
+        .unwrap_or_else(|_| path.to_path_buf())
+        .to_string_lossy()
+        .replace('\\', "/")
+}
+
+fn assert_emitted_file(json: &Value, expected_path: &std::path::Path, expected_kind: Option<&str>) {
+    let expected_name = expected_path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .expect("file name");
+    let entry = emitted_file_entry(json, expected_name);
+    assert_eq!(entry["path"], expected_event_path(expected_path));
+    assert_eq!(entry["file_name"], expected_name);
+    assert_eq!(
+        entry["size_bytes"],
+        fs::metadata(expected_path).expect("file metadata").len()
+    );
+    match expected_kind {
+        Some(kind) => assert_eq!(entry["kind"], kind),
+        None => {}
+    }
+}
+
 fn label_digest_value<'a>(label: &'a str, key: &str) -> Option<&'a str> {
     let prefix = format!("{key}=");
     label.split_whitespace().find_map(|part| {
@@ -2348,6 +2382,14 @@ fn extract_pbp_without_select_emits_all_discs() {
     let json = parse_single_json_line(&output);
     assert_eq!(json["format"], "pbp");
     assert_eq!(json["status"], "succeeded");
+    let emitted = json["details"]["emitted_files"]
+        .as_array()
+        .expect("emitted_files array");
+    assert_eq!(emitted.len(), 4);
+    assert_emitted_file(&json, out_dir.child("multi.disc01.cue").path(), Some("cue"));
+    assert_emitted_file(&json, out_dir.child("multi.disc01.bin").path(), Some("bin"));
+    assert_emitted_file(&json, out_dir.child("multi.disc02.cue").path(), Some("cue"));
+    assert_emitted_file(&json, out_dir.child("multi.disc02.bin").path(), Some("bin"));
     assert_eq!(
         fs::read(out_dir.child("multi.disc01.bin").path()).expect("disc01"),
         disc1
@@ -3700,6 +3742,11 @@ fn compress_routes_through_registered_container_format() {
     assert_eq!(json["family"], "container");
     assert_eq!(json["format"], "zip");
     assert_eq!(json["status"], "succeeded");
+    let emitted = json["details"]["emitted_files"]
+        .as_array()
+        .expect("emitted_files array");
+    assert_eq!(emitted.len(), 1);
+    assert_emitted_file(&json, output_path.path(), Some("archive"));
     assert!(output_path.path().exists());
 }
 
@@ -4915,6 +4962,21 @@ fn chd_extract_split_bin_forces_per_track_outputs_and_reports_emitted_files() {
     let extract_json = parse_single_json_line(&extract_output);
     assert_eq!(extract_json["format"], "chd");
     assert_eq!(extract_json["status"], "succeeded");
+    let emitted = extract_json["details"]["emitted_files"]
+        .as_array()
+        .expect("emitted_files array");
+    assert_eq!(emitted.len(), 3);
+    assert_emitted_file(&extract_json, out_dir.child("disc.cue").path(), Some("cue"));
+    assert_emitted_file(
+        &extract_json,
+        out_dir.child("disc.track01.bin").path(),
+        Some("bin"),
+    );
+    assert_emitted_file(
+        &extract_json,
+        out_dir.child("disc.track02.bin").path(),
+        Some("bin"),
+    );
     let label = extract_json["label"].as_str().expect("label");
     assert!(label.contains("splitbin=true"));
     assert!(label.contains("emitted_files=disc.cue,disc.track01.bin,disc.track02.bin"));
@@ -6437,6 +6499,11 @@ fn patch_apply_succeeds_for_valid_ips_patch() {
     assert_eq!(json["effective_threads"], 1);
     assert_eq!(json["used_parallelism"], false);
     assert_eq!(json["status"], "succeeded");
+    let emitted = json["details"]["emitted_files"]
+        .as_array()
+        .expect("emitted_files array");
+    assert_eq!(emitted.len(), 1);
+    assert_emitted_file(&json, temp.child("output.bin").path(), Some("bin"));
     assert_eq!(
         fs::read(temp.child("output.bin").path()).expect("output"),
         b"abXYZfg!!!!"
@@ -6498,6 +6565,11 @@ fn patch_apply_defaults_to_compressed_output_and_appends_extension() {
     assert!(apply_label.contains("auto format=7z reason=fallback-7z-lzma2"));
 
     let compressed_path = temp.child("patched-output.7z");
+    let emitted = apply_json["details"]["emitted_files"]
+        .as_array()
+        .expect("emitted_files array");
+    assert_eq!(emitted.len(), 1);
+    assert_emitted_file(&apply_json, compressed_path.path(), Some("archive"));
     assert!(compressed_path.path().exists());
     assert!(!output_base.path().exists());
 
