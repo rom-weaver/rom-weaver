@@ -5,7 +5,10 @@ use std::{
     io::{self, BufReader, BufWriter, Read, Seek, SeekFrom, Write},
     num::NonZeroU64,
     path::{Component, Path, PathBuf},
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
 };
 
 use bzip2::{Compression as Bzip2Compression, read::BzDecoder as Bzip2Decoder, write::BzEncoder};
@@ -41,8 +44,8 @@ use rom_weaver_codecs::{
 use rom_weaver_core::{
     CodecBackend, CodecOperationRequest, ContainerCapabilities, ContainerCreateRequest,
     ContainerExtractRequest, ContainerHandler, ContainerInspectRequest, FormatDescriptor,
-    OperationContext, OperationFamily, OperationReport, OperationStatus, ProbeConfidence, Result,
-    RomWeaverError, ThreadCapability,
+    OperationContext, OperationFamily, OperationReport, OperationStatus, ProbeConfidence,
+    ProgressEvent, Result, RomWeaverError, ThreadCapability, ThreadExecution,
 };
 use sevenz_rust::{
     ArchiveEntry as SevenZArchiveEntry, ArchiveReader as SevenZReader,
@@ -708,6 +711,61 @@ fn archive_path_to_name(path: &Path) -> Result<String> {
     Ok(parts.join("/"))
 }
 
+fn emit_container_running_progress(
+    context: &OperationContext,
+    command: &str,
+    format: &str,
+    stage: &str,
+    label: impl Into<String>,
+    percent: f32,
+    thread_execution: Option<&ThreadExecution>,
+) {
+    let clamped_percent = percent.clamp(0.0, 100.0);
+    context.emit(ProgressEvent {
+        command: command.to_string(),
+        family: OperationFamily::Container,
+        format: Some(format.to_string()),
+        stage: stage.to_string(),
+        label: label.into(),
+        details: None,
+        percent: Some(clamped_percent),
+        requested_threads: thread_execution.map(|value| value.requested_threads),
+        effective_threads: thread_execution.map(|value| value.effective_threads),
+        thread_mode: thread_execution.map(|value| value.thread_mode),
+        used_parallelism: thread_execution.map(|value| value.used_parallelism),
+        thread_fallback: thread_execution.map(|value| value.thread_fallback),
+        thread_fallback_reason: thread_execution
+            .and_then(|value| value.thread_fallback_reason.clone()),
+        status: OperationStatus::Running,
+    });
+}
+
+fn emit_container_step_progress(
+    context: &OperationContext,
+    command: &str,
+    format: &str,
+    stage: &str,
+    completed_steps: usize,
+    total_steps: usize,
+    label: impl Into<String>,
+    thread_execution: Option<&ThreadExecution>,
+) {
+    if total_steps == 0 {
+        return;
+    }
+    let completed = completed_steps.min(total_steps);
+    let percent = (completed as f32 / total_steps as f32) * 100.0;
+    emit_container_running_progress(
+        context,
+        command,
+        format,
+        stage,
+        label,
+        percent,
+        thread_execution,
+    );
+}
+
 fn collect_archive_inputs(inputs: &[PathBuf]) -> Result<Vec<ArchiveInputEntry>> {
     if inputs.is_empty() {
         return Err(RomWeaverError::Validation(
@@ -913,12 +971,21 @@ impl ZipContainerHandler {
         io::copy(&mut entry, &mut output).map_err(Into::into)
     }
 
-    fn extract_task_chunk(&self, source: &Path, chunk: &[ZipExtractTask]) -> Result<u64> {
+    fn extract_task_chunk<F>(
+        &self,
+        source: &Path,
+        chunk: &[ZipExtractTask],
+        mut on_task_complete: F,
+    ) -> Result<u64>
+    where
+        F: FnMut(),
+    {
         let mut archive = self.open_archive(source)?;
         let mut chunk_bytes = 0u64;
         for task in chunk {
             chunk_bytes =
                 chunk_bytes.saturating_add(self.extract_task_with_archive(&mut archive, task)?);
+            on_task_complete();
         }
         Ok(chunk_bytes)
     }
@@ -1144,14 +1211,30 @@ impl ContainerHandler for ZipContainerHandler {
         }
 
         selections.ensure_all_matched()?;
+        let total_tasks = tasks.len();
 
         let (execution, written_bytes) = if tasks.is_empty() || duplicate_output_paths {
             let execution = context.plan_threads(ThreadCapability::single_threaded());
             let mut archive = self.open_archive(&request.source)?;
             let mut written_bytes = 0u64;
-            for task in &tasks {
+            for (task_index, task) in tasks.iter().enumerate() {
                 written_bytes = written_bytes
                     .saturating_add(self.extract_task_with_archive(&mut archive, task)?);
+                emit_container_step_progress(
+                    context,
+                    "extract",
+                    self.descriptor.name,
+                    "extract",
+                    task_index.saturating_add(1),
+                    total_tasks,
+                    format!(
+                        "extracting `{}` ({}/{})",
+                        self.descriptor.name,
+                        task_index.saturating_add(1),
+                        total_tasks
+                    ),
+                    Some(&execution),
+                );
             }
             (execution, written_bytes)
         } else {
@@ -1159,20 +1242,63 @@ impl ContainerHandler for ZipContainerHandler {
             let (execution, pool) =
                 context.build_pool(ThreadCapability::parallel(Some(task_count)))?;
             let source = request.source.clone();
+            let completed_tasks = Arc::new(AtomicUsize::new(0));
+            let progress_context = context.clone();
+            let progress_execution = execution.clone();
+            let progress_format = self.descriptor.name;
             let written_bytes = if execution.used_parallelism {
                 let worker_count = execution.effective_threads.max(1);
                 let chunk_size = tasks.len().div_ceil(worker_count).max(1);
                 let chunk_bytes = pool.install(|| {
                     tasks
                         .par_chunks(chunk_size)
-                        .map(|chunk| self.extract_task_chunk(&source, chunk))
+                        .map(|chunk| {
+                            let completed_tasks = Arc::clone(&completed_tasks);
+                            let progress_context = progress_context.clone();
+                            let progress_execution = progress_execution.clone();
+                            self.extract_task_chunk(&source, chunk, || {
+                                let completed = completed_tasks
+                                    .fetch_add(1, Ordering::Relaxed)
+                                    .saturating_add(1);
+                                emit_container_step_progress(
+                                    &progress_context,
+                                    "extract",
+                                    progress_format,
+                                    "extract",
+                                    completed,
+                                    total_tasks,
+                                    format!(
+                                        "extracting `{}` ({}/{})",
+                                        progress_format, completed, total_tasks
+                                    ),
+                                    Some(&progress_execution),
+                                );
+                            })
+                        })
                         .collect::<Result<Vec<_>>>()
                 })?;
                 chunk_bytes
                     .into_iter()
                     .fold(0u64, |acc, value| acc.saturating_add(value))
             } else {
-                self.extract_task_chunk(&source, &tasks)?
+                self.extract_task_chunk(&source, &tasks, || {
+                    let completed = completed_tasks
+                        .fetch_add(1, Ordering::Relaxed)
+                        .saturating_add(1);
+                    emit_container_step_progress(
+                        &progress_context,
+                        "extract",
+                        progress_format,
+                        "extract",
+                        completed,
+                        total_tasks,
+                        format!(
+                            "extracting `{}` ({}/{})",
+                            progress_format, completed, total_tasks
+                        ),
+                        Some(&progress_execution),
+                    );
+                })?
             };
             (execution, written_bytes)
         };
@@ -1201,6 +1327,7 @@ impl ContainerHandler for ZipContainerHandler {
         let (method, level) = self.parse_codec(request.codec.as_deref(), request.level)?;
         let entries = collect_archive_inputs(&request.inputs)?;
         let create_tasks = self.build_create_tasks(&entries, context);
+        let total_create_tasks = create_tasks.len();
         let (execution, staged_artifacts) = if create_tasks.is_empty() {
             (
                 context.plan_threads(ThreadCapability::parallel(None)),
@@ -1209,17 +1336,59 @@ impl ContainerHandler for ZipContainerHandler {
         } else {
             let (execution, pool) =
                 context.build_pool(ThreadCapability::parallel(Some(create_tasks.len())))?;
+            let completed_tasks = Arc::new(AtomicUsize::new(0));
+            let progress_context = context.clone();
+            let progress_execution = execution.clone();
+            let progress_format = self.descriptor.name;
             let staged_result = if execution.used_parallelism {
                 pool.install(|| {
                     create_tasks
                         .par_iter()
-                        .map(|task| self.compress_create_task(task, method, level))
+                        .map(|task| {
+                            let artifact = self.compress_create_task(task, method, level)?;
+                            let completed = completed_tasks
+                                .fetch_add(1, Ordering::Relaxed)
+                                .saturating_add(1);
+                            emit_container_step_progress(
+                                &progress_context,
+                                "compress",
+                                progress_format,
+                                "create",
+                                completed,
+                                total_create_tasks,
+                                format!(
+                                    "creating `{}` ({}/{})",
+                                    progress_format, completed, total_create_tasks
+                                ),
+                                Some(&progress_execution),
+                            );
+                            Ok(artifact)
+                        })
                         .collect::<Result<Vec<_>>>()
                 })
             } else {
                 create_tasks
                     .iter()
-                    .map(|task| self.compress_create_task(task, method, level))
+                    .map(|task| {
+                        let artifact = self.compress_create_task(task, method, level)?;
+                        let completed = completed_tasks
+                            .fetch_add(1, Ordering::Relaxed)
+                            .saturating_add(1);
+                        emit_container_step_progress(
+                            &progress_context,
+                            "compress",
+                            progress_format,
+                            "create",
+                            completed,
+                            total_create_tasks,
+                            format!(
+                                "creating `{}` ({}/{})",
+                                progress_format, completed, total_create_tasks
+                            ),
+                            Some(&progress_execution),
+                        );
+                        Ok(artifact)
+                    })
                     .collect::<Result<Vec<_>>>()
             };
             let mut staged_artifacts = match staged_result {
@@ -1452,15 +1621,33 @@ impl TarContainerHandler {
         &self,
         builder: &mut TarBuilder<W>,
         entries: &[ArchiveInputEntry],
+        context: &OperationContext,
+        execution: &ThreadExecution,
     ) -> Result<u64> {
         let mut logical_bytes = 0u64;
-        for entry in entries {
+        let total_entries = entries.len();
+        for (entry_index, entry) in entries.iter().enumerate() {
             if entry.is_dir {
                 builder.append_dir(&entry.archive_name, &entry.source)?;
             } else {
                 builder.append_path_with_name(&entry.source, &entry.archive_name)?;
                 logical_bytes = logical_bytes.saturating_add(fs::metadata(&entry.source)?.len());
             }
+            emit_container_step_progress(
+                context,
+                "compress",
+                self.descriptor.name,
+                "create",
+                entry_index.saturating_add(1),
+                total_entries,
+                format!(
+                    "creating `{}` ({}/{})",
+                    self.descriptor.name,
+                    entry_index.saturating_add(1),
+                    total_entries
+                ),
+                Some(execution),
+            );
         }
         Ok(logical_bytes)
     }
@@ -1610,9 +1797,49 @@ impl ContainerHandler for TarContainerHandler {
 
         let reader = self.open_reader_for_extract(&request.source, &execution)?;
         let mut archive = TarArchive::new(reader);
+        let mut preview_selections = SelectionMatcher::new(&request.selections);
+        let mut total_selected_entries = 0usize;
+        let mut total_selected_file_bytes = 0u64;
+
+        for entry in archive.entries()? {
+            let entry = entry?;
+            let raw_path = entry.path()?;
+            let relative = sanitize_archive_relative_path(raw_path.as_ref())?;
+            let archive_name = archive_path_to_name(&relative)?;
+            if !preview_selections.matches(&archive_name) {
+                continue;
+            }
+            total_selected_entries = total_selected_entries.saturating_add(1);
+            let entry_type = entry.header().entry_type();
+            if entry_type.is_file() {
+                total_selected_file_bytes =
+                    total_selected_file_bytes.saturating_add(entry.header().size()?);
+            }
+        }
+
+        let reader = self.open_reader_for_extract(&request.source, &execution)?;
+        let mut archive = TarArchive::new(reader);
         let mut selections = SelectionMatcher::new(&request.selections);
         let mut extracted_files = 0usize;
         let mut written_bytes = 0u64;
+        let mut selected_entries_completed = 0usize;
+        let mut selected_file_bytes_written = 0u64;
+        let mut last_percent_bucket = -1i32;
+
+        if total_selected_entries > 0 {
+            emit_container_running_progress(
+                context,
+                "extract",
+                self.descriptor.name,
+                "extract",
+                format!(
+                    "extracting `{}` ({} selected entries)",
+                    self.descriptor.name, total_selected_entries
+                ),
+                0.0,
+                Some(&execution),
+            );
+        }
 
         for entry in archive.entries()? {
             let mut entry = entry?;
@@ -1627,6 +1854,24 @@ impl ContainerHandler for TarContainerHandler {
             let entry_type = entry.header().entry_type();
             if entry_type.is_dir() {
                 fs::create_dir_all(&output_path)?;
+                selected_entries_completed = selected_entries_completed.saturating_add(1);
+                if total_selected_file_bytes == 0 {
+                    emit_container_step_progress(
+                        context,
+                        "extract",
+                        self.descriptor.name,
+                        "extract",
+                        selected_entries_completed,
+                        total_selected_entries,
+                        format!(
+                            "extracting `{}` ({}/{})",
+                            self.descriptor.name,
+                            selected_entries_completed,
+                            total_selected_entries
+                        ),
+                        Some(&execution),
+                    );
+                }
                 continue;
             }
             if !entry_type.is_file() {
@@ -1642,9 +1887,60 @@ impl ContainerHandler for TarContainerHandler {
                 fs::create_dir_all(parent)?;
             }
             let mut output = BufWriter::new(File::create(&output_path)?);
-            let copied = io::copy(&mut entry, &mut output)?;
+            let mut buffer = [0u8; 64 * 1024];
+            let mut copied = 0u64;
+            loop {
+                let read = entry.read(&mut buffer)?;
+                if read == 0 {
+                    break;
+                }
+                output.write_all(&buffer[..read])?;
+                copied = copied.saturating_add(read as u64);
+                if total_selected_file_bytes > 0 {
+                    selected_file_bytes_written =
+                        selected_file_bytes_written.saturating_add(read as u64);
+                    let percent = (selected_file_bytes_written as f32
+                        / total_selected_file_bytes as f32)
+                        * 100.0;
+                    let bucket = percent.floor() as i32;
+                    if bucket > last_percent_bucket || percent >= 100.0 {
+                        last_percent_bucket = bucket;
+                        emit_container_running_progress(
+                            context,
+                            "extract",
+                            self.descriptor.name,
+                            "extract",
+                            format!(
+                                "extracting `{}` ({}/{})",
+                                self.descriptor.name,
+                                selected_file_bytes_written,
+                                total_selected_file_bytes
+                            ),
+                            percent,
+                            Some(&execution),
+                        );
+                    }
+                }
+            }
+            output.flush()?;
             extracted_files += 1;
             written_bytes = written_bytes.saturating_add(copied);
+            selected_entries_completed = selected_entries_completed.saturating_add(1);
+            if total_selected_file_bytes == 0 {
+                emit_container_step_progress(
+                    context,
+                    "extract",
+                    self.descriptor.name,
+                    "extract",
+                    selected_entries_completed,
+                    total_selected_entries,
+                    format!(
+                        "extracting `{}` ({}/{})",
+                        self.descriptor.name, selected_entries_completed, total_selected_entries
+                    ),
+                    Some(&execution),
+                );
+            }
         }
 
         selections.ensure_all_matched()?;
@@ -1682,7 +1978,7 @@ impl ContainerHandler for TarContainerHandler {
             TarCompression::None => {
                 let output = BufWriter::new(File::create(&request.output)?);
                 let mut builder = TarBuilder::new(output);
-                let bytes = self.append_entries(&mut builder, &entries)?;
+                let bytes = self.append_entries(&mut builder, &entries, context, &execution)?;
                 builder.finish()?;
                 bytes
             }
@@ -1690,7 +1986,7 @@ impl ContainerHandler for TarContainerHandler {
                 let output = BufWriter::new(File::create(&request.output)?);
                 let encoder = GzEncoder::new(output, GzipCompression::new(level));
                 let mut builder = TarBuilder::new(encoder);
-                let bytes = self.append_entries(&mut builder, &entries)?;
+                let bytes = self.append_entries(&mut builder, &entries, context, &execution)?;
                 let encoder = builder.into_inner()?;
                 let mut output = encoder.finish()?;
                 output.flush()?;
@@ -1700,7 +1996,7 @@ impl ContainerHandler for TarContainerHandler {
                 let output = BufWriter::new(File::create(&request.output)?);
                 let encoder = BzEncoder::new(output, Bzip2Compression::new(level));
                 let mut builder = TarBuilder::new(encoder);
-                let bytes = self.append_entries(&mut builder, &entries)?;
+                let bytes = self.append_entries(&mut builder, &entries, context, &execution)?;
                 let mut output = builder.into_inner()?.finish()?;
                 output.flush()?;
                 bytes
@@ -1715,14 +2011,14 @@ impl ContainerHandler for TarContainerHandler {
                         Self::xz_thread_count(execution.effective_threads),
                     )?;
                     let mut builder = TarBuilder::new(encoder);
-                    let bytes = self.append_entries(&mut builder, &entries)?;
+                    let bytes = self.append_entries(&mut builder, &entries, context, &execution)?;
                     let mut output = builder.into_inner()?.finish()?;
                     output.flush()?;
                     bytes
                 } else {
                     let encoder = XzWriter::new(output, XzOptions::with_preset(level))?;
                     let mut builder = TarBuilder::new(encoder);
-                    let bytes = self.append_entries(&mut builder, &entries)?;
+                    let bytes = self.append_entries(&mut builder, &entries, context, &execution)?;
                     let mut output = builder.into_inner()?.finish()?;
                     output.flush()?;
                     bytes
@@ -1897,7 +2193,12 @@ impl StreamContainerHandler {
     }
 
     fn extract_thread_capability(&self) -> ThreadCapability {
-        ThreadCapability::single_threaded()
+        match self.compression {
+            StreamCompression::Xz => ThreadCapability::parallel(None),
+            StreamCompression::Gzip | StreamCompression::Bzip2 | StreamCompression::Zstd => {
+                ThreadCapability::single_threaded()
+            }
+        }
     }
 
     fn create_thread_capability(&self) -> ThreadCapability {
@@ -2141,6 +2442,38 @@ impl ContainerHandler for StreamContainerHandler {
 }
 
 const CSO_DEFAULT_BLOCK_BYTES: usize = 2 * 1024;
+const CSO_EXTRACT_TASK_BYTES: u64 = 8 * 1024 * 1024;
+const CSO_CREATE_TASK_SECTORS: usize = 2048;
+
+#[derive(Clone, Debug)]
+struct CsoExtractTask {
+    index: usize,
+    offset: u64,
+    len: u64,
+    temp_path: PathBuf,
+}
+
+#[derive(Clone, Debug)]
+struct CsoCreateTask {
+    index: usize,
+    start_sector: usize,
+    sector_count: usize,
+    temp_path: PathBuf,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct CsoSectorEncoding {
+    encoded_len: u32,
+    is_compressed: bool,
+}
+
+#[derive(Clone, Debug)]
+struct CsoEncodedTask {
+    index: usize,
+    start_sector: usize,
+    temp_path: PathBuf,
+    sector_encodings: Vec<CsoSectorEncoding>,
+}
 
 struct ExactCsoFileReader {
     file: File,
@@ -2990,9 +3323,35 @@ impl ContainerHandler for SevenZContainerHandler {
 
         let mut reader = self.open_reader(&request.source)?;
         reader.set_thread_count(self.thread_count(execution.effective_threads));
+        let mut preview_selections = SelectionMatcher::new(&request.selections);
+        let total_selected_entries = reader
+            .archive()
+            .files
+            .iter()
+            .filter(|entry| {
+                let entry_name = normalize_archive_name(entry.name());
+                !entry_name.is_empty() && preview_selections.matches(&entry_name)
+            })
+            .count();
         let mut selections = SelectionMatcher::new(&request.selections);
         let mut extracted_files = 0usize;
         let mut written_bytes = 0u64;
+        let mut selected_entries_completed = 0usize;
+
+        if total_selected_entries > 0 {
+            emit_container_running_progress(
+                context,
+                "extract",
+                self.descriptor.name,
+                "extract",
+                format!(
+                    "extracting `{}` ({} selected entries)",
+                    self.descriptor.name, total_selected_entries
+                ),
+                0.0,
+                Some(&execution),
+            );
+        }
 
         reader
             .for_each_entries(|entry, source| {
@@ -3010,6 +3369,22 @@ impl ContainerHandler for SevenZContainerHandler {
 
                 if entry.is_directory() {
                     fs::create_dir_all(&output_path)?;
+                    selected_entries_completed = selected_entries_completed.saturating_add(1);
+                    emit_container_step_progress(
+                        context,
+                        "extract",
+                        self.descriptor.name,
+                        "extract",
+                        selected_entries_completed,
+                        total_selected_entries,
+                        format!(
+                            "extracting `{}` ({}/{})",
+                            self.descriptor.name,
+                            selected_entries_completed,
+                            total_selected_entries
+                        ),
+                        Some(&execution),
+                    );
                     return Ok(true);
                 }
 
@@ -3020,6 +3395,20 @@ impl ContainerHandler for SevenZContainerHandler {
                 let copied = io::copy(source, &mut output)?;
                 extracted_files += 1;
                 written_bytes = written_bytes.saturating_add(copied);
+                selected_entries_completed = selected_entries_completed.saturating_add(1);
+                emit_container_step_progress(
+                    context,
+                    "extract",
+                    self.descriptor.name,
+                    "extract",
+                    selected_entries_completed,
+                    total_selected_entries,
+                    format!(
+                        "extracting `{}` ({}/{})",
+                        self.descriptor.name, selected_entries_completed, total_selected_entries
+                    ),
+                    Some(&execution),
+                );
                 Ok(true)
             })
             .map_err(|error| RomWeaverError::Validation(format!("7z extract failed: {error}")))?;
@@ -3061,7 +3450,8 @@ impl ContainerHandler for SevenZContainerHandler {
         writer.set_content_methods(vec![method.clone()]);
 
         let mut logical_bytes = 0u64;
-        for entry in &entries {
+        let total_entries = entries.len();
+        for (entry_index, entry) in entries.iter().enumerate() {
             let archive_entry =
                 SevenZArchiveEntry::from_path(&entry.source, entry.archive_name.clone());
             if entry.is_dir {
@@ -3073,6 +3463,21 @@ impl ContainerHandler for SevenZContainerHandler {
                             entry.archive_name
                         ))
                     })?;
+                emit_container_step_progress(
+                    context,
+                    "compress",
+                    self.descriptor.name,
+                    "create",
+                    entry_index.saturating_add(1),
+                    total_entries,
+                    format!(
+                        "creating `{}` ({}/{})",
+                        self.descriptor.name,
+                        entry_index.saturating_add(1),
+                        total_entries
+                    ),
+                    Some(&execution),
+                );
                 continue;
             }
 
@@ -3086,6 +3491,21 @@ impl ContainerHandler for SevenZContainerHandler {
                     ))
                 })?;
             logical_bytes = logical_bytes.saturating_add(fs::metadata(&entry.source)?.len());
+            emit_container_step_progress(
+                context,
+                "compress",
+                self.descriptor.name,
+                "create",
+                entry_index.saturating_add(1),
+                total_entries,
+                format!(
+                    "creating `{}` ({}/{})",
+                    self.descriptor.name,
+                    entry_index.saturating_add(1),
+                    total_entries
+                ),
+                Some(&execution),
+            );
         }
 
         writer.finish().map_err(|error| {
@@ -10468,6 +10888,99 @@ mod tests {
         );
     }
 
+    #[cfg(not(target_family = "wasm"))]
+    #[test]
+    fn rar_capabilities_report_parallel_extract_threads() {
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("rar").expect("rar handler");
+        let capabilities = handler.capabilities();
+        assert!(capabilities.inspect);
+        assert!(capabilities.extract);
+        assert!(!capabilities.create);
+        assert_eq!(
+            capabilities.extract_threads,
+            ThreadCapability::parallel(None)
+        );
+        assert_eq!(
+            capabilities.create_threads,
+            ThreadCapability::single_threaded()
+        );
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    #[test]
+    fn chd_runtime_threads_match_capabilities_for_create_and_extract() {
+        let temp_dir = temp_dir_path("chd-thread-parity");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let source_path = temp_dir.join("source.bin");
+        let archive_path = temp_dir.join("source.chd");
+        let output_dir = temp_dir.join("out");
+        let payload = (0..(512 * 1024))
+            .map(|index| (index as u8).wrapping_mul(17))
+            .collect::<Vec<_>>();
+        fs::write(&source_path, &payload).expect("write fixture");
+
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("chd").expect("chd handler");
+        let capabilities = handler.capabilities();
+        assert_eq!(
+            capabilities.extract_threads,
+            ThreadCapability::parallel(None)
+        );
+        assert_eq!(
+            capabilities.create_threads,
+            ThreadCapability::parallel(None)
+        );
+
+        let create_report = handler
+            .create(
+                &ContainerCreateRequest {
+                    inputs: vec![source_path.clone()],
+                    output: archive_path.clone(),
+                    format: "chd".to_string(),
+                    codec: None,
+                    level: None,
+                },
+                &test_context(&temp_dir, 6),
+            )
+            .expect("create chd");
+        let create_execution = create_report.thread_execution.expect("thread execution");
+        assert!(
+            capabilities
+                .create_threads
+                .supports_execution(&create_execution)
+        );
+        assert_eq!(create_execution.requested_threads, 6);
+        assert_eq!(create_execution.effective_threads, 6);
+        assert!(create_execution.used_parallelism);
+
+        let extract_report = handler
+            .extract(
+                &rom_weaver_core::ContainerExtractRequest {
+                    source: archive_path,
+                    out_dir: output_dir.clone(),
+                    selections: Vec::new(),
+                    split_bin: false,
+                },
+                &test_context(&temp_dir, 6),
+            )
+            .expect("extract chd");
+        let extract_execution = extract_report.thread_execution.expect("thread execution");
+        assert!(
+            capabilities
+                .extract_threads
+                .supports_execution(&extract_execution)
+        );
+        assert_eq!(extract_execution.requested_threads, 6);
+        assert_eq!(extract_execution.effective_threads, 6);
+        assert!(extract_execution.used_parallelism);
+
+        let extracted = fs::read(output_dir.join("source.bin")).expect("read extracted payload");
+        assert_eq!(extracted, payload);
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
     #[test]
     fn seven_z_capabilities_report_parallel_threads() {
         let registry = ContainerRegistry::new();
@@ -10550,7 +11063,7 @@ mod tests {
         assert!(capabilities.create);
         assert_eq!(
             capabilities.extract_threads,
-            ThreadCapability::single_threaded()
+            ThreadCapability::parallel(None)
         );
         assert_eq!(
             capabilities.create_threads,
@@ -10618,8 +11131,8 @@ mod tests {
                 .supports_execution(&extract_execution)
         );
         assert_eq!(extract_execution.requested_threads, 8);
-        assert_eq!(extract_execution.effective_threads, 8);
-        assert!(extract_execution.used_parallelism);
+        assert_eq!(extract_execution.effective_threads, 1);
+        assert!(!extract_execution.used_parallelism);
 
         for index in 0..8 {
             let path = output_dir.join(format!("input/file-{index}.bin"));
@@ -10750,8 +11263,8 @@ mod tests {
                 .supports_execution(&extract_execution)
         );
         assert_eq!(extract_execution.requested_threads, 8);
-        assert_eq!(extract_execution.effective_threads, 8);
-        assert!(extract_execution.used_parallelism);
+        assert_eq!(extract_execution.effective_threads, 1);
+        assert!(!extract_execution.used_parallelism);
 
         for index in 0..6 {
             let path = output_dir.join(format!("input/blob-{index}.bin"));
@@ -10881,8 +11394,8 @@ mod tests {
                 .supports_execution(&extract_execution)
         );
         assert_eq!(extract_execution.requested_threads, 8);
-        assert_eq!(extract_execution.effective_threads, 1);
-        assert!(!extract_execution.used_parallelism);
+        assert_eq!(extract_execution.effective_threads, 8);
+        assert!(extract_execution.used_parallelism);
 
         let extracted = fs::read(output_dir.join("source.bin")).expect("read extracted payload");
         assert_eq!(extracted, payload);
