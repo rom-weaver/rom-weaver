@@ -100,7 +100,27 @@ impl PatchHandler for BpsPatchHandler {
             .read(true)
             .write(true)
             .open(&request.output)?;
-        apply_patch_actions(&patch, &mut source, &mut output)?;
+        let thread_capability = bps_apply_thread_capability(patch.actions.len());
+        let planned_execution = context.plan_threads(thread_capability.clone());
+        let has_target_copy = patch_contains_target_copy(&patch.actions);
+        let execution = if planned_execution.used_parallelism && !has_target_copy {
+            let source_map = map_file_read_only(&request.input)?;
+            let (execution, pool) = context.build_pool(thread_capability)?;
+            let prepared =
+                prepare_bps_writes_parallel(&patch, source_map.as_ref(), &pool, context)?;
+            apply_prepared_bps_writes(&mut output, &prepared)?;
+            execution
+        } else {
+            let mut execution = planned_execution;
+            if execution.used_parallelism && has_target_copy {
+                execution.apply_pool_fallback(
+                    "BPS apply encountered TargetCopy actions that require sequential output"
+                        .to_string(),
+                );
+            }
+            apply_patch_actions(&patch, &mut source, &mut output)?;
+            execution
+        };
         validate_output_file(
             &request.output,
             &mut output,
@@ -110,7 +130,6 @@ impl PatchHandler for BpsPatchHandler {
             context,
         )?;
 
-        let execution = context.plan_threads(ThreadCapability::single_threaded());
         let checksum_suffix = if validate_checksums {
             String::new()
         } else {
@@ -180,7 +199,7 @@ impl PatchHandler for BpsPatchHandler {
             create: true,
             threaded_scan: false,
             threaded_diff: true,
-            threaded_output: false,
+            threaded_output: true,
         }
     }
 }
@@ -206,6 +225,21 @@ enum BpsAction {
 #[derive(Debug, Default)]
 struct CreatedBpsPatch {
     action_count: usize,
+}
+
+enum BpsWritePlanKind {
+    SourceRange { source_offset: u64, len: u64 },
+    Literal(Vec<u8>),
+}
+
+struct BpsWritePlan {
+    output_offset: u64,
+    kind: BpsWritePlanKind,
+}
+
+struct PreparedBpsWrite {
+    output_offset: u64,
+    data: Vec<u8>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -546,6 +580,167 @@ fn create_bps_patch_streaming(
     flush_target_read(&mut writer, &mut target_read, &mut created)?;
     writer.finish(source_checksum, target_checksum.finalize())?;
     Ok(created)
+}
+
+fn bps_apply_thread_capability(action_count: usize) -> ThreadCapability {
+    ThreadCapability::parallel(Some(action_count.max(1)))
+}
+
+fn patch_contains_target_copy(actions: &[BpsAction]) -> bool {
+    actions
+        .iter()
+        .any(|action| matches!(action, BpsAction::TargetCopy { .. }))
+}
+
+fn collect_parallel_bps_write_plans(patch: &ParsedBpsPatch) -> Result<Vec<BpsWritePlan>> {
+    let mut plans = Vec::with_capacity(patch.actions.len());
+    let mut output_offset = 0u64;
+    let mut source_relative_offset = 0i128;
+
+    for action in &patch.actions {
+        match action {
+            BpsAction::SourceRead { length } => {
+                let end = output_offset.checked_add(*length).ok_or_else(|| {
+                    RomWeaverError::Validation("BPS source-read offset overflowed".into())
+                })?;
+                if end > patch.source_size {
+                    return Err(RomWeaverError::Validation(format!(
+                        "SourceRead exceeded input size at output offset {output_offset}"
+                    )));
+                }
+                plans.push(BpsWritePlan {
+                    output_offset,
+                    kind: BpsWritePlanKind::SourceRange {
+                        source_offset: output_offset,
+                        len: *length,
+                    },
+                });
+                output_offset = end;
+            }
+            BpsAction::TargetRead { data } => {
+                let data_len = u64::try_from(data.len()).map_err(|_| {
+                    RomWeaverError::Validation(
+                        "BPS target-read data length exceeded addressable memory".into(),
+                    )
+                })?;
+                let start = output_offset;
+                output_offset = output_offset.checked_add(data_len).ok_or_else(|| {
+                    RomWeaverError::Validation("BPS target-read output overflowed".into())
+                })?;
+                plans.push(BpsWritePlan {
+                    output_offset: start,
+                    kind: BpsWritePlanKind::Literal(data.clone()),
+                });
+            }
+            BpsAction::SourceCopy {
+                length,
+                relative_offset,
+            } => {
+                let source_start = adjust_relative_offset(
+                    source_relative_offset,
+                    *relative_offset,
+                    patch.source_size,
+                    "source",
+                )?;
+                let source_end = source_start.checked_add(*length).ok_or_else(|| {
+                    RomWeaverError::Validation("BPS source-copy length overflowed".into())
+                })?;
+                if source_end > patch.source_size {
+                    return Err(RomWeaverError::Validation(format!(
+                        "SourceCopy exceeded input size at source offset {source_start}"
+                    )));
+                }
+                plans.push(BpsWritePlan {
+                    output_offset,
+                    kind: BpsWritePlanKind::SourceRange {
+                        source_offset: source_start,
+                        len: *length,
+                    },
+                });
+                source_relative_offset = i128::from(source_end);
+                output_offset = output_offset.checked_add(*length).ok_or_else(|| {
+                    RomWeaverError::Validation("BPS output offset overflowed".into())
+                })?;
+            }
+            BpsAction::TargetCopy { .. } => {
+                return Err(RomWeaverError::Validation(
+                    "BPS TargetCopy actions require sequential apply".into(),
+                ));
+            }
+        }
+
+        if output_offset > patch.target_size {
+            return Err(RomWeaverError::Validation(format!(
+                "Output size invalid; Expected: {}, Actual: {output_offset}",
+                patch.target_size
+            )));
+        }
+    }
+
+    if output_offset != patch.target_size {
+        return Err(RomWeaverError::Validation(format!(
+            "Output size invalid; Expected: {}, Actual: {output_offset}",
+            patch.target_size
+        )));
+    }
+
+    Ok(plans)
+}
+
+fn prepare_bps_writes_parallel(
+    patch: &ParsedBpsPatch,
+    source: &[u8],
+    pool: &SharedThreadPool,
+    context: &OperationContext,
+) -> Result<Vec<PreparedBpsWrite>> {
+    let plans = collect_parallel_bps_write_plans(patch)?;
+    pool.install(|| {
+        plans
+            .par_iter()
+            .map(|plan| {
+                context.cancel().check()?;
+                let data = match &plan.kind {
+                    BpsWritePlanKind::Literal(data) => data.clone(),
+                    BpsWritePlanKind::SourceRange { source_offset, len } => {
+                        let start = usize::try_from(*source_offset).map_err(|_| {
+                            RomWeaverError::Validation(
+                                "BPS source offset exceeded addressable memory".into(),
+                            )
+                        })?;
+                        let range_len = usize::try_from(*len).map_err(|_| {
+                            RomWeaverError::Validation(
+                                "BPS source length exceeded addressable memory".into(),
+                            )
+                        })?;
+                        let end = start.checked_add(range_len).ok_or_else(|| {
+                            RomWeaverError::Validation("BPS source range overflowed".into())
+                        })?;
+                        let slice = source.get(start..end).ok_or_else(|| {
+                            RomWeaverError::Validation(
+                                "BPS source range exceeded source bounds".into(),
+                            )
+                        })?;
+                        slice.to_vec()
+                    }
+                };
+                Ok(PreparedBpsWrite {
+                    output_offset: plan.output_offset,
+                    data,
+                })
+            })
+            .collect::<Result<Vec<_>>>()
+    })
+}
+
+fn apply_prepared_bps_writes(output: &mut File, writes: &[PreparedBpsWrite]) -> Result<()> {
+    for write in writes {
+        if write.data.is_empty() {
+            continue;
+        }
+        output.seek(SeekFrom::Start(write.output_offset))?;
+        output.write_all(&write.data)?;
+    }
+    Ok(())
 }
 
 fn bps_create_thread_capability(modified_len: u64) -> ThreadCapability {
@@ -1497,10 +1692,11 @@ mod tests {
             )
             .expect("report");
 
+        assert!(handler.capabilities().threaded_output);
         let execution = report.thread_execution.expect("thread execution");
         assert_eq!(execution.requested_threads, 4);
-        assert_eq!(execution.effective_threads, 1);
-        assert!(!execution.used_parallelism);
+        assert_eq!(execution.effective_threads, 3);
+        assert!(execution.used_parallelism);
         assert_eq!(fs::read(output_path).expect("output"), target);
     }
 
@@ -1528,17 +1724,29 @@ mod tests {
         .expect("fixture");
 
         let handler = BpsPatchHandler::new(&BPS);
-        handler
+        let report = handler
             .apply(
                 &PatchApplyRequest {
                     input: input_path,
                     patches: vec![patch_path],
                     output: output_path.clone(),
                 },
-                &test_context_with_threads(&temp, 1),
+                &test_context_with_threads(&temp, 8),
             )
             .expect("apply");
 
+        let execution = report.thread_execution.expect("thread execution");
+        assert_eq!(execution.requested_threads, 8);
+        assert_eq!(execution.effective_threads, 1);
+        assert!(!execution.used_parallelism);
+        assert!(execution.thread_fallback);
+        assert!(
+            execution
+                .thread_fallback_reason
+                .as_deref()
+                .unwrap_or_default()
+                .contains("TargetCopy")
+        );
         assert_eq!(fs::read(output_path).expect("output"), b"AAAAAA");
     }
 

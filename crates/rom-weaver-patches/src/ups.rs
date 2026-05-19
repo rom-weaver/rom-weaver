@@ -95,7 +95,19 @@ impl PatchHandler for UpsPatchHandler {
             .write(true)
             .open(&request.output)?;
         output.set_len(working_size)?;
-        apply_changes_in_place(&patch, working_size, &mut output)?;
+        let thread_capability = ups_apply_thread_capability(patch.changes.len());
+        let planned_execution = context.plan_threads(thread_capability.clone());
+        let execution = if planned_execution.used_parallelism {
+            let source = map_file_read_only(&request.input)?;
+            let (execution, pool) = context.build_pool(thread_capability)?;
+            let prepared =
+                prepare_ups_writes_parallel(&patch, source.as_ref(), working_size, &pool, context)?;
+            apply_prepared_ups_writes(&mut output, &prepared)?;
+            execution
+        } else {
+            apply_changes_in_place(&patch, working_size, &mut output)?;
+            planned_execution
+        };
         output.set_len(output_size)?;
         output.flush()?;
 
@@ -108,7 +120,6 @@ impl PatchHandler for UpsPatchHandler {
             }
         }
 
-        let execution = context.plan_threads(ThreadCapability::single_threaded());
         let checksum_suffix = if validate_checksums {
             String::new()
         } else {
@@ -168,7 +179,7 @@ impl PatchHandler for UpsPatchHandler {
             create: true,
             threaded_scan: false,
             threaded_diff: true,
-            threaded_output: false,
+            threaded_output: true,
         }
     }
 }
@@ -193,6 +204,11 @@ struct UpsChange {
 struct CreatedUpsPatch {
     bytes: Vec<u8>,
     record_count: usize,
+}
+
+struct PreparedUpsWrite {
+    offset: u64,
+    data: Vec<u8>,
 }
 
 fn parse_ups_file(path: &Path) -> Result<ParsedUpsPatch> {
@@ -370,6 +386,80 @@ fn apply_changes_in_place(
         }
     }
 
+    Ok(())
+}
+
+fn ups_apply_thread_capability(change_count: usize) -> ThreadCapability {
+    ThreadCapability::parallel(Some(change_count.max(1)))
+}
+
+fn prepare_ups_writes_parallel(
+    patch: &ParsedUpsPatch,
+    source: &[u8],
+    output_len: u64,
+    pool: &SharedThreadPool,
+    context: &OperationContext,
+) -> Result<Vec<PreparedUpsWrite>> {
+    pool.install(|| {
+        patch
+            .changes
+            .par_iter()
+            .map(|change| {
+                context.cancel().check()?;
+                prepare_ups_write(change, source, output_len)
+            })
+            .collect::<Result<Vec<_>>>()
+    })
+}
+
+fn prepare_ups_write(
+    change: &UpsChange,
+    source: &[u8],
+    output_len: u64,
+) -> Result<PreparedUpsWrite> {
+    let change_len = u64::try_from(change.xor_bytes.len()).map_err(|_| {
+        RomWeaverError::Validation("UPS record length exceeded addressable memory".into())
+    })?;
+    let change_end = checked_add(change.offset, change_len, "UPS change end")?;
+    if change_end > output_len {
+        return Err(RomWeaverError::Validation(
+            "UPS change exceeds declared patch file bounds".into(),
+        ));
+    }
+
+    let source_block = match usize::try_from(change.offset) {
+        Ok(start) => {
+            let end = start
+                .saturating_add(change.xor_bytes.len())
+                .min(source.len());
+            if start >= source.len() {
+                &[][..]
+            } else {
+                &source[start..end]
+            }
+        }
+        Err(_) => &[][..],
+    };
+
+    let mut patched = vec![0u8; change.xor_bytes.len()];
+    for (index, byte) in patched.iter_mut().enumerate() {
+        *byte = source_block.get(index).copied().unwrap_or(0) ^ change.xor_bytes[index];
+    }
+
+    Ok(PreparedUpsWrite {
+        offset: change.offset,
+        data: patched,
+    })
+}
+
+fn apply_prepared_ups_writes(output: &mut File, writes: &[PreparedUpsWrite]) -> Result<()> {
+    for write in writes {
+        if write.data.is_empty() {
+            continue;
+        }
+        output.seek(SeekFrom::Start(write.offset))?;
+        output.write_all(&write.data)?;
+    }
     Ok(())
 }
 
@@ -1165,5 +1255,60 @@ mod tests {
             fs::read(single_patch).expect("single patch"),
             fs::read(parallel_patch).expect("parallel patch")
         );
+    }
+
+    #[test]
+    fn apply_runtime_threads_match_capabilities_for_multi_record_patch() {
+        let temp = TestDir::new();
+        let source_path = temp.child("source.bin");
+        let target_path = temp.child("target.bin");
+        let patch_path = temp.child("update.ups");
+        let output_path = temp.child("output.bin");
+
+        let len = super::CREATE_THREAD_SCAN_CHUNK_BYTES + 128 * 1024;
+        let mut source = vec![0u8; len];
+        for (index, byte) in source.iter_mut().enumerate() {
+            *byte = ((index * 11 + (index >> 1)) & 0xff) as u8;
+        }
+        let mut target = source.clone();
+        for index in (0..target.len()).step_by(4093) {
+            target[index] ^= 0x5a;
+        }
+
+        fs::write(&source_path, &source).expect("source fixture");
+        fs::write(&target_path, &target).expect("target fixture");
+
+        let handler = UpsPatchHandler::new(&UPS);
+        let capabilities = handler.capabilities();
+        assert!(capabilities.threaded_output);
+
+        handler
+            .create(
+                &PatchCreateRequest {
+                    original: source_path.clone(),
+                    modified: target_path.clone(),
+                    output: patch_path.clone(),
+                    format: "ups".into(),
+                },
+                &test_context_with_threads(&temp, 8),
+            )
+            .expect("create");
+
+        let apply_report = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: source_path,
+                    patches: vec![patch_path],
+                    output: output_path.clone(),
+                },
+                &test_context_with_threads(&temp, 8),
+            )
+            .expect("apply");
+
+        let execution = apply_report.thread_execution.expect("thread execution");
+        assert_eq!(execution.requested_threads, 8);
+        assert_eq!(execution.effective_threads, 8);
+        assert!(execution.used_parallelism);
+        assert_eq!(fs::read(output_path).expect("output"), target);
     }
 }

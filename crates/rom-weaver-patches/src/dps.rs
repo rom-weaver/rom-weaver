@@ -83,6 +83,12 @@ impl PatchHandler for DpsPatchHandler {
         };
         let parsed = parse_dps_file(patch_path, parse_mode)?;
         let source_len_u64 = fs::metadata(&request.input)?.len();
+        let source_len = usize::try_from(source_len_u64).map_err(|_| {
+            RomWeaverError::Validation(format!(
+                "{} source input exceeded addressable memory",
+                self.descriptor.name
+            ))
+        })?;
         let source_len_u32 = u32::try_from(source_len_u64).map_err(|_| {
             RomWeaverError::Validation(format!(
                 "{} source input exceeded maximum supported size of {} byte(s)",
@@ -106,7 +112,6 @@ impl PatchHandler for DpsPatchHandler {
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
         }
-        let mut source = File::open(&request.input)?;
         let mut output = OpenOptions::new()
             .read(true)
             .write(true)
@@ -114,50 +119,34 @@ impl PatchHandler for DpsPatchHandler {
             .truncate(true)
             .open(&request.output)?;
         output.set_len(parsed.output_size)?;
-
-        for record in &parsed.records {
-            match record {
-                DpsRecord::CopyFromSource {
-                    output_offset,
-                    source_offset,
-                    length,
-                } => {
-                    let (source_start, source_end) = checked_range(
-                        *source_offset,
-                        *length,
-                        source_len_u64 as usize,
-                        "DPS source copy",
-                    )?;
-                    let (output_start, output_end) =
-                        checked_range(*output_offset, *length, output_len, "DPS output write")?;
-                    debug_assert_eq!(source_end - source_start, output_end - output_start);
-                    copy_range_between_files(
-                        &mut source,
-                        &mut output,
-                        source_start as u64,
-                        output_start as u64,
-                        output_end - output_start,
-                    )?;
-                }
-                DpsRecord::EmbeddedData {
-                    output_offset,
-                    data,
-                } => {
-                    let data_len = u32::try_from(data.len()).map_err(|_| {
-                        RomWeaverError::Validation(
-                            "DPS embedded record length exceeded 32-bit range".into(),
-                        )
-                    })?;
-                    let (output_start, output_end) =
-                        checked_range(*output_offset, data_len, output_len, "DPS output write")?;
-                    output.seek(SeekFrom::Start(output_start as u64))?;
-                    output.write_all(&data[..output_end - output_start])?;
-                }
-            }
-        }
+        let thread_capability = dps_apply_thread_capability(parsed.records.len());
+        let planned_execution = context.plan_threads(thread_capability.clone());
+        let execution = if planned_execution.used_parallelism {
+            let source = map_file_read_only(&request.input)?;
+            let (execution, pool) = context.build_pool(thread_capability)?;
+            let prepared = prepare_dps_writes_parallel(
+                &parsed.records,
+                source.as_ref(),
+                source_len,
+                output_len,
+                &pool,
+                context,
+            )?;
+            apply_prepared_dps_writes(&mut output, &prepared)?;
+            execution
+        } else {
+            let mut source = File::open(&request.input)?;
+            apply_dps_records_in_place(
+                &parsed.records,
+                source_len,
+                output_len,
+                &mut source,
+                &mut output,
+            )?;
+            planned_execution
+        };
         output.flush()?;
 
-        let execution = context.plan_threads(ThreadCapability::single_threaded());
         let checksum_suffix = if validate_source_size {
             String::new()
         } else {
@@ -258,9 +247,13 @@ impl PatchHandler for DpsPatchHandler {
             create: true,
             threaded_scan: false,
             threaded_diff: true,
-            threaded_output: false,
+            threaded_output: true,
         }
     }
+}
+
+fn dps_apply_thread_capability(record_count: usize) -> ThreadCapability {
+    ThreadCapability::parallel(Some(record_count.max(1)))
 }
 
 fn dps_create_thread_capability(target_len: u64) -> ThreadCapability {
@@ -831,6 +824,128 @@ fn copy_range_between_files(
     Ok(())
 }
 
+struct PreparedDpsWrite {
+    output_offset: u64,
+    data: Vec<u8>,
+}
+
+fn apply_dps_records_in_place(
+    records: &[DpsRecord],
+    source_len: usize,
+    output_len: usize,
+    source: &mut File,
+    output: &mut File,
+) -> Result<()> {
+    for record in records {
+        match record {
+            DpsRecord::CopyFromSource {
+                output_offset,
+                source_offset,
+                length,
+            } => {
+                let (source_start, source_end) =
+                    checked_range(*source_offset, *length, source_len, "DPS source copy")?;
+                let (output_start, output_end) =
+                    checked_range(*output_offset, *length, output_len, "DPS output write")?;
+                debug_assert_eq!(source_end - source_start, output_end - output_start);
+                copy_range_between_files(
+                    source,
+                    output,
+                    source_start as u64,
+                    output_start as u64,
+                    output_end - output_start,
+                )?;
+            }
+            DpsRecord::EmbeddedData {
+                output_offset,
+                data,
+            } => {
+                let data_len = u32::try_from(data.len()).map_err(|_| {
+                    RomWeaverError::Validation(
+                        "DPS embedded record length exceeded 32-bit range".into(),
+                    )
+                })?;
+                let (output_start, output_end) =
+                    checked_range(*output_offset, data_len, output_len, "DPS output write")?;
+                output.seek(SeekFrom::Start(output_start as u64))?;
+                output.write_all(&data[..output_end - output_start])?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn prepare_dps_writes_parallel(
+    records: &[DpsRecord],
+    source: &[u8],
+    source_len: usize,
+    output_len: usize,
+    pool: &SharedThreadPool,
+    context: &OperationContext,
+) -> Result<Vec<PreparedDpsWrite>> {
+    pool.install(|| {
+        records
+            .par_iter()
+            .map(|record| {
+                context.cancel().check()?;
+                prepare_dps_write(record, source, source_len, output_len)
+            })
+            .collect::<Result<Vec<_>>>()
+    })
+}
+
+fn prepare_dps_write(
+    record: &DpsRecord,
+    source: &[u8],
+    source_len: usize,
+    output_len: usize,
+) -> Result<PreparedDpsWrite> {
+    match record {
+        DpsRecord::CopyFromSource {
+            output_offset,
+            source_offset,
+            length,
+        } => {
+            let (source_start, source_end) =
+                checked_range(*source_offset, *length, source_len, "DPS source copy")?;
+            let (output_start, output_end) =
+                checked_range(*output_offset, *length, output_len, "DPS output write")?;
+            debug_assert_eq!(source_end - source_start, output_end - output_start);
+            Ok(PreparedDpsWrite {
+                output_offset: output_start as u64,
+                data: source[source_start..source_end].to_vec(),
+            })
+        }
+        DpsRecord::EmbeddedData {
+            output_offset,
+            data,
+        } => {
+            let data_len = u32::try_from(data.len()).map_err(|_| {
+                RomWeaverError::Validation(
+                    "DPS embedded record length exceeded 32-bit range".into(),
+                )
+            })?;
+            let (output_start, output_end) =
+                checked_range(*output_offset, data_len, output_len, "DPS output write")?;
+            Ok(PreparedDpsWrite {
+                output_offset: output_start as u64,
+                data: data[..output_end - output_start].to_vec(),
+            })
+        }
+    }
+}
+
+fn apply_prepared_dps_writes(output: &mut File, writes: &[PreparedDpsWrite]) -> Result<()> {
+    for write in writes {
+        if write.data.is_empty() {
+            continue;
+        }
+        output.seek(SeekFrom::Start(write.output_offset))?;
+        output.write_all(&write.data)?;
+    }
+    Ok(())
+}
+
 fn encode_dps_patch(
     records: &[DpsRecord],
     metadata: DpsHeaderMetadata<'_>,
@@ -1201,7 +1316,10 @@ mod tests {
         let mut target = source.clone();
         let run_start = super::CREATE_THREAD_SCAN_CHUNK_BYTES - 11;
         let run_len = 29usize;
-        for (index, byte) in target[run_start..run_start + run_len].iter_mut().enumerate() {
+        for (index, byte) in target[run_start..run_start + run_len]
+            .iter_mut()
+            .enumerate()
+        {
             *byte = 0x80u8.wrapping_add(index as u8);
         }
 
@@ -1249,9 +1367,11 @@ mod tests {
             fs::read(&parallel_patch).expect("parallel patch")
         );
 
-        let parsed =
-            parse_dps_bytes(&fs::read(parallel_patch).expect("patch bytes"), DpsParseMode::Strict)
-                .expect("parse");
+        let parsed = parse_dps_bytes(
+            &fs::read(parallel_patch).expect("patch bytes"),
+            DpsParseMode::Strict,
+        )
+        .expect("parse");
         assert_eq!(parsed.data_record_count, 1);
 
         let embedded = parsed
@@ -1268,7 +1388,10 @@ mod tests {
 
         assert_eq!(embedded.0, run_start as u32);
         assert_eq!(embedded.1.len(), run_len);
-        assert_eq!(embedded.1.as_slice(), &target[run_start..run_start + run_len]);
+        assert_eq!(
+            embedded.1.as_slice(),
+            &target[run_start..run_start + run_len]
+        );
     }
 
     #[test]
@@ -1332,5 +1455,60 @@ mod tests {
             fs::read(single_patch).expect("single patch"),
             fs::read(parallel_patch).expect("parallel patch")
         );
+    }
+
+    #[test]
+    fn apply_runtime_threads_match_capabilities_for_multi_record_patch() {
+        let temp = TestDir::new();
+        let source_path = temp.child("source.bin");
+        let target_path = temp.child("target.bin");
+        let patch_path = temp.child("update.dps");
+        let output_path = temp.child("output.bin");
+
+        let len = super::CREATE_THREAD_SCAN_CHUNK_BYTES + 96 * 1024;
+        let mut source = vec![0u8; len];
+        for (index, byte) in source.iter_mut().enumerate() {
+            *byte = ((index * 13 + (index >> 2)) & 0xff) as u8;
+        }
+        let mut target = source.clone();
+        for index in (0..target.len()).step_by(3071) {
+            target[index] ^= 0x33;
+        }
+
+        fs::write(&source_path, &source).expect("source fixture");
+        fs::write(&target_path, &target).expect("target fixture");
+
+        let handler = DpsPatchHandler::new(&DPS);
+        let capabilities = handler.capabilities();
+        assert!(capabilities.threaded_output);
+
+        handler
+            .create(
+                &PatchCreateRequest {
+                    original: source_path.clone(),
+                    modified: target_path.clone(),
+                    output: patch_path.clone(),
+                    format: "dps".into(),
+                },
+                &test_context_with_threads(&temp, 8),
+            )
+            .expect("create");
+
+        let apply_report = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: source_path,
+                    patches: vec![patch_path],
+                    output: output_path.clone(),
+                },
+                &test_context_with_threads(&temp, 8),
+            )
+            .expect("apply");
+
+        let execution = apply_report.thread_execution.expect("thread execution");
+        assert_eq!(execution.requested_threads, 8);
+        assert_eq!(execution.effective_threads, 8);
+        assert!(execution.used_parallelism);
+        assert_eq!(fs::read(output_path).expect("output"), target);
     }
 }

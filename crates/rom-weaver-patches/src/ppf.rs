@@ -105,10 +105,20 @@ impl PatchHandler for PpfPatchHandler {
             .write(true)
             .open(&request.output)?;
         let use_undo_data = should_apply_undo_data(&mut output, &parsed.records)?;
-        apply_records(&mut output, &parsed.records, use_undo_data)?;
+        let thread_capability = ppf_apply_thread_capability(parsed.records.len());
+        let planned_execution = context.plan_threads(thread_capability.clone());
+        let execution = if planned_execution.used_parallelism {
+            let (execution, pool) = context.build_pool(thread_capability)?;
+            let prepared =
+                prepare_ppf_writes_parallel(&parsed.records, use_undo_data, &pool, context)?;
+            apply_prepared_ppf_writes(&mut output, &prepared)?;
+            execution
+        } else {
+            apply_records(&mut output, &parsed.records, use_undo_data)?;
+            planned_execution
+        };
         output.flush()?;
 
-        let execution = context.plan_threads(ThreadCapability::single_threaded());
         let checksum_suffix = if validate_checksums {
             String::new()
         } else {
@@ -181,7 +191,7 @@ impl PatchHandler for PpfPatchHandler {
             create: true,
             threaded_scan: false,
             threaded_diff: true,
-            threaded_output: false,
+            threaded_output: true,
         }
     }
 }
@@ -230,6 +240,11 @@ struct CreatedPpfPatch {
     blockcheck_enabled: bool,
 }
 
+struct PreparedPpfWrite {
+    offset: u64,
+    data: Vec<u8>,
+}
+
 fn parse_ppf_file(path: &Path) -> Result<ParsedPpfPatch> {
     let bytes = map_file_read_only(path)?;
     parse_ppf_bytes(&bytes)
@@ -245,6 +260,10 @@ fn map_file_read_only(path: &Path) -> Result<Mmap> {
 fn ppf_create_thread_capability(modified_len: u64) -> ThreadCapability {
     let chunk_count = ppf_create_chunk_count(modified_len).max(1);
     ThreadCapability::parallel(Some(chunk_count))
+}
+
+fn ppf_apply_thread_capability(record_count: usize) -> ThreadCapability {
+    ThreadCapability::parallel(Some(record_count.max(1)))
 }
 
 fn ppf_create_chunk_count(modified_len: u64) -> usize {
@@ -1045,6 +1064,42 @@ fn apply_records(file: &mut File, records: &[PpfRecord], use_undo_data: bool) ->
     Ok(())
 }
 
+fn prepare_ppf_writes_parallel(
+    records: &[PpfRecord],
+    use_undo_data: bool,
+    pool: &SharedThreadPool,
+    context: &OperationContext,
+) -> Result<Vec<PreparedPpfWrite>> {
+    pool.install(|| {
+        records
+            .par_iter()
+            .map(|record| {
+                context.cancel().check()?;
+                let payload = if use_undo_data {
+                    record.undo_data.as_deref().unwrap_or(&record.data)
+                } else {
+                    &record.data
+                };
+                Ok(PreparedPpfWrite {
+                    offset: record.offset,
+                    data: payload.to_vec(),
+                })
+            })
+            .collect::<Result<Vec<_>>>()
+    })
+}
+
+fn apply_prepared_ppf_writes(file: &mut File, writes: &[PreparedPpfWrite]) -> Result<()> {
+    for write in writes {
+        if write.data.is_empty() {
+            continue;
+        }
+        file.seek(SeekFrom::Start(write.offset))?;
+        file.write_all(&write.data)?;
+    }
+    Ok(())
+}
+
 fn read_u16_le(bytes: &[u8], offset: usize) -> Result<u16> {
     let end = offset
         .checked_add(2)
@@ -1151,10 +1206,11 @@ mod tests {
             )
             .expect("apply");
 
+        assert!(handler.capabilities().threaded_output);
         let execution = report.thread_execution.expect("thread execution");
         assert_eq!(execution.requested_threads, 8);
-        assert_eq!(execution.effective_threads, 1);
-        assert!(!execution.used_parallelism);
+        assert_eq!(execution.effective_threads, 2);
+        assert!(execution.used_parallelism);
 
         assert_eq!(fs::read(output_path).expect("output"), b"abXYZfg!!!!");
     }

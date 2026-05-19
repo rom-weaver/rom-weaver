@@ -115,14 +115,22 @@ impl PatchHandler for SolidPatchHandler {
         if validate_checksums {
             validate_source_checksum(parsed.source_md5, input.as_ref())?;
         }
-        let output = apply_parsed_patch(&parsed, input.as_ref())?;
+        let thread_capability = solid_apply_thread_capability(parsed.primitives.len());
+        let planned_execution = context.plan_threads(thread_capability.clone());
+        let (execution, output) = if planned_execution.used_parallelism {
+            let (execution, pool) = context.build_pool(thread_capability)?;
+            let output = apply_parsed_patch_parallel(&parsed, input.as_ref(), &pool, context)?;
+            (execution, output)
+        } else {
+            let output = apply_parsed_patch(&parsed, input.as_ref())?;
+            (planned_execution, output)
+        };
 
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
         }
         fs::write(&request.output, output)?;
 
-        let execution = context.plan_threads(ThreadCapability::single_threaded());
         let checksum_suffix = if validate_checksums {
             String::new()
         } else {
@@ -286,7 +294,7 @@ impl PatchHandler for SolidPatchHandler {
             create: true,
             threaded_scan: false,
             threaded_diff: true,
-            threaded_output: false,
+            threaded_output: true,
         }
     }
 }
@@ -331,6 +339,17 @@ enum PrimitivePayload {
 #[derive(Debug)]
 struct CreatedPrimitive {
     base_delta: u64,
+    data: Vec<u8>,
+}
+
+struct PrimitiveWritePlan {
+    primitive_index: usize,
+    start: usize,
+    len: usize,
+}
+
+struct PreparedSolidWrite {
+    start: usize,
     data: Vec<u8>,
 }
 
@@ -520,6 +539,101 @@ fn apply_parsed_patch(parsed: &ParsedSolidPatch, source: &[u8]) -> Result<Vec<u8
         )?;
     }
 
+    apply_resize_action(parsed, &mut output)?;
+    Ok(output)
+}
+
+fn apply_parsed_patch_parallel(
+    parsed: &ParsedSolidPatch,
+    source: &[u8],
+    pool: &SharedThreadPool,
+    context: &OperationContext,
+) -> Result<Vec<u8>> {
+    let (plans, required_output_len) = build_primitive_write_plans(parsed, source.len())?;
+    let writes = pool.install(|| {
+        plans
+            .par_iter()
+            .map(|plan| {
+                context.cancel().check()?;
+                let primitive = parsed.primitives.get(plan.primitive_index).ok_or_else(|| {
+                    RomWeaverError::Validation(
+                        "SOLID primitive plan referenced an out-of-range primitive".into(),
+                    )
+                })?;
+                let mut data = vec![0u8; plan.len];
+                primitive.write_into(&mut data);
+                Ok(PreparedSolidWrite {
+                    start: plan.start,
+                    data,
+                })
+            })
+            .collect::<Result<Vec<_>>>()
+    })?;
+
+    let mut output = source.to_vec();
+    if output.len() < required_output_len {
+        output.resize(required_output_len, 0);
+    }
+    for write in writes {
+        let end = checked_add_usize(write.start, write.data.len(), "SOLID write range end")?;
+        let target = output.get_mut(write.start..end).ok_or_else(|| {
+            RomWeaverError::Validation("SOLID write range exceeded output bounds".into())
+        })?;
+        target.copy_from_slice(&write.data);
+    }
+    apply_resize_action(parsed, &mut output)?;
+    Ok(output)
+}
+
+fn build_primitive_write_plans(
+    parsed: &ParsedSolidPatch,
+    initial_output_len: usize,
+) -> Result<(Vec<PrimitiveWritePlan>, usize)> {
+    let mut plans = Vec::with_capacity(parsed.primitives.len());
+    let mut cursor = 0u64;
+    let mut required_output_len = initial_output_len;
+
+    for (primitive_index, primitive) in parsed.primitives.iter().enumerate() {
+        match primitive.addr_byte {
+            0 => {
+                let delta = primitive.base_delta.ok_or_else(|| {
+                    RomWeaverError::Validation(
+                        "SOLID primitive used base addressing without base address bytes".into(),
+                    )
+                })?;
+                cursor = checked_add_u64(cursor, delta, "SOLID primitive address overflow")?;
+            }
+            0xFF => {}
+            relative => {
+                cursor = checked_add_u64(
+                    cursor,
+                    u64::from(relative),
+                    "SOLID primitive relative address overflow",
+                )?;
+            }
+        }
+
+        let start = usize_from_u64(cursor, "SOLID primitive address")?;
+        let len = primitive.write_len();
+        let end = checked_add_usize(start, len, "SOLID primitive write end")?;
+        required_output_len = required_output_len.max(end);
+        plans.push(PrimitiveWritePlan {
+            primitive_index,
+            start,
+            len,
+        });
+
+        cursor = checked_add_u64(
+            cursor,
+            len as u64,
+            "SOLID primitive cursor advance overflow",
+        )?;
+    }
+
+    Ok((plans, required_output_len))
+}
+
+fn apply_resize_action(parsed: &ParsedSolidPatch, output: &mut Vec<u8>) -> Result<()> {
     match parsed.resize {
         ResizeAction::None => {}
         ResizeAction::Expand { address, size } => {
@@ -549,7 +663,7 @@ fn apply_parsed_patch(parsed: &ParsedSolidPatch, source: &[u8]) -> Result<Vec<u8
         }
     }
 
-    Ok(output)
+    Ok(())
 }
 
 fn validate_source_checksum(expected: [u8; SOLID_MD5_LEN], input: &[u8]) -> Result<()> {
@@ -585,6 +699,10 @@ fn build_created_addr_param(mod_action: u8, uses_big_fields: bool, patch_info_fl
 fn solid_create_thread_capability(shared_len: u64) -> ThreadCapability {
     let chunk_count = solid_create_chunk_count(shared_len).max(1);
     ThreadCapability::parallel(Some(chunk_count))
+}
+
+fn solid_apply_thread_capability(primitive_count: usize) -> ThreadCapability {
+    ThreadCapability::parallel(Some(primitive_count.max(1)))
 }
 
 fn solid_create_chunk_count(shared_len: u64) -> usize {
@@ -1390,8 +1508,8 @@ mod tests {
             fs::read(&parallel_patch).expect("parallel patch")
         );
 
-        let parsed =
-            parse_solid_patch_bytes(&fs::read(&parallel_patch).expect("patch bytes")).expect("parse");
+        let parsed = parse_solid_patch_bytes(&fs::read(&parallel_patch).expect("patch bytes"))
+            .expect("parse");
         match parsed.resize {
             ResizeAction::Expand { size, .. } => assert_eq!(size, 32),
             _ => panic!("expected expand resize action"),
@@ -1518,5 +1636,60 @@ mod tests {
             )
             .expect_err("apply should fail");
         assert!(error.to_string().contains("MD5 mismatch"));
+    }
+
+    #[test]
+    fn apply_runtime_threads_match_capabilities_for_multi_primitive_patch() {
+        let temp = TestDir::new();
+        let original = temp.child("old.bin");
+        let modified = temp.child("new.bin");
+        let patch = temp.child("update.solid");
+        let output = temp.child("output.bin");
+
+        let len = super::CREATE_THREAD_SCAN_CHUNK_BYTES + 96 * 1024;
+        let mut source = vec![0u8; len];
+        for (index, byte) in source.iter_mut().enumerate() {
+            *byte = ((index * 9 + (index >> 3)) & 0xff) as u8;
+        }
+        let mut target = source.clone();
+        for index in (0..target.len()).step_by(2053) {
+            target[index] ^= 0x3c;
+        }
+
+        fs::write(&original, &source).expect("source");
+        fs::write(&modified, &target).expect("target");
+
+        let handler = SolidPatchHandler::new(&SOLID);
+        let capabilities = handler.capabilities();
+        assert!(capabilities.threaded_output);
+
+        handler
+            .create(
+                &PatchCreateRequest {
+                    original: original.clone(),
+                    modified: modified.clone(),
+                    output: patch.clone(),
+                    format: "solid".into(),
+                },
+                &test_context_with_threads(&temp, 8),
+            )
+            .expect("create");
+
+        let apply_report = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: original,
+                    patches: vec![patch],
+                    output: output.clone(),
+                },
+                &test_context_with_threads(&temp, 8),
+            )
+            .expect("apply");
+
+        let execution = apply_report.thread_execution.expect("thread execution");
+        assert_eq!(execution.requested_threads, 8);
+        assert_eq!(execution.effective_threads, 8);
+        assert!(execution.used_parallelism);
+        assert_eq!(fs::read(output).expect("output"), target);
     }
 }
