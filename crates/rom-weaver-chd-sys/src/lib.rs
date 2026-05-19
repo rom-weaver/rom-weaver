@@ -2,9 +2,10 @@ use std::{
     ffi::{CStr, CString, c_char, c_void},
     fmt,
     fs::File,
-    io::Write,
+    io::{Seek, SeekFrom, Write},
     path::Path,
     ptr::NonNull,
+    sync::{Arc, Mutex},
 };
 
 #[allow(unused_imports)]
@@ -85,6 +86,7 @@ pub struct CreateOptions {
     pub unit_bytes: u32,
     pub compression: [ChdCodec; CHD_MAX_COMPRESSORS],
     pub compression_level: i32,
+    pub thread_count: u32,
 }
 
 impl Default for CreateOptions {
@@ -95,6 +97,7 @@ impl Default for CreateOptions {
             unit_bytes: 1,
             compression: [ChdCodec::NONE; CHD_MAX_COMPRESSORS],
             compression_level: 0,
+            thread_count: 1,
         }
     }
 }
@@ -197,6 +200,7 @@ impl ChdFile {
                 options.unit_bytes,
                 codecs.as_ptr(),
                 options.compression_level,
+                sanitize_thread_count(options.thread_count),
                 &mut handle,
                 &mut header,
                 error.as_mut_ptr(),
@@ -239,6 +243,7 @@ impl ChdFile {
                 options.unit_bytes,
                 codecs.as_ptr(),
                 options.compression_level,
+                sanitize_thread_count(options.thread_count),
                 &mut header,
                 error.as_mut_ptr(),
                 ERROR_BUFFER_LEN,
@@ -403,6 +408,26 @@ impl ChdFile {
         parent_path: Option<&Path>,
         output_path: &Path,
     ) -> Result<ChdHeader, Error> {
+        Self::extract_to_file_with_threads(path, parent_path, output_path, 1)
+    }
+
+    pub fn extract_to_file_with_threads(
+        path: &Path,
+        parent_path: Option<&Path>,
+        output_path: &Path,
+        thread_count: usize,
+    ) -> Result<ChdHeader, Error> {
+        if thread_count <= 1 {
+            return Self::extract_to_file_sequential(path, parent_path, output_path);
+        }
+        Self::extract_to_file_parallel(path, parent_path, output_path, thread_count)
+    }
+
+    fn extract_to_file_sequential(
+        path: &Path,
+        parent_path: Option<&Path>,
+        output_path: &Path,
+    ) -> Result<ChdHeader, Error> {
         let chd = Self::open(path, parent_path)?;
         let header = chd.header();
         let mut output = File::create(output_path).map_err(|source| Error {
@@ -438,6 +463,172 @@ impl ChdFile {
             remaining -= write_len as u64;
         }
 
+        Ok(header)
+    }
+
+    fn extract_to_file_parallel(
+        path: &Path,
+        parent_path: Option<&Path>,
+        output_path: &Path,
+        thread_count: usize,
+    ) -> Result<ChdHeader, Error> {
+        let header = {
+            let chd = Self::open(path, parent_path)?;
+            chd.header()
+        };
+        if header.hunk_count <= 1 {
+            return Self::extract_to_file_sequential(path, parent_path, output_path);
+        }
+
+        let hunk_bytes = usize::try_from(header.hunk_bytes).map_err(|_| Error {
+            code: error_codes::INVALID_ARGUMENT,
+            message: "CHD hunk size exceeded addressable memory".into(),
+        })?;
+        let total_hunks = usize::try_from(header.hunk_count).map_err(|_| Error {
+            code: error_codes::INVALID_ARGUMENT,
+            message: "CHD hunk count exceeded addressable memory".into(),
+        })?;
+        let worker_count = thread_count.max(1).min(total_hunks.max(1));
+        if worker_count <= 1 {
+            return Self::extract_to_file_sequential(path, parent_path, output_path);
+        }
+
+        let output = Arc::new(Mutex::new(File::create(output_path).map_err(|source| {
+            Error {
+                code: error_codes::INVALID_ARGUMENT,
+                message: format!("failed to create {}: {source}", output_path.display()),
+            }
+        })?));
+        {
+            let guard = output.lock().map_err(|_| Error {
+                code: error_codes::INVALID_ARGUMENT,
+                message: "output file lock poisoned during CHD extraction".into(),
+            })?;
+            guard
+                .set_len(header.logical_bytes)
+                .map_err(|source| Error {
+                    code: error_codes::INVALID_ARGUMENT,
+                    message: format!("failed to resize {}: {source}", output_path.display()),
+                })?;
+        }
+
+        let first_error = Arc::new(Mutex::new(None::<Error>));
+        let source_path = path.to_path_buf();
+        let parent_path = parent_path.map(Path::to_path_buf);
+        let hunks_per_worker = total_hunks.div_ceil(worker_count);
+
+        std::thread::scope(|scope| {
+            for worker_index in 0..worker_count {
+                let start_hunk = worker_index * hunks_per_worker;
+                if start_hunk >= total_hunks {
+                    break;
+                }
+                let end_hunk = (start_hunk + hunks_per_worker).min(total_hunks);
+                let source_path = source_path.clone();
+                let parent_path = parent_path.clone();
+                let output = Arc::clone(&output);
+                let first_error = Arc::clone(&first_error);
+                scope.spawn(move || {
+                    let chd = match Self::open(&source_path, parent_path.as_deref()) {
+                        Ok(chd) => chd,
+                        Err(error) => {
+                            set_first_error(&first_error, error);
+                            return;
+                        }
+                    };
+
+                    let mut buffer = vec![0_u8; hunk_bytes];
+                    for hunk_index in start_hunk..end_hunk {
+                        if has_recorded_error(&first_error) {
+                            return;
+                        }
+                        let hunk_index_u32 = match u32::try_from(hunk_index) {
+                            Ok(index) => index,
+                            Err(_) => {
+                                set_first_error(
+                                    &first_error,
+                                    Error {
+                                        code: error_codes::INVALID_ARGUMENT,
+                                        message: "CHD hunk index exceeded supported range".into(),
+                                    },
+                                );
+                                return;
+                            }
+                        };
+                        if let Err(error) = chd.read_hunk(hunk_index_u32, &mut buffer) {
+                            set_first_error(&first_error, error);
+                            return;
+                        }
+                        let offset =
+                            (hunk_index as u64).saturating_mul(u64::from(header.hunk_bytes));
+                        let remaining = header.logical_bytes.saturating_sub(offset);
+                        if remaining == 0 {
+                            break;
+                        }
+                        let write_len =
+                            match usize::try_from(remaining.min(u64::from(header.hunk_bytes))) {
+                                Ok(length) => length,
+                                Err(_) => {
+                                    set_first_error(
+                                        &first_error,
+                                        Error {
+                                            code: error_codes::INVALID_ARGUMENT,
+                                            message:
+                                                "extracted CHD hunk exceeded addressable memory"
+                                                    .into(),
+                                        },
+                                    );
+                                    return;
+                                }
+                            };
+                        let mut guard = match output.lock() {
+                            Ok(guard) => guard,
+                            Err(_) => {
+                                set_first_error(
+                                    &first_error,
+                                    Error {
+                                        code: error_codes::INVALID_ARGUMENT,
+                                        message: "output file lock poisoned during CHD extraction"
+                                            .into(),
+                                    },
+                                );
+                                return;
+                            }
+                        };
+                        if let Err(source) = guard.seek(SeekFrom::Start(offset)) {
+                            set_first_error(
+                                &first_error,
+                                Error {
+                                    code: error_codes::INVALID_ARGUMENT,
+                                    message: format!(
+                                        "failed to seek {}: {source}",
+                                        output_path.display()
+                                    ),
+                                },
+                            );
+                            return;
+                        }
+                        if let Err(source) = guard.write_all(&buffer[..write_len]) {
+                            set_first_error(
+                                &first_error,
+                                Error {
+                                    code: error_codes::INVALID_ARGUMENT,
+                                    message: format!(
+                                        "failed to write {}: {source}",
+                                        output_path.display()
+                                    ),
+                                },
+                            );
+                            return;
+                        }
+                    }
+                });
+            }
+        });
+
+        if let Some(error) = first_error.lock().ok().and_then(|mut guard| guard.take()) {
+            return Err(error);
+        }
         Ok(header)
     }
 }
@@ -505,6 +696,22 @@ fn c_string_ptr(value: Option<&CString>) -> *const c_char {
     value.map_or(std::ptr::null(), |value| value.as_ptr())
 }
 
+fn sanitize_thread_count(thread_count: u32) -> i32 {
+    thread_count.max(1).min(i32::MAX as u32) as i32
+}
+
+fn has_recorded_error(slot: &Arc<Mutex<Option<Error>>>) -> bool {
+    slot.lock().map(|guard| guard.is_some()).unwrap_or(true)
+}
+
+fn set_first_error(slot: &Arc<Mutex<Option<Error>>>, error: Error) {
+    if let Ok(mut guard) = slot.lock() {
+        if guard.is_none() {
+            *guard = Some(error);
+        }
+    }
+}
+
 fn handle_result(status: i32, error: &[c_char; ERROR_BUFFER_LEN]) -> Result<(), Error> {
     if status == error_codes::OK {
         return Ok(());
@@ -549,6 +756,7 @@ unsafe extern "C" {
         unit_bytes: u32,
         compression: *const u32,
         compression_level: i32,
+        thread_count: i32,
         out_handle: *mut *mut c_void,
         out_header: *mut RawChdHeader,
         error: *mut c_char,
@@ -563,6 +771,7 @@ unsafe extern "C" {
         unit_bytes: u32,
         compression: *const u32,
         compression_level: i32,
+        thread_count: i32,
         out_header: *mut RawChdHeader,
         error: *mut c_char,
         error_len: usize,
@@ -656,6 +865,7 @@ mod tests {
                     super::ChdCodec::NONE,
                 ],
                 compression_level: 0,
+                thread_count: 1,
             },
         )
         .expect("compress");

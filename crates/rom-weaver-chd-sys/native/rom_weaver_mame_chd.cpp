@@ -15,6 +15,7 @@
 namespace {
 
 extern "C" void rw_mame_chd_set_compression_level(int level);
+extern "C" void rw_mame_chd_set_thread_count(int thread_count) noexcept;
 
 struct rw_mame_chd_handle {
     chd_file file;
@@ -31,6 +32,19 @@ public:
     ~rw_chd_level_scope()
     {
         rw_mame_chd_set_compression_level(0);
+    }
+};
+
+class rw_chd_thread_scope {
+public:
+    explicit rw_chd_thread_scope(int thread_count)
+    {
+        rw_mame_chd_set_thread_count(thread_count);
+    }
+
+    ~rw_chd_thread_scope()
+    {
+        rw_mame_chd_set_thread_count(1);
     }
 };
 
@@ -328,6 +342,7 @@ int32_t rw_mame_chd_create(
     uint32_t unit_bytes,
     uint32_t const *compression,
     int32_t compression_level,
+    int32_t thread_count,
     void **out_handle,
     rw_mame_chd_header *out_header,
     char *error,
@@ -371,6 +386,7 @@ int32_t rw_mame_chd_create(
         compression[3],
     };
     rw_chd_level_scope level_scope(compression_level);
+    rw_chd_thread_scope thread_scope(thread_count);
     std::error_condition condition = handle->parent
         ? handle->file.create(path, logical_bytes, hunk_bytes, codecs, *handle->parent)
         : handle->file.create(path, logical_bytes, hunk_bytes, unit_bytes, codecs);
@@ -397,6 +413,7 @@ int32_t rw_mame_chd_compress_file(
     uint32_t unit_bytes,
     uint32_t const *compression,
     int32_t compression_level,
+    int32_t thread_count,
     rw_mame_chd_header *out_header,
     char *error,
     size_t error_len
@@ -458,6 +475,7 @@ int32_t rw_mame_chd_compress_file(
     };
 
     rw_chd_level_scope level_scope(compression_level);
+    rw_chd_thread_scope thread_scope(thread_count);
     rw_path_compressor compressor(input, resolved_logical_bytes);
     std::error_condition condition = parent
         ? compressor.create(output_path, resolved_logical_bytes, hunk_bytes, codecs, *parent)

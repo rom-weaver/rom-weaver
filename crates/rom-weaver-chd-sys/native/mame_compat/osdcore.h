@@ -42,4 +42,7 @@ bool osd_work_item_wait(osd_work_item *item, osd_ticks_t timeout);
 void *osd_work_item_result(osd_work_item *item);
 void osd_work_item_release(osd_work_item *item);
 
+// CHD bridge controls the worker count for WORK_QUEUE_FLAG_MULTI queues.
+extern "C" void rw_mame_chd_set_thread_count(int thread_count) noexcept;
+
 #endif

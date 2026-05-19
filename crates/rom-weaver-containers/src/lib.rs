@@ -7318,31 +7318,40 @@ mod chd_native {
             }
         }
 
-        fn extract_to_file(&self, output_path: &Path) -> Result<rom_weaver_chd_sys::ChdHeader> {
+        fn extract_to_file(
+            &self,
+            output_path: &Path,
+            thread_count: usize,
+        ) -> Result<rom_weaver_chd_sys::ChdHeader> {
             match &self.backend {
-            ChdReadBackend::Native(_) => match ChdFile::extract_to_file(&self.source, None, output_path)
-                .map_err(|error| RomWeaverError::Validation(error.to_string()))
-            {
-                Ok(header) => Ok(header),
-                Err(native_error) => Self::extract_to_file_with_rust(
+                ChdReadBackend::Native(_) => match ChdFile::extract_to_file_with_threads(
                     &self.source,
-                    self.header.logical_bytes,
+                    None,
                     output_path,
+                    thread_count,
                 )
-                .map_err(|fallback_error| {
-                    RomWeaverError::Validation(format!(
-                        "failed to extract chd `{}` with native backend ({native_error}); fallback decoder failed ({fallback_error})",
-                        self.source.display()
-                    ))
-                })
-                .map(|_| self.header),
-            },
-            ChdReadBackend::Rust { .. } => {
-                Self::extract_to_file_with_rust(&self.source, self.header.logical_bytes, output_path)
-                    .map_err(RomWeaverError::Validation)
-                    .map(|_| self.header)
+                .map_err(|error| RomWeaverError::Validation(error.to_string()))
+                {
+                    Ok(header) => Ok(header),
+                    Err(native_error) => Self::extract_to_file_with_rust(
+                        &self.source,
+                        self.header.logical_bytes,
+                        output_path,
+                    )
+                    .map_err(|fallback_error| {
+                        RomWeaverError::Validation(format!(
+                            "failed to extract chd `{}` with native backend ({native_error}); fallback decoder failed ({fallback_error})",
+                            self.source.display()
+                        ))
+                    })
+                    .map(|_| self.header),
+                },
+                ChdReadBackend::Rust { .. } => {
+                    Self::extract_to_file_with_rust(&self.source, self.header.logical_bytes, output_path)
+                        .map_err(RomWeaverError::Validation)
+                        .map(|_| self.header)
+                }
             }
-        }
         }
 
         fn extract_to_file_with_rust(
@@ -8617,7 +8626,7 @@ mod chd_native {
                 .unwrap_or("output");
             let cue_path = request.out_dir.join(format!("{stem}.cue"));
             let temp_path = self.create_temp_file_path("cd-extract", ".bin");
-            let extract_result = chd.extract_to_file(&temp_path);
+            let extract_result = chd.extract_to_file(&temp_path, execution.effective_threads);
             if extract_result.is_err() {
                 let _ = fs::remove_file(&temp_path);
             }
@@ -8953,7 +8962,7 @@ mod chd_native {
                 .unwrap_or("output");
             let gdi_path = request.out_dir.join(format!("{stem}.gdi"));
             let temp_path = self.create_temp_file_path("gd-extract", ".bin");
-            let extract_result = chd.extract_to_file(&temp_path);
+            let extract_result = chd.extract_to_file(&temp_path, execution.effective_threads);
             if extract_result.is_err() {
                 let _ = fs::remove_file(&temp_path);
             }
@@ -9090,6 +9099,7 @@ mod chd_native {
             logical_bytes: u64,
             create_kind: &ChdCreateKind,
             compression_level: i32,
+            thread_count: usize,
         ) -> Result<rom_weaver_chd_sys::ChdHeader> {
             let hunk_bytes = self.hunk_bytes(create_kind, logical_bytes, ChdCodec::NONE);
             let mut chd = ChdFile::create(
@@ -9101,6 +9111,7 @@ mod chd_native {
                     unit_bytes: self.unit_bytes(create_kind),
                     compression: [ChdCodec::NONE; CHD_MAX_COMPRESSORS],
                     compression_level,
+                    thread_count: thread_count.min(u32::MAX as usize) as u32,
                 },
             )
             .map_err(|error| RomWeaverError::Validation(error.to_string()))?;
@@ -9138,6 +9149,7 @@ mod chd_native {
             codecs: [ChdCodec; CHD_MAX_COMPRESSORS],
             primary_codec: ChdCodec,
             compression_level: i32,
+            thread_count: usize,
         ) -> Result<rom_weaver_chd_sys::ChdHeader> {
             let hunk_bytes = self.hunk_bytes(create_kind, logical_bytes, primary_codec);
             ChdFile::compress_file(
@@ -9150,6 +9162,7 @@ mod chd_native {
                     unit_bytes: self.unit_bytes(create_kind),
                     compression: codecs,
                     compression_level,
+                    thread_count: thread_count.min(u32::MAX as usize) as u32,
                 },
             )
             .map_err(|error| RomWeaverError::Validation(error.to_string()))?;
@@ -9604,7 +9617,7 @@ mod chd_native {
             request: &ContainerExtractRequest,
             context: &OperationContext,
         ) -> Result<OperationReport> {
-            let execution = context.plan_threads(ThreadCapability::single_threaded());
+            let execution = context.plan_threads(ThreadCapability::parallel(None));
             let chd = ChdReadSession::open(&request.source)?;
             let media_kind = chd.media_kind();
             if request.split_bin && media_kind != ChdMediaKind::CdRom {
@@ -9628,7 +9641,7 @@ mod chd_native {
             }
             selections.ensure_all_matched()?;
             let output_path = request.out_dir.join(&output_name);
-            let header = chd.extract_to_file(&output_path)?;
+            let header = chd.extract_to_file(&output_path, execution.effective_threads)?;
             Ok(OperationReport::succeeded(
                 OperationFamily::Container,
                 Some(CHD.name.to_string()),
@@ -9658,7 +9671,7 @@ mod chd_native {
                 ));
             }
 
-            let execution = context.plan_threads(ThreadCapability::single_threaded());
+            let execution = context.plan_threads(ThreadCapability::parallel(None));
             let input = &request.inputs[0];
             let input_bytes = fs::metadata(input)?.len();
             let mode_override = self.parse_create_mode_override(&request.format)?;
@@ -9712,6 +9725,7 @@ mod chd_native {
                     logical_bytes,
                     &create_kind,
                     compression_level,
+                    execution.effective_threads,
                 )
             } else {
                 self.create_compressed(
@@ -9722,6 +9736,7 @@ mod chd_native {
                     compression_plan.codecs,
                     compression_plan.primary_codec,
                     compression_level,
+                    execution.effective_threads,
                 )
             };
             if let Some(path) = staged_input.as_ref() {
@@ -9756,8 +9771,8 @@ mod chd_native {
                 inspect: true,
                 extract: true,
                 create: true,
-                extract_threads: ThreadCapability::single_threaded(),
-                create_threads: ThreadCapability::single_threaded(),
+                extract_threads: ThreadCapability::parallel(None),
+                create_threads: ThreadCapability::parallel(None),
             }
         }
     }
