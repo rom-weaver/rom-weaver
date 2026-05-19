@@ -6,17 +6,23 @@ rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
-clap.workspace = true
-globset.workspace = true
 rom-weaver-checksum = { path = "../rom-weaver-checksum" }
 rom-weaver-codecs = { path = "../rom-weaver-codecs" }
 rom-weaver-containers = { path = "../rom-weaver-containers" }
 rom-weaver-core = { path = "../rom-weaver-core" }
-rom-weaver-patches = { path = "../rom-weaver-patches" }
 serde_json.workspace = true
 tracing.workspace = true
-tracing-subscriber.workspace = true
 xdvdfs.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+clap = { version = "4.5.51", default-features = false, features = ["derive", "std"] }
+rom-weaver-patches = { path = "../rom-weaver-patches", default-features = false }
+tracing-subscriber = { version = "0.3.20", default-features = false, features = ["fmt", "std"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+clap.workspace = true
+rom-weaver-patches = { path = "../rom-weaver-patches" }
+tracing-subscriber.workspace = true
 
 [dev-dependencies]
 assert_cmd.workspace = true

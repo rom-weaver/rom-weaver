@@ -10,7 +10,6 @@ use std::{
 };
 
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
-use globset::{GlobBuilder, GlobSet, GlobSetBuilder};
 use rom_weaver_checksum::{
     NativeChecksumEngine, checksum_file_values, seed_checksum_file_cache, supported_algorithms,
 };
@@ -25,6 +24,7 @@ use rom_weaver_core::{
 };
 use rom_weaver_patches::PatchRegistry;
 use tracing::trace;
+#[cfg(not(target_arch = "wasm32"))]
 use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 use xdvdfs::{
     blockdev::OffsetWrapper as XdvdfsOffsetWrapper,
@@ -353,6 +353,7 @@ pub fn main_entry() -> ExitCode {
     app.run(cli.command)
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn init_trace_logging(trace_flag: bool, json_mode: bool) {
     static TRACE_LOGGING_INIT: OnceLock<()> = OnceLock::new();
     TRACE_LOGGING_INIT.get_or_init(|| {
@@ -401,6 +402,32 @@ fn init_trace_logging(trace_flag: bool, json_mode: bool) {
                 )
                 .try_init();
         }
+    });
+}
+
+#[cfg(target_arch = "wasm32")]
+fn init_trace_logging(trace_flag: bool, _json_mode: bool) {
+    static TRACE_LOGGING_INIT: OnceLock<()> = OnceLock::new();
+    TRACE_LOGGING_INIT.get_or_init(|| {
+        let trace_requested = trace_flag
+            || std::env::var("ROM_WEAVER_LOG")
+                .ok()
+                .and_then(trim_non_empty)
+                .is_some()
+            || std::env::var("RUST_LOG")
+                .ok()
+                .and_then(trim_non_empty)
+                .is_some();
+        if !trace_requested {
+            return;
+        }
+
+        let _ = tracing_subscriber::fmt()
+            .with_ansi(false)
+            .with_writer(io::stderr)
+            .with_max_level(tracing::level_filters::LevelFilter::TRACE)
+            .compact()
+            .try_init();
     });
 }
 
@@ -1994,44 +2021,25 @@ impl CliApp {
     }
 
     fn should_ignore_checksum_candidate(candidate_name: &str) -> bool {
-        let lower = candidate_name.to_ascii_lowercase();
+        let normalized = candidate_name.replace('\\', "/");
+        let lower = normalized.to_ascii_lowercase();
         if lower.contains("maxcso") {
             return true;
         }
-        Self::checksum_ignore_globs().is_match(candidate_name)
-    }
-
-    fn checksum_ignore_globs() -> &'static GlobSet {
-        static IGNORE_GLOBS: OnceLock<GlobSet> = OnceLock::new();
-        IGNORE_GLOBS.get_or_init(|| {
-            let mut patterns = vec![
-                "__MACOSX".to_string(),
-                "__MACOSX/**".to_string(),
-                "**/__MACOSX".to_string(),
-                "**/__MACOSX/**".to_string(),
-                ".DS_Store".to_string(),
-                "**/.DS_Store".to_string(),
-                "Thumbs.db".to_string(),
-                "**/Thumbs.db".to_string(),
-                "desktop.ini".to_string(),
-                "**/desktop.ini".to_string(),
-            ];
-            for extension in CHECKSUM_IGNORE_SIDECAR_EXTENSIONS {
-                patterns.push(format!("*{extension}"));
-                patterns.push(format!("**/*{extension}"));
-            }
-
-            let mut builder = GlobSetBuilder::new();
-            for pattern in patterns {
-                let glob = GlobBuilder::new(&pattern)
-                    .case_insensitive(true)
-                    .literal_separator(true)
-                    .build()
-                    .expect("checksum ignore glob pattern must be valid");
-                builder.add(glob);
-            }
-            builder.build().expect("checksum ignore globset must build")
-        })
+        if lower
+            .split('/')
+            .any(|component| component.eq_ignore_ascii_case("__macosx"))
+        {
+            return true;
+        }
+        if let Some(file_name) = lower.rsplit('/').next()
+            && matches!(file_name, ".ds_store" | "thumbs.db" | "desktop.ini")
+        {
+            return true;
+        }
+        CHECKSUM_IGNORE_SIDECAR_EXTENSIONS
+            .iter()
+            .any(|extension| lower.ends_with(extension))
     }
 
     fn run_compress(&self, args: CompressCommand) -> ExitCode {
