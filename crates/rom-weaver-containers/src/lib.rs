@@ -13,6 +13,10 @@ use ciso::{read::CSOReader as CsoReader, split::SplitFileReader};
 use flate2::{
     Compression as GzipCompression, read::DeflateDecoder, read::GzDecoder, write::GzEncoder,
 };
+use lz4_flex::frame::{
+    BlockMode as Lz4BlockMode, BlockSize as Lz4BlockSize, FrameEncoder as Lz4FrameEncoder,
+    FrameInfo as Lz4FrameInfo,
+};
 use lzma_rust2::{XzOptions, XzReader, XzReaderMt, XzWriter, XzWriterMt};
 use nod::{
     common::{Compression as NodCompression, Format as NodFormat},
@@ -2291,6 +2295,297 @@ impl CsoContainerHandler {
         }
     }
 
+    fn build_extract_tasks(
+        &self,
+        logical_bytes: u64,
+        context: &OperationContext,
+    ) -> Vec<CsoExtractTask> {
+        if logical_bytes == 0 {
+            return Vec::new();
+        }
+        let mut tasks = Vec::new();
+        let mut offset = 0_u64;
+        let mut index = 0_usize;
+        while offset < logical_bytes {
+            let len = (logical_bytes - offset).min(CSO_EXTRACT_TASK_BYTES);
+            tasks.push(CsoExtractTask {
+                index,
+                offset,
+                len,
+                temp_path: context
+                    .temp_paths()
+                    .next_path(&format!("cso-extract-{index}"), Some("chunk")),
+            });
+            offset = offset.saturating_add(len);
+            index += 1;
+        }
+        tasks
+    }
+
+    fn decode_extract_task(&self, source: &Path, task: &CsoExtractTask) -> Result<()> {
+        let read_len = usize::try_from(task.len).map_err(|_| {
+            RomWeaverError::Validation("cso extract task length overflowed usize".into())
+        })?;
+        let mut reader = self.open_reader(source)?;
+        let mut decoded = vec![0_u8; read_len];
+        reader
+            .read_offset(task.offset, &mut decoded)
+            .map_err(|error| {
+                RomWeaverError::Validation(format!(
+                    "cso extract failed while decoding `{}` chunk {} at offset {}: {error}",
+                    source.display(),
+                    task.index,
+                    task.offset
+                ))
+            })?;
+
+        if let Some(parent) = task.temp_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let mut output = BufWriter::new(File::create(&task.temp_path)?);
+        output.write_all(&decoded)?;
+        output.flush()?;
+        Ok(())
+    }
+
+    fn cleanup_extract_tasks(&self, tasks: &[CsoExtractTask]) {
+        for task in tasks {
+            let _ = fs::remove_file(&task.temp_path);
+        }
+    }
+
+    fn assemble_extract_output(&self, tasks: &[CsoExtractTask], output_path: &Path) -> Result<()> {
+        let mut output = BufWriter::new(File::create(output_path)?);
+        for task in tasks {
+            let mut input = BufReader::new(File::open(&task.temp_path)?);
+            io::copy(&mut input, &mut output)?;
+        }
+        output.flush()?;
+        Ok(())
+    }
+
+    fn build_create_tasks(
+        &self,
+        logical_bytes: u64,
+        context: &OperationContext,
+    ) -> Vec<CsoCreateTask> {
+        let mut header = ciso::layout::CSOHeader::new();
+        header.uncompressed_size = logical_bytes;
+        let sector_count = header.index_table_len().saturating_sub(1);
+        if sector_count == 0 {
+            return Vec::new();
+        }
+
+        let mut tasks = Vec::new();
+        let mut start_sector = 0_usize;
+        let mut index = 0_usize;
+        while start_sector < sector_count {
+            let sector_count = (sector_count - start_sector).min(CSO_CREATE_TASK_SECTORS);
+            tasks.push(CsoCreateTask {
+                index,
+                start_sector,
+                sector_count,
+                temp_path: context
+                    .temp_paths()
+                    .next_path(&format!("cso-create-{index}"), Some("chunk")),
+            });
+            start_sector += sector_count;
+            index += 1;
+        }
+        tasks
+    }
+
+    fn compress_sector_for_create(&self, sector: &[u8]) -> Result<(Vec<u8>, bool)> {
+        let frame_info = Lz4FrameInfo::new()
+            .block_mode(Lz4BlockMode::Independent)
+            .block_size(Lz4BlockSize::Max64KB)
+            .content_checksum(false)
+            .block_checksums(false)
+            .legacy_frame(true)
+            .content_size(None);
+        let mut encoder = Lz4FrameEncoder::with_frame_info(frame_info, Vec::new());
+        encoder.write_all(sector).map_err(|error| {
+            RomWeaverError::Validation(format!(
+                "cso create failed while compressing sector: {error}"
+            ))
+        })?;
+        let encoded = encoder.finish().map_err(|error| {
+            RomWeaverError::Validation(format!(
+                "cso create failed while finalizing sector compression: {error}"
+            ))
+        })?;
+        if encoded.len() <= 11 {
+            return Err(RomWeaverError::Validation(
+                "cso create produced an invalid compressed sector frame".into(),
+            ));
+        }
+
+        let payload = encoded[7..encoded.len() - 4].to_vec();
+        if payload.len() + 12 < sector.len() {
+            Ok((payload, true))
+        } else {
+            Ok((sector.to_vec(), false))
+        }
+    }
+
+    fn encode_create_task(&self, source: &Path, task: &CsoCreateTask) -> Result<CsoEncodedTask> {
+        let mut input = BufReader::new(File::open(source)?);
+        let start_offset = u64::try_from(task.start_sector)
+            .ok()
+            .and_then(|sector| sector.checked_mul(CSO_DEFAULT_BLOCK_BYTES as u64))
+            .ok_or_else(|| {
+                RomWeaverError::Validation("cso create source offset overflowed".into())
+            })?;
+        input.seek(SeekFrom::Start(start_offset))?;
+
+        if let Some(parent) = task.temp_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let mut output = BufWriter::new(File::create(&task.temp_path)?);
+
+        let mut sector = vec![0_u8; CSO_DEFAULT_BLOCK_BYTES];
+        let mut sector_encodings = Vec::with_capacity(task.sector_count);
+        for _ in 0..task.sector_count {
+            input.read_exact(&mut sector)?;
+            let (encoded, is_compressed) = self.compress_sector_for_create(&sector)?;
+            let encoded_len = u32::try_from(encoded.len()).map_err(|_| {
+                RomWeaverError::Validation("cso create encoded sector length overflowed u32".into())
+            })?;
+            output.write_all(&encoded)?;
+            sector_encodings.push(CsoSectorEncoding {
+                encoded_len,
+                is_compressed,
+            });
+        }
+        output.flush()?;
+
+        Ok(CsoEncodedTask {
+            index: task.index,
+            start_sector: task.start_sector,
+            temp_path: task.temp_path.clone(),
+            sector_encodings,
+        })
+    }
+
+    fn cleanup_create_tasks(&self, tasks: &[CsoCreateTask]) {
+        for task in tasks {
+            let _ = fs::remove_file(&task.temp_path);
+        }
+    }
+
+    fn assemble_create_output(
+        &self,
+        output_path: &Path,
+        logical_bytes: u64,
+        encoded_tasks: &[CsoEncodedTask],
+    ) -> Result<u64> {
+        let mut header = ciso::layout::CSOHeader::new();
+        header.uncompressed_size = logical_bytes;
+
+        let sector_count = header.index_table_len().saturating_sub(1);
+        let index_entry_count = sector_count
+            .checked_add(1)
+            .ok_or_else(|| RomWeaverError::Validation("cso index table size overflowed".into()))?;
+        let index_table_len = index_entry_count
+            .checked_mul(4)
+            .ok_or_else(|| RomWeaverError::Validation("cso index table size overflowed".into()))?;
+
+        let mut output = BufWriter::new(File::create(output_path)?);
+        output.write_all(&header.serialize())?;
+        output.write_all(&vec![0_u8; index_table_len])?;
+
+        let align_base = 1_u64 << header.alignment;
+        let align_mask = align_base - 1;
+        let mut position = u64::from(header.header_size)
+            .checked_add(u64::try_from(index_table_len).map_err(|_| {
+                RomWeaverError::Validation("cso index table size overflowed".into())
+            })?)
+            .ok_or_else(|| RomWeaverError::Validation("cso output offset overflowed".into()))?;
+
+        let mut index_table = Vec::with_capacity(index_entry_count);
+        let mut expected_sector = 0_usize;
+        for task in encoded_tasks {
+            if task.start_sector != expected_sector {
+                return Err(RomWeaverError::Validation(format!(
+                    "cso create task order is invalid (expected sector {}, found {})",
+                    expected_sector, task.start_sector
+                )));
+            }
+
+            let mut input = BufReader::new(File::open(&task.temp_path)?);
+            for sector in &task.sector_encodings {
+                let align = position & align_mask;
+                if align != 0 {
+                    let pad = align_base - align;
+                    output.write_all(&vec![
+                        0_u8;
+                        usize::try_from(pad).map_err(|_| {
+                            RomWeaverError::Validation(
+                                "cso alignment padding overflowed usize".into(),
+                            )
+                        })?
+                    ])?;
+                    position = position.saturating_add(pad);
+                }
+
+                let index_position = u32::try_from(position >> header.alignment).map_err(|_| {
+                    RomWeaverError::Validation(
+                        "cso output exceeded supported index table range".into(),
+                    )
+                })?;
+                let mut entry = index_position & 0x7FFF_FFFF;
+                if sector.is_compressed {
+                    entry |= 0x8000_0000;
+                }
+                index_table.push(entry);
+
+                let encoded_len = usize::try_from(sector.encoded_len).map_err(|_| {
+                    RomWeaverError::Validation("cso encoded sector length overflowed usize".into())
+                })?;
+                let mut payload = vec![0_u8; encoded_len];
+                input.read_exact(&mut payload)?;
+                output.write_all(&payload)?;
+                position = position.saturating_add(u64::from(sector.encoded_len));
+                expected_sector += 1;
+            }
+
+            let mut trailing = [0_u8; 1];
+            if input.read(&mut trailing)? != 0 {
+                return Err(RomWeaverError::Validation(format!(
+                    "cso create task {} produced trailing bytes after encoded sectors",
+                    task.index
+                )));
+            }
+        }
+
+        if expected_sector != sector_count {
+            return Err(RomWeaverError::Validation(format!(
+                "cso create encoded {} sector(s) but expected {}",
+                expected_sector, sector_count
+            )));
+        }
+
+        let final_position = u32::try_from(position >> header.alignment).map_err(|_| {
+            RomWeaverError::Validation("cso output exceeded supported index table range".into())
+        })?;
+        index_table.push(final_position & 0x7FFF_FFFF);
+        if index_table.len() != index_entry_count {
+            return Err(RomWeaverError::Validation(
+                "cso index table entry count did not match expected value".into(),
+            ));
+        }
+
+        output.flush()?;
+        let output_file = output.get_mut();
+        output_file.seek(SeekFrom::Start(u64::from(header.header_size)))?;
+        for entry in &index_table {
+            output_file.write_all(&entry.to_le_bytes())?;
+        }
+        output.flush()?;
+
+        Ok(fs::metadata(output_path)?.len())
+    }
+
     fn resolve_create_compression(
         &self,
         codec: Option<&str>,
@@ -2363,7 +2658,6 @@ impl ContainerHandler for CsoContainerHandler {
         request: &ContainerExtractRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        let execution = context.plan_threads(ThreadCapability::single_threaded());
         fs::create_dir_all(&request.out_dir)?;
 
         let output_name = self.output_name(&request.source);
@@ -2374,27 +2668,41 @@ impl ContainerHandler for CsoContainerHandler {
         selections.ensure_all_matched()?;
 
         let output_path = request.out_dir.join(&output_name);
-        let mut output = BufWriter::new(File::create(&output_path)?);
-        let mut reader = self.open_reader(&request.source)?;
+        let reader = self.open_reader(&request.source)?;
         let logical_bytes = reader.file_size();
-        let mut cursor = 0u64;
-        let mut buffer = vec![0_u8; CSO_DEFAULT_BLOCK_BYTES];
-
-        while cursor < logical_bytes {
-            let remaining = logical_bytes - cursor;
-            let chunk_len = remaining.min(buffer.len() as u64) as usize;
-            reader
-                .read_offset(cursor, &mut buffer[..chunk_len])
-                .map_err(|error| {
-                    RomWeaverError::Validation(format!(
-                        "cso extract failed while reading `{}`: {error}",
-                        request.source.display()
-                    ))
-                })?;
-            output.write_all(&buffer[..chunk_len])?;
-            cursor += chunk_len as u64;
+        let tasks = self.build_extract_tasks(logical_bytes, context);
+        let (execution, decode_result) = if tasks.is_empty() {
+            (
+                context.plan_threads(ThreadCapability::parallel(None)),
+                Ok(Vec::new()),
+            )
+        } else {
+            let (execution, pool) =
+                context.build_pool(ThreadCapability::parallel(Some(tasks.len().max(1))))?;
+            let source = request.source.clone();
+            let decode_result = if execution.used_parallelism {
+                pool.install(|| {
+                    tasks
+                        .par_iter()
+                        .map(|task| self.decode_extract_task(&source, task))
+                        .collect::<Result<Vec<_>>>()
+                })
+            } else {
+                tasks
+                    .iter()
+                    .map(|task| self.decode_extract_task(&source, task))
+                    .collect::<Result<Vec<_>>>()
+            };
+            (execution, decode_result)
+        };
+        if let Err(error) = decode_result {
+            self.cleanup_extract_tasks(&tasks);
+            return Err(error);
         }
-        output.flush()?;
+
+        let assemble_result = self.assemble_extract_output(&tasks, &output_path);
+        self.cleanup_extract_tasks(&tasks);
+        assemble_result?;
 
         Ok(OperationReport::succeeded(
             OperationFamily::Container,
@@ -2422,20 +2730,58 @@ impl ContainerHandler for CsoContainerHandler {
             ));
         }
 
-        let execution = context.plan_threads(ThreadCapability::single_threaded());
         let input = &request.inputs[0];
         let _compression =
             self.resolve_create_compression(request.codec.as_deref(), request.level)?;
+        let logical_bytes = fs::metadata(input)?.len();
+        let create_tasks = self.build_create_tasks(logical_bytes, context);
 
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
         }
-        let mut source = File::open(input)?;
-        let mut output = File::create(&request.output)?;
-        ciso::write::write_ciso_image(&mut source, &mut output, |_| {})
-            .map_err(|error| RomWeaverError::Validation(format!("cso create failed: {error}")))?;
-        output.flush()?;
-        let output_bytes = fs::metadata(&request.output)?.len();
+
+        let (execution, encode_result) = if create_tasks.is_empty() {
+            (
+                context.plan_threads(ThreadCapability::parallel(None)),
+                Ok(Vec::new()),
+            )
+        } else {
+            let (execution, pool) =
+                context.build_pool(ThreadCapability::parallel(Some(create_tasks.len().max(1))))?;
+            let source = input.clone();
+            let encode_result = if execution.used_parallelism {
+                pool.install(|| {
+                    create_tasks
+                        .par_iter()
+                        .map(|task| self.encode_create_task(&source, task))
+                        .collect::<Result<Vec<_>>>()
+                })
+            } else {
+                create_tasks
+                    .iter()
+                    .map(|task| self.encode_create_task(&source, task))
+                    .collect::<Result<Vec<_>>>()
+            };
+            (execution, encode_result)
+        };
+
+        let mut encoded_tasks = match encode_result {
+            Ok(tasks) => tasks,
+            Err(error) => {
+                self.cleanup_create_tasks(&create_tasks);
+                return Err(error);
+            }
+        };
+        encoded_tasks.sort_by_key(|task| task.start_sector);
+        let output_bytes =
+            match self.assemble_create_output(&request.output, logical_bytes, &encoded_tasks) {
+                Ok(bytes) => bytes,
+                Err(error) => {
+                    self.cleanup_create_tasks(&create_tasks);
+                    return Err(error);
+                }
+            };
+        self.cleanup_create_tasks(&create_tasks);
 
         Ok(OperationReport::succeeded(
             OperationFamily::Container,
@@ -2458,8 +2804,8 @@ impl ContainerHandler for CsoContainerHandler {
             inspect: true,
             extract: true,
             create: true,
-            extract_threads: ThreadCapability::single_threaded(),
-            create_threads: ThreadCapability::single_threaded(),
+            extract_threads: ThreadCapability::parallel(None),
+            create_threads: ThreadCapability::parallel(None),
         }
     }
 }
@@ -3218,6 +3564,16 @@ struct PbpDiscOutput {
     bin_name: String,
 }
 
+#[derive(Clone, Debug)]
+struct PbpDiscExtractTask {
+    disc_index: usize,
+    task_index: usize,
+    start_block: usize,
+    block_count: usize,
+    expected_len: u64,
+    temp_path: PathBuf,
+}
+
 struct PbpContainerHandler;
 
 impl PbpContainerHandler {
@@ -3232,6 +3588,7 @@ impl PbpContainerHandler {
     const ISO_SECTOR_BYTES: usize = 0x930;
     const ISO_BLOCK_SECTORS: usize = 16;
     const ISO_BLOCK_BYTES: usize = Self::ISO_SECTOR_BYTES * Self::ISO_BLOCK_SECTORS;
+    const PBP_EXTRACT_TASK_BLOCKS: usize = 128;
     const MULTI_DISC_SLOT_COUNT: usize = 5;
     const MULTI_DISC_MAGIC: [u8; 16] = *b"PSTITLEIMG000000";
     const SINGLE_DISC_MAGIC: [u8; 12] = *b"PSISOIMG0000";
@@ -3737,25 +4094,92 @@ impl PbpContainerHandler {
         Ok(written)
     }
 
-    fn copy_disc_to_writer(
+    fn required_block_count(&self, iso_size: u64) -> Result<usize> {
+        if iso_size == 0 {
+            return Ok(0);
+        }
+        let block_bytes = Self::ISO_BLOCK_BYTES as u64;
+        let blocks = iso_size.div_ceil(block_bytes);
+        usize::try_from(blocks).map_err(|_| {
+            RomWeaverError::Validation("pbp ISO block count exceeds supported size".into())
+        })
+    }
+
+    fn build_disc_extract_tasks(
+        &self,
+        disc_index: usize,
+        disc: &PbpDiscEntry,
+        context: &OperationContext,
+    ) -> Result<Vec<PbpDiscExtractTask>> {
+        let required_blocks = self.required_block_count(disc.iso_size)?;
+        if required_blocks == 0 {
+            return Ok(Vec::new());
+        }
+
+        let mut tasks = Vec::new();
+        let mut start_block = 0usize;
+        let mut task_index = 0usize;
+        while start_block < required_blocks {
+            let block_count = (required_blocks - start_block).min(Self::PBP_EXTRACT_TASK_BLOCKS);
+            let start_offset = u64::try_from(start_block)
+                .ok()
+                .and_then(|value| value.checked_mul(Self::ISO_BLOCK_BYTES as u64))
+                .ok_or_else(|| {
+                    RomWeaverError::Validation("pbp extract block offset overflowed".into())
+                })?;
+            let max_task_len = u64::try_from(block_count)
+                .ok()
+                .and_then(|value| value.checked_mul(Self::ISO_BLOCK_BYTES as u64))
+                .ok_or_else(|| {
+                    RomWeaverError::Validation("pbp extract block length overflowed".into())
+                })?;
+            let expected_len = disc.iso_size.saturating_sub(start_offset).min(max_task_len);
+            tasks.push(PbpDiscExtractTask {
+                disc_index,
+                task_index,
+                start_block,
+                block_count,
+                expected_len,
+                temp_path: context.temp_paths().next_path(
+                    &format!("pbp-disc{}-extract-{task_index}", disc.disc_number),
+                    Some("binchunk"),
+                ),
+            });
+            start_block += block_count;
+            task_index += 1;
+        }
+        Ok(tasks)
+    }
+
+    fn decode_disc_extract_task(
         &self,
         source: &Path,
-        file: &mut File,
         disc: &PbpDiscEntry,
-        writer: &mut BufWriter<File>,
+        task: &PbpDiscExtractTask,
     ) -> Result<u64> {
-        let required_blocks = self.required_block_count(disc.iso_size)?;
-        let mut remaining = disc.iso_size;
-        let mut total_written = 0u64;
-        let mut block = vec![0u8; Self::ISO_BLOCK_BYTES];
+        if let Some(parent) = task.temp_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
 
-        for block_index in 0..required_blocks {
+        let mut source_file = File::open(source).map_err(|error| {
+            RomWeaverError::Validation(format!(
+                "failed to open pbp source `{}`: {error}",
+                source.display()
+            ))
+        })?;
+        let mut output = BufWriter::new(File::create(&task.temp_path)?);
+        let mut block = vec![0u8; Self::ISO_BLOCK_BYTES];
+        let mut remaining = task.expected_len;
+        let mut total_written = 0u64;
+
+        for block_offset in 0..task.block_count {
             if remaining == 0 {
                 break;
             }
+            let block_index = task.start_block + block_offset;
             let decoded = self.read_iso_block(
                 source,
-                file,
+                &mut source_file,
                 disc.psar_offset,
                 &disc.iso_indexes,
                 block_index,
@@ -3768,32 +4192,49 @@ impl PbpContainerHandler {
             let to_write_usize = usize::try_from(to_write).map_err(|_| {
                 RomWeaverError::Validation("pbp block write length overflowed usize".into())
             })?;
-            writer.write_all(&block[..to_write_usize])?;
+            output.write_all(&block[..to_write_usize])?;
             total_written = total_written.saturating_add(to_write);
             remaining -= to_write;
         }
 
-        if total_written != disc.iso_size {
+        output.flush()?;
+        if total_written != task.expected_len {
             return Err(RomWeaverError::Validation(format!(
-                "source `{}` disc {} extraction wrote {} bytes but expected {}",
+                "source `{}` disc {} chunk {} wrote {} bytes but expected {}",
                 source.display(),
                 disc.disc_number,
+                task.task_index,
                 total_written,
-                disc.iso_size
+                task.expected_len
             )));
         }
+
         Ok(total_written)
     }
 
-    fn required_block_count(&self, iso_size: u64) -> Result<usize> {
-        if iso_size == 0 {
-            return Ok(0);
+    fn cleanup_disc_extract_tasks(&self, tasks: &[PbpDiscExtractTask]) {
+        for task in tasks {
+            let _ = fs::remove_file(&task.temp_path);
         }
-        let block_bytes = Self::ISO_BLOCK_BYTES as u64;
-        let blocks = iso_size.div_ceil(block_bytes);
-        usize::try_from(blocks).map_err(|_| {
-            RomWeaverError::Validation("pbp ISO block count exceeds supported size".into())
-        })
+    }
+
+    fn assemble_disc_extract_output(
+        &self,
+        tasks: &[PbpDiscExtractTask],
+        output_path: &Path,
+    ) -> Result<u64> {
+        if let Some(parent) = output_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let mut output = BufWriter::new(File::create(output_path)?);
+        let mut total_written = 0u64;
+        for task in tasks {
+            let mut input = BufReader::new(File::open(&task.temp_path)?);
+            let copied = io::copy(&mut input, &mut output)?;
+            total_written = total_written.saturating_add(copied);
+        }
+        output.flush()?;
+        Ok(total_written)
     }
 
     fn write_cue_sheet(
@@ -3965,7 +4406,6 @@ impl ContainerHandler for PbpContainerHandler {
         request: &ContainerExtractRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        let execution = context.plan_threads(ThreadCapability::single_threaded());
         let archive = self.parse_archive(&request.source)?;
         let outputs = self.build_disc_outputs(&request.source, archive.discs.len());
         fs::create_dir_all(&request.out_dir)?;
@@ -3992,12 +4432,56 @@ impl ContainerHandler for PbpContainerHandler {
             ));
         }
 
-        let mut source_file = File::open(&request.source).map_err(|error| {
-            RomWeaverError::Validation(format!(
-                "failed to open pbp source `{}`: {error}",
-                request.source.display()
-            ))
-        })?;
+        let mut disc_extract_tasks = Vec::new();
+        let mut disc_task_ranges = BTreeMap::new();
+        for (disc_index, _write_cue, write_bin) in &extract_plan {
+            if !*write_bin {
+                continue;
+            }
+            let disc = &archive.discs[*disc_index];
+            let start = disc_extract_tasks.len();
+            let mut tasks = self.build_disc_extract_tasks(*disc_index, disc, context)?;
+            let len = tasks.len();
+            disc_extract_tasks.append(&mut tasks);
+            disc_task_ranges.insert(*disc_index, (start, len));
+        }
+
+        let (execution, decode_result) = if disc_extract_tasks.is_empty() {
+            (
+                context.plan_threads(ThreadCapability::parallel(None)),
+                Ok(Vec::new()),
+            )
+        } else {
+            let (execution, pool) = context.build_pool(ThreadCapability::parallel(Some(
+                disc_extract_tasks.len().max(1),
+            )))?;
+            let source = request.source.clone();
+            let decode_result = if execution.used_parallelism {
+                pool.install(|| {
+                    disc_extract_tasks
+                        .par_iter()
+                        .map(|task| {
+                            let disc = &archive.discs[task.disc_index];
+                            self.decode_disc_extract_task(&source, disc, task)
+                        })
+                        .collect::<Result<Vec<_>>>()
+                })
+            } else {
+                disc_extract_tasks
+                    .iter()
+                    .map(|task| {
+                        let disc = &archive.discs[task.disc_index];
+                        self.decode_disc_extract_task(&source, disc, task)
+                    })
+                    .collect::<Result<Vec<_>>>()
+            };
+            (execution, decode_result)
+        };
+        if let Err(error) = decode_result {
+            self.cleanup_disc_extract_tasks(&disc_extract_tasks);
+            return Err(error);
+        }
+
         let mut produced_outputs = Vec::new();
         let mut total_written = 0u64;
 
@@ -4006,22 +4490,48 @@ impl ContainerHandler for PbpContainerHandler {
             let output = &outputs[disc_index];
             let bin_path = request.out_dir.join(&output.bin_name);
             if write_bin {
-                let mut bin_writer = BufWriter::new(File::create(&bin_path)?);
-                total_written = total_written.saturating_add(self.copy_disc_to_writer(
-                    &request.source,
-                    &mut source_file,
-                    disc,
-                    &mut bin_writer,
-                )?);
-                bin_writer.flush()?;
+                let (start, len) = disc_task_ranges.get(&disc_index).copied().ok_or_else(|| {
+                    RomWeaverError::Validation(format!(
+                        "pbp extract could not locate chunk plan for disc {}",
+                        disc.disc_number
+                    ))
+                })?;
+                let task_end = start.checked_add(len).ok_or_else(|| {
+                    RomWeaverError::Validation("pbp extract chunk plan overflowed".into())
+                })?;
+                let tasks = &disc_extract_tasks[start..task_end];
+                let written = match self.assemble_disc_extract_output(tasks, &bin_path) {
+                    Ok(written) => written,
+                    Err(error) => {
+                        self.cleanup_disc_extract_tasks(&disc_extract_tasks);
+                        return Err(error);
+                    }
+                };
+                if written != disc.iso_size {
+                    self.cleanup_disc_extract_tasks(&disc_extract_tasks);
+                    return Err(RomWeaverError::Validation(format!(
+                        "source `{}` disc {} extraction wrote {} bytes but expected {}",
+                        request.source.display(),
+                        disc.disc_number,
+                        written,
+                        disc.iso_size
+                    )));
+                }
+                total_written = total_written.saturating_add(written);
                 produced_outputs.push(bin_path.clone());
             }
             if write_cue {
                 let cue_path = request.out_dir.join(&output.cue_name);
-                self.write_cue_sheet(&cue_path, &output.bin_name, &disc.toc_tracks)?;
+                if let Err(error) =
+                    self.write_cue_sheet(&cue_path, &output.bin_name, &disc.toc_tracks)
+                {
+                    self.cleanup_disc_extract_tasks(&disc_extract_tasks);
+                    return Err(error);
+                }
                 produced_outputs.push(cue_path);
             }
         }
+        self.cleanup_disc_extract_tasks(&disc_extract_tasks);
 
         if selection_requested && produced_outputs.is_empty() {
             return Err(RomWeaverError::Validation(
@@ -4085,7 +4595,7 @@ impl ContainerHandler for PbpContainerHandler {
             inspect: true,
             extract: true,
             create: false,
-            extract_threads: ThreadCapability::single_threaded(),
+            extract_threads: ThreadCapability::parallel(None),
             create_threads: ThreadCapability::single_threaded(),
         }
     }
@@ -9725,7 +10235,25 @@ mod tests {
         assert!(capabilities.create);
         assert_eq!(
             capabilities.extract_threads,
-            ThreadCapability::single_threaded()
+            ThreadCapability::parallel(None)
+        );
+        assert_eq!(
+            capabilities.create_threads,
+            ThreadCapability::parallel(None)
+        );
+    }
+
+    #[test]
+    fn pbp_capabilities_report_parallel_extract_threads() {
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("pbp").expect("pbp handler");
+        let capabilities = handler.capabilities();
+        assert!(capabilities.inspect);
+        assert!(capabilities.extract);
+        assert!(!capabilities.create);
+        assert_eq!(
+            capabilities.extract_threads,
+            ThreadCapability::parallel(None)
         );
         assert_eq!(
             capabilities.create_threads,
@@ -10783,6 +11311,106 @@ mod tests {
             capabilities.create_threads,
             ThreadCapability::single_threaded()
         );
+    }
+
+    #[test]
+    fn cso_runtime_threads_match_capabilities_for_create_and_extract() {
+        let temp_dir = temp_dir_path("cso-thread-parity");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input_path = temp_dir.join("disc.iso");
+        let output_path = temp_dir.join("disc.cso");
+        let output_dir = temp_dir.join("out");
+        let mut source = (0..(12 * 1024 * 1024))
+            .map(|index| (index % 251) as u8)
+            .collect::<Vec<_>>();
+        if let Some(last) = source.last_mut() {
+            *last = 0;
+        }
+        fs::write(&input_path, &source).expect("fixture");
+
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("cso").expect("cso handler");
+        let capabilities = handler.capabilities();
+
+        let create_report = handler
+            .create(
+                &ContainerCreateRequest {
+                    inputs: vec![input_path.clone()],
+                    output: output_path.clone(),
+                    format: "cso".to_string(),
+                    codec: None,
+                    level: None,
+                },
+                &test_context(&temp_dir, 8),
+            )
+            .expect("create cso");
+        let create_execution = create_report.thread_execution.expect("thread execution");
+        assert!(
+            capabilities
+                .create_threads
+                .supports_execution(&create_execution)
+        );
+        assert_eq!(create_execution.requested_threads, 8);
+        assert!(create_execution.used_parallelism);
+
+        let extract_report = handler
+            .extract(
+                &rom_weaver_core::ContainerExtractRequest {
+                    source: output_path,
+                    out_dir: output_dir.clone(),
+                    selections: Vec::new(),
+                    split_bin: false,
+                },
+                &test_context(&temp_dir, 8),
+            )
+            .expect("extract cso");
+        let extract_execution = extract_report.thread_execution.expect("thread execution");
+        assert!(
+            capabilities
+                .extract_threads
+                .supports_execution(&extract_execution)
+        );
+        assert_eq!(extract_execution.requested_threads, 8);
+        assert!(extract_execution.used_parallelism);
+
+        let extracted = fs::read(output_dir.join("disc.iso")).expect("read extracted output");
+        assert_eq!(extracted, source);
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn pbp_extract_runtime_threads_match_capability() {
+        let temp_dir = temp_dir_path("pbp-thread-parity");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let source_iso = build_test_pbp_iso(4096, 23);
+        let pbp_bytes = build_test_pbp_fixture(vec![("SLUS00001", source_iso.clone())]);
+        let source_path = temp_dir.join("game.pbp");
+        let out_dir = temp_dir.join("out");
+        fs::write(&source_path, pbp_bytes).expect("pbp fixture");
+
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("pbp").expect("pbp handler");
+        let capabilities = handler.capabilities();
+        let report = handler
+            .extract(
+                &rom_weaver_core::ContainerExtractRequest {
+                    source: source_path,
+                    out_dir: out_dir.clone(),
+                    selections: Vec::new(),
+                    split_bin: false,
+                },
+                &test_context(&temp_dir, 8),
+            )
+            .expect("extract pbp");
+
+        let execution = report.thread_execution.expect("thread execution");
+        assert!(capabilities.extract_threads.supports_execution(&execution));
+        assert_eq!(execution.requested_threads, 8);
+        assert!(execution.used_parallelism);
+        assert_eq!(fs::read(out_dir.join("game.bin")).expect("bin"), source_iso);
+
+        let _ = fs::remove_dir_all(temp_dir);
     }
 
     #[test]
