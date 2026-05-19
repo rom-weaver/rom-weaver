@@ -1,6 +1,4 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
@@ -9,20 +7,14 @@ import {
   createNodeFsRunner,
   createRomWeaverWasiRunner,
 } from '../src/rom-weaver-wasi-api.mjs';
+import {
+  runPatchMatrix,
+  runProgressMatrix,
+  withTempFixture,
+} from './test-helpers.mjs';
 
 const TEST_DIR = fileURLToPath(new URL('.', import.meta.url));
 const BROTLI_WASM_PATH = join(TEST_DIR, '..', 'rom-weaver-cli.wasm.br');
-
-async function withTempFixture(run) {
-  const dir = await mkdtemp(join(tmpdir(), 'rom-weaver-wasm-test-'));
-  try {
-    const sourcePath = join(dir, 'input.bin');
-    await writeFile(sourcePath, Buffer.from('rom-weaver wasm test fixture', 'utf8'));
-    await run({ dir, sourcePath });
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
-}
 
 test('runJson executes checksum through WASI runner', async () => {
   await withTempFixture(async ({ sourcePath }) => {
@@ -113,119 +105,23 @@ test('runJson emits trace events when --trace is enabled', async () => {
 test('runJson emits progress events for compress, extract, and patch-apply', async () => {
   await withTempFixture(async ({ dir, sourcePath }) => {
     const runner = createRomWeaverWasiRunner();
-    const archivePath = join(dir, 'archive.gz');
-    const extractDir = join(dir, 'extract');
-    const originalPath = join(dir, 'original.bin');
-    const modifiedPath = join(dir, 'modified.bin');
-    const patchPath = join(dir, 'update.ips');
-    const appliedPath = join(dir, 'applied-output');
+    await runProgressMatrix({
+      runJson: (args, options) => runner.runJson(args, options),
+      dir,
+      sourcePath,
+      appliedOutputName: 'applied-output',
+    });
+  });
+});
 
-    await writeFile(originalPath, Buffer.from('abcdefgh', 'utf8'));
-    await writeFile(modifiedPath, Buffer.from('a1XYZf!!!', 'utf8'));
-
-    const compressEvents = [];
-    const compressResult = await runner.runJson(
-      [
-        'compress',
-        sourcePath,
-        '--format',
-        'gz',
-        '--output',
-        archivePath,
-        '--threads',
-        '1',
-      ],
-      {
-        onEvent(event) {
-          compressEvents.push(event);
-        },
-      },
-    );
-    assert.equal(compressResult.exitCode, 0);
-    assert.equal(compressResult.ok, true);
-    assert.ok(
-      compressEvents.some(
-        (event) => event.command === 'compress' && event.status === 'running' && event.format === 'gz',
-      ),
-    );
-
-    const extractEvents = [];
-    const extractResult = await runner.runJson(
-      [
-        'extract',
-        archivePath,
-        '--out-dir',
-        extractDir,
-        '--threads',
-        '1',
-      ],
-      {
-        onEvent(event) {
-          extractEvents.push(event);
-        },
-      },
-    );
-    assert.equal(extractResult.exitCode, 0);
-    assert.equal(extractResult.ok, true);
-    assert.ok(
-      extractEvents.some(
-        (event) => event.command === 'extract' && event.status === 'running' && event.format === 'gz',
-      ),
-    );
-
-    const patchCreateResult = await runner.runJson([
-      'patch-create',
-      '--original',
-      originalPath,
-      '--modified',
-      modifiedPath,
-      '--format',
-      'ips',
-      '--output',
-      patchPath,
-      '--threads',
-      '1',
-    ]);
-    assert.equal(patchCreateResult.exitCode, 0);
-    assert.equal(patchCreateResult.ok, true);
-
-    const patchApplyEvents = [];
-    const patchApplyResult = await runner.runJson(
-      [
-        'patch-apply',
-        '--input',
-        originalPath,
-        '--patch',
-        patchPath,
-        '--output',
-        appliedPath,
-        '--compress-format',
-        'gz',
-        '--threads',
-        '1',
-      ],
-      {
-        onEvent(event) {
-          patchApplyEvents.push(event);
-        },
-      },
-    );
-    assert.equal(patchApplyResult.exitCode, 0);
-    assert.equal(patchApplyResult.ok, true);
-    assert.ok(
-      patchApplyEvents.some(
-        (event) => event.command === 'patch-apply' && event.status === 'running' && event.format === 'IPS',
-      ),
-    );
-    assert.ok(
-      patchApplyEvents.some(
-        (event) => event.command === 'patch-apply'
-          && event.status === 'running'
-          && event.stage === 'compress'
-          && typeof event.format === 'string'
-          && event.format.length > 0,
-      ),
-    );
+test('runJson integration matrix covers chd, zip, and patch wasm paths', async () => {
+  await withTempFixture(async ({ dir, sourcePath }) => {
+    const runner = createRomWeaverWasiRunner();
+    await runPatchMatrix({
+      runJson: (args, options) => runner.runJson(args, options),
+      dir,
+      sourcePath,
+    });
   });
 });
 
