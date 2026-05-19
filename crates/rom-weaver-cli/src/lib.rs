@@ -3277,7 +3277,7 @@ impl CliApp {
         let request = ContainerCreateRequest {
             inputs: input,
             output,
-            format: handler.descriptor().name.to_string(),
+            format: resolved_format.clone(),
             codec,
             level,
         };
@@ -4519,13 +4519,14 @@ impl CliApp {
 
     fn default_profile_codec_kind_for_format(format_name: &str) -> Option<ProfileCodecKind> {
         let normalized = format_name.trim().to_ascii_lowercase();
+        if normalized == "chd" || normalized.starts_with("chd-") {
+            return Some(ProfileCodecKind::Zstd);
+        }
         match normalized.as_str() {
             "zip" | "7z" | "tar.gz" | "tar.bz2" | "tar.xz" | "gz" | "bz2" | "xz" | "wia" => {
                 Some(ProfileCodecKind::Standard)
             }
-            "zipx" | "zst" | "zstd" | "rvz" | "z3ds" | "3ds" | "chd" => {
-                Some(ProfileCodecKind::Zstd)
-            }
+            "zipx" | "zst" | "zstd" | "rvz" | "z3ds" | "3ds" => Some(ProfileCodecKind::Zstd),
             "tar" => Some(ProfileCodecKind::NoLevel),
             _ => None,
         }

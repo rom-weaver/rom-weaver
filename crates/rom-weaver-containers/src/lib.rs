@@ -145,7 +145,7 @@ const PBP: FormatDescriptor = FormatDescriptor {
 const CHD: FormatDescriptor = FormatDescriptor {
     family: OperationFamily::Container,
     name: "chd",
-    aliases: &[],
+    aliases: &["chd-cd", "chd-dvd", "chd-raw", "chd-hd"],
     extensions: &[".chd"],
 };
 const GCZ: FormatDescriptor = FormatDescriptor {
@@ -6425,6 +6425,14 @@ mod chd_native {
     }
 
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum ChdCreateModeOverride {
+        Cd,
+        Dvd,
+        Raw,
+        HardDisk,
+    }
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     struct ChdCompressionPlan {
         codecs: [ChdCodec; CHD_MAX_COMPRESSORS],
         primary_codec: ChdCodec,
@@ -8394,6 +8402,142 @@ mod chd_native {
             }
         }
 
+        fn parse_create_mode_override(
+            &self,
+            format: &str,
+        ) -> Result<Option<ChdCreateModeOverride>> {
+            let normalized = format.trim().to_ascii_lowercase();
+            if normalized == "chd" {
+                return Ok(None);
+            }
+
+            let Some(mode) = normalized.strip_prefix("chd-") else {
+                return Err(RomWeaverError::Validation(format!(
+                    "unsupported chd format `{format}`; expected `chd` or `chd-<mode>` where mode is cd|dvd|raw|hd"
+                )));
+            };
+
+            match mode {
+                "cd" => Ok(Some(ChdCreateModeOverride::Cd)),
+                "dvd" => Ok(Some(ChdCreateModeOverride::Dvd)),
+                "raw" => Ok(Some(ChdCreateModeOverride::Raw)),
+                "hd" => Ok(Some(ChdCreateModeOverride::HardDisk)),
+                _ => Err(RomWeaverError::Validation(format!(
+                    "unsupported chd mode `{mode}` in `{format}`; expected one of: cd, dvd, raw, hd"
+                ))),
+            }
+        }
+
+        fn infer_create_kind_with_override(
+            &self,
+            input: &Path,
+            logical_bytes: u64,
+            mode: ChdCreateModeOverride,
+        ) -> Result<ChdCreateKind> {
+            match mode {
+                ChdCreateModeOverride::Cd => {
+                    let extension = input
+                        .extension()
+                        .and_then(|value| value.to_str())
+                        .map(|value| value.to_ascii_lowercase());
+                    let layout = match extension.as_deref() {
+                        Some("cue") => self.parse_cue_file(input)?,
+                        Some("gdi") => {
+                            return Err(RomWeaverError::Validation(format!(
+                                "chd-cd does not accept gdi input `{}`; use `chd` or `chd-raw` for gd media",
+                                input.display()
+                            )));
+                        }
+                        _ => {
+                            let (mode, sector_bytes) = if logical_bytes
+                                % u64::try_from(DiscTrackMode::Mode1Raw.data_bytes())
+                                    .unwrap_or(2352)
+                                == 0
+                            {
+                                (
+                                    DiscTrackMode::Mode1Raw,
+                                    DiscTrackMode::Mode1Raw.data_bytes(),
+                                )
+                            } else if logical_bytes
+                                % u64::try_from(DiscTrackMode::Mode1.data_bytes()).unwrap_or(2048)
+                                == 0
+                            {
+                                (DiscTrackMode::Mode1, DiscTrackMode::Mode1.data_bytes())
+                            } else {
+                                return Err(RomWeaverError::Validation(format!(
+                                    "chd-cd input `{}` size must be a multiple of 2352 or 2048 bytes unless a cue file is provided",
+                                    input.display()
+                                )));
+                            };
+                            let frames = logical_bytes / u64::try_from(sector_bytes).unwrap_or(1);
+                            let frames = u32::try_from(frames).map_err(|_| {
+                                RomWeaverError::Validation(format!(
+                                    "chd-cd input `{}` is too large for current track metadata limits",
+                                    input.display()
+                                ))
+                            })?;
+                            DiscLayout {
+                                kind: DiscKind::CdRom,
+                                tracks: vec![DiscTrack {
+                                    number: 1,
+                                    mode,
+                                    file_path: input.to_path_buf(),
+                                    file_offset_bytes: 0,
+                                    frames,
+                                    pregap_frames: 0,
+                                    postgap_frames: 0,
+                                    pregap_has_data: false,
+                                    has_subcode: false,
+                                    pad_frames: 0,
+                                    swap_audio_on_read: false,
+                                }],
+                            }
+                        }
+                    };
+                    if layout.kind != DiscKind::CdRom {
+                        return Err(RomWeaverError::Validation(format!(
+                            "chd-cd input `{}` resolved to non-cd media",
+                            input.display()
+                        )));
+                    }
+                    Ok(ChdCreateKind::Disc(layout))
+                }
+                ChdCreateModeOverride::Dvd => {
+                    self.ensure_multiple_of(logical_bytes, Self::DVD_SECTOR_BYTES, "dvd image")?;
+                    Ok(ChdCreateKind::Dvd)
+                }
+                ChdCreateModeOverride::Raw => Ok(ChdCreateKind::Raw),
+                ChdCreateModeOverride::HardDisk => Ok(ChdCreateKind::HardDisk(
+                    self.infer_hd_geometry(logical_bytes)?,
+                )),
+            }
+        }
+
+        #[cfg(test)]
+        pub(super) fn infer_create_kind_label_for_tests(
+            &self,
+            format: &str,
+            input: &Path,
+            logical_bytes: u64,
+        ) -> Result<&'static str> {
+            let mode_override = self.parse_create_mode_override(format)?;
+            let create_kind = if let Some(mode) = mode_override {
+                self.infer_create_kind_with_override(input, logical_bytes, mode)?
+            } else {
+                self.infer_create_kind(input, logical_bytes)?
+            };
+            Ok(match create_kind {
+                ChdCreateKind::Raw => "raw",
+                ChdCreateKind::HardDisk(_) => "hd",
+                ChdCreateKind::Dvd => "dvd",
+                ChdCreateKind::Disc(layout) => match layout.kind {
+                    DiscKind::CdRom => "cd",
+                    DiscKind::GdRom => "gd",
+                },
+                ChdCreateKind::Av(_) => "av",
+            })
+        }
+
         fn unit_bytes(&self, create_kind: &ChdCreateKind) -> u32 {
             match create_kind {
                 ChdCreateKind::Raw => 1,
@@ -8739,7 +8883,12 @@ mod chd_native {
             let execution = context.plan_threads(ThreadCapability::single_threaded());
             let input = &request.inputs[0];
             let input_bytes = fs::metadata(input)?.len();
-            let mut create_kind = self.infer_create_kind(input, input_bytes)?;
+            let mode_override = self.parse_create_mode_override(&request.format)?;
+            let mut create_kind = if let Some(mode) = mode_override {
+                self.infer_create_kind_with_override(input, input_bytes, mode)?
+            } else {
+                self.infer_create_kind(input, input_bytes)?
+            };
             let mut compression_plan =
                 self.resolve_compression_plan(request.codec.as_deref(), &create_kind)?;
             if compression_plan.primary_codec == ChdCodec::AVHUFF {
@@ -10376,6 +10525,62 @@ mod tests {
         assert_eq!(recommendation.reason, "not-wii-gc-or-unrecognized");
 
         let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn chd_mode_aliases_route_to_chd_handler() {
+        let registry = ContainerRegistry::new();
+        for alias in ["chd", "chd-cd", "chd-dvd", "chd-raw", "chd-hd"] {
+            let handler = registry
+                .find_by_name(alias)
+                .expect("chd alias should resolve");
+            assert_eq!(handler.descriptor().name, "chd");
+        }
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    #[test]
+    fn chd_create_mode_overrides_adjust_inferred_kind() {
+        let handler = super::ChdContainerHandler;
+        let input = Path::new("disc.iso");
+        assert_eq!(
+            handler
+                .infer_create_kind_label_for_tests("chd", input, 2048 * 8)
+                .expect("auto kind"),
+            "dvd"
+        );
+        assert_eq!(
+            handler
+                .infer_create_kind_label_for_tests("chd-cd", input, 2048 * 8)
+                .expect("cd override"),
+            "cd"
+        );
+        assert_eq!(
+            handler
+                .infer_create_kind_label_for_tests("chd-raw", input, 2048 * 8)
+                .expect("raw override"),
+            "raw"
+        );
+        assert_eq!(
+            handler
+                .infer_create_kind_label_for_tests("chd-hd", input, 512 * 8)
+                .expect("hd override"),
+            "hd"
+        );
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    #[test]
+    fn chd_cd_override_rejects_invalid_raw_sector_size() {
+        let handler = super::ChdContainerHandler;
+        let error = handler
+            .infer_create_kind_label_for_tests("chd-cd", Path::new("disc.bin"), 12345)
+            .expect_err("invalid sector size should fail");
+        assert!(
+            error
+                .to_string()
+                .contains("size must be a multiple of 2352 or 2048 bytes")
+        );
     }
 
     #[cfg(not(target_family = "wasm"))]
