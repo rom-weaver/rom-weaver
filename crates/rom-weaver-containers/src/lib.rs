@@ -782,6 +782,22 @@ struct ZipExtractTask {
     output_path: PathBuf,
 }
 
+#[derive(Clone, Debug)]
+struct ZipCreateTask {
+    entry_index: usize,
+    source: PathBuf,
+    archive_name: String,
+    temp_archive: PathBuf,
+}
+
+#[derive(Clone, Debug)]
+struct ZipCreateArtifact {
+    entry_index: usize,
+    archive_name: String,
+    logical_bytes: u64,
+    temp_archive: PathBuf,
+}
+
 impl ZipContainerHandler {
     const fn new(descriptor: &'static FormatDescriptor, flavor: ZipContainerFlavor) -> Self {
         Self { descriptor, flavor }
@@ -901,6 +917,106 @@ impl ZipContainerHandler {
                 chunk_bytes.saturating_add(self.extract_task_with_archive(&mut archive, task)?);
         }
         Ok(chunk_bytes)
+    }
+
+    fn build_create_tasks(
+        &self,
+        entries: &[ArchiveInputEntry],
+        context: &OperationContext,
+    ) -> Vec<ZipCreateTask> {
+        entries
+            .iter()
+            .enumerate()
+            .filter_map(|(entry_index, entry)| {
+                (!entry.is_dir).then(|| ZipCreateTask {
+                    entry_index,
+                    source: entry.source.clone(),
+                    archive_name: entry.archive_name.clone(),
+                    temp_archive: context.temp_paths().next_path(
+                        &format!("{}-create-{entry_index}", self.descriptor.name),
+                        Some("zip"),
+                    ),
+                })
+            })
+            .collect()
+    }
+
+    fn compress_create_task(
+        &self,
+        task: &ZipCreateTask,
+        method: ZipCompressionMethod,
+        level: Option<i32>,
+    ) -> Result<ZipCreateArtifact> {
+        if let Some(parent) = task.temp_archive.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        let output = File::create(&task.temp_archive)?;
+        let mut staged_archive = ZipFileWriter::new(BufWriter::new(output));
+        staged_archive
+            .start_file(task.archive_name.clone(), self.build_options(method, level))
+            .map_err(|error| {
+                RomWeaverError::Validation(format!(
+                    "{} create failed for `{}`: {error}",
+                    self.descriptor.name, task.archive_name
+                ))
+            })?;
+
+        let mut source = BufReader::new(File::open(&task.source)?);
+        let logical_bytes = io::copy(&mut source, &mut staged_archive)?;
+        staged_archive.finish().map_err(|error| {
+            RomWeaverError::Validation(format!(
+                "{} create failed for `{}`: {error}",
+                self.descriptor.name, task.archive_name
+            ))
+        })?;
+
+        Ok(ZipCreateArtifact {
+            entry_index: task.entry_index,
+            archive_name: task.archive_name.clone(),
+            logical_bytes,
+            temp_archive: task.temp_archive.clone(),
+        })
+    }
+
+    fn merge_create_artifact(
+        &self,
+        archive: &mut ZipFileWriter<BufWriter<File>>,
+        artifact: &ZipCreateArtifact,
+    ) -> Result<()> {
+        let staged_file = File::open(&artifact.temp_archive)?;
+        let mut staged_archive =
+            ZipFileArchive::new(BufReader::new(staged_file)).map_err(|error| {
+                RomWeaverError::Validation(format!(
+                    "{} create failed while reading staged entry `{}`: {error}",
+                    self.descriptor.name, artifact.archive_name
+                ))
+            })?;
+        let staged_entry = staged_archive.by_index(0).map_err(|error| {
+            RomWeaverError::Validation(format!(
+                "{} create failed while reading staged entry `{}`: {error}",
+                self.descriptor.name, artifact.archive_name
+            ))
+        })?;
+        archive.raw_copy_file(staged_entry).map_err(|error| {
+            RomWeaverError::Validation(format!(
+                "{} create failed for `{}`: {error}",
+                self.descriptor.name, artifact.archive_name
+            ))
+        })?;
+        Ok(())
+    }
+
+    fn cleanup_create_artifacts(&self, artifacts: &[ZipCreateArtifact]) {
+        for artifact in artifacts {
+            let _ = fs::remove_file(&artifact.temp_archive);
+        }
+    }
+
+    fn cleanup_create_tasks(&self, tasks: &[ZipCreateTask]) {
+        for task in tasks {
+            let _ = fs::remove_file(&task.temp_archive);
+        }
     }
 }
 
@@ -1076,9 +1192,33 @@ impl ContainerHandler for ZipContainerHandler {
         request: &ContainerCreateRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        let execution = context.plan_threads(ThreadCapability::single_threaded());
         let (method, level) = self.parse_codec(request.codec.as_deref(), request.level)?;
         let entries = collect_archive_inputs(&request.inputs)?;
+        let create_tasks = self.build_create_tasks(&entries, context);
+        let (execution, staged_artifacts) = if create_tasks.is_empty() {
+            (
+                context.plan_threads(ThreadCapability::parallel(None)),
+                Vec::new(),
+            )
+        } else {
+            let (execution, pool) =
+                context.build_pool(ThreadCapability::parallel(Some(create_tasks.len())))?;
+            let staged_result = pool.install(|| {
+                create_tasks
+                    .par_iter()
+                    .map(|task| self.compress_create_task(task, method, level))
+                    .collect::<Result<Vec<_>>>()
+            });
+            let mut staged_artifacts = match staged_result {
+                Ok(staged_artifacts) => staged_artifacts,
+                Err(error) => {
+                    self.cleanup_create_tasks(&create_tasks);
+                    return Err(error);
+                }
+            };
+            staged_artifacts.sort_by_key(|artifact| artifact.entry_index);
+            (execution, staged_artifacts)
+        };
 
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
@@ -1086,44 +1226,56 @@ impl ContainerHandler for ZipContainerHandler {
         let file = File::create(&request.output)?;
         let writer = BufWriter::new(file);
         let mut archive = ZipFileWriter::new(writer);
-        let mut logical_bytes = 0u64;
+        let create_result: Result<u64> = (|| {
+            let mut logical_bytes = 0u64;
+            let mut staged_iter = staged_artifacts.iter();
 
-        for entry in &entries {
-            if entry.is_dir {
-                let directory_name = format!("{}/", entry.archive_name);
-                archive
-                    .add_directory(directory_name, self.build_options(method, level))
-                    .map_err(|error| {
-                        RomWeaverError::Validation(format!(
-                            "{} create failed for `{}`: {error}",
-                            self.descriptor.name, entry.archive_name
-                        ))
-                    })?;
-                continue;
-            }
+            for (entry_index, entry) in entries.iter().enumerate() {
+                if entry.is_dir {
+                    let directory_name = format!("{}/", entry.archive_name);
+                    archive
+                        .add_directory(directory_name, self.build_options(method, level))
+                        .map_err(|error| {
+                            RomWeaverError::Validation(format!(
+                                "{} create failed for `{}`: {error}",
+                                self.descriptor.name, entry.archive_name
+                            ))
+                        })?;
+                    continue;
+                }
 
-            archive
-                .start_file(
-                    entry.archive_name.clone(),
-                    self.build_options(method, level),
-                )
-                .map_err(|error| {
+                let staged = staged_iter.next().ok_or_else(|| {
                     RomWeaverError::Validation(format!(
-                        "{} create failed for `{}`: {error}",
+                        "{} create failed while finalizing staged entries for `{}`",
                         self.descriptor.name, entry.archive_name
                     ))
                 })?;
-            let mut source = BufReader::new(File::open(&entry.source)?);
-            let copied = io::copy(&mut source, &mut archive)?;
-            logical_bytes = logical_bytes.saturating_add(copied);
-        }
+                if staged.entry_index != entry_index {
+                    return Err(RomWeaverError::Validation(format!(
+                        "{} create failed due to staged entry order mismatch for `{}`",
+                        self.descriptor.name, entry.archive_name
+                    )));
+                }
+                self.merge_create_artifact(&mut archive, staged)?;
+                logical_bytes = logical_bytes.saturating_add(staged.logical_bytes);
+            }
+            if staged_iter.next().is_some() {
+                return Err(RomWeaverError::Validation(format!(
+                    "{} create failed due to unexpected staged entries",
+                    self.descriptor.name
+                )));
+            }
 
-        archive.finish().map_err(|error| {
-            RomWeaverError::Validation(format!(
-                "{} create failed while finalizing archive: {error}",
-                self.descriptor.name
-            ))
-        })?;
+            archive.finish().map_err(|error| {
+                RomWeaverError::Validation(format!(
+                    "{} create failed while finalizing archive: {error}",
+                    self.descriptor.name
+                ))
+            })?;
+            Ok(logical_bytes)
+        })();
+        self.cleanup_create_artifacts(&staged_artifacts);
+        let logical_bytes = create_result?;
 
         Ok(OperationReport::succeeded(
             OperationFamily::Container,
@@ -1147,7 +1299,7 @@ impl ContainerHandler for ZipContainerHandler {
             extract: true,
             create: true,
             extract_threads: ThreadCapability::parallel(None),
-            create_threads: ThreadCapability::single_threaded(),
+            create_threads: ThreadCapability::parallel(None),
         }
     }
 }
@@ -4499,8 +4651,16 @@ impl TgcContainerHandler {
         options
     }
 
-    fn open_disc(&self, source: &Path) -> Result<NodDiscReader> {
-        NodDiscReader::new(source, &self.read_options(0)).map_err(|error| {
+    fn negotiated_threads(&self, used_parallelism: bool, effective_threads: usize) -> usize {
+        if used_parallelism {
+            effective_threads
+        } else {
+            0
+        }
+    }
+
+    fn open_disc(&self, source: &Path, preloader_threads: usize) -> Result<NodDiscReader> {
+        NodDiscReader::new(source, &self.read_options(preloader_threads)).map_err(|error| {
             RomWeaverError::Validation(format!(
                 "failed to open tgc source `{}`: {error}",
                 source.display()
@@ -4565,7 +4725,7 @@ impl ContainerHandler for TgcContainerHandler {
     }
 
     fn probe(&self, source: &Path) -> ProbeConfidence {
-        if let Ok(disc) = self.open_disc(source)
+        if let Ok(disc) = self.open_disc(source, 0)
             && disc.meta().format == NodFormat::Tgc
         {
             return ProbeConfidence::Signature;
@@ -4579,7 +4739,7 @@ impl ContainerHandler for TgcContainerHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let execution = context.plan_threads(ThreadCapability::single_threaded());
-        let disc = self.open_disc(&request.source)?;
+        let disc = self.open_disc(&request.source, 0)?;
         let meta = self.validate_tgc_meta(&request.source, &disc)?;
         let disc_size = meta.disc_size.unwrap_or_else(|| disc.disc_size());
         let compression_label = normalize_codec_label(&meta.compression.to_string());
@@ -4624,14 +4784,10 @@ impl ContainerHandler for TgcContainerHandler {
         }
         selections.ensure_all_matched()?;
 
-        let execution = context.plan_threads(ThreadCapability::single_threaded());
-        let mut disc =
-            NodDiscReader::new(&request.source, &self.read_options(0)).map_err(|error| {
-                RomWeaverError::Validation(format!(
-                    "failed to open tgc source `{}`: {error}",
-                    request.source.display()
-                ))
-            })?;
+        let execution = context.plan_threads(ThreadCapability::parallel(None));
+        let preloader_threads =
+            self.negotiated_threads(execution.used_parallelism, execution.effective_threads);
+        let mut disc = self.open_disc(&request.source, preloader_threads)?;
         let meta = self.validate_tgc_meta(&request.source, &disc)?;
         let disc_size = meta.disc_size.unwrap_or_else(|| disc.disc_size());
         let compression_label = normalize_codec_label(&meta.compression.to_string());
@@ -4670,7 +4826,7 @@ impl ContainerHandler for TgcContainerHandler {
             ));
         }
 
-        let execution = context.plan_threads(ThreadCapability::single_threaded());
+        let execution = context.plan_threads(ThreadCapability::parallel(None));
         let input = &request.inputs[0];
         let compression =
             self.resolve_create_compression(request.codec.as_deref(), request.level)?;
@@ -4684,21 +4840,27 @@ impl ContainerHandler for TgcContainerHandler {
             fs::create_dir_all(parent)?;
         }
 
-        let input_disc = NodDiscReader::new(input, &self.read_options(0)).map_err(|error| {
-            RomWeaverError::Validation(format!(
-                "failed to open input `{}` for tgc create: {error}",
-                input.display()
-            ))
-        })?;
+        let preloader_threads =
+            self.negotiated_threads(execution.used_parallelism, execution.effective_threads);
+        let input_disc =
+            NodDiscReader::new(input, &self.read_options(preloader_threads)).map_err(|error| {
+                RomWeaverError::Validation(format!(
+                    "failed to open input `{}` for tgc create: {error}",
+                    input.display()
+                ))
+            })?;
         let writer = NodDiscWriter::new(input_disc, &options).map_err(|error| {
             RomWeaverError::Validation(format!("failed to initialize tgc writer: {error}"))
         })?;
 
         let mut output = File::create(&request.output)?;
+        let mut process_options = NodProcessOptions::default();
+        process_options.processor_threads =
+            self.negotiated_threads(execution.used_parallelism, execution.effective_threads);
         let finalization = writer
             .process(
                 |data, _processed, _total| output.write_all(data.as_ref()),
-                &NodProcessOptions::default(),
+                &process_options,
             )
             .map_err(|error| RomWeaverError::Validation(format!("tgc create failed: {error}")))?;
         if !finalization.header.is_empty() {
@@ -4728,8 +4890,8 @@ impl ContainerHandler for TgcContainerHandler {
             inspect: true,
             extract: true,
             create: true,
-            extract_threads: ThreadCapability::single_threaded(),
-            create_threads: ThreadCapability::single_threaded(),
+            extract_threads: ThreadCapability::parallel(None),
+            create_threads: ThreadCapability::parallel(None),
         }
     }
 }
@@ -9497,11 +9659,11 @@ mod tests {
         assert!(capabilities.create);
         assert_eq!(
             capabilities.extract_threads,
-            ThreadCapability::single_threaded()
+            ThreadCapability::parallel(None)
         );
         assert_eq!(
             capabilities.create_threads,
-            ThreadCapability::single_threaded()
+            ThreadCapability::parallel(None)
         );
     }
 
@@ -9573,7 +9735,7 @@ mod tests {
         );
         assert_eq!(
             capabilities.create_threads,
-            ThreadCapability::single_threaded()
+            ThreadCapability::parallel(None)
         );
     }
 
@@ -9614,7 +9776,7 @@ mod tests {
     }
 
     #[test]
-    fn zip_extract_runtime_threads_match_capability() {
+    fn zip_runtime_threads_match_capabilities_for_create_and_extract() {
         let temp_dir = temp_dir_path("zip-thread-parity");
         fs::create_dir_all(&temp_dir).expect("temp dir");
         let input_dir = temp_dir.join("input");
@@ -9632,7 +9794,7 @@ mod tests {
         let registry = ContainerRegistry::new();
         let handler = registry.find_by_name("zip").expect("zip handler");
         let capabilities = handler.capabilities();
-        handler
+        let create_report = handler
             .create(
                 &ContainerCreateRequest {
                     inputs: vec![input_dir.clone()],
@@ -9641,9 +9803,18 @@ mod tests {
                     codec: None,
                     level: None,
                 },
-                &test_context(&temp_dir, 1),
+                &test_context(&temp_dir, 8),
             )
             .expect("create zip");
+        let create_execution = create_report.thread_execution.expect("thread execution");
+        assert!(
+            capabilities
+                .create_threads
+                .supports_execution(&create_execution)
+        );
+        assert_eq!(create_execution.requested_threads, 8);
+        assert_eq!(create_execution.effective_threads, 8);
+        assert!(create_execution.used_parallelism);
 
         let extract_report = handler
             .extract(
