@@ -65,24 +65,7 @@ export async function createRomWeaverZenFsNode(options = {}) {
     fs: zenfs.fs,
     guestMounts,
     run: (args, runOptions) => runner.run(args, runOptions),
-    async runJson(args, runOptions = {}) {
-      const result = await runner.run(['--json', ...normalizeArgs(args)], runOptions);
-      const parsed = parseJsonLines(result.stdout, {
-        onEvent: runOptions.onEvent,
-        onNonJsonLine: runOptions.onNonJsonLine,
-      });
-      const parsedTrace = parseTraceJsonLines(result.stderr, {
-        onTraceEvent: runOptions.onTraceEvent,
-        onTraceNonJsonLine: runOptions.onTraceNonJsonLine,
-      });
-      return {
-        ...result,
-        events: parsed.events,
-        nonJsonLines: parsed.nonJsonLines,
-        traceEvents: parsedTrace.traceEvents,
-        traceNonJsonLines: parsedTrace.traceNonJsonLines,
-      };
-    },
+    runJson: (args, runOptions) => runJsonWithParsers(runner.run, args, runOptions),
   };
 }
 
@@ -197,24 +180,8 @@ export async function createRomWeaverZenFsBrowser(options = {}) {
       }
     },
 
-    async runJson(args = [], runOptions = {}) {
-      const result = await this.run(['--json', ...normalizeArgs(args)], runOptions);
-      const parsed = parseJsonLines(result.stdout, {
-        onEvent: runOptions.onEvent,
-        onNonJsonLine: runOptions.onNonJsonLine,
-      });
-      const parsedTrace = parseTraceJsonLines(result.stderr, {
-        onTraceEvent: runOptions.onTraceEvent,
-        onTraceNonJsonLine: runOptions.onTraceNonJsonLine,
-      });
-
-      return {
-        ...result,
-        events: parsed.events,
-        nonJsonLines: parsed.nonJsonLines,
-        traceEvents: parsedTrace.traceEvents,
-        traceNonJsonLines: parsedTrace.traceNonJsonLines,
-      };
+    runJson(args = [], runOptions = {}) {
+      return runJsonWithParsers((jsonArgs, options) => this.run(jsonArgs, options), args, runOptions);
     },
   };
 
@@ -558,6 +525,26 @@ function normalizeArgs(args) {
     throw new TypeError('args must be an array of strings');
   }
   return args.map((value) => String(value));
+}
+
+async function runJsonWithParsers(run, args = [], runOptions = {}) {
+  const result = await run(['--json', ...normalizeArgs(args)], runOptions);
+  const parsed = parseJsonLines(result.stdout, {
+    onEvent: runOptions.onEvent,
+    onNonJsonLine: runOptions.onNonJsonLine,
+  });
+  const parsedTrace = parseTraceJsonLines(result.stderr, {
+    onTraceEvent: runOptions.onTraceEvent,
+    onTraceNonJsonLine: runOptions.onTraceNonJsonLine,
+  });
+
+  return {
+    ...result,
+    events: parsed.events,
+    nonJsonLines: parsed.nonJsonLines,
+    traceEvents: parsedTrace.traceEvents,
+    traceNonJsonLines: parsedTrace.traceNonJsonLines,
+  };
 }
 
 function normalizeStdin(stdin) {

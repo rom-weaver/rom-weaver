@@ -1,11 +1,11 @@
 import type {
   RomWeaverProgressEvent,
-  RomWeaverRunJsonOptions,
   RomWeaverRunJsonResult,
   RomWeaverRunOptions,
   RomWeaverRunResult,
   RomWeaverWorkerError,
 } from '../rom-weaver-types.d.ts';
+import type { WorkerClientRunJsonOptions } from './worker-client-types.d.ts';
 
 export interface BrowserWorkerClientCreateOptions {
   worker?: Worker;
@@ -13,14 +13,8 @@ export interface BrowserWorkerClientCreateOptions {
   workerOptions?: WorkerOptions;
 }
 
-export interface BrowserWorkerRunJsonOptions<TEvent = RomWeaverProgressEvent, TTraceEvent = unknown>
-  extends Omit<RomWeaverRunJsonOptions<TEvent, TTraceEvent>, 'onEvent' | 'onNonJsonLine' | 'onTraceEvent' | 'onTraceNonJsonLine'> {
-  onEvent?: (event: TEvent) => void;
-  onNonJsonLine?: (line: string) => void;
-  onTraceEvent?: (event: TTraceEvent) => void;
-  onTraceNonJsonLine?: (line: string) => void;
-  [key: string]: unknown;
-}
+export type BrowserWorkerRunJsonOptions<TEvent = RomWeaverProgressEvent, TTraceEvent = unknown> =
+  WorkerClientRunJsonOptions<TEvent, TTraceEvent>;
 
 export type BrowserWorkerClientError = RomWeaverWorkerError;
 
