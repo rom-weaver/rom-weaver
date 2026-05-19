@@ -1,5 +1,5 @@
 use std::{
-    fs::{self, File},
+    fs::{self, File, OpenOptions},
     io::{self, BufReader, BufWriter, Write},
     num::NonZeroU64,
     path::Path,
@@ -8,7 +8,9 @@ use std::{
 
 use bzip2::{Compression as Bzip2Compression, read::BzDecoder, write::BzEncoder};
 use flate2::{Compression as DeflateCompression, read::GzDecoder, write::GzEncoder};
-use lzma_rust2::{XzOptions, XzReader, XzWriter, XzWriterMt};
+use lzma_rust2::{XzOptions, XzReader, XzReaderMt, XzWriter, XzWriterMt};
+use memmap2::MmapOptions;
+use rayon::prelude::*;
 use rom_weaver_core::{
     CodecBackend, CodecCapabilities, CodecDescriptor, CodecOperationRequest, FormatDescriptor,
     OperationContext, OperationFamily, OperationReport, Result, RomWeaverError, ThreadCapability,
@@ -175,6 +177,7 @@ struct NativeCodecBackend {
 
 impl NativeCodecBackend {
     const XZ_MT_BLOCK_BYTES: u64 = 1 << 20;
+    const STORE_COPY_MIN_PARALLEL_BYTES: usize = 1 << 20;
 
     const fn new(descriptor: &'static CodecDescriptor, kind: NativeCodecKind) -> Self {
         Self { descriptor, kind }
@@ -257,7 +260,12 @@ impl NativeCodecBackend {
     }
 
     fn decode_thread_capability(&self) -> ThreadCapability {
-        ThreadCapability::single_threaded()
+        match self.kind {
+            NativeCodecKind::Store | NativeCodecKind::Lzma2 => ThreadCapability::parallel(None),
+            NativeCodecKind::Deflate | NativeCodecKind::Zstd | NativeCodecKind::Bzip2 => {
+                ThreadCapability::single_threaded()
+            }
+        }
     }
 
     fn xz_thread_count(effective_threads: usize) -> u32 {
@@ -274,6 +282,75 @@ impl NativeCodecBackend {
         })?;
         options.set_block_size(Some(block_size));
         Ok(options)
+    }
+
+    fn store_copy_chunk_len(total_len: usize, effective_threads: usize) -> usize {
+        let threads = effective_threads.max(1);
+        total_len.div_ceil(threads).max(1)
+    }
+
+    fn copy_store_payload(
+        &self,
+        request: &CodecOperationRequest,
+        execution: &mut ThreadExecution,
+    ) -> Result<u64> {
+        let input_len_u64 = fs::metadata(&request.input)?.len();
+        let output = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(&request.output)?;
+        output.set_len(input_len_u64)?;
+        if input_len_u64 == 0 {
+            return Ok(0);
+        }
+
+        let input_len = usize::try_from(input_len_u64).map_err(|_| {
+            RomWeaverError::Validation("store codec payload exceeded addressable memory".into())
+        })?;
+        let input = File::open(&request.input)?;
+        // SAFETY: Both mappings are file-backed and remain valid for the lifetime of this scope.
+        let input_map = unsafe { MmapOptions::new().map(&input)? };
+        // SAFETY: The output file is opened read+write and sized to the mapped length above.
+        let mut output_map = unsafe { MmapOptions::new().map_mut(&output)? };
+
+        if execution.used_parallelism {
+            if input_len < Self::STORE_COPY_MIN_PARALLEL_BYTES {
+                execution.apply_pool_fallback(format!(
+                    "store codec payload too small for threaded copy ({input_len} bytes)"
+                ));
+            } else {
+                match rayon::ThreadPoolBuilder::new()
+                    .num_threads(execution.effective_threads.max(1))
+                    .build()
+                {
+                    Ok(pool) => {
+                        let input_bytes: &[u8] = input_map.as_ref();
+                        let chunk_len =
+                            Self::store_copy_chunk_len(input_len, execution.effective_threads);
+                        pool.install(|| {
+                            output_map.par_chunks_mut(chunk_len).enumerate().for_each(
+                                |(chunk_index, chunk)| {
+                                    let start = chunk_index.saturating_mul(chunk_len);
+                                    let end = start + chunk.len();
+                                    chunk.copy_from_slice(&input_bytes[start..end]);
+                                },
+                            );
+                        });
+                    }
+                    Err(error) => execution.apply_pool_fallback(format!(
+                        "store codec thread pool build failed: {error}"
+                    )),
+                }
+            }
+        }
+
+        if !execution.used_parallelism {
+            output_map[..].copy_from_slice(input_map.as_ref());
+        }
+        output_map.flush()?;
+        Ok(input_len_u64)
     }
 
     fn encode_impl(
@@ -355,9 +432,13 @@ impl NativeCodecBackend {
         Ok(bytes)
     }
 
-    fn decode_impl(&self, request: &CodecOperationRequest) -> Result<u64> {
+    fn decode_impl(
+        &self,
+        request: &CodecOperationRequest,
+        execution: &mut ThreadExecution,
+    ) -> Result<u64> {
         let bytes = match self.kind {
-            NativeCodecKind::Store => fs::copy(&request.input, &request.output)?,
+            NativeCodecKind::Store => self.copy_store_payload(request, execution)?,
             NativeCodecKind::Deflate => {
                 let source = BufReader::new(File::open(&request.input)?);
                 let mut decoder = GzDecoder::new(source);
@@ -375,12 +456,36 @@ impl NativeCodecBackend {
                 copied
             }
             NativeCodecKind::Lzma2 => {
-                let source = BufReader::new(File::open(&request.input)?);
-                let mut decoder = XzReader::new(source, false);
-                let mut output = BufWriter::new(File::create(&request.output)?);
-                let copied = io::copy(&mut decoder, &mut output)?;
-                output.flush()?;
-                copied
+                if execution.used_parallelism {
+                    let workers = Self::xz_thread_count(execution.effective_threads);
+                    let source = BufReader::new(File::open(&request.input)?);
+                    match XzReaderMt::new(source, false, workers) {
+                        Ok(mut decoder) => {
+                            let mut output = BufWriter::new(File::create(&request.output)?);
+                            let copied = io::copy(&mut decoder, &mut output)?;
+                            output.flush()?;
+                            copied
+                        }
+                        Err(error) => {
+                            execution.apply_pool_fallback(format!(
+                                "lzma2 decoder rejected multithread setting: {error}"
+                            ));
+                            let source = BufReader::new(File::open(&request.input)?);
+                            let mut decoder = XzReader::new(source, false);
+                            let mut output = BufWriter::new(File::create(&request.output)?);
+                            let copied = io::copy(&mut decoder, &mut output)?;
+                            output.flush()?;
+                            copied
+                        }
+                    }
+                } else {
+                    let source = BufReader::new(File::open(&request.input)?);
+                    let mut decoder = XzReader::new(source, false);
+                    let mut output = BufWriter::new(File::create(&request.output)?);
+                    let copied = io::copy(&mut decoder, &mut output)?;
+                    output.flush()?;
+                    copied
+                }
             }
             NativeCodecKind::Bzip2 => {
                 let source = BufReader::new(File::open(&request.input)?);
@@ -426,8 +531,8 @@ impl NativeCodecBackend {
     ) -> Result<OperationReport> {
         self.validate_decode_level(request)?;
         Self::ensure_output_parent(&request.output)?;
-        let execution = context.plan_threads(self.decode_thread_capability());
-        let bytes = self.decode_impl(request)?;
+        let mut execution = context.plan_threads(self.decode_thread_capability());
+        let bytes = self.decode_impl(request, &mut execution)?;
         Ok(OperationReport::succeeded(
             OperationFamily::Codec,
             Some(self.descriptor.name.to_string()),
@@ -470,7 +575,8 @@ impl CodecBackend for NativeCodecBackend {
         CodecCapabilities {
             encode: true,
             decode: true,
-            threads: self.encode_thread_capability(),
+            encode_threads: self.encode_thread_capability(),
+            decode_threads: self.decode_thread_capability(),
         }
     }
 }
@@ -740,7 +846,7 @@ mod tests {
         for codec in ["zstd", "lzma2"] {
             let backend = registry.find_by_name(codec).expect("codec backend");
             assert_eq!(
-                backend.capabilities().threads,
+                backend.capabilities().encode_threads,
                 ThreadCapability::parallel(None)
             );
         }
@@ -748,7 +854,23 @@ mod tests {
         for codec in ["store", "deflate", "bzip2"] {
             let backend = registry.find_by_name(codec).expect("codec backend");
             assert_eq!(
-                backend.capabilities().threads,
+                backend.capabilities().encode_threads,
+                ThreadCapability::single_threaded()
+            );
+        }
+
+        for codec in ["store", "lzma2"] {
+            let backend = registry.find_by_name(codec).expect("codec backend");
+            assert_eq!(
+                backend.capabilities().decode_threads,
+                ThreadCapability::parallel(None)
+            );
+        }
+
+        for codec in ["deflate", "zstd", "bzip2"] {
+            let backend = registry.find_by_name(codec).expect("codec backend");
+            assert_eq!(
+                backend.capabilities().decode_threads,
                 ThreadCapability::single_threaded()
             );
         }
@@ -782,9 +904,107 @@ mod tests {
         assert_eq!(encode.status, OperationStatus::Succeeded);
 
         let execution = encode.thread_execution.expect("thread execution");
-        assert!(capabilities.threads.supports_execution(&execution));
+        assert!(capabilities.encode_threads.supports_execution(&execution));
         assert_eq!(execution.requested_threads, 8);
         assert_eq!(execution.effective_threads, 8);
         assert!(execution.used_parallelism);
+    }
+
+    #[test]
+    fn lzma2_backend_decode_runtime_threads_match_capability() {
+        let temp = TestDir::new();
+        let source = temp.path().join("source.bin");
+        let encoded = temp.path().join("encoded.xz");
+        let decoded = temp.path().join("decoded.bin");
+        let payload = (0..(3 * 1024 * 1024))
+            .map(|index| (index as u8).wrapping_mul(29))
+            .collect::<Vec<_>>();
+        fs::write(&source, &payload).expect("write source");
+
+        let registry = CodecRegistry::new();
+        let backend = registry.find_by_name("lzma2").expect("lzma2 backend");
+        let capabilities = backend.capabilities();
+        let context = codec_context(temp.path());
+
+        backend
+            .encode(
+                &CodecOperationRequest {
+                    input: source,
+                    output: encoded.clone(),
+                    level: Some(6),
+                },
+                &context,
+            )
+            .expect("encode");
+
+        let decode = backend
+            .decode(
+                &CodecOperationRequest {
+                    input: encoded,
+                    output: decoded.clone(),
+                    level: None,
+                },
+                &context,
+            )
+            .expect("decode");
+        assert_eq!(decode.status, OperationStatus::Succeeded);
+
+        let execution = decode.thread_execution.expect("thread execution");
+        assert!(capabilities.decode_threads.supports_execution(&execution));
+        assert_eq!(execution.requested_threads, 8);
+        assert_eq!(execution.effective_threads, 8);
+        assert!(execution.used_parallelism);
+        assert_eq!(fs::read(decoded).expect("decoded bytes"), payload);
+    }
+
+    #[test]
+    fn store_backend_decode_runs_with_parallel_runtime_when_budget_allows() {
+        let temp = TestDir::new();
+        let source = temp.path().join("source.bin");
+        let encoded = temp.path().join("encoded.store");
+        let decoded = temp.path().join("decoded.bin");
+        let payload = (0..(2 * 1024 * 1024))
+            .map(|index| (index as u8).wrapping_mul(7))
+            .collect::<Vec<_>>();
+        fs::write(&source, &payload).expect("write source");
+
+        let registry = CodecRegistry::new();
+        let backend = registry.find_by_name("store").expect("store backend");
+        let context = codec_context(temp.path());
+
+        backend
+            .encode(
+                &CodecOperationRequest {
+                    input: source,
+                    output: encoded.clone(),
+                    level: None,
+                },
+                &context,
+            )
+            .expect("encode");
+
+        let decode = backend
+            .decode(
+                &CodecOperationRequest {
+                    input: encoded,
+                    output: decoded.clone(),
+                    level: None,
+                },
+                &context,
+            )
+            .expect("decode");
+        assert_eq!(decode.status, OperationStatus::Succeeded);
+
+        let execution = decode.thread_execution.expect("thread execution");
+        assert!(
+            backend
+                .capabilities()
+                .decode_threads
+                .supports_execution(&execution)
+        );
+        assert_eq!(execution.requested_threads, 8);
+        assert_eq!(execution.effective_threads, 8);
+        assert!(execution.used_parallelism);
+        assert_eq!(fs::read(decoded).expect("decoded bytes"), payload);
     }
 }

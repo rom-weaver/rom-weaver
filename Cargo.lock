@@ -2253,6 +2253,8 @@ dependencies = [
  "bzip2",
  "flate2",
  "lzma-rust2",
+ "memmap2",
+ "rayon",
  "rom-weaver-core",
  "zstd",
 ]
@@ -2308,6 +2310,7 @@ dependencies = [
  "rom-weaver-checksum",
  "rom-weaver-core",
  "serde_json",
+ "sha1",
  "tracing",
 ]
 

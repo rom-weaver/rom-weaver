@@ -224,7 +224,8 @@ pub struct ChecksumCapabilities {
 pub struct CodecCapabilities {
     pub encode: bool,
     pub decode: bool,
-    pub threads: ThreadCapability,
+    pub encode_threads: ThreadCapability,
+    pub decode_threads: ThreadCapability,
 }
 
 pub type CodecDescriptor = FormatDescriptor;
