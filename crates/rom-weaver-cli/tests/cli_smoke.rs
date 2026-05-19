@@ -225,6 +225,54 @@ fn write_gcz_fixture_from_iso(iso_path: &std::path::Path, gcz_path: &std::path::
     output.flush().expect("flush gcz");
 }
 
+fn write_wbfs_fixture_from_iso(iso_path: &std::path::Path, wbfs_path: &std::path::Path) {
+    let disc = NodDiscReader::new(iso_path, &NodDiscOptions::default()).expect("open iso");
+    let options = NodFormatOptions {
+        format: NodFormat::Wbfs,
+        compression: NodCompression::None,
+        block_size: NodFormat::Wbfs.default_block_size(),
+    };
+    let writer = NodDiscWriter::new(disc, &options).expect("create wbfs writer");
+    let mut output = File::create(wbfs_path).expect("create wbfs");
+    let finalization = writer
+        .process(
+            |data, _processed, _total| output.write_all(data.as_ref()),
+            &NodProcessOptions::default(),
+        )
+        .expect("write wbfs");
+    if !finalization.header.is_empty() {
+        output.rewind().expect("seek wbfs");
+        output
+            .write_all(finalization.header.as_ref())
+            .expect("write wbfs header");
+    }
+    output.flush().expect("flush wbfs");
+}
+
+fn write_wia_fixture_from_iso(iso_path: &std::path::Path, wia_path: &std::path::Path) {
+    let disc = NodDiscReader::new(iso_path, &NodDiscOptions::default()).expect("open iso");
+    let options = NodFormatOptions {
+        format: NodFormat::Wia,
+        compression: NodCompression::Lzma2(6),
+        block_size: NodFormat::Wia.default_block_size(),
+    };
+    let writer = NodDiscWriter::new(disc, &options).expect("create wia writer");
+    let mut output = File::create(wia_path).expect("create wia");
+    let finalization = writer
+        .process(
+            |data, _processed, _total| output.write_all(data.as_ref()),
+            &NodProcessOptions::default(),
+        )
+        .expect("write wia");
+    if !finalization.header.is_empty() {
+        output.rewind().expect("seek wia");
+        output
+            .write_all(finalization.header.as_ref())
+            .expect("write wia header");
+    }
+    output.flush().expect("flush wia");
+}
+
 fn write_xiso_fixture_from_directory(source_dir: &std::path::Path, xiso_path: &std::path::Path) {
     fs::create_dir_all(source_dir.join("media")).expect("source tree");
     fs::write(source_dir.join("default.xbe"), b"XBE-STUB").expect("xbe fixture");
@@ -1706,6 +1754,98 @@ fn trim_xiso_revert_is_rejected() {
             .as_str()
             .expect("label")
             .contains("xiso trim revert is not supported")
+    );
+}
+
+#[test]
+fn trim_wbfs_uses_rvz_scrub_output() {
+    let temp = setup_temp_dir();
+    let iso_bytes = build_test_gamecube_iso(0x8000);
+    let source_iso = temp.child("disc.iso");
+    let source_wbfs = temp.child("disc.wbfs");
+    fs::write(source_iso.path(), &iso_bytes).expect("iso fixture");
+    write_wbfs_fixture_from_iso(source_iso.path(), source_wbfs.path());
+
+    let trim_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args(["trim", source_wbfs.path().to_str().expect("path"), "--json"])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let terminal = parse_single_json_line(&trim_output);
+    assert_eq!(terminal["command"], "trim");
+    assert_eq!(terminal["family"], "command");
+    assert_eq!(terminal["status"], "succeeded");
+    let label = terminal["label"].as_str().expect("label");
+    assert!(label.contains("mode=rvz-scrub"));
+    assert!(label.contains("revert_supported=false"));
+    assert!(label.contains(
+        "warning=trimmed rvz-scrub output cannot be reverted to original source format; keep backup"
+    ));
+
+    let trimmed = source_wbfs.path().with_extension("trim.rvz");
+    assert!(trimmed.exists(), "expected trimmed rvz output");
+
+    let extract_dir = temp.child("extract");
+    let extract_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "extract",
+            trimmed.to_str().expect("path"),
+            "--out-dir",
+            extract_dir.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let extract_terminal = parse_single_json_line(&extract_output);
+    assert_eq!(extract_terminal["command"], "extract");
+    assert_eq!(extract_terminal["format"], "rvz");
+    assert_eq!(extract_terminal["status"], "succeeded");
+    assert_eq!(
+        fs::read(extract_dir.child("disc.trim.iso").path()).expect("extracted iso"),
+        iso_bytes
+    );
+}
+
+#[test]
+fn trim_wbfs_revert_is_rejected_for_rvz_scrub() {
+    let temp = setup_temp_dir();
+    let iso_bytes = build_test_gamecube_iso(0x4000);
+    let source_iso = temp.child("disc.iso");
+    let source_wbfs = temp.child("disc.wbfs");
+    fs::write(source_iso.path(), &iso_bytes).expect("iso fixture");
+    write_wbfs_fixture_from_iso(source_iso.path(), source_wbfs.path());
+
+    let trim_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "trim",
+            source_wbfs.path().to_str().expect("path"),
+            "--revert",
+            "--json",
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .stdout
+        .clone();
+
+    let terminal = parse_single_json_line(&trim_output);
+    assert_eq!(terminal["command"], "trim");
+    assert_eq!(terminal["status"], "failed");
+    assert!(
+        terminal["label"]
+            .as_str()
+            .expect("label")
+            .contains("rvz-scrub trim revert is not supported")
     );
 }
 
@@ -3564,6 +3704,286 @@ fn compress_gcz_warns_and_rejects_output() {
 }
 
 #[test]
+fn compress_wbfs_and_extract_round_trip() {
+    let temp = setup_temp_dir();
+    let iso_bytes = build_test_gamecube_iso(0x7000);
+    fs::write(temp.child("disc.iso").path(), &iso_bytes).expect("iso fixture");
+    let wbfs_path = temp.child("disc.wbfs");
+
+    let compress_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("disc.iso").path().to_str().expect("path"),
+            "--format",
+            "wbfs",
+            "--output",
+            wbfs_path.path().to_str().expect("path"),
+            "--threads",
+            "8",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let compress_json = parse_single_json_line(&compress_output);
+    assert_eq!(compress_json["command"], "compress");
+    assert_eq!(compress_json["family"], "container");
+    assert_eq!(compress_json["format"], "wbfs");
+    assert_eq!(compress_json["requested_threads"], 8);
+    assert_eq!(compress_json["effective_threads"], 8);
+    assert_eq!(compress_json["used_parallelism"], true);
+    assert_eq!(compress_json["status"], "succeeded");
+    assert!(wbfs_path.path().exists());
+
+    let out_dir = temp.child("extract");
+    let extract_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "extract",
+            wbfs_path.path().to_str().expect("path"),
+            "--out-dir",
+            out_dir.path().to_str().expect("path"),
+            "--threads",
+            "8",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let extract_json = parse_single_json_line(&extract_output);
+    assert_eq!(extract_json["command"], "extract");
+    assert_eq!(extract_json["family"], "container");
+    assert_eq!(extract_json["format"], "wbfs");
+    assert_eq!(extract_json["requested_threads"], 8);
+    assert_eq!(extract_json["effective_threads"], 8);
+    assert_eq!(extract_json["used_parallelism"], true);
+    assert_eq!(extract_json["status"], "succeeded");
+    assert_eq!(
+        fs::read(out_dir.child("disc.iso").path()).expect("extracted iso"),
+        iso_bytes
+    );
+}
+
+#[test]
+fn compress_cso_and_extract_round_trip() {
+    let temp = setup_temp_dir();
+    let mut iso_bytes = (0..(2 * 1024 * 4))
+        .map(|index| (index % 251) as u8)
+        .collect::<Vec<_>>();
+    if let Some(last) = iso_bytes.last_mut() {
+        *last = 0;
+    }
+    fs::write(temp.child("disc.iso").path(), &iso_bytes).expect("iso fixture");
+    let cso_path = temp.child("disc.cso");
+
+    let compress_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("disc.iso").path().to_str().expect("path"),
+            "--format",
+            "cso",
+            "--output",
+            cso_path.path().to_str().expect("path"),
+            "--threads",
+            "8",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let compress_json = parse_single_json_line(&compress_output);
+    assert_eq!(compress_json["command"], "compress");
+    assert_eq!(compress_json["family"], "container");
+    assert_eq!(compress_json["format"], "cso");
+    assert_eq!(compress_json["requested_threads"], 8);
+    assert_eq!(compress_json["effective_threads"], 1);
+    assert_eq!(compress_json["used_parallelism"], false);
+    assert_eq!(compress_json["status"], "succeeded");
+    assert!(cso_path.path().exists());
+
+    let out_dir = temp.child("extract");
+    let extract_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "extract",
+            cso_path.path().to_str().expect("path"),
+            "--out-dir",
+            out_dir.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let extract_json = parse_single_json_line(&extract_output);
+    assert_eq!(extract_json["command"], "extract");
+    assert_eq!(extract_json["family"], "container");
+    assert_eq!(extract_json["format"], "cso");
+    assert_eq!(extract_json["status"], "succeeded");
+    assert_eq!(
+        fs::read(out_dir.child("disc.iso").path()).expect("extracted iso"),
+        iso_bytes
+    );
+}
+
+#[test]
+fn compress_wia_and_extract_round_trip() {
+    let temp = setup_temp_dir();
+    let iso_bytes = build_test_gamecube_iso(0x7000);
+    fs::write(temp.child("disc.iso").path(), &iso_bytes).expect("iso fixture");
+    let wia_path = temp.child("disc.wia");
+
+    let compress_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("disc.iso").path().to_str().expect("path"),
+            "--format",
+            "wia",
+            "--output",
+            wia_path.path().to_str().expect("path"),
+            "--codec",
+            "lzma2:6",
+            "--threads",
+            "8",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let compress_json = parse_single_json_line(&compress_output);
+    assert_eq!(compress_json["command"], "compress");
+    assert_eq!(compress_json["family"], "container");
+    assert_eq!(compress_json["format"], "wia");
+    assert_eq!(compress_json["requested_threads"], 8);
+    assert_eq!(compress_json["effective_threads"], 8);
+    assert_eq!(compress_json["used_parallelism"], true);
+    assert_eq!(compress_json["status"], "succeeded");
+    assert!(wia_path.path().exists());
+
+    let out_dir = temp.child("extract");
+    let extract_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "extract",
+            wia_path.path().to_str().expect("path"),
+            "--out-dir",
+            out_dir.path().to_str().expect("path"),
+            "--threads",
+            "8",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let extract_json = parse_single_json_line(&extract_output);
+    assert_eq!(extract_json["command"], "extract");
+    assert_eq!(extract_json["family"], "container");
+    assert_eq!(extract_json["format"], "wia");
+    assert_eq!(extract_json["requested_threads"], 8);
+    assert_eq!(extract_json["effective_threads"], 8);
+    assert_eq!(extract_json["used_parallelism"], true);
+    assert_eq!(extract_json["status"], "succeeded");
+    assert_eq!(
+        fs::read(out_dir.child("disc.iso").path()).expect("extracted iso"),
+        iso_bytes
+    );
+}
+
+#[test]
+fn compress_nfs_warns_and_rejects_output() {
+    let temp = setup_temp_dir();
+    let iso_bytes = build_test_gamecube_iso(0x4000);
+    fs::write(temp.child("disc.iso").path(), &iso_bytes).expect("iso fixture");
+    let output_path = temp.child("out.nfs");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("disc.iso").path().to_str().expect("path"),
+            "--format",
+            "nfs",
+            "--output",
+            output_path.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "compress");
+    assert_eq!(json["family"], "container");
+    assert_eq!(json["format"], "nfs");
+    assert_eq!(json["status"], "failed");
+    assert!(
+        json["label"]
+            .as_str()
+            .expect("label")
+            .contains("nfs compression is not supported")
+    );
+    assert!(!output_path.path().exists());
+}
+
+#[test]
+fn compress_tgc_routes_through_handler_and_reports_invalid_source() {
+    let temp = setup_temp_dir();
+    let source = temp.child("source.iso");
+    fs::write(source.path(), build_test_gamecube_iso(0x4000)).expect("fixture");
+    let output_path = temp.child("out.tgc");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            source.path().to_str().expect("path"),
+            "--format",
+            "tgc",
+            "--output",
+            output_path.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "compress");
+    assert_eq!(json["family"], "container");
+    assert_eq!(json["format"], "tgc");
+    assert_eq!(json["status"], "failed");
+    let label = json["label"].as_str().expect("label").to_ascii_lowercase();
+    assert!(
+        label.contains("tgc writer") || label.contains("reading gcm header"),
+        "unexpected label: {label}"
+    );
+}
+
+#[test]
 fn compress_rejects_unregistered_output_format() {
     let temp = setup_temp_dir();
     let source = temp.child("source.bin");
@@ -3648,6 +4068,76 @@ fn compress_without_format_auto_selects_rvz_for_disc_like_inputs() {
         .args([
             "compress",
             temp.child("source.iso").path().to_str().expect("path"),
+            "--output",
+            output_path.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "compress");
+    assert_eq!(json["family"], "container");
+    assert_eq!(json["format"], "rvz");
+    assert_eq!(json["status"], "succeeded");
+    let label = json["label"].as_str().expect("label");
+    assert!(label.contains("auto format=rvz"));
+    assert!(label.contains("reason=wii-gc-disc"));
+    assert!(output_path.path().exists());
+}
+
+#[test]
+fn compress_without_format_auto_selects_rvz_for_wbfs_inputs() {
+    let temp = setup_temp_dir();
+    let source_iso = temp.child("source.iso");
+    fs::write(source_iso.path(), build_test_gamecube_iso(512 * 1024)).expect("fixture");
+    let source_wbfs = temp.child("source.wbfs");
+    write_wbfs_fixture_from_iso(source_iso.path(), source_wbfs.path());
+    let output_path = temp.child("out.rvz");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            source_wbfs.path().to_str().expect("path"),
+            "--output",
+            output_path.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "compress");
+    assert_eq!(json["family"], "container");
+    assert_eq!(json["format"], "rvz");
+    assert_eq!(json["status"], "succeeded");
+    let label = json["label"].as_str().expect("label");
+    assert!(label.contains("auto format=rvz"));
+    assert!(label.contains("reason=wii-gc-disc"));
+    assert!(output_path.path().exists());
+}
+
+#[test]
+fn compress_without_format_auto_selects_rvz_for_wia_inputs() {
+    let temp = setup_temp_dir();
+    let source_iso = temp.child("source.iso");
+    fs::write(source_iso.path(), build_test_gamecube_iso(512 * 1024)).expect("fixture");
+    let source_wia = temp.child("source.wia");
+    write_wia_fixture_from_iso(source_iso.path(), source_wia.path());
+    let output_path = temp.child("out.rvz");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            source_wia.path().to_str().expect("path"),
             "--output",
             output_path.path().to_str().expect("path"),
             "--json",
@@ -5101,6 +5591,225 @@ fn gcz_extract_supports_single_output_selection() {
         .clone();
     let missing_json = parse_single_json_line(&missing_output);
     assert_eq!(missing_json["format"], "gcz");
+    assert_eq!(missing_json["status"], "failed");
+    assert!(
+        missing_json["label"]
+            .as_str()
+            .expect("label")
+            .contains("requested selections were not found")
+    );
+}
+
+#[test]
+fn wbfs_inspect_reports_succeeded() {
+    let temp = setup_temp_dir();
+    let iso_bytes = build_test_gamecube_iso(0x6000);
+    fs::write(temp.child("disc.iso").path(), &iso_bytes).expect("iso fixture");
+    write_wbfs_fixture_from_iso(
+        temp.child("disc.iso").path(),
+        temp.child("disc.wbfs").path(),
+    );
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "inspect",
+            temp.child("disc.wbfs").path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "inspect");
+    assert_eq!(json["family"], "container");
+    assert_eq!(json["format"], "wbfs");
+    assert_eq!(json["status"], "succeeded");
+    assert!(
+        json["label"]
+            .as_str()
+            .expect("label")
+            .to_ascii_lowercase()
+            .contains("compression")
+    );
+}
+
+#[test]
+fn wbfs_extract_round_trips_to_iso() {
+    let temp = setup_temp_dir();
+    let iso_bytes = build_test_gamecube_iso(0x8000);
+    fs::write(temp.child("disc.iso").path(), &iso_bytes).expect("iso fixture");
+    write_wbfs_fixture_from_iso(
+        temp.child("disc.iso").path(),
+        temp.child("disc.wbfs").path(),
+    );
+
+    let out_dir = temp.child("extract");
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "extract",
+            temp.child("disc.wbfs").path().to_str().expect("path"),
+            "--out-dir",
+            out_dir.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "extract");
+    assert_eq!(json["family"], "container");
+    assert_eq!(json["format"], "wbfs");
+    assert_eq!(json["status"], "succeeded");
+    assert_eq!(
+        fs::read(out_dir.child("disc.iso").path()).expect("extracted iso"),
+        iso_bytes
+    );
+}
+
+#[test]
+fn wbfs_extract_supports_single_output_selection() {
+    let temp = setup_temp_dir();
+    let iso_bytes = build_test_gamecube_iso(0x8000);
+    fs::write(temp.child("disc.iso").path(), &iso_bytes).expect("iso fixture");
+    write_wbfs_fixture_from_iso(
+        temp.child("disc.iso").path(),
+        temp.child("disc.wbfs").path(),
+    );
+
+    let out_dir = temp.child("selected");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "extract",
+            temp.child("disc.wbfs").path().to_str().expect("path"),
+            "--select",
+            "disc.iso",
+            "--out-dir",
+            out_dir.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    assert_eq!(
+        fs::read(out_dir.child("disc.iso").path()).expect("extracted iso"),
+        iso_bytes
+    );
+
+    let missing_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "extract",
+            temp.child("disc.wbfs").path().to_str().expect("path"),
+            "--select",
+            "missing.iso",
+            "--out-dir",
+            out_dir.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .stdout
+        .clone();
+    let missing_json = parse_single_json_line(&missing_output);
+    assert_eq!(missing_json["format"], "wbfs");
+    assert_eq!(missing_json["status"], "failed");
+    assert!(
+        missing_json["label"]
+            .as_str()
+            .expect("label")
+            .contains("requested selections were not found")
+    );
+}
+
+#[test]
+fn wia_inspect_reports_succeeded() {
+    let temp = setup_temp_dir();
+    let iso_bytes = build_test_gamecube_iso(0x6000);
+    fs::write(temp.child("disc.iso").path(), &iso_bytes).expect("iso fixture");
+    write_wia_fixture_from_iso(temp.child("disc.iso").path(), temp.child("disc.wia").path());
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "inspect",
+            temp.child("disc.wia").path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "inspect");
+    assert_eq!(json["family"], "container");
+    assert_eq!(json["format"], "wia");
+    assert_eq!(json["status"], "succeeded");
+    assert!(
+        json["label"]
+            .as_str()
+            .expect("label")
+            .to_ascii_lowercase()
+            .contains("compression")
+    );
+}
+
+#[test]
+fn wia_extract_supports_single_output_selection() {
+    let temp = setup_temp_dir();
+    let iso_bytes = build_test_gamecube_iso(0x8000);
+    fs::write(temp.child("disc.iso").path(), &iso_bytes).expect("iso fixture");
+    write_wia_fixture_from_iso(temp.child("disc.iso").path(), temp.child("disc.wia").path());
+
+    let out_dir = temp.child("selected");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "extract",
+            temp.child("disc.wia").path().to_str().expect("path"),
+            "--select",
+            "disc.iso",
+            "--out-dir",
+            out_dir.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    assert_eq!(
+        fs::read(out_dir.child("disc.iso").path()).expect("extracted iso"),
+        iso_bytes
+    );
+
+    let missing_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "extract",
+            temp.child("disc.wia").path().to_str().expect("path"),
+            "--select",
+            "missing.iso",
+            "--out-dir",
+            out_dir.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .stdout
+        .clone();
+    let missing_json = parse_single_json_line(&missing_output);
+    assert_eq!(missing_json["format"], "wia");
     assert_eq!(missing_json["status"], "failed");
     assert!(
         missing_json["label"]

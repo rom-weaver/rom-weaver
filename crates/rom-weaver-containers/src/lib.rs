@@ -3,6 +3,7 @@ use std::{
     collections::BTreeSet,
     fs::{self, File},
     io::{self, BufReader, BufWriter, Read, Seek, SeekFrom, Write},
+    num::NonZeroU64,
     path::{Component, Path, PathBuf},
     sync::Arc,
 };
@@ -12,8 +13,7 @@ use ciso::{read::CSOReader as CsoReader, split::SplitFileReader};
 use flate2::{
     Compression as GzipCompression, read::DeflateDecoder, read::GzDecoder, write::GzEncoder,
 };
-use globset::{GlobBuilder, GlobMatcher};
-use lzma_rust2::{XzOptions, XzReader, XzWriter};
+use lzma_rust2::{XzOptions, XzReader, XzReaderMt, XzWriter, XzWriterMt};
 use nod::{
     common::{Compression as NodCompression, Format as NodFormat},
     read::{DiscOptions as NodDiscOptions, DiscReader as NodDiscReader},
@@ -154,6 +154,30 @@ const GCZ: FormatDescriptor = FormatDescriptor {
     aliases: &[],
     extensions: &[".gcz"],
 };
+const WBFS: FormatDescriptor = FormatDescriptor {
+    family: OperationFamily::Container,
+    name: "wbfs",
+    aliases: &[],
+    extensions: &[".wbfs"],
+};
+const WIA: FormatDescriptor = FormatDescriptor {
+    family: OperationFamily::Container,
+    name: "wia",
+    aliases: &[],
+    extensions: &[".wia"],
+};
+const TGC: FormatDescriptor = FormatDescriptor {
+    family: OperationFamily::Container,
+    name: "tgc",
+    aliases: &[],
+    extensions: &[".tgc"],
+};
+const NFS: FormatDescriptor = FormatDescriptor {
+    family: OperationFamily::Container,
+    name: "nfs",
+    aliases: &[],
+    extensions: &[".nfs"],
+};
 const RVZ: FormatDescriptor = FormatDescriptor {
     family: OperationFamily::Container,
     name: "rvz",
@@ -233,6 +257,10 @@ impl ContainerRegistry {
         handlers.push(Arc::new(PbpContainerHandler));
         handlers.push(Arc::new(ChdContainerHandler));
         handlers.push(Arc::new(GczContainerHandler));
+        handlers.push(Arc::new(WiaContainerHandler));
+        handlers.push(Arc::new(TgcContainerHandler));
+        handlers.push(Arc::new(NfsContainerHandler));
+        handlers.push(Arc::new(WbfsContainerHandler));
         handlers.push(Arc::new(RvzContainerHandler));
         handlers.push(Arc::new(Z3dsContainerHandler));
         handlers.push(Arc::new(XisoContainerHandler));
@@ -332,7 +360,7 @@ struct ArchiveInputEntry {
 #[derive(Clone, Debug)]
 enum SelectionPatternKind {
     ExactOrPrefix,
-    Glob(GlobMatcher),
+    Wildcard(WildcardPattern),
 }
 
 #[derive(Clone, Debug)]
@@ -343,15 +371,11 @@ struct SelectionPattern {
 
 impl SelectionPattern {
     fn new(requested: String) -> Self {
-        if Self::contains_glob_syntax(&requested)
-            && let Ok(glob) = GlobBuilder::new(&requested)
-                .literal_separator(true)
-                .build()
-                .map(|glob| glob.compile_matcher())
-        {
+        if Self::contains_glob_syntax(&requested) {
+            let wildcard = WildcardPattern::new(&requested);
             return Self {
                 requested,
-                kind: SelectionPatternKind::Glob(glob),
+                kind: SelectionPatternKind::Wildcard(wildcard),
             };
         }
         Self {
@@ -372,9 +396,193 @@ impl SelectionPattern {
                 entry_name == self.requested
                     || entry_name.starts_with(&format!("{}/", self.requested))
             }
-            SelectionPatternKind::Glob(matcher) => matcher.is_match(entry_name),
+            SelectionPatternKind::Wildcard(pattern) => pattern.matches(entry_name),
         }
     }
+}
+
+#[derive(Clone, Debug)]
+struct WildcardPattern {
+    segments: Vec<PathPatternSegment>,
+}
+
+#[derive(Clone, Debug)]
+enum PathPatternSegment {
+    AnyDepth,
+    OneSegment(String),
+}
+
+impl WildcardPattern {
+    fn new(pattern: &str) -> Self {
+        let segments = pattern
+            .split('/')
+            .filter(|segment| !segment.is_empty())
+            .map(|segment| {
+                if segment == "**" {
+                    PathPatternSegment::AnyDepth
+                } else {
+                    PathPatternSegment::OneSegment(segment.to_string())
+                }
+            })
+            .collect::<Vec<_>>();
+        Self { segments }
+    }
+
+    fn matches(&self, entry_name: &str) -> bool {
+        let path_segments = entry_name
+            .split('/')
+            .filter(|segment| !segment.is_empty())
+            .collect::<Vec<_>>();
+        Self::matches_path_segments(&self.segments, &path_segments)
+    }
+
+    fn matches_path_segments(
+        pattern_segments: &[PathPatternSegment],
+        path_segments: &[&str],
+    ) -> bool {
+        match pattern_segments.split_first() {
+            None => path_segments.is_empty(),
+            Some((PathPatternSegment::AnyDepth, remaining)) => {
+                if Self::matches_path_segments(remaining, path_segments) {
+                    return true;
+                }
+                if let Some((_, tail)) = path_segments.split_first() {
+                    return Self::matches_path_segments(pattern_segments, tail);
+                }
+                false
+            }
+            Some((PathPatternSegment::OneSegment(pattern), remaining)) => {
+                let Some((segment, tail)) = path_segments.split_first() else {
+                    return false;
+                };
+                if !matches_wildcard_segment(pattern, segment) {
+                    return false;
+                }
+                Self::matches_path_segments(remaining, tail)
+            }
+        }
+    }
+}
+
+fn matches_wildcard_segment(pattern: &str, candidate: &str) -> bool {
+    let pattern_chars = pattern.chars().collect::<Vec<_>>();
+    let candidate_chars = candidate.chars().collect::<Vec<_>>();
+    matches_wildcard_segment_inner(&pattern_chars, &candidate_chars, 0, 0)
+}
+
+fn matches_wildcard_segment_inner(
+    pattern: &[char],
+    candidate: &[char],
+    pattern_index: usize,
+    candidate_index: usize,
+) -> bool {
+    let mut pattern_index = pattern_index;
+    let mut candidate_index = candidate_index;
+
+    while pattern_index < pattern.len() {
+        match pattern[pattern_index] {
+            '*' => {
+                while pattern_index < pattern.len() && pattern[pattern_index] == '*' {
+                    pattern_index += 1;
+                }
+                if pattern_index == pattern.len() {
+                    return true;
+                }
+                for next_candidate_index in candidate_index..=candidate.len() {
+                    if matches_wildcard_segment_inner(
+                        pattern,
+                        candidate,
+                        pattern_index,
+                        next_candidate_index,
+                    ) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+            '?' => {
+                if candidate_index == candidate.len() {
+                    return false;
+                }
+                pattern_index += 1;
+                candidate_index += 1;
+            }
+            '[' => {
+                let Some(class_end) = find_character_class_end(pattern, pattern_index + 1) else {
+                    if candidate_index == candidate.len() || candidate[candidate_index] != '[' {
+                        return false;
+                    }
+                    pattern_index += 1;
+                    candidate_index += 1;
+                    continue;
+                };
+                if candidate_index == candidate.len() {
+                    return false;
+                }
+                if !character_class_matches(
+                    &pattern[pattern_index + 1..class_end],
+                    candidate[candidate_index],
+                ) {
+                    return false;
+                }
+                pattern_index = class_end + 1;
+                candidate_index += 1;
+            }
+            expected => {
+                if candidate_index == candidate.len() || candidate[candidate_index] != expected {
+                    return false;
+                }
+                pattern_index += 1;
+                candidate_index += 1;
+            }
+        }
+    }
+
+    candidate_index == candidate.len()
+}
+
+fn find_character_class_end(pattern: &[char], class_start: usize) -> Option<usize> {
+    let mut index = class_start;
+    while index < pattern.len() {
+        if pattern[index] == ']' {
+            return Some(index);
+        }
+        index += 1;
+    }
+    None
+}
+
+fn character_class_matches(class: &[char], value: char) -> bool {
+    if class.is_empty() {
+        return false;
+    }
+
+    let mut index = 0usize;
+    let mut negated = false;
+    if matches!(class.first(), Some('!') | Some('^')) {
+        negated = true;
+        index = 1;
+    }
+
+    let mut matched = false;
+    while index < class.len() {
+        let current = class[index];
+        if index + 2 < class.len() && class[index + 1] == '-' {
+            let range_end = class[index + 2];
+            if current <= value && value <= range_end {
+                matched = true;
+            }
+            index += 3;
+            continue;
+        }
+
+        if current == value {
+            matched = true;
+        }
+        index += 1;
+    }
+
+    if negated { !matched } else { matched }
 }
 
 #[derive(Debug, Default)]
@@ -567,6 +775,13 @@ struct ZipContainerHandler {
     flavor: ZipContainerFlavor,
 }
 
+#[derive(Clone, Debug)]
+struct ZipExtractTask {
+    index: usize,
+    archive_name: String,
+    output_path: PathBuf,
+}
+
 impl ZipContainerHandler {
     const fn new(descriptor: &'static FormatDescriptor, flavor: ZipContainerFlavor) -> Self {
         Self { descriptor, flavor }
@@ -655,6 +870,38 @@ impl ZipContainerHandler {
             ))
         })
     }
+
+    fn extract_task_with_archive(
+        &self,
+        archive: &mut ZipFileArchive<BufReader<File>>,
+        task: &ZipExtractTask,
+    ) -> Result<u64> {
+        let mut entry = archive.by_index(task.index).map_err(|error| {
+            RomWeaverError::Validation(format!(
+                "{} extract failed while reading entry {} (`{}`): {error}",
+                self.descriptor.name, task.index, task.archive_name
+            ))
+        })?;
+        if entry.is_dir() {
+            fs::create_dir_all(&task.output_path)?;
+            return Ok(0);
+        }
+        if let Some(parent) = task.output_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let mut output = BufWriter::new(File::create(&task.output_path)?);
+        io::copy(&mut entry, &mut output).map_err(Into::into)
+    }
+
+    fn extract_task_chunk(&self, source: &Path, chunk: &[ZipExtractTask]) -> Result<u64> {
+        let mut archive = self.open_archive(source)?;
+        let mut chunk_bytes = 0u64;
+        for task in chunk {
+            chunk_bytes =
+                chunk_bytes.saturating_add(self.extract_task_with_archive(&mut archive, task)?);
+        }
+        Ok(chunk_bytes)
+    }
 }
 
 impl ContainerHandler for ZipContainerHandler {
@@ -742,16 +989,16 @@ impl ContainerHandler for ZipContainerHandler {
         request: &ContainerExtractRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        let execution = context.plan_threads(ThreadCapability::single_threaded());
         fs::create_dir_all(&request.out_dir)?;
 
         let mut archive = self.open_archive(&request.source)?;
         let mut selections = SelectionMatcher::new(&request.selections);
-        let mut extracted_files = 0usize;
-        let mut written_bytes = 0u64;
+        let mut tasks = Vec::new();
+        let mut output_paths = BTreeSet::new();
+        let mut duplicate_output_paths = false;
 
         for index in 0..archive.len() {
-            let mut entry = archive.by_index(index).map_err(|error| {
+            let entry = archive.by_index(index).map_err(|error| {
                 RomWeaverError::Validation(format!(
                     "{} extract failed while reading entry {index}: {error}",
                     self.descriptor.name
@@ -768,17 +1015,45 @@ impl ContainerHandler for ZipContainerHandler {
                 fs::create_dir_all(&output_path)?;
                 continue;
             }
-
-            if let Some(parent) = output_path.parent() {
-                fs::create_dir_all(parent)?;
-            }
-            let mut output = BufWriter::new(File::create(&output_path)?);
-            let copied = io::copy(&mut entry, &mut output)?;
-            written_bytes = written_bytes.saturating_add(copied);
-            extracted_files += 1;
+            duplicate_output_paths |= !output_paths.insert(output_path.clone());
+            tasks.push(ZipExtractTask {
+                index,
+                archive_name: entry_name,
+                output_path,
+            });
         }
 
         selections.ensure_all_matched()?;
+
+        let (execution, written_bytes) = if tasks.is_empty() || duplicate_output_paths {
+            let execution = context.plan_threads(ThreadCapability::single_threaded());
+            let mut archive = self.open_archive(&request.source)?;
+            let mut written_bytes = 0u64;
+            for task in &tasks {
+                written_bytes = written_bytes
+                    .saturating_add(self.extract_task_with_archive(&mut archive, task)?);
+            }
+            (execution, written_bytes)
+        } else {
+            let task_count = tasks.len().max(1);
+            let (execution, pool) =
+                context.build_pool(ThreadCapability::parallel(Some(task_count)))?;
+            let worker_count = execution.effective_threads.max(1);
+            let chunk_size = tasks.len().div_ceil(worker_count).max(1);
+            let source = request.source.clone();
+            let chunk_bytes = pool.install(|| {
+                tasks
+                    .par_chunks(chunk_size)
+                    .map(|chunk| self.extract_task_chunk(&source, chunk))
+                    .collect::<Result<Vec<_>>>()
+            })?;
+            (
+                execution,
+                chunk_bytes
+                    .into_iter()
+                    .fold(0u64, |acc, value| acc.saturating_add(value)),
+            )
+        };
 
         Ok(OperationReport::succeeded(
             OperationFamily::Container,
@@ -788,7 +1063,7 @@ impl ContainerHandler for ZipContainerHandler {
                 "extracted `{}` to `{}` ({} file(s), {} bytes written)",
                 request.source.display(),
                 request.out_dir.display(),
-                extracted_files,
+                tasks.len(),
                 written_bytes
             ),
             Some(100.0),
@@ -871,7 +1146,7 @@ impl ContainerHandler for ZipContainerHandler {
             inspect: true,
             extract: true,
             create: true,
-            extract_threads: ThreadCapability::single_threaded(),
+            extract_threads: ThreadCapability::parallel(None),
             create_threads: ThreadCapability::single_threaded(),
         }
     }
@@ -891,6 +1166,8 @@ struct TarContainerHandler {
 }
 
 impl TarContainerHandler {
+    const XZ_MT_BLOCK_BYTES: u64 = 1 << 20;
+
     const fn new(descriptor: &'static FormatDescriptor, compression: TarCompression) -> Self {
         Self {
             descriptor,
@@ -1034,6 +1311,50 @@ impl TarContainerHandler {
         Ok(reader)
     }
 
+    fn thread_capability(&self) -> ThreadCapability {
+        match self.compression {
+            TarCompression::Xz => ThreadCapability::parallel(None),
+            TarCompression::None | TarCompression::Gzip | TarCompression::Bzip2 => {
+                ThreadCapability::single_threaded()
+            }
+        }
+    }
+
+    fn xz_thread_count(effective_threads: usize) -> u32 {
+        match u32::try_from(effective_threads) {
+            Ok(count) => count.clamp(1, 256),
+            Err(_) => 256,
+        }
+    }
+
+    fn xz_mt_options(level: u32) -> Result<XzOptions> {
+        let mut options = XzOptions::with_preset(level);
+        let block_size = NonZeroU64::new(Self::XZ_MT_BLOCK_BYTES).ok_or_else(|| {
+            RomWeaverError::Validation("tar.xz internal block size must be non-zero".into())
+        })?;
+        options.set_block_size(Some(block_size));
+        Ok(options)
+    }
+
+    fn open_reader_for_extract(
+        &self,
+        source: &Path,
+        execution: &rom_weaver_core::ThreadExecution,
+    ) -> Result<Box<dyn Read>> {
+        match self.compression {
+            TarCompression::Xz if execution.used_parallelism => {
+                let workers = Self::xz_thread_count(execution.effective_threads);
+                let file = File::open(source)?;
+                Ok(Box::new(XzReaderMt::new(
+                    BufReader::new(file),
+                    false,
+                    workers,
+                )?))
+            }
+            _ => self.open_reader(source),
+        }
+    }
+
     fn looks_like_tar_archive(&self, source: &Path) -> bool {
         let mut reader = match self.open_reader(source) {
             Ok(reader) => reader,
@@ -1119,10 +1440,10 @@ impl ContainerHandler for TarContainerHandler {
         request: &ContainerExtractRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        let execution = context.plan_threads(ThreadCapability::single_threaded());
+        let execution = context.plan_threads(self.thread_capability());
         fs::create_dir_all(&request.out_dir)?;
 
-        let reader = self.open_reader(&request.source)?;
+        let reader = self.open_reader_for_extract(&request.source, &execution)?;
         let mut archive = TarArchive::new(reader);
         let mut selections = SelectionMatcher::new(&request.selections);
         let mut extracted_files = 0usize;
@@ -1184,7 +1505,7 @@ impl ContainerHandler for TarContainerHandler {
         request: &ContainerCreateRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        let execution = context.plan_threads(ThreadCapability::single_threaded());
+        let execution = context.plan_threads(self.thread_capability());
         let level = self.parse_codec_and_level(request.codec.as_deref(), request.level)?;
         let entries = collect_archive_inputs(&request.inputs)?;
 
@@ -1221,12 +1542,26 @@ impl ContainerHandler for TarContainerHandler {
             }
             TarCompression::Xz => {
                 let output = BufWriter::new(File::create(&request.output)?);
-                let encoder = XzWriter::new(output, XzOptions::with_preset(level))?;
-                let mut builder = TarBuilder::new(encoder);
-                let bytes = self.append_entries(&mut builder, &entries)?;
-                let mut output = builder.into_inner()?.finish()?;
-                output.flush()?;
-                bytes
+                if execution.used_parallelism {
+                    let options = Self::xz_mt_options(level)?;
+                    let encoder = XzWriterMt::new(
+                        output,
+                        options,
+                        Self::xz_thread_count(execution.effective_threads),
+                    )?;
+                    let mut builder = TarBuilder::new(encoder);
+                    let bytes = self.append_entries(&mut builder, &entries)?;
+                    let mut output = builder.into_inner()?.finish()?;
+                    output.flush()?;
+                    bytes
+                } else {
+                    let encoder = XzWriter::new(output, XzOptions::with_preset(level))?;
+                    let mut builder = TarBuilder::new(encoder);
+                    let bytes = self.append_entries(&mut builder, &entries)?;
+                    let mut output = builder.into_inner()?.finish()?;
+                    output.flush()?;
+                    bytes
+                }
             }
         };
 
@@ -1246,12 +1581,13 @@ impl ContainerHandler for TarContainerHandler {
     }
 
     fn capabilities(&self) -> ContainerCapabilities {
+        let threads = self.thread_capability();
         ContainerCapabilities {
             inspect: true,
             extract: true,
             create: true,
-            extract_threads: ThreadCapability::single_threaded(),
-            create_threads: ThreadCapability::single_threaded(),
+            extract_threads: threads.clone(),
+            create_threads: threads,
         }
     }
 }
@@ -1774,6 +2110,30 @@ impl CsoContainerHandler {
             format!("{normalized}.iso")
         }
     }
+
+    fn resolve_create_compression(
+        &self,
+        codec: Option<&str>,
+        level: Option<i32>,
+    ) -> Result<NodCompression> {
+        match parse_requested_codec(codec) {
+            RequestedCodec::Unspecified | RequestedCodec::Known(CanonicalCodec::Store) => {
+                if level.is_some() {
+                    return Err(RomWeaverError::Validation(
+                        "cso codec `store` does not accept --level".into(),
+                    ));
+                }
+                Ok(NodCompression::None)
+            }
+            RequestedCodec::Known(codec) => Err(RomWeaverError::Validation(format!(
+                "unsupported cso codec `{}`; supported codec is store",
+                codec.name()
+            ))),
+            RequestedCodec::Unknown(name) => Err(RomWeaverError::Validation(format!(
+                "unsupported cso codec `{name}`; supported codec is store"
+            ))),
+        }
+    }
 }
 
 impl ContainerHandler for CsoContainerHandler {
@@ -1873,11 +2233,43 @@ impl ContainerHandler for CsoContainerHandler {
 
     fn create(
         &self,
-        _request: &ContainerCreateRequest,
-        _context: &OperationContext,
+        request: &ContainerCreateRequest,
+        context: &OperationContext,
     ) -> Result<OperationReport> {
-        Err(RomWeaverError::Validation(
-            "cso compression is not supported; cso can only be decompressed with `extract`".into(),
+        if request.inputs.len() != 1 {
+            return Err(RomWeaverError::Validation(
+                "cso create currently requires exactly one input file".into(),
+            ));
+        }
+
+        let execution = context.plan_threads(ThreadCapability::single_threaded());
+        let input = &request.inputs[0];
+        let _compression =
+            self.resolve_create_compression(request.codec.as_deref(), request.level)?;
+
+        if let Some(parent) = request.output.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let mut source = File::open(input)?;
+        let mut output = File::create(&request.output)?;
+        ciso::write::write_ciso_image(&mut source, &mut output, |_| {})
+            .map_err(|error| RomWeaverError::Validation(format!("cso create failed: {error}")))?;
+        output.flush()?;
+        let output_bytes = fs::metadata(&request.output)?.len();
+
+        Ok(OperationReport::succeeded(
+            OperationFamily::Container,
+            Some(self.descriptor.name.to_string()),
+            "create",
+            format!(
+                "created {} `{}` from `{}` (codec=store, {} bytes)",
+                self.descriptor.name,
+                request.output.display(),
+                input.display(),
+                output_bytes
+            ),
+            Some(100.0),
+            Some(execution),
         ))
     }
 
@@ -1885,7 +2277,7 @@ impl ContainerHandler for CsoContainerHandler {
         ContainerCapabilities {
             inspect: true,
             extract: true,
-            create: false,
+            create: true,
             extract_threads: ThreadCapability::single_threaded(),
             create_threads: ThreadCapability::single_threaded(),
         }
@@ -3780,6 +4172,974 @@ impl ContainerHandler for GczContainerHandler {
     }
 }
 
+struct WiaContainerHandler;
+
+impl WiaContainerHandler {
+    fn read_options(&self, preloader_threads: usize) -> NodDiscOptions {
+        let mut options = NodDiscOptions::default();
+        options.preloader_threads = preloader_threads;
+        options
+    }
+
+    fn negotiated_threads(&self, used_parallelism: bool, effective_threads: usize) -> usize {
+        if used_parallelism {
+            effective_threads
+        } else {
+            0
+        }
+    }
+
+    fn open_disc(&self, source: &Path) -> Result<NodDiscReader> {
+        NodDiscReader::new(source, &self.read_options(0)).map_err(|error| {
+            RomWeaverError::Validation(format!(
+                "failed to open wia source `{}`: {error}",
+                source.display()
+            ))
+        })
+    }
+
+    fn validate_wia_meta(
+        &self,
+        source: &Path,
+        disc: &NodDiscReader,
+    ) -> Result<nod::read::DiscMeta> {
+        let meta = disc.meta();
+        if meta.format == NodFormat::Wia {
+            Ok(meta)
+        } else {
+            Err(RomWeaverError::Validation(format!(
+                "source `{}` is not a wia container (detected {})",
+                source.display(),
+                meta.format
+            )))
+        }
+    }
+
+    fn extract_name(&self, source: &Path) -> String {
+        let stem = source
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .filter(|value| !value.is_empty())
+            .unwrap_or("output");
+        format!("{stem}.iso")
+    }
+
+    fn to_u8_level(&self, level: i32, codec: &str) -> Result<u8> {
+        if level < 0 {
+            return Err(RomWeaverError::Validation(format!(
+                "wia codec `{codec}` requires a non-negative level"
+            )));
+        }
+        u8::try_from(level).map_err(|_| {
+            RomWeaverError::Validation(format!("wia codec `{codec}` level `{level}` is too large"))
+        })
+    }
+
+    fn to_i8_level(&self, level: i32, codec: &str) -> Result<i8> {
+        i8::try_from(level).map_err(|_| {
+            RomWeaverError::Validation(format!(
+                "wia codec `{codec}` level `{level}` is out of range"
+            ))
+        })
+    }
+
+    fn resolve_create_compression(
+        &self,
+        codec: Option<&str>,
+        level: Option<i32>,
+    ) -> Result<NodCompression> {
+        match parse_requested_codec(codec) {
+            RequestedCodec::Unspecified => {
+                if let Some(level) = level {
+                    return Ok(NodCompression::Lzma(self.to_u8_level(level, "lzma")?));
+                }
+                Ok(NodFormat::Wia.default_compression())
+            }
+            RequestedCodec::Known(CanonicalCodec::Store) => {
+                if level.is_some() {
+                    return Err(RomWeaverError::Validation(
+                        "wia codec `store` does not accept --level".into(),
+                    ));
+                }
+                Ok(NodCompression::None)
+            }
+            RequestedCodec::Known(CanonicalCodec::Bzip2) => Ok(NodCompression::Bzip2(
+                self.to_u8_level(level.unwrap_or(0), "bzip2")?,
+            )),
+            RequestedCodec::Known(CanonicalCodec::Lzma) => Ok(NodCompression::Lzma(
+                self.to_u8_level(level.unwrap_or(0), "lzma")?,
+            )),
+            RequestedCodec::Known(CanonicalCodec::Lzma2) => Ok(NodCompression::Lzma2(
+                self.to_u8_level(level.unwrap_or(0), "lzma2")?,
+            )),
+            RequestedCodec::Known(CanonicalCodec::Zstd) => Ok(NodCompression::Zstandard(
+                self.to_i8_level(level.unwrap_or(0), "zstd")?,
+            )),
+            RequestedCodec::Known(codec) => Err(RomWeaverError::Validation(format!(
+                "unsupported wia codec `{}`; supported codecs are store, bzip2, lzma, lzma2, and zstd",
+                codec.name()
+            ))),
+            RequestedCodec::Unknown(name) => Err(RomWeaverError::Validation(format!(
+                "unsupported wia codec `{name}`; supported codecs are store, bzip2, lzma, lzma2, and zstd"
+            ))),
+        }
+    }
+}
+
+impl ContainerHandler for WiaContainerHandler {
+    fn descriptor(&self) -> &'static FormatDescriptor {
+        &WIA
+    }
+
+    fn probe(&self, source: &Path) -> ProbeConfidence {
+        if let Ok(disc) = self.open_disc(source)
+            && disc.meta().format == NodFormat::Wia
+        {
+            return ProbeConfidence::Signature;
+        }
+        ProbeConfidence::Extension
+    }
+
+    fn inspect(
+        &self,
+        request: &ContainerInspectRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let execution = context.plan_threads(ThreadCapability::single_threaded());
+        let disc = self.open_disc(&request.source)?;
+        let meta = self.validate_wia_meta(&request.source, &disc)?;
+        let disc_size = meta.disc_size.unwrap_or_else(|| disc.disc_size());
+        let compression_label = normalize_codec_label(&meta.compression.to_string());
+        let block_label = meta
+            .block_size
+            .map(|size| format!("{size} bytes"))
+            .unwrap_or_else(|| "unknown".to_string());
+        Ok(OperationReport::succeeded(
+            OperationFamily::Container,
+            Some(WIA.name.to_string()),
+            "inspect",
+            format!(
+                "wia: {disc_size} bytes, compression={}, block={}, lossless={}, decrypted={}, needs_hash_recovery={}",
+                compression_label,
+                block_label,
+                meta.lossless,
+                meta.decrypted,
+                meta.needs_hash_recovery
+            ),
+            Some(100.0),
+            Some(execution),
+        ))
+    }
+
+    fn list_entries(
+        &self,
+        request: &ContainerInspectRequest,
+        _context: &OperationContext,
+    ) -> Result<Vec<String>> {
+        Ok(vec![self.extract_name(&request.source)])
+    }
+
+    fn extract(
+        &self,
+        request: &ContainerExtractRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let output_name = self.extract_name(&request.source);
+        let mut selections = SelectionMatcher::new(&request.selections);
+        if !selections.matches(&output_name) {
+            selections.ensure_all_matched()?;
+        }
+        selections.ensure_all_matched()?;
+
+        let execution = context.plan_threads(ThreadCapability::parallel(None));
+        let preloader_threads =
+            self.negotiated_threads(execution.used_parallelism, execution.effective_threads);
+        let mut disc = NodDiscReader::new(&request.source, &self.read_options(preloader_threads))
+            .map_err(|error| {
+            RomWeaverError::Validation(format!(
+                "failed to open wia source `{}`: {error}",
+                request.source.display()
+            ))
+        })?;
+        let meta = self.validate_wia_meta(&request.source, &disc)?;
+        let disc_size = meta.disc_size.unwrap_or_else(|| disc.disc_size());
+        let compression_label = normalize_codec_label(&meta.compression.to_string());
+
+        fs::create_dir_all(&request.out_dir)?;
+        let output_path = request.out_dir.join(&output_name);
+        let mut output = BufWriter::new(File::create(&output_path)?);
+        let bytes_written = nod_buf_copy(&mut disc, &mut output)?;
+        output.flush()?;
+
+        Ok(OperationReport::succeeded(
+            OperationFamily::Container,
+            Some(WIA.name.to_string()),
+            "extract",
+            format!(
+                "extracted `{}` to `{}` ({} bytes written, expected {}, compression={})",
+                request.source.display(),
+                output_path.display(),
+                bytes_written,
+                disc_size,
+                compression_label
+            ),
+            Some(100.0),
+            Some(execution),
+        ))
+    }
+
+    fn create(
+        &self,
+        request: &ContainerCreateRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        if request.inputs.len() != 1 {
+            return Err(RomWeaverError::Validation(
+                "wia create currently requires exactly one input file".into(),
+            ));
+        }
+
+        let execution = context.plan_threads(ThreadCapability::parallel(None));
+        let input = &request.inputs[0];
+        let compression =
+            self.resolve_create_compression(request.codec.as_deref(), request.level)?;
+        let options = NodFormatOptions {
+            format: NodFormat::Wia,
+            compression,
+            block_size: NodFormat::Wia.default_block_size(),
+        };
+
+        if let Some(parent) = request.output.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        let preloader_threads =
+            self.negotiated_threads(execution.used_parallelism, execution.effective_threads);
+        let input_disc =
+            NodDiscReader::new(input, &self.read_options(preloader_threads)).map_err(|error| {
+                RomWeaverError::Validation(format!(
+                    "failed to open input `{}` for wia create: {error}",
+                    input.display()
+                ))
+            })?;
+        let writer = NodDiscWriter::new(input_disc, &options).map_err(|error| {
+            RomWeaverError::Validation(format!("failed to initialize wia writer: {error}"))
+        })?;
+
+        let mut output = File::create(&request.output)?;
+        let mut process_options = NodProcessOptions::default();
+        process_options.processor_threads =
+            self.negotiated_threads(execution.used_parallelism, execution.effective_threads);
+        let finalization = writer
+            .process(
+                |data, _processed, _total| output.write_all(data.as_ref()),
+                &process_options,
+            )
+            .map_err(|error| RomWeaverError::Validation(format!("wia create failed: {error}")))?;
+        if !finalization.header.is_empty() {
+            output.seek(SeekFrom::Start(0))?;
+            output.write_all(finalization.header.as_ref())?;
+        }
+        output.flush()?;
+        let output_bytes = fs::metadata(&request.output)?.len();
+
+        Ok(OperationReport::succeeded(
+            OperationFamily::Container,
+            Some(WIA.name.to_string()),
+            "create",
+            format!(
+                "created wia `{}` from `{}` (codec={}, block={} bytes, {} bytes)",
+                request.output.display(),
+                input.display(),
+                normalize_codec_label(&options.compression.to_string()),
+                options.block_size,
+                output_bytes
+            ),
+            Some(100.0),
+            Some(execution),
+        ))
+    }
+
+    fn capabilities(&self) -> ContainerCapabilities {
+        ContainerCapabilities {
+            inspect: true,
+            extract: true,
+            create: true,
+            extract_threads: ThreadCapability::parallel(None),
+            create_threads: ThreadCapability::parallel(None),
+        }
+    }
+}
+
+struct TgcContainerHandler;
+
+impl TgcContainerHandler {
+    fn read_options(&self, preloader_threads: usize) -> NodDiscOptions {
+        let mut options = NodDiscOptions::default();
+        options.preloader_threads = preloader_threads;
+        options
+    }
+
+    fn open_disc(&self, source: &Path) -> Result<NodDiscReader> {
+        NodDiscReader::new(source, &self.read_options(0)).map_err(|error| {
+            RomWeaverError::Validation(format!(
+                "failed to open tgc source `{}`: {error}",
+                source.display()
+            ))
+        })
+    }
+
+    fn validate_tgc_meta(
+        &self,
+        source: &Path,
+        disc: &NodDiscReader,
+    ) -> Result<nod::read::DiscMeta> {
+        let meta = disc.meta();
+        if meta.format == NodFormat::Tgc {
+            Ok(meta)
+        } else {
+            Err(RomWeaverError::Validation(format!(
+                "source `{}` is not a tgc container (detected {})",
+                source.display(),
+                meta.format
+            )))
+        }
+    }
+
+    fn extract_name(&self, source: &Path) -> String {
+        let stem = source
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .filter(|value| !value.is_empty())
+            .unwrap_or("output");
+        format!("{stem}.iso")
+    }
+
+    fn resolve_create_compression(
+        &self,
+        codec: Option<&str>,
+        level: Option<i32>,
+    ) -> Result<NodCompression> {
+        match parse_requested_codec(codec) {
+            RequestedCodec::Unspecified | RequestedCodec::Known(CanonicalCodec::Store) => {
+                if level.is_some() {
+                    return Err(RomWeaverError::Validation(
+                        "tgc codec `store` does not accept --level".into(),
+                    ));
+                }
+                Ok(NodCompression::None)
+            }
+            RequestedCodec::Known(codec) => Err(RomWeaverError::Validation(format!(
+                "unsupported tgc codec `{}`; supported codec is store",
+                codec.name()
+            ))),
+            RequestedCodec::Unknown(name) => Err(RomWeaverError::Validation(format!(
+                "unsupported tgc codec `{name}`; supported codec is store"
+            ))),
+        }
+    }
+}
+
+impl ContainerHandler for TgcContainerHandler {
+    fn descriptor(&self) -> &'static FormatDescriptor {
+        &TGC
+    }
+
+    fn probe(&self, source: &Path) -> ProbeConfidence {
+        if let Ok(disc) = self.open_disc(source)
+            && disc.meta().format == NodFormat::Tgc
+        {
+            return ProbeConfidence::Signature;
+        }
+        ProbeConfidence::Extension
+    }
+
+    fn inspect(
+        &self,
+        request: &ContainerInspectRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let execution = context.plan_threads(ThreadCapability::single_threaded());
+        let disc = self.open_disc(&request.source)?;
+        let meta = self.validate_tgc_meta(&request.source, &disc)?;
+        let disc_size = meta.disc_size.unwrap_or_else(|| disc.disc_size());
+        let compression_label = normalize_codec_label(&meta.compression.to_string());
+        let block_label = meta
+            .block_size
+            .map(|size| format!("{size} bytes"))
+            .unwrap_or_else(|| "unknown".to_string());
+        Ok(OperationReport::succeeded(
+            OperationFamily::Container,
+            Some(TGC.name.to_string()),
+            "inspect",
+            format!(
+                "tgc: {disc_size} bytes, compression={}, block={}, lossless={}, decrypted={}, needs_hash_recovery={}",
+                compression_label,
+                block_label,
+                meta.lossless,
+                meta.decrypted,
+                meta.needs_hash_recovery
+            ),
+            Some(100.0),
+            Some(execution),
+        ))
+    }
+
+    fn list_entries(
+        &self,
+        request: &ContainerInspectRequest,
+        _context: &OperationContext,
+    ) -> Result<Vec<String>> {
+        Ok(vec![self.extract_name(&request.source)])
+    }
+
+    fn extract(
+        &self,
+        request: &ContainerExtractRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let output_name = self.extract_name(&request.source);
+        let mut selections = SelectionMatcher::new(&request.selections);
+        if !selections.matches(&output_name) {
+            selections.ensure_all_matched()?;
+        }
+        selections.ensure_all_matched()?;
+
+        let execution = context.plan_threads(ThreadCapability::single_threaded());
+        let mut disc =
+            NodDiscReader::new(&request.source, &self.read_options(0)).map_err(|error| {
+                RomWeaverError::Validation(format!(
+                    "failed to open tgc source `{}`: {error}",
+                    request.source.display()
+                ))
+            })?;
+        let meta = self.validate_tgc_meta(&request.source, &disc)?;
+        let disc_size = meta.disc_size.unwrap_or_else(|| disc.disc_size());
+        let compression_label = normalize_codec_label(&meta.compression.to_string());
+
+        fs::create_dir_all(&request.out_dir)?;
+        let output_path = request.out_dir.join(&output_name);
+        let mut output = BufWriter::new(File::create(&output_path)?);
+        let bytes_written = nod_buf_copy(&mut disc, &mut output)?;
+        output.flush()?;
+
+        Ok(OperationReport::succeeded(
+            OperationFamily::Container,
+            Some(TGC.name.to_string()),
+            "extract",
+            format!(
+                "extracted `{}` to `{}` ({} bytes written, expected {}, compression={})",
+                request.source.display(),
+                output_path.display(),
+                bytes_written,
+                disc_size,
+                compression_label
+            ),
+            Some(100.0),
+            Some(execution),
+        ))
+    }
+
+    fn create(
+        &self,
+        request: &ContainerCreateRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        if request.inputs.len() != 1 {
+            return Err(RomWeaverError::Validation(
+                "tgc create currently requires exactly one input file".into(),
+            ));
+        }
+
+        let execution = context.plan_threads(ThreadCapability::single_threaded());
+        let input = &request.inputs[0];
+        let compression =
+            self.resolve_create_compression(request.codec.as_deref(), request.level)?;
+        let options = NodFormatOptions {
+            format: NodFormat::Tgc,
+            compression,
+            block_size: NodFormat::Tgc.default_block_size(),
+        };
+
+        if let Some(parent) = request.output.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        let input_disc = NodDiscReader::new(input, &self.read_options(0)).map_err(|error| {
+            RomWeaverError::Validation(format!(
+                "failed to open input `{}` for tgc create: {error}",
+                input.display()
+            ))
+        })?;
+        let writer = NodDiscWriter::new(input_disc, &options).map_err(|error| {
+            RomWeaverError::Validation(format!("failed to initialize tgc writer: {error}"))
+        })?;
+
+        let mut output = File::create(&request.output)?;
+        let finalization = writer
+            .process(
+                |data, _processed, _total| output.write_all(data.as_ref()),
+                &NodProcessOptions::default(),
+            )
+            .map_err(|error| RomWeaverError::Validation(format!("tgc create failed: {error}")))?;
+        if !finalization.header.is_empty() {
+            output.seek(SeekFrom::Start(0))?;
+            output.write_all(finalization.header.as_ref())?;
+        }
+        output.flush()?;
+        let output_bytes = fs::metadata(&request.output)?.len();
+
+        Ok(OperationReport::succeeded(
+            OperationFamily::Container,
+            Some(TGC.name.to_string()),
+            "create",
+            format!(
+                "created tgc `{}` from `{}` (codec=store, {} bytes)",
+                request.output.display(),
+                input.display(),
+                output_bytes
+            ),
+            Some(100.0),
+            Some(execution),
+        ))
+    }
+
+    fn capabilities(&self) -> ContainerCapabilities {
+        ContainerCapabilities {
+            inspect: true,
+            extract: true,
+            create: true,
+            extract_threads: ThreadCapability::single_threaded(),
+            create_threads: ThreadCapability::single_threaded(),
+        }
+    }
+}
+
+struct NfsContainerHandler;
+
+impl NfsContainerHandler {
+    fn read_options(&self, preloader_threads: usize) -> NodDiscOptions {
+        let mut options = NodDiscOptions::default();
+        options.preloader_threads = preloader_threads;
+        options
+    }
+
+    fn open_disc(&self, source: &Path, preloader_threads: usize) -> Result<NodDiscReader> {
+        NodDiscReader::new(source, &self.read_options(preloader_threads)).map_err(|error| {
+            RomWeaverError::Validation(format!(
+                "failed to open nfs source `{}`: {error}",
+                source.display()
+            ))
+        })
+    }
+
+    fn validate_nfs_meta(
+        &self,
+        source: &Path,
+        disc: &NodDiscReader,
+    ) -> Result<nod::read::DiscMeta> {
+        let meta = disc.meta();
+        if meta.format == NodFormat::Nfs {
+            Ok(meta)
+        } else {
+            Err(RomWeaverError::Validation(format!(
+                "source `{}` is not an nfs container (detected {})",
+                source.display(),
+                meta.format
+            )))
+        }
+    }
+
+    fn extract_name(&self, source: &Path) -> String {
+        let stem = source
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .filter(|value| !value.is_empty())
+            .unwrap_or("output");
+        format!("{stem}.iso")
+    }
+}
+
+impl ContainerHandler for NfsContainerHandler {
+    fn descriptor(&self) -> &'static FormatDescriptor {
+        &NFS
+    }
+
+    fn probe(&self, source: &Path) -> ProbeConfidence {
+        if let Ok(disc) = self.open_disc(source, 0)
+            && disc.meta().format == NodFormat::Nfs
+        {
+            return ProbeConfidence::Signature;
+        }
+        ProbeConfidence::Extension
+    }
+
+    fn inspect(
+        &self,
+        request: &ContainerInspectRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let execution = context.plan_threads(ThreadCapability::single_threaded());
+        let disc = self.open_disc(&request.source, 0)?;
+        let meta = self.validate_nfs_meta(&request.source, &disc)?;
+        let disc_size = meta.disc_size.unwrap_or_else(|| disc.disc_size());
+        let compression_label = normalize_codec_label(&meta.compression.to_string());
+        let block_label = meta
+            .block_size
+            .map(|size| format!("{size} bytes"))
+            .unwrap_or_else(|| "unknown".to_string());
+        Ok(OperationReport::succeeded(
+            OperationFamily::Container,
+            Some(NFS.name.to_string()),
+            "inspect",
+            format!(
+                "nfs: {disc_size} bytes, compression={}, block={}, lossless={}, decrypted={}, needs_hash_recovery={}",
+                compression_label,
+                block_label,
+                meta.lossless,
+                meta.decrypted,
+                meta.needs_hash_recovery
+            ),
+            Some(100.0),
+            Some(execution),
+        ))
+    }
+
+    fn list_entries(
+        &self,
+        request: &ContainerInspectRequest,
+        _context: &OperationContext,
+    ) -> Result<Vec<String>> {
+        Ok(vec![self.extract_name(&request.source)])
+    }
+
+    fn extract(
+        &self,
+        request: &ContainerExtractRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let output_name = self.extract_name(&request.source);
+        let mut selections = SelectionMatcher::new(&request.selections);
+        if !selections.matches(&output_name) {
+            selections.ensure_all_matched()?;
+        }
+        selections.ensure_all_matched()?;
+
+        let execution = context.plan_threads(ThreadCapability::parallel(None));
+        let preloader_threads = if execution.used_parallelism {
+            execution.effective_threads
+        } else {
+            0
+        };
+        let mut disc = self.open_disc(&request.source, preloader_threads)?;
+        let meta = self.validate_nfs_meta(&request.source, &disc)?;
+        let disc_size = meta.disc_size.unwrap_or_else(|| disc.disc_size());
+        let compression_label = normalize_codec_label(&meta.compression.to_string());
+
+        fs::create_dir_all(&request.out_dir)?;
+        let output_path = request.out_dir.join(&output_name);
+        let mut output = BufWriter::new(File::create(&output_path)?);
+        let bytes_written = nod_buf_copy(&mut disc, &mut output)?;
+        output.flush()?;
+
+        Ok(OperationReport::succeeded(
+            OperationFamily::Container,
+            Some(NFS.name.to_string()),
+            "extract",
+            format!(
+                "extracted `{}` to `{}` ({} bytes written, expected {}, compression={})",
+                request.source.display(),
+                output_path.display(),
+                bytes_written,
+                disc_size,
+                compression_label
+            ),
+            Some(100.0),
+            Some(execution),
+        ))
+    }
+
+    fn create(
+        &self,
+        _request: &ContainerCreateRequest,
+        _context: &OperationContext,
+    ) -> Result<OperationReport> {
+        Err(RomWeaverError::Validation(
+            "nfs compression is not supported; nfs can only be decompressed with `extract`".into(),
+        ))
+    }
+
+    fn capabilities(&self) -> ContainerCapabilities {
+        ContainerCapabilities {
+            inspect: true,
+            extract: true,
+            create: false,
+            extract_threads: ThreadCapability::parallel(None),
+            create_threads: ThreadCapability::single_threaded(),
+        }
+    }
+}
+
+struct WbfsContainerHandler;
+
+impl WbfsContainerHandler {
+    fn read_options(&self, preloader_threads: usize) -> NodDiscOptions {
+        let mut options = NodDiscOptions::default();
+        options.preloader_threads = preloader_threads;
+        options
+    }
+
+    fn negotiated_threads(&self, used_parallelism: bool, effective_threads: usize) -> usize {
+        if used_parallelism {
+            effective_threads
+        } else {
+            0
+        }
+    }
+
+    fn open_disc(&self, source: &Path) -> Result<NodDiscReader> {
+        NodDiscReader::new(source, &self.read_options(0)).map_err(|error| {
+            RomWeaverError::Validation(format!(
+                "failed to open wbfs source `{}`: {error}",
+                source.display()
+            ))
+        })
+    }
+
+    fn validate_wbfs_meta(
+        &self,
+        source: &Path,
+        disc: &NodDiscReader,
+    ) -> Result<nod::read::DiscMeta> {
+        let meta = disc.meta();
+        if meta.format == NodFormat::Wbfs {
+            Ok(meta)
+        } else {
+            Err(RomWeaverError::Validation(format!(
+                "source `{}` is not a wbfs container (detected {})",
+                source.display(),
+                meta.format
+            )))
+        }
+    }
+
+    fn extract_name(&self, source: &Path) -> String {
+        let stem = source
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .filter(|value| !value.is_empty())
+            .unwrap_or("output");
+        format!("{stem}.iso")
+    }
+
+    fn resolve_create_compression(
+        &self,
+        codec: Option<&str>,
+        level: Option<i32>,
+    ) -> Result<NodCompression> {
+        match parse_requested_codec(codec) {
+            RequestedCodec::Unspecified | RequestedCodec::Known(CanonicalCodec::Store) => {
+                if level.is_some() {
+                    return Err(RomWeaverError::Validation(
+                        "wbfs codec `store` does not accept --level".into(),
+                    ));
+                }
+                Ok(NodCompression::None)
+            }
+            RequestedCodec::Known(codec) => Err(RomWeaverError::Validation(format!(
+                "unsupported wbfs codec `{}`; supported codec is store",
+                codec.name()
+            ))),
+            RequestedCodec::Unknown(name) => Err(RomWeaverError::Validation(format!(
+                "unsupported wbfs codec `{name}`; supported codec is store"
+            ))),
+        }
+    }
+}
+
+impl ContainerHandler for WbfsContainerHandler {
+    fn descriptor(&self) -> &'static FormatDescriptor {
+        &WBFS
+    }
+
+    fn probe(&self, source: &Path) -> ProbeConfidence {
+        if let Ok(disc) = self.open_disc(source)
+            && disc.meta().format == NodFormat::Wbfs
+        {
+            return ProbeConfidence::Signature;
+        }
+        ProbeConfidence::Extension
+    }
+
+    fn inspect(
+        &self,
+        request: &ContainerInspectRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let execution = context.plan_threads(ThreadCapability::single_threaded());
+        let disc = self.open_disc(&request.source)?;
+        let meta = self.validate_wbfs_meta(&request.source, &disc)?;
+        let disc_size = meta.disc_size.unwrap_or_else(|| disc.disc_size());
+        let compression_label = normalize_codec_label(&meta.compression.to_string());
+        let block_label = meta
+            .block_size
+            .map(|size| format!("{size} bytes"))
+            .unwrap_or_else(|| "unknown".to_string());
+        Ok(OperationReport::succeeded(
+            OperationFamily::Container,
+            Some(WBFS.name.to_string()),
+            "inspect",
+            format!(
+                "wbfs: {disc_size} bytes, compression={}, block={}, lossless={}, decrypted={}, needs_hash_recovery={}",
+                compression_label,
+                block_label,
+                meta.lossless,
+                meta.decrypted,
+                meta.needs_hash_recovery
+            ),
+            Some(100.0),
+            Some(execution),
+        ))
+    }
+
+    fn list_entries(
+        &self,
+        request: &ContainerInspectRequest,
+        _context: &OperationContext,
+    ) -> Result<Vec<String>> {
+        Ok(vec![self.extract_name(&request.source)])
+    }
+
+    fn extract(
+        &self,
+        request: &ContainerExtractRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let execution = context.plan_threads(ThreadCapability::parallel(None));
+        let preloader_threads =
+            self.negotiated_threads(execution.used_parallelism, execution.effective_threads);
+        let mut disc = NodDiscReader::new(&request.source, &self.read_options(preloader_threads))
+            .map_err(|error| {
+            RomWeaverError::Validation(format!(
+                "failed to open wbfs source `{}`: {error}",
+                request.source.display()
+            ))
+        })?;
+        let meta = self.validate_wbfs_meta(&request.source, &disc)?;
+        let disc_size = meta.disc_size.unwrap_or_else(|| disc.disc_size());
+        let compression_label = normalize_codec_label(&meta.compression.to_string());
+
+        fs::create_dir_all(&request.out_dir)?;
+        let output_name = self.extract_name(&request.source);
+        let mut selections = SelectionMatcher::new(&request.selections);
+        if !selections.matches(&output_name) {
+            selections.ensure_all_matched()?;
+        }
+        selections.ensure_all_matched()?;
+        let output_path = request.out_dir.join(&output_name);
+        let mut output = BufWriter::new(File::create(&output_path)?);
+        let bytes_written = nod_buf_copy(&mut disc, &mut output)?;
+        output.flush()?;
+
+        Ok(OperationReport::succeeded(
+            OperationFamily::Container,
+            Some(WBFS.name.to_string()),
+            "extract",
+            format!(
+                "extracted `{}` to `{}` ({} bytes written, expected {}, compression={})",
+                request.source.display(),
+                output_path.display(),
+                bytes_written,
+                disc_size,
+                compression_label
+            ),
+            Some(100.0),
+            Some(execution),
+        ))
+    }
+
+    fn create(
+        &self,
+        request: &ContainerCreateRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        if request.inputs.len() != 1 {
+            return Err(RomWeaverError::Validation(
+                "wbfs create currently requires exactly one input file".into(),
+            ));
+        }
+
+        let execution = context.plan_threads(ThreadCapability::parallel(None));
+        let input = &request.inputs[0];
+        let compression =
+            self.resolve_create_compression(request.codec.as_deref(), request.level)?;
+        let options = NodFormatOptions {
+            format: NodFormat::Wbfs,
+            compression,
+            block_size: NodFormat::Wbfs.default_block_size(),
+        };
+
+        if let Some(parent) = request.output.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        let preloader_threads =
+            self.negotiated_threads(execution.used_parallelism, execution.effective_threads);
+        let input_disc =
+            NodDiscReader::new(input, &self.read_options(preloader_threads)).map_err(|error| {
+                RomWeaverError::Validation(format!(
+                    "failed to open input `{}` for wbfs create: {error}",
+                    input.display()
+                ))
+            })?;
+        let writer = NodDiscWriter::new(input_disc, &options).map_err(|error| {
+            RomWeaverError::Validation(format!("failed to initialize wbfs writer: {error}"))
+        })?;
+
+        let mut output = File::create(&request.output)?;
+        let mut process_options = NodProcessOptions::default();
+        process_options.processor_threads =
+            self.negotiated_threads(execution.used_parallelism, execution.effective_threads);
+        let finalization = writer
+            .process(
+                |data, _processed, _total| output.write_all(data.as_ref()),
+                &process_options,
+            )
+            .map_err(|error| RomWeaverError::Validation(format!("wbfs create failed: {error}")))?;
+        if !finalization.header.is_empty() {
+            output.seek(SeekFrom::Start(0))?;
+            output.write_all(finalization.header.as_ref())?;
+        }
+        output.flush()?;
+        let output_bytes = fs::metadata(&request.output)?.len();
+
+        Ok(OperationReport::succeeded(
+            OperationFamily::Container,
+            Some(WBFS.name.to_string()),
+            "create",
+            format!(
+                "created wbfs `{}` from `{}` (codec=store, block={} bytes, {} bytes)",
+                request.output.display(),
+                input.display(),
+                options.block_size,
+                output_bytes
+            ),
+            Some(100.0),
+            Some(execution),
+        ))
+    }
+
+    fn capabilities(&self) -> ContainerCapabilities {
+        ContainerCapabilities {
+            inspect: true,
+            extract: true,
+            create: true,
+            extract_threads: ThreadCapability::parallel(None),
+            create_threads: ThreadCapability::parallel(None),
+        }
+    }
+}
+
 struct RvzContainerHandler;
 
 impl RvzContainerHandler {
@@ -5367,6 +6727,26 @@ mod chd_native {
                 return Ok(Self::single_codec_plan(mapped));
             }
             Ok(self.default_compression_plan(create_kind))
+        }
+
+        #[cfg(test)]
+        pub(super) fn default_cd_compression_plan_for_tests(
+            &self,
+        ) -> Result<([ChdCodec; CHD_MAX_COMPRESSORS], ChdCodec)> {
+            let create_kind = ChdCreateKind::Disc(DiscLayout {
+                kind: DiscKind::CdRom,
+                tracks: Vec::new(),
+            });
+            let plan = self.resolve_compression_plan(None, &create_kind)?;
+            Ok((plan.codecs, plan.primary_codec))
+        }
+
+        #[cfg(test)]
+        pub(super) fn default_dvd_compression_plan_for_tests(
+            &self,
+        ) -> Result<([ChdCodec; CHD_MAX_COMPRESSORS], ChdCodec)> {
+            let plan = self.resolve_compression_plan(None, &ChdCreateKind::Dvd)?;
+            Ok((plan.codecs, plan.primary_codec))
         }
 
         fn single_codec_plan(codec: ChdCodec) -> ChdCompressionPlan {
@@ -7462,6 +8842,7 @@ use chd_native::ChdContainerHandler;
 mod tests {
     use std::{
         env, fs,
+        io::{Seek, SeekFrom, Write},
         path::{Path, PathBuf},
         sync::Arc,
         time::{SystemTime, UNIX_EPOCH},
@@ -7473,6 +8854,14 @@ mod tests {
     };
     use ciso::write::write_ciso_image;
     use flate2::{Compression as DeflateCompression, write::DeflateEncoder};
+    use nod::{
+        common::{Compression as NodCompression, Format as NodFormat},
+        read::{DiscOptions as NodDiscOptions, DiscReader as NodDiscReader},
+        write::{
+            DiscWriter as NodDiscWriter, FormatOptions as NodFormatOptions,
+            ProcessOptions as NodProcessOptions,
+        },
+    };
     use rom_weaver_core::{
         CancellationToken, NoopProgressSink, OperationContext, ThreadBudget, ThreadCapability,
     };
@@ -7525,6 +8914,60 @@ mod tests {
         let mut source = fs::File::open(input).expect("open cso source fixture");
         let mut destination = fs::File::create(output).expect("create cso fixture");
         write_ciso_image(&mut source, &mut destination, |_| {}).expect("write cso fixture");
+    }
+
+    fn write_test_wbfs(input: &Path, output: &Path) {
+        let disc = NodDiscReader::new(input, &NodDiscOptions::default())
+            .expect("open wbfs source fixture");
+        let options = NodFormatOptions {
+            format: NodFormat::Wbfs,
+            compression: NodCompression::None,
+            block_size: NodFormat::Wbfs.default_block_size(),
+        };
+        let writer = NodDiscWriter::new(disc, &options).expect("create wbfs writer");
+        let mut destination = fs::File::create(output).expect("create wbfs fixture");
+        let finalization = writer
+            .process(
+                |data, _processed, _total| destination.write_all(data.as_ref()),
+                &NodProcessOptions::default(),
+            )
+            .expect("write wbfs fixture");
+        if !finalization.header.is_empty() {
+            destination
+                .seek(SeekFrom::Start(0))
+                .expect("seek wbfs header");
+            destination
+                .write_all(finalization.header.as_ref())
+                .expect("write wbfs header");
+        }
+        destination.flush().expect("flush wbfs fixture");
+    }
+
+    fn write_test_wia(input: &Path, output: &Path) {
+        let disc =
+            NodDiscReader::new(input, &NodDiscOptions::default()).expect("open wia source fixture");
+        let options = NodFormatOptions {
+            format: NodFormat::Wia,
+            compression: NodCompression::Lzma2(6),
+            block_size: NodFormat::Wia.default_block_size(),
+        };
+        let writer = NodDiscWriter::new(disc, &options).expect("create wia writer");
+        let mut destination = fs::File::create(output).expect("create wia fixture");
+        let finalization = writer
+            .process(
+                |data, _processed, _total| destination.write_all(data.as_ref()),
+                &NodProcessOptions::default(),
+            )
+            .expect("write wia fixture");
+        if !finalization.header.is_empty() {
+            destination
+                .seek(SeekFrom::Start(0))
+                .expect("seek wia header");
+            destination
+                .write_all(finalization.header.as_ref())
+                .expect("write wia header");
+        }
+        destination.flush().expect("flush wia fixture");
     }
 
     const TEST_PBP_SECTOR_BYTES: usize = 0x930;
@@ -7705,7 +9148,8 @@ mod tests {
             names,
             vec![
                 "zip", "zipx", "7z", "rar", "tar", "tar.gz", "tar.bz2", "tar.xz", "gz", "bz2",
-                "xz", "zst", "cso", "pbp", "chd", "gcz", "rvz", "z3ds", "xiso"
+                "xz", "zst", "cso", "pbp", "chd", "gcz", "wia", "tgc", "nfs", "wbfs", "rvz",
+                "z3ds", "xiso"
             ]
         );
     }
@@ -7783,13 +9227,85 @@ mod tests {
     }
 
     #[test]
-    fn cso_capabilities_are_extract_only() {
+    fn wbfs_capabilities_support_create_and_extract() {
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("wbfs").expect("wbfs handler");
+        let capabilities = handler.capabilities();
+        assert!(capabilities.inspect);
+        assert!(capabilities.extract);
+        assert!(capabilities.create);
+        assert_eq!(
+            capabilities.extract_threads,
+            ThreadCapability::parallel(None)
+        );
+        assert_eq!(
+            capabilities.create_threads,
+            ThreadCapability::parallel(None)
+        );
+    }
+
+    #[test]
+    fn wia_capabilities_support_create_and_extract() {
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("wia").expect("wia handler");
+        let capabilities = handler.capabilities();
+        assert!(capabilities.inspect);
+        assert!(capabilities.extract);
+        assert!(capabilities.create);
+        assert_eq!(
+            capabilities.extract_threads,
+            ThreadCapability::parallel(None)
+        );
+        assert_eq!(
+            capabilities.create_threads,
+            ThreadCapability::parallel(None)
+        );
+    }
+
+    #[test]
+    fn tgc_capabilities_support_create_and_extract() {
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("tgc").expect("tgc handler");
+        let capabilities = handler.capabilities();
+        assert!(capabilities.inspect);
+        assert!(capabilities.extract);
+        assert!(capabilities.create);
+        assert_eq!(
+            capabilities.extract_threads,
+            ThreadCapability::single_threaded()
+        );
+        assert_eq!(
+            capabilities.create_threads,
+            ThreadCapability::single_threaded()
+        );
+    }
+
+    #[test]
+    fn nfs_capabilities_are_extract_only() {
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("nfs").expect("nfs handler");
+        let capabilities = handler.capabilities();
+        assert!(capabilities.inspect);
+        assert!(capabilities.extract);
+        assert!(!capabilities.create);
+        assert_eq!(
+            capabilities.extract_threads,
+            ThreadCapability::parallel(None)
+        );
+        assert_eq!(
+            capabilities.create_threads,
+            ThreadCapability::single_threaded()
+        );
+    }
+
+    #[test]
+    fn cso_capabilities_support_create_and_extract() {
         let registry = ContainerRegistry::new();
         let handler = registry.find_by_name("cso").expect("cso handler");
         let capabilities = handler.capabilities();
         assert!(capabilities.inspect);
         assert!(capabilities.extract);
-        assert!(!capabilities.create);
+        assert!(capabilities.create);
         assert_eq!(
             capabilities.extract_threads,
             ThreadCapability::single_threaded()
@@ -7816,6 +9332,184 @@ mod tests {
             capabilities.create_threads,
             ThreadCapability::parallel(None)
         );
+    }
+
+    #[test]
+    fn zip_capabilities_report_parallel_extract_threads() {
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("zip").expect("zip handler");
+        let capabilities = handler.capabilities();
+        assert!(capabilities.inspect);
+        assert!(capabilities.extract);
+        assert!(capabilities.create);
+        assert_eq!(
+            capabilities.extract_threads,
+            ThreadCapability::parallel(None)
+        );
+        assert_eq!(
+            capabilities.create_threads,
+            ThreadCapability::single_threaded()
+        );
+    }
+
+    #[test]
+    fn tar_xz_capabilities_report_parallel_threads() {
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("tar.xz").expect("tar.xz handler");
+        let capabilities = handler.capabilities();
+        assert!(capabilities.inspect);
+        assert!(capabilities.extract);
+        assert!(capabilities.create);
+        assert_eq!(
+            capabilities.extract_threads,
+            ThreadCapability::parallel(None)
+        );
+        assert_eq!(
+            capabilities.create_threads,
+            ThreadCapability::parallel(None)
+        );
+    }
+
+    #[test]
+    fn zip_extract_runtime_threads_match_capability() {
+        let temp_dir = temp_dir_path("zip-thread-parity");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input_dir = temp_dir.join("input");
+        fs::create_dir_all(&input_dir).expect("input dir");
+        for index in 0..8 {
+            let path = input_dir.join(format!("file-{index}.bin"));
+            let content = (0..32_768)
+                .map(|offset| (offset as u8).wrapping_add(index as u8))
+                .collect::<Vec<_>>();
+            fs::write(path, content).expect("write fixture");
+        }
+        let archive_path = temp_dir.join("payload.zip");
+        let output_dir = temp_dir.join("out");
+
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("zip").expect("zip handler");
+        let capabilities = handler.capabilities();
+        handler
+            .create(
+                &ContainerCreateRequest {
+                    inputs: vec![input_dir.clone()],
+                    output: archive_path.clone(),
+                    format: "zip".to_string(),
+                    codec: None,
+                    level: None,
+                },
+                &test_context(&temp_dir, 1),
+            )
+            .expect("create zip");
+
+        let extract_report = handler
+            .extract(
+                &rom_weaver_core::ContainerExtractRequest {
+                    source: archive_path,
+                    out_dir: output_dir.clone(),
+                    selections: Vec::new(),
+                    split_bin: false,
+                },
+                &test_context(&temp_dir, 8),
+            )
+            .expect("extract zip");
+
+        let extract_execution = extract_report.thread_execution.expect("thread execution");
+        assert!(
+            capabilities
+                .extract_threads
+                .supports_execution(&extract_execution)
+        );
+        assert_eq!(extract_execution.requested_threads, 8);
+        assert_eq!(extract_execution.effective_threads, 8);
+        assert!(extract_execution.used_parallelism);
+
+        for index in 0..8 {
+            let path = output_dir.join(format!("input/file-{index}.bin"));
+            let content = fs::read(path).expect("read extracted file");
+            let expected = (0..32_768)
+                .map(|offset| (offset as u8).wrapping_add(index as u8))
+                .collect::<Vec<_>>();
+            assert_eq!(content, expected);
+        }
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn tar_xz_runtime_threads_match_capabilities_for_create_and_extract() {
+        let temp_dir = temp_dir_path("tar-xz-thread-parity");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input_dir = temp_dir.join("input");
+        fs::create_dir_all(&input_dir).expect("input dir");
+        for index in 0..6 {
+            let path = input_dir.join(format!("blob-{index}.bin"));
+            let content = (0..(512 * 1024))
+                .map(|offset| (offset as u8).wrapping_mul(3).wrapping_add(index as u8))
+                .collect::<Vec<_>>();
+            fs::write(path, content).expect("write fixture");
+        }
+        let archive_path = temp_dir.join("payload.tar.xz");
+        let output_dir = temp_dir.join("out");
+
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("tar.xz").expect("tar.xz handler");
+        let capabilities = handler.capabilities();
+        let create_report = handler
+            .create(
+                &ContainerCreateRequest {
+                    inputs: vec![input_dir.clone()],
+                    output: archive_path.clone(),
+                    format: "tar.xz".to_string(),
+                    codec: None,
+                    level: None,
+                },
+                &test_context(&temp_dir, 8),
+            )
+            .expect("create tar.xz");
+
+        let create_execution = create_report.thread_execution.expect("thread execution");
+        assert!(
+            capabilities
+                .create_threads
+                .supports_execution(&create_execution)
+        );
+        assert_eq!(create_execution.requested_threads, 8);
+        assert_eq!(create_execution.effective_threads, 8);
+        assert!(create_execution.used_parallelism);
+
+        let extract_report = handler
+            .extract(
+                &rom_weaver_core::ContainerExtractRequest {
+                    source: archive_path,
+                    out_dir: output_dir.clone(),
+                    selections: Vec::new(),
+                    split_bin: false,
+                },
+                &test_context(&temp_dir, 8),
+            )
+            .expect("extract tar.xz");
+
+        let extract_execution = extract_report.thread_execution.expect("thread execution");
+        assert!(
+            capabilities
+                .extract_threads
+                .supports_execution(&extract_execution)
+        );
+        assert_eq!(extract_execution.requested_threads, 8);
+        assert_eq!(extract_execution.effective_threads, 8);
+        assert!(extract_execution.used_parallelism);
+
+        for index in 0..6 {
+            let path = output_dir.join(format!("input/blob-{index}.bin"));
+            let content = fs::read(path).expect("read extracted file");
+            let expected = (0..(512 * 1024))
+                .map(|offset| (offset as u8).wrapping_mul(3).wrapping_add(index as u8))
+                .collect::<Vec<_>>();
+            assert_eq!(content, expected);
+        }
+
+        let _ = fs::remove_dir_all(temp_dir);
     }
 
     #[test]
@@ -7858,7 +9552,328 @@ mod tests {
     }
 
     #[test]
-    fn cso_create_returns_clear_error() {
+    fn wbfs_extract_round_trips_to_iso_output() {
+        let temp_dir = temp_dir_path("wbfs-extract");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input_iso = temp_dir.join("disc.iso");
+        let compressed_wbfs = temp_dir.join("disc.wbfs");
+        let output_dir = temp_dir.join("out");
+
+        let source = build_test_gamecube_iso(0x8000);
+        fs::write(&input_iso, &source).expect("write source fixture");
+        write_test_wbfs(&input_iso, &compressed_wbfs);
+
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("wbfs").expect("wbfs handler");
+        let report = handler
+            .extract(
+                &rom_weaver_core::ContainerExtractRequest {
+                    source: compressed_wbfs,
+                    out_dir: output_dir.clone(),
+                    selections: Vec::new(),
+                    split_bin: false,
+                },
+                &test_context(&temp_dir, 8),
+            )
+            .expect("extract wbfs");
+
+        assert_eq!(report.status, rom_weaver_core::OperationStatus::Succeeded);
+        let extracted = fs::read(output_dir.join("disc.iso")).expect("read extracted output");
+        assert_eq!(extracted, source);
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn wbfs_create_and_extract_round_trip() {
+        let temp_dir = temp_dir_path("wbfs-create");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input_iso = temp_dir.join("disc.iso");
+        let output_wbfs = temp_dir.join("disc.wbfs");
+        let output_dir = temp_dir.join("out");
+
+        let source = build_test_gamecube_iso(0xA000);
+        fs::write(&input_iso, &source).expect("write source fixture");
+
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("wbfs").expect("wbfs handler");
+        let create_report = handler
+            .create(
+                &ContainerCreateRequest {
+                    inputs: vec![input_iso.clone()],
+                    output: output_wbfs.clone(),
+                    format: "wbfs".to_string(),
+                    codec: None,
+                    level: None,
+                },
+                &test_context(&temp_dir, 8),
+            )
+            .expect("create wbfs");
+        assert_eq!(
+            create_report.status,
+            rom_weaver_core::OperationStatus::Succeeded
+        );
+        assert!(output_wbfs.exists());
+
+        let extract_report = handler
+            .extract(
+                &rom_weaver_core::ContainerExtractRequest {
+                    source: output_wbfs,
+                    out_dir: output_dir.clone(),
+                    selections: Vec::new(),
+                    split_bin: false,
+                },
+                &test_context(&temp_dir, 8),
+            )
+            .expect("extract wbfs");
+        assert_eq!(
+            extract_report.status,
+            rom_weaver_core::OperationStatus::Succeeded
+        );
+        let extracted = fs::read(output_dir.join("disc.iso")).expect("read extracted output");
+        assert_eq!(extracted, source);
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn wbfs_create_rejects_compressed_codec() {
+        let temp_dir = temp_dir_path("wbfs-create-error");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input_iso = temp_dir.join("disc.iso");
+        let output_wbfs = temp_dir.join("disc.wbfs");
+        let source = build_test_gamecube_iso(0x3000);
+        fs::write(&input_iso, &source).expect("write source fixture");
+
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("wbfs").expect("wbfs handler");
+        let error = handler
+            .create(
+                &ContainerCreateRequest {
+                    inputs: vec![input_iso],
+                    output: output_wbfs,
+                    format: "wbfs".to_string(),
+                    codec: Some("zstd".to_string()),
+                    level: None,
+                },
+                &test_context(&temp_dir, 1),
+            )
+            .expect_err("wbfs create should reject compressed codec");
+        assert!(
+            error.to_string().contains("unsupported wbfs codec `zstd`"),
+            "unexpected error message: {error}"
+        );
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn wia_extract_round_trips_to_iso_output() {
+        let temp_dir = temp_dir_path("wia-extract");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input_iso = temp_dir.join("disc.iso");
+        let compressed_wia = temp_dir.join("disc.wia");
+        let output_dir = temp_dir.join("out");
+
+        let source = build_test_gamecube_iso(0x7000);
+        fs::write(&input_iso, &source).expect("write source fixture");
+        write_test_wia(&input_iso, &compressed_wia);
+
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("wia").expect("wia handler");
+        let report = handler
+            .extract(
+                &rom_weaver_core::ContainerExtractRequest {
+                    source: compressed_wia,
+                    out_dir: output_dir.clone(),
+                    selections: Vec::new(),
+                    split_bin: false,
+                },
+                &test_context(&temp_dir, 8),
+            )
+            .expect("extract wia");
+
+        assert_eq!(report.status, rom_weaver_core::OperationStatus::Succeeded);
+        let extracted = fs::read(output_dir.join("disc.iso")).expect("read extracted output");
+        assert_eq!(extracted, source);
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn wia_create_and_extract_round_trip() {
+        let temp_dir = temp_dir_path("wia-create");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input_iso = temp_dir.join("disc.iso");
+        let output_wia = temp_dir.join("disc.wia");
+        let output_dir = temp_dir.join("out");
+
+        let source = build_test_gamecube_iso(0xA000);
+        fs::write(&input_iso, &source).expect("write source fixture");
+
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("wia").expect("wia handler");
+        let create_report = handler
+            .create(
+                &ContainerCreateRequest {
+                    inputs: vec![input_iso.clone()],
+                    output: output_wia.clone(),
+                    format: "wia".to_string(),
+                    codec: Some("lzma2".to_string()),
+                    level: Some(6),
+                },
+                &test_context(&temp_dir, 8),
+            )
+            .expect("create wia");
+        assert_eq!(
+            create_report.status,
+            rom_weaver_core::OperationStatus::Succeeded
+        );
+        assert!(output_wia.exists());
+
+        let extract_report = handler
+            .extract(
+                &rom_weaver_core::ContainerExtractRequest {
+                    source: output_wia,
+                    out_dir: output_dir.clone(),
+                    selections: Vec::new(),
+                    split_bin: false,
+                },
+                &test_context(&temp_dir, 8),
+            )
+            .expect("extract wia");
+        assert_eq!(
+            extract_report.status,
+            rom_weaver_core::OperationStatus::Succeeded
+        );
+        let extracted = fs::read(output_dir.join("disc.iso")).expect("read extracted output");
+        assert_eq!(extracted, source);
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn nfs_create_returns_clear_error() {
+        let temp_dir = temp_dir_path("nfs-create-error");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input_iso = temp_dir.join("disc.iso");
+        let output_nfs = temp_dir.join("disc.nfs");
+        let source = build_test_gamecube_iso(0x3000);
+        fs::write(&input_iso, &source).expect("write source fixture");
+
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("nfs").expect("nfs handler");
+        let error = handler
+            .create(
+                &ContainerCreateRequest {
+                    inputs: vec![input_iso],
+                    output: output_nfs,
+                    format: "nfs".to_string(),
+                    codec: None,
+                    level: None,
+                },
+                &test_context(&temp_dir, 1),
+            )
+            .expect_err("nfs create should error");
+        assert!(
+            error
+                .to_string()
+                .contains("nfs compression is not supported"),
+            "unexpected error message: {error}"
+        );
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn tgc_create_rejects_compressed_codec() {
+        let temp_dir = temp_dir_path("tgc-create-error");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input_iso = temp_dir.join("disc.iso");
+        let output_tgc = temp_dir.join("disc.tgc");
+        let source = build_test_gamecube_iso(0x3000);
+        fs::write(&input_iso, &source).expect("write source fixture");
+
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("tgc").expect("tgc handler");
+        let error = handler
+            .create(
+                &ContainerCreateRequest {
+                    inputs: vec![input_iso],
+                    output: output_tgc,
+                    format: "tgc".to_string(),
+                    codec: Some("zstd".to_string()),
+                    level: None,
+                },
+                &test_context(&temp_dir, 1),
+            )
+            .expect_err("tgc create should reject compressed codec");
+        assert!(
+            error.to_string().contains("unsupported tgc codec `zstd`"),
+            "unexpected error message: {error}"
+        );
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn cso_create_and_extract_round_trip() {
+        let temp_dir = temp_dir_path("cso-create");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input_iso = temp_dir.join("disc.iso");
+        let output_cso = temp_dir.join("disc.cso");
+        let output_dir = temp_dir.join("out");
+        let mut source = (0..(CSO_DEFAULT_BLOCK_BYTES * 4))
+            .map(|index| (index % 251) as u8)
+            .collect::<Vec<_>>();
+        if let Some(last) = source.last_mut() {
+            *last = 0;
+        }
+        fs::write(&input_iso, &source).expect("write source fixture");
+
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("cso").expect("cso handler");
+        let create_report = handler
+            .create(
+                &ContainerCreateRequest {
+                    inputs: vec![input_iso.clone()],
+                    output: output_cso.clone(),
+                    format: "cso".to_string(),
+                    codec: None,
+                    level: None,
+                },
+                &test_context(&temp_dir, 8),
+            )
+            .expect("create cso");
+        assert_eq!(
+            create_report.status,
+            rom_weaver_core::OperationStatus::Succeeded
+        );
+        assert!(output_cso.exists());
+
+        let extract_report = handler
+            .extract(
+                &rom_weaver_core::ContainerExtractRequest {
+                    source: output_cso,
+                    out_dir: output_dir.clone(),
+                    selections: Vec::new(),
+                    split_bin: false,
+                },
+                &test_context(&temp_dir, 1),
+            )
+            .expect("extract cso");
+        assert_eq!(
+            extract_report.status,
+            rom_weaver_core::OperationStatus::Succeeded
+        );
+        let extracted = fs::read(output_dir.join("disc.iso")).expect("read extracted output");
+        assert_eq!(extracted, source);
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn cso_create_rejects_compressed_codec() {
         let temp_dir = temp_dir_path("cso-create-error");
         fs::create_dir_all(&temp_dir).expect("temp dir");
         let input_iso = temp_dir.join("input.iso");
@@ -7873,17 +9888,14 @@ mod tests {
                     inputs: vec![input_iso],
                     output: output_cso,
                     format: "cso".to_string(),
-                    codec: None,
+                    codec: Some("zstd".to_string()),
                     level: None,
                 },
                 &test_context(&temp_dir, 1),
             )
-            .expect_err("cso create should error");
-
+            .expect_err("cso create should reject compressed codec");
         assert!(
-            error
-                .to_string()
-                .contains("cso compression is not supported"),
+            error.to_string().contains("unsupported cso codec `zstd`"),
             "unexpected error message: {error}"
         );
 
@@ -8320,6 +10332,40 @@ mod tests {
     }
 
     #[test]
+    fn recommend_compress_format_returns_rvz_for_wbfs_inputs() {
+        let temp_dir = temp_dir_path("recommend-rvz-wbfs");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input_iso = temp_dir.join("disc.iso");
+        let input_wbfs = temp_dir.join("disc.wbfs");
+        fs::write(&input_iso, build_test_gamecube_iso(64 * 1024)).expect("fixture");
+        write_test_wbfs(&input_iso, &input_wbfs);
+
+        let registry = ContainerRegistry::new();
+        let recommendation = registry.recommend_compress_format(&input_wbfs);
+        assert_eq!(recommendation.format_name, "rvz");
+        assert_eq!(recommendation.reason, "wii-gc-disc");
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn recommend_compress_format_returns_rvz_for_wia_inputs() {
+        let temp_dir = temp_dir_path("recommend-rvz-wia");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input_iso = temp_dir.join("disc.iso");
+        let input_wia = temp_dir.join("disc.wia");
+        fs::write(&input_iso, build_test_gamecube_iso(64 * 1024)).expect("fixture");
+        write_test_wia(&input_iso, &input_wia);
+
+        let registry = ContainerRegistry::new();
+        let recommendation = registry.recommend_compress_format(&input_wia);
+        assert_eq!(recommendation.format_name, "rvz");
+        assert_eq!(recommendation.reason, "wii-gc-disc");
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
     fn recommend_compress_format_returns_chd_for_unrecognized_inputs() {
         let path = temp_file_path_with_extension("recommend-chd", "bin");
         fs::write(&path, b"not-a-disc").expect("fixture");
@@ -8336,16 +10382,11 @@ mod tests {
     #[test]
     fn chd_default_codecs_for_cd_inputs_match_todo_policy() {
         let handler = super::ChdContainerHandler;
-        let create_kind = super::ChdCreateKind::Disc(super::DiscLayout {
-            kind: super::DiscKind::CdRom,
-            tracks: Vec::new(),
-        });
-
-        let plan = handler
-            .resolve_compression_plan(None, &create_kind)
+        let (codecs, primary_codec) = handler
+            .default_cd_compression_plan_for_tests()
             .expect("default cd plan");
         assert_eq!(
-            plan.codecs,
+            codecs,
             [
                 rom_weaver_chd_sys::ChdCodec::CD_ZSTD,
                 rom_weaver_chd_sys::ChdCodec::CD_ZLIB,
@@ -8353,18 +10394,18 @@ mod tests {
                 rom_weaver_chd_sys::ChdCodec::NONE,
             ]
         );
-        assert_eq!(plan.primary_codec, rom_weaver_chd_sys::ChdCodec::CD_ZSTD);
+        assert_eq!(primary_codec, rom_weaver_chd_sys::ChdCodec::CD_ZSTD);
     }
 
     #[cfg(not(target_family = "wasm"))]
     #[test]
     fn chd_default_codecs_for_dvd_inputs_match_todo_policy() {
         let handler = super::ChdContainerHandler;
-        let plan = handler
-            .resolve_compression_plan(None, &super::ChdCreateKind::Dvd)
+        let (codecs, primary_codec) = handler
+            .default_dvd_compression_plan_for_tests()
             .expect("default dvd plan");
         assert_eq!(
-            plan.codecs,
+            codecs,
             [
                 rom_weaver_chd_sys::ChdCodec::ZSTD,
                 rom_weaver_chd_sys::ChdCodec::ZLIB,
@@ -8372,7 +10413,7 @@ mod tests {
                 rom_weaver_chd_sys::ChdCodec::FLAC,
             ]
         );
-        assert_eq!(plan.primary_codec, rom_weaver_chd_sys::ChdCodec::ZSTD);
+        assert_eq!(primary_codec, rom_weaver_chd_sys::ChdCodec::ZSTD);
     }
 
     #[test]
