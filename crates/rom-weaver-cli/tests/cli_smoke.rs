@@ -676,6 +676,28 @@ fn with_fds_header(bytes: &[u8]) -> Vec<u8> {
     headered
 }
 
+fn gba_header_checksum(bytes: &[u8]) -> u8 {
+    let mut checksum = 0_i32;
+    for value in &bytes[0xA0..=0xBC] {
+        checksum -= i32::from(*value);
+    }
+    ((checksum - 0x19) & 0xFF) as u8
+}
+
+fn build_test_gba_rom(payload_len: usize) -> Vec<u8> {
+    let rom_len = payload_len.max(0x200);
+    let mut bytes = vec![0u8; rom_len];
+    bytes[0x04..0x08].copy_from_slice(&[0x24, 0xFF, 0xAE, 0x51]);
+    for (index, value) in bytes[0xA0..=0xBC].iter_mut().enumerate() {
+        *value = (index as u8).wrapping_mul(3).wrapping_add(7);
+    }
+    bytes[0x1BD] = gba_header_checksum(&bytes);
+    for (index, value) in bytes[0x1BE..].iter_mut().enumerate() {
+        *value = (index as u8).wrapping_mul(5).wrapping_add(0x31);
+    }
+    bytes
+}
+
 fn sega_genesis_checksum(bytes: &[u8]) -> u16 {
     let mut sum = 0_u32;
     let mut cursor = 0x200usize;
@@ -759,6 +781,76 @@ fn build_mod_patch(records: Vec<(u32, Vec<u8>)>) -> Vec<u8> {
         bytes.extend_from_slice(&(data.len() as u32).to_be_bytes());
         bytes.extend_from_slice(&data);
     }
+    bytes
+}
+
+enum TestGdiffCommand {
+    Data(Vec<u8>),
+    Copy { offset: u64, len: u64 },
+}
+
+fn build_gdiff_patch(commands: Vec<TestGdiffCommand>) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(&[0xD1, 0xFF, 0xD1, 0xFF, 4]);
+    for command in commands {
+        match command {
+            TestGdiffCommand::Data(data) => {
+                if data.len() <= 246 {
+                    bytes.push(u8::try_from(data.len()).expect("len <= 246"));
+                } else if data.len() <= usize::from(u16::MAX) {
+                    bytes.push(247);
+                    bytes.extend_from_slice(
+                        &u16::try_from(data.len())
+                            .expect("len <= u16::MAX")
+                            .to_be_bytes(),
+                    );
+                } else {
+                    bytes.push(248);
+                    bytes.extend_from_slice(
+                        &i32::try_from(data.len())
+                            .expect("len <= i32::MAX")
+                            .to_be_bytes(),
+                    );
+                }
+                bytes.extend_from_slice(&data);
+            }
+            TestGdiffCommand::Copy { offset, len } => {
+                if offset <= u64::from(u16::MAX) && len <= u64::from(u8::MAX) {
+                    bytes.push(249);
+                    bytes.extend_from_slice(&(offset as u16).to_be_bytes());
+                    bytes.push(len as u8);
+                } else if offset <= u64::from(u16::MAX) && len <= u64::from(u16::MAX) {
+                    bytes.push(250);
+                    bytes.extend_from_slice(&(offset as u16).to_be_bytes());
+                    bytes.extend_from_slice(&(len as u16).to_be_bytes());
+                } else if offset <= u64::from(i32::MAX as u32) && len <= u64::from(u8::MAX) {
+                    bytes.push(252);
+                    bytes.extend_from_slice(&(offset as u32).to_be_bytes());
+                    bytes.push(len as u8);
+                } else if offset <= u64::from(i32::MAX as u32) && len <= u64::from(u16::MAX) {
+                    bytes.push(253);
+                    bytes.extend_from_slice(&(offset as u32).to_be_bytes());
+                    bytes.extend_from_slice(&(len as u16).to_be_bytes());
+                } else if offset <= u64::from(i32::MAX as u32) && len <= u64::from(i32::MAX as u32)
+                {
+                    bytes.push(254);
+                    bytes.extend_from_slice(&(offset as u32).to_be_bytes());
+                    bytes.extend_from_slice(&(len as u32).to_be_bytes());
+                } else {
+                    bytes.push(255);
+                    bytes.extend_from_slice(
+                        &i64::try_from(offset)
+                            .expect("offset <= i64::MAX")
+                            .to_be_bytes(),
+                    );
+                    bytes.extend_from_slice(
+                        &i32::try_from(len).expect("len <= i32::MAX").to_be_bytes(),
+                    );
+                }
+            }
+        }
+    }
+    bytes.push(0);
     bytes
 }
 
@@ -1938,6 +2030,38 @@ fn inspect_reports_known_rom_header_as_supported() {
 }
 
 #[test]
+fn inspect_reports_gba_header_profile() {
+    let temp = setup_temp_dir();
+    let rom = build_test_gba_rom(0x2000);
+    fs::write(temp.child("test.gba").path(), rom).expect("fixture");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "inspect",
+            temp.child("test.gba").path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "inspect");
+    assert_eq!(json["family"], "command");
+    assert_eq!(json["format"], "rom-header");
+    assert_eq!(json["status"], "succeeded");
+    assert!(
+        json["label"]
+            .as_str()
+            .expect("label")
+            .contains("detected ROM header Game Boy Advance")
+    );
+}
+
+#[test]
 fn inspect_list_rejects_patch_inputs() {
     let temp = setup_temp_dir();
     fs::write(
@@ -3038,6 +3162,74 @@ fn checksum_strip_header_supports_igir_header_profiles() {
 }
 
 #[test]
+fn checksum_strip_header_supports_size_rule_copier_profiles() {
+    let temp = setup_temp_dir();
+    let payload = (0..16_384)
+        .map(|index| ((index * 7) % 251) as u8)
+        .collect::<Vec<_>>();
+
+    fs::write(temp.child("plain.smc").path(), &payload).expect("snes fixture");
+    fs::write(temp.child("plain.pce").path(), &payload).expect("pce fixture");
+
+    let mut snes_headered = vec![0xA5; 512];
+    snes_headered.extend_from_slice(&payload);
+    fs::write(temp.child("headered.smc").path(), snes_headered).expect("snes headered");
+
+    let mut pce_headered = vec![0x5A; 512];
+    pce_headered.extend_from_slice(&payload);
+    fs::write(temp.child("headered.pce").path(), pce_headered).expect("pce headered");
+
+    let plain_snes_sha1 = checksum_value(temp.child("plain.smc").path(), "sha1");
+    let plain_pce_sha1 = checksum_value(temp.child("plain.pce").path(), "sha1");
+
+    let snes_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "checksum",
+            temp.child("headered.smc").path().to_str().expect("path"),
+            "--algo",
+            "sha1",
+            "--strip-header",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let snes_json = parse_single_json_line(&snes_output);
+    let snes_label = snes_json["label"].as_str().expect("snes label");
+    assert_eq!(
+        label_digest_value(snes_label, "sha1").expect("snes digest"),
+        plain_snes_sha1
+    );
+    assert!(snes_label.contains("input header stripped (512 bytes, SNES_COPIER_HEADER)"));
+
+    let pce_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "checksum",
+            temp.child("headered.pce").path().to_str().expect("path"),
+            "--algo",
+            "sha1",
+            "--strip-header",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let pce_json = parse_single_json_line(&pce_output);
+    let pce_label = pce_json["label"].as_str().expect("pce label");
+    assert_eq!(
+        label_digest_value(pce_label, "sha1").expect("pce digest"),
+        plain_pce_sha1
+    );
+    assert!(pce_label.contains("input header stripped (512 bytes, PCE_COPIER_HEADER)"));
+}
+
+#[test]
 fn checksum_strip_header_rejects_small_input() {
     let temp = setup_temp_dir();
     fs::write(temp.child("tiny.bin").path(), b"small").expect("fixture");
@@ -3066,7 +3258,7 @@ fn checksum_strip_header_rejects_small_input() {
         json["label"]
             .as_str()
             .expect("label")
-            .contains("cannot strip 512-byte header")
+            .contains("could not detect a supported removable ROM header")
     );
 }
 
@@ -6476,7 +6668,119 @@ fn patch_apply_repair_checksum_repairs_genesis_header() {
 }
 
 #[test]
-fn patch_apply_repair_checksum_rejects_unsupported_targets() {
+fn patch_apply_repair_checksum_repairs_gba_header() {
+    let temp = setup_temp_dir();
+    let mut input = build_test_gba_rom(0x4000);
+    input[0x1BD] ^= 0x7F;
+    fs::write(temp.child("input.gba").path(), &input).expect("fixture");
+    fs::write(
+        temp.child("update.ips").path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: 0x200,
+                data: vec![0xFE],
+            }],
+            Some(input.len() as u32),
+        ),
+    )
+    .expect("fixture");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            temp.child("input.gba").path().to_str().expect("path"),
+            "--patch",
+            temp.child("update.ips").path().to_str().expect("path"),
+            "--output",
+            temp.child("output.gba").path().to_str().expect("path"),
+            "--repair-checksum",
+            "--no-compress",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "patch-apply");
+    assert_eq!(json["family"], "patch");
+    assert_eq!(json["status"], "succeeded");
+    assert!(
+        json["label"]
+            .as_str()
+            .expect("label")
+            .contains("repaired checksum (gba)")
+    );
+
+    let output_bytes = fs::read(temp.child("output.gba").path()).expect("output");
+    assert_eq!(output_bytes[0x1BD], gba_header_checksum(&output_bytes));
+}
+
+#[test]
+fn patch_apply_repair_checksum_repairs_nds_header_crc() {
+    let temp = setup_temp_dir();
+    let mut input = build_test_nds_rom(0x00, 0x3200, 0x3200, 0x6000, false);
+    input[0xC0..0xC4].copy_from_slice(&[0x24, 0xFF, 0xAE, 0x51]);
+    input[0x15E] = 0;
+    input[0x15F] = 0;
+    fs::write(temp.child("input.nds").path(), &input).expect("fixture");
+    fs::write(
+        temp.child("update.ips").path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Literal {
+                offset: 0x2000,
+                data: vec![0xAB],
+            }],
+            Some(input.len() as u32),
+        ),
+    )
+    .expect("fixture");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            temp.child("input.nds").path().to_str().expect("path"),
+            "--patch",
+            temp.child("update.ips").path().to_str().expect("path"),
+            "--output",
+            temp.child("output.nds").path().to_str().expect("path"),
+            "--repair-checksum",
+            "--no-compress",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "patch-apply");
+    assert_eq!(json["family"], "patch");
+    assert_eq!(json["status"], "succeeded");
+    let label = json["label"].as_str().expect("label");
+    assert!(
+        label.contains("repaired checksum (nds)")
+            || (label.contains("repaired headers (") && label.contains("nds")),
+        "unexpected label: {label}"
+    );
+
+    let output_bytes = fs::read(temp.child("output.nds").path()).expect("output");
+    let crc = nds_crc16(&output_bytes[..0x15E]);
+    assert_eq!(
+        u16::from_le_bytes([output_bytes[0x15E], output_bytes[0x15F]]),
+        crc
+    );
+}
+
+#[test]
+fn patch_apply_repair_checksum_warns_for_unsupported_targets() {
     let temp = setup_temp_dir();
     fs::write(temp.child("input.bin").path(), b"plain-bytes").expect("fixture");
     fs::write(
@@ -6506,7 +6810,7 @@ fn patch_apply_repair_checksum_rejects_unsupported_targets() {
             "--json",
         ])
         .assert()
-        .code(1)
+        .code(0)
         .get_output()
         .stdout
         .clone();
@@ -6514,12 +6818,12 @@ fn patch_apply_repair_checksum_rejects_unsupported_targets() {
     let json = parse_single_json_line(&output);
     assert_eq!(json["command"], "patch-apply");
     assert_eq!(json["family"], "patch");
-    assert_eq!(json["status"], "failed");
+    assert_eq!(json["status"], "succeeded");
     assert!(
         json["label"]
             .as_str()
             .expect("label")
-            .contains("could not auto-detect a supported checksum header")
+            .contains("warning=no supported header repair profile matched; output left unchanged")
     );
 }
 
@@ -6585,6 +6889,7 @@ fn patch_apply_succeeds_for_valid_solid_patch() {
     );
 }
 
+#[test]
 fn patch_create_succeeds_for_solid_and_round_trips() {
     let temp = setup_temp_dir();
     let original = temp.child("old.bin");
@@ -7685,6 +7990,44 @@ fn patch_create_succeeds_for_bdf_and_round_trips() {
 }
 
 #[test]
+fn patch_apply_succeeds_for_valid_bsp_patch() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.bin");
+    let patch = temp.child("update.bsp");
+    let output = temp.child("output.bin");
+    fs::write(original.path(), [0x01, 0x02, 0x03]).expect("fixture");
+    fs::write(patch.path(), [0x18, 0xFF, 0x06, 0x00, 0x00, 0x00, 0x00]).expect("fixture");
+
+    let apply_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let apply_json = parse_single_json_line(&apply_output);
+    assert_eq!(apply_json["command"], "patch-apply");
+    assert_eq!(apply_json["format"], "BSP");
+    assert_eq!(apply_json["status"], "succeeded");
+    assert_eq!(
+        fs::read(output.path()).expect("output"),
+        vec![0xFF, 0x02, 0x03]
+    );
+}
+
+#[test]
 fn patch_create_succeeds_for_ups_and_round_trips() {
     let temp = setup_temp_dir();
     let original = temp.child("old.bin");
@@ -8179,6 +8522,111 @@ fn patch_create_succeeds_for_dldi_and_round_trips() {
 }
 
 #[test]
+fn patch_apply_warns_and_succeeds_for_oversized_dldi_driver() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.nds");
+    let patch = temp.child("oversized.dldi");
+    let output = temp.child("output.nds");
+
+    fs::write(
+        original.path(),
+        build_nds_with_dldi_slot(0x500, 8, 0x0220_0000, "Default driver"),
+    )
+    .expect("fixture");
+    fs::write(
+        patch.path(),
+        build_dldi_driver(12, 0xBF82_0000u32 as i32, "Oversized driver"),
+    )
+    .expect("fixture");
+
+    let apply_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let apply_json = parse_single_json_line(&apply_output);
+    assert_eq!(apply_json["command"], "patch-apply");
+    assert_eq!(apply_json["family"], "patch");
+    assert_eq!(apply_json["format"], "DLDI");
+    assert_eq!(apply_json["status"], "succeeded");
+    let label = apply_json["label"].as_str().expect("label");
+    assert!(
+        label.contains(
+            "warning=not enough space for DLDI patch (available 256 byte(s), need 4096 byte(s))"
+        ),
+        "expected oversize warning in label: {label}"
+    );
+
+    let output_bytes = fs::read(output.path()).expect("output");
+    assert_eq!(output_bytes.len(), 0x500 + (1 << 12));
+    assert_eq!(output_bytes[0x500 + DLDI_DO_ALLOCATED_SPACE], 8);
+    assert_eq!(output_bytes[0x500 + DLDI_DO_DRIVER_SIZE], 12);
+}
+
+#[test]
+fn patch_apply_reports_unsupported_for_misaligned_dldi_slot() {
+    let temp = setup_temp_dir();
+    let input = temp.child("misaligned.nds");
+    let patch = temp.child("patch.dldi");
+    let output = temp.child("output.nds");
+
+    let aligned = build_nds_with_dldi_slot(0x300, 12, 0x0200_0000, "Default driver");
+    let mut misaligned = Vec::with_capacity(aligned.len() + 1);
+    misaligned.push(0);
+    misaligned.extend_from_slice(&aligned);
+
+    fs::write(input.path(), misaligned).expect("fixture");
+    fs::write(
+        patch.path(),
+        build_dldi_driver(8, 0xBF80_0000u32 as i32, "Patch driver"),
+    )
+    .expect("fixture");
+
+    let apply_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ])
+        .assert()
+        .code(2)
+        .get_output()
+        .stdout
+        .clone();
+
+    let apply_json = parse_single_json_line(&apply_output);
+    assert_eq!(apply_json["command"], "patch-apply");
+    assert_eq!(apply_json["family"], "patch");
+    assert_eq!(apply_json["format"], "DLDI");
+    assert_eq!(apply_json["status"], "unsupported");
+    assert_eq!(
+        apply_json["label"],
+        "input does not contain a patchable DLDI section"
+    );
+}
+
+#[test]
 fn patch_create_succeeds_for_dps_and_round_trips() {
     let temp = setup_temp_dir();
     let original = temp.child("old.bin");
@@ -8314,10 +8762,12 @@ fn patch_apply_can_ignore_checksum_validation_for_dps() {
     assert_eq!(strict_json["family"], "patch");
     assert_eq!(strict_json["format"], "DPS");
     assert_eq!(strict_json["status"], "failed");
-    assert!(strict_json["label"]
-        .as_str()
-        .expect("label")
-        .contains("source size mismatch"));
+    assert!(
+        strict_json["label"]
+            .as_str()
+            .expect("label")
+            .contains("source size mismatch")
+    );
 
     let ignored_output = Command::cargo_bin("rom-weaver")
         .expect("binary")
@@ -8343,10 +8793,260 @@ fn patch_apply_can_ignore_checksum_validation_for_dps() {
     assert_eq!(ignored_json["family"], "patch");
     assert_eq!(ignored_json["format"], "DPS");
     assert_eq!(ignored_json["status"], "succeeded");
-    assert!(ignored_json["label"]
-        .as_str()
-        .expect("label")
-        .contains("checksum validation skipped"));
+    assert!(
+        ignored_json["label"]
+            .as_str()
+            .expect("label")
+            .contains("checksum validation skipped")
+    );
+    assert_eq!(
+        fs::read(output.path()).expect("output"),
+        fs::read(modified.path()).expect("modified")
+    );
+}
+
+#[test]
+fn patch_create_succeeds_for_gdiff_and_round_trips() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.bin");
+    let modified = temp.child("new.bin");
+    let patch = temp.child("update.gdiff");
+    let output = temp.child("output.bin");
+    fs::write(original.path(), b"hello old world").expect("fixture");
+    fs::write(modified.path(), vec![0x42; 700]).expect("fixture");
+
+    let create_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--format",
+            "gdiff",
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--threads",
+            "8",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let create_json = parse_single_json_line(&create_output);
+    assert_eq!(create_json["command"], "patch-create");
+    assert_eq!(create_json["family"], "patch");
+    assert_eq!(create_json["format"], "GDIFF");
+    assert_eq!(create_json["requested_threads"], 8);
+    assert_eq!(create_json["effective_threads"], 1);
+    assert_eq!(create_json["used_parallelism"], false);
+    assert_eq!(create_json["status"], "succeeded");
+
+    let patch_bytes = fs::read(patch.path()).expect("patch");
+    assert_eq!(&patch_bytes[..5], &[0xD1, 0xFF, 0xD1, 0xFF, 4]);
+    assert_eq!(patch_bytes[5], 247);
+
+    let apply_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--threads",
+            "8",
+            "--no-compress",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let apply_json = parse_single_json_line(&apply_output);
+    assert_eq!(apply_json["command"], "patch-apply");
+    assert_eq!(apply_json["family"], "patch");
+    assert_eq!(apply_json["format"], "GDIFF");
+    assert_eq!(apply_json["requested_threads"], 8);
+    assert_eq!(apply_json["effective_threads"], 1);
+    assert_eq!(apply_json["used_parallelism"], false);
+    assert_eq!(apply_json["status"], "succeeded");
+    assert_eq!(
+        fs::read(output.path()).expect("output"),
+        fs::read(modified.path()).expect("modified")
+    );
+}
+
+#[test]
+fn patch_apply_succeeds_for_valid_gdiff_patch() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("input.bin").path(), b"abcdefgh").expect("fixture");
+    fs::write(
+        temp.child("update.gdiff").path(),
+        build_gdiff_patch(vec![
+            TestGdiffCommand::Copy { offset: 0, len: 2 },
+            TestGdiffCommand::Data(b"XY".to_vec()),
+            TestGdiffCommand::Copy { offset: 4, len: 4 },
+        ]),
+    )
+    .expect("fixture");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            temp.child("input.bin").path().to_str().expect("path"),
+            "--patch",
+            temp.child("update.gdiff").path().to_str().expect("path"),
+            "--output",
+            temp.child("output.bin").path().to_str().expect("path"),
+            "--threads",
+            "8",
+            "--no-compress",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "patch-apply");
+    assert_eq!(json["family"], "patch");
+    assert_eq!(json["format"], "GDIFF");
+    assert_eq!(json["requested_threads"], 8);
+    assert_eq!(json["effective_threads"], 1);
+    assert_eq!(json["used_parallelism"], false);
+    assert_eq!(json["status"], "succeeded");
+    assert_eq!(
+        fs::read(temp.child("output.bin").path()).expect("output"),
+        b"abXYefgh"
+    );
+}
+
+#[test]
+fn patch_apply_succeeds_for_valid_ffp_patch() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("input.bin").path(), b"abcdefgh").expect("fixture");
+    fs::write(
+        temp.child("update.ffp").path(),
+        b"comment line\n00000000 61 41\n00000001 62 42\n",
+    )
+    .expect("fixture");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            temp.child("input.bin").path().to_str().expect("path"),
+            "--patch",
+            temp.child("update.ffp").path().to_str().expect("path"),
+            "--output",
+            temp.child("output.bin").path().to_str().expect("path"),
+            "--threads",
+            "8",
+            "--no-compress",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "patch-apply");
+    assert_eq!(json["family"], "patch");
+    assert_eq!(json["format"], "PAT");
+    assert_eq!(json["requested_threads"], 8);
+    assert_eq!(json["effective_threads"], 1);
+    assert_eq!(json["used_parallelism"], false);
+    assert_eq!(json["status"], "succeeded");
+    assert_eq!(
+        fs::read(temp.child("output.bin").path()).expect("output"),
+        b"ABcdefgh"
+    );
+}
+
+#[test]
+fn patch_create_succeeds_for_pat_and_round_trips() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.bin");
+    let modified = temp.child("new.bin");
+    let patch = temp.child("update.pat");
+    let output = temp.child("output.bin");
+    fs::write(original.path(), b"hello old world").expect("fixture");
+    fs::write(modified.path(), b"HELlo old worlD").expect("fixture");
+
+    let create_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--format",
+            "pat",
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--threads",
+            "8",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let create_json = parse_single_json_line(&create_output);
+    assert_eq!(create_json["command"], "patch-create");
+    assert_eq!(create_json["family"], "patch");
+    assert_eq!(create_json["format"], "PAT");
+    assert_eq!(create_json["requested_threads"], 8);
+    assert_eq!(create_json["effective_threads"], 1);
+    assert_eq!(create_json["used_parallelism"], false);
+    assert_eq!(create_json["status"], "succeeded");
+
+    let patch_text = fs::read_to_string(patch.path()).expect("patch");
+    assert!(patch_text.contains("00000000 68 48"));
+
+    let apply_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let apply_json = parse_single_json_line(&apply_output);
+    assert_eq!(apply_json["command"], "patch-apply");
+    assert_eq!(apply_json["family"], "patch");
+    assert_eq!(apply_json["format"], "PAT");
+    assert_eq!(apply_json["status"], "succeeded");
     assert_eq!(
         fs::read(output.path()).expect("output"),
         fs::read(modified.path()).expect("modified")
@@ -8570,6 +9270,39 @@ fn inspect_succeeds_for_valid_dps_patch() {
 }
 
 #[test]
+fn inspect_succeeds_for_valid_gdiff_patch() {
+    let temp = setup_temp_dir();
+    fs::write(
+        temp.child("update.gdiff").path(),
+        build_gdiff_patch(vec![
+            TestGdiffCommand::Copy { offset: 0, len: 2 },
+            TestGdiffCommand::Data(b"XY".to_vec()),
+            TestGdiffCommand::Copy { offset: 2, len: 2 },
+        ]),
+    )
+    .expect("fixture");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "inspect",
+            temp.child("update.gdiff").path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "inspect");
+    assert_eq!(json["family"], "patch");
+    assert_eq!(json["format"], "GDIFF");
+    assert_eq!(json["status"], "succeeded");
+}
+
+#[test]
 fn inspect_succeeds_for_valid_ebp_patch() {
     let temp = setup_temp_dir();
     fs::write(
@@ -8668,6 +9401,7 @@ fn inspect_succeeds_for_ips32_patch_with_ips_extension() {
     assert_eq!(json["status"], "succeeded");
 }
 
+#[test]
 fn inspect_succeeds_for_valid_solid_patch() {
     let temp = setup_temp_dir();
     let original = temp.child("original.bin");
@@ -8759,6 +9493,94 @@ fn patch_apply_succeeds_for_valid_xdelta_patch() {
     assert_eq!(json["effective_threads"], 1);
     assert_eq!(json["used_parallelism"], false);
     assert_eq!(json["status"], "succeeded");
+    assert_eq!(
+        fs::read(temp.child("output.bin").path()).expect("output"),
+        expected
+    );
+}
+
+#[test]
+fn patch_apply_can_ignore_checksum_validation_for_xdelta() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("input.bin").path(), b"abcabcabcabc").expect("fixture");
+    let expected = b"abcabcZZabcabc";
+    let patch = build_patch(
+        Some(b"xdelta-cli"),
+        vec![TestWindow {
+            win_indicator: 0x01 | 0x04,
+            source_segment_size: Some(12),
+            source_segment_position: Some(0),
+            target_window_size: expected.len() as u64,
+            checksum: Some(adler32(expected) ^ 0x0000_0001),
+            data: b"ZZ".to_vec(),
+            inst: vec![22, 3, 22],
+            addr: encode_all_varints(&[0, 6]),
+        }],
+    );
+    fs::write(temp.child("update.xdelta").path(), patch).expect("fixture");
+
+    let strict_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            temp.child("input.bin").path().to_str().expect("path"),
+            "--patch",
+            temp.child("update.xdelta").path().to_str().expect("path"),
+            "--output",
+            temp.child("output.bin").path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .stdout
+        .clone();
+
+    let strict_json = parse_single_json_line(&strict_output);
+    assert_eq!(strict_json["command"], "patch-apply");
+    assert_eq!(strict_json["family"], "patch");
+    assert_eq!(strict_json["format"], "xdelta");
+    assert_eq!(strict_json["status"], "failed");
+    assert!(
+        strict_json["label"]
+            .as_str()
+            .expect("label")
+            .contains("checksum mismatch")
+    );
+
+    let ignored_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            temp.child("input.bin").path().to_str().expect("path"),
+            "--patch",
+            temp.child("update.xdelta").path().to_str().expect("path"),
+            "--output",
+            temp.child("output.bin").path().to_str().expect("path"),
+            "--ignore-checksum-validation",
+            "--no-compress",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let ignored_json = parse_single_json_line(&ignored_output);
+    assert_eq!(ignored_json["command"], "patch-apply");
+    assert_eq!(ignored_json["family"], "patch");
+    assert_eq!(ignored_json["format"], "xdelta");
+    assert_eq!(ignored_json["status"], "succeeded");
+    assert!(
+        ignored_json["label"]
+            .as_str()
+            .expect("label")
+            .contains("checksum validation skipped")
+    );
     assert_eq!(
         fs::read(temp.child("output.bin").path()).expect("output"),
         expected

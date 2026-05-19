@@ -152,7 +152,7 @@ struct ChecksumCommand {
     no_ignore: bool,
     #[arg(
         long,
-        help = "Remove a detected ROM header before checksum (A78/LNX/NES/FDS/SMC; falls back to 512-byte copier header)"
+        help = "Remove a detected ROM header before checksum (A78/LNX/NES/FDS/SMC signatures; SNES/PCE copier-size rules)"
     )]
     strip_header: bool,
     #[arg(
@@ -297,7 +297,7 @@ struct PatchApplyCommand {
     validate_with_checksums: Vec<String>,
     #[arg(
         long,
-        help = "Remove a detected ROM header before patch apply (A78/LNX/NES/FDS/SMC; falls back to 512-byte copier header)"
+        help = "Remove a detected ROM header before patch apply (A78/LNX/NES/FDS/SMC signatures; SNES/PCE copier-size rules)"
     )]
     strip_header: bool,
     #[arg(
@@ -307,7 +307,7 @@ struct PatchApplyCommand {
     add_header: bool,
     #[arg(
         long,
-        help = "Repair supported ROM header checksums after patch apply (auto-detect)"
+        help = "Repair supported ROM headers/checksums after patch apply (SNES/NES/GB/GBA/MD/SMS/N64/NDS and related profiles; auto-detect)"
     )]
     repair_checksum: bool,
     #[arg(
@@ -425,11 +425,19 @@ struct CliApp {
 const MAX_NESTED_EXTRACT_DEPTH: usize = 8;
 const MAX_NESTED_EXTRACT_ARCHIVES: usize = 256;
 const ROM_HEADER_BYTES: usize = 512;
-const ROM_HEADER_SCAN_BYTES: usize = ROM_HEADER_BYTES;
+const ROM_HEADER_SCAN_BYTES: usize = 0x8000;
 const A78_HEADER_MAGIC: [u8; 9] = *b"ATARI7800";
 const LNX_HEADER_MAGIC: [u8; 4] = *b"LYNX";
 const INES_HEADER_MAGIC: [u8; 4] = *b"NES\x1A";
 const FDS_HEADER_MAGIC: [u8; 3] = *b"FDS";
+const SMS_TMR_SEGA_MAGIC: [u8; 8] = *b"TMR SEGA";
+const NGP_COPYRIGHT_MAGIC: [u8; 16] = *b"COPYRIGHT BY SNK";
+const GBA_HEADER_MAGIC: [u8; 4] = [0x24, 0xFF, 0xAE, 0x51];
+const N64_BIG_ENDIAN_MAGIC: [u8; 4] = [0x80, 0x37, 0x12, 0x40];
+const N64_LITTLE_ENDIAN_MAGIC: [u8; 4] = [0x40, 0x12, 0x37, 0x80];
+const N64_BYTE_SWAPPED_MAGIC: [u8; 4] = [0x37, 0x80, 0x40, 0x12];
+const SNES_COPIER_HEADER_MODULUS: u64 = 1024;
+const PCE_COPIER_HEADER_MODULUS: u64 = 8192;
 const SMC_GAME_DOCTOR_1_MAGIC: [u8; 16] = [
     0x00, 0x01, 0x4D, 0x45, 0x20, 0x44, 0x4F, 0x43, 0x54, 0x4F, 0x52, 0x20, 0x53, 0x46, 0x20, 0x33,
 ];
@@ -462,20 +470,40 @@ enum KnownRomHeader {
     Lnx,
     Nes,
     Fds,
+    SnesCopier,
+    PceCopier,
     SmcZero,
     SmcGameDoctor1,
     SmcGameDoctor2,
+    GameBoy,
+    Gba,
+    MegaDrive,
+    SmsTmr,
+    N64,
+    Nds,
+    NeoGeoPocket,
+    Msx,
 }
 
 impl KnownRomHeader {
-    const ALL: [Self; 7] = [
+    const ALL: [Self; 17] = [
         Self::A78,
         Self::Lnx,
         Self::Nes,
         Self::Fds,
+        Self::SnesCopier,
+        Self::PceCopier,
         Self::SmcZero,
         Self::SmcGameDoctor1,
         Self::SmcGameDoctor2,
+        Self::GameBoy,
+        Self::Gba,
+        Self::MegaDrive,
+        Self::SmsTmr,
+        Self::N64,
+        Self::Nds,
+        Self::NeoGeoPocket,
+        Self::Msx,
     ];
 
     const fn profile_name(self) -> &'static str {
@@ -484,9 +512,19 @@ impl KnownRomHeader {
             Self::Lnx => "No-Intro_LNX.xml",
             Self::Nes => "No-Intro_NES.xml",
             Self::Fds => "No-Intro_FDS.xml",
+            Self::SnesCopier => "SNES_COPIER_HEADER",
+            Self::PceCopier => "PCE_COPIER_HEADER",
             Self::SmcZero => "SMC",
             Self::SmcGameDoctor1 => "SMC_GAME_DOCTOR_1",
             Self::SmcGameDoctor2 => "SMC_GAME_DOCTOR_2",
+            Self::GameBoy => "Game Boy",
+            Self::Gba => "Game Boy Advance",
+            Self::MegaDrive => "Sega Mega Drive / Genesis",
+            Self::SmsTmr => "SMS/GG_TMR_SEGA",
+            Self::N64 => "Nintendo 64",
+            Self::Nds => "Nintendo DS",
+            Self::NeoGeoPocket => "Neo Geo Pocket",
+            Self::Msx => "MSX AB",
         }
     }
 
@@ -496,7 +534,17 @@ impl KnownRomHeader {
             Self::Lnx => ".lnx",
             Self::Nes => ".nes",
             Self::Fds => ".fds",
+            Self::SnesCopier => ".smc",
+            Self::PceCopier => ".pce",
             Self::SmcZero | Self::SmcGameDoctor1 | Self::SmcGameDoctor2 => ".smc",
+            Self::GameBoy => ".gb",
+            Self::Gba => ".gba",
+            Self::MegaDrive => ".md",
+            Self::SmsTmr => ".sms",
+            Self::N64 => ".z64",
+            Self::Nds => ".nds",
+            Self::NeoGeoPocket => ".ngp",
+            Self::Msx => ".mx1",
         }
     }
 
@@ -505,16 +553,38 @@ impl KnownRomHeader {
             Self::Lnx => ".lyx",
             Self::SmcZero | Self::SmcGameDoctor1 | Self::SmcGameDoctor2 => ".sfc",
             Self::A78 | Self::Nes | Self::Fds => self.headered_extension(),
+            Self::SnesCopier => ".sfc",
+            Self::PceCopier => ".tg16",
+            Self::GameBoy => ".gbc",
+            Self::Gba => self.headered_extension(),
+            Self::MegaDrive => ".gen",
+            Self::SmsTmr => ".gg",
+            Self::N64 => ".n64",
+            Self::Nds => ".dsi",
+            Self::NeoGeoPocket => ".ngc",
+            Self::Msx => ".mx2",
         }
     }
 
-    const fn data_offset_bytes(self) -> usize {
+    const fn data_offset_bytes(self) -> Option<usize> {
         match self {
-            Self::A78 => 128,
-            Self::Lnx => 64,
-            Self::Nes => 16,
-            Self::Fds => 16,
-            Self::SmcZero | Self::SmcGameDoctor1 | Self::SmcGameDoctor2 => ROM_HEADER_BYTES,
+            Self::A78 => Some(128),
+            Self::Lnx => Some(64),
+            Self::Nes => Some(16),
+            Self::Fds => Some(16),
+            Self::SnesCopier
+            | Self::PceCopier
+            | Self::SmcZero
+            | Self::SmcGameDoctor1
+            | Self::SmcGameDoctor2 => Some(ROM_HEADER_BYTES),
+            Self::GameBoy
+            | Self::Gba
+            | Self::MegaDrive
+            | Self::SmsTmr
+            | Self::N64
+            | Self::Nds
+            | Self::NeoGeoPocket
+            | Self::Msx => None,
         }
     }
 
@@ -524,18 +594,36 @@ impl KnownRomHeader {
             Self::Lnx => LNX_HEADER_MAGIC.len(),
             Self::Nes => INES_HEADER_MAGIC.len(),
             Self::Fds => FDS_HEADER_MAGIC.len(),
+            Self::SnesCopier | Self::PceCopier => 0,
             Self::SmcZero => ROM_HEADER_BYTES,
             Self::SmcGameDoctor1 => SMC_GAME_DOCTOR_1_MAGIC.len(),
             Self::SmcGameDoctor2 => SMC_GAME_DOCTOR_2_MAGIC.len(),
+            Self::GameBoy => 0x134,
+            Self::Gba => 0x08,
+            Self::MegaDrive => 0x105,
+            Self::SmsTmr => 0x7FF8,
+            Self::N64 => N64_BIG_ENDIAN_MAGIC.len(),
+            Self::Nds => 0xC4,
+            Self::NeoGeoPocket => NGP_COPYRIGHT_MAGIC.len(),
+            Self::Msx => 2,
         }
     }
 
     fn matches_extension(self, extension_with_dot: &str) -> bool {
-        self.headered_extension()
+        if self
+            .headered_extension()
             .eq_ignore_ascii_case(extension_with_dot)
             || self
                 .headerless_extension()
                 .eq_ignore_ascii_case(extension_with_dot)
+        {
+            return true;
+        }
+        match self {
+            Self::N64 => ".v64".eq_ignore_ascii_case(extension_with_dot),
+            Self::Nds => ".srl".eq_ignore_ascii_case(extension_with_dot),
+            _ => false,
+        }
     }
 
     fn signature_matches(self, bytes: &[u8]) -> bool {
@@ -547,6 +635,7 @@ impl KnownRomHeader {
             Self::Lnx => bytes[..LNX_HEADER_MAGIC.len()] == LNX_HEADER_MAGIC,
             Self::Nes => bytes[..INES_HEADER_MAGIC.len()] == INES_HEADER_MAGIC,
             Self::Fds => bytes[..FDS_HEADER_MAGIC.len()] == FDS_HEADER_MAGIC,
+            Self::SnesCopier | Self::PceCopier => false,
             Self::SmcZero => bytes[3..ROM_HEADER_BYTES].iter().all(|value| *value == 0),
             Self::SmcGameDoctor1 => {
                 bytes[..SMC_GAME_DOCTOR_1_MAGIC.len()] == SMC_GAME_DOCTOR_1_MAGIC
@@ -554,6 +643,21 @@ impl KnownRomHeader {
             Self::SmcGameDoctor2 => {
                 bytes[..SMC_GAME_DOCTOR_2_MAGIC.len()] == SMC_GAME_DOCTOR_2_MAGIC
             }
+            Self::GameBoy => bytes[0x104..0x134] == GAME_BOY_NINTENDO_LOGO,
+            Self::Gba => bytes[0x04..0x08] == GBA_HEADER_MAGIC,
+            Self::MegaDrive => bytes[0x100..0x104] == *b"SEGA" || bytes[0x101..0x105] == *b"SEGA",
+            Self::SmsTmr => [0x7FF0usize, 0x3FF0, 0x1FF0].iter().any(|offset| {
+                bytes.get(*offset..offset.saturating_add(SMS_TMR_SEGA_MAGIC.len()))
+                    == Some(SMS_TMR_SEGA_MAGIC.as_slice())
+            }),
+            Self::N64 => {
+                bytes[..N64_BIG_ENDIAN_MAGIC.len()] == N64_BIG_ENDIAN_MAGIC
+                    || bytes[..N64_LITTLE_ENDIAN_MAGIC.len()] == N64_LITTLE_ENDIAN_MAGIC
+                    || bytes[..N64_BYTE_SWAPPED_MAGIC.len()] == N64_BYTE_SWAPPED_MAGIC
+            }
+            Self::Nds => bytes[0xC0..0xC4] == GBA_HEADER_MAGIC,
+            Self::NeoGeoPocket => bytes[..NGP_COPYRIGHT_MAGIC.len()] == NGP_COPYRIGHT_MAGIC,
+            Self::Msx => bytes[..2] == *b"AB",
         }
     }
 }
@@ -561,7 +665,7 @@ impl KnownRomHeader {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct KnownRomHeaderMatch {
     header: KnownRomHeader,
-    stripped_bytes: usize,
+    stripped_bytes: Option<usize>,
 }
 
 impl KnownRomHeaderMatch {
@@ -569,7 +673,7 @@ impl KnownRomHeaderMatch {
         self.header.profile_name()
     }
 
-    const fn stripped_bytes(self) -> usize {
+    const fn stripped_bytes(self) -> Option<usize> {
         self.stripped_bytes
     }
 }
@@ -750,6 +854,30 @@ struct PatchApplyCompressionPlan {
     output_path: PathBuf,
     extension_appended: bool,
     auto_note: String,
+}
+
+struct PatchApplyFinalizeResult {
+    repaired_profiles: Vec<&'static str>,
+    repair_warning: Option<String>,
+}
+
+struct HeaderRepairOutcome {
+    repaired_profiles: Vec<&'static str>,
+    matched_without_changes: Vec<&'static str>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum HeaderRepairStatus {
+    NotMatched,
+    MatchedNoChange,
+    Repaired,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum N64ByteOrder {
+    BigEndian,
+    LittleEndian,
+    ByteSwapped,
 }
 
 impl CliApp {
@@ -934,7 +1062,10 @@ impl CliApp {
                 format!(
                     "detected ROM header {}; stripped_bytes={}; headered_extension={}; headerless_extension={}",
                     header_match.profile_name(),
-                    header_match.stripped_bytes(),
+                    header_match
+                        .stripped_bytes()
+                        .map(|value| value.to_string())
+                        .unwrap_or_else(|| "n/a".to_string()),
                     header_match.header.headered_extension(),
                     header_match.header.headerless_extension()
                 ),
@@ -1273,7 +1404,7 @@ impl CliApp {
                     report.label = format!(
                         "{}; input header stripped ({} bytes, {})",
                         report.label,
-                        header_match.stripped_bytes(),
+                        header_match.stripped_bytes().unwrap_or(ROM_HEADER_BYTES),
                         header_match.profile_name()
                     );
                 } else {
@@ -2755,11 +2886,24 @@ impl CliApp {
                     add_header,
                     stripped_header.as_deref(),
                     repair_checksum,
+                    Some(&resolved_input),
                 ) {
-                    Ok(repaired_kind) => {
+                    Ok(finalized) => {
                         raw_ready_output = finalized_output_path;
-                        if let Some(kind) = repaired_kind {
-                            report.label = format!("{}; repaired checksum ({kind})", report.label);
+                        if finalized.repaired_profiles.len() == 1 {
+                            report.label = format!(
+                                "{}; repaired checksum ({})",
+                                report.label, finalized.repaired_profiles[0]
+                            );
+                        } else if !finalized.repaired_profiles.is_empty() {
+                            report.label = format!(
+                                "{}; repaired headers ({})",
+                                report.label,
+                                finalized.repaired_profiles.join(", ")
+                            );
+                        }
+                        if let Some(repair_warning) = finalized.repair_warning {
+                            report.label = format!("{}; warning={repair_warning}", report.label);
                         }
                     }
                     Err(error) => {
@@ -2786,7 +2930,7 @@ impl CliApp {
                     report.label = format!(
                         "{}; input header stripped ({} bytes, {})",
                         report.label,
-                        header_match.stripped_bytes(),
+                        header_match.stripped_bytes().unwrap_or(ROM_HEADER_BYTES),
                         header_match.profile_name()
                     );
                 } else {
@@ -4355,6 +4499,38 @@ impl CliApp {
         Ok(Self::detect_known_rom_header_from_prefix(path, &prefix))
     }
 
+    fn has_extension(path: &Path, expected: &[&str]) -> bool {
+        let Some(extension) = path.extension().and_then(|value| value.to_str()) else {
+            return false;
+        };
+        expected
+            .iter()
+            .any(|candidate| extension.eq_ignore_ascii_case(candidate))
+    }
+
+    fn detect_size_based_copier_header(path: &Path, input_len: u64) -> Option<KnownRomHeaderMatch> {
+        if input_len <= ROM_HEADER_BYTES as u64 {
+            return None;
+        }
+        if Self::has_extension(path, &["smc", "sfc"])
+            && input_len % SNES_COPIER_HEADER_MODULUS == ROM_HEADER_BYTES as u64
+        {
+            return Some(KnownRomHeaderMatch {
+                header: KnownRomHeader::SnesCopier,
+                stripped_bytes: Some(ROM_HEADER_BYTES),
+            });
+        }
+        if Self::has_extension(path, &["pce", "tg16"])
+            && input_len % PCE_COPIER_HEADER_MODULUS == ROM_HEADER_BYTES as u64
+        {
+            return Some(KnownRomHeaderMatch {
+                header: KnownRomHeader::PceCopier,
+                stripped_bytes: Some(ROM_HEADER_BYTES),
+            });
+        }
+        None
+    }
+
     fn strip_header_to_temp(input: &Path, stripped_path: &Path) -> Result<StripHeaderResult> {
         let input_len = fs::metadata(input)?.len();
         if let Some(parent) = stripped_path.parent() {
@@ -4366,10 +4542,19 @@ impl CliApp {
             ROM_HEADER_SCAN_BYTES.min(usize::try_from(input_len).unwrap_or(ROM_HEADER_SCAN_BYTES));
         let mut probe_bytes = vec![0_u8; probe_len];
         source.read_exact(&mut probe_bytes)?;
-        let matched_header = Self::detect_known_rom_header_from_prefix(input, &probe_bytes);
-        let header_len = matched_header
-            .map(|value| value.stripped_bytes())
-            .unwrap_or(ROM_HEADER_BYTES);
+        let mut matched_header = Self::detect_known_rom_header_from_prefix(input, &probe_bytes);
+        if matched_header
+            .and_then(|value| value.stripped_bytes())
+            .is_none()
+        {
+            matched_header = Self::detect_size_based_copier_header(input, input_len);
+        }
+        let Some(header_len) = matched_header.and_then(|value| value.stripped_bytes()) else {
+            return Err(RomWeaverError::Validation(format!(
+                "could not detect a supported removable ROM header for `{}`",
+                input.display()
+            )));
+        };
         if input_len < header_len as u64 {
             return Err(RomWeaverError::Validation(format!(
                 "cannot strip {header_len}-byte header from `{}` (file is only {input_len} byte(s))",
@@ -4395,7 +4580,8 @@ impl CliApp {
         add_header: bool,
         stripped_header: Option<&[u8]>,
         repair_checksum: bool,
-    ) -> Result<Option<&'static str>> {
+        repair_hint_path: Option<&Path>,
+    ) -> Result<PatchApplyFinalizeResult> {
         let header_bytes = if add_header {
             Some(stripped_header.unwrap_or(&[0_u8; ROM_HEADER_BYTES]))
         } else {
@@ -4404,13 +4590,8 @@ impl CliApp {
 
         if repair_checksum {
             let mut output_bytes = fs::read(staged_output)?;
-            let repaired_kind =
-                Self::repair_checksum_if_supported(&mut output_bytes).ok_or_else(|| {
-                    RomWeaverError::Validation(
-                        "could not auto-detect a supported checksum header to repair; currently supported targets are sega-genesis and game-boy"
-                            .into(),
-                    )
-                })?;
+            let repair_outcome =
+                Self::repair_checksum_if_supported(&mut output_bytes, repair_hint_path);
             if let Some(parent) = final_output.parent() {
                 fs::create_dir_all(parent)?;
             }
@@ -4420,11 +4601,32 @@ impl CliApp {
             }
             writer.write_all(&output_bytes)?;
             writer.flush()?;
-            return Ok(Some(repaired_kind));
+            let repair_warning = if repair_outcome.repaired_profiles.is_empty() {
+                if repair_outcome.matched_without_changes.is_empty() {
+                    Some(
+                        "no supported header repair profile matched; output left unchanged"
+                            .to_string(),
+                    )
+                } else {
+                    Some(format!(
+                        "header repair matched profile(s) {} but no writable changes were required",
+                        repair_outcome.matched_without_changes.join(", ")
+                    ))
+                }
+            } else {
+                None
+            };
+            return Ok(PatchApplyFinalizeResult {
+                repaired_profiles: repair_outcome.repaired_profiles,
+                repair_warning,
+            });
         }
 
         Self::copy_with_optional_header(staged_output, final_output, header_bytes)?;
-        Ok(None)
+        Ok(PatchApplyFinalizeResult {
+            repaired_profiles: Vec::new(),
+            repair_warning: None,
+        })
     }
 
     fn copy_with_optional_header(
@@ -4445,23 +4647,270 @@ impl CliApp {
         Ok(())
     }
 
-    fn repair_checksum_if_supported(bytes: &mut [u8]) -> Option<&'static str> {
-        if Self::repair_sega_genesis_checksum(bytes) {
-            return Some("sega-genesis");
+    fn record_header_repair_status(
+        outcome: &mut HeaderRepairOutcome,
+        profile: &'static str,
+        status: HeaderRepairStatus,
+    ) {
+        match status {
+            HeaderRepairStatus::NotMatched => {}
+            HeaderRepairStatus::MatchedNoChange => outcome.matched_without_changes.push(profile),
+            HeaderRepairStatus::Repaired => outcome.repaired_profiles.push(profile),
         }
-        if Self::repair_game_boy_checksum(bytes) {
-            return Some("game-boy");
-        }
-        None
     }
 
-    fn repair_sega_genesis_checksum(bytes: &mut [u8]) -> bool {
+    fn repair_checksum_if_supported(
+        bytes: &mut Vec<u8>,
+        hint_path: Option<&Path>,
+    ) -> HeaderRepairOutcome {
+        let extension = hint_path
+            .and_then(|path| path.extension())
+            .and_then(|value| value.to_str())
+            .map(|value| value.to_ascii_lowercase());
+        let extension = extension.as_deref();
+
+        let mut outcome = HeaderRepairOutcome {
+            repaired_profiles: Vec::new(),
+            matched_without_changes: Vec::new(),
+        };
+
+        Self::record_header_repair_status(
+            &mut outcome,
+            "snes",
+            Self::repair_snes_checksum(bytes.as_mut_slice()),
+        );
+        Self::record_header_repair_status(
+            &mut outcome,
+            "nes",
+            Self::repair_nes_header_padding(bytes.as_mut_slice()),
+        );
+        Self::record_header_repair_status(
+            &mut outcome,
+            "game-boy",
+            Self::repair_game_boy_checksum(bytes.as_mut_slice()),
+        );
+        Self::record_header_repair_status(
+            &mut outcome,
+            "gba",
+            Self::repair_gba_header_checksum(bytes.as_mut_slice()),
+        );
+        Self::record_header_repair_status(
+            &mut outcome,
+            "sega-genesis",
+            Self::repair_sega_genesis_checksum(bytes.as_mut_slice()),
+        );
+        Self::record_header_repair_status(
+            &mut outcome,
+            "sms-gg",
+            Self::repair_sms_tmr_checksum(bytes.as_mut_slice()),
+        );
+        Self::record_header_repair_status(
+            &mut outcome,
+            "n64",
+            Self::repair_n64_checksum(bytes.as_mut_slice()),
+        );
+        Self::record_header_repair_status(
+            &mut outcome,
+            "atari-7800",
+            Self::repair_atari_7800_header(bytes.as_mut_slice()),
+        );
+        Self::record_header_repair_status(
+            &mut outcome,
+            "atari-lynx",
+            Self::repair_atari_lynx_header(bytes.as_mut_slice()),
+        );
+        Self::record_header_repair_status(
+            &mut outcome,
+            "pce-tg16",
+            Self::repair_pce_copier_header(bytes, extension),
+        );
+        Self::record_header_repair_status(
+            &mut outcome,
+            "virtual-boy",
+            Self::repair_virtual_boy_header(bytes.as_mut_slice(), extension),
+        );
+        Self::record_header_repair_status(
+            &mut outcome,
+            "neo-geo-pocket",
+            Self::repair_neo_geo_pocket_header(bytes.as_mut_slice()),
+        );
+        Self::record_header_repair_status(
+            &mut outcome,
+            "msx",
+            Self::repair_msx_header(bytes.as_mut_slice()),
+        );
+        Self::record_header_repair_status(
+            &mut outcome,
+            "nds",
+            Self::repair_nintendo_ds_header_crc(bytes.as_mut_slice()),
+        );
+        Self::record_header_repair_status(
+            &mut outcome,
+            "atari-jaguar",
+            Self::validate_atari_jaguar_header(bytes.as_slice(), extension),
+        );
+        Self::record_header_repair_status(
+            &mut outcome,
+            "colecovision",
+            Self::validate_colecovision_header(bytes.as_slice(), extension),
+        );
+        Self::record_header_repair_status(
+            &mut outcome,
+            "watara-supervision",
+            Self::validate_watara_supervision_header(bytes.as_slice(), extension),
+        );
+        Self::record_header_repair_status(
+            &mut outcome,
+            "intellivision",
+            Self::validate_intellivision_header(bytes.as_slice(), extension),
+        );
+
+        outcome
+    }
+
+    fn repair_snes_checksum(bytes: &mut [u8]) -> HeaderRepairStatus {
+        if bytes.len() <= ROM_HEADER_BYTES {
+            return HeaderRepairStatus::NotMatched;
+        }
+
+        let copier_offset = if bytes.len() % SNES_COPIER_HEADER_MODULUS as usize == ROM_HEADER_BYTES
+        {
+            ROM_HEADER_BYTES
+        } else {
+            0
+        };
+        let rom_size = bytes.len().saturating_sub(copier_offset);
+        if rom_size == 0 {
+            return HeaderRepairStatus::NotMatched;
+        }
+
+        let lo_rom_header = copier_offset.saturating_add(0x7FC0);
+        let hi_rom_header = copier_offset.saturating_add(0xFFC0);
+        let header_offset = if hi_rom_header + 0x30 <= bytes.len()
+            && Self::is_valid_snes_title(bytes, hi_rom_header)
+        {
+            hi_rom_header
+        } else if lo_rom_header + 0x30 <= bytes.len()
+            && Self::is_valid_snes_title(bytes, lo_rom_header)
+        {
+            lo_rom_header
+        } else {
+            return HeaderRepairStatus::NotMatched;
+        };
+
+        let checksum_complement_offset = header_offset + 0x1C;
+        let checksum_offset = header_offset + 0x1E;
+        if checksum_offset + 2 > bytes.len() || checksum_complement_offset + 2 > bytes.len() {
+            return HeaderRepairStatus::NotMatched;
+        }
+
+        let old_complement = u16::from_le_bytes([
+            bytes[checksum_complement_offset],
+            bytes[checksum_complement_offset + 1],
+        ]);
+        let old_checksum = u16::from_le_bytes([bytes[checksum_offset], bytes[checksum_offset + 1]]);
+
+        bytes[checksum_complement_offset] = 0;
+        bytes[checksum_complement_offset + 1] = 0;
+        bytes[checksum_offset] = 0;
+        bytes[checksum_offset + 1] = 0;
+
+        let mut sum = 0_u32;
+        if rom_size.is_power_of_two() {
+            for value in &bytes[copier_offset..] {
+                sum = sum.wrapping_add(u32::from(*value));
+            }
+        } else {
+            let base_size = rom_size.next_power_of_two() / 2;
+            let excess_size = rom_size.saturating_sub(base_size);
+            for value in &bytes[copier_offset..copier_offset + base_size] {
+                sum = sum.wrapping_add(u32::from(*value));
+            }
+            if excess_size > 0 {
+                let mut excess_sum = 0_u32;
+                for value in &bytes[copier_offset + base_size..] {
+                    excess_sum = excess_sum.wrapping_add(u32::from(*value));
+                }
+                let mirror_count = (rom_size.next_power_of_two() - base_size) / excess_size;
+                sum = sum.wrapping_add(excess_sum.wrapping_mul(mirror_count as u32));
+            }
+        }
+
+        let new_checksum = (sum & 0xFFFF) as u16;
+        let new_complement = new_checksum ^ 0xFFFF;
+        bytes[checksum_complement_offset..checksum_complement_offset + 2]
+            .copy_from_slice(&new_complement.to_le_bytes());
+        bytes[checksum_offset..checksum_offset + 2].copy_from_slice(&new_checksum.to_le_bytes());
+
+        if old_checksum == new_checksum && old_complement == new_complement {
+            HeaderRepairStatus::MatchedNoChange
+        } else {
+            HeaderRepairStatus::Repaired
+        }
+    }
+
+    fn is_valid_snes_title(bytes: &[u8], offset: usize) -> bool {
+        if offset + 21 > bytes.len() {
+            return false;
+        }
+        let mut printable_count = 0usize;
+        for value in &bytes[offset..offset + 21] {
+            if (0x20..=0x7E).contains(value) {
+                printable_count = printable_count.saturating_add(1);
+            }
+        }
+        printable_count >= 10
+    }
+
+    fn repair_nes_header_padding(bytes: &mut [u8]) -> HeaderRepairStatus {
+        if bytes.len() < 16 || bytes[..4] != INES_HEADER_MAGIC {
+            return HeaderRepairStatus::NotMatched;
+        }
+        let is_nes2 = (bytes[7] & 0x0C) == 0x08;
+        if is_nes2 {
+            return HeaderRepairStatus::MatchedNoChange;
+        }
+
+        let mut changed = false;
+        for value in &mut bytes[11..16] {
+            if *value != 0 {
+                *value = 0;
+                changed = true;
+            }
+        }
+        if changed {
+            HeaderRepairStatus::Repaired
+        } else {
+            HeaderRepairStatus::MatchedNoChange
+        }
+    }
+
+    fn repair_gba_header_checksum(bytes: &mut [u8]) -> HeaderRepairStatus {
+        if bytes.len() < 0x1BE || bytes[0x04..0x08] != GBA_HEADER_MAGIC {
+            return HeaderRepairStatus::NotMatched;
+        }
+        let old_checksum = bytes[0x1BD];
+        let mut checksum = 0_i32;
+        for value in &bytes[0xA0..=0xBC] {
+            checksum -= i32::from(*value);
+        }
+        let new_checksum = ((checksum - 0x19) & 0xFF) as u8;
+        bytes[0x1BD] = new_checksum;
+        if old_checksum == new_checksum {
+            HeaderRepairStatus::MatchedNoChange
+        } else {
+            HeaderRepairStatus::Repaired
+        }
+    }
+
+    fn repair_sega_genesis_checksum(bytes: &mut [u8]) -> HeaderRepairStatus {
         if bytes.len() <= 0x18F || bytes.len() < 0x200 {
-            return false;
+            return HeaderRepairStatus::NotMatched;
         }
-        if &bytes[0x100..0x104] != b"SEGA" {
-            return false;
+        if bytes[0x100..0x104] != *b"SEGA" && bytes[0x101..0x105] != *b"SEGA" {
+            return HeaderRepairStatus::NotMatched;
         }
+        let old_checksum = u16::from_be_bytes([bytes[0x18E], bytes[0x18F]]);
         let mut sum = 0_u32;
         let mut cursor = 0x200usize;
         while cursor + 1 < bytes.len() {
@@ -4474,16 +4923,23 @@ impl CliApp {
         }
         let checksum = (sum & 0xFFFF) as u16;
         bytes[0x18E..=0x18F].copy_from_slice(&checksum.to_be_bytes());
-        true
+        if old_checksum == checksum {
+            HeaderRepairStatus::MatchedNoChange
+        } else {
+            HeaderRepairStatus::Repaired
+        }
     }
 
-    fn repair_game_boy_checksum(bytes: &mut [u8]) -> bool {
+    fn repair_game_boy_checksum(bytes: &mut [u8]) -> HeaderRepairStatus {
         if bytes.len() <= 0x14F {
-            return false;
+            return HeaderRepairStatus::NotMatched;
         }
         if bytes[0x104..0x134] != GAME_BOY_NINTENDO_LOGO {
-            return false;
+            return HeaderRepairStatus::NotMatched;
         }
+
+        let old_header_checksum = bytes[0x14D];
+        let old_global_checksum = u16::from_be_bytes([bytes[0x14E], bytes[0x14F]]);
 
         let mut header_checksum = 0_u8;
         for value in &bytes[0x134..=0x14C] {
@@ -4499,7 +4955,358 @@ impl CliApp {
             global_checksum = global_checksum.wrapping_add(u16::from(value));
         }
         bytes[0x14E..=0x14F].copy_from_slice(&global_checksum.to_be_bytes());
-        true
+
+        if old_header_checksum == header_checksum && old_global_checksum == global_checksum {
+            HeaderRepairStatus::MatchedNoChange
+        } else {
+            HeaderRepairStatus::Repaired
+        }
+    }
+
+    fn repair_sms_tmr_checksum(bytes: &mut [u8]) -> HeaderRepairStatus {
+        let mut header_offset = None;
+        for offset in [0x7FF0usize, 0x3FF0, 0x1FF0] {
+            if bytes.get(offset..offset + SMS_TMR_SEGA_MAGIC.len())
+                == Some(SMS_TMR_SEGA_MAGIC.as_slice())
+            {
+                header_offset = Some(offset);
+                break;
+            }
+        }
+        let Some(header_offset) = header_offset else {
+            return HeaderRepairStatus::NotMatched;
+        };
+        if header_offset + 0x10 > bytes.len() {
+            return HeaderRepairStatus::NotMatched;
+        }
+        let checksum_offset = header_offset + 0x0A;
+        if checksum_offset + 2 > bytes.len() {
+            return HeaderRepairStatus::NotMatched;
+        }
+        let old_checksum = u16::from_le_bytes([bytes[checksum_offset], bytes[checksum_offset + 1]]);
+        let size_nibble = bytes[header_offset + 0x0F] & 0x0F;
+        let declared_end = match size_nibble {
+            0xA => 0x2000usize,
+            0xB => 0x4000,
+            0xC => 0x8000,
+            0xD => 0xC000,
+            0xE => 0x10000,
+            0xF => 0x20000,
+            0x0 => 0x40000,
+            0x1 => 0x80000,
+            0x2 => 0x100000,
+            _ => bytes.len(),
+        };
+        let checksum_end = declared_end.min(bytes.len());
+        let header_end = header_offset + 16;
+
+        let mut sum = 0_u32;
+        for value in &bytes[..header_offset.min(checksum_end)] {
+            sum = sum.wrapping_add(u32::from(*value));
+        }
+        if header_end < checksum_end {
+            for value in &bytes[header_end..checksum_end] {
+                sum = sum.wrapping_add(u32::from(*value));
+            }
+        }
+        let new_checksum = (sum & 0xFFFF) as u16;
+        bytes[checksum_offset..checksum_offset + 2].copy_from_slice(&new_checksum.to_le_bytes());
+        if old_checksum == new_checksum {
+            HeaderRepairStatus::MatchedNoChange
+        } else {
+            HeaderRepairStatus::Repaired
+        }
+    }
+
+    fn repair_n64_checksum(bytes: &mut [u8]) -> HeaderRepairStatus {
+        if bytes.len() < 0x101000 {
+            return HeaderRepairStatus::NotMatched;
+        }
+        let Some(original_order) = Self::detect_n64_byte_order(bytes) else {
+            return HeaderRepairStatus::NotMatched;
+        };
+        Self::normalize_n64_to_big_endian(bytes, original_order);
+
+        let old_crc1 = u32::from_be_bytes([bytes[0x10], bytes[0x11], bytes[0x12], bytes[0x13]]);
+        let old_crc2 = u32::from_be_bytes([bytes[0x14], bytes[0x15], bytes[0x16], bytes[0x17]]);
+
+        let seed = 0xF8CA4DDCu32;
+        let mut t1 = seed;
+        let mut t2 = seed;
+        let mut t3 = seed;
+        let mut t4 = seed;
+        let mut t5 = seed;
+        let mut t6 = seed;
+
+        for chunk in bytes[0x1000..0x101000].chunks_exact(4) {
+            let d = u32::from_be_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+            if t6.wrapping_add(d) < t6 {
+                t4 = t4.wrapping_add(1);
+            }
+            t6 = t6.wrapping_add(d);
+            t3 ^= d;
+
+            let shift = (d & 0x1F) as u32;
+            let rotated = if shift == 0 { d } else { d.rotate_left(shift) };
+
+            t5 = t5.wrapping_add(rotated);
+            if t2 > d {
+                t2 ^= rotated;
+            } else {
+                t2 ^= t6 ^ d;
+            }
+            t1 = t1.wrapping_add(t5 ^ d);
+        }
+
+        let new_crc1 = t6 ^ t4 ^ t3;
+        let new_crc2 = t5 ^ t2 ^ t1;
+        bytes[0x10..0x14].copy_from_slice(&new_crc1.to_be_bytes());
+        bytes[0x14..0x18].copy_from_slice(&new_crc2.to_be_bytes());
+        Self::denormalize_n64_from_big_endian(bytes, original_order);
+
+        if old_crc1 == new_crc1 && old_crc2 == new_crc2 {
+            HeaderRepairStatus::MatchedNoChange
+        } else {
+            HeaderRepairStatus::Repaired
+        }
+    }
+
+    fn detect_n64_byte_order(bytes: &[u8]) -> Option<N64ByteOrder> {
+        if bytes.len() < 4 {
+            return None;
+        }
+        let magic = [bytes[0], bytes[1], bytes[2], bytes[3]];
+        if magic == N64_BIG_ENDIAN_MAGIC {
+            Some(N64ByteOrder::BigEndian)
+        } else if magic == N64_LITTLE_ENDIAN_MAGIC {
+            Some(N64ByteOrder::LittleEndian)
+        } else if magic == N64_BYTE_SWAPPED_MAGIC {
+            Some(N64ByteOrder::ByteSwapped)
+        } else {
+            None
+        }
+    }
+
+    fn normalize_n64_to_big_endian(bytes: &mut [u8], order: N64ByteOrder) {
+        match order {
+            N64ByteOrder::BigEndian => {}
+            N64ByteOrder::LittleEndian => {
+                for chunk in bytes.chunks_exact_mut(4) {
+                    chunk.reverse();
+                }
+            }
+            N64ByteOrder::ByteSwapped => {
+                for chunk in bytes.chunks_exact_mut(4) {
+                    chunk.swap(0, 1);
+                    chunk.swap(2, 3);
+                }
+            }
+        }
+    }
+
+    fn denormalize_n64_from_big_endian(bytes: &mut [u8], order: N64ByteOrder) {
+        match order {
+            N64ByteOrder::BigEndian => {}
+            N64ByteOrder::LittleEndian => {
+                for chunk in bytes.chunks_exact_mut(4) {
+                    chunk.reverse();
+                }
+            }
+            N64ByteOrder::ByteSwapped => {
+                for chunk in bytes.chunks_exact_mut(4) {
+                    chunk.swap(0, 1);
+                    chunk.swap(2, 3);
+                }
+            }
+        }
+    }
+
+    fn repair_atari_7800_header(bytes: &mut [u8]) -> HeaderRepairStatus {
+        if bytes.len() < 128 {
+            return HeaderRepairStatus::NotMatched;
+        }
+        if bytes[1..1 + A78_HEADER_MAGIC.len()] != A78_HEADER_MAGIC {
+            return HeaderRepairStatus::NotMatched;
+        }
+        let mut changed = false;
+        for value in &mut bytes[0x64..0x80] {
+            if *value != 0 {
+                *value = 0;
+                changed = true;
+            }
+        }
+        if changed {
+            HeaderRepairStatus::Repaired
+        } else {
+            HeaderRepairStatus::MatchedNoChange
+        }
+    }
+
+    fn repair_atari_lynx_header(bytes: &mut [u8]) -> HeaderRepairStatus {
+        if bytes.len() < 64 || bytes[..4] != LNX_HEADER_MAGIC {
+            return HeaderRepairStatus::NotMatched;
+        }
+        let mut changed = false;
+        let page_size = u16::from_le_bytes([bytes[4], bytes[5]]);
+        if page_size == 0 {
+            bytes[4] = 0x00;
+            bytes[5] = 0x01;
+            changed = true;
+        }
+        for value in &mut bytes[59..64] {
+            if *value != 0 {
+                *value = 0;
+                changed = true;
+            }
+        }
+        if changed {
+            HeaderRepairStatus::Repaired
+        } else {
+            HeaderRepairStatus::MatchedNoChange
+        }
+    }
+
+    fn repair_neo_geo_pocket_header(bytes: &mut [u8]) -> HeaderRepairStatus {
+        if bytes.len() < 0x30 {
+            return HeaderRepairStatus::NotMatched;
+        }
+        if bytes[..NGP_COPYRIGHT_MAGIC.len()] != NGP_COPYRIGHT_MAGIC {
+            return HeaderRepairStatus::NotMatched;
+        }
+        let mut changed = false;
+        for value in &mut bytes[0x24..0x30] {
+            if *value != 0 {
+                *value = 0;
+                changed = true;
+            }
+        }
+        if changed {
+            HeaderRepairStatus::Repaired
+        } else {
+            HeaderRepairStatus::MatchedNoChange
+        }
+    }
+
+    fn repair_msx_header(bytes: &mut [u8]) -> HeaderRepairStatus {
+        if bytes.len() < 16 || bytes[..2] != *b"AB" {
+            return HeaderRepairStatus::NotMatched;
+        }
+        let mut changed = false;
+        for value in &mut bytes[0x0A..0x10] {
+            if *value != 0 {
+                *value = 0;
+                changed = true;
+            }
+        }
+        if changed {
+            HeaderRepairStatus::Repaired
+        } else {
+            HeaderRepairStatus::MatchedNoChange
+        }
+    }
+
+    fn repair_nintendo_ds_header_crc(bytes: &mut [u8]) -> HeaderRepairStatus {
+        if bytes.len() < 0x200 || bytes[0xC0..0xC4] != GBA_HEADER_MAGIC {
+            return HeaderRepairStatus::NotMatched;
+        }
+        let old_crc = u16::from_le_bytes([bytes[0x15E], bytes[0x15F]]);
+        let new_crc = Self::nds_crc16(&bytes[..0x15E]);
+        bytes[0x15E..0x160].copy_from_slice(&new_crc.to_le_bytes());
+        if old_crc == new_crc {
+            HeaderRepairStatus::MatchedNoChange
+        } else {
+            HeaderRepairStatus::Repaired
+        }
+    }
+
+    fn repair_pce_copier_header(
+        bytes: &mut Vec<u8>,
+        extension: Option<&str>,
+    ) -> HeaderRepairStatus {
+        let is_pce = matches!(extension, Some("pce" | "tg16"));
+        if !is_pce {
+            return HeaderRepairStatus::NotMatched;
+        }
+        if bytes.len() <= ROM_HEADER_BYTES || bytes.len() < PCE_COPIER_HEADER_MODULUS as usize {
+            return HeaderRepairStatus::MatchedNoChange;
+        }
+        if bytes.len() as u64 % PCE_COPIER_HEADER_MODULUS != ROM_HEADER_BYTES as u64 {
+            return HeaderRepairStatus::MatchedNoChange;
+        }
+        bytes.drain(0..ROM_HEADER_BYTES);
+        HeaderRepairStatus::Repaired
+    }
+
+    fn repair_virtual_boy_header(bytes: &mut [u8], extension: Option<&str>) -> HeaderRepairStatus {
+        let is_virtual_boy = matches!(extension, Some("vb" | "vboy"));
+        if !is_virtual_boy || bytes.len() < 1024 {
+            return HeaderRepairStatus::NotMatched;
+        }
+        if bytes.len() < 0x220 {
+            return HeaderRepairStatus::MatchedNoChange;
+        }
+        let header_offset = bytes.len() - 0x220;
+        let mut changed = false;
+        for value in &mut bytes[header_offset + 0x14..header_offset + 0x19] {
+            if *value != 0 {
+                *value = 0;
+                changed = true;
+            }
+        }
+        if changed {
+            HeaderRepairStatus::Repaired
+        } else {
+            HeaderRepairStatus::MatchedNoChange
+        }
+    }
+
+    fn validate_atari_jaguar_header(bytes: &[u8], extension: Option<&str>) -> HeaderRepairStatus {
+        if !matches!(extension, Some("j64" | "jag")) {
+            return HeaderRepairStatus::NotMatched;
+        }
+        if bytes.len() >= 0x2000 {
+            HeaderRepairStatus::MatchedNoChange
+        } else {
+            HeaderRepairStatus::NotMatched
+        }
+    }
+
+    fn validate_colecovision_header(bytes: &[u8], extension: Option<&str>) -> HeaderRepairStatus {
+        if !matches!(extension, Some("col" | "cv")) {
+            return HeaderRepairStatus::NotMatched;
+        }
+        if bytes.len() >= 16
+            && ((bytes[0] == 0xAA && bytes[1] == 0x55) || (bytes[0] == 0x55 && bytes[1] == 0xAA))
+        {
+            HeaderRepairStatus::MatchedNoChange
+        } else {
+            HeaderRepairStatus::NotMatched
+        }
+    }
+
+    fn validate_watara_supervision_header(
+        bytes: &[u8],
+        extension: Option<&str>,
+    ) -> HeaderRepairStatus {
+        if !matches!(extension, Some("sv")) {
+            return HeaderRepairStatus::NotMatched;
+        }
+        if bytes.len() >= 64 {
+            HeaderRepairStatus::MatchedNoChange
+        } else {
+            HeaderRepairStatus::NotMatched
+        }
+    }
+
+    fn validate_intellivision_header(bytes: &[u8], extension: Option<&str>) -> HeaderRepairStatus {
+        if !matches!(extension, Some("int")) {
+            return HeaderRepairStatus::NotMatched;
+        }
+        if bytes.len() >= 0x50 {
+            HeaderRepairStatus::MatchedNoChange
+        } else {
+            HeaderRepairStatus::NotMatched
+        }
     }
 
     fn require_existing_path(
