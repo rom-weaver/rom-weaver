@@ -51,6 +51,9 @@ await runner.runJson(
         console.log(event.percent, event.label);
       }
     },
+    onTraceEvent(event) {
+      console.log('trace', event);
+    },
   },
 );
 
@@ -167,13 +170,17 @@ Same as `run`, but automatically prepends `--json` and parses stdout JSONL into:
 
 - `events: any[]`
 - `nonJsonLines: string[]`
+- `traceEvents: any[]` (parsed from stderr JSON trace lines)
+- `traceNonJsonLines: string[]` (stderr lines that were not valid JSON)
 
 Options:
 
 - `onEvent?: (event) => void`
 - `onNonJsonLine?: (line) => void`
+- `onTraceEvent?: (event) => void`
+- `onTraceNonJsonLine?: (line) => void`
 
-`onEvent` and `onNonJsonLine` are called in output order after execution returns.
+`onEvent`/`onNonJsonLine` (stdout) and `onTraceEvent`/`onTraceNonJsonLine` (stderr) are called in output order after execution returns.
 
 ### `parseJsonLines(text)`
 

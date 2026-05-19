@@ -15,6 +15,15 @@ if [[ -z "$WASI_SDK_PATH" ]]; then
     WASI_SDK_PATH="/opt/wasi-sdk"
   elif [[ -d "/opt/homebrew/opt/wasi-sdk" ]]; then
     WASI_SDK_PATH="/opt/homebrew/opt/wasi-sdk"
+  elif [[ -d "$HOME/.local/toolchains" ]]; then
+    LOCAL_WASI_SDK_PATH="$(
+      find "$HOME/.local/toolchains" -maxdepth 1 -type d -name 'wasi-sdk-*' 2>/dev/null \
+        | sort -V \
+        | tail -n 1
+    )"
+    if [[ -n "$LOCAL_WASI_SDK_PATH" ]]; then
+      WASI_SDK_PATH="$LOCAL_WASI_SDK_PATH"
+    fi
   fi
 fi
 

@@ -1,6 +1,7 @@
 import {
   createRomWeaverWasiRunner,
   parseJsonLines,
+  parseTraceJsonLines,
 } from './rom-weaver-wasi-api.mjs';
 
 export async function createRomWeaverZenFsNode(options = {}) {
@@ -69,10 +70,16 @@ export async function createRomWeaverZenFsNode(options = {}) {
         onEvent: runOptions.onEvent,
         onNonJsonLine: runOptions.onNonJsonLine,
       });
+      const parsedTrace = parseTraceJsonLines(result.stderr, {
+        onTraceEvent: runOptions.onTraceEvent,
+        onTraceNonJsonLine: runOptions.onTraceNonJsonLine,
+      });
       return {
         ...result,
         events: parsed.events,
         nonJsonLines: parsed.nonJsonLines,
+        traceEvents: parsedTrace.traceEvents,
+        traceNonJsonLines: parsedTrace.traceNonJsonLines,
       };
     },
   };
@@ -194,11 +201,17 @@ export async function createRomWeaverZenFsBrowser(options = {}) {
         onEvent: runOptions.onEvent,
         onNonJsonLine: runOptions.onNonJsonLine,
       });
+      const parsedTrace = parseTraceJsonLines(result.stderr, {
+        onTraceEvent: runOptions.onTraceEvent,
+        onTraceNonJsonLine: runOptions.onTraceNonJsonLine,
+      });
 
       return {
         ...result,
         events: parsed.events,
         nonJsonLines: parsed.nonJsonLines,
+        traceEvents: parsedTrace.traceEvents,
+        traceNonJsonLines: parsedTrace.traceNonJsonLines,
       };
     },
   };

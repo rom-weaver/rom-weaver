@@ -115,11 +115,17 @@ export class RomWeaverWasiRunner {
       onEvent: options.onEvent,
       onNonJsonLine: options.onNonJsonLine,
     });
+    const parsedTrace = parseTraceJsonLines(result.stderr, {
+      onTraceEvent: options.onTraceEvent,
+      onTraceNonJsonLine: options.onTraceNonJsonLine,
+    });
 
     return {
       ...result,
       events: parsed.events,
       nonJsonLines: parsed.nonJsonLines,
+      traceEvents: parsedTrace.traceEvents,
+      traceNonJsonLines: parsedTrace.traceNonJsonLines,
     };
   }
 
@@ -205,6 +211,32 @@ export function parseJsonLines(text, options = {}) {
   }
 
   return { events, nonJsonLines };
+}
+
+export function parseTraceJsonLines(text, options = {}) {
+  const traceEvents = [];
+  const traceNonJsonLines = [];
+  const onTraceEvent = typeof options.onTraceEvent === 'function' ? options.onTraceEvent : null;
+  const onTraceNonJsonLine = typeof options.onTraceNonJsonLine === 'function'
+    ? options.onTraceNonJsonLine
+    : null;
+
+  for (const line of text.split(/\r?\n/)) {
+    if (line.length === 0) {
+      continue;
+    }
+
+    try {
+      const event = JSON.parse(line);
+      traceEvents.push(event);
+      onTraceEvent?.(event);
+    } catch {
+      traceNonJsonLines.push(line);
+      onTraceNonJsonLine?.(line);
+    }
+  }
+
+  return { traceEvents, traceNonJsonLines };
 }
 
 function loadWasmBytes(inputPath) {
