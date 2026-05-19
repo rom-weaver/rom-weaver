@@ -47,7 +47,30 @@ test('node worker client rejects runJson before init', async () => {
   try {
     await assert.rejects(
       client.runJson(['checksum', '/tmp/does-not-exist.bin', '--algo', 'crc32', '--no-extract']),
-      /worker is not initialized/i,
+      (error) => {
+        assert.equal(error.kind, 'worker');
+        assert.equal(error.context?.command, 'checksum');
+        assert.equal(error.context?.stage, 'worker.runJson');
+        assert.match(error.message, /worker is not initialized/i);
+        return true;
+      },
+    );
+  } finally {
+    await client.terminate();
+  }
+});
+
+test('node worker client rejects unsupported worker modes with typed kind', async () => {
+  const client = createNodeWorkerClient();
+  try {
+    await assert.rejects(
+      client.init('invalid-mode'),
+      (error) => {
+        assert.equal(error.kind, 'worker');
+        assert.equal(error.context?.stage, 'worker.init');
+        assert.match(error.message, /unsupported node worker mode/i);
+        return true;
+      },
     );
   } finally {
     await client.terminate();

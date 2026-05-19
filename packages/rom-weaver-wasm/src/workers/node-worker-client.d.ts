@@ -1,10 +1,12 @@
 import type { Worker, WorkerOptions } from 'node:worker_threads';
 import type {
   RomWeaverNodeWorkerMode,
+  RomWeaverProgressEvent,
   RomWeaverRunJsonOptions,
   RomWeaverRunJsonResult,
   RomWeaverRunOptions,
   RomWeaverRunResult,
+  RomWeaverWorkerError,
 } from '../rom-weaver-types.d.ts';
 
 export interface NodeWorkerClientCreateOptions {
@@ -13,7 +15,7 @@ export interface NodeWorkerClientCreateOptions {
   workerOptions?: WorkerOptions;
 }
 
-export interface NodeWorkerRunJsonOptions<TEvent = unknown, TTraceEvent = unknown>
+export interface NodeWorkerRunJsonOptions<TEvent = RomWeaverProgressEvent, TTraceEvent = unknown>
   extends Omit<RomWeaverRunJsonOptions<TEvent, TTraceEvent>, 'onEvent' | 'onNonJsonLine' | 'onTraceEvent' | 'onTraceNonJsonLine'> {
   onEvent?: (event: TEvent) => void;
   onNonJsonLine?: (line: string) => void;
@@ -22,13 +24,15 @@ export interface NodeWorkerRunJsonOptions<TEvent = unknown, TTraceEvent = unknow
   [key: string]: unknown;
 }
 
+export type NodeWorkerClientError = RomWeaverWorkerError;
+
 export function createNodeWorkerClient(options?: NodeWorkerClientCreateOptions): NodeRomWeaverWorkerClient;
 
 export class NodeRomWeaverWorkerClient {
   constructor(worker: Worker);
   init(mode?: RomWeaverNodeWorkerMode, options?: Record<string, unknown>): Promise<{ mode: string }>;
   run(args?: unknown[], options?: RomWeaverRunOptions & Record<string, unknown>): Promise<RomWeaverRunResult>;
-  runJson<TEvent = unknown, TTraceEvent = unknown>(
+  runJson<TEvent = RomWeaverProgressEvent, TTraceEvent = unknown>(
     args?: unknown[],
     options?: NodeWorkerRunJsonOptions<TEvent, TTraceEvent>,
   ): Promise<RomWeaverRunJsonResult<TEvent, TTraceEvent>>;

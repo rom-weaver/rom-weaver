@@ -1,3 +1,15 @@
+const WORKER_ERROR_KINDS = new Set([
+  'validation',
+  'unknown_format',
+  'unsupported',
+  'cancelled',
+  'io',
+  'thread_pool_build',
+  'worker',
+  'panic',
+  'unknown',
+]);
+
 export class RomWeaverWorkerClientCore {
   constructor(worker, transport) {
     this.worker = worker;
@@ -60,7 +72,7 @@ export class RomWeaverWorkerClientCore {
         this._transport.postMessage(this.worker, { ...payload, requestId });
       } catch (error) {
         this._pending.delete(requestId);
-        reject(error);
+        reject(toWorkerError(error, 'worker'));
       }
     });
   }
@@ -124,8 +136,9 @@ export class RomWeaverWorkerClientCore {
   }
 
   _rejectAllPending(error) {
+    const normalizedError = toWorkerError(error, 'worker');
     for (const pending of this._pending.values()) {
-      pending.reject(error);
+      pending.reject(normalizedError);
     }
     this._pending.clear();
   }
@@ -228,5 +241,147 @@ function deserializeError(error) {
     out.stack = error.stack;
   }
 
+  out.kind = resolveErrorKind(error, out.name, out.message, 'unknown');
+  const context = readErrorContext(error);
+  if (context) {
+    out.context = context;
+  }
+
   return out;
+}
+
+function toWorkerError(error, fallbackKind) {
+  if (error instanceof Error) {
+    error.kind = resolveErrorKind(error, error.name, error.message, fallbackKind);
+    const context = readErrorContext(error);
+    if (context) {
+      error.context = context;
+    }
+    return error;
+  }
+
+  const out = new Error(String(error));
+  out.kind = resolveErrorKind(error, out.name, out.message, fallbackKind);
+  const context = readErrorContext(error);
+  if (context) {
+    out.context = context;
+  }
+  return out;
+}
+
+function resolveErrorKind(error, name, message, fallbackKind) {
+  const explicit = normalizeErrorKind(error && error.kind);
+  if (explicit) {
+    return explicit;
+  }
+
+  const coreKind = inferCoreErrorKind(message);
+  if (coreKind) {
+    return coreKind;
+  }
+
+  if (isPanicLikeError(name, message)) {
+    return 'panic';
+  }
+
+  if (isWorkerErrorMessage(message)) {
+    return 'worker';
+  }
+
+  const fallback = normalizeErrorKind(fallbackKind);
+  if (fallback) {
+    return fallback;
+  }
+
+  return 'unknown';
+}
+
+function inferCoreErrorKind(message) {
+  if (/^validation failed:/i.test(message)) {
+    return 'validation';
+  }
+  if (/^unknown format for path\b/i.test(message)) {
+    return 'unknown_format';
+  }
+  if (/^unsupported operation:/i.test(message)) {
+    return 'unsupported';
+  }
+  if (/^operation cancelled\b/i.test(message)) {
+    return 'cancelled';
+  }
+  if (/^(?:i\/o|io) error:/i.test(message)) {
+    return 'io';
+  }
+  if (/^thread pool build failed:/i.test(message)) {
+    return 'thread_pool_build';
+  }
+
+  return null;
+}
+
+function isPanicLikeError(name, message) {
+  if (/\bpanic\b/i.test(name)) {
+    return true;
+  }
+
+  return /\bpanicked at\b/i.test(message);
+}
+
+function isWorkerErrorMessage(message) {
+  return /\bworker\b/i.test(message);
+}
+
+function normalizeErrorKind(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if (!WORKER_ERROR_KINDS.has(normalized)) {
+    return null;
+  }
+
+  return normalized;
+}
+
+function readErrorContext(error) {
+  if (!error || typeof error !== 'object') {
+    return undefined;
+  }
+
+  const fromContext = readContextFields(error.context);
+  const fromError = readContextFields(error);
+  const context = {
+    command: fromContext.command ?? fromError.command,
+    family: fromContext.family ?? fromError.family,
+    format: fromContext.format !== undefined ? fromContext.format : fromError.format,
+    stage: fromContext.stage ?? fromError.stage,
+  };
+
+  if (
+    context.command === undefined
+    && context.family === undefined
+    && context.format === undefined
+    && context.stage === undefined
+  ) {
+    return undefined;
+  }
+
+  return context;
+}
+
+function readContextFields(input) {
+  if (!input || typeof input !== 'object') {
+    return {};
+  }
+
+  return {
+    command: typeof input.command === 'string' ? input.command : undefined,
+    family: typeof input.family === 'string' ? input.family : undefined,
+    format:
+      typeof input.format === 'string' || input.format === null
+        ? input.format
+        : undefined,
+    stage: typeof input.stage === 'string' ? input.stage : undefined,
+  };
 }

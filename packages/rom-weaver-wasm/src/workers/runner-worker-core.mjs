@@ -1,3 +1,15 @@
+const WORKER_ERROR_KINDS = new Set([
+  'validation',
+  'unknown_format',
+  'unsupported',
+  'cancelled',
+  'io',
+  'thread_pool_build',
+  'worker',
+  'panic',
+  'unknown',
+]);
+
 export function createRunnerWorkerMessageQueue({ postMessage, initRunner }) {
   let runner = null;
   let queue = Promise.resolve();
@@ -10,7 +22,7 @@ export function createRunnerWorkerMessageQueue({ postMessage, initRunner }) {
           postMessage({
             type: 'error',
             requestId: readRequestId(message),
-            error: serializeError(error),
+            error: serializeError(error, message),
           });
         });
     },
@@ -110,17 +122,166 @@ function normalizeArgs(args) {
   return args.map((value) => String(value));
 }
 
-function serializeError(error) {
+function serializeError(error, requestMessage) {
+  const name = error && typeof error.name === 'string' ? error.name : 'Error';
+  const message = error && typeof error.message === 'string' ? error.message : String(error);
+  const stack = error && typeof error.stack === 'string' ? error.stack : undefined;
+  const kind = resolveErrorKind(error, name, message);
+  const context = resolveErrorContext(error, requestMessage);
+
+  return {
+    name,
+    message,
+    stack,
+    kind,
+    ...(context ? { context } : {}),
+  };
+}
+
+function resolveErrorKind(error, name, message) {
+  const explicit = normalizeErrorKind(error && error.kind);
+  if (explicit) {
+    return explicit;
+  }
+
+  const coreKind = inferCoreErrorKind(message);
+  if (coreKind) {
+    return coreKind;
+  }
+
+  if (isPanicLikeError(name, message)) {
+    return 'panic';
+  }
+
+  if (isWorkerErrorMessage(message)) {
+    return 'worker';
+  }
+
+  return 'unknown';
+}
+
+function inferCoreErrorKind(message) {
+  if (/^validation failed:/i.test(message)) {
+    return 'validation';
+  }
+  if (/^unknown format for path\b/i.test(message)) {
+    return 'unknown_format';
+  }
+  if (/^unsupported operation:/i.test(message)) {
+    return 'unsupported';
+  }
+  if (/^operation cancelled\b/i.test(message)) {
+    return 'cancelled';
+  }
+  if (/^(?:i\/o|io) error:/i.test(message)) {
+    return 'io';
+  }
+  if (/^thread pool build failed:/i.test(message)) {
+    return 'thread_pool_build';
+  }
+
+  return null;
+}
+
+function isWorkerErrorMessage(message) {
+  return /\bworker\b/i.test(message);
+}
+
+function isPanicLikeError(name, message) {
+  if (/\bpanic\b/i.test(name)) {
+    return true;
+  }
+
+  return /\bpanicked at\b/i.test(message);
+}
+
+function normalizeErrorKind(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if (!WORKER_ERROR_KINDS.has(normalized)) {
+    return null;
+  }
+
+  return normalized;
+}
+
+function resolveErrorContext(error, requestMessage) {
+  const explicitContext = readErrorContext(error);
+  const requestContext = readRequestContext(requestMessage);
+  const context = {
+    command: explicitContext.command ?? requestContext.command,
+    family: explicitContext.family ?? requestContext.family,
+    format:
+      explicitContext.format !== undefined
+        ? explicitContext.format
+        : requestContext.format,
+    stage: explicitContext.stage ?? requestContext.stage,
+  };
+
+  if (
+    context.command === undefined
+    && context.family === undefined
+    && context.format === undefined
+    && context.stage === undefined
+  ) {
+    return undefined;
+  }
+
+  return context;
+}
+
+function readErrorContext(error) {
   if (!error || typeof error !== 'object') {
-    return {
-      name: 'Error',
-      message: String(error),
-    };
+    return {};
+  }
+
+  const fromContext = readContextFields(error.context);
+  const fromError = readContextFields(error);
+  return {
+    command: fromContext.command ?? fromError.command,
+    family: fromContext.family ?? fromError.family,
+    format: fromContext.format !== undefined ? fromContext.format : fromError.format,
+    stage: fromContext.stage ?? fromError.stage,
+  };
+}
+
+function readContextFields(input) {
+  if (!input || typeof input !== 'object') {
+    return {};
   }
 
   return {
-    name: typeof error.name === 'string' ? error.name : 'Error',
-    message: typeof error.message === 'string' ? error.message : String(error),
-    stack: typeof error.stack === 'string' ? error.stack : undefined,
+    command: typeof input.command === 'string' ? input.command : undefined,
+    family: typeof input.family === 'string' ? input.family : undefined,
+    format:
+      typeof input.format === 'string' || input.format === null
+        ? input.format
+        : undefined,
+    stage: typeof input.stage === 'string' ? input.stage : undefined,
   };
+}
+
+function readRequestContext(message) {
+  if (!message || typeof message !== 'object') {
+    return {};
+  }
+
+  const context = {};
+  if (typeof message.type === 'string') {
+    context.stage = `worker.${message.type}`;
+  }
+
+  if (
+    (message.type === 'run' || message.type === 'runJson')
+    && Array.isArray(message.args)
+    && typeof message.args[0] === 'string'
+    && message.args[0].length > 0
+  ) {
+    context.command = message.args[0];
+  }
+
+  return context;
 }

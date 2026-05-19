@@ -20,12 +20,53 @@ export interface RomWeaverRunOptions {
   argv0?: string;
 }
 
-export interface ParseJsonLinesOptions<TEvent = unknown> {
+export interface RomWeaverInspectContainerDetails {
+  entry_count: number | null;
+  entries?: string[];
+  recommended_compress_format?: string;
+  reason?: string;
+  [key: string]: unknown;
+}
+
+export interface RomWeaverInspectPatchDetails {
+  format: string | null;
+  source_size: number | null;
+  target_size: number | null;
+  source_crc32: number | null;
+  target_crc32: number | null;
+  patch_crc32: number | null;
+  record_count: number | null;
+  [key: string]: unknown;
+}
+
+export interface RomWeaverProgressDetails {
+  container?: RomWeaverInspectContainerDetails;
+  patch?: RomWeaverInspectPatchDetails;
+  [key: string]: unknown;
+}
+
+export interface RomWeaverProgressEvent {
+  command: string;
+  family: string;
+  format: string | null;
+  stage: string;
+  label: string;
+  details: RomWeaverProgressDetails | null;
+  percent: number | null;
+  requested_threads: number | null;
+  effective_threads: number | null;
+  thread_mode: string | null;
+  used_parallelism: boolean | null;
+  thread_fallback: boolean | null;
+  status: string;
+}
+
+export interface ParseJsonLinesOptions<TEvent = RomWeaverProgressEvent> {
   onEvent?: (event: TEvent) => void;
   onNonJsonLine?: (line: string) => void;
 }
 
-export interface ParseJsonLinesResult<TEvent = unknown> {
+export interface ParseJsonLinesResult<TEvent = RomWeaverProgressEvent> {
   events: TEvent[];
   nonJsonLines: string[];
 }
@@ -40,7 +81,7 @@ export interface ParseTraceJsonLinesResult<TTraceEvent = unknown> {
   traceNonJsonLines: string[];
 }
 
-export interface RomWeaverRunJsonOptions<TEvent = unknown, TTraceEvent = unknown>
+export interface RomWeaverRunJsonOptions<TEvent = RomWeaverProgressEvent, TTraceEvent = unknown>
 extends RomWeaverRunOptions {
   onEvent?: (event: TEvent) => void;
   onNonJsonLine?: (line: string) => void;
@@ -48,7 +89,7 @@ extends RomWeaverRunOptions {
   onTraceNonJsonLine?: (line: string) => void;
 }
 
-export interface RomWeaverRunJsonResult<TEvent = unknown, TTraceEvent = unknown>
+export interface RomWeaverRunJsonResult<TEvent = RomWeaverProgressEvent, TTraceEvent = unknown>
 extends RomWeaverRunResult {
   events: TEvent[];
   nonJsonLines: string[];
@@ -111,8 +152,33 @@ export interface RomWeaverZenFsBrowserRunOptions extends RomWeaverRunOptions {
 
 export type RomWeaverNodeWorkerMode = 'wasi' | 'nodefs' | 'zenfs-node';
 
+export type RomWeaverWorkerErrorKind =
+  | 'validation'
+  | 'unknown_format'
+  | 'unsupported'
+  | 'cancelled'
+  | 'io'
+  | 'thread_pool_build'
+  | 'worker'
+  | 'panic'
+  | 'unknown';
+
+export interface RomWeaverWorkerErrorContext {
+  command?: string;
+  family?: string;
+  format?: string | null;
+  stage?: string;
+}
+
 export interface RomWeaverWorkerSerializedError {
   name: string;
   message: string;
   stack?: string;
+  kind?: RomWeaverWorkerErrorKind;
+  context?: RomWeaverWorkerErrorContext;
+}
+
+export interface RomWeaverWorkerError extends Error {
+  kind: RomWeaverWorkerErrorKind;
+  context?: RomWeaverWorkerErrorContext;
 }
