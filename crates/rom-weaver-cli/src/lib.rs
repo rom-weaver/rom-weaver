@@ -333,6 +333,7 @@ struct PatchCreateCommand {
     threads: ThreadBudget,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub fn main_entry() -> ExitCode {
     let cli = Cli::parse();
     init_trace_logging(cli.trace, cli.json);
@@ -351,6 +352,827 @@ pub fn main_entry() -> ExitCode {
         !cli.json && io::stdin().is_terminal() && io::stderr().is_terminal();
     let app = CliApp::new(reporter, cli.json, interactive_selection_enabled);
     app.run(cli.command)
+}
+
+#[cfg(target_arch = "wasm32")]
+pub fn main_entry() -> ExitCode {
+    let cli = match parse_wasm_cli() {
+        Ok(cli) => cli,
+        Err(error) => {
+            eprintln!("error: {error}");
+            return ExitCode::from(2);
+        }
+    };
+    init_trace_logging(cli.trace, cli.json);
+    trace!(
+        json = cli.json,
+        trace_requested = cli.trace,
+        command = ?cli.command,
+        "parsed command-line arguments"
+    );
+    let reporter: Arc<dyn ProgressSink> = if cli.json {
+        Arc::new(StdoutReporter::json())
+    } else {
+        Arc::new(StdoutReporter::text())
+    };
+    let interactive_selection_enabled =
+        !cli.json && io::stdin().is_terminal() && io::stderr().is_terminal();
+    let app = CliApp::new(reporter, cli.json, interactive_selection_enabled);
+    app.run(cli.command)
+}
+
+#[cfg(target_arch = "wasm32")]
+fn parse_wasm_cli() -> std::result::Result<Cli, String> {
+    let mut args = std::env::args().skip(1).collect::<Vec<_>>();
+    let mut json = false;
+    let mut trace = false;
+
+    loop {
+        let Some(arg) = args.first() else {
+            return Err("missing command (inspect|extract|checksum|compress|trim|patch-apply|patch-create)".into());
+        };
+        match arg.as_str() {
+            "--json" => {
+                json = true;
+                args.remove(0);
+            }
+            "--trace" => {
+                trace = true;
+                args.remove(0);
+            }
+            _ => break,
+        }
+    }
+
+    if args.is_empty() {
+        return Err(
+            "missing command (inspect|extract|checksum|compress|trim|patch-apply|patch-create)"
+                .into(),
+        );
+    }
+    let command_name = args.remove(0);
+    let command = match command_name.as_str() {
+        "inspect" => Commands::Inspect(parse_wasm_inspect(args)?),
+        "extract" => Commands::Extract(parse_wasm_extract(args)?),
+        "checksum" => Commands::Checksum(parse_wasm_checksum(args)?),
+        "compress" => Commands::Compress(parse_wasm_compress(args)?),
+        "trim" => Commands::Trim(parse_wasm_trim(args)?),
+        "patch-apply" => Commands::PatchApply(parse_wasm_patch_apply(args)?),
+        "patch-create" => Commands::PatchCreate(parse_wasm_patch_create(args)?),
+        other => return Err(format!("unknown command `{other}`")),
+    };
+    Ok(Cli {
+        json,
+        trace,
+        command,
+    })
+}
+
+#[cfg(target_arch = "wasm32")]
+fn parse_wasm_inspect(args: Vec<String>) -> std::result::Result<InspectCommand, String> {
+    let mut list = false;
+    let mut source: Option<PathBuf> = None;
+    let mut index = 0usize;
+    while index < args.len() {
+        let arg = &args[index];
+        if arg == "--list" {
+            list = true;
+            index += 1;
+            continue;
+        }
+        if arg.starts_with('-') {
+            return Err(format!("unknown inspect option `{arg}`"));
+        }
+        if source.is_some() {
+            return Err(format!("unexpected inspect argument `{arg}`"));
+        }
+        source = Some(PathBuf::from(arg));
+        index += 1;
+    }
+    let source = source.ok_or_else(|| "inspect requires <source>".to_string())?;
+    Ok(InspectCommand { source, list })
+}
+
+#[cfg(target_arch = "wasm32")]
+fn parse_wasm_extract(args: Vec<String>) -> std::result::Result<ExtractCommand, String> {
+    let mut source: Option<PathBuf> = None;
+    let mut select = Vec::new();
+    let mut out_dir: Option<PathBuf> = None;
+    let mut split_bin = false;
+    let mut threads = ThreadBudget::Auto;
+    let mut index = 0usize;
+    while index < args.len() {
+        let arg = &args[index];
+        if let Some(value) = arg.strip_prefix("--select=") {
+            select.push(value.to_string());
+            index += 1;
+            continue;
+        }
+        if arg == "--select" {
+            select.push(parse_wasm_required_value(&args, &mut index, "--select")?);
+            continue;
+        }
+        if let Some(value) = arg.strip_prefix("--out-dir=") {
+            out_dir = Some(PathBuf::from(value));
+            index += 1;
+            continue;
+        }
+        if arg == "--out-dir" {
+            out_dir = Some(PathBuf::from(parse_wasm_required_value(
+                &args,
+                &mut index,
+                "--out-dir",
+            )?));
+            continue;
+        }
+        if arg == "--split-bin" {
+            split_bin = true;
+            index += 1;
+            continue;
+        }
+        if let Some(value) = arg.strip_prefix("--threads=") {
+            threads = parse_wasm_thread_budget(value, "--threads")?;
+            index += 1;
+            continue;
+        }
+        if arg == "--threads" {
+            threads = parse_wasm_thread_budget(
+                &parse_wasm_required_value(&args, &mut index, "--threads")?,
+                "--threads",
+            )?;
+            continue;
+        }
+        if arg.starts_with('-') {
+            return Err(format!("unknown extract option `{arg}`"));
+        }
+        if source.is_some() {
+            return Err(format!("unexpected extract argument `{arg}`"));
+        }
+        source = Some(PathBuf::from(arg));
+        index += 1;
+    }
+
+    let source = source.ok_or_else(|| "extract requires <source>".to_string())?;
+    let out_dir = out_dir.ok_or_else(|| "extract requires --out-dir <path>".to_string())?;
+    Ok(ExtractCommand {
+        source,
+        select,
+        out_dir,
+        split_bin,
+        threads,
+    })
+}
+
+#[cfg(target_arch = "wasm32")]
+fn parse_wasm_checksum(args: Vec<String>) -> std::result::Result<ChecksumCommand, String> {
+    let mut source: Option<PathBuf> = None;
+    let mut algo = Vec::new();
+    let mut select = Vec::new();
+    let mut no_extract = false;
+    let mut no_ignore = false;
+    let mut strip_header = false;
+    let mut no_trim_fix = false;
+    let mut start: Option<u64> = None;
+    let mut length: Option<u64> = None;
+    let mut threads = ThreadBudget::Auto;
+    let mut index = 0usize;
+    while index < args.len() {
+        let arg = &args[index];
+        if let Some(value) = arg.strip_prefix("--algo=") {
+            algo.push(value.to_string());
+            index += 1;
+            continue;
+        }
+        if arg == "--algo" {
+            algo.push(parse_wasm_required_value(&args, &mut index, "--algo")?);
+            continue;
+        }
+        if let Some(value) = arg.strip_prefix("--select=") {
+            select.push(value.to_string());
+            index += 1;
+            continue;
+        }
+        if arg == "--select" {
+            select.push(parse_wasm_required_value(&args, &mut index, "--select")?);
+            continue;
+        }
+        if arg == "--no-extract" {
+            no_extract = true;
+            index += 1;
+            continue;
+        }
+        if arg == "--no-ignore" {
+            no_ignore = true;
+            index += 1;
+            continue;
+        }
+        if arg == "--strip-header" {
+            strip_header = true;
+            index += 1;
+            continue;
+        }
+        if arg == "--no-trim-fix" {
+            no_trim_fix = true;
+            index += 1;
+            continue;
+        }
+        if let Some(value) = arg.strip_prefix("--start=") {
+            start = Some(parse_wasm_u64(value, "--start")?);
+            index += 1;
+            continue;
+        }
+        if arg == "--start" {
+            start = Some(parse_wasm_u64(
+                &parse_wasm_required_value(&args, &mut index, "--start")?,
+                "--start",
+            )?);
+            continue;
+        }
+        if let Some(value) = arg.strip_prefix("--length=") {
+            length = Some(parse_wasm_u64(value, "--length")?);
+            index += 1;
+            continue;
+        }
+        if arg == "--length" {
+            length = Some(parse_wasm_u64(
+                &parse_wasm_required_value(&args, &mut index, "--length")?,
+                "--length",
+            )?);
+            continue;
+        }
+        if let Some(value) = arg.strip_prefix("--threads=") {
+            threads = parse_wasm_thread_budget(value, "--threads")?;
+            index += 1;
+            continue;
+        }
+        if arg == "--threads" {
+            threads = parse_wasm_thread_budget(
+                &parse_wasm_required_value(&args, &mut index, "--threads")?,
+                "--threads",
+            )?;
+            continue;
+        }
+        if arg.starts_with('-') {
+            return Err(format!("unknown checksum option `{arg}`"));
+        }
+        if source.is_some() {
+            return Err(format!("unexpected checksum argument `{arg}`"));
+        }
+        source = Some(PathBuf::from(arg));
+        index += 1;
+    }
+
+    if algo.is_empty() {
+        return Err("checksum requires at least one --algo <name>".into());
+    }
+    let source = source.ok_or_else(|| "checksum requires <source>".to_string())?;
+    Ok(ChecksumCommand {
+        source,
+        algo,
+        select,
+        no_extract,
+        no_ignore,
+        strip_header,
+        no_trim_fix,
+        start,
+        length,
+        threads,
+    })
+}
+
+#[cfg(target_arch = "wasm32")]
+fn parse_wasm_compress(args: Vec<String>) -> std::result::Result<CompressCommand, String> {
+    let mut input = Vec::new();
+    let mut format: Option<String> = None;
+    let mut output: Option<PathBuf> = None;
+    let mut codec: Option<String> = None;
+    let mut level = CompressionLevelProfile::Max;
+    let mut threads = ThreadBudget::Auto;
+    let mut index = 0usize;
+    while index < args.len() {
+        let arg = &args[index];
+        if let Some(value) = arg.strip_prefix("--format=") {
+            format = Some(value.to_string());
+            index += 1;
+            continue;
+        }
+        if arg == "--format" {
+            format = Some(parse_wasm_required_value(&args, &mut index, "--format")?);
+            continue;
+        }
+        if let Some(value) = arg.strip_prefix("--output=") {
+            output = Some(PathBuf::from(value));
+            index += 1;
+            continue;
+        }
+        if arg == "--output" {
+            output = Some(PathBuf::from(parse_wasm_required_value(
+                &args,
+                &mut index,
+                "--output",
+            )?));
+            continue;
+        }
+        if let Some(value) = arg.strip_prefix("--codec=") {
+            codec = Some(value.to_string());
+            index += 1;
+            continue;
+        }
+        if arg == "--codec" {
+            codec = Some(parse_wasm_required_value(&args, &mut index, "--codec")?);
+            continue;
+        }
+        if let Some(value) = arg.strip_prefix("--level=") {
+            level = parse_wasm_compression_level(value)?;
+            index += 1;
+            continue;
+        }
+        if arg == "--level" {
+            level = parse_wasm_compression_level(&parse_wasm_required_value(
+                &args,
+                &mut index,
+                "--level",
+            )?)?;
+            continue;
+        }
+        if let Some(value) = arg.strip_prefix("--threads=") {
+            threads = parse_wasm_thread_budget(value, "--threads")?;
+            index += 1;
+            continue;
+        }
+        if arg == "--threads" {
+            threads = parse_wasm_thread_budget(
+                &parse_wasm_required_value(&args, &mut index, "--threads")?,
+                "--threads",
+            )?;
+            continue;
+        }
+        if arg.starts_with('-') {
+            return Err(format!("unknown compress option `{arg}`"));
+        }
+        input.push(PathBuf::from(arg));
+        index += 1;
+    }
+
+    if input.is_empty() {
+        return Err("compress requires at least one <input>".into());
+    }
+    let output = output.ok_or_else(|| "compress requires --output <path>".to_string())?;
+    Ok(CompressCommand {
+        input,
+        format,
+        output,
+        codec,
+        level,
+        threads,
+    })
+}
+
+#[cfg(target_arch = "wasm32")]
+fn parse_wasm_trim(args: Vec<String>) -> std::result::Result<TrimCommand, String> {
+    let mut source = Vec::new();
+    let mut output: Option<PathBuf> = None;
+    let mut extension: Option<String> = None;
+    let mut in_place = false;
+    let mut dry_run = false;
+    let mut revert = false;
+    let mut recursive = true;
+    let mut threads = ThreadBudget::Auto;
+    let mut index = 0usize;
+    while index < args.len() {
+        let arg = &args[index];
+        if let Some(value) = arg.strip_prefix("--output=") {
+            output = Some(PathBuf::from(value));
+            index += 1;
+            continue;
+        }
+        if arg == "--output" {
+            output = Some(PathBuf::from(parse_wasm_required_value(
+                &args,
+                &mut index,
+                "--output",
+            )?));
+            continue;
+        }
+        if let Some(value) = arg.strip_prefix("--extension=") {
+            extension = Some(value.to_string());
+            index += 1;
+            continue;
+        }
+        if arg == "--extension" || arg == "-e" {
+            extension = Some(parse_wasm_required_value(
+                &args,
+                &mut index,
+                "--extension",
+            )?);
+            continue;
+        }
+        if arg == "--in-place" || arg == "--inplace" || arg == "-i" {
+            in_place = true;
+            index += 1;
+            continue;
+        }
+        if arg == "--simulate" || arg == "--dry-run" || arg == "-s" {
+            dry_run = true;
+            index += 1;
+            continue;
+        }
+        if arg == "--revert" || arg == "--untrim" || arg == "--restore" {
+            revert = true;
+            index += 1;
+            continue;
+        }
+        if arg == "--no-recursive" {
+            recursive = false;
+            index += 1;
+            continue;
+        }
+        if let Some(value) = arg.strip_prefix("--threads=") {
+            threads = parse_wasm_thread_budget(value, "--threads")?;
+            index += 1;
+            continue;
+        }
+        if arg == "--threads" {
+            threads = parse_wasm_thread_budget(
+                &parse_wasm_required_value(&args, &mut index, "--threads")?,
+                "--threads",
+            )?;
+            continue;
+        }
+        if arg.starts_with('-') {
+            return Err(format!("unknown trim option `{arg}`"));
+        }
+        source.push(PathBuf::from(arg));
+        index += 1;
+    }
+
+    if source.is_empty() {
+        return Err("trim requires at least one <source>".into());
+    }
+    if output.is_some() && in_place {
+        return Err("trim --output conflicts with --in-place".into());
+    }
+
+    Ok(TrimCommand {
+        source,
+        output,
+        extension,
+        in_place,
+        dry_run,
+        revert,
+        recursive,
+        threads,
+    })
+}
+
+#[cfg(target_arch = "wasm32")]
+fn parse_wasm_patch_apply(args: Vec<String>) -> std::result::Result<PatchApplyCommand, String> {
+    let mut input: Option<PathBuf> = None;
+    let mut select = Vec::new();
+    let mut no_extract = false;
+    let mut no_ignore = false;
+    let mut patches = Vec::new();
+    let mut output: Option<PathBuf> = None;
+    let mut no_compress = false;
+    let mut compress_format: Option<String> = None;
+    let mut compress_codec: Option<String> = None;
+    let mut compress_level = CompressionLevelProfile::Max;
+    let mut checksum_cache = Vec::new();
+    let mut validate_with_checksums = Vec::new();
+    let mut strip_header = false;
+    let mut add_header = false;
+    let mut repair_checksum = false;
+    let mut ignore_checksum_validation = false;
+    let mut threads = ThreadBudget::Auto;
+
+    let mut index = 0usize;
+    while index < args.len() {
+        let arg = &args[index];
+        if let Some(value) = arg.strip_prefix("--input=") {
+            input = Some(PathBuf::from(value));
+            index += 1;
+            continue;
+        }
+        if arg == "--input" {
+            input = Some(PathBuf::from(parse_wasm_required_value(
+                &args,
+                &mut index,
+                "--input",
+            )?));
+            continue;
+        }
+        if let Some(value) = arg.strip_prefix("--select=") {
+            select.push(value.to_string());
+            index += 1;
+            continue;
+        }
+        if arg == "--select" {
+            select.push(parse_wasm_required_value(&args, &mut index, "--select")?);
+            continue;
+        }
+        if arg == "--no-extract" {
+            no_extract = true;
+            index += 1;
+            continue;
+        }
+        if arg == "--no-ignore" {
+            no_ignore = true;
+            index += 1;
+            continue;
+        }
+        if let Some(value) = arg.strip_prefix("--patch=") {
+            patches.push(PathBuf::from(value));
+            index += 1;
+            continue;
+        }
+        if arg == "--patch" {
+            patches.push(PathBuf::from(parse_wasm_required_value(
+                &args,
+                &mut index,
+                "--patch",
+            )?));
+            continue;
+        }
+        if let Some(value) = arg.strip_prefix("--output=") {
+            output = Some(PathBuf::from(value));
+            index += 1;
+            continue;
+        }
+        if arg == "--output" {
+            output = Some(PathBuf::from(parse_wasm_required_value(
+                &args,
+                &mut index,
+                "--output",
+            )?));
+            continue;
+        }
+        if arg == "--no-compress" {
+            no_compress = true;
+            index += 1;
+            continue;
+        }
+        if let Some(value) = arg.strip_prefix("--compress-format=") {
+            compress_format = Some(value.to_string());
+            index += 1;
+            continue;
+        }
+        if arg == "--compress-format" {
+            compress_format = Some(parse_wasm_required_value(
+                &args,
+                &mut index,
+                "--compress-format",
+            )?);
+            continue;
+        }
+        if let Some(value) = arg.strip_prefix("--compress-codec=") {
+            compress_codec = Some(value.to_string());
+            index += 1;
+            continue;
+        }
+        if arg == "--compress-codec" {
+            compress_codec = Some(parse_wasm_required_value(
+                &args,
+                &mut index,
+                "--compress-codec",
+            )?);
+            continue;
+        }
+        if let Some(value) = arg.strip_prefix("--compress-level=") {
+            compress_level = parse_wasm_compression_level(value)?;
+            index += 1;
+            continue;
+        }
+        if arg == "--compress-level" {
+            compress_level = parse_wasm_compression_level(&parse_wasm_required_value(
+                &args,
+                &mut index,
+                "--compress-level",
+            )?)?;
+            continue;
+        }
+        if let Some(value) = arg.strip_prefix("--checksum-cache=") {
+            checksum_cache.push(value.to_string());
+            index += 1;
+            continue;
+        }
+        if arg == "--checksum-cache" {
+            checksum_cache.push(parse_wasm_required_value(
+                &args,
+                &mut index,
+                "--checksum-cache",
+            )?);
+            continue;
+        }
+        if let Some(value) = arg.strip_prefix("--validate-with-checksum=") {
+            validate_with_checksums.push(value.to_string());
+            index += 1;
+            continue;
+        }
+        if arg == "--validate-with-checksum" {
+            validate_with_checksums.push(parse_wasm_required_value(
+                &args,
+                &mut index,
+                "--validate-with-checksum",
+            )?);
+            continue;
+        }
+        if arg == "--strip-header" {
+            strip_header = true;
+            index += 1;
+            continue;
+        }
+        if arg == "--add-header" {
+            add_header = true;
+            index += 1;
+            continue;
+        }
+        if arg == "--repair-checksum" {
+            repair_checksum = true;
+            index += 1;
+            continue;
+        }
+        if arg == "--ignore-checksum-validation" {
+            ignore_checksum_validation = true;
+            index += 1;
+            continue;
+        }
+        if let Some(value) = arg.strip_prefix("--threads=") {
+            threads = parse_wasm_thread_budget(value, "--threads")?;
+            index += 1;
+            continue;
+        }
+        if arg == "--threads" {
+            threads = parse_wasm_thread_budget(
+                &parse_wasm_required_value(&args, &mut index, "--threads")?,
+                "--threads",
+            )?;
+            continue;
+        }
+        if arg.starts_with('-') {
+            return Err(format!("unknown patch-apply option `{arg}`"));
+        }
+        return Err(format!("unexpected patch-apply argument `{arg}`"));
+    }
+
+    let input = input.ok_or_else(|| "patch-apply requires --input <path>".to_string())?;
+    if patches.is_empty() {
+        return Err("patch-apply requires at least one --patch <path>".into());
+    }
+    let output = output.ok_or_else(|| "patch-apply requires --output <path>".to_string())?;
+    Ok(PatchApplyCommand {
+        input,
+        select,
+        no_extract,
+        no_ignore,
+        patches,
+        output,
+        no_compress,
+        compress_format,
+        compress_codec,
+        compress_level,
+        checksum_cache,
+        validate_with_checksums,
+        strip_header,
+        add_header,
+        repair_checksum,
+        ignore_checksum_validation,
+        threads,
+    })
+}
+
+#[cfg(target_arch = "wasm32")]
+fn parse_wasm_patch_create(args: Vec<String>) -> std::result::Result<PatchCreateCommand, String> {
+    let mut original: Option<PathBuf> = None;
+    let mut modified: Option<PathBuf> = None;
+    let mut format: Option<String> = None;
+    let mut output: Option<PathBuf> = None;
+    let mut threads = ThreadBudget::Auto;
+    let mut index = 0usize;
+    while index < args.len() {
+        let arg = &args[index];
+        if let Some(value) = arg.strip_prefix("--original=") {
+            original = Some(PathBuf::from(value));
+            index += 1;
+            continue;
+        }
+        if arg == "--original" {
+            original = Some(PathBuf::from(parse_wasm_required_value(
+                &args,
+                &mut index,
+                "--original",
+            )?));
+            continue;
+        }
+        if let Some(value) = arg.strip_prefix("--modified=") {
+            modified = Some(PathBuf::from(value));
+            index += 1;
+            continue;
+        }
+        if arg == "--modified" {
+            modified = Some(PathBuf::from(parse_wasm_required_value(
+                &args,
+                &mut index,
+                "--modified",
+            )?));
+            continue;
+        }
+        if let Some(value) = arg.strip_prefix("--format=") {
+            format = Some(value.to_string());
+            index += 1;
+            continue;
+        }
+        if arg == "--format" {
+            format = Some(parse_wasm_required_value(&args, &mut index, "--format")?);
+            continue;
+        }
+        if let Some(value) = arg.strip_prefix("--output=") {
+            output = Some(PathBuf::from(value));
+            index += 1;
+            continue;
+        }
+        if arg == "--output" {
+            output = Some(PathBuf::from(parse_wasm_required_value(
+                &args,
+                &mut index,
+                "--output",
+            )?));
+            continue;
+        }
+        if let Some(value) = arg.strip_prefix("--threads=") {
+            threads = parse_wasm_thread_budget(value, "--threads")?;
+            index += 1;
+            continue;
+        }
+        if arg == "--threads" {
+            threads = parse_wasm_thread_budget(
+                &parse_wasm_required_value(&args, &mut index, "--threads")?,
+                "--threads",
+            )?;
+            continue;
+        }
+        if arg.starts_with('-') {
+            return Err(format!("unknown patch-create option `{arg}`"));
+        }
+        return Err(format!("unexpected patch-create argument `{arg}`"));
+    }
+    let original = original.ok_or_else(|| "patch-create requires --original <path>".to_string())?;
+    let modified = modified.ok_or_else(|| "patch-create requires --modified <path>".to_string())?;
+    let format = format.ok_or_else(|| "patch-create requires --format <name>".to_string())?;
+    let output = output.ok_or_else(|| "patch-create requires --output <path>".to_string())?;
+    Ok(PatchCreateCommand {
+        original,
+        modified,
+        format,
+        output,
+        threads,
+    })
+}
+
+#[cfg(target_arch = "wasm32")]
+fn parse_wasm_required_value(
+    args: &[String],
+    index: &mut usize,
+    flag: &str,
+) -> std::result::Result<String, String> {
+    *index += 1;
+    if *index >= args.len() {
+        return Err(format!("missing value for {flag}"));
+    }
+    let value = args[*index].clone();
+    *index += 1;
+    Ok(value)
+}
+
+#[cfg(target_arch = "wasm32")]
+fn parse_wasm_u64(value: &str, flag: &str) -> std::result::Result<u64, String> {
+    value
+        .parse::<u64>()
+        .map_err(|_| format!("invalid value `{value}` for {flag}"))
+}
+
+#[cfg(target_arch = "wasm32")]
+fn parse_wasm_thread_budget(value: &str, flag: &str) -> std::result::Result<ThreadBudget, String> {
+    value
+        .parse::<ThreadBudget>()
+        .map_err(|error| format!("invalid value `{value}` for {flag}: {error}"))
+}
+
+#[cfg(target_arch = "wasm32")]
+fn parse_wasm_compression_level(
+    value: &str,
+) -> std::result::Result<CompressionLevelProfile, String> {
+    match value {
+        "min" => Ok(CompressionLevelProfile::Min),
+        "very-low" => Ok(CompressionLevelProfile::VeryLow),
+        "low" => Ok(CompressionLevelProfile::Low),
+        "medium" => Ok(CompressionLevelProfile::Medium),
+        "high" => Ok(CompressionLevelProfile::High),
+        "very-high" => Ok(CompressionLevelProfile::VeryHigh),
+        "max" => Ok(CompressionLevelProfile::Max),
+        _ => Err(format!(
+            "invalid compression level `{value}` (expected: min|very-low|low|medium|high|very-high|max)"
+        )),
+    }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
