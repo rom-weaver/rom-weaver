@@ -1,0 +1,844 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { createTiming, formatTiming } from "../../lib/progress/timing.ts";
+import { ApplyWorkflow, type BrowserApplyResult, type WorkflowProgress } from "../../platform/browser/browser-api.ts";
+import { getErrorCode } from "../../presentation/errors.ts";
+import type { ApplyWorkflowInputState, ApplyWorkflowPatchState } from "../../types/apply-workflow.ts";
+import type { CompressionFormat } from "../../types/settings.ts";
+import type { ApplyWorkflowResult, ProgressEvent } from "../../types/workflow-runtime.ts";
+import { ApplyWorkflowFormView } from "./apply-workflow-form-view.tsx";
+import { useCandidateSelection } from "./candidate-selection.tsx";
+import { getBinarySourceListStableIds, sameBinarySourceLists } from "./input-session-helpers.ts";
+import type { BinarySource } from "./patcher-form.ts";
+import { inertDialogController, useLocalApplyPatchFormSession } from "./patcher-form-session.ts";
+import type {
+  ApplyPatchFormProps,
+  ApplyPatchFormSettings,
+  CandidateSelectionPrompt,
+  InternalApplyPatchFormProps,
+} from "./public-types.ts";
+import { toApplyWorkflowSettings, useApplySettings, useRomWeaverAssetBaseUrl } from "./settings-context.tsx";
+import {
+  createWorkflowFormError,
+  getReactBinarySourceFileName,
+  toBrowserPublicBinarySource,
+  toReactProgressEvent,
+} from "./workflow-adapters.ts";
+
+type ApplyWorkflowSessionInput = {
+  inputs: BinarySource[];
+  patches: BinarySource[];
+  options: ApplyPatchFormSettings & {
+    output: NonNullable<ApplyPatchFormSettings["output"]> & {
+      compression: "auto" | CompressionFormat;
+    };
+    signal?: AbortSignal;
+    workerThreads?: number | string;
+    containerInputsEnabled?: boolean;
+    onProgress?: (event: ProgressEvent) => void;
+  };
+};
+
+type ApplyWorkflowPrepareHandlers = {
+  onChecksumReady?: (input: ApplyWorkflowInputState) => void;
+  onInputState?: (input: ApplyWorkflowInputState | null) => void;
+  onPatchState?: (patches: ApplyWorkflowPatchState[]) => void;
+  onProgress?: (event: WorkflowProgress) => void;
+  selection?: {
+    promptInputSelection?: boolean;
+    promptPatchSelection?: boolean;
+  };
+};
+
+type ApplyWorkflowSyncState = {
+  inputs: BinarySource[];
+  patches: BinarySource[];
+  settingsKey: string;
+};
+
+const FILE_EXTENSION_REGEX = /\.([^./\\\s]+)$/;
+const PATCH_OUTPUT_LABEL_PATTERN = /\[([^\]]+)\](?:\.[^.]+)?\d*$/;
+
+const getFileNameWithoutExtension = (fileName: string) => fileName.replace(FILE_EXTENSION_REGEX, "") || fileName;
+const getFileNameExtension = (fileName: string) => fileName.match(FILE_EXTENSION_REGEX)?.[1]?.toLowerCase() || "";
+
+const getApplyOutputCompression = (
+  snapshot: ApplyWorkflowSessionInput,
+  input: ApplyWorkflowInputState | null,
+): CompressionFormat => {
+  const configuredCompression = snapshot.options.output?.compression || "auto";
+  if (configuredCompression !== "auto") return configuredCompression;
+  const parentKind = input?.parentCompressions[0]?.kind;
+  if (parentKind === "zip") return "zip";
+  if (parentKind === "7z") return "7z";
+  if (parentKind === "chd") return "chd";
+  if (parentKind === "rvz") return "rvz";
+  if (parentKind === "z3ds") return "z3ds";
+  const sourceName = snapshot.inputs[0] ? getReactBinarySourceFileName(snapshot.inputs[0], "") : "";
+  const extension = getFileNameExtension(sourceName);
+  if (extension === "zip" || extension === "zipx") return "zip";
+  if (extension === "7z") return "7z";
+  if (extension === "chd") return "chd";
+  if (extension === "rvz") return "rvz";
+  if (["cia", "cci", "cxi", "app", "3dsx", "3ds", "zcia", "zcci", "zcxi", "z3dsx", "z3ds"].includes(extension))
+    return "z3ds";
+  return "7z";
+};
+
+const getAutomaticApplyOutputName = (
+  snapshot: ApplyWorkflowSessionInput,
+  input: ApplyWorkflowInputState | null,
+  patches: ApplyWorkflowPatchState[],
+) => {
+  const inputFileName = input?.fileName || getReactBinarySourceFileName(snapshot.inputs[0], "patched.bin");
+  const inputBase = getFileNameWithoutExtension(inputFileName) || "patched";
+  const patchFileNames =
+    patches.length > 0
+      ? patches.map(
+          (patch, index) =>
+            patch.fileName || getReactBinarySourceFileName(snapshot.patches[index], `patch ${index + 1}`),
+        )
+      : snapshot.patches.map((patch, index) => getReactBinarySourceFileName(patch, `patch ${index + 1}`));
+  const patchNames = patchFileNames
+    .map((patchFileName) => {
+      const outputLabel = patchFileName.match(PATCH_OUTPUT_LABEL_PATTERN)?.[1]?.trim();
+      return getFileNameWithoutExtension(outputLabel || patchFileName);
+    })
+    .filter(Boolean);
+  const outputBase = patchNames.length ? `${inputBase} - ${patchNames.join(" + ")}` : inputBase;
+  return outputBase;
+};
+
+const toPatchStageInfo = (
+  patch: ApplyWorkflowPatchState | undefined,
+  originalName: string,
+  order: number,
+  targetLabel: string,
+) => {
+  if (!patch) return null;
+  const fileName = patch.fileName || originalName;
+  let archiveName = "-";
+  if (patch.parentCompressions?.length) {
+    archiveName = [...patch.parentCompressions]
+      .sort((left, right) => left.depth - right.depth)
+      .map((entry) => entry.fileName)
+      .filter((entry): entry is string => !!entry)
+      .join(" > ");
+  } else if (originalName && fileName && originalName !== fileName) {
+    archiveName = originalName;
+  }
+  return {
+    archiveName,
+    decompressionTimeMs: patch.decompressionTimeMs,
+    fileName,
+    id: patch.id,
+    order,
+    parentCompressions: patch.parentCompressions,
+    size: patch.size,
+    sourceSize: patch.sourceSize,
+    targetLabel,
+    wasDecompressed: patch.wasDecompressed,
+  };
+};
+
+const getPatchTargetSelectionError = (input: ApplyWorkflowInputState | null, patches: ApplyWorkflowPatchState[]) => {
+  if (!input || input.status !== "ready") return null;
+  for (const patch of patches) {
+    if (!(patch.status === "needsSelection" && patch.selectedCandidateId)) continue;
+    const warning = patch.warnings.find(
+      (entry) => entry.code === "AMBIGUOUS_SELECTION" || entry.code === "PATCH_TARGET_MISMATCH",
+    );
+    return createWorkflowFormError(
+      warning?.code || "AMBIGUOUS_SELECTION",
+      warning?.message || `${patch.fileName || "Patch"} target selection is required`,
+    );
+  }
+  return null;
+};
+
+const getWorkflowReadinessError = (input: ApplyWorkflowInputState | null, patches: ApplyWorkflowPatchState[]) => {
+  if (!input) return createWorkflowFormError("INVALID_INPUT", "Input source is required");
+  if (input.status !== "ready" || !input.selectedCandidateId)
+    return createWorkflowFormError("AMBIGUOUS_SELECTION", "Input selection is required");
+  const patchTargetError = getPatchTargetSelectionError(input, patches);
+  if (patchTargetError) return patchTargetError;
+  const unresolvedPatch = patches.find((patch) => patch.status !== "ready");
+  if (!unresolvedPatch) return null;
+  return createWorkflowFormError("AMBIGUOUS_SELECTION", `${unresolvedPatch.fileName || "Patch"} requires selection`);
+};
+
+const normalizeApplyResult = (result: BrowserApplyResult): ApplyWorkflowResult => {
+  const outputs = result.outputs.map((output) => ({
+    cleanup: output.dispose,
+    dispose: output.dispose,
+    fileName: output.fileName,
+    mediaType: undefined,
+    path: "" as ApplyWorkflowResult["output"]["path"],
+    saveAs: () => output.saveAs(),
+    size: output.size || 0,
+    vfs: {} as ApplyWorkflowResult["output"]["vfs"],
+  })) as unknown as ApplyWorkflowResult["outputs"];
+  return {
+    inputs: result.inputs,
+    output: outputs[0] as ApplyWorkflowResult["output"],
+    outputs,
+    patches: result.patches,
+    rom: {
+      fileName: result.inputs[0]?.fileName || "",
+      size: result.inputs[0]?.size || 0,
+    },
+    sizeSummary: result.sizeSummary,
+  } as ApplyWorkflowResult;
+};
+
+const createBaseApplyWorkflowSettings = (
+  options: ApplyWorkflowSessionInput["options"],
+  workerThreads?: number | string,
+) => {
+  const {
+    containerInputsEnabled,
+    onProgress: _onProgress,
+    signal: _signal,
+    workerThreads: optionWorkerThreads,
+    ...settingsInput
+  } = options;
+  const settings = toApplyWorkflowSettings(
+    {
+      ...settingsInput,
+      input: {
+        ...settingsInput.input,
+        containerInputsEnabled,
+      },
+    },
+    optionWorkerThreads || workerThreads,
+  );
+  return {
+    ...settings,
+    output: {
+      ...(settings.output || {}),
+      compression: undefined,
+      outputName: undefined,
+    },
+  };
+};
+
+const createWorkflowId = (prefix: string) =>
+  typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? `${prefix}-${crypto.randomUUID()}`
+    : `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+
+const createWorkflowSettingsKey = (settings: Partial<ApplyPatchFormSettings>) =>
+  JSON.stringify(settings, (_key, value) => (typeof value === "function" ? "[function]" : value));
+
+const createWorkflowOutputOverridesKey = (snapshot: ApplyWorkflowSessionInput) =>
+  JSON.stringify({
+    compression: snapshot.options.output?.compression || "auto",
+    outputName:
+      typeof snapshot.options.output?.outputName === "string" ? snapshot.options.output.outputName.trim() : "",
+  });
+
+const getResolvedInputArchiveName = (
+  resolved: NonNullable<ApplyWorkflowInputState["resolvedInputs"]>[number],
+  input: ApplyWorkflowInputState,
+  originals: BinarySource[],
+  index: number,
+) => {
+  if (resolved.parentCompressions?.length) {
+    return [...resolved.parentCompressions]
+      .sort((left, right) => left.depth - right.depth)
+      .map((entry) => entry.fileName)
+      .filter((entry): entry is string => !!entry)
+      .join(" > ");
+  }
+
+  const originalName = getReactBinarySourceFileName(originals[resolved.order ?? index], "");
+  const resolvedName = resolved.fileName || input.fileName;
+  return originalName && resolvedName && originalName !== resolvedName ? originalName : "-";
+};
+
+const formatElapsedMs = (elapsedMs: number | undefined) =>
+  typeof elapsedMs === "number" && Number.isFinite(elapsedMs) ? formatTiming(createTiming(elapsedMs)) : "";
+
+const getSelectedInputCandidateFileName = (input: ApplyWorkflowInputState) => {
+  const candidateId = input.selectedCandidateId;
+  if (!candidateId) return "";
+  const selectedCandidate = input.candidates.find((candidate) => candidate.id === candidateId);
+  if (selectedCandidate?.type === "file" && selectedCandidate.fileName) return selectedCandidate.fileName;
+  if (!(selectedCandidate?.type === "group" && selectedCandidate.candidateIds.length)) return "";
+  const childCandidateIds = new Set(selectedCandidate.candidateIds);
+  const childCandidate = input.candidates.find(
+    (candidate): candidate is Extract<(typeof input.candidates)[number], { type: "file" }> =>
+      candidate.type === "file" && candidate.selectable && childCandidateIds.has(candidate.id) && !!candidate.fileName,
+  );
+  return childCandidate?.fileName || "";
+};
+
+const getSingleSelectableInputCandidateFileName = (input: ApplyWorkflowInputState) => {
+  const selectableGroupIds = new Set(
+    input.candidates
+      .filter((candidate) => candidate.type === "group" && candidate.selectable)
+      .map((candidate) => candidate.id),
+  );
+  const selectableFileCandidates = input.candidates.filter(
+    (candidate): candidate is Extract<(typeof input.candidates)[number], { type: "file" }> =>
+      candidate.type === "file" &&
+      candidate.selectable &&
+      !selectableGroupIds.has(candidate.parentCandidateId || "") &&
+      !!candidate.fileName,
+  );
+  return selectableFileCandidates.length === 1 ? selectableFileCandidates[0]?.fileName || "" : "";
+};
+
+const toStagedInputInfos = (input: ApplyWorkflowInputState | null, originals: BinarySource[]) => {
+  if (!input) return [];
+  const resolvedInputs = input.resolvedInputs?.length
+    ? input.resolvedInputs
+    : [
+        {
+          checksums: input.checksums,
+          checksumTimeMs: input.checksumTimeMs,
+          decompressionTimeMs: input.decompressionTimeMs,
+          fileName: input.fileName,
+          id: input.id,
+          order: 0,
+          parentCompressions: input.parentCompressions,
+          selected: true,
+          size: input.size,
+          sourceSize: input.sourceSize,
+          wasDecompressed: input.wasDecompressed,
+        },
+      ];
+  return resolvedInputs.map((resolved, index) => ({
+    archiveName: getResolvedInputArchiveName(resolved, input, originals, index),
+    checksums: resolved.checksums || undefined,
+    checksumTiming: formatElapsedMs(resolved.checksumTimeMs ?? input.checksumTimeMs),
+    decompressionTimeMs: resolved.decompressionTimeMs,
+    fileName:
+      resolved.fileName ||
+      getSelectedInputCandidateFileName(input) ||
+      getSingleSelectableInputCandidateFileName(input) ||
+      input.fileName ||
+      getReactBinarySourceFileName(originals[resolved.order ?? index], `Input ${index + 1}`),
+    groupId: resolved.groupId,
+    id: resolved.id,
+    order: resolved.order ?? index,
+    parentCompressions: resolved.parentCompressions,
+    size: resolved.size,
+    sourceSize: resolved.sourceSize,
+    wasDecompressed: resolved.wasDecompressed,
+  }));
+};
+
+function ApplyPatchForm(props: ApplyPatchFormProps) {
+  const providerSettings = useApplySettings();
+  const providerAssetBaseUrl = useRomWeaverAssetBaseUrl();
+  const resolvedAssetBaseUrl = props.assetBaseUrl || providerAssetBaseUrl;
+  const internalProps = props as InternalApplyPatchFormProps;
+  const { startup, controllers } = internalProps;
+  const handleSelectionCancelledRef = useRef<(request: CandidateSelectionPrompt) => void>(() => undefined);
+  const { candidateSelectionDialog, selectFile } = useCandidateSelection({
+    onCancelSelection: (request) => handleSelectionCancelledRef.current(request),
+  });
+  const [applyReady, setApplyReady] = useState(false);
+  const [resolvedOutputCompression, setResolvedOutputCompression] = useState<CompressionFormat | undefined>(undefined);
+  const [resolvedOutputName, setResolvedOutputName] = useState("");
+  const workflowIdRef = useRef(createWorkflowId("react-apply"));
+  const mutationQueueRef = useRef(Promise.resolve<void>(undefined));
+  const selectedInputCandidateIdRef = useRef<string | null>(null);
+  const selectedPatchCandidateIdsRef = useRef(new Map<string, string>());
+  const selectedPatchArchiveCandidateIdsRef = useRef(new Map<string, string>());
+  const lastInputsRef = useRef<BinarySource[]>([]);
+  const lastPatchOrderRef = useRef("");
+  const workflowRef = useRef<ApplyWorkflow | null>(null);
+  const workflowSyncRef = useRef<ApplyWorkflowSyncState>({
+    inputs: [],
+    patches: [],
+    settingsKey: "",
+  });
+  const workflowOutputOverridesKeyRef = useRef("");
+  const prepareHandlersRef = useRef<ApplyWorkflowPrepareHandlers | null>(null);
+  const selectFileRef = useRef(selectFile);
+  selectFileRef.current = selectFile;
+  const propsWithSettings = {
+    ...props,
+    defaultSettings: props.defaultSettings || providerSettings,
+    settings: props.settings,
+  };
+
+  const syncSelectionRefs = useCallback((snapshot: ApplyWorkflowSessionInput) => {
+    if (!sameBinarySourceLists(lastInputsRef.current, snapshot.inputs)) {
+      selectedInputCandidateIdRef.current = null;
+      lastInputsRef.current = snapshot.inputs.slice();
+    }
+    const patchOrder = getBinarySourceListStableIds(snapshot.patches).join("|");
+    if (lastPatchOrderRef.current !== patchOrder) {
+      selectedPatchCandidateIdsRef.current.clear();
+      selectedPatchArchiveCandidateIdsRef.current.clear();
+      lastPatchOrderRef.current = patchOrder;
+    }
+  }, []);
+
+  const queueMutation = useCallback(<TValue,>(callback: () => Promise<TValue>) => {
+    const run = mutationQueueRef.current.catch(() => undefined).then(callback);
+    mutationQueueRef.current = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }, []);
+
+  const resetWorkflow = useCallback(() => {
+    const workflow = workflowRef.current;
+    workflowRef.current = null;
+    workflowSyncRef.current = { inputs: [], patches: [], settingsKey: "" };
+    workflowOutputOverridesKeyRef.current = "";
+    prepareHandlersRef.current = null;
+    void workflow?.dispose();
+  }, []);
+
+  const getWorkflow = useCallback(() => {
+    if (workflowRef.current) return workflowRef.current;
+    workflowRef.current = new ApplyWorkflow({
+      ...(resolvedAssetBaseUrl ? { assetBaseUrl: resolvedAssetBaseUrl } : {}),
+      id: workflowIdRef.current,
+      selectFile: async (request) => {
+        const handlers = prepareHandlersRef.current;
+        const promptInputSelection = handlers?.selection?.promptInputSelection !== false;
+        const promptPatchSelection = handlers?.selection?.promptPatchSelection !== false;
+        if ((request.role === "input" && !promptInputSelection) || (request.role === "patch" && !promptPatchSelection))
+          throw createWorkflowFormError("WORKFLOW_SELECTION_SKIPPED", `${request.sourceName} requires selection`);
+        if (request.role === "input" && selectedInputCandidateIdRef.current) {
+          const existing = request.candidates.find((candidate) => candidate.id === selectedInputCandidateIdRef.current);
+          if (existing?.selectable) return { id: existing.id };
+        }
+        if (request.role === "patch") {
+          const existing = request.sourceName
+            ? selectedPatchArchiveCandidateIdsRef.current.get(request.sourceName)
+            : undefined;
+          const matchingCandidate = request.candidates.find((candidate) => candidate.id === existing);
+          if (matchingCandidate?.selectable) return { id: matchingCandidate.id };
+        }
+        const selection = await selectFileRef.current(request);
+        if (request.role === "input") selectedInputCandidateIdRef.current = selection.id;
+        if (request.role === "patch" && request.sourceName)
+          selectedPatchArchiveCandidateIdsRef.current.set(request.sourceName, selection.id);
+        return selection;
+      },
+    });
+    return workflowRef.current;
+  }, [resolvedAssetBaseUrl]);
+
+  useEffect(
+    () => () => {
+      resetWorkflow();
+    },
+    [resetWorkflow],
+  );
+
+  const emitWorkflowProgress = useCallback(
+    (event: WorkflowProgress, onProgress?: (event: ProgressEvent) => void) => {
+      const progressEvent = toReactProgressEvent(event);
+      onProgress?.(progressEvent);
+      props.onProgress?.(progressEvent);
+      return { progressEvent, workflowProgress: event };
+    },
+    [props.onProgress],
+  );
+
+  const applyOutputOverrides = useCallback(async (workflow: ApplyWorkflow, snapshot: ApplyWorkflowSessionInput) => {
+    const manualOutputName =
+      typeof snapshot.options.output?.outputName === "string" && snapshot.options.output.outputName.trim()
+        ? snapshot.options.output.outputName
+        : "";
+    if (manualOutputName) await workflow.setOutputName(manualOutputName);
+    const compressionMode = snapshot.options.output?.compression || "auto";
+    if (compressionMode !== "auto") await workflow.setOutputFormat(compressionMode);
+  }, []);
+
+  const syncWorkflowOutputOverrides = useCallback(
+    async (
+      workflow: ApplyWorkflow,
+      snapshot: ApplyWorkflowSessionInput,
+      baseSettings: ReturnType<typeof createBaseApplyWorkflowSettings>,
+      baseSettingsChanged: boolean,
+    ) => {
+      const outputOverridesKey = createWorkflowOutputOverridesKey(snapshot);
+      const outputOverridesChanged = workflowOutputOverridesKeyRef.current !== outputOverridesKey;
+      if (!(baseSettingsChanged || outputOverridesChanged)) return;
+      if (!baseSettingsChanged) await workflow.setSettings(baseSettings);
+      await applyOutputOverrides(workflow, snapshot);
+      workflowOutputOverridesKeyRef.current = outputOverridesKey;
+    },
+    [applyOutputOverrides],
+  );
+
+  const resolveSelections = useCallback(
+    async (
+      workflow: ApplyWorkflow,
+      patches: BinarySource[],
+      _selectionOptions: ApplyWorkflowPrepareHandlers["selection"] = {},
+    ) => {
+      if (workflow.getInput()?.selectedCandidateId) {
+        selectedInputCandidateIdRef.current = workflow.getInput()?.selectedCandidateId || null;
+      }
+      const workflowPatches = workflow.getPatches();
+      const patchKeys = getBinarySourceListStableIds(patches);
+      for (const [index, patch] of workflowPatches.entries()) {
+        const patchKey = patchKeys[index] || "";
+        if (patchKey && patch.selectedCandidateId) {
+          selectedPatchCandidateIdsRef.current.set(patchKey, patch.selectedCandidateId);
+        }
+      }
+
+      const patchTargetError = getPatchTargetSelectionError(workflow.getInput(), workflowPatches);
+      if (patchTargetError) throw patchTargetError;
+    },
+    [],
+  );
+
+  const prepareWorkflow = useCallback(
+    async <TValue,>(
+      snapshot: ApplyWorkflowSessionInput,
+      handlers: ApplyWorkflowPrepareHandlers,
+      callback: (prepared: {
+        checksums: Record<string, string> | null;
+        input: ApplyWorkflowInputState | null;
+        patches: ApplyWorkflowPatchState[];
+        workflow: ApplyWorkflow;
+      }) => Promise<TValue>,
+    ): Promise<TValue> => {
+      syncSelectionRefs(snapshot);
+      setResolvedOutputCompression(getApplyOutputCompression(snapshot, null));
+      setResolvedOutputName(getAutomaticApplyOutputName(snapshot, null, []));
+      const workflow = getWorkflow();
+      prepareHandlersRef.current = handlers;
+      const handleProgress = (event: WorkflowProgress) => handlers.onProgress?.(event);
+      workflow.on("progress", handleProgress);
+      try {
+        const baseSettings = createBaseApplyWorkflowSettings(snapshot.options, props.workerThreads);
+        const settingsKey = createWorkflowSettingsKey(baseSettings);
+        const previousSync = workflowSyncRef.current;
+        const settingsChanged = previousSync.settingsKey !== settingsKey;
+        const inputsChanged = settingsChanged || !sameBinarySourceLists(previousSync.inputs, snapshot.inputs);
+        const patchesChanged = settingsChanged || !sameBinarySourceLists(previousSync.patches, snapshot.patches);
+        if (settingsChanged) await workflow.setSettings(baseSettings);
+        if (patchesChanged) {
+          await workflow.clearPatches();
+        }
+        if (inputsChanged) {
+          if (snapshot.inputs.length) {
+            await workflow.setInput(snapshot.inputs.map(toBrowserPublicBinarySource)).catch((error) => {
+              if (getErrorCode(error) !== "WORKFLOW_SELECTION_SKIPPED") throw error;
+            });
+          } else {
+            await workflow.clearInput();
+          }
+          handlers.onInputState?.(workflow.getInput());
+        }
+        if (patchesChanged) {
+          for (const patch of snapshot.patches) {
+            await workflow.addPatch(toBrowserPublicBinarySource(patch)).catch((error) => {
+              if (getErrorCode(error) !== "WORKFLOW_SELECTION_SKIPPED") throw error;
+            });
+            handlers.onPatchState?.(workflow.getPatches());
+          }
+        }
+
+        await resolveSelections(workflow, snapshot.patches, handlers.selection);
+        await syncWorkflowOutputOverrides(workflow, snapshot, baseSettings, settingsChanged);
+        workflowSyncRef.current = {
+          inputs: snapshot.inputs.slice(),
+          patches: snapshot.patches.slice(),
+          settingsKey,
+        };
+
+        const input = workflow.getInput();
+        const patches = workflow.getPatches();
+        const checksums = input?.checksums || null;
+        const outputCompression = getApplyOutputCompression(snapshot, input);
+        setResolvedOutputCompression(outputCompression);
+        setResolvedOutputName(getAutomaticApplyOutputName(snapshot, input, patches));
+        handlers.onInputState?.(input);
+        handlers.onPatchState?.(patches);
+        if (input?.checksums) handlers.onChecksumReady?.(input);
+        setApplyReady(!getWorkflowReadinessError(input, patches) && patches.length === snapshot.patches.length);
+
+        return await callback({
+          checksums,
+          input,
+          patches,
+          workflow,
+        });
+      } catch (error) {
+        const normalized = error instanceof Error ? error : new Error(String(error));
+        if (
+          (normalized as Error & { code?: string }).code === "INVALID_INPUT" &&
+          snapshot.inputs.length > 1 &&
+          snapshot.patches.length > 0
+        ) {
+          throw createWorkflowFormError("AMBIGUOUS_SELECTION", "Patch target selection is required");
+        }
+        throw normalized;
+      } finally {
+        prepareHandlersRef.current = null;
+        workflow.off("progress", handleProgress);
+      }
+    },
+    [getWorkflow, props.workerThreads, resolveSelections, syncSelectionRefs, syncWorkflowOutputOverrides],
+  );
+
+  const withPreparedWorkflow = useCallback(
+    <TValue,>(
+      snapshot: ApplyWorkflowSessionInput,
+      handlers: ApplyWorkflowPrepareHandlers,
+      callback: (prepared: {
+        checksums: Record<string, string> | null;
+        input: ApplyWorkflowInputState | null;
+        patches: ApplyWorkflowPatchState[];
+        workflow: ApplyWorkflow;
+      }) => Promise<TValue>,
+    ): Promise<TValue> => queueMutation(() => prepareWorkflow(snapshot, handlers, callback)),
+    [prepareWorkflow, queueMutation],
+  );
+
+  const applyPatches = useCallback(
+    async (input: ApplyWorkflowSessionInput) => {
+      const runPreparedWorkflow = async ({
+        input: stagedInput,
+        patches,
+        workflow,
+      }: {
+        input: ApplyWorkflowInputState | null;
+        patches: ApplyWorkflowPatchState[];
+        workflow: ApplyWorkflow;
+      }) => {
+        const readinessError = getWorkflowReadinessError(stagedInput, patches);
+        if (readinessError) throw readinessError;
+        const abortSignal = input.options.signal;
+        const abortWorkflow = () => workflow.abort(abortSignal?.reason);
+        if (abortSignal?.aborted) abortWorkflow();
+        else abortSignal?.addEventListener("abort", abortWorkflow, { once: true });
+        try {
+          const result = (await workflow.run()) as BrowserApplyResult;
+          props.onApplyComplete?.(result);
+          return normalizeApplyResult(result);
+        } finally {
+          abortSignal?.removeEventListener("abort", abortWorkflow);
+          if (abortSignal?.aborted) resetWorkflow();
+        }
+      };
+
+      return queueMutation(async () => {
+        syncSelectionRefs(input);
+        const baseSettings = createBaseApplyWorkflowSettings(input.options, props.workerThreads);
+        const settingsKey = createWorkflowSettingsKey(baseSettings);
+        const previousSync = workflowSyncRef.current;
+        const workflow = workflowRef.current;
+        const workflowPrepared =
+          !!workflow &&
+          sameBinarySourceLists(previousSync.inputs, input.inputs) &&
+          sameBinarySourceLists(previousSync.patches, input.patches);
+        if (!(workflowPrepared && workflow)) {
+          return prepareWorkflow(
+            input,
+            {
+              onProgress: (event) => {
+                emitWorkflowProgress(event, input.options.onProgress);
+              },
+            },
+            runPreparedWorkflow,
+          );
+        }
+
+        prepareHandlersRef.current = {
+          onProgress: (event) => {
+            emitWorkflowProgress(event, input.options.onProgress);
+          },
+        };
+        const handleProgress = (event: WorkflowProgress) => prepareHandlersRef.current?.onProgress?.(event);
+        workflow.on("progress", handleProgress);
+        try {
+          const settingsChanged = previousSync.settingsKey !== settingsKey;
+          await syncWorkflowOutputOverrides(workflow, input, baseSettings, settingsChanged);
+          if (settingsChanged) {
+            workflowSyncRef.current = {
+              ...previousSync,
+              settingsKey,
+            };
+          }
+          return await runPreparedWorkflow({
+            input: workflow.getInput(),
+            patches: workflow.getPatches(),
+            workflow,
+          });
+        } finally {
+          prepareHandlersRef.current = null;
+          workflow.off("progress", handleProgress);
+        }
+      });
+    },
+    [
+      emitWorkflowProgress,
+      props.onApplyComplete,
+      props.workerThreads,
+      queueMutation,
+      resetWorkflow,
+      syncSelectionRefs,
+      syncWorkflowOutputOverrides,
+      prepareWorkflow,
+    ],
+  );
+
+  const downloadOutput = useCallback((result: ApplyWorkflowResult) => {
+    if (typeof window !== "undefined") return result.output.saveAs?.();
+    return undefined;
+  }, []);
+
+  const stageInput = useCallback(
+    async (
+      input: ApplyWorkflowSessionInput,
+      handlers: {
+        onChecksum: (info: {
+          archiveName?: string;
+          checksums?: Record<string, string>;
+          decompressionTimeMs?: number;
+          fileName?: string;
+          size?: number;
+          sourceSize?: number;
+          wasDecompressed?: boolean;
+        }) => void;
+        onProgress: (event: ProgressEvent) => void;
+        onState: (info: {
+          archiveName?: string;
+          checksums?: Record<string, string>;
+          decompressionTimeMs?: number;
+          fileName?: string;
+          size?: number;
+          sourceSize?: number;
+          wasDecompressed?: boolean;
+        }) => void;
+      },
+    ) => {
+      return withPreparedWorkflow(
+        input,
+        {
+          onChecksumReady: (state) => {
+            for (const info of toStagedInputInfos(state, input.inputs)) {
+              if (info) handlers.onChecksum(info);
+            }
+          },
+          onInputState: (state) => {
+            for (const info of toStagedInputInfos(state, input.inputs)) {
+              if (info) handlers.onState(info);
+            }
+          },
+          onProgress: (event) => {
+            const emitted = emitWorkflowProgress(event);
+            if (emitted.workflowProgress.role === "input") handlers.onProgress(emitted.progressEvent);
+          },
+        },
+        async ({ input: stagedInput }) => toStagedInputInfos(stagedInput, input.inputs),
+      );
+    },
+    [emitWorkflowProgress, withPreparedWorkflow],
+  );
+
+  const stagePatches = useCallback(
+    async (
+      input: ApplyWorkflowSessionInput,
+      handlers: {
+        onProgress: (event: ProgressEvent) => void;
+      },
+    ) => {
+      const originalNames = input.patches.map((patch, index) =>
+        getReactBinarySourceFileName(patch, `Patch ${index + 1}`),
+      );
+      return withPreparedWorkflow(
+        input,
+        {
+          onProgress: (event) => {
+            const emitted = emitWorkflowProgress(event);
+            if (emitted.workflowProgress.role === "patch") handlers.onProgress(emitted.progressEvent);
+          },
+          selection: {
+            promptInputSelection: false,
+            promptPatchSelection: true,
+          },
+        },
+        async ({ input: stagedInput, patches }) => {
+          const inputLabelById = new Map(
+            toStagedInputInfos(stagedInput, input.inputs).map((entry) => [entry.id || "", entry.fileName || "Input"]),
+          );
+          return patches.map((patch, index) => {
+            const targetName =
+              patch?.targetInputFileName ||
+              (patch?.targetInputId ? inputLabelById.get(patch.targetInputId) : undefined) ||
+              "None selected";
+            return toPatchStageInfo(
+              patch,
+              originalNames[index] || `Patch ${index + 1}`,
+              index,
+              `Target: ${targetName}`,
+            );
+          });
+        },
+      );
+    },
+    [emitWorkflowProgress, withPreparedWorkflow],
+  );
+
+  const { localUiController, localStackController, localOutputController, localNoticeController } =
+    useLocalApplyPatchFormSession({
+      ...propsWithSettings,
+      applyPatches,
+      applyReady,
+      downloadOutput,
+      onApplyComplete: () => undefined,
+      resolvedOutputCompression,
+      resolvedOutputName,
+      stageInput,
+      stagePatches,
+    });
+  const resolvedUiController = controllers?.ui || localUiController;
+  const resolvedStackController = controllers?.patchStack || localStackController;
+
+  handleSelectionCancelledRef.current = (request) => {
+    const normalizedSourceName = request.sourceName.trim().toLowerCase();
+    if (request.role === "patch") {
+      const items = resolvedStackController.getState().items;
+      const matchingIndex = items.findIndex((item) =>
+        [item.fileName, item.archiveFileName].some((value) => value.trim().toLowerCase() === normalizedSourceName),
+      );
+      const removeIndex = matchingIndex >= 0 ? matchingIndex : items.length - 1;
+      if (removeIndex >= 0) resolvedStackController.removeItem(removeIndex);
+      return;
+    }
+    if (request.role !== "input") return;
+    const romInputs = resolvedUiController.getState().romInputs;
+    const matchingInput = romInputs.find((entry) =>
+      [entry.info.fileName, entry.info.archiveName].some(
+        (value) => value.trim().toLowerCase() === normalizedSourceName,
+      ),
+    );
+    const fallbackInput = romInputs[romInputs.length - 1];
+    const removeId = matchingInput?.id || fallbackInput?.id;
+    if (removeId) resolvedUiController.removeRomInput?.(removeId);
+  };
+
+  return (
+    <>
+      <ApplyWorkflowFormView
+        controllers={{
+          dialog: controllers?.dialog || inertDialogController,
+          notice: controllers?.notice || localNoticeController,
+          output: controllers?.output || localOutputController,
+          patchStack: resolvedStackController,
+          ui: resolvedUiController,
+        }}
+        startup={startup}
+      />
+      {candidateSelectionDialog}
+    </>
+  );
+}
+
+export { ApplyPatchForm };

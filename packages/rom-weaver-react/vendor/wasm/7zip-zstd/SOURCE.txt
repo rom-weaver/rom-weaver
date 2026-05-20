@@ -1,0 +1,24 @@
+7-Zip-zstd WebAssembly artifacts for Rom Patcher JS
+
+Source: /Users/bcasey/Projects/brandonocasey/RomPatcher.js/../7-Zip-zstd
+Commit: 3ec0a79ecb0eb85f9ee7e3da556828949b3c8d35
+Reference loader/build surface: https://github.com/use-strict/7z-wasm
+Reference commit: 521d2cf93f5964f4e77b01049e19f1b29305c454
+
+Build script: scripts/build-7zip-zstd-wasm.sh
+Artifacts:
+- 7zz.js
+- 7zz.wasm
+- 7zz-threaded.js
+- 7zz-threaded.wasm
+
+WASM build notes:
+- Emscripten ES module build with JS FS forced, FS, NODEFS, WORKERFS, and callMain exported.
+- preRun, print, and printErr are preserved in INCOMING_MODULE_JS_API so Rom Patcher JS can install
+  a byte-level stderr callback with FS.init before runtime startup for live 7-Zip progress.
+- C++ exceptions are enabled; the 7-Zip command path uses exceptions for normal error propagation.
+- The single-threaded build compiles zstd without ZSTD_MULTITHREAD and skips ZSTD_c_nbWorkers in the encoder.
+  That avoids E_OUTOFMEMORY/E_INVALIDARG failures in the single-threaded wasm runtime while preserving zstd
+  archive creation and extraction.
+- The threaded build compiles and links with -pthread, enables ZSTD_MULTITHREAD, and uses a pthread pool size
+  of 8. Emscripten emits 7zz-threaded.js as both the main module and pthread worker module.

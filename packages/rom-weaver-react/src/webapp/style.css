@@ -1,0 +1,253 @@
+/* RomWeaver React UI base tokens */
+
+@import "../assets/fonts/inter-tight.css";
+@import "tailwindcss";
+
+body {
+  color-scheme: dark;
+  --rom-weaver-color-background: oklch(0.23 0.022 292);
+  --rom-weaver-color-surface: oklch(0.958 0.018 304);
+  --rom-weaver-color-surface-muted: oklch(0.936 0.022 302);
+  --rom-weaver-color-surface-strong: oklch(0.9 0.032 301);
+  --rom-weaver-color-border: oklch(0.8 0.03 303);
+  --rom-weaver-color-border-strong: oklch(0.66 0.055 302);
+  --rom-weaver-color-text: oklch(0.33 0.026 299);
+  --rom-weaver-color-text-soft: oklch(0.46 0.028 300);
+  --rom-weaver-color-primary: oklch(0.66 0.16 303);
+  --rom-weaver-color-primary-hover: oklch(0.71 0.16 304);
+  --rom-weaver-color-primary-active: oklch(0.59 0.15 301);
+  --rom-weaver-color-primary-focus: oklch(0.87 0.09 303 / 0.5);
+  --rom-weaver-color-success: oklch(0.66 0.13 154);
+  --rom-weaver-color-danger: oklch(0.62 0.2 24);
+  --rom-weaver-color-warning: oklch(0.74 0.16 67);
+  --rom-weaver-color-spinner: oklch(0.71 0.15 303);
+  --rom-weaver-color-muted: var(--rom-weaver-color-text-soft);
+  --rom-weaver-color-outer-btn: oklch(0.972 0.008 292);
+  --rom-weaver-color-footer: oklch(0.72 0.022 292);
+  --rom-weaver-color-footer-link: oklch(0.8 0.022 292);
+  --rom-weaver-color-footer-link-border: oklch(0.5 0.024 292);
+  --rom-weaver-color-footer-hover: oklch(0.96 0.011 292);
+  --rom-weaver-color-footer-hover-border: oklch(0.71 0.16 304);
+  --rom-weaver-control-height: 46px;
+  --rom-weaver-control-font-size: 13px;
+  --rom-weaver-control-line-height: 1.24;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: var(--rom-weaver-color-background);
+  background-image:
+    radial-gradient(1200px 600px at 8% -14%, oklch(0.43 0.12 300 / 0.36), transparent 58%),
+    radial-gradient(900px 500px at 96% -8%, oklch(0.4 0.11 278 / 0.26), transparent 54%),
+    linear-gradient(180deg, oklch(0.29 0.025 296), oklch(0.22 0.022 292));
+  background-attachment: fixed;
+  color: var(--rom-weaver-color-text);
+  font: 500 14.5px/1.5 "Inter Tight", "Segoe UI", sans-serif;
+  letter-spacing: 0;
+  font-stretch: 92%;
+  cursor: default;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+#webapp-root {
+  min-height: 100%;
+}
+
+a {
+  color: var(--rom-weaver-color-primary);
+}
+
+a:hover,
+a:focus-visible {
+  color: var(--rom-weaver-color-primary-hover);
+}
+
+select {
+  appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position:
+    calc(100% - 14px) calc(50% - 1px),
+    calc(100% - 9px) calc(50% - 1px);
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  text-overflow: "";
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--rom-weaver-color-muted);
+  opacity: 0.95;
+}
+
+input[type="file"].no-file-selector-button::file-selector-button {
+  display: none;
+}
+
+.compression-control {
+  --rom-weaver-compression-thumb-size: 16px;
+  --rom-weaver-compression-track-inset: calc(var(--rom-weaver-compression-thumb-size) / 2);
+}
+
+.compression-scale {
+  margin-inline: var(--rom-weaver-compression-track-inset);
+}
+
+.compression-scale-label {
+  left: var(--compression-scale-position);
+  text-align: center;
+  transform: translateX(-50%);
+}
+
+input[type="checkbox"].styled {
+  appearance: none;
+  position: relative;
+  box-sizing: border-box;
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--rom-weaver-color-border-strong);
+  border-radius: 6px;
+  background-color: var(--rom-weaver-color-surface-muted);
+  vertical-align: middle;
+  transition: border-color 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+input[type="checkbox"].styled::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 5px;
+  height: 9px;
+  border-right: 2px solid oklch(1 0 0 / 0.95);
+  border-bottom: 2px solid oklch(1 0 0 / 0.95);
+  opacity: 0;
+  transform: translate(-50%, -56%) rotate(45deg) scale(0.74);
+  transform-origin: center;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  content: "";
+}
+
+input[type="checkbox"].styled:focus:not(:disabled) {
+  box-shadow: var(--rom-weaver-color-primary-focus) 0 0 0 2px;
+}
+
+input[type="checkbox"].styled:hover:not(:disabled) {
+  border-color: var(--rom-weaver-color-primary-hover);
+  cursor: pointer;
+}
+
+input[type="checkbox"].styled:hover:checked:not(:disabled) {
+  background-color: var(--rom-weaver-color-primary-hover);
+}
+
+input[type="checkbox"].styled:checked {
+  border-color: var(--rom-weaver-color-primary);
+  background-color: var(--rom-weaver-color-primary);
+}
+
+input[type="checkbox"].styled:checked::after {
+  opacity: 1;
+  transform: translate(-50%, -56%) rotate(45deg) scale(1);
+}
+
+@keyframes rom-weaver-progress-indeterminate {
+  0% {
+    left: -52%;
+    width: 28%;
+  }
+  45% {
+    width: 52%;
+  }
+  100% {
+    left: 100%;
+    width: 34%;
+  }
+}
+
+@keyframes rom-weaver-progress-sheen {
+  0% {
+    background-position: 210% 0;
+  }
+  100% {
+    background-position: -110% 0;
+  }
+}
+
+@keyframes rom-weaver-progress-weave-a {
+  0% {
+    background-position: 0 0;
+  }
+  100% {
+    background-position: 210% 0;
+  }
+}
+
+@keyframes rom-weaver-progress-weave-b {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -20% 0;
+  }
+}
+
+@keyframes rom-weaver-progress-thread {
+  0% {
+    transform: translateX(-36%);
+  }
+  100% {
+    transform: translateX(248%);
+  }
+}
+
+@keyframes spin {
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.rom-weaver-spinner {
+  position: relative;
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  vertical-align: middle;
+  animation: spin 1s ease-in-out infinite;
+}
+
+.rom-weaver-spinner::before {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: -3px;
+  border-radius: 3px;
+  background-color: var(--rom-weaver-color-spinner);
+  content: "";
+}
+
+#rom-weaver-dialog-zip::backdrop {
+  background-color: oklch(0.2 0.022 292 / 0.82);
+  backdrop-filter: blur(4px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

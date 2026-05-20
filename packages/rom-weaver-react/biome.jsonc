@@ -1,0 +1,113 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.2.6/schema.json",
+  "root": true,
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on",
+        "useSortedAttributes": "on",
+        "useSortedKeys": "on",
+        "useSortedProperties": "on"
+      }
+    },
+    "enabled": true
+  },
+  "files": {
+    "ignoreUnknown": true,
+    "includes": [
+      "package.json",
+      "index.html",
+      "vite.config.mjs",
+      "vitest.config.base.mjs",
+      "vitest.browser.config.mjs",
+      "src/**/*.js",
+      "src/**/*.jsx",
+      "src/**/*.mjs",
+      "src/**/*.ts",
+      "src/**/*.tsx",
+      "tests/**/*.js",
+      "tests/**/*.mjs",
+      "tests/**/*.ts"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "lineWidth": 120
+  },
+  "linter": {
+    "domains": {
+      "react": "recommended"
+    },
+    "enabled": true,
+    "rules": {
+      "complexity": {
+        "noForEach": "error",
+        "noUselessStringConcat": "error",
+        "useSimplifiedLogicExpression": "error"
+      },
+      "performance": {
+        "useTopLevelRegex": "off"
+      },
+      "recommended": true,
+      "correctness": {
+        "useExhaustiveDependencies": "off"
+      },
+      "style": {
+        "noCommonJs": "error",
+        "noNegationElse": "error",
+        "noNestedTernary": "off",
+        "noNonNullAssertion": "off",
+        "noSubstr": "error",
+        "noUselessElse": "error",
+        "noYodaExpression": "error",
+        "useAtIndex": "off",
+        "useCollapsedElseIf": "error",
+        "useCollapsedIf": "error",
+        "useForOf": "error"
+      },
+      "suspicious": {
+        "noAlert": "error",
+        "noArrayIndexKey": "off",
+        "noDuplicateTestHooks": "error",
+        "noEmptyBlockStatements": "error",
+        "noExplicitAny": "error",
+        "noMisplacedAssertion": "off",
+        "noSkippedTests": "error",
+        "useErrorMessage": "error",
+        "useNumberToFixedDigitsArgument": "error"
+      },
+      "security": {
+        "noGlobalEval": "off"
+      }
+    }
+  },
+  "overrides": [
+    {
+      "includes": ["src/workers/shared/**/*.ts"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noImplicitAnyLet": "off"
+          }
+        }
+      }
+    },
+    {
+      "assist": {
+        "actions": {
+          "source": {
+            "useSortedKeys": "off"
+          }
+        }
+      },
+      "includes": ["**/*.json"]
+    }
+  ],
+  "vcs": {
+    "clientKind": "git",
+    "defaultBranch": "master",
+    "enabled": true,
+    "useIgnoreFile": true
+  }
+}

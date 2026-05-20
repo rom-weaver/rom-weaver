@@ -1,0 +1,615 @@
+import { forwardCreatePatchProgress } from "../../platform/shared/workflow-runtime-progress.ts";
+import type { ChecksumResult } from "../../types/checksum.ts";
+import type { PublicOutput } from "../../types/workflow-runtime.ts";
+import type {
+  RuntimeDiscCreateChdInput,
+  RuntimeDiscCreateRvzInput,
+  RuntimeDiscCreateZ3dsInput,
+  RuntimeDiscExtractChdInput,
+  RuntimeDiscExtractRvzInput,
+  RuntimeDiscExtractZ3dsInput,
+  RuntimeDiscHooks,
+  RuntimePatchApplyWorkerInput,
+  RuntimePatchCreateWorkerInput,
+  RuntimePatchWorkerProgress,
+  RuntimeWorkerIo,
+  RuntimeWorkerPathSource,
+  WorkflowRuntime,
+  WorkflowRuntimeLog,
+  WorkflowRuntimePreload,
+  WorkflowRuntimePreloadEvent,
+  WorkflowRuntimeProgress,
+} from "../../types/workflow-runtime-adapter.ts";
+import { getNamedSourceFileName, toWorkerMetadata } from "./source-normalization.ts";
+import { createCompressionExtractResult } from "./workflow-runtime-worker-helpers.ts";
+
+const CUE_FILE_REGEX = /\.cue$/i;
+
+type DiscRuntimeAdapter = {
+  createChd?: (input: RuntimeDiscCreateChdInput) => Promise<Awaited<ReturnType<RuntimeWorkerIo["createWorkerOutput"]>>>;
+  createRvz?: (input: RuntimeDiscCreateRvzInput) => Promise<Awaited<ReturnType<RuntimeWorkerIo["createWorkerOutput"]>>>;
+  createZ3ds?: (
+    input: RuntimeDiscCreateZ3dsInput,
+  ) => Promise<Awaited<ReturnType<RuntimeWorkerIo["createWorkerOutput"]>>>;
+  listChd?: (
+    input: RuntimeDiscExtractChdInput,
+  ) => Promise<Awaited<ReturnType<NonNullable<WorkflowRuntime["compression"]["list"]>>>["entries"]>;
+  listRvz?: (
+    input: RuntimeDiscExtractRvzInput,
+  ) => Promise<Awaited<ReturnType<NonNullable<WorkflowRuntime["compression"]["list"]>>>["entries"]>;
+  listZ3ds?: (
+    input: RuntimeDiscExtractZ3dsInput,
+  ) => Promise<Awaited<ReturnType<NonNullable<WorkflowRuntime["compression"]["list"]>>>["entries"]>;
+  extractChd?: (
+    input: RuntimeDiscExtractChdInput,
+  ) => Promise<Awaited<ReturnType<RuntimeWorkerIo["createWorkerOutput"]>>>;
+  extractRvz?: (
+    input: RuntimeDiscExtractRvzInput,
+  ) => Promise<Awaited<ReturnType<RuntimeWorkerIo["createWorkerOutput"]>>>;
+  extractZ3ds?: (
+    input: RuntimeDiscExtractZ3dsInput,
+  ) => Promise<Awaited<ReturnType<RuntimeWorkerIo["createWorkerOutput"]>>>;
+};
+
+type PatchRuntimeAdapter = {
+  invokeApplyPatchWorker: (
+    input: RuntimePatchApplyWorkerInput,
+    onProgress: ((progress: RuntimePatchWorkerProgress) => void) | undefined,
+    onLog: Parameters<NonNullable<WorkflowRuntime["patch"]["applyPatch"]>>[0]["onLog"],
+  ) => Promise<Parameters<RuntimeWorkerIo["createWorkerOutput"]>[0]>;
+  invokeCreatePatchWorker: (
+    input: RuntimePatchCreateWorkerInput,
+    onProgress: ((progress: RuntimePatchWorkerProgress) => void) | undefined,
+    onLog: Parameters<NonNullable<WorkflowRuntime["patch"]["createPatch"]>>[0]["onLog"],
+  ) => Promise<Parameters<RuntimeWorkerIo["createWorkerOutput"]>[0]>;
+  workerIo: RuntimeWorkerIo;
+  workerOutputFailureMessage?: string;
+};
+
+type InternalPatchApplySummary = {
+  outputSize?: number;
+  patches?: Array<{
+    fileName: string;
+    format: string;
+    size?: number;
+  }>;
+  patchSize?: number;
+  rom?: {
+    fileName: string;
+    size?: number;
+  };
+  timing?: {
+    elapsedMs?: number;
+    elapsedSeconds?: number;
+  } | null;
+};
+
+type ChecksumWorkerRunner = (
+  input: {
+    checksumAlgorithms: string[];
+    checksumStartOffset?: number;
+    fileName?: string;
+    filePath?: string;
+    fileSize?: number;
+    logLevel?: string;
+  },
+  onProgress?: (progress: WorkflowRuntimeProgress) => void,
+  onLog?: (log: WorkflowRuntimeLog) => void,
+) => Promise<{ checksums: ChecksumResult }>;
+
+type RuntimePatchTraceContext = {
+  logLevel?: string;
+  onLog?: (log: WorkflowRuntimeLog) => void;
+};
+
+const cleanupWorkerSources = async (workerSources: RuntimeWorkerPathSource[]) => {
+  await Promise.all(workerSources.map((workerSource) => workerSource.cleanup().catch(() => undefined)));
+};
+
+const traceRuntimePatchApply = (
+  context: RuntimePatchTraceContext,
+  message: string,
+  details: Record<string, unknown> = {},
+) => {
+  if (context.logLevel !== "trace") return;
+  context.onLog?.({
+    details,
+    level: "trace",
+    message,
+    namespace: "runtime:patch",
+    timestamp: new Date().toISOString(),
+  });
+};
+
+const summarizeRuntimeWorkerPathSource = (source: RuntimeWorkerPathSource | undefined, index?: number) =>
+  source
+    ? {
+        fileName: source.fileName,
+        filePath: source.filePath,
+        index,
+        size: source.size,
+      }
+    : null;
+
+const toPatchWorkerFiles = (sources: RuntimeWorkerPathSource[]) =>
+  sources.map((patchSource) => ({
+    patchFileName: patchSource.fileName,
+    patchFilePath: patchSource.filePath,
+  }));
+
+const attachApplySummary = <TOutput extends PublicOutput>(
+  output: TOutput,
+  summary: InternalPatchApplySummary | null,
+) => (summary ? Object.assign(output, { _applySummary: summary }) : output);
+
+const createSharedPatchRuntime = (adapter: PatchRuntimeAdapter): WorkflowRuntime["patch"] => ({
+  applyPatch: async ({ input, patches, options, logLevel, onLog, onProgress }) => {
+    const traceContext = { logLevel, onLog };
+    const stageStartedAt = Date.now();
+    traceRuntimePatchApply(traceContext, "patch.apply.stage.start", {
+      patchCount: patches.length,
+    });
+    let workerSources: RuntimeWorkerPathSource[];
+    try {
+      workerSources = await adapter.workerIo.stageSources([
+        {
+          fallbackFileName: "input.bin",
+          pathBucket: "input",
+          pathPrefix: "apply-input",
+          scope: "apply",
+          source: input,
+        },
+        ...patches.map((patch, index) => ({
+          fallbackFileName: patch.patchFileName || `patch-${index + 1}.bin`,
+          pathBucket: "patches" as const,
+          pathPrefix: `apply-patch-${index + 1}`,
+          scope: "apply" as const,
+          source: patch.patchFile,
+        })),
+      ]);
+      const [inputSource, ...patchSources] = workerSources;
+      traceRuntimePatchApply(traceContext, "patch.apply.stage.finish", {
+        durationMs: Date.now() - stageStartedAt,
+        input: summarizeRuntimeWorkerPathSource(inputSource),
+        patches: patchSources.map((source, index) => summarizeRuntimeWorkerPathSource(source, index)),
+      });
+    } catch (error) {
+      traceRuntimePatchApply(traceContext, "patch.apply.stage.fail", {
+        durationMs: Date.now() - stageStartedAt,
+        error,
+        patchCount: patches.length,
+      });
+      throw error;
+    }
+    try {
+      const [inputSource, ...patchSources] = workerSources;
+      if (!inputSource) throw new Error("Apply patch worker input was not staged");
+      const workerStartedAt = Date.now();
+      traceRuntimePatchApply(traceContext, "patch.apply.worker.dispatch", {
+        input: summarizeRuntimeWorkerPathSource(inputSource),
+        patchCount: patchSources.length,
+        patches: patchSources.map((source, index) => summarizeRuntimeWorkerPathSource(source, index)),
+      });
+      let result: Parameters<RuntimeWorkerIo["createWorkerOutput"]>[0];
+      try {
+        result = await adapter.invokeApplyPatchWorker(
+          {
+            logLevel,
+            options,
+            patchFileName: patchSources[0]?.fileName || "patch.bin",
+            patchFilePath: patchSources[0]?.filePath,
+            patchFiles: toPatchWorkerFiles(patchSources),
+            romFileName: inputSource.fileName,
+            romFilePath: inputSource.filePath,
+          },
+          onProgress ? forwardCreatePatchProgress(onProgress) : undefined,
+          onLog,
+        );
+      } catch (error) {
+        traceRuntimePatchApply(traceContext, "patch.apply.worker.fail", {
+          durationMs: Date.now() - workerStartedAt,
+          error,
+          input: summarizeRuntimeWorkerPathSource(inputSource),
+          patchCount: patchSources.length,
+        });
+        throw error;
+      }
+      traceRuntimePatchApply(traceContext, "patch.apply.worker.finish", {
+        durationMs: Date.now() - workerStartedAt,
+        fileName: result.fileName,
+        outputSize: result.size,
+        timing: result.applySummary && typeof result.applySummary === "object" ? result.applySummary.timing : undefined,
+      });
+      return attachApplySummary(
+        await adapter.workerIo.createWorkerOutput(
+          result,
+          result.fileName || "patched.bin",
+          adapter.workerOutputFailureMessage,
+        ),
+        result.applySummary && typeof result.applySummary === "object"
+          ? (result.applySummary as InternalPatchApplySummary)
+          : null,
+      );
+    } finally {
+      await cleanupWorkerSources(workerSources);
+    }
+  },
+  createPatch: async ({
+    original,
+    modified,
+    format,
+    metadata,
+    outputName,
+    workerThreads,
+    logLevel,
+    onLog,
+    onProgress,
+  }) => {
+    const workerSources = await adapter.workerIo.stageSources([
+      {
+        fallbackFileName: "original.bin",
+        pathBucket: "input",
+        pathPrefix: "create-patch-original",
+        scope: "create-patch",
+        source: original,
+      },
+      {
+        fallbackFileName: "modified.bin",
+        pathBucket: "input",
+        pathPrefix: "create-patch-modified",
+        scope: "create-patch",
+        source: modified,
+      },
+    ]);
+    try {
+      const [originalSource, modifiedSource] = workerSources;
+      if (!(originalSource && modifiedSource)) throw new Error("Create patch worker inputs were not staged");
+      const result = await adapter.invokeCreatePatchWorker(
+        {
+          format,
+          logLevel,
+          metadata: toWorkerMetadata(metadata),
+          modifiedFileName: modifiedSource.fileName,
+          modifiedFilePath: modifiedSource.filePath,
+          originalFileName: originalSource.fileName,
+          originalFilePath: originalSource.filePath,
+          outputName,
+          workerThreads: workerThreads ?? undefined,
+        },
+        onProgress ? forwardCreatePatchProgress(onProgress) : undefined,
+        onLog,
+      );
+      return {
+        format,
+        output: await adapter.workerIo.createWorkerOutput(result, outputName, adapter.workerOutputFailureMessage),
+      };
+    } finally {
+      await cleanupWorkerSources(workerSources);
+    }
+  },
+});
+
+const createWorkerChecksumRuntime = (
+  workerIo: RuntimeWorkerIo,
+  runChecksumWorker: ChecksumWorkerRunner,
+): WorkflowRuntime["checksum"] => ({
+  calculate: async ({ source, algorithms, startOffset, logLevel, onLog, onProgress }) => {
+    const workerSource = await workerIo.stageSource({
+      fallbackFileName: "file.bin",
+      pathPrefix: "checksum-input",
+      scope: "checksum",
+      source,
+    });
+    try {
+      const result = await runChecksumWorker(
+        {
+          checksumAlgorithms: algorithms,
+          checksumStartOffset: startOffset,
+          fileName: workerSource.fileName || "file.bin",
+          filePath: workerSource.filePath,
+          fileSize: workerSource.size,
+          logLevel,
+        },
+        onProgress,
+        onLog,
+      );
+      return result.checksums;
+    } finally {
+      await workerSource.cleanup().catch(() => undefined);
+    }
+  },
+});
+
+const createSharedCompressionRuntime = (
+  sevenZipZstdRuntime: Partial<WorkflowRuntime["compression"]>,
+  discRuntime: DiscRuntimeAdapter,
+  input: {
+    createBytes?: (bytes: Uint8Array, fileName: string) => Promise<PublicOutput>;
+    sevenZipZstdOptional?: boolean;
+  } = {},
+): WorkflowRuntime["compression"] => {
+  type CompressionProgressHandler = NonNullable<
+    Parameters<NonNullable<WorkflowRuntime["compression"]["extract"]>>[0]["options"]
+  >["onProgress"];
+  const requireOutput = <TOutput>(output: TOutput | undefined, message: string): TOutput => {
+    if (output === undefined) throw new Error(message);
+    return output;
+  };
+  const getSourceFileName = (source: RuntimeDiscExtractChdInput["source"], fallbackFileName: string) =>
+    getNamedSourceFileName(source, { fallback: fallbackFileName }) || fallbackFileName;
+  const createCueOutput = async (
+    cueText: string,
+    cueFileName: string,
+    cleanup?: () => Promise<void> | void,
+  ): Promise<PublicOutput> => {
+    if (!input.createBytes) throw new Error("Compression runtime cannot synthesize cue outputs in this environment");
+    const cueOutput = await input.createBytes(new TextEncoder().encode(cueText), cueFileName);
+    if (cleanup) cueOutput.cleanup = cleanup;
+    return cueOutput;
+  };
+  const toDiscProgressCallback = (
+    stage: "input" | "output",
+    onProgress: CompressionProgressHandler,
+  ): RuntimeDiscHooks["onProgress"] =>
+    onProgress
+      ? (progress: { label?: string; message?: string; percent?: number | null }) => {
+          onProgress({
+            label: progress.label || (stage === "input" ? "Extracting disc image..." : "Creating disc image..."),
+            message: progress.message,
+            percent:
+              typeof progress.percent === "number" && Number.isFinite(progress.percent) ? progress.percent : null,
+            stage,
+          });
+        }
+      : undefined;
+  const runtime: WorkflowRuntime["compression"] = {
+    create: async (request) => {
+      if ("entries" in request) {
+        if (!sevenZipZstdRuntime.create) throw new Error("7zip-zstd compression creation is unavailable");
+        return sevenZipZstdRuntime.create(request);
+      }
+      if (request.format === "chd")
+        return {
+          output: requireOutput(
+            await discRuntime.createChd?.({
+              chdSourceMode: request.chdSourceMode,
+              compressionCodecs: request.compressionCodecs,
+              cueInputFileName: request.cueInputFileName,
+              cueText: request.cueText,
+              fileName: request.fileName,
+              imageFiles: request.imageFiles,
+              logLevel: request.options?.logLevel,
+              mode: request.mode,
+              onLog: request.options?.onLog,
+              onProgress: toDiscProgressCallback("output", request.options?.onProgress),
+              outputName: request.outputName,
+              source: request.source,
+              threads: request.options?.workerThreads,
+            }),
+            "CHD compression creation is unavailable",
+          ),
+        };
+      if (request.format === "rvz")
+        return {
+          output: requireOutput(
+            await discRuntime.createRvz?.({
+              fileName: request.fileName,
+              logLevel: request.options?.logLevel,
+              onLog: request.options?.onLog,
+              onProgress: toDiscProgressCallback("output", request.options?.onProgress),
+              outputName: request.outputName,
+              rvzBlockSize: request.rvzBlockSize,
+              rvzCompression: request.rvzCompression,
+              rvzCompressionLevel: request.rvzCompressionLevel,
+              rvzMode: request.rvzMode,
+              rvzScrub: request.rvzScrub,
+              rvzSourceFileName: request.rvzSourceFileName,
+              source: request.source,
+              threads: request.options?.workerThreads,
+            }),
+            "RVZ compression creation is unavailable",
+          ),
+        };
+      if (request.format === "z3ds")
+        return {
+          output: requireOutput(
+            await discRuntime.createZ3ds?.({
+              fileName: request.fileName,
+              logLevel: request.options?.logLevel,
+              onLog: request.options?.onLog,
+              onProgress: toDiscProgressCallback("output", request.options?.onProgress),
+              outputName: request.outputName,
+              source: request.source,
+              threads: request.options?.workerThreads,
+              z3dsCompressionLevel: request.z3dsCompressionLevel,
+              z3dsMetadata: request.z3dsMetadata as Record<
+                string,
+                string | number | boolean | Uint8Array | null | undefined
+              > | null,
+              z3dsSourceFileName: request.z3dsSourceFileName,
+              z3dsUnderlyingMagic: request.z3dsUnderlyingMagic,
+            }),
+            "Z3DS compression creation is unavailable",
+          ),
+        };
+      throw new Error(
+        `Unsupported compression create format: ${String((request as { format?: unknown }).format || "")}`,
+      );
+    },
+  };
+  const extract = async (request: Parameters<NonNullable<WorkflowRuntime["compression"]["extract"]>>[0]) => {
+    if (request.format === "chd") {
+      const selectedEntries = request.entries.filter((entryName) => typeof entryName === "string" && entryName);
+      const cueEntryName = selectedEntries.find((entryName) => CUE_FILE_REGEX.test(entryName));
+      const trackEntryName = selectedEntries.find((entryName) => !CUE_FILE_REGEX.test(entryName));
+      const extractedOutput = requireOutput(
+        await discRuntime.extractChd?.({
+          fileName: getSourceFileName(request.source, "input.chd"),
+          logLevel: request.options?.logLevel,
+          mode: cueEntryName ? "cd" : undefined,
+          onLog: request.options?.onLog,
+          onProgress: toDiscProgressCallback("input", request.options?.onProgress),
+          outputName: trackEntryName || request.outputName,
+          source: request.source,
+          threads: request.options?.workerThreads,
+        }),
+        "CHD compression extraction is unavailable",
+      ) as PublicOutput & { chdCueFileName?: string; chdCueText?: string };
+      if (!cueEntryName) return createCompressionExtractResult([extractedOutput]);
+      const cueOutput = await createCueOutput(
+        extractedOutput.chdCueText || "",
+        cueEntryName || extractedOutput.chdCueFileName || "disc.cue",
+        trackEntryName ? undefined : extractedOutput.cleanup,
+      );
+      const outputs = request.entries
+        .map((entryName) => {
+          if (entryName === cueEntryName) return cueOutput;
+          if (entryName === trackEntryName) return extractedOutput;
+          return null;
+        })
+        .filter((output): output is PublicOutput => !!output);
+      return createCompressionExtractResult(outputs.length ? outputs : [cueOutput, extractedOutput]);
+    }
+    if (request.format === "rvz") {
+      if (request.entries.length !== 1)
+        throw new Error("RVZ compression extraction requires exactly one synthetic output entry");
+      return createCompressionExtractResult([
+        requireOutput(
+          await discRuntime.extractRvz?.({
+            fileName: getSourceFileName(request.source, "input.rvz"),
+            logLevel: request.options?.logLevel,
+            onLog: request.options?.onLog,
+            onProgress: toDiscProgressCallback("input", request.options?.onProgress),
+            outputName: request.entries[0] || request.outputName,
+            source: request.source,
+            threads: request.options?.workerThreads,
+          }),
+          "RVZ compression extraction is unavailable",
+        ),
+      ]);
+    }
+    if (request.format === "z3ds") {
+      if (request.entries.length !== 1)
+        throw new Error("Z3DS compression extraction requires exactly one synthetic output entry");
+      return createCompressionExtractResult([
+        requireOutput(
+          await discRuntime.extractZ3ds?.({
+            fileName: getSourceFileName(request.source, "input.z3ds"),
+            logLevel: request.options?.logLevel,
+            onLog: request.options?.onLog,
+            onProgress: toDiscProgressCallback("input", request.options?.onProgress),
+            outputName: request.entries[0] || request.outputName,
+            source: request.source,
+            threads: request.options?.workerThreads,
+          }),
+          "Z3DS compression extraction is unavailable",
+        ),
+      ]);
+    }
+    if (!sevenZipZstdRuntime.extract) throw new Error("7zip-zstd compression extraction is unavailable");
+    return sevenZipZstdRuntime.extract(request);
+  };
+  if (!input.sevenZipZstdOptional || sevenZipZstdRuntime.extract) runtime.extract = extract;
+  runtime.list = async (request) => {
+    if (request.format === "chd")
+      return {
+        entries: requireOutput(
+          await discRuntime.listChd?.({
+            fileName: getSourceFileName(request.source, "input.chd"),
+            logLevel: request.options?.logLevel,
+            mode: undefined,
+            onLog: request.options?.onLog,
+            onProgress: toDiscProgressCallback("input", request.options?.onProgress),
+            source: request.source,
+            threads: request.options?.workerThreads,
+          }),
+          "CHD compression listing is unavailable",
+        ),
+      };
+    if (request.format === "rvz")
+      return {
+        entries: requireOutput(
+          await discRuntime.listRvz?.({
+            fileName: getSourceFileName(request.source, "input.rvz"),
+            logLevel: request.options?.logLevel,
+            onLog: request.options?.onLog,
+            onProgress: toDiscProgressCallback("input", request.options?.onProgress),
+            source: request.source,
+            threads: request.options?.workerThreads,
+          }),
+          "RVZ compression listing is unavailable",
+        ),
+      };
+    if (request.format === "z3ds")
+      return {
+        entries: requireOutput(
+          await discRuntime.listZ3ds?.({
+            fileName: getSourceFileName(request.source, "input.z3ds"),
+            logLevel: request.options?.logLevel,
+            onLog: request.options?.onLog,
+            onProgress: toDiscProgressCallback("input", request.options?.onProgress),
+            source: request.source,
+            threads: request.options?.workerThreads,
+          }),
+          "Z3DS compression listing is unavailable",
+        ),
+      };
+    const listRuntime = sevenZipZstdRuntime.list;
+    if (!listRuntime) throw new Error("7zip-zstd compression listing is unavailable");
+    return listRuntime(request);
+  };
+  return runtime;
+};
+
+const createRuntimePreload = (): WorkflowRuntimePreload => ({
+  preloadCapability: async (capability, emit) => {
+    const workerKind = getPreloadWorkerKind(capability);
+    const tool = getPreloadWasmTool(capability);
+    try {
+      emitPreloadLog(emit, capability, `Preloading ${capability} capability`);
+      emit({ data: { capability, status: "created", workerKind }, kind: "worker" });
+      emit({ data: { capability, status: "loading", workerKind }, kind: "worker" });
+      emit({ data: { capability, status: "loading", tool }, kind: "wasm" });
+      emit({ data: { capability, status: "busy", workerKind }, kind: "worker" });
+      const { warmupRomWeaverRunner } = await import("../../workers/rom-weaver/rom-weaver-runner.ts");
+      await warmupRomWeaverRunner();
+      emit({ data: { capability, status: "loaded", tool }, kind: "wasm" });
+      emit({ data: { capability, status: "instantiated", tool }, kind: "wasm" });
+      emit({ data: { capability, status: "ready", workerKind }, kind: "worker" });
+      emit({ data: { capability, status: "idle", workerKind }, kind: "worker" });
+    } catch (error) {
+      emit({ data: { capability, status: "failed", tool }, kind: "wasm" });
+      emit({ data: { capability, status: "failed", workerKind }, kind: "worker" });
+      throw error;
+    }
+  },
+});
+
+const emitPreloadLog = (
+  emit: (event: WorkflowRuntimePreloadEvent) => void,
+  capability: Parameters<NonNullable<WorkflowRuntimePreload["preloadCapability"]>>[0],
+  message: string,
+) => {
+  emit({
+    data: {
+      capability,
+      level: "debug",
+      message,
+    },
+    kind: "log",
+  });
+};
+
+const getPreloadWorkerKind = (capability: Parameters<NonNullable<WorkflowRuntimePreload["preloadCapability"]>>[0]) => {
+  if (capability === "compression") return "compression";
+  if (capability === "checksum" || capability === "patch") return "patch-checksum";
+  return "compression";
+};
+
+const getPreloadWasmTool = (capability: Parameters<NonNullable<WorkflowRuntimePreload["preloadCapability"]>>[0]) => {
+  if (capability === "compression" || capability === "checksum" || capability === "patch") return "rom-weaver";
+  return undefined;
+};
+
+export type { DiscRuntimeAdapter };
+export { createRuntimePreload, createSharedCompressionRuntime, createSharedPatchRuntime, createWorkerChecksumRuntime };

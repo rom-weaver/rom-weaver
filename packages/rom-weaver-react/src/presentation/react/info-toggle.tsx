@@ -1,0 +1,107 @@
+import { type CSSProperties, type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { cx, sectionClasses } from "../tailwind-classes.ts";
+
+function InfoToggle({
+  ariaLabel,
+  children,
+  className,
+  panelClassName,
+  portalPanel,
+  title,
+}: {
+  ariaLabel: string;
+  children: ReactNode;
+  className?: string;
+  panelClassName?: string;
+  portalPanel?: boolean;
+  title: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const containerRef = useRef<HTMLSpanElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const [panelStyle, setPanelStyle] = useState<CSSProperties | undefined>(undefined);
+  const panelId = useId();
+
+  useLayoutEffect(() => {
+    if (!(portalPanel && open) || typeof window === "undefined") return;
+    const panel = panelRef.current;
+    const button = buttonRef.current;
+    if (!(panel && button)) return;
+
+    const viewportMargin = 12;
+    const gap = 6;
+    const summaryRect = button.getBoundingClientRect();
+    const panelRect = panel.getBoundingClientRect();
+    const maxLeft = window.innerWidth - panelRect.width - viewportMargin;
+    const left = Math.max(viewportMargin, Math.min(summaryRect.left, maxLeft));
+    const belowTop = summaryRect.bottom + gap;
+    const aboveTop = summaryRect.top - panelRect.height - gap;
+    const top =
+      belowTop + panelRect.height <= window.innerHeight - viewportMargin
+        ? belowTop
+        : Math.max(viewportMargin, aboveTop);
+    setPanelStyle({ left, top });
+  }, [open, portalPanel]);
+
+  useEffect(() => {
+    if (!(open && typeof document !== "undefined")) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (containerRef.current?.contains(target)) return;
+      if (panelRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      buttonRef.current?.focus();
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
+  const panel = (
+    <div
+      className={cx(sectionClasses.infoPanel, portalPanel && sectionClasses.infoPortalPanel, panelClassName)}
+      id={panelId}
+      ref={panelRef}
+      style={portalPanel ? panelStyle : undefined}
+    >
+      {children}
+    </div>
+  );
+  let renderedPanel: ReactNode = null;
+  if (open) {
+    renderedPanel = portalPanel && typeof document !== "undefined" ? createPortal(panel, document.body) : panel;
+  }
+
+  return (
+    <span className={cx(sectionClasses.info, className)} ref={containerRef}>
+      <button
+        aria-controls={panelId}
+        aria-expanded={open}
+        aria-label={ariaLabel}
+        className={sectionClasses.infoButton}
+        onClick={() => {
+          if (!open) setPanelStyle(undefined);
+          setOpen((currentOpen) => !currentOpen);
+        }}
+        ref={buttonRef}
+        title={title}
+        type="button"
+      >
+        i
+      </button>
+      {renderedPanel}
+    </span>
+  );
+}
+
+export { InfoToggle };

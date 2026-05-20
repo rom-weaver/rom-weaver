@@ -1,0 +1,56 @@
+{
+  "name": "rom-weaver-react",
+  "version": "0.1.0",
+  "description": "RomWeaver patcher-only webapp and React API",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.tsx",
+      "import": "./src/index.tsx"
+    },
+    "./webapp": "./src/webapp/main.tsx"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "lint": "npm run lint:code && npm run lint:types",
+    "lint:code": "biome check package.json index.html vite.config.mjs vitest.config.base.mjs vitest.browser.config.mjs tsconfig.base.json tsconfig.json src tests --diagnostic-level=error",
+    "lint:types": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run test:browser",
+    "test:browser": "vitest --config ./vitest.browser.config.mjs run",
+    "audit:strings": "if rg --hidden --glob '!node_modules/**' --glob '!.git/**' --glob '!dist/**' 'rom-patcher' src tests index.html; then echo 'Found legacy rom-patcher identifiers' && exit 1; else echo 'No legacy rom-patcher identifiers found'; fi"
+  },
+  "dependencies": {
+    "@bjorn3/browser_wasi_shim": "0.4.2",
+    "@zenfs/core": "2.5.6",
+    "@zenfs/dom": "1.2.9",
+    "hash-wasm": "^4.12.0",
+    "lucide-react": "0.554.0",
+    "react": "19.2.5",
+    "react-dom": "19.2.5",
+    "rom-weaver-wasm": "file:../rom-weaver-wasm",
+    "valibot": "1.4.0",
+    "zustand": "5.0.13"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.4.13",
+    "@tailwindcss/vite": "4.2.4",
+    "@types/node": "25.6.0",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.1",
+    "@vitest/browser": "4.1.7",
+    "@vitest/browser-playwright": "4.1.7",
+    "playwright": "1.60.0",
+    "tailwindcss": "4.2.4",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.0",
+    "vitest": "4.1.7"
+  }
+}
