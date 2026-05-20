@@ -416,6 +416,14 @@ impl<W: Write + Seek> ArchiveWriter<W> {
             }
         }
 
+        #[cfg(target_family = "wasm")]
+        if !must_encrypt_header {
+            // WASI hosts can crash in lzma-rust2 during encoded-header finalization.
+            // Writing the raw header is spec-compliant and avoids that path.
+            header.write_all(&raw_header)?;
+            return Ok(());
+        }
+
         methods.push(EncoderConfiguration::new(EncoderMethod::LZMA));
 
         let methods = Arc::new(methods);

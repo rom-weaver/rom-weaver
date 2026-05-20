@@ -165,7 +165,6 @@ optional = true
 version = "0.16"
 features = [
     "std",
-    "optimization",
 ]
 default-features = false
 

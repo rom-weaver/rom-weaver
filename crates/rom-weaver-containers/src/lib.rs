@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::{
     collections::BTreeSet,
     fs::{self, File},
-    io::{self, BufReader, BufWriter, Read, Seek, SeekFrom, Write},
+    io::{self, BufReader, BufWriter, Cursor, Read, Seek, SeekFrom, Write},
     num::NonZeroU64,
     path::{Component, Path, PathBuf},
     sync::{
@@ -49,7 +49,7 @@ use rom_weaver_core::{
 use sevenz_rust::{
     ArchiveEntry as SevenZArchiveEntry, ArchiveReader as SevenZReader,
     ArchiveWriter as SevenZWriter, EncoderConfiguration as SevenZMethodConfiguration,
-    EncoderMethod as SevenZMethod, Password as SevenZPassword,
+    EncoderMethod as SevenZMethod, Password as SevenZPassword, SourceReader as SevenZSourceReader,
 };
 use tar::{Archive as TarArchive, Builder as TarBuilder};
 use xdvdfs::{
@@ -200,6 +200,43 @@ const XISO: FormatDescriptor = FormatDescriptor {
     aliases: &[],
     extensions: &[".xiso", ".xiso.iso"],
 };
+
+/// Avoid vectored writes on WASI file descriptors, which can trigger host runtime crashes
+/// for some archive/codec pipelines.
+struct NonVectoredWriter<W> {
+    inner: W,
+}
+
+impl<W> NonVectoredWriter<W> {
+    fn new(inner: W) -> Self {
+        Self { inner }
+    }
+}
+
+impl<W: Write> Write for NonVectoredWriter<W> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.inner.write(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.inner.flush()
+    }
+
+    fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
+        for slice in bufs {
+            if !slice.is_empty() {
+                return self.inner.write(slice);
+            }
+        }
+        Ok(0)
+    }
+}
+
+impl<W: Seek> Seek for NonVectoredWriter<W> {
+    fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+        self.inner.seek(pos)
+    }
+}
 
 pub struct ContainerRegistry {
     handlers: Vec<Arc<dyn ContainerHandler>>,
@@ -2064,6 +2101,8 @@ struct StreamContainerHandler {
 }
 
 impl StreamContainerHandler {
+    const INSPECT_READ_BUFFER_BYTES: usize = 64 * 1024;
+
     const fn new(descriptor: &'static FormatDescriptor, compression: StreamCompression) -> Self {
         Self {
             descriptor,
@@ -2217,6 +2256,32 @@ impl StreamContainerHandler {
         })
     }
 
+    fn xz_thread_count(effective_threads: usize) -> u32 {
+        match u32::try_from(effective_threads) {
+            Ok(count) => count.clamp(1, 256),
+            Err(_) => 256,
+        }
+    }
+
+    fn open_reader_for_inspect(
+        &self,
+        source: &Path,
+        execution: &ThreadExecution,
+    ) -> Result<Box<dyn Read>> {
+        let file = File::open(source)?;
+        let reader: Box<dyn Read> = match self.compression {
+            StreamCompression::Gzip => Box::new(GzDecoder::new(BufReader::new(file))),
+            StreamCompression::Bzip2 => Box::new(Bzip2Decoder::new(BufReader::new(file))),
+            StreamCompression::Xz if execution.used_parallelism => {
+                let workers = Self::xz_thread_count(execution.effective_threads);
+                Box::new(XzReaderMt::new(BufReader::new(file), false, workers)?)
+            }
+            StreamCompression::Xz => Box::new(XzReader::new(BufReader::new(file), false)),
+            StreamCompression::Zstd => Box::new(zstd::stream::Decoder::new(BufReader::new(file))?),
+        };
+        Ok(reader)
+    }
+
     fn output_name(&self, source: &Path) -> String {
         let file_name = source
             .file_name()
@@ -2280,23 +2345,19 @@ impl ContainerHandler for StreamContainerHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let compressed_bytes = fs::metadata(&request.source)?.len();
-        let backend = self.codec_backend()?;
-        let decoded = context
-            .temp_paths()
-            .next_path(&format!("{}-inspect", self.descriptor.name), Some("bin"));
-        let decode_report = backend.decode(
-            &CodecOperationRequest {
-                input: request.source.clone(),
-                output: decoded.clone(),
-                level: None,
-            },
-            context,
-        )?;
-        if decode_report.status != OperationStatus::Succeeded {
-            return Err(RomWeaverError::Unsupported(decode_report.label));
+        let execution = context.plan_threads(self.extract_thread_capability());
+        let mut reader = self.open_reader_for_inspect(&request.source, &execution)?;
+        let mut logical_bytes = 0u64;
+        let mut buffer = vec![0u8; Self::INSPECT_READ_BUFFER_BYTES];
+
+        loop {
+            context.cancel().check()?;
+            let read = reader.read(&mut buffer)?;
+            if read == 0 {
+                break;
+            }
+            logical_bytes = logical_bytes.saturating_add(read as u64);
         }
-        let logical_bytes = fs::metadata(&decoded)?.len();
-        let _ = fs::remove_file(&decoded);
 
         Ok(OperationReport::succeeded(
             OperationFamily::Container,
@@ -3171,12 +3232,15 @@ impl SevenZContainerHandler {
             RequestedCodec::Known(CanonicalCodec::Lzma) => {
                 Ok(SevenZMethodConfiguration::new(SevenZMethod::LZMA))
             }
+            RequestedCodec::Known(CanonicalCodec::Store) => {
+                Ok(SevenZMethodConfiguration::new(SevenZMethod::COPY))
+            }
             RequestedCodec::Known(codec) => Err(RomWeaverError::Validation(format!(
-                "unsupported 7z codec `{}`; supported codecs are lzma2 and lzma",
+                "unsupported 7z codec `{}`; supported codecs are lzma2, lzma, and store",
                 codec.name()
             ))),
             RequestedCodec::Unknown(name) => Err(RomWeaverError::Validation(format!(
-                "unsupported 7z codec `{name}`; supported codecs are lzma2 and lzma"
+                "unsupported 7z codec `{name}`; supported codecs are lzma2, lzma, and store"
             ))),
         }?;
 
@@ -3190,6 +3254,12 @@ impl SevenZContainerHandler {
         } else {
             None
         };
+
+        if method.method == SevenZMethod::COPY && level.is_some() {
+            return Err(RomWeaverError::Validation(
+                "7z codec `store` does not accept --level".into(),
+            ));
+        }
 
         match method.method {
             SevenZMethod::LZMA2 if execution.used_parallelism => {
@@ -3232,9 +3302,27 @@ impl SevenZContainerHandler {
 
     fn method_name(method: &SevenZMethodConfiguration) -> &'static str {
         match method.method {
+            SevenZMethod::COPY => "store",
             SevenZMethod::LZMA2 => "lzma2",
             SevenZMethod::LZMA => "lzma",
             _ => "unknown",
+        }
+    }
+
+    fn create_archive_entry(&self, entry: &ArchiveInputEntry) -> SevenZArchiveEntry {
+        #[cfg(target_family = "wasm")]
+        {
+            // Avoid filesystem timestamp conversion in sevenz-rust on wasm, which can panic on
+            // platforms that cannot represent pre-UNIX-EPOCH SystemTime values.
+            if entry.is_dir {
+                SevenZArchiveEntry::new_directory(&entry.archive_name)
+            } else {
+                SevenZArchiveEntry::new_file(&entry.archive_name)
+            }
+        }
+        #[cfg(not(target_family = "wasm"))]
+        {
+            SevenZArchiveEntry::from_path(&entry.source, entry.archive_name.clone())
         }
     }
 }
@@ -3440,7 +3528,7 @@ impl ContainerHandler for SevenZContainerHandler {
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
         }
-        let output = File::create(&request.output)?;
+        let output = Cursor::new(Vec::new());
         let mut writer = SevenZWriter::new(output).map_err(|error| {
             RomWeaverError::Validation(format!("7z create failed to initialize writer: {error}"))
         })?;
@@ -3449,8 +3537,7 @@ impl ContainerHandler for SevenZContainerHandler {
         let mut logical_bytes = 0u64;
         let total_entries = entries.len();
         for (entry_index, entry) in entries.iter().enumerate() {
-            let archive_entry =
-                SevenZArchiveEntry::from_path(&entry.source, entry.archive_name.clone());
+            let archive_entry = self.create_archive_entry(entry);
             if entry.is_dir {
                 writer
                     .push_archive_entry::<&[u8]>(archive_entry, None)
@@ -3478,9 +3565,12 @@ impl ContainerHandler for SevenZContainerHandler {
                 continue;
             }
 
-            let source = File::open(&entry.source)?;
+            #[cfg(target_family = "wasm")]
+            let source: Box<dyn Read> = Box::new(Cursor::new(fs::read(&entry.source)?));
+            #[cfg(not(target_family = "wasm"))]
+            let source: Box<dyn Read> = Box::new(File::open(&entry.source)?);
             writer
-                .push_archive_entry(archive_entry, Some(source))
+                .push_archive_entries(vec![archive_entry], vec![SevenZSourceReader::new(source)])
                 .map_err(|error| {
                     RomWeaverError::Validation(format!(
                         "7z create failed for `{}`: {error}",
@@ -3505,11 +3595,12 @@ impl ContainerHandler for SevenZContainerHandler {
             );
         }
 
-        writer.finish().map_err(|error| {
+        let output = writer.finish().map_err(|error| {
             RomWeaverError::Validation(format!(
                 "7z create failed while finalizing archive: {error}"
             ))
         })?;
+        fs::write(&request.output, output.into_inner())?;
 
         Ok(OperationReport::succeeded(
             OperationFamily::Container,
@@ -10817,8 +10908,8 @@ mod tests {
                 .supports_execution(&extract_execution)
         );
         assert_eq!(extract_execution.requested_threads, 8);
-        assert_eq!(extract_execution.effective_threads, 1);
-        assert!(!extract_execution.used_parallelism);
+        assert_eq!(extract_execution.effective_threads, 8);
+        assert!(extract_execution.used_parallelism);
 
         for index in 0..8 {
             let path = output_dir.join(format!("input/file-{index}.bin"));
@@ -10949,8 +11040,8 @@ mod tests {
                 .supports_execution(&extract_execution)
         );
         assert_eq!(extract_execution.requested_threads, 8);
-        assert_eq!(extract_execution.effective_threads, 1);
-        assert!(!extract_execution.used_parallelism);
+        assert_eq!(extract_execution.effective_threads, 8);
+        assert!(extract_execution.used_parallelism);
 
         for index in 0..6 {
             let path = output_dir.join(format!("input/blob-{index}.bin"));
@@ -11022,6 +11113,52 @@ mod tests {
 
         let extracted = fs::read(output_dir.join("source.bin")).expect("read extracted payload");
         assert_eq!(extracted, payload);
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn zst_stream_inspect_reports_uncompressed_bytes() {
+        let temp_dir = temp_dir_path("zst-stream-inspect");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let source_path = temp_dir.join("source.bin");
+        let archive_path = temp_dir.join("source.bin.zst");
+        let payload = (0..(512 * 1024))
+            .map(|index| (index as u8).wrapping_mul(7))
+            .collect::<Vec<_>>();
+        fs::write(&source_path, &payload).expect("write fixture");
+
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("zst").expect("zst handler");
+        handler
+            .create(
+                &ContainerCreateRequest {
+                    inputs: vec![source_path.clone()],
+                    output: archive_path.clone(),
+                    format: "zst".to_string(),
+                    codec: None,
+                    level: None,
+                },
+                &test_context(&temp_dir, 8),
+            )
+            .expect("create zst");
+
+        let report = handler
+            .inspect(
+                &rom_weaver_core::ContainerInspectRequest {
+                    source: archive_path,
+                },
+                &test_context(&temp_dir, 8),
+            )
+            .expect("inspect zst");
+        assert_eq!(report.status, rom_weaver_core::OperationStatus::Succeeded);
+        assert!(
+            report
+                .label
+                .contains(&format!("{} bytes uncompressed", payload.len())),
+            "inspect label mismatch: {}",
+            report.label
+        );
+
         let _ = fs::remove_dir_all(temp_dir);
     }
 

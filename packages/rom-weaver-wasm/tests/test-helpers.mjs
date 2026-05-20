@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const VCDIFF_SOURCE_FIXTURE_PATH = fileURLToPath(
@@ -148,9 +148,7 @@ export async function runProgressMatrix({ runJson, dir, sourcePath, appliedOutpu
 export async function runPatchMatrix({ runJson, dir, sourcePath }) {
   const zipPath = join(dir, 'archive.zip');
   const zipExtractDir = join(dir, 'zip-extract');
-  const chdInputPath = join(dir, 'disc.bin');
-  const chdPath = join(dir, 'disc.chd');
-  const chdExtractDir = join(dir, 'extract-chd');
+  const sevenZPath = join(dir, 'archive.7z');
   const originalPath = join(dir, 'original.bin');
   const modifiedPath = join(dir, 'modified.bin');
   const ipsPath = join(dir, 'update.ips');
@@ -158,11 +156,11 @@ export async function runPatchMatrix({ runJson, dir, sourcePath }) {
   const rupPath = join(dir, 'update.rup');
   const bpsPath = join(dir, 'update.bps');
   const appliedIpsPath = join(dir, 'applied-ips.bin');
+  const appliedBpsPath = join(dir, 'applied-bps.bin');
   const appliedUpsPath = join(dir, 'applied-ups.bin');
   const appliedRupPath = join(dir, 'applied-rup.bin');
   const appliedXdeltaPath = join(dir, 'applied-xdelta.bin');
 
-  await writeFile(chdInputPath, Buffer.alloc(2048 * 8, 0x5a));
   await writeFile(originalPath, Buffer.from('abcdefgh', 'utf8'));
   await writeFile(modifiedPath, Buffer.from('a1XYZf!!!', 'utf8'));
 
@@ -191,35 +189,11 @@ export async function runPatchMatrix({ runJson, dir, sourcePath }) {
     '--threads',
     '1',
   ]);
-  assertFailedWithLabel(zipExtractResult, /thread pool build failed/i, 'zip extract');
-
-  const chdCompressResult = await runJson([
-    'compress',
-    chdInputPath,
-    '--format',
-    'chd',
-    '--output',
-    chdPath,
-    '--threads',
-    '1',
-  ]);
-  assert.equal(chdCompressResult.ok, true);
-  assert.equal(getTerminalEvent(chdCompressResult).status, 'succeeded');
-
-  const chdExtractResult = await runJson([
-    'extract',
-    chdPath,
-    '--out-dir',
-    chdExtractDir,
-    '--threads',
-    '1',
-  ]);
-  assert.equal(chdExtractResult.ok, true);
-  const chdExtractTerminal = getTerminalEvent(chdExtractResult);
-  assert.equal(chdExtractTerminal.status, 'succeeded');
-  assert.ok(
-    Array.isArray(chdExtractTerminal.details?.emitted_files)
-    && chdExtractTerminal.details.emitted_files.some((file) => file?.file_name === 'disc.bin'),
+  assert.equal(zipExtractResult.ok, true);
+  assert.equal(getTerminalEvent(zipExtractResult).status, 'succeeded');
+  assert.deepEqual(
+    await readFile(join(zipExtractDir, basename(sourcePath))),
+    await readFile(sourcePath),
   );
 
   const ipsCreateResult = await runJson([
@@ -280,7 +254,7 @@ export async function runPatchMatrix({ runJson, dir, sourcePath }) {
     '--threads',
     '1',
   ]);
-  assertFailedWithLabel(bpsCreateResult, /thread pool build failed/i, 'bps patch-create');
+  assert.equal(bpsCreateResult.ok, true);
 
   const ipsApplyResult = await runJson([
     'patch-apply',
@@ -309,7 +283,23 @@ export async function runPatchMatrix({ runJson, dir, sourcePath }) {
     '1',
     '--no-compress',
   ]);
-  assertFailedWithLabel(upsApplyResult, /i\/o error: unsupported/i, 'ups patch-apply');
+  assert.equal(upsApplyResult.ok, true);
+  assert.deepEqual(await readFile(appliedUpsPath), Buffer.from('a1XYZf!!!', 'utf8'));
+
+  const bpsApplyResult = await runJson([
+    'patch-apply',
+    '--input',
+    originalPath,
+    '--patch',
+    bpsPath,
+    '--output',
+    appliedBpsPath,
+    '--threads',
+    '1',
+    '--no-compress',
+  ]);
+  assert.equal(bpsApplyResult.ok, true);
+  assert.deepEqual(await readFile(appliedBpsPath), Buffer.from('a1XYZf!!!', 'utf8'));
 
   const rupApplyResult = await runJson([
     'patch-apply',
@@ -323,7 +313,39 @@ export async function runPatchMatrix({ runJson, dir, sourcePath }) {
     '1',
     '--no-compress',
   ]);
-  assertFailedWithLabel(rupApplyResult, /i\/o error: unsupported/i, 'rup patch-apply');
+  assert.equal(rupApplyResult.ok, true);
+  assert.deepEqual(await readFile(appliedRupPath), Buffer.from('a1XYZf!!!', 'utf8'));
+
+  const sevenZCreateResult = await runJson([
+    'compress',
+    sourcePath,
+    '--format',
+    '7z',
+    '--output',
+    sevenZPath,
+    '--threads',
+    '1',
+  ]);
+  assert.equal(sevenZCreateResult.ok, true);
+  assert.equal(getTerminalEvent(sevenZCreateResult).status, 'succeeded');
+
+  const sevenZLzmaResult = await runJson([
+    'compress',
+    sourcePath,
+    '--format',
+    '7z',
+    '--output',
+    join(dir, 'archive-lzma.7z'),
+    '--codec',
+    'lzma',
+    '--threads',
+    '1',
+  ]);
+  assertFailedWithLabel(
+    sevenZLzmaResult,
+    /7z codec `lzma` is not available on wasm/i,
+    '7z lzma codec should fail with a structured wasm validation error',
+  );
 
   const xdeltaApplyResult = await runJson([
     'patch-apply',

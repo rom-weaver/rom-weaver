@@ -1,6 +1,6 @@
 use std::{
     fs::{self, File, OpenOptions},
-    io::{self, BufReader, BufWriter, Write},
+    io::{self, BufReader, BufWriter, Seek, SeekFrom, Write},
     num::NonZeroU64,
     path::Path,
     sync::Arc,
@@ -173,6 +173,43 @@ enum NativeCodecKind {
 struct NativeCodecBackend {
     descriptor: &'static CodecDescriptor,
     kind: NativeCodecKind,
+}
+
+/// Avoid vectored writes on WASI file descriptors, which can trigger runtime crashes
+/// in some host runtimes when certain codec pipelines flush output.
+struct NonVectoredWriter<W> {
+    inner: W,
+}
+
+impl<W> NonVectoredWriter<W> {
+    fn new(inner: W) -> Self {
+        Self { inner }
+    }
+}
+
+impl<W: Write> Write for NonVectoredWriter<W> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.inner.write(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.inner.flush()
+    }
+
+    fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
+        for slice in bufs {
+            if !slice.is_empty() {
+                return self.inner.write(slice);
+            }
+        }
+        Ok(0)
+    }
+}
+
+impl<W: Seek> Seek for NonVectoredWriter<W> {
+    fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+        self.inner.seek(pos)
+    }
 }
 
 impl NativeCodecBackend {
@@ -363,7 +400,7 @@ impl NativeCodecBackend {
             NativeCodecKind::Store => fs::copy(&request.input, &request.output)?,
             NativeCodecKind::Deflate => {
                 let mut source = BufReader::new(File::open(&request.input)?);
-                let output = BufWriter::new(File::create(&request.output)?);
+                let output = BufWriter::new(NonVectoredWriter::new(File::create(&request.output)?));
                 let mut encoder =
                     GzEncoder::new(output, DeflateCompression::new(level.unwrap_or(6) as u32));
                 let copied = io::copy(&mut source, &mut encoder)?;
@@ -373,7 +410,7 @@ impl NativeCodecBackend {
             }
             NativeCodecKind::Zstd => {
                 let mut source = BufReader::new(File::open(&request.input)?);
-                let output = BufWriter::new(File::create(&request.output)?);
+                let output = BufWriter::new(NonVectoredWriter::new(File::create(&request.output)?));
                 let mut encoder = ZstdEncoder::new(output, level.unwrap_or(3))?;
                 if execution.effective_threads > 1 {
                     match u32::try_from(execution.effective_threads) {
@@ -398,7 +435,7 @@ impl NativeCodecBackend {
             }
             NativeCodecKind::Lzma2 => {
                 let mut source = BufReader::new(File::open(&request.input)?);
-                let output = BufWriter::new(File::create(&request.output)?);
+                let output = BufWriter::new(NonVectoredWriter::new(File::create(&request.output)?));
                 let level = level.unwrap_or(6) as u32;
                 if execution.used_parallelism {
                     let mut encoder = XzWriterMt::new(
@@ -420,7 +457,7 @@ impl NativeCodecBackend {
             }
             NativeCodecKind::Bzip2 => {
                 let mut source = BufReader::new(File::open(&request.input)?);
-                let output = BufWriter::new(File::create(&request.output)?);
+                let output = BufWriter::new(NonVectoredWriter::new(File::create(&request.output)?));
                 let mut encoder =
                     BzEncoder::new(output, Bzip2Compression::new(level.unwrap_or(6) as u32));
                 let copied = io::copy(&mut source, &mut encoder)?;
