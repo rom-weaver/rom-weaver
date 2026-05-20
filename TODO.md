@@ -7,10 +7,8 @@
 - `2026-05-17 audit`: Added backlog rows for current threading/streaming gaps (RVZ/Z3DS capability parity, qbsdiff threading, patch streaming migrations off full-buffer reads, and real codec backend implementation).
 - `this commit`: Added thread capability/runtime validation groundwork (`ThreadCapability::supports_execution`) and parity assertions for IPS/VCDIFF apply execution paths.
 - `this commit`: Native SOLID v4 patch support landed (`.solid`, parse/apply/create, MD5 validation, primitive stream handling, and CLI smoke coverage).
-- `this commit`: PDS parse/apply/create landed with `patch.dat` manifest validation and embedded BSDIFF40 payload round-trip support.
 - `b9b66a5`: MOD/PMSR parse/apply/create support landed (`.mod`/`.pmsr`, `pmsr` alias) with module + CLI smoke coverage.
 - `6e2e7d1`: Standalone stream container support landed for `gz`, `bz2`, `xz`, and `zst` (`inspect`/`extract`/`create`).
-- `e4442c2`: PDS probe-only patch registration landed (`.pds` routing now reserved while apply/create remain pending).
 - `edf17b0`: RUP parse/apply/create support landed with MD5-matched forward/undo apply validation.
 - `70a1850`: Checksum command engine landed with mmap-backed hashing, parallel crc32 fanout, and CLI smoke coverage for baseline algorithms.
 - `69bdce6`: APS parse/apply/create support landed (`.aps` via APSGBA-compatible handler).
@@ -22,6 +20,7 @@
 - `78ae8b9`: z3ds inspect/extract/create landed (parallel extract path for large files).
 - `67ef8fb`: rvz inspect/extract/create landed.
 - `this commit`: inspect now supports `--list` archive entry output; patch-apply gained `--strip-header`/`--add-header`/`--repair-checksum`; checksum gained `--strip-header`.
+- `this commit`: Added backlog rows for NSZ-family decompression support (`.nsz`, `.xcz`, `.ncz`) aligned to the `nicoboss/nsz` reference format behavior.
 
 ## Commands
 
@@ -41,6 +40,7 @@
 | CMD-012 | command | save-file-converter | n/a | n/a | todo | n/a | n/a | context-plumbed | cli-smoke,fixture-roundtrip,json-contract | todo | Convert between save formats (`.sav`, `.srm`, `.eep`, `.fla`, `.sra`), swap endianness, and pad/trim output for flash-cart compatibility. |
 | CMD-013 | command | snes-copier-header-tool | n/a | n/a | todo | n/a | n/a | context-plumbed | cli-smoke,fixture-roundtrip,json-contract | todo | Detect, add, and remove 512-byte copier headers. |
 | CMD-014 | command | batch-header-fixer | n/a | n/a | done | n/a | n/a | context-plumbed | cli-smoke,fixture-roundtrip,json-contract | done | `batch-header-fixer` landed with recursive batch scanning, side-by-side or in-place output modes, dry-run support, and RetroMultiTools-style 19-profile header repair/validation coverage with JSON contract details. |
+| CMD-015 | command | header-fixer-opt-in-flags | n/a | n/a | n/a | todo | n/a | context-plumbed | cli-smoke,json-contract | todo | Migrate batch-header-fixer behavior into opt-in arguments for `checksum` and `patch-apply`, defaulting off unless explicitly requested. |
 
 ## Threading Groundwork
 
@@ -83,36 +83,40 @@
 | CTR-024 | container | tgc | done | done | done | n/a | n/a | per-file | cli-smoke | done | Native TGC inspect/extract/create landed; create is explicitly uncompressed (`store` only) and expects valid GameCube filesystem metadata in the source image. |
 | CTR-025 | container | nfs | done | done | n/a | n/a | n/a | per-file | cli-smoke | done | NFS inspect/extract support landed through `nod` path-based loaders (including external key-file requirements); create remains intentionally unsupported. |
 | CTR-026 | container | cso-ciso-create | done | done | done | n/a | n/a | per-block | fixture-roundtrip,cli-smoke | done | CSO/CISO support now includes create in addition to extract, with explicit `store`-only codec routing and single-input output semantics. |
+| CTR-027 | container | nsz | todo | todo | n/a | n/a | n/a | block,crypto-aware | fixture-roundtrip,cli-smoke | todo | Add native NSZ container inspect/extract support for decompression to NSP semantics, using `nicoboss/nsz` behavior as the parity reference. |
+| CTR-028 | container | xcz | todo | todo | n/a | n/a | n/a | block,crypto-aware | fixture-roundtrip,cli-smoke | todo | Add native XCZ container inspect/extract support for decompression to XCI semantics, with NSZ-compatible mixed NCZ or NCA entry handling. |
+| CTR-029 | container | ncz | n/a | todo | n/a | n/a | n/a | block,crypto-aware | fixture-roundtrip,cli-smoke | todo | Add native NCZ payload decompression support (header plus section or block handling) so NSZ or XCZ extraction can reconstruct original NCA payloads. |
 
 ## Patch Formats
 
 | ID | Family | Name | Inspect | Extract | Create/Compress | Apply | Create Patch | Threads | Tests | Status | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| PAT-001 | patch | IPS | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | Native parse/apply/create landed with round-trip fixture coverage and CLI smoke coverage. |
+| PAT-001 | patch | IPS | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | Native parse/apply/create landed with round-trip fixture coverage and CLI smoke coverage; create now supports deterministic threaded diff generation for large inputs and parse now uses read-only mmap instead of full-buffer `fs::read`. |
 | PAT-002 | patch | BPS | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | Native parse/apply/create landed with round-trip fixture coverage and CLI smoke coverage. |
 | PAT-003 | patch | UPS | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | Native parse/apply/create landed with reversible apply validation and CLI smoke coverage. |
-| PAT-004 | patch | VCDIFF | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | Native parse/apply/create landed with round-trip fixture coverage and CLI smoke coverage, including VCD_TARGET windows and custom code-table headers. |
-| PAT-005 | patch | xdelta | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | Shares the VCDIFF parser, uses threaded per-window xdelta decode (with sequential fallback for VCD_TARGET windows), and creates patches with optional secondary compression when it wins. |
-| PAT-006 | patch | APS | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | APS parse/apply/create landed via APSGBA-compatible handler wiring. |
-| PAT-007 | patch | APSGBA | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | APSGBA parse/apply/create landed with module-level round-trip coverage. |
+| PAT-004 | patch | VCDIFF | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | Native parse/apply/create landed with round-trip fixture coverage and CLI smoke coverage, including VCD_TARGET windows and custom code-table headers; create now runs baseline/secondary encode candidates in parallel when thread budget allows. |
+| PAT-005 | patch | xdelta | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | Shares the VCDIFF parser, uses threaded per-window xdelta decode (with sequential fallback for VCD_TARGET windows), and creates patches with optional secondary compression when it wins; create now runs baseline/secondary candidates in parallel with thread-aware reporting. |
+| PAT-006 | patch | APS | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | APS parse/apply/create landed via APSGBA-compatible handler wiring; create now supports deterministic threaded diff generation with chunk-boundary run merge. |
+| PAT-007 | patch | APSGBA | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | APSGBA parse/apply/create landed with module-level round-trip coverage; create now supports deterministic threaded block diff generation and thread-aware reporting. |
 | PAT-008 | patch | RUP | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | Native parse/apply/create landed with MD5-matched forward/undo apply, overflow mode handling (`A`/`M`), and round-trip fixture coverage. |
 | PAT-009 | patch | PPF | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | PPF parse/apply/create landed (PPF1/2/3 parse, PPF3 create). |
 | PAT-010 | patch | EBP | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | Implemented as IPS-compatible records with EBP JSON metadata trailers for parse/apply/create support. |
 | PAT-011 | patch | BDF/BSDIFF40 | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | Native parse/apply/create landed with BSDIFF40-compatible patch bytes plus `bdf`/`bsdiff` alias coverage. |
-| PAT-012 | patch | PMSR | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | Implemented through the MOD handler with `pmsr` alias support and `.pmsr` extension probing. |
-| PAT-013 | patch | MOD | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | Native parse/apply/create landed for Star Rod/Paper Mario `.mod` patches (PMSR magic), including CLI smoke and module coverage; create currently rejects shrinking outputs. |
+| PAT-012 | patch | PMSR | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | Implemented through the MOD handler with `pmsr` alias support and `.pmsr` extension probing; create now supports deterministic threaded diff generation for large inputs. |
+| PAT-013 | patch | MOD | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | Native parse/apply/create landed for Star Rod/Paper Mario `.mod` patches (PMSR magic), including CLI smoke and module coverage; create still rejects shrinking outputs and now supports deterministic threaded diff generation for large inputs. |
 | PAT-014 | patch | FFP/PAT | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | Native FireFlower/`fc /b`-style text patch support landed for `.pat`/`.ffp`, including reversible apply semantics and CLI smoke round-trip coverage. |
 | PAT-015 | patch | DLDI | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | Native parse/apply/create landed for `.dldi` patches with relocation-aware driver slot updates and CLI + module round-trip coverage. |
-| PAT-016 | patch | PDS | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | Native parse/apply/create landed for `.pds` archives via `patch.dat` manifest + embedded BSDIFF40 payload handling, with module and CLI smoke coverage. |
+| PAT-016 | patch | PDS | n/a | n/a | n/a | n/a | n/a | n/a | cli-smoke | dropped | Explicitly unsupported: `.pds` name/extension are intentionally not routed because no surviving ecosystem patches are known in practical use. |
 | PAT-017 | patch | SPATCH (Double IPS) | n/a | n/a | n/a | n/a | n/a | n/a | n/a | dropped | Support intentionally removed: `.spatch` probing and `double-ips`/`doubleips` alias routing are no longer registered. |
 | PAT-018 | patch | IPS32 | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | Native parse/apply/create landed with 32-bit offset support via `IPS32`/`EEOF`, plus signature-aware `.ips` probe routing (IPS vs IPS32) and CLI smoke coverage. |
 | PAT-019 | patch | SOLID | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | Native SOLID v4 parse/apply/create landed with source MD5 validation, base-address primitive decoding, and `solid`/`solidpatch`/`solid-patch` format name support. |
 | PAT-020 | patch | DPS | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | Native parse/apply/create landed for Deufeufeu `.dps` patches using fixed-size header metadata and mode-based copy/data records. |
-| PAT-021 | patch | bdf-pds-threaded-create | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke,thread-model | done | Replace qbsdiff `ParallelScheme::Never` in BDF and PDS create paths with thread-budget-aware configuration and verify deterministic output parity. |
-| PAT-022 | patch | buffered-to-streaming-migration-wave-1 | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke,large-file | done | Migrated heavy patch handlers (`UPS`, `APSGBA`, `RUP`, `PMSR`, `DPS`, `DLDI`, `SOLID`, `BDF`, `PDS`) off direct `fs::read` full-buffer apply/create paths where feasible, using chunked readers, in-place output writes, and file-backed mappings. |
+| PAT-021 | patch | bdf-threaded-create | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke,thread-model | done | Replace qbsdiff `ParallelScheme::Never` in the BDF create path with thread-budget-aware configuration and verify deterministic output parity. |
+| PAT-022 | patch | buffered-to-streaming-migration-wave-1 | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke,large-file | done | Migrated heavy patch handlers (`UPS`, `APSGBA`, `RUP`, `PMSR`, `DPS`, `DLDI`, `SOLID`, `BDF`) off direct `fs::read` full-buffer apply/create paths where feasible, using chunked readers, in-place output writes, and file-backed mappings. |
 | PAT-023 | patch | GDIFF | done | n/a | n/a | done | done | scan,diff,write flags | fixture-parity,cli-smoke | done | Native GDIFF v4 parse/apply/create landed with DATA/COPY opcode coverage and CLI smoke round-trip coverage. |
 | PAT-024 | patch | BSP | done | n/a | n/a | done | n/a | scan,write flags | unit,cli-smoke | done | BSP apply landed as a distinct scripted format (`.bsp`) via embedded BSP VM runtime execution; patch creation is intentionally unsupported and out of scope. |
 | PAT-025 | patch | cheat-patch-create | n/a | n/a | n/a | n/a | todo | scan,diff,write flags | fixture-parity,cli-smoke,json-contract | todo | Add cheat patch creation support that emits deterministic cheat-code outputs from original/modified inputs. |
+| PAT-026 | patch | HDiffPatch/HPatchZ | done | n/a | n/a | done | n/a | scan,diff,write flags | fixture-parity,cli-smoke | done | Native `.hdiff`/`.hpatchz` parse/apply landed with HDIFF13 and HDIFFSF20 single-file support; apply supports nocomp, zstd, zlib, bz2, lzma, and lzma2 with upstream fixture parity coverage (including HDIFFSF20 zstd). Patch creation is intentionally disabled (use upstream hdiffz/hpatchz tooling). |
 
 ## Codecs
 
