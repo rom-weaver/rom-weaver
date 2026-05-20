@@ -41,6 +41,7 @@ const DELTA_ADDR_COMP: u8 = 0x04;
 const DELTA_KNOWN_MASK: u8 = DELTA_DATA_COMP | DELTA_INST_COMP | DELTA_ADDR_COMP;
 const NATIVE_CHUNK_SIZE: usize = 64 * 1024;
 const XDELTA_SECONDARY_MIN_INPUT: usize = 10;
+const XDELTA_SECONDARY_MIN_SAVINGS: usize = 2;
 const XDELTA_DJW_SECONDARY_ID: u8 = 1;
 const XDELTA_LZMA_SECONDARY_ID: u8 = 2;
 const XDELTA_FGK_SECONDARY_ID: u8 = 16;
@@ -59,6 +60,7 @@ const DJW_MAX_GROUPS: usize = 8;
 const DJW_GROUP_BITS: usize = 3;
 const DJW_SECTORSZ_MULT: usize = 5;
 const DJW_SECTORSZ_BITS: usize = 5;
+const DJW_SECTORSZ_MAX: usize = (1 << DJW_SECTORSZ_BITS) * DJW_SECTORSZ_MULT;
 const DJW_MAX_CLCLEN: usize = 15;
 const DJW_CLCLEN_BITS: usize = 4;
 const DJW_MAX_GBCLEN: usize = 7;
@@ -151,13 +153,6 @@ impl PatchHandler for VcdiffPatchHandler {
         let validate_checksums =
             context.patch_checksum_validation() == PatchChecksumValidation::Strict;
         let input_len = std::fs::metadata(&request.input)?.len();
-        if patch
-            .windows
-            .iter()
-            .any(|window| window.delta_indicator != 0)
-        {
-            ensure_supported_secondary_compressor(patch.secondary_compressor_id)?;
-        }
 
         if patch
             .windows
@@ -427,6 +422,13 @@ enum WindowSourceKind {
     Target,
 }
 
+#[derive(Clone, Copy)]
+enum DjwSectionKind {
+    Data,
+    Inst,
+    Addr,
+}
+
 #[derive(Clone, Debug)]
 struct WindowIndex {
     source_kind: Option<WindowSourceKind>,
@@ -521,16 +523,23 @@ fn parse_patch<R: Read + Seek>(reader: &mut R) -> Result<ParsedPatch> {
     } else {
         None
     };
+    ensure_supported_secondary_compressor(secondary_compressor_id)?;
 
     let custom_code_table = if hdr_indicator & HDR_CODE_TABLE != 0 {
+        let (code_table_len, _) = read_varint(reader)?;
+        if code_table_len <= 2 {
+            return Err(RomWeaverError::Validation(
+                "invalid custom code table size".into(),
+            ));
+        }
         let near_size = read_u8(reader)?;
         let same_size = read_u8(reader)?;
-        let (code_table_len, _) = read_varint(reader)?;
-        skip_bytes(reader, code_table_len)?;
+        let code_table_data_len = code_table_len - 2;
+        skip_bytes(reader, code_table_data_len)?;
         Some(CustomCodeTableInfo {
             near_size,
             same_size,
-            data_len: code_table_len,
+            data_len: code_table_data_len,
         })
     } else {
         None
@@ -557,6 +566,12 @@ fn parse_patch<R: Read + Seek>(reader: &mut R) -> Result<ParsedPatch> {
             "patch output size",
         )?;
         windows.push(window);
+    }
+    if secondary_compressor_id.is_none() && windows.iter().any(|window| window.delta_indicator != 0)
+    {
+        return Err(RomWeaverError::Validation(
+            "patch declares compressed sections without a VCD_SECONDARY header".into(),
+        ));
     }
 
     Ok(ParsedPatch {
@@ -890,16 +905,19 @@ fn recode_patch_with_xdelta_options(
             &data,
             window.delta_indicator & DELTA_DATA_COMP != 0,
             secondary_compressor_id,
+            DjwSectionKind::Data,
         )?;
         let (inst_out, inst_comp) = recode_window_section(
             &inst,
             window.delta_indicator & DELTA_INST_COMP != 0,
             secondary_compressor_id,
+            DjwSectionKind::Inst,
         )?;
         let (addr_out, addr_comp) = recode_window_section(
             &addr,
             window.delta_indicator & DELTA_ADDR_COMP != 0,
             secondary_compressor_id,
+            DjwSectionKind::Addr,
         )?;
 
         let delta_indicator = recode_delta_indicator(
@@ -946,10 +964,11 @@ fn recode_window_section(
     section: &[u8],
     original_compressed: bool,
     secondary_compressor_id: Option<u8>,
+    section_kind: DjwSectionKind,
 ) -> Result<(Vec<u8>, bool)> {
     match secondary_compressor_id {
         Some(XDELTA_LZMA_SECONDARY_ID) => maybe_compress_xdelta_lzma_section(section),
-        Some(XDELTA_DJW_SECONDARY_ID) => maybe_compress_xdelta_djw_section(section),
+        Some(XDELTA_DJW_SECONDARY_ID) => maybe_compress_xdelta_djw_section(section, section_kind),
         Some(XDELTA_FGK_SECONDARY_ID) => maybe_compress_xdelta_fgk_section(section),
         Some(_) => {
             ensure_supported_secondary_compressor(secondary_compressor_id)?;
@@ -1006,24 +1025,27 @@ fn maybe_compress_xdelta_lzma_section(section: &[u8]) -> Result<(Vec<u8>, bool)>
     encode_varint_raw(&mut candidate, section.len() as u64);
     candidate.extend_from_slice(&compressed);
 
-    if candidate.len() < section.len() {
+    if xdelta_secondary_candidate_is_efficient(section.len(), candidate.len()) {
         Ok((candidate, true))
     } else {
         Ok((section.to_vec(), false))
     }
 }
 
-fn maybe_compress_xdelta_djw_section(section: &[u8]) -> Result<(Vec<u8>, bool)> {
+fn maybe_compress_xdelta_djw_section(
+    section: &[u8],
+    section_kind: DjwSectionKind,
+) -> Result<(Vec<u8>, bool)> {
     if section.len() < XDELTA_SECONDARY_MIN_INPUT {
         return Ok((section.to_vec(), false));
     }
 
-    let compressed = xdelta_djw_compress(section)?;
+    let compressed = xdelta_djw_compress(section, section_kind)?;
     let mut candidate = Vec::new();
     encode_varint_raw(&mut candidate, section.len() as u64);
     candidate.extend_from_slice(&compressed);
 
-    if candidate.len() < section.len() {
+    if xdelta_secondary_candidate_is_efficient(section.len(), candidate.len()) {
         Ok((candidate, true))
     } else {
         Ok((section.to_vec(), false))
@@ -1040,18 +1062,33 @@ fn maybe_compress_xdelta_fgk_section(section: &[u8]) -> Result<(Vec<u8>, bool)> 
     encode_varint_raw(&mut candidate, section.len() as u64);
     candidate.extend_from_slice(&compressed);
 
-    if candidate.len() < section.len() {
+    if xdelta_secondary_candidate_is_efficient(section.len(), candidate.len()) {
         Ok((candidate, true))
     } else {
         Ok((section.to_vec(), false))
     }
 }
 
-fn xdelta_djw_compress(section: &[u8]) -> Result<Vec<u8>> {
+fn xdelta_secondary_candidate_is_efficient(original_size: usize, candidate_size: usize) -> bool {
+    candidate_size < original_size.saturating_sub(XDELTA_SECONDARY_MIN_SAVINGS)
+}
+
+fn xdelta_djw_compress(section: &[u8], section_kind: DjwSectionKind) -> Result<Vec<u8>> {
     if section.is_empty() {
         return Err(RomWeaverError::Validation(
             "xdelta djw secondary encoder requires non-empty input".into(),
         ));
+    }
+
+    let (groups, sector_size) = djw_select_groups_and_sector_size(section.len(), section_kind)?;
+    if groups > 1 {
+        if let Ok(compressed) = xdelta_djw_compress_multi_group(section, groups, sector_size) {
+            if let Ok(decoded) = decode_djw_secondary(&compressed, section.len()) {
+                if decoded == section {
+                    return Ok(compressed);
+                }
+            }
+        }
     }
 
     let frequencies = djw_count_byte_frequencies(section);
@@ -1076,6 +1113,298 @@ fn xdelta_djw_compress(section: &[u8]) -> Result<Vec<u8>> {
     }
 
     Ok(writer.finish())
+}
+
+fn djw_select_groups_and_sector_size(
+    input_size: usize,
+    section_kind: DjwSectionKind,
+) -> Result<(usize, usize)> {
+    let (groups, sector_size) = match section_kind {
+        DjwSectionKind::Data => {
+            if input_size < 1_000 {
+                (1, 0)
+            } else if input_size < 4_000 {
+                (2, 10)
+            } else if input_size < 7_000 {
+                (3, 10)
+            } else if input_size < 10_000 {
+                (4, 10)
+            } else if input_size < 25_000 {
+                (5, 10)
+            } else if input_size < 50_000 {
+                (7, 20)
+            } else if input_size < 100_000 {
+                (8, 30)
+            } else {
+                (8, 70)
+            }
+        }
+        DjwSectionKind::Inst => {
+            if input_size < 7_000 {
+                (1, 0)
+            } else if input_size < 10_000 {
+                (2, 50)
+            } else if input_size < 25_000 {
+                (3, 50)
+            } else if input_size < 50_000 {
+                (6, 40)
+            } else {
+                (8, 40)
+            }
+        }
+        DjwSectionKind::Addr => {
+            if input_size < 9_000 {
+                (1, 0)
+            } else if input_size < 25_000 {
+                (2, 130)
+            } else if input_size < 50_000 {
+                (3, 130)
+            } else if input_size < 100_000 {
+                (5, 130)
+            } else {
+                (7, 130)
+            }
+        }
+    };
+    if groups > DJW_MAX_GROUPS {
+        return Err(RomWeaverError::Validation(
+            "xdelta djw encoder selected too many groups".into(),
+        ));
+    }
+    if groups == 1 {
+        return Ok((1, 0));
+    }
+    if sector_size < DJW_SECTORSZ_MULT
+        || sector_size > DJW_SECTORSZ_MAX
+        || sector_size % DJW_SECTORSZ_MULT != 0
+    {
+        return Err(RomWeaverError::Validation(
+            "xdelta djw encoder selected an invalid sector size".into(),
+        ));
+    }
+    Ok((groups, sector_size))
+}
+
+fn xdelta_djw_compress_multi_group(
+    section: &[u8],
+    groups: usize,
+    sector_size: usize,
+) -> Result<Vec<u8>> {
+    if groups <= 1 || groups > DJW_MAX_GROUPS {
+        return Err(RomWeaverError::Validation(
+            "xdelta djw encoder received an invalid group count".into(),
+        ));
+    }
+    if sector_size < DJW_SECTORSZ_MULT
+        || sector_size > DJW_SECTORSZ_MAX
+        || sector_size % DJW_SECTORSZ_MULT != 0
+    {
+        return Err(RomWeaverError::Validation(
+            "xdelta djw encoder received an invalid sector size".into(),
+        ));
+    }
+
+    let sectors = 1 + (section.len() - 1) / sector_size;
+    let real_freq = djw_count_byte_frequencies(section);
+    let mut selected_groups = vec![0u8; sectors];
+    let mut group_freq = djw_seed_group_frequencies(groups);
+    djw_smooth_group_frequencies(&mut group_freq, &real_freq);
+
+    for _ in 0..3 {
+        let (group_lengths, _) = djw_build_group_code_tables(&group_freq, &real_freq)?;
+        djw_choose_best_sector_groups(section, sector_size, &group_lengths, &mut selected_groups)?;
+        djw_rebuild_group_frequencies(section, sector_size, &selected_groups, &mut group_freq)?;
+        djw_smooth_group_frequencies(&mut group_freq, &real_freq);
+    }
+
+    let (group_lengths, group_codes) = djw_build_group_code_tables(&group_freq, &real_freq)?;
+    let mut writer = DjwBitWriter::new();
+    writer.write_bits(DJW_GROUP_BITS, groups - 1)?;
+    writer.write_bits(DJW_SECTORSZ_BITS, (sector_size / DJW_SECTORSZ_MULT) - 1)?;
+
+    let mut group_symbols = Vec::with_capacity(groups * DJW_ALPHABET_SIZE);
+    for lengths in &group_lengths {
+        group_symbols.extend_from_slice(lengths);
+    }
+    let mut group_prefix = DjwPrefix::new(group_symbols);
+    djw_encode_prefix(&mut writer, &mut group_prefix)?;
+
+    let mut selector_prefix = DjwPrefix::new(selected_groups.clone());
+    let mut selector_mtf = (0..groups)
+        .map(|index| {
+            u8::try_from(index).map_err(|_| {
+                RomWeaverError::Validation("xdelta djw selector index exceeded u8".into())
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let mut selector_freq = vec![0u32; groups + 1];
+    djw_compute_mtf_1_2(
+        &mut selector_prefix,
+        &mut selector_mtf,
+        &mut selector_freq,
+        groups,
+    )?;
+    let (selector_lengths, _) = djw_build_prefix_lengths(&selector_freq, DJW_MAX_GBCLEN)?;
+    let selector_codes = djw_build_codes_from_lengths(&selector_lengths, DJW_MAX_GBCLEN)?;
+    for &length in selector_lengths.iter().take(groups + 1) {
+        writer.write_bits(DJW_GBCLEN_BITS, usize::from(length))?;
+    }
+    for &symbol in selector_prefix.mtfsym.iter().take(selector_prefix.mcount) {
+        let index = usize::from(symbol);
+        let bits = usize::from(selector_lengths[index]);
+        let code = selector_codes[index];
+        writer.write_bits(bits, code)?;
+    }
+
+    let mut offset = 0usize;
+    for &group in &selected_groups {
+        let group_index = usize::from(group);
+        if group_index >= groups {
+            return Err(RomWeaverError::Validation(format!(
+                "xdelta djw selector chose invalid group index {group_index}"
+            )));
+        }
+        let end = (offset + sector_size).min(section.len());
+        let lengths = &group_lengths[group_index];
+        let codes = &group_codes[group_index];
+        for &symbol in &section[offset..end] {
+            let index = usize::from(symbol);
+            let bits = usize::from(lengths[index]);
+            if bits == 0 {
+                return Err(RomWeaverError::Validation(format!(
+                    "xdelta djw secondary encoder produced zero-length code for symbol {index}"
+                )));
+            }
+            writer.write_bits(bits, codes[index])?;
+        }
+        offset = end;
+    }
+    if offset != section.len() {
+        return Err(RomWeaverError::Validation(
+            "xdelta djw secondary encoder failed to encode all input bytes".into(),
+        ));
+    }
+
+    Ok(writer.finish())
+}
+
+fn djw_seed_group_frequencies(groups: usize) -> Vec<[u32; DJW_ALPHABET_SIZE]> {
+    let mut frequencies = vec![[0u32; DJW_ALPHABET_SIZE]; groups];
+    for symbol in 0..DJW_ALPHABET_SIZE {
+        let mut group = (symbol * groups) / DJW_ALPHABET_SIZE;
+        if group >= groups {
+            group = groups - 1;
+        }
+        frequencies[group][symbol] = 8;
+    }
+    frequencies
+}
+
+fn djw_smooth_group_frequencies(
+    group_frequencies: &mut [[u32; DJW_ALPHABET_SIZE]],
+    real_frequencies: &[u32; DJW_ALPHABET_SIZE],
+) {
+    for group in group_frequencies.iter_mut() {
+        for symbol in 0..DJW_ALPHABET_SIZE {
+            if real_frequencies[symbol] != 0 && group[symbol] == 0 {
+                group[symbol] = 1;
+            }
+        }
+    }
+}
+
+fn djw_build_group_code_tables(
+    group_frequencies: &[[u32; DJW_ALPHABET_SIZE]],
+    real_frequencies: &[u32; DJW_ALPHABET_SIZE],
+) -> Result<(Vec<Vec<u8>>, Vec<Vec<usize>>)> {
+    let mut lengths = Vec::with_capacity(group_frequencies.len());
+    let mut codes = Vec::with_capacity(group_frequencies.len());
+    for group in group_frequencies {
+        let mut adjusted = *group;
+        for symbol in 0..DJW_ALPHABET_SIZE {
+            if adjusted[symbol] == 0 && real_frequencies[symbol] != 0 {
+                adjusted[symbol] = 1;
+            }
+        }
+        let (group_lengths, _) = djw_build_prefix_lengths(&adjusted, DJW_MAX_CODELEN)?;
+        let group_codes = djw_build_codes_from_lengths(&group_lengths, DJW_MAX_CODELEN)?;
+        lengths.push(group_lengths);
+        codes.push(group_codes);
+    }
+    Ok((lengths, codes))
+}
+
+fn djw_choose_best_sector_groups(
+    section: &[u8],
+    sector_size: usize,
+    group_lengths: &[Vec<u8>],
+    selected_groups: &mut [u8],
+) -> Result<()> {
+    let expected_sectors = 1 + (section.len() - 1) / sector_size;
+    if selected_groups.len() != expected_sectors {
+        return Err(RomWeaverError::Validation(
+            "xdelta djw selector vector has the wrong size".into(),
+        ));
+    }
+    if group_lengths.is_empty() {
+        return Err(RomWeaverError::Validation(
+            "xdelta djw encoder has no group code tables".into(),
+        ));
+    }
+
+    for (sector_index, sector) in section.chunks(sector_size).enumerate() {
+        let mut winner = 0usize;
+        let mut winner_cost = usize::MAX;
+
+        for (group_index, lengths) in group_lengths.iter().enumerate() {
+            let mut cost = 0usize;
+            let mut valid = true;
+            for &symbol in sector {
+                let bits = usize::from(lengths[usize::from(symbol)]);
+                if bits == 0 {
+                    valid = false;
+                    break;
+                }
+                cost = cost.saturating_add(bits);
+            }
+            if valid && cost < winner_cost {
+                winner = group_index;
+                winner_cost = cost;
+            }
+        }
+
+        selected_groups[sector_index] = u8::try_from(winner).map_err(|_| {
+            RomWeaverError::Validation("xdelta djw winner index exceeded u8".into())
+        })?;
+    }
+
+    Ok(())
+}
+
+fn djw_rebuild_group_frequencies(
+    section: &[u8],
+    sector_size: usize,
+    selected_groups: &[u8],
+    group_frequencies: &mut [[u32; DJW_ALPHABET_SIZE]],
+) -> Result<()> {
+    for group in group_frequencies.iter_mut() {
+        group.fill(0);
+    }
+
+    for (sector_index, sector) in section.chunks(sector_size).enumerate() {
+        let group_index = usize::from(selected_groups[sector_index]);
+        let group = group_frequencies.get_mut(group_index).ok_or_else(|| {
+            RomWeaverError::Validation(format!(
+                "xdelta djw selector chose invalid group index {group_index}"
+            ))
+        })?;
+        for &symbol in sector {
+            let slot = &mut group[usize::from(symbol)];
+            *slot = slot.saturating_add(1);
+        }
+    }
+
+    Ok(())
 }
 
 fn xdelta_fgk_compress(section: &[u8]) -> Result<Vec<u8>> {
@@ -3258,6 +3587,21 @@ mod tests {
     }
 
     #[test]
+    fn parse_rejects_custom_code_table_header_without_table_data() {
+        let patch_bytes = build_patch(TestPatch {
+            header_flags: HDR_CODE_TABLE,
+            code_table_near: Some(4),
+            code_table_same: Some(3),
+            code_table_data: Vec::new(),
+            ..Default::default()
+        });
+
+        let error = parse_patch(&mut Cursor::new(&patch_bytes))
+            .expect_err("custom code table without payload should fail");
+        assert!(format!("{error}").contains("invalid custom code table size"));
+    }
+
+    #[test]
     fn apply_rejects_custom_code_table_headers() {
         let patch_bytes = build_patch(TestPatch {
             header_flags: HDR_CODE_TABLE,
@@ -4092,9 +4436,6 @@ mod tests {
             fs::read(fixture_path("secondary-djw.xdelta")).expect("read secondary patch fixture");
         patch[5] = 0x7F;
 
-        let parsed = parse_patch(&mut Cursor::new(&patch)).expect("parse unknown secondary patch");
-        assert_eq!(parsed.secondary_compressor_id, Some(0x7F));
-
         let temp = create_temp_dir();
         let input_path = temp.join("source.bin");
         let patch_path = temp.join("update.xdelta");
@@ -4114,6 +4455,83 @@ mod tests {
             )
             .expect_err("unknown secondary compressor should fail");
         assert!(format!("{error}").contains("secondary compressor ID"));
+    }
+
+    #[test]
+    fn apply_fails_for_unknown_secondary_id_without_compressed_sections() {
+        let patch_bytes = build_patch(TestPatch {
+            header_flags: HDR_SECONDARY,
+            secondary_id: Some(0x7F),
+            windows: vec![TestWindow {
+                win_indicator: WIN_SOURCE,
+                source_segment_size: Some(4),
+                source_segment_position: Some(0),
+                target_window_size: 4,
+                checksum: None,
+                data: Vec::new(),
+                inst: vec![22],
+                addr: encode_all_varints(&[0]),
+            }],
+            ..Default::default()
+        });
+
+        let temp = create_temp_dir();
+        let input_path = temp.join("input.bin");
+        let patch_path = temp.join("update.xdelta");
+        let output_path = temp.join("output.bin");
+        fs::write(&input_path, b"abcd").expect("write input");
+        fs::write(&patch_path, patch_bytes).expect("write patch");
+
+        let handler = VcdiffPatchHandler::new(&crate::XDELTA);
+        let error = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: input_path,
+                    patches: vec![patch_path],
+                    output: output_path,
+                },
+                &test_context(),
+            )
+            .expect_err("unknown secondary header id should fail");
+        assert!(format!("{error}").contains("secondary compressor ID"));
+    }
+
+    #[test]
+    fn apply_fails_when_compressed_sections_lack_secondary_header() {
+        let mut patch = build_patch(TestPatch {
+            windows: vec![TestWindow {
+                win_indicator: 0,
+                source_segment_size: None,
+                source_segment_position: None,
+                target_window_size: 4,
+                checksum: None,
+                data: Vec::new(),
+                inst: vec![22],
+                addr: encode_all_varints(&[0]),
+            }],
+            ..Default::default()
+        });
+        patch[8] = DELTA_DATA_COMP;
+
+        let temp = create_temp_dir();
+        let input_path = temp.join("input.bin");
+        let patch_path = temp.join("update.xdelta");
+        let output_path = temp.join("output.bin");
+        fs::write(&input_path, b"abcd").expect("write input");
+        fs::write(&patch_path, patch).expect("write patch");
+
+        let handler = VcdiffPatchHandler::new(&crate::XDELTA);
+        let error = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: input_path,
+                    patches: vec![patch_path],
+                    output: output_path,
+                },
+                &test_context(),
+            )
+            .expect_err("compressed sections without secondary header should fail");
+        assert!(format!("{error}").contains("compressed sections"));
     }
 
     #[test]
@@ -4228,9 +4646,10 @@ mod tests {
             bytes.push(patch.secondary_id.expect("secondary id"));
         }
         if patch.header_flags & HDR_CODE_TABLE != 0 {
+            let code_table_len = patch.code_table_data.len() as u64 + 2;
+            encode_varint(&mut bytes, code_table_len);
             bytes.push(patch.code_table_near.expect("near size"));
             bytes.push(patch.code_table_same.expect("same size"));
-            encode_varint(&mut bytes, patch.code_table_data.len() as u64);
             bytes.extend_from_slice(&patch.code_table_data);
         }
         if patch.header_flags & HDR_APP_HEADER != 0 {
