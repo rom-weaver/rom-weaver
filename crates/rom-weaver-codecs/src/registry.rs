@@ -2,4 +2,4 @@ include!("definitions.rs");
 include!("backend.rs");
 include!("backend_trait.rs");
 include!("helpers.rs");
-include!("tests.rs");
+include!("../tests/unit/registry.rs");

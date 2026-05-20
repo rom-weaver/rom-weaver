@@ -926,4 +926,4 @@ include!("handlers/z3ds.rs");
 
 include!("handlers/chd.rs");
 
-include!("handlers/tests.rs");
+include!("../tests/unit/handlers.rs");

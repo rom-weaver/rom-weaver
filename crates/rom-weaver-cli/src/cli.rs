@@ -624,4 +624,4 @@ include!("app.rs");
 
 include!("reporters.rs");
 
-include!("tests.rs");
+include!("../tests/unit/cli.rs");
