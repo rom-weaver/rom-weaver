@@ -1,19 +1,26 @@
 use std::{
-    ffi::CStr,
     fs::{self, File, OpenOptions},
-    io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write},
-    os::raw::{c_int, c_void},
+    io::{BufReader, BufWriter, Cursor, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
 };
 
+use lzma_rust2::{XzOptions, XzReader, XzWriter};
+use oxidelta::{
+    compress::{
+        encoder::{CompressOptions, DeltaEncoder},
+        secondary::SecondaryCompression,
+    },
+    vcdiff::{
+        decoder::{self as oxidelta_decoder, DecodeError as OxideltaDecodeError},
+        header::{VCD_ADLER32, VCD_SOURCE, VCD_TARGET, WindowHeader as OxideltaWindowHeader},
+    },
+};
 use rayon::prelude::*;
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
     PatchCapabilities, PatchChecksumValidation, PatchCreateRequest, PatchHandler, ProbeConfidence,
-    Result, RomWeaverError, ThreadCapability, ValidationCodeError,
+    Result, RomWeaverError, ThreadCapability,
 };
-
-use crate::xdelta_ffi;
 
 const VCDIFF_MAGIC_BYTES: [u8; 3] = [0xD6, 0xC3, 0xC4];
 const VCDIFF_VERSION_STANDARD: u8 = 0x00;
@@ -32,21 +39,34 @@ const DELTA_DATA_COMP: u8 = 0x01;
 const DELTA_INST_COMP: u8 = 0x02;
 const DELTA_ADDR_COMP: u8 = 0x04;
 const DELTA_KNOWN_MASK: u8 = DELTA_DATA_COMP | DELTA_INST_COMP | DELTA_ADDR_COMP;
+const NATIVE_CHUNK_SIZE: usize = 64 * 1024;
+const XDELTA_SECONDARY_MIN_INPUT: usize = 10;
+const XDELTA_DJW_SECONDARY_ID: u8 = 1;
+const XDELTA_LZMA_SECONDARY_ID: u8 = 2;
+const XDELTA_FGK_SECONDARY_ID: u8 = 16;
+const DJW_MAX_CODELEN: usize = 20;
+const DJW_TOTAL_CODES: usize = DJW_MAX_CODELEN + 2;
+const DJW_BASIC_CODES: usize = 5;
+const DJW_RUN_CODES: usize = 2;
+const DJW_EXTRA_12OFFSET: usize = DJW_BASIC_CODES + DJW_RUN_CODES;
+const DJW_EXTRA_CODE_BITS: usize = 4;
+const DJW_MAX_GROUPS: usize = 8;
+const DJW_GROUP_BITS: usize = 3;
+const DJW_SECTORSZ_MULT: usize = 5;
+const DJW_SECTORSZ_BITS: usize = 5;
+const DJW_MAX_CLCLEN: usize = 15;
+const DJW_CLCLEN_BITS: usize = 4;
+const DJW_MAX_GBCLEN: usize = 7;
+const DJW_GBCLEN_BITS: usize = 3;
+const DJW_RUN_1: usize = 1;
+const DJW_ALPHABET_SIZE: usize = 256;
 
-#[cfg(test)]
-const XD3_ENOSPC: c_int = 28;
-
-fn vcdiff_validation_code(code: &'static str) -> ValidationCodeError {
-    ValidationCodeError::new(code)
-}
+const DJW_ENCODE_12EXTRA: [u8; 15] = [9, 10, 3, 11, 2, 12, 13, 1, 14, 15, 16, 17, 18, 19, 20];
+const DJW_ENCODE_12BASIC: [u8; 5] = [4, 5, 6, 7, 8];
 
 pub struct VcdiffPatchHandler {
     descriptor: &'static FormatDescriptor,
 }
-
-trait ReadSeek: Read + Seek {}
-
-impl<T: Read + Seek + ?Sized> ReadSeek for T {}
 
 impl VcdiffPatchHandler {
     pub const fn new(descriptor: &'static FormatDescriptor) -> Self {
@@ -109,9 +129,21 @@ impl PatchHandler for VcdiffPatchHandler {
             crate::require_single_patch_file(&request.patches, self.descriptor.name)?.clone();
         let mut patch_reader = BufReader::new(File::open(&patch_path)?);
         let patch = parse_patch(&mut patch_reader)?;
+        if patch.has_custom_code_table {
+            return Err(RomWeaverError::Validation(
+                "native VCDIFF backend does not support custom code tables".into(),
+            ));
+        }
         let validate_checksums =
             context.patch_checksum_validation() == PatchChecksumValidation::Strict;
         let input_len = std::fs::metadata(&request.input)?.len();
+        if patch
+            .windows
+            .iter()
+            .any(|window| window.delta_indicator != 0)
+        {
+            ensure_supported_secondary_compressor(patch.secondary_compressor_id)?;
+        }
 
         if patch
             .windows
@@ -164,9 +196,9 @@ impl PatchHandler for VcdiffPatchHandler {
                 window,
             })
             .collect::<Vec<_>>();
-        let patch_header = patch.header_bytes;
         let input_path = request.input.clone();
         let validate_checksums_for_tasks = validate_checksums;
+        let secondary_compressor_id = patch.secondary_compressor_id;
 
         let (execution, mut decoded) = if planned_execution.used_parallelism {
             let (execution, pool) = context.build_pool(thread_capability)?;
@@ -179,7 +211,7 @@ impl PatchHandler for VcdiffPatchHandler {
                             &patch_path,
                             &input_path,
                             input_len,
-                            &patch_header,
+                            secondary_compressor_id,
                             validate_checksums_for_tasks,
                         )
                     })
@@ -195,7 +227,7 @@ impl PatchHandler for VcdiffPatchHandler {
                         &patch_path,
                         &input_path,
                         input_len,
-                        &patch_header,
+                        secondary_compressor_id,
                         validate_checksums_for_tasks,
                     )
                 })
@@ -209,12 +241,10 @@ impl PatchHandler for VcdiffPatchHandler {
         let mut expected_offset = 0u64;
         for window in decoded {
             if window.output_offset != expected_offset {
-                return Err(RomWeaverError::ValidationCode(
-                    vcdiff_validation_code("VCDIFF_WINDOW_OUTPUT_OFFSET_MISMATCH")
-                        .with_message("window output offset mismatch")
-                        .with_field("expected", expected_offset)
-                        .with_field("actual", window.output_offset),
-                ));
+                return Err(RomWeaverError::Validation(format!(
+                    "window output offset mismatch: expected {expected_offset}, got {}",
+                    window.output_offset
+                )));
             }
 
             let mut temp = BufReader::new(File::open(&window.temp_path)?);
@@ -248,6 +278,7 @@ impl PatchHandler for VcdiffPatchHandler {
         request: &PatchCreateRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
+        let compare_secondary = is_xdelta_descriptor(self.descriptor);
         let output_extension = request.output.extension().and_then(|value| value.to_str());
         let baseline_path = context
             .temp_paths()
@@ -255,60 +286,28 @@ impl PatchHandler for VcdiffPatchHandler {
         let secondary_path = context
             .temp_paths()
             .next_path("vcdiff-create-secondary", output_extension);
-        let thread_capability = ThreadCapability::parallel(Some(2));
+        let thread_capability = ThreadCapability::single_threaded();
 
         let create_result = (|| -> Result<(ParsedPatch, rom_weaver_core::ThreadExecution)> {
-            let base_flags = create_base_flags(self.descriptor);
             let planned_execution = context.plan_threads(thread_capability.clone());
-            let (execution, baseline, secondary) = if planned_execution.used_parallelism {
-                let (execution, pool) = context.build_pool(thread_capability.clone())?;
-                let baseline_original = request.original.clone();
-                let baseline_modified = request.modified.clone();
-                let baseline_output = baseline_path.clone();
-                let secondary_original = request.original.clone();
-                let secondary_modified = request.modified.clone();
-                let secondary_output = secondary_path.clone();
-                let (baseline_result, secondary_result) = pool.install(|| {
-                    rayon::join(
-                        || {
-                            encode_patch_with_xdelta_streaming(
-                                &baseline_original,
-                                &baseline_modified,
-                                &baseline_output,
-                                base_flags,
-                            )
-                        },
-                        || {
-                            encode_patch_with_xdelta_streaming(
-                                &secondary_original,
-                                &secondary_modified,
-                                &secondary_output,
-                                base_flags | xdelta_ffi::XD3_SEC_DJW,
-                            )
-                        },
-                    )
-                });
-                (execution, baseline_result?, secondary_result?)
-            } else {
-                let baseline = encode_patch_with_xdelta_streaming(
-                    &request.original,
-                    &request.modified,
-                    &baseline_path,
-                    base_flags,
-                )?;
-                let secondary = encode_patch_with_xdelta_streaming(
-                    &request.original,
-                    &request.modified,
-                    &secondary_path,
-                    base_flags | xdelta_ffi::XD3_SEC_DJW,
-                )?;
-                (planned_execution, baseline, secondary)
-            };
-            let selected = if secondary.size < baseline.size {
-                secondary
+            let baseline = encode_patch_with_native_streaming(
+                &request.original,
+                &request.modified,
+                &baseline_path,
+                create_native_compress_options(self.descriptor),
+            )?;
+            let selected = if compare_secondary {
+                let secondary =
+                    recode_patch_with_xdelta_lzma_secondary(&baseline.path, &secondary_path)?;
+                if secondary.size < baseline.size {
+                    secondary
+                } else {
+                    baseline
+                }
             } else {
                 baseline
             };
+            let execution = planned_execution;
 
             if let Some(parent) = request.output.parent() {
                 fs::create_dir_all(parent)?;
@@ -362,8 +361,8 @@ impl PatchHandler for VcdiffPatchHandler {
 
 #[derive(Debug)]
 struct ParsedPatch {
-    header_bytes: Vec<u8>,
     secondary_compressor_id: Option<u8>,
+    has_custom_code_table: bool,
     windows: Vec<WindowIndex>,
 }
 
@@ -375,11 +374,9 @@ enum WindowSourceKind {
 
 #[derive(Clone, Debug)]
 struct WindowIndex {
-    win_indicator: u8,
     source_kind: Option<WindowSourceKind>,
     source_segment_size: u64,
     source_segment_position: u64,
-    delta_encoding_len: u64,
     target_window_size: u64,
     delta_indicator: u8,
     checksum: Option<u32>,
@@ -394,8 +391,8 @@ struct WindowIndex {
 
 impl WindowIndex {}
 
-fn read_source_segment(
-    reader: &mut dyn ReadSeek,
+fn read_source_segment<R: Read + Seek>(
+    reader: &mut R,
     segment_position: u64,
     segment_size: u64,
     available_len: u64,
@@ -403,14 +400,9 @@ fn read_source_segment(
 ) -> Result<Vec<u8>> {
     let end = checked_add(segment_position, segment_size, "source segment range")?;
     if end > available_len {
-        return Err(RomWeaverError::ValidationCode(
-            vcdiff_validation_code("VCDIFF_SOURCE_SEGMENT_EXCEEDED_AVAILABLE_LENGTH")
-                .with_message("source segment exceeded available length")
-                .with_field("segment_kind", kind_label)
-                .with_field("segment_position", segment_position)
-                .with_field("segment_end", end)
-                .with_field("available_len", available_len),
-        ));
+        return Err(RomWeaverError::Validation(format!(
+            "{kind_label} segment [{segment_position}..{end}) exceeds available length {available_len}"
+        )));
     }
 
     let size = usize::try_from(segment_size).map_err(|_| {
@@ -445,74 +437,7 @@ struct CreatedPatchCandidate {
     size: u64,
 }
 
-#[derive(Debug)]
-struct SourceBlockReader {
-    file: File,
-    buffer: Vec<u8>,
-    last_error: Option<XdeltaSourceBlockError>,
-}
-
-impl SourceBlockReader {
-    fn new(path: &Path, block_size: usize) -> Result<Self> {
-        Ok(Self {
-            file: File::open(path)?,
-            buffer: vec![0; block_size.max(1)],
-            last_error: None,
-        })
-    }
-}
-
-#[derive(Debug)]
-struct XdeltaSourceBlockError {
-    code: &'static str,
-    block_number: xdelta_ffi::XoffT,
-    detail: Option<String>,
-}
-
-impl XdeltaSourceBlockError {
-    fn offset_overflow(block_number: xdelta_ffi::XoffT, block_size: u64) -> Self {
-        Self {
-            code: "VCDIFF_XDELTA_SOURCE_BLOCK_OFFSET_OVERFLOW",
-            block_number,
-            detail: Some(block_size.to_string()),
-        }
-    }
-
-    fn seek_failed(block_number: xdelta_ffi::XoffT, error: std::io::Error) -> Self {
-        Self {
-            code: "VCDIFF_XDELTA_SOURCE_BLOCK_SEEK_FAILED",
-            block_number,
-            detail: Some(error.to_string()),
-        }
-    }
-
-    fn read_failed(block_number: xdelta_ffi::XoffT, error: std::io::Error) -> Self {
-        Self {
-            code: "VCDIFF_XDELTA_SOURCE_BLOCK_READ_FAILED",
-            block_number,
-            detail: Some(error.to_string()),
-        }
-    }
-
-    fn read_too_large(block_number: xdelta_ffi::XoffT, bytes_read: usize) -> Self {
-        Self {
-            code: "VCDIFF_XDELTA_SOURCE_BLOCK_READ_TOO_LARGE",
-            block_number,
-            detail: Some(bytes_read.to_string()),
-        }
-    }
-
-    fn to_validation_code(&self) -> ValidationCodeError {
-        let mut code =
-            vcdiff_validation_code(self.code).with_field("block_number", self.block_number);
-        if let Some(detail) = &self.detail {
-            code.push_field("detail", detail.as_str());
-        }
-        code
-    }
-}
-
-fn parse_patch(reader: &mut dyn ReadSeek) -> Result<ParsedPatch> {
+fn parse_patch<R: Read + Seek>(reader: &mut R) -> Result<ParsedPatch> {
     reader.seek(SeekFrom::Start(0))?;
 
     let mut magic = [0; 4];
@@ -523,20 +448,17 @@ fn parse_patch(reader: &mut dyn ReadSeek) -> Result<ParsedPatch> {
         ));
     }
     if magic[3] != VCDIFF_VERSION_STANDARD {
-        return Err(RomWeaverError::ValidationCode(
-            vcdiff_validation_code("VCDIFF_HEADER_VERSION_UNSUPPORTED")
-                .with_message("unsupported VCDIFF header version byte")
-                .with_field("version_byte", magic[3]),
-        ));
+        return Err(RomWeaverError::Validation(format!(
+            "unsupported VCDIFF header version byte 0x{:02X}",
+            magic[3]
+        )));
     }
 
     let hdr_indicator = read_u8(reader)?;
     if hdr_indicator & !HDR_KNOWN_MASK != 0 {
-        return Err(RomWeaverError::ValidationCode(
-            vcdiff_validation_code("VCDIFF_HEADER_FLAGS_UNSUPPORTED")
-                .with_message("unsupported VCDIFF header flags")
-                .with_field("header_flags", hdr_indicator),
-        ));
+        return Err(RomWeaverError::Validation(format!(
+            "unsupported VCDIFF header flags 0x{hdr_indicator:02X}"
+        )));
     }
 
     let secondary_compressor_id = if hdr_indicator & HDR_SECONDARY != 0 {
@@ -557,10 +479,6 @@ fn parse_patch(reader: &mut dyn ReadSeek) -> Result<ParsedPatch> {
         skip_bytes(reader, app_header_len)?;
     }
 
-    let header_end = reader.stream_position()?;
-    let header_bytes = read_section(reader, 0, header_end)?;
-    reader.seek(SeekFrom::Start(header_end))?;
-
     let mut windows = Vec::new();
     let mut output_offset = 0u64;
     while let Some(window) = read_window_index(reader, output_offset)? {
@@ -573,23 +491,24 @@ fn parse_patch(reader: &mut dyn ReadSeek) -> Result<ParsedPatch> {
     }
 
     Ok(ParsedPatch {
-        header_bytes,
         secondary_compressor_id,
+        has_custom_code_table: hdr_indicator & HDR_CODE_TABLE != 0,
         windows,
     })
 }
 
-fn read_window_index(reader: &mut dyn ReadSeek, output_offset: u64) -> Result<Option<WindowIndex>> {
+fn read_window_index<R: Read + Seek>(
+    reader: &mut R,
+    output_offset: u64,
+) -> Result<Option<WindowIndex>> {
     let Some(win_indicator) = read_optional_u8(reader)? else {
         return Ok(None);
     };
 
     if win_indicator & !WIN_KNOWN_MASK != 0 {
-        return Err(RomWeaverError::ValidationCode(
-            vcdiff_validation_code("VCDIFF_WINDOW_FLAGS_UNSUPPORTED")
-                .with_message("unsupported window flags")
-                .with_field("window_flags", win_indicator),
-        ));
+        return Err(RomWeaverError::Validation(format!(
+            "unsupported window flags 0x{win_indicator:02X}"
+        )));
     }
 
     let uses_source = win_indicator & WIN_SOURCE != 0;
@@ -622,11 +541,9 @@ fn read_window_index(reader: &mut dyn ReadSeek, output_offset: u64) -> Result<Op
     let (target_window_size, _) = read_varint(reader)?;
     let delta_indicator = read_u8(reader)?;
     if delta_indicator & !DELTA_KNOWN_MASK != 0 {
-        return Err(RomWeaverError::ValidationCode(
-            vcdiff_validation_code("VCDIFF_DELTA_FLAGS_UNSUPPORTED")
-                .with_message("unsupported delta section flags")
-                .with_field("delta_flags", delta_indicator),
-        ));
+        return Err(RomWeaverError::Validation(format!(
+            "unsupported delta section flags 0x{delta_indicator:02X}"
+        )));
     }
 
     let (data_len, _) = read_varint(reader)?;
@@ -654,22 +571,17 @@ fn read_window_index(reader: &mut dyn ReadSeek, output_offset: u64) -> Result<Op
         "delta encoding size",
     )?;
     if header_and_sections != delta_encoding_len {
-        return Err(RomWeaverError::ValidationCode(
-            vcdiff_validation_code("VCDIFF_DELTA_ENCODING_LENGTH_MISMATCH")
-                .with_message("delta encoding length mismatch")
-                .with_field("declared_len", delta_encoding_len)
-                .with_field("calculated_len", header_and_sections),
-        ));
+        return Err(RomWeaverError::Validation(format!(
+            "delta encoding length mismatch: header declared {delta_encoding_len} bytes but window needs {header_and_sections}"
+        )));
     }
 
     reader.seek(SeekFrom::Start(window_end))?;
 
     Ok(Some(WindowIndex {
-        win_indicator,
         source_kind,
         source_segment_size,
         source_segment_position,
-        delta_encoding_len,
         target_window_size,
         delta_indicator,
         checksum,
@@ -688,7 +600,7 @@ fn decode_window_task(
     patch_path: &Path,
     input_path: &Path,
     input_len: u64,
-    patch_header: &[u8],
+    secondary_compressor_id: Option<u8>,
     validate_checksums: bool,
 ) -> Result<DecodedWindow> {
     let mut input_reader = BufReader::new(File::open(input_path)?);
@@ -708,10 +620,10 @@ fn decode_window_task(
         )?,
     };
     let mut patch_reader = BufReader::new(File::open(patch_path)?);
-    let target = decode_window_with_xdelta(
+    let target = decode_window_with_native_engine(
         &mut patch_reader,
-        patch_header,
         &task.window,
+        secondary_compressor_id,
         &source,
         validate_checksums,
     )?;
@@ -752,12 +664,10 @@ fn apply_windows_with_target_sources(
 
     for window in &patch.windows {
         if window.output_offset != assembled_output_size {
-            return Err(RomWeaverError::ValidationCode(
-                vcdiff_validation_code("VCDIFF_WINDOW_OUTPUT_OFFSET_MISMATCH")
-                    .with_message("window output offset mismatch")
-                    .with_field("expected", assembled_output_size)
-                    .with_field("actual", window.output_offset),
-            ));
+            return Err(RomWeaverError::Validation(format!(
+                "window output offset mismatch: expected {assembled_output_size}, got {}",
+                window.output_offset
+            )));
         }
 
         let source = match window.source_kind {
@@ -779,10 +689,10 @@ fn apply_windows_with_target_sources(
         };
 
         let mut patch_reader = BufReader::new(File::open(patch_path)?);
-        let target = decode_window_with_xdelta(
+        let target = decode_window_with_native_engine(
             &mut patch_reader,
-            &patch.header_bytes,
             window,
+            patch.secondary_compressor_id,
             &source,
             validate_checksums,
         )?;
@@ -798,470 +708,1455 @@ fn apply_windows_with_target_sources(
     Ok(())
 }
 
-fn create_base_flags(descriptor: &FormatDescriptor) -> c_int {
-    if descriptor.name.eq_ignore_ascii_case("xdelta") {
-        xdelta_ffi::XD3_ADLER32
-    } else {
-        0
+fn is_xdelta_descriptor(descriptor: &FormatDescriptor) -> bool {
+    descriptor.name.eq_ignore_ascii_case("xdelta")
+}
+
+fn create_native_compress_options(descriptor: &FormatDescriptor) -> CompressOptions {
+    CompressOptions {
+        checksum: is_xdelta_descriptor(descriptor),
+        secondary: SecondaryCompression::None,
+        ..CompressOptions::default()
     }
 }
 
-unsafe extern "C" fn read_source_block_callback(
-    _stream: *mut xdelta_ffi::Xd3Stream,
-    source: *mut xdelta_ffi::Xd3Source,
-    block_number: xdelta_ffi::XoffT,
-) -> c_int {
-    let source = unsafe { &mut *source };
-    let state = unsafe { &mut *(source.ioh as *mut SourceBlockReader) };
-    match load_source_block(state, source, block_number) {
-        Ok(()) => 0,
-        Err(message) => {
-            state.last_error = Some(message);
-            xdelta_ffi::XD3_INTERNAL
-        }
-    }
-}
-
-fn load_source_block(
-    state: &mut SourceBlockReader,
-    source: &mut xdelta_ffi::Xd3Source,
-    block_number: xdelta_ffi::XoffT,
-) -> std::result::Result<(), XdeltaSourceBlockError> {
-    let block_size = state.buffer.len() as u64;
-    let offset = (block_number as u64)
-        .checked_mul(block_size)
-        .ok_or_else(|| XdeltaSourceBlockError::offset_overflow(block_number, block_size))?;
-    state
-        .file
-        .seek(SeekFrom::Start(offset))
-        .map_err(|error| XdeltaSourceBlockError::seek_failed(block_number, error))?;
-    let bytes_read = state
-        .file
-        .read(&mut state.buffer)
-        .map_err(|error| XdeltaSourceBlockError::read_failed(block_number, error))?;
-
-    source.curblkno = block_number;
-    source.onblk = u32::try_from(bytes_read)
-        .map_err(|_| XdeltaSourceBlockError::read_too_large(block_number, bytes_read))?;
-    source.curblk = state.buffer.as_ptr();
-
-    if bytes_read < state.buffer.len() {
-        source.max_blkno = block_number;
-        source.onlastblk = source.onblk;
-        source.eof_known = 1;
-    }
-
-    Ok(())
-}
-
-fn encode_patch_with_xdelta_streaming(
+fn encode_patch_with_native_streaming(
     source_path: &Path,
     target_path: &Path,
     output_path: &Path,
-    flags: c_int,
+    options: CompressOptions,
 ) -> Result<CreatedPatchCandidate> {
-    let source_len = fs::metadata(source_path)?.len();
-    let target_len = fs::metadata(target_path)?.len();
-    let window_size = preferred_xdelta_window(target_len, xdelta_ffi::XD3_DEFAULT_WINSIZE);
-    let source_block_size = preferred_xdelta_window(source_len, xdelta_ffi::XD3_DEFAULT_WINSIZE);
+    let source = fs::read(source_path)?;
 
     if let Some(parent) = output_path.parent() {
         fs::create_dir_all(parent)?;
     }
 
     let output_file = File::create(output_path)?;
-    let mut output = BufWriter::new(output_file);
-    let mut stream = xdelta_ffi::Xd3Stream::zeroed();
-    let mut config = xdelta_ffi::Xd3Config::with_flags(flags);
-    config.winsize = xdelta_usize(window_size, "xdelta encoder window size")?;
-    config.getblk = Some(read_source_block_callback);
+    let writer = BufWriter::with_capacity(NATIVE_CHUNK_SIZE, output_file);
+    let mut encoder = DeltaEncoder::new(writer, &source, options);
 
-    let mut source = xdelta_ffi::Xd3Source::zeroed();
-    let mut source_state = if source_len > 0 {
-        Some(SourceBlockReader::new(source_path, source_block_size)?)
-    } else {
-        None
-    };
+    let mut target = BufReader::with_capacity(NATIVE_CHUNK_SIZE, File::open(target_path)?);
+    let mut input_buffer = vec![0; NATIVE_CHUNK_SIZE];
 
-    let mut result = (|| -> Result<()> {
-        let rc = unsafe { xdelta_ffi::xd3_config_stream(&mut stream, &mut config) };
-        if rc != 0 {
-            return Err(xdelta_stream_error(
-                "configure",
-                &stream,
-                source_state.as_mut(),
-                rc,
-            ));
+    loop {
+        let bytes_read = target.read(&mut input_buffer)?;
+        if bytes_read == 0 {
+            break;
         }
 
-        if let Some(state) = source_state.as_mut() {
-            source.blksize = xdelta_usize(state.buffer.len(), "xdelta source block size")?;
-            source.ioh = state as *mut SourceBlockReader as *mut c_void;
-            source.max_winsize =
-                xdelta_xoff(state.buffer.len() as u64, "xdelta source window size")?;
-            let rc = unsafe {
-                xdelta_ffi::xd3_set_source_and_size(
-                    &mut stream,
-                    &mut source,
-                    xdelta_xoff(source_len, "xdelta source file size")?,
-                )
-            };
-            if rc != 0 {
-                return Err(xdelta_stream_error(
-                    "configure source",
-                    &stream,
-                    source_state.as_mut(),
-                    rc,
-                ));
-            }
-        }
-
-        let mut target = BufReader::new(File::open(target_path)?);
-        let mut input_buffer = vec![0; window_size.max(1)];
-
-        loop {
-            let bytes_read = target.read(&mut input_buffer)?;
-            let is_last_chunk = bytes_read < input_buffer.len();
-            if is_last_chunk {
-                stream.set_flags(stream.flags | xdelta_ffi::XD3_FLUSH);
-            }
-            stream.avail_input(
-                input_buffer.as_ptr(),
-                xdelta_usize(bytes_read, "xdelta input chunk size")?,
-            );
-
-            drive_xdelta_encoder(&mut stream, &mut output, source_state.as_mut())?;
-
-            if is_last_chunk {
-                break;
-            }
-        }
-
-        output.flush()?;
-        Ok(())
-    })();
-
-    if result.is_ok() {
-        let rc = unsafe { xdelta_ffi::xd3_close_stream(&mut stream) };
-        if rc != 0 {
-            result = Err(xdelta_stream_error(
-                "finalize",
-                &stream,
-                source_state.as_mut(),
-                rc,
-            ));
-        }
-    } else {
-        unsafe {
-            xdelta_ffi::xd3_abort_stream(&mut stream);
-        }
+        encoder
+            .write_target(&input_buffer[..bytes_read])
+            .map_err(native_encode_error)?;
     }
 
-    unsafe {
-        xdelta_ffi::xd3_free_stream(&mut stream);
-    }
-
-    result?;
+    let (writer, _) = encoder.finish().map_err(native_encode_error)?;
+    let output = writer.into_inner().map_err(|error| {
+        RomWeaverError::Validation(format!(
+            "native VCDIFF encoder failed to flush output: {}",
+            error.into_error()
+        ))
+    })?;
 
     Ok(CreatedPatchCandidate {
         path: output_path.to_path_buf(),
-        size: fs::metadata(output_path)?.len(),
+        size: output.metadata()?.len(),
     })
 }
 
-fn drive_xdelta_encoder<W: Write>(
-    stream: &mut xdelta_ffi::Xd3Stream,
-    output: &mut W,
-    mut source_state: Option<&mut SourceBlockReader>,
-) -> Result<()> {
-    loop {
-        let rc = unsafe { xdelta_ffi::xd3_encode_input(stream) };
-        match rc {
-            xdelta_ffi::XD3_OUTPUT => {
-                let chunk = unsafe { stream.output_slice() };
-                output.write_all(chunk)?;
-                stream.consume_output();
-            }
-            xdelta_ffi::XD3_INPUT => return Ok(()),
-            xdelta_ffi::XD3_WINSTART | xdelta_ffi::XD3_WINFINISH | xdelta_ffi::XD3_GOTHEADER => {}
-            xdelta_ffi::XD3_GETSRCBLK => {
-                return Err(RomWeaverError::Validation(
-                    "xdelta encoder requested a source block without a callback".into(),
-                ));
-            }
-            _ => {
-                return Err(xdelta_stream_error(
-                    "encode",
-                    stream,
-                    source_state.as_deref_mut(),
-                    rc,
-                ));
-            }
-        }
+fn native_encode_error(error: oxidelta::compress::encoder::EncodeError) -> RomWeaverError {
+    RomWeaverError::Validation(format!("native VCDIFF encoder failed: {error}"))
+}
+
+fn recode_patch_with_xdelta_lzma_secondary(
+    baseline_patch_path: &Path,
+    output_path: &Path,
+) -> Result<CreatedPatchCandidate> {
+    let baseline_bytes = fs::read(baseline_patch_path)?;
+    let mut reader = Cursor::new(&baseline_bytes);
+    let parsed = parse_patch(&mut reader)?;
+    if parsed.has_custom_code_table {
+        return Err(RomWeaverError::Validation(
+            "native VCDIFF secondary recoder does not support custom code tables".into(),
+        ));
     }
-}
-
-fn xdelta_stream_error(
-    operation: &'static str,
-    stream: &xdelta_ffi::Xd3Stream,
-    source_state: Option<&mut SourceBlockReader>,
-    rc: c_int,
-) -> RomWeaverError {
-    if let Some(state) = source_state {
-        if let Some(source_error) = state.last_error.take() {
-            let mut code = source_error.to_validation_code();
-            code.push_field("operation", operation);
-            code.push_field("status_code", rc);
-            return RomWeaverError::ValidationCode(code);
-        }
-    }
-
-    let detail = unsafe {
-        if !stream.msg.is_null() {
-            Some(CStr::from_ptr(stream.msg).to_string_lossy().into_owned())
-        } else {
-            let message = xdelta_ffi::xd3_strerror(rc);
-            if message.is_null() {
-                None
-            } else {
-                Some(CStr::from_ptr(message).to_string_lossy().into_owned())
-            }
-        }
-    };
-
-    let mut code = vcdiff_validation_code("VCDIFF_XDELTA_STREAM_FAILURE")
-        .with_field("operation", operation)
-        .with_field("status_code", rc);
-    if let Some(detail) = detail.filter(|message| !message.is_empty()) {
-        code.push_field("detail", detail);
-    }
-    RomWeaverError::ValidationCode(code)
-}
-
-fn preferred_xdelta_window(file_len: u64, max_window: usize) -> usize {
-    let bounded = file_len.clamp(xdelta_ffi::XD3_ALLOCSIZE as u64, max_window as u64) as usize;
-    if bounded.is_power_of_two() {
-        bounded
-    } else {
-        bounded.next_power_of_two().min(max_window)
-    }
-}
-
-fn xdelta_usize(value: usize, label: &'static str) -> Result<xdelta_ffi::UsizeT> {
-    u32::try_from(value).map_err(|_| {
-        RomWeaverError::ValidationCode(
-            vcdiff_validation_code("VCDIFF_XDELTA_USIZE_LIMIT_EXCEEDED")
-                .with_field("label", label)
-                .with_field("value", value),
-        )
-    })
-}
-
-fn xdelta_xoff(value: u64, label: &'static str) -> Result<xdelta_ffi::XoffT> {
-    xdelta_ffi::XoffT::try_from(value).map_err(|_| {
-        RomWeaverError::ValidationCode(
-            vcdiff_validation_code("VCDIFF_XDELTA_XOFF_LIMIT_EXCEEDED")
-                .with_field("label", label)
-                .with_field("value", value),
-        )
-    })
-}
-
-#[cfg(test)]
-fn encode_patch_with_xdelta_memory(source: &[u8], target: &[u8], flags: c_int) -> Result<Vec<u8>> {
-    let target_len = u32::try_from(target.len()).map_err(|_| {
-        RomWeaverError::Validation("xdelta encoder target input is too large".into())
-    })?;
-    let source_len = u32::try_from(source.len()).map_err(|_| {
-        RomWeaverError::Validation("xdelta encoder source input is too large".into())
-    })?;
-
-    let max_capacity = u32::MAX as usize;
-    let mut capacity = initial_encode_capacity(source.len(), target.len())?
-        .min(max_capacity)
-        .max(1);
-
-    loop {
-        let avail_output = u32::try_from(capacity).map_err(|_| {
-            RomWeaverError::Validation("xdelta encoder output buffer is too large".into())
-        })?;
-        let mut output = vec![0; capacity];
-        let mut output_size = avail_output;
-
-        let rc = unsafe {
-            xdelta_ffi::xd3_encode_memory(
-                target.as_ptr(),
-                target_len,
-                source.as_ptr(),
-                source_len,
-                output.as_mut_ptr(),
-                &mut output_size,
-                avail_output,
-                flags,
-            )
-        };
-        match rc {
-            0 => {
-                output.truncate(output_size as usize);
-                return Ok(output);
-            }
-            XD3_ENOSPC if capacity < max_capacity => {
-                let next_capacity = capacity.saturating_mul(2).min(max_capacity);
-                if next_capacity == capacity {
-                    return Err(RomWeaverError::Validation(
-                        "xdelta encoder ran out of output buffer space".into(),
-                    ));
-                }
-                capacity = next_capacity;
-            }
-            XD3_ENOSPC => {
-                return Err(RomWeaverError::Validation(
-                    "xdelta encoder ran out of output buffer space".into(),
-                ));
-            }
-            _ => {
-                return Err(RomWeaverError::ValidationCode(
-                    vcdiff_validation_code("VCDIFF_XDELTA_CREATE_FAILED")
-                        .with_message("xdelta encoder failed to create patch")
-                        .with_field("status_code", rc),
-                ));
-            }
-        }
-    }
-}
-
-#[cfg(test)]
-fn initial_encode_capacity(source_len: usize, target_len: usize) -> Result<usize> {
-    let doubled_target = target_len
-        .checked_mul(2)
-        .ok_or_else(|| RomWeaverError::Validation("xdelta encoder capacity overflowed".into()))?;
-    let combined = source_len
-        .checked_add(target_len)
-        .ok_or_else(|| RomWeaverError::Validation("xdelta encoder capacity overflowed".into()))?;
-    doubled_target
-        .max(combined)
-        .checked_add(4096)
-        .ok_or_else(|| RomWeaverError::Validation("xdelta encoder capacity overflowed".into()))
-}
-
-fn decode_window_with_xdelta(
-    patch_reader: &mut dyn ReadSeek,
-    patch_header: &[u8],
-    window: &WindowIndex,
-    source_segment: &[u8],
-    validate_checksums: bool,
-) -> Result<Vec<u8>> {
-    let patch_bytes = build_single_window_patch(patch_reader, patch_header, window)?;
-    let decoded = decode_window_with_xdelta_memory(&patch_bytes, source_segment, window)?;
-
-    if decoded.len() as u64 != window.target_window_size {
-        return Err(RomWeaverError::ValidationCode(
-            vcdiff_validation_code("VCDIFF_XDELTA_DECODED_SIZE_MISMATCH")
-                .with_message("xdelta decoder produced an unexpected output size")
-                .with_field("actual", decoded.len())
-                .with_field("expected", window.target_window_size),
+    if parsed.secondary_compressor_id.is_some() {
+        return Err(RomWeaverError::Validation(
+            "native VCDIFF secondary recoder expected an uncompressed baseline patch".into(),
         ));
     }
 
-    if validate_checksums {
-        if let Some(expected) = window.checksum {
-            let actual = adler32(&decoded);
-            if actual != expected {
-                return Err(RomWeaverError::ValidationCode(
-                    vcdiff_validation_code("VCDIFF_TARGET_WINDOW_CHECKSUM_MISMATCH")
-                        .with_message("target window checksum mismatch")
-                        .with_field("expected", expected)
-                        .with_field("actual", actual),
-                ));
-            }
+    let mut recoded = Vec::new();
+    recoded.extend_from_slice(&VCDIFF_MAGIC_BYTES);
+    recoded.push(VCDIFF_VERSION_STANDARD);
+    recoded.push(HDR_SECONDARY);
+    recoded.push(XDELTA_LZMA_SECONDARY_ID);
+
+    let mut patch_reader = Cursor::new(&baseline_bytes);
+    for window in &parsed.windows {
+        let data = read_section(&mut patch_reader, window.data_start, window.data_len)?;
+        let inst = read_section(&mut patch_reader, window.inst_start, window.inst_len)?;
+        let addr = read_section(&mut patch_reader, window.addr_start, window.addr_len)?;
+
+        let (data_out, data_comp) = maybe_compress_xdelta_lzma_section(&data)?;
+        let (inst_out, inst_comp) = maybe_compress_xdelta_lzma_section(&inst)?;
+        let (addr_out, addr_comp) = maybe_compress_xdelta_lzma_section(&addr)?;
+
+        let mut delta_indicator = 0u8;
+        if data_comp {
+            delta_indicator |= DELTA_DATA_COMP;
+        }
+        if inst_comp {
+            delta_indicator |= DELTA_INST_COMP;
+        }
+        if addr_comp {
+            delta_indicator |= DELTA_ADDR_COMP;
+        }
+
+        let mut delta = Vec::new();
+        encode_varint_raw(&mut delta, window.target_window_size);
+        delta.push(delta_indicator);
+        encode_varint_raw(&mut delta, data_out.len() as u64);
+        encode_varint_raw(&mut delta, inst_out.len() as u64);
+        encode_varint_raw(&mut delta, addr_out.len() as u64);
+        if let Some(checksum) = window.checksum {
+            delta.extend_from_slice(&checksum.to_be_bytes());
+        }
+        delta.extend_from_slice(&data_out);
+        delta.extend_from_slice(&inst_out);
+        delta.extend_from_slice(&addr_out);
+
+        recoded.push(window_win_indicator(window));
+        if window.source_kind.is_some() {
+            encode_varint_raw(&mut recoded, window.source_segment_size);
+            encode_varint_raw(&mut recoded, window.source_segment_position);
+        }
+        encode_varint_raw(&mut recoded, delta.len() as u64);
+        recoded.extend_from_slice(&delta);
+    }
+
+    if let Some(parent) = output_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(output_path, &recoded)?;
+    Ok(CreatedPatchCandidate {
+        path: output_path.to_path_buf(),
+        size: recoded.len() as u64,
+    })
+}
+
+fn maybe_compress_xdelta_lzma_section(section: &[u8]) -> Result<(Vec<u8>, bool)> {
+    if section.len() < XDELTA_SECONDARY_MIN_INPUT {
+        return Ok((section.to_vec(), false));
+    }
+
+    let compressed = xdelta_lzma2_compress(section)?;
+    let mut candidate = Vec::new();
+    encode_varint_raw(&mut candidate, section.len() as u64);
+    candidate.extend_from_slice(&compressed);
+
+    if candidate.len() < section.len() {
+        Ok((candidate, true))
+    } else {
+        Ok((section.to_vec(), false))
+    }
+}
+
+fn xdelta_lzma2_compress(bytes: &[u8]) -> Result<Vec<u8>> {
+    let mut encoder = XzWriter::new(Vec::new(), XzOptions::with_preset(6)).map_err(|error| {
+        RomWeaverError::Validation(format!("xdelta lzma secondary init failed: {error}"))
+    })?;
+    encoder.write_all(bytes).map_err(|error| {
+        RomWeaverError::Validation(format!("xdelta lzma secondary encode failed: {error}"))
+    })?;
+    encoder.flush().map_err(|error| {
+        RomWeaverError::Validation(format!("xdelta lzma secondary finalize failed: {error}"))
+    })?;
+    Ok(encoder.into_inner())
+}
+
+fn xdelta_lzma2_decompress(bytes: &[u8], expected_size: usize) -> Result<Vec<u8>> {
+    let mut decoder = XzReader::new(Cursor::new(bytes), false);
+    let mut output = vec![0u8; expected_size];
+    decoder.read_exact(&mut output).map_err(|error| {
+        RomWeaverError::Validation(format!("xdelta lzma secondary decode failed: {error}"))
+    })?;
+    Ok(output)
+}
+
+fn window_win_indicator(window: &WindowIndex) -> u8 {
+    let mut win_indicator = match window.source_kind {
+        Some(WindowSourceKind::Source) => WIN_SOURCE,
+        Some(WindowSourceKind::Target) => WIN_TARGET,
+        None => 0,
+    };
+    if window.checksum.is_some() {
+        win_indicator |= WIN_CHECKSUM;
+    }
+    win_indicator
+}
+
+fn encode_varint_raw(bytes: &mut Vec<u8>, mut value: u64) {
+    if value == 0 {
+        bytes.push(0);
+        return;
+    }
+
+    let mut stack = Vec::new();
+    while value > 0 {
+        stack.push((value % 128) as u8);
+        value /= 128;
+    }
+
+    for (index, digit) in stack.iter().rev().enumerate() {
+        let is_last = index + 1 == stack.len();
+        bytes.push(if is_last { *digit } else { *digit | 0x80 });
+    }
+}
+
+fn decode_varint_raw(bytes: &[u8]) -> Result<(u64, usize)> {
+    let mut value = 0u64;
+    for (index, byte) in bytes.iter().copied().enumerate() {
+        value = value
+            .checked_mul(128)
+            .and_then(|current| current.checked_add(u64::from(byte & 0x7F)))
+            .ok_or_else(|| RomWeaverError::Validation("base-128 integer overflowed u64".into()))?;
+        if byte & 0x80 == 0 {
+            return Ok((value, index + 1));
+        }
+        if index >= 9 {
+            break;
+        }
+    }
+    Err(RomWeaverError::Validation(
+        "base-128 integer exceeds the supported length".into(),
+    ))
+}
+
+fn decode_window_with_native_engine<R: Read + Seek>(
+    patch_reader: &mut R,
+    window: &WindowIndex,
+    secondary_compressor_id: Option<u8>,
+    source_segment: &[u8],
+    validate_checksums: bool,
+) -> Result<Vec<u8>> {
+    let (data, inst, addr) = read_window_sections(patch_reader, window, secondary_compressor_id)?;
+    let source_len = if window.source_kind.is_some() {
+        window.source_segment_size
+    } else {
+        0
+    };
+    let header = build_native_window_header(window, source_len);
+    let mut source: &[u8] = source_segment;
+    let mut copy_buf = Vec::new();
+
+    let decoded = oxidelta_decoder::decode_window(
+        &header,
+        &data,
+        &inst,
+        &addr,
+        &mut source,
+        validate_checksums,
+        &mut copy_buf,
+    )
+    .map_err(|error| native_decode_error(error, window))?;
+
+    if decoded.len() as u64 != window.target_window_size {
+        return Err(RomWeaverError::Validation(format!(
+            "native VCDIFF decoder produced {} byte(s) but expected {}",
+            decoded.len(),
+            window.target_window_size
+        )));
+    }
+
+    if validate_checksums && let Some(expected) = window.checksum {
+        let actual = adler32(&decoded);
+        if actual != expected {
+            return Err(RomWeaverError::Validation(format!(
+                "target window checksum mismatch: expected 0x{expected:08X}, got 0x{actual:08X}"
+            )));
         }
     }
 
     Ok(decoded)
 }
 
-fn decode_window_with_xdelta_memory(
-    patch_bytes: &[u8],
-    source_segment: &[u8],
+fn read_window_sections<R: Read + Seek>(
+    patch_reader: &mut R,
     window: &WindowIndex,
-) -> Result<Vec<u8>> {
-    let patch_len = u32::try_from(patch_bytes.len()).map_err(|_| {
-        RomWeaverError::Validation("xdelta decoder patch window is too large".into())
-    })?;
-    let source_len = u32::try_from(source_segment.len()).map_err(|_| {
-        RomWeaverError::Validation("xdelta decoder source window is too large".into())
-    })?;
-    let expected_len = u32::try_from(window.target_window_size).map_err(|_| {
-        RomWeaverError::Validation("xdelta decoder output window is too large".into())
-    })?;
-    let output_capacity = usize::try_from(expected_len).map_err(|_| {
-        RomWeaverError::Validation("xdelta decoder output window is too large".into())
-    })?;
-    let mut output = vec![0; output_capacity.max(1)];
-    let mut output_len = expected_len;
-
-    let rc = unsafe {
-        xdelta_ffi::xd3_decode_memory(
-            patch_bytes.as_ptr(),
-            patch_len,
-            source_segment.as_ptr(),
-            source_len,
-            output.as_mut_ptr(),
-            &mut output_len,
-            expected_len.max(1),
-            xdelta_ffi::XD3_ADLER32_NOVER,
-        )
-    };
-    if rc != 0 {
-        return Err(RomWeaverError::ValidationCode(
-            vcdiff_validation_code("VCDIFF_XDELTA_DECODE_FAILED")
-                .with_message("xdelta decoder failed")
-                .with_field("output_offset", window.output_offset)
-                .with_field("status_code", rc),
-        ));
-    }
-
-    output.truncate(output_len as usize);
-    Ok(output)
-}
-
-fn build_single_window_patch(
-    patch_reader: &mut dyn ReadSeek,
-    patch_header: &[u8],
-    window: &WindowIndex,
-) -> Result<Vec<u8>> {
+    secondary_compressor_id: Option<u8>,
+) -> Result<(Vec<u8>, Vec<u8>, Vec<u8>)> {
     let data = read_section(patch_reader, window.data_start, window.data_len)?;
     let inst = read_section(patch_reader, window.inst_start, window.inst_len)?;
     let addr = read_section(patch_reader, window.addr_start, window.addr_len)?;
 
-    let mut patch = patch_header.to_vec();
-    let mut win_indicator = window.win_indicator;
-    if matches!(window.source_kind, Some(WindowSourceKind::Target)) {
-        // We decode each window in isolation. For VCD_TARGET windows we provide the referenced
-        // target bytes as an explicit source segment and rewrite the window to VCD_SOURCE.
-        win_indicator = (win_indicator & !WIN_TARGET) | WIN_SOURCE;
+    if window.delta_indicator == 0 {
+        return Ok((data, inst, addr));
     }
-    patch.push(win_indicator);
-    if window.source_kind.is_some() {
-        encode_varint(&mut patch, window.source_segment_size);
-        encode_varint(&mut patch, 0);
+
+    if secondary_compressor_id == Some(XDELTA_LZMA_SECONDARY_ID)
+        && let Ok(decoded) =
+            try_decode_xdelta_lzma_sections(&data, &inst, &addr, window.delta_indicator)
+    {
+        return Ok(decoded);
     }
-    encode_varint(&mut patch, window.delta_encoding_len);
-    encode_varint(&mut patch, window.target_window_size);
-    patch.push(window.delta_indicator);
-    encode_varint(&mut patch, window.data_len);
-    encode_varint(&mut patch, window.inst_len);
-    encode_varint(&mut patch, window.addr_len);
-    if let Some(checksum) = window.checksum {
-        patch.extend_from_slice(&checksum.to_be_bytes());
+
+    if secondary_compressor_id == Some(XDELTA_DJW_SECONDARY_ID) {
+        return try_decode_xdelta_djw_sections(&data, &inst, &addr, window.delta_indicator);
     }
-    patch.extend_from_slice(&data);
-    patch.extend_from_slice(&inst);
-    patch.extend_from_slice(&addr);
-    Ok(patch)
+
+    if secondary_compressor_id == Some(XDELTA_FGK_SECONDARY_ID) {
+        return try_decode_xdelta_fgk_sections(&data, &inst, &addr, window.delta_indicator);
+    }
+
+    ensure_supported_secondary_compressor(secondary_compressor_id)?;
+
+    oxidelta::compress::secondary::decompress_sections(
+        &data,
+        &inst,
+        &addr,
+        window.delta_indicator,
+        secondary_compressor_id,
+    )
+    .map_err(|error| {
+        RomWeaverError::Validation(format!(
+            "native VCDIFF secondary decompression failed at output offset {}: {error}",
+            window.output_offset
+        ))
+    })
 }
 
-fn read_section(reader: &mut dyn ReadSeek, start: u64, len: u64) -> Result<Vec<u8>> {
+fn try_decode_xdelta_lzma_sections(
+    data: &[u8],
+    inst: &[u8],
+    addr: &[u8],
+    delta_indicator: u8,
+) -> Result<(Vec<u8>, Vec<u8>, Vec<u8>)> {
+    let data = decode_xdelta_lzma_section_if_flag(data, delta_indicator & DELTA_DATA_COMP != 0)?;
+    let inst = decode_xdelta_lzma_section_if_flag(inst, delta_indicator & DELTA_INST_COMP != 0)?;
+    let addr = decode_xdelta_lzma_section_if_flag(addr, delta_indicator & DELTA_ADDR_COMP != 0)?;
+    Ok((data, inst, addr))
+}
+
+fn decode_xdelta_lzma_section_if_flag(section: &[u8], compressed: bool) -> Result<Vec<u8>> {
+    if !compressed {
+        return Ok(section.to_vec());
+    }
+
+    let (decoded_size, prefix_len) = decode_varint_raw(section)?;
+    let payload = section.get(prefix_len..).ok_or_else(|| {
+        RomWeaverError::Validation("xdelta lzma section payload is missing".into())
+    })?;
+    let expected = usize::try_from(decoded_size).map_err(|_| {
+        RomWeaverError::Validation("xdelta lzma section decoded size is too large".into())
+    })?;
+    let decoded = xdelta_lzma2_decompress(payload, expected)?;
+    if decoded.len() != expected {
+        return Err(RomWeaverError::Validation(format!(
+            "xdelta lzma section decoded to {} byte(s) but expected {}",
+            decoded.len(),
+            expected
+        )));
+    }
+    Ok(decoded)
+}
+
+#[derive(Clone, Copy)]
+struct DjwBitState {
+    cur_byte: u8,
+    cur_mask: u16,
+}
+
+impl DjwBitState {
+    fn decode_init() -> Self {
+        Self {
+            cur_byte: 0,
+            cur_mask: 0x100,
+        }
+    }
+}
+
+#[derive(Clone)]
+struct DjwDecodeTable {
+    inorder: Vec<u8>,
+    base: Vec<usize>,
+    limit: Vec<usize>,
+    min_len: usize,
+    max_len: usize,
+}
+
+fn decode_djw_secondary(input: &[u8], output_size: usize) -> Result<Vec<u8>> {
+    if output_size == 0 {
+        return Err(RomWeaverError::Validation(
+            "xdelta djw secondary decoder invalid output size".into(),
+        ));
+    }
+
+    let mut state = DjwBitState::decode_init();
+    let mut input_pos = 0usize;
+    let mut output = Vec::with_capacity(output_size);
+
+    let groups = decode_djw_bits(&mut state, input, &mut input_pos, DJW_GROUP_BITS)? + 1;
+    if groups == 0 || groups > DJW_MAX_GROUPS {
+        return Err(RomWeaverError::Validation(format!(
+            "xdelta djw secondary decoder invalid group count {groups}"
+        )));
+    }
+
+    let sector_size = if groups > 1 {
+        (decode_djw_bits(&mut state, input, &mut input_pos, DJW_SECTORSZ_BITS)? + 1)
+            .checked_mul(DJW_SECTORSZ_MULT)
+            .ok_or_else(|| {
+                RomWeaverError::Validation(
+                    "xdelta djw secondary decoder sector size overflowed".into(),
+                )
+            })?
+    } else {
+        output_size
+    };
+    let sectors = 1 + (output_size - 1) / sector_size;
+
+    let mut cl_mtf = [0u8; DJW_TOTAL_CODES];
+    let cl_decode_table = decode_djw_clclen_table(&mut state, input, &mut input_pos, &mut cl_mtf)?;
+
+    let mut clen = vec![0u8; groups * DJW_ALPHABET_SIZE];
+    decode_djw_1_2(
+        &mut state,
+        input,
+        &mut input_pos,
+        &cl_decode_table,
+        &mut cl_mtf,
+        groups * DJW_ALPHABET_SIZE,
+        DJW_ALPHABET_SIZE,
+        &mut clen,
+    )?;
+
+    let mut group_tables = Vec::with_capacity(groups);
+    for group in 0..groups {
+        let start = group * DJW_ALPHABET_SIZE;
+        let end = start + DJW_ALPHABET_SIZE;
+        group_tables.push(build_djw_decoder_table(
+            &clen[start..end],
+            DJW_ALPHABET_SIZE,
+            DJW_MAX_CODELEN,
+        )?);
+    }
+
+    let mut selected_groups = vec![0u8; sectors];
+    if groups > 1 {
+        let mut sel_clen = vec![0u8; groups + 1];
+        let mut sel_mtf = vec![0u8; groups + 1];
+        for i in 0..(groups + 1) {
+            let code_len = decode_djw_bits(&mut state, input, &mut input_pos, DJW_GBCLEN_BITS)?;
+            sel_clen[i] = u8::try_from(code_len).map_err(|_| {
+                RomWeaverError::Validation("xdelta djw selector code length exceeded u8".into())
+            })?;
+            sel_mtf[i] = u8::try_from(i).map_err(|_| {
+                RomWeaverError::Validation("xdelta djw selector index exceeded u8".into())
+            })?;
+        }
+
+        let selector_table = build_djw_decoder_table(&sel_clen, groups + 1, DJW_MAX_GBCLEN)?;
+        decode_djw_1_2(
+            &mut state,
+            input,
+            &mut input_pos,
+            &selector_table,
+            &mut sel_mtf,
+            sectors,
+            0,
+            &mut selected_groups,
+        )?;
+    }
+
+    for sector_index in 0..sectors {
+        let group_index = if groups > 1 {
+            usize::from(selected_groups[sector_index])
+        } else {
+            0
+        };
+        if group_index >= group_tables.len() {
+            return Err(RomWeaverError::Validation(format!(
+                "xdelta djw secondary decoder selected invalid group index {group_index}"
+            )));
+        }
+
+        let remaining = output_size.checked_sub(output.len()).ok_or_else(|| {
+            RomWeaverError::Validation("xdelta djw output size underflowed".into())
+        })?;
+        let symbols = sector_size.min(remaining);
+        let table = &group_tables[group_index];
+
+        for _ in 0..symbols {
+            let symbol =
+                decode_djw_symbol(&mut state, input, &mut input_pos, table, DJW_ALPHABET_SIZE)?;
+            output.push(u8::try_from(symbol).map_err(|_| {
+                RomWeaverError::Validation(format!(
+                    "xdelta djw secondary decoder produced out-of-range symbol {symbol}"
+                ))
+            })?);
+        }
+    }
+
+    if output.len() != output_size {
+        return Err(RomWeaverError::Validation(format!(
+            "xdelta djw secondary decoder produced {} byte(s) but expected {}",
+            output.len(),
+            output_size
+        )));
+    }
+
+    Ok(output)
+}
+
+fn decode_djw_clclen_table(
+    state: &mut DjwBitState,
+    input: &[u8],
+    input_pos: &mut usize,
+    cl_mtf: &mut [u8; DJW_TOTAL_CODES],
+) -> Result<DjwDecodeTable> {
+    let num_codes = decode_djw_bits(state, input, input_pos, DJW_EXTRA_CODE_BITS)?
+        .checked_add(DJW_EXTRA_12OFFSET)
+        .ok_or_else(|| {
+            RomWeaverError::Validation("xdelta djw code length count overflowed".into())
+        })?;
+    if num_codes > DJW_TOTAL_CODES {
+        return Err(RomWeaverError::Validation(format!(
+            "xdelta djw code length count {num_codes} exceeds limit {DJW_TOTAL_CODES}"
+        )));
+    }
+
+    let mut cl_clen = vec![0u8; DJW_TOTAL_CODES];
+    for value in cl_clen.iter_mut().take(num_codes) {
+        *value = u8::try_from(decode_djw_bits(state, input, input_pos, DJW_CLCLEN_BITS)?)
+            .map_err(|_| RomWeaverError::Validation("xdelta djw code length exceeded u8".into()))?;
+    }
+
+    init_djw_clen_mtf(cl_mtf);
+    build_djw_decoder_table(&cl_clen, DJW_TOTAL_CODES, DJW_MAX_CLCLEN)
+}
+
+fn decode_djw_1_2(
+    state: &mut DjwBitState,
+    input: &[u8],
+    input_pos: &mut usize,
+    table: &DjwDecodeTable,
+    mtf_values: &mut [u8],
+    elements: usize,
+    skip_offset: usize,
+    output: &mut [u8],
+) -> Result<()> {
+    let mut index = 0usize;
+    let mut repeat = 0usize;
+    let mut mtf = 0usize;
+    let mut shift = 0usize;
+
+    while index < elements {
+        if skip_offset != 0 && index >= skip_offset && output[index - skip_offset] == 0 {
+            output[index] = 0;
+            index += 1;
+            continue;
+        }
+
+        if repeat != 0 {
+            output[index] = mtf_values[0];
+            repeat -= 1;
+            index += 1;
+            continue;
+        }
+
+        if mtf != 0 {
+            let symbol = djw_update_mtf(mtf_values, mtf)?;
+            output[index] = symbol;
+            mtf = 0;
+            index += 1;
+            continue;
+        }
+
+        mtf = decode_djw_symbol(state, input, input_pos, table, DJW_TOTAL_CODES)?;
+        if mtf <= DJW_RUN_1 {
+            repeat = (mtf + 1)
+                .checked_shl(u32::try_from(shift).unwrap_or(u32::MAX))
+                .ok_or_else(|| {
+                    RomWeaverError::Validation("xdelta djw repeat count overflowed".into())
+                })?;
+            mtf = 0;
+            shift = shift
+                .checked_add(1)
+                .ok_or_else(|| RomWeaverError::Validation("xdelta djw shift overflowed".into()))?;
+        } else {
+            mtf -= 1;
+            shift = 0;
+        }
+    }
+
+    if repeat != 0 {
+        return Err(RomWeaverError::Validation(
+            "xdelta djw secondary decoder invalid repeat code".into(),
+        ));
+    }
+
+    Ok(())
+}
+
+fn build_djw_decoder_table(
+    code_lengths: &[u8],
+    alphabet_size: usize,
+    max_code_len: usize,
+) -> Result<DjwDecodeTable> {
+    if code_lengths.len() < alphabet_size {
+        return Err(RomWeaverError::Validation(
+            "xdelta djw decoder table input is too short".into(),
+        ));
+    }
+
+    let mut counts = vec![0usize; max_code_len + 1];
+    for &code_len in code_lengths.iter().take(alphabet_size) {
+        let value = usize::from(code_len);
+        if value > max_code_len {
+            return Err(RomWeaverError::Validation(format!(
+                "xdelta djw code length {value} exceeds max {max_code_len}"
+            )));
+        }
+        counts[value] += 1;
+    }
+
+    let mut min_len = None;
+    let mut max_len = None;
+    for (length, &count) in counts.iter().enumerate().skip(1) {
+        if count != 0 {
+            min_len.get_or_insert(length);
+            max_len = Some(length);
+        }
+    }
+
+    let min_len = min_len.ok_or_else(|| {
+        RomWeaverError::Validation("xdelta djw decoder table has no symbols".into())
+    })?;
+    let max_len = max_len.unwrap_or(min_len);
+
+    let mut base = vec![0usize; max_code_len + 2];
+    let mut limit = vec![0usize; max_code_len + 2];
+    let mut cursor = vec![0usize; max_code_len + 2];
+    let mut inorder = vec![0u8; alphabet_size];
+
+    base[min_len] = 0;
+    limit[min_len] = counts[min_len]
+        .checked_sub(1)
+        .ok_or_else(|| RomWeaverError::Validation("xdelta djw invalid prefix table".into()))?;
+    cursor[min_len] = 0;
+
+    for length in (min_len + 1)..=max_len {
+        let previous = (limit[length - 1] + 1) << 1;
+        cursor[length] = cursor[length - 1]
+            .checked_add(counts[length - 1])
+            .ok_or_else(|| {
+                RomWeaverError::Validation("xdelta djw prefix cursor overflowed".into())
+            })?;
+        limit[length] = previous
+            .checked_add(counts[length])
+            .and_then(|value| value.checked_sub(1))
+            .ok_or_else(|| {
+                RomWeaverError::Validation("xdelta djw prefix limit overflowed".into())
+            })?;
+        base[length] = previous.checked_sub(cursor[length]).ok_or_else(|| {
+            RomWeaverError::Validation("xdelta djw prefix base overflowed".into())
+        })?;
+    }
+
+    for (symbol, &code_len) in code_lengths.iter().take(alphabet_size).enumerate() {
+        let length = usize::from(code_len);
+        if length == 0 {
+            continue;
+        }
+        let position = cursor[length];
+        if position >= inorder.len() {
+            return Err(RomWeaverError::Validation(
+                "xdelta djw inorder table overflowed".into(),
+            ));
+        }
+        inorder[position] = u8::try_from(symbol).map_err(|_| {
+            RomWeaverError::Validation("xdelta djw symbol index exceeded u8".into())
+        })?;
+        cursor[length] += 1;
+    }
+
+    Ok(DjwDecodeTable {
+        inorder,
+        base,
+        limit,
+        min_len,
+        max_len,
+    })
+}
+
+fn decode_djw_symbol(
+    state: &mut DjwBitState,
+    input: &[u8],
+    input_pos: &mut usize,
+    table: &DjwDecodeTable,
+    max_symbol: usize,
+) -> Result<usize> {
+    let mut code = 0usize;
+    let mut bits = 0usize;
+
+    loop {
+        if state.cur_mask == 0x100 {
+            if *input_pos >= input.len() {
+                return Err(RomWeaverError::Validation(
+                    "xdelta djw secondary decoder reached end of input".into(),
+                ));
+            }
+            state.cur_byte = input[*input_pos];
+            *input_pos += 1;
+            state.cur_mask = 1;
+        }
+
+        if bits == table.max_len {
+            return Err(RomWeaverError::Validation(
+                "xdelta djw secondary decoder encountered an invalid symbol".into(),
+            ));
+        }
+
+        bits += 1;
+        code <<= 1;
+        if (usize::from(state.cur_byte) & usize::from(state.cur_mask)) != 0 {
+            code |= 1;
+        }
+        state.cur_mask <<= 1;
+
+        if bits >= table.min_len && code <= table.limit[bits] {
+            if table.base[bits] > code {
+                break;
+            }
+            let offset = code - table.base[bits];
+            if offset < table.inorder.len() && offset <= max_symbol {
+                return Ok(usize::from(table.inorder[offset]));
+            }
+            break;
+        }
+    }
+
+    Err(RomWeaverError::Validation(
+        "xdelta djw secondary decoder encountered an invalid symbol".into(),
+    ))
+}
+
+fn decode_djw_bits(
+    state: &mut DjwBitState,
+    input: &[u8],
+    input_pos: &mut usize,
+    bit_count: usize,
+) -> Result<usize> {
+    if bit_count == 0 || bit_count >= usize::BITS as usize {
+        return Err(RomWeaverError::Validation(
+            "xdelta djw secondary decoder requested an invalid bit count".into(),
+        ));
+    }
+
+    let mut value = 0usize;
+    let mut mask = 1usize << bit_count;
+    loop {
+        if state.cur_mask == 0x100 {
+            if *input_pos >= input.len() {
+                return Err(RomWeaverError::Validation(
+                    "xdelta djw secondary decoder reached end of input".into(),
+                ));
+            }
+            state.cur_byte = input[*input_pos];
+            *input_pos += 1;
+            state.cur_mask = 1;
+        }
+
+        mask >>= 1;
+        if (usize::from(state.cur_byte) & usize::from(state.cur_mask)) != 0 {
+            value |= mask;
+        }
+        state.cur_mask <<= 1;
+        if mask == 1 {
+            break;
+        }
+    }
+    Ok(value)
+}
+
+fn init_djw_clen_mtf(cl_mtf: &mut [u8; DJW_TOTAL_CODES]) {
+    let mut index = 0usize;
+    cl_mtf[index] = 0;
+    index += 1;
+    for &value in &DJW_ENCODE_12BASIC {
+        cl_mtf[index] = value;
+        index += 1;
+    }
+    for &value in &DJW_ENCODE_12EXTRA {
+        cl_mtf[index] = value;
+        index += 1;
+    }
+}
+
+fn djw_update_mtf(mtf_values: &mut [u8], mtf_index: usize) -> Result<u8> {
+    if mtf_index >= mtf_values.len() {
+        return Err(RomWeaverError::Validation(format!(
+            "xdelta djw mtf index {mtf_index} is out of bounds"
+        )));
+    }
+
+    let symbol = mtf_values[mtf_index];
+    for index in (1..=mtf_index).rev() {
+        mtf_values[index] = mtf_values[index - 1];
+    }
+    mtf_values[0] = symbol;
+    Ok(symbol)
+}
+
+#[derive(Clone, Copy, Default)]
+struct FgkNode {
+    weight: u32,
+    parent: Option<usize>,
+    left_child: Option<usize>,
+    right_child: Option<usize>,
+    left: Option<usize>,
+    right: Option<usize>,
+    my_block: Option<usize>,
+}
+
+#[derive(Clone, Copy, Default)]
+struct FgkBlock {
+    leader: Option<usize>,
+    free_next: Option<usize>,
+}
+
+struct FgkState {
+    alphabet_size: usize,
+    zero_freq_count: usize,
+    zero_freq_exp: usize,
+    zero_freq_rem: usize,
+    coded_depth: usize,
+    coded_bits: Vec<u8>,
+    blocks: Vec<FgkBlock>,
+    free_block: Option<usize>,
+    nodes: Vec<FgkNode>,
+    decode_ptr: usize,
+    remaining_zeros: Option<usize>,
+    root_node: usize,
+    free_node: usize,
+}
+
+impl FgkState {
+    fn new(alphabet_size: usize) -> Result<Self> {
+        let total_nodes = (2 * alphabet_size).checked_sub(1).ok_or_else(|| {
+            RomWeaverError::Validation("xdelta fgk total node count overflowed".into())
+        })?;
+        let total_blocks = total_nodes.checked_mul(2).ok_or_else(|| {
+            RomWeaverError::Validation("xdelta fgk block count overflowed".into())
+        })?;
+
+        let mut nodes = vec![FgkNode::default(); total_nodes];
+        for index in 0..alphabet_size {
+            let right_child = if index + 1 < alphabet_size {
+                Some(index + 1)
+            } else {
+                None
+            };
+            let left_child = if index >= 1 { Some(index - 1) } else { None };
+            nodes[index] = FgkNode {
+                weight: 0,
+                parent: None,
+                left_child,
+                right_child,
+                left: None,
+                right: None,
+                my_block: None,
+            };
+        }
+
+        let mut blocks = vec![FgkBlock::default(); total_blocks];
+        for (index, block) in blocks.iter_mut().enumerate() {
+            block.free_next = if index + 1 < total_blocks {
+                Some(index + 1)
+            } else {
+                None
+            };
+        }
+
+        let mut state = Self {
+            alphabet_size,
+            zero_freq_count: alphabet_size + 2,
+            zero_freq_exp: 0,
+            zero_freq_rem: 0,
+            coded_depth: 0,
+            coded_bits: vec![0; alphabet_size],
+            blocks,
+            free_block: Some(0),
+            nodes,
+            decode_ptr: 0,
+            remaining_zeros: Some(0),
+            root_node: 0,
+            free_node: alphabet_size,
+        };
+
+        state.fgk_factor_remaining()?;
+        state.fgk_factor_remaining()?;
+        Ok(state)
+    }
+
+    fn fgk_decode_bit(&mut self, bit: u8) -> Result<bool> {
+        if bit > 1 {
+            return Err(RomWeaverError::Validation(
+                "xdelta fgk decoder received an invalid bit".into(),
+            ));
+        }
+
+        if self.nodes[self.decode_ptr].weight == 0 {
+            let bits_required = if self.zero_freq_rem == 0 {
+                self.zero_freq_exp
+            } else {
+                self.zero_freq_exp + 1
+            };
+            if self.coded_depth >= self.coded_bits.len() {
+                return Err(RomWeaverError::Validation(
+                    "xdelta fgk coded bit buffer overflowed".into(),
+                ));
+            }
+            self.coded_bits[self.coded_depth] = bit;
+            self.coded_depth += 1;
+            return Ok(self.coded_depth >= bits_required);
+        }
+
+        let next = if bit == 1 {
+            self.nodes[self.decode_ptr].right_child.ok_or_else(|| {
+                RomWeaverError::Validation("xdelta fgk missing right child".into())
+            })?
+        } else {
+            self.nodes[self.decode_ptr]
+                .left_child
+                .ok_or_else(|| RomWeaverError::Validation("xdelta fgk missing left child".into()))?
+        };
+        self.decode_ptr = next;
+
+        if self.nodes[self.decode_ptr].left_child.is_none() {
+            if self.nodes[self.decode_ptr].weight != 0 {
+                return Ok(true);
+            }
+            return Ok(self.zero_freq_count == 1);
+        }
+        Ok(false)
+    }
+
+    fn fgk_nth_zero(&self, mut index: usize) -> Result<usize> {
+        let mut cursor = self
+            .remaining_zeros
+            .ok_or_else(|| RomWeaverError::Validation("xdelta fgk zero list is empty".into()))?;
+        while index != 0 {
+            if let Some(next) = self.nodes[cursor].right_child {
+                cursor = next;
+            } else {
+                break;
+            }
+            index -= 1;
+        }
+        Ok(cursor)
+    }
+
+    fn fgk_decode_data(&mut self) -> Result<u8> {
+        let mut symbol_index = self.decode_ptr;
+        if self.nodes[self.decode_ptr].weight == 0 {
+            let mut value = 0usize;
+            if self.coded_depth > 0 {
+                for &bit in self.coded_bits.iter().take(self.coded_depth - 1) {
+                    value |= usize::from(bit);
+                    value <<= 1;
+                }
+                value |= usize::from(self.coded_bits[self.coded_depth - 1]);
+            }
+            symbol_index = self.fgk_nth_zero(value)?;
+        }
+
+        self.coded_depth = 0;
+        self.fgk_update_tree(symbol_index)?;
+        self.decode_ptr = self.root_node;
+
+        if symbol_index >= self.alphabet_size {
+            return Err(RomWeaverError::Validation(format!(
+                "xdelta fgk decoded symbol index {symbol_index} exceeds alphabet size {}",
+                self.alphabet_size
+            )));
+        }
+        u8::try_from(symbol_index).map_err(|_| {
+            RomWeaverError::Validation("xdelta fgk decoded symbol index exceeded u8".into())
+        })
+    }
+
+    fn fgk_update_tree(&mut self, symbol_index: usize) -> Result<()> {
+        let mut current = if self.nodes[symbol_index].weight == 0 {
+            self.fgk_increase_zero_weight(symbol_index)?
+        } else {
+            symbol_index
+        };
+
+        while current != self.root_node {
+            self.fgk_move_right(current)?;
+            self.fgk_promote(current)?;
+            self.nodes[current].weight = self.nodes[current]
+                .weight
+                .checked_add(1)
+                .ok_or_else(|| RomWeaverError::Validation("xdelta fgk weight overflowed".into()))?;
+            let parent = self.nodes[current].parent.ok_or_else(|| {
+                RomWeaverError::Validation("xdelta fgk node is missing a parent".into())
+            })?;
+            current = parent;
+        }
+
+        self.nodes[self.root_node].weight = self.nodes[self.root_node]
+            .weight
+            .checked_add(1)
+            .ok_or_else(|| {
+                RomWeaverError::Validation("xdelta fgk root weight overflowed".into())
+            })?;
+        Ok(())
+    }
+
+    fn fgk_move_right(&mut self, move_fwd: usize) -> Result<()> {
+        let block_index = self.nodes[move_fwd].my_block.ok_or_else(|| {
+            RomWeaverError::Validation("xdelta fgk node is missing a block".into())
+        })?;
+        let move_back = self.blocks[block_index].leader.ok_or_else(|| {
+            RomWeaverError::Validation("xdelta fgk block is missing a leader".into())
+        })?;
+
+        if move_fwd == move_back
+            || self.nodes[move_fwd].parent == Some(move_back)
+            || self.nodes[move_fwd].weight == 0
+        {
+            return Ok(());
+        }
+
+        let move_back_right = self.nodes[move_back].right.ok_or_else(|| {
+            RomWeaverError::Validation("xdelta fgk move-back node is missing right link".into())
+        })?;
+        self.nodes[move_back_right].left = Some(move_fwd);
+
+        if let Some(left) = self.nodes[move_fwd].left {
+            self.nodes[left].right = Some(move_back);
+        }
+
+        let tmp_right = self.nodes[move_fwd].right;
+        self.nodes[move_fwd].right = self.nodes[move_back].right;
+        if tmp_right == Some(move_back) {
+            self.nodes[move_back].right = Some(move_fwd);
+        } else {
+            let tmp = tmp_right.ok_or_else(|| {
+                RomWeaverError::Validation(
+                    "xdelta fgk move-forward node is missing right link".into(),
+                )
+            })?;
+            self.nodes[tmp].left = Some(move_back);
+            self.nodes[move_back].right = Some(tmp);
+        }
+
+        let tmp_left = self.nodes[move_back].left;
+        self.nodes[move_back].left = self.nodes[move_fwd].left;
+        if tmp_left == Some(move_fwd) {
+            self.nodes[move_fwd].left = Some(move_back);
+        } else {
+            let tmp = tmp_left.ok_or_else(|| {
+                RomWeaverError::Validation("xdelta fgk move-back node is missing left link".into())
+            })?;
+            self.nodes[tmp].right = Some(move_fwd);
+            self.nodes[move_fwd].left = Some(tmp);
+        }
+
+        let move_fwd_parent = self.nodes[move_fwd].parent.ok_or_else(|| {
+            RomWeaverError::Validation("xdelta fgk move-forward parent missing".into())
+        })?;
+        let move_back_parent = self.nodes[move_back].parent.ok_or_else(|| {
+            RomWeaverError::Validation("xdelta fgk move-back parent missing".into())
+        })?;
+
+        let fwd_is_right = self.nodes[move_fwd_parent].right_child == Some(move_fwd);
+        let back_is_right = self.nodes[move_back_parent].right_child == Some(move_back);
+
+        self.nodes[move_fwd].parent = Some(move_back_parent);
+        self.nodes[move_back].parent = Some(move_fwd_parent);
+
+        if fwd_is_right {
+            self.nodes[move_fwd_parent].right_child = Some(move_back);
+        } else {
+            self.nodes[move_fwd_parent].left_child = Some(move_back);
+        }
+        if back_is_right {
+            self.nodes[move_back_parent].right_child = Some(move_fwd);
+        } else {
+            self.nodes[move_back_parent].left_child = Some(move_fwd);
+        }
+
+        self.blocks[block_index].leader = Some(move_fwd);
+        Ok(())
+    }
+
+    fn fgk_promote(&mut self, node: usize) -> Result<()> {
+        if self.nodes[node].weight == 0 {
+            return Ok(());
+        }
+
+        let my_right = self.nodes[node].right.ok_or_else(|| {
+            RomWeaverError::Validation("xdelta fgk promote missing right link".into())
+        })?;
+        let my_left = self.nodes[node].left;
+        let current_block = self.nodes[node]
+            .my_block
+            .ok_or_else(|| RomWeaverError::Validation("xdelta fgk promote missing block".into()))?;
+
+        if my_left == self.nodes[node].right_child
+            && self.nodes[node].left_child.is_some()
+            && self.nodes[self.nodes[node].left_child.unwrap()].weight == 0
+        {
+            if self.nodes[node].weight == self.nodes[my_right].weight.saturating_sub(1)
+                && my_right != self.root_node
+            {
+                self.fgk_free_block(current_block);
+                let right_block = self.nodes[my_right].my_block.ok_or_else(|| {
+                    RomWeaverError::Validation("xdelta fgk right node missing block".into())
+                })?;
+                self.nodes[node].my_block = Some(right_block);
+                let left_child = self.nodes[node].left_child.unwrap();
+                self.nodes[left_child].my_block = Some(right_block);
+            }
+            return Ok(());
+        }
+
+        if my_left == self.remaining_zeros {
+            return Ok(());
+        }
+
+        if let Some(left_index) = my_left {
+            if self.nodes[left_index].my_block == Some(current_block) {
+                self.blocks[current_block].leader = Some(left_index);
+            } else {
+                self.fgk_free_block(current_block);
+            }
+        } else {
+            self.fgk_free_block(current_block);
+        }
+
+        if self.nodes[node].weight == self.nodes[my_right].weight.saturating_sub(1)
+            && my_right != self.root_node
+        {
+            self.nodes[node].my_block = self.nodes[my_right].my_block;
+        } else {
+            let block = self.fgk_make_block(node)?;
+            self.nodes[node].my_block = Some(block);
+        }
+
+        Ok(())
+    }
+
+    fn fgk_increase_zero_weight(&mut self, symbol_index: usize) -> Result<usize> {
+        let this_zero = symbol_index;
+        if self.zero_freq_count == 1 {
+            self.nodes[this_zero].right_child = None;
+            let right = self.nodes[this_zero].right.ok_or_else(|| {
+                RomWeaverError::Validation("xdelta fgk zero node missing right link".into())
+            })?;
+            if self.nodes[right].weight == 1 {
+                self.nodes[this_zero].my_block = self.nodes[right].my_block;
+            } else {
+                let block = self.fgk_make_block(this_zero)?;
+                self.nodes[this_zero].my_block = Some(block);
+            }
+            self.remaining_zeros = None;
+            return Ok(this_zero);
+        }
+
+        let zero_ptr = self
+            .remaining_zeros
+            .ok_or_else(|| RomWeaverError::Validation("xdelta fgk zero list is empty".into()))?;
+        let new_internal = self.free_node;
+        if new_internal >= self.nodes.len() {
+            return Err(RomWeaverError::Validation(
+                "xdelta fgk exhausted internal node capacity".into(),
+            ));
+        }
+        self.free_node += 1;
+
+        self.nodes[new_internal].parent = self.nodes[zero_ptr].parent;
+        self.nodes[new_internal].right = self.nodes[zero_ptr].right;
+        self.nodes[new_internal].weight = 0;
+        self.nodes[new_internal].right_child = Some(this_zero);
+        self.nodes[new_internal].left = Some(this_zero);
+
+        if self.remaining_zeros == Some(self.root_node) {
+            self.root_node = new_internal;
+            let zero_block = self.fgk_make_block(this_zero)?;
+            self.nodes[this_zero].my_block = Some(zero_block);
+            let internal_block = self.fgk_make_block(new_internal)?;
+            self.nodes[new_internal].my_block = Some(internal_block);
+        } else {
+            let right = self.nodes[new_internal].right.ok_or_else(|| {
+                RomWeaverError::Validation("xdelta fgk internal node missing right link".into())
+            })?;
+            self.nodes[right].left = Some(new_internal);
+
+            let zero_parent = self.nodes[zero_ptr].parent.ok_or_else(|| {
+                RomWeaverError::Validation("xdelta fgk zero node missing parent".into())
+            })?;
+            if self.nodes[zero_parent].right_child == Some(zero_ptr) {
+                self.nodes[zero_parent].right_child = Some(new_internal);
+            } else {
+                self.nodes[zero_parent].left_child = Some(new_internal);
+            }
+
+            if self.nodes[right].weight == 1 {
+                self.nodes[new_internal].my_block = self.nodes[right].my_block;
+            } else {
+                let block = self.fgk_make_block(new_internal)?;
+                self.nodes[new_internal].my_block = Some(block);
+            }
+            self.nodes[this_zero].my_block = self.nodes[new_internal].my_block;
+        }
+
+        self.fgk_eliminate_zero(this_zero)?;
+
+        self.nodes[new_internal].left_child = self.remaining_zeros;
+        self.nodes[this_zero].right = Some(new_internal);
+        self.nodes[this_zero].left = self.remaining_zeros;
+        self.nodes[this_zero].parent = Some(new_internal);
+        self.nodes[this_zero].left_child = None;
+        self.nodes[this_zero].right_child = None;
+
+        let remaining = self.remaining_zeros.ok_or_else(|| {
+            RomWeaverError::Validation("xdelta fgk zero list became empty".into())
+        })?;
+        self.nodes[remaining].parent = Some(new_internal);
+        self.nodes[remaining].right = Some(this_zero);
+
+        Ok(this_zero)
+    }
+
+    fn fgk_eliminate_zero(&mut self, node: usize) -> Result<()> {
+        if self.zero_freq_count == 1 {
+            return Ok(());
+        }
+
+        self.fgk_factor_remaining()?;
+
+        if self.nodes[node].left_child.is_none() {
+            let next = self
+                .remaining_zeros
+                .and_then(|index| self.nodes[index].right_child)
+                .ok_or_else(|| {
+                    RomWeaverError::Validation("xdelta fgk zero list is missing a successor".into())
+                })?;
+            self.remaining_zeros = Some(next);
+            self.nodes[next].left_child = None;
+            return Ok(());
+        }
+
+        if self.nodes[node].right_child.is_none() {
+            let left = self.nodes[node].left_child.ok_or_else(|| {
+                RomWeaverError::Validation("xdelta fgk zero node missing left child".into())
+            })?;
+            self.nodes[left].right_child = None;
+            return Ok(());
+        }
+
+        let right = self.nodes[node].right_child.ok_or_else(|| {
+            RomWeaverError::Validation("xdelta fgk zero node missing right child".into())
+        })?;
+        let left = self.nodes[node].left_child.ok_or_else(|| {
+            RomWeaverError::Validation("xdelta fgk zero node missing left child".into())
+        })?;
+        self.nodes[right].left_child = Some(left);
+        self.nodes[left].right_child = Some(right);
+        Ok(())
+    }
+
+    fn fgk_make_block(&mut self, leader: usize) -> Result<usize> {
+        let block = self.free_block.ok_or_else(|| {
+            RomWeaverError::Validation("xdelta fgk block allocator exhausted".into())
+        })?;
+        self.free_block = self.blocks[block].free_next;
+        self.blocks[block].leader = Some(leader);
+        self.blocks[block].free_next = None;
+        Ok(block)
+    }
+
+    fn fgk_free_block(&mut self, block: usize) {
+        self.blocks[block].leader = None;
+        self.blocks[block].free_next = self.free_block;
+        self.free_block = Some(block);
+    }
+
+    fn fgk_factor_remaining(&mut self) -> Result<()> {
+        if self.zero_freq_count == 0 {
+            return Err(RomWeaverError::Validation(
+                "xdelta fgk zero-frequency count underflowed".into(),
+            ));
+        }
+        self.zero_freq_count -= 1;
+        let mut i = self.zero_freq_count;
+        self.zero_freq_exp = 0;
+        while i > 1 {
+            self.zero_freq_exp += 1;
+            i >>= 1;
+        }
+        let base = 1usize
+            .checked_shl(u32::try_from(self.zero_freq_exp).unwrap_or(u32::MAX))
+            .ok_or_else(|| RomWeaverError::Validation("xdelta fgk exponent overflowed".into()))?;
+        self.zero_freq_rem = self
+            .zero_freq_count
+            .checked_sub(base)
+            .ok_or_else(|| RomWeaverError::Validation("xdelta fgk remainder underflowed".into()))?;
+        Ok(())
+    }
+}
+
+fn decode_fgk_secondary(input: &[u8], output_size: usize) -> Result<Vec<u8>> {
+    let mut state = FgkState::new(DJW_ALPHABET_SIZE)?;
+    let mut output = Vec::with_capacity(output_size);
+    let mut input_pos = 0usize;
+
+    while output.len() < output_size {
+        if input_pos >= input.len() {
+            return Err(RomWeaverError::Validation(
+                "xdelta fgk secondary decoder reached end of input".into(),
+            ));
+        }
+        let byte = input[input_pos];
+        input_pos += 1;
+        let mut mask = 1u16;
+        while mask != 0x100 {
+            let bit = if (u16::from(byte) & mask) != 0 { 1 } else { 0 };
+            let done = state.fgk_decode_bit(bit)?;
+            mask <<= 1;
+            if !done {
+                continue;
+            }
+            let symbol = state.fgk_decode_data()?;
+            output.push(symbol);
+            if output.len() == output_size {
+                break;
+            }
+        }
+    }
+
+    Ok(output)
+}
+
+fn try_decode_xdelta_djw_sections(
+    data: &[u8],
+    inst: &[u8],
+    addr: &[u8],
+    delta_indicator: u8,
+) -> Result<(Vec<u8>, Vec<u8>, Vec<u8>)> {
+    let data = decode_xdelta_djw_section_if_flag(data, delta_indicator & DELTA_DATA_COMP != 0)?;
+    let inst = decode_xdelta_djw_section_if_flag(inst, delta_indicator & DELTA_INST_COMP != 0)?;
+    let addr = decode_xdelta_djw_section_if_flag(addr, delta_indicator & DELTA_ADDR_COMP != 0)?;
+    Ok((data, inst, addr))
+}
+
+fn decode_xdelta_djw_section_if_flag(section: &[u8], compressed: bool) -> Result<Vec<u8>> {
+    if !compressed {
+        return Ok(section.to_vec());
+    }
+
+    let (decoded_size, prefix_len) = decode_varint_raw(section)?;
+    let payload = section.get(prefix_len..).ok_or_else(|| {
+        RomWeaverError::Validation("xdelta djw section payload is missing".into())
+    })?;
+    let decoded = decode_djw_secondary(
+        payload,
+        usize::try_from(decoded_size).map_err(|_| {
+            RomWeaverError::Validation("xdelta djw section decoded size is too large".into())
+        })?,
+    )?;
+    Ok(decoded)
+}
+
+fn try_decode_xdelta_fgk_sections(
+    data: &[u8],
+    inst: &[u8],
+    addr: &[u8],
+    delta_indicator: u8,
+) -> Result<(Vec<u8>, Vec<u8>, Vec<u8>)> {
+    let data = decode_xdelta_fgk_section_if_flag(data, delta_indicator & DELTA_DATA_COMP != 0)?;
+    let inst = decode_xdelta_fgk_section_if_flag(inst, delta_indicator & DELTA_INST_COMP != 0)?;
+    let addr = decode_xdelta_fgk_section_if_flag(addr, delta_indicator & DELTA_ADDR_COMP != 0)?;
+    Ok((data, inst, addr))
+}
+
+fn decode_xdelta_fgk_section_if_flag(section: &[u8], compressed: bool) -> Result<Vec<u8>> {
+    if !compressed {
+        return Ok(section.to_vec());
+    }
+
+    let (decoded_size, prefix_len) = decode_varint_raw(section)?;
+    let payload = section.get(prefix_len..).ok_or_else(|| {
+        RomWeaverError::Validation("xdelta fgk section payload is missing".into())
+    })?;
+    let decoded = decode_fgk_secondary(
+        payload,
+        usize::try_from(decoded_size).map_err(|_| {
+            RomWeaverError::Validation("xdelta fgk section decoded size is too large".into())
+        })?,
+    )?;
+    Ok(decoded)
+}
+
+fn build_native_window_header(window: &WindowIndex, source_len: u64) -> OxideltaWindowHeader {
+    let mut win_ind = 0u8;
+    match window.source_kind {
+        Some(WindowSourceKind::Source) => {
+            win_ind |= VCD_SOURCE;
+        }
+        Some(WindowSourceKind::Target) => {
+            win_ind |= VCD_TARGET;
+        }
+        None => {}
+    }
+
+    if window.checksum.is_some() {
+        win_ind |= VCD_ADLER32;
+    }
+
+    let mut header = OxideltaWindowHeader {
+        win_ind,
+        copy_window_len: source_len,
+        copy_window_offset: 0,
+        enc_len: 0,
+        target_window_len: window.target_window_size,
+        del_ind: 0,
+        data_len: window.data_len,
+        inst_len: window.inst_len,
+        addr_len: window.addr_len,
+        adler32: window.checksum,
+    };
+    header.enc_len = header.compute_enc_len();
+    header
+}
+
+fn ensure_supported_secondary_compressor(secondary_id: Option<u8>) -> Result<()> {
+    match secondary_id {
+        Some(id)
+            if id != XDELTA_LZMA_SECONDARY_ID
+                && id != XDELTA_DJW_SECONDARY_ID
+                && id != XDELTA_FGK_SECONDARY_ID =>
+        {
+            Err(RomWeaverError::Validation(format!(
+                "native VCDIFF backend does not support secondary compressor ID {id}"
+            )))
+        }
+        _ => Ok(()),
+    }
+}
+
+fn native_decode_error(error: OxideltaDecodeError, window: &WindowIndex) -> RomWeaverError {
+    RomWeaverError::Validation(format!(
+        "native VCDIFF decoder failed at output offset {}: {error}",
+        window.output_offset
+    ))
+}
+fn read_section<R: Read + Seek>(reader: &mut R, start: u64, len: u64) -> Result<Vec<u8>> {
     let size = usize::try_from(len).map_err(|_| {
         RomWeaverError::Validation("section is too large to fit in memory on this platform".into())
     })?;
@@ -1271,7 +2166,7 @@ fn read_section(reader: &mut dyn ReadSeek, start: u64, len: u64) -> Result<Vec<u
     Ok(buffer)
 }
 
-fn skip_bytes(reader: &mut dyn ReadSeek, len: u64) -> Result<()> {
+fn skip_bytes<R: Read>(reader: &mut R, len: u64) -> Result<()> {
     let size = usize::try_from(len).map_err(|_| {
         RomWeaverError::Validation("section is too large to fit in memory on this platform".into())
     })?;
@@ -1280,7 +2175,7 @@ fn skip_bytes(reader: &mut dyn ReadSeek, len: u64) -> Result<()> {
     Ok(())
 }
 
-fn read_optional_u8(reader: &mut dyn ReadSeek) -> Result<Option<u8>> {
+fn read_optional_u8<R: Read>(reader: &mut R) -> Result<Option<u8>> {
     let mut buffer = [0; 1];
     match reader.read_exact(&mut buffer) {
         Ok(()) => Ok(Some(buffer[0])),
@@ -1289,19 +2184,19 @@ fn read_optional_u8(reader: &mut dyn ReadSeek) -> Result<Option<u8>> {
     }
 }
 
-fn read_u8(reader: &mut dyn ReadSeek) -> Result<u8> {
+fn read_u8<R: Read>(reader: &mut R) -> Result<u8> {
     let mut buffer = [0; 1];
     reader.read_exact(&mut buffer)?;
     Ok(buffer[0])
 }
 
-fn read_be_u32(reader: &mut dyn ReadSeek) -> Result<u32> {
+fn read_be_u32<R: Read>(reader: &mut R) -> Result<u32> {
     let mut buffer = [0; 4];
     reader.read_exact(&mut buffer)?;
     Ok(u32::from_be_bytes(buffer))
 }
 
-fn read_varint(reader: &mut dyn ReadSeek) -> Result<(u64, usize)> {
+fn read_varint<R: Read>(reader: &mut R) -> Result<(u64, usize)> {
     let mut value = 0u64;
     let mut count = 0usize;
     loop {
@@ -1323,34 +2218,9 @@ fn read_varint(reader: &mut dyn ReadSeek) -> Result<(u64, usize)> {
     Ok((value, count))
 }
 
-fn encode_varint(bytes: &mut Vec<u8>, mut value: u64) {
-    if value == 0 {
-        bytes.push(0);
-        return;
-    }
-
-    let mut stack = Vec::new();
-    while value > 0 {
-        stack.push((value % 128) as u8);
-        value /= 128;
-    }
-
-    for (index, digit) in stack.iter().rev().enumerate() {
-        let is_last = index + 1 == stack.len();
-        bytes.push(if is_last { *digit } else { *digit | 0x80 });
-    }
-}
-
-fn checked_add(lhs: u64, rhs: u64, label: &'static str) -> Result<u64> {
-    lhs.checked_add(rhs).ok_or_else(|| {
-        RomWeaverError::ValidationCode(
-            vcdiff_validation_code("VCDIFF_U64_ADD_OVERFLOW")
-                .with_message("VCDIFF arithmetic overflowed u64")
-                .with_field("label", label)
-                .with_field("lhs", lhs)
-                .with_field("rhs", rhs),
-        )
-    })
+fn checked_add(lhs: u64, rhs: u64, label: &str) -> Result<u64> {
+    lhs.checked_add(rhs)
+        .ok_or_else(|| RomWeaverError::Validation(format!("{label} overflowed u64")))
 }
 
 fn adler32(bytes: &[u8]) -> u32 {
@@ -1369,11 +2239,10 @@ mod tests {
     use std::{
         fs,
         io::Cursor,
-        os::raw::c_int,
         path::PathBuf,
         process,
-        sync::atomic::{AtomicU64, Ordering},
         sync::Arc,
+        sync::atomic::{AtomicU64, Ordering},
         time::{SystemTime, UNIX_EPOCH},
     };
 
@@ -1382,10 +2251,6 @@ mod tests {
     use super::*;
 
     static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
-    const XD3_ADLER32: c_int = xdelta_ffi::XD3_ADLER32;
-    const XD3_SEC_DJW: c_int = xdelta_ffi::XD3_SEC_DJW;
-    const XD3_SEC_FGK: c_int = xdelta_ffi::XD3_SEC_FGK;
-    const XD3_NOCOMPRESS: c_int = xdelta_ffi::XD3_NOCOMPRESS;
 
     #[derive(Clone)]
     struct TestWindow {
@@ -1617,10 +2482,12 @@ mod tests {
         let parsed = parse_patch(&mut Cursor::new(patch)).expect("parse secondary patch");
         assert!(parsed.secondary_compressor_id.is_some());
         assert_eq!(parsed.windows.len(), 1);
-        assert!(parsed
-            .windows
-            .iter()
-            .any(|window| window.delta_indicator != 0));
+        assert!(
+            parsed
+                .windows
+                .iter()
+                .any(|window| window.delta_indicator != 0)
+        );
     }
 
     #[test]
@@ -1635,6 +2502,47 @@ mod tests {
 
         let parsed = parse_patch(&mut Cursor::new(patch_bytes)).expect("parse custom code table");
         assert!(parsed.windows.is_empty());
+    }
+
+    #[test]
+    fn apply_rejects_custom_code_table_headers() {
+        let patch_bytes = build_patch(TestPatch {
+            header_flags: HDR_CODE_TABLE,
+            code_table_near: Some(4),
+            code_table_same: Some(3),
+            code_table_data: vec![0x00],
+            windows: vec![TestWindow {
+                win_indicator: WIN_SOURCE,
+                source_segment_size: Some(4),
+                source_segment_position: Some(0),
+                target_window_size: 4,
+                checksum: None,
+                data: Vec::new(),
+                inst: vec![22],
+                addr: encode_all_varints(&[0]),
+            }],
+            ..Default::default()
+        });
+
+        let temp = create_temp_dir();
+        let input_path = temp.join("input.bin");
+        let patch_path = temp.join("update.xdelta");
+        let output_path = temp.join("output.bin");
+        fs::write(&input_path, b"abcd").expect("write input");
+        fs::write(&patch_path, patch_bytes).expect("write patch");
+
+        let handler = VcdiffPatchHandler::new(&crate::XDELTA);
+        let error = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: input_path,
+                    patches: vec![patch_path],
+                    output: output_path,
+                },
+                &test_context(),
+            )
+            .expect_err("custom code table should be rejected");
+        assert!(format!("{error}").contains("does not support custom code tables"));
     }
 
     #[test]
@@ -1910,7 +2818,7 @@ mod tests {
             .create(
                 &PatchCreateRequest {
                     original: input_path.clone(),
-                    modified: modified_path,
+                    modified: modified_path.clone(),
                     output: patch_path.clone(),
                     format: "xdelta".into(),
                 },
@@ -1919,27 +2827,38 @@ mod tests {
             .expect("create xdelta patch");
         assert_eq!(report.status, rom_weaver_core::OperationStatus::Succeeded);
         assert!(
-            report
+            !report
                 .thread_execution
                 .expect("thread execution")
                 .used_parallelism
         );
         assert!(report.label.contains("secondary compression"));
 
-        let plain = encode_patch_with_xdelta_memory(&input, &expected, XD3_ADLER32)
-            .expect("encode baseline xdelta patch");
-        let secondary =
-            encode_patch_with_xdelta_memory(&input, &expected, XD3_ADLER32 | XD3_SEC_DJW)
-                .expect("encode secondary xdelta patch");
-        assert!(
-            secondary.len() < plain.len(),
-            "fixture should benefit from secondary compression"
-        );
+        let baseline_probe = temp.join("baseline-probe.xdelta");
+        let secondary_probe = temp.join("secondary-probe.xdelta");
+        let baseline = encode_patch_with_native_streaming(
+            &input_path,
+            &modified_path,
+            &baseline_probe,
+            create_native_compress_options(&crate::XDELTA),
+        )
+        .expect("encode baseline xdelta patch");
+        let secondary = recode_patch_with_xdelta_lzma_secondary(&baseline.path, &secondary_probe)
+            .expect("encode secondary xdelta patch");
+        let should_choose_secondary = secondary.size < baseline.size;
 
         let patch = fs::read(&patch_path).expect("read patch");
-        assert_eq!(patch.len(), secondary.len());
+        assert_eq!(
+            patch.len() as u64,
+            secondary.size.min(baseline.size),
+            "created patch should match the smallest native candidate"
+        );
         let parsed = parse_patch(&mut Cursor::new(&patch)).expect("parse created patch");
-        assert_eq!(parsed.secondary_compressor_id, Some(1));
+        if should_choose_secondary {
+            assert_eq!(parsed.secondary_compressor_id, Some(2));
+        } else {
+            assert_eq!(parsed.secondary_compressor_id, None);
+        }
 
         handler
             .apply(
@@ -1985,10 +2904,12 @@ mod tests {
         let parsed = parse_patch(&mut Cursor::new(&patch)).expect("parse created patch");
         assert_eq!(parsed.secondary_compressor_id, None);
         assert!(!parsed.windows.is_empty());
-        assert!(parsed
-            .windows
-            .iter()
-            .all(|window| window.source_kind.is_none()));
+        assert!(
+            parsed
+                .windows
+                .iter()
+                .all(|window| window.source_kind.is_none())
+        );
 
         handler
             .apply(
@@ -2084,27 +3005,109 @@ mod tests {
     }
 
     #[test]
-    fn generated_fgk_secondary_patch_round_trips() {
+    fn apply_supports_oxidelta_style_lzma_secondary_patch() {
         let (input, expected) = generated_secondary_source_and_target();
-        let patch_bytes = encode_secondary_patch(
-            &input,
-            &expected,
-            XD3_SEC_FGK | XD3_ADLER32 | XD3_NOCOMPRESS,
-        );
-
-        let parsed = parse_patch(&mut Cursor::new(&patch_bytes)).expect("parse fgk patch");
-        assert_eq!(parsed.secondary_compressor_id, Some(16));
-        assert!(parsed
-            .windows
-            .iter()
-            .any(|window| window.delta_indicator != 0));
 
         let temp = create_temp_dir();
         let input_path = temp.join("input.bin");
-        let patch_path = temp.join("update.xdelta");
+        let modified_path = temp.join("modified.bin");
+        let patch_path = temp.join("oxidelta-style.xdelta");
         let output_path = temp.join("output.bin");
         fs::write(&input_path, &input).expect("write input");
-        fs::write(&patch_path, patch_bytes).expect("write patch");
+        fs::write(&modified_path, &expected).expect("write modified");
+
+        let patch = encode_patch_with_native_streaming(
+            &input_path,
+            &modified_path,
+            &patch_path,
+            CompressOptions {
+                checksum: true,
+                secondary: SecondaryCompression::Lzma,
+                ..CompressOptions::default()
+            },
+        )
+        .expect("encode oxidelta lzma patch");
+        assert!(patch.size > 0);
+
+        let parsed = parse_patch(&mut Cursor::new(fs::read(&patch_path).expect("read patch")))
+            .expect("parse oxidelta patch");
+        assert_eq!(
+            parsed.secondary_compressor_id,
+            Some(XDELTA_LZMA_SECONDARY_ID)
+        );
+        assert!(
+            parsed
+                .windows
+                .iter()
+                .any(|window| window.delta_indicator != 0)
+        );
+
+        let handler = VcdiffPatchHandler::new(&crate::XDELTA);
+        handler
+            .apply(
+                &PatchApplyRequest {
+                    input: input_path,
+                    patches: vec![patch_path],
+                    output: output_path.clone(),
+                },
+                &test_context_with_threads(8),
+            )
+            .expect("apply oxidelta lzma patch");
+        assert_eq!(fs::read(output_path).expect("read output"), expected);
+    }
+
+    #[test]
+    fn apply_fails_for_mismatched_djw_header_and_lzma_payload() {
+        let mut patch =
+            fs::read(fixture_path("secondary-djw.xdelta")).expect("read secondary patch fixture");
+        patch[5] = XDELTA_DJW_SECONDARY_ID;
+
+        let parsed = parse_patch(&mut Cursor::new(&patch)).expect("parse djw patch");
+        assert_eq!(
+            parsed.secondary_compressor_id,
+            Some(XDELTA_DJW_SECONDARY_ID)
+        );
+        assert!(
+            parsed
+                .windows
+                .iter()
+                .any(|window| window.delta_indicator != 0)
+        );
+
+        let temp = create_temp_dir();
+        let input_path = temp.join("source.bin");
+        let patch_path = temp.join("update.xdelta");
+        let output_path = temp.join("output.bin");
+        fs::copy(fixture_path("secondary-source.bin"), &input_path).expect("copy source fixture");
+        fs::write(&patch_path, patch).expect("write patch");
+
+        let handler = VcdiffPatchHandler::new(&crate::XDELTA);
+        let error = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: input_path,
+                    patches: vec![patch_path],
+                    output: output_path,
+                },
+                &test_context(),
+            )
+            .expect_err("mismatched DJW header should fail");
+        assert!(
+            format!("{error}").contains("xdelta djw")
+                || format!("{error}").contains("secondary decompression")
+        );
+    }
+
+    #[test]
+    fn apply_supports_legacy_djw_fixture() {
+        let temp = create_temp_dir();
+        let input_path = temp.join("source.bin");
+        let patch_path = temp.join("update.xdelta");
+        let output_path = temp.join("output.bin");
+        fs::copy(fixture_path("secondary-source.bin"), &input_path).expect("copy source fixture");
+        fs::copy(fixture_path("secondary-djw-legacy.xdelta"), &patch_path)
+            .expect("copy legacy djw fixture");
+        let expected = fs::read(fixture_path("secondary-target.bin")).expect("read target fixture");
 
         let handler = VcdiffPatchHandler::new(&crate::XDELTA);
         handler
@@ -2116,7 +3119,99 @@ mod tests {
                 },
                 &test_context(),
             )
-            .expect("apply fgk patch");
+            .expect("legacy djw fixture should apply");
+        assert_eq!(fs::read(output_path).expect("read output"), expected);
+    }
+
+    #[test]
+    fn apply_fails_for_mismatched_fgk_header_and_lzma_payload() {
+        let mut patch =
+            fs::read(fixture_path("secondary-djw.xdelta")).expect("read secondary patch fixture");
+        patch[5] = XDELTA_FGK_SECONDARY_ID;
+
+        let parsed = parse_patch(&mut Cursor::new(&patch)).expect("parse fgk patch");
+        assert_eq!(
+            parsed.secondary_compressor_id,
+            Some(XDELTA_FGK_SECONDARY_ID)
+        );
+        assert!(
+            parsed
+                .windows
+                .iter()
+                .any(|window| window.delta_indicator != 0)
+        );
+
+        let temp = create_temp_dir();
+        let input_path = temp.join("source.bin");
+        let patch_path = temp.join("update.xdelta");
+        let output_path = temp.join("output.bin");
+        fs::copy(fixture_path("secondary-source.bin"), &input_path).expect("copy source fixture");
+        fs::write(&patch_path, patch).expect("write patch");
+
+        let handler = VcdiffPatchHandler::new(&crate::XDELTA);
+        let error = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: input_path,
+                    patches: vec![patch_path],
+                    output: output_path,
+                },
+                &test_context(),
+            )
+            .expect_err("mismatched FGK header should fail");
+        assert!(
+            format!("{error}").contains("xdelta fgk")
+                || format!("{error}").contains("secondary decompression")
+        );
+    }
+
+    #[test]
+    fn apply_supports_legacy_fgk_fixture() {
+        let temp = create_temp_dir();
+        let input_path = temp.join("source.bin");
+        let patch_path = temp.join("update.xdelta");
+        let output_path = temp.join("output.bin");
+        fs::copy(fixture_path("secondary-source.bin"), &input_path).expect("copy source fixture");
+        fs::copy(fixture_path("secondary-fgk-legacy.xdelta"), &patch_path)
+            .expect("copy legacy fgk fixture");
+        let expected = fs::read(fixture_path("secondary-target.bin")).expect("read target fixture");
+
+        let handler = VcdiffPatchHandler::new(&crate::XDELTA);
+        handler
+            .apply(
+                &PatchApplyRequest {
+                    input: input_path,
+                    patches: vec![patch_path],
+                    output: output_path.clone(),
+                },
+                &test_context(),
+            )
+            .expect("legacy fgk fixture should apply");
+        assert_eq!(fs::read(output_path).expect("read output"), expected);
+    }
+
+    #[test]
+    fn apply_supports_legacy_lzma_fixture() {
+        let temp = create_temp_dir();
+        let input_path = temp.join("source.bin");
+        let patch_path = temp.join("update.xdelta");
+        let output_path = temp.join("output.bin");
+        fs::copy(fixture_path("secondary-source.bin"), &input_path).expect("copy source fixture");
+        fs::copy(fixture_path("secondary-lzma-legacy.xdelta"), &patch_path)
+            .expect("copy legacy lzma fixture");
+        let expected = fs::read(fixture_path("secondary-target.bin")).expect("read target fixture");
+
+        let handler = VcdiffPatchHandler::new(&crate::XDELTA);
+        handler
+            .apply(
+                &PatchApplyRequest {
+                    input: input_path,
+                    patches: vec![patch_path],
+                    output: output_path.clone(),
+                },
+                &test_context(),
+            )
+            .expect("legacy lzma fixture should apply");
         assert_eq!(fs::read(output_path).expect("read output"), expected);
     }
 
@@ -2147,7 +3242,7 @@ mod tests {
                 &test_context(),
             )
             .expect_err("unknown secondary compressor should fail");
-        assert!(format!("{error}").contains("xdelta decoder failed"));
+        assert!(format!("{error}").contains("secondary compressor ID"));
     }
 
     #[test]
@@ -2177,7 +3272,11 @@ mod tests {
             )
             .expect_err("corrupted secondary stream should fail");
         let message = format!("{error}");
-        assert!(message.contains("xdelta decoder failed") || message.contains("checksum mismatch"));
+        assert!(
+            message.contains("native VCDIFF secondary decompression failed")
+                || message.contains("native VCDIFF decoder failed")
+                || message.contains("checksum mismatch")
+        );
     }
 
     fn create_temp_dir() -> PathBuf {
@@ -2246,33 +3345,6 @@ mod tests {
         source[128_000..128_000 + b"SOURCE-ONLY-DATA".len()].copy_from_slice(b"SOURCE-ONLY-DATA");
 
         (source, target)
-    }
-
-    fn encode_secondary_patch(source: &[u8], target: &[u8], flags: c_int) -> Vec<u8> {
-        let input_len = u32::try_from(target.len()).expect("target too large for xdelta encode");
-        let source_len = u32::try_from(source.len()).expect("source too large for xdelta encode");
-        let capacity = (target.len() + source.len())
-            .checked_mul(8)
-            .and_then(|value| value.checked_add(4096))
-            .expect("encode capacity overflow");
-        let mut output = vec![0; capacity];
-        let mut output_size = u32::try_from(output.len()).expect("encode buffer too large");
-
-        let rc = unsafe {
-            xdelta_ffi::xd3_encode_memory(
-                target.as_ptr(),
-                input_len,
-                source.as_ptr(),
-                source_len,
-                output.as_mut_ptr(),
-                &mut output_size,
-                output_size,
-                flags,
-            )
-        };
-        assert_eq!(rc, 0, "xdelta encoder failed with code {rc}");
-        output.truncate(output_size as usize);
-        output
     }
 
     fn build_patch(patch: TestPatch) -> Vec<u8> {

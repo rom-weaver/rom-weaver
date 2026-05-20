@@ -1066,6 +1066,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "lzma-rs"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "297e814c836ae64db86b36cf2a557ba54368d03f6afcd7d947c266692f71115e"
+dependencies = [
+ "byteorder",
+ "crc",
+]
+
+[[package]]
 name = "lzma-rs-perf-exp"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1268,6 +1278,19 @@ name = "once_cell_polyfill"
 version = "1.70.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
+
+[[package]]
+name = "oxidelta"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1754ebd72de1f61efc690ca75beb1f46b07cba4c37c02879c11d1940dd1556f2"
+dependencies = [
+ "bitflags",
+ "log",
+ "lzma-rs",
+ "simd-adler32",
+ "thiserror 2.0.18",
+]
 
 [[package]]
 name = "paste"
@@ -1692,12 +1715,12 @@ name = "rom-weaver-patches"
 version = "0.1.0"
 dependencies = [
  "bzip2",
- "cc",
  "crc32fast",
  "flate2",
  "lzma-rust2",
  "md-5",
  "memmap2",
+ "oxidelta",
  "qbsdiff",
  "rayon",
  "rom-weaver-checksum",

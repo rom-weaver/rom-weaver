@@ -20,7 +20,6 @@ mod solid;
 mod test_support;
 mod ups;
 mod vcdiff;
-mod xdelta_ffi;
 
 use std::{
     fs,
