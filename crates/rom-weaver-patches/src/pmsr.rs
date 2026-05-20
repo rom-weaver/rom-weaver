@@ -6,15 +6,17 @@ use std::{
 
 use crc32fast::Hasher;
 use memmap2::{Mmap, MmapOptions};
+use rayon::prelude::*;
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
     PatchCapabilities, PatchChecksumValidation, PatchCreateRequest, PatchHandler, ProbeConfidence,
-    Result, RomWeaverError, ThreadCapability,
+    Result, RomWeaverError, SharedThreadPool, ThreadCapability,
 };
 
 const PMSR_MAGIC: &[u8; 4] = b"PMSR";
 const PMSR_HEADER_SIZE: usize = 8;
 const PMSR_IO_BUFFER_SIZE: usize = 64 * 1024;
+const CREATE_SCAN_CHUNK_BYTES: usize = 4 * 1024 * 1024;
 const PAPER_MARIO_USA10_CRC32: u32 = 0xA7F5CD7E;
 const PAPER_MARIO_USA10_FILE_SIZE: u64 = 41_943_040;
 
@@ -74,15 +76,44 @@ impl PatchHandler for PmsrPatchHandler {
             fs::create_dir_all(parent)?;
         }
         fs::copy(&request.input, &request.output)?;
-        let mut output = OpenOptions::new()
+        let output = OpenOptions::new()
             .read(true)
             .write(true)
             .open(&request.output)?;
         output.set_len(output_len)?;
-        apply_pmsr_patch_in_place(&patch, output_len, &mut output)?;
-        output.flush()?;
+        drop(output);
 
-        let execution = context.plan_threads(ThreadCapability::single_threaded());
+        let thread_capability = pmsr_apply_thread_capability(patch.records.len());
+        let planned_execution = context.plan_threads(thread_capability.clone());
+        let records_non_overlapping = pmsr_records_are_non_overlapping(&patch, output_len)?;
+        let execution = if planned_execution.used_parallelism && records_non_overlapping {
+            let (execution, pool) = context.build_pool(thread_capability)?;
+            apply_pmsr_patch_parallel_in_place(
+                &patch,
+                &request.output,
+                output_len,
+                execution.effective_threads,
+                &pool,
+                context,
+            )?;
+            execution
+        } else {
+            let mut output = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(&request.output)?;
+            apply_pmsr_patch_in_place(&patch, output_len, &mut output)?;
+            output.flush()?;
+            if planned_execution.used_parallelism && !records_non_overlapping {
+                let mut fallback = planned_execution;
+                fallback.apply_pool_fallback(
+                    "MOD apply records overlap; preserving patch order with single-thread writes",
+                );
+                fallback
+            } else {
+                planned_execution
+            }
+        };
         let checksum_suffix = if validate_source {
             String::new()
         } else {
@@ -108,8 +139,26 @@ impl PatchHandler for PmsrPatchHandler {
         request: &PatchCreateRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        let execution = context.plan_threads(ThreadCapability::single_threaded());
-        let patch = create_pmsr_patch_streaming(&request.original, &request.modified)?;
+        let original_len = fs::metadata(&request.original)?.len();
+        let modified_len = fs::metadata(&request.modified)?.len();
+        if modified_len < original_len {
+            return Err(RomWeaverError::Validation(format!(
+                "MOD create does not support shrinking outputs (original: {}, modified: {})",
+                original_len, modified_len,
+            )));
+        }
+
+        let thread_capability = pmsr_create_thread_capability(modified_len)?;
+        let planned_execution = context.plan_threads(thread_capability.clone());
+        let (execution, patch) = if planned_execution.used_parallelism {
+            let (execution, pool) = context.build_pool(thread_capability)?;
+            let patch =
+                create_pmsr_patch_parallel(&request.original, &request.modified, &pool, context)?;
+            (execution, patch)
+        } else {
+            let patch = create_pmsr_patch_streaming(&request.original, &request.modified)?;
+            (planned_execution, patch)
+        };
 
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
@@ -135,8 +184,8 @@ impl PatchHandler for PmsrPatchHandler {
             apply: true,
             create: true,
             threaded_scan: false,
-            threaded_diff: false,
-            threaded_output: false,
+            threaded_diff: true,
+            threaded_output: true,
         }
     }
 }
@@ -153,6 +202,17 @@ struct ParsedPmsrPatch {
 struct PmsrRecord {
     offset: u64,
     data: Vec<u8>,
+}
+
+impl PmsrRecord {
+    fn end(&self) -> Result<u64> {
+        checked_add(
+            self.offset,
+            u64::try_from(self.data.len())
+                .map_err(|_| RomWeaverError::Validation("MOD record length exceeded u64".into()))?,
+            "MOD record end",
+        )
+    }
 }
 
 #[derive(Debug)]
@@ -285,6 +345,86 @@ fn apply_pmsr_patch_in_place(
     Ok(())
 }
 
+fn pmsr_records_are_non_overlapping(patch: &ParsedPmsrPatch, output_len: u64) -> Result<bool> {
+    let mut ranges = Vec::with_capacity(patch.records.len());
+    for record in &patch.records {
+        let end = record.end()?;
+        if end > output_len {
+            return Err(RomWeaverError::Validation(
+                "MOD record exceeded declared output size".into(),
+            ));
+        }
+        if !record.data.is_empty() {
+            ranges.push((record.offset, end));
+        }
+    }
+    ranges.sort_unstable_by_key(|(start, _)| *start);
+    let mut previous_end = 0u64;
+    let mut seen_any = false;
+    for (start, end) in ranges {
+        if seen_any && start < previous_end {
+            return Ok(false);
+        }
+        previous_end = end;
+        seen_any = true;
+    }
+    Ok(true)
+}
+
+fn apply_pmsr_patch_parallel_in_place(
+    patch: &ParsedPmsrPatch,
+    output_path: &Path,
+    output_len: u64,
+    effective_threads: usize,
+    pool: &SharedThreadPool,
+    context: &OperationContext,
+) -> Result<()> {
+    if patch.records.is_empty() {
+        return Ok(());
+    }
+    let chunk_size = patch
+        .records
+        .len()
+        .div_ceil(effective_threads.max(1))
+        .max(1);
+    pool.install(|| {
+        patch
+            .records
+            .par_chunks(chunk_size)
+            .map(|records| apply_pmsr_record_chunk(records, output_path, output_len, context))
+            .collect::<Result<Vec<_>>>()
+    })?;
+    Ok(())
+}
+
+fn apply_pmsr_record_chunk(
+    records: &[PmsrRecord],
+    output_path: &Path,
+    output_len: u64,
+    context: &OperationContext,
+) -> Result<()> {
+    let mut output = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(output_path)?;
+    for record in records {
+        context.cancel().check()?;
+        let end = record.end()?;
+        if end > output_len {
+            return Err(RomWeaverError::Validation(
+                "MOD record exceeded declared output size".into(),
+            ));
+        }
+        if record.data.is_empty() {
+            continue;
+        }
+        output.seek(SeekFrom::Start(record.offset))?;
+        output.write_all(&record.data)?;
+    }
+    output.flush()?;
+    Ok(())
+}
+
 fn validate_paper_mario_source(input_path: &Path) -> Result<()> {
     let source_len = fs::metadata(input_path)?.len();
     if source_len != PAPER_MARIO_USA10_FILE_SIZE {
@@ -309,6 +449,26 @@ fn validate_paper_mario_source(input_path: &Path) -> Result<()> {
         ));
     }
     Ok(())
+}
+
+fn pmsr_create_chunk_count(modified_len: u64) -> Result<usize> {
+    if modified_len == 0 {
+        return Ok(1);
+    }
+    let chunk_bytes = CREATE_SCAN_CHUNK_BYTES as u64;
+    let chunk_count = modified_len.saturating_add(chunk_bytes - 1) / chunk_bytes;
+    usize::try_from(chunk_count).map_err(|_| {
+        RomWeaverError::Validation("MOD create required too many chunks to index".into())
+    })
+}
+
+fn pmsr_create_thread_capability(modified_len: u64) -> Result<ThreadCapability> {
+    let chunk_count = pmsr_create_chunk_count(modified_len)?;
+    Ok(ThreadCapability::parallel(Some(chunk_count.max(1))))
+}
+
+fn pmsr_apply_thread_capability(record_count: usize) -> ThreadCapability {
+    ThreadCapability::parallel(Some(record_count.max(1)))
 }
 
 fn create_pmsr_patch_streaming(
@@ -389,6 +549,102 @@ fn create_pmsr_patch_streaming(
     }
 
     finalize_created_pmsr_patch(records, modified_len)
+}
+
+fn create_pmsr_patch_parallel(
+    original_path: &Path,
+    modified_path: &Path,
+    pool: &SharedThreadPool,
+    context: &OperationContext,
+) -> Result<CreatedPmsrPatch> {
+    let original_len = fs::metadata(original_path)?.len();
+    let modified_len = fs::metadata(modified_path)?.len();
+    if modified_len < original_len {
+        return Err(RomWeaverError::Validation(format!(
+            "MOD create does not support shrinking outputs (original: {}, modified: {})",
+            original_len, modified_len,
+        )));
+    }
+
+    let original = map_file_read_only(original_path)?;
+    let modified = map_file_read_only(modified_path)?;
+    let original_bytes = original.as_ref();
+    let modified_bytes = modified.as_ref();
+
+    let chunk_count = pmsr_create_chunk_count(modified_len)?;
+    let chunk_records = pool.install(|| {
+        (0..chunk_count)
+            .into_par_iter()
+            .map(|chunk_index| {
+                context.cancel().check()?;
+                collect_pmsr_records_for_chunk(chunk_index, original_bytes, modified_bytes)
+            })
+            .collect::<Result<Vec<_>>>()
+    })?;
+    let records = merge_pmsr_records(chunk_records)?;
+    finalize_created_pmsr_patch(records, modified_len)
+}
+
+fn collect_pmsr_records_for_chunk(
+    chunk_index: usize,
+    original: &[u8],
+    modified: &[u8],
+) -> Result<Vec<PmsrRecord>> {
+    let start = chunk_index
+        .checked_mul(CREATE_SCAN_CHUNK_BYTES)
+        .ok_or_else(|| RomWeaverError::Validation("MOD create chunk offset overflowed".into()))?;
+    if start >= modified.len() {
+        return Ok(Vec::new());
+    }
+    let end = start
+        .saturating_add(CREATE_SCAN_CHUNK_BYTES)
+        .min(modified.len());
+    let mut cursor = start;
+    let mut records = Vec::new();
+
+    while cursor < end {
+        let source = original.get(cursor).copied().unwrap_or(0);
+        let target = modified[cursor];
+        if source == target {
+            cursor += 1;
+            continue;
+        }
+
+        let run_start = cursor;
+        let mut run_data = Vec::new();
+        while cursor < end {
+            let source = original.get(cursor).copied().unwrap_or(0);
+            let target = modified[cursor];
+            if source == target {
+                break;
+            }
+            run_data.push(target);
+            cursor += 1;
+        }
+
+        records.push(PmsrRecord {
+            offset: run_start as u64,
+            data: run_data,
+        });
+    }
+
+    Ok(records)
+}
+
+fn merge_pmsr_records(chunk_records: Vec<Vec<PmsrRecord>>) -> Result<Vec<PmsrRecord>> {
+    let mut merged = Vec::<PmsrRecord>::new();
+    for records in chunk_records {
+        for record in records {
+            if let Some(last) = merged.last_mut() {
+                if last.end()? == record.offset {
+                    last.data.extend_from_slice(&record.data);
+                    continue;
+                }
+            }
+            merged.push(record);
+        }
+    }
+    Ok(merged)
 }
 
 fn finalize_created_pmsr_patch(
@@ -487,7 +743,9 @@ mod tests {
         PatchApplyRequest, PatchChecksumValidation, PatchCreateRequest, PatchHandler,
     };
 
-    use super::{PmsrPatchHandler, create_pmsr_patch_bytes, parse_pmsr_bytes};
+    use super::{
+        CREATE_SCAN_CHUNK_BYTES, PmsrPatchHandler, create_pmsr_patch_bytes, parse_pmsr_bytes,
+    };
     use crate::{
         MOD,
         test_support::{TestDir, test_context_with_threads},
@@ -590,6 +848,206 @@ mod tests {
             .expect("apply");
 
         assert_eq!(fs::read(output_path).expect("output"), target);
+    }
+
+    #[test]
+    fn create_uses_parallel_threads_for_large_input() {
+        let temp = TestDir::new();
+        let source_path = temp.child("source.bin");
+        let target_path = temp.child("target.bin");
+        let patch_path = temp.child("update.mod");
+        let output_path = temp.child("output.bin");
+
+        let len = CREATE_SCAN_CHUNK_BYTES + 64;
+        let source = vec![0u8; len];
+        let mut target = source.clone();
+        target[CREATE_SCAN_CHUNK_BYTES - 16..CREATE_SCAN_CHUNK_BYTES + 16].fill(0x5A);
+        fs::write(&source_path, &source).expect("fixture");
+        fs::write(&target_path, &target).expect("fixture");
+
+        let handler = PmsrPatchHandler::new(&MOD);
+        let report = handler
+            .create(
+                &PatchCreateRequest {
+                    original: source_path.clone(),
+                    modified: target_path.clone(),
+                    output: patch_path.clone(),
+                    format: "MOD".into(),
+                },
+                &test_context_with_threads(&temp, 8),
+            )
+            .expect("create");
+        let execution = report.thread_execution.expect("thread execution");
+        assert_eq!(execution.requested_threads, 8);
+        assert_eq!(execution.effective_threads, 2);
+        assert!(execution.used_parallelism);
+
+        handler
+            .apply(
+                &PatchApplyRequest {
+                    input: source_path,
+                    patches: vec![patch_path],
+                    output: output_path.clone(),
+                },
+                &test_context_with_threads(&temp, 2)
+                    .with_patch_checksum_validation(PatchChecksumValidation::Ignore),
+            )
+            .expect("apply");
+        assert_eq!(fs::read(output_path).expect("output"), target);
+    }
+
+    #[test]
+    fn apply_uses_parallel_threads_for_non_overlapping_records() {
+        let temp = TestDir::new();
+        let source_path = temp.child("source.bin");
+        let target_path = temp.child("target.bin");
+        let patch_path = temp.child("update.mod");
+        let output_path = temp.child("output.bin");
+
+        let len = 512 * 1024 + 13;
+        let mut source = vec![0u8; len];
+        for (index, byte) in source.iter_mut().enumerate() {
+            *byte = ((index * 9 + (index >> 1)) & 0xff) as u8;
+        }
+        let mut target = source.clone();
+        for index in (0..target.len()).step_by(701) {
+            target[index] ^= 0x5A;
+        }
+
+        fs::write(&source_path, &source).expect("source");
+        fs::write(&target_path, &target).expect("target");
+
+        let handler = PmsrPatchHandler::new(&MOD);
+        handler
+            .create(
+                &PatchCreateRequest {
+                    original: source_path.clone(),
+                    modified: target_path,
+                    output: patch_path.clone(),
+                    format: "MOD".into(),
+                },
+                &test_context_with_threads(&temp, 4),
+            )
+            .expect("create");
+
+        let report = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: source_path,
+                    patches: vec![patch_path],
+                    output: output_path.clone(),
+                },
+                &test_context_with_threads(&temp, 8)
+                    .with_patch_checksum_validation(PatchChecksumValidation::Ignore),
+            )
+            .expect("apply");
+        let execution = report.thread_execution.expect("thread execution");
+        assert_eq!(execution.requested_threads, 8);
+        assert!(execution.used_parallelism);
+        assert!(!execution.thread_fallback);
+        assert_eq!(fs::read(output_path).expect("output"), target);
+    }
+
+    #[test]
+    fn apply_falls_back_to_single_thread_when_records_overlap() {
+        let temp = TestDir::new();
+        let source_path = temp.child("source.bin");
+        let patch_path = temp.child("overlap.mod");
+        let output_path = temp.child("output.bin");
+
+        fs::write(&source_path, b"abcd").expect("source");
+        let mut patch = Vec::new();
+        patch.extend_from_slice(b"PMSR");
+        patch.extend_from_slice(&2u32.to_be_bytes());
+        patch.extend_from_slice(&1u32.to_be_bytes());
+        patch.extend_from_slice(&2u32.to_be_bytes());
+        patch.extend_from_slice(b"XY");
+        patch.extend_from_slice(&2u32.to_be_bytes());
+        patch.extend_from_slice(&2u32.to_be_bytes());
+        patch.extend_from_slice(b"ZZ");
+        fs::write(&patch_path, patch).expect("patch");
+
+        let handler = PmsrPatchHandler::new(&MOD);
+        let report = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: source_path,
+                    patches: vec![patch_path],
+                    output: output_path.clone(),
+                },
+                &test_context_with_threads(&temp, 8)
+                    .with_patch_checksum_validation(PatchChecksumValidation::Ignore),
+            )
+            .expect("apply");
+        let execution = report.thread_execution.expect("thread execution");
+        assert_eq!(execution.requested_threads, 8);
+        assert!(!execution.used_parallelism);
+        assert!(execution.thread_fallback);
+        assert!(
+            execution
+                .thread_fallback_reason
+                .as_deref()
+                .unwrap_or_default()
+                .contains("overlap")
+        );
+        assert_eq!(fs::read(output_path).expect("output"), b"aXZZ");
+    }
+
+    #[test]
+    fn create_is_deterministic_across_thread_budgets() {
+        let temp = TestDir::new();
+        let source_path = temp.child("source.bin");
+        let target_path = temp.child("target.bin");
+        let single_patch = temp.child("single.mod");
+        let parallel_patch = temp.child("parallel.mod");
+
+        let len = CREATE_SCAN_CHUNK_BYTES + 64;
+        let source = vec![0u8; len];
+        let mut target = source.clone();
+        target[CREATE_SCAN_CHUNK_BYTES - 16..CREATE_SCAN_CHUNK_BYTES + 16].fill(0x5A);
+        fs::write(&source_path, &source).expect("fixture");
+        fs::write(&target_path, &target).expect("fixture");
+
+        let handler = PmsrPatchHandler::new(&MOD);
+        let single_report = handler
+            .create(
+                &PatchCreateRequest {
+                    original: source_path.clone(),
+                    modified: target_path.clone(),
+                    output: single_patch.clone(),
+                    format: "MOD".into(),
+                },
+                &test_context_with_threads(&temp, 1),
+            )
+            .expect("single create");
+        let parallel_report = handler
+            .create(
+                &PatchCreateRequest {
+                    original: source_path,
+                    modified: target_path,
+                    output: parallel_patch.clone(),
+                    format: "MOD".into(),
+                },
+                &test_context_with_threads(&temp, 8),
+            )
+            .expect("parallel create");
+
+        assert!(
+            !single_report
+                .thread_execution
+                .expect("single execution")
+                .used_parallelism
+        );
+        assert!(
+            parallel_report
+                .thread_execution
+                .expect("parallel execution")
+                .used_parallelism
+        );
+        assert_eq!(
+            fs::read(single_patch).expect("single patch"),
+            fs::read(parallel_patch).expect("parallel patch")
+        );
     }
 
     #[test]

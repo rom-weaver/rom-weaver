@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeMap,
     fs::{self, File, OpenOptions},
     io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write},
     path::Path,
@@ -64,49 +65,56 @@ impl PatchHandler for PatPatchHandler {
     ) -> Result<OperationReport> {
         let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
         let parsed = parse_pat_file(patch_path)?;
+        let grouped_records = group_pat_records_by_offset(&parsed.records);
 
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
         }
         fs::copy(&request.input, &request.output)?;
+        let output_len = fs::metadata(&request.output)?.len();
+        validate_pat_record_offsets(&grouped_records, output_len)?;
+        let input = map_file_read_only(&request.input)?;
+        let thread_capability = pat_apply_thread_capability(grouped_records.len());
+        let planned_execution = context.plan_threads(thread_capability.clone());
 
+        let (execution, mut writes) = if planned_execution.used_parallelism {
+            let (execution, pool) = context.build_pool(thread_capability)?;
+            let writes = pool.install(|| {
+                grouped_records
+                    .par_iter()
+                    .map(|group| prepare_pat_offset_write(group, input.as_ref(), context))
+                    .collect::<Result<Vec<_>>>()
+            })?;
+            (execution, writes)
+        } else {
+            let writes = grouped_records
+                .iter()
+                .map(|group| prepare_pat_offset_write(group, input.as_ref(), context))
+                .collect::<Result<Vec<_>>>()?;
+            (planned_execution, writes)
+        };
+
+        writes.sort_by_key(|write| write.offset);
         let mut output = OpenOptions::new()
             .read(true)
             .write(true)
             .open(&request.output)?;
-        let output_len = fs::metadata(&request.output)?.len();
 
         let mut forward_applied = 0usize;
         let mut reverse_applied = 0usize;
         let mut skipped = 0usize;
-        for record in &parsed.records {
-            if record.offset >= output_len {
-                return Err(RomWeaverError::Validation(format!(
-                    "PAT record offset 0x{:08X} exceeded input length {}",
-                    record.offset, output_len
-                )));
-            }
-
-            output.seek(SeekFrom::Start(record.offset))?;
-            let mut current = [0u8; 1];
-            output.read_exact(&mut current)?;
-            output.seek(SeekFrom::Start(record.offset))?;
-
-            if current[0] == record.source_byte {
-                output.write_all(&[record.modified_byte])?;
-                forward_applied = forward_applied.checked_add(1).ok_or_else(|| {
-                    RomWeaverError::Validation("PAT apply count overflowed".into())
-                })?;
-            } else if current[0] == record.modified_byte {
-                output.write_all(&[record.source_byte])?;
-                reverse_applied = reverse_applied.checked_add(1).ok_or_else(|| {
-                    RomWeaverError::Validation("PAT apply count overflowed".into())
-                })?;
-            } else {
-                skipped = skipped.checked_add(1).ok_or_else(|| {
-                    RomWeaverError::Validation("PAT apply count overflowed".into())
-                })?;
-            }
+        for write in &writes {
+            output.seek(SeekFrom::Start(write.offset))?;
+            output.write_all(&[write.byte])?;
+            forward_applied = forward_applied
+                .checked_add(write.forward_applied)
+                .ok_or_else(|| RomWeaverError::Validation("PAT apply count overflowed".into()))?;
+            reverse_applied = reverse_applied
+                .checked_add(write.reverse_applied)
+                .ok_or_else(|| RomWeaverError::Validation("PAT apply count overflowed".into()))?;
+            skipped = skipped
+                .checked_add(write.skipped)
+                .ok_or_else(|| RomWeaverError::Validation("PAT apply count overflowed".into()))?;
         }
         output.flush()?;
 
@@ -121,7 +129,6 @@ impl PatchHandler for PatPatchHandler {
             String::new()
         };
 
-        let execution = context.plan_threads(ThreadCapability::single_threaded());
         Ok(OperationReport::succeeded(
             OperationFamily::Patch,
             Some(self.descriptor.name.to_string()),
@@ -193,7 +200,7 @@ impl PatchHandler for PatPatchHandler {
             create: true,
             threaded_scan: false,
             threaded_diff: true,
-            threaded_output: false,
+            threaded_output: true,
         }
     }
 }
@@ -216,10 +223,95 @@ struct CreatedPatPatch {
     records: Vec<PatRecord>,
 }
 
+#[derive(Debug)]
+struct PatOffsetGroup {
+    offset: u64,
+    records: Vec<PatRecord>,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct PreparedPatWrite {
+    offset: u64,
+    byte: u8,
+    forward_applied: usize,
+    reverse_applied: usize,
+    skipped: usize,
+}
+
 pub(crate) fn has_pat_record_signature(path: &Path) -> bool {
     parse_pat_file(path)
         .map(|parsed| !parsed.records.is_empty())
         .unwrap_or(false)
+}
+
+fn group_pat_records_by_offset(records: &[PatRecord]) -> Vec<PatOffsetGroup> {
+    let mut grouped = BTreeMap::<u64, Vec<PatRecord>>::new();
+    for record in records {
+        grouped.entry(record.offset).or_default().push(*record);
+    }
+    grouped
+        .into_iter()
+        .map(|(offset, records)| PatOffsetGroup { offset, records })
+        .collect()
+}
+
+fn validate_pat_record_offsets(groups: &[PatOffsetGroup], output_len: u64) -> Result<()> {
+    for group in groups {
+        if group.offset >= output_len {
+            return Err(RomWeaverError::Validation(format!(
+                "PAT record offset 0x{:08X} exceeded input length {}",
+                group.offset, output_len
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn pat_apply_thread_capability(group_count: usize) -> ThreadCapability {
+    ThreadCapability::parallel(Some(group_count.max(1)))
+}
+
+fn prepare_pat_offset_write(
+    group: &PatOffsetGroup,
+    input: &[u8],
+    context: &OperationContext,
+) -> Result<PreparedPatWrite> {
+    context.cancel().check()?;
+    let index = usize::try_from(group.offset)
+        .map_err(|_| RomWeaverError::Validation("PAT offset exceeded addressable memory".into()))?;
+    let mut current = *input.get(index).ok_or_else(|| {
+        RomWeaverError::Validation("PAT record offset exceeded addressable memory".into())
+    })?;
+
+    let mut forward_applied = 0usize;
+    let mut reverse_applied = 0usize;
+    let mut skipped = 0usize;
+
+    for record in &group.records {
+        if current == record.source_byte {
+            current = record.modified_byte;
+            forward_applied = forward_applied
+                .checked_add(1)
+                .ok_or_else(|| RomWeaverError::Validation("PAT apply count overflowed".into()))?;
+        } else if current == record.modified_byte {
+            current = record.source_byte;
+            reverse_applied = reverse_applied
+                .checked_add(1)
+                .ok_or_else(|| RomWeaverError::Validation("PAT apply count overflowed".into()))?;
+        } else {
+            skipped = skipped
+                .checked_add(1)
+                .ok_or_else(|| RomWeaverError::Validation("PAT apply count overflowed".into()))?;
+        }
+    }
+
+    Ok(PreparedPatWrite {
+        offset: group.offset,
+        byte: current,
+        forward_applied,
+        reverse_applied,
+        skipped,
+    })
 }
 
 fn parse_pat_file(path: &Path) -> Result<ParsedPatPatch> {
@@ -547,6 +639,79 @@ mod tests {
             .expect("apply");
 
         assert_eq!(fs::read(output).expect("output"), b"abc");
+    }
+
+    #[test]
+    fn apply_is_deterministic_across_thread_budgets() {
+        let temp = TestDir::new();
+        let source = temp.child("source.bin");
+        let patch = temp.child("update.pat");
+        let output_single = temp.child("output-single.bin");
+        let output_parallel = temp.child("output-parallel.bin");
+
+        let len = super::CREATE_THREAD_SCAN_CHUNK_BYTES + 8192;
+        let mut source_bytes = vec![0u8; len];
+        for (index, byte) in source_bytes.iter_mut().enumerate() {
+            *byte = ((index * 17 + (index >> 4)) & 0xff) as u8;
+        }
+        fs::write(&source, &source_bytes).expect("fixture");
+
+        let mut patch_lines = String::new();
+        for offset in (0..len).step_by(4096) {
+            let source_byte = source_bytes[offset];
+            let modified_byte = source_byte ^ 0x5a;
+            patch_lines.push_str(&format!(
+                "{offset:08X} {source_byte:02X} {modified_byte:02X}\n"
+            ));
+        }
+        // Add duplicate-offset records to verify offset-local order remains deterministic.
+        let first_source = source_bytes[0];
+        let first_modified = first_source ^ 0x5a;
+        patch_lines.push_str(&format!(
+            "00000000 {first_modified:02X} {first_source:02X}\n"
+        ));
+        patch_lines.push_str(&format!(
+            "00000000 {first_source:02X} {first_modified:02X}\n"
+        ));
+        fs::write(&patch, patch_lines).expect("patch");
+
+        let handler = PatPatchHandler::new(&PAT);
+        let capabilities = handler.capabilities();
+        assert!(capabilities.threaded_output);
+
+        let single_report = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: source.clone(),
+                    patches: vec![patch.clone()],
+                    output: output_single.clone(),
+                },
+                &test_context_with_threads(&temp, 1),
+            )
+            .expect("single apply");
+        let parallel_report = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: source,
+                    patches: vec![patch],
+                    output: output_parallel.clone(),
+                },
+                &test_context_with_threads(&temp, 8),
+            )
+            .expect("parallel apply");
+
+        let single_execution = single_report.thread_execution.expect("single execution");
+        let parallel_execution = parallel_report
+            .thread_execution
+            .expect("parallel execution");
+        assert!(capabilities.threaded_output);
+        assert!(!single_execution.used_parallelism);
+        assert!(parallel_execution.used_parallelism);
+
+        assert_eq!(
+            fs::read(output_single).expect("single"),
+            fs::read(output_parallel).expect("parallel")
+        );
     }
 
     #[test]

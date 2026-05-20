@@ -1,8 +1,8 @@
 use std::{
     cmp::min,
     fs::{self, File, OpenOptions},
-    io::{BufReader, Read, Seek, SeekFrom, Write},
-    path::Path,
+    io::{self, BufReader, Read, Seek, SeekFrom, Write},
+    path::{Path, PathBuf},
 };
 
 use md5::{Digest, Md5};
@@ -124,14 +124,45 @@ impl PatchHandler for RupPatchHandler {
             fs::create_dir_all(parent)?;
         }
         fs::copy(&request.input, &request.output)?;
-        let mut input = File::open(&request.input)?;
         let input_len = fs::metadata(&request.input)?.len();
         let mut output = OpenOptions::new()
             .read(true)
             .write(true)
             .open(&request.output)?;
         output.set_len(output_size)?;
-        apply_xor_records_in_place(file, output_len, input_len, &mut input, &mut output)?;
+        let thread_capability = rup_apply_thread_capability(file.records.len());
+        let planned_execution = context.plan_threads(thread_capability.clone());
+        let execution = if planned_execution.used_parallelism {
+            let tasks = build_rup_prepared_tasks(file.records.len(), context);
+            let (execution, pool) = context.build_pool(thread_capability)?;
+            let prepare_result = pool.install(|| {
+                tasks
+                    .par_iter()
+                    .map(|task| {
+                        prepare_rup_write_task(
+                            task,
+                            file,
+                            &request.input,
+                            input_len,
+                            output_len,
+                            context,
+                        )
+                    })
+                    .collect::<Result<Vec<_>>>()
+            });
+            if let Err(error) = prepare_result {
+                cleanup_rup_prepared_tasks(&tasks);
+                return Err(error);
+            }
+            let apply_result = apply_rup_prepared_tasks(file, &tasks, &mut output, context);
+            cleanup_rup_prepared_tasks(&tasks);
+            apply_result?;
+            execution
+        } else {
+            let mut input = File::open(&request.input)?;
+            apply_xor_records_in_place(file, output_len, input_len, &mut input, &mut output)?;
+            planned_execution
+        };
         apply_overflow_in_place(file, undo, output_len, &mut output)?;
         output.flush()?;
 
@@ -151,7 +182,6 @@ impl PatchHandler for RupPatchHandler {
             }
         }
 
-        let execution = context.plan_threads(ThreadCapability::single_threaded());
         let checksum_suffix = if validate_checksums {
             String::new()
         } else {
@@ -215,7 +245,7 @@ impl PatchHandler for RupPatchHandler {
             create: true,
             threaded_scan: false,
             threaded_diff: true,
-            threaded_output: false,
+            threaded_output: true,
         }
     }
 }
@@ -251,6 +281,12 @@ struct RupFile {
     records: Vec<RupRecord>,
 }
 
+#[derive(Debug)]
+struct RupPreparedTask {
+    index: usize,
+    temp_path: PathBuf,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum RupOverflowMode {
     Append,
@@ -269,16 +305,37 @@ struct CreatedRupPatch {
     record_count: usize,
 }
 
-fn parse_rup_file(path: &Path) -> Result<ParsedRupPatch> {
-    let bytes = map_file_read_only(path)?;
-    parse_rup_bytes(&bytes)
+enum ReadOnlyFile {
+    Mapped(Mmap),
+    Owned(Vec<u8>),
 }
 
-fn map_file_read_only(path: &Path) -> Result<Mmap> {
+impl AsRef<[u8]> for ReadOnlyFile {
+    fn as_ref(&self) -> &[u8] {
+        match self {
+            Self::Mapped(map) => map.as_ref(),
+            Self::Owned(bytes) => bytes.as_slice(),
+        }
+    }
+}
+
+fn parse_rup_file(path: &Path) -> Result<ParsedRupPatch> {
+    let bytes = map_file_read_only(path)?;
+    parse_rup_bytes(bytes.as_ref())
+}
+
+fn map_file_read_only(path: &Path) -> Result<ReadOnlyFile> {
     let file = File::open(path)?;
     // SAFETY: This mapping is read-only and the file handle lives through map creation.
-    let map = unsafe { MmapOptions::new().map(&file)? };
-    Ok(map)
+    match unsafe { MmapOptions::new().map(&file) } {
+        Ok(map) => Ok(ReadOnlyFile::Mapped(map)),
+        Err(error) if should_fallback_from_mmap(&error) => Ok(ReadOnlyFile::Owned(fs::read(path)?)),
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn should_fallback_from_mmap(error: &io::Error) -> bool {
+    error.kind() == io::ErrorKind::Unsupported
 }
 
 fn parse_rup_bytes(bytes: &[u8]) -> Result<ParsedRupPatch> {
@@ -412,6 +469,10 @@ fn rup_create_thread_capability(shared_len: u64) -> ThreadCapability {
     ThreadCapability::parallel(Some(chunk_count))
 }
 
+fn rup_apply_thread_capability(record_count: usize) -> ThreadCapability {
+    ThreadCapability::parallel(Some(record_count.max(1)))
+}
+
 fn rup_create_chunk_count(shared_len: u64) -> usize {
     if shared_len == 0 {
         return 1;
@@ -419,6 +480,114 @@ fn rup_create_chunk_count(shared_len: u64) -> usize {
     let chunk_bytes = CREATE_THREAD_SCAN_CHUNK_BYTES as u64;
     let chunk_count = shared_len.saturating_add(chunk_bytes - 1) / chunk_bytes;
     usize::try_from(chunk_count).unwrap_or(usize::MAX)
+}
+
+fn build_rup_prepared_tasks(
+    record_count: usize,
+    context: &OperationContext,
+) -> Vec<RupPreparedTask> {
+    (0..record_count)
+        .map(|index| RupPreparedTask {
+            index,
+            temp_path: context
+                .temp_paths()
+                .next_path(&format!("rup-apply-record-{index}"), Some("bin")),
+        })
+        .collect()
+}
+
+fn prepare_rup_write_task(
+    task: &RupPreparedTask,
+    file: &RupFile,
+    input_path: &Path,
+    input_len: u64,
+    output_len: usize,
+    context: &OperationContext,
+) -> Result<()> {
+    context.cancel().check()?;
+    let record = file.records.get(task.index).ok_or_else(|| {
+        RomWeaverError::Validation("RUP apply record index was out of bounds".into())
+    })?;
+
+    let start = usize_from_u64(record.offset, "RUP record offset")?;
+    let end = start
+        .checked_add(record.xor.len())
+        .ok_or_else(|| RomWeaverError::Validation("RUP record length overflowed".into()))?;
+    if end > output_len {
+        return Err(RomWeaverError::Validation(
+            "RUP record exceeded declared output size".into(),
+        ));
+    }
+
+    if let Some(parent) = task.temp_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let mut input = File::open(input_path)?;
+    let mut writer = io::BufWriter::new(File::create(&task.temp_path)?);
+    let mut buffer = vec![0u8; RUP_IO_BUFFER_SIZE];
+    let mut remaining = record.xor.len();
+    let mut xor_cursor = 0usize;
+    let mut write_offset = record.offset;
+    while remaining > 0 {
+        context.cancel().check()?;
+        let chunk_len = remaining.min(buffer.len());
+
+        let readable_u64 = if write_offset >= input_len {
+            0
+        } else {
+            (input_len - write_offset).min(chunk_len as u64)
+        };
+        let readable = usize::try_from(readable_u64).map_err(|_| {
+            RomWeaverError::Validation("RUP readable chunk length exceeded usize".into())
+        })?;
+
+        if readable > 0 {
+            input.seek(SeekFrom::Start(write_offset))?;
+            input.read_exact(&mut buffer[..readable])?;
+        }
+        if readable < chunk_len {
+            buffer[readable..chunk_len].fill(0);
+        }
+
+        for (index, byte) in buffer[..chunk_len].iter_mut().enumerate() {
+            *byte ^= record.xor[xor_cursor + index];
+        }
+        writer.write_all(&buffer[..chunk_len])?;
+
+        write_offset = write_offset
+            .checked_add(chunk_len as u64)
+            .ok_or_else(|| RomWeaverError::Validation("RUP output offset overflowed".into()))?;
+        xor_cursor = xor_cursor
+            .checked_add(chunk_len)
+            .ok_or_else(|| RomWeaverError::Validation("RUP xor cursor overflowed".into()))?;
+        remaining -= chunk_len;
+    }
+    writer.flush()?;
+    Ok(())
+}
+
+fn apply_rup_prepared_tasks(
+    file: &RupFile,
+    tasks: &[RupPreparedTask],
+    output: &mut File,
+    context: &OperationContext,
+) -> Result<()> {
+    for task in tasks {
+        context.cancel().check()?;
+        let record = file.records.get(task.index).ok_or_else(|| {
+            RomWeaverError::Validation("RUP apply record index was out of bounds".into())
+        })?;
+        output.seek(SeekFrom::Start(record.offset))?;
+        let mut reader = BufReader::new(File::open(&task.temp_path)?);
+        io::copy(&mut reader, output)?;
+    }
+    Ok(())
+}
+
+fn cleanup_rup_prepared_tasks(tasks: &[RupPreparedTask]) {
+    for task in tasks {
+        let _ = fs::remove_file(&task.temp_path);
+    }
 }
 
 fn apply_xor_records_in_place(
@@ -728,6 +897,8 @@ fn create_rup_patch_parallel(
 ) -> Result<CreatedRupPatch> {
     let original = map_file_read_only(original_path)?;
     let modified = map_file_read_only(modified_path)?;
+    let original = original.as_ref();
+    let modified = modified.as_ref();
 
     let source_file_size = u64::try_from(original.len())
         .map_err(|_| RomWeaverError::Validation("RUP source size exceeded u64".into()))?;
@@ -737,8 +908,8 @@ fn create_rup_patch_parallel(
     let records =
         collect_rup_records_parallel(&original[..shared_len], &modified[..shared_len], pool);
 
-    let source_md5: [u8; 16] = Md5::digest(original.as_ref()).into();
-    let target_md5: [u8; 16] = Md5::digest(modified.as_ref()).into();
+    let source_md5: [u8; 16] = Md5::digest(original).into();
+    let target_md5: [u8; 16] = Md5::digest(modified).into();
 
     let (overflow_mode, overflow_data) = if original.len() < modified.len() {
         (
@@ -1472,6 +1643,136 @@ mod tests {
             .expect("apply");
 
         assert_eq!(fs::read(output_path).expect("output"), target);
+    }
+
+    #[test]
+    fn apply_is_deterministic_across_thread_budgets_for_overlapping_records() {
+        let temp = TestDir::new();
+        let source_path = temp.child("source.bin");
+        let target_path = temp.child("target.bin");
+        let patch_path = temp.child("overlap.rup");
+        let output_single = temp.child("output-single.bin");
+        let output_parallel = temp.child("output-parallel.bin");
+
+        let source = vec![0u8; 8];
+        let target = vec![0u8, 1, 2, 2, 0, 0, 0, 0];
+        fs::write(&source_path, &source).expect("source");
+        fs::write(&target_path, &target).expect("target");
+
+        let mut patch = create_rup_patch_bytes(&source, &target)
+            .expect("patch")
+            .bytes;
+        let command_offset = patch
+            .iter()
+            .position(|byte| *byte == RUP_COMMAND_OPEN_NEW_FILE)
+            .expect("open command");
+        let mut cursor = command_offset + 1;
+        let name_len = usize::from(patch[cursor]);
+        cursor += 1 + name_len;
+        cursor += 1;
+        let source_size_len = usize::from(patch[cursor]);
+        cursor += 1 + source_size_len;
+        let target_size_len = usize::from(patch[cursor]);
+        cursor += 1 + target_size_len;
+        cursor += 32;
+        patch.truncate(cursor);
+        patch.push(0x02);
+        patch.extend_from_slice(&[0x01, 0x01, 0x01, 0x02, 0x01, 0x01]);
+        patch.push(0x02);
+        patch.extend_from_slice(&[0x01, 0x02, 0x01, 0x02, 0x02, 0x02]);
+        patch.push(0x00);
+        fs::write(&patch_path, &patch).expect("patch file");
+
+        let handler = RupPatchHandler::new(&RUP);
+        let single_report = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: source_path.clone(),
+                    patches: vec![patch_path.clone()],
+                    output: output_single.clone(),
+                },
+                &test_context_with_threads(&temp, 1)
+                    .with_patch_checksum_validation(PatchChecksumValidation::Ignore),
+            )
+            .expect("single apply");
+        let parallel_report = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: source_path,
+                    patches: vec![patch_path],
+                    output: output_parallel.clone(),
+                },
+                &test_context_with_threads(&temp, 8)
+                    .with_patch_checksum_validation(PatchChecksumValidation::Ignore),
+            )
+            .expect("parallel apply");
+
+        assert!(
+            !single_report
+                .thread_execution
+                .expect("single execution")
+                .used_parallelism
+        );
+        assert!(
+            parallel_report
+                .thread_execution
+                .expect("parallel execution")
+                .used_parallelism
+        );
+        assert_eq!(
+            fs::read(output_single).expect("single output"),
+            fs::read(output_parallel).expect("parallel output")
+        );
+    }
+
+    #[test]
+    fn apply_runtime_threads_match_capabilities_for_multi_record_patch() {
+        let temp = TestDir::new();
+        let source_path = temp.child("source-large.bin");
+        let target_path = temp.child("target-large.bin");
+        let patch_path = temp.child("update.rup");
+        let output_path = temp.child("output.bin");
+
+        let len = super::CREATE_THREAD_SCAN_CHUNK_BYTES + 128 * 1024;
+        let mut source = vec![0u8; len];
+        for (index, byte) in source.iter_mut().enumerate() {
+            *byte = ((index * 23 + (index >> 4)) & 0xff) as u8;
+        }
+        let mut target = source.clone();
+        for index in (0..target.len()).step_by(6143) {
+            target[index] ^= 0x44;
+        }
+        fs::write(&source_path, &source).expect("source");
+        fs::write(&target_path, &target).expect("target");
+
+        let handler = RupPatchHandler::new(&RUP);
+        handler
+            .create(
+                &PatchCreateRequest {
+                    original: source_path.clone(),
+                    modified: target_path,
+                    output: patch_path.clone(),
+                    format: "RUP".into(),
+                },
+                &test_context_with_threads(&temp, 1),
+            )
+            .expect("create");
+
+        let capabilities = handler.capabilities();
+        let apply_report = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: source_path,
+                    patches: vec![patch_path],
+                    output: output_path,
+                },
+                &test_context_with_threads(&temp, 8),
+            )
+            .expect("apply");
+        let execution = apply_report.thread_execution.expect("thread execution");
+        assert!(capabilities.threaded_output);
+        assert_eq!(execution.requested_threads, 8);
+        assert!(execution.used_parallelism);
     }
 
     #[test]

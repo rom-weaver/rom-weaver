@@ -129,13 +129,43 @@ impl PatchHandler for ApsGbaPatchHandler {
         request: &PatchCreateRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        let created = create_apsgba_patch_streaming(&request.original, &request.modified)?;
-        crate::finalize_single_threaded_patch_create(
-            self.descriptor,
-            request,
-            context,
-            crate::CreatedPatchFile::new(created.bytes, created.record_count),
-        )
+        let source_size_u64 = fs::metadata(&request.original)?.len();
+        let target_size_u64 = fs::metadata(&request.modified)?.len();
+        let thread_capability =
+            apsgba_create_thread_capability(source_size_u64.max(target_size_u64))?;
+        let planned_execution = context.plan_threads(thread_capability.clone());
+        let (execution, created) = if planned_execution.used_parallelism {
+            let (execution, pool) = context.build_pool(thread_capability)?;
+            let created = create_apsgba_patch_parallel(
+                &request.original,
+                source_size_u64,
+                &request.modified,
+                target_size_u64,
+                &pool,
+                context,
+            )?;
+            (execution, created)
+        } else {
+            let created = create_apsgba_patch_streaming(&request.original, &request.modified)?;
+            (planned_execution, created)
+        };
+
+        if let Some(parent) = request.output.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(&request.output, created.bytes)?;
+
+        Ok(OperationReport::succeeded(
+            OperationFamily::Patch,
+            Some(self.descriptor.name.to_string()),
+            "create",
+            format!(
+                "created {} patch with {} record(s)",
+                self.descriptor.name, created.record_count
+            ),
+            Some(100.0),
+            Some(execution),
+        ))
     }
 
     fn capabilities(&self) -> PatchCapabilities {
@@ -144,7 +174,7 @@ impl PatchHandler for ApsGbaPatchHandler {
             apply: true,
             create: true,
             threaded_scan: false,
-            threaded_diff: false,
+            threaded_diff: true,
             threaded_output: true,
         }
     }
@@ -178,6 +208,24 @@ struct PreparedApsGbaWrite {
 
 fn apsgba_apply_thread_capability(record_count: usize) -> ThreadCapability {
     ThreadCapability::parallel(Some(record_count.max(1)))
+}
+
+fn apsgba_create_thread_capability(max_len: u64) -> Result<ThreadCapability> {
+    let block_count = apsgba_create_block_count(max_len)?;
+    Ok(ThreadCapability::parallel(Some(block_count.max(1))))
+}
+
+fn apsgba_create_block_count(max_len: u64) -> Result<usize> {
+    let block_count = if max_len == 0 {
+        1
+    } else {
+        max_len.div_ceil(APS_GBA_BLOCK_SIZE as u64)
+    };
+    usize::try_from(block_count).map_err(|_| {
+        RomWeaverError::Validation(
+            "APSGBA create required more blocks than this platform can index".into(),
+        )
+    })
 }
 
 fn parse_apsgba_file(path: &Path) -> Result<ParsedApsGbaPatch> {
@@ -513,6 +561,88 @@ fn create_apsgba_patch_streaming(
     ))
 }
 
+fn create_apsgba_patch_parallel(
+    source_path: &Path,
+    source_size_u64: u64,
+    target_path: &Path,
+    target_size_u64: u64,
+    pool: &SharedThreadPool,
+    context: &OperationContext,
+) -> Result<CreatedApsGbaPatch> {
+    let source_size = u32::try_from(source_size_u64).map_err(|_| {
+        RomWeaverError::Validation("APSGBA source size exceeded 32-bit header range".into())
+    })?;
+    let target_size = u32::try_from(target_size_u64).map_err(|_| {
+        RomWeaverError::Validation("APSGBA target size exceeded 32-bit header range".into())
+    })?;
+    let source = map_file_read_only(source_path)?;
+    let target = map_file_read_only(target_path)?;
+    let block_count = apsgba_create_block_count(source_size_u64.max(target_size_u64))?;
+
+    let records = pool.install(|| {
+        (0..block_count)
+            .into_par_iter()
+            .map(|block_index| {
+                context.cancel().check()?;
+                create_apsgba_record_for_block(block_index, source.as_ref(), target.as_ref())
+            })
+            .collect::<Result<Vec<_>>>()
+    })?;
+    let records = records.into_iter().flatten().collect::<Vec<_>>();
+    Ok(finalize_created_apsgba_patch(
+        source_size,
+        target_size,
+        records,
+    ))
+}
+
+fn create_apsgba_record_for_block(
+    block_index: usize,
+    source: &[u8],
+    target: &[u8],
+) -> Result<Option<ApsGbaRecord>> {
+    let offset = block_index
+        .checked_mul(APS_GBA_BLOCK_SIZE)
+        .ok_or_else(|| RomWeaverError::Validation("APSGBA block offset overflowed".into()))?;
+    let source_end = offset.saturating_add(APS_GBA_BLOCK_SIZE).min(source.len());
+    let target_end = offset.saturating_add(APS_GBA_BLOCK_SIZE).min(target.len());
+    let source_block = if offset >= source.len() {
+        &[][..]
+    } else {
+        &source[offset..source_end]
+    };
+    let target_block = if offset >= target.len() {
+        &[][..]
+    } else {
+        &target[offset..target_end]
+    };
+
+    let source_crc16 = crc16_bytes(source_block);
+    let target_crc16 = crc16_bytes(target_block);
+
+    let mut xor_bytes = vec![0u8; APS_GBA_BLOCK_SIZE];
+    let mut changed = false;
+    for (index, xor_byte) in xor_bytes.iter_mut().enumerate() {
+        let source_byte = source_block.get(index).copied().unwrap_or(0);
+        let target_byte = target_block.get(index).copied().unwrap_or(0);
+        *xor_byte = source_byte ^ target_byte;
+        changed |= *xor_byte != 0;
+    }
+    if !changed {
+        return Ok(None);
+    }
+
+    let record_offset = u32::try_from(offset).map_err(|_| {
+        RomWeaverError::Validation("APSGBA block offset exceeded 32-bit range".into())
+    })?;
+    Ok(Some(ApsGbaRecord {
+        offset: record_offset,
+        source_crc16,
+        target_crc16,
+        xor_bytes,
+    }))
+}
+
 fn finalize_created_apsgba_patch(
     source_size: u32,
     target_size: u32,
@@ -660,8 +790,8 @@ mod tests {
 
         let execution = create_report.thread_execution.expect("thread execution");
         assert_eq!(execution.requested_threads, 8);
-        assert_eq!(execution.effective_threads, 1);
-        assert!(!execution.used_parallelism);
+        assert!(execution.used_parallelism);
+        assert!(execution.effective_threads > 1);
 
         let apply_report = handler
             .apply(
@@ -740,6 +870,65 @@ mod tests {
         assert_eq!(
             fs::read(output_single).expect("single"),
             fs::read(output_parallel).expect("parallel")
+        );
+    }
+
+    #[test]
+    fn create_is_deterministic_across_thread_budgets() {
+        let temp = TestDir::new();
+        let source_path = temp.child("source.gba");
+        let target_path = temp.child("target.gba");
+        let patch_single = temp.child("single.apsgba");
+        let patch_parallel = temp.child("parallel.apsgba");
+
+        let source = build_source_bytes((super::APS_GBA_BLOCK_SIZE * 3) + 4096);
+        let mut target = source.clone();
+        target[0x101] ^= 0x31;
+        target[super::APS_GBA_BLOCK_SIZE + 257] ^= 0x72;
+        target[(super::APS_GBA_BLOCK_SIZE * 2) + 33] ^= 0xA4;
+
+        fs::write(&source_path, &source).expect("fixture");
+        fs::write(&target_path, &target).expect("fixture");
+
+        let handler = ApsGbaPatchHandler::new(&APSGBA);
+        let single_report = handler
+            .create(
+                &PatchCreateRequest {
+                    original: source_path.clone(),
+                    modified: target_path.clone(),
+                    output: patch_single.clone(),
+                    format: "APSGBA".into(),
+                },
+                &test_context_with_threads(&temp, 1),
+            )
+            .expect("single-thread create");
+        let parallel_report = handler
+            .create(
+                &PatchCreateRequest {
+                    original: source_path,
+                    modified: target_path,
+                    output: patch_parallel.clone(),
+                    format: "APSGBA".into(),
+                },
+                &test_context_with_threads(&temp, 8),
+            )
+            .expect("parallel create");
+
+        assert!(
+            !single_report
+                .thread_execution
+                .expect("single execution")
+                .used_parallelism
+        );
+        assert!(
+            parallel_report
+                .thread_execution
+                .expect("parallel execution")
+                .used_parallelism
+        );
+        assert_eq!(
+            fs::read(patch_single).expect("single patch"),
+            fs::read(patch_parallel).expect("parallel patch")
         );
     }
 

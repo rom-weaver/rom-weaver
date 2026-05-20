@@ -1,15 +1,16 @@
 use std::{
     cmp::{max, min},
     fs::{self, File},
-    io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write},
+    io::{self, BufReader, BufWriter, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
 };
 
+use memmap2::{Mmap, MmapOptions};
 use rayon::prelude::*;
 use rom_weaver_core::{
     ChunkPlanner, FileChunk, FormatDescriptor, OperationContext, OperationFamily, OperationReport,
     PatchApplyRequest, PatchCapabilities, PatchCreateRequest, PatchHandler, ProbeConfidence,
-    Result, RomWeaverError, ThreadCapability,
+    Result, RomWeaverError, SharedThreadPool, ThreadCapability,
 };
 use serde_json::{Map as JsonMap, Value as JsonValue};
 
@@ -19,6 +20,7 @@ const IPS32_MAGIC: &[u8; 5] = b"IPS32";
 const IPS32_EOF: &[u8; 4] = b"EEOF";
 const COMPARE_BUFFER_SIZE: usize = 64 * 1024;
 const OUTPUT_CHUNK_SIZE: u64 = 2 * 1024 * 1024;
+const CREATE_SCAN_CHUNK_BYTES: usize = 4 * 1024 * 1024;
 const MAX_IPS_RECORD_LEN: usize = u16::MAX as usize;
 const MAX_IPS_OFFSET: u64 = 0x00FF_FFFF;
 const MAX_IPS32_OFFSET: u64 = 0xFFFF_FFFF;
@@ -168,9 +170,10 @@ impl PatchHandler for IpsPatchHandler {
         request: &PatchCreateRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        let execution = context.plan_threads(ThreadCapability::single_threaded());
         let original_len = fs::metadata(&request.original)?.len();
         let modified_len = fs::metadata(&request.modified)?.len();
+        let thread_capability = ips_create_thread_capability(modified_len)?;
+        let planned_execution = context.plan_threads(thread_capability.clone());
 
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
@@ -178,15 +181,31 @@ impl PatchHandler for IpsPatchHandler {
 
         let output_file = File::create(&request.output)?;
         let mut output = BufWriter::new(output_file);
-        let create_result = create_ips_patch_streaming(
-            &request.original,
-            original_len,
-            &request.modified,
-            modified_len,
-            &mut output,
-            context,
-            self.flavor,
-        )?;
+        let (execution, create_result) = if planned_execution.used_parallelism {
+            let (execution, pool) = context.build_pool(thread_capability)?;
+            let create_result = create_ips_patch_parallel(
+                &request.original,
+                original_len,
+                &request.modified,
+                modified_len,
+                &pool,
+                &mut output,
+                context,
+                self.flavor,
+            )?;
+            (execution, create_result)
+        } else {
+            let create_result = create_ips_patch_streaming(
+                &request.original,
+                original_len,
+                &request.modified,
+                modified_len,
+                &mut output,
+                context,
+                self.flavor,
+            )?;
+            (planned_execution, create_result)
+        };
         output.flush()?;
 
         Ok(OperationReport::succeeded(
@@ -208,7 +227,7 @@ impl PatchHandler for IpsPatchHandler {
             apply: true,
             create: true,
             threaded_scan: false,
-            threaded_diff: false,
+            threaded_diff: true,
             threaded_output: true,
         }
     }
@@ -275,9 +294,51 @@ struct PendingDiff {
     bytes: Vec<u8>,
 }
 
+#[derive(Debug)]
+struct IpsDiffRun {
+    offset: u64,
+    bytes: Vec<u8>,
+}
+
+impl IpsDiffRun {
+    fn end(&self) -> Result<u64> {
+        self.offset
+            .checked_add(self.bytes.len() as u64)
+            .ok_or_else(|| RomWeaverError::Validation("IPS diff run offset overflowed".into()))
+    }
+}
+
+enum ReadOnlyFile {
+    Mapped(Mmap),
+    Owned(Vec<u8>),
+}
+
+impl AsRef<[u8]> for ReadOnlyFile {
+    fn as_ref(&self) -> &[u8] {
+        match self {
+            Self::Mapped(map) => map.as_ref(),
+            Self::Owned(bytes) => bytes.as_slice(),
+        }
+    }
+}
+
 fn parse_ips_file(path: &Path, flavor: IpsFlavor) -> Result<ParsedIpsPatch> {
-    let bytes = fs::read(path)?;
-    parse_ips_bytes(&bytes, flavor)
+    let bytes = map_file_read_only(path)?;
+    parse_ips_bytes(bytes.as_ref(), flavor)
+}
+
+fn map_file_read_only(path: &Path) -> Result<ReadOnlyFile> {
+    let file = File::open(path)?;
+    // SAFETY: The mapping is read-only and the file handle lives for map creation.
+    match unsafe { MmapOptions::new().map(&file) } {
+        Ok(map) => Ok(ReadOnlyFile::Mapped(map)),
+        Err(error) if should_fallback_from_mmap(&error) => Ok(ReadOnlyFile::Owned(fs::read(path)?)),
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn should_fallback_from_mmap(error: &io::Error) -> bool {
+    error.kind() == io::ErrorKind::Unsupported
 }
 
 fn parse_ips_bytes(bytes: &[u8], flavor: IpsFlavor) -> Result<ParsedIpsPatch> {
@@ -424,6 +485,24 @@ fn max_parallel_chunks(output_size: u64) -> Result<usize> {
     })
 }
 
+fn ips_create_chunk_count(modified_len: u64) -> Result<usize> {
+    if modified_len == 0 {
+        return Ok(1);
+    }
+    let chunk_bytes = CREATE_SCAN_CHUNK_BYTES as u64;
+    let chunk_count = modified_len.saturating_add(chunk_bytes - 1) / chunk_bytes;
+    usize::try_from(chunk_count).map_err(|_| {
+        RomWeaverError::Validation(
+            "IPS create required more chunks than this platform can index".into(),
+        )
+    })
+}
+
+fn ips_create_thread_capability(modified_len: u64) -> Result<ThreadCapability> {
+    let chunk_count = ips_create_chunk_count(modified_len)?;
+    Ok(ThreadCapability::parallel(Some(chunk_count.max(1))))
+}
+
 fn create_ips_patch_streaming(
     original_path: &Path,
     original_len: u64,
@@ -505,6 +584,145 @@ fn create_ips_patch_streaming(
     }
 
     Ok(created)
+}
+
+fn create_ips_patch_parallel(
+    original_path: &Path,
+    original_len: u64,
+    modified_path: &Path,
+    modified_len: u64,
+    pool: &SharedThreadPool,
+    output: &mut impl Write,
+    context: &OperationContext,
+    flavor: IpsFlavor,
+) -> Result<IpsCreateResult> {
+    let original = map_file_read_only(original_path)?;
+    let modified = map_file_read_only(modified_path)?;
+    let original_bytes = original.as_ref();
+    let modified_bytes = modified.as_ref();
+
+    let chunk_count = ips_create_chunk_count(modified_len)?;
+    let chunk_runs = pool.install(|| {
+        (0..chunk_count)
+            .into_par_iter()
+            .map(|chunk_index| {
+                context.cancel().check()?;
+                collect_ips_diff_runs_for_chunk(chunk_index, original_bytes, modified_bytes)
+            })
+            .collect::<Result<Vec<_>>>()
+    })?;
+    let runs = merge_ips_diff_runs(chunk_runs)?;
+
+    let mut created = IpsCreateResult::default();
+    output.write_all(flavor.header())?;
+    for run in &runs {
+        write_diff_run_records(output, run, &mut created, flavor)?;
+    }
+    output.write_all(flavor.footer())?;
+
+    match flavor {
+        IpsFlavor::Ips => {
+            if truncate_size_required(original_len, modified_len, created.max_written_end) {
+                write_u24(output, modified_len, "IPS truncate size")?;
+            }
+        }
+        IpsFlavor::Ips32 => {}
+        IpsFlavor::Ebp => {
+            output.write_all(DEFAULT_EBP_METADATA_JSON.as_bytes())?;
+        }
+    }
+
+    Ok(created)
+}
+
+fn collect_ips_diff_runs_for_chunk(
+    chunk_index: usize,
+    original: &[u8],
+    modified: &[u8],
+) -> Result<Vec<IpsDiffRun>> {
+    let start = chunk_index
+        .checked_mul(CREATE_SCAN_CHUNK_BYTES)
+        .ok_or_else(|| RomWeaverError::Validation("IPS create chunk offset overflowed".into()))?;
+    if start >= modified.len() {
+        return Ok(Vec::new());
+    }
+    let end = start
+        .saturating_add(CREATE_SCAN_CHUNK_BYTES)
+        .min(modified.len());
+    let mut cursor = start;
+    let mut runs = Vec::new();
+
+    while cursor < end {
+        let source = original.get(cursor).copied().unwrap_or(0);
+        let target = modified[cursor];
+        if source == target {
+            cursor += 1;
+            continue;
+        }
+
+        let run_start = cursor;
+        let mut run_bytes = Vec::new();
+        while cursor < end {
+            let source = original.get(cursor).copied().unwrap_or(0);
+            let target = modified[cursor];
+            if source == target {
+                break;
+            }
+            run_bytes.push(target);
+            cursor += 1;
+        }
+
+        runs.push(IpsDiffRun {
+            offset: run_start as u64,
+            bytes: run_bytes,
+        });
+    }
+
+    Ok(runs)
+}
+
+fn merge_ips_diff_runs(chunk_runs: Vec<Vec<IpsDiffRun>>) -> Result<Vec<IpsDiffRun>> {
+    let mut merged = Vec::<IpsDiffRun>::new();
+    for runs in chunk_runs {
+        for run in runs {
+            if let Some(last) = merged.last_mut() {
+                if last.end()? == run.offset {
+                    last.bytes.extend_from_slice(&run.bytes);
+                    continue;
+                }
+            }
+            merged.push(run);
+        }
+    }
+    Ok(merged)
+}
+
+fn write_diff_run_records(
+    output: &mut impl Write,
+    run: &IpsDiffRun,
+    created: &mut IpsCreateResult,
+    flavor: IpsFlavor,
+) -> Result<()> {
+    let mut cursor = 0usize;
+    while cursor < run.bytes.len() {
+        let next = (cursor + MAX_IPS_RECORD_LEN).min(run.bytes.len());
+        let segment = &run.bytes[cursor..next];
+        let segment_offset = checked_add(run.offset, cursor as u64, "IPS diff segment offset")?;
+        if segment.len() >= MIN_RLE_RECORD_LEN && segment.iter().all(|byte| *byte == segment[0]) {
+            write_rle_record(
+                output,
+                segment_offset,
+                segment.len(),
+                segment[0],
+                created,
+                flavor,
+            )?;
+        } else {
+            write_literal_record(output, segment_offset, segment, created, flavor)?;
+        }
+        cursor = next;
+    }
+    Ok(())
 }
 
 fn flush_pending_diff(
@@ -865,9 +1083,9 @@ mod tests {
     use rom_weaver_core::{OperationContext, PatchApplyRequest, PatchCreateRequest, PatchHandler};
 
     use super::{
-        DEFAULT_EBP_METADATA_JSON, IPS_EOF, IPS_MAGIC, IPS32_EOF, IPS32_MAGIC, IpsFlavor,
-        IpsPatchHandler, IpsRecordData, JsonValue, MAX_IPS_RECORD_LEN, OUTPUT_CHUNK_SIZE,
-        parse_ips_bytes,
+        CREATE_SCAN_CHUNK_BYTES, DEFAULT_EBP_METADATA_JSON, IPS_EOF, IPS_MAGIC, IPS32_EOF,
+        IPS32_MAGIC, IpsFlavor, IpsPatchHandler, IpsRecordData, JsonValue, MAX_IPS_RECORD_LEN,
+        OUTPUT_CHUNK_SIZE, parse_ips_bytes,
     };
     use crate::{
         EBP, IPS, IPS32,
@@ -1228,6 +1446,110 @@ mod tests {
             IpsRecordData::Rle { byte } => assert_eq!(*byte, b'Z'),
             other => panic!("expected RLE record, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn create_uses_parallel_threads_for_large_input() {
+        let temp = TestDir::new();
+        let original_path = temp.child("input.bin");
+        let modified_path = temp.child("modified.bin");
+        let patch_path = temp.child("update.ips");
+        let output_path = temp.child("output.bin");
+
+        let len = CREATE_SCAN_CHUNK_BYTES + 128;
+        let original = vec![0u8; len];
+        let mut modified = original.clone();
+        modified[CREATE_SCAN_CHUNK_BYTES - 8..CREATE_SCAN_CHUNK_BYTES + 24].fill(b'X');
+        fs::write(&original_path, &original).expect("fixture");
+        fs::write(&modified_path, &modified).expect("fixture");
+
+        let handler = IpsPatchHandler::new(&IPS);
+        let report = handler
+            .create(
+                &PatchCreateRequest {
+                    original: original_path.clone(),
+                    modified: modified_path.clone(),
+                    output: patch_path.clone(),
+                    format: "IPS".into(),
+                },
+                &test_context_with_threads(&temp, 8),
+            )
+            .expect("create");
+        let execution = report.thread_execution.expect("thread execution");
+        assert_eq!(execution.requested_threads, 8);
+        assert_eq!(execution.effective_threads, 2);
+        assert!(execution.used_parallelism);
+
+        handler
+            .apply(
+                &PatchApplyRequest {
+                    input: original_path,
+                    patches: vec![patch_path],
+                    output: output_path.clone(),
+                },
+                &test_context_with_threads(&temp, 4),
+            )
+            .expect("apply");
+        assert_eq!(fs::read(&output_path).expect("output"), modified);
+    }
+
+    #[test]
+    fn create_is_deterministic_across_thread_budgets() {
+        let temp = TestDir::new();
+        let original_path = temp.child("input.bin");
+        let modified_path = temp.child("modified.bin");
+        let patch_single = temp.child("single.ips");
+        let patch_parallel = temp.child("parallel.ips");
+
+        let len = CREATE_SCAN_CHUNK_BYTES + 128;
+        let original = vec![0u8; len];
+        let mut modified = original.clone();
+        modified[CREATE_SCAN_CHUNK_BYTES - 8..CREATE_SCAN_CHUNK_BYTES + 24].fill(b'X');
+        fs::write(&original_path, &original).expect("fixture");
+        fs::write(&modified_path, &modified).expect("fixture");
+
+        let handler = IpsPatchHandler::new(&IPS);
+
+        let single_report = handler
+            .create(
+                &PatchCreateRequest {
+                    original: original_path.clone(),
+                    modified: modified_path.clone(),
+                    output: patch_single.clone(),
+                    format: "IPS".into(),
+                },
+                &test_context_with_threads(&temp, 1),
+            )
+            .expect("single create");
+        let parallel_report = handler
+            .create(
+                &PatchCreateRequest {
+                    original: original_path,
+                    modified: modified_path,
+                    output: patch_parallel.clone(),
+                    format: "IPS".into(),
+                },
+                &test_context_with_threads(&temp, 8),
+            )
+            .expect("parallel create");
+
+        assert!(
+            !single_report
+                .thread_execution
+                .expect("single execution")
+                .used_parallelism
+        );
+        assert!(
+            parallel_report
+                .thread_execution
+                .expect("parallel execution")
+                .used_parallelism
+        );
+
+        assert_eq!(
+            fs::read(&patch_single).expect("single patch"),
+            fs::read(&patch_parallel).expect("parallel patch")
+        );
     }
 
     #[test]

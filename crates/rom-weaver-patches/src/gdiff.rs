@@ -2,7 +2,7 @@ use std::{
     cmp::min,
     fs::{self, File},
     io::{BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write},
-    path::Path,
+    path::{Path, PathBuf},
 };
 
 use memmap2::{Mmap, MmapOptions};
@@ -69,31 +69,46 @@ impl PatchHandler for GdiffPatchHandler {
     ) -> Result<OperationReport> {
         let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
         let source_len = fs::metadata(&request.input)?.len();
-        if let Some(parent) = request.output.parent() {
-            fs::create_dir_all(parent)?;
-        }
+        let (summary, commands) = parse_gdiff_apply_plan(patch_path)?;
+        let thread_capability = gdiff_apply_thread_capability(commands.len());
+        let planned_execution = context.plan_threads(thread_capability.clone());
 
-        let mut source = File::open(&request.input)?;
-        let mut output = BufWriter::new(File::create(&request.output)?);
-        let mut patch_scratch = vec![0u8; GDIFF_IO_BUFFER_SIZE];
-        let mut copy_scratch = vec![0u8; GDIFF_IO_BUFFER_SIZE];
-
-        let summary = parse_gdiff_patch(patch_path, |command, reader| match command {
-            GdiffCommand::Data { len } => {
-                copy_patch_data(reader, &mut output, len, &mut patch_scratch)
+        let execution = if planned_execution.used_parallelism {
+            let tasks = build_gdiff_apply_tasks(&commands, context);
+            let (execution, pool) = context.build_pool(thread_capability)?;
+            let prepare_result = pool.install(|| {
+                tasks
+                    .par_iter()
+                    .map(|task| {
+                        prepare_gdiff_apply_task(
+                            task,
+                            patch_path,
+                            &request.input,
+                            source_len,
+                            context,
+                        )
+                    })
+                    .collect::<Result<Vec<_>>>()
+            });
+            if let Err(error) = prepare_result {
+                cleanup_gdiff_apply_tasks(&tasks);
+                return Err(error);
             }
-            GdiffCommand::Copy { offset, len } => copy_from_source(
-                &mut source,
-                &mut output,
+            let apply_result = apply_gdiff_prepared_tasks(&tasks, &request.output, context);
+            cleanup_gdiff_apply_tasks(&tasks);
+            apply_result?;
+            execution
+        } else {
+            apply_gdiff_plan_sequential(
+                &commands,
+                patch_path,
+                &request.input,
+                &request.output,
                 source_len,
-                offset,
-                len,
-                &mut copy_scratch,
-            ),
-        })?;
-        output.flush()?;
+            )?;
+            planned_execution
+        };
 
-        let execution = context.plan_threads(ThreadCapability::single_threaded());
         Ok(OperationReport::succeeded(
             OperationFamily::Patch,
             Some(self.descriptor.name.to_string()),
@@ -152,7 +167,7 @@ impl PatchHandler for GdiffPatchHandler {
             create: true,
             threaded_scan: false,
             threaded_diff: true,
-            threaded_output: false,
+            threaded_output: true,
         }
     }
 }
@@ -171,10 +186,42 @@ fn gdiff_create_command_count(modified_len: u64) -> usize {
     usize::try_from(command_count).unwrap_or(usize::MAX)
 }
 
+fn gdiff_apply_thread_capability(command_count: usize) -> ThreadCapability {
+    ThreadCapability::parallel(Some(command_count.max(1)))
+}
+
 #[derive(Clone, Copy)]
 enum GdiffCommand {
     Data { len: u64 },
     Copy { offset: u64, len: u64 },
+}
+
+#[derive(Clone, Copy)]
+enum GdiffApplyCommandKind {
+    Data { patch_data_offset: u64, len: u64 },
+    Copy { source_offset: u64, len: u64 },
+}
+
+#[derive(Clone, Copy)]
+struct GdiffApplyCommand {
+    index: usize,
+    output_offset: u64,
+    kind: GdiffApplyCommandKind,
+}
+
+impl GdiffApplyCommand {
+    fn len(&self) -> u64 {
+        match self.kind {
+            GdiffApplyCommandKind::Data { len, .. } => len,
+            GdiffApplyCommandKind::Copy { len, .. } => len,
+        }
+    }
+}
+
+#[derive(Clone)]
+struct GdiffApplyTask {
+    command: GdiffApplyCommand,
+    temp_path: PathBuf,
 }
 
 #[derive(Default)]
@@ -219,6 +266,186 @@ where
     }
 
     Ok(summary)
+}
+
+fn parse_gdiff_apply_plan(patch_path: &Path) -> Result<(GdiffSummary, Vec<GdiffApplyCommand>)> {
+    let file = File::open(patch_path)?;
+    let mut reader = BufReader::new(file);
+    read_gdiff_header(&mut reader)?;
+
+    let mut summary = GdiffSummary::default();
+    let mut commands = Vec::new();
+    let mut scratch = vec![0u8; GDIFF_IO_BUFFER_SIZE];
+    let mut output_offset = 0u64;
+
+    loop {
+        let opcode = read_u8(&mut reader, "command opcode")?;
+        if opcode == 0 {
+            break;
+        }
+
+        summary.command_count = checked_add_usize(summary.command_count, 1, "command count")?;
+        let command = read_gdiff_command(&mut reader, opcode)?;
+        let index = commands.len();
+        match command {
+            GdiffCommand::Data { len } => {
+                summary.data_commands =
+                    checked_add_usize(summary.data_commands, 1, "data command count")?;
+                summary.output_bytes = checked_add_u64(summary.output_bytes, len, "output length")?;
+                let patch_data_offset = reader.stream_position()?;
+                consume_data(&mut reader, len, &mut scratch)?;
+                commands.push(GdiffApplyCommand {
+                    index,
+                    output_offset,
+                    kind: GdiffApplyCommandKind::Data {
+                        patch_data_offset,
+                        len,
+                    },
+                });
+                output_offset = checked_add_u64(output_offset, len, "output offset")?;
+            }
+            GdiffCommand::Copy { offset, len } => {
+                summary.copy_commands =
+                    checked_add_usize(summary.copy_commands, 1, "copy command count")?;
+                summary.output_bytes = checked_add_u64(summary.output_bytes, len, "output length")?;
+                commands.push(GdiffApplyCommand {
+                    index,
+                    output_offset,
+                    kind: GdiffApplyCommandKind::Copy {
+                        source_offset: offset,
+                        len,
+                    },
+                });
+                output_offset = checked_add_u64(output_offset, len, "output offset")?;
+            }
+        }
+    }
+
+    Ok((summary, commands))
+}
+
+fn build_gdiff_apply_tasks(
+    commands: &[GdiffApplyCommand],
+    context: &OperationContext,
+) -> Vec<GdiffApplyTask> {
+    commands
+        .iter()
+        .copied()
+        .map(|command| GdiffApplyTask {
+            command,
+            temp_path: context.temp_paths().next_path(
+                &format!("gdiff-apply-command-{}", command.index),
+                Some("bin"),
+            ),
+        })
+        .collect()
+}
+
+fn apply_gdiff_plan_sequential(
+    commands: &[GdiffApplyCommand],
+    patch_path: &Path,
+    source_path: &Path,
+    output_path: &Path,
+    source_len: u64,
+) -> Result<()> {
+    if let Some(parent) = output_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    let mut patch = BufReader::new(File::open(patch_path)?);
+    let mut source = File::open(source_path)?;
+    let mut output = BufWriter::new(File::create(output_path)?);
+    let mut scratch = vec![0u8; GDIFF_IO_BUFFER_SIZE];
+    for command in commands {
+        output.seek(SeekFrom::Start(command.output_offset))?;
+        match command.kind {
+            GdiffApplyCommandKind::Data {
+                patch_data_offset,
+                len,
+            } => {
+                patch.seek(SeekFrom::Start(patch_data_offset))?;
+                copy_patch_data(&mut patch, &mut output, len, &mut scratch)?;
+            }
+            GdiffApplyCommandKind::Copy { source_offset, len } => {
+                copy_from_source(
+                    &mut source,
+                    &mut output,
+                    source_len,
+                    source_offset,
+                    len,
+                    &mut scratch,
+                )?;
+            }
+        }
+    }
+    output.flush()?;
+    Ok(())
+}
+
+fn prepare_gdiff_apply_task(
+    task: &GdiffApplyTask,
+    patch_path: &Path,
+    source_path: &Path,
+    source_len: u64,
+    context: &OperationContext,
+) -> Result<()> {
+    context.cancel().check()?;
+    if let Some(parent) = task.temp_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    let mut output = BufWriter::new(File::create(&task.temp_path)?);
+    let mut scratch = vec![0u8; GDIFF_IO_BUFFER_SIZE];
+    match task.command.kind {
+        GdiffApplyCommandKind::Data {
+            patch_data_offset,
+            len,
+        } => {
+            let mut patch = BufReader::new(File::open(patch_path)?);
+            patch.seek(SeekFrom::Start(patch_data_offset))?;
+            copy_patch_data(&mut patch, &mut output, len, &mut scratch)?;
+        }
+        GdiffApplyCommandKind::Copy { source_offset, len } => {
+            let mut source = File::open(source_path)?;
+            copy_from_source(
+                &mut source,
+                &mut output,
+                source_len,
+                source_offset,
+                len,
+                &mut scratch,
+            )?;
+        }
+    }
+    output.flush()?;
+    Ok(())
+}
+
+fn apply_gdiff_prepared_tasks(
+    tasks: &[GdiffApplyTask],
+    output_path: &Path,
+    context: &OperationContext,
+) -> Result<()> {
+    if let Some(parent) = output_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    let mut output = BufWriter::new(File::create(output_path)?);
+    let mut scratch = vec![0u8; GDIFF_IO_BUFFER_SIZE];
+    for task in tasks {
+        context.cancel().check()?;
+        output.seek(SeekFrom::Start(task.command.output_offset))?;
+        let mut reader = BufReader::new(File::open(&task.temp_path)?);
+        copy_patch_data(&mut reader, &mut output, task.command.len(), &mut scratch)?;
+    }
+    output.flush()?;
+    Ok(())
+}
+
+fn cleanup_gdiff_apply_tasks(tasks: &[GdiffApplyTask]) {
+    for task in tasks {
+        let _ = fs::remove_file(&task.temp_path);
+    }
 }
 
 fn read_gdiff_header<R: Read>(reader: &mut R) -> Result<()> {
@@ -729,6 +956,117 @@ mod tests {
             fs::read(output_path).expect("output"),
             fs::read(target_path).expect("target")
         );
+    }
+
+    #[test]
+    fn apply_is_deterministic_across_thread_budgets() {
+        let temp = TestDir::new();
+        let source_path = temp.child("source.bin");
+        let patch_path = temp.child("update.gdiff");
+        let output_single = temp.child("output-single.bin");
+        let output_parallel = temp.child("output-parallel.bin");
+
+        let source = b"0123456789abcdefghijklmnopqrstuvwxyz".to_vec();
+        fs::write(&source_path, &source).expect("fixture");
+        let patch = build_test_gdiff_patch(vec![
+            TestGdiffCommand::Copy { offset: 0, len: 10 },
+            TestGdiffCommand::Data(b"++".to_vec()),
+            TestGdiffCommand::Copy { offset: 10, len: 8 },
+            TestGdiffCommand::Data(b"--".to_vec()),
+            TestGdiffCommand::Copy { offset: 2, len: 14 },
+            TestGdiffCommand::Data(vec![0xFA, 0xCE, 0xB0, 0x0C]),
+        ]);
+        fs::write(&patch_path, patch).expect("patch");
+
+        let handler = GdiffPatchHandler::new(&GDIFF);
+        let single_report = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: source_path.clone(),
+                    patches: vec![patch_path.clone()],
+                    output: output_single.clone(),
+                },
+                &test_context_with_threads(&temp, 1),
+            )
+            .expect("single apply");
+        let parallel_report = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: source_path,
+                    patches: vec![patch_path],
+                    output: output_parallel.clone(),
+                },
+                &test_context_with_threads(&temp, 8),
+            )
+            .expect("parallel apply");
+
+        assert!(
+            !single_report
+                .thread_execution
+                .expect("single execution")
+                .used_parallelism
+        );
+        assert!(
+            parallel_report
+                .thread_execution
+                .expect("parallel execution")
+                .used_parallelism
+        );
+        assert_eq!(
+            fs::read(output_single).expect("single output"),
+            fs::read(output_parallel).expect("parallel output")
+        );
+    }
+
+    #[test]
+    fn apply_runtime_threads_match_capabilities_for_multi_command_patch() {
+        let temp = TestDir::new();
+        let source_path = temp.child("source.bin");
+        let patch_path = temp.child("update.gdiff");
+        let output_path = temp.child("output.bin");
+
+        let len = super::CREATE_COMMAND_CHUNK_BYTES * 4 + 257;
+        let mut source = vec![0u8; len];
+        for (index, byte) in source.iter_mut().enumerate() {
+            *byte = ((index * 17 + (index >> 2)) & 0xff) as u8;
+        }
+        fs::write(&source_path, &source).expect("source");
+
+        let patch = build_test_gdiff_patch(vec![
+            TestGdiffCommand::Copy {
+                offset: 0,
+                len: super::CREATE_COMMAND_CHUNK_BYTES as u64,
+            },
+            TestGdiffCommand::Data(vec![0xAA; 64]),
+            TestGdiffCommand::Copy {
+                offset: super::CREATE_COMMAND_CHUNK_BYTES as u64,
+                len: super::CREATE_COMMAND_CHUNK_BYTES as u64,
+            },
+            TestGdiffCommand::Data(vec![0x55; 64]),
+            TestGdiffCommand::Copy {
+                offset: (super::CREATE_COMMAND_CHUNK_BYTES * 2) as u64,
+                len: super::CREATE_COMMAND_CHUNK_BYTES as u64,
+            },
+        ]);
+        fs::write(&patch_path, patch).expect("patch");
+
+        let handler = GdiffPatchHandler::new(&GDIFF);
+        let capabilities = handler.capabilities();
+        let report = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: source_path,
+                    patches: vec![patch_path],
+                    output: output_path,
+                },
+                &test_context_with_threads(&temp, 8),
+            )
+            .expect("apply");
+        let execution = report.thread_execution.expect("thread execution");
+
+        assert!(capabilities.threaded_output);
+        assert_eq!(execution.requested_threads, 8);
+        assert!(execution.used_parallelism);
     }
 
     #[test]

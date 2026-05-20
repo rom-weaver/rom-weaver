@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::{borrow::Cow, collections::VecDeque};
 
 use rom_weaver_core::RomWeaverError;
 use sha1::{Digest, Sha1};
@@ -16,17 +16,17 @@ enum VmOutcome {
     Failure(u32),
 }
 
-struct Frame {
+struct Frame<'a> {
     instruction_pointer: u32,
     variables: [u32; 256],
-    patch_space: Vec<u8>,
+    patch_space: Cow<'a, [u8]>,
     stack: VecDeque<u32>,
     waiting_var: Option<u8>,
     message_buffer: String,
 }
 
-impl Frame {
-    fn new(patch_space: Vec<u8>) -> Self {
+impl<'a> Frame<'a> {
+    fn new(patch_space: Cow<'a, [u8]>) -> Self {
         Self {
             instruction_pointer: 0,
             variables: [0; 256],
@@ -38,22 +38,22 @@ impl Frame {
     }
 }
 
-struct BspVm {
+struct BspVm<'a> {
     file_buffer: Vec<u8>,
     current_file_pointer: u32,
     current_file_pointer_locked: bool,
-    frames: Vec<Frame>,
+    frames: Vec<Frame<'a>>,
     dirty: bool,
     sha1: [u8; 20],
 }
 
-impl BspVm {
-    fn new(patch_bytes: Vec<u8>, input_bytes: Vec<u8>) -> Self {
+impl<'a> BspVm<'a> {
+    fn new(patch_bytes: &'a [u8], input_bytes: Vec<u8>) -> Self {
         Self {
             file_buffer: input_bytes,
             current_file_pointer: 0,
             current_file_pointer_locked: false,
-            frames: vec![Frame::new(patch_bytes)],
+            frames: vec![Frame::new(Cow::Borrowed(patch_bytes))],
             dirty: true,
             sha1: [0; 20],
         }
@@ -87,11 +87,11 @@ impl BspVm {
         Err("BSP runtime returned an invalid completion state".to_string())
     }
 
-    fn top_frame(&self) -> &Frame {
+    fn top_frame<'b>(&'b self) -> &'b Frame<'a> {
         self.frames.last().expect("frame exists")
     }
 
-    fn top_frame_mut(&mut self) -> &mut Frame {
+    fn top_frame_mut<'b>(&'b mut self) -> &'b mut Frame<'a> {
         self.frames.last_mut().expect("frame exists")
     }
 
@@ -1273,7 +1273,7 @@ impl BspVm {
         };
 
         self.top_frame_mut().waiting_var = Some(variable);
-        self.frames.push(Frame::new(slice));
+        self.frames.push(Frame::new(Cow::Owned(slice)));
         Ok(StepControl::Continue)
     }
 
@@ -1304,7 +1304,7 @@ impl BspVm {
 }
 
 pub(crate) fn apply_bsp_patch_bytes_native(
-    patch_bytes: Vec<u8>,
+    patch_bytes: &[u8],
     input_bytes: Vec<u8>,
 ) -> Result<Vec<u8>, RomWeaverError> {
     let mut vm = BspVm::new(patch_bytes, input_bytes);

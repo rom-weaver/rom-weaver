@@ -24,6 +24,7 @@ const APS_DEFAULT_DESCRIPTION: &str = "no description";
 const APS_DEFAULT_ENCODING_METHOD: u8 = 0;
 const APS_N64_CART_ID_OFFSET: u64 = 0x3C;
 const APS_N64_CRC_OFFSET: u64 = 0x10;
+const APS_CREATE_CHUNK_BYTES: usize = 1024 * 1024;
 
 pub struct ApsN64PatchHandler {
     descriptor: &'static FormatDescriptor,
@@ -138,14 +139,40 @@ impl PatchHandler for ApsN64PatchHandler {
     ) -> Result<OperationReport> {
         let original = map_file_read_only(&request.original)?;
         let modified = map_file_read_only(&request.modified)?;
-        let created =
-            create_aps_patch_bytes(&request.original, original.as_ref(), modified.as_ref())?;
-        crate::finalize_single_threaded_patch_create(
-            self.descriptor,
-            request,
-            context,
-            crate::CreatedPatchFile::new(created.bytes, created.record_count),
-        )
+        let thread_capability = aps_create_thread_capability(modified.len())?;
+        let planned_execution = context.plan_threads(thread_capability.clone());
+        let (execution, created) = if planned_execution.used_parallelism {
+            let (execution, pool) = context.build_pool(thread_capability)?;
+            let created = create_aps_patch_parallel(
+                &request.original,
+                original.as_ref(),
+                modified.as_ref(),
+                &pool,
+                context,
+            )?;
+            (execution, created)
+        } else {
+            let created =
+                create_aps_patch_bytes(&request.original, original.as_ref(), modified.as_ref())?;
+            (planned_execution, created)
+        };
+
+        if let Some(parent) = request.output.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(&request.output, created.bytes)?;
+
+        Ok(OperationReport::succeeded(
+            OperationFamily::Patch,
+            Some(self.descriptor.name.to_string()),
+            "create",
+            format!(
+                "created {} patch with {} record(s)",
+                self.descriptor.name, created.record_count
+            ),
+            Some(100.0),
+            Some(execution),
+        ))
     }
 
     fn capabilities(&self) -> PatchCapabilities {
@@ -154,7 +181,7 @@ impl PatchHandler for ApsN64PatchHandler {
             apply: true,
             create: true,
             threaded_scan: false,
-            threaded_diff: false,
+            threaded_diff: true,
             threaded_output: true,
         }
     }
@@ -213,6 +240,25 @@ struct PreparedApsWrite {
 
 fn aps_apply_thread_capability(record_count: usize) -> ThreadCapability {
     ThreadCapability::parallel(Some(record_count.max(1)))
+}
+
+fn aps_create_thread_capability(modified_len: usize) -> Result<ThreadCapability> {
+    let chunk_count = aps_create_chunk_count(modified_len)?;
+    Ok(ThreadCapability::parallel(Some(chunk_count.max(1))))
+}
+
+fn aps_create_chunk_count(modified_len: usize) -> Result<usize> {
+    let chunk_count = if modified_len == 0 {
+        1
+    } else {
+        modified_len.div_ceil(APS_CREATE_CHUNK_BYTES)
+    };
+    if chunk_count == 0 {
+        return Err(RomWeaverError::Validation(
+            "APS create chunk count resolved to zero".into(),
+        ));
+    }
+    Ok(chunk_count)
 }
 
 fn parse_aps_file(path: &Path) -> Result<ParsedApsPatch> {
@@ -617,6 +663,193 @@ struct DetectedN64Header {
     crc: [u8; 8],
 }
 
+#[derive(Debug)]
+struct ApsDiffRun {
+    offset: u64,
+    bytes: Vec<u8>,
+}
+
+impl ApsDiffRun {
+    fn end(&self) -> Result<u64> {
+        self.offset
+            .checked_add(self.bytes.len() as u64)
+            .ok_or_else(|| RomWeaverError::Validation("APS diff run offset overflowed".into()))
+    }
+}
+
+fn create_aps_patch_parallel(
+    original_path: &Path,
+    original: &[u8],
+    modified: &[u8],
+    pool: &SharedThreadPool,
+    context: &OperationContext,
+) -> Result<CreatedApsPatch> {
+    let n64_header = detect_n64_header(original_path, original);
+    let output_size = u32::try_from(modified.len()).map_err(|_| {
+        RomWeaverError::Validation("APS output size exceeded 32-bit header range".into())
+    })?;
+    let chunk_count = aps_create_chunk_count(modified.len())?;
+
+    let chunk_runs = pool.install(|| {
+        (0..chunk_count)
+            .into_par_iter()
+            .map(|chunk_index| {
+                context.cancel().check()?;
+                collect_diff_runs_for_chunk(chunk_index, original, modified)
+            })
+            .collect::<Result<Vec<_>>>()
+    })?;
+    let runs = merge_diff_runs(chunk_runs)?;
+    let records = encode_runs_as_aps_records(runs)?;
+
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(APS_N64_MAGIC);
+    bytes.push(if n64_header.is_some() {
+        APS_N64_MODE
+    } else {
+        0
+    });
+    bytes.push(APS_DEFAULT_ENCODING_METHOD);
+
+    let mut description = [0u8; APS_DESCRIPTION_SIZE];
+    let description_bytes = APS_DEFAULT_DESCRIPTION.as_bytes();
+    let description_len = description_bytes.len().min(description.len());
+    description[..description_len].copy_from_slice(&description_bytes[..description_len]);
+    bytes.extend_from_slice(&description);
+
+    if let Some(n64_header) = n64_header {
+        bytes.push(n64_header.original_format);
+        bytes.extend_from_slice(&n64_header.cart_id);
+        bytes.extend_from_slice(&n64_header.crc);
+        bytes.extend_from_slice(&[0u8; 5]);
+    }
+
+    bytes.extend_from_slice(&output_size.to_le_bytes());
+    for record in &records {
+        match record {
+            ApsRecord::Simple { offset, data } => {
+                let offset_u32 = u32::try_from(*offset).map_err(|_| {
+                    RomWeaverError::Validation("APS record offset exceeded 32-bit range".into())
+                })?;
+                if data.len() > APS_RECORD_MAX_DATA_LEN {
+                    return Err(RomWeaverError::Validation(
+                        "APS record length exceeded 255 bytes".into(),
+                    ));
+                }
+                bytes.extend_from_slice(&offset_u32.to_le_bytes());
+                bytes.push(data.len() as u8);
+                bytes.extend_from_slice(data);
+            }
+            ApsRecord::Rle {
+                offset,
+                byte,
+                length,
+            } => {
+                let offset_u32 = u32::try_from(*offset).map_err(|_| {
+                    RomWeaverError::Validation("APS record offset exceeded 32-bit range".into())
+                })?;
+                bytes.extend_from_slice(&offset_u32.to_le_bytes());
+                bytes.push(APS_RECORD_RLE);
+                bytes.push(*byte);
+                bytes.push(*length);
+            }
+        }
+    }
+
+    Ok(CreatedApsPatch {
+        bytes,
+        record_count: records.len(),
+    })
+}
+
+fn collect_diff_runs_for_chunk(
+    chunk_index: usize,
+    original: &[u8],
+    modified: &[u8],
+) -> Result<Vec<ApsDiffRun>> {
+    let start = chunk_index
+        .checked_mul(APS_CREATE_CHUNK_BYTES)
+        .ok_or_else(|| RomWeaverError::Validation("APS chunk offset overflowed".into()))?;
+    let end = start
+        .saturating_add(APS_CREATE_CHUNK_BYTES)
+        .min(modified.len());
+    let mut cursor = start;
+    let mut runs = Vec::new();
+
+    while cursor < end {
+        let source = original.get(cursor).copied().unwrap_or(0);
+        let target = modified[cursor];
+        if source == target {
+            cursor += 1;
+            continue;
+        }
+
+        let run_start = cursor;
+        let mut run_bytes = Vec::new();
+        while cursor < end {
+            let source = original.get(cursor).copied().unwrap_or(0);
+            let target = modified[cursor];
+            if source == target {
+                break;
+            }
+            run_bytes.push(target);
+            cursor += 1;
+        }
+
+        runs.push(ApsDiffRun {
+            offset: run_start as u64,
+            bytes: run_bytes,
+        });
+    }
+
+    Ok(runs)
+}
+
+fn merge_diff_runs(chunk_runs: Vec<Vec<ApsDiffRun>>) -> Result<Vec<ApsDiffRun>> {
+    let mut merged = Vec::<ApsDiffRun>::new();
+    for runs in chunk_runs {
+        for run in runs {
+            if let Some(last) = merged.last_mut() {
+                if last.end()? == run.offset {
+                    last.bytes.extend_from_slice(&run.bytes);
+                    continue;
+                }
+            }
+            merged.push(run);
+        }
+    }
+    Ok(merged)
+}
+
+fn encode_runs_as_aps_records(runs: Vec<ApsDiffRun>) -> Result<Vec<ApsRecord>> {
+    let mut records = Vec::<ApsRecord>::new();
+    for run in runs {
+        let mut cursor = 0usize;
+        while cursor < run.bytes.len() {
+            let next = (cursor + APS_RECORD_MAX_DATA_LEN).min(run.bytes.len());
+            let slice = &run.bytes[cursor..next];
+            let offset = run
+                .offset
+                .checked_add(cursor as u64)
+                .ok_or_else(|| RomWeaverError::Validation("APS record offset overflowed".into()))?;
+            if slice.len() > 2 && slice.iter().all(|byte| *byte == slice[0]) {
+                records.push(ApsRecord::Rle {
+                    offset,
+                    byte: slice[0],
+                    length: u8::try_from(slice.len()).expect("slice len is bounded to 255"),
+                });
+            } else {
+                records.push(ApsRecord::Simple {
+                    offset,
+                    data: slice.to_vec(),
+                });
+            }
+            cursor = next;
+        }
+    }
+    Ok(records)
+}
+
 fn decode_description(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes)
         .trim_end_matches(|c| c == '\0' || c == ' ')
@@ -817,7 +1050,7 @@ mod tests {
         fs::write(&modified_path, &modified).expect("fixture");
 
         let handler = ApsN64PatchHandler::new(&APS);
-        handler
+        let create_report = handler
             .create(
                 &PatchCreateRequest {
                     original: original_path.clone(),
@@ -828,6 +1061,13 @@ mod tests {
                 &test_context_with_threads(&temp, 8),
             )
             .expect("create");
+        assert_eq!(
+            create_report
+                .thread_execution
+                .expect("thread execution")
+                .requested_threads,
+            8
+        );
 
         let parsed = parse_aps_bytes(&fs::read(&patch_path).expect("patch")).expect("parse");
         assert_eq!(parsed.header_type, APS_N64_MODE);
@@ -925,6 +1165,74 @@ mod tests {
         assert_eq!(
             fs::read(output_single).expect("single"),
             fs::read(output_parallel).expect("parallel")
+        );
+    }
+
+    #[test]
+    fn create_is_deterministic_across_thread_budgets() {
+        let temp = TestDir::new();
+        let original_path = temp.child("original.z64");
+        let modified_path = temp.child("modified.z64");
+        let patch_single = temp.child("single.aps");
+        let patch_parallel = temp.child("parallel.aps");
+
+        let size = (super::APS_CREATE_CHUNK_BYTES * 2) + 4096;
+        let mut original = vec![0u8; size];
+        for (index, byte) in original.iter_mut().enumerate() {
+            *byte = ((index * 11 + (index >> 3)) & 0xFF) as u8;
+        }
+        original[0..4].copy_from_slice(&[0x80, 0x37, 0x12, 0x40]);
+        original[APS_N64_CART_ID_OFFSET as usize..APS_N64_CART_ID_OFFSET as usize + 3]
+            .copy_from_slice(b"XYZ");
+        original[APS_N64_CRC_OFFSET as usize..APS_N64_CRC_OFFSET as usize + 8]
+            .copy_from_slice(&[0xA0, 0xB1, 0xC2, 0xD3, 0xE4, 0xF5, 0x16, 0x27]);
+        let mut modified = original.clone();
+        modified[0x2000..0x2100].fill(0x44);
+        modified[super::APS_CREATE_CHUNK_BYTES - 8..super::APS_CREATE_CHUNK_BYTES + 8].fill(0xAA);
+        modified[(super::APS_CREATE_CHUNK_BYTES * 2) + 64] ^= 0x5A;
+
+        fs::write(&original_path, &original).expect("fixture");
+        fs::write(&modified_path, &modified).expect("fixture");
+
+        let handler = ApsN64PatchHandler::new(&APS);
+        let single_report = handler
+            .create(
+                &PatchCreateRequest {
+                    original: original_path.clone(),
+                    modified: modified_path.clone(),
+                    output: patch_single.clone(),
+                    format: "APS".into(),
+                },
+                &test_context_with_threads(&temp, 1),
+            )
+            .expect("single create");
+        let parallel_report = handler
+            .create(
+                &PatchCreateRequest {
+                    original: original_path,
+                    modified: modified_path,
+                    output: patch_parallel.clone(),
+                    format: "APS".into(),
+                },
+                &test_context_with_threads(&temp, 8),
+            )
+            .expect("parallel create");
+
+        assert!(
+            !single_report
+                .thread_execution
+                .expect("single execution")
+                .used_parallelism
+        );
+        assert!(
+            parallel_report
+                .thread_execution
+                .expect("parallel execution")
+                .used_parallelism
+        );
+        assert_eq!(
+            fs::read(patch_single).expect("single patch"),
+            fs::read(patch_parallel).expect("parallel patch")
         );
     }
 

@@ -1,5 +1,10 @@
-use std::{fs, path::Path};
+use std::{
+    fs::{self, File},
+    io,
+    path::Path,
+};
 
+use memmap2::{Mmap, MmapOptions};
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
     PatchCapabilities, PatchCreateRequest, PatchHandler, Result, RomWeaverError, ThreadCapability,
@@ -44,10 +49,10 @@ impl PatchHandler for BspPatchHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
-        let patch_bytes = fs::read(patch_path)?;
+        let patch_bytes = map_file_read_only(patch_path)?;
         let input_bytes = fs::read(&request.input)?;
 
-        let output_bytes = apply_bsp_patch_bytes(patch_bytes, input_bytes)?;
+        let output_bytes = apply_bsp_patch_bytes(patch_bytes.as_ref(), input_bytes)?;
 
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
@@ -91,8 +96,36 @@ impl PatchHandler for BspPatchHandler {
     }
 }
 
-fn apply_bsp_patch_bytes(patch_bytes: Vec<u8>, input_bytes: Vec<u8>) -> Result<Vec<u8>> {
+fn apply_bsp_patch_bytes(patch_bytes: &[u8], input_bytes: Vec<u8>) -> Result<Vec<u8>> {
     crate::bsp_native_vm::apply_bsp_patch_bytes_native(patch_bytes, input_bytes)
+}
+
+enum ReadOnlyFile {
+    Mapped(Mmap),
+    Owned(Vec<u8>),
+}
+
+impl AsRef<[u8]> for ReadOnlyFile {
+    fn as_ref(&self) -> &[u8] {
+        match self {
+            Self::Mapped(map) => map.as_ref(),
+            Self::Owned(bytes) => bytes.as_slice(),
+        }
+    }
+}
+
+fn map_file_read_only(path: &Path) -> Result<ReadOnlyFile> {
+    let file = File::open(path)?;
+    // SAFETY: This mapping is read-only and the file handle lives through map creation.
+    match unsafe { MmapOptions::new().map(&file) } {
+        Ok(map) => Ok(ReadOnlyFile::Mapped(map)),
+        Err(error) if should_fallback_from_mmap(&error) => Ok(ReadOnlyFile::Owned(fs::read(path)?)),
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn should_fallback_from_mmap(error: &io::Error) -> bool {
+    error.kind() == io::ErrorKind::Unsupported
 }
 
 #[cfg(test)]
@@ -350,7 +383,7 @@ patcher.run();
             let patch_bytes = decode_hex(vector.patch_hex);
             let input_bytes = decode_hex(vector.input_hex);
             let reference = run_reference_patcher(&runtime_path, &patch_bytes, &input_bytes);
-            let ours = apply_bsp_patch_bytes(patch_bytes.clone(), input_bytes.clone());
+            let ours = apply_bsp_patch_bytes(patch_bytes.as_slice(), input_bytes.clone());
 
             match reference {
                 ReferenceOutcome::Success(expected_output) => {
@@ -434,7 +467,7 @@ patcher.run();
 
         let input = vec![0x00];
         let reference = run_reference_patcher(&runtime_path, &patch, &input);
-        let ours = apply_bsp_patch_bytes(patch, input).expect("native apply");
+        let ours = apply_bsp_patch_bytes(&patch, input).expect("native apply");
         let expected = match reference {
             ReferenceOutcome::Success(bytes) => bytes,
             ReferenceOutcome::Failure(code) => panic!("reference failed with status {code}"),

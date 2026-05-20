@@ -238,7 +238,6 @@ impl PatchHandler for VcdiffPatchHandler {
         request: &PatchCreateRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        let execution = context.plan_threads(ThreadCapability::single_threaded());
         let output_extension = request.output.extension().and_then(|value| value.to_str());
         let baseline_path = context
             .temp_paths()
@@ -246,21 +245,55 @@ impl PatchHandler for VcdiffPatchHandler {
         let secondary_path = context
             .temp_paths()
             .next_path("vcdiff-create-secondary", output_extension);
+        let thread_capability = ThreadCapability::parallel(Some(2));
 
-        let create_result = (|| -> Result<ParsedPatch> {
+        let create_result = (|| -> Result<(ParsedPatch, rom_weaver_core::ThreadExecution)> {
             let base_flags = create_base_flags(self.descriptor);
-            let baseline = encode_patch_with_xdelta_streaming(
-                &request.original,
-                &request.modified,
-                &baseline_path,
-                base_flags,
-            )?;
-            let secondary = encode_patch_with_xdelta_streaming(
-                &request.original,
-                &request.modified,
-                &secondary_path,
-                base_flags | xdelta_ffi::XD3_SEC_DJW,
-            )?;
+            let planned_execution = context.plan_threads(thread_capability.clone());
+            let (execution, baseline, secondary) = if planned_execution.used_parallelism {
+                let (execution, pool) = context.build_pool(thread_capability.clone())?;
+                let baseline_original = request.original.clone();
+                let baseline_modified = request.modified.clone();
+                let baseline_output = baseline_path.clone();
+                let secondary_original = request.original.clone();
+                let secondary_modified = request.modified.clone();
+                let secondary_output = secondary_path.clone();
+                let (baseline_result, secondary_result) = pool.install(|| {
+                    rayon::join(
+                        || {
+                            encode_patch_with_xdelta_streaming(
+                                &baseline_original,
+                                &baseline_modified,
+                                &baseline_output,
+                                base_flags,
+                            )
+                        },
+                        || {
+                            encode_patch_with_xdelta_streaming(
+                                &secondary_original,
+                                &secondary_modified,
+                                &secondary_output,
+                                base_flags | xdelta_ffi::XD3_SEC_DJW,
+                            )
+                        },
+                    )
+                });
+                (execution, baseline_result?, secondary_result?)
+            } else {
+                let baseline = encode_patch_with_xdelta_streaming(
+                    &request.original,
+                    &request.modified,
+                    &baseline_path,
+                    base_flags,
+                )?;
+                let secondary = encode_patch_with_xdelta_streaming(
+                    &request.original,
+                    &request.modified,
+                    &secondary_path,
+                    base_flags | xdelta_ffi::XD3_SEC_DJW,
+                )?;
+                (planned_execution, baseline, secondary)
+            };
             let selected = if secondary.size < baseline.size {
                 secondary
             } else {
@@ -273,13 +306,13 @@ impl PatchHandler for VcdiffPatchHandler {
             fs::copy(&selected.path, &request.output)?;
 
             let mut reader = BufReader::new(File::open(&request.output)?);
-            parse_patch(&mut reader)
+            Ok((parse_patch(&mut reader)?, execution))
         })();
 
         let _ = fs::remove_file(&baseline_path);
         let _ = fs::remove_file(&secondary_path);
 
-        let parsed = create_result?;
+        let (parsed, execution) = create_result?;
 
         let label = if parsed.secondary_compressor_id.is_some() {
             format!(
@@ -311,7 +344,7 @@ impl PatchHandler for VcdiffPatchHandler {
             apply: true,
             create: true,
             threaded_scan: false,
-            threaded_diff: false,
+            threaded_diff: true,
             threaded_output: true,
         }
     }
@@ -1311,6 +1344,7 @@ mod tests {
 
         let handler = VcdiffPatchHandler::new(&crate::VCDIFF);
         let capabilities = handler.capabilities();
+        assert!(capabilities.threaded_diff);
         assert!(capabilities.threaded_output);
         let report = handler
             .apply(
@@ -1702,6 +1736,7 @@ mod tests {
 
         let handler = VcdiffPatchHandler::new(&crate::XDELTA);
         let capabilities = handler.capabilities();
+        assert!(capabilities.threaded_diff);
         assert!(capabilities.threaded_output);
         let report = handler
             .apply(
@@ -1783,10 +1818,16 @@ mod tests {
                     output: patch_path.clone(),
                     format: "xdelta".into(),
                 },
-                &test_context(),
+                &test_context_with_threads(8),
             )
             .expect("create xdelta patch");
         assert_eq!(report.status, rom_weaver_core::OperationStatus::Succeeded);
+        assert!(
+            report
+                .thread_execution
+                .expect("thread execution")
+                .used_parallelism
+        );
         assert!(report.label.contains("secondary compression"));
 
         let plain = encode_patch_with_xdelta_memory(&input, &expected, XD3_ADLER32)

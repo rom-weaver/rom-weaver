@@ -1,7 +1,7 @@
 use std::{
     cmp::max,
     fs::{self, File, OpenOptions},
-    io::{BufReader, Read, Seek, SeekFrom, Write},
+    io::{self, BufReader, Read, Seek, SeekFrom, Write},
     path::Path,
 };
 
@@ -211,6 +211,20 @@ struct PreparedUpsWrite {
     data: Vec<u8>,
 }
 
+enum ReadOnlyFile {
+    Mapped(Mmap),
+    Owned(Vec<u8>),
+}
+
+impl AsRef<[u8]> for ReadOnlyFile {
+    fn as_ref(&self) -> &[u8] {
+        match self {
+            Self::Mapped(map) => map.as_ref(),
+            Self::Owned(bytes) => bytes.as_slice(),
+        }
+    }
+}
+
 fn parse_ups_file(path: &Path) -> Result<ParsedUpsPatch> {
     parse_ups_file_with_checksum_validation(path, true)
 }
@@ -220,14 +234,21 @@ fn parse_ups_file_with_checksum_validation(
     validate_patch_checksum: bool,
 ) -> Result<ParsedUpsPatch> {
     let bytes = map_file_read_only(path)?;
-    parse_ups_bytes_with_checksum_validation(&bytes, validate_patch_checksum)
+    parse_ups_bytes_with_checksum_validation(bytes.as_ref(), validate_patch_checksum)
 }
 
-fn map_file_read_only(path: &Path) -> Result<Mmap> {
+fn map_file_read_only(path: &Path) -> Result<ReadOnlyFile> {
     let file = File::open(path)?;
     // SAFETY: This mapping is read-only and the file handle lives through map creation.
-    let map = unsafe { MmapOptions::new().map(&file)? };
-    Ok(map)
+    match unsafe { MmapOptions::new().map(&file) } {
+        Ok(map) => Ok(ReadOnlyFile::Mapped(map)),
+        Err(error) if should_fallback_from_mmap(&error) => Ok(ReadOnlyFile::Owned(fs::read(path)?)),
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn should_fallback_from_mmap(error: &io::Error) -> bool {
+    error.kind() == io::ErrorKind::Unsupported
 }
 
 #[cfg(test)]
@@ -497,14 +518,16 @@ fn create_ups_patch_parallel(
 ) -> Result<CreatedUpsPatch> {
     let source = map_file_read_only(source_path)?;
     let target = map_file_read_only(target_path)?;
+    let source = source.as_ref();
+    let target = target.as_ref();
 
     let source_size = u64::try_from(source.len())
         .map_err(|_| RomWeaverError::Validation("UPS source size exceeded u64".into()))?;
     let target_size = u64::try_from(target.len())
         .map_err(|_| RomWeaverError::Validation("UPS target size exceeded u64".into()))?;
-    let source_checksum = crc32_bytes(source.as_ref());
-    let target_checksum = crc32_bytes(target.as_ref());
-    let changes = collect_ups_changes_parallel(source.as_ref(), target.as_ref(), pool);
+    let source_checksum = crc32_bytes(source);
+    let target_checksum = crc32_bytes(target);
+    let changes = collect_ups_changes_parallel(source, target, pool);
 
     encode_ups_patch(
         &changes,
