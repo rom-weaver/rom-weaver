@@ -448,7 +448,7 @@ fn cleanup_gdiff_apply_tasks(tasks: &[GdiffApplyTask]) {
     }
 }
 
-fn read_gdiff_header<R: Read>(reader: &mut R) -> Result<()> {
+fn read_gdiff_header(reader: &mut dyn Read) -> Result<()> {
     let mut magic = [0u8; GDIFF_MAGIC.len()];
     read_exact_into(reader, &mut magic, "header magic")?;
     if magic != GDIFF_MAGIC {
@@ -467,7 +467,7 @@ fn read_gdiff_header<R: Read>(reader: &mut R) -> Result<()> {
     Ok(())
 }
 
-fn read_gdiff_command<R: Read>(reader: &mut R, opcode: u8) -> Result<GdiffCommand> {
+fn read_gdiff_command(reader: &mut dyn Read, opcode: u8) -> Result<GdiffCommand> {
     match opcode {
         1..=246 => Ok(GdiffCommand::Data {
             len: u64::from(opcode),
@@ -512,7 +512,7 @@ fn read_gdiff_command<R: Read>(reader: &mut R, opcode: u8) -> Result<GdiffComman
     }
 }
 
-fn write_gdiff_header<W: Write>(writer: &mut W) -> Result<()> {
+fn write_gdiff_header(writer: &mut dyn Write) -> Result<()> {
     writer.write_all(&GDIFF_MAGIC)?;
     writer.write_all(&[GDIFF_VERSION])?;
     Ok(())
@@ -522,7 +522,7 @@ fn create_gdiff_patch(
     modified_path: &Path,
     pool: &SharedThreadPool,
     use_parallel_scan: bool,
-    output: &mut impl Write,
+    output: &mut dyn Write,
 ) -> Result<(usize, u64)> {
     if use_parallel_scan {
         create_gdiff_patch_parallel(modified_path, pool, output)
@@ -533,7 +533,7 @@ fn create_gdiff_patch(
 
 fn create_gdiff_patch_streaming(
     modified_path: &Path,
-    output: &mut impl Write,
+    output: &mut dyn Write,
 ) -> Result<(usize, u64)> {
     let mut modified = BufReader::new(File::open(modified_path)?);
     write_gdiff_header(output)?;
@@ -562,7 +562,7 @@ fn create_gdiff_patch_streaming(
 fn create_gdiff_patch_parallel(
     modified_path: &Path,
     pool: &SharedThreadPool,
-    output: &mut impl Write,
+    output: &mut dyn Write,
 ) -> Result<(usize, u64)> {
     let modified = map_file_read_only(modified_path)?;
     write_gdiff_header(output)?;
@@ -619,7 +619,7 @@ fn map_file_read_only(path: &Path) -> Result<Mmap> {
     Ok(map)
 }
 
-fn encode_data_command<W: Write>(writer: &mut W, data: &[u8]) -> Result<()> {
+fn encode_data_command(writer: &mut dyn Write, data: &[u8]) -> Result<()> {
     if data.len() <= GDIFF_INLINE_DATA_MAX {
         let inline_len = u8::try_from(data.len()).map_err(|_| {
             RomWeaverError::Validation("GDIFF inline data command length exceeded u8 range".into())
@@ -638,9 +638,9 @@ fn encode_data_command<W: Write>(writer: &mut W, data: &[u8]) -> Result<()> {
     Ok(())
 }
 
-fn copy_patch_data<R: Read, W: Write>(
-    reader: &mut R,
-    writer: &mut W,
+fn copy_patch_data(
+    reader: &mut dyn Read,
+    writer: &mut dyn Write,
     len: u64,
     scratch: &mut [u8],
 ) -> Result<()> {
@@ -662,7 +662,7 @@ fn copy_patch_data<R: Read, W: Write>(
     Ok(())
 }
 
-fn consume_data<R: Read>(reader: &mut R, len: u64, scratch: &mut [u8]) -> Result<()> {
+fn consume_data(reader: &mut dyn Read, len: u64, scratch: &mut [u8]) -> Result<()> {
     if len == 0 {
         return Ok(());
     }
@@ -680,9 +680,9 @@ fn consume_data<R: Read>(reader: &mut R, len: u64, scratch: &mut [u8]) -> Result
     Ok(())
 }
 
-fn copy_from_source<W: Write>(
+fn copy_from_source(
     source: &mut File,
-    output: &mut W,
+    output: &mut dyn Write,
     source_len: u64,
     offset: u64,
     len: u64,
@@ -730,31 +730,31 @@ fn checked_add_usize(lhs: usize, rhs: usize, label: &str) -> Result<usize> {
         .ok_or_else(|| RomWeaverError::Validation(format!("GDIFF {label} overflowed")))
 }
 
-fn read_u8<R: Read>(reader: &mut R, label: &str) -> Result<u8> {
+fn read_u8(reader: &mut dyn Read, label: &str) -> Result<u8> {
     let mut bytes = [0u8; 1];
     read_exact_into(reader, &mut bytes, label)?;
     Ok(bytes[0])
 }
 
-fn read_u16_be<R: Read>(reader: &mut R, label: &str) -> Result<u16> {
+fn read_u16_be(reader: &mut dyn Read, label: &str) -> Result<u16> {
     let mut bytes = [0u8; 2];
     read_exact_into(reader, &mut bytes, label)?;
     Ok(u16::from_be_bytes(bytes))
 }
 
-fn read_i32_be<R: Read>(reader: &mut R, label: &str) -> Result<i32> {
+fn read_i32_be(reader: &mut dyn Read, label: &str) -> Result<i32> {
     let mut bytes = [0u8; 4];
     read_exact_into(reader, &mut bytes, label)?;
     Ok(i32::from_be_bytes(bytes))
 }
 
-fn read_i64_be<R: Read>(reader: &mut R, label: &str) -> Result<i64> {
+fn read_i64_be(reader: &mut dyn Read, label: &str) -> Result<i64> {
     let mut bytes = [0u8; 8];
     read_exact_into(reader, &mut bytes, label)?;
     Ok(i64::from_be_bytes(bytes))
 }
 
-fn read_non_negative_i32<R: Read>(reader: &mut R, label: &str) -> Result<u64> {
+fn read_non_negative_i32(reader: &mut dyn Read, label: &str) -> Result<u64> {
     let value = read_i32_be(reader, label)?;
     if value < 0 {
         return Err(RomWeaverError::Validation(format!(
@@ -764,7 +764,7 @@ fn read_non_negative_i32<R: Read>(reader: &mut R, label: &str) -> Result<u64> {
     Ok(value as u64)
 }
 
-fn read_non_negative_i64<R: Read>(reader: &mut R, label: &str) -> Result<u64> {
+fn read_non_negative_i64(reader: &mut dyn Read, label: &str) -> Result<u64> {
     let value = read_i64_be(reader, label)?;
     if value < 0 {
         return Err(RomWeaverError::Validation(format!(
@@ -774,7 +774,7 @@ fn read_non_negative_i64<R: Read>(reader: &mut R, label: &str) -> Result<u64> {
     Ok(value as u64)
 }
 
-fn read_exact_into<R: Read>(reader: &mut R, buffer: &mut [u8], label: &str) -> Result<()> {
+fn read_exact_into(reader: &mut dyn Read, buffer: &mut [u8], label: &str) -> Result<()> {
     reader.read_exact(buffer).map_err(|error| {
         if error.kind() == ErrorKind::UnexpectedEof {
             RomWeaverError::Validation(format!(
@@ -792,10 +792,10 @@ mod tests {
 
     use rom_weaver_core::{PatchApplyRequest, PatchCreateRequest, PatchHandler};
 
-    use super::{GdiffPatchHandler, write_gdiff_header};
+    use super::{write_gdiff_header, GdiffPatchHandler};
     use crate::{
+        test_support::{test_context_with_threads, TestDir},
         GDIFF,
-        test_support::{TestDir, test_context_with_threads},
     };
 
     enum TestGdiffCommand {
@@ -914,11 +914,9 @@ mod tests {
                 &test_context_with_threads(&temp, 1),
             )
             .expect_err("negative position");
-        assert!(
-            error
-                .to_string()
-                .contains("copy position must be non-negative")
-        );
+        assert!(error
+            .to_string()
+            .contains("copy position must be non-negative"));
     }
 
     #[test]

@@ -44,6 +44,10 @@ pub struct VcdiffPatchHandler {
     descriptor: &'static FormatDescriptor,
 }
 
+trait ReadSeek: Read + Seek {}
+
+impl<T: Read + Seek + ?Sized> ReadSeek for T {}
+
 impl VcdiffPatchHandler {
     pub const fn new(descriptor: &'static FormatDescriptor) -> Self {
         Self { descriptor }
@@ -390,8 +394,8 @@ struct WindowIndex {
 
 impl WindowIndex {}
 
-fn read_source_segment<R: Read + Seek>(
-    reader: &mut R,
+fn read_source_segment(
+    reader: &mut dyn ReadSeek,
     segment_position: u64,
     segment_size: u64,
     available_len: u64,
@@ -508,7 +512,7 @@ impl XdeltaSourceBlockError {
     }
 }
 
-fn parse_patch<R: Read + Seek>(reader: &mut R) -> Result<ParsedPatch> {
+fn parse_patch(reader: &mut dyn ReadSeek) -> Result<ParsedPatch> {
     reader.seek(SeekFrom::Start(0))?;
 
     let mut magic = [0; 4];
@@ -575,10 +579,7 @@ fn parse_patch<R: Read + Seek>(reader: &mut R) -> Result<ParsedPatch> {
     })
 }
 
-fn read_window_index<R: Read + Seek>(
-    reader: &mut R,
-    output_offset: u64,
-) -> Result<Option<WindowIndex>> {
+fn read_window_index(reader: &mut dyn ReadSeek, output_offset: u64) -> Result<Option<WindowIndex>> {
     let Some(win_indicator) = read_optional_u8(reader)? else {
         return Ok(None);
     };
@@ -1143,8 +1144,8 @@ fn initial_encode_capacity(source_len: usize, target_len: usize) -> Result<usize
         .ok_or_else(|| RomWeaverError::Validation("xdelta encoder capacity overflowed".into()))
 }
 
-fn decode_window_with_xdelta<R: Read + Seek>(
-    patch_reader: &mut R,
+fn decode_window_with_xdelta(
+    patch_reader: &mut dyn ReadSeek,
     patch_header: &[u8],
     window: &WindowIndex,
     source_segment: &[u8],
@@ -1224,8 +1225,8 @@ fn decode_window_with_xdelta_memory(
     Ok(output)
 }
 
-fn build_single_window_patch<R: Read + Seek>(
-    patch_reader: &mut R,
+fn build_single_window_patch(
+    patch_reader: &mut dyn ReadSeek,
     patch_header: &[u8],
     window: &WindowIndex,
 ) -> Result<Vec<u8>> {
@@ -1260,7 +1261,7 @@ fn build_single_window_patch<R: Read + Seek>(
     Ok(patch)
 }
 
-fn read_section<R: Read + Seek>(reader: &mut R, start: u64, len: u64) -> Result<Vec<u8>> {
+fn read_section(reader: &mut dyn ReadSeek, start: u64, len: u64) -> Result<Vec<u8>> {
     let size = usize::try_from(len).map_err(|_| {
         RomWeaverError::Validation("section is too large to fit in memory on this platform".into())
     })?;
@@ -1270,7 +1271,7 @@ fn read_section<R: Read + Seek>(reader: &mut R, start: u64, len: u64) -> Result<
     Ok(buffer)
 }
 
-fn skip_bytes<R: Read>(reader: &mut R, len: u64) -> Result<()> {
+fn skip_bytes(reader: &mut dyn ReadSeek, len: u64) -> Result<()> {
     let size = usize::try_from(len).map_err(|_| {
         RomWeaverError::Validation("section is too large to fit in memory on this platform".into())
     })?;
@@ -1279,7 +1280,7 @@ fn skip_bytes<R: Read>(reader: &mut R, len: u64) -> Result<()> {
     Ok(())
 }
 
-fn read_optional_u8<R: Read>(reader: &mut R) -> Result<Option<u8>> {
+fn read_optional_u8(reader: &mut dyn ReadSeek) -> Result<Option<u8>> {
     let mut buffer = [0; 1];
     match reader.read_exact(&mut buffer) {
         Ok(()) => Ok(Some(buffer[0])),
@@ -1288,19 +1289,19 @@ fn read_optional_u8<R: Read>(reader: &mut R) -> Result<Option<u8>> {
     }
 }
 
-fn read_u8<R: Read>(reader: &mut R) -> Result<u8> {
+fn read_u8(reader: &mut dyn ReadSeek) -> Result<u8> {
     let mut buffer = [0; 1];
     reader.read_exact(&mut buffer)?;
     Ok(buffer[0])
 }
 
-fn read_be_u32<R: Read>(reader: &mut R) -> Result<u32> {
+fn read_be_u32(reader: &mut dyn ReadSeek) -> Result<u32> {
     let mut buffer = [0; 4];
     reader.read_exact(&mut buffer)?;
     Ok(u32::from_be_bytes(buffer))
 }
 
-fn read_varint<R: Read>(reader: &mut R) -> Result<(u64, usize)> {
+fn read_varint(reader: &mut dyn ReadSeek) -> Result<(u64, usize)> {
     let mut value = 0u64;
     let mut count = 0usize;
     loop {
