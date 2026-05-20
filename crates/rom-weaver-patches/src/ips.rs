@@ -1,11 +1,10 @@
 use std::{
     cmp::{max, min},
     fs::{self, File},
-    io::{self, BufReader, BufWriter, Read, Seek, SeekFrom, Write},
+    io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
 };
 
-use memmap2::{Mmap, MmapOptions};
 use rayon::prelude::*;
 use rom_weaver_core::{
     ChunkPlanner, FileChunk, FormatDescriptor, OperationContext, OperationFamily, OperationReport,
@@ -308,37 +307,9 @@ impl IpsDiffRun {
     }
 }
 
-enum ReadOnlyFile {
-    Mapped(Mmap),
-    Owned(Vec<u8>),
-}
-
-impl AsRef<[u8]> for ReadOnlyFile {
-    fn as_ref(&self) -> &[u8] {
-        match self {
-            Self::Mapped(map) => map.as_ref(),
-            Self::Owned(bytes) => bytes.as_slice(),
-        }
-    }
-}
-
 fn parse_ips_file(path: &Path, flavor: IpsFlavor) -> Result<ParsedIpsPatch> {
-    let bytes = map_file_read_only(path)?;
+    let bytes = crate::map_file_read_only_with_fallback(path)?;
     parse_ips_bytes(bytes.as_ref(), flavor)
-}
-
-fn map_file_read_only(path: &Path) -> Result<ReadOnlyFile> {
-    let file = File::open(path)?;
-    // SAFETY: The mapping is read-only and the file handle lives for map creation.
-    match unsafe { MmapOptions::new().map(&file) } {
-        Ok(map) => Ok(ReadOnlyFile::Mapped(map)),
-        Err(error) if should_fallback_from_mmap(&error) => Ok(ReadOnlyFile::Owned(fs::read(path)?)),
-        Err(error) => Err(error.into()),
-    }
-}
-
-fn should_fallback_from_mmap(error: &io::Error) -> bool {
-    error.kind() == io::ErrorKind::Unsupported
 }
 
 fn parse_ips_bytes(bytes: &[u8], flavor: IpsFlavor) -> Result<ParsedIpsPatch> {
@@ -596,8 +567,8 @@ fn create_ips_patch_parallel(
     context: &OperationContext,
     flavor: IpsFlavor,
 ) -> Result<IpsCreateResult> {
-    let original = map_file_read_only(original_path)?;
-    let modified = map_file_read_only(modified_path)?;
+    let original = crate::map_file_read_only_with_fallback(original_path)?;
+    let modified = crate::map_file_read_only_with_fallback(modified_path)?;
     let original_bytes = original.as_ref();
     let modified_bytes = modified.as_ref();
 

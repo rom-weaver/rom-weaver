@@ -296,7 +296,7 @@ impl SharedThreadPool {
             return None;
         }
 
-        let raw = std::env::var("ROM_WEAVER_TEST_THREAD_POOL_FAIL").ok()?;
+        let raw = forced_build_failure_mode()?;
         let mode = raw.trim().to_ascii_lowercase();
         let should_fail = match mode.as_str() {
             "all" => true,
@@ -308,36 +308,62 @@ impl SharedThreadPool {
     }
 }
 
+fn forced_build_failure_mode() -> Option<String> {
+    #[cfg(test)]
+    if let Some(mode) = test_forced_build_failure_mode() {
+        return Some(mode);
+    }
+
+    std::env::var("ROM_WEAVER_TEST_THREAD_POOL_FAIL").ok()
+}
+
+#[cfg(test)]
+thread_local! {
+    static TEST_FORCED_BUILD_FAILURE_MODE: std::cell::RefCell<Option<String>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+#[cfg(test)]
+fn test_forced_build_failure_mode() -> Option<String> {
+    TEST_FORCED_BUILD_FAILURE_MODE.with(|state| state.borrow().clone())
+}
+
+#[cfg(test)]
+fn set_test_forced_build_failure_mode(value: Option<&str>) -> Option<String> {
+    TEST_FORCED_BUILD_FAILURE_MODE.with(|state| {
+        let mut state = state.borrow_mut();
+        let previous = state.clone();
+        *state = value.map(|entry| entry.to_string());
+        previous
+    })
+}
+
+#[cfg(test)]
+fn restore_test_forced_build_failure_mode(previous: Option<String>) {
+    TEST_FORCED_BUILD_FAILURE_MODE.with(|state| {
+        *state.borrow_mut() = previous;
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::{SharedThreadPool, ThreadBudget, ThreadCapability, ThreadExecution, ThreadMode};
     use crate::RomWeaverError;
 
-    static ENV_VAR_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
-    struct ScopedEnvVar {
-        key: &'static str,
+    struct ScopedFailMode {
         original: Option<String>,
     }
 
-    impl ScopedEnvVar {
-        fn set(key: &'static str, value: &str) -> Self {
-            let original = std::env::var(key).ok();
-            // SAFETY: test-only helper scopes environment mutation to a single process.
-            unsafe { std::env::set_var(key, value) };
-            Self { key, original }
+    impl ScopedFailMode {
+        fn set(value: &str) -> Self {
+            let original = super::set_test_forced_build_failure_mode(Some(value));
+            Self { original }
         }
     }
 
-    impl Drop for ScopedEnvVar {
+    impl Drop for ScopedFailMode {
         fn drop(&mut self) {
-            if let Some(value) = &self.original {
-                // SAFETY: test-only helper restores the previous value.
-                unsafe { std::env::set_var(self.key, value) };
-            } else {
-                // SAFETY: test-only helper restores the previous state.
-                unsafe { std::env::remove_var(self.key) };
-            }
+            super::restore_test_forced_build_failure_mode(self.original.take());
         }
     }
 
@@ -518,8 +544,7 @@ mod tests {
 
     #[test]
     fn test_force_mode_fails_multi_only() {
-        let _env_lock = ENV_VAR_LOCK.lock().expect("env var lock");
-        let _guard = ScopedEnvVar::set("ROM_WEAVER_TEST_THREAD_POOL_FAIL", "multi");
+        let _guard = ScopedFailMode::set("multi");
         assert!(
             SharedThreadPool::with_size(4).is_err(),
             "multi mode should fail multi-thread pools"
@@ -532,8 +557,7 @@ mod tests {
 
     #[test]
     fn with_execution_uses_inline_path_for_effective_single_thread() {
-        let _env_lock = ENV_VAR_LOCK.lock().expect("env var lock");
-        let _guard = ScopedEnvVar::set("ROM_WEAVER_TEST_THREAD_POOL_FAIL", "single");
+        let _guard = ScopedFailMode::set("single");
         let execution = ThreadCapability::parallel(Some(1)).negotiate(ThreadBudget::Fixed(8));
         let pool = SharedThreadPool::with_execution(&execution)
             .expect("single-thread execution should bypass rayon pool builds");
@@ -543,8 +567,7 @@ mod tests {
 
     #[test]
     fn fallback_to_single_thread_uses_inline_path_after_parallel_build_failure() {
-        let _env_lock = ENV_VAR_LOCK.lock().expect("env var lock");
-        let _guard = ScopedEnvVar::set("ROM_WEAVER_TEST_THREAD_POOL_FAIL", "all");
+        let _guard = ScopedFailMode::set("all");
         let planned = ThreadCapability::parallel(None).negotiate(ThreadBudget::Fixed(8));
         let (execution, pool) =
             SharedThreadPool::with_execution_fallback(planned).expect("fallback should succeed");

@@ -1,13 +1,12 @@
 use std::{
     fs::{self, File},
-    io::{self, BufWriter, Cursor, Read, Write},
+    io::{BufWriter, Cursor, Read, Write},
     path::Path,
 };
 
 use bzip2::read::BzDecoder;
 use flate2::read::{DeflateDecoder, ZlibDecoder};
 use lzma_rust2::{Lzma2Reader, LzmaReader};
-use memmap2::{Mmap, MmapOptions};
 use rayon::prelude::*;
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
@@ -39,7 +38,7 @@ impl PatchHandler for HdiffPatchHandler {
     }
 
     fn parse(&self, patch_path: &Path, _context: &OperationContext) -> Result<OperationReport> {
-        let patch = map_file_read_only(patch_path)?;
+        let patch = crate::map_file_read_only_with_fallback(patch_path)?;
         let variant = parse_hdiff_patch_view(patch.as_ref())?;
         let label = match variant {
             ParsedPatchVariant::SingleFile13(header) => format!(
@@ -87,11 +86,11 @@ impl PatchHandler for HdiffPatchHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
-        let patch = map_file_read_only(patch_path)?;
-        let variant = parse_hdiff_patch_view(patch.as_ref())?;
+        let patch = crate::map_file_read_only_with_fallback(patch_path)?;
+        let variant = parse_hdiff_patch_view(patch.as_slice())?;
 
-        let old_bytes = map_file_read_only(&request.input)?;
-        let old_len = u64::try_from(old_bytes.as_ref().len()).map_err(|_| {
+        let old_bytes = crate::map_file_read_only_with_fallback(&request.input)?;
+        let old_len = u64::try_from(old_bytes.len()).map_err(|_| {
             RomWeaverError::Validation("HDiffPatch input size overflowed u64".into())
         })?;
 
@@ -113,15 +112,15 @@ impl PatchHandler for HdiffPatchHandler {
                     let chunk_parallel = execution.used_parallelism;
                     let output = pool.install(|| {
                         apply_hdiff13_with_chunk_parallelism(
-                            old_bytes.as_ref(),
-                            patch.as_ref(),
+                            old_bytes.as_slice(),
+                            patch.as_slice(),
                             &header,
                             chunk_parallel,
                         )
                     })?;
                     (output, execution)
                 } else {
-                    let output = apply_hdiff13(old_bytes.as_ref(), patch.as_ref(), &header)?;
+                    let output = apply_hdiff13(old_bytes.as_slice(), patch.as_slice(), &header)?;
                     (output, planned_execution)
                 }
             }
@@ -142,8 +141,8 @@ impl PatchHandler for HdiffPatchHandler {
                     let step_parallel = execution.used_parallelism;
                     let apply = pool.install(|| {
                         apply_hdiffsf20_with_step_parallelism(
-                            old_bytes.as_ref(),
-                            patch.as_ref(),
+                            old_bytes.as_slice(),
+                            patch.as_slice(),
                             &header,
                             step_parallel,
                         )
@@ -156,7 +155,7 @@ impl PatchHandler for HdiffPatchHandler {
                     }
                     (apply.output, execution)
                 } else {
-                    let output = apply_hdiffsf20(old_bytes.as_ref(), patch.as_ref(), &header)?;
+                    let output = apply_hdiffsf20(old_bytes.as_slice(), patch.as_slice(), &header)?;
                     (output, planned_execution)
                 }
             }
@@ -428,34 +427,6 @@ fn parse_hdiff_patch_view(raw: &[u8]) -> Result<ParsedPatchVariant> {
     };
 
     Ok(variant)
-}
-
-enum ReadOnlyFile {
-    Mapped(Mmap),
-    Owned(Vec<u8>),
-}
-
-impl AsRef<[u8]> for ReadOnlyFile {
-    fn as_ref(&self) -> &[u8] {
-        match self {
-            Self::Mapped(map) => map.as_ref(),
-            Self::Owned(bytes) => bytes.as_slice(),
-        }
-    }
-}
-
-fn map_file_read_only(path: &Path) -> Result<ReadOnlyFile> {
-    let file = File::open(path)?;
-    // SAFETY: The mapping is read-only and the file handle lives for map creation.
-    match unsafe { MmapOptions::new().map(&file) } {
-        Ok(map) => Ok(ReadOnlyFile::Mapped(map)),
-        Err(error) if should_fallback_from_mmap(&error) => Ok(ReadOnlyFile::Owned(fs::read(path)?)),
-        Err(error) => Err(error.into()),
-    }
-}
-
-fn should_fallback_from_mmap(error: &io::Error) -> bool {
-    error.kind() == io::ErrorKind::Unsupported
 }
 
 fn apply_hdiff13(old_bytes: &[u8], patch_bytes: &[u8], header: &ParsedHdiff13) -> Result<Vec<u8>> {
@@ -1758,12 +1729,12 @@ mod tests {
     use rom_weaver_core::{PatchApplyRequest, PatchCreateRequest, PatchHandler};
 
     use super::{
-        apply_hdiff13, apply_hdiffsf20, build_uncompressed_hdiff13_patch, write_var_u64,
-        HdiffPatchHandler,
+        HdiffPatchHandler, apply_hdiff13, apply_hdiffsf20, build_uncompressed_hdiff13_patch,
+        write_var_u64,
     };
     use crate::{
-        test_support::{test_context_with_threads, TestDir},
         HDIFFPATCH,
+        test_support::{TestDir, test_context_with_threads},
     };
 
     #[test]
@@ -2143,11 +2114,13 @@ mod tests {
         let execution = report.thread_execution.expect("thread execution");
         assert!(!execution.used_parallelism);
         assert!(execution.thread_fallback);
-        assert!(execution
-            .thread_fallback_reason
-            .as_deref()
-            .unwrap_or_default()
-            .contains("no independent step-level parallel work"));
+        assert!(
+            execution
+                .thread_fallback_reason
+                .as_deref()
+                .unwrap_or_default()
+                .contains("no independent step-level parallel work")
+        );
         assert_eq!(execution.effective_threads, 1);
         assert_eq!(fs::read(output_path).expect("output"), source);
     }

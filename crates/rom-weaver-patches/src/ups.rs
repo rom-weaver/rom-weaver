@@ -1,12 +1,11 @@
 use std::{
     cmp::max,
     fs::{self, File, OpenOptions},
-    io::{self, BufReader, Read, Seek, SeekFrom, Write},
+    io::{BufReader, Read, Seek, SeekFrom, Write},
     path::Path,
 };
 
 use crc32fast::Hasher;
-use memmap2::{Mmap, MmapOptions};
 use rayon::prelude::*;
 use rom_weaver_checksum::checksum_file_values;
 use rom_weaver_core::{
@@ -98,7 +97,7 @@ impl PatchHandler for UpsPatchHandler {
         let thread_capability = ups_apply_thread_capability(patch.changes.len());
         let planned_execution = context.plan_threads(thread_capability.clone());
         let execution = if planned_execution.used_parallelism {
-            let source = map_file_read_only(&request.input)?;
+            let source = crate::map_file_read_only_with_fallback(&request.input)?;
             let (execution, pool) = context.build_pool(thread_capability)?;
             let prepared =
                 prepare_ups_writes_parallel(&patch, source.as_ref(), working_size, &pool, context)?;
@@ -211,20 +210,6 @@ struct PreparedUpsWrite {
     data: Vec<u8>,
 }
 
-enum ReadOnlyFile {
-    Mapped(Mmap),
-    Owned(Vec<u8>),
-}
-
-impl AsRef<[u8]> for ReadOnlyFile {
-    fn as_ref(&self) -> &[u8] {
-        match self {
-            Self::Mapped(map) => map.as_ref(),
-            Self::Owned(bytes) => bytes.as_slice(),
-        }
-    }
-}
-
 fn parse_ups_file(path: &Path) -> Result<ParsedUpsPatch> {
     parse_ups_file_with_checksum_validation(path, true)
 }
@@ -233,22 +218,8 @@ fn parse_ups_file_with_checksum_validation(
     path: &Path,
     validate_patch_checksum: bool,
 ) -> Result<ParsedUpsPatch> {
-    let bytes = map_file_read_only(path)?;
+    let bytes = crate::map_file_read_only_with_fallback(path)?;
     parse_ups_bytes_with_checksum_validation(bytes.as_ref(), validate_patch_checksum)
-}
-
-fn map_file_read_only(path: &Path) -> Result<ReadOnlyFile> {
-    let file = File::open(path)?;
-    // SAFETY: This mapping is read-only and the file handle lives through map creation.
-    match unsafe { MmapOptions::new().map(&file) } {
-        Ok(map) => Ok(ReadOnlyFile::Mapped(map)),
-        Err(error) if should_fallback_from_mmap(&error) => Ok(ReadOnlyFile::Owned(fs::read(path)?)),
-        Err(error) => Err(error.into()),
-    }
-}
-
-fn should_fallback_from_mmap(error: &io::Error) -> bool {
-    error.kind() == io::ErrorKind::Unsupported
 }
 
 #[cfg(test)]
@@ -516,10 +487,10 @@ fn create_ups_patch_parallel(
     target_path: &Path,
     pool: &SharedThreadPool,
 ) -> Result<CreatedUpsPatch> {
-    let source = map_file_read_only(source_path)?;
-    let target = map_file_read_only(target_path)?;
-    let source = source.as_ref();
-    let target = target.as_ref();
+    let source = crate::map_file_read_only_with_fallback(source_path)?;
+    let target = crate::map_file_read_only_with_fallback(target_path)?;
+    let source = source.as_slice();
+    let target = target.as_slice();
 
     let source_size = u64::try_from(source.len())
         .map_err(|_| RomWeaverError::Validation("UPS source size exceeded u64".into()))?;

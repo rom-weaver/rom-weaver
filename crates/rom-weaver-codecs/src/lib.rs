@@ -1,5 +1,5 @@
 use std::{
-    fs::{self, File, OpenOptions},
+    fs::{self, File},
     io::{self, BufReader, BufWriter, Cursor, Seek, SeekFrom, Write},
     num::NonZeroU64,
     path::Path,
@@ -15,7 +15,6 @@ use flate2::{
     read::MultiGzDecoder, write::GzEncoder,
 };
 use lzma_rust2::{XzOptions, XzReader, XzReaderMt, XzWriter, XzWriterMt};
-use memmap2::{Mmap, MmapOptions};
 use rayon::prelude::*;
 use rom_weaver_core::{
     CodecBackend, CodecCapabilities, CodecDescriptor, CodecOperationRequest, FormatDescriptor,
@@ -182,14 +181,12 @@ struct NativeCodecBackend {
 }
 
 enum ReadOnlyFile {
-    Mapped(Mmap),
     Owned(Vec<u8>),
 }
 
 impl AsRef<[u8]> for ReadOnlyFile {
     fn as_ref(&self) -> &[u8] {
         match self {
-            Self::Mapped(map) => map.as_ref(),
             Self::Owned(bytes) => bytes.as_ref(),
         }
     }
@@ -870,26 +867,13 @@ impl NativeCodecBackend {
         request: &CodecOperationRequest,
         execution: &mut ThreadExecution,
     ) -> Result<u64> {
-        let input_len_u64 = fs::metadata(&request.input)?.len();
-        let output = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(&request.output)?;
-        output.set_len(input_len_u64)?;
-        if input_len_u64 == 0 {
+        let input_bytes = map_file_read_only(&request.input)?;
+        let input_bytes = input_bytes.as_ref();
+        let input_len = input_bytes.len();
+        if input_len == 0 {
+            fs::write(&request.output, [])?;
             return Ok(0);
         }
-
-        let input_len = usize::try_from(input_len_u64).map_err(|_| {
-            RomWeaverError::Validation("store codec payload exceeded addressable memory".into())
-        })?;
-        let input = File::open(&request.input)?;
-        // SAFETY: Both mappings are file-backed and remain valid for the lifetime of this scope.
-        let input_map = unsafe { MmapOptions::new().map(&input)? };
-        // SAFETY: The output file is opened read+write and sized to the mapped length above.
-        let mut output_map = unsafe { MmapOptions::new().map_mut(&output)? };
 
         if execution.used_parallelism {
             if input_len < Self::STORE_COPY_MIN_PARALLEL_BYTES {
@@ -902,11 +886,11 @@ impl NativeCodecBackend {
                     .build()
                 {
                     Ok(pool) => {
-                        let input_bytes: &[u8] = input_map.as_ref();
+                        let mut output_bytes = vec![0u8; input_len];
                         let chunk_len =
                             Self::store_copy_chunk_len(input_len, execution.effective_threads);
                         pool.install(|| {
-                            output_map.par_chunks_mut(chunk_len).enumerate().for_each(
+                            output_bytes.par_chunks_mut(chunk_len).enumerate().for_each(
                                 |(chunk_index, chunk)| {
                                     let start = chunk_index.saturating_mul(chunk_len);
                                     let end = start + chunk.len();
@@ -914,6 +898,8 @@ impl NativeCodecBackend {
                                 },
                             );
                         });
+                        fs::write(&request.output, output_bytes)?;
+                        return Ok(input_len as u64);
                     }
                     Err(error) => execution.apply_pool_fallback(format!(
                         "store codec thread pool build failed: {error}"
@@ -922,11 +908,8 @@ impl NativeCodecBackend {
             }
         }
 
-        if !execution.used_parallelism {
-            output_map[..].copy_from_slice(input_map.as_ref());
-        }
-        output_map.flush()?;
-        Ok(input_len_u64)
+        fs::write(&request.output, input_bytes)?;
+        Ok(input_len as u64)
     }
 
     fn encode_impl(
@@ -1191,17 +1174,7 @@ impl CodecBackend for NativeCodecBackend {
 }
 
 fn map_file_read_only(path: &Path) -> Result<ReadOnlyFile> {
-    let file = File::open(path)?;
-    // SAFETY: The mapping is read-only and the file handle lives for map creation.
-    match unsafe { MmapOptions::new().map(&file) } {
-        Ok(map) => Ok(ReadOnlyFile::Mapped(map)),
-        Err(error) if should_fallback_from_mmap(&error) => Ok(ReadOnlyFile::Owned(fs::read(path)?)),
-        Err(error) => Err(error.into()),
-    }
-}
-
-fn should_fallback_from_mmap(error: &io::Error) -> bool {
-    error.kind() == io::ErrorKind::Unsupported
+    Ok(ReadOnlyFile::Owned(fs::read(path)?))
 }
 
 #[cfg(test)]

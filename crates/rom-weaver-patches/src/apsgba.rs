@@ -4,7 +4,6 @@ use std::{
     path::Path,
 };
 
-use memmap2::{Mmap, MmapOptions};
 use rayon::prelude::*;
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
@@ -86,7 +85,7 @@ impl PatchHandler for ApsGbaPatchHandler {
             .open(&request.output)?;
         output.set_len(u64::from(patch.target_size))?;
         let execution = if planned_execution.used_parallelism {
-            let source = map_file_read_only(&request.input)?;
+            let source = crate::map_file_read_only(&request.input)?;
             let (execution, pool) = context.build_pool(thread_capability)?;
             let prepared = prepare_apsgba_writes_parallel(
                 &patch,
@@ -229,15 +228,8 @@ fn apsgba_create_block_count(max_len: u64) -> Result<usize> {
 }
 
 fn parse_apsgba_file(path: &Path) -> Result<ParsedApsGbaPatch> {
-    let bytes = map_file_read_only(path)?;
+    let bytes = crate::map_file_read_only(path)?;
     parse_apsgba_bytes(&bytes)
-}
-
-fn map_file_read_only(path: &Path) -> Result<Mmap> {
-    let file = File::open(path)?;
-    // SAFETY: This mapping is read-only and the file handle lives through map creation.
-    let map = unsafe { MmapOptions::new().map(&file)? };
-    Ok(map)
 }
 
 fn parse_apsgba_bytes(bytes: &[u8]) -> Result<ParsedApsGbaPatch> {
@@ -577,8 +569,8 @@ fn create_apsgba_patch_parallel(
     let target_size = u32::try_from(target_size_u64).map_err(|_| {
         RomWeaverError::Validation("APSGBA target size exceeded 32-bit header range".into())
     })?;
-    let source = map_file_read_only(source_path)?;
-    let target = map_file_read_only(target_path)?;
+    let source = crate::map_file_read_only(source_path)?;
+    let target = crate::map_file_read_only(target_path)?;
     let block_count = apsgba_create_block_count(source_size_u64.max(target_size_u64))?;
 
     let records = pool.install(|| {

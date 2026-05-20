@@ -6,7 +6,6 @@ use std::{
 };
 
 use md5::{Digest, Md5};
-use memmap2::{Mmap, MmapOptions};
 use rayon::prelude::*;
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
@@ -305,37 +304,9 @@ struct CreatedRupPatch {
     record_count: usize,
 }
 
-enum ReadOnlyFile {
-    Mapped(Mmap),
-    Owned(Vec<u8>),
-}
-
-impl AsRef<[u8]> for ReadOnlyFile {
-    fn as_ref(&self) -> &[u8] {
-        match self {
-            Self::Mapped(map) => map.as_ref(),
-            Self::Owned(bytes) => bytes.as_slice(),
-        }
-    }
-}
-
 fn parse_rup_file(path: &Path) -> Result<ParsedRupPatch> {
-    let bytes = map_file_read_only(path)?;
+    let bytes = crate::map_file_read_only_with_fallback(path)?;
     parse_rup_bytes(bytes.as_ref())
-}
-
-fn map_file_read_only(path: &Path) -> Result<ReadOnlyFile> {
-    let file = File::open(path)?;
-    // SAFETY: This mapping is read-only and the file handle lives through map creation.
-    match unsafe { MmapOptions::new().map(&file) } {
-        Ok(map) => Ok(ReadOnlyFile::Mapped(map)),
-        Err(error) if should_fallback_from_mmap(&error) => Ok(ReadOnlyFile::Owned(fs::read(path)?)),
-        Err(error) => Err(error.into()),
-    }
-}
-
-fn should_fallback_from_mmap(error: &io::Error) -> bool {
-    error.kind() == io::ErrorKind::Unsupported
 }
 
 fn parse_rup_bytes(bytes: &[u8]) -> Result<ParsedRupPatch> {
@@ -895,10 +866,10 @@ fn create_rup_patch_parallel(
     modified_path: &Path,
     pool: &SharedThreadPool,
 ) -> Result<CreatedRupPatch> {
-    let original = map_file_read_only(original_path)?;
-    let modified = map_file_read_only(modified_path)?;
-    let original = original.as_ref();
-    let modified = modified.as_ref();
+    let original = crate::map_file_read_only_with_fallback(original_path)?;
+    let modified = crate::map_file_read_only_with_fallback(modified_path)?;
+    let original = original.as_slice();
+    let modified = modified.as_slice();
 
     let source_file_size = u64::try_from(original.len())
         .map_err(|_| RomWeaverError::Validation("RUP source size exceeded u64".into()))?;

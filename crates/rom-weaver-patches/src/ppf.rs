@@ -5,7 +5,6 @@ use std::{
     path::Path,
 };
 
-use memmap2::{Mmap, MmapOptions};
 use rayon::prelude::*;
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
@@ -51,7 +50,7 @@ impl PatchHandler for PpfPatchHandler {
     }
 
     fn parse(&self, patch_path: &Path, _context: &OperationContext) -> Result<OperationReport> {
-        let patch = map_file_read_only(patch_path)?;
+        let patch = crate::map_file_read_only(patch_path)?;
         let parsed = parse_ppf_bytes(patch.as_ref())?;
         let mut label = format!(
             "parsed {} patch ({}) with {} record(s)",
@@ -78,7 +77,7 @@ impl PatchHandler for PpfPatchHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
-        let patch = map_file_read_only(patch_path)?;
+        let patch = crate::map_file_read_only(patch_path)?;
         let parsed = parse_ppf_bytes(patch.as_ref())?;
         let validate_checksums =
             context.patch_checksum_validation() == PatchChecksumValidation::Strict;
@@ -246,13 +245,6 @@ struct CreatedPpfPatch {
 struct PreparedPpfWrite {
     offset: u64,
     data: Vec<u8>,
-}
-
-fn map_file_read_only(path: &Path) -> Result<Mmap> {
-    let file = File::open(path)?;
-    // SAFETY: This mapping is read-only and the file handle lives through map creation.
-    let map = unsafe { MmapOptions::new().map(&file)? };
-    Ok(map)
 }
 
 fn ppf_create_thread_capability(modified_len: u64) -> ThreadCapability {
@@ -450,8 +442,8 @@ fn create_ppf3_patch_parallel(
     }
 
     let blockcheck_enabled = write_ppf3_header(output, original_path, original_len)?;
-    let original = map_file_read_only(original_path)?;
-    let modified = map_file_read_only(modified_path)?;
+    let original = crate::map_file_read_only(original_path)?;
+    let modified = crate::map_file_read_only(modified_path)?;
     let runs = collect_ppf_diff_runs_parallel(original.as_ref(), modified.as_ref(), pool)?;
 
     for run in &runs {

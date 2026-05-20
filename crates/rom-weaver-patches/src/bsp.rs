@@ -1,7 +1,4 @@
-use std::{
-    fs,
-    path::Path,
-};
+use std::{fs, path::Path};
 
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationReport, PatchApplyRequest, PatchCapabilities,
@@ -39,11 +36,11 @@ impl BspPatchHandler {
         let input_bytes = fs::read(&request.input)?;
         let (execution, pool) = context.build_pool(bsp_apply_thread_capability(
             input_bytes.len(),
-            patch_bytes.as_ref().len(),
+            patch_bytes.len(),
         ))?;
 
         let output_bytes = apply_bsp_patch_bytes(
-            patch_bytes.as_ref(),
+            patch_bytes.as_slice(),
             input_bytes,
             execution.used_parallelism.then_some(&pool),
         )?;

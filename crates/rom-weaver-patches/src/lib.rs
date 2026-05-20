@@ -23,7 +23,7 @@ mod vcdiff;
 
 use std::{
     fs,
-    io::{self, Read},
+    io::Read,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -38,7 +38,6 @@ use dps::DpsPatchHandler;
 use gdiff::GdiffPatchHandler;
 use hdiffpatch::HdiffPatchHandler;
 use ips::IpsPatchHandler;
-use memmap2::{Mmap, MmapOptions};
 use ninja1::Ninja1PatchHandler;
 use pat::{PatPatchHandler, has_pat_record_signature};
 use pmsr::PmsrPatchHandler;
@@ -239,39 +238,12 @@ pub(crate) fn patch_parse_report_with(
     Ok(patch_success_report(descriptor, "parse", label, None))
 }
 
-pub(crate) enum ReadOnlyFile {
-    Mapped(Mmap),
-    Owned(Vec<u8>),
+pub(crate) fn map_file_read_only(path: &Path) -> Result<Vec<u8>> {
+    Ok(fs::read(path)?)
 }
 
-impl AsRef<[u8]> for ReadOnlyFile {
-    fn as_ref(&self) -> &[u8] {
-        match self {
-            Self::Mapped(map) => map.as_ref(),
-            Self::Owned(bytes) => bytes.as_slice(),
-        }
-    }
-}
-
-pub(crate) fn map_file_read_only(path: &Path) -> Result<Mmap> {
-    let file = fs::File::open(path)?;
-    // SAFETY: This mapping is read-only and the file handle lives through map creation.
-    let map = unsafe { MmapOptions::new().map(&file)? };
-    Ok(map)
-}
-
-pub(crate) fn map_file_read_only_with_fallback(path: &Path) -> Result<ReadOnlyFile> {
-    match map_file_read_only(path) {
-        Ok(map) => Ok(ReadOnlyFile::Mapped(map)),
-        Err(RomWeaverError::Io(error)) if should_fallback_from_mmap(&error) => {
-            Ok(ReadOnlyFile::Owned(fs::read(path)?))
-        }
-        Err(error) => Err(error),
-    }
-}
-
-fn should_fallback_from_mmap(error: &io::Error) -> bool {
-    error.kind() == io::ErrorKind::Unsupported
+pub(crate) fn map_file_read_only_with_fallback(path: &Path) -> Result<Vec<u8>> {
+    map_file_read_only(path)
 }
 
 pub fn explicitly_unsupported_patch_reason_for_name(name: &str) -> Option<&'static str> {

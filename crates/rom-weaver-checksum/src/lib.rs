@@ -13,7 +13,6 @@ use crc16::{ARC, State as Crc16State};
 use crc32c::{crc32c_append, crc32c_combine};
 use crc32fast::Hasher as Crc32Hasher;
 use md5::{Digest as Md5Digest, Md5};
-use memmap2::{Mmap, MmapOptions};
 use rayon::prelude::*;
 use rom_weaver_core::{
     CancellationToken, ChecksumCapabilities, ChecksumEngine, ChecksumRequest, OperationContext,
@@ -367,14 +366,12 @@ impl SourceFingerprint {
 }
 
 struct MappedRange {
-    mmap: Mmap,
-    start: usize,
-    end: usize,
+    bytes: Vec<u8>,
 }
 
 impl MappedRange {
     fn bytes(&self) -> &[u8] {
-        &self.mmap[self.start..self.end]
+        self.bytes.as_slice()
     }
 }
 
@@ -1464,21 +1461,18 @@ fn crc32_parallel_chunk_size(range_len: u64, worker_count: usize) -> u64 {
 }
 
 fn map_range(source: &Path, range: &ResolvedRange) -> Option<MappedRange> {
-    if range.file_len == 0 {
+    if range.file_len == 0 || range.len == 0 {
         return None;
     }
 
-    let file = File::open(source).ok()?;
-    let start = usize::try_from(range.start).ok()?;
-    let end = usize::try_from(range.end()).ok()?;
-    let mmap = {
-        // Read-only mapping is safe here because the checksum engine only observes bytes.
-        unsafe { MmapOptions::new().map(&file).ok()? }
-    };
-    if end > mmap.len() {
+    let mut file = File::open(source).ok()?;
+    let len = usize::try_from(range.len).ok()?;
+    file.seek(SeekFrom::Start(range.start)).ok()?;
+    let mut bytes = vec![0u8; len];
+    if file.read_exact(&mut bytes).is_err() {
         return None;
     }
-    Some(MappedRange { mmap, start, end })
+    Some(MappedRange { bytes })
 }
 
 fn cache_hit_execution(budget: ThreadBudget) -> ThreadExecution {

@@ -4,7 +4,6 @@ use std::{
     path::Path,
 };
 
-use memmap2::{Mmap, MmapOptions};
 use rayon::prelude::*;
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
@@ -48,7 +47,7 @@ impl PatchHandler for DpsPatchHandler {
     }
 
     fn parse(&self, patch_path: &Path, _context: &OperationContext) -> Result<OperationReport> {
-        let patch = map_file_read_only(patch_path)?;
+        let patch = crate::map_file_read_only(patch_path)?;
         let parsed = parse_dps_bytes(patch.as_ref(), DpsParseMode::Strict)?;
 
         Ok(OperationReport::succeeded(
@@ -86,7 +85,7 @@ impl PatchHandler for DpsPatchHandler {
         } else {
             DpsParseMode::WarnAndStopOnMalformedRecord
         };
-        let patch = map_file_read_only(patch_path)?;
+        let patch = crate::map_file_read_only(patch_path)?;
         let parsed = parse_dps_bytes(patch.as_ref(), parse_mode)?;
         let source_len_u64 = fs::metadata(&request.input)?.len();
         let source_len = usize::try_from(source_len_u64).map_err(|_| {
@@ -137,7 +136,7 @@ impl PatchHandler for DpsPatchHandler {
         let thread_capability = dps_apply_thread_capability(parsed.records.len());
         let planned_execution = context.plan_threads(thread_capability.clone());
         let execution = if planned_execution.used_parallelism {
-            let source = map_file_read_only(&request.input)?;
+            let source = crate::map_file_read_only(&request.input)?;
             let (execution, pool) = context.build_pool(thread_capability)?;
             let prepared = prepare_dps_writes_parallel(
                 &parsed.records,
@@ -363,13 +362,6 @@ struct DpsHeaderMetadata<'a> {
 enum DpsParseMode {
     Strict,
     WarnAndStopOnMalformedRecord,
-}
-
-fn map_file_read_only(path: &Path) -> Result<Mmap> {
-    let file = File::open(path)?;
-    // SAFETY: This mapping is read-only and the file handle lives through map creation.
-    let map = unsafe { MmapOptions::new().map(&file)? };
-    Ok(map)
 }
 
 fn parse_dps_bytes<'a>(bytes: &'a [u8], mode: DpsParseMode) -> Result<ParsedDpsPatch<'a>> {
@@ -678,8 +670,8 @@ fn create_dps_records_parallel(
     target_path: &Path,
     pool: &SharedThreadPool,
 ) -> Result<Vec<DpsRecord>> {
-    let source = map_file_read_only(source_path)?;
-    let target = map_file_read_only(target_path)?;
+    let source = crate::map_file_read_only(source_path)?;
+    let target = crate::map_file_read_only(target_path)?;
 
     if target.len() > u32::MAX as usize {
         return Err(RomWeaverError::ValidationCode(
@@ -1165,12 +1157,12 @@ mod tests {
     };
 
     use super::{
-        encode_dps_patch, parse_dps_bytes, DpsHeaderMetadata, DpsParseMode, DpsPatchHandler,
-        DpsRecord, ParsedDpsRecord, DPS_PATCH_VERSION, DPS_RECORD_EMBEDDED_DATA,
+        DPS_PATCH_VERSION, DPS_RECORD_EMBEDDED_DATA, DpsHeaderMetadata, DpsParseMode,
+        DpsPatchHandler, DpsRecord, ParsedDpsRecord, encode_dps_patch, parse_dps_bytes,
     };
     use crate::{
-        test_support::{test_context_with_threads, TestDir},
         DPS,
+        test_support::{TestDir, test_context_with_threads},
     };
 
     #[test]
@@ -1401,9 +1393,11 @@ mod tests {
                     .with_patch_checksum_validation(PatchChecksumValidation::Ignore),
             )
             .expect("ignore malformed");
-        assert!(ignored_report
-            .label
-            .contains("warning=ignored malformed DPS record"));
+        assert!(
+            ignored_report
+                .label
+                .contains("warning=ignored malformed DPS record")
+        );
         assert_eq!(fs::read(output_path).expect("output"), b"abcdXY");
     }
 

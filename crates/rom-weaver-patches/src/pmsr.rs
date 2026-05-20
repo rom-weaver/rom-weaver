@@ -5,7 +5,6 @@ use std::{
 };
 
 use crc32fast::Hasher;
-use memmap2::{Mmap, MmapOptions};
 use rayon::prelude::*;
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
@@ -222,15 +221,8 @@ struct CreatedPmsrPatch {
 }
 
 fn parse_pmsr_file(path: &Path) -> Result<ParsedPmsrPatch> {
-    let bytes = map_file_read_only(path)?;
+    let bytes = crate::map_file_read_only(path)?;
     parse_pmsr_bytes(&bytes)
-}
-
-fn map_file_read_only(path: &Path) -> Result<Mmap> {
-    let file = File::open(path)?;
-    // SAFETY: This mapping is read-only and the file handle lives through map creation.
-    let map = unsafe { MmapOptions::new().map(&file)? };
-    Ok(map)
 }
 
 fn parse_pmsr_bytes(bytes: &[u8]) -> Result<ParsedPmsrPatch> {
@@ -566,8 +558,8 @@ fn create_pmsr_patch_parallel(
         )));
     }
 
-    let original = map_file_read_only(original_path)?;
-    let modified = map_file_read_only(modified_path)?;
+    let original = crate::map_file_read_only(original_path)?;
+    let modified = crate::map_file_read_only(modified_path)?;
     let original_bytes = original.as_ref();
     let modified_bytes = modified.as_ref();
 

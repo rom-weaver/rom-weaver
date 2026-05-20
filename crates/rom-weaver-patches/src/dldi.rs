@@ -1,9 +1,5 @@
-use std::{
-    fs::{self, File},
-    path::Path,
-};
+use std::{fs, path::Path};
 
-use memmap2::{Mmap, MmapOptions};
 use rayon::{join, prelude::*};
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
@@ -66,7 +62,7 @@ impl PatchHandler for DldiPatchHandler {
     }
 
     fn parse(&self, patch_path: &Path, _context: &OperationContext) -> Result<OperationReport> {
-        let patch = map_file_read_only(patch_path)?;
+        let patch = crate::map_file_read_only(patch_path)?;
         let header = parse_dldi_bytes(patch.as_ref(), "DLDI patch")?;
 
         Ok(OperationReport::succeeded(
@@ -88,8 +84,8 @@ impl PatchHandler for DldiPatchHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
-        let patch = map_file_read_only(patch_path)?;
-        let input = map_file_read_only(&request.input)?;
+        let patch = crate::map_file_read_only(patch_path)?;
+        let input = crate::map_file_read_only(&request.input)?;
         let (execution, pool) = context.build_pool(dldi_apply_thread_capability(input.len()))?;
         let apply = match apply_dldi_patch(input.as_ref(), patch.as_ref(), &pool, &execution) {
             Ok(apply) => apply,
@@ -134,8 +130,8 @@ impl PatchHandler for DldiPatchHandler {
         request: &PatchCreateRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        let original = map_file_read_only(&request.original)?;
-        let modified = map_file_read_only(&request.modified)?;
+        let original = crate::map_file_read_only(&request.original)?;
+        let modified = crate::map_file_read_only(&request.modified)?;
         let (execution, pool) = context.build_pool(dldi_create_thread_capability(
             original.len(),
             modified.len(),
@@ -192,9 +188,9 @@ impl PatchHandler for DldiPatchHandler {
         // Validate determinism by replaying that patch against `original`.
         let replay = apply_dldi_patch(original.as_ref(), &patch_bytes, &pool, &execution)?;
         let replay_matches = if execution.used_parallelism {
-            bytes_equal_parallel(replay.output.as_slice(), modified.as_ref(), &pool)
+            bytes_equal_parallel(replay.output.as_slice(), modified.as_slice(), &pool)
         } else {
-            replay.output == modified.as_ref()
+            replay.output == modified.as_slice()
         };
         if !replay_matches {
             return Err(RomWeaverError::Validation(
@@ -671,13 +667,6 @@ fn find_dldi_slot(input: &[u8]) -> Option<usize> {
         offset = offset.checked_add(4)?;
     }
     None
-}
-
-fn map_file_read_only(path: &Path) -> Result<Mmap> {
-    let file = File::open(path)?;
-    // SAFETY: This mapping is read-only and the file handle lives through map creation.
-    let map = unsafe { MmapOptions::new().map(&file)? };
-    Ok(map)
 }
 
 #[cfg(test)]

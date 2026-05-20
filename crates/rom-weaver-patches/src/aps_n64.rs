@@ -4,7 +4,6 @@ use std::{
     path::Path,
 };
 
-use memmap2::{Mmap, MmapOptions};
 use rayon::prelude::*;
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
@@ -137,8 +136,8 @@ impl PatchHandler for ApsN64PatchHandler {
         request: &PatchCreateRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        let original = map_file_read_only(&request.original)?;
-        let modified = map_file_read_only(&request.modified)?;
+        let original = crate::map_file_read_only(&request.original)?;
+        let modified = crate::map_file_read_only(&request.modified)?;
         let thread_capability = aps_create_thread_capability(modified.len())?;
         let planned_execution = context.plan_threads(thread_capability.clone());
         let (execution, created) = if planned_execution.used_parallelism {
@@ -262,15 +261,8 @@ fn aps_create_chunk_count(modified_len: usize) -> Result<usize> {
 }
 
 fn parse_aps_file(path: &Path) -> Result<ParsedApsPatch> {
-    let bytes = map_file_read_only(path)?;
+    let bytes = crate::map_file_read_only(path)?;
     parse_aps_bytes(&bytes)
-}
-
-fn map_file_read_only(path: &Path) -> Result<Mmap> {
-    let file = File::open(path)?;
-    // SAFETY: The mapping is read-only and the file handle lives for map creation.
-    let map = unsafe { MmapOptions::new().map(&file)? };
-    Ok(map)
 }
 
 fn parse_aps_bytes(bytes: &[u8]) -> Result<ParsedApsPatch> {

@@ -5,7 +5,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use memmap2::{Mmap, MmapOptions};
 use rayon::prelude::*;
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
@@ -564,7 +563,7 @@ fn create_gdiff_patch_parallel(
     pool: &SharedThreadPool,
     output: &mut dyn Write,
 ) -> Result<(usize, u64)> {
-    let modified = map_file_read_only(modified_path)?;
+    let modified = crate::map_file_read_only(modified_path)?;
     write_gdiff_header(output)?;
 
     let chunk_ranges = (0..modified.len())
@@ -610,13 +609,6 @@ fn encode_data_command_bytes(data: &[u8]) -> Result<Vec<u8>> {
     }
     bytes.extend_from_slice(data);
     Ok(bytes)
-}
-
-fn map_file_read_only(path: &Path) -> Result<Mmap> {
-    let file = File::open(path)?;
-    // SAFETY: This mapping is read-only and the file handle lives through map creation.
-    let map = unsafe { MmapOptions::new().map(&file)? };
-    Ok(map)
 }
 
 fn encode_data_command(writer: &mut dyn Write, data: &[u8]) -> Result<()> {
@@ -792,10 +784,10 @@ mod tests {
 
     use rom_weaver_core::{PatchApplyRequest, PatchCreateRequest, PatchHandler};
 
-    use super::{write_gdiff_header, GdiffPatchHandler};
+    use super::{GdiffPatchHandler, write_gdiff_header};
     use crate::{
-        test_support::{test_context_with_threads, TestDir},
         GDIFF,
+        test_support::{TestDir, test_context_with_threads},
     };
 
     enum TestGdiffCommand {
@@ -914,9 +906,11 @@ mod tests {
                 &test_context_with_threads(&temp, 1),
             )
             .expect_err("negative position");
-        assert!(error
-            .to_string()
-            .contains("copy position must be non-negative"));
+        assert!(
+            error
+                .to_string()
+                .contains("copy position must be non-negative")
+        );
     }
 
     #[test]

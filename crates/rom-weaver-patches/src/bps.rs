@@ -5,7 +5,6 @@ use std::{
 };
 
 use crc32fast::Hasher;
-use memmap2::{Mmap, MmapOptions};
 use rayon::prelude::*;
 use rom_weaver_checksum::checksum_file_values;
 use rom_weaver_core::{
@@ -104,7 +103,7 @@ impl PatchHandler for BpsPatchHandler {
         let planned_execution = context.plan_threads(thread_capability.clone());
         let has_target_copy = patch_contains_target_copy(&patch.actions);
         let execution = if planned_execution.used_parallelism && !has_target_copy {
-            let source_map = map_file_read_only(&request.input)?;
+            let source_map = crate::map_file_read_only_with_fallback(&request.input)?;
             let (execution, pool) = context.build_pool(thread_capability)?;
             let prepared =
                 prepare_bps_writes_parallel(&patch, source_map.as_ref(), &pool, context)?;
@@ -242,20 +241,6 @@ struct PreparedBpsWrite {
     data: Vec<u8>,
 }
 
-enum ReadOnlyFile {
-    Mapped(Mmap),
-    Owned(Vec<u8>),
-}
-
-impl AsRef<[u8]> for ReadOnlyFile {
-    fn as_ref(&self) -> &[u8] {
-        match self {
-            Self::Mapped(map) => map.as_ref(),
-            Self::Owned(bytes) => bytes.as_slice(),
-        }
-    }
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ResyncKind {
     Insert,
@@ -290,22 +275,8 @@ fn parse_bps_file_with_checksum_validation(
     path: &Path,
     validate_patch_checksum: bool,
 ) -> Result<ParsedBpsPatch> {
-    let bytes = map_file_read_only(path)?;
+    let bytes = crate::map_file_read_only_with_fallback(path)?;
     parse_bps_bytes_with_checksum_validation(bytes.as_ref(), validate_patch_checksum)
-}
-
-fn map_file_read_only(path: &Path) -> Result<ReadOnlyFile> {
-    let file = File::open(path)?;
-    // SAFETY: The mapping is read-only and the file handle lives for map creation.
-    match unsafe { MmapOptions::new().map(&file) } {
-        Ok(map) => Ok(ReadOnlyFile::Mapped(map)),
-        Err(error) if should_fallback_from_mmap(&error) => Ok(ReadOnlyFile::Owned(fs::read(path)?)),
-        Err(error) => Err(error.into()),
-    }
-}
-
-fn should_fallback_from_mmap(error: &io::Error) -> bool {
-    error.kind() == io::ErrorKind::Unsupported
 }
 
 #[cfg(test)]
@@ -788,10 +759,10 @@ fn create_bps_patch_parallel(
     output: &mut impl Write,
     context: &OperationContext,
 ) -> Result<CreatedBpsPatch> {
-    let original = map_file_read_only(original_path)?;
-    let modified = map_file_read_only(modified_path)?;
-    let original = original.as_ref();
-    let modified = modified.as_ref();
+    let original = crate::map_file_read_only_with_fallback(original_path)?;
+    let modified = crate::map_file_read_only_with_fallback(modified_path)?;
+    let original = original.as_slice();
+    let modified = modified.as_slice();
 
     if u64::try_from(modified.len()).ok() != Some(modified_len) {
         return Err(RomWeaverError::Validation(

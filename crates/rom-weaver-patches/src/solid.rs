@@ -1,11 +1,10 @@
 use std::{
-    fs::{self, File},
+    fs,
     path::Path,
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use md5::{Digest, Md5};
-use memmap2::{Mmap, MmapOptions};
 use rayon::prelude::*;
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
@@ -65,7 +64,7 @@ impl PatchHandler for SolidPatchHandler {
     }
 
     fn parse(&self, patch_path: &Path, _context: &OperationContext) -> Result<OperationReport> {
-        let patch = map_file_read_only(patch_path)?;
+        let patch = crate::map_file_read_only(patch_path)?;
         let parsed = parse_solid_patch_bytes(patch.as_ref())?;
 
         let mut label = format!(
@@ -111,11 +110,11 @@ impl PatchHandler for SolidPatchHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
-        let patch = map_file_read_only(patch_path)?;
+        let patch = crate::map_file_read_only(patch_path)?;
         let parsed = parse_solid_patch_bytes(patch.as_ref())?;
         let validate_checksums =
             context.patch_checksum_validation() == PatchChecksumValidation::Strict;
-        let input = map_file_read_only(&request.input)?;
+        let input = crate::map_file_read_only(&request.input)?;
         if validate_checksums {
             validate_source_checksum(parsed.source_md5, input.as_ref())?;
         }
@@ -165,8 +164,8 @@ impl PatchHandler for SolidPatchHandler {
         let modified_len = fs::metadata(&request.modified)?.len();
         let shared_len = original_len.min(modified_len);
         let (execution, pool) = context.build_pool(solid_create_thread_capability(shared_len))?;
-        let original = map_file_read_only(&request.original)?;
-        let modified = map_file_read_only(&request.modified)?;
+        let original = crate::map_file_read_only(&request.original)?;
+        let modified = crate::map_file_read_only(&request.modified)?;
 
         let expansion = build_created_expansion(original.as_ref(), modified.as_ref())?;
         let mod_action = if expansion.is_some() {
@@ -265,7 +264,7 @@ impl PatchHandler for SolidPatchHandler {
         // Validate that created patches are deterministic by replaying them.
         let parsed = parse_solid_patch_bytes(&patch)?;
         let replay = apply_parsed_patch(&parsed, original.as_ref())?;
-        if replay != modified.as_ref() {
+        if replay != modified.as_slice() {
             return Err(RomWeaverError::Validation(
                 "created SOLID patch does not round-trip to modified input".into(),
             ));
@@ -692,13 +691,6 @@ fn validate_source_checksum(expected: [u8; SOLID_MD5_LEN], input: &[u8]) -> Resu
     Ok(())
 }
 
-fn map_file_read_only(path: &Path) -> Result<Mmap> {
-    let file = File::open(path)?;
-    // SAFETY: This mapping is read-only and the file handle lives through map creation.
-    let map = unsafe { MmapOptions::new().map(&file)? };
-    Ok(map)
-}
-
 fn build_created_addr_param(mod_action: u8, uses_big_fields: bool, patch_info_flag: bool) -> u8 {
     let mut addr_param = CREATED_BASE_ADDR_FIELD | ((mod_action & 0b11) << 4);
     if uses_big_fields {
@@ -985,17 +977,52 @@ fn build_description_strings(original: &Path, output_patch: &Path) -> SolidDescr
 }
 
 fn solid_patch_info7_enabled() -> bool {
-    match std::env::var(SOLID_PATCH_INFO7_ENV) {
-        Ok(value) => {
+    match read_env_string(SOLID_PATCH_INFO7_ENV) {
+        Some(value) => {
             let normalized = value.trim().to_ascii_lowercase();
             matches!(normalized.as_str(), "1" | "true" | "yes" | "on")
         }
-        Err(_) => false,
+        None => false,
     }
 }
 
 fn read_env_string(name: &str) -> Option<String> {
+    #[cfg(test)]
+    if let Some(value) = solid_test_env_lookup(name) {
+        return value;
+    }
     std::env::var(name).ok()
+}
+
+#[cfg(test)]
+thread_local! {
+    static SOLID_TEST_ENV_OVERRIDES: std::cell::RefCell<std::collections::HashMap<String, Option<String>>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+#[cfg(test)]
+fn solid_test_env_lookup(name: &str) -> Option<Option<String>> {
+    SOLID_TEST_ENV_OVERRIDES.with(|state| state.borrow().get(name).cloned())
+}
+
+#[cfg(test)]
+fn set_solid_test_env_override(name: &'static str, value: Option<&str>) -> Option<Option<String>> {
+    SOLID_TEST_ENV_OVERRIDES.with(|state| {
+        let mut state = state.borrow_mut();
+        state.insert(name.to_string(), value.map(|entry| entry.to_string()))
+    })
+}
+
+#[cfg(test)]
+fn restore_solid_test_env_override(name: &'static str, previous: Option<Option<String>>) {
+    SOLID_TEST_ENV_OVERRIDES.with(|state| {
+        let mut state = state.borrow_mut();
+        if let Some(value) = previous {
+            state.insert(name.to_string(), value);
+        } else {
+            state.remove(name);
+        }
+    });
 }
 
 fn write_description_string(output: &mut Vec<u8>, value: &str) -> Result<()> {
@@ -1248,11 +1275,7 @@ fn checked_add_u64(lhs: u64, rhs: u64, label: &'static str) -> Result<u64> {
 }
 
 fn pluralize<'a>(count: usize, singular: &'a str, plural: &'a str) -> &'a str {
-    if count == 1 {
-        singular
-    } else {
-        plural
-    }
+    if count == 1 { singular } else { plural }
 }
 
 impl ParsedPrimitive<'_> {
@@ -1282,24 +1305,20 @@ mod tests {
 
     use super::*;
     use crate::{
-        test_support::{test_context_with_threads_in_root as test_context_with_threads, TestDir},
         SOLID,
+        test_support::{TestDir, test_context_with_threads_in_root as test_context_with_threads},
     };
 
     static SOLID_ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
     struct EnvRestore {
-        entries: Vec<(&'static str, Option<String>)>,
+        entries: Vec<(&'static str, Option<Option<String>>)>,
     }
 
     impl Drop for EnvRestore {
         fn drop(&mut self) {
-            for (name, value) in &self.entries {
-                if let Some(value) = value {
-                    set_env_var(name, value);
-                } else {
-                    remove_env_var(name);
-                }
+            for (name, previous) in &self.entries {
+                restore_solid_test_env_override(name, previous.clone());
             }
         }
     }
@@ -1307,26 +1326,10 @@ mod tests {
     fn set_env_vars(vars: &[(&'static str, Option<&str>)]) -> EnvRestore {
         let mut entries = Vec::with_capacity(vars.len());
         for (name, value) in vars {
-            entries.push((*name, std::env::var(name).ok()));
-            if let Some(value) = value {
-                set_env_var(name, value);
-            } else {
-                remove_env_var(name);
-            }
+            let previous = set_solid_test_env_override(name, *value);
+            entries.push((*name, previous));
         }
         EnvRestore { entries }
-    }
-
-    fn set_env_var(name: &str, value: &str) {
-        // SAFETY: This test module serializes all environment mutation through
-        // SOLID_ENV_LOCK, and values are always restored via EnvRestore.
-        unsafe { std::env::set_var(name, value) };
-    }
-
-    fn remove_env_var(name: &str) {
-        // SAFETY: This test module serializes all environment mutation through
-        // SOLID_ENV_LOCK, and values are always restored via EnvRestore.
-        unsafe { std::env::remove_var(name) };
     }
 
     fn with_solid_env_vars(vars: &[(&'static str, Option<&str>)], run: impl FnOnce()) {
