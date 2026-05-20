@@ -25,10 +25,41 @@ JavaScript wrappers and WASM artifacts for `rom-weaver`.
 import { createRomWeaverWasiRunner } from 'rom-weaver-wasm';
 
 const runner = createRomWeaverWasiRunner();
-const result = await runner.run(['--help']);
+try {
+  const result = await runner.run(['--help']);
+  console.log(result.exitCode);
+  console.log(result.stdout);
+} finally {
+  await runner.dispose();
+}
+```
 
-console.log(result.exitCode);
-console.log(result.stdout);
+## Node `executionIsolation`
+
+`createRomWeaverWasiRunner({ executionIsolation })` controls where each call executes in Node:
+
+- `none` (default): run in-process on the current thread. Lowest per-call latency.
+- `auto`: on the main thread, run each call in a dedicated worker; inside a worker thread, run in-process.
+- `worker`: force dedicated-worker execution per call on the main thread.
+
+Tradeoff:
+
+- Dedicated-worker isolation (`auto`/`worker`) typically adds a mostly fixed per-call startup/teardown cost.
+- In-process mode (`none`) is faster, but long-running workloads should still call `await runner.dispose()` when done.
+
+```js
+import { createRomWeaverWasiRunner } from 'rom-weaver-wasm';
+
+const runner = createRomWeaverWasiRunner({
+  executionIsolation: 'worker',
+});
+
+try {
+  const result = await runner.runJson(['checksum', '/work/game.bin', '--algo', 'crc32']);
+  console.log(result.ok);
+} finally {
+  await runner.dispose();
+}
 ```
 
 ## `run` vs `runJson`
@@ -90,6 +121,8 @@ console.log(result.exitCode, result.ok);
 ## Browser OPFS Example
 
 `createRomWeaverZenFsBrowser` must run in a secure-context Dedicated Worker if you want true zero-copy OPFS access (`FileSystemSyncAccessHandle`).
+
+It is not a main-thread API and will throw when called from `window`.
 
 ```js
 import { createRomWeaverZenFsBrowser } from 'rom-weaver-wasm/zenfs';
@@ -159,7 +192,7 @@ const result = await worker.runJson(['checksum', '/opfs/game.bin', '--algo', 'cr
 });
 
 console.log(result.exitCode, result.ok);
-worker.terminate();
+await worker.terminate();
 ```
 
 ## Build And Package

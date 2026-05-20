@@ -35,6 +35,11 @@ See [`packages/rom-weaver-wasm/README.md`](packages/rom-weaver-wasm/README.md) f
 - dedicated Node/browser worker clients
 - TypeScript declarations
 
+Integration notes:
+
+- Node runner supports `executionIsolation: "none" | "auto" | "worker"` for latency vs isolation tradeoffs.
+- Browser OPFS runtime is Dedicated Worker only (not main-thread `window`).
+
 ## CLI Commands
 
 - `inspect`
