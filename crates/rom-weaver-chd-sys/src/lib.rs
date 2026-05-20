@@ -167,16 +167,7 @@ impl ChdFile {
             )
         };
 
-        handle_result(status, &error)?;
-        let handle = NonNull::new(handle).ok_or_else(|| Error {
-            code: error_codes::ALLOC,
-            message: "MAME CHD bridge returned a null handle".into(),
-        })?;
-
-        Ok(Self {
-            handle,
-            header: header.into(),
-        })
+        finalize_open_file_result(status, &error, handle, header)
     }
 
     pub fn create(
@@ -208,16 +199,7 @@ impl ChdFile {
             )
         };
 
-        handle_result(status, &error)?;
-        let handle = NonNull::new(handle).ok_or_else(|| Error {
-            code: error_codes::ALLOC,
-            message: "MAME CHD bridge returned a null handle".into(),
-        })?;
-
-        Ok(Self {
-            handle,
-            header: header.into(),
-        })
+        finalize_open_file_result(status, &error, handle, header)
     }
 
     pub fn compress_file(
@@ -710,6 +692,24 @@ fn set_first_error(slot: &Arc<Mutex<Option<Error>>>, error: Error) {
             *guard = Some(error);
         }
     }
+}
+
+fn finalize_open_file_result(
+    status: i32,
+    error: &[c_char; ERROR_BUFFER_LEN],
+    handle: *mut c_void,
+    header: RawChdHeader,
+) -> Result<ChdFile, Error> {
+    handle_result(status, error)?;
+    let handle = NonNull::new(handle).ok_or_else(|| Error {
+        code: error_codes::ALLOC,
+        message: "MAME CHD bridge returned a null handle".into(),
+    })?;
+
+    Ok(ChdFile {
+        handle,
+        header: header.into(),
+    })
 }
 
 fn handle_result(status: i32, error: &[c_char; ERROR_BUFFER_LEN]) -> Result<(), Error> {

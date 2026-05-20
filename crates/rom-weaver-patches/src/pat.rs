@@ -5,12 +5,10 @@ use std::{
     path::Path,
 };
 
-use memmap2::{Mmap, MmapOptions};
 use rayon::prelude::*;
 use rom_weaver_core::{
-    FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
-    PatchCapabilities, PatchCreateRequest, PatchHandler, ProbeConfidence, Result, RomWeaverError,
-    SharedThreadPool, ThreadCapability,
+    FormatDescriptor, OperationContext, OperationReport, PatchApplyRequest, PatchCapabilities,
+    PatchCreateRequest, PatchHandler, Result, RomWeaverError, SharedThreadPool, ThreadCapability,
 };
 
 const PAT_LINE_MAX_BYTES: usize = 4 * 1024;
@@ -25,40 +23,15 @@ impl PatPatchHandler {
     pub const fn new(descriptor: &'static FormatDescriptor) -> Self {
         Self { descriptor }
     }
-}
 
-impl PatchHandler for PatPatchHandler {
-    fn descriptor(&self) -> &'static FormatDescriptor {
-        self.descriptor
+    fn parse_report(&self, patch_path: &Path) -> Result<OperationReport> {
+        crate::patch_parse_report_with(self.descriptor, || {
+            let parsed = parse_pat_file(patch_path)?;
+            Ok(build_pat_parse_label(self.descriptor.name, &parsed))
+        })
     }
 
-    fn probe(&self, _patch_path: &Path) -> ProbeConfidence {
-        ProbeConfidence::Extension
-    }
-
-    fn parse(&self, patch_path: &Path, _context: &OperationContext) -> Result<OperationReport> {
-        let parsed = parse_pat_file(patch_path)?;
-        let ignored_suffix = if parsed.ignored_lines > 0 {
-            format!("; ignored {} non-record line(s)", parsed.ignored_lines)
-        } else {
-            String::new()
-        };
-
-        Ok(OperationReport::succeeded(
-            OperationFamily::Patch,
-            Some(self.descriptor.name.to_string()),
-            "parse",
-            format!(
-                "parsed {} patch with {} record(s){ignored_suffix}",
-                self.descriptor.name,
-                parsed.records.len()
-            ),
-            Some(100.0),
-            None,
-        ))
-    }
-
-    fn apply(
+    fn apply_report(
         &self,
         request: &PatchApplyRequest,
         context: &OperationContext,
@@ -73,7 +46,7 @@ impl PatchHandler for PatPatchHandler {
         fs::copy(&request.input, &request.output)?;
         let output_len = fs::metadata(&request.output)?.len();
         validate_pat_record_offsets(&grouped_records, output_len)?;
-        let input = map_file_read_only(&request.input)?;
+        let input = crate::map_file_read_only(&request.input)?;
         let thread_capability = pat_apply_thread_capability(grouped_records.len());
         let planned_execution = context.plan_threads(thread_capability.clone());
 
@@ -129,9 +102,8 @@ impl PatchHandler for PatPatchHandler {
             String::new()
         };
 
-        Ok(OperationReport::succeeded(
-            OperationFamily::Patch,
-            Some(self.descriptor.name.to_string()),
+        Ok(crate::patch_success_report(
+            self.descriptor,
             "apply",
             format!(
                 "applied {} patch with {} record(s): {} forward / {} reverse{ignored_suffix}{skipped_suffix}",
@@ -140,9 +112,26 @@ impl PatchHandler for PatPatchHandler {
                 forward_applied,
                 reverse_applied
             ),
-            Some(100.0),
             Some(execution),
         ))
+    }
+}
+
+impl PatchHandler for PatPatchHandler {
+    fn descriptor(&self) -> &'static FormatDescriptor {
+        self.descriptor
+    }
+
+    fn parse(&self, patch_path: &Path, _context: &OperationContext) -> Result<OperationReport> {
+        self.parse_report(patch_path)
+    }
+
+    fn apply(
+        &self,
+        request: &PatchApplyRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        self.apply_report(request, context)
     }
 
     fn create(
@@ -179,16 +168,14 @@ impl PatchHandler for PatPatchHandler {
         }
         output.flush()?;
 
-        Ok(OperationReport::succeeded(
-            OperationFamily::Patch,
-            Some(self.descriptor.name.to_string()),
+        Ok(crate::patch_success_report(
+            self.descriptor,
             "create",
             format!(
                 "created {} patch with {} record(s)",
                 self.descriptor.name,
                 created.records.len()
             ),
-            Some(100.0),
             Some(execution),
         ))
     }
@@ -318,6 +305,21 @@ fn parse_pat_file(path: &Path) -> Result<ParsedPatPatch> {
     let file = File::open(path)?;
     let reader = BufReader::new(file);
     parse_pat_reader(reader)
+}
+
+fn build_pat_parse_label(format_name: &str, parsed: &ParsedPatPatch) -> String {
+    if parsed.ignored_lines == 0 {
+        return format!(
+            "parsed {format_name} patch with {} record(s)",
+            parsed.records.len()
+        );
+    }
+
+    format!(
+        "parsed {format_name} patch with {} record(s); ignored {} non-record line(s)",
+        parsed.records.len(),
+        parsed.ignored_lines
+    )
 }
 
 fn parse_pat_reader<R: BufRead>(mut reader: R) -> Result<ParsedPatPatch> {
@@ -477,8 +479,8 @@ fn create_pat_patch_parallel(
     modified_path: &Path,
     pool: &SharedThreadPool,
 ) -> Result<CreatedPatPatch> {
-    let original = map_file_read_only(original_path)?;
-    let modified = map_file_read_only(modified_path)?;
+    let original = crate::map_file_read_only(original_path)?;
+    let modified = crate::map_file_read_only(modified_path)?;
     if original.len() != modified.len() {
         return Err(RomWeaverError::Validation(format!(
             "PAT create requires equal input lengths (original: {}, modified: {})",
@@ -549,13 +551,6 @@ fn collect_pat_chunk_records(
         }
     }
     records
-}
-
-fn map_file_read_only(path: &Path) -> Result<Mmap> {
-    let file = File::open(path)?;
-    // SAFETY: This mapping is read-only and the file handle lives through map creation.
-    let map = unsafe { MmapOptions::new().map(&file)? };
-    Ok(map)
 }
 
 #[cfg(test)]

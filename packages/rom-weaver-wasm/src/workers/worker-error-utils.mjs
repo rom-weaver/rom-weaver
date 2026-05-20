@@ -53,6 +53,32 @@ export function readWorkerContextFields(input) {
   };
 }
 
+export function readWorkerErrorContext(input) {
+  if (!input || typeof input !== 'object') {
+    return undefined;
+  }
+
+  const fromContext = readWorkerContextFields(input.context);
+  const fromInput = readWorkerContextFields(input);
+  const context = {
+    command: fromContext.command ?? fromInput.command,
+    family: fromContext.family ?? fromInput.family,
+    format: fromContext.format !== undefined ? fromContext.format : fromInput.format,
+    stage: fromContext.stage ?? fromInput.stage,
+  };
+
+  if (
+    context.command === undefined
+    && context.family === undefined
+    && context.format === undefined
+    && context.stage === undefined
+  ) {
+    return undefined;
+  }
+
+  return context;
+}
+
 function inferCoreWorkerErrorKind(message) {
   if (/^validation failed:/i.test(message)) {
     return 'validation';

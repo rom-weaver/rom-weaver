@@ -9,6 +9,7 @@ import {
   createRomWeaverWasiRunner,
 } from '../src/rom-weaver-wasi-api.mjs';
 import {
+  assertRunJsonSucceeded,
   runFullFormatMatrix,
   runPatchMatrix,
   runProgressMatrix,
@@ -65,11 +66,10 @@ test('nodefs runner supports mounted guest paths', async () => {
       '--no-extract',
     ]);
 
-    assert.equal(result.exitCode, 0);
-    assert.equal(result.ok, true);
-    const terminal = result.events.at(-1);
-    assert.equal(terminal.status, 'succeeded');
-    assert.equal(terminal.command, 'checksum');
+    assertRunJsonSucceeded(result, {
+      command: 'checksum',
+      context: 'nodefs checksum',
+    });
   });
 });
 
@@ -148,10 +148,10 @@ test('runner supports explicit .wasm.br module paths', async () => {
       '--no-extract',
     ]);
 
-    assert.equal(result.exitCode, 0);
-    assert.equal(result.ok, true);
-    const terminal = result.events.at(-1);
-    assert.equal(terminal.status, 'succeeded');
+    assertRunJsonSucceeded(result, {
+      command: 'checksum',
+      context: 'brotli wasm checksum',
+    });
   });
 });
 

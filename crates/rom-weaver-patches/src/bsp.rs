@@ -1,14 +1,11 @@
 use std::{
-    fs::{self, File},
-    io,
+    fs,
     path::Path,
 };
 
-use memmap2::{Mmap, MmapOptions};
 use rom_weaver_core::{
-    FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
-    PatchCapabilities, PatchCreateRequest, PatchHandler, Result, RomWeaverError, SharedThreadPool,
-    ThreadCapability,
+    FormatDescriptor, OperationContext, OperationReport, PatchApplyRequest, PatchCapabilities,
+    PatchCreateRequest, PatchHandler, Result, RomWeaverError, SharedThreadPool, ThreadCapability,
 };
 
 #[cfg(test)]
@@ -23,35 +20,22 @@ impl BspPatchHandler {
     pub const fn new(descriptor: &'static FormatDescriptor) -> Self {
         Self { descriptor }
     }
-}
 
-impl PatchHandler for BspPatchHandler {
-    fn descriptor(&self) -> &'static FormatDescriptor {
-        self.descriptor
+    /* jscpd:ignore-start */
+    fn parse_report(&self, patch_path: &Path) -> Result<OperationReport> {
+        crate::patch_parse_report_with(self.descriptor, || {
+            let patch_len = fs::metadata(patch_path)?.len();
+            Ok(build_bsp_parse_label(self.descriptor.name, patch_len))
+        })
     }
 
-    fn parse(&self, patch_path: &Path, _context: &OperationContext) -> Result<OperationReport> {
-        let patch_len = fs::metadata(patch_path)?.len();
-        Ok(OperationReport::succeeded(
-            OperationFamily::Patch,
-            Some(self.descriptor.name.to_string()),
-            "parse",
-            format!(
-                "parsed {} patch script ({} byte(s)); semantic validation occurs during apply",
-                self.descriptor.name, patch_len
-            ),
-            Some(100.0),
-            None,
-        ))
-    }
-
-    fn apply(
+    fn apply_report(
         &self,
         request: &PatchApplyRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
-        let patch_bytes = map_file_read_only(patch_path)?;
+        let patch_bytes = crate::map_file_read_only_with_fallback(patch_path)?;
         let input_bytes = fs::read(&request.input)?;
         let (execution, pool) = context.build_pool(bsp_apply_thread_capability(
             input_bytes.len(),
@@ -70,18 +54,37 @@ impl PatchHandler for BspPatchHandler {
         fs::write(&request.output, &output_bytes)?;
 
         let written = output_bytes.len();
-        Ok(OperationReport::succeeded(
-            OperationFamily::Patch,
-            Some(self.descriptor.name.to_string()),
+        Ok(crate::patch_success_report(
+            self.descriptor,
             "apply",
             format!(
                 "applied {} patch script and wrote {} byte(s)",
                 self.descriptor.name, written
             ),
-            Some(100.0),
             Some(execution),
         ))
     }
+    /* jscpd:ignore-end */
+}
+
+impl PatchHandler for BspPatchHandler {
+    /* jscpd:ignore-start */
+    fn descriptor(&self) -> &'static FormatDescriptor {
+        self.descriptor
+    }
+
+    fn parse(&self, patch_path: &Path, _context: &OperationContext) -> Result<OperationReport> {
+        self.parse_report(patch_path)
+    }
+
+    fn apply(
+        &self,
+        request: &PatchApplyRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        self.apply_report(request, context)
+    }
+    /* jscpd:ignore-end */
 
     fn create(
         &self,
@@ -119,37 +122,19 @@ fn bsp_apply_thread_capability(input_len: usize, patch_len: usize) -> ThreadCapa
     ThreadCapability::parallel(Some(chunk_count.max(1)))
 }
 
-enum ReadOnlyFile {
-    Mapped(Mmap),
-    Owned(Vec<u8>),
-}
-
-impl AsRef<[u8]> for ReadOnlyFile {
-    fn as_ref(&self) -> &[u8] {
-        match self {
-            Self::Mapped(map) => map.as_ref(),
-            Self::Owned(bytes) => bytes.as_slice(),
-        }
-    }
-}
-
-fn map_file_read_only(path: &Path) -> Result<ReadOnlyFile> {
-    let file = File::open(path)?;
-    // SAFETY: This mapping is read-only and the file handle lives through map creation.
-    match unsafe { MmapOptions::new().map(&file) } {
-        Ok(map) => Ok(ReadOnlyFile::Mapped(map)),
-        Err(error) if should_fallback_from_mmap(&error) => Ok(ReadOnlyFile::Owned(fs::read(path)?)),
-        Err(error) => Err(error.into()),
-    }
-}
-
-fn should_fallback_from_mmap(error: &io::Error) -> bool {
-    error.kind() == io::ErrorKind::Unsupported
+fn build_bsp_parse_label(format_name: &str, patch_len: u64) -> String {
+    format!(
+        "parsed {format_name} patch script ({patch_len} byte(s)); semantic validation occurs during apply"
+    )
 }
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, path::Path, process::Command};
+    use std::{
+        fs,
+        path::{Path, PathBuf},
+        process::Command,
+    };
 
     use rom_weaver_core::{PatchApplyRequest, PatchCreateRequest, PatchHandler};
     use serde_json::Value;
@@ -311,6 +296,45 @@ patcher.run();
         }
     }
 
+    fn apply_fixture_with_threads(
+        handler: &BspPatchHandler,
+        temp: &TestDir,
+        input_bytes: &[u8],
+        patch_bytes: &[u8],
+        threads: usize,
+    ) -> (rom_weaver_core::OperationReport, Vec<u8>) {
+        let input_path = temp.child("source.bin");
+        let patch_path = temp.child("update.bsp");
+        let output_path = temp.child("output.bin");
+        fs::write(&input_path, input_bytes).expect("fixture");
+        fs::write(&patch_path, patch_bytes).expect("fixture");
+
+        let report = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: input_path,
+                    patches: vec![patch_path],
+                    output: output_path.clone(),
+                },
+                &test_context_with_threads(temp, threads),
+            )
+            .expect("apply");
+
+        let output = fs::read(output_path).expect("output");
+        (report, output)
+    }
+
+    fn prepare_reference_runtime(temp: &TestDir) -> Option<PathBuf> {
+        if Command::new("node").arg("--version").output().is_err() {
+            eprintln!("skipping BSP reference parity test because Node.js is unavailable");
+            return None;
+        }
+
+        let runtime_path = temp.child("reference_bsppatch.js");
+        fs::write(&runtime_path, BSP_VM_SOURCE).expect("reference runtime fixture");
+        Some(runtime_path)
+    }
+
     #[test]
     fn parse_reports_patch_size() {
         let temp = TestDir::new();
@@ -331,44 +355,25 @@ patcher.run();
     #[test]
     fn apply_executes_patch_script() {
         let temp = TestDir::new();
-        let input_path = temp.child("source.bin");
-        let patch_path = temp.child("update.bsp");
-        let output_path = temp.child("output.bin");
-
-        fs::write(&input_path, [0x01, 0x02, 0x03]).expect("fixture");
-        fs::write(&patch_path, [0x18, 0xFF, 0x06, 0x00, 0x00, 0x00, 0x00]).expect("fixture");
-
         let handler = BspPatchHandler::new(&BSP);
-        let report = handler
-            .apply(
-                &PatchApplyRequest {
-                    input: input_path,
-                    patches: vec![patch_path],
-                    output: output_path.clone(),
-                },
-                &test_context_with_threads(&temp, 8),
-            )
-            .expect("apply");
+        let (report, output) = apply_fixture_with_threads(
+            &handler,
+            &temp,
+            &[0x01, 0x02, 0x03],
+            &[0x18, 0xFF, 0x06, 0x00, 0x00, 0x00, 0x00],
+            8,
+        );
 
         let execution = report.thread_execution.expect("thread execution");
         assert_eq!(execution.requested_threads, 8);
         assert_eq!(execution.effective_threads, 1);
         assert!(!execution.used_parallelism);
-        assert_eq!(
-            fs::read(output_path).expect("output"),
-            vec![0xFF, 0x02, 0x03]
-        );
+        assert_eq!(output, vec![0xFF, 0x02, 0x03]);
     }
 
     #[test]
     fn apply_reports_parallel_execution_for_large_write_data_opcode() {
         let temp = TestDir::new();
-        let input_path = temp.child("source.bin");
-        let patch_path = temp.child("update.bsp");
-        let output_path = temp.child("output.bin");
-
-        fs::write(&input_path, []).expect("fixture");
-
         let payload_len = (BSP_THREAD_WORK_CHUNK_BYTES * 2) + 17;
         let payload: Vec<u8> = (0..payload_len).map(|index| (index % 251) as u8).collect();
         let payload_offset = 14u32;
@@ -381,25 +386,15 @@ patcher.run();
         patch_bytes.extend_from_slice(&0u32.to_le_bytes());
         assert_eq!(patch_bytes.len(), payload_offset as usize);
         patch_bytes.extend_from_slice(&payload);
-        fs::write(&patch_path, patch_bytes).expect("fixture");
 
         let handler = BspPatchHandler::new(&BSP);
-        let report = handler
-            .apply(
-                &PatchApplyRequest {
-                    input: input_path,
-                    patches: vec![patch_path],
-                    output: output_path.clone(),
-                },
-                &test_context_with_threads(&temp, 8),
-            )
-            .expect("apply");
+        let (report, output) = apply_fixture_with_threads(&handler, &temp, &[], &patch_bytes, 8);
 
         let execution = report.thread_execution.expect("thread execution");
         assert_eq!(execution.requested_threads, 8);
         assert!(execution.effective_threads > 1);
         assert!(execution.used_parallelism);
-        assert_eq!(fs::read(output_path).expect("output"), payload);
+        assert_eq!(output, payload);
     }
 
     #[test]
@@ -433,14 +428,10 @@ patcher.run();
 
     #[test]
     fn apply_matches_reference_runtime_vectors() {
-        if Command::new("node").arg("--version").output().is_err() {
-            eprintln!("skipping BSP reference parity test because Node.js is unavailable");
-            return;
-        }
-
         let temp = TestDir::new();
-        let runtime_path = temp.child("reference_bsppatch.js");
-        fs::write(&runtime_path, BSP_VM_SOURCE).expect("reference runtime fixture");
+        let Some(runtime_path) = prepare_reference_runtime(&temp) else {
+            return;
+        };
 
         for vector in REFERENCE_VECTORS {
             let patch_bytes = decode_hex(vector.patch_hex);
@@ -485,14 +476,10 @@ patcher.run();
 
     #[test]
     fn apply_matches_reference_runtime_menu_selection() {
-        if Command::new("node").arg("--version").output().is_err() {
-            eprintln!("skipping BSP reference parity test because Node.js is unavailable");
-            return;
-        }
-
         let temp = TestDir::new();
-        let runtime_path = temp.child("reference_bsppatch.js");
-        fs::write(&runtime_path, BSP_VM_SOURCE).expect("reference runtime fixture");
+        let Some(runtime_path) = prepare_reference_runtime(&temp) else {
+            return;
+        };
 
         fn push_word(buffer: &mut Vec<u8>, value: u32) {
             buffer.extend_from_slice(&value.to_le_bytes());

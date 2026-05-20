@@ -5,13 +5,11 @@ use std::{
 };
 
 use bzip2::read::BzDecoder;
-use memmap2::{Mmap, MmapOptions};
 use qbsdiff::{Bsdiff, Bspatch};
 use rayon::prelude::*;
 use rom_weaver_core::{
-    FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
-    PatchCapabilities, PatchCreateRequest, PatchHandler, ProbeConfidence, Result, RomWeaverError,
-    SharedThreadPool, ThreadCapability,
+    FormatDescriptor, OperationContext, OperationReport, PatchApplyRequest, PatchCapabilities,
+    PatchCreateRequest, PatchHandler, Result, RomWeaverError, SharedThreadPool, ThreadCapability,
 };
 
 use crate::qbsdiff_support::{qbsdiff_parallel_scheme, qbsdiff_thread_capability};
@@ -28,41 +26,26 @@ impl BdfPatchHandler {
     pub const fn new(descriptor: &'static FormatDescriptor) -> Self {
         Self { descriptor }
     }
-}
 
-impl PatchHandler for BdfPatchHandler {
-    fn descriptor(&self) -> &'static FormatDescriptor {
-        self.descriptor
-    }
-
-    fn probe(&self, _patch_path: &Path) -> ProbeConfidence {
-        ProbeConfidence::Extension
-    }
-
-    fn parse(&self, patch_path: &Path, _context: &OperationContext) -> Result<OperationReport> {
-        let patch_bytes = map_file_read_only(patch_path)?;
-        let patcher = Bspatch::new(patch_bytes.as_ref())?;
-        Ok(OperationReport::succeeded(
-            OperationFamily::Patch,
-            Some(self.descriptor.name.to_string()),
-            "parse",
-            format!(
-                "parsed {} patch targeting {} byte(s)",
+    /* jscpd:ignore-start */
+    fn parse_report(&self, patch_path: &Path) -> Result<OperationReport> {
+        crate::patch_parse_report_with(self.descriptor, || {
+            let patch_bytes = crate::map_file_read_only(patch_path)?;
+            let patcher = Bspatch::new(patch_bytes.as_ref())?;
+            Ok(build_bdf_parse_label(
                 self.descriptor.name,
-                patcher.hint_target_size()
-            ),
-            Some(100.0),
-            None,
-        ))
+                patcher.hint_target_size(),
+            ))
+        })
     }
 
-    fn apply(
+    fn apply_report(
         &self,
         request: &PatchApplyRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
-        let patch_bytes = map_file_read_only(patch_path)?;
+        let patch_bytes = crate::map_file_read_only(patch_path)?;
         let patcher = Bspatch::new(patch_bytes.as_ref())?;
 
         if let Some(parent) = request.output.parent() {
@@ -73,7 +56,7 @@ impl PatchHandler for BdfPatchHandler {
         let execution = if planned_execution.used_parallelism {
             let (execution, pool) = context.build_pool(thread_capability)?;
             if execution.used_parallelism {
-                let input = map_file_read_only(&request.input)?;
+                let input = crate::map_file_read_only(&request.input)?;
                 let plan = parse_bsdiff_parallel_plan(patch_bytes.as_ref(), input.len())?;
                 let mut output = OpenOptions::new()
                     .read(true)
@@ -94,49 +77,60 @@ impl PatchHandler for BdfPatchHandler {
                 output.flush()?;
                 execution
             } else {
-                let input = map_file_read_only(&request.input)?;
-                let output_file = File::create(&request.output)?;
-                let mut output = BufWriter::new(output_file);
-                patcher.apply(input.as_ref(), &mut output)?;
-                output.flush()?;
+                apply_bspatch_serial(patch_bytes.as_ref(), &request.input, &request.output)?;
                 execution
             }
         } else {
-            let input = map_file_read_only(&request.input)?;
-            let output_file = File::create(&request.output)?;
-            let mut output = BufWriter::new(output_file);
-            patcher.apply(input.as_ref(), &mut output)?;
-            output.flush()?;
+            apply_bspatch_serial(patch_bytes.as_ref(), &request.input, &request.output)?;
             planned_execution
         };
         let written = fs::metadata(&request.output)?.len();
 
-        Ok(OperationReport::succeeded(
-            OperationFamily::Patch,
-            Some(self.descriptor.name.to_string()),
+        Ok(crate::patch_success_report(
+            self.descriptor,
             "apply",
             format!(
                 "applied {} patch and wrote {} byte(s)",
                 self.descriptor.name, written
             ),
-            Some(100.0),
             Some(execution),
         ))
     }
+    /* jscpd:ignore-end */
+}
+
+impl PatchHandler for BdfPatchHandler {
+    /* jscpd:ignore-start */
+    fn descriptor(&self) -> &'static FormatDescriptor {
+        self.descriptor
+    }
+
+    fn parse(&self, patch_path: &Path, _context: &OperationContext) -> Result<OperationReport> {
+        self.parse_report(patch_path)
+    }
+
+    fn apply(
+        &self,
+        request: &PatchApplyRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        self.apply_report(request, context)
+    }
+    /* jscpd:ignore-end */
 
     fn create(
         &self,
         request: &PatchCreateRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        let source = map_file_read_only(&request.original)?;
+        let source = crate::map_file_read_only(&request.original)?;
         if source.len() > qbsdiff::bsdiff::MAX_LENGTH {
             return Err(RomWeaverError::Validation(format!(
                 "BSDIFF40 source exceeds maximum supported size of {} byte(s)",
                 qbsdiff::bsdiff::MAX_LENGTH
             )));
         }
-        let target = map_file_read_only(&request.modified)?;
+        let target = crate::map_file_read_only(&request.modified)?;
         let (execution, pool) = context.build_pool(qbsdiff_thread_capability(target.len()))?;
         let parallel_scheme = qbsdiff_parallel_scheme(target.len());
 
@@ -154,15 +148,13 @@ impl PatchHandler for BdfPatchHandler {
         patch.flush()?;
         let patch_len = fs::metadata(&request.output)?.len();
 
-        Ok(OperationReport::succeeded(
-            OperationFamily::Patch,
-            Some(self.descriptor.name.to_string()),
+        Ok(crate::patch_success_report(
+            self.descriptor,
             "create",
             format!(
                 "created {} patch ({} byte(s))",
                 self.descriptor.name, patch_len
             ),
-            Some(100.0),
             Some(execution),
         ))
     }
@@ -224,6 +216,20 @@ fn qbsdiff_apply_thread_capability(target_len: u64) -> ThreadCapability {
         Ok(target_len) => qbsdiff_thread_capability(target_len),
         Err(_) => ThreadCapability::parallel(None),
     }
+}
+
+fn build_bdf_parse_label(format_name: &str, target_size: u64) -> String {
+    format!("parsed {format_name} patch targeting {target_size} byte(s)")
+}
+
+fn apply_bspatch_serial(patch_bytes: &[u8], input_path: &Path, output_path: &Path) -> Result<()> {
+    let patcher = Bspatch::new(patch_bytes)?;
+    let input = crate::map_file_read_only(input_path)?;
+    let output_file = File::create(output_path)?;
+    let mut output = BufWriter::new(output_file);
+    patcher.apply(input.as_ref(), &mut output)?;
+    output.flush()?;
+    Ok(())
 }
 
 fn parse_bsdiff_parallel_plan(
@@ -510,16 +516,9 @@ fn decode_bsdiff_i64(bytes: &[u8]) -> Result<i64> {
     }
 }
 
-fn map_file_read_only(path: &Path) -> Result<Mmap> {
-    let file = File::open(path)?;
-    // SAFETY: This mapping is read-only and the file handle lives through map creation.
-    let map = unsafe { MmapOptions::new().map(&file)? };
-    Ok(map)
-}
-
 #[cfg(test)]
 mod tests {
-    use std::fs;
+    use std::{fs, path::PathBuf};
 
     use rom_weaver_core::{PatchApplyRequest, PatchCreateRequest, PatchHandler};
 
@@ -528,6 +527,15 @@ mod tests {
         BDF_BSDIFF40,
         test_support::{TestDir, test_context_with_threads},
     };
+
+    fn bdf_fixture_paths(temp: &TestDir) -> (PathBuf, PathBuf, PathBuf, PathBuf) {
+        (
+            temp.child("source.bin"),
+            temp.child("target.bin"),
+            temp.child("update.bdf"),
+            temp.child("output.bin"),
+        )
+    }
 
     #[test]
     fn parse_rejects_invalid_patch_header() {
@@ -545,10 +553,7 @@ mod tests {
     #[test]
     fn create_and_apply_round_trip() {
         let temp = TestDir::new();
-        let source_path = temp.child("source.bin");
-        let target_path = temp.child("target.bin");
-        let patch_path = temp.child("update.bdf");
-        let output_path = temp.child("output.bin");
+        let (source_path, target_path, patch_path, output_path) = bdf_fixture_paths(&temp);
 
         let source = b"The quick brown fox jumps over the lazy dog.";
         let target = b"The quick brown cat jumps over two lazy dogs!";
@@ -593,10 +598,7 @@ mod tests {
     #[test]
     fn apply_rejects_multiple_patch_files() {
         let temp = TestDir::new();
-        let source_path = temp.child("source.bin");
-        let target_path = temp.child("target.bin");
-        let patch_path = temp.child("update.bdf");
-        let output_path = temp.child("output.bin");
+        let (source_path, target_path, patch_path, output_path) = bdf_fixture_paths(&temp);
 
         fs::write(&source_path, b"abc").expect("fixture");
         fs::write(&target_path, b"abZ").expect("fixture");

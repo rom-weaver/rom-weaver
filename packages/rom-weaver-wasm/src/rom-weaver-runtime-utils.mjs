@@ -17,6 +17,25 @@ export function createWasmEnvImports(memory) {
   return imports;
 }
 
+export function normalizeGuestPath(pathLike, options = {}) {
+  const label = typeof options.label === 'string' && options.label.length > 0
+    ? options.label
+    : 'guest path';
+  if (typeof pathLike !== 'string' || pathLike.trim().length === 0) {
+    throw new TypeError(`${label} must be a non-empty string`);
+  }
+
+  let normalized = pathLike.trim();
+  if (!normalized.startsWith('/')) {
+    normalized = `/${normalized}`;
+  }
+  if (normalized.length > 1) {
+    normalized = normalized.replace(/\/+$/, '');
+  }
+
+  return normalized;
+}
+
 export function parseJsonLines(text, options = {}) {
   const events = [];
   const nonJsonLines = [];

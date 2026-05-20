@@ -6,11 +6,25 @@ import test from 'node:test';
 
 import { createNodeWorkerClient } from '../src/workers/node-worker-client.mjs';
 import {
+  assertRunJsonSucceeded,
   runFullFormatMatrix,
   runPatchMatrix,
   runProgressMatrix,
   withTempFixture,
 } from './test-helpers.mjs';
+
+async function runWithNodeFsWorker(args, options) {
+  const client = createNodeWorkerClient();
+  try {
+    await client.init('nodefs', {
+      includeHostRoot: true,
+      mountCwd: true,
+    });
+    return await client.runJson(args, options);
+  } finally {
+    await client.terminate();
+  }
+}
 
 test('node worker client initializes and runs checksum with runJson', async () => {
   const client = createNodeWorkerClient();
@@ -99,11 +113,10 @@ test('node worker client handles concurrent runJson calls after init', async () 
     ]);
 
     for (const result of [resultA, resultB]) {
-      assert.equal(result.exitCode, 0);
-      assert.equal(result.ok, true);
-      const terminal = result.events.at(-1);
-      assert.equal(terminal.status, 'succeeded');
-      assert.equal(terminal.command, 'checksum');
+      assertRunJsonSucceeded(result, {
+        command: 'checksum',
+        context: 'parallel checksum',
+      });
     }
   } finally {
     await client.terminate();
@@ -134,22 +147,9 @@ test('node worker client streams progress events for compress, extract, and patc
 });
 
 test('node worker client integration matrix covers chd, zip, and patch wasm paths', async () => {
-  const runNodeFsJson = async (args, options) => {
-    const client = createNodeWorkerClient();
-    try {
-      await client.init('nodefs', {
-        includeHostRoot: true,
-        mountCwd: true,
-      });
-      return await client.runJson(args, options);
-    } finally {
-      await client.terminate();
-    }
-  };
-
   await withTempFixture(async ({ dir, sourcePath }) => {
     await runPatchMatrix({
-      runJson: runNodeFsJson,
+      runJson: runWithNodeFsWorker,
       dir,
       sourcePath,
     });
@@ -161,22 +161,9 @@ test('node worker client integration matrix covers chd, zip, and patch wasm path
 });
 
 test('node worker client full format matrix covers patch and container registries', async () => {
-  const runNodeFsJson = async (args, options) => {
-    const client = createNodeWorkerClient();
-    try {
-      await client.init('nodefs', {
-        includeHostRoot: true,
-        mountCwd: true,
-      });
-      return await client.runJson(args, options);
-    } finally {
-      await client.terminate();
-    }
-  };
-
   await withTempFixture(async ({ dir }) => {
     await runFullFormatMatrix({
-      runJson: runNodeFsJson,
+      runJson: runWithNodeFsWorker,
       dir,
     });
   }, {

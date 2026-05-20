@@ -1,5 +1,6 @@
 import {
   createWasmEnvImports,
+  normalizeGuestPath as normalizeSharedGuestPath,
   parseJsonLines,
   parseTraceJsonLines,
 } from './rom-weaver-runtime-utils.mjs';
@@ -447,19 +448,7 @@ async function resolveBrowserModule(module, wasmUrl) {
 }
 
 function normalizeGuestPath(pathLike) {
-  if (typeof pathLike !== 'string' || pathLike.trim().length === 0) {
-    throw new TypeError('guest path must be a non-empty string');
-  }
-
-  let normalized = pathLike.trim();
-  if (!normalized.startsWith('/')) {
-    normalized = `/${normalized}`;
-  }
-  if (normalized.length > 1) {
-    normalized = normalized.replace(/\/+$/, '');
-  }
-
-  return normalized;
+  return normalizeSharedGuestPath(pathLike, { label: 'guest path' });
 }
 
 function normalizeHostPath(pathLike, resolveHostPath) {

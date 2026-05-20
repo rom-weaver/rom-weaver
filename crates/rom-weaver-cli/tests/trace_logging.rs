@@ -1,4 +1,4 @@
-use std::fs;
+use std::{fs, path::Path};
 
 use assert_cmd::Command;
 use assert_fs::{TempDir, fixture::PathChild};
@@ -24,28 +24,34 @@ fn write_fixture_file(temp: &TempDir, name: &str, bytes: &[u8]) -> std::path::Pa
     file.path().to_path_buf()
 }
 
+enum TraceMode {
+    Flag,
+    Env,
+    Off,
+}
+
+fn run_checksum_json(source: &Path, trace_mode: TraceMode) -> std::process::Output {
+    let source = source.to_str().expect("path");
+    let mut command = Command::cargo_bin("rom-weaver").expect("binary");
+    command.env_remove("ROM_WEAVER_LOG").env_remove("RUST_LOG");
+    if matches!(trace_mode, TraceMode::Env) {
+        command.env("ROM_WEAVER_LOG", "rom_weaver_cli=trace");
+    }
+
+    let mut args = vec!["--json"];
+    if matches!(trace_mode, TraceMode::Flag) {
+        args.push("--trace");
+    }
+    args.extend(["checksum", source, "--algo", "crc32", "--no-extract"]);
+
+    command.args(args).assert().code(0).get_output().clone()
+}
+
 #[test]
 fn json_trace_flag_emits_trace_json_to_stderr() {
     let temp = TempDir::new().expect("temp dir");
     let source = write_fixture_file(&temp, "input.bin", b"rom-weaver-trace-fixture");
-
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .env_remove("ROM_WEAVER_LOG")
-        .env_remove("RUST_LOG")
-        .args([
-            "--json",
-            "--trace",
-            "checksum",
-            source.to_str().expect("path"),
-            "--algo",
-            "crc32",
-            "--no-extract",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .clone();
+    let output = run_checksum_json(&source, TraceMode::Flag);
 
     let stdout_events = parse_json_lines(&output.stdout);
     assert!(
@@ -76,23 +82,7 @@ fn json_trace_flag_emits_trace_json_to_stderr() {
 fn rom_weaver_log_env_enables_trace_without_trace_flag() {
     let temp = TempDir::new().expect("temp dir");
     let source = write_fixture_file(&temp, "input.bin", b"rom-weaver-trace-env");
-
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .env("ROM_WEAVER_LOG", "rom_weaver_cli=trace")
-        .env_remove("RUST_LOG")
-        .args([
-            "--json",
-            "checksum",
-            source.to_str().expect("path"),
-            "--algo",
-            "crc32",
-            "--no-extract",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .clone();
+    let output = run_checksum_json(&source, TraceMode::Env);
 
     let trace_events = parse_json_lines(&output.stderr);
     assert!(
@@ -105,23 +95,7 @@ fn rom_weaver_log_env_enables_trace_without_trace_flag() {
 fn json_mode_without_trace_keeps_stderr_clean() {
     let temp = TempDir::new().expect("temp dir");
     let source = write_fixture_file(&temp, "input.bin", b"rom-weaver-no-trace");
-
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .env_remove("ROM_WEAVER_LOG")
-        .env_remove("RUST_LOG")
-        .args([
-            "--json",
-            "checksum",
-            source.to_str().expect("path"),
-            "--algo",
-            "crc32",
-            "--no-extract",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .clone();
+    let output = run_checksum_json(&source, TraceMode::Off);
 
     let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
     assert!(stderr.trim().is_empty(), "expected stderr to remain empty");

@@ -1,5 +1,5 @@
 import {
-  readWorkerContextFields,
+  readWorkerErrorContext,
   resolveWorkerErrorKind,
 } from './worker-error-utils.mjs';
 
@@ -283,27 +283,5 @@ function resolveErrorKind(error, name, message, fallbackKind) {
 }
 
 function readErrorContext(error) {
-  if (!error || typeof error !== 'object') {
-    return undefined;
-  }
-
-  const fromContext = readWorkerContextFields(error.context);
-  const fromError = readWorkerContextFields(error);
-  const context = {
-    command: fromContext.command ?? fromError.command,
-    family: fromContext.family ?? fromError.family,
-    format: fromContext.format !== undefined ? fromContext.format : fromError.format,
-    stage: fromContext.stage ?? fromError.stage,
-  };
-
-  if (
-    context.command === undefined
-    && context.family === undefined
-    && context.format === undefined
-    && context.stage === undefined
-  ) {
-    return undefined;
-  }
-
-  return context;
+  return readWorkerErrorContext(error);
 }

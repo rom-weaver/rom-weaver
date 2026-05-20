@@ -23,7 +23,7 @@ mod vcdiff;
 
 use std::{
     fs,
-    io::Read,
+    io::{self, Read},
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -38,11 +38,15 @@ use dps::DpsPatchHandler;
 use gdiff::GdiffPatchHandler;
 use hdiffpatch::HdiffPatchHandler;
 use ips::IpsPatchHandler;
+use memmap2::{Mmap, MmapOptions};
 use ninja1::Ninja1PatchHandler;
 use pat::{PatPatchHandler, has_pat_record_signature};
 use pmsr::PmsrPatchHandler;
 use ppf::PpfPatchHandler;
-use rom_weaver_core::{FormatDescriptor, OperationFamily, PatchHandler, Result, RomWeaverError};
+use rom_weaver_core::{
+    FormatDescriptor, OperationFamily, OperationReport, PatchHandler, Result, RomWeaverError,
+    ThreadExecution,
+};
 use rup::RupPatchHandler;
 use solid::SolidPatchHandler;
 use tracing::trace;
@@ -209,6 +213,65 @@ pub(crate) fn require_single_patch_file<'a>(
         )));
     }
     Ok(&patches[0])
+}
+
+pub(crate) fn patch_success_report(
+    descriptor: &'static FormatDescriptor,
+    stage: &'static str,
+    label: impl Into<String>,
+    thread_execution: Option<ThreadExecution>,
+) -> OperationReport {
+    OperationReport::succeeded(
+        OperationFamily::Patch,
+        Some(descriptor.name.to_string()),
+        stage,
+        label,
+        Some(100.0),
+        thread_execution,
+    )
+}
+
+pub(crate) fn patch_parse_report_with(
+    descriptor: &'static FormatDescriptor,
+    build_label: impl FnOnce() -> Result<String>,
+) -> Result<OperationReport> {
+    let label = build_label()?;
+    Ok(patch_success_report(descriptor, "parse", label, None))
+}
+
+pub(crate) enum ReadOnlyFile {
+    Mapped(Mmap),
+    Owned(Vec<u8>),
+}
+
+impl AsRef<[u8]> for ReadOnlyFile {
+    fn as_ref(&self) -> &[u8] {
+        match self {
+            Self::Mapped(map) => map.as_ref(),
+            Self::Owned(bytes) => bytes.as_slice(),
+        }
+    }
+}
+
+pub(crate) fn map_file_read_only(path: &Path) -> Result<Mmap> {
+    let file = fs::File::open(path)?;
+    // SAFETY: This mapping is read-only and the file handle lives through map creation.
+    let map = unsafe { MmapOptions::new().map(&file)? };
+    Ok(map)
+}
+
+pub(crate) fn map_file_read_only_with_fallback(path: &Path) -> Result<ReadOnlyFile> {
+    match map_file_read_only(path) {
+        Ok(map) => Ok(ReadOnlyFile::Mapped(map)),
+        Err(RomWeaverError::Io(error)) if should_fallback_from_mmap(&error) => {
+            Ok(ReadOnlyFile::Owned(fs::read(path)?))
+        }
+        Err(error) => Err(error),
+    }
+}
+
+fn should_fallback_from_mmap(error: &io::Error) -> bool {
+    error.kind() == io::ErrorKind::Unsupported
 }
 
 pub fn explicitly_unsupported_patch_reason_for_name(name: &str) -> Option<&'static str> {
@@ -490,6 +553,21 @@ mod tests {
         ))
     }
 
+    fn assert_probe_for_fixture(
+        path: PathBuf,
+        fixture: &[u8],
+        expected_handler_name: &str,
+        probe_message: &str,
+    ) {
+        fs::write(&path, fixture).expect("fixture");
+
+        let registry = PatchRegistry::new();
+        let handler = registry.probe(&path).expect(probe_message);
+        assert_eq!(handler.descriptor().name, expected_handler_name);
+
+        let _ = fs::remove_file(path);
+    }
+
     #[test]
     fn registry_contains_planned_formats() {
         let registry = PatchRegistry::new();
@@ -686,25 +764,13 @@ mod tests {
     #[test]
     fn probe_routes_ips_extension_with_double_ips_signature_to_ips_handler() {
         let path = temp_file_path("double-ips");
-        fs::write(&path, b"PATCHEOFPATCHEOF").expect("fixture");
-
-        let registry = PatchRegistry::new();
-        let handler = registry.probe(&path).expect("ips probe");
-        assert_eq!(handler.descriptor().name, "IPS");
-
-        let _ = fs::remove_file(path);
+        assert_probe_for_fixture(path, b"PATCHEOFPATCHEOF", "IPS", "ips probe");
     }
 
     #[test]
     fn probe_routes_ips_extension_with_single_ips_signature_to_ips_handler() {
         let path = temp_file_path("single-ips");
-        fs::write(&path, b"PATCHEOF").expect("fixture");
-
-        let registry = PatchRegistry::new();
-        let handler = registry.probe(&path).expect("ips probe");
-        assert_eq!(handler.descriptor().name, "IPS");
-
-        let _ = fs::remove_file(path);
+        assert_probe_for_fixture(path, b"PATCHEOF", "IPS", "ips probe");
     }
 
     #[test]
@@ -734,13 +800,7 @@ mod tests {
     #[test]
     fn probe_routes_unknown_extension_with_double_ips_signature_to_ips_handler() {
         let path = temp_file_path_with_extension("double-ips-signature", "bin");
-        fs::write(&path, b"PATCHEOFPATCHEOF").expect("fixture");
-
-        let registry = PatchRegistry::new();
-        let handler = registry.probe(&path).expect("ips probe");
-        assert_eq!(handler.descriptor().name, "IPS");
-
-        let _ = fs::remove_file(path);
+        assert_probe_for_fixture(path, b"PATCHEOFPATCHEOF", "IPS", "ips probe");
     }
 
     #[test]

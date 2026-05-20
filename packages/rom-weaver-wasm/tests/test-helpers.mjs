@@ -37,12 +37,51 @@ export function getTerminalEvent(result) {
   return result.events.at(-1);
 }
 
+export function assertRunJsonSucceeded(result, options = {}) {
+  const { command, context = 'runJson command' } = options;
+  assert.equal(result.exitCode, 0, `${context} should exit with code 0`);
+  assert.equal(result.ok, true, `${context} should succeed`);
+  const terminal = getTerminalEvent(result);
+  assert.equal(terminal.status, 'succeeded');
+  if (typeof command === 'string') {
+    assert.equal(terminal.command, command);
+  }
+  return terminal;
+}
+
 export function assertFailedWithLabel(result, labelPattern, context) {
   assert.equal(result.ok, false, `${context} should fail in the current wasm matrix`);
   assert.notEqual(result.exitCode, 0, `${context} should not exit with code 0`);
   const terminal = getTerminalEvent(result);
   assert.equal(terminal.status, 'failed');
   assert.match(String(terminal.label || ''), labelPattern);
+}
+
+async function runPatchApplyNoCompress(runJson, { inputPath, patchPath, outputPath }) {
+  return runJson([
+    'patch-apply',
+    '--input',
+    inputPath,
+    '--patch',
+    patchPath,
+    '--output',
+    outputPath,
+    '--threads',
+    '1',
+    '--no-compress',
+  ]);
+}
+
+async function runCreatedPatchApply(runJson, { format, createResult, originalPath, patchPath, dir }) {
+  assert.equal(createResult.ok, true, `patch-create ${format} should succeed`);
+  assert.equal(getTerminalEvent(createResult).status, 'succeeded');
+  const applyPath = join(dir, `patch-applied-${format}.bin`);
+  const applyResult = await runPatchApplyNoCompress(runJson, {
+    inputPath: originalPath,
+    patchPath,
+    outputPath: applyPath,
+  });
+  return { applyPath, applyResult };
 }
 
 export async function runProgressMatrix({ runJson, dir, sourcePath, appliedOutputName }) {
@@ -733,21 +772,13 @@ export async function runFullFormatMatrix({ runJson, dir }) {
     ]);
 
     if (createAndApplySuccessFormats.has(format)) {
-      assert.equal(createResult.ok, true, `patch-create ${format} should succeed`);
-      assert.equal(getTerminalEvent(createResult).status, 'succeeded');
-      const applyPath = join(dir, `patch-applied-${format}.bin`);
-      const applyResult = await runJson([
-        'patch-apply',
-        '--input',
+      const { applyPath, applyResult } = await runCreatedPatchApply(runJson, {
+        format,
+        createResult,
         originalPath,
-        '--patch',
         patchPath,
-        '--output',
-        applyPath,
-        '--threads',
-        '1',
-        '--no-compress',
-      ]);
+        dir,
+      });
       assert.equal(applyResult.ok, true, `patch-apply ${format} should succeed`);
       assert.equal(getTerminalEvent(applyResult).status, 'succeeded');
       assert.deepEqual(await readFile(applyPath), await readFile(modifiedPath));
@@ -755,21 +786,13 @@ export async function runFullFormatMatrix({ runJson, dir }) {
     }
 
     if (createSuccessApplyFailureExpectations.has(format)) {
-      assert.equal(createResult.ok, true, `patch-create ${format} should succeed`);
-      assert.equal(getTerminalEvent(createResult).status, 'succeeded');
-      const applyPath = join(dir, `patch-applied-${format}.bin`);
-      const applyResult = await runJson([
-        'patch-apply',
-        '--input',
+      const { applyResult } = await runCreatedPatchApply(runJson, {
+        format,
+        createResult,
         originalPath,
-        '--patch',
         patchPath,
-        '--output',
-        applyPath,
-        '--threads',
-        '1',
-        '--no-compress',
-      ]);
+        dir,
+      });
       assertFailedByPattern(
         applyResult,
         createSuccessApplyFailureExpectations.get(format),

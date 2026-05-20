@@ -67,6 +67,28 @@ fn collect_input_files(input_dir: &Path) -> io::Result<Vec<PathBuf>> {
     Ok(files)
 }
 
+fn file_name_utf8(path: &Path) -> io::Result<&str> {
+    path.file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "invalid file name"))
+}
+
+fn zip_entry_output_path(base_dir: &Path, raw_name: &str) -> Option<PathBuf> {
+    let name = raw_name.replace('\\', "/");
+    if name.ends_with('/') {
+        return None;
+    }
+    Some(base_dir.join(Path::new(name.trim_start_matches("./"))))
+}
+
+fn append_tar_inputs<W: Write>(builder: &mut TarBuilder<W>, input_dir: &Path) -> BenchResult<()> {
+    for input in collect_input_files(input_dir)? {
+        let file_name = file_name_utf8(&input)?;
+        builder.append_path_with_name(&input, file_name)?;
+    }
+    Ok(())
+}
+
 fn create_zip_archive(input_dir: &Path, output_path: &Path) -> BenchResult<()> {
     if let Some(parent) = output_path.parent() {
         fs::create_dir_all(parent)?;
@@ -76,10 +98,7 @@ fn create_zip_archive(input_dir: &Path, output_path: &Path) -> BenchResult<()> {
     let mut archive = ZipFileWriter::new(writer);
     let options = ZipFileOptions::default().compression_method(ZipCompressionMethod::Deflated);
     for input in collect_input_files(input_dir)? {
-        let file_name = input
-            .file_name()
-            .and_then(|value| value.to_str())
-            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "invalid file name"))?;
+        let file_name = file_name_utf8(&input)?;
         archive.start_file(file_name, options)?;
         let mut source = BufReader::new(File::open(&input)?);
         io::copy(&mut source, &mut archive)?;
@@ -94,12 +113,9 @@ fn zip_extract_single(source: &Path, out_dir: &Path) -> BenchResult<()> {
     let mut archive = ZipFileArchive::new(BufReader::new(file))?;
     for index in 0..archive.len() {
         let mut entry = archive.by_index(index)?;
-        let name = entry.name().replace('\\', "/");
-        if name.ends_with('/') {
+        let Some(output_path) = zip_entry_output_path(out_dir, entry.name()) else {
             continue;
-        }
-        let relative = Path::new(name.trim_start_matches("./"));
-        let output_path = out_dir.join(relative);
+        };
         if let Some(parent) = output_path.parent() {
             fs::create_dir_all(parent)?;
         }
@@ -117,15 +133,10 @@ fn zip_extract_parallel(source: &Path, out_dir: &Path, threads: usize) -> BenchR
     let mut tasks = Vec::new();
     for index in 0..archive.len() {
         let entry = archive.by_index(index)?;
-        let name = entry.name().replace('\\', "/");
-        if name.ends_with('/') {
+        let Some(output_path) = zip_entry_output_path(out_dir, entry.name()) else {
             continue;
-        }
-        let relative = Path::new(name.trim_start_matches("./"));
-        tasks.push(ZipExtractTask {
-            index,
-            output_path: out_dir.join(relative),
-        });
+        };
+        tasks.push(ZipExtractTask { index, output_path });
     }
 
     let worker_count = threads.max(1);
@@ -160,25 +171,13 @@ fn create_tar_xz(input_dir: &Path, output_path: &Path, threads: usize) -> BenchR
         options.set_block_size(NonZeroU64::new(XZ_MT_BLOCK_BYTES));
         let encoder = XzWriterMt::new(output, options, threads.min(256) as u32)?;
         let mut builder = TarBuilder::new(encoder);
-        for input in collect_input_files(input_dir)? {
-            let file_name = input
-                .file_name()
-                .and_then(|value| value.to_str())
-                .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "invalid file name"))?;
-            builder.append_path_with_name(&input, file_name)?;
-        }
+        append_tar_inputs(&mut builder, input_dir)?;
         let mut output = builder.into_inner()?.finish()?;
         output.flush()?;
     } else {
         let encoder = XzWriter::new(output, XzOptions::with_preset(6))?;
         let mut builder = TarBuilder::new(encoder);
-        for input in collect_input_files(input_dir)? {
-            let file_name = input
-                .file_name()
-                .and_then(|value| value.to_str())
-                .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "invalid file name"))?;
-            builder.append_path_with_name(&input, file_name)?;
-        }
+        append_tar_inputs(&mut builder, input_dir)?;
         let mut output = builder.into_inner()?.finish()?;
         output.flush()?;
     }

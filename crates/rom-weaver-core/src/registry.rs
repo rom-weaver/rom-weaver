@@ -62,12 +62,14 @@ pub struct OperationReport {
 }
 
 impl OperationReport {
-    pub fn unsupported(
+    fn with_status(
         family: OperationFamily,
         format: Option<String>,
         stage: impl Into<String>,
         label: impl Into<String>,
+        percent: Option<f32>,
         thread_execution: Option<ThreadExecution>,
+        status: OperationStatus,
     ) -> Self {
         Self {
             family,
@@ -75,10 +77,28 @@ impl OperationReport {
             stage: stage.into(),
             label: label.into(),
             details: None,
-            percent: None,
+            percent,
             thread_execution,
-            status: OperationStatus::Unsupported,
+            status,
         }
+    }
+
+    pub fn unsupported(
+        family: OperationFamily,
+        format: Option<String>,
+        stage: impl Into<String>,
+        label: impl Into<String>,
+        thread_execution: Option<ThreadExecution>,
+    ) -> Self {
+        Self::with_status(
+            family,
+            format,
+            stage,
+            label,
+            None,
+            thread_execution,
+            OperationStatus::Unsupported,
+        )
     }
 
     pub fn failed(
@@ -88,16 +108,9 @@ impl OperationReport {
         label: impl Into<String>,
         thread_execution: Option<ThreadExecution>,
     ) -> Self {
-        Self {
-            family,
-            format,
-            stage: stage.into(),
-            label: label.into(),
-            details: None,
-            percent: None,
-            thread_execution,
-            status: OperationStatus::Failed,
-        }
+        let mut report = Self::unsupported(family, format, stage, label, thread_execution);
+        report.status = OperationStatus::Failed;
+        report
     }
 
     pub fn succeeded(
@@ -108,16 +121,15 @@ impl OperationReport {
         percent: Option<f32>,
         thread_execution: Option<ThreadExecution>,
     ) -> Self {
-        Self {
+        Self::with_status(
             family,
             format,
-            stage: stage.into(),
-            label: label.into(),
-            details: None,
+            stage,
+            label,
             percent,
             thread_execution,
-            status: OperationStatus::Succeeded,
-        }
+            OperationStatus::Succeeded,
+        )
     }
 
     pub fn into_event(self, command: impl Into<String>) -> crate::ProgressEvent {
@@ -552,17 +564,9 @@ impl CodecBackend for TracingCodecBackend {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let descriptor = self.inner.descriptor();
-        trace!(
-            family = ?descriptor.family,
-            format = descriptor.name,
-            input = %request.input.display(),
-            output = %request.output.display(),
-            level = ?request.level,
-            "codec encode start"
-        );
-        let result = self.inner.encode(request, context);
-        trace_operation_result("encode", descriptor, &result);
-        result
+        trace_codec_operation("encode", descriptor, request, || {
+            self.inner.encode(request, context)
+        })
     }
 
     fn decode(
@@ -571,22 +575,33 @@ impl CodecBackend for TracingCodecBackend {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let descriptor = self.inner.descriptor();
-        trace!(
-            family = ?descriptor.family,
-            format = descriptor.name,
-            input = %request.input.display(),
-            output = %request.output.display(),
-            level = ?request.level,
-            "codec decode start"
-        );
-        let result = self.inner.decode(request, context);
-        trace_operation_result("decode", descriptor, &result);
-        result
+        trace_codec_operation("decode", descriptor, request, || {
+            self.inner.decode(request, context)
+        })
     }
 
     fn capabilities(&self) -> CodecCapabilities {
         self.inner.capabilities()
     }
+}
+
+fn trace_codec_operation(
+    stage: &'static str,
+    descriptor: &CodecDescriptor,
+    request: &CodecOperationRequest,
+    operation: impl FnOnce() -> Result<OperationReport>,
+) -> Result<OperationReport> {
+    trace!(
+        family = ?descriptor.family,
+        format = descriptor.name,
+        input = %request.input.display(),
+        output = %request.output.display(),
+        level = ?request.level,
+        "codec operation start"
+    );
+    let result = operation();
+    trace_operation_result(stage, descriptor, &result);
+    result
 }
 
 fn trace_operation_result(
