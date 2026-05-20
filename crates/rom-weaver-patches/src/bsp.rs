@@ -7,11 +7,13 @@ use std::{
 use memmap2::{Mmap, MmapOptions};
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
-    PatchCapabilities, PatchCreateRequest, PatchHandler, Result, RomWeaverError, ThreadCapability,
+    PatchCapabilities, PatchCreateRequest, PatchHandler, Result, RomWeaverError, SharedThreadPool,
+    ThreadCapability,
 };
 
 #[cfg(test)]
 const BSP_VM_SOURCE: &str = include_str!("bsp_vm_runtime.js");
+const BSP_THREAD_WORK_CHUNK_BYTES: usize = 1024 * 1024;
 
 pub struct BspPatchHandler {
     descriptor: &'static FormatDescriptor,
@@ -51,8 +53,16 @@ impl PatchHandler for BspPatchHandler {
         let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
         let patch_bytes = map_file_read_only(patch_path)?;
         let input_bytes = fs::read(&request.input)?;
+        let (execution, pool) = context.build_pool(bsp_apply_thread_capability(
+            input_bytes.len(),
+            patch_bytes.as_ref().len(),
+        ))?;
 
-        let output_bytes = apply_bsp_patch_bytes(patch_bytes.as_ref(), input_bytes)?;
+        let output_bytes = apply_bsp_patch_bytes(
+            patch_bytes.as_ref(),
+            input_bytes,
+            execution.used_parallelism.then_some(&pool),
+        )?;
 
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
@@ -60,7 +70,6 @@ impl PatchHandler for BspPatchHandler {
         fs::write(&request.output, &output_bytes)?;
 
         let written = output_bytes.len();
-        let execution = context.plan_threads(ThreadCapability::single_threaded());
         Ok(OperationReport::succeeded(
             OperationFamily::Patch,
             Some(self.descriptor.name.to_string()),
@@ -91,13 +100,23 @@ impl PatchHandler for BspPatchHandler {
             create: false,
             threaded_scan: false,
             threaded_diff: false,
-            threaded_output: false,
+            threaded_output: true,
         }
     }
 }
 
-fn apply_bsp_patch_bytes(patch_bytes: &[u8], input_bytes: Vec<u8>) -> Result<Vec<u8>> {
-    crate::bsp_native_vm::apply_bsp_patch_bytes_native(patch_bytes, input_bytes)
+fn apply_bsp_patch_bytes(
+    patch_bytes: &[u8],
+    input_bytes: Vec<u8>,
+    pool: Option<&SharedThreadPool>,
+) -> Result<Vec<u8>> {
+    crate::bsp_native_vm::apply_bsp_patch_bytes_native(patch_bytes, input_bytes, pool)
+}
+
+fn bsp_apply_thread_capability(input_len: usize, patch_len: usize) -> ThreadCapability {
+    let work_bytes = input_len.max(patch_len).max(1);
+    let chunk_count = work_bytes.div_ceil(BSP_THREAD_WORK_CHUNK_BYTES);
+    ThreadCapability::parallel(Some(chunk_count.max(1)))
 }
 
 enum ReadOnlyFile {
@@ -135,7 +154,9 @@ mod tests {
     use rom_weaver_core::{PatchApplyRequest, PatchCreateRequest, PatchHandler};
     use serde_json::Value;
 
-    use super::{BSP_VM_SOURCE, BspPatchHandler, apply_bsp_patch_bytes};
+    use super::{
+        BSP_THREAD_WORK_CHUNK_BYTES, BSP_VM_SOURCE, BspPatchHandler, apply_bsp_patch_bytes,
+    };
     use crate::{
         BSP,
         test_support::{TestDir, test_context_with_threads},
@@ -340,6 +361,48 @@ patcher.run();
     }
 
     #[test]
+    fn apply_reports_parallel_execution_for_large_write_data_opcode() {
+        let temp = TestDir::new();
+        let input_path = temp.child("source.bin");
+        let patch_path = temp.child("update.bsp");
+        let output_path = temp.child("output.bin");
+
+        fs::write(&input_path, []).expect("fixture");
+
+        let payload_len = (BSP_THREAD_WORK_CHUNK_BYTES * 2) + 17;
+        let payload: Vec<u8> = (0..payload_len).map(|index| (index % 251) as u8).collect();
+        let payload_offset = 14u32;
+
+        let mut patch_bytes = Vec::with_capacity(payload_offset as usize + payload_len);
+        patch_bytes.push(0x7C);
+        patch_bytes.extend_from_slice(&payload_offset.to_le_bytes());
+        patch_bytes.extend_from_slice(&(payload_len as u32).to_le_bytes());
+        patch_bytes.push(0x06);
+        patch_bytes.extend_from_slice(&0u32.to_le_bytes());
+        assert_eq!(patch_bytes.len(), payload_offset as usize);
+        patch_bytes.extend_from_slice(&payload);
+        fs::write(&patch_path, patch_bytes).expect("fixture");
+
+        let handler = BspPatchHandler::new(&BSP);
+        let report = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: input_path,
+                    patches: vec![patch_path],
+                    output: output_path.clone(),
+                },
+                &test_context_with_threads(&temp, 8),
+            )
+            .expect("apply");
+
+        let execution = report.thread_execution.expect("thread execution");
+        assert_eq!(execution.requested_threads, 8);
+        assert!(execution.effective_threads > 1);
+        assert!(execution.used_parallelism);
+        assert_eq!(fs::read(output_path).expect("output"), payload);
+    }
+
+    #[test]
     fn apply_surfaces_non_zero_exit_status() {
         let temp = TestDir::new();
         let input_path = temp.child("source.bin");
@@ -383,7 +446,7 @@ patcher.run();
             let patch_bytes = decode_hex(vector.patch_hex);
             let input_bytes = decode_hex(vector.input_hex);
             let reference = run_reference_patcher(&runtime_path, &patch_bytes, &input_bytes);
-            let ours = apply_bsp_patch_bytes(patch_bytes.as_slice(), input_bytes.clone());
+            let ours = apply_bsp_patch_bytes(patch_bytes.as_slice(), input_bytes.clone(), None);
 
             match reference {
                 ReferenceOutcome::Success(expected_output) => {
@@ -467,7 +530,7 @@ patcher.run();
 
         let input = vec![0x00];
         let reference = run_reference_patcher(&runtime_path, &patch, &input);
-        let ours = apply_bsp_patch_bytes(&patch, input).expect("native apply");
+        let ours = apply_bsp_patch_bytes(&patch, input, None).expect("native apply");
         let expected = match reference {
             ReferenceOutcome::Success(bytes) => bytes,
             ReferenceOutcome::Failure(code) => panic!("reference failed with status {code}"),

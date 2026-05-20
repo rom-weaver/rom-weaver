@@ -1,9 +1,11 @@
 use std::{borrow::Cow, collections::VecDeque};
 
-use rom_weaver_core::RomWeaverError;
+use rayon::prelude::*;
+use rom_weaver_core::{RomWeaverError, SharedThreadPool};
 use sha1::{Digest, Sha1};
 
 type VmResult<T> = std::result::Result<T, String>;
+const THREAD_WORK_CHUNK_BYTES: usize = 1024 * 1024;
 
 #[derive(Clone, Copy)]
 enum StepControl {
@@ -38,17 +40,22 @@ impl<'a> Frame<'a> {
     }
 }
 
-struct BspVm<'a> {
+struct BspVm<'a, 'pool> {
     file_buffer: Vec<u8>,
     current_file_pointer: u32,
     current_file_pointer_locked: bool,
     frames: Vec<Frame<'a>>,
     dirty: bool,
     sha1: [u8; 20],
+    thread_pool: Option<&'pool SharedThreadPool>,
 }
 
-impl<'a> BspVm<'a> {
-    fn new(patch_bytes: &'a [u8], input_bytes: Vec<u8>) -> Self {
+impl<'a, 'pool> BspVm<'a, 'pool> {
+    fn new(
+        patch_bytes: &'a [u8],
+        input_bytes: Vec<u8>,
+        thread_pool: Option<&'pool SharedThreadPool>,
+    ) -> Self {
         Self {
             file_buffer: input_bytes,
             current_file_pointer: 0,
@@ -56,6 +63,7 @@ impl<'a> BspVm<'a> {
             frames: vec![Frame::new(Cow::Borrowed(patch_bytes))],
             dirty: true,
             sha1: [0; 20],
+            thread_pool,
         }
     }
 
@@ -389,25 +397,100 @@ impl<'a> BspVm<'a> {
         self.dirty = false;
     }
 
-    fn write_data(&mut self, mut position: u32, mut address: u32, mut len: u32) -> VmResult<()> {
-        while len > 0 {
-            self.set_file_byte(position, self.get_patch_byte(address)?)?;
-            position = position.wrapping_add(1);
-            address = address.wrapping_add(1);
-            len -= 1;
+    fn write_data(&mut self, position: u32, address: u32, len: u32) -> VmResult<()> {
+        if len == 0 {
+            self.dirty = true;
+            return Ok(());
         }
+
+        let end_address = address
+            .checked_add(len)
+            .ok_or_else(|| "attempted to read past the end of the patch space".to_string())?;
+        if end_address as usize > self.patch_len() {
+            return Err("attempted to read past the end of the patch space".to_string());
+        }
+
+        let end_position = position
+            .checked_add(len)
+            .ok_or_else(|| "file buffer size overflow".to_string())?;
+        self.ensure_file_size(end_position)?;
+
+        let start = position as usize;
+        let end = end_position as usize;
+        let patch_start = address as usize;
+        let patch_end = end_address as usize;
+
+        let source = self.top_frame().patch_space.as_ref()[patch_start..patch_end].to_vec();
+        let destination = &mut self.file_buffer[start..end];
+
+        if let Some(pool) = self
+            .thread_pool
+            .filter(|_| source.len() >= THREAD_WORK_CHUNK_BYTES)
+        {
+            pool.install(|| {
+                destination
+                    .par_chunks_mut(THREAD_WORK_CHUNK_BYTES)
+                    .zip(source.par_chunks(THREAD_WORK_CHUNK_BYTES))
+                    .for_each(|(dest_chunk, source_chunk)| {
+                        dest_chunk.copy_from_slice(source_chunk);
+                    });
+            });
+        } else {
+            destination.copy_from_slice(&source);
+        }
+
         self.dirty = true;
         Ok(())
     }
 
-    fn xor_data(&mut self, mut position: u32, mut address: u32, mut len: u32) -> VmResult<()> {
-        while len > 0 {
-            let value = self.get_patch_byte(address)? ^ self.get_file_byte(position)?;
-            self.set_file_byte(position, value)?;
-            position = position.wrapping_add(1);
-            address = address.wrapping_add(1);
-            len -= 1;
+    fn xor_data(&mut self, position: u32, address: u32, len: u32) -> VmResult<()> {
+        if len == 0 {
+            self.dirty = true;
+            return Ok(());
         }
+
+        let end_address = address
+            .checked_add(len)
+            .ok_or_else(|| "attempted to read past the end of the patch space".to_string())?;
+        if end_address as usize > self.patch_len() {
+            return Err("attempted to read past the end of the patch space".to_string());
+        }
+
+        let end_position = position
+            .checked_add(len)
+            .ok_or_else(|| "attempted to read past the end of the file buffer".to_string())?;
+        if end_position as usize > self.file_buffer.len() {
+            return Err("attempted to read past the end of the file buffer".to_string());
+        }
+
+        let start = position as usize;
+        let end = end_position as usize;
+        let patch_start = address as usize;
+        let patch_end = end_address as usize;
+
+        let source = self.top_frame().patch_space.as_ref()[patch_start..patch_end].to_vec();
+        let destination = &mut self.file_buffer[start..end];
+
+        if let Some(pool) = self
+            .thread_pool
+            .filter(|_| source.len() >= THREAD_WORK_CHUNK_BYTES)
+        {
+            pool.install(|| {
+                destination
+                    .par_chunks_mut(THREAD_WORK_CHUNK_BYTES)
+                    .zip(source.par_chunks(THREAD_WORK_CHUNK_BYTES))
+                    .for_each(|(dest_chunk, source_chunk)| {
+                        for (dest, src) in dest_chunk.iter_mut().zip(source_chunk) {
+                            *dest ^= *src;
+                        }
+                    });
+            });
+        } else {
+            for (dest, src) in destination.iter_mut().zip(source.iter()) {
+                *dest ^= *src;
+            }
+        }
+
         self.dirty = true;
         Ok(())
     }
@@ -1306,8 +1389,9 @@ impl<'a> BspVm<'a> {
 pub(crate) fn apply_bsp_patch_bytes_native(
     patch_bytes: &[u8],
     input_bytes: Vec<u8>,
+    pool: Option<&SharedThreadPool>,
 ) -> Result<Vec<u8>, RomWeaverError> {
-    let mut vm = BspVm::new(patch_bytes, input_bytes);
+    let mut vm = BspVm::new(patch_bytes, input_bytes, pool);
     match vm.execute() {
         Ok(VmOutcome::Success(output)) => Ok(output),
         Ok(VmOutcome::Failure(code)) => Err(RomWeaverError::Validation(format!(
