@@ -44,6 +44,11 @@ const XDELTA_SECONDARY_MIN_INPUT: usize = 10;
 const XDELTA_DJW_SECONDARY_ID: u8 = 1;
 const XDELTA_LZMA_SECONDARY_ID: u8 = 2;
 const XDELTA_FGK_SECONDARY_ID: u8 = 16;
+const XDELTA_SECONDARY_CANDIDATES: [u8; 3] = [
+    XDELTA_DJW_SECONDARY_ID,
+    XDELTA_LZMA_SECONDARY_ID,
+    XDELTA_FGK_SECONDARY_ID,
+];
 const DJW_MAX_CODELEN: usize = 20;
 const DJW_TOTAL_CODES: usize = DJW_MAX_CODELEN + 2;
 const DJW_BASIC_CODES: usize = 5;
@@ -110,6 +115,15 @@ impl PatchHandler for VcdiffPatchHandler {
                 checksum_windows
             ));
         }
+        if patch.app_header.is_some() {
+            label.push_str("; application header declared");
+        }
+        if let Some(code_table) = &patch.custom_code_table {
+            label.push_str(&format!(
+                "; custom code table declared (near={}, same={}, bytes={})",
+                code_table.near_size, code_table.same_size, code_table.data_len
+            ));
+        }
         Ok(OperationReport::succeeded(
             OperationFamily::Patch,
             Some(self.descriptor.name.to_string()),
@@ -129,7 +143,7 @@ impl PatchHandler for VcdiffPatchHandler {
             crate::require_single_patch_file(&request.patches, self.descriptor.name)?.clone();
         let mut patch_reader = BufReader::new(File::open(&patch_path)?);
         let patch = parse_patch(&mut patch_reader)?;
-        if patch.has_custom_code_table {
+        if patch.custom_code_table.is_some() {
             return Err(RomWeaverError::Validation(
                 "native VCDIFF backend does not support custom code tables".into(),
             ));
@@ -279,31 +293,64 @@ impl PatchHandler for VcdiffPatchHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let compare_secondary = is_xdelta_descriptor(self.descriptor);
+        let include_checksums =
+            context.patch_checksum_validation() == PatchChecksumValidation::Strict;
+        let xdelta_app_header = if compare_secondary {
+            Some(build_default_xdelta_app_header(
+                &request.original,
+                &request.modified,
+            ))
+        } else {
+            None
+        };
         let output_extension = request.output.extension().and_then(|value| value.to_str());
+        let baseline_raw_path = context
+            .temp_paths()
+            .next_path("vcdiff-create-baseline-raw", output_extension);
         let baseline_path = context
             .temp_paths()
             .next_path("vcdiff-create-baseline", output_extension);
-        let secondary_path = context
-            .temp_paths()
-            .next_path("vcdiff-create-secondary", output_extension);
         let thread_capability = ThreadCapability::single_threaded();
 
         let create_result = (|| -> Result<(ParsedPatch, rom_weaver_core::ThreadExecution)> {
             let planned_execution = context.plan_threads(thread_capability.clone());
-            let baseline = encode_patch_with_native_streaming(
+            let baseline_raw = encode_patch_with_native_streaming(
                 &request.original,
                 &request.modified,
-                &baseline_path,
-                create_native_compress_options(self.descriptor),
+                &baseline_raw_path,
+                create_native_compress_options(self.descriptor, include_checksums),
             )?;
+            let baseline_secondary_source_path = baseline_raw.path.clone();
+            let baseline = if xdelta_app_header.is_some() {
+                recode_patch_with_xdelta_options(
+                    &baseline_raw.path,
+                    &baseline_path,
+                    None,
+                    xdelta_app_header.as_deref(),
+                )?
+            } else {
+                baseline_raw
+            };
             let selected = if compare_secondary {
-                let secondary =
-                    recode_patch_with_xdelta_lzma_secondary(&baseline.path, &secondary_path)?;
-                if secondary.size < baseline.size {
-                    secondary
-                } else {
-                    baseline
+                let mut best = baseline;
+                for secondary_id in XDELTA_SECONDARY_CANDIDATES {
+                    let candidate_path = context.temp_paths().next_path(
+                        &format!("vcdiff-create-secondary-{secondary_id}"),
+                        output_extension,
+                    );
+                    let candidate = recode_patch_with_xdelta_options(
+                        &baseline_secondary_source_path,
+                        &candidate_path,
+                        Some(secondary_id),
+                        xdelta_app_header.as_deref(),
+                    );
+                    if let Ok(candidate) = candidate {
+                        if candidate.size < best.size {
+                            best = candidate;
+                        }
+                    }
                 }
+                best
             } else {
                 baseline
             };
@@ -318,8 +365,8 @@ impl PatchHandler for VcdiffPatchHandler {
             Ok((parse_patch(&mut reader)?, execution))
         })();
 
+        let _ = fs::remove_file(&baseline_raw_path);
         let _ = fs::remove_file(&baseline_path);
-        let _ = fs::remove_file(&secondary_path);
 
         let (parsed, execution) = create_result?;
 
@@ -362,8 +409,16 @@ impl PatchHandler for VcdiffPatchHandler {
 #[derive(Debug)]
 struct ParsedPatch {
     secondary_compressor_id: Option<u8>,
-    has_custom_code_table: bool,
+    custom_code_table: Option<CustomCodeTableInfo>,
+    app_header: Option<Vec<u8>>,
     windows: Vec<WindowIndex>,
+}
+
+#[derive(Debug)]
+struct CustomCodeTableInfo {
+    near_size: u8,
+    same_size: u8,
+    data_len: u64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -467,17 +522,31 @@ fn parse_patch<R: Read + Seek>(reader: &mut R) -> Result<ParsedPatch> {
         None
     };
 
-    if hdr_indicator & HDR_CODE_TABLE != 0 {
-        let _near = read_u8(reader)?;
-        let _same = read_u8(reader)?;
+    let custom_code_table = if hdr_indicator & HDR_CODE_TABLE != 0 {
+        let near_size = read_u8(reader)?;
+        let same_size = read_u8(reader)?;
         let (code_table_len, _) = read_varint(reader)?;
         skip_bytes(reader, code_table_len)?;
-    }
+        Some(CustomCodeTableInfo {
+            near_size,
+            same_size,
+            data_len: code_table_len,
+        })
+    } else {
+        None
+    };
 
-    if hdr_indicator & HDR_APP_HEADER != 0 {
+    let app_header = if hdr_indicator & HDR_APP_HEADER != 0 {
         let (app_header_len, _) = read_varint(reader)?;
-        skip_bytes(reader, app_header_len)?;
-    }
+        let len = usize::try_from(app_header_len).map_err(|_| {
+            RomWeaverError::Validation("application header is too large to fit in memory".into())
+        })?;
+        let mut bytes = vec![0; len];
+        reader.read_exact(&mut bytes)?;
+        Some(bytes)
+    } else {
+        None
+    };
 
     let mut windows = Vec::new();
     let mut output_offset = 0u64;
@@ -492,7 +561,8 @@ fn parse_patch<R: Read + Seek>(reader: &mut R) -> Result<ParsedPatch> {
 
     Ok(ParsedPatch {
         secondary_compressor_id,
-        has_custom_code_table: hdr_indicator & HDR_CODE_TABLE != 0,
+        custom_code_table,
+        app_header,
         windows,
     })
 }
@@ -712,9 +782,12 @@ fn is_xdelta_descriptor(descriptor: &FormatDescriptor) -> bool {
     descriptor.name.eq_ignore_ascii_case("xdelta")
 }
 
-fn create_native_compress_options(descriptor: &FormatDescriptor) -> CompressOptions {
+fn create_native_compress_options(
+    descriptor: &FormatDescriptor,
+    include_checksums: bool,
+) -> CompressOptions {
     CompressOptions {
-        checksum: is_xdelta_descriptor(descriptor),
+        checksum: is_xdelta_descriptor(descriptor) && include_checksums,
         secondary: SecondaryCompression::None,
         ..CompressOptions::default()
     }
@@ -768,19 +841,21 @@ fn native_encode_error(error: oxidelta::compress::encoder::EncodeError) -> RomWe
     RomWeaverError::Validation(format!("native VCDIFF encoder failed: {error}"))
 }
 
-fn recode_patch_with_xdelta_lzma_secondary(
+fn recode_patch_with_xdelta_options(
     baseline_patch_path: &Path,
     output_path: &Path,
+    secondary_compressor_id: Option<u8>,
+    app_header: Option<&[u8]>,
 ) -> Result<CreatedPatchCandidate> {
     let baseline_bytes = fs::read(baseline_patch_path)?;
     let mut reader = Cursor::new(&baseline_bytes);
     let parsed = parse_patch(&mut reader)?;
-    if parsed.has_custom_code_table {
+    if parsed.custom_code_table.is_some() {
         return Err(RomWeaverError::Validation(
             "native VCDIFF secondary recoder does not support custom code tables".into(),
         ));
     }
-    if parsed.secondary_compressor_id.is_some() {
+    if secondary_compressor_id.is_some() && parsed.secondary_compressor_id.is_some() {
         return Err(RomWeaverError::Validation(
             "native VCDIFF secondary recoder expected an uncompressed baseline patch".into(),
         ));
@@ -789,8 +864,21 @@ fn recode_patch_with_xdelta_lzma_secondary(
     let mut recoded = Vec::new();
     recoded.extend_from_slice(&VCDIFF_MAGIC_BYTES);
     recoded.push(VCDIFF_VERSION_STANDARD);
-    recoded.push(HDR_SECONDARY);
-    recoded.push(XDELTA_LZMA_SECONDARY_ID);
+    let mut header_flags = 0u8;
+    if secondary_compressor_id.is_some() {
+        header_flags |= HDR_SECONDARY;
+    }
+    if app_header.is_some() {
+        header_flags |= HDR_APP_HEADER;
+    }
+    recoded.push(header_flags);
+    if let Some(id) = secondary_compressor_id {
+        recoded.push(id);
+    }
+    if let Some(header) = app_header {
+        encode_varint_raw(&mut recoded, header.len() as u64);
+        recoded.extend_from_slice(header);
+    }
 
     let mut patch_reader = Cursor::new(&baseline_bytes);
     for window in &parsed.windows {
@@ -798,20 +886,29 @@ fn recode_patch_with_xdelta_lzma_secondary(
         let inst = read_section(&mut patch_reader, window.inst_start, window.inst_len)?;
         let addr = read_section(&mut patch_reader, window.addr_start, window.addr_len)?;
 
-        let (data_out, data_comp) = maybe_compress_xdelta_lzma_section(&data)?;
-        let (inst_out, inst_comp) = maybe_compress_xdelta_lzma_section(&inst)?;
-        let (addr_out, addr_comp) = maybe_compress_xdelta_lzma_section(&addr)?;
+        let (data_out, data_comp) = recode_window_section(
+            &data,
+            window.delta_indicator & DELTA_DATA_COMP != 0,
+            secondary_compressor_id,
+        )?;
+        let (inst_out, inst_comp) = recode_window_section(
+            &inst,
+            window.delta_indicator & DELTA_INST_COMP != 0,
+            secondary_compressor_id,
+        )?;
+        let (addr_out, addr_comp) = recode_window_section(
+            &addr,
+            window.delta_indicator & DELTA_ADDR_COMP != 0,
+            secondary_compressor_id,
+        )?;
 
-        let mut delta_indicator = 0u8;
-        if data_comp {
-            delta_indicator |= DELTA_DATA_COMP;
-        }
-        if inst_comp {
-            delta_indicator |= DELTA_INST_COMP;
-        }
-        if addr_comp {
-            delta_indicator |= DELTA_ADDR_COMP;
-        }
+        let delta_indicator = recode_delta_indicator(
+            window.delta_indicator,
+            data_comp,
+            inst_comp,
+            addr_comp,
+            secondary_compressor_id,
+        );
 
         let mut delta = Vec::new();
         encode_varint_raw(&mut delta, window.target_window_size);
@@ -845,6 +942,60 @@ fn recode_patch_with_xdelta_lzma_secondary(
     })
 }
 
+fn recode_window_section(
+    section: &[u8],
+    original_compressed: bool,
+    secondary_compressor_id: Option<u8>,
+) -> Result<(Vec<u8>, bool)> {
+    match secondary_compressor_id {
+        Some(XDELTA_LZMA_SECONDARY_ID) => maybe_compress_xdelta_lzma_section(section),
+        Some(XDELTA_DJW_SECONDARY_ID) => maybe_compress_xdelta_djw_section(section),
+        Some(XDELTA_FGK_SECONDARY_ID) => maybe_compress_xdelta_fgk_section(section),
+        Some(_) => {
+            ensure_supported_secondary_compressor(secondary_compressor_id)?;
+            Ok((section.to_vec(), original_compressed))
+        }
+        None => Ok((section.to_vec(), original_compressed)),
+    }
+}
+
+fn recode_delta_indicator(
+    original_indicator: u8,
+    data_comp: bool,
+    inst_comp: bool,
+    addr_comp: bool,
+    secondary_compressor_id: Option<u8>,
+) -> u8 {
+    if secondary_compressor_id.is_none() {
+        return original_indicator;
+    }
+    let mut indicator = 0u8;
+    if data_comp {
+        indicator |= DELTA_DATA_COMP;
+    }
+    if inst_comp {
+        indicator |= DELTA_INST_COMP;
+    }
+    if addr_comp {
+        indicator |= DELTA_ADDR_COMP;
+    }
+    indicator
+}
+
+fn build_default_xdelta_app_header(source_path: &Path, target_path: &Path) -> Vec<u8> {
+    let source = xdelta_app_header_name_component(source_path);
+    let target = xdelta_app_header_name_component(target_path);
+    format!("{target}//{source}/").into_bytes()
+}
+
+fn xdelta_app_header_name_component(path: &Path) -> String {
+    path.file_name()
+        .and_then(|value| value.to_str())
+        .filter(|value| !value.is_empty())
+        .unwrap_or("-")
+        .to_string()
+}
+
 fn maybe_compress_xdelta_lzma_section(section: &[u8]) -> Result<(Vec<u8>, bool)> {
     if section.len() < XDELTA_SECONDARY_MIN_INPUT {
         return Ok((section.to_vec(), false));
@@ -859,6 +1010,153 @@ fn maybe_compress_xdelta_lzma_section(section: &[u8]) -> Result<(Vec<u8>, bool)>
         Ok((candidate, true))
     } else {
         Ok((section.to_vec(), false))
+    }
+}
+
+fn maybe_compress_xdelta_djw_section(section: &[u8]) -> Result<(Vec<u8>, bool)> {
+    if section.len() < XDELTA_SECONDARY_MIN_INPUT {
+        return Ok((section.to_vec(), false));
+    }
+
+    let compressed = xdelta_djw_compress(section)?;
+    let mut candidate = Vec::new();
+    encode_varint_raw(&mut candidate, section.len() as u64);
+    candidate.extend_from_slice(&compressed);
+
+    if candidate.len() < section.len() {
+        Ok((candidate, true))
+    } else {
+        Ok((section.to_vec(), false))
+    }
+}
+
+fn maybe_compress_xdelta_fgk_section(section: &[u8]) -> Result<(Vec<u8>, bool)> {
+    if section.len() < XDELTA_SECONDARY_MIN_INPUT {
+        return Ok((section.to_vec(), false));
+    }
+
+    let compressed = xdelta_fgk_compress(section)?;
+    let mut candidate = Vec::new();
+    encode_varint_raw(&mut candidate, section.len() as u64);
+    candidate.extend_from_slice(&compressed);
+
+    if candidate.len() < section.len() {
+        Ok((candidate, true))
+    } else {
+        Ok((section.to_vec(), false))
+    }
+}
+
+fn xdelta_djw_compress(section: &[u8]) -> Result<Vec<u8>> {
+    if section.is_empty() {
+        return Err(RomWeaverError::Validation(
+            "xdelta djw secondary encoder requires non-empty input".into(),
+        ));
+    }
+
+    let frequencies = djw_count_byte_frequencies(section);
+    let (code_lengths, _) = djw_build_prefix_lengths(&frequencies, DJW_MAX_CODELEN)?;
+    let codes = djw_build_codes_from_lengths(&code_lengths, DJW_MAX_CODELEN)?;
+
+    let mut writer = DjwBitWriter::new();
+    writer.write_bits(DJW_GROUP_BITS, 0)?;
+
+    let mut prefix = DjwPrefix::new(code_lengths.to_vec());
+    djw_encode_prefix(&mut writer, &mut prefix)?;
+
+    for &symbol in section {
+        let index = usize::from(symbol);
+        let bits = usize::from(code_lengths[index]);
+        if bits == 0 {
+            return Err(RomWeaverError::Validation(format!(
+                "xdelta djw secondary encoder produced zero-length code for symbol {index}"
+            )));
+        }
+        writer.write_bits(bits, codes[index])?;
+    }
+
+    Ok(writer.finish())
+}
+
+fn xdelta_fgk_compress(section: &[u8]) -> Result<Vec<u8>> {
+    let mut state = FgkState::new(DJW_ALPHABET_SIZE)?;
+    let mut writer = DjwBitWriter::new();
+
+    for &symbol in section {
+        let mut bits = state.fgk_encode_data(usize::from(symbol))?;
+        while bits != 0 {
+            bits -= 1;
+            writer.write_bit(state.fgk_get_encoded_bit()?)?;
+        }
+    }
+
+    Ok(writer.finish())
+}
+
+#[derive(Default)]
+struct DjwBitWriter {
+    output: Vec<u8>,
+    current_byte: u8,
+    current_mask: u16,
+}
+
+impl DjwBitWriter {
+    fn new() -> Self {
+        Self {
+            output: Vec::new(),
+            current_byte: 0,
+            current_mask: 1,
+        }
+    }
+
+    fn write_bit(&mut self, bit: u8) -> Result<()> {
+        if bit > 1 {
+            return Err(RomWeaverError::Validation(
+                "xdelta secondary encoder received a non-bit value".into(),
+            ));
+        }
+        if bit == 1 {
+            self.current_byte |= self.current_mask as u8;
+        }
+        if self.current_mask == 0x80 {
+            self.output.push(self.current_byte);
+            self.current_byte = 0;
+            self.current_mask = 1;
+        } else {
+            self.current_mask <<= 1;
+        }
+        Ok(())
+    }
+
+    fn write_bits(&mut self, bit_count: usize, value: usize) -> Result<()> {
+        if bit_count == 0 || bit_count >= usize::BITS as usize {
+            return Err(RomWeaverError::Validation(
+                "xdelta secondary encoder invalid bit width".into(),
+            ));
+        }
+        let mask = 1usize
+            .checked_shl(u32::try_from(bit_count).unwrap_or(u32::MAX))
+            .ok_or_else(|| {
+                RomWeaverError::Validation("xdelta secondary encoder bit mask overflowed".into())
+            })?;
+        if value >= mask {
+            return Err(RomWeaverError::Validation(
+                "xdelta secondary encoder bit value out of range".into(),
+            ));
+        }
+        let mut current = mask;
+        while current != 1 {
+            current >>= 1;
+            self.write_bit(if value & current != 0 { 1 } else { 0 })?;
+        }
+        Ok(())
+    }
+
+    fn finish(mut self) -> Vec<u8> {
+        if self.current_mask != 1 {
+            self.output.push(self.current_byte);
+        }
+        self.output
     }
 }
 
@@ -1480,7 +1778,10 @@ fn decode_djw_bits(
     Ok(value)
 }
 
-fn init_djw_clen_mtf(cl_mtf: &mut [u8; DJW_TOTAL_CODES]) {
+fn init_djw_clen_mtf(cl_mtf: &mut [u8]) {
+    if cl_mtf.len() < DJW_MAX_CODELEN + 1 {
+        return;
+    }
     let mut index = 0usize;
     cl_mtf[index] = 0;
     index += 1;
@@ -1507,6 +1808,348 @@ fn djw_update_mtf(mtf_values: &mut [u8], mtf_index: usize) -> Result<u8> {
     }
     mtf_values[0] = symbol;
     Ok(symbol)
+}
+
+#[derive(Clone, Copy, Default)]
+struct DjwHeapNode {
+    depth: u32,
+    freq: u32,
+    parent: usize,
+}
+
+#[derive(Clone)]
+struct DjwPrefix {
+    symbol: Vec<u8>,
+    mtfsym: Vec<u8>,
+    mcount: usize,
+}
+
+impl DjwPrefix {
+    fn new(symbol: Vec<u8>) -> Self {
+        Self {
+            mtfsym: vec![0; symbol.len().max(1)],
+            symbol,
+            mcount: 0,
+        }
+    }
+}
+
+fn djw_count_byte_frequencies(section: &[u8]) -> [u32; DJW_ALPHABET_SIZE] {
+    let mut freq = [0u32; DJW_ALPHABET_SIZE];
+    for &byte in section {
+        freq[usize::from(byte)] += 1;
+    }
+    freq
+}
+
+fn djw_heap_less(ents: &[DjwHeapNode], left: usize, right: usize) -> bool {
+    ents[left].freq < ents[right].freq
+        || (ents[left].freq == ents[right].freq && ents[left].depth < ents[right].depth)
+}
+
+fn djw_heap_insert(heap: &mut [usize], ents: &[DjwHeapNode], mut position: usize, entry: usize) {
+    let mut parent = position / 2;
+    while djw_heap_less(ents, entry, heap[parent]) {
+        heap[position] = heap[parent];
+        position = parent;
+        parent = position / 2;
+    }
+    heap[position] = entry;
+}
+
+fn djw_heap_extract(heap: &mut [usize], ents: &[DjwHeapNode], heap_last: usize) -> usize {
+    let smallest = heap[1];
+    heap[1] = heap[heap_last + 1];
+    let mut parent = 1usize;
+    loop {
+        let mut child = parent * 2;
+        if child > heap_last {
+            break;
+        }
+        if child < heap_last && djw_heap_less(ents, heap[child + 1], heap[child]) {
+            child += 1;
+        }
+        if !djw_heap_less(ents, heap[child], heap[parent]) {
+            break;
+        }
+        heap.swap(parent, child);
+        parent = child;
+    }
+    smallest
+}
+
+fn djw_build_prefix_lengths(freq: &[u32], max_code_len: usize) -> Result<(Vec<u8>, usize)> {
+    if freq.is_empty() {
+        return Err(RomWeaverError::Validation(
+            "xdelta djw prefix builder received empty frequency input".into(),
+        ));
+    }
+    let asize = freq.len();
+    let mut work_freq = freq.to_vec();
+
+    loop {
+        let mut heap = vec![0usize; asize + 1];
+        let mut ents = vec![DjwHeapNode::default(); asize * 2 + 1];
+        let mut heap_last = 0usize;
+        let mut ents_size = 1usize;
+        let mut total_bits = 0usize;
+
+        ents[0].depth = 0;
+        ents[0].freq = 0;
+        heap[0] = 0;
+
+        for &value in &work_freq {
+            ents[ents_size].depth = 0;
+            ents[ents_size].parent = 0;
+            ents[ents_size].freq = value;
+            if value != 0 {
+                heap_last += 1;
+                djw_heap_insert(&mut heap, &ents, heap_last, ents_size);
+            }
+            ents_size += 1;
+        }
+
+        if heap_last == 0 {
+            return Err(RomWeaverError::Validation(
+                "xdelta djw prefix builder requires at least one symbol".into(),
+            ));
+        }
+
+        if heap_last == 1 {
+            let fake = if work_freq[0] != 0 { asize - 1 } else { 0 };
+            work_freq[fake] = 1;
+            continue;
+        }
+
+        while heap_last > 1 {
+            heap_last -= 1;
+            let first = djw_heap_extract(&mut heap, &ents, heap_last);
+            heap_last -= 1;
+            let second = djw_heap_extract(&mut heap, &ents, heap_last);
+            let node = ents_size;
+            ents[node].freq = ents[first]
+                .freq
+                .checked_add(ents[second].freq)
+                .ok_or_else(|| {
+                    RomWeaverError::Validation("xdelta djw frequency sum overflowed".into())
+                })?;
+            ents[node].depth = 1 + ents[first].depth.max(ents[second].depth);
+            ents[node].parent = 0;
+            ents[first].parent = node;
+            ents[second].parent = node;
+            heap_last += 1;
+            djw_heap_insert(&mut heap, &ents, heap_last, node);
+            ents_size += 1;
+        }
+
+        let mut overflow = false;
+        let mut lengths = vec![0u8; asize];
+        for i in 1..=asize {
+            let mut bits = 0usize;
+            if ents[i].freq != 0 {
+                let mut parent = i;
+                while ents[parent].parent != 0 {
+                    bits += 1;
+                    parent = ents[parent].parent;
+                }
+                if bits > max_code_len {
+                    overflow = true;
+                }
+                total_bits = total_bits
+                    .checked_add(bits.saturating_mul(work_freq[i - 1] as usize))
+                    .ok_or_else(|| {
+                        RomWeaverError::Validation("xdelta djw total bit count overflowed".into())
+                    })?;
+            }
+            lengths[i - 1] = u8::try_from(bits).map_err(|_| {
+                RomWeaverError::Validation("xdelta djw code length exceeded u8".into())
+            })?;
+        }
+
+        if !overflow {
+            return Ok((lengths, total_bits));
+        }
+
+        for value in &mut work_freq {
+            *value = value.saturating_div(2).saturating_add(1);
+        }
+    }
+}
+
+fn djw_build_codes_from_lengths(code_lengths: &[u8], max_code_len: usize) -> Result<Vec<usize>> {
+    let mut min_len = max_code_len;
+    let mut max_len = 0usize;
+    for &length in code_lengths {
+        let length = usize::from(length);
+        if length > 0 && length < min_len {
+            min_len = length;
+        }
+        if length > max_len {
+            max_len = length;
+        }
+    }
+    if max_len == 0 {
+        return Err(RomWeaverError::Validation(
+            "xdelta djw code table has no symbols".into(),
+        ));
+    }
+    if max_len > max_code_len {
+        return Err(RomWeaverError::Validation(
+            "xdelta djw code length exceeded configured maximum".into(),
+        ));
+    }
+
+    let mut code = 0usize;
+    let mut codes = vec![0usize; code_lengths.len()];
+    for length in min_len..=max_len {
+        for (symbol, &symbol_len) in code_lengths.iter().enumerate() {
+            if usize::from(symbol_len) == length {
+                codes[symbol] = code;
+                code = code.checked_add(1).ok_or_else(|| {
+                    RomWeaverError::Validation("xdelta djw code counter overflowed".into())
+                })?;
+            }
+        }
+        code = code
+            .checked_shl(1)
+            .ok_or_else(|| RomWeaverError::Validation("xdelta djw code shift overflowed".into()))?;
+    }
+    Ok(codes)
+}
+
+fn djw_update_1_2(
+    mtf_run: &mut usize,
+    mtf_index: &mut usize,
+    mtf_symbols: &mut [u8],
+    frequencies: &mut [u32],
+) -> Result<()> {
+    loop {
+        *mtf_run = mtf_run.saturating_sub(1);
+        let code = if (*mtf_run & 1) != 0 { DJW_RUN_1 } else { 0 };
+        if *mtf_index >= mtf_symbols.len() {
+            return Err(RomWeaverError::Validation(
+                "xdelta djw mtf symbol buffer overflowed".into(),
+            ));
+        }
+        mtf_symbols[*mtf_index] = code as u8;
+        *mtf_index += 1;
+        frequencies[code] = frequencies[code].saturating_add(1);
+        *mtf_run >>= 1;
+        if *mtf_run < 1 {
+            break;
+        }
+    }
+    *mtf_run = 0;
+    Ok(())
+}
+
+fn djw_compute_mtf_1_2(
+    prefix: &mut DjwPrefix,
+    mtf_values: &mut [u8],
+    frequencies_out: &mut [u32],
+    symbol_count: usize,
+) -> Result<()> {
+    frequencies_out.fill(0);
+    let mut mtf_index = 0usize;
+    let mut mtf_run = 0usize;
+
+    for &symbol in &prefix.symbol {
+        let position = mtf_values
+            .iter()
+            .position(|value| *value == symbol)
+            .ok_or_else(|| {
+                RomWeaverError::Validation(
+                    "xdelta djw prefix symbol was missing from MTF table".into(),
+                )
+            })?;
+        let _ = djw_update_mtf(mtf_values, position)?;
+
+        if position == 0 {
+            mtf_run = mtf_run.saturating_add(1);
+            continue;
+        }
+
+        if mtf_run > 0 {
+            djw_update_1_2(
+                &mut mtf_run,
+                &mut mtf_index,
+                &mut prefix.mtfsym,
+                frequencies_out,
+            )?;
+        }
+
+        let encoded = position
+            .checked_add(DJW_RUN_1)
+            .ok_or_else(|| RomWeaverError::Validation("xdelta djw mtf offset overflowed".into()))?;
+        if encoded >= symbol_count + 2 {
+            return Err(RomWeaverError::Validation(
+                "xdelta djw mtf symbol exceeded expected range".into(),
+            ));
+        }
+        if mtf_index >= prefix.mtfsym.len() {
+            return Err(RomWeaverError::Validation(
+                "xdelta djw mtf output overflowed".into(),
+            ));
+        }
+        prefix.mtfsym[mtf_index] = encoded as u8;
+        mtf_index += 1;
+        frequencies_out[encoded] = frequencies_out[encoded].saturating_add(1);
+    }
+
+    if mtf_run > 0 {
+        djw_update_1_2(
+            &mut mtf_run,
+            &mut mtf_index,
+            &mut prefix.mtfsym,
+            frequencies_out,
+        )?;
+    }
+
+    prefix.mcount = mtf_index;
+    Ok(())
+}
+
+fn djw_compute_prefix_1_2(prefix: &mut DjwPrefix, frequencies: &mut [u32]) -> Result<()> {
+    let mut code_len_mtf = [0u8; DJW_MAX_CODELEN + 1];
+    init_djw_clen_mtf(&mut code_len_mtf);
+    djw_compute_mtf_1_2(prefix, &mut code_len_mtf, frequencies, DJW_MAX_CODELEN)
+}
+
+fn djw_encode_prefix(writer: &mut DjwBitWriter, prefix: &mut DjwPrefix) -> Result<()> {
+    let mut code_len_freq = [0u32; DJW_TOTAL_CODES];
+    djw_compute_prefix_1_2(prefix, &mut code_len_freq)?;
+    let (code_len_lengths, _) = djw_build_prefix_lengths(&code_len_freq, DJW_MAX_CLCLEN)?;
+    let code_len_codes = djw_build_codes_from_lengths(&code_len_lengths, DJW_MAX_CLCLEN)?;
+
+    let mut num_to_encode = DJW_TOTAL_CODES;
+    while num_to_encode > DJW_EXTRA_12OFFSET && code_len_lengths[num_to_encode - 1] == 0 {
+        num_to_encode -= 1;
+    }
+    if num_to_encode < DJW_EXTRA_12OFFSET {
+        return Err(RomWeaverError::Validation(
+            "xdelta djw prefix encoder computed invalid code count".into(),
+        ));
+    }
+    let extra_codes = num_to_encode - DJW_EXTRA_12OFFSET;
+    if extra_codes >= (1 << DJW_EXTRA_CODE_BITS) {
+        return Err(RomWeaverError::Validation(
+            "xdelta djw prefix encoder overflowed extra code count".into(),
+        ));
+    }
+
+    writer.write_bits(DJW_EXTRA_CODE_BITS, extra_codes)?;
+    for &length in code_len_lengths.iter().take(num_to_encode) {
+        writer.write_bits(DJW_CLCLEN_BITS, usize::from(length))?;
+    }
+
+    for &symbol in prefix.mtfsym.iter().take(prefix.mcount) {
+        let index = usize::from(symbol);
+        let bits = usize::from(code_len_lengths[index]);
+        let code = code_len_codes[index];
+        writer.write_bits(bits, code)?;
+    }
+
+    Ok(())
 }
 
 #[derive(Clone, Copy, Default)]
@@ -1641,6 +2284,96 @@ impl FgkState {
             return Ok(self.zero_freq_count == 1);
         }
         Ok(false)
+    }
+
+    fn fgk_find_nth_zero(&self, symbol_index: usize) -> Result<usize> {
+        if symbol_index >= self.alphabet_size {
+            return Err(RomWeaverError::Validation(format!(
+                "xdelta fgk symbol index {symbol_index} exceeds alphabet size {}",
+                self.alphabet_size
+            )));
+        }
+        let mut cursor = self
+            .remaining_zeros
+            .ok_or_else(|| RomWeaverError::Validation("xdelta fgk zero list is empty".into()))?;
+        let target = symbol_index;
+        let mut index = 0usize;
+        while cursor != target {
+            cursor = self.nodes[cursor].right_child.ok_or_else(|| {
+                RomWeaverError::Validation("xdelta fgk zero list traversal failed".into())
+            })?;
+            index = index.checked_add(1).ok_or_else(|| {
+                RomWeaverError::Validation("xdelta fgk zero index overflowed".into())
+            })?;
+        }
+        Ok(index)
+    }
+
+    fn fgk_encode_data(&mut self, symbol_index: usize) -> Result<usize> {
+        if symbol_index >= self.alphabet_size {
+            return Err(RomWeaverError::Validation(format!(
+                "xdelta fgk symbol index {symbol_index} exceeds alphabet size {}",
+                self.alphabet_size
+            )));
+        }
+
+        self.coded_depth = 0;
+        let mut target = symbol_index;
+        if self.nodes[target].weight == 0 {
+            let where_zero = self.fgk_find_nth_zero(symbol_index)?;
+            let bits_required = if self.zero_freq_rem == 0 {
+                self.zero_freq_exp
+            } else {
+                self.zero_freq_exp + 1
+            };
+            let mut shift = 1usize;
+            let mut bits_left = bits_required;
+            while bits_left > 0 {
+                if self.coded_depth >= self.coded_bits.len() {
+                    return Err(RomWeaverError::Validation(
+                        "xdelta fgk coded bit buffer overflowed".into(),
+                    ));
+                }
+                self.coded_bits[self.coded_depth] = if (shift & where_zero) != 0 { 1 } else { 0 };
+                self.coded_depth += 1;
+                bits_left -= 1;
+                shift <<= 1;
+            }
+            target = self.remaining_zeros.ok_or_else(|| {
+                RomWeaverError::Validation("xdelta fgk zero list is empty".into())
+            })?;
+        }
+
+        while target != self.root_node {
+            let parent = self.nodes[target].parent.ok_or_else(|| {
+                RomWeaverError::Validation("xdelta fgk node is missing a parent".into())
+            })?;
+            if self.coded_depth >= self.coded_bits.len() {
+                return Err(RomWeaverError::Validation(
+                    "xdelta fgk coded bit buffer overflowed".into(),
+                ));
+            }
+            self.coded_bits[self.coded_depth] = if self.nodes[parent].right_child == Some(target) {
+                1
+            } else {
+                0
+            };
+            self.coded_depth += 1;
+            target = parent;
+        }
+
+        self.fgk_update_tree(symbol_index)?;
+        Ok(self.coded_depth)
+    }
+
+    fn fgk_get_encoded_bit(&mut self) -> Result<u8> {
+        if self.coded_depth == 0 {
+            return Err(RomWeaverError::Validation(
+                "xdelta fgk encoded bit buffer was empty".into(),
+            ));
+        }
+        self.coded_depth -= 1;
+        Ok(self.coded_bits[self.coded_depth])
     }
 
     fn fgk_nth_zero(&self, mut index: usize) -> Result<usize> {
@@ -2386,6 +3119,10 @@ mod tests {
         let parsed = parse_patch(&mut reader).expect("parse patch");
         assert_eq!(parsed.windows.len(), 1);
         assert_eq!(parsed.windows[0].checksum, Some(checksum));
+        assert_eq!(
+            parsed.app_header.as_deref(),
+            Some(b"xdelta-test".as_slice())
+        );
 
         let temp = create_temp_dir();
         let input_path = temp.join("input.bin");
@@ -2500,8 +3237,24 @@ mod tests {
             ..Default::default()
         });
 
-        let parsed = parse_patch(&mut Cursor::new(patch_bytes)).expect("parse custom code table");
+        let parsed = parse_patch(&mut Cursor::new(&patch_bytes)).expect("parse custom code table");
         assert!(parsed.windows.is_empty());
+        let code_table = parsed
+            .custom_code_table
+            .as_ref()
+            .expect("custom code table metadata");
+        assert_eq!(code_table.near_size, 4);
+        assert_eq!(code_table.same_size, 3);
+        assert_eq!(code_table.data_len, 1);
+
+        let temp = create_temp_dir();
+        let patch_path = temp.join("custom-table.vcdiff");
+        fs::write(&patch_path, &patch_bytes).expect("write patch");
+        let handler = VcdiffPatchHandler::new(&crate::VCDIFF);
+        let report = handler
+            .parse(&patch_path, &test_context())
+            .expect("parse report");
+        assert!(report.label.contains("custom code table declared"));
     }
 
     #[test]
@@ -2787,6 +3540,7 @@ mod tests {
         let patch = fs::read(&patch_path).expect("read patch");
         let parsed = parse_patch(&mut Cursor::new(&patch)).expect("parse created patch");
         assert_eq!(parsed.secondary_compressor_id, None);
+        assert_eq!(parsed.app_header, None);
 
         handler
             .apply(
@@ -2835,25 +3589,43 @@ mod tests {
         assert!(report.label.contains("secondary compression"));
 
         let baseline_probe = temp.join("baseline-probe.xdelta");
+        let baseline_with_header_probe = temp.join("baseline-header-probe.xdelta");
         let secondary_probe = temp.join("secondary-probe.xdelta");
+        let expected_app_header = build_default_xdelta_app_header(&input_path, &modified_path);
         let baseline = encode_patch_with_native_streaming(
             &input_path,
             &modified_path,
             &baseline_probe,
-            create_native_compress_options(&crate::XDELTA),
+            create_native_compress_options(&crate::XDELTA, true),
         )
         .expect("encode baseline xdelta patch");
-        let secondary = recode_patch_with_xdelta_lzma_secondary(&baseline.path, &secondary_probe)
-            .expect("encode secondary xdelta patch");
-        let should_choose_secondary = secondary.size < baseline.size;
+        let baseline_with_header = recode_patch_with_xdelta_options(
+            &baseline.path,
+            &baseline_with_header_probe,
+            None,
+            Some(expected_app_header.as_slice()),
+        )
+        .expect("add xdelta app header");
+        let secondary = recode_patch_with_xdelta_options(
+            &baseline_with_header.path,
+            &secondary_probe,
+            Some(XDELTA_LZMA_SECONDARY_ID),
+            Some(expected_app_header.as_slice()),
+        )
+        .expect("encode secondary xdelta patch");
+        let should_choose_secondary = secondary.size < baseline_with_header.size;
 
         let patch = fs::read(&patch_path).expect("read patch");
         assert_eq!(
             patch.len() as u64,
-            secondary.size.min(baseline.size),
+            secondary.size.min(baseline_with_header.size),
             "created patch should match the smallest native candidate"
         );
         let parsed = parse_patch(&mut Cursor::new(&patch)).expect("parse created patch");
+        assert_eq!(
+            parsed.app_header.as_deref(),
+            Some(expected_app_header.as_slice())
+        );
         if should_choose_secondary {
             assert_eq!(parsed.secondary_compressor_id, Some(2));
         } else {
@@ -2941,7 +3713,7 @@ mod tests {
             .create(
                 &PatchCreateRequest {
                     original: input_path.clone(),
-                    modified: modified_path,
+                    modified: modified_path.clone(),
                     output: patch_path.clone(),
                     format: "xdelta".into(),
                 },
@@ -2952,6 +3724,11 @@ mod tests {
 
         let patch = fs::read(&patch_path).expect("read patch");
         let parsed = parse_patch(&mut Cursor::new(&patch)).expect("parse created patch");
+        let expected_app_header = build_default_xdelta_app_header(&input_path, &modified_path);
+        assert_eq!(
+            parsed.app_header.as_deref(),
+            Some(expected_app_header.as_slice())
+        );
         assert!(
             parsed.windows.len() >= 2,
             "expected streaming create to produce multiple windows for >8 MiB input"
@@ -3005,6 +3782,47 @@ mod tests {
     }
 
     #[test]
+    fn create_xdelta_patch_can_skip_checksums_via_context_toggle() {
+        let input = b"hello old world";
+        let expected = b"hello new world";
+
+        let temp = create_temp_dir();
+        let input_path = temp.join("input.bin");
+        let modified_path = temp.join("modified.bin");
+        let patch_path = temp.join("update.xdelta");
+        fs::write(&input_path, input).expect("write input");
+        fs::write(&modified_path, expected).expect("write modified");
+
+        let handler = VcdiffPatchHandler::new(&crate::XDELTA);
+        handler
+            .create(
+                &PatchCreateRequest {
+                    original: input_path.clone(),
+                    modified: modified_path.clone(),
+                    output: patch_path.clone(),
+                    format: "xdelta".into(),
+                },
+                &test_context().with_patch_checksum_validation(PatchChecksumValidation::Ignore),
+            )
+            .expect("create xdelta patch without checksums");
+
+        let parsed = parse_patch(&mut Cursor::new(fs::read(&patch_path).expect("read patch")))
+            .expect("parse created xdelta patch");
+        assert!(!parsed.windows.is_empty());
+        assert!(
+            parsed
+                .windows
+                .iter()
+                .all(|window| window.checksum.is_none())
+        );
+        let expected_app_header = build_default_xdelta_app_header(&input_path, &modified_path);
+        assert_eq!(
+            parsed.app_header.as_deref(),
+            Some(expected_app_header.as_slice())
+        );
+    }
+
+    #[test]
     fn apply_supports_oxidelta_style_lzma_secondary_patch() {
         let (input, expected) = generated_secondary_source_and_target();
 
@@ -3054,6 +3872,59 @@ mod tests {
             )
             .expect("apply oxidelta lzma patch");
         assert_eq!(fs::read(output_path).expect("read output"), expected);
+    }
+
+    #[test]
+    fn recode_supports_all_xdelta_secondary_encoders() {
+        let (input, expected) = generated_secondary_source_and_target();
+        let temp = create_temp_dir();
+        let input_path = temp.join("input.bin");
+        let modified_path = temp.join("modified.bin");
+        fs::write(&input_path, &input).expect("write input");
+        fs::write(&modified_path, &expected).expect("write modified");
+
+        let baseline_path = temp.join("baseline.xdelta");
+        let baseline = encode_patch_with_native_streaming(
+            &input_path,
+            &modified_path,
+            &baseline_path,
+            create_native_compress_options(&crate::XDELTA, true),
+        )
+        .expect("encode baseline");
+        assert!(baseline.size > 0);
+
+        let app_header = build_default_xdelta_app_header(&input_path, &modified_path);
+        let handler = VcdiffPatchHandler::new(&crate::XDELTA);
+
+        for secondary_id in XDELTA_SECONDARY_CANDIDATES {
+            let patch_path = temp.join(format!("secondary-{secondary_id}.xdelta"));
+            let output_path = temp.join(format!("output-{secondary_id}.bin"));
+            let recoded = recode_patch_with_xdelta_options(
+                &baseline.path,
+                &patch_path,
+                Some(secondary_id),
+                Some(app_header.as_slice()),
+            )
+            .expect("recode patch");
+            assert!(recoded.size > 0);
+
+            let parsed = parse_patch(&mut Cursor::new(fs::read(&patch_path).expect("read patch")))
+                .expect("parse recoded patch");
+            assert_eq!(parsed.secondary_compressor_id, Some(secondary_id));
+            assert_eq!(parsed.app_header.as_deref(), Some(app_header.as_slice()));
+
+            handler
+                .apply(
+                    &PatchApplyRequest {
+                        input: input_path.clone(),
+                        patches: vec![patch_path],
+                        output: output_path.clone(),
+                    },
+                    &test_context(),
+                )
+                .expect("apply recoded patch");
+            assert_eq!(fs::read(output_path).expect("read output"), expected);
+        }
     }
 
     #[test]
