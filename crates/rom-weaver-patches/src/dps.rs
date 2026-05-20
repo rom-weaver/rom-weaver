@@ -9,7 +9,7 @@ use rayon::prelude::*;
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
     PatchCapabilities, PatchChecksumValidation, PatchCreateRequest, PatchHandler, ProbeConfidence,
-    Result, RomWeaverError, SharedThreadPool, ThreadCapability,
+    Result, RomWeaverError, SharedThreadPool, ThreadCapability, ValidationCodeError,
 };
 
 const DPS_TEXT_FIELD_BYTES: usize = 64;
@@ -23,6 +23,10 @@ const CREATE_THREAD_SCAN_CHUNK_BYTES: usize = 4 * 1024 * 1024;
 
 const DEFAULT_PATCH_AUTHOR: &str = "rom-weaver";
 const DEFAULT_PATCH_VERSION_TEXT: &str = "1";
+
+fn dps_validation_code(code: &'static str) -> ValidationCodeError {
+    ValidationCodeError::new(code)
+}
 
 pub struct DpsPatchHandler {
     descriptor: &'static FormatDescriptor,
@@ -86,30 +90,39 @@ impl PatchHandler for DpsPatchHandler {
         let parsed = parse_dps_bytes(patch.as_ref(), parse_mode)?;
         let source_len_u64 = fs::metadata(&request.input)?.len();
         let source_len = usize::try_from(source_len_u64).map_err(|_| {
-            RomWeaverError::Validation(format!(
-                "{} source input exceeded addressable memory",
-                self.descriptor.name
-            ))
+            RomWeaverError::ValidationCode(
+                dps_validation_code("DPS_SOURCE_INPUT_EXCEEDED_ADDRESSABLE_MEMORY")
+                    .with_message("DPS source input exceeded addressable memory")
+                    .with_field("format", self.descriptor.name)
+                    .with_field("source_len", source_len_u64),
+            )
         })?;
         let source_len_u32 = u32::try_from(source_len_u64).map_err(|_| {
-            RomWeaverError::Validation(format!(
-                "{} source input exceeded maximum supported size of {} byte(s)",
-                self.descriptor.name,
-                u32::MAX
-            ))
+            RomWeaverError::ValidationCode(
+                dps_validation_code("DPS_SOURCE_INPUT_EXCEEDED_U32_MAX")
+                    .with_message("DPS source input exceeded maximum supported size")
+                    .with_field("format", self.descriptor.name)
+                    .with_field("source_len", source_len_u64)
+                    .with_field("max_supported", u32::MAX),
+            )
         })?;
         if validate_source_size && source_len_u32 != parsed.source_size {
-            return Err(RomWeaverError::Validation(format!(
-                "{} source size mismatch: expected {} byte(s), actual {} byte(s)",
-                self.descriptor.name, parsed.source_size, source_len_u32
-            )));
+            return Err(RomWeaverError::ValidationCode(
+                dps_validation_code("DPS_SOURCE_SIZE_MISMATCH")
+                    .with_message("DPS source size mismatch")
+                    .with_field("format", self.descriptor.name)
+                    .with_field("expected", parsed.source_size)
+                    .with_field("actual", source_len_u32),
+            ));
         }
 
         let output_len = usize::try_from(parsed.output_size).map_err(|_| {
-            RomWeaverError::Validation(format!(
-                "{} output size exceeded addressable memory",
-                self.descriptor.name
-            ))
+            RomWeaverError::ValidationCode(
+                dps_validation_code("DPS_OUTPUT_SIZE_EXCEEDED_ADDRESSABLE_MEMORY")
+                    .with_message("DPS output size exceeded addressable memory")
+                    .with_field("format", self.descriptor.name)
+                    .with_field("output_size", parsed.output_size),
+            )
         })?;
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
@@ -184,11 +197,13 @@ impl PatchHandler for DpsPatchHandler {
     ) -> Result<OperationReport> {
         let source_len = fs::metadata(&request.original)?.len();
         let source_size = u32::try_from(source_len).map_err(|_| {
-            RomWeaverError::Validation(format!(
-                "{} create does not support sources larger than {} byte(s)",
-                self.descriptor.name,
-                u32::MAX
-            ))
+            RomWeaverError::ValidationCode(
+                dps_validation_code("DPS_CREATE_SOURCE_EXCEEDED_U32_MAX")
+                    .with_message("DPS create does not support oversized sources")
+                    .with_field("format", self.descriptor.name)
+                    .with_field("source_len", source_len)
+                    .with_field("max_supported", u32::MAX),
+            )
         })?;
         let target_len = fs::metadata(&request.modified)?.len();
         let (execution, pool) = context.build_pool(dps_create_thread_capability(target_len))?;
@@ -359,10 +374,11 @@ fn map_file_read_only(path: &Path) -> Result<Mmap> {
 
 fn parse_dps_bytes<'a>(bytes: &'a [u8], mode: DpsParseMode) -> Result<ParsedDpsPatch<'a>> {
     if bytes.len() < DPS_HEADER_BYTES {
-        return Err(RomWeaverError::Validation(format!(
-            "DPS patch is too small to contain a valid header (expected at least {DPS_HEADER_BYTES} byte(s), found {})",
-            bytes.len()
-        )));
+        return Err(RomWeaverError::ValidationCode(
+            dps_validation_code("DPS_PATCH_HEADER_TOO_SMALL")
+                .with_field("expected_min_bytes", DPS_HEADER_BYTES)
+                .with_field("found_bytes", bytes.len()),
+        ));
     }
 
     let patch_name = parse_text_field(&bytes[0..DPS_TEXT_FIELD_BYTES]);
@@ -373,9 +389,12 @@ fn parse_dps_bytes<'a>(bytes: &'a [u8], mode: DpsParseMode) -> Result<ParsedDpsP
 
     let version = bytes[(DPS_TEXT_FIELD_BYTES * 3) + 1];
     if version != DPS_PATCH_VERSION {
-        return Err(RomWeaverError::Validation(format!(
-            "DPS patch version {version} is not supported (expected {DPS_PATCH_VERSION})"
-        )));
+        return Err(RomWeaverError::ValidationCode(
+            dps_validation_code("DPS_PATCH_VERSION_UNSUPPORTED")
+                .with_message("DPS patch version is not supported")
+                .with_field("found_version", version)
+                .with_field("expected_version", DPS_PATCH_VERSION),
+        ));
     }
 
     let source_size_offset = (DPS_TEXT_FIELD_BYTES * 3) + 2;
@@ -492,9 +511,12 @@ fn parse_dps_bytes<'a>(bytes: &'a [u8], mode: DpsParseMode) -> Result<ParsedDpsP
                     ));
                     break;
                 }
-                return Err(RomWeaverError::Validation(format!(
-                    "DPS record mode {mode_byte} is not supported"
-                )));
+                return Err(RomWeaverError::ValidationCode(
+                    dps_validation_code("DPS_RECORD_MODE_UNSUPPORTED")
+                        .with_message("DPS record mode is not supported")
+                        .with_field("record_offset", record_start)
+                        .with_field("mode", mode_byte),
+                ));
             }
         };
 
@@ -520,10 +542,12 @@ fn create_dps_records_streaming(source_path: &Path, target_path: &Path) -> Resul
     let source_len = fs::metadata(source_path)?.len();
     let target_len = fs::metadata(target_path)?.len();
     if target_len > u32::MAX as u64 {
-        return Err(RomWeaverError::Validation(format!(
-            "DPS create does not support targets larger than {} byte(s)",
-            u32::MAX
-        )));
+        return Err(RomWeaverError::ValidationCode(
+            dps_validation_code("DPS_CREATE_TARGET_EXCEEDED_U32_MAX")
+                .with_message("DPS create does not support oversized targets")
+                .with_field("target_len", target_len)
+                .with_field("max_supported", u32::MAX),
+        ));
     }
 
     let mut source = BufReader::new(File::open(source_path)?);
@@ -658,10 +682,12 @@ fn create_dps_records_parallel(
     let target = map_file_read_only(target_path)?;
 
     if target.len() > u32::MAX as usize {
-        return Err(RomWeaverError::Validation(format!(
-            "DPS create does not support targets larger than {} byte(s)",
-            u32::MAX
-        )));
+        return Err(RomWeaverError::ValidationCode(
+            dps_validation_code("DPS_CREATE_TARGET_EXCEEDED_U32_MAX")
+                .with_message("DPS create does not support oversized targets")
+                .with_field("target_len", target.len())
+                .with_field("max_supported", u32::MAX),
+        ));
     }
 
     collect_dps_records_parallel(source.as_ref(), target.as_ref(), pool)
@@ -1054,11 +1080,11 @@ fn parse_text_field(bytes: &[u8]) -> String {
     String::from_utf8_lossy(&bytes[..end]).trim().to_string()
 }
 
-fn read_u8(bytes: &[u8], cursor: &mut usize, label: &str) -> Result<u8> {
+fn read_u8(bytes: &[u8], cursor: &mut usize, label: &'static str) -> Result<u8> {
     Ok(read_exact(bytes, cursor, 1, label)?[0])
 }
 
-fn read_u32_le(bytes: &[u8], cursor: &mut usize, label: &str) -> Result<u32> {
+fn read_u32_le(bytes: &[u8], cursor: &mut usize, label: &'static str) -> Result<u32> {
     let raw = read_exact(bytes, cursor, 4, label)?;
     Ok(u32::from_le_bytes([raw[0], raw[1], raw[2], raw[3]]))
 }
@@ -1067,32 +1093,65 @@ fn read_exact<'a>(
     bytes: &'a [u8],
     cursor: &mut usize,
     len: usize,
-    label: &str,
+    label: &'static str,
 ) -> Result<&'a [u8]> {
-    let end = cursor
-        .checked_add(len)
-        .ok_or_else(|| RomWeaverError::Validation(format!("{label} offset overflowed")))?;
+    let end = cursor.checked_add(len).ok_or_else(|| {
+        RomWeaverError::ValidationCode(
+            dps_validation_code("DPS_READ_OFFSET_OVERFLOW")
+                .with_field("label", label)
+                .with_field("offset", *cursor)
+                .with_field("len", len),
+        )
+    })?;
     let slice = bytes.get(*cursor..end).ok_or_else(|| {
-        RomWeaverError::Validation(format!(
-            "DPS patch ended unexpectedly while reading {label}"
-        ))
+        RomWeaverError::ValidationCode(
+            dps_validation_code("DPS_READ_UNEXPECTED_EOF")
+                .with_message("DPS patch ended unexpectedly while reading field")
+                .with_field("label", label)
+                .with_field("offset", *cursor)
+                .with_field("len", len)
+                .with_field("buffer_len", bytes.len()),
+        )
     })?;
     *cursor = end;
     Ok(slice)
 }
 
-fn checked_range(start: u32, len: u32, limit: usize, label: &str) -> Result<(usize, usize)> {
-    let start = usize::try_from(start)
-        .map_err(|_| RomWeaverError::Validation(format!("{label} offset exceeded usize range")))?;
-    let len = usize::try_from(len)
-        .map_err(|_| RomWeaverError::Validation(format!("{label} length exceeded usize range")))?;
-    let end = start
-        .checked_add(len)
-        .ok_or_else(|| RomWeaverError::Validation(format!("{label} range overflowed")))?;
+fn checked_range(
+    start: u32,
+    len: u32,
+    limit: usize,
+    label: &'static str,
+) -> Result<(usize, usize)> {
+    let start = usize::try_from(start).map_err(|_| {
+        RomWeaverError::ValidationCode(
+            dps_validation_code("DPS_RANGE_OFFSET_OUT_OF_USIZE")
+                .with_field("label", label)
+                .with_field("offset", start),
+        )
+    })?;
+    let len = usize::try_from(len).map_err(|_| {
+        RomWeaverError::ValidationCode(
+            dps_validation_code("DPS_RANGE_LENGTH_OUT_OF_USIZE")
+                .with_field("label", label)
+                .with_field("len", len),
+        )
+    })?;
+    let end = start.checked_add(len).ok_or_else(|| {
+        RomWeaverError::ValidationCode(
+            dps_validation_code("DPS_RANGE_OVERFLOW")
+                .with_field("label", label)
+                .with_field("start", start)
+                .with_field("len", len),
+        )
+    })?;
     if end > limit {
-        return Err(RomWeaverError::Validation(format!(
-            "{label} exceeded available length ({end} > {limit})"
-        )));
+        return Err(RomWeaverError::ValidationCode(
+            dps_validation_code("DPS_RANGE_EXCEEDED_LIMIT")
+                .with_field("label", label)
+                .with_field("end", end)
+                .with_field("limit", limit),
+        ));
     }
     Ok((start, end))
 }
@@ -1106,12 +1165,12 @@ mod tests {
     };
 
     use super::{
-        DPS_PATCH_VERSION, DPS_RECORD_EMBEDDED_DATA, DpsHeaderMetadata, DpsParseMode,
-        DpsPatchHandler, DpsRecord, ParsedDpsRecord, encode_dps_patch, parse_dps_bytes,
+        encode_dps_patch, parse_dps_bytes, DpsHeaderMetadata, DpsParseMode, DpsPatchHandler,
+        DpsRecord, ParsedDpsRecord, DPS_PATCH_VERSION, DPS_RECORD_EMBEDDED_DATA,
     };
     use crate::{
+        test_support::{test_context_with_threads, TestDir},
         DPS,
-        test_support::{TestDir, test_context_with_threads},
     };
 
     #[test]
@@ -1342,11 +1401,9 @@ mod tests {
                     .with_patch_checksum_validation(PatchChecksumValidation::Ignore),
             )
             .expect("ignore malformed");
-        assert!(
-            ignored_report
-                .label
-                .contains("warning=ignored malformed DPS record")
-        );
+        assert!(ignored_report
+            .label
+            .contains("warning=ignored malformed DPS record"));
         assert_eq!(fs::read(output_path).expect("output"), b"abcdXY");
     }
 

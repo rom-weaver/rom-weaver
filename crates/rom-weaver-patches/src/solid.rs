@@ -10,7 +10,7 @@ use rayon::prelude::*;
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
     PatchCapabilities, PatchChecksumValidation, PatchCreateRequest, PatchHandler, ProbeConfidence,
-    Result, RomWeaverError, SharedThreadPool, ThreadCapability,
+    Result, RomWeaverError, SharedThreadPool, ThreadCapability, ValidationCodeError,
 };
 
 const SOLID_MAGIC: &[u8; 2] = b"SP";
@@ -40,6 +40,10 @@ const SOLID_PATCH_AUTHOR_ENV: &str = "ROM_WEAVER_SOLID_AUTHOR";
 const SOLID_PATCH_CONTACT_ENV: &str = "ROM_WEAVER_SOLID_CONTACT";
 const SOLID_PATCH_COMMENT_ENV: &str = "ROM_WEAVER_SOLID_COMMENT";
 const CREATE_THREAD_SCAN_CHUNK_BYTES: usize = 4 * 1024 * 1024;
+
+fn solid_validation_code(code: &'static str) -> ValidationCodeError {
+    ValidationCodeError::new(code)
+}
 
 pub struct SolidPatchHandler {
     descriptor: &'static FormatDescriptor,
@@ -381,9 +385,12 @@ fn parse_solid_patch_bytes<'a>(bytes: &'a [u8]) -> Result<ParsedSolidPatch<'a>> 
     let version = bytes[cursor];
     cursor += 1;
     if version != SOLID_FORMAT_VERSION {
-        return Err(RomWeaverError::Validation(format!(
-            "SOLID patch has unsupported version {version}; expected {SOLID_FORMAT_VERSION}"
-        )));
+        return Err(RomWeaverError::ValidationCode(
+            solid_validation_code("SOLID_VERSION_UNSUPPORTED")
+                .with_message("SOLID patch has unsupported version")
+                .with_field("version", version)
+                .with_field("expected_version", SOLID_FORMAT_VERSION),
+        ));
     }
 
     let addr_param = bytes[cursor];
@@ -392,9 +399,11 @@ fn parse_solid_patch_bytes<'a>(bytes: &'a [u8]) -> Result<ParsedSolidPatch<'a>> 
     let base_addr_len = decode_base_addr_len(addr_param)?;
     let mod_action = (addr_param & MOD_ACTION_MASK) >> 4;
     if mod_action > MOD_ACTION_TRUNCATE {
-        return Err(RomWeaverError::Validation(format!(
-            "SOLID patch uses unsupported modFileAction value {mod_action}"
-        )));
+        return Err(RomWeaverError::ValidationCode(
+            solid_validation_code("SOLID_MOD_FILE_ACTION_UNSUPPORTED")
+                .with_message("SOLID patch uses unsupported modFileAction value")
+                .with_field("mod_file_action", mod_action),
+        ));
     }
     if addr_param & EXTENSION_FLAG != 0 {
         return Err(RomWeaverError::Validation(
@@ -644,20 +653,24 @@ fn apply_resize_action(parsed: &ParsedSolidPatch<'_>, output: &mut Vec<u8>) -> R
             }
             let at = usize_from_u64(address, "SOLID resizeFileAddr")?;
             if at > output.len() {
-                return Err(RomWeaverError::Validation(format!(
-                    "SOLID resizeFileAddr {address} exceeds output length {}",
-                    output.len()
-                )));
+                return Err(RomWeaverError::ValidationCode(
+                    solid_validation_code("SOLID_RESIZE_ADDR_EXCEEDED_OUTPUT_LENGTH")
+                        .with_message("SOLID resizeFileAddr exceeds output length")
+                        .with_field("resize_addr", address)
+                        .with_field("output_len", output.len()),
+                ));
             }
             output.splice(at..at, parsed.expansion_data.iter().copied());
         }
         ResizeAction::Truncate { size } => {
             let size = usize_from_u64(size, "SOLID resizeFileDataSize")?;
             if size > output.len() {
-                return Err(RomWeaverError::Validation(format!(
-                    "SOLID truncate size {size} exceeds output length {}",
-                    output.len()
-                )));
+                return Err(RomWeaverError::ValidationCode(
+                    solid_validation_code("SOLID_TRUNCATE_SIZE_EXCEEDED_OUTPUT_LENGTH")
+                        .with_message("SOLID truncate size exceeds output length")
+                        .with_field("truncate_size", size)
+                        .with_field("output_len", output.len()),
+                ));
             }
             output.truncate(size);
         }
@@ -669,11 +682,12 @@ fn apply_resize_action(parsed: &ParsedSolidPatch<'_>, output: &mut Vec<u8>) -> R
 fn validate_source_checksum(expected: [u8; SOLID_MD5_LEN], input: &[u8]) -> Result<()> {
     let actual = md5_bytes(input);
     if actual != expected {
-        return Err(RomWeaverError::Validation(format!(
-            "SOLID source MD5 mismatch; expected {}, actual {}",
-            format_md5_hex(expected),
-            format_md5_hex(actual)
-        )));
+        return Err(RomWeaverError::ValidationCode(
+            solid_validation_code("SOLID_SOURCE_MD5_MISMATCH")
+                .with_message("SOLID source MD5 mismatch")
+                .with_field("expected", format_md5_hex(expected))
+                .with_field("actual", format_md5_hex(actual)),
+        ));
     }
     Ok(())
 }
@@ -991,10 +1005,12 @@ fn write_description_string(output: &mut Vec<u8>, value: &str) -> Result<()> {
         ));
     }
     if value.len() > SOLID_MAX_DESCRIPTION_LEN {
-        return Err(RomWeaverError::Validation(format!(
-            "SOLID description string exceeded {} byte(s)",
-            SOLID_MAX_DESCRIPTION_LEN
-        )));
+        return Err(RomWeaverError::ValidationCode(
+            solid_validation_code("SOLID_DESCRIPTION_STRING_EXCEEDED_MAX_LEN")
+                .with_message("SOLID description string exceeded max length")
+                .with_field("max_len", SOLID_MAX_DESCRIPTION_LEN)
+                .with_field("actual_len", value.len()),
+        ));
     }
     output.extend_from_slice(value.as_bytes());
     output.push(0);
@@ -1016,10 +1032,12 @@ fn read_null_terminated_string(bytes: &[u8], cursor: &mut usize) -> Result<Strin
         ));
     };
     if terminator > SOLID_MAX_DESCRIPTION_LEN {
-        return Err(RomWeaverError::Validation(format!(
-            "SOLID description string exceeded {} byte(s)",
-            SOLID_MAX_DESCRIPTION_LEN
-        )));
+        return Err(RomWeaverError::ValidationCode(
+            solid_validation_code("SOLID_DESCRIPTION_STRING_EXCEEDED_MAX_LEN")
+                .with_message("SOLID description string exceeded max length")
+                .with_field("max_len", SOLID_MAX_DESCRIPTION_LEN)
+                .with_field("actual_len", terminator),
+        ));
     }
     let string_bytes = &remaining[..terminator];
     let string = std::str::from_utf8(string_bytes)
@@ -1090,9 +1108,10 @@ fn decode_base_addr_len(addr_param: u8) -> Result<Option<usize>> {
     }
     let len = usize::from(encoded) + 1;
     if !(2..=8).contains(&len) {
-        return Err(RomWeaverError::Validation(format!(
-            "SOLID patch declared unsupported base address size of {len} byte(s)"
-        )));
+        return Err(RomWeaverError::ValidationCode(
+            solid_validation_code("SOLID_BASE_ADDR_SIZE_UNSUPPORTED")
+                .with_field("base_addr_size", len),
+        ));
     }
     Ok(Some(len))
 }
@@ -1101,7 +1120,7 @@ fn read_required_base_addr(
     bytes: &[u8],
     cursor: &mut usize,
     base_addr_len: Option<usize>,
-    label: &str,
+    label: &'static str,
 ) -> Result<u64> {
     let Some(base_addr_len) = base_addr_len else {
         return Err(RomWeaverError::Validation(
@@ -1111,21 +1130,26 @@ fn read_required_base_addr(
     read_u64_le(bytes, cursor, base_addr_len, label)
 }
 
-fn read_u8(bytes: &[u8], cursor: &mut usize, label: &str) -> Result<u8> {
+fn read_u8(bytes: &[u8], cursor: &mut usize, label: &'static str) -> Result<u8> {
     let value = *bytes.get(*cursor).ok_or_else(|| {
-        RomWeaverError::Validation(format!(
-            "{label} is missing because SOLID patch ended unexpectedly"
-        ))
+        RomWeaverError::ValidationCode(
+            solid_validation_code("SOLID_READ_U8_UNEXPECTED_EOF")
+                .with_field("label", label)
+                .with_field("cursor", *cursor)
+                .with_field("len", bytes.len()),
+        )
     })?;
     *cursor = checked_add_usize(*cursor, 1, label)?;
     Ok(value)
 }
 
-fn read_u64_le(bytes: &[u8], cursor: &mut usize, width: usize, label: &str) -> Result<u64> {
+fn read_u64_le(bytes: &[u8], cursor: &mut usize, width: usize, label: &'static str) -> Result<u64> {
     if width == 0 || width > 8 {
-        return Err(RomWeaverError::Validation(format!(
-            "{label} requested unsupported integer width {width}"
-        )));
+        return Err(RomWeaverError::ValidationCode(
+            solid_validation_code("SOLID_INTEGER_WIDTH_UNSUPPORTED")
+                .with_field("label", label)
+                .with_field("width", width),
+        ));
     }
     let raw = read_exact(bytes, cursor, width)?;
     let mut value = 0u64;
@@ -1154,11 +1178,13 @@ fn read_exact<'a>(bytes: &'a [u8], cursor: &mut usize, len: usize) -> Result<&'a
     Ok(&bytes[start..end])
 }
 
-fn write_u64_le(output: &mut Vec<u8>, value: u64, width: usize, label: &str) -> Result<()> {
+fn write_u64_le(output: &mut Vec<u8>, value: u64, width: usize, label: &'static str) -> Result<()> {
     if width == 0 || width > 8 {
-        return Err(RomWeaverError::Validation(format!(
-            "{label} requested unsupported integer width {width}"
-        )));
+        return Err(RomWeaverError::ValidationCode(
+            solid_validation_code("SOLID_INTEGER_WIDTH_UNSUPPORTED")
+                .with_field("label", label)
+                .with_field("width", width),
+        ));
     }
     for index in 0..width {
         output.push(((value >> (index * 8)) & 0xFF) as u8);
@@ -1189,23 +1215,44 @@ fn hex_nibble(value: u8) -> char {
     }
 }
 
-fn usize_from_u64(value: u64, label: &str) -> Result<usize> {
-    usize::try_from(value)
-        .map_err(|_| RomWeaverError::Validation(format!("{label} exceeded usize")))
+fn usize_from_u64(value: u64, label: &'static str) -> Result<usize> {
+    usize::try_from(value).map_err(|_| {
+        RomWeaverError::ValidationCode(
+            solid_validation_code("SOLID_USIZE_CONVERSION_OVERFLOW")
+                .with_field("label", label)
+                .with_field("value", value),
+        )
+    })
 }
 
-fn checked_add_usize(lhs: usize, rhs: usize, label: &str) -> Result<usize> {
-    lhs.checked_add(rhs)
-        .ok_or_else(|| RomWeaverError::Validation(format!("{label} overflowed")))
+fn checked_add_usize(lhs: usize, rhs: usize, label: &'static str) -> Result<usize> {
+    lhs.checked_add(rhs).ok_or_else(|| {
+        RomWeaverError::ValidationCode(
+            solid_validation_code("SOLID_USIZE_ADD_OVERFLOW")
+                .with_field("label", label)
+                .with_field("lhs", lhs)
+                .with_field("rhs", rhs),
+        )
+    })
 }
 
-fn checked_add_u64(lhs: u64, rhs: u64, label: &str) -> Result<u64> {
-    lhs.checked_add(rhs)
-        .ok_or_else(|| RomWeaverError::Validation(format!("{label} overflowed")))
+fn checked_add_u64(lhs: u64, rhs: u64, label: &'static str) -> Result<u64> {
+    lhs.checked_add(rhs).ok_or_else(|| {
+        RomWeaverError::ValidationCode(
+            solid_validation_code("SOLID_U64_ADD_OVERFLOW")
+                .with_field("label", label)
+                .with_field("lhs", lhs)
+                .with_field("rhs", rhs),
+        )
+    })
 }
 
 fn pluralize<'a>(count: usize, singular: &'a str, plural: &'a str) -> &'a str {
-    if count == 1 { singular } else { plural }
+    if count == 1 {
+        singular
+    } else {
+        plural
+    }
 }
 
 impl ParsedPrimitive<'_> {
@@ -1235,8 +1282,8 @@ mod tests {
 
     use super::*;
     use crate::{
+        test_support::{test_context_with_threads_in_root as test_context_with_threads, TestDir},
         SOLID,
-        test_support::{TestDir, test_context_with_threads_in_root as test_context_with_threads},
     };
 
     static SOLID_ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();

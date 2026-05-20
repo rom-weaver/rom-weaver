@@ -12,8 +12,12 @@ use rayon::prelude::*;
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
     PatchCapabilities, PatchCreateRequest, PatchHandler, ProbeConfidence, Result, RomWeaverError,
-    ThreadCapability,
+    ThreadCapability, ValidationCodeError,
 };
+
+fn hdiff_validation_code(code: &'static str) -> ValidationCodeError {
+    ValidationCodeError::new(code)
+}
 
 pub struct HdiffPatchHandler {
     descriptor: &'static FormatDescriptor,
@@ -94,10 +98,12 @@ impl PatchHandler for HdiffPatchHandler {
         let (output_bytes, execution) = match variant {
             ParsedPatchVariant::SingleFile13(header) => {
                 if old_len != header.old_data_size {
-                    return Err(RomWeaverError::Validation(format!(
-                        "HDiffPatch source size mismatch: expected {} byte(s), got {} byte(s)",
-                        header.old_data_size, old_len
-                    )));
+                    return Err(RomWeaverError::ValidationCode(
+                        hdiff_validation_code("HDIFF_SOURCE_SIZE_MISMATCH")
+                            .with_message("HDiffPatch source size mismatch")
+                            .with_field("expected", header.old_data_size)
+                            .with_field("actual", old_len),
+                    ));
                 }
 
                 let thread_capability = hdiff13_apply_thread_capability(&header);
@@ -121,10 +127,12 @@ impl PatchHandler for HdiffPatchHandler {
             }
             ParsedPatchVariant::SingleStream20(header) => {
                 if old_len != header.old_data_size {
-                    return Err(RomWeaverError::Validation(format!(
-                        "HDiffPatch source size mismatch: expected {} byte(s), got {} byte(s)",
-                        header.old_data_size, old_len
-                    )));
+                    return Err(RomWeaverError::ValidationCode(
+                        hdiff_validation_code("HDIFF_SOURCE_SIZE_MISMATCH")
+                            .with_message("HDiffPatch source size mismatch")
+                            .with_field("expected", header.old_data_size)
+                            .with_field("actual", old_len),
+                    ));
                 }
 
                 let thread_capability = hdiffsf20_apply_thread_capability(&header);
@@ -226,9 +234,11 @@ impl HdiffCompression {
             "bz2" | "pbz2" => Ok(Self::Bz2),
             "lzma" => Ok(Self::Lzma),
             "lzma2" => Ok(Self::Lzma2),
-            other => Err(RomWeaverError::Validation(format!(
-                "HDiffPatch compression `{other}` is not recognized"
-            ))),
+            other => Err(RomWeaverError::ValidationCode(
+                hdiff_validation_code("HDIFF_COMPRESSION_UNRECOGNIZED")
+                    .with_message("HDiffPatch compression is not recognized")
+                    .with_field("compression", other),
+            )),
         }
     }
 
@@ -410,9 +420,11 @@ fn parse_hdiff_patch_view(raw: &[u8]) -> Result<ParsedPatchVariant> {
             new_data_size: output_sum_size,
         })
     } else {
-        return Err(RomWeaverError::Validation(format!(
-            "HDiffPatch magic `{magic}` is not supported"
-        )));
+        return Err(RomWeaverError::ValidationCode(
+            hdiff_validation_code("HDIFF_MAGIC_UNSUPPORTED")
+                .with_message("HDiffPatch magic is not supported")
+                .with_field("magic", magic),
+        ));
     };
 
     Ok(variant)
@@ -569,11 +581,12 @@ fn apply_hdiff13_with_chunk_parallelism(
         RomWeaverError::Validation("HDiffPatch old_data_size overflowed usize".into())
     })?;
     if old_bytes.len() != old_data_size {
-        return Err(RomWeaverError::Validation(format!(
-            "HDiffPatch source size mismatch: expected {} byte(s), got {} byte(s)",
-            old_data_size,
-            old_bytes.len()
-        )));
+        return Err(RomWeaverError::ValidationCode(
+            hdiff_validation_code("HDIFF_SOURCE_SIZE_MISMATCH")
+                .with_message("HDiffPatch source size mismatch")
+                .with_field("expected", old_data_size)
+                .with_field("actual", old_bytes.len()),
+        ));
     }
 
     let new_data_size = usize::try_from(header.new_data_size).map_err(|_| {
@@ -661,12 +674,13 @@ fn apply_hdiff13_with_chunk_parallelism(
             RomWeaverError::Validation("HDiffPatch cover old range overflowed".into())
         })?;
         if old_end > old_bytes.len() {
-            return Err(RomWeaverError::Validation(format!(
-                "HDiffPatch cover exceeded old data bounds: {}..{} of {}",
-                old_start,
-                old_end,
-                old_bytes.len()
-            )));
+            return Err(RomWeaverError::ValidationCode(
+                hdiff_validation_code("HDIFF_COVER_EXCEEDED_OLD_BOUNDS")
+                    .with_message("HDiffPatch cover exceeded old data bounds")
+                    .with_field("old_start", old_start)
+                    .with_field("old_end", old_end)
+                    .with_field("old_len", old_bytes.len()),
+            ));
         }
 
         output.extend_from_slice(&old_bytes[old_start..old_end]);
@@ -709,11 +723,12 @@ fn apply_hdiff13_with_chunk_parallelism(
     }
 
     if output.len() != new_data_size {
-        return Err(RomWeaverError::Validation(format!(
-            "HDiffPatch output size mismatch: expected {} byte(s), got {} byte(s)",
-            new_data_size,
-            output.len()
-        )));
+        return Err(RomWeaverError::ValidationCode(
+            hdiff_validation_code("HDIFF_OUTPUT_SIZE_MISMATCH")
+                .with_message("HDiffPatch output size mismatch")
+                .with_field("expected", new_data_size)
+                .with_field("actual", output.len()),
+        ));
     }
 
     Ok(output)
@@ -979,10 +994,12 @@ fn parse_hdiffsf20_steps(
         RomWeaverError::Validation("HDIFFSF20 produced size overflowed usize".into())
     })?;
     if produced_len > new_data_size {
-        return Err(RomWeaverError::Validation(format!(
-            "HDIFFSF20 output size mismatch: expected {} byte(s), got {} byte(s)",
-            new_data_size, produced_len
-        )));
+        return Err(RomWeaverError::ValidationCode(
+            hdiff_validation_code("HDIFFSF20_OUTPUT_SIZE_MISMATCH")
+                .with_message("HDIFFSF20 output size mismatch")
+                .with_field("expected", new_data_size)
+                .with_field("actual", produced_len),
+        ));
     }
     let tail_len = new_data_size - produced_len;
     let tail_end = diff_index
@@ -1084,27 +1101,35 @@ fn read_hdiff_chunk(
     plain_size: u64,
     compressed_size: u64,
     compression: HdiffCompression,
-    label: &str,
+    label: &'static str,
 ) -> Result<Vec<u8>> {
     let raw_size = hdiff_chunk_raw_size(plain_size, compressed_size);
     let end = add_usize_u64(start, raw_size, label)?;
     if end > patch_bytes.len() {
-        return Err(RomWeaverError::Validation(format!(
-            "HDiffPatch {label} chunk exceeded patch length"
-        )));
+        return Err(RomWeaverError::ValidationCode(
+            hdiff_validation_code("HDIFF_CHUNK_EXCEEDED_PATCH_LENGTH")
+                .with_field("label", label)
+                .with_field("end", end)
+                .with_field("patch_len", patch_bytes.len()),
+        ));
     }
 
     if compressed_size == 0 {
         let plain_len = usize::try_from(plain_size).map_err(|_| {
-            RomWeaverError::Validation(format!("HDiffPatch {label} size overflowed usize"))
+            RomWeaverError::ValidationCode(
+                hdiff_validation_code("HDIFF_CHUNK_SIZE_OVERFLOW_USIZE")
+                    .with_field("label", label)
+                    .with_field("plain_size", plain_size),
+            )
         })?;
         return Ok(patch_bytes[start..start + plain_len].to_vec());
     }
 
     if compression == HdiffCompression::NoComp {
-        return Err(RomWeaverError::Validation(format!(
-            "HDiffPatch {label} declared compressed bytes while using nocomp"
-        )));
+        return Err(RomWeaverError::ValidationCode(
+            hdiff_validation_code("HDIFF_CHUNK_COMPRESSED_BYTES_WITH_NOCOMP")
+                .with_field("label", label),
+        ));
     }
 
     let compressed = &patch_bytes[start..end];
@@ -1123,12 +1148,13 @@ fn decompress_hdiff_payload(
     compression: HdiffCompression,
     compressed: &[u8],
     expected_len: u64,
-    label: &str,
+    label: &'static str,
 ) -> Result<Vec<u8>> {
     match compression {
-        HdiffCompression::NoComp => Err(RomWeaverError::Validation(format!(
-            "HDiffPatch {label} declared compressed bytes while using nocomp"
-        ))),
+        HdiffCompression::NoComp => Err(RomWeaverError::ValidationCode(
+            hdiff_validation_code("HDIFF_CHUNK_COMPRESSED_BYTES_WITH_NOCOMP")
+                .with_field("label", label),
+        )),
         HdiffCompression::Zstd => decompress_zstd_to_vec(compressed, expected_len, label),
         HdiffCompression::Zlib => decompress_zlib_to_vec(compressed, expected_len, label),
         HdiffCompression::Bz2 => decompress_bz2_to_vec(compressed, expected_len, label),
@@ -1137,18 +1163,31 @@ fn decompress_hdiff_payload(
     }
 }
 
-fn decompress_zstd_to_vec(compressed: &[u8], expected_len: u64, label: &str) -> Result<Vec<u8>> {
+fn decompress_zstd_to_vec(
+    compressed: &[u8],
+    expected_len: u64,
+    label: &'static str,
+) -> Result<Vec<u8>> {
     let decoder = zstd::stream::read::Decoder::new(Cursor::new(compressed)).map_err(|error| {
-        RomWeaverError::Validation(format!("HDiffPatch {label} zstd init failed: {error}"))
+        RomWeaverError::ValidationCode(
+            hdiff_validation_code("HDIFF_ZSTD_INIT_FAILED")
+                .with_field("label", label)
+                .with_field("error", error.to_string()),
+        )
     })?;
     read_exact_decompressed_size(decoder, expected_len, label, "zstd")
 }
 
-fn decompress_zlib_to_vec(compressed: &[u8], expected_len: u64, label: &str) -> Result<Vec<u8>> {
+fn decompress_zlib_to_vec(
+    compressed: &[u8],
+    expected_len: u64,
+    label: &'static str,
+) -> Result<Vec<u8>> {
     if compressed.is_empty() {
-        return Err(RomWeaverError::Validation(format!(
-            "HDiffPatch {label} zlib payload is missing windowBits prefix"
-        )));
+        return Err(RomWeaverError::ValidationCode(
+            hdiff_validation_code("HDIFF_ZLIB_WINDOW_BITS_PREFIX_MISSING")
+                .with_field("label", label),
+        ));
     }
     let window_bits = i8::from_ne_bytes([compressed[0]]);
     let payload = &compressed[1..];
@@ -1166,13 +1205,19 @@ fn decompress_zlib_to_vec(compressed: &[u8], expected_len: u64, label: &str) -> 
             label,
             "zlib",
         ),
-        _ => Err(RomWeaverError::Validation(format!(
-            "HDiffPatch {label} zlib windowBits `{window_bits}` is unsupported"
-        ))),
+        _ => Err(RomWeaverError::ValidationCode(
+            hdiff_validation_code("HDIFF_ZLIB_WINDOW_BITS_UNSUPPORTED")
+                .with_field("label", label)
+                .with_field("window_bits", window_bits),
+        )),
     }
 }
 
-fn decompress_bz2_to_vec(compressed: &[u8], expected_len: u64, label: &str) -> Result<Vec<u8>> {
+fn decompress_bz2_to_vec(
+    compressed: &[u8],
+    expected_len: u64,
+    label: &'static str,
+) -> Result<Vec<u8>> {
     read_exact_decompressed_size(
         BzDecoder::new(Cursor::new(compressed)),
         expected_len,
@@ -1181,34 +1226,47 @@ fn decompress_bz2_to_vec(compressed: &[u8], expected_len: u64, label: &str) -> R
     )
 }
 
-fn decompress_lzma_to_vec(compressed: &[u8], expected_len: u64, label: &str) -> Result<Vec<u8>> {
+fn decompress_lzma_to_vec(
+    compressed: &[u8],
+    expected_len: u64,
+    label: &'static str,
+) -> Result<Vec<u8>> {
     if compressed.is_empty() {
-        return Err(RomWeaverError::Validation(format!(
-            "HDiffPatch {label} lzma payload is missing properties"
-        )));
+        return Err(RomWeaverError::ValidationCode(
+            hdiff_validation_code("HDIFF_LZMA_PROPS_MISSING").with_field("label", label),
+        ));
     }
     let props_size = usize::from(compressed[0]);
     if props_size == 0 {
-        return Err(RomWeaverError::Validation(format!(
-            "HDiffPatch {label} lzma props size must be non-zero"
-        )));
+        return Err(RomWeaverError::ValidationCode(
+            hdiff_validation_code("HDIFF_LZMA_PROPS_SIZE_ZERO").with_field("label", label),
+        ));
     }
 
     let props_begin = 1usize;
     let props_end = props_begin.checked_add(props_size).ok_or_else(|| {
-        RomWeaverError::Validation(format!("HDiffPatch {label} lzma props overflowed"))
+        RomWeaverError::ValidationCode(
+            hdiff_validation_code("HDIFF_LZMA_PROPS_OVERFLOW")
+                .with_field("label", label)
+                .with_field("props_size", props_size),
+        )
     })?;
     if props_end > compressed.len() {
-        return Err(RomWeaverError::Validation(format!(
-            "HDiffPatch {label} lzma properties exceeded payload"
-        )));
+        return Err(RomWeaverError::ValidationCode(
+            hdiff_validation_code("HDIFF_LZMA_PROPS_EXCEEDED_PAYLOAD")
+                .with_field("label", label)
+                .with_field("props_end", props_end)
+                .with_field("payload_len", compressed.len()),
+        ));
     }
 
     let props = &compressed[props_begin..props_end];
     if props.len() < 5 {
-        return Err(RomWeaverError::Validation(format!(
-            "HDiffPatch {label} lzma properties are too short"
-        )));
+        return Err(RomWeaverError::ValidationCode(
+            hdiff_validation_code("HDIFF_LZMA_PROPS_TOO_SHORT")
+                .with_field("label", label)
+                .with_field("props_len", props.len()),
+        ));
     }
 
     let props_byte = props[0];
@@ -1223,16 +1281,24 @@ fn decompress_lzma_to_vec(compressed: &[u8], expected_len: u64, label: &str) -> 
         None,
     )
     .map_err(|error| {
-        RomWeaverError::Validation(format!("HDiffPatch {label} lzma init failed: {error}"))
+        RomWeaverError::ValidationCode(
+            hdiff_validation_code("HDIFF_LZMA_INIT_FAILED")
+                .with_field("label", label)
+                .with_field("error", error.to_string()),
+        )
     })?;
     read_exact_decompressed_size(decoder, expected_len, label, "lzma")
 }
 
-fn decompress_lzma2_to_vec(compressed: &[u8], expected_len: u64, label: &str) -> Result<Vec<u8>> {
+fn decompress_lzma2_to_vec(
+    compressed: &[u8],
+    expected_len: u64,
+    label: &'static str,
+) -> Result<Vec<u8>> {
     if compressed.is_empty() {
-        return Err(RomWeaverError::Validation(format!(
-            "HDiffPatch {label} lzma2 payload is missing properties"
-        )));
+        return Err(RomWeaverError::ValidationCode(
+            hdiff_validation_code("HDIFF_LZMA2_PROPS_MISSING").with_field("label", label),
+        ));
     }
 
     let property = compressed[0];
@@ -1243,17 +1309,21 @@ fn decompress_lzma2_to_vec(compressed: &[u8], expected_len: u64, label: &str) ->
     read_exact_decompressed_size(decoder, expected_len, label, "lzma2")
 }
 
-fn decode_lzma2_dict_size(property: u8, label: &str) -> Result<u32> {
+fn decode_lzma2_dict_size(property: u8, label: &'static str) -> Result<u32> {
     let bits = u32::from(property);
     if (bits & !0x3f) != 0 {
-        return Err(RomWeaverError::Validation(format!(
-            "HDiffPatch {label} lzma2 property `{property}` has unsupported flag bits"
-        )));
+        return Err(RomWeaverError::ValidationCode(
+            hdiff_validation_code("HDIFF_LZMA2_PROPERTY_FLAG_BITS_UNSUPPORTED")
+                .with_field("label", label)
+                .with_field("property", property),
+        ));
     }
     if bits > 40 {
-        return Err(RomWeaverError::Validation(format!(
-            "HDiffPatch {label} lzma2 property `{property}` exceeds max dictionary setting"
-        )));
+        return Err(RomWeaverError::ValidationCode(
+            hdiff_validation_code("HDIFF_LZMA2_PROPERTY_MAX_EXCEEDED")
+                .with_field("label", label)
+                .with_field("property", property),
+        ));
     }
     if bits == 40 {
         return Ok(u32::MAX);
@@ -1261,9 +1331,11 @@ fn decode_lzma2_dict_size(property: u8, label: &str) -> Result<u32> {
 
     let shift = bits / 2 + 11;
     let size = (2 | (bits & 1)).checked_shl(shift).ok_or_else(|| {
-        RomWeaverError::Validation(format!(
-            "HDiffPatch {label} lzma2 dictionary size overflowed"
-        ))
+        RomWeaverError::ValidationCode(
+            hdiff_validation_code("HDIFF_LZMA2_DICTIONARY_SIZE_OVERFLOW")
+                .with_field("label", label)
+                .with_field("property", property),
+        )
     })?;
     Ok(size)
 }
@@ -1271,22 +1343,33 @@ fn decode_lzma2_dict_size(property: u8, label: &str) -> Result<u32> {
 fn read_exact_decompressed_size(
     mut decoder: impl Read,
     expected_len: u64,
-    label: &str,
-    codec: &str,
+    label: &'static str,
+    codec: &'static str,
 ) -> Result<Vec<u8>> {
     let mut out = Vec::new();
     decoder.read_to_end(&mut out).map_err(|error| {
-        RomWeaverError::Validation(format!("HDiffPatch {label} {codec} decode failed: {error}"))
+        RomWeaverError::ValidationCode(
+            hdiff_validation_code("HDIFF_DECODE_FAILED")
+                .with_field("label", label)
+                .with_field("codec", codec)
+                .with_field("error", error.to_string()),
+        )
     })?;
 
     let expected = usize::try_from(expected_len).map_err(|_| {
-        RomWeaverError::Validation(format!("HDiffPatch {label} expected size overflowed usize"))
+        RomWeaverError::ValidationCode(
+            hdiff_validation_code("HDIFF_EXPECTED_SIZE_OVERFLOW_USIZE")
+                .with_field("label", label)
+                .with_field("expected_len", expected_len),
+        )
     })?;
     if out.len() != expected {
-        return Err(RomWeaverError::Validation(format!(
-            "HDiffPatch {label} size mismatch after decompression: expected {expected}, got {}",
-            out.len()
-        )));
+        return Err(RomWeaverError::ValidationCode(
+            hdiff_validation_code("HDIFF_DECOMPRESSED_SIZE_MISMATCH")
+                .with_field("label", label)
+                .with_field("expected", expected)
+                .with_field("actual", out.len()),
+        ));
     }
 
     Ok(out)
@@ -1470,7 +1553,7 @@ impl<'a> HdiffSf20RleDecoder<'a> {
     }
 }
 
-fn read_rle_varint(bytes: &[u8], index: &mut usize, label: &str) -> Result<usize> {
+fn read_rle_varint(bytes: &[u8], index: &mut usize, label: &'static str) -> Result<usize> {
     let first = read_u8_slice(bytes, index, label)?;
     let mut value = u64::from(first & 0x7f);
 
@@ -1498,12 +1581,16 @@ fn append_from_new_diff(
     source: &[u8],
     source_index: &mut usize,
     len: usize,
-    label: &str,
+    label: &'static str,
 ) -> Result<()> {
     if source.len().saturating_sub(*source_index) < len {
-        return Err(RomWeaverError::Validation(format!(
-            "HDiffPatch {label} ended unexpectedly"
-        )));
+        return Err(RomWeaverError::ValidationCode(
+            hdiff_validation_code("HDIFF_NEW_DIFF_UNEXPECTED_EOF")
+                .with_field("label", label)
+                .with_field("source_index", *source_index)
+                .with_field("len", len)
+                .with_field("source_len", source.len()),
+        ));
     }
     output.extend_from_slice(&source[*source_index..*source_index + len]);
     *source_index += len;
@@ -1526,26 +1613,29 @@ fn read_null_terminated_string(bytes: &[u8], max_len: usize) -> Result<(String, 
     ))
 }
 
-fn read_bool_byte(bytes: &[u8], index: &mut usize, label: &str) -> Result<bool> {
+fn read_bool_byte(bytes: &[u8], index: &mut usize, label: &'static str) -> Result<bool> {
     Ok(read_u8_slice(bytes, index, label)? != 0)
 }
 
-fn read_u8_slice(bytes: &[u8], index: &mut usize, label: &str) -> Result<u8> {
+fn read_u8_slice(bytes: &[u8], index: &mut usize, label: &'static str) -> Result<u8> {
     if *index >= bytes.len() {
-        return Err(RomWeaverError::Validation(format!(
-            "HDiffPatch ended unexpectedly while reading {label}"
-        )));
+        return Err(RomWeaverError::ValidationCode(
+            hdiff_validation_code("HDIFF_READ_UNEXPECTED_EOF")
+                .with_field("label", label)
+                .with_field("index", *index)
+                .with_field("len", bytes.len()),
+        ));
     }
     let byte = bytes[*index];
     *index += 1;
     Ok(byte)
 }
 
-fn read_var_u64(bytes: &[u8], index: &mut usize, label: &str) -> Result<u64> {
+fn read_var_u64(bytes: &[u8], index: &mut usize, label: &'static str) -> Result<u64> {
     read_var_u64_tagged_slice(bytes, index, 0, 0, label)
 }
 
-fn read_var_u64_slice(bytes: &[u8], index: &mut usize, label: &str) -> Result<u64> {
+fn read_var_u64_slice(bytes: &[u8], index: &mut usize, label: &'static str) -> Result<u64> {
     read_var_u64(bytes, index, label)
 }
 
@@ -1554,7 +1644,7 @@ fn read_var_u64_tagged_slice(
     index: &mut usize,
     tag_bits: u8,
     first_byte: u8,
-    label: &str,
+    label: &'static str,
 ) -> Result<u64> {
     if tag_bits > 6 {
         return Err(RomWeaverError::Validation(
@@ -1590,12 +1680,22 @@ fn read_var_u64_tagged_slice(
     Ok(value)
 }
 
-fn add_usize_u64(start: usize, amount: u64, label: &str) -> Result<usize> {
-    let amount = usize::try_from(amount)
-        .map_err(|_| RomWeaverError::Validation(format!("HDiffPatch {label} overflowed usize")))?;
-    start
-        .checked_add(amount)
-        .ok_or_else(|| RomWeaverError::Validation(format!("HDiffPatch {label} overflowed")))
+fn add_usize_u64(start: usize, amount: u64, label: &'static str) -> Result<usize> {
+    let amount = usize::try_from(amount).map_err(|_| {
+        RomWeaverError::ValidationCode(
+            hdiff_validation_code("HDIFF_USIZE_CONVERSION_OVERFLOW")
+                .with_field("label", label)
+                .with_field("amount", amount),
+        )
+    })?;
+    start.checked_add(amount).ok_or_else(|| {
+        RomWeaverError::ValidationCode(
+            hdiff_validation_code("HDIFF_USIZE_ADD_OVERFLOW")
+                .with_field("label", label)
+                .with_field("start", start)
+                .with_field("amount", amount),
+        )
+    })
 }
 
 #[cfg(test)]
@@ -1658,12 +1758,12 @@ mod tests {
     use rom_weaver_core::{PatchApplyRequest, PatchCreateRequest, PatchHandler};
 
     use super::{
-        HdiffPatchHandler, apply_hdiff13, apply_hdiffsf20, build_uncompressed_hdiff13_patch,
-        write_var_u64,
+        apply_hdiff13, apply_hdiffsf20, build_uncompressed_hdiff13_patch, write_var_u64,
+        HdiffPatchHandler,
     };
     use crate::{
+        test_support::{test_context_with_threads, TestDir},
         HDIFFPATCH,
-        test_support::{TestDir, test_context_with_threads},
     };
 
     #[test]
@@ -2043,13 +2143,11 @@ mod tests {
         let execution = report.thread_execution.expect("thread execution");
         assert!(!execution.used_parallelism);
         assert!(execution.thread_fallback);
-        assert!(
-            execution
-                .thread_fallback_reason
-                .as_deref()
-                .unwrap_or_default()
-                .contains("no independent step-level parallel work")
-        );
+        assert!(execution
+            .thread_fallback_reason
+            .as_deref()
+            .unwrap_or_default()
+            .contains("no independent step-level parallel work"));
         assert_eq!(execution.effective_threads, 1);
         assert_eq!(fs::read(output_path).expect("output"), source);
     }

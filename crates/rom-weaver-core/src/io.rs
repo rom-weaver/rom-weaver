@@ -141,10 +141,8 @@ mod tests {
             .collect::<Vec<_>>();
         let unique = paths.iter().collect::<HashSet<_>>();
         assert_eq!(paths.len(), unique.len());
-        assert!(
-            paths
-                .iter()
-                .all(|path| path.to_string_lossy().contains("checksum-stage"))
-        );
+        assert!(paths
+            .iter()
+            .all(|path| path.to_string_lossy().contains("checksum-stage")));
     }
 }

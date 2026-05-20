@@ -10,7 +10,7 @@ use rayon::prelude::*;
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
     PatchCapabilities, PatchChecksumValidation, PatchCreateRequest, PatchHandler, ProbeConfidence,
-    Result, RomWeaverError, ThreadCapability,
+    Result, RomWeaverError, ThreadCapability, ValidationCodeError,
 };
 
 use crate::xdelta_ffi;
@@ -35,6 +35,10 @@ const DELTA_KNOWN_MASK: u8 = DELTA_DATA_COMP | DELTA_INST_COMP | DELTA_ADDR_COMP
 
 #[cfg(test)]
 const XD3_ENOSPC: c_int = 28;
+
+fn vcdiff_validation_code(code: &'static str) -> ValidationCodeError {
+    ValidationCodeError::new(code)
+}
 
 pub struct VcdiffPatchHandler {
     descriptor: &'static FormatDescriptor,
@@ -201,10 +205,12 @@ impl PatchHandler for VcdiffPatchHandler {
         let mut expected_offset = 0u64;
         for window in decoded {
             if window.output_offset != expected_offset {
-                return Err(RomWeaverError::Validation(format!(
-                    "window output offset mismatch: expected {expected_offset}, got {}",
-                    window.output_offset
-                )));
+                return Err(RomWeaverError::ValidationCode(
+                    vcdiff_validation_code("VCDIFF_WINDOW_OUTPUT_OFFSET_MISMATCH")
+                        .with_message("window output offset mismatch")
+                        .with_field("expected", expected_offset)
+                        .with_field("actual", window.output_offset),
+                ));
             }
 
             let mut temp = BufReader::new(File::open(&window.temp_path)?);
@@ -393,9 +399,14 @@ fn read_source_segment<R: Read + Seek>(
 ) -> Result<Vec<u8>> {
     let end = checked_add(segment_position, segment_size, "source segment range")?;
     if end > available_len {
-        return Err(RomWeaverError::Validation(format!(
-            "{kind_label} segment [{segment_position}..{end}) exceeds available length {available_len}"
-        )));
+        return Err(RomWeaverError::ValidationCode(
+            vcdiff_validation_code("VCDIFF_SOURCE_SEGMENT_EXCEEDED_AVAILABLE_LENGTH")
+                .with_message("source segment exceeded available length")
+                .with_field("segment_kind", kind_label)
+                .with_field("segment_position", segment_position)
+                .with_field("segment_end", end)
+                .with_field("available_len", available_len),
+        ));
     }
 
     let size = usize::try_from(segment_size).map_err(|_| {
@@ -434,7 +445,7 @@ struct CreatedPatchCandidate {
 struct SourceBlockReader {
     file: File,
     buffer: Vec<u8>,
-    last_error: Option<String>,
+    last_error: Option<XdeltaSourceBlockError>,
 }
 
 impl SourceBlockReader {
@@ -444,6 +455,56 @@ impl SourceBlockReader {
             buffer: vec![0; block_size.max(1)],
             last_error: None,
         })
+    }
+}
+
+#[derive(Debug)]
+struct XdeltaSourceBlockError {
+    code: &'static str,
+    block_number: xdelta_ffi::XoffT,
+    detail: Option<String>,
+}
+
+impl XdeltaSourceBlockError {
+    fn offset_overflow(block_number: xdelta_ffi::XoffT, block_size: u64) -> Self {
+        Self {
+            code: "VCDIFF_XDELTA_SOURCE_BLOCK_OFFSET_OVERFLOW",
+            block_number,
+            detail: Some(block_size.to_string()),
+        }
+    }
+
+    fn seek_failed(block_number: xdelta_ffi::XoffT, error: std::io::Error) -> Self {
+        Self {
+            code: "VCDIFF_XDELTA_SOURCE_BLOCK_SEEK_FAILED",
+            block_number,
+            detail: Some(error.to_string()),
+        }
+    }
+
+    fn read_failed(block_number: xdelta_ffi::XoffT, error: std::io::Error) -> Self {
+        Self {
+            code: "VCDIFF_XDELTA_SOURCE_BLOCK_READ_FAILED",
+            block_number,
+            detail: Some(error.to_string()),
+        }
+    }
+
+    fn read_too_large(block_number: xdelta_ffi::XoffT, bytes_read: usize) -> Self {
+        Self {
+            code: "VCDIFF_XDELTA_SOURCE_BLOCK_READ_TOO_LARGE",
+            block_number,
+            detail: Some(bytes_read.to_string()),
+        }
+    }
+
+    fn to_validation_code(&self) -> ValidationCodeError {
+        let mut code =
+            vcdiff_validation_code(self.code).with_field("block_number", self.block_number);
+        if let Some(detail) = &self.detail {
+            code.push_field("detail", detail.as_str());
+        }
+        code
     }
 }
 
@@ -458,17 +519,20 @@ fn parse_patch<R: Read + Seek>(reader: &mut R) -> Result<ParsedPatch> {
         ));
     }
     if magic[3] != VCDIFF_VERSION_STANDARD {
-        return Err(RomWeaverError::Validation(format!(
-            "unsupported VCDIFF header version byte 0x{:02X}",
-            magic[3]
-        )));
+        return Err(RomWeaverError::ValidationCode(
+            vcdiff_validation_code("VCDIFF_HEADER_VERSION_UNSUPPORTED")
+                .with_message("unsupported VCDIFF header version byte")
+                .with_field("version_byte", magic[3]),
+        ));
     }
 
     let hdr_indicator = read_u8(reader)?;
     if hdr_indicator & !HDR_KNOWN_MASK != 0 {
-        return Err(RomWeaverError::Validation(format!(
-            "unsupported VCDIFF header flags 0x{hdr_indicator:02X}"
-        )));
+        return Err(RomWeaverError::ValidationCode(
+            vcdiff_validation_code("VCDIFF_HEADER_FLAGS_UNSUPPORTED")
+                .with_message("unsupported VCDIFF header flags")
+                .with_field("header_flags", hdr_indicator),
+        ));
     }
 
     let secondary_compressor_id = if hdr_indicator & HDR_SECONDARY != 0 {
@@ -520,9 +584,11 @@ fn read_window_index<R: Read + Seek>(
     };
 
     if win_indicator & !WIN_KNOWN_MASK != 0 {
-        return Err(RomWeaverError::Validation(format!(
-            "unsupported window flags 0x{win_indicator:02X}"
-        )));
+        return Err(RomWeaverError::ValidationCode(
+            vcdiff_validation_code("VCDIFF_WINDOW_FLAGS_UNSUPPORTED")
+                .with_message("unsupported window flags")
+                .with_field("window_flags", win_indicator),
+        ));
     }
 
     let uses_source = win_indicator & WIN_SOURCE != 0;
@@ -555,9 +621,11 @@ fn read_window_index<R: Read + Seek>(
     let (target_window_size, _) = read_varint(reader)?;
     let delta_indicator = read_u8(reader)?;
     if delta_indicator & !DELTA_KNOWN_MASK != 0 {
-        return Err(RomWeaverError::Validation(format!(
-            "unsupported delta section flags 0x{delta_indicator:02X}"
-        )));
+        return Err(RomWeaverError::ValidationCode(
+            vcdiff_validation_code("VCDIFF_DELTA_FLAGS_UNSUPPORTED")
+                .with_message("unsupported delta section flags")
+                .with_field("delta_flags", delta_indicator),
+        ));
     }
 
     let (data_len, _) = read_varint(reader)?;
@@ -585,9 +653,12 @@ fn read_window_index<R: Read + Seek>(
         "delta encoding size",
     )?;
     if header_and_sections != delta_encoding_len {
-        return Err(RomWeaverError::Validation(format!(
-            "delta encoding length mismatch: header declared {delta_encoding_len} bytes but window needs {header_and_sections}"
-        )));
+        return Err(RomWeaverError::ValidationCode(
+            vcdiff_validation_code("VCDIFF_DELTA_ENCODING_LENGTH_MISMATCH")
+                .with_message("delta encoding length mismatch")
+                .with_field("declared_len", delta_encoding_len)
+                .with_field("calculated_len", header_and_sections),
+        ));
     }
 
     reader.seek(SeekFrom::Start(window_end))?;
@@ -680,10 +751,12 @@ fn apply_windows_with_target_sources(
 
     for window in &patch.windows {
         if window.output_offset != assembled_output_size {
-            return Err(RomWeaverError::Validation(format!(
-                "window output offset mismatch: expected {assembled_output_size}, got {}",
-                window.output_offset
-            )));
+            return Err(RomWeaverError::ValidationCode(
+                vcdiff_validation_code("VCDIFF_WINDOW_OUTPUT_OFFSET_MISMATCH")
+                    .with_message("window output offset mismatch")
+                    .with_field("expected", assembled_output_size)
+                    .with_field("actual", window.output_offset),
+            ));
         }
 
         let source = match window.source_kind {
@@ -752,23 +825,23 @@ fn load_source_block(
     state: &mut SourceBlockReader,
     source: &mut xdelta_ffi::Xd3Source,
     block_number: xdelta_ffi::XoffT,
-) -> std::result::Result<(), String> {
+) -> std::result::Result<(), XdeltaSourceBlockError> {
     let block_size = state.buffer.len() as u64;
     let offset = (block_number as u64)
         .checked_mul(block_size)
-        .ok_or_else(|| "xdelta source block offset overflowed u64".to_string())?;
+        .ok_or_else(|| XdeltaSourceBlockError::offset_overflow(block_number, block_size))?;
     state
         .file
         .seek(SeekFrom::Start(offset))
-        .map_err(|error| format!("failed to seek source block {block_number}: {error}"))?;
+        .map_err(|error| XdeltaSourceBlockError::seek_failed(block_number, error))?;
     let bytes_read = state
         .file
         .read(&mut state.buffer)
-        .map_err(|error| format!("failed to read source block {block_number}: {error}"))?;
+        .map_err(|error| XdeltaSourceBlockError::read_failed(block_number, error))?;
 
     source.curblkno = block_number;
     source.onblk = u32::try_from(bytes_read)
-        .map_err(|_| "xdelta source block read is too large".to_string())?;
+        .map_err(|_| XdeltaSourceBlockError::read_too_large(block_number, bytes_read))?;
     source.curblk = state.buffer.as_ptr();
 
     if bytes_read < state.buffer.len() {
@@ -928,16 +1001,17 @@ fn drive_xdelta_encoder<W: Write>(
 }
 
 fn xdelta_stream_error(
-    operation: &str,
+    operation: &'static str,
     stream: &xdelta_ffi::Xd3Stream,
     source_state: Option<&mut SourceBlockReader>,
     rc: c_int,
 ) -> RomWeaverError {
     if let Some(state) = source_state {
-        if let Some(message) = state.last_error.take() {
-            return RomWeaverError::Validation(format!(
-                "xdelta encoder failed to {operation} patch: {message}"
-            ));
+        if let Some(source_error) = state.last_error.take() {
+            let mut code = source_error.to_validation_code();
+            code.push_field("operation", operation);
+            code.push_field("status_code", rc);
+            return RomWeaverError::ValidationCode(code);
         }
     }
 
@@ -954,15 +1028,13 @@ fn xdelta_stream_error(
         }
     };
 
+    let mut code = vcdiff_validation_code("VCDIFF_XDELTA_STREAM_FAILURE")
+        .with_field("operation", operation)
+        .with_field("status_code", rc);
     if let Some(detail) = detail.filter(|message| !message.is_empty()) {
-        RomWeaverError::Validation(format!(
-            "xdelta encoder failed to {operation} patch: {detail} (code {rc})"
-        ))
-    } else {
-        RomWeaverError::Validation(format!(
-            "xdelta encoder failed to {operation} patch (code {rc})"
-        ))
+        code.push_field("detail", detail);
     }
+    RomWeaverError::ValidationCode(code)
 }
 
 fn preferred_xdelta_window(file_len: u64, max_window: usize) -> usize {
@@ -974,14 +1046,24 @@ fn preferred_xdelta_window(file_len: u64, max_window: usize) -> usize {
     }
 }
 
-fn xdelta_usize(value: usize, label: &str) -> Result<xdelta_ffi::UsizeT> {
-    u32::try_from(value)
-        .map_err(|_| RomWeaverError::Validation(format!("{label} exceeded xdelta limits")))
+fn xdelta_usize(value: usize, label: &'static str) -> Result<xdelta_ffi::UsizeT> {
+    u32::try_from(value).map_err(|_| {
+        RomWeaverError::ValidationCode(
+            vcdiff_validation_code("VCDIFF_XDELTA_USIZE_LIMIT_EXCEEDED")
+                .with_field("label", label)
+                .with_field("value", value),
+        )
+    })
 }
 
-fn xdelta_xoff(value: u64, label: &str) -> Result<xdelta_ffi::XoffT> {
-    xdelta_ffi::XoffT::try_from(value)
-        .map_err(|_| RomWeaverError::Validation(format!("{label} exceeded xdelta limits")))
+fn xdelta_xoff(value: u64, label: &'static str) -> Result<xdelta_ffi::XoffT> {
+    xdelta_ffi::XoffT::try_from(value).map_err(|_| {
+        RomWeaverError::ValidationCode(
+            vcdiff_validation_code("VCDIFF_XDELTA_XOFF_LIMIT_EXCEEDED")
+                .with_field("label", label)
+                .with_field("value", value),
+        )
+    })
 }
 
 #[cfg(test)]
@@ -1037,9 +1119,11 @@ fn encode_patch_with_xdelta_memory(source: &[u8], target: &[u8], flags: c_int) -
                 ));
             }
             _ => {
-                return Err(RomWeaverError::Validation(format!(
-                    "xdelta encoder failed to create patch (code {rc})"
-                )));
+                return Err(RomWeaverError::ValidationCode(
+                    vcdiff_validation_code("VCDIFF_XDELTA_CREATE_FAILED")
+                        .with_message("xdelta encoder failed to create patch")
+                        .with_field("status_code", rc),
+                ));
             }
         }
     }
@@ -1070,20 +1154,24 @@ fn decode_window_with_xdelta<R: Read + Seek>(
     let decoded = decode_window_with_xdelta_memory(&patch_bytes, source_segment, window)?;
 
     if decoded.len() as u64 != window.target_window_size {
-        return Err(RomWeaverError::Validation(format!(
-            "xdelta decoder produced {} byte(s) but expected {}",
-            decoded.len(),
-            window.target_window_size
-        )));
+        return Err(RomWeaverError::ValidationCode(
+            vcdiff_validation_code("VCDIFF_XDELTA_DECODED_SIZE_MISMATCH")
+                .with_message("xdelta decoder produced an unexpected output size")
+                .with_field("actual", decoded.len())
+                .with_field("expected", window.target_window_size),
+        ));
     }
 
     if validate_checksums {
         if let Some(expected) = window.checksum {
             let actual = adler32(&decoded);
             if actual != expected {
-                return Err(RomWeaverError::Validation(format!(
-                    "target window checksum mismatch: expected 0x{expected:08X}, got 0x{actual:08X}"
-                )));
+                return Err(RomWeaverError::ValidationCode(
+                    vcdiff_validation_code("VCDIFF_TARGET_WINDOW_CHECKSUM_MISMATCH")
+                        .with_message("target window checksum mismatch")
+                        .with_field("expected", expected)
+                        .with_field("actual", actual),
+                ));
             }
         }
     }
@@ -1124,10 +1212,12 @@ fn decode_window_with_xdelta_memory(
         )
     };
     if rc != 0 {
-        return Err(RomWeaverError::Validation(format!(
-            "xdelta decoder failed to decode window at output offset {} (code {rc})",
-            window.output_offset
-        )));
+        return Err(RomWeaverError::ValidationCode(
+            vcdiff_validation_code("VCDIFF_XDELTA_DECODE_FAILED")
+                .with_message("xdelta decoder failed")
+                .with_field("output_offset", window.output_offset)
+                .with_field("status_code", rc),
+        ));
     }
 
     output.truncate(output_len as usize);
@@ -1250,9 +1340,16 @@ fn encode_varint(bytes: &mut Vec<u8>, mut value: u64) {
     }
 }
 
-fn checked_add(lhs: u64, rhs: u64, label: &str) -> Result<u64> {
-    lhs.checked_add(rhs)
-        .ok_or_else(|| RomWeaverError::Validation(format!("{label} overflowed u64")))
+fn checked_add(lhs: u64, rhs: u64, label: &'static str) -> Result<u64> {
+    lhs.checked_add(rhs).ok_or_else(|| {
+        RomWeaverError::ValidationCode(
+            vcdiff_validation_code("VCDIFF_U64_ADD_OVERFLOW")
+                .with_message("VCDIFF arithmetic overflowed u64")
+                .with_field("label", label)
+                .with_field("lhs", lhs)
+                .with_field("rhs", rhs),
+        )
+    })
 }
 
 fn adler32(bytes: &[u8]) -> u32 {
@@ -1274,8 +1371,8 @@ mod tests {
         os::raw::c_int,
         path::PathBuf,
         process,
-        sync::Arc,
         sync::atomic::{AtomicU64, Ordering},
+        sync::Arc,
         time::{SystemTime, UNIX_EPOCH},
     };
 
@@ -1519,12 +1616,10 @@ mod tests {
         let parsed = parse_patch(&mut Cursor::new(patch)).expect("parse secondary patch");
         assert!(parsed.secondary_compressor_id.is_some());
         assert_eq!(parsed.windows.len(), 1);
-        assert!(
-            parsed
-                .windows
-                .iter()
-                .any(|window| window.delta_indicator != 0)
-        );
+        assert!(parsed
+            .windows
+            .iter()
+            .any(|window| window.delta_indicator != 0));
     }
 
     #[test]
@@ -1889,12 +1984,10 @@ mod tests {
         let parsed = parse_patch(&mut Cursor::new(&patch)).expect("parse created patch");
         assert_eq!(parsed.secondary_compressor_id, None);
         assert!(!parsed.windows.is_empty());
-        assert!(
-            parsed
-                .windows
-                .iter()
-                .all(|window| window.source_kind.is_none())
-        );
+        assert!(parsed
+            .windows
+            .iter()
+            .all(|window| window.source_kind.is_none()));
 
         handler
             .apply(
@@ -2000,12 +2093,10 @@ mod tests {
 
         let parsed = parse_patch(&mut Cursor::new(&patch_bytes)).expect("parse fgk patch");
         assert_eq!(parsed.secondary_compressor_id, Some(16));
-        assert!(
-            parsed
-                .windows
-                .iter()
-                .any(|window| window.delta_indicator != 0)
-        );
+        assert!(parsed
+            .windows
+            .iter()
+            .any(|window| window.delta_indicator != 0));
 
         let temp = create_temp_dir();
         let input_path = temp.join("input.bin");
