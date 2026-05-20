@@ -1,0 +1,640 @@
+    pub(super) struct ChdContainerHandler;
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    struct HdGeometry {
+        cylinders: u32,
+        heads: u32,
+        sectors: u32,
+        bytes_per_sector: u32,
+    }
+
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    struct DiscLayout {
+        kind: DiscKind,
+        tracks: Vec<DiscTrack>,
+    }
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    struct AvProfile {
+        frame_bytes: u32,
+        fps: u32,
+        fpsfrac: u32,
+        width: u32,
+        height: u32,
+        interlaced: u32,
+        channels: u32,
+        sample_rate: u32,
+    }
+
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    struct DiscTrack {
+        number: u32,
+        mode: DiscTrackMode,
+        file_path: PathBuf,
+        file_offset_bytes: u64,
+        frames: u32,
+        pregap_frames: u32,
+        postgap_frames: u32,
+        pregap_has_data: bool,
+        has_subcode: bool,
+        pad_frames: u32,
+        swap_audio_on_read: bool,
+    }
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum DiscKind {
+        CdRom,
+        GdRom,
+    }
+
+    impl DiscKind {
+        fn metadata_tag(self) -> u32 {
+            match self {
+                Self::CdRom => CDROM_TRACK_METADATA2_TAG,
+                Self::GdRom => GDROM_TRACK_METADATA_TAG,
+            }
+        }
+    }
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum DiscTrackMode {
+        Mode1,
+        Mode1Raw,
+        Mode2,
+        Mode2Form1,
+        Mode2Form2,
+        Mode2FormMix,
+        Mode2Raw,
+        Audio,
+    }
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum FlacSampleByteOrder {
+        LittleEndian,
+        BigEndian,
+    }
+
+    impl DiscTrackMode {
+        fn cue_label(self) -> &'static str {
+            match self {
+                Self::Mode1 => "MODE1/2048",
+                Self::Mode1Raw => "MODE1/2352",
+                Self::Mode2 => "MODE2/2336",
+                Self::Mode2Form1 => "MODE2/2048",
+                Self::Mode2Form2 => "MODE2/2324",
+                Self::Mode2FormMix => "MODE2_FORM_MIX",
+                Self::Mode2Raw => "MODE2/2352",
+                Self::Audio => "AUDIO",
+            }
+        }
+
+        fn metadata_label(self) -> &'static str {
+            match self {
+                Self::Mode1 => "MODE1",
+                Self::Mode1Raw => "MODE1_RAW",
+                Self::Mode2 => "MODE2",
+                Self::Mode2Form1 => "MODE2_FORM1",
+                Self::Mode2Form2 => "MODE2_FORM2",
+                Self::Mode2FormMix => "MODE2_FORM_MIX",
+                Self::Mode2Raw => "MODE2_RAW",
+                Self::Audio => "AUDIO",
+            }
+        }
+
+        fn data_bytes(self) -> usize {
+            match self {
+                Self::Mode1 | Self::Mode2Form1 => 2048,
+                Self::Mode2 | Self::Mode2FormMix => 2336,
+                Self::Mode2Form2 => 2324,
+                Self::Mode1Raw | Self::Mode2Raw | Self::Audio => 2352,
+            }
+        }
+
+        fn gdi_track_descriptor(self) -> Result<(u32, u32)> {
+            match self {
+                Self::Mode1Raw => Ok((4, 2352)),
+                Self::Mode1 => Ok((4, 2048)),
+                Self::Audio => Ok((0, 2352)),
+                other => Err(RomWeaverError::Validation(format!(
+                    "gd-rom output does not support {} tracks",
+                    other.metadata_label()
+                ))),
+            }
+        }
+
+        fn swap_audio_bytes(self, buffer: &mut [u8]) {
+            if !matches!(self, Self::Audio) {
+                return;
+            }
+            for pair in buffer.chunks_exact_mut(2) {
+                pair.swap(0, 1);
+            }
+        }
+    }
+
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    enum ChdCreateKind {
+        Raw,
+        HardDisk(HdGeometry),
+        Dvd,
+        Disc(DiscLayout),
+        Av(AvProfile),
+    }
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum ChdCreateModeOverride {
+        Cd,
+        Dvd,
+        Raw,
+        HardDisk,
+    }
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    struct ChdCompressionPlan {
+        codecs: [ChdCodec; CHD_MAX_COMPRESSORS],
+        primary_codec: ChdCodec,
+    }
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    struct RustCompressedHunkEntry {
+        compression_type: u8,
+        offset: u64,
+        length: u32,
+        crc16: u16,
+    }
+
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    struct HunkHashKey {
+        crc16: u16,
+        sha1: [u8; 20],
+    }
+
+    struct ParentReuseIndex {
+        by_hash: BTreeMap<HunkHashKey, u64>,
+        sha1: [u8; 20],
+    }
+
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    struct RustMetadataEntry {
+        tag: u32,
+        flags: u8,
+        data: Vec<u8>,
+    }
+
+    #[derive(Default)]
+    struct MsbBitWriter {
+        bytes: Vec<u8>,
+        bit_len: usize,
+    }
+
+    impl MsbBitWriter {
+        fn new() -> Self {
+            Self::default()
+        }
+
+        fn write_bits(&mut self, value: u64, bit_count: u8) {
+            if bit_count == 0 {
+                return;
+            }
+            for shift in (0..bit_count).rev() {
+                let bit = ((value >> shift) & 1) as u8;
+                let byte_index = self.bit_len / 8;
+                if byte_index == self.bytes.len() {
+                    self.bytes.push(0);
+                }
+                let bit_index = 7 - (self.bit_len % 8);
+                self.bytes[byte_index] |= bit << bit_index;
+                self.bit_len += 1;
+            }
+        }
+
+        fn align_to_byte(&mut self) {
+            let remainder = self.bit_len % 8;
+            if remainder == 0 {
+                return;
+            }
+            self.write_bits(0, (8 - remainder) as u8);
+        }
+
+        fn finish(self) -> Vec<u8> {
+            self.bytes
+        }
+    }
+
+    const CDROM_OLD_METADATA_TAG: u32 = make_tag(b'C', b'H', b'C', b'D');
+    const CDROM_TRACK_METADATA_TAG: u32 = make_tag(b'C', b'H', b'T', b'R');
+    const GDROM_OLD_METADATA_TAG: u32 = make_tag(b'C', b'H', b'G', b'T');
+    const AV_METADATA_TAG: u32 = make_tag(b'A', b'V', b'A', b'V');
+    const AV_LD_METADATA_TAG: u32 = make_tag(b'A', b'V', b'L', b'D');
+
+    enum ChdReadBackend {
+        Rust {
+            metadata_by_tag_and_index: BTreeMap<(u32, u32), Vec<u8>>,
+        },
+    }
+
+    struct ChdReadSession {
+        source: PathBuf,
+        parent_source: Option<PathBuf>,
+        header: ChdHeader,
+        media_kind: ChdMediaKind,
+        backend: ChdReadBackend,
+    }
+
+    impl ChdReadSession {
+        fn open(source: &Path, parent_source: Option<&Path>) -> Result<Self> {
+            Self::open_rust(source, parent_source).map_err(|rust_error| {
+                RomWeaverError::Validation(format!(
+                    "failed to open chd `{}` with rust backend ({rust_error})",
+                    source.display()
+                ))
+            })
+        }
+
+        fn open_rust(
+            source: &Path,
+            parent_source: Option<&Path>,
+        ) -> std::result::Result<Self, String> {
+            let mut chd = Self::open_rust_chd(source, parent_source)?;
+
+            let header = Self::convert_header(chd.header());
+            let mut metadata_by_tag_and_index = BTreeMap::new();
+            let metadatas: Vec<chd::metadata::Metadata> = chd
+                .metadata_refs()
+                .try_into()
+                .map_err(|error| format!("failed to read CHD metadata: {error}"))?;
+            for metadata in metadatas {
+                metadata_by_tag_and_index
+                    .insert((metadata.metatag, metadata.index), metadata.value);
+            }
+            let media_kind = Self::detect_media_kind(&metadata_by_tag_and_index);
+
+            Ok(Self {
+                source: source.to_path_buf(),
+                parent_source: parent_source.map(Path::to_path_buf),
+                header,
+                media_kind,
+                backend: ChdReadBackend::Rust {
+                    metadata_by_tag_and_index,
+                },
+            })
+        }
+
+        fn detect_media_kind(
+            metadata_by_tag_and_index: &BTreeMap<(u32, u32), Vec<u8>>,
+        ) -> ChdMediaKind {
+            let has_tag = |tag: u32| {
+                metadata_by_tag_and_index
+                    .keys()
+                    .any(|(candidate, _)| *candidate == tag)
+            };
+            if has_tag(GDROM_TRACK_METADATA_TAG) || has_tag(GDROM_OLD_METADATA_TAG) {
+                return ChdMediaKind::GdRom;
+            }
+            if has_tag(CDROM_TRACK_METADATA2_TAG)
+                || has_tag(CDROM_TRACK_METADATA_TAG)
+                || has_tag(CDROM_OLD_METADATA_TAG)
+            {
+                return ChdMediaKind::CdRom;
+            }
+            if has_tag(HARD_DISK_METADATA_TAG) {
+                return ChdMediaKind::HardDisk;
+            }
+            if has_tag(DVD_METADATA_TAG) {
+                return ChdMediaKind::Dvd;
+            }
+            if has_tag(AV_METADATA_TAG) || has_tag(AV_LD_METADATA_TAG) {
+                return ChdMediaKind::Av;
+            }
+            ChdMediaKind::Raw
+        }
+
+        fn codec_from_raw(raw: u32) -> ChdCodec {
+            match raw {
+                0 => ChdCodec::NONE,
+                1 | 2 => ChdCodec::ZLIB,
+                value if value == ChdCodec::ZLIB.raw() => ChdCodec::ZLIB,
+                value if value == ChdCodec::ZSTD.raw() => ChdCodec::ZSTD,
+                value if value == ChdCodec::LZMA.raw() => ChdCodec::LZMA,
+                value if value == ChdCodec::HUFFMAN.raw() => ChdCodec::HUFFMAN,
+                value if value == ChdCodec::AVHUFF.raw() => ChdCodec::AVHUFF,
+                value if value == ChdCodec::FLAC.raw() => ChdCodec::FLAC,
+                value if value == ChdCodec::CD_ZLIB.raw() => ChdCodec::CD_ZLIB,
+                value if value == ChdCodec::CD_ZSTD.raw() => ChdCodec::CD_ZSTD,
+                value if value == ChdCodec::CD_LZMA.raw() => ChdCodec::CD_LZMA,
+                value if value == ChdCodec::CD_FLAC.raw() => ChdCodec::CD_FLAC,
+                _ => ChdCodec::NONE,
+            }
+        }
+
+        fn convert_header(header: &chd::header::Header) -> ChdHeader {
+            let compression = match header {
+                chd::header::Header::V1Header(value) | chd::header::Header::V2Header(value) => {
+                    [value.compression, 0, 0, 0]
+                }
+                chd::header::Header::V3Header(value) => [value.compression, 0, 0, 0],
+                chd::header::Header::V4Header(value) => [value.compression, 0, 0, 0],
+                chd::header::Header::V5Header(value) => value.compression,
+            };
+            ChdHeader {
+                version: header.version() as u32,
+                logical_bytes: header.logical_bytes(),
+                hunk_bytes: header.hunk_size(),
+                hunk_count: header.hunk_count(),
+                unit_bytes: header.unit_bytes(),
+                unit_count: header.unit_count(),
+                compressed: header.is_compressed(),
+                compression: compression.map(Self::codec_from_raw),
+            }
+        }
+
+        fn header(&self) -> ChdHeader {
+            self.header
+        }
+
+        fn media_kind(&self) -> ChdMediaKind {
+            self.media_kind
+        }
+
+        fn read_metadata(&self, tag: u32, index: u32) -> Result<Option<Vec<u8>>> {
+            match &self.backend {
+                ChdReadBackend::Rust {
+                    metadata_by_tag_and_index,
+                } => Ok(metadata_by_tag_and_index.get(&(tag, index)).cloned()),
+            }
+        }
+
+        fn open_rust_chd(
+            source: &Path,
+            parent_source: Option<&Path>,
+        ) -> std::result::Result<chd::Chd<BufReader<File>>, String> {
+            let parent = if let Some(parent_source) = parent_source {
+                let parent_file = File::open(parent_source).map_err(|error| {
+                    format!(
+                        "failed to open parent chd `{}`: {error}",
+                        parent_source.display()
+                    )
+                })?;
+                let parent_reader = BufReader::new(parent_file);
+                let parent_chd = chd::Chd::open(parent_reader, None).map_err(|error| {
+                    format!(
+                        "failed to parse parent chd `{}`: {error}",
+                        parent_source.display()
+                    )
+                })?;
+                Some(Box::new(parent_chd))
+            } else {
+                None
+            };
+
+            let file = File::open(source)
+                .map_err(|error| format!("failed to open `{}`: {error}", source.display()))?;
+            let reader = BufReader::new(file);
+            chd::Chd::open(reader, parent)
+                .map_err(|error| format!("failed to parse `{}`: {error}", source.display()))
+        }
+
+        fn extract_to_file(&self, output_path: &Path, thread_count: usize) -> Result<ChdHeader> {
+            match &self.backend {
+                ChdReadBackend::Rust { .. } => Self::extract_to_file_with_rust(
+                    &self.source,
+                    self.parent_source.as_deref(),
+                    self.header.logical_bytes,
+                    output_path,
+                    thread_count,
+                )
+                .map_err(RomWeaverError::Validation)
+                .map(|_| self.header),
+            }
+        }
+
+        fn extract_to_file_with_rust(
+            source: &Path,
+            parent_source: Option<&Path>,
+            logical_bytes: u64,
+            output_path: &Path,
+            thread_count: usize,
+        ) -> std::result::Result<(), String> {
+            #[cfg(any(unix, windows))]
+            if thread_count > 1 {
+                return Self::extract_to_file_with_rust_parallel(
+                    source,
+                    parent_source,
+                    logical_bytes,
+                    output_path,
+                    thread_count,
+                );
+            }
+
+            let mut chd = Self::open_rust_chd(source, parent_source)
+                .map_err(|error| format!("failed to decode `{}`: {error}", source.display()))?;
+
+            let mut output = File::create(output_path).map_err(|error| {
+                format!("failed to create `{}`: {error}", output_path.display())
+            })?;
+            let mut remaining = logical_bytes;
+            let mut hunk_buffer = chd.get_hunksized_buffer();
+            let mut compressed_buffer = Vec::new();
+            for hunk_index in 0..chd.header().hunk_count() {
+                if remaining == 0 {
+                    break;
+                }
+                let mut hunk = chd.hunk(hunk_index).map_err(|error| {
+                    format!(
+                        "failed to decode hunk {} of `{}`: {error}",
+                        hunk_index,
+                        source.display()
+                    )
+                })?;
+                hunk.read_hunk_in(&mut compressed_buffer, &mut hunk_buffer)
+                    .map_err(|error| {
+                        format!(
+                            "failed to read hunk {} of `{}`: {error}",
+                            hunk_index,
+                            source.display()
+                        )
+                    })?;
+                let write_len = usize::try_from(remaining.min(hunk_buffer.len() as u64))
+                    .map_err(|_| "decoded CHD chunk exceeded addressable memory".to_string())?;
+                output
+                    .write_all(&hunk_buffer[..write_len])
+                    .map_err(|error| {
+                        format!("failed to write `{}`: {error}", output_path.display())
+                    })?;
+                remaining -= write_len as u64;
+            }
+
+            Ok(())
+        }
+
+        #[cfg(any(unix, windows))]
+        fn extract_to_file_with_rust_parallel(
+            source: &Path,
+            parent_source: Option<&Path>,
+            logical_bytes: u64,
+            output_path: &Path,
+            thread_count: usize,
+        ) -> std::result::Result<(), String> {
+            let chd = Self::open_rust_chd(source, parent_source)
+                .map_err(|error| format!("failed to decode `{}`: {error}", source.display()))?;
+            let hunk_count = chd.header().hunk_count();
+            let hunk_bytes = chd.header().hunk_size() as u64;
+            drop(chd);
+
+            let output = File::create(output_path).map_err(|error| {
+                format!("failed to create `{}`: {error}", output_path.display())
+            })?;
+            output.set_len(logical_bytes).map_err(|error| {
+                format!(
+                    "failed to size `{}` to {} bytes: {error}",
+                    output_path.display(),
+                    logical_bytes
+                )
+            })?;
+
+            let hunk_count_usize = usize::try_from(hunk_count)
+                .map_err(|_| "CHD hunk count exceeded addressable memory".to_string())?;
+            if hunk_count_usize == 0 {
+                return Ok(());
+            }
+            let effective_threads = thread_count.max(1).min(hunk_count_usize);
+            if effective_threads <= 1 {
+                return Self::extract_to_file_with_rust(
+                    source,
+                    parent_source,
+                    logical_bytes,
+                    output_path,
+                    1,
+                );
+            }
+
+            let pool = rayon::ThreadPoolBuilder::new()
+                .num_threads(effective_threads)
+                .build()
+                .map_err(|error| {
+                    format!(
+                        "failed to build CHD rust extraction pool (threads={}): {error}",
+                        effective_threads
+                    )
+                })?;
+
+            let source = source.to_path_buf();
+            let parent_source = parent_source.map(Path::to_path_buf);
+            let output = Arc::new(output);
+            let hunk_indices: Vec<u32> = (0..hunk_count).collect();
+            let chunk_size = hunk_indices.len().div_ceil(effective_threads).max(1);
+
+            let chunk_results = pool.install(|| {
+                hunk_indices
+                    .par_chunks(chunk_size)
+                    .map(|chunk| {
+                        let mut chd = Self::open_rust_chd(&source, parent_source.as_deref())
+                            .map_err(|error| {
+                                format!("failed to decode `{}`: {error}", source.display())
+                            })?;
+
+                        let mut hunk_buffer = chd.get_hunksized_buffer();
+                        let mut compressed_buffer = Vec::new();
+
+                        for &hunk_index in chunk {
+                            let mut hunk = chd.hunk(hunk_index).map_err(|error| {
+                                format!(
+                                    "failed to decode hunk {} of `{}`: {error}",
+                                    hunk_index,
+                                    source.display()
+                                )
+                            })?;
+                            hunk.read_hunk_in(&mut compressed_buffer, &mut hunk_buffer)
+                                .map_err(|error| {
+                                    format!(
+                                        "failed to read hunk {} of `{}`: {error}",
+                                        hunk_index,
+                                        source.display()
+                                    )
+                                })?;
+
+                            let offset = u64::from(hunk_index).saturating_mul(hunk_bytes);
+                            if offset >= logical_bytes {
+                                continue;
+                            }
+                            let write_len = usize::try_from(
+                                logical_bytes
+                                    .saturating_sub(offset)
+                                    .min(hunk_buffer.len() as u64),
+                            )
+                            .map_err(|_| {
+                                "decoded CHD chunk exceeded addressable memory".to_string()
+                            })?;
+                            Self::write_all_at(&output, &hunk_buffer[..write_len], offset)
+                                .map_err(|error| {
+                                    format!(
+                                        "failed to write `{}` at offset {}: {error}",
+                                        output_path.display(),
+                                        offset
+                                    )
+                                })?;
+                        }
+                        Ok(())
+                    })
+                    .collect::<Vec<std::result::Result<(), String>>>()
+            });
+
+            for result in chunk_results {
+                result?;
+            }
+            Ok(())
+        }
+
+        #[cfg(unix)]
+        fn write_all_at(file: &File, mut bytes: &[u8], mut offset: u64) -> io::Result<()> {
+            use std::os::unix::fs::FileExt as _;
+
+            while !bytes.is_empty() {
+                let written = file.write_at(bytes, offset)?;
+                if written == 0 {
+                    return Err(io::Error::new(
+                        io::ErrorKind::WriteZero,
+                        "failed to write CHD chunk",
+                    ));
+                }
+                offset = offset.saturating_add(written as u64);
+                bytes = &bytes[written..];
+            }
+            Ok(())
+        }
+
+        #[cfg(all(not(unix), windows))]
+        fn write_all_at(file: &File, mut bytes: &[u8], mut offset: u64) -> io::Result<()> {
+            use std::os::windows::fs::FileExt as _;
+
+            while !bytes.is_empty() {
+                let written = file.seek_write(bytes, offset)?;
+                if written == 0 {
+                    return Err(io::Error::new(
+                        io::ErrorKind::WriteZero,
+                        "failed to write CHD chunk",
+                    ));
+                }
+                offset = offset.saturating_add(written as u64);
+                bytes = &bytes[written..];
+            }
+            Ok(())
+        }
+    }
+
+    fn split_token(text: &str) -> Option<(&str, &str)> {
+        let trimmed = text.trim_start();
+        if trimmed.is_empty() {
+            return None;
+        }
+        if let Some(rest) = trimmed.strip_prefix('"') {
+            let end = rest.find('"')?;
+            let token = &rest[..end];
+            let remainder = &rest[end + 1..];
+            Some((token, remainder))
+        } else {
+            let end = trimmed.find(char::is_whitespace).unwrap_or(trimmed.len());
+            Some((&trimmed[..end], &trimmed[end..]))
+        }
+    }
+

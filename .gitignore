@@ -2,6 +2,7 @@
 /.tmp/
 
 # Generated wasm artifacts
+/dist/wasm/
 /packages/rom-weaver-wasm/rom-weaver-cli.wasm
 /packages/rom-weaver-wasm/rom-weaver-cli.wasm.br
 /packages/rom-weaver-wasm/rom-weaver-cli-threaded.wasm

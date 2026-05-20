@@ -1,14 +1,12 @@
 import {
   createWasmEnvImports,
+  createRomWeaverWasiRunner,
   parseJsonLines,
   parseTraceJsonLines,
-} from './rom-weaver-runtime-utils.mjs';
-import * as wasiShim from '@bjorn3/browser_wasi_shim';
-import * as zenfs from '@zenfs/core';
-import * as zenDom from '@zenfs/dom';
+} from './rom-weaver-wasi-api.mjs';
 
 export async function createRomWeaverZenFsNode(options = {}) {
-  const { createRomWeaverWasiRunner } = await import('./rom-weaver-wasi-api.mjs');
+  const zenfs = await import('@zenfs/core');
   const nodeFs = await import('node:fs');
   const nodeOs = await import('node:os');
   const nodePath = await import('node:path');
@@ -90,6 +88,10 @@ export async function createRomWeaverZenFsNode(options = {}) {
 
 export async function createRomWeaverZenFsBrowser(options = {}) {
   assertDedicatedWorkerRuntime();
+
+  const zenfs = await import('@zenfs/core');
+  const zenDom = await import('@zenfs/dom');
+  const wasiShim = await import('@bjorn3/browser_wasi_shim');
 
   const opfsGuestPath = normalizeGuestPath(options.opfsGuestPath ?? '/opfs');
   const tmpGuestPath = normalizeGuestPath(options.tmpGuestPath ?? '/tmp');
@@ -281,7 +283,7 @@ async function buildBrowserWasiFds({
       syncAccessMode,
     });
 
-    fds.push(new wasiShim.PreopenDirectory(mountPath, preopenContents));
+    fds.push(createStrictOpfsPreopenDirectory(wasiShim, mountPath, preopenContents));
   }
 
   return {
@@ -290,6 +292,56 @@ async function buildBrowserWasiFds({
     stdoutChunks: stdoutCollector.chunks,
     stderrChunks: stderrCollector.chunks,
   };
+}
+
+function createStrictOpfsPreopenDirectory(wasiShim, mountPath, contents) {
+  const rofsErrno = wasiShim.wasi.ERRNO_ROFS;
+  const oCreat = wasiShim.wasi.OFLAGS_CREAT;
+
+  class StrictOpfsPreopenDirectory extends wasiShim.PreopenDirectory {
+    path_open(
+      dirflags,
+      pathStr,
+      oflags,
+      fsRightsBase,
+      fsRightsInheriting,
+      fdFlags,
+    ) {
+      if ((oflags & oCreat) === oCreat) {
+        return { ret: rofsErrno, fd_obj: null };
+      }
+      return super.path_open(
+        dirflags,
+        pathStr,
+        oflags,
+        fsRightsBase,
+        fsRightsInheriting,
+        fdFlags,
+      );
+    }
+
+    path_create_directory(_path) {
+      return rofsErrno;
+    }
+
+    path_link(_pathStr, _inode, _allowDir) {
+      return rofsErrno;
+    }
+
+    path_unlink(_pathStr) {
+      return { ret: rofsErrno, inode_obj: null };
+    }
+
+    path_unlink_file(_pathStr) {
+      return rofsErrno;
+    }
+
+    path_remove_directory(_pathStr) {
+      return rofsErrno;
+    }
+  }
+
+  return new StrictOpfsPreopenDirectory(mountPath, contents);
 }
 
 function createOutputCollector(ConsoleStdout) {
