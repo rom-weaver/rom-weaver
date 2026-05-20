@@ -17,10 +17,10 @@ pub use progress::{
     RecordingProgressSink,
 };
 pub use registry::{
-    traced_codec_backend, traced_container_handler, traced_patch_handler, ChecksumCapabilities,
-    ChecksumEngine, ChecksumRequest, CodecBackend, CodecCapabilities, CodecDescriptor,
-    CodecOperationRequest, ContainerCapabilities, ContainerCreateRequest, ContainerExtractRequest,
-    ContainerHandler, ContainerInspectRequest, FormatDescriptor, OperationReport,
-    PatchApplyRequest, PatchCapabilities, PatchCreateRequest, PatchHandler, ProbeConfidence,
+    ChecksumCapabilities, ChecksumEngine, ChecksumRequest, CodecBackend, CodecCapabilities,
+    CodecDescriptor, CodecOperationRequest, ContainerCapabilities, ContainerCreateRequest,
+    ContainerExtractRequest, ContainerHandler, ContainerInspectRequest, FormatDescriptor,
+    OperationReport, PatchApplyRequest, PatchCapabilities, PatchCreateRequest, PatchHandler,
+    ProbeConfidence, traced_codec_backend, traced_container_handler, traced_patch_handler,
 };
 pub use threads::{SharedThreadPool, ThreadBudget, ThreadCapability, ThreadExecution, ThreadMode};

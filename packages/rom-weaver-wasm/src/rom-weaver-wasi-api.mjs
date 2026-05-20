@@ -4,12 +4,6 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { brotliDecompressSync } from 'node:zlib';
 import { WASI } from 'node:wasi';
-import {
-  createWasmEnvImports,
-  normalizeGuestPath as normalizeSharedGuestPath,
-  parseJsonLines,
-  parseTraceJsonLines,
-} from './rom-weaver-runtime-utils.mjs';
 
 const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
 const WASM_PATH_CANDIDATES = [
@@ -40,7 +34,25 @@ const WASI_THREAD_WORKER_PATH_CANDIDATES = [
 const DEFAULT_WASI_THREAD_WORKER_PATH = WASI_THREAD_WORKER_PATH_CANDIDATES.find(
   (candidate) => existsSync(candidate),
 ) ?? WASI_THREAD_WORKER_PATH_CANDIDATES[0];
-export { createWasmEnvImports, parseJsonLines, parseTraceJsonLines };
+
+export function createWasmEnvImports(memory) {
+  const imports = {
+    __cxa_allocate_exception() {
+      return 0;
+    },
+    __cxa_throw(pointer, typeInfo) {
+      throw new Error(
+        `rom-weaver wasm raised a C++ exception (pointer=${pointer}, type=${typeInfo})`,
+      );
+    },
+  };
+
+  if (memory !== undefined && memory !== null) {
+    imports.memory = memory;
+  }
+
+  return imports;
+}
 
 export class RomWeaverWasiRunner {
   constructor(options = {}) {
@@ -233,6 +245,58 @@ export function buildNodeFsPreopens(options = {}) {
   }
 
   return preopens;
+}
+
+export function parseJsonLines(text, options = {}) {
+  const events = [];
+  const nonJsonLines = [];
+  const onEvent = typeof options.onEvent === 'function' ? options.onEvent : null;
+  const onNonJsonLine = typeof options.onNonJsonLine === 'function'
+    ? options.onNonJsonLine
+    : null;
+
+  for (const line of text.split(/\r?\n/)) {
+    if (line.length === 0) {
+      continue;
+    }
+
+    try {
+      const event = JSON.parse(line);
+      events.push(event);
+      onEvent?.(event);
+    } catch {
+      nonJsonLines.push(line);
+      onNonJsonLine?.(line);
+    }
+  }
+
+  return { events, nonJsonLines };
+}
+
+export function parseTraceJsonLines(text, options = {}) {
+  const traceEvents = [];
+  const traceNonJsonLines = [];
+  const onTraceEvent = typeof options.onTraceEvent === 'function' ? options.onTraceEvent : null;
+  const onTraceNonJsonLine = typeof options.onTraceNonJsonLine === 'function'
+    ? options.onTraceNonJsonLine
+    : null;
+
+  for (const line of text.split(/\r?\n/)) {
+    if (line.length === 0) {
+      continue;
+    }
+
+    try {
+      const event = JSON.parse(line);
+      traceEvents.push(event);
+      onTraceEvent?.(event);
+    } catch {
+      traceNonJsonLines.push(line);
+      onTraceNonJsonLine?.(line);
+    }
+  }
+
+  return { traceEvents, traceNonJsonLines };
 }
 
 function readWasmModuleInfo(module) {
@@ -430,7 +494,19 @@ function normalizeArgs(args) {
 }
 
 function normalizeGuestMountPath(pathLike) {
-  return normalizeSharedGuestPath(pathLike, { label: 'guest mount path' });
+  if (typeof pathLike !== 'string' || pathLike.trim().length === 0) {
+    throw new TypeError('guest mount path must be a non-empty string');
+  }
+
+  let normalized = pathLike.trim();
+  if (!normalized.startsWith('/')) {
+    normalized = `/${normalized}`;
+  }
+  if (normalized.length > 1) {
+    normalized = normalized.replace(/\/+$/, '');
+  }
+
+  return normalized;
 }
 
 function resolveHostMountPath(pathLike, label) {

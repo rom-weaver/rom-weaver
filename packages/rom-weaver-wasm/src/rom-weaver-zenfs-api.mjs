@@ -1,20 +1,97 @@
 import {
   createWasmEnvImports,
-  normalizeGuestPath as normalizeSharedGuestPath,
+  createRomWeaverWasiRunner,
   parseJsonLines,
   parseTraceJsonLines,
-} from './rom-weaver-runtime-utils.mjs';
-import * as wasiShim from '@bjorn3/browser_wasi_shim';
-import * as zenfs from '@zenfs/core';
-import * as zenDom from '@zenfs/dom';
+} from './rom-weaver-wasi-api.mjs';
 
 export async function createRomWeaverZenFsNode(options = {}) {
-  void options;
-  throw new Error('createRomWeaverZenFsNode is unavailable in this browser-focused runtime.');
+  const zenfs = await import('@zenfs/core');
+  const nodeFs = await import('node:fs');
+  const nodeOs = await import('node:os');
+  const nodePath = await import('node:path');
+
+  const guestMounts = normalizeGuestMountMap({
+    defaultTmpHostPath: nodeOs.tmpdir(),
+    defaultCwdHostPath: process.cwd(),
+    resolveHostPath: (pathLike) => nodePath.resolve(pathLike),
+    mounts: options.mounts,
+    includeHostRoot: options.includeHostRoot,
+    mountCwd: options.mountCwd,
+    cwdGuestPath: options.cwdGuestPath,
+    cwdHostPath: options.cwdHostPath,
+    mountTmp: options.mountTmp,
+    tmpGuestPath: options.tmpGuestPath,
+    tmpHostPath: options.tmpHostPath,
+  });
+
+  const zenMounts = {
+    '/': zenfs.InMemory,
+  };
+  const preopens = {};
+
+  for (const [guestPath, hostPath] of Object.entries(guestMounts)) {
+    nodeFs.mkdirSync(hostPath, { recursive: true });
+    zenMounts[guestPath] = {
+      backend: zenfs.Passthrough,
+      fs: nodeFs,
+      prefix: hostPath,
+    };
+    preopens[guestPath] = hostPath;
+  }
+
+  await zenfs.configure({
+    mounts: zenMounts,
+    defaultDirectories: true,
+  });
+
+  const tmpGuestPath = normalizeGuestPath(options.tmpGuestPath ?? '/tmp');
+  const runner = createRomWeaverWasiRunner({
+    wasmPath: options.wasmPath,
+    argv0: options.argv0,
+    useDefaultPreopens: false,
+    preopens: {
+      ...preopens,
+      ...(options.preopens ?? {}),
+    },
+    env: {
+      ROM_WEAVER_TMPDIR: tmpGuestPath,
+      ...(options.env ?? {}),
+    },
+  });
+
+  return {
+    mode: 'node',
+    fs: zenfs.fs,
+    guestMounts,
+    run: (args, runOptions) => runner.run(args, runOptions),
+    async runJson(args, runOptions = {}) {
+      const result = await runner.run(['--json', ...normalizeArgs(args)], runOptions);
+      const parsed = parseJsonLines(result.stdout, {
+        onEvent: runOptions.onEvent,
+        onNonJsonLine: runOptions.onNonJsonLine,
+      });
+      const parsedTrace = parseTraceJsonLines(result.stderr, {
+        onTraceEvent: runOptions.onTraceEvent,
+        onTraceNonJsonLine: runOptions.onTraceNonJsonLine,
+      });
+      return {
+        ...result,
+        events: parsed.events,
+        nonJsonLines: parsed.nonJsonLines,
+        traceEvents: parsedTrace.traceEvents,
+        traceNonJsonLines: parsedTrace.traceNonJsonLines,
+      };
+    },
+  };
 }
 
 export async function createRomWeaverZenFsBrowser(options = {}) {
   assertDedicatedWorkerRuntime();
+
+  const zenfs = await import('@zenfs/core');
+  const zenDom = await import('@zenfs/dom');
+  const wasiShim = await import('@bjorn3/browser_wasi_shim');
 
   const opfsGuestPath = normalizeGuestPath(options.opfsGuestPath ?? '/opfs');
   const tmpGuestPath = normalizeGuestPath(options.tmpGuestPath ?? '/tmp');
@@ -67,7 +144,6 @@ export async function createRomWeaverZenFsBrowser(options = {}) {
       const syncAccessMode = runOptions.syncAccessMode ?? options.syncAccessMode;
       const {
         fds,
-        opfsMounts,
         closeHandles,
         stdoutChunks,
         stderrChunks,
@@ -117,7 +193,6 @@ export async function createRomWeaverZenFsBrowser(options = {}) {
           error,
         };
       } finally {
-        await flushMutableOpfsEntries(opfsMounts);
         closeSyncAccessHandles(closeHandles);
       }
     },
@@ -177,7 +252,6 @@ async function buildBrowserWasiFds({
   syncAccessMode,
 }) {
   const closeHandles = [];
-  const opfsMounts = [];
   const stdinBytes = normalizeStdin(stdin);
   const stdoutCollector = createOutputCollector(wasiShim.ConsoleStdout);
   const stderrCollector = createOutputCollector(wasiShim.ConsoleStdout);
@@ -209,59 +283,65 @@ async function buildBrowserWasiFds({
       syncAccessMode,
     });
 
-    const preopen = new wasiShim.PreopenDirectory(mountPath, preopenContents);
-    fds.push(preopen);
-    opfsMounts.push({
-      directoryHandle: handle,
-      preopen,
-    });
+    fds.push(createStrictOpfsPreopenDirectory(wasiShim, mountPath, preopenContents));
   }
 
   return {
     fds,
-    opfsMounts,
     closeHandles,
     stdoutChunks: stdoutCollector.chunks,
     stderrChunks: stderrCollector.chunks,
   };
 }
 
-async function flushMutableOpfsEntries(opfsMounts) {
-  for (const mount of opfsMounts || []) {
-    const preopenDirectory = mount?.preopen?.dir;
-    const directoryHandle = mount?.directoryHandle;
-    const contents = preopenDirectory?.contents;
-    if (!directoryHandle || !(contents instanceof Map)) {
-      continue;
-    }
-    await flushDirectoryEntries(directoryHandle, contents);
-  }
-}
+function createStrictOpfsPreopenDirectory(wasiShim, mountPath, contents) {
+  const rofsErrno = wasiShim.wasi.ERRNO_ROFS;
+  const oCreat = wasiShim.wasi.OFLAGS_CREAT;
 
-async function flushDirectoryEntries(directoryHandle, contents) {
-  for (const [entryName, entryValue] of contents.entries()) {
-    if (!entryName) {
-      continue;
-    }
-    if (entryValue && typeof entryValue === 'object' && entryValue.contents instanceof Map) {
-      const nestedHandle = await directoryHandle.getDirectoryHandle(entryName, { create: true });
-      await flushDirectoryEntries(nestedHandle, entryValue.contents);
-      continue;
-    }
-    const bytes = entryValue?.data instanceof Uint8Array ? entryValue.data : null;
-    if (!bytes) {
-      continue;
-    }
-    const fileHandle = await directoryHandle.getFileHandle(entryName, { create: true });
-    const writable = await fileHandle.createWritable({ keepExistingData: false });
-    try {
-      if (bytes.byteLength) {
-        await writable.write(bytes);
+  class StrictOpfsPreopenDirectory extends wasiShim.PreopenDirectory {
+    path_open(
+      dirflags,
+      pathStr,
+      oflags,
+      fsRightsBase,
+      fsRightsInheriting,
+      fdFlags,
+    ) {
+      if ((oflags & oCreat) === oCreat) {
+        return { ret: rofsErrno, fd_obj: null };
       }
-    } finally {
-      await writable.close();
+      return super.path_open(
+        dirflags,
+        pathStr,
+        oflags,
+        fsRightsBase,
+        fsRightsInheriting,
+        fdFlags,
+      );
+    }
+
+    path_create_directory(_path) {
+      return rofsErrno;
+    }
+
+    path_link(_pathStr, _inode, _allowDir) {
+      return rofsErrno;
+    }
+
+    path_unlink(_pathStr) {
+      return { ret: rofsErrno, inode_obj: null };
+    }
+
+    path_unlink_file(_pathStr) {
+      return rofsErrno;
+    }
+
+    path_remove_directory(_pathStr) {
+      return rofsErrno;
     }
   }
+
+  return new StrictOpfsPreopenDirectory(mountPath, contents);
 }
 
 function createOutputCollector(ConsoleStdout) {
@@ -433,14 +513,10 @@ async function resolveBrowserModule(module, wasmUrl) {
     return module;
   }
 
-  const resolvedUrl = wasmUrl
-    ? new URL(String(wasmUrl), import.meta.url)
-    : new URL('../rom-weaver-cli.wasm', import.meta.url);
-  const response = await fetch(resolvedUrl);
+  const url = wasmUrl ?? './rom-weaver-cli.wasm';
+  const response = await fetch(url);
   if (!response.ok) {
-    throw new Error(
-      `failed to fetch wasm module from ${resolvedUrl}: ${response.status} ${response.statusText}`,
-    );
+    throw new Error(`failed to fetch wasm module from ${url}: ${response.status} ${response.statusText}`);
   }
 
   const bytes = await response.arrayBuffer();
@@ -448,7 +524,19 @@ async function resolveBrowserModule(module, wasmUrl) {
 }
 
 function normalizeGuestPath(pathLike) {
-  return normalizeSharedGuestPath(pathLike, { label: 'guest path' });
+  if (typeof pathLike !== 'string' || pathLike.trim().length === 0) {
+    throw new TypeError('guest path must be a non-empty string');
+  }
+
+  let normalized = pathLike.trim();
+  if (!normalized.startsWith('/')) {
+    normalized = `/${normalized}`;
+  }
+  if (normalized.length > 1) {
+    normalized = normalized.replace(/\/+$/, '');
+  }
+
+  return normalized;
 }
 
 function normalizeHostPath(pathLike, resolveHostPath) {

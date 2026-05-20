@@ -56,11 +56,11 @@ use tar::{Archive as TarArchive, Builder as TarBuilder};
 use xdvdfs::{
     blockdev::OffsetWrapper as XdvdfsOffsetWrapper, write::fs::XDVDFSFilesystem as XdvdfsFilesystem,
 };
+use zeekstd::{Decoder as ZeekstdDecoder, SeekTable as ZeekstdSeekTable};
 use zip::{
     CompressionMethod as ZipCompressionMethod, ZipArchive as ZipFileArchive,
     ZipWriter as ZipFileWriter, write::SimpleFileOptions as ZipFileOptions,
 };
-use zeekstd::{Decoder as ZeekstdDecoder, SeekTable as ZeekstdSeekTable};
 use zstd::bulk::compress as zstd_compress;
 
 const ZIP: FormatDescriptor = FormatDescriptor {
@@ -7591,9 +7591,10 @@ impl Z3dsContainerHandler {
     ) -> Result<()> {
         let source_file = File::open(source)?;
         let payload_reader = Z3dsPayloadReader::new(source_file, payload_start, compressed_size)?;
-        let extract_end = task.offset.checked_add(task.len).ok_or_else(|| {
-            RomWeaverError::Validation("z3ds extract offset overflowed".into())
-        })?;
+        let extract_end = task
+            .offset
+            .checked_add(task.len)
+            .ok_or_else(|| RomWeaverError::Validation("z3ds extract offset overflowed".into()))?;
         let mut decompressor = ZeekstdDecoder::new(payload_reader)
             .map_err(|error| self.map_zstd_error("extract initialize", error))?;
         decompressor
@@ -8758,7 +8759,10 @@ mod chd_native {
                     matches!(codec, ChdCodec::ZSTD | ChdCodec::ZLIB | ChdCodec::LZMA)
                 }
                 ChdCreateKind::Disc(_) => {
-                    matches!(codec, ChdCodec::CD_ZSTD | ChdCodec::CD_ZLIB | ChdCodec::CD_LZMA)
+                    matches!(
+                        codec,
+                        ChdCodec::CD_ZSTD | ChdCodec::CD_ZLIB | ChdCodec::CD_LZMA
+                    )
                 }
                 ChdCreateKind::Av(_) => false,
             }
@@ -10672,12 +10676,13 @@ mod chd_native {
             expected_unit_bytes: u32,
             expected_hunk_bytes: u32,
         ) -> Result<ParentReuseIndex> {
-            let mut parent = ChdReadSession::open_rust_chd(parent_source, None).map_err(|error| {
-                RomWeaverError::Validation(format!(
-                    "failed to open parent chd `{}` for differential create: {error}",
-                    parent_source.display()
-                ))
-            })?;
+            let mut parent =
+                ChdReadSession::open_rust_chd(parent_source, None).map_err(|error| {
+                    RomWeaverError::Validation(format!(
+                        "failed to open parent chd `{}` for differential create: {error}",
+                        parent_source.display()
+                    ))
+                })?;
             let parent_header = parent.header();
             let parent_sha1 = parent_header.sha1().ok_or_else(|| {
                 RomWeaverError::Validation(format!(
@@ -10899,42 +10904,13 @@ mod chd_native {
                         data_hunks.push((index, std::mem::take(hunk)));
                     }
                 }
-                let compressed_hunks: Vec<Result<(usize, u8, Vec<u8>, u16)>> =
-                    if let Some(pool) = &pool {
-                        if data_hunks.len() > 1 {
-                            pool.install(|| {
-                                data_hunks
-                                    .into_par_iter()
-                                    .map(|(index, hunk)| {
-                                        let crc = Self::crc16_ibm3740(&hunk);
-                                        let mut best: Option<(u8, Vec<u8>)> = None;
-                                        for (codec_slot, codec) in &encodable_codecs {
-                                            let compressed = self.compress_rust_hunk(
-                                                create_kind,
-                                                *codec,
-                                                compression_level,
-                                                &hunk,
-                                            )?;
-                                            if best
-                                                .as_ref()
-                                                .map(|(_, candidate)| {
-                                                    compressed.len() < candidate.len()
-                                                })
-                                                .unwrap_or(true)
-                                            {
-                                                best = Some((*codec_slot, compressed));
-                                            }
-                                        }
-                                        let (compression_type, payload) = best
-                                            .filter(|(_, compressed)| compressed.len() < hunk.len())
-                                            .unwrap_or((Self::CHD_V5_MAP_TYPE_UNCOMPRESSED, hunk));
-                                        Ok((index, compression_type, payload, crc))
-                                    })
-                                    .collect()
-                            })
-                        } else {
+                let compressed_hunks: Vec<Result<(usize, u8, Vec<u8>, u16)>> = if let Some(pool) =
+                    &pool
+                {
+                    if data_hunks.len() > 1 {
+                        pool.install(|| {
                             data_hunks
-                                .into_iter()
+                                .into_par_iter()
                                 .map(|(index, hunk)| {
                                     let crc = Self::crc16_ibm3740(&hunk);
                                     let mut best: Option<(u8, Vec<u8>)> = None;
@@ -10947,7 +10923,9 @@ mod chd_native {
                                         )?;
                                         if best
                                             .as_ref()
-                                            .map(|(_, candidate)| compressed.len() < candidate.len())
+                                            .map(|(_, candidate)| {
+                                                compressed.len() < candidate.len()
+                                            })
                                             .unwrap_or(true)
                                         {
                                             best = Some((*codec_slot, compressed));
@@ -10959,7 +10937,7 @@ mod chd_native {
                                     Ok((index, compression_type, payload, crc))
                                 })
                                 .collect()
-                        }
+                        })
                     } else {
                         data_hunks
                             .into_iter()
@@ -10987,7 +10965,35 @@ mod chd_native {
                                 Ok((index, compression_type, payload, crc))
                             })
                             .collect()
-                    };
+                    }
+                } else {
+                    data_hunks
+                        .into_iter()
+                        .map(|(index, hunk)| {
+                            let crc = Self::crc16_ibm3740(&hunk);
+                            let mut best: Option<(u8, Vec<u8>)> = None;
+                            for (codec_slot, codec) in &encodable_codecs {
+                                let compressed = self.compress_rust_hunk(
+                                    create_kind,
+                                    *codec,
+                                    compression_level,
+                                    &hunk,
+                                )?;
+                                if best
+                                    .as_ref()
+                                    .map(|(_, candidate)| compressed.len() < candidate.len())
+                                    .unwrap_or(true)
+                                {
+                                    best = Some((*codec_slot, compressed));
+                                }
+                            }
+                            let (compression_type, payload) = best
+                                .filter(|(_, compressed)| compressed.len() < hunk.len())
+                                .unwrap_or((Self::CHD_V5_MAP_TYPE_UNCOMPRESSED, hunk));
+                            Ok((index, compression_type, payload, crc))
+                        })
+                        .collect()
+                };
                 let mut data_results = vec![None; batch_hunks.len()];
                 for result in compressed_hunks {
                     let (index, compression_type, payload, crc16) = result?;
@@ -10996,12 +11002,14 @@ mod chd_native {
 
                 for (index, entry) in batch_hunks.into_iter().enumerate() {
                     match entry {
-                        BatchHunkEntry::SelfCopy(other_hunk) => entries.push(RustCompressedHunkEntry {
-                            compression_type: Self::CHD_V5_MAP_TYPE_SELF,
-                            offset: other_hunk,
-                            length: 0,
-                            crc16: 0,
-                        }),
+                        BatchHunkEntry::SelfCopy(other_hunk) => {
+                            entries.push(RustCompressedHunkEntry {
+                                compression_type: Self::CHD_V5_MAP_TYPE_SELF,
+                                offset: other_hunk,
+                                length: 0,
+                                crc16: 0,
+                            })
+                        }
                         BatchHunkEntry::ParentCopy(parent_unit) => {
                             entries.push(RustCompressedHunkEntry {
                                 compression_type: Self::CHD_V5_MAP_TYPE_PARENT,
@@ -11011,7 +11019,8 @@ mod chd_native {
                             })
                         }
                         BatchHunkEntry::Data(_) => {
-                            let Some((compression_type, payload, crc16)) = data_results[index].take()
+                            let Some((compression_type, payload, crc16)) =
+                                data_results[index].take()
                             else {
                                 return Err(RomWeaverError::Validation(
                                     "internal CHD compression result mismatch".to_string(),
@@ -12613,6 +12622,24 @@ mod tests {
             *byte = (index % 251) as u8;
         }
         bytes
+    }
+
+    fn build_test_chav_stream(frame_count: usize, width: u16, height: u16) -> Vec<u8> {
+        let pixels_per_frame = usize::from(width) * usize::from(height) * 2;
+        let frame_bytes = 12 + pixels_per_frame;
+        let mut data = Vec::with_capacity(frame_count * frame_bytes);
+        for frame in 0..frame_count {
+            data.extend_from_slice(b"chav");
+            data.push(0);
+            data.push(0);
+            data.extend_from_slice(&0_u16.to_be_bytes());
+            data.extend_from_slice(&width.to_be_bytes());
+            data.extend_from_slice(&height.to_be_bytes());
+            for pixel in 0..pixels_per_frame {
+                data.push(((frame * 29 + pixel) % 251) as u8);
+            }
+        }
+        data
     }
 
     fn write_test_cso(input: &Path, output: &Path) {
@@ -15430,7 +15457,12 @@ mod tests {
                 &test_context(&temp_dir, 4),
             )
             .expect_err("extract with parent should fail when source has no parent linkage");
-        assert!(error.to_string().to_ascii_lowercase().contains("invalid parameter"));
+        assert!(
+            error
+                .to_string()
+                .to_ascii_lowercase()
+                .contains("invalid parameter")
+        );
 
         let _ = fs::remove_dir_all(temp_dir);
     }
@@ -15509,7 +15541,8 @@ mod tests {
                 &test_context(&temp_dir, 6),
             )
             .expect("extracting a parented chd with parent should succeed");
-        let extracted = fs::read(out_with_parent.join("child.bin")).expect("read extracted payload");
+        let extracted =
+            fs::read(out_with_parent.join("child.bin")).expect("read extracted payload");
         assert_eq!(extracted, payload);
 
         let _ = fs::remove_dir_all(temp_dir);
@@ -15531,6 +15564,8 @@ mod tests {
             (ChdCodec::ZSTD, "zstd"),
             (ChdCodec::ZLIB, "zlib"),
             (ChdCodec::LZMA, "lzma"),
+            (ChdCodec::HUFFMAN, "huffman"),
+            (ChdCodec::FLAC, "flac"),
         ] {
             let archive_path = temp_dir.join(format!("source-{codec_label}.chd"));
             let extracted_path = temp_dir.join(format!("extracted-{codec_label}.bin"));
@@ -15595,6 +15630,51 @@ mod tests {
             .expect("extract rust-only multi codec chd");
 
         let extracted = fs::read(output_dir.join("source.bin")).expect("read extracted payload");
+        assert_eq!(extracted, payload);
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    #[test]
+    fn chd_rust_only_create_supports_avhuff_round_trip() {
+        let temp_dir = temp_dir_path("chd-rust-avhuff-create");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let source_path = temp_dir.join("video.bin");
+        let archive_path = temp_dir.join("video.chd");
+        let output_dir = temp_dir.join("out");
+        let payload = build_test_chav_stream(4, 32, 16);
+        fs::write(&source_path, &payload).expect("write source fixture");
+
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("chd").expect("chd handler");
+        handler
+            .create(
+                &ContainerCreateRequest {
+                    inputs: vec![source_path],
+                    output: archive_path.clone(),
+                    format: "chd".to_string(),
+                    codec: Some("avhuff".to_string()),
+                    level: None,
+                    parent: None,
+                },
+                &test_context(&temp_dir, 6),
+            )
+            .expect("create rust-only avhuff chd");
+        handler
+            .extract(
+                &rom_weaver_core::ContainerExtractRequest {
+                    source: archive_path,
+                    out_dir: output_dir.clone(),
+                    selections: Vec::new(),
+                    split_bin: false,
+                    parent: None,
+                },
+                &test_context(&temp_dir, 6),
+            )
+            .expect("extract rust-only avhuff chd");
+
+        let extracted = fs::read(output_dir.join("video.avi")).expect("read extracted payload");
         assert_eq!(extracted, payload);
 
         let _ = fs::remove_dir_all(temp_dir);
@@ -15739,7 +15819,12 @@ mod tests {
 
         let registry = ContainerRegistry::new();
         let handler = registry.find_by_name("chd").expect("chd handler");
-        for (codec, label) in [("cdzs", "cdzs"), ("cdzl", "cdzl"), ("cdlz", "cdlz")] {
+        for (codec, label) in [
+            ("cdzs", "cdzs"),
+            ("cdzl", "cdzl"),
+            ("cdlz", "cdlz"),
+            ("cdfl", "cdfl"),
+        ] {
             let archive_path = temp_dir.join(format!("disc-{label}.chd"));
             let output_dir = temp_dir.join(format!("out-{label}"));
             handler

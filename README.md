@@ -123,7 +123,8 @@ Notes:
 - `xiso` is intentionally trim-only (via `trim`).
 - `extract` supports `--select` (exact/prefix/glob) and recursively extracts nested containers up to depth 8.
 - `extract --split-bin` is CHD-only (ignored for non-CHD input).
-- CHD parent/differential workflows are currently unsupported in the Rust-native path.
+- CHD parent/differential workflows are supported when a parent CHD is supplied by the caller.
+- CHD create accepts full MAME-style codec lists; Rust-native encoding currently emits compressed hunks with `zstd`, `zlib`, `lzma`, `cdzs`, `cdzl`, or `cdlz` and uses uncompressed or deduplicated map entries otherwise.
 
 ## Create-Time Codec Support
 

@@ -160,10 +160,6 @@ fn read_single_file_bytes(dir: &std::path::Path) -> Vec<u8> {
     fs::read(&files[0]).expect("read extracted file")
 }
 
-fn chd_backend_requires_rust_codec_slots() -> bool {
-    true
-}
-
 fn run_chd_round_trip(input_name: &str, source: &[u8], codec: &str, expected_extract_name: &str) {
     let temp = setup_temp_dir();
     fs::write(temp.child(input_name).path(), source).expect("fixture");
@@ -5899,39 +5895,6 @@ fn chd_compress_and_extract_flac_round_trip() {
         .map(|index| ((index as i16).wrapping_mul(17) as u16).to_le_bytes())
         .flat_map(|bytes| bytes.into_iter())
         .collect::<Vec<_>>();
-    if chd_backend_requires_rust_codec_slots() {
-        let temp = setup_temp_dir();
-        fs::write(temp.child("audio.bin").path(), &source).expect("fixture");
-        let chd_path = temp.child("disc.chd");
-        let output = Command::cargo_bin("rom-weaver")
-            .expect("binary")
-            .args([
-                "compress",
-                temp.child("audio.bin").path().to_str().expect("path"),
-                "--format",
-                "chd",
-                "--output",
-                chd_path.path().to_str().expect("path"),
-                "--codec",
-                "flac",
-                "--json",
-            ])
-            .assert()
-            .code(1)
-            .get_output()
-            .stdout
-            .clone();
-        let events = parse_json_lines(&output);
-        let terminal = events.last().expect("terminal event");
-        assert_eq!(terminal["status"], "failed");
-        assert!(
-            terminal["label"]
-                .as_str()
-                .expect("label")
-                .contains("requires all active compressed codec slots to be rust-encodable")
-        );
-        return;
-    }
     run_chd_round_trip("audio.bin", &source, "flac", "disc.bin");
 }
 
@@ -5956,27 +5919,13 @@ fn chd_compress_and_extract_avhuff_round_trip() {
             "--json",
         ])
         .assert()
-        .code(if chd_backend_requires_rust_codec_slots() {
-            1
-        } else {
-            0
-        })
+        .code(0)
         .get_output()
         .stdout
         .clone();
     let compress_events = parse_json_lines(&compress_output);
     assert_running_percent_event(&compress_events, "compress", "chd");
     let compress_json = compress_events.last().expect("compress terminal event");
-    if chd_backend_requires_rust_codec_slots() {
-        assert_eq!(compress_json["status"], "failed");
-        assert!(
-            compress_json["label"]
-                .as_str()
-                .expect("label")
-                .contains("requires all active compressed codec slots to be rust-encodable")
-        );
-        return;
-    }
     assert_eq!(compress_json["status"], "succeeded");
     assert!(
         compress_json["label"]
@@ -6001,6 +5950,14 @@ fn chd_compress_and_extract_avhuff_round_trip() {
         fs::read(out_dir.child("disc.avi").path()).expect("extract bytes"),
         source
     );
+}
+
+#[test]
+fn chd_compress_and_extract_huffman_round_trip() {
+    let source = (0..16_384)
+        .map(|index| (index % 173) as u8)
+        .collect::<Vec<_>>();
+    run_chd_round_trip("disc.bin", &source, "huffman", "disc.bin");
 }
 
 #[test]
@@ -6563,6 +6520,54 @@ fn chd_compress_accepts_cd_codec_aliases() {
 }
 
 #[test]
+fn chd_compress_and_extract_cdfl_round_trip() {
+    let temp = setup_temp_dir();
+    let frames = 8_u32;
+    let source = (0..(frames as usize * 2352))
+        .map(|index| (index % 197) as u8)
+        .collect::<Vec<_>>();
+    fs::write(temp.child("disc.bin").path(), &source).expect("fixture");
+    temp.child("disc.cue")
+        .write_str("FILE \"disc.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n")
+        .expect("cue fixture");
+    let chd_path = temp.child("disc.chd");
+
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("disc.cue").path().to_str().expect("path"),
+            "--format",
+            "chd",
+            "--output",
+            chd_path.path().to_str().expect("path"),
+            "--codec",
+            "cdfl",
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let out_dir = temp.child("extract");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "extract",
+            chd_path.path().to_str().expect("path"),
+            "--out-dir",
+            out_dir.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    assert_eq!(
+        fs::read(out_dir.child("disc.bin").path()).expect("extract bytes"),
+        source
+    );
+}
+
+#[test]
 fn chd_compress_accepts_multiple_codecs_from_repeated_flags() {
     let temp = setup_temp_dir();
     let frames = 10_u32;
@@ -6593,27 +6598,14 @@ fn chd_compress_accepts_multiple_codecs_from_repeated_flags() {
             "--json",
         ])
         .assert()
-        .code(if chd_backend_requires_rust_codec_slots() {
-            1
-        } else {
-            0
-        })
+        .code(0)
         .get_output()
         .stdout
         .clone();
-
-    if chd_backend_requires_rust_codec_slots() {
-        let events = parse_json_lines(&compress_output);
-        let terminal = events.last().expect("terminal event");
-        assert_eq!(terminal["status"], "failed");
-        assert!(
-            terminal["label"]
-                .as_str()
-                .expect("label")
-                .contains("requires all active compressed codec slots to be rust-encodable")
-        );
-        return;
-    }
+    let compress_events = parse_json_lines(&compress_output);
+    assert_running_percent_event(&compress_events, "compress", "chd");
+    let compress_json = compress_events.last().expect("compress terminal event");
+    assert_eq!(compress_json["status"], "succeeded");
 
     let inspect_output = Command::cargo_bin("rom-weaver")
         .expect("binary")
