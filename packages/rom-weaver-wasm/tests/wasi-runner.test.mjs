@@ -186,7 +186,7 @@ test('runner stdin normalization accepts supported types and rejects invalid inp
   );
 });
 
-test('runJson stays stable across repeated wasm 7z lzma/lzma2 create calls', async () => {
+test('runJson stays stable across repeated wasm 7z codec create calls', async () => {
   await withTempFixture(async ({ dir }) => {
     const runner = createRomWeaverWasiRunner({ executionIsolation: 'none' });
     const sourcePath = join(dir, 'repeat-lzma-source.bin');
@@ -197,10 +197,11 @@ test('runJson stays stable across repeated wasm 7z lzma/lzma2 create calls', asy
     await writeFile(sourcePath, sourceData);
 
     try {
-      for (const codec of ['lzma', 'lzma2']) {
-        for (let attempt = 0; attempt < 15; attempt += 1) {
+      for (const codec of ['store', 'deflate', 'bzip2', 'zstd', 'lz4', 'brotli', 'ppmd', 'lzma', 'lzma2']) {
+        for (let attempt = 0; attempt < 4; attempt += 1) {
           const archivePath = join(dir, `repeat-${codec}-${attempt}.7z`);
-          const result = await runner.runJson([
+          const resolvedCodec = codec === 'store' ? codec : `${codec}:6`;
+          const command = [
             'compress',
             sourcePath,
             '--format',
@@ -208,10 +209,11 @@ test('runJson stays stable across repeated wasm 7z lzma/lzma2 create calls', asy
             '--output',
             archivePath,
             '--codec',
-            codec,
+            resolvedCodec,
             '--threads',
             '1',
-          ]);
+          ];
+          const result = await runner.runJson(command);
           assert.equal(result.ok, true);
           assert.equal(result.exitCode, 0);
         }

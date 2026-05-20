@@ -15,9 +15,7 @@ use std::{
 use bzip2::read::MultiBzDecoder as Bzip2Decoder;
 use ciso::{read::CSOReader as CsoReader, split::SplitFileReader};
 use flacenc::{component::BitRepr as _, error::Verify as _};
-use flate2::{
-    Compression as GzipCompression, read::MultiGzDecoder, write::DeflateEncoder,
-};
+use flate2::{Compression as GzipCompression, read::MultiGzDecoder, write::DeflateEncoder};
 use lz4_flex::frame::{
     BlockMode as Lz4BlockMode, BlockSize as Lz4BlockSize, FrameEncoder as Lz4FrameEncoder,
     FrameInfo as Lz4FrameInfo,
@@ -48,6 +46,13 @@ use sevenz_rust::{
     ArchiveEntry as SevenZArchiveEntry, ArchiveReader as SevenZReader,
     ArchiveWriter as SevenZWriter, EncoderConfiguration as SevenZMethodConfiguration,
     EncoderMethod as SevenZMethod, Password as SevenZPassword,
+    encoder_options::{
+        BrotliOptions as SevenZBrotliOptions, Bzip2Options as SevenZBzip2Options,
+        DeflateOptions as SevenZDeflateOptions, EncoderOptions as SevenZEncoderOptions,
+        Lz4Options as SevenZLz4Options, Lzma2Options as SevenZLzma2Options,
+        LzmaOptions as SevenZLzmaOptions, PpmdOptions as SevenZPpmdOptions,
+        ZstandardOptions as SevenZZstdOptions,
+    },
 };
 use sha1::{Digest, Sha1};
 use tar::{Archive as TarArchive, Builder as TarBuilder};
@@ -411,11 +416,13 @@ fn resolve_container_codec_backend(
     descriptor_name: &str,
     codec_name: &str,
 ) -> Result<Arc<dyn CodecBackend>> {
-    CodecRegistry::new().find_by_name(codec_name).ok_or_else(|| {
-        RomWeaverError::Unsupported(format!(
-            "codec backend `{codec_name}` is not registered for {descriptor_name}"
-        ))
-    })
+    CodecRegistry::new()
+        .find_by_name(codec_name)
+        .ok_or_else(|| {
+            RomWeaverError::Unsupported(format!(
+                "codec backend `{codec_name}` is not registered for {descriptor_name}"
+            ))
+        })
 }
 
 #[derive(Clone, Debug)]
@@ -2148,10 +2155,7 @@ impl TarContainerHandler {
         }
     }
 
-    fn inspect_uncompressed_archive(
-        &self,
-        source: &Path,
-    ) -> Result<(usize, usize, usize, u64)> {
+    fn inspect_uncompressed_archive(&self, source: &Path) -> Result<(usize, usize, usize, u64)> {
         let reader = BufReader::new(File::open(source)?);
         let mut archive = TarArchive::new(reader);
         let mut files = 0usize;
@@ -2216,24 +2220,19 @@ impl ContainerHandler for TarContainerHandler {
         request: &ContainerInspectRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        let (entries_total, files, directories, logical_bytes) = if matches!(
-            self.compression,
-            TarCompression::None
-        ) {
-            self.inspect_uncompressed_archive(&request.source)?
-        } else {
-            let staged_result = (|| -> Result<(usize, usize, usize, u64)> {
-                let (staged_tar, _) = self.decode_to_staged_tar(
-                    &request.source,
-                    context,
-                    "tar-inspect-stage",
-                )?;
-                let inspected = self.inspect_uncompressed_archive(&staged_tar);
-                let _ = fs::remove_file(&staged_tar);
-                inspected
-            })();
-            staged_result?
-        };
+        let (entries_total, files, directories, logical_bytes) =
+            if matches!(self.compression, TarCompression::None) {
+                self.inspect_uncompressed_archive(&request.source)?
+            } else {
+                let staged_result = (|| -> Result<(usize, usize, usize, u64)> {
+                    let (staged_tar, _) =
+                        self.decode_to_staged_tar(&request.source, context, "tar-inspect-stage")?;
+                    let inspected = self.inspect_uncompressed_archive(&staged_tar);
+                    let _ = fs::remove_file(&staged_tar);
+                    inspected
+                })();
+                staged_result?
+            };
 
         Ok(OperationReport::succeeded(
             OperationFamily::Container,
@@ -2283,7 +2282,8 @@ impl ContainerHandler for TarContainerHandler {
             TarCompression::Xz => "tar-xz-extract-stage",
         };
         let staged_result = (|| -> Result<OperationReport> {
-            let (staged_tar, _) = self.decode_to_staged_tar(&request.source, context, staged_label)?;
+            let (staged_tar, _) =
+                self.decode_to_staged_tar(&request.source, context, staged_label)?;
             let extracted = self.extract_uncompressed_archive(&staged_tar, request, context);
             let _ = fs::remove_file(&staged_tar);
             extracted
@@ -2714,7 +2714,9 @@ impl ContainerHandler for StreamContainerHandler {
         let compressed_bytes = fs::metadata(&request.source)?.len();
         let mut execution = context.plan_threads(self.extract_thread_capability());
         let backend = self.codec_backend()?;
-        let decoded_path = context.temp_paths().next_path("stream-inspect", Some("bin"));
+        let decoded_path = context
+            .temp_paths()
+            .next_path("stream-inspect", Some("bin"));
         let logical_bytes_result = (|| -> Result<u64> {
             let decode_report = backend.decode(
                 &CodecOperationRequest {
@@ -3582,8 +3584,22 @@ struct SevenZContainerHandler {
 }
 
 impl SevenZContainerHandler {
-    const DEFAULT_LZMA2_LEVEL: u32 = 6;
+    const DEFAULT_CODEC_LEVEL: u32 = 6;
     const LZMA2_MT_CHUNK_BYTES: u64 = 1 << 20;
+    const ZSTD_LEVEL_MAP: [u32; 10] = [1, 3, 5, 7, 9, 11, 13, 15, 18, 22];
+    const BROTLI_QUALITY_MAP: [u32; 10] = [0, 1, 3, 4, 5, 6, 7, 8, 10, 11];
+    const LZ4_SKIPPABLE_FRAME_BYTES: [u32; 10] = [
+        0,
+        64 * 1024,
+        128 * 1024,
+        256 * 1024,
+        512 * 1024,
+        1024 * 1024,
+        2 * 1024 * 1024,
+        4 * 1024 * 1024,
+        8 * 1024 * 1024,
+        16 * 1024 * 1024,
+    ];
 
     const fn new(descriptor: &'static FormatDescriptor) -> Self {
         Self { descriptor }
@@ -3601,96 +3617,112 @@ impl SevenZContainerHandler {
         level: Option<i32>,
         execution: &rom_weaver_core::ThreadExecution,
     ) -> Result<SevenZMethodConfiguration> {
-        let mut method = match parse_requested_codec(codec) {
-            RequestedCodec::Unspecified | RequestedCodec::Known(CanonicalCodec::Lzma2) => {
-                Ok(SevenZMethodConfiguration::new(SevenZMethod::LZMA2))
-            }
-            RequestedCodec::Known(CanonicalCodec::Lzma) => {
-                Ok(SevenZMethodConfiguration::new(SevenZMethod::LZMA))
-            }
-            RequestedCodec::Known(CanonicalCodec::Store) => {
-                Ok(SevenZMethodConfiguration::new(SevenZMethod::COPY))
-            }
-            RequestedCodec::Known(codec) => Err(RomWeaverError::Validation(format!(
-                "unsupported 7z codec `{}`; supported codecs are lzma2, lzma, and store",
-                codec.name()
-            ))),
-            RequestedCodec::Unknown(name) => Err(RomWeaverError::Validation(format!(
-                "unsupported 7z codec `{name}`; supported codecs are lzma2, lzma, and store"
-            ))),
-        }?;
-
-        let level = if let Some(level) = level {
-            if !(0..=9).contains(&level) {
+        let codec = match parse_requested_codec(codec) {
+            RequestedCodec::Unspecified => CanonicalCodec::Lzma2,
+            RequestedCodec::Known(codec) => codec,
+            RequestedCodec::Unknown(name) => {
                 return Err(RomWeaverError::Validation(format!(
-                    "7z level `{level}` is out of range (0..=9)"
+                    "unsupported 7z codec `{name}`; supported codecs are lzma2, lzma, store, zstd, deflate, bzip2, lz4, brotli, and ppmd"
                 )));
             }
-            Some(level as u32)
-        } else {
-            None
         };
 
-        if method.method == SevenZMethod::COPY && level.is_some() {
+        if !matches!(
+            codec,
+            CanonicalCodec::Lzma2
+                | CanonicalCodec::Lzma
+                | CanonicalCodec::Store
+                | CanonicalCodec::Zstd
+                | CanonicalCodec::Deflate
+                | CanonicalCodec::Bzip2
+                | CanonicalCodec::Lz4
+                | CanonicalCodec::Brotli
+                | CanonicalCodec::Ppmd
+        ) {
+            return Err(RomWeaverError::Validation(format!(
+                "unsupported 7z codec `{}`; supported codecs are lzma2, lzma, store, zstd, deflate, bzip2, lz4, brotli, and ppmd",
+                codec.name()
+            )));
+        }
+
+        let level = Self::parse_level(level)?;
+        if codec == CanonicalCodec::Store && level.is_some() {
             return Err(RomWeaverError::Validation(
                 "7z codec `store` does not accept --level".into(),
             ));
         }
 
-        match method.method {
-            SevenZMethod::LZMA2 if execution.used_parallelism => {
-                #[cfg(target_family = "wasm")]
-                let mut options = sevenz_rust::encoder_options::Lzma2Options::from_level_mt(
-                    level.unwrap_or(Self::DEFAULT_LZMA2_LEVEL),
-                    self.thread_count(execution.effective_threads),
-                    Self::LZMA2_MT_CHUNK_BYTES,
-                );
-                #[cfg(not(target_family = "wasm"))]
-                let options = sevenz_rust::encoder_options::Lzma2Options::from_level_mt(
-                    level.unwrap_or(Self::DEFAULT_LZMA2_LEVEL),
-                    self.thread_count(execution.effective_threads),
-                    Self::LZMA2_MT_CHUNK_BYTES,
-                );
-                #[cfg(target_family = "wasm")]
-                options.set_dictionary_size(1 << 12);
+        let level = level.unwrap_or(Self::DEFAULT_CODEC_LEVEL);
+        let method = match codec {
+            CanonicalCodec::Lzma2 => {
+                let mut method = SevenZMethodConfiguration::new(SevenZMethod::LZMA2);
+                let options = if execution.used_parallelism {
+                    SevenZLzma2Options::from_level_mt(
+                        level,
+                        self.thread_count(execution.effective_threads),
+                        Self::LZMA2_MT_CHUNK_BYTES,
+                    )
+                } else {
+                    SevenZLzma2Options::from_level(level)
+                };
                 method = method.with_options(options.into());
+                method
             }
-            SevenZMethod::LZMA2 => {
-                #[cfg(target_family = "wasm")]
-                {
-                    let mut options = sevenz_rust::encoder_options::Lzma2Options::from_level(
-                        level.unwrap_or(Self::DEFAULT_LZMA2_LEVEL),
-                    );
-                    options.set_dictionary_size(1 << 12);
-                    method = method.with_options(options.into());
-                }
-                #[cfg(not(target_family = "wasm"))]
-                if let Some(level) = level {
-                    let options = sevenz_rust::encoder_options::Lzma2Options::from_level(level);
-                    method = method.with_options(options.into());
-                }
+            CanonicalCodec::Lzma => SevenZMethodConfiguration::new(SevenZMethod::LZMA)
+                .with_options(SevenZEncoderOptions::Lzma(SevenZLzmaOptions::from_level(
+                    level,
+                ))),
+            CanonicalCodec::Store => SevenZMethodConfiguration::new(SevenZMethod::COPY),
+            CanonicalCodec::Zstd => SevenZMethodConfiguration::new(SevenZMethod::ZSTD)
+                .with_options(SevenZZstdOptions::from_level(Self::map_zstd_level(level)).into()),
+            CanonicalCodec::Deflate => SevenZMethodConfiguration::new(SevenZMethod::DEFLATE)
+                .with_options(SevenZDeflateOptions::from_level(level).into()),
+            CanonicalCodec::Bzip2 => SevenZMethodConfiguration::new(SevenZMethod::BZIP2)
+                .with_options(SevenZBzip2Options::from_level(level.max(1)).into()),
+            CanonicalCodec::Lz4 => SevenZMethodConfiguration::new(SevenZMethod::LZ4).with_options(
+                SevenZLz4Options::default()
+                    .with_skippable_frame_size(Self::map_lz4_skippable_frame_size(level))
+                    .into(),
+            ),
+            CanonicalCodec::Brotli => SevenZMethodConfiguration::new(SevenZMethod::BROTLI)
+                .with_options(
+                    SevenZBrotliOptions::from_quality_window(Self::map_brotli_quality(level), 22)
+                        .into(),
+                ),
+            CanonicalCodec::Ppmd => SevenZMethodConfiguration::new(SevenZMethod::PPMD)
+                .with_options(SevenZPpmdOptions::from_level(level).into()),
+            CanonicalCodec::Huffman => {
+                return Err(RomWeaverError::Validation(
+                    "unsupported 7z codec `huffman`; supported codecs are lzma2, lzma, store, zstd, deflate, bzip2, lz4, brotli, and ppmd".to_string(),
+                ));
             }
-            SevenZMethod::LZMA => {
-                #[cfg(target_family = "wasm")]
-                {
-                    let options = sevenz_rust::encoder_options::LzmaOptions::from_level(
-                        level.unwrap_or(Self::DEFAULT_LZMA2_LEVEL),
-                    );
-                    method = method
-                        .with_options(sevenz_rust::encoder_options::EncoderOptions::Lzma(options));
-                }
-                #[cfg(not(target_family = "wasm"))]
-                if let Some(level) = level {
-                    method =
-                        method.with_options(sevenz_rust::encoder_options::EncoderOptions::Lzma(
-                            sevenz_rust::encoder_options::LzmaOptions::from_level(level),
-                        ));
-                }
-            }
-            _ => {}
-        }
+        };
 
         Ok(method)
+    }
+
+    fn parse_level(level: Option<i32>) -> Result<Option<u32>> {
+        let Some(level) = level else {
+            return Ok(None);
+        };
+        if !(0..=9).contains(&level) {
+            return Err(RomWeaverError::Validation(format!(
+                "7z level `{level}` is out of range (0..=9)"
+            )));
+        }
+        Ok(Some(level as u32))
+    }
+
+    const fn map_zstd_level(level: u32) -> u32 {
+        Self::ZSTD_LEVEL_MAP[level as usize]
+    }
+
+    const fn map_brotli_quality(level: u32) -> u32 {
+        Self::BROTLI_QUALITY_MAP[level as usize]
+    }
+
+    const fn map_lz4_skippable_frame_size(level: u32) -> u32 {
+        Self::LZ4_SKIPPABLE_FRAME_BYTES[level as usize]
     }
 
     fn thread_count(&self, effective_threads: usize) -> u32 {
@@ -3705,6 +3737,12 @@ impl SevenZContainerHandler {
             SevenZMethod::COPY => "store",
             SevenZMethod::LZMA2 => "lzma2",
             SevenZMethod::LZMA => "lzma",
+            SevenZMethod::ZSTD => "zstd",
+            SevenZMethod::DEFLATE => "deflate",
+            SevenZMethod::BZIP2 => "bzip2",
+            SevenZMethod::LZ4 => "lz4",
+            SevenZMethod::BROTLI => "brotli",
+            SevenZMethod::PPMD => "ppmd",
             _ => "unknown",
         }
     }
@@ -8000,6 +8038,14 @@ mod chd_native {
             }
         }
 
+        fn align_to_byte(&mut self) {
+            let remainder = self.bit_len % 8;
+            if remainder == 0 {
+                return;
+            }
+            self.write_bits(0, (8 - remainder) as u8);
+        }
+
         fn finish(self) -> Vec<u8> {
             self.bytes
         }
@@ -8450,6 +8496,10 @@ mod chd_native {
         const CHD_V5_HEADER_SHA1_OFFSET: u64 = 84;
         const CHD_V5_HEADER_PARENT_SHA1_OFFSET: u64 = 104;
         const CHD_SHA1_BYTES: usize = 20;
+        const HUFFMAN_SMALL_TREE_BITS: [u8; 5] = [1, 7, 0, 1, 7];
+        const AVHUFF_DELTA_TREE_SYMBOLS: usize = 256 + 16;
+        const AVHUFF_DELTA_TREE_BITS: u8 = 5;
+        const AVHUFF_DELTA_TREE_8BIT_COUNT: usize = 240;
 
         fn supports_rust_create(
             &self,
@@ -8513,7 +8563,11 @@ mod chd_native {
                 ChdCreateKind::Raw | ChdCreateKind::Dvd | ChdCreateKind::HardDisk(_) => {
                     matches!(
                         codec,
-                        ChdCodec::ZSTD | ChdCodec::ZLIB | ChdCodec::LZMA | ChdCodec::FLAC
+                        ChdCodec::ZSTD
+                            | ChdCodec::ZLIB
+                            | ChdCodec::LZMA
+                            | ChdCodec::HUFFMAN
+                            | ChdCodec::FLAC
                     )
                 }
                 ChdCreateKind::Disc(_) => {
@@ -8525,7 +8579,7 @@ mod chd_native {
                             | ChdCodec::CD_FLAC
                     )
                 }
-                ChdCreateKind::Av(_) => false,
+                ChdCreateKind::Av(_) => matches!(codec, ChdCodec::AVHUFF),
             }
         }
 
@@ -8610,6 +8664,14 @@ mod chd_native {
             &self,
         ) -> Result<([ChdCodec; CHD_MAX_COMPRESSORS], ChdCodec)> {
             let plan = self.resolve_compression_plan(None, &ChdCreateKind::Dvd)?;
+            Ok((plan.codecs, plan.primary_codec))
+        }
+
+        #[cfg(test)]
+        pub(super) fn default_raw_compression_plan_for_tests(
+            &self,
+        ) -> Result<([ChdCodec; CHD_MAX_COMPRESSORS], ChdCodec)> {
+            let plan = self.resolve_compression_plan(None, &ChdCreateKind::Raw)?;
             Ok((plan.codecs, plan.primary_codec))
         }
 
@@ -8750,7 +8812,7 @@ mod chd_native {
                         codecs: [
                             ChdCodec::CD_ZSTD,
                             ChdCodec::CD_ZLIB,
-                            ChdCodec::CD_LZMA,
+                            ChdCodec::CD_FLAC,
                             ChdCodec::NONE,
                         ],
                         primary_codec: ChdCodec::CD_ZSTD,
@@ -8760,17 +8822,17 @@ mod chd_native {
                     codecs: [
                         ChdCodec::ZSTD,
                         ChdCodec::ZLIB,
-                        ChdCodec::LZMA,
-                        ChdCodec::NONE,
+                        ChdCodec::HUFFMAN,
+                        ChdCodec::FLAC,
                     ],
                     primary_codec: ChdCodec::ZSTD,
                 },
                 _ => ChdCompressionPlan {
                     codecs: [
                         ChdCodec::ZSTD,
-                        ChdCodec::NONE,
-                        ChdCodec::NONE,
-                        ChdCodec::NONE,
+                        ChdCodec::ZLIB,
+                        ChdCodec::HUFFMAN,
+                        ChdCodec::FLAC,
                     ],
                     primary_codec: ChdCodec::ZSTD,
                 },
@@ -8802,6 +8864,7 @@ mod chd_native {
         fn map_codec(&self, codec: &str) -> Result<ChdCodec> {
             let normalized = codec.trim().to_ascii_lowercase();
             match normalized.as_str() {
+                "huff" | "huffman" => return Ok(ChdCodec::HUFFMAN),
                 "flac" => return Ok(ChdCodec::FLAC),
                 "cdzl" => return Ok(ChdCodec::CD_ZLIB),
                 "cdzs" => return Ok(ChdCodec::CD_ZSTD),
@@ -8820,11 +8883,11 @@ mod chd_native {
                 | RequestedCodec::Known(CanonicalCodec::Lzma2) => Ok(ChdCodec::LZMA),
                 RequestedCodec::Known(CanonicalCodec::Huffman) => Ok(ChdCodec::HUFFMAN),
                 RequestedCodec::Known(codec) => Err(RomWeaverError::Validation(format!(
-                    "unsupported chd codec `{}`; supported codecs are store, zlib, zstd, lzma, huffman, flac, cdlz, cdzl, cdzs, cdfl, and avhu",
+                    "unsupported chd codec `{}`; supported codecs are store, zlib, zstd, lzma, huff (alias: huffman), flac, cdlz, cdzl, cdzs, cdfl, and avhuff (alias: avhu)",
                     codec.name()
                 ))),
                 RequestedCodec::Unknown(name) => Err(RomWeaverError::Validation(format!(
-                    "unsupported chd codec `{name}`; supported codecs are store, zlib, zstd, lzma, huffman, flac, cdlz, cdzl, cdzs, cdfl, and avhu"
+                    "unsupported chd codec `{name}`; supported codecs are store, zlib, zstd, lzma, huff (alias: huffman), flac, cdlz, cdzl, cdzs, cdfl, and avhuff (alias: avhu)"
                 ))),
             }
         }
@@ -8872,7 +8935,7 @@ mod chd_native {
                 ChdCodec::ZLIB => "zlib",
                 ChdCodec::ZSTD => "zstd",
                 ChdCodec::LZMA => "lzma",
-                ChdCodec::HUFFMAN => "huffman",
+                ChdCodec::HUFFMAN => "huff",
                 ChdCodec::AVHUFF => "avhuff",
                 ChdCodec::FLAC => "flac",
                 ChdCodec::CD_ZLIB => "cdzl",
@@ -8888,7 +8951,7 @@ mod chd_native {
                 .compression
                 .into_iter()
                 .filter(|codec| *codec != ChdCodec::NONE)
-                .map(|codec| normalize_codec_label(self.codec_label(codec)))
+                .map(|codec| self.codec_label(codec).to_string())
                 .collect::<Vec<_>>();
             if codecs.is_empty() {
                 "store".to_string()
@@ -10510,6 +10573,20 @@ mod chd_native {
             })
         }
 
+        fn force_compressed_payload_for_primary_codec(primary_codec: ChdCodec) -> bool {
+            matches!(primary_codec, ChdCodec::HUFFMAN | ChdCodec::AVHUFF)
+        }
+
+        fn prefer_compressed_payload(
+            &self,
+            primary_codec: ChdCodec,
+            compressed_len: usize,
+            raw_len: usize,
+        ) -> bool {
+            compressed_len < raw_len
+                || Self::force_compressed_payload_for_primary_codec(primary_codec)
+        }
+
         fn create_compressed_rust_raw(
             &self,
             input: &Path,
@@ -10703,7 +10780,13 @@ mod chd_native {
                                         }
                                     }
                                     let (compression_type, payload) = best
-                                        .filter(|(_, compressed)| compressed.len() < hunk.len())
+                                        .filter(|(_, compressed)| {
+                                            self.prefer_compressed_payload(
+                                                primary_codec,
+                                                compressed.len(),
+                                                hunk.len(),
+                                            )
+                                        })
                                         .unwrap_or((Self::CHD_V5_MAP_TYPE_UNCOMPRESSED, hunk));
                                     Ok((index, compression_type, payload, crc))
                                 })
@@ -10731,7 +10814,13 @@ mod chd_native {
                                     }
                                 }
                                 let (compression_type, payload) = best
-                                    .filter(|(_, compressed)| compressed.len() < hunk.len())
+                                    .filter(|(_, compressed)| {
+                                        self.prefer_compressed_payload(
+                                            primary_codec,
+                                            compressed.len(),
+                                            hunk.len(),
+                                        )
+                                    })
                                     .unwrap_or((Self::CHD_V5_MAP_TYPE_UNCOMPRESSED, hunk));
                                 Ok((index, compression_type, payload, crc))
                             })
@@ -10759,7 +10848,13 @@ mod chd_native {
                                 }
                             }
                             let (compression_type, payload) = best
-                                .filter(|(_, compressed)| compressed.len() < hunk.len())
+                                .filter(|(_, compressed)| {
+                                    self.prefer_compressed_payload(
+                                        primary_codec,
+                                        compressed.len(),
+                                        hunk.len(),
+                                    )
+                                })
                                 .unwrap_or((Self::CHD_V5_MAP_TYPE_UNCOMPRESSED, hunk));
                             Ok((index, compression_type, payload, crc))
                         })
@@ -10995,6 +11090,303 @@ mod chd_native {
             Ok(sink.as_slice().to_vec())
         }
 
+        fn encode_huffman_identity_payload(&self, hunk: &[u8]) -> Vec<u8> {
+            let mut writer = MsbBitWriter::new();
+            for length_bits in Self::HUFFMAN_SMALL_TREE_BITS {
+                writer.write_bits(u64::from(length_bits), 3);
+            }
+            // The main tree uses 8-bit canonical lengths for all 256 symbols:
+            // token stream: [9, 0] where 0 repeats the previous length 255 times.
+            writer.write_bits(1, 1);
+            writer.write_bits(0, 1);
+            writer.write_bits(7, 3);
+            writer.write_bits(246, 8);
+            for &byte in hunk {
+                writer.write_bits(u64::from(byte), 8);
+            }
+            writer.finish()
+        }
+
+        fn canonical_codes_from_lengths(&self, lengths: &[u8]) -> Result<Vec<Option<(u32, u8)>>> {
+            let mut histogram = [0_u32; 33];
+            for &length in lengths {
+                if usize::from(length) >= histogram.len() {
+                    return Err(RomWeaverError::Validation(format!(
+                        "unsupported huffman bit length {}",
+                        length
+                    )));
+                }
+                histogram[length as usize] = histogram[length as usize].saturating_add(1);
+            }
+
+            let mut curr_start = 0_u32;
+            for code_len in (1..histogram.len()).rev() {
+                let next_start = (curr_start + histogram[code_len]) >> 1;
+                if code_len != 1 && next_start.saturating_mul(2) != curr_start + histogram[code_len]
+                {
+                    return Err(RomWeaverError::Validation(
+                        "invalid huffman length distribution".to_string(),
+                    ));
+                }
+                histogram[code_len] = curr_start;
+                curr_start = next_start;
+            }
+
+            let mut codes = vec![None; lengths.len()];
+            for (index, &length) in lengths.iter().enumerate() {
+                if length == 0 {
+                    continue;
+                }
+                let start = &mut histogram[length as usize];
+                codes[index] = Some((*start, length));
+                *start = start.saturating_add(1);
+            }
+            Ok(codes)
+        }
+
+        fn write_huffman_tree_rle_lengths(
+            &self,
+            writer: &mut MsbBitWriter,
+            lengths: &[u8],
+            rle_bits: u8,
+        ) -> Result<()> {
+            if rle_bits == 0 || rle_bits > 8 {
+                return Err(RomWeaverError::Validation(
+                    "invalid avhuff tree configuration".to_string(),
+                ));
+            }
+            let max_symbol_value = (1_u16 << rle_bits) - 1;
+            let max_run_len = usize::from(max_symbol_value).saturating_add(3);
+
+            let mut index = 0usize;
+            while index < lengths.len() {
+                let value = lengths[index];
+                if u16::from(value) > max_symbol_value {
+                    return Err(RomWeaverError::Validation(format!(
+                        "avhuff tree symbol `{value}` exceeds {rle_bits}-bit range"
+                    )));
+                }
+
+                let mut run_len = 1usize;
+                while index + run_len < lengths.len() && lengths[index + run_len] == value {
+                    run_len += 1;
+                }
+
+                if value != 1 && run_len >= 3 {
+                    let mut remaining = run_len;
+                    while remaining >= 3 {
+                        let this_run = remaining.min(max_run_len);
+                        if this_run < 3 {
+                            break;
+                        }
+                        writer.write_bits(1, rle_bits);
+                        writer.write_bits(u64::from(value), rle_bits);
+                        writer.write_bits(u64::try_from(this_run - 3).unwrap_or(0), rle_bits);
+                        remaining -= this_run;
+                    }
+                    for _ in 0..remaining {
+                        writer.write_bits(u64::from(value), rle_bits);
+                    }
+                } else if value == 1 {
+                    for _ in 0..run_len {
+                        writer.write_bits(1, rle_bits);
+                        writer.write_bits(1, rle_bits);
+                    }
+                } else {
+                    for _ in 0..run_len {
+                        writer.write_bits(u64::from(value), rle_bits);
+                    }
+                }
+
+                index += run_len;
+            }
+            Ok(())
+        }
+
+        fn encode_avhuff_video_payload(
+            &self,
+            width: u16,
+            height: u16,
+            video: &[u8],
+        ) -> Result<Vec<u8>> {
+            if width == 0 || height == 0 {
+                return Ok(vec![0x80]);
+            }
+            if width % 2 != 0 {
+                return Err(RomWeaverError::Validation(format!(
+                    "avhuff encode expects even frame width; received {width}"
+                )));
+            }
+
+            let expected_video_bytes = usize::from(width)
+                .saturating_mul(usize::from(height))
+                .saturating_mul(2);
+            if video.len() != expected_video_bytes {
+                return Err(RomWeaverError::Validation(format!(
+                    "avhuff frame video payload length mismatch (expected {expected_video_bytes}, found {})",
+                    video.len()
+                )));
+            }
+
+            let mut delta_tree_lengths = vec![9_u8; Self::AVHUFF_DELTA_TREE_SYMBOLS];
+            for length in delta_tree_lengths
+                .iter_mut()
+                .take(Self::AVHUFF_DELTA_TREE_8BIT_COUNT)
+            {
+                *length = 8;
+            }
+            let delta_tree_codes = self.canonical_codes_from_lengths(&delta_tree_lengths)?;
+
+            let mut writer = MsbBitWriter::new();
+            writer.write_bits(0x80, 8);
+            for _ in 0..3 {
+                self.write_huffman_tree_rle_lengths(
+                    &mut writer,
+                    &delta_tree_lengths,
+                    Self::AVHUFF_DELTA_TREE_BITS,
+                )?;
+                writer.align_to_byte();
+            }
+
+            let mut prev_y = 0_u8;
+            let mut prev_cb = 0_u8;
+            let mut prev_cr = 0_u8;
+            let stride = usize::from(width) * 2;
+            for row in 0..usize::from(height) {
+                let row_start = row.saturating_mul(stride);
+                let row_bytes = &video[row_start..row_start + stride];
+                for pair in row_bytes.chunks_exact(4) {
+                    let y0 = pair[0];
+                    let cb = pair[1];
+                    let y1 = pair[2];
+                    let cr = pair[3];
+
+                    let dy0 = y0.wrapping_sub(prev_y);
+                    prev_y = y0;
+                    let (bits, bit_count) =
+                        delta_tree_codes[usize::from(dy0)].ok_or_else(|| {
+                            RomWeaverError::Validation("missing avhuff delta code".to_string())
+                        })?;
+                    writer.write_bits(u64::from(bits), bit_count);
+
+                    let dcb = cb.wrapping_sub(prev_cb);
+                    prev_cb = cb;
+                    let (bits, bit_count) =
+                        delta_tree_codes[usize::from(dcb)].ok_or_else(|| {
+                            RomWeaverError::Validation("missing avhuff delta code".to_string())
+                        })?;
+                    writer.write_bits(u64::from(bits), bit_count);
+
+                    let dy1 = y1.wrapping_sub(prev_y);
+                    prev_y = y1;
+                    let (bits, bit_count) =
+                        delta_tree_codes[usize::from(dy1)].ok_or_else(|| {
+                            RomWeaverError::Validation("missing avhuff delta code".to_string())
+                        })?;
+                    writer.write_bits(u64::from(bits), bit_count);
+
+                    let dcr = cr.wrapping_sub(prev_cr);
+                    prev_cr = cr;
+                    let (bits, bit_count) =
+                        delta_tree_codes[usize::from(dcr)].ok_or_else(|| {
+                            RomWeaverError::Validation("missing avhuff delta code".to_string())
+                        })?;
+                    writer.write_bits(u64::from(bits), bit_count);
+                }
+            }
+            writer.align_to_byte();
+            Ok(writer.finish())
+        }
+
+        fn encode_avhuff_chav_hunk(&self, hunk: &[u8]) -> Result<Vec<u8>> {
+            if hunk.len() < 12 || &hunk[..4] != b"chav" {
+                return Err(RomWeaverError::Validation(
+                    "avhuff encode expects a raw `chav` frame payload".to_string(),
+                ));
+            }
+
+            let metadata_size = usize::from(hunk[4]);
+            let channels = usize::from(hunk[5]);
+            let samples = usize::from(u16::from_be_bytes([hunk[6], hunk[7]]));
+            let width = u16::from_be_bytes([hunk[8], hunk[9]]);
+            let height = u16::from_be_bytes([hunk[10], hunk[11]]);
+
+            let audio_bytes = channels.saturating_mul(samples).saturating_mul(2);
+            let video_bytes = usize::from(width)
+                .saturating_mul(usize::from(height))
+                .saturating_mul(2);
+            let expected_len = 12usize
+                .saturating_add(metadata_size)
+                .saturating_add(audio_bytes)
+                .saturating_add(video_bytes);
+            if hunk.len() != expected_len {
+                return Err(RomWeaverError::Validation(format!(
+                    "avhuff encode expected {expected_len} bytes from chav frame header, found {}",
+                    hunk.len()
+                )));
+            }
+
+            if samples.saturating_mul(2) > usize::from(u16::MAX) {
+                return Err(RomWeaverError::Unsupported(
+                    "avhuff encode currently supports up to 32767 audio samples per channel"
+                        .to_string(),
+                ));
+            }
+
+            let metadata_start = 12;
+            let metadata_end = metadata_start + metadata_size;
+            let audio_end = metadata_end + audio_bytes;
+            let metadata = &hunk[metadata_start..metadata_end];
+            let audio = &hunk[metadata_end..audio_end];
+            let video = &hunk[audio_end..];
+
+            let mut encoded_audio = Vec::with_capacity(audio_bytes);
+            let channel_bytes = samples.saturating_mul(2);
+            for channel_index in 0..channels {
+                let channel_start = channel_index.saturating_mul(channel_bytes);
+                let channel_end = channel_start + channel_bytes;
+                let channel_samples = &audio[channel_start..channel_end];
+                let mut prev_sample = 0_u16;
+                for sample_bytes in channel_samples.chunks_exact(2) {
+                    let sample = u16::from_be_bytes([sample_bytes[0], sample_bytes[1]]);
+                    let delta = sample.wrapping_sub(prev_sample);
+                    prev_sample = sample;
+                    encoded_audio.extend_from_slice(&delta.to_be_bytes());
+                }
+            }
+            let encoded_video = self.encode_avhuff_video_payload(width, height, video)?;
+
+            let mut encoded = Vec::with_capacity(
+                10usize
+                    .saturating_add(channels.saturating_mul(2))
+                    .saturating_add(metadata_size)
+                    .saturating_add(encoded_audio.len())
+                    .saturating_add(encoded_video.len()),
+            );
+            encoded.push(hunk[4]);
+            encoded.push(hunk[5]);
+            encoded.extend_from_slice(&hunk[6..8]);
+            encoded.extend_from_slice(&hunk[8..10]);
+            encoded.extend_from_slice(&hunk[10..12]);
+            // Tree size of 0 indicates uncompressed audio deltas.
+            encoded.extend_from_slice(&0_u16.to_be_bytes());
+            for _ in 0..channels {
+                encoded.extend_from_slice(
+                    &u16::try_from(channel_bytes)
+                        .map_err(|_| {
+                            RomWeaverError::Validation(
+                                "avhuff channel payload length overflow".to_string(),
+                            )
+                        })?
+                        .to_be_bytes(),
+                );
+            }
+            encoded.extend_from_slice(metadata);
+            encoded.extend_from_slice(&encoded_audio);
+            encoded.extend_from_slice(&encoded_video);
+            Ok(encoded)
+        }
+
         fn compress_rust_hunk(
             &self,
             create_kind: &ChdCreateKind,
@@ -11048,6 +11440,14 @@ mod chd_native {
                     })?;
                     Ok(compressed)
                 }
+                ChdCodec::HUFFMAN => Ok(self.encode_huffman_identity_payload(hunk)),
+                ChdCodec::AVHUFF => match create_kind {
+                    ChdCreateKind::Av(_) => self.encode_avhuff_chav_hunk(hunk),
+                    _ => Err(RomWeaverError::Unsupported(
+                        "rust chd compressed create supports `avhuff` only for `chav` frame inputs"
+                            .to_string(),
+                    )),
+                },
                 ChdCodec::FLAC => {
                     let mut encoded = Vec::new();
                     encoded.push(b'L');
@@ -12411,7 +12811,8 @@ use chd_native::ChdContainerHandler;
 #[cfg(test)]
 mod tests {
     use std::{
-        env, fs,
+        env,
+        fs::{self, File},
         io::{Cursor, Read, Seek, SeekFrom, Write},
         path::{Path, PathBuf},
         sync::Arc,
@@ -12419,8 +12820,12 @@ mod tests {
     };
 
     use super::{
-        CSO_DEFAULT_BLOCK_BYTES, ChdCodec, ContainerCreateRequest, ContainerRegistry,
-        SelectionMatcher, Z3dsContainerHandler,
+        CSO_DEFAULT_BLOCK_BYTES, ChdCodec, ContainerCreateRequest, ContainerRegistry, SEVEN_Z,
+        SelectionMatcher, SevenZContainerHandler, SevenZMethod, Z3dsContainerHandler,
+    };
+    use chd::{
+        header::Header,
+        map::{CompressionTypeV5, Map, MapEntry},
     };
     use ciso::write::write_ciso_image;
     use claxon::frame::FrameReader as FlacFrameReader;
@@ -12498,6 +12903,30 @@ mod tests {
             }
         }
         data
+    }
+
+    fn assert_chd_map_contains_codec_slot(path: &Path, expected_slot: u8) {
+        let expected = match expected_slot {
+            0 => CompressionTypeV5::CompressionType0,
+            1 => CompressionTypeV5::CompressionType1,
+            2 => CompressionTypeV5::CompressionType2,
+            3 => CompressionTypeV5::CompressionType3,
+            _ => panic!("unsupported codec slot {expected_slot}"),
+        } as u8;
+
+        let mut file = File::open(path).expect("open chd");
+        let header = Header::try_read_header(&mut file).expect("read chd header");
+        let map = Map::try_read_map(&header, &mut file).expect("read chd map");
+        assert!(
+            map.iter().any(|entry| match entry {
+                MapEntry::V5Compressed(entry) => {
+                    entry.hunk_type().expect("map entry hunk type") as u8 == expected
+                }
+                _ => false,
+            }),
+            "expected at least one compressed map entry using codec slot {expected_slot} in `{}`",
+            path.display()
+        );
     }
 
     fn decode_flac_frame_stream_to_pcm(
@@ -13032,7 +13461,7 @@ mod tests {
         let extract_report = handler
             .extract(
                 &rom_weaver_core::ContainerExtractRequest {
-                    source: archive_path,
+                    source: archive_path.clone(),
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
                     split_bin: false,
@@ -13073,6 +13502,77 @@ mod tests {
             capabilities.create_threads,
             ThreadCapability::parallel(None)
         );
+    }
+
+    #[test]
+    fn seven_z_level_mapping_tables_match_policy() {
+        assert_eq!(
+            (0_u32..=9)
+                .map(SevenZContainerHandler::map_zstd_level)
+                .collect::<Vec<_>>(),
+            vec![1, 3, 5, 7, 9, 11, 13, 15, 18, 22]
+        );
+        assert_eq!(
+            (0_u32..=9)
+                .map(SevenZContainerHandler::map_brotli_quality)
+                .collect::<Vec<_>>(),
+            vec![0, 1, 3, 4, 5, 6, 7, 8, 10, 11]
+        );
+        assert_eq!(
+            (0_u32..=9)
+                .map(SevenZContainerHandler::map_lz4_skippable_frame_size)
+                .collect::<Vec<_>>(),
+            vec![
+                0,
+                64 * 1024,
+                128 * 1024,
+                256 * 1024,
+                512 * 1024,
+                1024 * 1024,
+                2 * 1024 * 1024,
+                4 * 1024 * 1024,
+                8 * 1024 * 1024,
+                16 * 1024 * 1024,
+            ]
+        );
+    }
+
+    #[test]
+    fn seven_z_parse_codec_supports_expanded_codec_set() {
+        let temp_dir = temp_dir_path("seven-z-codec-parse");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let execution = test_context(&temp_dir, 8).plan_threads(ThreadCapability::parallel(None));
+        let handler = SevenZContainerHandler::new(&SEVEN_Z);
+
+        let cases = [
+            (None, None, SevenZMethod::LZMA2),
+            (Some("lzma2"), Some(6), SevenZMethod::LZMA2),
+            (Some("lzma"), Some(6), SevenZMethod::LZMA),
+            (Some("store"), None, SevenZMethod::COPY),
+            (Some("zstd"), Some(6), SevenZMethod::ZSTD),
+            (Some("deflate"), Some(6), SevenZMethod::DEFLATE),
+            (Some("bzip2"), Some(6), SevenZMethod::BZIP2),
+            (Some("lz4"), Some(6), SevenZMethod::LZ4),
+            (Some("brotli"), Some(6), SevenZMethod::BROTLI),
+            (Some("ppmd"), Some(6), SevenZMethod::PPMD),
+        ];
+        for (codec, level, expected_method) in cases {
+            let method = handler
+                .parse_codec(codec, level, &execution)
+                .expect("codec should parse");
+            assert_eq!(method.method, expected_method);
+        }
+
+        let store_error = handler
+            .parse_codec(Some("store"), Some(6), &execution)
+            .expect_err("store level should fail");
+        assert!(store_error.to_string().contains("does not accept --level"));
+        let level_error = handler
+            .parse_codec(Some("zstd"), Some(10), &execution)
+            .expect_err("out-of-range level should fail");
+        assert!(level_error.to_string().contains("out of range (0..=9)"));
+
+        let _ = fs::remove_dir_all(temp_dir);
     }
 
     #[test]
@@ -13282,7 +13782,7 @@ mod tests {
         let extract_report = handler
             .extract(
                 &rom_weaver_core::ContainerExtractRequest {
-                    source: archive_path,
+                    source: archive_path.clone(),
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
                     split_bin: false,
@@ -14935,6 +15435,70 @@ mod tests {
     }
 
     #[test]
+    fn seven_z_round_trip_supports_expanded_codec_set() {
+        let temp_dir = temp_dir_path("seven-z-expanded-codec-roundtrip");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input_path = temp_dir.join("payload.bin");
+        let source_bytes = (0..(96 * 1024))
+            .map(|index| (index as u8).wrapping_mul(29))
+            .collect::<Vec<_>>();
+        fs::write(&input_path, &source_bytes).expect("fixture");
+
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("7z").expect("7z handler");
+        let capabilities = handler.capabilities();
+
+        for codec in ["zstd", "deflate", "bzip2", "lz4", "brotli", "ppmd"] {
+            let archive_path = temp_dir.join(format!("payload-{codec}.7z"));
+            let output_dir = temp_dir.join(format!("out-{codec}"));
+
+            let create_report = handler
+                .create(
+                    &ContainerCreateRequest {
+                        inputs: vec![input_path.clone()],
+                        output: archive_path.clone(),
+                        format: "7z".to_string(),
+                        codec: Some(codec.to_string()),
+                        level: Some(6),
+                        parent: None,
+                    },
+                    &test_context(&temp_dir, 8),
+                )
+                .expect("create seven-z with codec");
+            let create_execution = create_report.thread_execution.expect("thread execution");
+            assert!(
+                capabilities
+                    .create_threads
+                    .supports_execution(&create_execution)
+            );
+
+            let extract_report = handler
+                .extract(
+                    &rom_weaver_core::ContainerExtractRequest {
+                        source: archive_path,
+                        out_dir: output_dir.clone(),
+                        selections: Vec::new(),
+                        split_bin: false,
+                        parent: None,
+                    },
+                    &test_context(&temp_dir, 8),
+                )
+                .expect("extract seven-z with codec");
+            let extract_execution = extract_report.thread_execution.expect("thread execution");
+            assert!(
+                capabilities
+                    .extract_threads
+                    .supports_execution(&extract_execution)
+            );
+
+            let extracted = fs::read(output_dir.join("payload.bin")).expect("read extracted file");
+            assert_eq!(extracted, source_bytes);
+        }
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
     fn probe_prefers_signature_over_mismatched_extension() {
         let path = temp_file_path_with_extension("seven-z-signature", "zip");
         fs::write(&path, [b'7', b'z', 0xBC, 0xAF, 0x27, 0x1C]).expect("fixture");
@@ -15099,7 +15663,7 @@ mod tests {
             [
                 ChdCodec::CD_ZSTD,
                 ChdCodec::CD_ZLIB,
-                ChdCodec::CD_LZMA,
+                ChdCodec::CD_FLAC,
                 ChdCodec::NONE,
             ]
         );
@@ -15118,8 +15682,27 @@ mod tests {
             [
                 ChdCodec::ZSTD,
                 ChdCodec::ZLIB,
-                ChdCodec::LZMA,
-                ChdCodec::NONE,
+                ChdCodec::HUFFMAN,
+                ChdCodec::FLAC,
+            ]
+        );
+        assert_eq!(primary_codec, ChdCodec::ZSTD);
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    #[test]
+    fn chd_default_codecs_for_raw_inputs_match_rust_native_policy() {
+        let handler = super::ChdContainerHandler;
+        let (codecs, primary_codec) = handler
+            .default_raw_compression_plan_for_tests()
+            .expect("default raw plan");
+        assert_eq!(
+            codecs,
+            [
+                ChdCodec::ZSTD,
+                ChdCodec::ZLIB,
+                ChdCodec::HUFFMAN,
+                ChdCodec::FLAC,
             ]
         );
         assert_eq!(primary_codec, ChdCodec::ZSTD);
@@ -15156,6 +15739,36 @@ mod tests {
 
     #[cfg(not(target_family = "wasm"))]
     #[test]
+    fn chd_explicit_codec_lists_accept_huff_and_avhuff_aliases() {
+        let handler = super::ChdContainerHandler;
+
+        let (codecs, primary_codec) = handler
+            .explicit_compression_plan_for_tests("huff")
+            .expect("huff alias should parse");
+        assert_eq!(codecs[0], ChdCodec::HUFFMAN);
+        assert_eq!(primary_codec, ChdCodec::HUFFMAN);
+
+        let (codecs, primary_codec) = handler
+            .explicit_compression_plan_for_tests("huffman")
+            .expect("huffman alias should parse");
+        assert_eq!(codecs[0], ChdCodec::HUFFMAN);
+        assert_eq!(primary_codec, ChdCodec::HUFFMAN);
+
+        let (codecs, primary_codec) = handler
+            .explicit_compression_plan_for_tests("avhuff")
+            .expect("avhuff should parse");
+        assert_eq!(codecs[0], ChdCodec::AVHUFF);
+        assert_eq!(primary_codec, ChdCodec::AVHUFF);
+
+        let (codecs, primary_codec) = handler
+            .explicit_compression_plan_for_tests("avhu")
+            .expect("avhu alias should parse");
+        assert_eq!(codecs[0], ChdCodec::AVHUFF);
+        assert_eq!(primary_codec, ChdCodec::AVHUFF);
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    #[test]
     fn chd_rust_backend_store_attempt_policy_matches_supported_codecs() {
         let handler = super::ChdContainerHandler;
         assert!(
@@ -15167,7 +15780,7 @@ mod tests {
 
     #[cfg(not(target_family = "wasm"))]
     #[test]
-    fn chd_rust_backend_create_attempt_accepts_decode_only_codec_slots() {
+    fn chd_rust_backend_create_attempt_accepts_huff_codec_slots() {
         let handler = super::ChdContainerHandler;
         assert!(
             handler
@@ -15182,12 +15795,12 @@ mod tests {
         assert!(
             handler
                 .rust_backend_can_create_with_codec_list_for_tests("zstd,zlib,huffman")
-                .expect("mixed encode/decode codec plan should use rust backend")
+                .expect("mixed codec plan should use rust backend")
         );
         assert!(
             handler
                 .rust_backend_can_create_with_codec_list_for_tests("huffman")
-                .expect("decode-only codec plans should use rust backend")
+                .expect("huffman codec plans should use rust backend")
         );
         assert!(
             !handler
@@ -15198,7 +15811,7 @@ mod tests {
 
     #[cfg(not(target_family = "wasm"))]
     #[test]
-    fn chd_rust_only_create_accepts_decode_only_codec_slots() {
+    fn chd_rust_only_create_supports_huff_codec_slots() {
         let temp_dir = temp_dir_path("chd-rust-unsupported-codec-slots");
         fs::create_dir_all(&temp_dir).expect("temp dir");
         let source_path = temp_dir.join("source.bin");
@@ -15223,7 +15836,7 @@ mod tests {
                 },
                 &test_context(&temp_dir, 6),
             )
-            .expect("mixed encode/decode codec slots should succeed");
+            .expect("mixed huff codec slots should succeed");
         handler
             .extract(
                 &rom_weaver_core::ContainerExtractRequest {
@@ -15460,7 +16073,7 @@ mod tests {
             (ChdCodec::ZSTD, "zstd"),
             (ChdCodec::ZLIB, "zlib"),
             (ChdCodec::LZMA, "lzma"),
-            (ChdCodec::HUFFMAN, "huffman"),
+            (ChdCodec::HUFFMAN, "huff"),
             (ChdCodec::FLAC, "flac"),
         ] {
             let archive_path = temp_dir.join(format!("source-{codec_label}.chd"));
@@ -15479,6 +16092,9 @@ mod tests {
                 .expect("extract rust compressed chd");
             let extracted = fs::read(&extracted_path).expect("read extracted output");
             assert_eq!(extracted, payload);
+            if codec == ChdCodec::HUFFMAN {
+                assert_chd_map_contains_codec_slot(&archive_path, 0);
+            }
         }
 
         let _ = fs::remove_dir_all(temp_dir);
@@ -15595,7 +16211,7 @@ mod tests {
         handler
             .extract(
                 &rom_weaver_core::ContainerExtractRequest {
-                    source: archive_path,
+                    source: archive_path.clone(),
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
                     split_bin: false,
@@ -15640,7 +16256,7 @@ mod tests {
         handler
             .extract(
                 &rom_weaver_core::ContainerExtractRequest {
-                    source: archive_path,
+                    source: archive_path.clone(),
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
                     split_bin: false,
@@ -15652,6 +16268,7 @@ mod tests {
 
         let extracted = fs::read(output_dir.join("video.avi")).expect("read extracted payload");
         assert_eq!(extracted, payload);
+        assert_chd_map_contains_codec_slot(&archive_path, 0);
 
         let _ = fs::remove_dir_all(temp_dir);
     }

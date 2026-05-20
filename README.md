@@ -124,7 +124,7 @@ Notes:
 - `extract` supports `--select` (exact/prefix/glob) and recursively extracts nested containers up to depth 8.
 - `extract --split-bin` is CHD-only (ignored for non-CHD input).
 - CHD parent/differential workflows are supported when a parent CHD is supplied by the caller.
-- CHD create accepts full MAME-style codec lists; Rust-native encoding currently emits compressed hunks with `zstd`, `zlib`, `lzma`, `cdzs`, `cdzl`, or `cdlz` and uses uncompressed or deduplicated map entries otherwise.
+- CHD create accepts full MAME-style codec lists; Rust-native encoding emits CHD-compatible payloads for `zstd`, `zlib`, `lzma`, `huff`, `flac`, `cdzs`, `cdzl`, `cdlz`, `cdfl`, and `avhuff` (aliases `huffman` and `avhu` are accepted).
 
 ## Create-Time Codec Support
 
@@ -141,7 +141,7 @@ Notes:
 | `wia`                | `store`, `bzip2`, `lzma`, `lzma2`, `zstd`                                                    |
 | `rvz`                | `store`, `zstd`, `bzip2`, `lzma`, `lzma2`                                                    |
 | `z3ds`               | `zstd` only                                                                                  |
-| `chd`                | `store`, `zlib`, `zstd`, `lzma`, `huffman`, `flac`, `cdlz`, `cdzl`, `cdzs`, `cdfl`, `avhuff` |
+| `chd`                | `store`, `zlib`, `zstd`, `lzma`, `huff` (`huffman` alias), `flac`, `cdlz`, `cdzl`, `cdzs`, `cdfl`, `avhuff` (`avhu` alias) |
 
 ## Compression Level Profiles
 

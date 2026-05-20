@@ -5915,7 +5915,7 @@ fn chd_compress_and_extract_avhuff_round_trip() {
             "--output",
             chd_path.path().to_str().expect("path"),
             "--codec",
-            "avhu",
+            "avhuff",
             "--json",
         ])
         .assert()
@@ -5950,14 +5950,106 @@ fn chd_compress_and_extract_avhuff_round_trip() {
         fs::read(out_dir.child("disc.avi").path()).expect("extract bytes"),
         source
     );
+    let inspect_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args(["inspect", chd_path.path().to_str().expect("path"), "--json"])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let inspect_json = parse_single_json_line(&inspect_output);
+    assert!(
+        inspect_json["label"]
+            .as_str()
+            .expect("label")
+            .contains("codec=avhuff")
+    );
+
+    let alias_chd_path = temp.child("disc-alias.chd");
+    let alias_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("video.bin").path().to_str().expect("path"),
+            "--format",
+            "chd",
+            "--output",
+            alias_chd_path.path().to_str().expect("path"),
+            "--codec",
+            "avhu",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let alias_json = parse_single_json_line(&alias_output);
+    assert_eq!(alias_json["status"], "succeeded");
+    assert!(
+        alias_json["label"]
+            .as_str()
+            .expect("label")
+            .contains("avhuff")
+    );
 }
 
 #[test]
-fn chd_compress_and_extract_huffman_round_trip() {
+fn chd_compress_and_extract_huff_round_trip() {
     let source = (0..16_384)
         .map(|index| (index % 173) as u8)
         .collect::<Vec<_>>();
-    run_chd_round_trip("disc.bin", &source, "huffman", "disc.bin");
+    run_chd_round_trip("disc.bin", &source, "huff", "disc.bin");
+}
+
+#[test]
+fn chd_compress_huffman_alias_emits_huff_label() {
+    let temp = setup_temp_dir();
+    let source = (0..16_384)
+        .map(|index| (index % 181) as u8)
+        .collect::<Vec<_>>();
+    fs::write(temp.child("disc.bin").path(), &source).expect("fixture");
+    let chd_path = temp.child("disc.chd");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("disc.bin").path().to_str().expect("path"),
+            "--format",
+            "chd",
+            "--output",
+            chd_path.path().to_str().expect("path"),
+            "--codec",
+            "huffman",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["status"], "succeeded");
+    assert!(json["label"].as_str().expect("label").contains("huff"));
+    assert!(!json["label"].as_str().expect("label").contains("huffman"));
+
+    let inspect_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args(["inspect", chd_path.path().to_str().expect("path"), "--json"])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let inspect_json = parse_single_json_line(&inspect_output);
+    assert!(
+        inspect_json["label"]
+            .as_str()
+            .expect("label")
+            .contains("codec=huff")
+    );
 }
 
 #[test]
@@ -6664,6 +6756,43 @@ fn chd_compress_rejects_level_for_huffman_codec() {
             chd_path.path().to_str().expect("path"),
             "--codec",
             "huffman:3",
+            "--json",
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["format"], "chd");
+    assert_eq!(json["status"], "failed");
+    assert!(
+        json["label"]
+            .as_str()
+            .expect("label")
+            .contains("does not accept --level")
+    );
+}
+
+#[test]
+fn chd_compress_rejects_level_for_avhuff_codec() {
+    let temp = setup_temp_dir();
+    let source = build_test_chav_stream(4, 32, 16);
+    fs::write(temp.child("video.bin").path(), &source).expect("fixture");
+
+    let chd_path = temp.child("disc.chd");
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("video.bin").path().to_str().expect("path"),
+            "--format",
+            "chd",
+            "--output",
+            chd_path.path().to_str().expect("path"),
+            "--codec",
+            "avhu:3",
             "--json",
         ])
         .assert()

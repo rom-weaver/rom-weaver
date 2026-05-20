@@ -59,6 +59,9 @@ pub enum CanonicalCodec {
     Store,
     Deflate,
     Zstd,
+    Lz4,
+    Brotli,
+    Ppmd,
     Lzma,
     Lzma2,
     Bzip2,
@@ -71,6 +74,9 @@ impl CanonicalCodec {
             Self::Store => "store",
             Self::Deflate => "deflate",
             Self::Zstd => "zstd",
+            Self::Lz4 => "lz4",
+            Self::Brotli => "brotli",
+            Self::Ppmd => "ppmd",
             Self::Lzma => "lzma",
             Self::Lzma2 => "lzma2",
             Self::Bzip2 => "bzip2",
@@ -97,6 +103,9 @@ pub fn parse_requested_codec(codec: Option<&str>) -> RequestedCodec {
                     RequestedCodec::Known(CanonicalCodec::Deflate)
                 }
                 "zstd" | "zst" | "zstandard" => RequestedCodec::Known(CanonicalCodec::Zstd),
+                "lz4" => RequestedCodec::Known(CanonicalCodec::Lz4),
+                "brotli" | "br" => RequestedCodec::Known(CanonicalCodec::Brotli),
+                "ppmd" => RequestedCodec::Known(CanonicalCodec::Ppmd),
                 "lzma" => RequestedCodec::Known(CanonicalCodec::Lzma),
                 "lzma2" | "xz" => RequestedCodec::Known(CanonicalCodec::Lzma2),
                 "bzip2" | "bz2" => RequestedCodec::Known(CanonicalCodec::Bzip2),
@@ -1179,9 +1188,9 @@ fn map_file_read_only(path: &Path) -> Result<ReadOnlyFile> {
 
 fn decode_all(mut decoder: impl Read, codec: &'static str) -> Result<Vec<u8>> {
     let mut output = Vec::new();
-    decoder.read_to_end(&mut output).map_err(|error| {
-        RomWeaverError::Validation(format!("{codec} decode failed: {error}"))
-    })?;
+    decoder
+        .read_to_end(&mut output)
+        .map_err(|error| RomWeaverError::Validation(format!("{codec} decode failed: {error}")))?;
     Ok(output)
 }
 
@@ -1190,9 +1199,9 @@ fn decode_exact(mut decoder: impl Read, expected_len: u64, codec: &'static str) 
         RomWeaverError::Validation(format!("{codec} expected size overflowed usize"))
     })?;
     let mut output = Vec::with_capacity(expected);
-    decoder.read_to_end(&mut output).map_err(|error| {
-        RomWeaverError::Validation(format!("{codec} decode failed: {error}"))
-    })?;
+    decoder
+        .read_to_end(&mut output)
+        .map_err(|error| RomWeaverError::Validation(format!("{codec} decode failed: {error}")))?;
     if output.len() != expected {
         return Err(RomWeaverError::Validation(format!(
             "{codec} decoded size mismatch: expected {expected}, got {}",
@@ -1238,9 +1247,11 @@ pub fn decode_deflate_into_buffer(
     let mut decoder = DeflateDecoder::new(Cursor::new(payload));
     let mut bytes_written = 0usize;
     while bytes_written < output.len() {
-        let read = decoder.read(&mut output[bytes_written..]).map_err(|error| {
-            RomWeaverError::Validation(format!("deflate decode failed: {error}"))
-        })?;
+        let read = decoder
+            .read(&mut output[bytes_written..])
+            .map_err(|error| {
+                RomWeaverError::Validation(format!("deflate decode failed: {error}"))
+            })?;
         if read == 0 {
             break;
         }
@@ -1307,9 +1318,9 @@ pub fn encode_xz_preset(payload: &[u8], level: u32) -> Result<Vec<u8>> {
     encoder
         .write_all(payload)
         .map_err(|error| RomWeaverError::Validation(format!("xz encode failed: {error}")))?;
-    encoder
-        .flush()
-        .map_err(|error| RomWeaverError::Validation(format!("xz encode finalize failed: {error}")))?;
+    encoder.flush().map_err(|error| {
+        RomWeaverError::Validation(format!("xz encode finalize failed: {error}"))
+    })?;
     Ok(encoder.into_inner())
 }
 
@@ -1473,6 +1484,18 @@ mod tests {
             RequestedCodec::Known(CanonicalCodec::Zstd)
         );
         assert_eq!(
+            parse_requested_codec(Some("lz4")),
+            RequestedCodec::Known(CanonicalCodec::Lz4)
+        );
+        assert_eq!(
+            parse_requested_codec(Some("br")),
+            RequestedCodec::Known(CanonicalCodec::Brotli)
+        );
+        assert_eq!(
+            parse_requested_codec(Some("ppmd")),
+            RequestedCodec::Known(CanonicalCodec::Ppmd)
+        );
+        assert_eq!(
             parse_requested_codec(Some("huff")),
             RequestedCodec::Known(CanonicalCodec::Huffman)
         );
@@ -1491,6 +1514,7 @@ mod tests {
         assert_eq!(normalize_codec_label("LZMA2 (6)"), "lzma2 (6)");
         assert_eq!(normalize_codec_label("xz(9)"), "lzma2(9)");
         assert_eq!(normalize_codec_label("Zstandard level=3"), "zstd level=3");
+        assert_eq!(normalize_codec_label("BR q=11"), "brotli q=11");
         assert_eq!(normalize_codec_label("mystery-codec"), "mystery-codec");
     }
 

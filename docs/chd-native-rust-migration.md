@@ -10,17 +10,19 @@ This branch now runs CHD through the Rust path directly with no runtime backend 
 
 ## Current supported create codecs
 
-- Raw/DVD/HD/AV media: `store`, `zstd`, `zlib`, `lzma`
-- CD/GD media: `store`, `cdzs`, `cdzl`, `cdlz` (with `zstd`/`zlib`/`lzma` aliases normalized for disc media)
+- Raw/DVD/HD media: `store`, `zstd`, `zlib`, `lzma`, `huff` (`huffman` alias), `flac`
+- AV media (`chav` frames): `store`, `avhuff` (`avhu` alias)
+- CD/GD media: `store`, `cdzs`, `cdzl`, `cdlz`, `cdfl` (with `zstd`/`zlib`/`lzma`/`flac` aliases normalized for disc media)
 
-## Current unsupported create codecs in Rust path
+## Default create codec plans
 
-- `huffman`, `flac`, `cdfl`, and `avhu` are currently rejected for CHD create.
-- Mixed codec plans that include unsupported codecs are rejected.
+- CD/GD: `cdzs,cdzl,cdfl`
+- DVD: `zstd,zlib,huff,flac`
+- Raw/HD: `zstd,zlib,huff,flac`
 
 ## Remaining parity gap
 
-- True Rust encoder parity for `huffman`, `flac`, `cdfl`, and `avhu`.
+- Additional size-ratio parity validation against `chdman` for representative fixtures.
 - Additional metadata and behavior parity validation against historical native outputs where needed.
 
 ## Validation commands
