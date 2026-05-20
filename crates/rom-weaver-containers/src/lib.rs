@@ -30,7 +30,6 @@ use nod::{
         ProcessOptions as NodProcessOptions,
     },
 };
-#[cfg(target_family = "wasm")]
 use rars::ArchiveReader as RarRsArchiveReader;
 use rayon::prelude::*;
 use rom_weaver_chd_sys::{
@@ -53,8 +52,6 @@ use sevenz_rust::{
     EncoderMethod as SevenZMethod, Password as SevenZPassword,
 };
 use tar::{Archive as TarArchive, Builder as TarBuilder};
-#[cfg(not(target_family = "wasm"))]
-use unrar_ng::Archive as RarArchive;
 use xdvdfs::{
     blockdev::OffsetWrapper as XdvdfsOffsetWrapper, write::fs::XDVDFSFilesystem as XdvdfsFilesystem,
 };
@@ -3541,7 +3538,6 @@ impl ContainerHandler for SevenZContainerHandler {
     }
 }
 
-#[cfg(not(target_family = "wasm"))]
 struct RarContainerHandler {
     descriptor: &'static FormatDescriptor,
 }
@@ -3553,315 +3549,6 @@ struct RarExtractTask {
     is_directory: bool,
 }
 
-#[cfg(not(target_family = "wasm"))]
-impl RarContainerHandler {
-    const fn new(descriptor: &'static FormatDescriptor) -> Self {
-        Self { descriptor }
-    }
-
-    fn open_for_listing(
-        &self,
-        source: &Path,
-    ) -> Result<unrar_ng::OpenArchive<unrar_ng::List, unrar_ng::CursorBeforeHeader>> {
-        RarArchive::new(source)
-            .open_for_listing()
-            .map_err(|error| RomWeaverError::Validation(format!("rar archive is invalid: {error}")))
-    }
-
-    fn open_for_processing(
-        &self,
-        source: &Path,
-    ) -> Result<unrar_ng::OpenArchive<unrar_ng::Process, unrar_ng::CursorBeforeHeader>> {
-        RarArchive::new(source)
-            .open_for_processing()
-            .map_err(|error| RomWeaverError::Validation(format!("rar archive is invalid: {error}")))
-    }
-
-    fn build_extract_tasks(
-        &self,
-        request: &ContainerExtractRequest,
-    ) -> Result<Vec<RarExtractTask>> {
-        let mut archive = self.open_for_listing(&request.source)?;
-        let mut selections = SelectionMatcher::new(&request.selections);
-        let mut tasks = Vec::new();
-        let mut entry_index = 0usize;
-
-        while let Some(entry) = archive.read_header().map_err(|error| {
-            RomWeaverError::Validation(format!("rar extract failed while reading header: {error}"))
-        })? {
-            let raw_name = entry.entry().filename.to_string_lossy().into_owned();
-            let entry_name = normalize_archive_name(&raw_name);
-            if !entry_name.is_empty() && selections.matches(&entry_name) {
-                let relative = sanitize_archive_relative_path_from_str(&raw_name)?;
-                tasks.push(RarExtractTask {
-                    index: entry_index,
-                    output_path: request.out_dir.join(relative),
-                    is_directory: entry.entry().is_directory(),
-                });
-            }
-
-            archive = entry.skip().map_err(|error| {
-                RomWeaverError::Validation(format!(
-                    "rar extract failed while skipping entry `{entry_name}`: {error}"
-                ))
-            })?;
-            entry_index = entry_index.saturating_add(1);
-        }
-
-        selections.ensure_all_matched()?;
-        Ok(tasks)
-    }
-
-    fn extract_task_chunk(&self, source: &Path, chunk: &[RarExtractTask]) -> Result<(usize, u64)> {
-        if chunk.is_empty() {
-            return Ok((0, 0));
-        }
-
-        let mut archive = self.open_for_processing(source)?;
-        let mut task_by_index = BTreeMap::new();
-        for task in chunk {
-            task_by_index.insert(task.index, task);
-        }
-
-        let mut entry_index = 0usize;
-        let mut matched_tasks = 0usize;
-        let mut extracted_files = 0usize;
-        let mut written_bytes = 0u64;
-
-        while let Some(entry) = archive.read_header().map_err(|error| {
-            RomWeaverError::Validation(format!("rar extract failed while reading header: {error}"))
-        })? {
-            let entry_name = normalize_archive_name(&entry.entry().filename.to_string_lossy());
-            if let Some(task) = task_by_index.get(&entry_index).copied() {
-                matched_tasks = matched_tasks.saturating_add(1);
-                if task.is_directory {
-                    fs::create_dir_all(&task.output_path)?;
-                    archive = entry.skip().map_err(|error| {
-                        RomWeaverError::Validation(format!(
-                            "rar extract failed while skipping directory `{entry_name}`: {error}"
-                        ))
-                    })?;
-                } else {
-                    if let Some(parent) = task.output_path.parent() {
-                        fs::create_dir_all(parent)?;
-                    }
-                    archive = entry.extract_to(&task.output_path).map_err(|error| {
-                        RomWeaverError::Validation(format!(
-                            "rar extract failed for `{entry_name}`: {error}"
-                        ))
-                    })?;
-                    extracted_files = extracted_files.saturating_add(1);
-                    written_bytes =
-                        written_bytes.saturating_add(fs::metadata(&task.output_path)?.len());
-                }
-
-                if matched_tasks == task_by_index.len() {
-                    break;
-                }
-            } else {
-                archive = entry.skip().map_err(|error| {
-                    RomWeaverError::Validation(format!(
-                        "rar extract failed while skipping entry `{entry_name}`: {error}"
-                    ))
-                })?;
-            }
-
-            entry_index = entry_index.saturating_add(1);
-        }
-
-        if matched_tasks != task_by_index.len() {
-            return Err(RomWeaverError::Validation(
-                "rar extract failed because selected entries changed while processing".into(),
-            ));
-        }
-
-        Ok((extracted_files, written_bytes))
-    }
-}
-
-#[cfg(not(target_family = "wasm"))]
-impl ContainerHandler for RarContainerHandler {
-    fn descriptor(&self) -> &'static FormatDescriptor {
-        self.descriptor
-    }
-
-    fn probe(&self, source: &Path) -> ProbeConfidence {
-        let mut signature = [0u8; RAR5_SIGNATURE.len()];
-        if let Ok(mut file) = File::open(source) {
-            if let Ok(read) = file.read(&mut signature) {
-                if read >= RAR4_SIGNATURE.len()
-                    && signature[..RAR4_SIGNATURE.len()] == RAR4_SIGNATURE
-                {
-                    return ProbeConfidence::Signature;
-                }
-                if read >= RAR5_SIGNATURE.len() && signature == RAR5_SIGNATURE {
-                    return ProbeConfidence::Signature;
-                }
-            }
-        }
-        ProbeConfidence::Extension
-    }
-
-    fn inspect(
-        &self,
-        request: &ContainerInspectRequest,
-        _context: &OperationContext,
-    ) -> Result<OperationReport> {
-        let mut archive = self.open_for_listing(&request.source)?;
-        let mut files = 0usize;
-        let mut directories = 0usize;
-        let mut logical_bytes = 0u64;
-        let mut entries_total = 0usize;
-
-        while let Some(entry) = archive.read_header().map_err(|error| {
-            RomWeaverError::Validation(format!("rar inspect failed while reading header: {error}"))
-        })? {
-            let header = entry.entry();
-            entries_total = entries_total.saturating_add(1);
-            if header.is_directory() {
-                directories = directories.saturating_add(1);
-            } else {
-                files = files.saturating_add(1);
-                logical_bytes = logical_bytes.saturating_add(header.unpacked_size);
-            }
-            let entry_name = normalize_archive_name(&header.filename.to_string_lossy());
-            archive = entry.skip().map_err(|error| {
-                RomWeaverError::Validation(format!(
-                    "rar inspect failed while skipping entry `{entry_name}`: {error}"
-                ))
-            })?;
-        }
-
-        Ok(OperationReport::succeeded(
-            OperationFamily::Container,
-            Some(self.descriptor.name.to_string()),
-            "inspect",
-            format!(
-                "rar: {} entries ({} files, {} directories), {} bytes uncompressed",
-                entries_total, files, directories, logical_bytes
-            ),
-            Some(100.0),
-            None,
-        ))
-    }
-
-    fn list_entries(
-        &self,
-        request: &ContainerInspectRequest,
-        _context: &OperationContext,
-    ) -> Result<Vec<String>> {
-        let mut archive = self.open_for_listing(&request.source)?;
-        let mut entries = Vec::new();
-        while let Some(entry) = archive.read_header().map_err(|error| {
-            RomWeaverError::Validation(format!("rar list failed while reading header: {error}"))
-        })? {
-            let entry_name = normalize_archive_name(&entry.entry().filename.to_string_lossy());
-            if !entry_name.is_empty() {
-                entries.push(entry_name.clone());
-            }
-            archive = entry.skip().map_err(|error| {
-                RomWeaverError::Validation(format!(
-                    "rar list failed while skipping entry `{entry_name}`: {error}"
-                ))
-            })?;
-        }
-        Ok(entries)
-    }
-
-    fn extract(
-        &self,
-        request: &ContainerExtractRequest,
-        context: &OperationContext,
-    ) -> Result<OperationReport> {
-        fs::create_dir_all(&request.out_dir)?;
-        let tasks = self.build_extract_tasks(request)?;
-        let mut output_paths = BTreeSet::new();
-        let mut duplicate_output_paths = false;
-        for task in &tasks {
-            if task.is_directory {
-                continue;
-            }
-            duplicate_output_paths |= !output_paths.insert(task.output_path.clone());
-        }
-
-        let (execution, extracted_files, written_bytes) =
-            if tasks.is_empty() || duplicate_output_paths {
-                let execution = context.plan_threads(ThreadCapability::single_threaded());
-                let (extracted_files, written_bytes) =
-                    self.extract_task_chunk(&request.source, &tasks)?;
-                (execution, extracted_files, written_bytes)
-            } else {
-                let task_count = tasks.len().max(1);
-                let (execution, pool) =
-                    context.build_pool(ThreadCapability::parallel(Some(task_count)))?;
-                let source = request.source.clone();
-                let (extracted_files, written_bytes) = if execution.used_parallelism {
-                    let worker_count = execution.effective_threads.max(1);
-                    let chunk_size = tasks.len().div_ceil(worker_count).max(1);
-                    let chunk_results = pool.install(|| {
-                        tasks
-                            .par_chunks(chunk_size)
-                            .map(|chunk| self.extract_task_chunk(&source, chunk))
-                            .collect::<Result<Vec<_>>>()
-                    })?;
-                    chunk_results.into_iter().fold(
-                        (0usize, 0u64),
-                        |(files_acc, bytes_acc), (files, bytes)| {
-                            (
-                                files_acc.saturating_add(files),
-                                bytes_acc.saturating_add(bytes),
-                            )
-                        },
-                    )
-                } else {
-                    self.extract_task_chunk(&source, &tasks)?
-                };
-                (execution, extracted_files, written_bytes)
-            };
-
-        Ok(OperationReport::succeeded(
-            OperationFamily::Container,
-            Some(self.descriptor.name.to_string()),
-            "extract",
-            format!(
-                "extracted `{}` to `{}` ({} file(s), {} bytes written)",
-                request.source.display(),
-                request.out_dir.display(),
-                extracted_files,
-                written_bytes
-            ),
-            Some(100.0),
-            Some(execution),
-        ))
-    }
-
-    fn create(
-        &self,
-        _request: &ContainerCreateRequest,
-        _context: &OperationContext,
-    ) -> Result<OperationReport> {
-        Err(RomWeaverError::Validation(
-            "rar create is not supported".into(),
-        ))
-    }
-
-    fn capabilities(&self) -> ContainerCapabilities {
-        ContainerCapabilities {
-            inspect: true,
-            extract: true,
-            create: false,
-            extract_threads: ThreadCapability::parallel(None),
-            create_threads: ThreadCapability::single_threaded(),
-        }
-    }
-}
-
-#[cfg(target_family = "wasm")]
-struct RarContainerHandler {
-    descriptor: &'static FormatDescriptor,
-}
-
-#[cfg(target_family = "wasm")]
 impl RarContainerHandler {
     const fn new(descriptor: &'static FormatDescriptor) -> Self {
         Self { descriptor }
@@ -3962,7 +3649,6 @@ impl RarContainerHandler {
     }
 }
 
-#[cfg(target_family = "wasm")]
 impl ContainerHandler for RarContainerHandler {
     fn descriptor(&self) -> &'static FormatDescriptor {
         self.descriptor

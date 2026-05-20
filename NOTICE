@@ -11,12 +11,6 @@ Compliance Notes
 - No GPL/AGPL/LGPL dependency was detected in this resolved set.
 - Most dependencies are permissive licenses (MIT/Apache/BSD/Zlib/ISC/BSL/0BSD/Unlicense).
 
-UnRAR Special Terms
-- The `unrar-ng-sys` crate vendors UnRAR source code.
-- UnRAR terms include additional restrictions that are not captured by SPDX alone, including restrictions against using the UnRAR sources to build a RAR-compatible archiver or re-create the RAR compression algorithm.
-- If distributing modified UnRAR source, include the required UnRAR paragraph/notice text from the bundled license.
-- Bundled reference: third_party/licenses/unrar-ng-sys-0.7.7/UNRAR-LICENSE.txt
-
 Crates Without Top-Level License Files In Package
 - For crates where a top-level LICENSE/COPYING/NOTICE file was not present in the packaged source, a fallback metadata file was added:
   third_party/licenses/<crate>-<version>/LICENSE-SPDX-NOTICE.txt

@@ -177,8 +177,6 @@ This file is generated from the resolved Cargo dependency graph for `rom-weaver`
 | `typenum` | `1.20.0` | `MIT OR Apache-2.0` | `crates.io` |
 | `unicode-ident` | `1.0.24` | `(MIT OR Apache-2.0) AND Unicode-3.0` | `crates.io` |
 | `unicode-width` | `0.1.14` | `MIT OR Apache-2.0` | `crates.io` |
-| `unrar-ng` | `0.7.7` | `MIT OR Apache-2.0` | `crates.io` |
-| `unrar-ng-sys` | `0.7.7` | `MIT OR Apache-2.0` | `crates.io` |
 | `utf8parse` | `0.2.2` | `Apache-2.0 OR MIT` | `crates.io` |
 | `vec_map` | `0.8.2` | `MIT/Apache-2.0` | `crates.io` |
 | `version_check` | `0.1.5` | `MIT/Apache-2.0` | `crates.io` |
@@ -203,4 +201,3 @@ This file is generated from the resolved Cargo dependency graph for `rom-weaver`
 
 - This list excludes local workspace crates (`rom-weaver-*`).
 - This list is resolved from current Cargo metadata and may change when dependency versions change.
-- `unrar-ng` and `unrar-ng-sys` vendor UnRAR code with additional terms beyond the crate SPDX string. See `NOTICE`.
