@@ -6,6 +6,7 @@ import test from 'node:test';
 
 import { createNodeWorkerClient } from '../src/workers/node-worker-client.mjs';
 import {
+  runFullFormatMatrix,
   runPatchMatrix,
   runProgressMatrix,
   withTempFixture,
@@ -156,5 +157,31 @@ test('node worker client integration matrix covers chd, zip, and patch wasm path
     prefix: 'rom-weaver-wasm-worker-matrix-',
     sourceFileName: 'source.bin',
     sourceContents: 'rom-weaver worker matrix fixture',
+  });
+});
+
+test('node worker client full format matrix covers patch and container registries', async () => {
+  const runNodeFsJson = async (args, options) => {
+    const client = createNodeWorkerClient();
+    try {
+      await client.init('nodefs', {
+        includeHostRoot: true,
+        mountCwd: true,
+      });
+      return await client.runJson(args, options);
+    } finally {
+      await client.terminate();
+    }
+  };
+
+  await withTempFixture(async ({ dir }) => {
+    await runFullFormatMatrix({
+      runJson: runNodeFsJson,
+      dir,
+    });
+  }, {
+    prefix: 'rom-weaver-wasm-worker-full-matrix-',
+    sourceFileName: 'source.bin',
+    sourceContents: 'rom-weaver worker full matrix fixture',
   });
 });

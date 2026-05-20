@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
@@ -8,6 +9,7 @@ import {
   createRomWeaverWasiRunner,
 } from '../src/rom-weaver-wasi-api.mjs';
 import {
+  runFullFormatMatrix,
   runPatchMatrix,
   runProgressMatrix,
   withTempFixture,
@@ -125,6 +127,16 @@ test('runJson integration matrix covers chd, zip, and patch wasm paths', async (
   });
 });
 
+test('runJson full format matrix covers patch and container registries', async () => {
+  await withTempFixture(async ({ dir }) => {
+    const runner = createRomWeaverWasiRunner();
+    await runFullFormatMatrix({
+      runJson: (args, options) => runner.runJson(args, options),
+      dir,
+    });
+  });
+});
+
 test('runner supports explicit .wasm.br module paths', async () => {
   await withTempFixture(async ({ sourcePath }) => {
     const runner = createRomWeaverWasiRunner({ wasmPath: BROTLI_WASM_PATH });
@@ -172,4 +184,42 @@ test('runner stdin normalization accepts supported types and rejects invalid inp
     runner.run(unknownCommand, { stdin: 123 }),
     /stdin must be a string, Uint8Array, ArrayBuffer, or undefined/i,
   );
+});
+
+test('runJson stays stable across repeated wasm 7z lzma/lzma2 create calls', async () => {
+  await withTempFixture(async ({ dir }) => {
+    const runner = createRomWeaverWasiRunner({ executionIsolation: 'none' });
+    const sourcePath = join(dir, 'repeat-lzma-source.bin');
+    const sourceData = Buffer.alloc(256 * 1024);
+    for (let index = 0; index < sourceData.length; index += 1) {
+      sourceData[index] = index % 251;
+    }
+    await writeFile(sourcePath, sourceData);
+
+    try {
+      for (const codec of ['lzma', 'lzma2']) {
+        for (let attempt = 0; attempt < 15; attempt += 1) {
+          const archivePath = join(dir, `repeat-${codec}-${attempt}.7z`);
+          const result = await runner.runJson([
+            'compress',
+            sourcePath,
+            '--format',
+            '7z',
+            '--output',
+            archivePath,
+            '--codec',
+            codec,
+            '--threads',
+            '1',
+          ]);
+          assert.equal(result.ok, true);
+          assert.equal(result.exitCode, 0);
+        }
+      }
+    } finally {
+      if (typeof runner.dispose === 'function') {
+        await runner.dispose();
+      }
+    }
+  });
 });
