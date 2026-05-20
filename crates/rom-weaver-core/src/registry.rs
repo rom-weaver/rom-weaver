@@ -165,6 +165,7 @@ pub struct ContainerExtractRequest {
     pub selections: Vec<String>,
     pub out_dir: PathBuf,
     pub split_bin: bool,
+    pub parent: Option<PathBuf>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -174,6 +175,7 @@ pub struct ContainerCreateRequest {
     pub format: String,
     pub codec: Option<String>,
     pub level: Option<i32>,
+    pub parent: Option<PathBuf>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -431,6 +433,7 @@ impl ContainerHandler for TracingContainerHandler {
             source = %request.source.display(),
             out_dir = %request.out_dir.display(),
             selections = request.selections.len(),
+            parent = ?request.parent.as_ref().map(|path| path.display().to_string()),
             "container extract start"
         );
         let result = self.inner.extract(request, context);
@@ -452,6 +455,7 @@ impl ContainerHandler for TracingContainerHandler {
             requested_format = %request.format,
             codec = ?request.codec,
             level = ?request.level,
+            parent = ?request.parent.as_ref().map(|path| path.display().to_string()),
             "container create start"
         );
         let result = self.inner.create(request, context);

@@ -1,6 +1,5 @@
 [workspace]
 members = [
-    "crates/rom-weaver-chd-sys",
     "crates/rom-weaver-checksum",
     "crates/rom-weaver-cli",
     "crates/rom-weaver-codecs",
@@ -23,7 +22,7 @@ assert_fs = "1.1.3"
 blake3 = "1.8.2"
 bzip2 = "0.6.1"
 ciso = { version = "0.2.1", default-features = false, features = ["sync"] }
-chd = "0.3.4"
+chd = { version = "0.3.4", features = ["verify_block_crc"] }
 cc = "1.2.43"
 clap = { version = "4.5.51", features = ["derive"] }
 crc16 = "0.4.0"

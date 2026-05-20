@@ -514,6 +514,14 @@ pub struct PatchCreateCommand {
     pub format: String,
     #[cfg_attr(not(target_arch = "wasm32"), arg(long))]
     pub output: PathBuf,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            help = "Skip patch checksum emission during patch create when supported (for example xdelta or VCDIFF window checksums)"
+        )
+    )]
+    pub ignore_checksum_validation: bool,
     #[cfg_attr(not(target_arch = "wasm32"), arg(long, default_value = "auto"))]
     pub threads: ThreadBudget,
 }
@@ -1490,6 +1498,7 @@ fn parse_wasm_patch_create(args: Vec<String>) -> WasmCliParseResult<PatchCreateC
     let mut modified: Option<PathBuf> = None;
     let mut format: Option<String> = None;
     let mut output: Option<PathBuf> = None;
+    let mut ignore_checksum_validation = false;
     let mut threads = ThreadBudget::Auto;
     let mut index = 0usize;
     while index < args.len() {
@@ -1545,6 +1554,11 @@ fn parse_wasm_patch_create(args: Vec<String>) -> WasmCliParseResult<PatchCreateC
             index += 1;
             continue;
         }
+        if arg == "--ignore-checksum-validation" {
+            ignore_checksum_validation = true;
+            index += 1;
+            continue;
+        }
         if arg == "--threads" {
             threads = parse_wasm_thread_budget(
                 &parse_wasm_required_value(&args, &mut index, "--threads")?,
@@ -1580,6 +1594,7 @@ fn parse_wasm_patch_create(args: Vec<String>) -> WasmCliParseResult<PatchCreateC
         modified,
         format,
         output,
+        ignore_checksum_validation,
         threads,
     })
 }
@@ -2536,7 +2551,6 @@ impl CliApp {
             } else {
                 (split_bin, None)
             };
-
         let extract_threads = Some(context.plan_threads(handler.capabilities().extract_threads));
         self.emit_running(
             "extract",
@@ -2575,8 +2589,12 @@ impl CliApp {
                     Some(context.plan_threads(ThreadCapability::single_threaded())),
                 )
             });
+        let mut warnings = Vec::new();
         if let Some(split_bin_warning) = split_bin_warning {
-            report.label = format!("{}; warning={split_bin_warning}", report.label);
+            warnings.push(split_bin_warning);
+        }
+        if !warnings.is_empty() {
+            report.label = format!("{}; warning={}", report.label, warnings.join("; "));
         }
         if report.status == OperationStatus::Succeeded {
             let progress_execution = report.thread_execution.clone();
@@ -3174,6 +3192,7 @@ impl CliApp {
             selections: selections.to_vec(),
             out_dir: out_dir.to_path_buf(),
             split_bin,
+            parent: None,
         };
         match handler.extract(&request, context) {
             Ok(report) => Ok(report),
@@ -3198,6 +3217,7 @@ impl CliApp {
                     selections: vec![selected_entry],
                     out_dir: out_dir.to_path_buf(),
                     split_bin,
+                    parent: None,
                 };
                 handler.extract(&retry_request, context)
             }
@@ -3727,7 +3747,6 @@ impl CliApp {
                 ),
             );
         }
-
         let create_threads = Some(context.plan_threads(capabilities.create_threads.clone()));
         self.emit_running(
             "compress",
@@ -3759,6 +3778,7 @@ impl CliApp {
             format: resolved_format.clone(),
             codec,
             level,
+            parent: None,
         };
         let mut report = handler.create(&request, &context).unwrap_or_else(|error| {
             OperationReport::failed(
@@ -4980,6 +5000,7 @@ impl CliApp {
                     format: compression_plan.format.clone(),
                     codec: compression_plan.codec.clone(),
                     level: compression_plan.level,
+                    parent: None,
                 };
                 let compress_report = compress_handler
                     .create(&compress_request, &context)
@@ -5045,10 +5066,17 @@ impl CliApp {
             modified = %args.modified.display(),
             output = %args.output.display(),
             format = %args.format,
+            ignore_checksum_validation = args.ignore_checksum_validation,
             threads = %args.threads,
             "starting patch-create command"
         );
-        let context = self.context(args.threads);
+        let context = self.context(args.threads).with_patch_checksum_validation(
+            if args.ignore_checksum_validation {
+                PatchChecksumValidation::Ignore
+            } else {
+                PatchChecksumValidation::Strict
+            },
+        );
         let probe_threads = Some(context.plan_threads(ThreadCapability::single_threaded()));
         if let Some(report) = self.require_existing_path(
             "patch-create",
@@ -6427,6 +6455,7 @@ impl CliApp {
                     format: "rvz".to_string(),
                     codec: None,
                     level: None,
+                    parent: None,
                 },
                 context,
             )
@@ -7867,6 +7896,7 @@ impl CliApp {
                 selections: Vec::new(),
                 out_dir: nested_out_dir.clone(),
                 split_bin: false,
+                parent: None,
             };
             self.emit_running(
                 "extract",

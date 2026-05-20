@@ -37,11 +37,6 @@ use nod::{
 };
 use rars::ArchiveReader as RarRsArchiveReader;
 use rayon::prelude::*;
-use rom_weaver_chd_sys::{
-    CD_FRAME_SIZE, CDROM_TRACK_METADATA2_TAG, CHD_MAX_COMPRESSORS, CHD_METADATA_FLAG_CHECKSUM,
-    ChdCodec, ChdMediaKind, DVD_METADATA_TAG, GDROM_TRACK_METADATA_TAG, HARD_DISK_METADATA_TAG,
-    make_tag,
-};
 use rom_weaver_codecs::{
     CanonicalCodec, CodecRegistry, RequestedCodec, normalize_codec_label, parse_requested_codec,
 };
@@ -56,6 +51,7 @@ use sevenz_rust::{
     ArchiveWriter as SevenZWriter, EncoderConfiguration as SevenZMethodConfiguration,
     EncoderMethod as SevenZMethod, Password as SevenZPassword,
 };
+use sha1::{Digest, Sha1};
 use tar::{Archive as TarArchive, Builder as TarBuilder};
 use xdvdfs::{
     blockdev::OffsetWrapper as XdvdfsOffsetWrapper, write::fs::XDVDFSFilesystem as XdvdfsFilesystem,
@@ -344,6 +340,60 @@ const ZSTD_SIGNATURE: [u8; 4] = [0x28, 0xB5, 0x2F, 0xFD];
 const CSO_SIGNATURE: [u8; 4] = [b'C', b'I', b'S', b'O'];
 const PBP_SIGNATURE: [u8; 4] = [0x00, b'P', b'B', b'P'];
 const CHD_SIGNATURE: [u8; 8] = *b"MComprHD";
+const CHD_MAX_COMPRESSORS: usize = 4;
+const CHD_METADATA_FLAG_CHECKSUM: u8 = 0x01;
+const CD_FRAME_SIZE: u32 = 2352 + 96;
+const HARD_DISK_METADATA_TAG: u32 = make_tag(b'G', b'D', b'D', b'D');
+const CDROM_TRACK_METADATA2_TAG: u32 = make_tag(b'C', b'H', b'T', b'2');
+const GDROM_TRACK_METADATA_TAG: u32 = make_tag(b'C', b'H', b'G', b'D');
+const DVD_METADATA_TAG: u32 = make_tag(b'D', b'V', b'D', b' ');
+
+const fn make_tag(a: u8, b: u8, c: u8, d: u8) -> u32 {
+    ((a as u32) << 24) | ((b as u32) << 16) | ((c as u32) << 8) | (d as u32)
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ChdCodec(u32);
+
+impl ChdCodec {
+    const NONE: Self = Self(0);
+    const ZLIB: Self = Self(make_tag(b'z', b'l', b'i', b'b'));
+    const ZSTD: Self = Self(make_tag(b'z', b's', b't', b'd'));
+    const LZMA: Self = Self(make_tag(b'l', b'z', b'm', b'a'));
+    const HUFFMAN: Self = Self(make_tag(b'h', b'u', b'f', b'f'));
+    const AVHUFF: Self = Self(make_tag(b'a', b'v', b'h', b'u'));
+    const FLAC: Self = Self(make_tag(b'f', b'l', b'a', b'c'));
+    const CD_ZLIB: Self = Self(make_tag(b'c', b'd', b'z', b'l'));
+    const CD_ZSTD: Self = Self(make_tag(b'c', b'd', b'z', b's'));
+    const CD_LZMA: Self = Self(make_tag(b'c', b'd', b'l', b'z'));
+    const CD_FLAC: Self = Self(make_tag(b'c', b'd', b'f', b'l'));
+
+    const fn raw(self) -> u32 {
+        self.0
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ChdMediaKind {
+    Raw,
+    HardDisk,
+    CdRom,
+    GdRom,
+    Dvd,
+    Av,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ChdHeader {
+    version: u32,
+    logical_bytes: u64,
+    hunk_bytes: u32,
+    hunk_count: u32,
+    unit_bytes: u32,
+    unit_count: u64,
+    compressed: bool,
+    compression: [ChdCodec; CHD_MAX_COMPRESSORS],
+}
 
 fn file_starts_with(source: &Path, signature: &[u8]) -> bool {
     let mut bytes = vec![0u8; signature.len()];
@@ -8214,14 +8264,15 @@ mod chd_native {
 
     struct ChdReadSession {
         source: PathBuf,
-        header: rom_weaver_chd_sys::ChdHeader,
+        parent_source: Option<PathBuf>,
+        header: ChdHeader,
         media_kind: ChdMediaKind,
         backend: ChdReadBackend,
     }
 
     impl ChdReadSession {
-        fn open(source: &Path) -> Result<Self> {
-            Self::open_rust(source).map_err(|rust_error| {
+        fn open(source: &Path, parent_source: Option<&Path>) -> Result<Self> {
+            Self::open_rust(source, parent_source).map_err(|rust_error| {
                 RomWeaverError::Validation(format!(
                     "failed to open chd `{}` with rust backend ({rust_error})",
                     source.display()
@@ -8229,12 +8280,11 @@ mod chd_native {
             })
         }
 
-        fn open_rust(source: &Path) -> std::result::Result<Self, String> {
-            let file = File::open(source)
-                .map_err(|error| format!("failed to open `{}`: {error}", source.display()))?;
-            let mut reader = BufReader::new(file);
-            let mut chd = chd::Chd::open(&mut reader, None)
-                .map_err(|error| format!("failed to parse `{}`: {error}", source.display()))?;
+        fn open_rust(
+            source: &Path,
+            parent_source: Option<&Path>,
+        ) -> std::result::Result<Self, String> {
+            let mut chd = Self::open_rust_chd(source, parent_source)?;
 
             let header = Self::convert_header(chd.header());
             let mut metadata_by_tag_and_index = BTreeMap::new();
@@ -8250,6 +8300,7 @@ mod chd_native {
 
             Ok(Self {
                 source: source.to_path_buf(),
+                parent_source: parent_source.map(Path::to_path_buf),
                 header,
                 media_kind,
                 backend: ChdReadBackend::Rust {
@@ -8305,7 +8356,7 @@ mod chd_native {
             }
         }
 
-        fn convert_header(header: &chd::header::Header) -> rom_weaver_chd_sys::ChdHeader {
+        fn convert_header(header: &chd::header::Header) -> ChdHeader {
             let compression = match header {
                 chd::header::Header::V1Header(value) | chd::header::Header::V2Header(value) => {
                     [value.compression, 0, 0, 0]
@@ -8314,7 +8365,7 @@ mod chd_native {
                 chd::header::Header::V4Header(value) => [value.compression, 0, 0, 0],
                 chd::header::Header::V5Header(value) => value.compression,
             };
-            rom_weaver_chd_sys::ChdHeader {
+            ChdHeader {
                 version: header.version() as u32,
                 logical_bytes: header.logical_bytes(),
                 hunk_bytes: header.hunk_size(),
@@ -8326,7 +8377,7 @@ mod chd_native {
             }
         }
 
-        fn header(&self) -> rom_weaver_chd_sys::ChdHeader {
+        fn header(&self) -> ChdHeader {
             self.header
         }
 
@@ -8342,27 +8393,63 @@ mod chd_native {
             }
         }
 
-        fn extract_to_file(
-            &self,
-            output_path: &Path,
-            thread_count: usize,
-        ) -> Result<rom_weaver_chd_sys::ChdHeader> {
-            match &self.backend {
-                ChdReadBackend::Rust { .. } => {
-                    Self::extract_to_file_with_rust(
-                        &self.source,
-                        self.header.logical_bytes,
-                        output_path,
-                        thread_count,
+        fn open_rust_chd(
+            source: &Path,
+            parent_source: Option<&Path>,
+        ) -> std::result::Result<chd::Chd<BufReader<File>>, String> {
+            let parent = if let Some(parent_source) = parent_source {
+                let parent_file = File::open(parent_source).map_err(|error| {
+                    format!(
+                        "failed to open parent chd `{}`: {error}",
+                        parent_source.display()
                     )
-                    .map_err(RomWeaverError::Validation)
-                    .map(|_| self.header)
+                })?;
+                let parent_reader = BufReader::new(parent_file);
+                let parent_chd = chd::Chd::open(parent_reader, None).map_err(|error| {
+                    format!(
+                        "failed to parse parent chd `{}`: {error}",
+                        parent_source.display()
+                    )
+                })?;
+                Some(Box::new(parent_chd))
+            } else {
+                None
+            };
+
+            let file = File::open(source)
+                .map_err(|error| format!("failed to open `{}`: {error}", source.display()))?;
+            let reader = BufReader::new(file);
+            match chd::Chd::open(reader, parent) {
+                Ok(chd) => Ok(chd),
+                Err(chd::Error::InvalidParameter) if parent_source.is_some() => {
+                    let file = File::open(source).map_err(|error| {
+                        format!("failed to open `{}`: {error}", source.display())
+                    })?;
+                    let reader = BufReader::new(file);
+                    chd::Chd::open(reader, None)
+                        .map_err(|error| format!("failed to parse `{}`: {error}", source.display()))
                 }
+                Err(error) => Err(format!("failed to parse `{}`: {error}", source.display())),
+            }
+        }
+
+        fn extract_to_file(&self, output_path: &Path, thread_count: usize) -> Result<ChdHeader> {
+            match &self.backend {
+                ChdReadBackend::Rust { .. } => Self::extract_to_file_with_rust(
+                    &self.source,
+                    self.parent_source.as_deref(),
+                    self.header.logical_bytes,
+                    output_path,
+                    thread_count,
+                )
+                .map_err(RomWeaverError::Validation)
+                .map(|_| self.header),
             }
         }
 
         fn extract_to_file_with_rust(
             source: &Path,
+            parent_source: Option<&Path>,
             logical_bytes: u64,
             output_path: &Path,
             thread_count: usize,
@@ -8371,16 +8458,14 @@ mod chd_native {
             if thread_count > 1 {
                 return Self::extract_to_file_with_rust_parallel(
                     source,
+                    parent_source,
                     logical_bytes,
                     output_path,
                     thread_count,
                 );
             }
 
-            let file = File::open(source)
-                .map_err(|error| format!("failed to open `{}`: {error}", source.display()))?;
-            let mut reader = BufReader::new(file);
-            let mut chd = chd::Chd::open(&mut reader, None)
+            let mut chd = Self::open_rust_chd(source, parent_source)
                 .map_err(|error| format!("failed to decode `{}`: {error}", source.display()))?;
 
             let mut output = File::create(output_path).map_err(|error| {
@@ -8424,14 +8509,12 @@ mod chd_native {
         #[cfg(any(unix, windows))]
         fn extract_to_file_with_rust_parallel(
             source: &Path,
+            parent_source: Option<&Path>,
             logical_bytes: u64,
             output_path: &Path,
             thread_count: usize,
         ) -> std::result::Result<(), String> {
-            let file = File::open(source)
-                .map_err(|error| format!("failed to open `{}`: {error}", source.display()))?;
-            let mut reader = BufReader::new(file);
-            let chd = chd::Chd::open(&mut reader, None)
+            let chd = Self::open_rust_chd(source, parent_source)
                 .map_err(|error| format!("failed to decode `{}`: {error}", source.display()))?;
             let hunk_count = chd.header().hunk_count();
             let hunk_bytes = chd.header().hunk_size() as u64;
@@ -8455,7 +8538,13 @@ mod chd_native {
             }
             let effective_threads = thread_count.max(1).min(hunk_count_usize);
             if effective_threads <= 1 {
-                return Self::extract_to_file_with_rust(source, logical_bytes, output_path, 1);
+                return Self::extract_to_file_with_rust(
+                    source,
+                    parent_source,
+                    logical_bytes,
+                    output_path,
+                    1,
+                );
             }
 
             let pool = rayon::ThreadPoolBuilder::new()
@@ -8469,6 +8558,7 @@ mod chd_native {
                 })?;
 
             let source = source.to_path_buf();
+            let parent_source = parent_source.map(Path::to_path_buf);
             let output = Arc::new(output);
             let hunk_indices: Vec<u32> = (0..hunk_count).collect();
             let chunk_size = hunk_indices.len().div_ceil(effective_threads).max(1);
@@ -8477,13 +8567,10 @@ mod chd_native {
                 hunk_indices
                     .par_chunks(chunk_size)
                     .map(|chunk| {
-                        let file = File::open(&source).map_err(|error| {
-                            format!("failed to open `{}`: {error}", source.display())
-                        })?;
-                        let mut reader = BufReader::new(file);
-                        let mut chd = chd::Chd::open(&mut reader, None).map_err(|error| {
-                            format!("failed to decode `{}`: {error}", source.display())
-                        })?;
+                        let mut chd = Self::open_rust_chd(&source, parent_source.as_deref())
+                            .map_err(|error| {
+                                format!("failed to decode `{}`: {error}", source.display())
+                            })?;
 
                         let mut hunk_buffer = chd.get_hunksized_buffer();
                         let mut compressed_buffer = Vec::new();
@@ -8604,6 +8691,13 @@ mod chd_native {
         const LZMA_LEVEL_MIN: i32 = 0;
         const LZMA_LEVEL_MAX: i32 = 9;
         const CHD_V5_HEADER_BYTES: u64 = 124;
+        const CHD_V5_MAP_TYPE_COMPRESSED_MAX: u8 = 3;
+        const CHD_V5_MAP_TYPE_UNCOMPRESSED: u8 = 4;
+        const CHD_V5_HEADER_MAP_OFFSET: u64 = 40;
+        const CHD_V5_HEADER_META_OFFSET: u64 = 48;
+        const CHD_V5_HEADER_RAW_SHA1_OFFSET: u64 = 64;
+        const CHD_V5_HEADER_SHA1_OFFSET: u64 = 84;
+        const CHD_SHA1_BYTES: usize = 20;
 
         fn supports_rust_create(
             &self,
@@ -8769,7 +8863,7 @@ mod chd_native {
             &self,
             source: &Path,
             output: &Path,
-        ) -> Result<rom_weaver_chd_sys::ChdHeader> {
+        ) -> Result<ChdHeader> {
             let logical_bytes = fs::metadata(source)?.len();
             self.create_uncompressed_rust_raw(source, output, logical_bytes, &ChdCreateKind::Raw)
         }
@@ -8782,10 +8876,15 @@ mod chd_native {
             codec: ChdCodec,
             level: i32,
             thread_count: usize,
-        ) -> Result<rom_weaver_chd_sys::ChdHeader> {
+        ) -> Result<ChdHeader> {
             let logical_bytes = fs::metadata(source)?.len();
             if codec == ChdCodec::NONE {
-                self.create_uncompressed_rust_raw(source, output, logical_bytes, &ChdCreateKind::Raw)
+                self.create_uncompressed_rust_raw(
+                    source,
+                    output,
+                    logical_bytes,
+                    &ChdCreateKind::Raw,
+                )
             } else {
                 self.create_compressed_rust_raw(
                     source,
@@ -8806,7 +8905,8 @@ mod chd_native {
             output: &Path,
             thread_count: usize,
         ) -> Result<()> {
-            let session = ChdReadSession::open_rust(source).map_err(RomWeaverError::Validation)?;
+            let session =
+                ChdReadSession::open_rust(source, None).map_err(RomWeaverError::Validation)?;
             let media_kind = session.media_kind();
             if matches!(media_kind, ChdMediaKind::CdRom | ChdMediaKind::GdRom) {
                 return Err(RomWeaverError::Validation(
@@ -8995,7 +9095,7 @@ mod chd_native {
             }
         }
 
-        fn header_codec_label(&self, header: rom_weaver_chd_sys::ChdHeader) -> String {
+        fn header_codec_label(&self, header: ChdHeader) -> String {
             let codecs = header
                 .compression
                 .into_iter()
@@ -10378,7 +10478,7 @@ mod chd_native {
             output: &Path,
             logical_bytes: u64,
             create_kind: &ChdCreateKind,
-        ) -> Result<rom_weaver_chd_sys::ChdHeader> {
+        ) -> Result<ChdHeader> {
             if matches!(create_kind, ChdCreateKind::Av(_)) {
                 return Err(RomWeaverError::Unsupported(
                     "rust chd create currently supports only raw/dvd/hd/disc `store` mode".into(),
@@ -10400,9 +10500,9 @@ mod chd_native {
                 )
             })?;
             let map_offset = Self::CHD_V5_HEADER_BYTES;
-            let map_bytes = hunk_count_u64.checked_mul(4).ok_or_else(|| {
-                RomWeaverError::Validation("chd map size overflow".to_string())
-            })?;
+            let map_bytes = hunk_count_u64
+                .checked_mul(4)
+                .ok_or_else(|| RomWeaverError::Validation("chd map size overflow".to_string()))?;
             let after_map = map_offset.checked_add(map_bytes).ok_or_else(|| {
                 RomWeaverError::Validation("chd file layout overflow".to_string())
             })?;
@@ -10411,9 +10511,8 @@ mod chd_native {
             } else {
                 after_map.div_ceil(u64::from(hunk_bytes)) * u64::from(hunk_bytes)
             };
-            let first_hunk_entry = u32::try_from(data_offset / u64::from(hunk_bytes)).map_err(
-                |_| RomWeaverError::Validation("chd map entry overflow".to_string()),
-            )?;
+            let first_hunk_entry = u32::try_from(data_offset / u64::from(hunk_bytes))
+                .map_err(|_| RomWeaverError::Validation("chd map entry overflow".to_string()))?;
 
             let mut output_file = File::options()
                 .create(true)
@@ -10446,51 +10545,57 @@ mod chd_native {
                 let entry = first_hunk_entry
                     .checked_add(hunk_index)
                     .ok_or_else(|| RomWeaverError::Validation("chd map entry overflow".into()))?;
-                output_file.write_all(&entry.to_be_bytes()).map_err(|error| {
-                    RomWeaverError::Validation(format!(
-                        "failed to write CHD map to `{}`: {error}",
-                        output.display()
-                    ))
-                })?;
+                output_file
+                    .write_all(&entry.to_be_bytes())
+                    .map_err(|error| {
+                        RomWeaverError::Validation(format!(
+                            "failed to write CHD map to `{}`: {error}",
+                            output.display()
+                        ))
+                    })?;
             }
 
             let mut pad_bytes = data_offset.saturating_sub(after_map);
             if pad_bytes > 0 {
                 let padding = [0_u8; 8192];
                 while pad_bytes > 0 {
-                    let write_len = usize::try_from(pad_bytes.min(padding.len() as u64))
-                        .map_err(|_| {
+                    let write_len =
+                        usize::try_from(pad_bytes.min(padding.len() as u64)).map_err(|_| {
                             RomWeaverError::Validation("chd alignment padding overflow".to_string())
                         })?;
-                    output_file.write_all(&padding[..write_len]).map_err(|error| {
-                        RomWeaverError::Validation(format!(
-                            "failed to write CHD alignment padding to `{}`: {error}",
-                            output.display()
-                        ))
-                    })?;
+                    output_file
+                        .write_all(&padding[..write_len])
+                        .map_err(|error| {
+                            RomWeaverError::Validation(format!(
+                                "failed to write CHD alignment padding to `{}`: {error}",
+                                output.display()
+                            ))
+                        })?;
                     pad_bytes -= write_len as u64;
                 }
             }
 
             let mut reader = BufReader::new(File::open(input).map_err(|error| {
-                RomWeaverError::Validation(format!(
-                    "failed to open `{}`: {error}",
-                    input.display()
-                ))
+                RomWeaverError::Validation(format!("failed to open `{}`: {error}", input.display()))
             })?);
             let mut buffer = vec![0_u8; usize::try_from(hunk_bytes).unwrap_or(4096)];
             let mut remaining = logical_bytes;
             for _ in 0..hunk_count {
                 buffer.fill(0);
-                let read_len = usize::try_from(remaining.min(u64::from(hunk_bytes))).map_err(
-                    |_| RomWeaverError::Validation("decoded CHD chunk exceeded addressable memory".to_string()),
-                )?;
-                reader.read_exact(&mut buffer[..read_len]).map_err(|error| {
-                    RomWeaverError::Validation(format!(
-                        "failed to read source `{}`: {error}",
-                        input.display()
-                    ))
-                })?;
+                let read_len =
+                    usize::try_from(remaining.min(u64::from(hunk_bytes))).map_err(|_| {
+                        RomWeaverError::Validation(
+                            "decoded CHD chunk exceeded addressable memory".to_string(),
+                        )
+                    })?;
+                reader
+                    .read_exact(&mut buffer[..read_len])
+                    .map_err(|error| {
+                        RomWeaverError::Validation(format!(
+                            "failed to read source `{}`: {error}",
+                            input.display()
+                        ))
+                    })?;
                 output_file.write_all(&buffer).map_err(|error| {
                     RomWeaverError::Validation(format!(
                         "failed to write CHD data to `{}`: {error}",
@@ -10503,8 +10608,21 @@ mod chd_native {
             if let Some(meta_offset) =
                 self.append_rust_metadata(&mut output_file, output, &metadata_entries)?
             {
-                self.patch_chd_header_u64(&mut output_file, output, 48, meta_offset, "metadata")?;
+                self.patch_chd_header_u64(
+                    &mut output_file,
+                    output,
+                    Self::CHD_V5_HEADER_META_OFFSET,
+                    meta_offset,
+                    "metadata",
+                )?;
             }
+            self.patch_chd_header_sha1s(
+                &mut output_file,
+                output,
+                input,
+                logical_bytes,
+                &metadata_entries,
+            )?;
             output_file.flush().map_err(|error| {
                 RomWeaverError::Validation(format!(
                     "failed to flush `{}`: {error}",
@@ -10512,7 +10630,7 @@ mod chd_native {
                 ))
             })?;
 
-            Ok(rom_weaver_chd_sys::ChdHeader {
+            Ok(ChdHeader {
                 version: 5,
                 logical_bytes,
                 hunk_bytes,
@@ -10533,7 +10651,7 @@ mod chd_native {
             codecs: [ChdCodec; CHD_MAX_COMPRESSORS],
             compression_level: i32,
             thread_count: usize,
-        ) -> Result<rom_weaver_chd_sys::ChdHeader> {
+        ) -> Result<ChdHeader> {
             let mut active_codecs = Vec::new();
             for (index, codec) in codecs.into_iter().enumerate() {
                 if codec == ChdCodec::NONE {
@@ -10600,10 +10718,7 @@ mod chd_native {
                 })?;
 
             let mut source = BufReader::new(File::open(input).map_err(|error| {
-                RomWeaverError::Validation(format!(
-                    "failed to open `{}`: {error}",
-                    input.display()
-                ))
+                RomWeaverError::Validation(format!("failed to open `{}`: {error}", input.display()))
             })?);
             let effective_threads = thread_count.max(1).min(hunk_count_usize.max(1));
             let pool = if effective_threads > 1 {
@@ -10669,12 +10784,10 @@ mod chd_native {
                                         best = Some((*codec_slot, compressed));
                                     }
                                 }
-                                let (compression_type, compressed) = best.ok_or_else(|| {
-                                    RomWeaverError::Validation(
-                                        "compressed rust CHD create had no usable codecs".to_string(),
-                                    )
-                                })?;
-                                Ok((compression_type, compressed, crc))
+                                let (compression_type, payload) = best
+                                    .filter(|(_, compressed)| compressed.len() < hunk.len())
+                                    .unwrap_or((Self::CHD_V5_MAP_TYPE_UNCOMPRESSED, hunk));
+                                Ok((compression_type, payload, crc))
                             })
                             .collect()
                     })
@@ -10699,12 +10812,10 @@ mod chd_native {
                                     best = Some((*codec_slot, compressed));
                                 }
                             }
-                            let (compression_type, compressed) = best.ok_or_else(|| {
-                                RomWeaverError::Validation(
-                                    "compressed rust CHD create had no usable codecs".to_string(),
-                                )
-                            })?;
-                            Ok((compression_type, compressed, crc))
+                            let (compression_type, payload) = best
+                                .filter(|(_, compressed)| compressed.len() < hunk.len())
+                                .unwrap_or((Self::CHD_V5_MAP_TYPE_UNCOMPRESSED, hunk));
+                            Ok((compression_type, payload, crc))
                         })
                         .collect()
                 };
@@ -10763,13 +10874,32 @@ mod chd_native {
                 ))
             })?;
 
-            self.patch_chd_header_u64(&mut output_file, output, 40, map_offset, "map")?;
+            self.patch_chd_header_u64(
+                &mut output_file,
+                output,
+                Self::CHD_V5_HEADER_MAP_OFFSET,
+                map_offset,
+                "map",
+            )?;
             let metadata_entries = self.rust_metadata_entries(create_kind)?;
             if let Some(meta_offset) =
                 self.append_rust_metadata(&mut output_file, output, &metadata_entries)?
             {
-                self.patch_chd_header_u64(&mut output_file, output, 48, meta_offset, "metadata")?;
+                self.patch_chd_header_u64(
+                    &mut output_file,
+                    output,
+                    Self::CHD_V5_HEADER_META_OFFSET,
+                    meta_offset,
+                    "metadata",
+                )?;
             }
+            self.patch_chd_header_sha1s(
+                &mut output_file,
+                output,
+                input,
+                logical_bytes,
+                &metadata_entries,
+            )?;
             output_file.flush().map_err(|error| {
                 RomWeaverError::Validation(format!(
                     "failed to flush `{}`: {error}",
@@ -10777,7 +10907,7 @@ mod chd_native {
                 ))
             })?;
 
-            Ok(rom_weaver_chd_sys::ChdHeader {
+            Ok(ChdHeader {
                 version: 5,
                 logical_bytes,
                 hunk_bytes,
@@ -10899,14 +11029,17 @@ mod chd_native {
             for frame in hunk.chunks_exact(frame_bytes) {
                 sectors.extend_from_slice(&frame[..Self::CD_SECTOR_DATA_BYTES]);
                 subcode.extend_from_slice(
-                    &frame[Self::CD_SECTOR_DATA_BYTES..Self::CD_SECTOR_DATA_BYTES + Self::CD_SUBCODE_BYTES],
+                    &frame[Self::CD_SECTOR_DATA_BYTES
+                        ..Self::CD_SECTOR_DATA_BYTES + Self::CD_SUBCODE_BYTES],
                 );
             }
 
             let sector_stream = match primary_codec {
-                ChdCodec::CD_ZSTD => zstd_compress(&sectors, compression_level).map_err(|error| {
-                    RomWeaverError::Validation(format!("cd zstd compression failed: {error}"))
-                })?,
+                ChdCodec::CD_ZSTD => {
+                    zstd_compress(&sectors, compression_level).map_err(|error| {
+                        RomWeaverError::Validation(format!("cd zstd compression failed: {error}"))
+                    })?
+                }
                 ChdCodec::CD_ZLIB => {
                     let compression = if compression_level <= 0 {
                         GzipCompression::default()
@@ -10932,8 +11065,7 @@ mod chd_native {
                     options.lc = 3;
                     options.lp = 0;
                     options.pb = 2;
-                    options.dict_size =
-                        Self::chd_lzma_dict_size(lzma_level, sectors.len() as u32);
+                    options.dict_size = Self::chd_lzma_dict_size(lzma_level, sectors.len() as u32);
                     let mut compressed = Vec::new();
                     let mut writer = LzmaWriter::new_no_header(&mut compressed, &options, false)
                         .map_err(|error| {
@@ -10961,14 +11093,15 @@ mod chd_native {
             })?;
 
             let subcode_stream = match primary_codec {
-                ChdCodec::CD_ZSTD => zstd_compress(&subcode, compression_level).map_err(|error| {
-                    RomWeaverError::Validation(format!(
-                        "cd subcode zstd compression failed: {error}"
-                    ))
-                })?,
+                ChdCodec::CD_ZSTD => {
+                    zstd_compress(&subcode, compression_level).map_err(|error| {
+                        RomWeaverError::Validation(format!(
+                            "cd subcode zstd compression failed: {error}"
+                        ))
+                    })?
+                }
                 ChdCodec::CD_ZLIB | ChdCodec::CD_LZMA => {
-                    let mut encoder =
-                        DeflateEncoder::new(Vec::new(), GzipCompression::default());
+                    let mut encoder = DeflateEncoder::new(Vec::new(), GzipCompression::default());
                     encoder.write_all(&subcode).map_err(|error| {
                         RomWeaverError::Validation(format!(
                             "cd subcode zlib compression failed: {error}"
@@ -11061,7 +11194,7 @@ mod chd_native {
                 .map(|entry| entry.compression_type)
                 .max()
                 .unwrap_or(0);
-            if max_compression_type > 3 {
+            if max_compression_type > Self::CHD_V5_MAP_TYPE_UNCOMPRESSED {
                 return Err(RomWeaverError::Validation(format!(
                     "unsupported compressed CHD map type {} for rust map encoder",
                     max_compression_type
@@ -11075,17 +11208,18 @@ mod chd_native {
             Self::write_map_symbol_tree_rle(&mut bit_writer, &symbol_bit_lengths)?;
 
             for entry in entries {
-                let (bits, bit_count) = symbol_codes[usize::from(entry.compression_type)].ok_or_else(|| {
-                    RomWeaverError::Validation(format!(
-                        "missing map huffman code for compression type {}",
-                        entry.compression_type
-                    ))
-                })?;
+                let (bits, bit_count) = symbol_codes[usize::from(entry.compression_type)]
+                    .ok_or_else(|| {
+                        RomWeaverError::Validation(format!(
+                            "missing map huffman code for compression type {}",
+                            entry.compression_type
+                        ))
+                    })?;
                 bit_writer.write_bits(u64::from(bits), bit_count);
             }
 
             for entry in entries {
-                if entry.compression_type <= 3 {
+                if entry.compression_type <= Self::CHD_V5_MAP_TYPE_COMPRESSED_MAX {
                     bit_writer.write_bits(u64::from(entry.length), length_bits);
                 }
                 bit_writer.write_bits(u64::from(entry.crc16), 16);
@@ -11114,6 +11248,13 @@ mod chd_native {
                     lengths[2] = 2;
                     lengths[3] = 2;
                 }
+                4 => {
+                    lengths[0] = 2;
+                    lengths[1] = 2;
+                    lengths[2] = 2;
+                    lengths[3] = 3;
+                    lengths[4] = 3;
+                }
                 _ => {
                     return Err(RomWeaverError::Validation(format!(
                         "unsupported compressed CHD map type {max_type} for rust map encoder"
@@ -11123,9 +11264,7 @@ mod chd_native {
             Ok(lengths)
         }
 
-        fn canonical_huffman_codes(
-            lengths: &[u8; 16],
-        ) -> Result<[Option<(u32, u8)>; 16]> {
+        fn canonical_huffman_codes(lengths: &[u8; 16]) -> Result<[Option<(u32, u8)>; 16]> {
             let mut histogram = [0_u32; 33];
             for &length in lengths {
                 if usize::from(length) >= histogram.len() {
@@ -11258,7 +11397,10 @@ mod chd_native {
             crc
         }
 
-        fn rust_metadata_entries(&self, create_kind: &ChdCreateKind) -> Result<Vec<RustMetadataEntry>> {
+        fn rust_metadata_entries(
+            &self,
+            create_kind: &ChdCreateKind,
+        ) -> Result<Vec<RustMetadataEntry>> {
             match create_kind {
                 ChdCreateKind::Raw => Ok(Vec::new()),
                 ChdCreateKind::Dvd => Ok(vec![RustMetadataEntry {
@@ -11393,18 +11535,22 @@ mod chd_native {
 
             for (index, offset) in entry_offsets.iter().enumerate() {
                 let next = entry_offsets.get(index + 1).copied().unwrap_or(0);
-                output_file.seek(SeekFrom::Start(offset.saturating_add(8))).map_err(|error| {
-                    RomWeaverError::Validation(format!(
-                        "failed to seek CHD metadata link in `{}`: {error}",
-                        output_path.display()
-                    ))
-                })?;
-                output_file.write_all(&next.to_be_bytes()).map_err(|error| {
-                    RomWeaverError::Validation(format!(
-                        "failed to write CHD metadata link in `{}`: {error}",
-                        output_path.display()
-                    ))
-                })?;
+                output_file
+                    .seek(SeekFrom::Start(offset.saturating_add(8)))
+                    .map_err(|error| {
+                        RomWeaverError::Validation(format!(
+                            "failed to seek CHD metadata link in `{}`: {error}",
+                            output_path.display()
+                        ))
+                    })?;
+                output_file
+                    .write_all(&next.to_be_bytes())
+                    .map_err(|error| {
+                        RomWeaverError::Validation(format!(
+                            "failed to write CHD metadata link in `{}`: {error}",
+                            output_path.display()
+                        ))
+                    })?;
             }
             let end = output_file.seek(SeekFrom::End(0)).map_err(|error| {
                 RomWeaverError::Validation(format!(
@@ -11421,12 +11567,119 @@ mod chd_native {
             Ok(Some(first))
         }
 
+        fn patch_chd_header_sha1s(
+            &self,
+            output_file: &mut File,
+            output_path: &Path,
+            source_path: &Path,
+            logical_bytes: u64,
+            metadata_entries: &[RustMetadataEntry],
+        ) -> Result<()> {
+            let raw_sha1 = Self::sha1_file_prefix(source_path, logical_bytes)?;
+            let overall_sha1 = Self::compute_overall_sha1(&raw_sha1, metadata_entries);
+            self.patch_chd_header_bytes(
+                output_file,
+                output_path,
+                Self::CHD_V5_HEADER_RAW_SHA1_OFFSET,
+                &raw_sha1,
+                "raw sha1",
+            )?;
+            self.patch_chd_header_bytes(
+                output_file,
+                output_path,
+                Self::CHD_V5_HEADER_SHA1_OFFSET,
+                &overall_sha1,
+                "sha1",
+            )
+        }
+
+        fn compute_overall_sha1(
+            raw_sha1: &[u8; Self::CHD_SHA1_BYTES],
+            metadata_entries: &[RustMetadataEntry],
+        ) -> [u8; Self::CHD_SHA1_BYTES] {
+            let mut metadata_hashes = metadata_entries
+                .iter()
+                .filter(|entry| (entry.flags & CHD_METADATA_FLAG_CHECKSUM) != 0)
+                .map(|entry| {
+                    let mut hash_entry = [0_u8; 4 + Self::CHD_SHA1_BYTES];
+                    hash_entry[..4].copy_from_slice(&entry.tag.to_be_bytes());
+                    let digest = Sha1::digest(&entry.data);
+                    hash_entry[4..].copy_from_slice(&digest);
+                    hash_entry
+                })
+                .collect::<Vec<_>>();
+            metadata_hashes.sort_unstable();
+
+            let mut overall_sha1 = Sha1::new();
+            overall_sha1.update(raw_sha1);
+            for hash_entry in metadata_hashes {
+                overall_sha1.update(hash_entry);
+            }
+            let digest = overall_sha1.finalize();
+            let mut out = [0_u8; Self::CHD_SHA1_BYTES];
+            out.copy_from_slice(&digest);
+            out
+        }
+
+        fn sha1_file_prefix(
+            source_path: &Path,
+            logical_bytes: u64,
+        ) -> Result<[u8; Self::CHD_SHA1_BYTES]> {
+            let mut reader = BufReader::new(File::open(source_path).map_err(|error| {
+                RomWeaverError::Validation(format!(
+                    "failed to open `{}` for CHD sha1: {error}",
+                    source_path.display()
+                ))
+            })?);
+            let mut sha1 = Sha1::new();
+            let mut remaining = logical_bytes;
+            let mut buffer = [0_u8; 64 * 1024];
+            while remaining > 0 {
+                let read_len =
+                    usize::try_from(remaining.min(buffer.len() as u64)).map_err(|_| {
+                        RomWeaverError::Validation("CHD sha1 read length overflow".to_string())
+                    })?;
+                reader
+                    .read_exact(&mut buffer[..read_len])
+                    .map_err(|error| {
+                        RomWeaverError::Validation(format!(
+                            "failed to read `{}` for CHD sha1: {error}",
+                            source_path.display()
+                        ))
+                    })?;
+                sha1.update(&buffer[..read_len]);
+                remaining = remaining.saturating_sub(read_len as u64);
+            }
+
+            let digest = sha1.finalize();
+            let mut out = [0_u8; Self::CHD_SHA1_BYTES];
+            out.copy_from_slice(&digest);
+            Ok(out)
+        }
+
         fn patch_chd_header_u64(
             &self,
             output_file: &mut File,
             output_path: &Path,
             header_offset: u64,
             value: u64,
+            field_label: &str,
+        ) -> Result<()> {
+            self.patch_chd_header_bytes(
+                output_file,
+                output_path,
+                header_offset,
+                &value.to_be_bytes(),
+                field_label,
+            )
+        }
+
+        fn patch_chd_header_bytes(
+            &self,
+            output_file: &mut File,
+            output_path: &Path,
+            header_offset: u64,
+            bytes: &[u8],
             field_label: &str,
         ) -> Result<()> {
             let restore_offset = output_file.stream_position().map_err(|error| {
@@ -11443,18 +11696,20 @@ mod chd_native {
                         output_path.display()
                     ))
                 })?;
-            output_file.write_all(&value.to_be_bytes()).map_err(|error| {
+            output_file.write_all(bytes).map_err(|error| {
                 RomWeaverError::Validation(format!(
                     "failed to finalize CHD {field_label} pointer in `{}`: {error}",
                     output_path.display()
                 ))
             })?;
-            output_file.seek(SeekFrom::Start(restore_offset)).map_err(|error| {
-                RomWeaverError::Validation(format!(
-                    "failed to restore CHD write offset in `{}`: {error}",
-                    output_path.display()
-                ))
-            })?;
+            output_file
+                .seek(SeekFrom::Start(restore_offset))
+                .map_err(|error| {
+                    RomWeaverError::Validation(format!(
+                        "failed to restore CHD write offset in `{}`: {error}",
+                        output_path.display()
+                    ))
+                })?;
             Ok(())
         }
 
@@ -11756,7 +12011,6 @@ mod chd_native {
                 )))
             }
         }
-
     }
 
     impl ContainerHandler for ChdContainerHandler {
@@ -11778,7 +12032,7 @@ mod chd_native {
             context: &OperationContext,
         ) -> Result<OperationReport> {
             let execution = context.plan_threads(ThreadCapability::single_threaded());
-            let chd = ChdReadSession::open(&request.source)?;
+            let chd = ChdReadSession::open(&request.source, None)?;
             let header = chd.header();
             let media_kind = chd.media_kind();
             Ok(OperationReport::succeeded(
@@ -11803,7 +12057,7 @@ mod chd_native {
             request: &ContainerInspectRequest,
             _context: &OperationContext,
         ) -> Result<Vec<String>> {
-            let chd = ChdReadSession::open(&request.source)?;
+            let chd = ChdReadSession::open(&request.source, None)?;
             let media_kind = chd.media_kind();
             let stem = request
                 .source
@@ -11848,8 +12102,14 @@ mod chd_native {
             request: &ContainerExtractRequest,
             context: &OperationContext,
         ) -> Result<OperationReport> {
+            if request.parent.is_some() {
+                return Err(RomWeaverError::Unsupported(
+                    "chd extract with parent is not yet supported by the rust-native path"
+                        .to_string(),
+                ));
+            }
             let execution = context.plan_threads(ThreadCapability::parallel(None));
-            let chd = ChdReadSession::open(&request.source)?;
+            let chd = ChdReadSession::open(&request.source, None)?;
             let media_kind = chd.media_kind();
             if request.split_bin && media_kind != ChdMediaKind::CdRom {
                 return Err(RomWeaverError::Validation(format!(
@@ -11895,6 +12155,12 @@ mod chd_native {
             request: &ContainerCreateRequest,
             context: &OperationContext,
         ) -> Result<OperationReport> {
+            if request.parent.is_some() {
+                return Err(RomWeaverError::Unsupported(
+                    "chd create with parent is not yet supported by the rust-native path"
+                        .to_string(),
+                ));
+            }
             if request.inputs.len() != 1 {
                 return Err(RomWeaverError::Validation(
                     "chd create currently requires exactly one input file".into(),
@@ -11950,7 +12216,7 @@ mod chd_native {
                 _ => (input, input_bytes),
             };
 
-            let rust_create = || -> Result<(rom_weaver_chd_sys::ChdHeader, ChdMediaKind)> {
+            let rust_create = || -> Result<(ChdHeader, ChdMediaKind)> {
                 let header = if compression_plan.primary_codec == ChdCodec::NONE {
                     self.create_uncompressed_rust_raw(
                         source_path,
@@ -12031,8 +12297,8 @@ mod tests {
     };
 
     use super::{
-        CSO_DEFAULT_BLOCK_BYTES, ContainerCreateRequest, ContainerRegistry, SelectionMatcher,
-        Z3dsContainerHandler,
+        CSO_DEFAULT_BLOCK_BYTES, ChdCodec, ContainerCreateRequest, ContainerRegistry,
+        SelectionMatcher, Z3dsContainerHandler,
     };
     use ciso::write::write_ciso_image;
     use flate2::{Compression as DeflateCompression, write::DeflateEncoder};
@@ -12569,6 +12835,7 @@ mod tests {
                     format: "chd".to_string(),
                     codec: None,
                     level: None,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 6),
             )
@@ -12590,6 +12857,7 @@ mod tests {
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
                     split_bin: false,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 6),
             )
@@ -12817,6 +13085,7 @@ mod tests {
                     format: "zip".to_string(),
                     codec: None,
                     level: None,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 8),
             )
@@ -12838,6 +13107,7 @@ mod tests {
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
                     split_bin: false,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 8),
             )
@@ -12890,6 +13160,7 @@ mod tests {
                     format: "zip".to_string(),
                     codec: None,
                     level: None,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 8),
             )
@@ -12906,6 +13177,7 @@ mod tests {
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
                     split_bin: false,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 8),
             )
@@ -12948,6 +13220,7 @@ mod tests {
                     format: "tar.gz".to_string(),
                     codec: None,
                     level: None,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 8),
             )
@@ -12967,6 +13240,7 @@ mod tests {
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
                     split_bin: false,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 8),
             )
@@ -13020,6 +13294,7 @@ mod tests {
                     format: "tar.bz2".to_string(),
                     codec: None,
                     level: None,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 8),
             )
@@ -13041,6 +13316,7 @@ mod tests {
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
                     split_bin: false,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 8),
             )
@@ -13094,6 +13370,7 @@ mod tests {
                     format: "tar".to_string(),
                     codec: None,
                     level: None,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 8),
             )
@@ -13116,6 +13393,7 @@ mod tests {
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
                     split_bin: false,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 8),
             )
@@ -13170,6 +13448,7 @@ mod tests {
                     format: "tar.xz".to_string(),
                     codec: None,
                     level: None,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 8),
             )
@@ -13192,6 +13471,7 @@ mod tests {
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
                     split_bin: false,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 8),
             )
@@ -13242,6 +13522,7 @@ mod tests {
                     format: "gz".to_string(),
                     codec: None,
                     level: None,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 8),
             )
@@ -13261,6 +13542,7 @@ mod tests {
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
                     split_bin: false,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 8),
             )
@@ -13303,6 +13585,7 @@ mod tests {
                     format: "bz2".to_string(),
                     codec: None,
                     level: None,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 8),
             )
@@ -13324,6 +13607,7 @@ mod tests {
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
                     split_bin: false,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 8),
             )
@@ -13366,6 +13650,7 @@ mod tests {
                     format: "zst".to_string(),
                     codec: None,
                     level: None,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 8),
             )
@@ -13385,6 +13670,7 @@ mod tests {
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
                     split_bin: false,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 8),
             )
@@ -13425,6 +13711,7 @@ mod tests {
                     format: "zst".to_string(),
                     codec: None,
                     level: None,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 8),
             )
@@ -13473,6 +13760,7 @@ mod tests {
                     format: "xz".to_string(),
                     codec: None,
                     level: None,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 8),
             )
@@ -13494,6 +13782,7 @@ mod tests {
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
                     split_bin: false,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 8),
             )
@@ -13540,6 +13829,7 @@ mod tests {
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
                     split_bin: false,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 1),
             )
@@ -13573,6 +13863,7 @@ mod tests {
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
                     split_bin: false,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 8),
             )
@@ -13606,6 +13897,7 @@ mod tests {
                     format: "wbfs".to_string(),
                     codec: None,
                     level: None,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 8),
             )
@@ -13623,6 +13915,7 @@ mod tests {
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
                     split_bin: false,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 8),
             )
@@ -13656,6 +13949,7 @@ mod tests {
                     format: "wbfs".to_string(),
                     codec: Some("zstd".to_string()),
                     level: None,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 1),
             )
@@ -13689,6 +13983,7 @@ mod tests {
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
                     split_bin: false,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 8),
             )
@@ -13722,6 +14017,7 @@ mod tests {
                     format: "wia".to_string(),
                     codec: Some("lzma2".to_string()),
                     level: Some(6),
+                    parent: None,
                 },
                 &test_context(&temp_dir, 8),
             )
@@ -13739,6 +14035,7 @@ mod tests {
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
                     split_bin: false,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 8),
             )
@@ -13772,6 +14069,7 @@ mod tests {
                     format: "nfs".to_string(),
                     codec: None,
                     level: None,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 1),
             )
@@ -13805,6 +14103,7 @@ mod tests {
                     format: "tgc".to_string(),
                     codec: Some("zstd".to_string()),
                     level: None,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 1),
             )
@@ -13842,6 +14141,7 @@ mod tests {
                     format: "cso".to_string(),
                     codec: None,
                     level: None,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 8),
             )
@@ -13859,6 +14159,7 @@ mod tests {
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
                     split_bin: false,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 1),
             )
@@ -13891,6 +14192,7 @@ mod tests {
                     format: "cso".to_string(),
                     codec: Some("zstd".to_string()),
                     level: None,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 1),
             )
@@ -13949,6 +14251,7 @@ mod tests {
                     out_dir: out_dir.clone(),
                     selections: Vec::new(),
                     split_bin: false,
+                    parent: None,
                 },
                 &context,
             )
@@ -14005,6 +14308,7 @@ mod tests {
                     out_dir: selected_cue_dir.clone(),
                     selections: vec!["multi.disc02.cue".to_string()],
                     split_bin: false,
+                    parent: None,
                 },
                 &context,
             )
@@ -14026,6 +14330,7 @@ mod tests {
                     out_dir: selected_glob_dir.clone(),
                     selections: vec!["multi.disc0?.bin".to_string()],
                     split_bin: false,
+                    parent: None,
                 },
                 &context,
             )
@@ -14063,6 +14368,7 @@ mod tests {
                     out_dir: temp_dir.join("out"),
                     selections: vec!["single.missing.cue".to_string()],
                     split_bin: false,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 1),
             )
@@ -14171,6 +14477,7 @@ mod tests {
                     format: "cso".to_string(),
                     codec: None,
                     level: None,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 8),
             )
@@ -14191,6 +14498,7 @@ mod tests {
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
                     split_bin: false,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 8),
             )
@@ -14230,6 +14538,7 @@ mod tests {
                     out_dir: out_dir.clone(),
                     selections: Vec::new(),
                     split_bin: false,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 8),
             )
@@ -14263,6 +14572,7 @@ mod tests {
                     format: "rvz".to_string(),
                     codec: None,
                     level: None,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 8),
             )
@@ -14299,6 +14609,7 @@ mod tests {
                     format: "z3ds".to_string(),
                     codec: None,
                     level: None,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 8),
             )
@@ -14337,6 +14648,7 @@ mod tests {
                     format: "z3ds".to_string(),
                     codec: None,
                     level: None,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 8),
             )
@@ -14352,6 +14664,7 @@ mod tests {
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
                     split_bin: false,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 8),
             )
@@ -14395,6 +14708,7 @@ mod tests {
                     format: "7z".to_string(),
                     codec: Some("lzma2".to_string()),
                     level: Some(6),
+                    parent: None,
                 },
                 &test_context(&temp_dir, 8),
             )
@@ -14418,6 +14732,7 @@ mod tests {
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
                     split_bin: false,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 8),
             )
@@ -14603,13 +14918,13 @@ mod tests {
         assert_eq!(
             codecs,
             [
-                rom_weaver_chd_sys::ChdCodec::CD_ZSTD,
-                rom_weaver_chd_sys::ChdCodec::CD_ZLIB,
-                rom_weaver_chd_sys::ChdCodec::CD_LZMA,
-                rom_weaver_chd_sys::ChdCodec::NONE,
+                ChdCodec::CD_ZSTD,
+                ChdCodec::CD_ZLIB,
+                ChdCodec::CD_LZMA,
+                ChdCodec::NONE,
             ]
         );
-        assert_eq!(primary_codec, rom_weaver_chd_sys::ChdCodec::CD_ZSTD);
+        assert_eq!(primary_codec, ChdCodec::CD_ZSTD);
     }
 
     #[cfg(not(target_family = "wasm"))]
@@ -14622,13 +14937,13 @@ mod tests {
         assert_eq!(
             codecs,
             [
-                rom_weaver_chd_sys::ChdCodec::ZSTD,
-                rom_weaver_chd_sys::ChdCodec::ZLIB,
-                rom_weaver_chd_sys::ChdCodec::LZMA,
-                rom_weaver_chd_sys::ChdCodec::NONE,
+                ChdCodec::ZSTD,
+                ChdCodec::ZLIB,
+                ChdCodec::LZMA,
+                ChdCodec::NONE,
             ]
         );
-        assert_eq!(primary_codec, rom_weaver_chd_sys::ChdCodec::ZSTD);
+        assert_eq!(primary_codec, ChdCodec::ZSTD);
     }
 
     #[cfg(not(target_family = "wasm"))]
@@ -14641,13 +14956,13 @@ mod tests {
         assert_eq!(
             codecs,
             [
-                rom_weaver_chd_sys::ChdCodec::CD_ZSTD,
-                rom_weaver_chd_sys::ChdCodec::CD_ZLIB,
-                rom_weaver_chd_sys::ChdCodec::CD_FLAC,
-                rom_weaver_chd_sys::ChdCodec::NONE,
+                ChdCodec::CD_ZSTD,
+                ChdCodec::CD_ZLIB,
+                ChdCodec::CD_FLAC,
+                ChdCodec::NONE,
             ]
         );
-        assert_eq!(primary_codec, rom_weaver_chd_sys::ChdCodec::CD_ZSTD);
+        assert_eq!(primary_codec, ChdCodec::CD_ZSTD);
     }
 
     #[cfg(not(target_family = "wasm"))]
@@ -14719,6 +15034,7 @@ mod tests {
                     format: "chd".to_string(),
                     codec: Some("zstd,huffman".to_string()),
                     level: None,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 6),
             )
@@ -14755,6 +15071,7 @@ mod tests {
                     format: "chd".to_string(),
                     codec: None,
                     level: None,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 6),
             )
@@ -14804,6 +15121,51 @@ mod tests {
 
     #[cfg(not(target_family = "wasm"))]
     #[test]
+    fn chd_extract_with_parent_option_is_unsupported() {
+        let temp_dir = temp_dir_path("chd-parent-option-extract");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let source_path = temp_dir.join("source.bin");
+        let archive_path = temp_dir.join("source.chd");
+        let payload = (0..(320 * 1024))
+            .map(|index| (index as u8).wrapping_mul(17))
+            .collect::<Vec<_>>();
+        fs::write(&source_path, &payload).expect("write fixture");
+
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("chd").expect("chd handler");
+        handler
+            .create(
+                &ContainerCreateRequest {
+                    inputs: vec![source_path.clone()],
+                    output: archive_path.clone(),
+                    format: "chd".to_string(),
+                    codec: None,
+                    level: None,
+                    parent: None,
+                },
+                &test_context(&temp_dir, 4),
+            )
+            .expect("create chd fixture");
+
+        let error = handler
+            .extract(
+                &rom_weaver_core::ContainerExtractRequest {
+                    source: archive_path.clone(),
+                    out_dir: temp_dir.join("out"),
+                    selections: Vec::new(),
+                    split_bin: false,
+                    parent: Some(archive_path),
+                },
+                &test_context(&temp_dir, 4),
+            )
+            .expect_err("extract with parent should be unsupported");
+        assert!(error.to_string().contains("not yet supported"));
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    #[test]
     fn chd_rust_compressed_create_round_trip_matches_source_payload() {
         let temp_dir = temp_dir_path("chd-rust-compressed-create");
         fs::create_dir_all(&temp_dir).expect("temp dir");
@@ -14815,9 +15177,9 @@ mod tests {
 
         let handler = super::ChdContainerHandler;
         for (codec, codec_label) in [
-            (rom_weaver_chd_sys::ChdCodec::ZSTD, "zstd"),
-            (rom_weaver_chd_sys::ChdCodec::ZLIB, "zlib"),
-            (rom_weaver_chd_sys::ChdCodec::LZMA, "lzma"),
+            (ChdCodec::ZSTD, "zstd"),
+            (ChdCodec::ZLIB, "zlib"),
+            (ChdCodec::LZMA, "lzma"),
         ] {
             let archive_path = temp_dir.join(format!("source-{codec_label}.chd"));
             let extracted_path = temp_dir.join(format!("extracted-{codec_label}.bin"));
@@ -14863,6 +15225,7 @@ mod tests {
                     format: "chd".to_string(),
                     codec: Some("zstd,zlib".to_string()),
                     level: None,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 6),
             )
@@ -14874,6 +15237,7 @@ mod tests {
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
                     split_bin: false,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 6),
             )
@@ -14918,6 +15282,7 @@ mod tests {
                         format: "chd".to_string(),
                         codec: Some(codec.to_string()),
                         level: None,
+                        parent: None,
                     },
                     &test_context(&temp_dir, 6),
                 )
@@ -14929,6 +15294,7 @@ mod tests {
                         out_dir: output_dir.clone(),
                         selections: Vec::new(),
                         split_bin: false,
+                        parent: None,
                     },
                     &test_context(&temp_dir, 6),
                 )
@@ -14976,6 +15342,7 @@ mod tests {
                     format: "chd".to_string(),
                     codec: Some("store".to_string()),
                     level: None,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 6),
             )
@@ -14987,6 +15354,7 @@ mod tests {
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
                     split_bin: false,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 6),
             )
@@ -15031,6 +15399,7 @@ mod tests {
                         format: "chd".to_string(),
                         codec: Some(codec.to_string()),
                         level: None,
+                        parent: None,
                     },
                     &test_context(&temp_dir, 6),
                 )
@@ -15042,12 +15411,13 @@ mod tests {
                         out_dir: output_dir.clone(),
                         selections: Vec::new(),
                         split_bin: false,
+                        parent: None,
                     },
                     &test_context(&temp_dir, 6),
                 )
                 .expect("extract rust-only compressed cd chd");
-            let extracted_bin = fs::read(output_dir.join(format!("disc-{label}.bin")))
-                .expect("read extracted bin");
+            let extracted_bin =
+                fs::read(output_dir.join(format!("disc-{label}.bin"))).expect("read extracted bin");
             assert_eq!(extracted_bin, source_payload);
         }
 
@@ -15077,6 +15447,7 @@ mod tests {
                     format: "chd".to_string(),
                     codec: None,
                     level: None,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 6),
             )
@@ -15088,6 +15459,7 @@ mod tests {
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
                     split_bin: false,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 6),
             )
@@ -15127,6 +15499,7 @@ mod tests {
                     format: "chd".to_string(),
                     codec: None,
                     level: None,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 6),
             )
@@ -15138,6 +15511,7 @@ mod tests {
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
                     split_bin: false,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 6),
             )
@@ -15178,6 +15552,7 @@ mod tests {
                     format: "chd".to_string(),
                     codec: Some("cdzs,cdzl".to_string()),
                     level: None,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 6),
             )
@@ -15189,6 +15564,7 @@ mod tests {
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
                     split_bin: false,
+                    parent: None,
                 },
                 &test_context(&temp_dir, 6),
             )
@@ -15230,6 +15606,7 @@ mod tests {
                         format: "chd".to_string(),
                         codec: Some(codec.to_string()),
                         level: None,
+                        parent: None,
                     },
                     &test_context(&temp_dir, 6),
                 )
@@ -15241,6 +15618,7 @@ mod tests {
                         out_dir: output_dir.clone(),
                         selections: Vec::new(),
                         split_bin: false,
+                        parent: None,
                     },
                     &test_context(&temp_dir, 6),
                 )

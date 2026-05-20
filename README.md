@@ -123,6 +123,7 @@ Notes:
 - `xiso` is intentionally trim-only (via `trim`).
 - `extract` supports `--select` (exact/prefix/glob) and recursively extracts nested containers up to depth 8.
 - `extract --split-bin` is CHD-only (ignored for non-CHD input).
+- CHD parent/differential workflows are currently unsupported in the Rust-native path.
 
 ## Create-Time Codec Support
 
