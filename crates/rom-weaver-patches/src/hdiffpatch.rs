@@ -1,13 +1,14 @@
 use std::{
     fs::{self, File},
-    io::{BufWriter, Cursor, Read, Write},
+    io::{BufWriter, Write},
     path::Path,
 };
 
-use bzip2::read::BzDecoder;
-use flate2::read::{DeflateDecoder, ZlibDecoder};
-use lzma_rust2::{Lzma2Reader, LzmaReader};
 use rayon::prelude::*;
+use rom_weaver_codecs::{
+    decode_bzip2_exact, decode_deflate_exact, decode_lzma2, decode_lzma_with_props,
+    decode_zlib_exact, decode_zstd_exact,
+};
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
     PatchCapabilities, PatchCreateRequest, PatchHandler, ProbeConfidence, Result, RomWeaverError,
@@ -1139,14 +1140,14 @@ fn decompress_zstd_to_vec(
     expected_len: u64,
     label: &'static str,
 ) -> Result<Vec<u8>> {
-    let decoder = zstd::stream::read::Decoder::new(Cursor::new(compressed)).map_err(|error| {
+    decode_zstd_exact(compressed, expected_len).map_err(|error| {
         RomWeaverError::ValidationCode(
-            hdiff_validation_code("HDIFF_ZSTD_INIT_FAILED")
+            hdiff_validation_code("HDIFF_DECODE_FAILED")
                 .with_field("label", label)
+                .with_field("codec", "zstd")
                 .with_field("error", error.to_string()),
         )
-    })?;
-    read_exact_decompressed_size(decoder, expected_len, label, "zstd")
+    })
 }
 
 fn decompress_zlib_to_vec(
@@ -1164,18 +1165,22 @@ fn decompress_zlib_to_vec(
     let payload = &compressed[1..];
 
     match window_bits {
-        -15..=-8 => read_exact_decompressed_size(
-            DeflateDecoder::new(Cursor::new(payload)),
-            expected_len,
-            label,
-            "zlib(deflate)",
-        ),
-        8..=15 => read_exact_decompressed_size(
-            ZlibDecoder::new(Cursor::new(payload)),
-            expected_len,
-            label,
-            "zlib",
-        ),
+        -15..=-8 => decode_deflate_exact(payload, expected_len).map_err(|error| {
+            RomWeaverError::ValidationCode(
+                hdiff_validation_code("HDIFF_DECODE_FAILED")
+                    .with_field("label", label)
+                    .with_field("codec", "zlib(deflate)")
+                    .with_field("error", error.to_string()),
+            )
+        }),
+        8..=15 => decode_zlib_exact(payload, expected_len).map_err(|error| {
+            RomWeaverError::ValidationCode(
+                hdiff_validation_code("HDIFF_DECODE_FAILED")
+                    .with_field("label", label)
+                    .with_field("codec", "zlib")
+                    .with_field("error", error.to_string()),
+            )
+        }),
         _ => Err(RomWeaverError::ValidationCode(
             hdiff_validation_code("HDIFF_ZLIB_WINDOW_BITS_UNSUPPORTED")
                 .with_field("label", label)
@@ -1189,12 +1194,14 @@ fn decompress_bz2_to_vec(
     expected_len: u64,
     label: &'static str,
 ) -> Result<Vec<u8>> {
-    read_exact_decompressed_size(
-        BzDecoder::new(Cursor::new(compressed)),
-        expected_len,
-        label,
-        "bz2",
-    )
+    decode_bzip2_exact(compressed, expected_len).map_err(|error| {
+        RomWeaverError::ValidationCode(
+            hdiff_validation_code("HDIFF_DECODE_FAILED")
+                .with_field("label", label)
+                .with_field("codec", "bz2")
+                .with_field("error", error.to_string()),
+        )
+    })
 }
 
 fn decompress_lzma_to_vec(
@@ -1244,21 +1251,14 @@ fn decompress_lzma_to_vec(
     let dict_size = u32::from_le_bytes([props[1], props[2], props[3], props[4]]);
     let payload = &compressed[props_end..];
 
-    let decoder = LzmaReader::new_with_props(
-        Cursor::new(payload),
-        expected_len,
-        props_byte,
-        dict_size,
-        None,
-    )
-    .map_err(|error| {
+    decode_lzma_with_props(payload, expected_len, props_byte, dict_size).map_err(|error| {
         RomWeaverError::ValidationCode(
-            hdiff_validation_code("HDIFF_LZMA_INIT_FAILED")
+            hdiff_validation_code("HDIFF_DECODE_FAILED")
                 .with_field("label", label)
+                .with_field("codec", "lzma")
                 .with_field("error", error.to_string()),
         )
-    })?;
-    read_exact_decompressed_size(decoder, expected_len, label, "lzma")
+    })
 }
 
 fn decompress_lzma2_to_vec(
@@ -1276,8 +1276,14 @@ fn decompress_lzma2_to_vec(
     let dict_size = decode_lzma2_dict_size(property, label)?;
     let payload = &compressed[1..];
 
-    let decoder = Lzma2Reader::new(Cursor::new(payload), dict_size, None);
-    read_exact_decompressed_size(decoder, expected_len, label, "lzma2")
+    decode_lzma2(payload, expected_len, dict_size).map_err(|error| {
+        RomWeaverError::ValidationCode(
+            hdiff_validation_code("HDIFF_DECODE_FAILED")
+                .with_field("label", label)
+                .with_field("codec", "lzma2")
+                .with_field("error", error.to_string()),
+        )
+    })
 }
 
 fn decode_lzma2_dict_size(property: u8, label: &'static str) -> Result<u32> {
@@ -1309,41 +1315,6 @@ fn decode_lzma2_dict_size(property: u8, label: &'static str) -> Result<u32> {
         )
     })?;
     Ok(size)
-}
-
-fn read_exact_decompressed_size(
-    mut decoder: impl Read,
-    expected_len: u64,
-    label: &'static str,
-    codec: &'static str,
-) -> Result<Vec<u8>> {
-    let mut out = Vec::new();
-    decoder.read_to_end(&mut out).map_err(|error| {
-        RomWeaverError::ValidationCode(
-            hdiff_validation_code("HDIFF_DECODE_FAILED")
-                .with_field("label", label)
-                .with_field("codec", codec)
-                .with_field("error", error.to_string()),
-        )
-    })?;
-
-    let expected = usize::try_from(expected_len).map_err(|_| {
-        RomWeaverError::ValidationCode(
-            hdiff_validation_code("HDIFF_EXPECTED_SIZE_OVERFLOW_USIZE")
-                .with_field("label", label)
-                .with_field("expected_len", expected_len),
-        )
-    })?;
-    if out.len() != expected {
-        return Err(RomWeaverError::ValidationCode(
-            hdiff_validation_code("HDIFF_DECOMPRESSED_SIZE_MISMATCH")
-                .with_field("label", label)
-                .with_field("expected", expected)
-                .with_field("actual", out.len()),
-        ));
-    }
-
-    Ok(out)
 }
 
 #[derive(Default)]
@@ -1724,7 +1695,7 @@ fn write_uncompressed_hdiff13_header_vec(out: &mut Vec<u8>, old_size: u64, new_s
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, io::Write, path::PathBuf};
+    use std::{fs, path::PathBuf};
 
     use rom_weaver_core::{PatchApplyRequest, PatchCreateRequest, PatchHandler};
 
@@ -1827,9 +1798,7 @@ mod tests {
     }
 
     fn build_zstd_hdiff13_patch(old: &[u8], new: &[u8]) -> Vec<u8> {
-        let mut encoder = zstd::stream::write::Encoder::new(Vec::new(), 3).expect("zstd encoder");
-        encoder.write_all(new).expect("zstd write");
-        let compressed = encoder.finish().expect("zstd finish");
+        let compressed = rom_weaver_codecs::encode_zstd(new, 3).expect("zstd encode");
         assert!(
             compressed.len() < new.len(),
             "fixture should be compressible"

@@ -4,7 +4,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use lzma_rust2::{XzOptions, XzReader, XzWriter};
 use oxidelta::{
     compress::{
         encoder::{CompressOptions, DeltaEncoder},
@@ -17,6 +16,7 @@ use oxidelta::{
 };
 use rayon::prelude::*;
 use rom_weaver_checksum::adler32_checksum as adler32;
+use rom_weaver_codecs::{decode_xz_exact, encode_xz_preset};
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
     PatchCapabilities, PatchChecksumValidation, PatchCreateRequest, PatchHandler, ProbeConfidence,
@@ -1491,25 +1491,15 @@ impl DjwBitWriter {
 }
 
 fn xdelta_lzma2_compress(bytes: &[u8]) -> Result<Vec<u8>> {
-    let mut encoder = XzWriter::new(Vec::new(), XzOptions::with_preset(6)).map_err(|error| {
-        RomWeaverError::Validation(format!("xdelta lzma secondary init failed: {error}"))
-    })?;
-    encoder.write_all(bytes).map_err(|error| {
+    encode_xz_preset(bytes, 6).map_err(|error| {
         RomWeaverError::Validation(format!("xdelta lzma secondary encode failed: {error}"))
-    })?;
-    encoder.flush().map_err(|error| {
-        RomWeaverError::Validation(format!("xdelta lzma secondary finalize failed: {error}"))
-    })?;
-    Ok(encoder.into_inner())
+    })
 }
 
 fn xdelta_lzma2_decompress(bytes: &[u8], expected_size: usize) -> Result<Vec<u8>> {
-    let mut decoder = XzReader::new(Cursor::new(bytes), false);
-    let mut output = vec![0u8; expected_size];
-    decoder.read_exact(&mut output).map_err(|error| {
+    decode_xz_exact(bytes, expected_size).map_err(|error| {
         RomWeaverError::Validation(format!("xdelta lzma secondary decode failed: {error}"))
-    })?;
-    Ok(output)
+    })
 }
 
 fn window_win_indicator(window: &WindowIndex) -> u8 {

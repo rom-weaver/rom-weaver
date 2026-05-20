@@ -1,12 +1,12 @@
 use std::{
     fs::{self, File, OpenOptions},
-    io::{BufWriter, Cursor, Read, Seek, SeekFrom, Write},
+    io::{BufWriter, Seek, SeekFrom, Write},
     path::Path,
 };
 
-use bzip2::read::BzDecoder;
 use qbsdiff::{Bsdiff, Bspatch};
 use rayon::prelude::*;
+use rom_weaver_codecs::{decode_bzip2, decode_bzip2_exact};
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationReport, PatchApplyRequest, PatchCapabilities,
     PatchCreateRequest, PatchHandler, Result, RomWeaverError, SharedThreadPool, ThreadCapability,
@@ -281,24 +281,19 @@ fn collect_bsdiff_write_plans(
     compressed_control_block: &[u8],
     source_len: usize,
 ) -> Result<(Vec<BsdiffWritePlan>, u64, u64, u64)> {
-    let mut decoder = BzDecoder::new(Cursor::new(compressed_control_block));
+    let control_payload = decode_bzip2(compressed_control_block)?;
     let source_len = i128::try_from(source_len).map_err(|_| {
         RomWeaverError::Validation("BSDIFF40 source exceeded addressable memory".into())
     })?;
 
-    let mut control = [0u8; BSDIFF40_CONTROL_BYTES];
     let mut writes = Vec::new();
     let mut source_offset = 0i128;
     let mut output_offset = 0u64;
     let mut delta_offset = 0u64;
     let mut extra_offset = 0u64;
 
-    loop {
-        let read = read_exact_or_eof(&mut decoder, &mut control)?;
-        if read == 0 {
-            break;
-        }
-
+    let mut chunks = control_payload.chunks_exact(BSDIFF40_CONTROL_BYTES);
+    for control in &mut chunks {
         let add_len: u64 = decode_bsdiff_i64(&control[0..8])?.try_into().map_err(|_| {
             RomWeaverError::Validation("BSDIFF40 patch contains a negative add length".into())
         })?;
@@ -366,6 +361,11 @@ fn collect_bsdiff_write_plans(
                 "BSDIFF40 source seek moved before the start of input".into(),
             ));
         }
+    }
+    if !chunks.remainder().is_empty() {
+        return Err(RomWeaverError::Validation(
+            "BSDIFF40 control block ended with a partial record".into(),
+        ));
     }
 
     Ok((writes, delta_offset, extra_offset, output_offset))
@@ -474,34 +474,9 @@ fn apply_prepared_bsdiff_writes(output: &mut File, writes: &[PreparedBsdiffWrite
 }
 
 fn decompress_bzip_stream_exact(payload: &[u8], expected_len: u64) -> Result<Vec<u8>> {
-    let expected_len = usize::try_from(expected_len).map_err(|_| {
-        RomWeaverError::Validation("BSDIFF40 payload exceeded addressable memory".into())
-    })?;
-    let mut decoder = BzDecoder::new(Cursor::new(payload));
-    let mut output = vec![0u8; expected_len];
-    decoder.read_exact(&mut output)?;
-    Ok(output)
-}
-
-fn read_exact_or_eof<R: Read>(reader: &mut R, buffer: &mut [u8]) -> Result<usize> {
-    let mut read = 0usize;
-    while read < buffer.len() {
-        match reader.read(&mut buffer[read..]) {
-            Ok(0) => break,
-            Ok(count) => read += count,
-            Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
-            Err(error) => return Err(error.into()),
-        }
-    }
-
-    if read != 0 && read != buffer.len() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::UnexpectedEof,
-            "failed to fill whole buffer",
-        )
-        .into());
-    }
-    Ok(read)
+    decode_bzip2_exact(payload, expected_len).map_err(|error| {
+        RomWeaverError::Validation(format!("BSDIFF40 bzip2 payload decode failed: {error}"))
+    })
 }
 
 fn decode_bsdiff_i64(bytes: &[u8]) -> Result<i64> {

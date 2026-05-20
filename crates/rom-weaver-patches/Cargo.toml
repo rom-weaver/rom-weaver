@@ -6,17 +6,14 @@ rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
-bzip2.workspace = true
 crc32fast.workspace = true
-flate2.workspace = true
-lzma-rust2.workspace = true
 md-5.workspace = true
 oxidelta = { version = "0.1.4", default-features = false, features = ["adler32", "lzma-secondary"] }
 qbsdiff.workspace = true
 rom-weaver-checksum = { path = "../rom-weaver-checksum" }
+rom-weaver-codecs = { path = "../rom-weaver-codecs" }
 rom-weaver-core = { path = "../rom-weaver-core" }
 rayon.workspace = true
 serde_json.workspace = true
 sha1.workspace = true
 tracing.workspace = true
-zstd.workspace = true

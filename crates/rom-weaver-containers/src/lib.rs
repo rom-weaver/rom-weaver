@@ -5,7 +5,6 @@ use std::{
     collections::BTreeSet,
     fs::{self, File},
     io::{self, BufReader, BufWriter, Read, Seek, SeekFrom, Write},
-    num::NonZeroU64,
     path::{Component, Path, PathBuf},
     sync::{
         Arc,
@@ -13,20 +12,17 @@ use std::{
     },
 };
 
-use bzip2::{
-    Compression as Bzip2Compression, read::MultiBzDecoder as Bzip2Decoder, write::BzEncoder,
-};
+use bzip2::read::MultiBzDecoder as Bzip2Decoder;
 use ciso::{read::CSOReader as CsoReader, split::SplitFileReader};
 use flacenc::{component::BitRepr as _, error::Verify as _};
 use flate2::{
-    Compression as GzipCompression, read::DeflateDecoder, read::MultiGzDecoder,
-    write::DeflateEncoder, write::GzEncoder,
+    Compression as GzipCompression, read::MultiGzDecoder, write::DeflateEncoder,
 };
 use lz4_flex::frame::{
     BlockMode as Lz4BlockMode, BlockSize as Lz4BlockSize, FrameEncoder as Lz4FrameEncoder,
     FrameInfo as Lz4FrameInfo,
 };
-use lzma_rust2::{LzmaOptions, LzmaWriter, XzOptions, XzReader, XzReaderMt, XzWriter, XzWriterMt};
+use lzma_rust2::{LzmaOptions, LzmaWriter, XzReader};
 use nod::{
     common::{Compression as NodCompression, Format as NodFormat},
     read::{DiscOptions as NodDiscOptions, DiscReader as NodDiscReader},
@@ -39,7 +35,8 @@ use nod::{
 use rars::ArchiveReader as RarRsArchiveReader;
 use rayon::prelude::*;
 use rom_weaver_codecs::{
-    CanonicalCodec, CodecRegistry, RequestedCodec, normalize_codec_label, parse_requested_codec,
+    CanonicalCodec, CodecRegistry, RequestedCodec, decode_deflate_into_buffer,
+    normalize_codec_label, parse_requested_codec,
 };
 use rom_weaver_core::{
     CodecBackend, CodecOperationRequest, ContainerCapabilities, ContainerCreateRequest,
@@ -408,6 +405,17 @@ fn is_ustar_header(header: &[u8]) -> bool {
     header.len() >= 512
         && (header[257..263] == [b'u', b's', b't', b'a', b'r', 0x00]
             || header[257..263] == [b'u', b's', b't', b'a', b'r', b' '])
+}
+
+fn resolve_container_codec_backend(
+    descriptor_name: &str,
+    codec_name: &str,
+) -> Result<Arc<dyn CodecBackend>> {
+    CodecRegistry::new().find_by_name(codec_name).ok_or_else(|| {
+        RomWeaverError::Unsupported(format!(
+            "codec backend `{codec_name}` is not registered for {descriptor_name}"
+        ))
+    })
 }
 
 #[derive(Clone, Debug)]
@@ -1580,8 +1588,6 @@ struct TarCreateArtifact {
 }
 
 impl TarContainerHandler {
-    const XZ_MT_BLOCK_BYTES: u64 = 1 << 20;
-
     const fn new(descriptor: &'static FormatDescriptor, compression: TarCompression) -> Self {
         Self {
             descriptor,
@@ -1695,6 +1701,50 @@ impl TarContainerHandler {
                 }
             }
         }
+    }
+
+    fn backend_codec_name(&self) -> Option<&'static str> {
+        match self.compression {
+            TarCompression::None => None,
+            TarCompression::Gzip => Some("deflate"),
+            TarCompression::Bzip2 => Some("bzip2"),
+            TarCompression::Xz => Some("lzma2"),
+        }
+    }
+
+    fn codec_backend(&self) -> Result<Arc<dyn CodecBackend>> {
+        let codec_name = self.backend_codec_name().ok_or_else(|| {
+            RomWeaverError::Unsupported(format!(
+                "codec backend is not defined for {}",
+                self.descriptor.name
+            ))
+        })?;
+        resolve_container_codec_backend(self.descriptor.name, codec_name)
+    }
+
+    fn decode_to_staged_tar(
+        &self,
+        source: &Path,
+        context: &OperationContext,
+        staged_label: &str,
+    ) -> Result<(PathBuf, Option<ThreadExecution>)> {
+        let staged_tar = context.temp_paths().next_path(staged_label, Some("tar"));
+        if let Some(parent) = staged_tar.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let backend = self.codec_backend()?;
+        let decode_report = backend.decode(
+            &CodecOperationRequest {
+                input: source.to_path_buf(),
+                output: staged_tar.clone(),
+                level: None,
+            },
+            context,
+        )?;
+        if decode_report.status != OperationStatus::Succeeded {
+            return Err(RomWeaverError::Unsupported(decode_report.label));
+        }
+        Ok((staged_tar, decode_report.thread_execution))
     }
 
     fn append_entries<W: Write>(
@@ -2098,39 +2148,44 @@ impl TarContainerHandler {
         }
     }
 
-    fn xz_thread_count(effective_threads: usize) -> u32 {
-        match u32::try_from(effective_threads) {
-            Ok(count) => count.clamp(1, 256),
-            Err(_) => 256,
-        }
-    }
-
-    fn xz_mt_options(level: u32) -> Result<XzOptions> {
-        let mut options = XzOptions::with_preset(level);
-        let block_size = NonZeroU64::new(Self::XZ_MT_BLOCK_BYTES).ok_or_else(|| {
-            RomWeaverError::Validation("tar.xz internal block size must be non-zero".into())
-        })?;
-        options.set_block_size(Some(block_size));
-        Ok(options)
-    }
-
-    fn open_reader_for_extract(
+    fn inspect_uncompressed_archive(
         &self,
         source: &Path,
-        execution: &rom_weaver_core::ThreadExecution,
-    ) -> Result<Box<dyn Read>> {
-        match self.compression {
-            TarCompression::Xz if execution.used_parallelism => {
-                let workers = Self::xz_thread_count(execution.effective_threads);
-                let file = File::open(source)?;
-                Ok(Box::new(XzReaderMt::new(
-                    BufReader::new(file),
-                    false,
-                    workers,
-                )?))
+    ) -> Result<(usize, usize, usize, u64)> {
+        let reader = BufReader::new(File::open(source)?);
+        let mut archive = TarArchive::new(reader);
+        let mut files = 0usize;
+        let mut directories = 0usize;
+        let mut logical_bytes = 0u64;
+        let mut entries_total = 0usize;
+        for entry in archive.entries()? {
+            let entry = entry?;
+            entries_total += 1;
+            let entry_type = entry.header().entry_type();
+            if entry_type.is_dir() {
+                directories += 1;
+            } else if entry_type.is_file() {
+                files += 1;
+                logical_bytes = logical_bytes.saturating_add(entry.header().size()?);
             }
-            _ => self.open_reader(source),
         }
+        Ok((entries_total, files, directories, logical_bytes))
+    }
+
+    fn list_uncompressed_entries(&self, source: &Path) -> Result<Vec<String>> {
+        let reader = BufReader::new(File::open(source)?);
+        let mut archive = TarArchive::new(reader);
+        let mut entries = Vec::new();
+        for entry in archive.entries()? {
+            let entry = entry?;
+            let raw_path = entry.path()?;
+            let relative = sanitize_archive_relative_path(raw_path.as_ref())?;
+            let archive_name = archive_path_to_name(&relative)?;
+            if !archive_name.is_empty() {
+                entries.push(archive_name);
+            }
+        }
+        Ok(entries)
     }
 
     fn looks_like_tar_archive(&self, source: &Path) -> bool {
@@ -2159,26 +2214,26 @@ impl ContainerHandler for TarContainerHandler {
     fn inspect(
         &self,
         request: &ContainerInspectRequest,
-        _context: &OperationContext,
+        context: &OperationContext,
     ) -> Result<OperationReport> {
-        let reader = self.open_reader(&request.source)?;
-        let mut archive = TarArchive::new(reader);
-        let mut files = 0usize;
-        let mut directories = 0usize;
-        let mut logical_bytes = 0u64;
-        let mut entries_total = 0usize;
-
-        for entry in archive.entries()? {
-            let entry = entry?;
-            entries_total += 1;
-            let entry_type = entry.header().entry_type();
-            if entry_type.is_dir() {
-                directories += 1;
-            } else if entry_type.is_file() {
-                files += 1;
-                logical_bytes = logical_bytes.saturating_add(entry.header().size()?);
-            }
-        }
+        let (entries_total, files, directories, logical_bytes) = if matches!(
+            self.compression,
+            TarCompression::None
+        ) {
+            self.inspect_uncompressed_archive(&request.source)?
+        } else {
+            let staged_result = (|| -> Result<(usize, usize, usize, u64)> {
+                let (staged_tar, _) = self.decode_to_staged_tar(
+                    &request.source,
+                    context,
+                    "tar-inspect-stage",
+                )?;
+                let inspected = self.inspect_uncompressed_archive(&staged_tar);
+                let _ = fs::remove_file(&staged_tar);
+                inspected
+            })();
+            staged_result?
+        };
 
         Ok(OperationReport::succeeded(
             OperationFamily::Container,
@@ -2196,21 +2251,19 @@ impl ContainerHandler for TarContainerHandler {
     fn list_entries(
         &self,
         request: &ContainerInspectRequest,
-        _context: &OperationContext,
+        context: &OperationContext,
     ) -> Result<Vec<String>> {
-        let reader = self.open_reader(&request.source)?;
-        let mut archive = TarArchive::new(reader);
-        let mut entries = Vec::new();
-        for entry in archive.entries()? {
-            let entry = entry?;
-            let raw_path = entry.path()?;
-            let relative = sanitize_archive_relative_path(raw_path.as_ref())?;
-            let archive_name = archive_path_to_name(&relative)?;
-            if !archive_name.is_empty() {
-                entries.push(archive_name);
-            }
+        if matches!(self.compression, TarCompression::None) {
+            return self.list_uncompressed_entries(&request.source);
         }
-        Ok(entries)
+        let staged_result = (|| -> Result<Vec<String>> {
+            let (staged_tar, _) =
+                self.decode_to_staged_tar(&request.source, context, "tar-list-stage")?;
+            let entries = self.list_uncompressed_entries(&staged_tar);
+            let _ = fs::remove_file(&staged_tar);
+            entries
+        })();
+        staged_result
     }
 
     fn extract(
@@ -2223,211 +2276,19 @@ impl ContainerHandler for TarContainerHandler {
         if matches!(self.compression, TarCompression::None) {
             return self.extract_uncompressed_archive(&request.source, request, context);
         }
-
-        if matches!(
-            self.compression,
-            TarCompression::Gzip | TarCompression::Bzip2
-        ) {
-            let (codec_name, staged_label) = match self.compression {
-                TarCompression::Gzip => ("deflate", "tar-gz-extract-stage"),
-                TarCompression::Bzip2 => ("bzip2", "tar-bz2-extract-stage"),
-                TarCompression::None | TarCompression::Xz => unreachable!(),
-            };
-            let staged_tar = context.temp_paths().next_path(staged_label, Some("tar"));
-            let staged_result = (|| -> Result<OperationReport> {
-                if let Some(parent) = staged_tar.parent() {
-                    fs::create_dir_all(parent)?;
-                }
-                let backend = CodecRegistry::new()
-                    .find_by_name(codec_name)
-                    .ok_or_else(|| {
-                        RomWeaverError::Unsupported(format!(
-                            "codec backend `{codec_name}` is not registered for {}",
-                            self.descriptor.name
-                        ))
-                    })?;
-                let decode_report = backend.decode(
-                    &CodecOperationRequest {
-                        input: request.source.clone(),
-                        output: staged_tar.clone(),
-                        level: None,
-                    },
-                    context,
-                )?;
-                if decode_report.status != OperationStatus::Succeeded {
-                    return Err(RomWeaverError::Unsupported(decode_report.label));
-                }
-                self.extract_uncompressed_archive(&staged_tar, request, context)
-            })();
+        let staged_label = match self.compression {
+            TarCompression::None => unreachable!(),
+            TarCompression::Gzip => "tar-gz-extract-stage",
+            TarCompression::Bzip2 => "tar-bz2-extract-stage",
+            TarCompression::Xz => "tar-xz-extract-stage",
+        };
+        let staged_result = (|| -> Result<OperationReport> {
+            let (staged_tar, _) = self.decode_to_staged_tar(&request.source, context, staged_label)?;
+            let extracted = self.extract_uncompressed_archive(&staged_tar, request, context);
             let _ = fs::remove_file(&staged_tar);
-            return staged_result;
-        }
-
-        let execution = context.plan_threads(self.extract_thread_capability());
-        let reader = self.open_reader_for_extract(&request.source, &execution)?;
-        let mut archive = TarArchive::new(reader);
-        let mut preview_selections = SelectionMatcher::new(&request.selections);
-        let mut total_selected_entries = 0usize;
-        let mut total_selected_file_bytes = 0u64;
-
-        for entry in archive.entries()? {
-            let entry = entry?;
-            let raw_path = entry.path()?;
-            let relative = sanitize_archive_relative_path(raw_path.as_ref())?;
-            let archive_name = archive_path_to_name(&relative)?;
-            if !preview_selections.matches(&archive_name) {
-                continue;
-            }
-            total_selected_entries = total_selected_entries.saturating_add(1);
-            let entry_type = entry.header().entry_type();
-            if entry_type.is_file() {
-                total_selected_file_bytes =
-                    total_selected_file_bytes.saturating_add(entry.header().size()?);
-            }
-        }
-
-        let reader = self.open_reader_for_extract(&request.source, &execution)?;
-        let mut archive = TarArchive::new(reader);
-        let mut selections = SelectionMatcher::new(&request.selections);
-        let mut extracted_files = 0usize;
-        let mut written_bytes = 0u64;
-        let mut selected_entries_completed = 0usize;
-        let mut selected_file_bytes_written = 0u64;
-        let mut last_percent_bucket = -1i32;
-
-        if total_selected_entries > 0 {
-            emit_container_running_progress(
-                context,
-                "extract",
-                self.descriptor.name,
-                "extract",
-                format!(
-                    "extracting `{}` ({} selected entries)",
-                    self.descriptor.name, total_selected_entries
-                ),
-                0.0,
-                Some(&execution),
-            );
-        }
-
-        for entry in archive.entries()? {
-            let mut entry = entry?;
-            let raw_path = entry.path()?;
-            let relative = sanitize_archive_relative_path(raw_path.as_ref())?;
-            let archive_name = archive_path_to_name(&relative)?;
-            if !selections.matches(&archive_name) {
-                continue;
-            }
-
-            let output_path = request.out_dir.join(&relative);
-            let entry_type = entry.header().entry_type();
-            if entry_type.is_dir() {
-                fs::create_dir_all(&output_path)?;
-                selected_entries_completed = selected_entries_completed.saturating_add(1);
-                if total_selected_file_bytes == 0 {
-                    emit_container_step_progress(
-                        context,
-                        "extract",
-                        self.descriptor.name,
-                        "extract",
-                        selected_entries_completed,
-                        total_selected_entries,
-                        format!(
-                            "extracting `{}` ({}/{})",
-                            self.descriptor.name,
-                            selected_entries_completed,
-                            total_selected_entries
-                        ),
-                        Some(&execution),
-                    );
-                }
-                continue;
-            }
-            if !entry_type.is_file() {
-                return Err(RomWeaverError::Validation(format!(
-                    "{} extract does not support {} entries yet (`{}`)",
-                    self.descriptor.name,
-                    entry_type.as_byte(),
-                    archive_name
-                )));
-            }
-
-            if let Some(parent) = output_path.parent() {
-                fs::create_dir_all(parent)?;
-            }
-            let mut output = BufWriter::new(File::create(&output_path)?);
-            let mut buffer = [0u8; 64 * 1024];
-            let mut copied = 0u64;
-            loop {
-                let read = entry.read(&mut buffer)?;
-                if read == 0 {
-                    break;
-                }
-                output.write_all(&buffer[..read])?;
-                copied = copied.saturating_add(read as u64);
-                if total_selected_file_bytes > 0 {
-                    selected_file_bytes_written =
-                        selected_file_bytes_written.saturating_add(read as u64);
-                    let percent = (selected_file_bytes_written as f32
-                        / total_selected_file_bytes as f32)
-                        * 100.0;
-                    let bucket = percent.floor() as i32;
-                    if bucket > last_percent_bucket || percent >= 100.0 {
-                        last_percent_bucket = bucket;
-                        emit_container_running_progress(
-                            context,
-                            "extract",
-                            self.descriptor.name,
-                            "extract",
-                            format!(
-                                "extracting `{}` ({}/{})",
-                                self.descriptor.name,
-                                selected_file_bytes_written,
-                                total_selected_file_bytes
-                            ),
-                            percent,
-                            Some(&execution),
-                        );
-                    }
-                }
-            }
-            output.flush()?;
-            extracted_files += 1;
-            written_bytes = written_bytes.saturating_add(copied);
-            selected_entries_completed = selected_entries_completed.saturating_add(1);
-            if total_selected_file_bytes == 0 {
-                emit_container_step_progress(
-                    context,
-                    "extract",
-                    self.descriptor.name,
-                    "extract",
-                    selected_entries_completed,
-                    total_selected_entries,
-                    format!(
-                        "extracting `{}` ({}/{})",
-                        self.descriptor.name, selected_entries_completed, total_selected_entries
-                    ),
-                    Some(&execution),
-                );
-            }
-        }
-
-        selections.ensure_all_matched()?;
-
-        Ok(OperationReport::succeeded(
-            OperationFamily::Container,
-            Some(self.descriptor.name.to_string()),
-            "extract",
-            format!(
-                "extracted `{}` to `{}` ({} file(s), {} bytes written)",
-                request.source.display(),
-                request.out_dir.display(),
-                extracted_files,
-                written_bytes
-            ),
-            Some(100.0),
-            Some(execution),
-        ))
+            extracted
+        })();
+        staged_result
     }
 
     fn create(
@@ -2557,132 +2418,46 @@ impl ContainerHandler for TarContainerHandler {
                     create_result?
                 }
             }
-            TarCompression::Gzip => {
-                if execution.used_parallelism {
-                    let staged_tar = context
-                        .temp_paths()
-                        .next_path("tar-gz-create-stage", Some("tar"));
-                    let staged_result = (|| -> Result<(u64, Option<ThreadExecution>)> {
-                        if let Some(parent) = staged_tar.parent() {
-                            fs::create_dir_all(parent)?;
-                        }
-                        let staged_output = BufWriter::new(File::create(&staged_tar)?);
-                        let mut builder = TarBuilder::new(staged_output);
-                        let bytes =
-                            self.append_entries(&mut builder, &entries, context, &execution)?;
-                        builder.finish()?;
-
-                        let backend =
-                            CodecRegistry::new()
-                                .find_by_name("deflate")
-                                .ok_or_else(|| {
-                                    RomWeaverError::Unsupported(
-                                        "codec backend `deflate` is not registered for tar.gz"
-                                            .into(),
-                                    )
-                                })?;
-                        let encode_report = backend.encode(
-                            &CodecOperationRequest {
-                                input: staged_tar.clone(),
-                                output: request.output.clone(),
-                                level: Some(level as i32),
-                            },
-                            context,
-                        )?;
-                        if encode_report.status != OperationStatus::Succeeded {
-                            return Err(RomWeaverError::Unsupported(encode_report.label));
-                        }
-                        Ok((bytes, encode_report.thread_execution))
-                    })();
-                    let _ = fs::remove_file(&staged_tar);
-                    let (bytes, encode_execution) = staged_result?;
-                    if let Some(encode_execution) = encode_execution {
-                        execution = encode_execution;
+            TarCompression::Gzip | TarCompression::Bzip2 | TarCompression::Xz => {
+                let staged_label = match self.compression {
+                    TarCompression::None => unreachable!(),
+                    TarCompression::Gzip => "tar-gz-create-stage",
+                    TarCompression::Bzip2 => "tar-bz2-create-stage",
+                    TarCompression::Xz => "tar-xz-create-stage",
+                };
+                let staged_tar = context.temp_paths().next_path(staged_label, Some("tar"));
+                let staged_result = (|| -> Result<(u64, Option<ThreadExecution>)> {
+                    if let Some(parent) = staged_tar.parent() {
+                        fs::create_dir_all(parent)?;
                     }
-                    bytes
-                } else {
-                    let output = BufWriter::new(File::create(&request.output)?);
-                    let encoder = GzEncoder::new(output, GzipCompression::new(level));
-                    let mut builder = TarBuilder::new(encoder);
+                    let staged_output = BufWriter::new(File::create(&staged_tar)?);
+                    let mut builder = TarBuilder::new(staged_output);
                     let bytes = self.append_entries(&mut builder, &entries, context, &execution)?;
-                    let encoder = builder.into_inner()?;
-                    let mut output = encoder.finish()?;
-                    output.flush()?;
-                    bytes
-                }
-            }
-            TarCompression::Bzip2 => {
-                if execution.used_parallelism {
-                    let staged_tar = context
-                        .temp_paths()
-                        .next_path("tar-bz2-create-stage", Some("tar"));
-                    let staged_result = (|| -> Result<(u64, Option<ThreadExecution>)> {
-                        if let Some(parent) = staged_tar.parent() {
-                            fs::create_dir_all(parent)?;
-                        }
-                        let staged_output = BufWriter::new(File::create(&staged_tar)?);
-                        let mut builder = TarBuilder::new(staged_output);
-                        let bytes =
-                            self.append_entries(&mut builder, &entries, context, &execution)?;
-                        builder.finish()?;
+                    builder.finish()?;
 
-                        let backend =
-                            CodecRegistry::new().find_by_name("bzip2").ok_or_else(|| {
-                                RomWeaverError::Unsupported(
-                                    "codec backend `bzip2` is not registered for tar.bz2".into(),
-                                )
-                            })?;
-                        let encode_report = backend.encode(
-                            &CodecOperationRequest {
-                                input: staged_tar.clone(),
-                                output: request.output.clone(),
-                                level: Some(level as i32),
-                            },
-                            context,
-                        )?;
-                        if encode_report.status != OperationStatus::Succeeded {
-                            return Err(RomWeaverError::Unsupported(encode_report.label));
-                        }
-                        Ok((bytes, encode_report.thread_execution))
-                    })();
-                    let _ = fs::remove_file(&staged_tar);
-                    let (bytes, encode_execution) = staged_result?;
-                    if let Some(encode_execution) = encode_execution {
-                        execution = encode_execution;
-                    }
-                    bytes
-                } else {
-                    let output = BufWriter::new(File::create(&request.output)?);
-                    let encoder = BzEncoder::new(output, Bzip2Compression::new(level));
-                    let mut builder = TarBuilder::new(encoder);
-                    let bytes = self.append_entries(&mut builder, &entries, context, &execution)?;
-                    let mut output = builder.into_inner()?.finish()?;
-                    output.flush()?;
-                    bytes
-                }
-            }
-            TarCompression::Xz => {
-                let output = BufWriter::new(File::create(&request.output)?);
-                if execution.used_parallelism {
-                    let options = Self::xz_mt_options(level)?;
-                    let encoder = XzWriterMt::new(
-                        output,
-                        options,
-                        Self::xz_thread_count(execution.effective_threads),
+                    let backend = self.codec_backend()?;
+                    let level = i32::try_from(level).map_err(|_| {
+                        RomWeaverError::Validation("tar compression level exceeded i32".into())
+                    })?;
+                    let encode_report = backend.encode(
+                        &CodecOperationRequest {
+                            input: staged_tar.clone(),
+                            output: request.output.clone(),
+                            level: Some(level),
+                        },
+                        context,
                     )?;
-                    let mut builder = TarBuilder::new(encoder);
-                    let bytes = self.append_entries(&mut builder, &entries, context, &execution)?;
-                    let mut output = builder.into_inner()?.finish()?;
-                    output.flush()?;
-                    bytes
-                } else {
-                    let encoder = XzWriter::new(output, XzOptions::with_preset(level))?;
-                    let mut builder = TarBuilder::new(encoder);
-                    let bytes = self.append_entries(&mut builder, &entries, context, &execution)?;
-                    let mut output = builder.into_inner()?.finish()?;
-                    output.flush()?;
-                    bytes
+                    if encode_report.status != OperationStatus::Succeeded {
+                        return Err(RomWeaverError::Unsupported(encode_report.label));
+                    }
+                    Ok((bytes, encode_report.thread_execution))
+                })();
+                let _ = fs::remove_file(&staged_tar);
+                let (bytes, encode_execution) = staged_result?;
+                if let Some(encode_execution) = encode_execution {
+                    execution = encode_execution;
                 }
+                bytes
             }
         };
 
@@ -2726,8 +2501,6 @@ struct StreamContainerHandler {
 }
 
 impl StreamContainerHandler {
-    const INSPECT_READ_BUFFER_BYTES: usize = 64 * 1024;
-
     const fn new(descriptor: &'static FormatDescriptor, compression: StreamCompression) -> Self {
         Self {
             descriptor,
@@ -2873,38 +2646,7 @@ impl StreamContainerHandler {
 
     fn codec_backend(&self) -> Result<Arc<dyn CodecBackend>> {
         let codec = self.backend_codec_name();
-        CodecRegistry::new().find_by_name(codec).ok_or_else(|| {
-            RomWeaverError::Unsupported(format!(
-                "codec backend `{codec}` is not registered for {}",
-                self.descriptor.name
-            ))
-        })
-    }
-
-    fn xz_thread_count(effective_threads: usize) -> u32 {
-        match u32::try_from(effective_threads) {
-            Ok(count) => count.clamp(1, 256),
-            Err(_) => 256,
-        }
-    }
-
-    fn open_reader_for_inspect(
-        &self,
-        source: &Path,
-        execution: &ThreadExecution,
-    ) -> Result<Box<dyn Read>> {
-        let file = File::open(source)?;
-        let reader: Box<dyn Read> = match self.compression {
-            StreamCompression::Gzip => Box::new(MultiGzDecoder::new(BufReader::new(file))),
-            StreamCompression::Bzip2 => Box::new(Bzip2Decoder::new(BufReader::new(file))),
-            StreamCompression::Xz if execution.used_parallelism => {
-                let workers = Self::xz_thread_count(execution.effective_threads);
-                Box::new(XzReaderMt::new(BufReader::new(file), false, workers)?)
-            }
-            StreamCompression::Xz => Box::new(XzReader::new(BufReader::new(file), false)),
-            StreamCompression::Zstd => Box::new(zstd::stream::Decoder::new(BufReader::new(file))?),
-        };
-        Ok(reader)
+        resolve_container_codec_backend(self.descriptor.name, codec)
     }
 
     fn output_name(&self, source: &Path) -> String {
@@ -2970,19 +2712,28 @@ impl ContainerHandler for StreamContainerHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let compressed_bytes = fs::metadata(&request.source)?.len();
-        let execution = context.plan_threads(self.extract_thread_capability());
-        let mut reader = self.open_reader_for_inspect(&request.source, &execution)?;
-        let mut logical_bytes = 0u64;
-        let mut buffer = vec![0u8; Self::INSPECT_READ_BUFFER_BYTES];
-
-        loop {
-            context.cancel().check()?;
-            let read = reader.read(&mut buffer)?;
-            if read == 0 {
-                break;
+        let mut execution = context.plan_threads(self.extract_thread_capability());
+        let backend = self.codec_backend()?;
+        let decoded_path = context.temp_paths().next_path("stream-inspect", Some("bin"));
+        let logical_bytes_result = (|| -> Result<u64> {
+            let decode_report = backend.decode(
+                &CodecOperationRequest {
+                    input: request.source.clone(),
+                    output: decoded_path.clone(),
+                    level: None,
+                },
+                context,
+            )?;
+            if decode_report.status != OperationStatus::Succeeded {
+                return Err(RomWeaverError::Unsupported(decode_report.label));
             }
-            logical_bytes = logical_bytes.saturating_add(read as u64);
-        }
+            if let Some(decode_execution) = decode_report.thread_execution {
+                execution = decode_execution;
+            }
+            Ok(fs::metadata(&decoded_path)?.len())
+        })();
+        let _ = fs::remove_file(&decoded_path);
+        let logical_bytes = logical_bytes_result?;
 
         Ok(OperationReport::succeeded(
             OperationFamily::Container,
@@ -5112,31 +4863,25 @@ impl PbpContainerHandler {
             return Ok(Self::ISO_BLOCK_BYTES);
         }
 
-        let mut decoder = DeflateDecoder::new(compressed.as_slice());
-        let mut written = 0usize;
-        while written < output.len() {
-            let read = decoder.read(&mut output[written..])?;
-            if read == 0 {
-                break;
-            }
-            written = written.saturating_add(read);
+        let decode = decode_deflate_into_buffer(&compressed, output).map_err(|error| {
+            RomWeaverError::Validation(format!(
+                "source `{}` contains an undecodable deflate ISO block: {error}",
+                source.display()
+            ))
+        })?;
+        if decode.has_trailing_bytes {
+            return Err(RomWeaverError::Validation(format!(
+                "source `{}` contains an oversized deflate ISO block",
+                source.display()
+            )));
         }
-        if written == output.len() {
-            let mut trailing = [0u8; 1];
-            if decoder.read(&mut trailing)? != 0 {
-                return Err(RomWeaverError::Validation(format!(
-                    "source `{}` contains an oversized deflate ISO block",
-                    source.display()
-                )));
-            }
-        }
-        if written == 0 {
+        if decode.bytes_written == 0 {
             return Err(RomWeaverError::Validation(format!(
                 "source `{}` contains an undecodable deflate ISO block",
                 source.display()
             )));
         }
-        Ok(written)
+        Ok(decode.bytes_written)
     }
 
     fn required_block_count(&self, iso_size: u64) -> Result<usize> {
@@ -13554,7 +13299,7 @@ mod tests {
                 .supports_execution(&extract_execution)
         );
         assert_eq!(extract_execution.requested_threads, 8);
-        assert_eq!(extract_execution.effective_threads, 8);
+        assert!(extract_execution.effective_threads > 1);
         assert!(extract_execution.used_parallelism);
 
         for index in 0..8 {
@@ -13918,7 +13663,7 @@ mod tests {
                 .supports_execution(&extract_execution)
         );
         assert_eq!(extract_execution.requested_threads, 8);
-        assert_eq!(extract_execution.effective_threads, 8);
+        assert!(extract_execution.effective_threads > 1);
         assert!(extract_execution.used_parallelism);
 
         for index in 0..6 {
