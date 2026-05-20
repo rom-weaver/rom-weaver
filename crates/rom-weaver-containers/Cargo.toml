@@ -23,4 +23,4 @@ chd.workspace = true
 xdvdfs.workspace = true
 zip.workspace = true
 zstd.workspace = true
-zstd-seekable.workspace = true
+zeekstd.workspace = true

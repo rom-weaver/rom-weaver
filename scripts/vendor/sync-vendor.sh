@@ -13,9 +13,7 @@ cargo vendor \
   >/dev/null
 
 for crate_dir in \
-  libflac-sys-0.3.4 \
-  sevenz-rust2-0.20.2 \
-  zstd-seekable-0.1.23; do
+  sevenz-rust2-0.20.2; do
   if [[ ! -d "$TMP_DIR/$crate_dir" ]]; then
     echo "error: missing $crate_dir in cargo vendor output" >&2
     exit 1

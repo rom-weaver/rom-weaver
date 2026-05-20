@@ -31,7 +31,6 @@ crc32fast = "1.5.0"
 flate2 = "1.1.5"
 lz4_flex = "0.11.6"
 lzma-rust2 = { version = "0.16.2", default-features = false, features = ["std", "encoder", "xz"] }
-libflac-sys = "0.3.4"
 libz-sys = { version = "1.1.28", default-features = false }
 md-5 = "0.11.0"
 memmap2 = "0.9.5"
@@ -51,8 +50,8 @@ tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.20", features = ["env-filter", "json"] }
 xdvdfs = { version = "0.8.3", default-features = false, features = ["std", "read", "write", "sync"] }
 zip = { version = "6.0.0", default-features = false, features = ["deflate-flate2-zlib-rs", "bzip2", "zstd"] }
+zeekstd = "0.6.2"
 zstd-sys = { version = "2.0.16", default-features = false }
-zstd-seekable = "0.1.23"
 zstd = "0.13.3"
 
 [profile.wasm-release]
@@ -66,6 +65,4 @@ panic = "abort"
 strip = "symbols"
 
 [patch.crates-io]
-libflac-sys = { path = "vendor/libflac-sys-0.3.4" }
 sevenz-rust2 = { path = "vendor/sevenz-rust2-0.20.2" }
-zstd-seekable = { path = "vendor/zstd-seekable-0.1.23" }

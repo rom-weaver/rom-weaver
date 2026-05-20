@@ -60,8 +60,8 @@ use zip::{
     CompressionMethod as ZipCompressionMethod, ZipArchive as ZipFileArchive,
     ZipWriter as ZipFileWriter, write::SimpleFileOptions as ZipFileOptions,
 };
+use zeekstd::{Decoder as ZeekstdDecoder, SeekTable as ZeekstdSeekTable};
 use zstd::bulk::compress as zstd_compress;
-use zstd_seekable::Seekable;
 
 const ZIP: FormatDescriptor = FormatDescriptor {
     family: OperationFamily::Container,
@@ -7452,9 +7452,6 @@ impl Z3dsContainerHandler {
     const MIN_LEVEL: i32 = 0;
     const MAX_LEVEL: i32 = 22;
     const EXTRACT_CHUNK: usize = 8 * 1024 * 1024;
-    const SEEKABLE_SKIPPABLE_MAGIC: u32 = 0x184D2A5E;
-    const SEEKABLE_FOOTER_MAGIC: u32 = 0x8F92EAB1;
-    const SEEKABLE_FOOTER_SIZE: usize = 9;
 
     fn align_16(size: usize) -> usize {
         let rem = size % 16;
@@ -7496,7 +7493,7 @@ impl Z3dsContainerHandler {
         format!("{stem}{}", self.decompressed_extension_for_source(source))
     }
 
-    fn map_zstd_error(&self, stage: &str, error: zstd_seekable::Error) -> RomWeaverError {
+    fn map_zstd_error(&self, stage: &str, error: zeekstd::Error) -> RomWeaverError {
         RomWeaverError::Validation(format!("z3ds {stage} failed: {error}"))
     }
 
@@ -7594,8 +7591,17 @@ impl Z3dsContainerHandler {
     ) -> Result<()> {
         let source_file = File::open(source)?;
         let payload_reader = Z3dsPayloadReader::new(source_file, payload_start, compressed_size)?;
-        let mut decompressor = Seekable::init(Box::new(payload_reader))
+        let extract_end = task.offset.checked_add(task.len).ok_or_else(|| {
+            RomWeaverError::Validation("z3ds extract offset overflowed".into())
+        })?;
+        let mut decompressor = ZeekstdDecoder::new(payload_reader)
             .map_err(|error| self.map_zstd_error("extract initialize", error))?;
+        decompressor
+            .set_offset(task.offset)
+            .map_err(|error| self.map_zstd_error("extract seek", error))?;
+        decompressor
+            .set_offset_limit(extract_end)
+            .map_err(|error| self.map_zstd_error("extract limit", error))?;
 
         if let Some(parent) = task.temp_path.parent() {
             fs::create_dir_all(parent)?;
@@ -7611,11 +7617,8 @@ impl Z3dsContainerHandler {
             let to_decode = usize::try_from(remaining)
                 .unwrap_or(usize::MAX)
                 .min(buffer.len());
-            let read_offset = task.offset.checked_add(written).ok_or_else(|| {
-                RomWeaverError::Validation("z3ds extract offset overflowed".into())
-            })?;
             let decoded = decompressor
-                .decompress(&mut buffer[..to_decode], read_offset)
+                .decompress(&mut buffer[..to_decode])
                 .map_err(|error| self.map_zstd_error("extract", error))?;
             if decoded == 0 {
                 return Err(RomWeaverError::Validation(format!(
@@ -7724,30 +7727,18 @@ impl Z3dsContainerHandler {
         output: &mut BufWriter<File>,
         frames: &[Z3dsCompressedFrame],
     ) -> Result<u64> {
-        let frame_count = u32::try_from(frames.len()).map_err(|_| {
-            RomWeaverError::Validation("z3ds frame count exceeded seekable format limits".into())
-        })?;
-        let entry_size = 8_u64;
-        let entries_bytes = u64::from(frame_count)
-            .checked_mul(entry_size)
-            .ok_or_else(|| RomWeaverError::Validation("z3ds seek table size overflowed".into()))?;
-        let frame_size_u64 = entries_bytes
-            .checked_add(Self::SEEKABLE_FOOTER_SIZE as u64)
-            .ok_or_else(|| RomWeaverError::Validation("z3ds seek table size overflowed".into()))?;
-        let frame_size = u32::try_from(frame_size_u64)
-            .map_err(|_| RomWeaverError::Validation("z3ds seek table exceeded 4 GiB".into()))?;
-
-        output.write_all(&Self::SEEKABLE_SKIPPABLE_MAGIC.to_le_bytes())?;
-        output.write_all(&frame_size.to_le_bytes())?;
+        let mut seek_table = ZeekstdSeekTable::new();
         for frame in frames {
-            output.write_all(&frame.compressed_size.to_le_bytes())?;
-            output.write_all(&frame.decompressed_size.to_le_bytes())?;
+            seek_table
+                .log_frame(frame.compressed_size, frame.decompressed_size)
+                .map_err(|error| self.map_zstd_error("seek table build", error))?;
         }
-        output.write_all(&frame_count.to_le_bytes())?;
-        output.write_all(&[0_u8])?; // Seek_Table_Descriptor (no checksum)
-        output.write_all(&Self::SEEKABLE_FOOTER_MAGIC.to_le_bytes())?;
+        let mut serializer = seek_table.into_serializer();
+        let seek_table_bytes = u64::try_from(serializer.encoded_len())
+            .map_err(|_| RomWeaverError::Validation("z3ds seek table size overflowed".into()))?;
+        io::copy(&mut serializer, output)?;
 
-        Ok(u64::from(frame_size) + 8)
+        Ok(seek_table_bytes)
     }
 }
 
@@ -8211,6 +8202,17 @@ mod chd_native {
         crc16: u16,
     }
 
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    struct HunkHashKey {
+        crc16: u16,
+        sha1: [u8; 20],
+    }
+
+    struct ParentReuseIndex {
+        by_hash: BTreeMap<HunkHashKey, u64>,
+        sha1: [u8; 20],
+    }
+
     #[derive(Clone, Debug, PartialEq, Eq)]
     struct RustMetadataEntry {
         tag: u32,
@@ -8419,18 +8421,8 @@ mod chd_native {
             let file = File::open(source)
                 .map_err(|error| format!("failed to open `{}`: {error}", source.display()))?;
             let reader = BufReader::new(file);
-            match chd::Chd::open(reader, parent) {
-                Ok(chd) => Ok(chd),
-                Err(chd::Error::InvalidParameter) if parent_source.is_some() => {
-                    let file = File::open(source).map_err(|error| {
-                        format!("failed to open `{}`: {error}", source.display())
-                    })?;
-                    let reader = BufReader::new(file);
-                    chd::Chd::open(reader, None)
-                        .map_err(|error| format!("failed to parse `{}`: {error}", source.display()))
-                }
-                Err(error) => Err(format!("failed to parse `{}`: {error}", source.display())),
-            }
+            chd::Chd::open(reader, parent)
+                .map_err(|error| format!("failed to parse `{}`: {error}", source.display()))
         }
 
         fn extract_to_file(&self, output_path: &Path, thread_count: usize) -> Result<ChdHeader> {
@@ -8693,10 +8685,14 @@ mod chd_native {
         const CHD_V5_HEADER_BYTES: u64 = 124;
         const CHD_V5_MAP_TYPE_COMPRESSED_MAX: u8 = 3;
         const CHD_V5_MAP_TYPE_UNCOMPRESSED: u8 = 4;
+        const CHD_V5_MAP_TYPE_SELF: u8 = 5;
+        const CHD_V5_MAP_TYPE_PARENT: u8 = 6;
+        const CHD_V5_MAP_TYPE_MAX: u8 = 6;
         const CHD_V5_HEADER_MAP_OFFSET: u64 = 40;
         const CHD_V5_HEADER_META_OFFSET: u64 = 48;
         const CHD_V5_HEADER_RAW_SHA1_OFFSET: u64 = 64;
         const CHD_V5_HEADER_SHA1_OFFSET: u64 = 84;
+        const CHD_V5_HEADER_PARENT_SHA1_OFFSET: u64 = 104;
         const CHD_SHA1_BYTES: usize = 20;
 
         fn supports_rust_create(
@@ -8726,29 +8722,45 @@ mod chd_native {
             }
             active_codecs
                 .into_iter()
-                .all(|codec| self.supports_rust_create_codec(create_kind, codec))
+                .all(|codec| self.supports_create_codec(create_kind, codec))
         }
 
-        fn supports_rust_create_codec(&self, create_kind: &ChdCreateKind, codec: ChdCodec) -> bool {
+        fn supports_create_codec(&self, create_kind: &ChdCreateKind, codec: ChdCodec) -> bool {
             match create_kind {
                 ChdCreateKind::Raw | ChdCreateKind::Dvd | ChdCreateKind::HardDisk(_) => {
                     matches!(
                         codec,
-                        ChdCodec::NONE | ChdCodec::ZSTD | ChdCodec::ZLIB | ChdCodec::LZMA
+                        ChdCodec::NONE
+                            | ChdCodec::ZSTD
+                            | ChdCodec::ZLIB
+                            | ChdCodec::LZMA
+                            | ChdCodec::HUFFMAN
+                            | ChdCodec::FLAC
                     )
                 }
                 ChdCreateKind::Disc(_) => {
                     matches!(
                         codec,
-                        ChdCodec::NONE | ChdCodec::CD_ZSTD | ChdCodec::CD_ZLIB | ChdCodec::CD_LZMA
+                        ChdCodec::NONE
+                            | ChdCodec::CD_ZSTD
+                            | ChdCodec::CD_ZLIB
+                            | ChdCodec::CD_LZMA
+                            | ChdCodec::CD_FLAC
                     )
                 }
-                ChdCreateKind::Av(_) => {
-                    matches!(
-                        codec,
-                        ChdCodec::NONE | ChdCodec::ZSTD | ChdCodec::ZLIB | ChdCodec::LZMA
-                    )
+                ChdCreateKind::Av(_) => matches!(codec, ChdCodec::NONE | ChdCodec::AVHUFF),
+            }
+        }
+
+        fn supports_rust_encode_codec(&self, create_kind: &ChdCreateKind, codec: ChdCodec) -> bool {
+            match create_kind {
+                ChdCreateKind::Raw | ChdCreateKind::Dvd | ChdCreateKind::HardDisk(_) => {
+                    matches!(codec, ChdCodec::ZSTD | ChdCodec::ZLIB | ChdCodec::LZMA)
                 }
+                ChdCreateKind::Disc(_) => {
+                    matches!(codec, ChdCodec::CD_ZSTD | ChdCodec::CD_ZLIB | ChdCodec::CD_LZMA)
+                }
+                ChdCreateKind::Av(_) => false,
             }
         }
 
@@ -8894,6 +8906,7 @@ mod chd_native {
                     [codec, ChdCodec::NONE, ChdCodec::NONE, ChdCodec::NONE],
                     level,
                     thread_count,
+                    None,
                 )
             }
         }
@@ -10533,6 +10546,7 @@ mod chd_native {
                 hunk_bytes,
                 unit_bytes,
                 [ChdCodec::NONE; CHD_MAX_COMPRESSORS],
+                None,
             );
             output_file.write_all(&header).map_err(|error| {
                 RomWeaverError::Validation(format!(
@@ -10642,6 +10656,84 @@ mod chd_native {
             })
         }
 
+        fn hunk_hash_key(bytes: &[u8]) -> HunkHashKey {
+            let mut sha1 = [0_u8; 20];
+            let digest = Sha1::digest(bytes);
+            sha1.copy_from_slice(digest.as_slice());
+            HunkHashKey {
+                crc16: Self::crc16_ibm3740(bytes),
+                sha1,
+            }
+        }
+
+        fn load_parent_reuse_index(
+            &self,
+            parent_source: &Path,
+            expected_unit_bytes: u32,
+            expected_hunk_bytes: u32,
+        ) -> Result<ParentReuseIndex> {
+            let mut parent = ChdReadSession::open_rust_chd(parent_source, None).map_err(|error| {
+                RomWeaverError::Validation(format!(
+                    "failed to open parent chd `{}` for differential create: {error}",
+                    parent_source.display()
+                ))
+            })?;
+            let parent_header = parent.header();
+            let parent_sha1 = parent_header.sha1().ok_or_else(|| {
+                RomWeaverError::Validation(format!(
+                    "parent chd `{}` does not expose a sha1 in its header",
+                    parent_source.display()
+                ))
+            })?;
+            if parent_header.unit_bytes() != expected_unit_bytes {
+                return Err(RomWeaverError::Validation(format!(
+                    "parent chd `{}` unit size {} does not match child unit size {}",
+                    parent_source.display(),
+                    parent_header.unit_bytes(),
+                    expected_unit_bytes
+                )));
+            }
+            if parent_header.hunk_size() != expected_hunk_bytes {
+                return Err(RomWeaverError::Validation(format!(
+                    "parent chd `{}` hunk size {} does not match child hunk size {}",
+                    parent_source.display(),
+                    parent_header.hunk_size(),
+                    expected_hunk_bytes
+                )));
+            }
+            if expected_unit_bytes == 0 || expected_hunk_bytes % expected_unit_bytes != 0 {
+                return Err(RomWeaverError::Validation(
+                    "invalid parent/child geometry for differential create".to_string(),
+                ));
+            }
+            let units_per_hunk = expected_hunk_bytes / expected_unit_bytes;
+            let mut by_hash = BTreeMap::new();
+            let mut hunk_buffer = parent.get_hunksized_buffer();
+            let mut compressed_buffer = Vec::new();
+            for hunk_index in 0..parent_header.hunk_count() {
+                let mut hunk = parent.hunk(hunk_index).map_err(|error| {
+                    RomWeaverError::Validation(format!(
+                        "failed to read parent hunk {hunk_index} from `{}`: {error}",
+                        parent_source.display()
+                    ))
+                })?;
+                hunk.read_hunk_in(&mut compressed_buffer, &mut hunk_buffer)
+                    .map_err(|error| {
+                        RomWeaverError::Validation(format!(
+                            "failed to decode parent hunk {hunk_index} from `{}`: {error}",
+                            parent_source.display()
+                        ))
+                    })?;
+                let key = Self::hunk_hash_key(&hunk_buffer);
+                let parent_unit = u64::from(hunk_index).saturating_mul(u64::from(units_per_hunk));
+                by_hash.entry(key).or_insert(parent_unit);
+            }
+            Ok(ParentReuseIndex {
+                by_hash,
+                sha1: parent_sha1,
+            })
+        }
+
         fn create_compressed_rust_raw(
             &self,
             input: &Path,
@@ -10651,15 +10743,16 @@ mod chd_native {
             codecs: [ChdCodec; CHD_MAX_COMPRESSORS],
             compression_level: i32,
             thread_count: usize,
+            parent_source: Option<&Path>,
         ) -> Result<ChdHeader> {
             let mut active_codecs = Vec::new();
             for (index, codec) in codecs.into_iter().enumerate() {
                 if codec == ChdCodec::NONE {
                     break;
                 }
-                if !self.supports_rust_create_codec(create_kind, codec) {
+                if !self.supports_create_codec(create_kind, codec) {
                     return Err(RomWeaverError::Unsupported(format!(
-                        "rust chd compressed create does not support codec `{}` for {} media",
+                        "chd codec `{}` is not valid for {} media",
                         self.codec_label(codec),
                         self.media_label(self.media_kind_from_create_kind(create_kind))
                     )));
@@ -10671,6 +10764,11 @@ mod chd_native {
                     "compressed rust CHD create requires at least one codec".to_string(),
                 ));
             }
+            let encodable_codecs = active_codecs
+                .iter()
+                .copied()
+                .filter(|(_, codec)| self.supports_rust_encode_codec(create_kind, *codec))
+                .collect::<Vec<_>>();
             let primary_codec = active_codecs[0].1;
 
             let hunk_bytes = self.hunk_bytes(create_kind, logical_bytes, primary_codec);
@@ -10693,6 +10791,13 @@ mod chd_native {
             let hunk_bytes_usize = usize::try_from(hunk_bytes).map_err(|_| {
                 RomWeaverError::Validation("CHD hunk size exceeded addressable memory".to_string())
             })?;
+            let parent_reuse = match parent_source {
+                Some(parent_source) => {
+                    Some(self.load_parent_reuse_index(parent_source, unit_bytes, hunk_bytes)?)
+                }
+                None => None,
+            };
+            let parent_sha1 = parent_reuse.as_ref().map(|value| value.sha1);
 
             let mut output_file = File::options()
                 .create(true)
@@ -10706,8 +10811,14 @@ mod chd_native {
                         output.display()
                     ))
                 })?;
-            let placeholder_header =
-                self.build_chd_v5_header(logical_bytes, 0, hunk_bytes, unit_bytes, codecs);
+            let placeholder_header = self.build_chd_v5_header(
+                logical_bytes,
+                0,
+                hunk_bytes,
+                unit_bytes,
+                codecs,
+                parent_sha1,
+            );
             output_file
                 .write_all(&placeholder_header)
                 .map_err(|error| {
@@ -10740,11 +10851,18 @@ mod chd_native {
             let mut entries = Vec::with_capacity(hunk_count_usize);
             let mut remaining = logical_bytes;
             let mut current_offset = Self::CHD_V5_HEADER_BYTES;
+            let mut self_hunks_by_hash = BTreeMap::<HunkHashKey, u64>::new();
+            let parent_hunks_by_hash = parent_reuse.as_ref().map(|value| &value.by_hash);
             let mut next_hunk = 0usize;
             while next_hunk < hunk_count_usize {
                 let this_batch = (hunk_count_usize - next_hunk).min(batch_size);
-                let mut raw_hunks = Vec::with_capacity(this_batch);
-                for _ in 0..this_batch {
+                enum BatchHunkEntry {
+                    SelfCopy(u64),
+                    ParentCopy(u64),
+                    Data(Vec<u8>),
+                }
+                let mut batch_hunks = Vec::with_capacity(this_batch);
+                for batch_index in 0..this_batch {
                     let mut hunk = vec![0_u8; hunk_bytes_usize];
                     let read_len =
                         usize::try_from(remaining.min(u64::from(hunk_bytes))).map_err(|_| {
@@ -10759,17 +10877,96 @@ mod chd_native {
                         ))
                     })?;
                     remaining = remaining.saturating_sub(read_len as u64);
-                    raw_hunks.push(hunk);
+                    let key = Self::hunk_hash_key(&hunk);
+                    if let Some(&other_hunk) = self_hunks_by_hash.get(&key) {
+                        batch_hunks.push(BatchHunkEntry::SelfCopy(other_hunk));
+                        continue;
+                    }
+                    if let Some(parent_hunks_by_hash) = parent_hunks_by_hash
+                        && let Some(&parent_unit) = parent_hunks_by_hash.get(&key)
+                    {
+                        batch_hunks.push(BatchHunkEntry::ParentCopy(parent_unit));
+                        continue;
+                    }
+                    let hunk_index = next_hunk.saturating_add(batch_index);
+                    self_hunks_by_hash.insert(key, hunk_index as u64);
+                    batch_hunks.push(BatchHunkEntry::Data(hunk));
                 }
 
-                let compressed_hunks: Vec<Result<(u8, Vec<u8>, u16)>> = if let Some(pool) = &pool {
-                    pool.install(|| {
-                        raw_hunks
-                            .into_par_iter()
-                            .map(|hunk| {
+                let mut data_hunks = Vec::<(usize, Vec<u8>)>::new();
+                for (index, entry) in batch_hunks.iter_mut().enumerate() {
+                    if let BatchHunkEntry::Data(hunk) = entry {
+                        data_hunks.push((index, std::mem::take(hunk)));
+                    }
+                }
+                let compressed_hunks: Vec<Result<(usize, u8, Vec<u8>, u16)>> =
+                    if let Some(pool) = &pool {
+                        if data_hunks.len() > 1 {
+                            pool.install(|| {
+                                data_hunks
+                                    .into_par_iter()
+                                    .map(|(index, hunk)| {
+                                        let crc = Self::crc16_ibm3740(&hunk);
+                                        let mut best: Option<(u8, Vec<u8>)> = None;
+                                        for (codec_slot, codec) in &encodable_codecs {
+                                            let compressed = self.compress_rust_hunk(
+                                                create_kind,
+                                                *codec,
+                                                compression_level,
+                                                &hunk,
+                                            )?;
+                                            if best
+                                                .as_ref()
+                                                .map(|(_, candidate)| {
+                                                    compressed.len() < candidate.len()
+                                                })
+                                                .unwrap_or(true)
+                                            {
+                                                best = Some((*codec_slot, compressed));
+                                            }
+                                        }
+                                        let (compression_type, payload) = best
+                                            .filter(|(_, compressed)| compressed.len() < hunk.len())
+                                            .unwrap_or((Self::CHD_V5_MAP_TYPE_UNCOMPRESSED, hunk));
+                                        Ok((index, compression_type, payload, crc))
+                                    })
+                                    .collect()
+                            })
+                        } else {
+                            data_hunks
+                                .into_iter()
+                                .map(|(index, hunk)| {
+                                    let crc = Self::crc16_ibm3740(&hunk);
+                                    let mut best: Option<(u8, Vec<u8>)> = None;
+                                    for (codec_slot, codec) in &encodable_codecs {
+                                        let compressed = self.compress_rust_hunk(
+                                            create_kind,
+                                            *codec,
+                                            compression_level,
+                                            &hunk,
+                                        )?;
+                                        if best
+                                            .as_ref()
+                                            .map(|(_, candidate)| compressed.len() < candidate.len())
+                                            .unwrap_or(true)
+                                        {
+                                            best = Some((*codec_slot, compressed));
+                                        }
+                                    }
+                                    let (compression_type, payload) = best
+                                        .filter(|(_, compressed)| compressed.len() < hunk.len())
+                                        .unwrap_or((Self::CHD_V5_MAP_TYPE_UNCOMPRESSED, hunk));
+                                    Ok((index, compression_type, payload, crc))
+                                })
+                                .collect()
+                        }
+                    } else {
+                        data_hunks
+                            .into_iter()
+                            .map(|(index, hunk)| {
                                 let crc = Self::crc16_ibm3740(&hunk);
                                 let mut best: Option<(u8, Vec<u8>)> = None;
-                                for (codec_slot, codec) in &active_codecs {
+                                for (codec_slot, codec) in &encodable_codecs {
                                     let compressed = self.compress_rust_hunk(
                                         create_kind,
                                         *codec,
@@ -10787,68 +10984,70 @@ mod chd_native {
                                 let (compression_type, payload) = best
                                     .filter(|(_, compressed)| compressed.len() < hunk.len())
                                     .unwrap_or((Self::CHD_V5_MAP_TYPE_UNCOMPRESSED, hunk));
-                                Ok((compression_type, payload, crc))
+                                Ok((index, compression_type, payload, crc))
                             })
                             .collect()
-                    })
-                } else {
-                    raw_hunks
-                        .into_iter()
-                        .map(|hunk| {
-                            let crc = Self::crc16_ibm3740(&hunk);
-                            let mut best: Option<(u8, Vec<u8>)> = None;
-                            for (codec_slot, codec) in &active_codecs {
-                                let compressed = self.compress_rust_hunk(
-                                    create_kind,
-                                    *codec,
-                                    compression_level,
-                                    &hunk,
-                                )?;
-                                if best
-                                    .as_ref()
-                                    .map(|(_, candidate)| compressed.len() < candidate.len())
-                                    .unwrap_or(true)
-                                {
-                                    best = Some((*codec_slot, compressed));
-                                }
-                            }
-                            let (compression_type, payload) = best
-                                .filter(|(_, compressed)| compressed.len() < hunk.len())
-                                .unwrap_or((Self::CHD_V5_MAP_TYPE_UNCOMPRESSED, hunk));
-                            Ok((compression_type, payload, crc))
-                        })
-                        .collect()
-                };
-
+                    };
+                let mut data_results = vec![None; batch_hunks.len()];
                 for result in compressed_hunks {
-                    let (compression_type, compressed, crc16) = result?;
-                    let length = u32::try_from(compressed.len()).map_err(|_| {
-                        RomWeaverError::Validation("compressed CHD chunk exceeded u32 size".into())
-                    })?;
-                    if length > 0x00FF_FFFF {
-                        return Err(RomWeaverError::Validation(format!(
-                            "compressed CHD chunk length {length} exceeds v5 map limit"
-                        )));
+                    let (index, compression_type, payload, crc16) = result?;
+                    data_results[index] = Some((compression_type, payload, crc16));
+                }
+
+                for (index, entry) in batch_hunks.into_iter().enumerate() {
+                    match entry {
+                        BatchHunkEntry::SelfCopy(other_hunk) => entries.push(RustCompressedHunkEntry {
+                            compression_type: Self::CHD_V5_MAP_TYPE_SELF,
+                            offset: other_hunk,
+                            length: 0,
+                            crc16: 0,
+                        }),
+                        BatchHunkEntry::ParentCopy(parent_unit) => {
+                            entries.push(RustCompressedHunkEntry {
+                                compression_type: Self::CHD_V5_MAP_TYPE_PARENT,
+                                offset: parent_unit,
+                                length: 0,
+                                crc16: 0,
+                            })
+                        }
+                        BatchHunkEntry::Data(_) => {
+                            let Some((compression_type, payload, crc16)) = data_results[index].take()
+                            else {
+                                return Err(RomWeaverError::Validation(
+                                    "internal CHD compression result mismatch".to_string(),
+                                ));
+                            };
+                            let length = u32::try_from(payload.len()).map_err(|_| {
+                                RomWeaverError::Validation(
+                                    "compressed CHD chunk exceeded u32 size".into(),
+                                )
+                            })?;
+                            if length > 0x00FF_FFFF {
+                                return Err(RomWeaverError::Validation(format!(
+                                    "compressed CHD chunk length {length} exceeds v5 map limit"
+                                )));
+                            }
+                            output_file.write_all(&payload).map_err(|error| {
+                                RomWeaverError::Validation(format!(
+                                    "failed to write CHD data to `{}`: {error}",
+                                    output.display()
+                                ))
+                            })?;
+                            entries.push(RustCompressedHunkEntry {
+                                compression_type,
+                                offset: current_offset,
+                                length,
+                                crc16,
+                            });
+                            current_offset = current_offset.saturating_add(u64::from(length));
+                        }
                     }
-                    output_file.write_all(&compressed).map_err(|error| {
-                        RomWeaverError::Validation(format!(
-                            "failed to write CHD data to `{}`: {error}",
-                            output.display()
-                        ))
-                    })?;
-                    entries.push(RustCompressedHunkEntry {
-                        compression_type,
-                        offset: current_offset,
-                        length,
-                        crc16,
-                    });
-                    current_offset = current_offset.saturating_add(u64::from(length));
                 }
                 next_hunk += this_batch;
             }
 
             let map_offset = current_offset;
-            let (map_payload, map_crc, length_bits, first_offset) =
+            let (map_payload, map_crc, length_bits, self_bits, parent_bits, first_offset) =
                 Self::encode_v5_compressed_map(&entries)?;
             let map_bytes = u32::try_from(map_payload.len()).map_err(|_| {
                 RomWeaverError::Validation("compressed CHD map exceeded u32 size".to_string())
@@ -10858,8 +11057,8 @@ mod chd_native {
             Self::write_u48_be(&mut map_header[4..10], first_offset)?;
             map_header[10..12].copy_from_slice(&map_crc.to_be_bytes());
             map_header[12] = length_bits;
-            map_header[13] = 0;
-            map_header[14] = 0;
+            map_header[13] = self_bits;
+            map_header[14] = parent_bits;
             map_header[15] = 0;
             output_file.write_all(&map_header).map_err(|error| {
                 RomWeaverError::Validation(format!(
@@ -10926,6 +11125,7 @@ mod chd_native {
             hunk_bytes: u32,
             unit_bytes: u32,
             codecs: [ChdCodec; CHD_MAX_COMPRESSORS],
+            parent_sha1: Option<[u8; Self::CHD_SHA1_BYTES]>,
         ) -> [u8; Self::CHD_V5_HEADER_BYTES as usize] {
             let mut header = [0_u8; Self::CHD_V5_HEADER_BYTES as usize];
             header[0..8].copy_from_slice(&CHD_SIGNATURE);
@@ -10940,6 +11140,11 @@ mod chd_native {
             header[48..56].copy_from_slice(&0_u64.to_be_bytes());
             header[56..60].copy_from_slice(&hunk_bytes.to_be_bytes());
             header[60..64].copy_from_slice(&unit_bytes.to_be_bytes());
+            if let Some(parent_sha1) = parent_sha1 {
+                header[Self::CHD_V5_HEADER_PARENT_SHA1_OFFSET as usize
+                    ..Self::CHD_V5_HEADER_PARENT_SHA1_OFFSET as usize + Self::CHD_SHA1_BYTES]
+                    .copy_from_slice(&parent_sha1);
+            }
             header
         }
 
@@ -11171,7 +11376,7 @@ mod chd_native {
 
         fn encode_v5_compressed_map(
             entries: &[RustCompressedHunkEntry],
-        ) -> Result<(Vec<u8>, u16, u8, u64)> {
+        ) -> Result<(Vec<u8>, u16, u8, u8, u8, u64)> {
             let mut raw_map = vec![0_u8; entries.len().saturating_mul(12)];
             for (index, entry) in entries.iter().enumerate() {
                 let offset = index.saturating_mul(12);
@@ -11188,13 +11393,41 @@ mod chd_native {
                     .max()
                     .unwrap_or_default(),
             );
-            let first_offset = entries.first().map(|entry| entry.offset).unwrap_or(0);
+            let mut max_self = 0_u64;
+            let mut max_parent = 0_u64;
+            let mut first_offset = 0_u64;
+            for entry in entries {
+                match entry.compression_type {
+                    0..=Self::CHD_V5_MAP_TYPE_UNCOMPRESSED => {
+                        if first_offset == 0 {
+                            first_offset = entry.offset;
+                        }
+                    }
+                    Self::CHD_V5_MAP_TYPE_SELF => {
+                        max_self = max_self.max(entry.offset);
+                    }
+                    Self::CHD_V5_MAP_TYPE_PARENT => {
+                        max_parent = max_parent.max(entry.offset);
+                    }
+                    _ => {}
+                }
+            }
+            let self_bits = if max_self == 0 {
+                0
+            } else {
+                (u64::BITS - max_self.leading_zeros()) as u8
+            };
+            let parent_bits = if max_parent == 0 {
+                0
+            } else {
+                (u64::BITS - max_parent.leading_zeros()) as u8
+            };
             let max_compression_type = entries
                 .iter()
                 .map(|entry| entry.compression_type)
                 .max()
                 .unwrap_or(0);
-            if max_compression_type > Self::CHD_V5_MAP_TYPE_UNCOMPRESSED {
+            if max_compression_type > Self::CHD_V5_MAP_TYPE_MAX {
                 return Err(RomWeaverError::Validation(format!(
                     "unsupported compressed CHD map type {} for rust map encoder",
                     max_compression_type
@@ -11219,12 +11452,36 @@ mod chd_native {
             }
 
             for entry in entries {
-                if entry.compression_type <= Self::CHD_V5_MAP_TYPE_COMPRESSED_MAX {
-                    bit_writer.write_bits(u64::from(entry.length), length_bits);
+                match entry.compression_type {
+                    0..=Self::CHD_V5_MAP_TYPE_COMPRESSED_MAX => {
+                        bit_writer.write_bits(u64::from(entry.length), length_bits);
+                        bit_writer.write_bits(u64::from(entry.crc16), 16);
+                    }
+                    Self::CHD_V5_MAP_TYPE_UNCOMPRESSED => {
+                        bit_writer.write_bits(u64::from(entry.crc16), 16);
+                    }
+                    Self::CHD_V5_MAP_TYPE_SELF => {
+                        bit_writer.write_bits(entry.offset, self_bits);
+                    }
+                    Self::CHD_V5_MAP_TYPE_PARENT => {
+                        bit_writer.write_bits(entry.offset, parent_bits);
+                    }
+                    other => {
+                        return Err(RomWeaverError::Validation(format!(
+                            "unsupported compressed CHD map type {} for rust map encoder",
+                            other
+                        )));
+                    }
                 }
-                bit_writer.write_bits(u64::from(entry.crc16), 16);
             }
-            Ok((bit_writer.finish(), map_crc, length_bits, first_offset))
+            Ok((
+                bit_writer.finish(),
+                map_crc,
+                length_bits,
+                self_bits,
+                parent_bits,
+                first_offset,
+            ))
         }
 
         fn map_symbol_bit_lengths_for_max_type(max_type: u8) -> Result<[u8; 16]> {
@@ -11254,6 +11511,9 @@ mod chd_native {
                     lengths[2] = 2;
                     lengths[3] = 3;
                     lengths[4] = 3;
+                }
+                5 | 6 => {
+                    lengths[0..8].fill(3);
                 }
                 _ => {
                     return Err(RomWeaverError::Validation(format!(
@@ -12102,14 +12362,8 @@ mod chd_native {
             request: &ContainerExtractRequest,
             context: &OperationContext,
         ) -> Result<OperationReport> {
-            if request.parent.is_some() {
-                return Err(RomWeaverError::Unsupported(
-                    "chd extract with parent is not yet supported by the rust-native path"
-                        .to_string(),
-                ));
-            }
             let execution = context.plan_threads(ThreadCapability::parallel(None));
-            let chd = ChdReadSession::open(&request.source, None)?;
+            let chd = ChdReadSession::open(&request.source, request.parent.as_deref())?;
             let media_kind = chd.media_kind();
             if request.split_bin && media_kind != ChdMediaKind::CdRom {
                 return Err(RomWeaverError::Validation(format!(
@@ -12155,12 +12409,6 @@ mod chd_native {
             request: &ContainerCreateRequest,
             context: &OperationContext,
         ) -> Result<OperationReport> {
-            if request.parent.is_some() {
-                return Err(RomWeaverError::Unsupported(
-                    "chd create with parent is not yet supported by the rust-native path"
-                        .to_string(),
-                ));
-            }
             if request.inputs.len() != 1 {
                 return Err(RomWeaverError::Validation(
                     "chd create currently requires exactly one input file".into(),
@@ -12218,6 +12466,12 @@ mod chd_native {
 
             let rust_create = || -> Result<(ChdHeader, ChdMediaKind)> {
                 let header = if compression_plan.primary_codec == ChdCodec::NONE {
+                    if request.parent.is_some() {
+                        return Err(RomWeaverError::Unsupported(
+                            "chd create with parent requires at least one compressed codec; `store` mode cannot reference parent hunks"
+                                .to_string(),
+                        ));
+                    }
                     self.create_uncompressed_rust_raw(
                         source_path,
                         &request.output,
@@ -12233,6 +12487,7 @@ mod chd_native {
                         compression_plan.codecs,
                         compression_level,
                         execution.effective_threads,
+                        request.parent.as_deref(),
                     )?
                 };
                 Ok((header, self.media_kind_from_create_kind(&create_kind)))
@@ -12244,9 +12499,10 @@ mod chd_native {
                 compression_plan.primary_codec,
             );
             let create_result = if !should_attempt_rust {
-                Err(RomWeaverError::Unsupported(
-                    "chd create requires all active compressed codec slots to be rust-encodable: raw/dvd/hd/av use `zstd`, `zlib`, or `lzma`; disc/gd use `cdzs`, `cdzl`, or `cdlz` (aliases `zstd`, `zlib`, and `lzma` normalize to disc codecs)".to_string(),
-                ))
+                Err(RomWeaverError::Unsupported(format!(
+                    "chd codec list is invalid for {} media",
+                    self.media_label(self.media_kind_from_create_kind(&create_kind))
+                )))
             } else {
                 rust_create()
             };
@@ -14988,7 +15244,7 @@ mod tests {
 
     #[cfg(not(target_family = "wasm"))]
     #[test]
-    fn chd_rust_backend_create_attempt_requires_single_codec_plan() {
+    fn chd_rust_backend_create_attempt_accepts_decode_only_codec_slots() {
         let handler = super::ChdContainerHandler;
         assert!(
             handler
@@ -15001,24 +15257,30 @@ mod tests {
                 .expect("supported multi codec plan should use rust backend")
         );
         assert!(
-            !handler
+            handler
                 .rust_backend_can_create_with_codec_list_for_tests("zstd,zlib,huffman")
-                .expect("mixed codec plan with unsupported codecs should not use rust backend")
+                .expect("mixed encode/decode codec plan should use rust backend")
+        );
+        assert!(
+            handler
+                .rust_backend_can_create_with_codec_list_for_tests("huffman")
+                .expect("decode-only codec plans should use rust backend")
         );
         assert!(
             !handler
-                .rust_backend_can_create_with_codec_list_for_tests("huffman")
-                .expect("unsupported-only plan should fail rust backend support")
+                .rust_backend_can_create_with_codec_list_for_tests("cdzs")
+                .expect("disc codecs are invalid for raw create")
         );
     }
 
     #[cfg(not(target_family = "wasm"))]
     #[test]
-    fn chd_rust_only_create_rejects_unsupported_codec_slots() {
+    fn chd_rust_only_create_accepts_decode_only_codec_slots() {
         let temp_dir = temp_dir_path("chd-rust-unsupported-codec-slots");
         fs::create_dir_all(&temp_dir).expect("temp dir");
         let source_path = temp_dir.join("source.bin");
         let archive_path = temp_dir.join("source.chd");
+        let output_dir = temp_dir.join("out");
         let payload = (0..(512 * 1024))
             .map(|index| (index as u8).wrapping_mul(61))
             .collect::<Vec<_>>();
@@ -15026,11 +15288,11 @@ mod tests {
 
         let registry = ContainerRegistry::new();
         let handler = registry.find_by_name("chd").expect("chd handler");
-        let error = handler
+        handler
             .create(
                 &ContainerCreateRequest {
-                    inputs: vec![source_path],
-                    output: archive_path,
+                    inputs: vec![source_path.clone()],
+                    output: archive_path.clone(),
                     format: "chd".to_string(),
                     codec: Some("zstd,huffman".to_string()),
                     level: None,
@@ -15038,12 +15300,21 @@ mod tests {
                 },
                 &test_context(&temp_dir, 6),
             )
-            .expect_err("mixed unsupported codec slots should fail in rust backend");
-        assert!(
-            error
-                .to_string()
-                .contains("requires all active compressed codec slots to be rust-encodable")
-        );
+            .expect("mixed encode/decode codec slots should succeed");
+        handler
+            .extract(
+                &rom_weaver_core::ContainerExtractRequest {
+                    source: archive_path,
+                    out_dir: output_dir.clone(),
+                    selections: Vec::new(),
+                    split_bin: false,
+                    parent: None,
+                },
+                &test_context(&temp_dir, 6),
+            )
+            .expect("extract mixed codec slot chd");
+        let extracted = fs::read(output_dir.join("source.bin")).expect("read extracted payload");
+        assert_eq!(extracted, payload);
 
         let _ = fs::remove_dir_all(temp_dir);
     }
@@ -15121,7 +15392,7 @@ mod tests {
 
     #[cfg(not(target_family = "wasm"))]
     #[test]
-    fn chd_extract_with_parent_option_is_unsupported() {
+    fn chd_extract_with_parent_option_rejects_non_parented_chd() {
         let temp_dir = temp_dir_path("chd-parent-option-extract");
         fs::create_dir_all(&temp_dir).expect("temp dir");
         let source_path = temp_dir.join("source.bin");
@@ -15158,8 +15429,88 @@ mod tests {
                 },
                 &test_context(&temp_dir, 4),
             )
-            .expect_err("extract with parent should be unsupported");
-        assert!(error.to_string().contains("not yet supported"));
+            .expect_err("extract with parent should fail when source has no parent linkage");
+        assert!(error.to_string().to_ascii_lowercase().contains("invalid parameter"));
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    #[test]
+    fn chd_create_and_extract_with_parent_round_trip() {
+        let temp_dir = temp_dir_path("chd-parented-create-extract");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let source_path = temp_dir.join("source.bin");
+        let parent_chd = temp_dir.join("parent.chd");
+        let child_chd = temp_dir.join("child.chd");
+        let out_without_parent = temp_dir.join("out-no-parent");
+        let out_with_parent = temp_dir.join("out-with-parent");
+        let payload = (0..(448 * 1024))
+            .map(|index| (index as u8).wrapping_mul(73))
+            .collect::<Vec<_>>();
+        fs::write(&source_path, &payload).expect("write fixture");
+
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("chd").expect("chd handler");
+        handler
+            .create(
+                &ContainerCreateRequest {
+                    inputs: vec![source_path.clone()],
+                    output: parent_chd.clone(),
+                    format: "chd".to_string(),
+                    codec: Some("zstd".to_string()),
+                    level: None,
+                    parent: None,
+                },
+                &test_context(&temp_dir, 6),
+            )
+            .expect("create parent chd");
+        handler
+            .create(
+                &ContainerCreateRequest {
+                    inputs: vec![source_path.clone()],
+                    output: child_chd.clone(),
+                    format: "chd".to_string(),
+                    codec: Some("zstd".to_string()),
+                    level: None,
+                    parent: Some(parent_chd.clone()),
+                },
+                &test_context(&temp_dir, 6),
+            )
+            .expect("create child chd with parent");
+
+        let no_parent_error = handler
+            .extract(
+                &rom_weaver_core::ContainerExtractRequest {
+                    source: child_chd.clone(),
+                    out_dir: out_without_parent,
+                    selections: Vec::new(),
+                    split_bin: false,
+                    parent: None,
+                },
+                &test_context(&temp_dir, 6),
+            )
+            .expect_err("extracting a parented chd without parent should fail");
+        let no_parent_text = no_parent_error.to_string().to_ascii_lowercase();
+        assert!(
+            no_parent_text.contains("requires parent")
+                || no_parent_text.contains("invalid parent")
+                || no_parent_text.contains("missing parent")
+        );
+        handler
+            .extract(
+                &rom_weaver_core::ContainerExtractRequest {
+                    source: child_chd,
+                    out_dir: out_with_parent.clone(),
+                    selections: Vec::new(),
+                    split_bin: false,
+                    parent: Some(parent_chd),
+                },
+                &test_context(&temp_dir, 6),
+            )
+            .expect("extracting a parented chd with parent should succeed");
+        let extracted = fs::read(out_with_parent.join("child.bin")).expect("read extracted payload");
+        assert_eq!(extracted, payload);
 
         let _ = fs::remove_dir_all(temp_dir);
     }
