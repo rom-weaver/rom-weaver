@@ -17,6 +17,7 @@ use bzip2::{
     Compression as Bzip2Compression, read::MultiBzDecoder as Bzip2Decoder, write::BzEncoder,
 };
 use ciso::{read::CSOReader as CsoReader, split::SplitFileReader};
+use flacenc::{component::BitRepr as _, error::Verify as _};
 use flate2::{
     Compression as GzipCompression, read::DeflateDecoder, read::MultiGzDecoder,
     write::DeflateEncoder, write::GzEncoder,
@@ -8114,6 +8115,12 @@ mod chd_native {
         Audio,
     }
 
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum FlacSampleByteOrder {
+        LittleEndian,
+        BigEndian,
+    }
+
     impl DiscTrackMode {
         fn cue_label(self) -> &'static str {
             match self {
@@ -8676,6 +8683,9 @@ mod chd_native {
         const HD_SECTOR_BYTES: u32 = 512;
         const CD_FRAME_BYTES: u32 = CD_FRAME_SIZE;
         const CD_HUNK_BYTES: u32 = CD_FRAME_SIZE * 8;
+        const FLAC_CHANNELS: usize = 2;
+        const FLAC_BITS_PER_SAMPLE: usize = 16;
+        const FLAC_SAMPLE_RATE_HZ: usize = 44_100;
         const CD_SECTOR_DATA_BYTES: usize = 2352;
         const CD_SUBCODE_BYTES: usize = 96;
         const ZLIB_LEVEL_MIN: i32 = 1;
@@ -8756,12 +8766,18 @@ mod chd_native {
         fn supports_rust_encode_codec(&self, create_kind: &ChdCreateKind, codec: ChdCodec) -> bool {
             match create_kind {
                 ChdCreateKind::Raw | ChdCreateKind::Dvd | ChdCreateKind::HardDisk(_) => {
-                    matches!(codec, ChdCodec::ZSTD | ChdCodec::ZLIB | ChdCodec::LZMA)
+                    matches!(
+                        codec,
+                        ChdCodec::ZSTD | ChdCodec::ZLIB | ChdCodec::LZMA | ChdCodec::FLAC
+                    )
                 }
                 ChdCreateKind::Disc(_) => {
                     matches!(
                         codec,
-                        ChdCodec::CD_ZSTD | ChdCodec::CD_ZLIB | ChdCodec::CD_LZMA
+                        ChdCodec::CD_ZSTD
+                            | ChdCodec::CD_ZLIB
+                            | ChdCodec::CD_LZMA
+                            | ChdCodec::CD_FLAC
                     )
                 }
                 ChdCreateKind::Av(_) => false,
@@ -11157,6 +11173,73 @@ mod chd_native {
             header
         }
 
+        fn pcm_i16_interleaved_to_samples(
+            &self,
+            pcm_bytes: &[u8],
+            byte_order: FlacSampleByteOrder,
+        ) -> Result<Vec<i32>> {
+            if pcm_bytes.len() % (Self::FLAC_CHANNELS * 2) != 0 {
+                return Err(RomWeaverError::Validation(format!(
+                    "flac encode expects stereo 16-bit interleaved PCM bytes (len={} is not divisible by {})",
+                    pcm_bytes.len(),
+                    Self::FLAC_CHANNELS * 2
+                )));
+            }
+            let mut samples = Vec::with_capacity(pcm_bytes.len() / 2);
+            for chunk in pcm_bytes.chunks_exact(2) {
+                let value = match byte_order {
+                    FlacSampleByteOrder::LittleEndian => i16::from_le_bytes([chunk[0], chunk[1]]),
+                    FlacSampleByteOrder::BigEndian => i16::from_be_bytes([chunk[0], chunk[1]]),
+                };
+                samples.push(i32::from(value));
+            }
+            Ok(samples)
+        }
+
+        fn encode_flac_frame_stream(
+            &self,
+            pcm_bytes: &[u8],
+            byte_order: FlacSampleByteOrder,
+        ) -> Result<Vec<u8>> {
+            let samples = self.pcm_i16_interleaved_to_samples(pcm_bytes, byte_order)?;
+            let samples_per_channel = samples.len() / Self::FLAC_CHANNELS;
+            if samples_per_channel < 32 {
+                return Err(RomWeaverError::Validation(format!(
+                    "flac encode requires at least 32 samples per channel; received {samples_per_channel}"
+                )));
+            }
+            let block_size = samples_per_channel.min(32_767);
+            let config = flacenc::config::Encoder::default()
+                .into_verified()
+                .map_err(|error| {
+                    RomWeaverError::Validation(format!(
+                        "invalid flac encoder configuration: {error:?}"
+                    ))
+                })?;
+            let source = flacenc::source::MemSource::from_samples(
+                &samples,
+                Self::FLAC_CHANNELS,
+                Self::FLAC_BITS_PER_SAMPLE,
+                Self::FLAC_SAMPLE_RATE_HZ,
+            );
+            let stream = flacenc::encode_with_fixed_block_size(&config, source, block_size)
+                .map_err(|error| {
+                    RomWeaverError::Validation(format!("flac compression failed: {error}"))
+                })?;
+            let mut sink = flacenc::bitsink::ByteSink::new();
+            for frame_index in 0..stream.frame_count() {
+                let frame = stream.frame(frame_index).ok_or_else(|| {
+                    RomWeaverError::Validation(format!(
+                        "missing flac frame {frame_index} during serialization"
+                    ))
+                })?;
+                frame.write(&mut sink).map_err(|error| {
+                    RomWeaverError::Validation(format!("flac frame serialization failed: {error}"))
+                })?;
+            }
+            Ok(sink.as_slice().to_vec())
+        }
+
         fn compress_rust_hunk(
             &self,
             create_kind: &ChdCreateKind,
@@ -11209,6 +11292,14 @@ mod chd_native {
                         RomWeaverError::Validation(format!("lzma compression failed: {error}"))
                     })?;
                     Ok(compressed)
+                }
+                ChdCodec::FLAC => {
+                    let mut encoded = Vec::new();
+                    encoded.push(b'L');
+                    encoded.extend(
+                        self.encode_flac_frame_stream(hunk, FlacSampleByteOrder::LittleEndian)?,
+                    );
+                    Ok(encoded)
                 }
                 other => Err(RomWeaverError::Unsupported(format!(
                     "rust chd compressed create does not support codec `{}` for this media mode",
@@ -11295,6 +11386,9 @@ mod chd_native {
                     })?;
                     compressed
                 }
+                ChdCodec::CD_FLAC => {
+                    self.encode_flac_frame_stream(&sectors, FlacSampleByteOrder::BigEndian)?
+                }
                 other => {
                     return Err(RomWeaverError::Unsupported(format!(
                         "rust chd compressed create does not support codec `{}` for disc media",
@@ -11302,9 +11396,6 @@ mod chd_native {
                     )));
                 }
             };
-            let sector_len_u32 = u32::try_from(sector_stream.len()).map_err(|_| {
-                RomWeaverError::Validation("cd sector stream size exceeded u32".to_string())
-            })?;
 
             let subcode_stream = match primary_codec {
                 ChdCodec::CD_ZSTD => {
@@ -11314,7 +11405,7 @@ mod chd_native {
                         ))
                     })?
                 }
-                ChdCodec::CD_ZLIB | ChdCodec::CD_LZMA => {
+                ChdCodec::CD_ZLIB | ChdCodec::CD_LZMA | ChdCodec::CD_FLAC => {
                     let mut encoder = DeflateEncoder::new(Vec::new(), GzipCompression::default());
                     encoder.write_all(&subcode).map_err(|error| {
                         RomWeaverError::Validation(format!(
@@ -11330,6 +11421,17 @@ mod chd_native {
                 _ => Vec::new(),
             };
 
+            if primary_codec == ChdCodec::CD_FLAC {
+                // cdfl stores frame FLAC stream directly, followed by deflate-compressed subcode.
+                let mut output = Vec::with_capacity(sector_stream.len() + subcode_stream.len());
+                output.extend_from_slice(&sector_stream);
+                output.extend_from_slice(&subcode_stream);
+                return Ok(output);
+            }
+
+            let sector_len_u32 = u32::try_from(sector_stream.len()).map_err(|_| {
+                RomWeaverError::Validation("cd sector stream size exceeded u32".to_string())
+            })?;
             let ecc_bytes = frame_count.div_ceil(8);
             let comp_len_bytes = if hunk.len() < 65_536 { 2 } else { 3 };
             let mut output = Vec::with_capacity(

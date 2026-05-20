@@ -9,6 +9,7 @@ version.workspace = true
 bzip2.workspace = true
 ciso.workspace = true
 flate2.workspace = true
+flacenc.workspace = true
 lz4_flex.workspace = true
 lzma-rust2.workspace = true
 nod.workspace = true
@@ -24,3 +25,6 @@ xdvdfs.workspace = true
 zip.workspace = true
 zstd.workspace = true
 zeekstd.workspace = true
+
+[dev-dependencies]
+claxon.workspace = true
