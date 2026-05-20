@@ -28,6 +28,13 @@ impl LzmaOptions {
     pub fn from_level(level: u32) -> Self {
         Self(lzma_rust2::LzmaOptions::with_preset(level))
     }
+
+    /// Sets the dictionary size used when encoding.
+    ///
+    /// Will be clamped between 4096..=4294967280.
+    pub fn set_dictionary_size(&mut self, dict_size: u32) {
+        self.0.dict_size = dict_size.clamp(lzma_rust2::DICT_SIZE_MIN, lzma_rust2::DICT_SIZE_MAX);
+    }
 }
 
 #[cfg(feature = "compress")]
