@@ -1763,6 +1763,168 @@ impl TarContainerHandler {
         Ok(copied)
     }
 
+    fn extract_uncompressed_archive(
+        &self,
+        source: &Path,
+        request: &ContainerExtractRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let mut local_request = request.clone();
+        local_request.source = source.to_path_buf();
+        let tasks = self.build_uncompressed_extract_tasks(&local_request)?;
+        let total_selected_entries = tasks.len();
+        let total_selected_file_bytes = tasks
+            .iter()
+            .filter_map(|task| (!task.is_dir).then_some(task.file_size))
+            .fold(0u64, |acc, size| acc.saturating_add(size));
+        let directory_tasks = tasks
+            .iter()
+            .filter(|task| task.is_dir)
+            .cloned()
+            .collect::<Vec<_>>();
+        let file_tasks = tasks
+            .iter()
+            .filter(|task| !task.is_dir)
+            .cloned()
+            .collect::<Vec<_>>();
+
+        let (execution, maybe_pool) = if file_tasks.is_empty() {
+            (context.plan_threads(self.extract_thread_capability()), None)
+        } else {
+            let (execution, pool) =
+                context.build_pool(ThreadCapability::parallel(Some(file_tasks.len())))?;
+            (execution, Some(pool))
+        };
+
+        if total_selected_entries > 0 {
+            emit_container_running_progress(
+                context,
+                "extract",
+                self.descriptor.name,
+                "extract",
+                format!(
+                    "extracting `{}` ({} selected entries)",
+                    self.descriptor.name, total_selected_entries
+                ),
+                0.0,
+                Some(&execution),
+            );
+        }
+
+        let mut selected_entries_completed = 0usize;
+        for task in &directory_tasks {
+            fs::create_dir_all(&task.output_path)?;
+            selected_entries_completed = selected_entries_completed.saturating_add(1);
+            if total_selected_file_bytes == 0 {
+                emit_container_step_progress(
+                    context,
+                    "extract",
+                    self.descriptor.name,
+                    "extract",
+                    selected_entries_completed,
+                    total_selected_entries,
+                    format!(
+                        "extracting `{}` ({}/{})",
+                        self.descriptor.name, selected_entries_completed, total_selected_entries
+                    ),
+                    Some(&execution),
+                );
+            }
+        }
+
+        let extracted_files = file_tasks.len();
+        let written_bytes = if file_tasks.is_empty() {
+            0
+        } else if execution.used_parallelism {
+            let pool = maybe_pool.expect("pool present for parallel extraction");
+            let progress_context = context.clone();
+            let progress_execution = execution.clone();
+            let progress_format = self.descriptor.name;
+            let copied_bytes = Arc::new(AtomicU64::new(0));
+            let copied_bytes_for_progress = Arc::clone(&copied_bytes);
+            let source_path = source.to_path_buf();
+            let chunk_bytes = pool.install(|| {
+                file_tasks
+                    .par_iter()
+                    .map(|task| {
+                        let copied = self.extract_uncompressed_task(&source_path, task)?;
+                        let completed_bytes = copied_bytes_for_progress
+                            .fetch_add(copied, Ordering::Relaxed)
+                            .saturating_add(copied);
+                        if total_selected_file_bytes > 0 {
+                            let percent =
+                                (completed_bytes as f32 / total_selected_file_bytes as f32) * 100.0;
+                            emit_container_running_progress(
+                                &progress_context,
+                                "extract",
+                                progress_format,
+                                "extract",
+                                format!(
+                                    "extracting `{}` ({}/{})",
+                                    progress_format, completed_bytes, total_selected_file_bytes
+                                ),
+                                percent,
+                                Some(&progress_execution),
+                            );
+                        }
+                        Ok(copied)
+                    })
+                    .collect::<Result<Vec<_>>>()
+            })?;
+            chunk_bytes
+                .into_iter()
+                .fold(0u64, |acc, value| acc.saturating_add(value))
+        } else {
+            let mut written_bytes = 0u64;
+            let mut selected_file_bytes_written = 0u64;
+            let mut last_percent_bucket = -1i32;
+            for task in &file_tasks {
+                let copied = self.extract_uncompressed_task(source, task)?;
+                written_bytes = written_bytes.saturating_add(copied);
+                selected_file_bytes_written = selected_file_bytes_written.saturating_add(copied);
+                if total_selected_file_bytes > 0 {
+                    let percent = (selected_file_bytes_written as f32
+                        / total_selected_file_bytes as f32)
+                        * 100.0;
+                    let bucket = percent.floor() as i32;
+                    if bucket > last_percent_bucket || percent >= 100.0 {
+                        last_percent_bucket = bucket;
+                        emit_container_running_progress(
+                            context,
+                            "extract",
+                            self.descriptor.name,
+                            "extract",
+                            format!(
+                                "extracting `{}` ({}/{})",
+                                self.descriptor.name,
+                                selected_file_bytes_written,
+                                total_selected_file_bytes
+                            ),
+                            percent,
+                            Some(&execution),
+                        );
+                    }
+                }
+            }
+            written_bytes
+        };
+
+        Ok(OperationReport::succeeded(
+            OperationFamily::Container,
+            Some(self.descriptor.name.to_string()),
+            "extract",
+            format!(
+                "extracted `{}` to `{}` ({} file(s), {} bytes written)",
+                request.source.display(),
+                request.out_dir.display(),
+                extracted_files,
+                written_bytes
+            ),
+            Some(100.0),
+            Some(execution),
+        ))
+    }
+
     fn build_uncompressed_create_tasks(
         &self,
         entries: &[ArchiveInputEntry],
@@ -1863,8 +2025,10 @@ impl TarContainerHandler {
 
     fn extract_thread_capability(&self) -> ThreadCapability {
         match self.compression {
-            TarCompression::None | TarCompression::Xz => ThreadCapability::parallel(None),
-            TarCompression::Gzip | TarCompression::Bzip2 => ThreadCapability::single_threaded(),
+            TarCompression::None
+            | TarCompression::Gzip
+            | TarCompression::Bzip2
+            | TarCompression::Xz => ThreadCapability::parallel(None),
         }
     }
 
@@ -2000,162 +2164,46 @@ impl ContainerHandler for TarContainerHandler {
         fs::create_dir_all(&request.out_dir)?;
 
         if matches!(self.compression, TarCompression::None) {
-            let tasks = self.build_uncompressed_extract_tasks(request)?;
-            let total_selected_entries = tasks.len();
-            let total_selected_file_bytes = tasks
-                .iter()
-                .filter_map(|task| (!task.is_dir).then_some(task.file_size))
-                .fold(0u64, |acc, size| acc.saturating_add(size));
-            let directory_tasks = tasks
-                .iter()
-                .filter(|task| task.is_dir)
-                .cloned()
-                .collect::<Vec<_>>();
-            let file_tasks = tasks
-                .iter()
-                .filter(|task| !task.is_dir)
-                .cloned()
-                .collect::<Vec<_>>();
+            return self.extract_uncompressed_archive(&request.source, request, context);
+        }
 
-            let (execution, maybe_pool) = if file_tasks.is_empty() {
-                (context.plan_threads(self.extract_thread_capability()), None)
-            } else {
-                let (execution, pool) =
-                    context.build_pool(ThreadCapability::parallel(Some(file_tasks.len())))?;
-                (execution, Some(pool))
+        if matches!(
+            self.compression,
+            TarCompression::Gzip | TarCompression::Bzip2
+        ) {
+            let (codec_name, staged_label) = match self.compression {
+                TarCompression::Gzip => ("deflate", "tar-gz-extract-stage"),
+                TarCompression::Bzip2 => ("bzip2", "tar-bz2-extract-stage"),
+                TarCompression::None | TarCompression::Xz => unreachable!(),
             };
-
-            if total_selected_entries > 0 {
-                emit_container_running_progress(
+            let staged_tar = context.temp_paths().next_path(staged_label, Some("tar"));
+            let staged_result = (|| -> Result<OperationReport> {
+                if let Some(parent) = staged_tar.parent() {
+                    fs::create_dir_all(parent)?;
+                }
+                let backend = CodecRegistry::new()
+                    .find_by_name(codec_name)
+                    .ok_or_else(|| {
+                        RomWeaverError::Unsupported(format!(
+                            "codec backend `{codec_name}` is not registered for {}",
+                            self.descriptor.name
+                        ))
+                    })?;
+                let decode_report = backend.decode(
+                    &CodecOperationRequest {
+                        input: request.source.clone(),
+                        output: staged_tar.clone(),
+                        level: None,
+                    },
                     context,
-                    "extract",
-                    self.descriptor.name,
-                    "extract",
-                    format!(
-                        "extracting `{}` ({} selected entries)",
-                        self.descriptor.name, total_selected_entries
-                    ),
-                    0.0,
-                    Some(&execution),
-                );
-            }
-
-            let mut selected_entries_completed = 0usize;
-            for task in &directory_tasks {
-                fs::create_dir_all(&task.output_path)?;
-                selected_entries_completed = selected_entries_completed.saturating_add(1);
-                if total_selected_file_bytes == 0 {
-                    emit_container_step_progress(
-                        context,
-                        "extract",
-                        self.descriptor.name,
-                        "extract",
-                        selected_entries_completed,
-                        total_selected_entries,
-                        format!(
-                            "extracting `{}` ({}/{})",
-                            self.descriptor.name,
-                            selected_entries_completed,
-                            total_selected_entries
-                        ),
-                        Some(&execution),
-                    );
+                )?;
+                if decode_report.status != OperationStatus::Succeeded {
+                    return Err(RomWeaverError::Unsupported(decode_report.label));
                 }
-            }
-
-            let extracted_files = file_tasks.len();
-            let written_bytes = if file_tasks.is_empty() {
-                0
-            } else if execution.used_parallelism {
-                let pool = maybe_pool.expect("pool present for parallel extraction");
-                let progress_context = context.clone();
-                let progress_execution = execution.clone();
-                let progress_format = self.descriptor.name;
-                let copied_bytes = Arc::new(AtomicU64::new(0));
-                let copied_bytes_for_progress = Arc::clone(&copied_bytes);
-                let source = request.source.clone();
-                let chunk_bytes = pool.install(|| {
-                    file_tasks
-                        .par_iter()
-                        .map(|task| {
-                            let copied = self.extract_uncompressed_task(&source, task)?;
-                            let completed_bytes = copied_bytes_for_progress
-                                .fetch_add(copied, Ordering::Relaxed)
-                                .saturating_add(copied);
-                            if total_selected_file_bytes > 0 {
-                                let percent = (completed_bytes as f32
-                                    / total_selected_file_bytes as f32)
-                                    * 100.0;
-                                emit_container_running_progress(
-                                    &progress_context,
-                                    "extract",
-                                    progress_format,
-                                    "extract",
-                                    format!(
-                                        "extracting `{}` ({}/{})",
-                                        progress_format, completed_bytes, total_selected_file_bytes
-                                    ),
-                                    percent,
-                                    Some(&progress_execution),
-                                );
-                            }
-                            Ok(copied)
-                        })
-                        .collect::<Result<Vec<_>>>()
-                })?;
-                chunk_bytes
-                    .into_iter()
-                    .fold(0u64, |acc, value| acc.saturating_add(value))
-            } else {
-                let mut written_bytes = 0u64;
-                let mut selected_file_bytes_written = 0u64;
-                let mut last_percent_bucket = -1i32;
-                for task in &file_tasks {
-                    let copied = self.extract_uncompressed_task(&request.source, task)?;
-                    written_bytes = written_bytes.saturating_add(copied);
-                    selected_file_bytes_written =
-                        selected_file_bytes_written.saturating_add(copied);
-                    if total_selected_file_bytes > 0 {
-                        let percent = (selected_file_bytes_written as f32
-                            / total_selected_file_bytes as f32)
-                            * 100.0;
-                        let bucket = percent.floor() as i32;
-                        if bucket > last_percent_bucket || percent >= 100.0 {
-                            last_percent_bucket = bucket;
-                            emit_container_running_progress(
-                                context,
-                                "extract",
-                                self.descriptor.name,
-                                "extract",
-                                format!(
-                                    "extracting `{}` ({}/{})",
-                                    self.descriptor.name,
-                                    selected_file_bytes_written,
-                                    total_selected_file_bytes
-                                ),
-                                percent,
-                                Some(&execution),
-                            );
-                        }
-                    }
-                }
-                written_bytes
-            };
-
-            return Ok(OperationReport::succeeded(
-                OperationFamily::Container,
-                Some(self.descriptor.name.to_string()),
-                "extract",
-                format!(
-                    "extracted `{}` to `{}` ({} file(s), {} bytes written)",
-                    request.source.display(),
-                    request.out_dir.display(),
-                    extracted_files,
-                    written_bytes
-                ),
-                Some(100.0),
-                Some(execution),
-            ));
+                self.extract_uncompressed_archive(&staged_tar, request, context)
+            })();
+            let _ = fs::remove_file(&staged_tar);
+            return staged_result;
         }
 
         let execution = context.plan_threads(self.extract_thread_capability());
@@ -2750,10 +2798,10 @@ impl StreamContainerHandler {
 
     fn extract_thread_capability(&self) -> ThreadCapability {
         match self.compression {
-            StreamCompression::Xz => ThreadCapability::parallel(None),
-            StreamCompression::Gzip | StreamCompression::Bzip2 | StreamCompression::Zstd => {
-                ThreadCapability::single_threaded()
-            }
+            StreamCompression::Gzip
+            | StreamCompression::Bzip2
+            | StreamCompression::Xz
+            | StreamCompression::Zstd => ThreadCapability::parallel(None),
         }
     }
 
@@ -11383,7 +11431,7 @@ mod tests {
     }
 
     #[test]
-    fn tar_gz_capabilities_report_parallel_create_threads() {
+    fn tar_gz_capabilities_report_parallel_threads() {
         let registry = ContainerRegistry::new();
         let handler = registry.find_by_name("tar.gz").expect("tar.gz handler");
         let capabilities = handler.capabilities();
@@ -11392,7 +11440,7 @@ mod tests {
         assert!(capabilities.create);
         assert_eq!(
             capabilities.extract_threads,
-            ThreadCapability::single_threaded()
+            ThreadCapability::parallel(None)
         );
         assert_eq!(
             capabilities.create_threads,
@@ -11401,7 +11449,7 @@ mod tests {
     }
 
     #[test]
-    fn tar_bz2_capabilities_report_parallel_create_threads() {
+    fn tar_bz2_capabilities_report_parallel_threads() {
         let registry = ContainerRegistry::new();
         let handler = registry.find_by_name("tar.bz2").expect("tar.bz2 handler");
         let capabilities = handler.capabilities();
@@ -11410,7 +11458,7 @@ mod tests {
         assert!(capabilities.create);
         assert_eq!(
             capabilities.extract_threads,
-            ThreadCapability::single_threaded()
+            ThreadCapability::parallel(None)
         );
         assert_eq!(
             capabilities.create_threads,
@@ -11419,7 +11467,7 @@ mod tests {
     }
 
     #[test]
-    fn gz_stream_capabilities_report_parallel_create_threads() {
+    fn gz_stream_capabilities_report_parallel_threads() {
         let registry = ContainerRegistry::new();
         let handler = registry.find_by_name("gz").expect("gz handler");
         let capabilities = handler.capabilities();
@@ -11428,7 +11476,7 @@ mod tests {
         assert!(capabilities.create);
         assert_eq!(
             capabilities.extract_threads,
-            ThreadCapability::single_threaded()
+            ThreadCapability::parallel(None)
         );
         assert_eq!(
             capabilities.create_threads,
@@ -11437,7 +11485,7 @@ mod tests {
     }
 
     #[test]
-    fn bz2_stream_capabilities_report_parallel_create_threads() {
+    fn bz2_stream_capabilities_report_parallel_threads() {
         let registry = ContainerRegistry::new();
         let handler = registry.find_by_name("bz2").expect("bz2 handler");
         let capabilities = handler.capabilities();
@@ -11446,7 +11494,7 @@ mod tests {
         assert!(capabilities.create);
         assert_eq!(
             capabilities.extract_threads,
-            ThreadCapability::single_threaded()
+            ThreadCapability::parallel(None)
         );
         assert_eq!(
             capabilities.create_threads,
@@ -11455,7 +11503,7 @@ mod tests {
     }
 
     #[test]
-    fn zst_stream_capabilities_report_parallel_create_threads() {
+    fn zst_stream_capabilities_report_parallel_threads() {
         let registry = ContainerRegistry::new();
         let handler = registry.find_by_name("zst").expect("zst handler");
         let capabilities = handler.capabilities();
@@ -11464,7 +11512,7 @@ mod tests {
         assert!(capabilities.create);
         assert_eq!(
             capabilities.extract_threads,
-            ThreadCapability::single_threaded()
+            ThreadCapability::parallel(None)
         );
         assert_eq!(
             capabilities.create_threads,
@@ -11678,8 +11726,8 @@ mod tests {
                 .supports_execution(&extract_execution)
         );
         assert_eq!(extract_execution.requested_threads, 8);
-        assert_eq!(extract_execution.effective_threads, 1);
-        assert!(!extract_execution.used_parallelism);
+        assert!(extract_execution.effective_threads > 1);
+        assert!(extract_execution.used_parallelism);
 
         for index in 0..6 {
             let path = output_dir.join(format!("input/blob-{index}.bin"));
@@ -11752,8 +11800,8 @@ mod tests {
                 .supports_execution(&extract_execution)
         );
         assert_eq!(extract_execution.requested_threads, 8);
-        assert_eq!(extract_execution.effective_threads, 1);
-        assert!(!extract_execution.used_parallelism);
+        assert!(extract_execution.effective_threads > 1);
+        assert!(extract_execution.used_parallelism);
 
         for index in 0..6 {
             let path = output_dir.join(format!("input/blob-{index}.bin"));
@@ -11972,8 +12020,8 @@ mod tests {
                 .supports_execution(&extract_execution)
         );
         assert_eq!(extract_execution.requested_threads, 8);
-        assert_eq!(extract_execution.effective_threads, 1);
-        assert!(!extract_execution.used_parallelism);
+        assert!(extract_execution.effective_threads > 1);
+        assert!(extract_execution.used_parallelism);
 
         let extracted = fs::read(output_dir.join("source.bin")).expect("read extracted payload");
         assert_eq!(extracted, payload);
@@ -12035,8 +12083,8 @@ mod tests {
                 .supports_execution(&extract_execution)
         );
         assert_eq!(extract_execution.requested_threads, 8);
-        assert_eq!(extract_execution.effective_threads, 1);
-        assert!(!extract_execution.used_parallelism);
+        assert!(extract_execution.effective_threads > 1);
+        assert!(extract_execution.used_parallelism);
 
         let extracted = fs::read(output_dir.join("source.bin")).expect("read extracted payload");
         assert_eq!(extracted, payload);
@@ -12096,8 +12144,8 @@ mod tests {
                 .supports_execution(&extract_execution)
         );
         assert_eq!(extract_execution.requested_threads, 8);
-        assert_eq!(extract_execution.effective_threads, 1);
-        assert!(!extract_execution.used_parallelism);
+        assert!(extract_execution.effective_threads > 1);
+        assert!(extract_execution.used_parallelism);
 
         let extracted = fs::read(output_dir.join("source.bin")).expect("read extracted payload");
         assert_eq!(extracted, payload);
