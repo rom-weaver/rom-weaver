@@ -4,10 +4,11 @@ use std::{
 };
 
 use memmap2::{Mmap, MmapOptions};
+use rayon::{join, prelude::*};
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
     PatchCapabilities, PatchCreateRequest, PatchHandler, ProbeConfidence, Result, RomWeaverError,
-    ThreadCapability,
+    SharedThreadPool, ThreadCapability,
 };
 
 const DLDI_VERSION: u8 = 1;
@@ -42,6 +43,7 @@ const DO_CLEAR_STATUS: usize = 0x78;
 const DO_SHUTDOWN: usize = 0x7C;
 const DO_CODE: usize = 0x80;
 const INPUT_NO_DLDI_SLOT_MESSAGE: &str = "input does not contain a patchable DLDI section";
+const THREAD_WORK_CHUNK_BYTES: usize = 4 * 1024 * 1024;
 
 pub struct DldiPatchHandler {
     descriptor: &'static FormatDescriptor,
@@ -87,8 +89,8 @@ impl PatchHandler for DldiPatchHandler {
         let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
         let patch = map_file_read_only(patch_path)?;
         let input = map_file_read_only(&request.input)?;
-        let execution = context.plan_threads(ThreadCapability::single_threaded());
-        let apply = match apply_dldi_patch(input.as_ref(), patch.as_ref()) {
+        let (execution, pool) = context.build_pool(dldi_apply_thread_capability(input.len()))?;
+        let apply = match apply_dldi_patch(input.as_ref(), patch.as_ref(), &pool, &execution) {
             Ok(apply) => apply,
             Err(RomWeaverError::Validation(message)) if message == INPUT_NO_DLDI_SLOT_MESSAGE => {
                 return Ok(OperationReport::unsupported(
@@ -131,16 +133,33 @@ impl PatchHandler for DldiPatchHandler {
         request: &PatchCreateRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        let execution = context.plan_threads(ThreadCapability::single_threaded());
         let original = map_file_read_only(&request.original)?;
         let modified = map_file_read_only(&request.modified)?;
+        let (execution, pool) = context.build_pool(dldi_create_thread_capability(
+            original.len(),
+            modified.len(),
+        ))?;
 
-        let original_slot = find_dldi_slot(original.as_ref()).ok_or_else(|| {
+        let (original_slot, modified_slot) = if execution.used_parallelism {
+            pool.install(|| {
+                join(
+                    || find_dldi_slot(original.as_ref()),
+                    || find_dldi_slot(modified.as_ref()),
+                )
+            })
+        } else {
+            (
+                find_dldi_slot(original.as_ref()),
+                find_dldi_slot(modified.as_ref()),
+            )
+        };
+
+        let original_slot = original_slot.ok_or_else(|| {
             RomWeaverError::Validation(
                 "original input does not contain a patchable DLDI section".into(),
             )
         })?;
-        let modified_slot = find_dldi_slot(modified.as_ref()).ok_or_else(|| {
+        let modified_slot = modified_slot.ok_or_else(|| {
             RomWeaverError::Validation(
                 "modified input does not contain a patchable DLDI section".into(),
             )
@@ -170,8 +189,13 @@ impl PatchHandler for DldiPatchHandler {
 
         // DLDI create is defined as extracting the relocated driver bytes from `modified`.
         // Validate determinism by replaying that patch against `original`.
-        let replay = apply_dldi_patch(original.as_ref(), &patch_bytes)?;
-        if replay.output != modified.as_ref() {
+        let replay = apply_dldi_patch(original.as_ref(), &patch_bytes, &pool, &execution)?;
+        let replay_matches = if execution.used_parallelism {
+            bytes_equal_parallel(replay.output.as_slice(), modified.as_ref(), &pool)
+        } else {
+            replay.output == modified.as_ref()
+        };
+        if !replay_matches {
             return Err(RomWeaverError::Validation(
                 "modified input is not representable as a pure DLDI patch over original".into(),
             ));
@@ -203,8 +227,8 @@ impl PatchHandler for DldiPatchHandler {
             apply: true,
             create: true,
             threaded_scan: false,
-            threaded_diff: false,
-            threaded_output: false,
+            threaded_diff: true,
+            threaded_output: true,
         }
     }
 }
@@ -315,7 +339,31 @@ fn parse_friendly_name(bytes: &[u8]) -> Result<String> {
         .to_string())
 }
 
-fn apply_dldi_patch(input: &[u8], patch: &[u8]) -> Result<DldiApplyOutput> {
+fn dldi_apply_thread_capability(input_len: usize) -> ThreadCapability {
+    ThreadCapability::parallel(Some(dldi_thread_chunk_count(input_len)))
+}
+
+fn dldi_create_thread_capability(original_len: usize, modified_len: usize) -> ThreadCapability {
+    let total_len = original_len.max(modified_len);
+    ThreadCapability::parallel(Some(dldi_thread_chunk_count(total_len)))
+}
+
+fn dldi_thread_chunk_count(byte_len: usize) -> usize {
+    if byte_len == 0 {
+        return 1;
+    }
+    byte_len
+        .saturating_add(THREAD_WORK_CHUNK_BYTES - 1)
+        .saturating_div(THREAD_WORK_CHUNK_BYTES)
+        .max(1)
+}
+
+fn apply_dldi_patch(
+    input: &[u8],
+    patch: &[u8],
+    pool: &SharedThreadPool,
+    execution: &rom_weaver_core::ThreadExecution,
+) -> Result<DldiApplyOutput> {
     let patch_header = parse_dldi_bytes_for_apply(patch, "DLDI patch")?;
     let patch_offset = find_dldi_slot(input)
         .ok_or_else(|| RomWeaverError::Validation(INPUT_NO_DLDI_SLOT_MESSAGE.into()))?;
@@ -340,18 +388,19 @@ fn apply_dldi_patch(input: &[u8], patch: &[u8]) -> Result<DldiApplyOutput> {
         ));
     }
 
-    let mut output = input.to_vec();
     let patch_end = patch_offset
         .checked_add(patch_header.driver_size_bytes)
         .ok_or_else(|| RomWeaverError::Validation("DLDI patch range overflowed".into()))?;
-    if patch_end > output.len() {
+    if patch_end > input.len() {
         warnings.push(format!(
             "input file ended before the DLDI patch slot; extending output from {} to {} byte(s)",
-            output.len(),
+            input.len(),
             patch_end
         ));
-        output.resize(patch_end, 0);
     }
+    let output_len = patch_end.max(input.len());
+    let mut output = vec![0u8; output_len];
+    copy_input_bytes(&mut output, input, pool, execution);
 
     // Keep oversized applies deterministic: legacy dlditool overflow behavior is undefined,
     // so we copy only available patch bytes and still run full relocation/BSS fixups.
@@ -429,6 +478,40 @@ fn apply_dldi_patch(input: &[u8], patch: &[u8]) -> Result<DldiApplyOutput> {
         old_driver: existing_header.friendly_name,
         new_driver: patch_header.friendly_name,
         warnings,
+    })
+}
+
+fn copy_input_bytes(
+    output: &mut [u8],
+    input: &[u8],
+    pool: &SharedThreadPool,
+    execution: &rom_weaver_core::ThreadExecution,
+) {
+    let input_len = input.len();
+    if execution.used_parallelism {
+        pool.install(|| {
+            output[..input_len]
+                .par_chunks_mut(THREAD_WORK_CHUNK_BYTES)
+                .enumerate()
+                .for_each(|(chunk_index, chunk)| {
+                    let start = chunk_index * THREAD_WORK_CHUNK_BYTES;
+                    let end = start + chunk.len();
+                    chunk.copy_from_slice(&input[start..end]);
+                });
+        });
+    } else {
+        output[..input_len].copy_from_slice(input);
+    }
+}
+
+fn bytes_equal_parallel(left: &[u8], right: &[u8], pool: &SharedThreadPool) -> bool {
+    if left.len() != right.len() {
+        return false;
+    }
+    pool.install(|| {
+        left.par_chunks(THREAD_WORK_CHUNK_BYTES)
+            .zip(right.par_chunks(THREAD_WORK_CHUNK_BYTES))
+            .all(|(lhs, rhs)| lhs == rhs)
     })
 }
 
@@ -601,7 +684,7 @@ mod tests {
         DO_DATA_END, DO_DRIVER_SIZE, DO_FIX_SECTIONS, DO_FRIENDLY_NAME, DO_GLUE_END, DO_GLUE_START,
         DO_GOT_END, DO_GOT_START, DO_MAGIC_STRING, DO_READ_SECTORS, DO_SHUTDOWN, DO_STARTUP,
         DO_TEXT_START, DO_VERSION, DO_WRITE_SECTORS, DldiPatchHandler, FIX_ALL, FIX_BSS, FIX_GLUE,
-        FIX_GOT,
+        FIX_GOT, THREAD_WORK_CHUNK_BYTES,
     };
     use crate::{
         DLDI,
@@ -904,6 +987,147 @@ mod tests {
         assert_eq!(
             fs::read(replay_path).expect("replay"),
             fs::read(modified_path).expect("modified")
+        );
+    }
+
+    #[test]
+    fn apply_is_deterministic_across_thread_budgets() {
+        let temp = TestDir::new();
+        let input_path = temp.child("input-large.nds");
+        let patch_path = temp.child("driver.dldi");
+        let output_single = temp.child("output-single.nds");
+        let output_parallel = temp.child("output-parallel.nds");
+
+        let slot_offset = 0x300;
+        let mem_offset = 0x0200_0000i32;
+        let mut input = build_test_app_with_slot(slot_offset, 12, mem_offset, "Default driver");
+        input.resize(THREAD_WORK_CHUNK_BYTES + 128 * 1024, 0xCD);
+        let patch = build_test_dldi_driver(
+            10,
+            0xBF81_0000u32 as i32,
+            "Threaded Driver",
+            FIX_ALL | FIX_GLUE | FIX_GOT | FIX_BSS,
+        );
+
+        fs::write(&input_path, &input).expect("fixture");
+        fs::write(&patch_path, &patch).expect("fixture");
+
+        let handler = DldiPatchHandler::new(&DLDI);
+        let capabilities = handler.capabilities();
+        assert!(capabilities.threaded_diff);
+        assert!(capabilities.threaded_output);
+        let single_report = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: input_path.clone(),
+                    patches: vec![patch_path.clone()],
+                    output: output_single.clone(),
+                },
+                &test_context_with_threads(&temp, 1),
+            )
+            .expect("single apply");
+        let parallel_report = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: input_path,
+                    patches: vec![patch_path],
+                    output: output_parallel.clone(),
+                },
+                &test_context_with_threads(&temp, 8),
+            )
+            .expect("parallel apply");
+
+        assert!(
+            !single_report
+                .thread_execution
+                .expect("single execution")
+                .used_parallelism
+        );
+        assert!(
+            parallel_report
+                .thread_execution
+                .expect("parallel execution")
+                .used_parallelism
+        );
+        assert_eq!(
+            fs::read(output_single).expect("single"),
+            fs::read(output_parallel).expect("parallel")
+        );
+    }
+
+    #[test]
+    fn create_is_deterministic_across_thread_budgets() {
+        let temp = TestDir::new();
+        let original_path = temp.child("original-large.nds");
+        let driver_path = temp.child("driver.dldi");
+        let modified_path = temp.child("modified-large.nds");
+        let patch_single = temp.child("single.dldi");
+        let patch_parallel = temp.child("parallel.dldi");
+
+        let slot_offset = 0x300;
+        let mem_offset = 0x0200_0000i32;
+        let mut original = build_test_app_with_slot(slot_offset, 12, mem_offset, "Default driver");
+        original.resize(THREAD_WORK_CHUNK_BYTES + 256 * 1024, 0xCD);
+        let driver = build_test_dldi_driver(
+            10,
+            0xBF81_0000u32 as i32,
+            "Threaded Create Driver",
+            FIX_ALL | FIX_GLUE | FIX_GOT | FIX_BSS,
+        );
+
+        fs::write(&original_path, &original).expect("fixture");
+        fs::write(&driver_path, &driver).expect("fixture");
+
+        let handler = DldiPatchHandler::new(&DLDI);
+        handler
+            .apply(
+                &PatchApplyRequest {
+                    input: original_path.clone(),
+                    patches: vec![driver_path],
+                    output: modified_path.clone(),
+                },
+                &test_context_with_threads(&temp, 1),
+            )
+            .expect("apply");
+
+        let single_report = handler
+            .create(
+                &PatchCreateRequest {
+                    original: original_path.clone(),
+                    modified: modified_path.clone(),
+                    output: patch_single.clone(),
+                    format: "dldi".into(),
+                },
+                &test_context_with_threads(&temp, 1),
+            )
+            .expect("single create");
+        let parallel_report = handler
+            .create(
+                &PatchCreateRequest {
+                    original: original_path,
+                    modified: modified_path,
+                    output: patch_parallel.clone(),
+                    format: "dldi".into(),
+                },
+                &test_context_with_threads(&temp, 8),
+            )
+            .expect("parallel create");
+
+        assert!(
+            !single_report
+                .thread_execution
+                .expect("single execution")
+                .used_parallelism
+        );
+        assert!(
+            parallel_report
+                .thread_execution
+                .expect("parallel execution")
+                .used_parallelism
+        );
+        assert_eq!(
+            fs::read(patch_single).expect("single patch"),
+            fs::read(patch_parallel).expect("parallel patch")
         );
     }
 
