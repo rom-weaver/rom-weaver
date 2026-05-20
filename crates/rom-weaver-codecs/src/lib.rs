@@ -15,7 +15,7 @@ use flate2::{
     read::MultiGzDecoder, write::GzEncoder,
 };
 use lzma_rust2::{XzOptions, XzReader, XzReaderMt, XzWriter, XzWriterMt};
-use memmap2::MmapOptions;
+use memmap2::{Mmap, MmapOptions};
 use rayon::prelude::*;
 use rom_weaver_core::{
     CodecBackend, CodecCapabilities, CodecDescriptor, CodecOperationRequest, FormatDescriptor,
@@ -179,6 +179,20 @@ enum NativeCodecKind {
 struct NativeCodecBackend {
     descriptor: &'static CodecDescriptor,
     kind: NativeCodecKind,
+}
+
+enum ReadOnlyFile {
+    Mapped(Mmap),
+    Owned(Vec<u8>),
+}
+
+impl AsRef<[u8]> for ReadOnlyFile {
+    fn as_ref(&self) -> &[u8] {
+        match self {
+            Self::Mapped(map) => map.as_ref(),
+            Self::Owned(bytes) => bytes.as_ref(),
+        }
+    }
 }
 
 /// Avoid vectored writes on WASI file descriptors, which can trigger runtime crashes
@@ -400,10 +414,8 @@ impl NativeCodecBackend {
             return Ok(None);
         }
 
-        let input = File::open(&request.input)?;
-        // SAFETY: The mapped file remains alive for this scope and is opened read-only.
-        let input_map = unsafe { MmapOptions::new().map(&input)? };
-        let input_bytes: &[u8] = input_map.as_ref();
+        let input_bytes = map_file_read_only(&request.input)?;
+        let input_bytes: &[u8] = input_bytes.as_ref();
         let chunk_len = Self::deflate_chunk_len(input_len, execution.effective_threads);
 
         match rayon::ThreadPoolBuilder::new()
@@ -466,10 +478,8 @@ impl NativeCodecBackend {
             return Ok(None);
         }
 
-        let input = File::open(&request.input)?;
-        // SAFETY: The mapped file remains alive for this scope and is opened read-only.
-        let input_map = unsafe { MmapOptions::new().map(&input)? };
-        let input_bytes: &[u8] = input_map.as_ref();
+        let input_bytes = map_file_read_only(&request.input)?;
+        let input_bytes: &[u8] = input_bytes.as_ref();
         let chunk_len = Self::bzip2_chunk_len(input_len, execution.effective_threads);
 
         match rayon::ThreadPoolBuilder::new()
@@ -627,10 +637,8 @@ impl NativeCodecBackend {
             return Ok(None);
         }
 
-        let input = File::open(&request.input)?;
-        // SAFETY: The mapped file remains alive for this scope and is opened read-only.
-        let input_map = unsafe { MmapOptions::new().map(&input)? };
-        let input_bytes: &[u8] = input_map.as_ref();
+        let input_bytes = map_file_read_only(&request.input)?;
+        let input_bytes: &[u8] = input_bytes.as_ref();
         let chunk_len = Self::zstd_chunk_len(input_len, execution.effective_threads);
 
         match rayon::ThreadPoolBuilder::new()
@@ -677,10 +685,8 @@ impl NativeCodecBackend {
             return Ok(None);
         }
 
-        let input = File::open(&request.input)?;
-        // SAFETY: The mapped file remains alive for this scope and is opened read-only.
-        let input_map = unsafe { MmapOptions::new().map(&input)? };
-        let input_bytes: &[u8] = input_map.as_ref();
+        let input_bytes = map_file_read_only(&request.input)?;
+        let input_bytes: &[u8] = input_bytes.as_ref();
         let ranges = Self::scan_deflate_member_ranges(input_bytes)?;
         if ranges.len() <= 1 {
             execution.apply_pool_fallback(format!(
@@ -745,10 +751,8 @@ impl NativeCodecBackend {
             return Ok(None);
         }
 
-        let input = File::open(&request.input)?;
-        // SAFETY: The mapped file remains alive for this scope and is opened read-only.
-        let input_map = unsafe { MmapOptions::new().map(&input)? };
-        let input_bytes: &[u8] = input_map.as_ref();
+        let input_bytes = map_file_read_only(&request.input)?;
+        let input_bytes: &[u8] = input_bytes.as_ref();
         let ranges = Self::scan_bzip2_member_ranges(input_bytes)?;
         if ranges.len() <= 1 {
             execution.apply_pool_fallback(format!(
@@ -812,10 +816,8 @@ impl NativeCodecBackend {
             return Ok(None);
         }
 
-        let input = File::open(&request.input)?;
-        // SAFETY: The mapped file remains alive for this scope and is opened read-only.
-        let input_map = unsafe { MmapOptions::new().map(&input)? };
-        let input_bytes: &[u8] = input_map.as_ref();
+        let input_bytes = map_file_read_only(&request.input)?;
+        let input_bytes: &[u8] = input_bytes.as_ref();
         let ranges = Self::scan_zstd_frame_ranges(input_bytes)?;
         if ranges.len() <= 1 {
             execution.apply_pool_fallback(format!(
@@ -1186,6 +1188,20 @@ impl CodecBackend for NativeCodecBackend {
             decode_threads: self.decode_thread_capability(),
         }
     }
+}
+
+fn map_file_read_only(path: &Path) -> Result<ReadOnlyFile> {
+    let file = File::open(path)?;
+    // SAFETY: The mapping is read-only and the file handle lives for map creation.
+    match unsafe { MmapOptions::new().map(&file) } {
+        Ok(map) => Ok(ReadOnlyFile::Mapped(map)),
+        Err(error) if should_fallback_from_mmap(&error) => Ok(ReadOnlyFile::Owned(fs::read(path)?)),
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn should_fallback_from_mmap(error: &io::Error) -> bool {
+    error.kind() == io::ErrorKind::Unsupported
 }
 
 #[cfg(test)]
