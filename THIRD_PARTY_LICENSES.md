@@ -184,7 +184,6 @@ This file is generated from the resolved Cargo dependency graph for `rom-weaver`
 | `which` | `3.1.1` | `MIT` | `crates.io` |
 | `widestring` | `1.2.1` | `MIT OR Apache-2.0` | `crates.io` |
 | `xattr` | `1.6.1` | `MIT OR Apache-2.0` | `crates.io` |
-| `xdelta3` | `0.1.5` | `Apache-2.0` | `crates.io` |
 | `xxhash-rust` | `0.8.15` | `BSL-1.0` | `crates.io` |
 | `zerocopy` | `0.8.48` | `BSD-2-Clause OR Apache-2.0 OR MIT` | `crates.io` |
 | `zerocopy-derive` | `0.8.48` | `BSD-2-Clause OR Apache-2.0 OR MIT` | `crates.io` |

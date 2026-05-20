@@ -22,20 +22,6 @@ That script:
 2. Replaces the three crate directories above.
 3. Runs `scripts/vendor/prune-vendor.sh` to remove non-build files.
 
-## xdelta source snapshot
-
-`vendor/xdelta3-src` is a curated C source snapshot used by
-`crates/rom-weaver-patches/build.rs`.
-
-It intentionally keeps only the files needed to compile `xdelta3.c` plus
-license/readme metadata. `scripts/vendor/prune-vendor.sh` enforces this shape.
-
-If `xdelta3` sources are refreshed, run:
-
-```bash
-scripts/vendor/prune-vendor.sh
-```
-
 ## Validate after vendor updates
 
 ```bash
