@@ -594,6 +594,141 @@ fn build_hdiff13_nocomp_patch(old: &[u8], new: &[u8]) -> Vec<u8> {
     patch
 }
 
+fn build_hdiff13_identity_patch_with_cover_and_rle(source: &[u8]) -> Vec<u8> {
+    let source_size = u64::try_from(source.len()).expect("source size");
+    let mut cover = Vec::new();
+    cover.push(0); // old sign=0, old_delta=0
+    encode_varint(&mut cover, 0); // copy_length
+    encode_varint(&mut cover, source_size); // cover_length
+
+    let mut patch = Vec::new();
+    patch.extend_from_slice(b"HDIFF13&nocomp");
+    patch.push(0);
+    patch.extend_from_slice(&encode_all_varints(&[
+        source_size, // new_data_size
+        source_size, // old_data_size
+        1,           // cover_count
+        u64::try_from(cover.len()).expect("cover size"),
+        0, // compress_cover_buf_size
+        1, // rle_ctrl_buf_size
+        0, // compress_rle_ctrl_buf_size
+        1, // rle_code_buf_size
+        0, // compress_rle_code_buf_size
+        0, // new_data_diff_size
+        0, // compress_new_data_diff_size
+    ]));
+    patch.extend_from_slice(&cover);
+    patch.push(0xC0); // rle_type=copy, length=1
+    patch.push(0x00); // add 0 to keep bytes unchanged
+    patch
+}
+
+fn build_hdiffsf20_nocomp_identity_two_steps(source: &[u8]) -> Vec<u8> {
+    assert!(source.len() >= 2, "fixture requires at least two bytes");
+    let split = source.len() / 2;
+    let tail = source.len() - split;
+    assert!(split > 0 && tail > 0, "fixture split invalid");
+
+    let mut payload = Vec::new();
+
+    let mut cover1 = Vec::new();
+    cover1.push(0); // old sign=0, old_delta=0
+    encode_varint(&mut cover1, 0); // new_gap
+    encode_varint(&mut cover1, u64::try_from(split).expect("split"));
+    let mut rle1 = Vec::new();
+    encode_varint(&mut rle1, u64::try_from(split).expect("split"));
+    encode_varint(
+        &mut payload,
+        u64::try_from(cover1.len()).expect("cover1 len"),
+    );
+    encode_varint(&mut payload, u64::try_from(rle1.len()).expect("rle1 len"));
+    payload.extend_from_slice(&cover1);
+    payload.extend_from_slice(&rle1);
+
+    let mut cover2 = Vec::new();
+    cover2.push(0); // old sign=0, old_delta=0
+    encode_varint(&mut cover2, 0); // new_gap
+    encode_varint(&mut cover2, u64::try_from(tail).expect("tail"));
+    let mut rle2 = Vec::new();
+    encode_varint(&mut rle2, u64::try_from(tail).expect("tail"));
+    encode_varint(
+        &mut payload,
+        u64::try_from(cover2.len()).expect("cover2 len"),
+    );
+    encode_varint(&mut payload, u64::try_from(rle2.len()).expect("rle2 len"));
+    payload.extend_from_slice(&cover2);
+    payload.extend_from_slice(&rle2);
+
+    let mut patch = Vec::new();
+    patch.extend_from_slice(b"HDIFFSF20&nocomp");
+    patch.push(0);
+    patch.extend_from_slice(&encode_all_varints(&[
+        u64::try_from(source.len()).expect("new size"),
+        u64::try_from(source.len()).expect("old size"),
+        2,   // cover_count
+        256, // step_mem_size
+        u64::try_from(payload.len()).expect("payload size"),
+        0, // compressed_size
+    ]));
+    patch.extend_from_slice(&payload);
+    patch
+}
+
+fn build_hdiffsf20_nocomp_identity_single_step_two_covers(source: &[u8]) -> Vec<u8> {
+    assert!(source.len() >= 2, "fixture requires at least two bytes");
+    let split = source.len() / 2;
+    let tail = source.len() - split;
+    assert!(split > 0 && tail > 0, "fixture split invalid");
+
+    let mut cover = Vec::new();
+    cover.push(0); // old sign=0, old_delta=0
+    encode_varint(&mut cover, 0); // new_gap
+    encode_varint(&mut cover, u64::try_from(split).expect("split"));
+    cover.push(0); // old sign=0, old_delta=0
+    encode_varint(&mut cover, 0); // new_gap
+    encode_varint(&mut cover, u64::try_from(tail).expect("tail"));
+
+    let mut rle = Vec::new();
+    encode_varint(&mut rle, u64::try_from(split).expect("split"));
+    encode_varint(&mut rle, 0); // len_value for second cover transition
+    encode_varint(&mut rle, u64::try_from(tail).expect("tail"));
+
+    let mut payload = Vec::new();
+    encode_varint(&mut payload, u64::try_from(cover.len()).expect("cover len"));
+    encode_varint(&mut payload, u64::try_from(rle.len()).expect("rle len"));
+    payload.extend_from_slice(&cover);
+    payload.extend_from_slice(&rle);
+
+    let mut patch = Vec::new();
+    patch.extend_from_slice(b"HDIFFSF20&nocomp");
+    patch.push(0);
+    patch.extend_from_slice(&encode_all_varints(&[
+        u64::try_from(source.len()).expect("new size"),
+        u64::try_from(source.len()).expect("old size"),
+        2,   // cover_count
+        256, // step_mem_size
+        u64::try_from(payload.len()).expect("payload size"),
+        0, // compressed_size
+    ]));
+    patch.extend_from_slice(&payload);
+    patch
+}
+
+fn build_hdiff19_nocomp_directory_patch() -> Vec<u8> {
+    let mut patch = Vec::new();
+    patch.extend_from_slice(b"HDIFF19&nocomp");
+    patch.push(0);
+    patch.push(1); // is_input_dir
+    patch.push(1); // is_output_dir
+    patch.extend_from_slice(&encode_all_varints(&[
+        0, // input_dir_count
+        0, // input_sum_size
+        0, // output_dir_count
+        0, // output_sum_size
+    ]));
+    patch
+}
+
 fn adler32(bytes: &[u8]) -> u32 {
     const MOD_ADLER: u32 = 65_521;
     let mut a = 1u32;
@@ -11196,6 +11331,200 @@ fn patch_create_reports_unsupported_for_hdiffpatch() {
             .as_str()
             .unwrap_or_default()
             .contains("patch creation is disabled")
+    );
+}
+
+#[test]
+fn patch_apply_hdiffpatch_reports_parallel_execution_for_multi_chunk_patch() {
+    let temp = setup_temp_dir();
+    let input = temp.child("input.bin");
+    let patch = temp.child("update.hdiff");
+    let output = temp.child("output.bin");
+    let source = vec![0x5au8; 1024];
+    fs::write(input.path(), &source).expect("fixture");
+    fs::write(
+        patch.path(),
+        build_hdiff13_identity_patch_with_cover_and_rle(&source),
+    )
+    .expect("fixture");
+
+    let apply_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--threads",
+            "8",
+            "--no-compress",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let apply_json = parse_single_json_line(&apply_output);
+    assert_eq!(apply_json["command"], "patch-apply");
+    assert_eq!(apply_json["family"], "patch");
+    assert_eq!(apply_json["format"], "HDiffPatch/HPatchZ");
+    assert_eq!(apply_json["requested_threads"], 8);
+    let effective_threads = apply_json["effective_threads"]
+        .as_u64()
+        .expect("effective_threads");
+    assert!(effective_threads > 1);
+    assert_eq!(apply_json["used_parallelism"], true);
+    assert_eq!(apply_json["status"], "succeeded");
+    assert_eq!(fs::read(output.path()).expect("output"), source);
+}
+
+#[test]
+fn patch_apply_hpatchz_sf20_reports_parallel_execution_for_multi_step_payload() {
+    let temp = setup_temp_dir();
+    let input = temp.child("input.bin");
+    let patch = temp.child("update.hpatchz");
+    let output = temp.child("output.bin");
+    let source = vec![0x6bu8; 1024];
+    fs::write(input.path(), &source).expect("fixture");
+    fs::write(
+        patch.path(),
+        build_hdiffsf20_nocomp_identity_two_steps(&source),
+    )
+    .expect("fixture");
+
+    let apply_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--threads",
+            "8",
+            "--no-compress",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let apply_json = parse_single_json_line(&apply_output);
+    assert_eq!(apply_json["command"], "patch-apply");
+    assert_eq!(apply_json["family"], "patch");
+    assert_eq!(apply_json["format"], "HDiffPatch/HPatchZ");
+    assert_eq!(apply_json["requested_threads"], 8);
+    let effective_threads = apply_json["effective_threads"]
+        .as_u64()
+        .expect("effective_threads");
+    assert!(effective_threads > 1);
+    assert_eq!(apply_json["used_parallelism"], true);
+    assert_eq!(apply_json["status"], "succeeded");
+    assert_eq!(fs::read(output.path()).expect("output"), source);
+}
+
+#[test]
+fn patch_apply_hpatchz_sf20_reports_parallel_fallback_for_single_step_payload() {
+    let temp = setup_temp_dir();
+    let input = temp.child("input.bin");
+    let patch = temp.child("update.hpatchz");
+    let output = temp.child("output.bin");
+    let source = vec![0x33u8; 1024];
+    fs::write(input.path(), &source).expect("fixture");
+    fs::write(
+        patch.path(),
+        build_hdiffsf20_nocomp_identity_single_step_two_covers(&source),
+    )
+    .expect("fixture");
+
+    let apply_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--threads",
+            "8",
+            "--no-compress",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let apply_json = parse_single_json_line(&apply_output);
+    assert_eq!(apply_json["command"], "patch-apply");
+    assert_eq!(apply_json["family"], "patch");
+    assert_eq!(apply_json["format"], "HDiffPatch/HPatchZ");
+    assert_eq!(apply_json["requested_threads"], 8);
+    assert_eq!(apply_json["effective_threads"], 1);
+    assert_eq!(apply_json["used_parallelism"], false);
+    assert_eq!(apply_json["thread_fallback"], true);
+    assert!(
+        apply_json["thread_fallback_reason"]
+            .as_str()
+            .expect("thread fallback reason")
+            .contains("no independent step-level parallel work")
+    );
+    assert_eq!(apply_json["status"], "succeeded");
+    assert_eq!(fs::read(output.path()).expect("output"), source);
+}
+
+#[test]
+fn patch_apply_hdiff19_directory_patch_reports_unsupported() {
+    let temp = setup_temp_dir();
+    let input = temp.child("input.bin");
+    let patch = temp.child("update.hdiff");
+    let output = temp.child("output.bin");
+    fs::write(input.path(), b"any source bytes").expect("fixture");
+    fs::write(patch.path(), build_hdiff19_nocomp_directory_patch()).expect("fixture");
+
+    let apply_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-apply",
+            "--input",
+            input.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--threads",
+            "8",
+            "--no-compress",
+            "--json",
+        ])
+        .assert()
+        .code(2)
+        .get_output()
+        .stdout
+        .clone();
+
+    let apply_json = parse_single_json_line(&apply_output);
+    assert_eq!(apply_json["command"], "patch-apply");
+    assert_eq!(apply_json["family"], "patch");
+    assert_eq!(apply_json["format"], "HDiffPatch/HPatchZ");
+    assert_eq!(apply_json["status"], "unsupported");
+    assert!(
+        apply_json["label"]
+            .as_str()
+            .expect("label")
+            .contains("directory patches (HDIFF19) are not supported")
     );
 }
 

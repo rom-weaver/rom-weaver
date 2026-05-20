@@ -8,6 +8,7 @@ use bzip2::read::BzDecoder;
 use flate2::read::{DeflateDecoder, ZlibDecoder};
 use lzma_rust2::{Lzma2Reader, LzmaReader};
 use memmap2::{Mmap, MmapOptions};
+use rayon::prelude::*;
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
     PatchCapabilities, PatchCreateRequest, PatchHandler, ProbeConfidence, Result, RomWeaverError,
@@ -90,7 +91,7 @@ impl PatchHandler for HdiffPatchHandler {
             RomWeaverError::Validation("HDiffPatch input size overflowed u64".into())
         })?;
 
-        let output_bytes = match variant {
+        let (output_bytes, execution) = match variant {
             ParsedPatchVariant::SingleFile13(header) => {
                 if old_len != header.old_data_size {
                     return Err(RomWeaverError::Validation(format!(
@@ -98,7 +99,25 @@ impl PatchHandler for HdiffPatchHandler {
                         header.old_data_size, old_len
                     )));
                 }
-                apply_hdiff13(old_bytes.as_ref(), patch.as_ref(), &header)?
+
+                let thread_capability = hdiff13_apply_thread_capability(&header);
+                let planned_execution = context.plan_threads(thread_capability.clone());
+                if planned_execution.used_parallelism {
+                    let (execution, pool) = context.build_pool(thread_capability)?;
+                    let chunk_parallel = execution.used_parallelism;
+                    let output = pool.install(|| {
+                        apply_hdiff13_with_chunk_parallelism(
+                            old_bytes.as_ref(),
+                            patch.as_ref(),
+                            &header,
+                            chunk_parallel,
+                        )
+                    })?;
+                    (output, execution)
+                } else {
+                    let output = apply_hdiff13(old_bytes.as_ref(), patch.as_ref(), &header)?;
+                    (output, planned_execution)
+                }
             }
             ParsedPatchVariant::SingleStream20(header) => {
                 if old_len != header.old_data_size {
@@ -107,7 +126,31 @@ impl PatchHandler for HdiffPatchHandler {
                         header.old_data_size, old_len
                     )));
                 }
-                apply_hdiffsf20(old_bytes.as_ref(), patch.as_ref(), &header)?
+
+                let thread_capability = hdiffsf20_apply_thread_capability(&header);
+                let planned_execution = context.plan_threads(thread_capability.clone());
+                if planned_execution.used_parallelism {
+                    let (mut execution, pool) = context.build_pool(thread_capability)?;
+                    let step_parallel = execution.used_parallelism;
+                    let apply = pool.install(|| {
+                        apply_hdiffsf20_with_step_parallelism(
+                            old_bytes.as_ref(),
+                            patch.as_ref(),
+                            &header,
+                            step_parallel,
+                        )
+                    })?;
+                    if !apply.used_parallelism {
+                        execution.apply_pool_fallback(
+                            "HDIFFSF20 payload had no independent step-level parallel work"
+                                .to_string(),
+                        );
+                    }
+                    (apply.output, execution)
+                } else {
+                    let output = apply_hdiffsf20(old_bytes.as_ref(), patch.as_ref(), &header)?;
+                    (output, planned_execution)
+                }
             }
             ParsedPatchVariant::Directory19(_) => {
                 return Err(RomWeaverError::Unsupported(
@@ -123,7 +166,6 @@ impl PatchHandler for HdiffPatchHandler {
         output.write_all(&output_bytes)?;
         output.flush()?;
 
-        let execution = context.plan_threads(ThreadCapability::single_threaded());
         Ok(OperationReport::succeeded(
             OperationFamily::Patch,
             Some(self.descriptor.name.to_string()),
@@ -160,7 +202,7 @@ impl PatchHandler for HdiffPatchHandler {
             create: false,
             threaded_scan: false,
             threaded_diff: false,
-            threaded_output: false,
+            threaded_output: true,
         }
     }
 }
@@ -229,6 +271,35 @@ struct ParsedHdiffSf20 {
     uncompressed_size: u64,
     compressed_size: u64,
     diff_data_pos: usize,
+}
+
+#[derive(Clone, Debug)]
+struct Sf20CoverPlan {
+    old_start: usize,
+    cover_len: usize,
+    gap_len: usize,
+}
+
+#[derive(Clone, Debug)]
+struct Sf20StepPlan {
+    output_start: usize,
+    output_len: usize,
+    rle_range: std::ops::Range<usize>,
+    gap_range: std::ops::Range<usize>,
+    covers: Vec<Sf20CoverPlan>,
+}
+
+#[derive(Clone, Debug)]
+struct ParsedSf20Plan {
+    steps: Vec<Sf20StepPlan>,
+    tail_range: std::ops::Range<usize>,
+    produced_len: usize,
+}
+
+#[derive(Clone, Debug)]
+struct HdiffSf20ApplyOutput {
+    output: Vec<u8>,
+    used_parallelism: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -376,56 +447,123 @@ fn should_fallback_from_mmap(error: &io::Error) -> bool {
 }
 
 fn apply_hdiff13(old_bytes: &[u8], patch_bytes: &[u8], header: &ParsedHdiff13) -> Result<Vec<u8>> {
-    let cover_raw = read_hdiff_chunk(
-        patch_bytes,
-        header.header_end,
-        header.cover_buf_size,
-        header.compress_cover_buf_size,
-        header.compression,
-        "cover",
-    )?;
+    apply_hdiff13_with_chunk_parallelism(old_bytes, patch_bytes, header, false)
+}
+
+fn apply_hdiff13_with_chunk_parallelism(
+    old_bytes: &[u8],
+    patch_bytes: &[u8],
+    header: &ParsedHdiff13,
+    parallel_chunks: bool,
+) -> Result<Vec<u8>> {
+    let cover_start = header.header_end;
     let cover_end = add_usize_u64(
-        header.header_end,
+        cover_start,
         hdiff_chunk_raw_size(header.cover_buf_size, header.compress_cover_buf_size),
         "cover end",
     )?;
-
-    let rle_ctrl_raw = read_hdiff_chunk(
-        patch_bytes,
-        cover_end,
-        header.rle_ctrl_buf_size,
-        header.compress_rle_ctrl_buf_size,
-        header.compression,
-        "rle_ctrl",
-    )?;
+    let rle_ctrl_start = cover_end;
     let rle_ctrl_end = add_usize_u64(
-        cover_end,
+        rle_ctrl_start,
         hdiff_chunk_raw_size(header.rle_ctrl_buf_size, header.compress_rle_ctrl_buf_size),
         "rle_ctrl end",
     )?;
-
-    let rle_code_raw = read_hdiff_chunk(
-        patch_bytes,
-        rle_ctrl_end,
-        header.rle_code_buf_size,
-        header.compress_rle_code_buf_size,
-        header.compression,
-        "rle_code",
-    )?;
+    let rle_code_start = rle_ctrl_end;
     let rle_code_end = add_usize_u64(
-        rle_ctrl_end,
+        rle_code_start,
         hdiff_chunk_raw_size(header.rle_code_buf_size, header.compress_rle_code_buf_size),
         "rle_code end",
     )?;
+    let new_diff_start = rle_code_end;
 
-    let new_diff_raw = read_hdiff_chunk(
-        patch_bytes,
-        rle_code_end,
-        header.new_data_diff_size,
-        header.compress_new_data_diff_size,
-        header.compression,
-        "new_data_diff",
-    )?;
+    let (cover_raw, rle_ctrl_raw, rle_code_raw, new_diff_raw) = if parallel_chunks {
+        let ((cover_raw, rle_ctrl_raw), (rle_code_raw, new_diff_raw)) = rayon::join(
+            || {
+                rayon::join(
+                    || {
+                        read_hdiff_chunk(
+                            patch_bytes,
+                            cover_start,
+                            header.cover_buf_size,
+                            header.compress_cover_buf_size,
+                            header.compression,
+                            "cover",
+                        )
+                    },
+                    || {
+                        read_hdiff_chunk(
+                            patch_bytes,
+                            rle_ctrl_start,
+                            header.rle_ctrl_buf_size,
+                            header.compress_rle_ctrl_buf_size,
+                            header.compression,
+                            "rle_ctrl",
+                        )
+                    },
+                )
+            },
+            || {
+                rayon::join(
+                    || {
+                        read_hdiff_chunk(
+                            patch_bytes,
+                            rle_code_start,
+                            header.rle_code_buf_size,
+                            header.compress_rle_code_buf_size,
+                            header.compression,
+                            "rle_code",
+                        )
+                    },
+                    || {
+                        read_hdiff_chunk(
+                            patch_bytes,
+                            new_diff_start,
+                            header.new_data_diff_size,
+                            header.compress_new_data_diff_size,
+                            header.compression,
+                            "new_data_diff",
+                        )
+                    },
+                )
+            },
+        );
+        (cover_raw?, rle_ctrl_raw?, rle_code_raw?, new_diff_raw?)
+    } else {
+        (
+            read_hdiff_chunk(
+                patch_bytes,
+                cover_start,
+                header.cover_buf_size,
+                header.compress_cover_buf_size,
+                header.compression,
+                "cover",
+            )?,
+            read_hdiff_chunk(
+                patch_bytes,
+                rle_ctrl_start,
+                header.rle_ctrl_buf_size,
+                header.compress_rle_ctrl_buf_size,
+                header.compression,
+                "rle_ctrl",
+            )?,
+            read_hdiff_chunk(
+                patch_bytes,
+                rle_code_start,
+                header.rle_code_buf_size,
+                header.compress_rle_code_buf_size,
+                header.compression,
+                "rle_code",
+            )?,
+            read_hdiff_chunk(
+                patch_bytes,
+                new_diff_start,
+                header.new_data_diff_size,
+                header.compress_new_data_diff_size,
+                header.compression,
+                "new_data_diff",
+            )?,
+        )
+    };
 
     let old_data_size = usize::try_from(header.old_data_size).map_err(|_| {
         RomWeaverError::Validation("HDiffPatch old_data_size overflowed usize".into())
@@ -581,11 +719,50 @@ fn apply_hdiff13(old_bytes: &[u8], patch_bytes: &[u8], header: &ParsedHdiff13) -
     Ok(output)
 }
 
+fn hdiff13_apply_thread_capability(header: &ParsedHdiff13) -> ThreadCapability {
+    let chunk_count = [
+        hdiff_chunk_raw_size(header.cover_buf_size, header.compress_cover_buf_size),
+        hdiff_chunk_raw_size(header.rle_ctrl_buf_size, header.compress_rle_ctrl_buf_size),
+        hdiff_chunk_raw_size(header.rle_code_buf_size, header.compress_rle_code_buf_size),
+        hdiff_chunk_raw_size(
+            header.new_data_diff_size,
+            header.compress_new_data_diff_size,
+        ),
+    ]
+    .into_iter()
+    .filter(|raw_size| *raw_size > 0)
+    .count();
+
+    if chunk_count > 1 {
+        ThreadCapability::parallel(Some(chunk_count))
+    } else {
+        ThreadCapability::single_threaded()
+    }
+}
+
 fn apply_hdiffsf20(
     old_bytes: &[u8],
     patch_bytes: &[u8],
     header: &ParsedHdiffSf20,
 ) -> Result<Vec<u8>> {
+    Ok(apply_hdiffsf20_with_step_parallelism(old_bytes, patch_bytes, header, false)?.output)
+}
+
+fn hdiffsf20_apply_thread_capability(header: &ParsedHdiffSf20) -> ThreadCapability {
+    let cover_count = usize::try_from(header.cover_count).unwrap_or(usize::MAX);
+    if cover_count > 1 {
+        ThreadCapability::parallel(Some(cover_count.min(64)))
+    } else {
+        ThreadCapability::single_threaded()
+    }
+}
+
+fn apply_hdiffsf20_with_step_parallelism(
+    old_bytes: &[u8],
+    patch_bytes: &[u8],
+    header: &ParsedHdiffSf20,
+    enable_parallel_steps: bool,
+) -> Result<HdiffSf20ApplyOutput> {
     let diff_start = header.diff_data_pos;
     let diff_raw_len = hdiff_chunk_raw_size(header.uncompressed_size, header.compressed_size);
     let diff_end = add_usize_u64(diff_start, diff_raw_len, "HDIFFSF20 diff end")?;
@@ -606,16 +783,59 @@ fn apply_hdiffsf20(
         )?
     };
 
+    let new_data_size = usize::try_from(header.new_data_size)
+        .map_err(|_| RomWeaverError::Validation("HDIFFSF20 new size overflowed usize".into()))?;
+    let parsed = parse_hdiffsf20_steps(
+        diff.as_slice(),
+        old_bytes.len(),
+        new_data_size,
+        header.cover_count,
+    )?;
+
+    let mut output = vec![0u8; new_data_size];
+    let used_parallelism = if enable_parallel_steps && parsed.steps.len() > 1 {
+        let rendered = parsed
+            .steps
+            .par_iter()
+            .map(|step| render_hdiffsf20_step(old_bytes, diff.as_slice(), step))
+            .collect::<Result<Vec<_>>>()?;
+        for (step, step_bytes) in parsed.steps.iter().zip(rendered.iter()) {
+            write_hdiffsf20_step_bytes(output.as_mut_slice(), step, step_bytes)?;
+        }
+        true
+    } else {
+        for step in &parsed.steps {
+            let step_bytes = render_hdiffsf20_step(old_bytes, diff.as_slice(), step)?;
+            write_hdiffsf20_step_bytes(output.as_mut_slice(), step, step_bytes.as_slice())?;
+        }
+        false
+    };
+
+    if parsed.produced_len < new_data_size {
+        output[parsed.produced_len..new_data_size].copy_from_slice(&diff[parsed.tail_range]);
+    }
+
+    Ok(HdiffSf20ApplyOutput {
+        output,
+        used_parallelism,
+    })
+}
+
+fn parse_hdiffsf20_steps(
+    diff: &[u8],
+    old_len: usize,
+    new_data_size: usize,
+    cover_count: u64,
+) -> Result<ParsedSf20Plan> {
     let mut diff_index = 0usize;
     let mut last_old_end = 0u64;
     let mut last_new_end = 0u64;
-    let mut remaining_covers = header.cover_count;
-
-    let mut output = Vec::with_capacity(usize::try_from(header.new_data_size).unwrap_or(0));
+    let mut remaining_covers = cover_count;
+    let mut steps = Vec::<Sf20StepPlan>::new();
 
     while remaining_covers > 0 {
         let cover_buf_size = usize::try_from(read_var_u64_slice(
-            &diff,
+            diff,
             &mut diff_index,
             "sf20 cover_buf_size",
         )?)
@@ -623,14 +843,13 @@ fn apply_hdiffsf20(
             RomWeaverError::Validation("HDIFFSF20 cover_buf_size overflowed usize".into())
         })?;
         let rle_buf_size = usize::try_from(read_var_u64_slice(
-            &diff,
+            diff,
             &mut diff_index,
             "sf20 rle_buf_size",
         )?)
         .map_err(|_| {
             RomWeaverError::Validation("HDIFFSF20 rle_buf_size overflowed usize".into())
         })?;
-
         let step_size = cover_buf_size
             .checked_add(rle_buf_size)
             .ok_or_else(|| RomWeaverError::Validation("HDIFFSF20 step size overflowed".into()))?;
@@ -643,12 +862,21 @@ fn apply_hdiffsf20(
             ));
         }
 
-        let covers = &diff[diff_index..diff_index + cover_buf_size];
-        let rle = &diff[diff_index + cover_buf_size..step_end];
+        let cover_start = diff_index;
+        let cover_end = cover_start + cover_buf_size;
+        let rle_start = cover_end;
+        let rle_end = step_end;
+        let covers = &diff[cover_start..cover_end];
         diff_index = step_end;
 
+        let step_output_start = usize::try_from(last_new_end).map_err(|_| {
+            RomWeaverError::Validation("HDIFFSF20 step output start overflowed usize".into())
+        })?;
+        let step_gap_start = diff_index;
+        let mut step_gap_cursor = diff_index;
         let mut cover_index = 0usize;
-        let mut rle_decoder = HdiffSf20RleDecoder::new(rle);
+        let mut step_covers = Vec::<Sf20CoverPlan>::new();
+        let covers_before = remaining_covers;
 
         while cover_index < covers.len() && remaining_covers > 0 {
             let p_sign = read_u8_slice(covers, &mut cover_index, "sf20 cover sign")?;
@@ -663,54 +891,44 @@ fn apply_hdiffsf20(
                     RomWeaverError::Validation("HDIFFSF20 old position underflowed".into())
                 })?
             };
-
             let new_gap = read_var_u64_slice(covers, &mut cover_index, "sf20 new gap")?;
             let cover_length = read_var_u64_slice(covers, &mut cover_index, "sf20 cover length")?;
             let new_pos = last_new_end.checked_add(new_gap).ok_or_else(|| {
                 RomWeaverError::Validation("HDIFFSF20 new position overflowed".into())
             })?;
 
-            let new_pos_usize = usize::try_from(new_pos).map_err(|_| {
-                RomWeaverError::Validation("HDIFFSF20 new position overflowed usize".into())
-            })?;
-            if output.len() > new_pos_usize {
-                return Err(RomWeaverError::Validation(
-                    "HDIFFSF20 new position moved backward".into(),
-                ));
-            }
-
-            if output.len() < new_pos_usize {
-                let fill_len = new_pos_usize - output.len();
-                append_from_new_diff(
-                    &mut output,
-                    diff.as_slice(),
-                    &mut diff_index,
-                    fill_len,
-                    "sf20 diff gap",
-                )?;
-            }
-
-            remaining_covers -= 1;
-
             let old_start = usize::try_from(old_pos).map_err(|_| {
                 RomWeaverError::Validation("HDIFFSF20 old position overflowed usize".into())
             })?;
-            let cover_len_usize = usize::try_from(cover_length).map_err(|_| {
+            let cover_len = usize::try_from(cover_length).map_err(|_| {
                 RomWeaverError::Validation("HDIFFSF20 cover length overflowed usize".into())
             })?;
-            let old_end = old_start.checked_add(cover_len_usize).ok_or_else(|| {
+            let gap_len = usize::try_from(new_gap)
+                .map_err(|_| RomWeaverError::Validation("HDIFFSF20 gap overflowed usize".into()))?;
+            let old_end = old_start.checked_add(cover_len).ok_or_else(|| {
                 RomWeaverError::Validation("HDIFFSF20 old range overflowed".into())
             })?;
-            if old_end > old_bytes.len() {
+            if old_end > old_len {
                 return Err(RomWeaverError::Validation(
                     "HDIFFSF20 cover exceeded source bounds".into(),
                 ));
             }
 
-            output.extend_from_slice(&old_bytes[old_start..old_end]);
-            let begin = output.len() - cover_len_usize;
-            rle_decoder.add(&mut output[begin..])?;
+            step_gap_cursor = step_gap_cursor.checked_add(gap_len).ok_or_else(|| {
+                RomWeaverError::Validation("HDIFFSF20 gap cursor overflowed".into())
+            })?;
+            if step_gap_cursor > diff.len() {
+                return Err(RomWeaverError::Validation(
+                    "HDIFFSF20 gap bytes exceeded payload".into(),
+                ));
+            }
 
+            remaining_covers -= 1;
+            step_covers.push(Sf20CoverPlan {
+                old_start,
+                cover_len,
+                gap_len,
+            });
             last_old_end = old_pos
                 .checked_add(cover_length)
                 .ok_or_else(|| RomWeaverError::Validation("HDIFFSF20 old end overflowed".into()))?;
@@ -718,30 +936,146 @@ fn apply_hdiffsf20(
                 .checked_add(cover_length)
                 .ok_or_else(|| RomWeaverError::Validation("HDIFFSF20 new end overflowed".into()))?;
         }
+
+        if remaining_covers == covers_before {
+            return Err(RomWeaverError::Validation(
+                "HDIFFSF20 step declared no decodable covers".into(),
+            ));
+        }
+
+        let step_output_end = usize::try_from(last_new_end).map_err(|_| {
+            RomWeaverError::Validation("HDIFFSF20 step output end overflowed usize".into())
+        })?;
+        if step_output_end < step_output_start {
+            return Err(RomWeaverError::Validation(
+                "HDIFFSF20 step output moved backward".into(),
+            ));
+        }
+        if let Some(previous) = steps.last() {
+            let previous_end = previous
+                .output_start
+                .checked_add(previous.output_len)
+                .ok_or_else(|| {
+                    RomWeaverError::Validation("HDIFFSF20 step output range overflowed".into())
+                })?;
+            if step_output_start < previous_end {
+                return Err(RomWeaverError::Validation(
+                    "HDIFFSF20 step output ranges overlapped".into(),
+                ));
+            }
+        }
+
+        steps.push(Sf20StepPlan {
+            output_start: step_output_start,
+            output_len: step_output_end - step_output_start,
+            rle_range: rle_start..rle_end,
+            gap_range: step_gap_start..step_gap_cursor,
+            covers: step_covers,
+        });
+        diff_index = step_gap_cursor;
     }
 
-    let new_data_size = usize::try_from(header.new_data_size)
-        .map_err(|_| RomWeaverError::Validation("HDIFFSF20 new size overflowed usize".into()))?;
-    if output.len() < new_data_size {
-        let fill_len = new_data_size - output.len();
-        append_from_new_diff(
-            &mut output,
-            diff.as_slice(),
-            &mut diff_index,
-            fill_len,
-            "sf20 diff tail",
-        )?;
-    }
-
-    if output.len() != new_data_size {
+    let produced_len = usize::try_from(last_new_end).map_err(|_| {
+        RomWeaverError::Validation("HDIFFSF20 produced size overflowed usize".into())
+    })?;
+    if produced_len > new_data_size {
         return Err(RomWeaverError::Validation(format!(
             "HDIFFSF20 output size mismatch: expected {} byte(s), got {} byte(s)",
-            new_data_size,
-            output.len()
+            new_data_size, produced_len
         )));
+    }
+    let tail_len = new_data_size - produced_len;
+    let tail_end = diff_index
+        .checked_add(tail_len)
+        .ok_or_else(|| RomWeaverError::Validation("HDIFFSF20 tail range overflowed".into()))?;
+    if tail_end > diff.len() {
+        return Err(RomWeaverError::Validation(
+            "HDIFFSF20 tail diff bytes exceeded payload".into(),
+        ));
+    }
+
+    Ok(ParsedSf20Plan {
+        steps,
+        tail_range: diff_index..tail_end,
+        produced_len,
+    })
+}
+
+fn render_hdiffsf20_step(old_bytes: &[u8], diff: &[u8], step: &Sf20StepPlan) -> Result<Vec<u8>> {
+    if step.rle_range.end > diff.len() || step.gap_range.end > diff.len() {
+        return Err(RomWeaverError::Validation(
+            "HDIFFSF20 step referenced bytes past payload".into(),
+        ));
+    }
+
+    let mut output = Vec::with_capacity(step.output_len);
+    let mut gap_index = 0usize;
+    let gap_bytes = &diff[step.gap_range.clone()];
+    let rle_bytes = &diff[step.rle_range.clone()];
+    let mut rle_decoder = HdiffSf20RleDecoder::new(rle_bytes);
+
+    for cover in &step.covers {
+        if cover.gap_len > 0 {
+            if gap_bytes.len().saturating_sub(gap_index) < cover.gap_len {
+                return Err(RomWeaverError::Validation(
+                    "HDIFFSF20 step gap bytes ended unexpectedly".into(),
+                ));
+            }
+            output.extend_from_slice(&gap_bytes[gap_index..gap_index + cover.gap_len]);
+            gap_index += cover.gap_len;
+        }
+
+        let old_end = cover
+            .old_start
+            .checked_add(cover.cover_len)
+            .ok_or_else(|| RomWeaverError::Validation("HDIFFSF20 old range overflowed".into()))?;
+        if old_end > old_bytes.len() {
+            return Err(RomWeaverError::Validation(
+                "HDIFFSF20 cover exceeded source bounds".into(),
+            ));
+        }
+        output.extend_from_slice(&old_bytes[cover.old_start..old_end]);
+        let begin = output.len() - cover.cover_len;
+        rle_decoder.add(&mut output[begin..])?;
+    }
+
+    if gap_index != gap_bytes.len() {
+        return Err(RomWeaverError::Validation(
+            "HDIFFSF20 step left unused gap bytes".into(),
+        ));
+    }
+    if output.len() != step.output_len {
+        return Err(RomWeaverError::Validation(
+            "HDIFFSF20 rendered step size mismatch".into(),
+        ));
     }
 
     Ok(output)
+}
+
+fn write_hdiffsf20_step_bytes(
+    output: &mut [u8],
+    step: &Sf20StepPlan,
+    step_bytes: &[u8],
+) -> Result<()> {
+    if step_bytes.len() != step.output_len {
+        return Err(RomWeaverError::Validation(
+            "HDIFFSF20 rendered step length mismatch".into(),
+        ));
+    }
+    let step_end = step
+        .output_start
+        .checked_add(step.output_len)
+        .ok_or_else(|| {
+            RomWeaverError::Validation("HDIFFSF20 step output range overflowed".into())
+        })?;
+    if step_end > output.len() {
+        return Err(RomWeaverError::Validation(
+            "HDIFFSF20 step output exceeded target size".into(),
+        ));
+    }
+    output[step.output_start..step_end].copy_from_slice(step_bytes);
+    Ok(())
 }
 
 fn read_hdiff_chunk(
@@ -1453,6 +1787,124 @@ mod tests {
         patch
     }
 
+    fn build_identity_hdiff13_patch_with_cover_and_rle(source: &[u8]) -> Vec<u8> {
+        let source_len = u64::try_from(source.len()).expect("source size");
+        let mut cover = Vec::new();
+        cover.push(0); // old sign=0, old_delta=0
+        write_var_u64(&mut cover, 0); // copy_length
+        write_var_u64(&mut cover, source_len); // cover_length
+
+        let mut patch = Vec::new();
+        patch.extend_from_slice(b"HDIFF13&nocomp");
+        patch.push(0);
+        write_var_u64(&mut patch, source_len); // new_data_size
+        write_var_u64(&mut patch, source_len); // old_data_size
+        write_var_u64(&mut patch, 1); // cover_count
+        write_var_u64(&mut patch, u64::try_from(cover.len()).expect("cover size"));
+        write_var_u64(&mut patch, 0); // compress_cover_buf_size
+        write_var_u64(&mut patch, 1); // rle_ctrl_buf_size
+        write_var_u64(&mut patch, 0); // compress_rle_ctrl_buf_size
+        write_var_u64(&mut patch, 1); // rle_code_buf_size
+        write_var_u64(&mut patch, 0); // compress_rle_code_buf_size
+        write_var_u64(&mut patch, 0); // new_data_diff_size
+        write_var_u64(&mut patch, 0); // compress_new_data_diff_size
+        patch.extend_from_slice(&cover);
+        patch.push(0xC0); // rle_type=copy, length=1
+        patch.push(0x00); // add 0, leaves byte unchanged
+        patch
+    }
+
+    fn append_sf20_zero_delta_cover(out: &mut Vec<u8>, cover_len: usize) {
+        out.push(0); // old sign=0, old_delta=0
+        write_var_u64(out, 0); // new_gap
+        write_var_u64(out, u64::try_from(cover_len).expect("cover len"));
+    }
+
+    fn build_hdiffsf20_nocomp_identity_two_steps(source: &[u8]) -> Vec<u8> {
+        assert!(source.len() >= 2, "fixture requires at least two bytes");
+        let split = source.len() / 2;
+        let tail = source.len() - split;
+        assert!(split > 0 && tail > 0, "fixture split invalid");
+
+        let mut payload = Vec::new();
+
+        let mut cover1 = Vec::new();
+        append_sf20_zero_delta_cover(&mut cover1, split);
+        let mut rle1 = Vec::new();
+        write_var_u64(&mut rle1, u64::try_from(split).expect("split"));
+        write_var_u64(
+            &mut payload,
+            u64::try_from(cover1.len()).expect("cover1 len"),
+        );
+        write_var_u64(&mut payload, u64::try_from(rle1.len()).expect("rle1 len"));
+        payload.extend_from_slice(&cover1);
+        payload.extend_from_slice(&rle1);
+
+        let mut cover2 = Vec::new();
+        append_sf20_zero_delta_cover(&mut cover2, tail);
+        let mut rle2 = Vec::new();
+        write_var_u64(&mut rle2, u64::try_from(tail).expect("tail"));
+        write_var_u64(
+            &mut payload,
+            u64::try_from(cover2.len()).expect("cover2 len"),
+        );
+        write_var_u64(&mut payload, u64::try_from(rle2.len()).expect("rle2 len"));
+        payload.extend_from_slice(&cover2);
+        payload.extend_from_slice(&rle2);
+
+        let mut patch = Vec::new();
+        patch.extend_from_slice(b"HDIFFSF20&nocomp");
+        patch.push(0);
+        write_var_u64(&mut patch, u64::try_from(source.len()).expect("new size"));
+        write_var_u64(&mut patch, u64::try_from(source.len()).expect("old size"));
+        write_var_u64(&mut patch, 2); // cover_count
+        write_var_u64(&mut patch, 256); // step_mem_size
+        write_var_u64(
+            &mut patch,
+            u64::try_from(payload.len()).expect("payload size"),
+        );
+        write_var_u64(&mut patch, 0); // compressed_size
+        patch.extend_from_slice(&payload);
+        patch
+    }
+
+    fn build_hdiffsf20_nocomp_identity_single_step_two_covers(source: &[u8]) -> Vec<u8> {
+        assert!(source.len() >= 2, "fixture requires at least two bytes");
+        let split = source.len() / 2;
+        let tail = source.len() - split;
+        assert!(split > 0 && tail > 0, "fixture split invalid");
+
+        let mut cover = Vec::new();
+        append_sf20_zero_delta_cover(&mut cover, split);
+        append_sf20_zero_delta_cover(&mut cover, tail);
+
+        let mut rle = Vec::new();
+        write_var_u64(&mut rle, u64::try_from(split).expect("split"));
+        write_var_u64(&mut rle, 0); // len_value for the second cover transition
+        write_var_u64(&mut rle, u64::try_from(tail).expect("tail"));
+
+        let mut payload = Vec::new();
+        write_var_u64(&mut payload, u64::try_from(cover.len()).expect("cover len"));
+        write_var_u64(&mut payload, u64::try_from(rle.len()).expect("rle len"));
+        payload.extend_from_slice(&cover);
+        payload.extend_from_slice(&rle);
+
+        let mut patch = Vec::new();
+        patch.extend_from_slice(b"HDIFFSF20&nocomp");
+        patch.push(0);
+        write_var_u64(&mut patch, u64::try_from(source.len()).expect("new size"));
+        write_var_u64(&mut patch, u64::try_from(source.len()).expect("old size"));
+        write_var_u64(&mut patch, 2); // cover_count
+        write_var_u64(&mut patch, 256); // step_mem_size
+        write_var_u64(
+            &mut patch,
+            u64::try_from(payload.len()).expect("payload size"),
+        );
+        write_var_u64(&mut patch, 0); // compressed_size
+        patch.extend_from_slice(&payload);
+        patch
+    }
+
     #[test]
     fn apply_hdiff13_zstd_zero_cover_round_trip() {
         let old = b"01234567890123456789";
@@ -1467,6 +1919,139 @@ mod tests {
 
         let output = apply_hdiff13(old, &parsed.bytes, &header).expect("apply");
         assert_eq!(output, new);
+    }
+
+    #[test]
+    fn apply_reports_parallel_execution_for_multi_chunk_hdiff13() {
+        let temp = TestDir::new();
+        let input_path = temp.child("source.bin");
+        let patch_path = temp.child("patch.hdiff");
+        let output_path = temp.child("output.bin");
+
+        let source = vec![0x5au8; 1024];
+        let patch = build_identity_hdiff13_patch_with_cover_and_rle(&source);
+        fs::write(&input_path, &source).expect("source");
+        fs::write(&patch_path, patch).expect("patch");
+
+        let handler = HdiffPatchHandler::new(&HDIFFPATCH);
+        let report = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: input_path,
+                    patches: vec![patch_path],
+                    output: output_path.clone(),
+                },
+                &test_context_with_threads(&temp, 8),
+            )
+            .expect("apply");
+
+        let execution = report.thread_execution.expect("thread execution");
+        assert!(execution.used_parallelism);
+        assert!(execution.effective_threads > 1);
+        assert_eq!(fs::read(output_path).expect("output"), source);
+    }
+
+    #[test]
+    fn apply_reports_single_thread_execution_when_only_one_chunk_is_present() {
+        let temp = TestDir::new();
+        let input_path = temp.child("source.bin");
+        let patch_path = temp.child("patch.hdiff");
+        let output_path = temp.child("output.bin");
+
+        let source = b"input bytes".to_vec();
+        let output = b"replacement bytes".to_vec();
+        let patch = build_uncompressed_hdiff13_patch(&source, &output).expect("patch");
+        fs::write(&input_path, &source).expect("source");
+        fs::write(&patch_path, patch).expect("patch");
+
+        let handler = HdiffPatchHandler::new(&HDIFFPATCH);
+        let report = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: input_path,
+                    patches: vec![patch_path],
+                    output: output_path.clone(),
+                },
+                &test_context_with_threads(&temp, 8),
+            )
+            .expect("apply");
+
+        let execution = report.thread_execution.expect("thread execution");
+        assert_eq!(execution.effective_threads, 1);
+        assert!(!execution.used_parallelism);
+        assert_eq!(fs::read(output_path).expect("output"), output);
+    }
+
+    #[test]
+    fn apply_hdiffsf20_reports_parallel_execution_for_multi_step_patch() {
+        let temp = TestDir::new();
+        let input_path = temp.child("source.bin");
+        let patch_path = temp.child("patch.hpatchz");
+        let output_path = temp.child("output.bin");
+        let source = vec![0x5au8; 1024];
+        fs::write(&input_path, &source).expect("source");
+        fs::write(
+            &patch_path,
+            build_hdiffsf20_nocomp_identity_two_steps(&source),
+        )
+        .expect("patch");
+
+        let handler = HdiffPatchHandler::new(&HDIFFPATCH);
+        let report = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: input_path,
+                    patches: vec![patch_path],
+                    output: output_path.clone(),
+                },
+                &test_context_with_threads(&temp, 8),
+            )
+            .expect("apply");
+
+        let execution = report.thread_execution.expect("thread execution");
+        assert!(execution.used_parallelism);
+        assert!(execution.effective_threads > 1);
+        assert_eq!(fs::read(output_path).expect("output"), source);
+    }
+
+    #[test]
+    fn apply_hdiffsf20_reports_parallel_fallback_for_single_step_patch() {
+        let temp = TestDir::new();
+        let input_path = temp.child("source.bin");
+        let patch_path = temp.child("patch.hpatchz");
+        let output_path = temp.child("output.bin");
+        let source = vec![0x33u8; 1024];
+        fs::write(&input_path, &source).expect("source");
+        fs::write(
+            &patch_path,
+            build_hdiffsf20_nocomp_identity_single_step_two_covers(&source),
+        )
+        .expect("patch");
+
+        let handler = HdiffPatchHandler::new(&HDIFFPATCH);
+        let report = handler
+            .apply(
+                &PatchApplyRequest {
+                    input: input_path,
+                    patches: vec![patch_path],
+                    output: output_path.clone(),
+                },
+                &test_context_with_threads(&temp, 8),
+            )
+            .expect("apply");
+
+        let execution = report.thread_execution.expect("thread execution");
+        assert!(!execution.used_parallelism);
+        assert!(execution.thread_fallback);
+        assert!(
+            execution
+                .thread_fallback_reason
+                .as_deref()
+                .unwrap_or_default()
+                .contains("no independent step-level parallel work")
+        );
+        assert_eq!(execution.effective_threads, 1);
+        assert_eq!(fs::read(output_path).expect("output"), source);
     }
 
     fn fixture_path(name: &str) -> PathBuf {
@@ -1517,5 +2102,16 @@ mod tests {
 
         let output = apply_hdiffsf20(&source, &parsed.bytes, &header).expect("apply");
         assert_eq!(output, expected);
+    }
+
+    #[test]
+    fn capabilities_mark_threaded_output_with_create_disabled() {
+        let capabilities = HdiffPatchHandler::new(&HDIFFPATCH).capabilities();
+        assert!(capabilities.parse);
+        assert!(capabilities.apply);
+        assert!(!capabilities.create);
+        assert!(!capabilities.threaded_scan);
+        assert!(!capabilities.threaded_diff);
+        assert!(capabilities.threaded_output);
     }
 }

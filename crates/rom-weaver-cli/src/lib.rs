@@ -4638,15 +4638,23 @@ impl CliApp {
                     patches: vec![resolved_patch_path.clone()],
                     output: apply_output.clone(),
                 };
-                report = handler.apply(&request, &context).unwrap_or_else(|error| {
-                    OperationReport::failed(
+                report = match handler.apply(&request, &context) {
+                    Ok(report) => report,
+                    Err(RomWeaverError::Unsupported(label)) => OperationReport::unsupported(
+                        OperationFamily::Patch,
+                        Some(handler.descriptor().name.to_string()),
+                        "apply",
+                        label,
+                        Some(context.plan_threads(ThreadCapability::single_threaded())),
+                    ),
+                    Err(error) => OperationReport::failed(
                         OperationFamily::Patch,
                         Some(handler.descriptor().name.to_string()),
                         "apply",
                         error.to_string(),
                         Some(context.plan_threads(ThreadCapability::single_threaded())),
-                    )
-                });
+                    ),
+                };
                 if report.status != OperationStatus::Succeeded {
                     if patch_count > 1 {
                         report.label = format!(
@@ -4942,15 +4950,23 @@ impl CliApp {
             Some(0.0),
             None,
         );
-        let report = handler.create(&request, &context).unwrap_or_else(|error| {
-            OperationReport::failed(
+        let report = match handler.create(&request, &context) {
+            Ok(report) => report,
+            Err(RomWeaverError::Unsupported(label)) => OperationReport::unsupported(
+                OperationFamily::Patch,
+                Some(handler.descriptor().name.to_string()),
+                "create",
+                label,
+                Some(context.plan_threads(ThreadCapability::single_threaded())),
+            ),
+            Err(error) => OperationReport::failed(
                 OperationFamily::Patch,
                 Some(handler.descriptor().name.to_string()),
                 "create",
                 error.to_string(),
                 Some(context.plan_threads(ThreadCapability::single_threaded())),
-            )
-        });
+            ),
+        };
         self.finish("patch-create", report)
     }
 
