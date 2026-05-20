@@ -8,6 +8,7 @@ mod dldi;
 mod dps;
 mod gdiff;
 mod ips;
+mod ninja1;
 mod pat;
 mod pmsr;
 mod ppf;
@@ -36,6 +37,7 @@ use dldi::DldiPatchHandler;
 use dps::DpsPatchHandler;
 use gdiff::GdiffPatchHandler;
 use ips::IpsPatchHandler;
+use ninja1::Ninja1PatchHandler;
 use pat::{PatPatchHandler, has_pat_record_signature};
 use pmsr::PmsrPatchHandler;
 use ppf::PpfPatchHandler;
@@ -106,6 +108,12 @@ const APSGBA: FormatDescriptor = FormatDescriptor {
     aliases: &["aps-gba"],
     extensions: &[".apsgba"],
 };
+const NINJA1: FormatDescriptor = FormatDescriptor {
+    family: OperationFamily::Patch,
+    name: "NINJA1",
+    aliases: &["ninja1"],
+    extensions: &[],
+};
 const RUP: FormatDescriptor = FormatDescriptor {
     family: OperationFamily::Patch,
     name: "RUP",
@@ -167,6 +175,7 @@ const VCDIFF_SIGNATURE: [u8; 3] = [0xD6, 0xC3, 0xC4];
 const GDIFF_SIGNATURE: [u8; 5] = [0xD1, 0xFF, 0xD1, 0xFF, 4];
 const APS_N64_SIGNATURE: &[u8] = b"APS10";
 const APS_GBA_SIGNATURE: &[u8] = b"APS1";
+const NINJA1_SIGNATURE: &[u8] = b"NINJA1";
 const RUP_SIGNATURE: &[u8] = b"NINJA2";
 const PPF1_SIGNATURE: &[u8] = b"PPF1";
 const PPF2_SIGNATURE: &[u8] = b"PPF2";
@@ -255,6 +264,7 @@ impl PatchRegistry {
         handlers.push(Arc::new(GdiffPatchHandler::new(&GDIFF)));
         handlers.push(Arc::new(ApsN64PatchHandler::new(&APS)));
         handlers.push(Arc::new(ApsGbaPatchHandler::new(&APSGBA)));
+        handlers.push(Arc::new(Ninja1PatchHandler::new(&NINJA1)));
         handlers.push(Arc::new(RupPatchHandler::new(&RUP)));
         handlers.push(Arc::new(PpfPatchHandler::new(&PPF)));
         handlers.push(Arc::new(PatPatchHandler::new(&PAT)));
@@ -366,6 +376,9 @@ impl PatchRegistry {
         }
         if prefix.starts_with(APS_GBA_SIGNATURE) {
             return self.probe_signature_match(path, "APS GBA", "apsgba");
+        }
+        if prefix.starts_with(NINJA1_SIGNATURE) {
+            return self.probe_signature_match(path, "NINJA1", "ninja1");
         }
         if prefix.starts_with(RUP_SIGNATURE) {
             return self.probe_signature_match(path, "RUP", "rup");
@@ -500,6 +513,7 @@ mod tests {
         expected.extend([
             "APS",
             "APSGBA",
+            "NINJA1",
             "RUP",
             "PPF",
             "PAT",
@@ -698,6 +712,18 @@ mod tests {
         let registry = PatchRegistry::new();
         let handler = registry.probe(&path).expect("bps probe");
         assert_eq!(handler.descriptor().name, "BPS");
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn probe_routes_unknown_extension_with_ninja1_signature_to_ninja1_handler() {
+        let path = temp_file_path_with_extension("ninja1-signature", "bin");
+        fs::write(&path, b"NINJA1\0\0\0\0").expect("fixture");
+
+        let registry = PatchRegistry::new();
+        let handler = registry.probe(&path).expect("ninja1 probe");
+        assert_eq!(handler.descriptor().name, "NINJA1");
 
         let _ = fs::remove_file(path);
     }
