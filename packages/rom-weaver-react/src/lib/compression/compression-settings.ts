@@ -15,7 +15,7 @@ type CompressionSettingsSource = {
 };
 
 const getCompressionProfileIndex = (validProfiles: string[], profile: string | null | undefined): number =>
-  Math.max(0, validProfiles.indexOf(compressionManager.normalizeCompressionProfile(profile, "max")));
+  Math.max(0, validProfiles.indexOf(compressionManager.normalizeCompressionProfile(profile, "high")));
 
 const getCompressionProfileFromIndex = (
   validProfiles: string[],
@@ -23,11 +23,11 @@ const getCompressionProfileFromIndex = (
   fallback: string | null | undefined,
 ): string => {
   const index = parseInt(String(value), 10);
-  return validProfiles[index] || compressionManager.normalizeCompressionProfile(fallback, "max");
+  return validProfiles[index] || compressionManager.normalizeCompressionProfile(fallback, "high");
 };
 
 const getCompressionProfileLabel = (profile: string | null | undefined): string => {
-  const normalized = compressionManager.normalizeCompressionProfile(profile, "max");
+  const normalized = compressionManager.normalizeCompressionProfile(profile, "high");
   return normalized === "min"
     ? "Min"
     : (() => {
@@ -62,7 +62,7 @@ const getOptionalCompressionLevel = (
 
 const resolveCompressionLevels = (source?: CompressionSettingsSource | null) => {
   const settings = source || {};
-  const compressionProfile = compressionManager.normalizeCompressionProfile(settings.compressionProfile, "max");
+  const compressionProfile = compressionManager.normalizeCompressionProfile(settings.compressionProfile, "high");
   const rvzCompression = compressionManager.normalizeRvzCompression(settings.rvzCompression || "zstd");
   const sevenZipCodec = compressionManager.normalizeSevenZipCodec(settings.sevenZipCodec, "lzma2");
   const zipCodec = compressionManager.normalizeZipCodec(settings.zipCodec, "deflate");

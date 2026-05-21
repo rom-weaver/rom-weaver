@@ -263,7 +263,7 @@ pub struct CompressCommand {
     #[cfg_attr(not(target_arch = "wasm32"), arg(
         long,
         value_enum,
-        default_value_t = CompressionLevelProfile::Max,
+        default_value_t = CompressionLevelProfile::High,
         help = "Global compression level profile (min|very-low|low|medium|high|very-high|max)"
     ))]
     pub level: CompressionLevelProfile,
@@ -457,7 +457,7 @@ pub struct PatchApplyCommand {
     #[cfg_attr(not(target_arch = "wasm32"), arg(
         long = "compress-level",
         value_enum,
-        default_value_t = CompressionLevelProfile::Max,
+        default_value_t = CompressionLevelProfile::High,
         help = "Global patch-output compression level profile (min|very-low|low|medium|high|very-high|max)"
     ))]
     pub compress_level: CompressionLevelProfile,

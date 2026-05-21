@@ -302,15 +302,15 @@ const OutputCompressionManager = (() => {
     value: CompressionProfileInput,
     fallback?: CompressionProfile | string,
   ): CompressionProfile => {
-    const normalized = String(value || fallback || "max")
+    const normalized = String(value || fallback || "high")
       .trim()
       .toLowerCase();
     if (COMPRESSION_PROFILES.indexOf(normalized as CompressionProfile) !== -1) return normalized as CompressionProfile;
-    const normalizedFallback = String(fallback || "max")
+    const normalizedFallback = String(fallback || "high")
       .trim()
       .toLowerCase();
     return COMPRESSION_PROFILES.indexOf(normalizedFallback as CompressionProfile) === -1
-      ? "max"
+      ? "high"
       : (normalizedFallback as CompressionProfile);
   };
   const _getCompressionProfileLevel = (
@@ -318,7 +318,7 @@ const OutputCompressionManager = (() => {
     codec: CodecChoiceInput,
     compression?: CompressionChoiceInput,
   ) => {
-    const normalizedProfile = _normalizeCompressionProfile(profile, "max");
+    const normalizedProfile = _normalizeCompressionProfile(profile, "high");
     const selected = compression ? _normalizeOutputCompression(compression) : "";
     const levelSet =
       selected !== OUTPUT_COMPRESSION.ZIP && String(codec || "").toLowerCase() === "zstd"
@@ -451,7 +451,7 @@ const OutputCompressionManager = (() => {
     const normalizedCodecs = _normalizeChdCodecs(codecs);
     if (!normalizedCodecs) return "";
 
-    const compressionProfile = _normalizeCompressionProfile(options?.compressionProfile, "max");
+    const compressionProfile = _normalizeCompressionProfile(options?.compressionProfile, "high");
     return normalizedCodecs
       .split(",")
       .map((entry) => {
