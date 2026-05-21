@@ -13,6 +13,7 @@ import { buildSessionOutputFiles } from "../../lib/output/output-build-service.t
 import { requireOutputName } from "../../lib/output/output-name-validation.ts";
 import { reportProgress } from "../../lib/progress/progress-reporting.ts";
 import { getNamedSourcePath } from "../../storage/shared/binary/source-file-utils.ts";
+import { isVfsFileRef } from "../../storage/vfs/source-ref.ts";
 import type { SourceRef } from "../../types/source.ts";
 import type { PatchFileInstance, PatchWorkflowDeps } from "../../types/workflow-internal.ts";
 import type { ApplyWorkflowResult, PatchInput } from "../../types/workflow-runtime.ts";
@@ -56,6 +57,30 @@ const getApplyLogLevel = (options: PatchInput["options"]) => options?.logging?.l
 const getApplyWorkerThreads = (options: PatchInput["options"]) => options?.workers?.threads;
 const getApplyPatchTargets = (options: PatchInput["options"]) => options?.patchTargets;
 const { traceWorkflowStage, traceWorkflowStageBlock } = createWorkflowTracer("apply");
+
+const getRuntimeExternalPath = (
+  sourceRef: ReturnType<typeof getPatchFileExternalSource>,
+  runtime: WorkflowRuntime,
+): string | null => {
+  if (!(sourceRef && sourceRef.source)) return null;
+  if (typeof sourceRef.source === "string" && sourceRef.source.trim()) return sourceRef.source.trim();
+  if (isVfsFileRef(sourceRef.source) && sourceRef.source.vfs === runtime.vfs) {
+    const path = String(sourceRef.source.path || "").trim();
+    if (path) return path;
+  }
+  return null;
+};
+
+const hasMissingPreparedInputPaths = async (assets: InputAsset[], runtime: WorkflowRuntime) => {
+  for (const asset of assets) {
+    const sourceRef = getPatchFileExternalSource(asset.file, asset.fileName);
+    const externalPath = getRuntimeExternalPath(sourceRef, runtime);
+    if (!externalPath) continue;
+    if (await runtime.vfs.stat(externalPath)) continue;
+    return true;
+  }
+  return false;
+};
 
 const toWorkerSourceRef = (file: PatchFileInstance, fallbackFileName: string): SourceRef => {
   const sourceRef = getPatchFileExternalSource(file, fallbackFileName);
@@ -126,12 +151,17 @@ const runApplyWorkflow = async (
   );
   const preparationWork: Promise<void>[] = [];
   const inputAssets = input.preparedInputAssets ? [...input.preparedInputAssets] : [];
-  if (input.preparedInputAssets) {
+  const shouldReprepareInputs =
+    !!input.preparedInputAssets?.length &&
+    inputSources.some((source) => !!source) &&
+    (await hasMissingPreparedInputPaths(inputAssets, runtime));
+  if (input.preparedInputAssets && !shouldReprepareInputs) {
     traceWorkflowStage(options, "stage.skip", "input.prepare", "input", {
       preparedAssetCount: inputAssets.length,
       reason: "prepared input assets supplied",
     });
   } else {
+    inputAssets.length = 0;
     preparationWork.push(
       traceWorkflowStageBlock(
         options,
@@ -156,6 +186,7 @@ const runApplyWorkflow = async (
         () => ({
           inputCount: inputSources.length,
           preparedAssetCount: inputAssets.length,
+          reprepare: shouldReprepareInputs,
           selectedEntryName: input.selectedInputEntryName,
         }),
       ),

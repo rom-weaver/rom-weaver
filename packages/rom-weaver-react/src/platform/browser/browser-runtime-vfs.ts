@@ -15,6 +15,22 @@ const createBrowserRuntimeVfsIo = ({
   mountPoint = WORKER_OPFS_MOUNTPOINT,
   vfs,
 }: CreateBrowserRuntimeVfsIoOptions): RuntimeWorkerIo => {
+  const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+  const statWithRetries = async (filePath: string) => {
+    let stat = await vfs.stat(filePath);
+    if (stat) return stat;
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      await wait(25 * (attempt + 1));
+      stat = await vfs.stat(filePath);
+      if (stat) return stat;
+    }
+    return null;
+  };
+  const assertStagedPath = async (filePath: string) => {
+    const stat = await statWithRetries(filePath);
+    if (!stat) throw new Error(`Browser worker input path is not available: ${filePath}`);
+    return stat;
+  };
   const stageSource: RuntimeWorkerIo["stageSource"] = async ({
     fallbackFileName,
     pathBucket,
@@ -25,7 +41,7 @@ const createBrowserRuntimeVfsIo = ({
     const directSource = getNamedSource(source as Parameters<typeof getNamedSource>[0]);
     const directVfsSource = isVfsFileRef(directSource) ? directSource : isVfsFileRef(source) ? source : null;
     if (directVfsSource && directVfsSource.vfs === vfs) {
-      const stat = await vfs.stat(directVfsSource.path);
+      const stat = await assertStagedPath(directVfsSource.path);
       return {
         cleanup: async () => undefined,
         fileName: directVfsSource.fileName || fallbackFileName,
@@ -33,11 +49,33 @@ const createBrowserRuntimeVfsIo = ({
         size: stat?.size,
       };
     }
-    return createBrowserOpfsSourceRef(source, fallbackFileName, {
-      bucket: pathBucket,
-      mountPoint,
-      pathPrefix: pathPrefix || scope,
-    });
+    const stageFromSource = () =>
+      createBrowserOpfsSourceRef(source, fallbackFileName, {
+        bucket: pathBucket,
+        mountPoint,
+        pathPrefix: pathPrefix || scope,
+      });
+    let staged = await stageFromSource();
+    try {
+      const stat = await assertStagedPath(staged.filePath);
+      return {
+        ...staged,
+        size: staged.size ?? stat.size,
+      };
+    } catch (error) {
+      await staged.cleanup().catch(() => undefined);
+      staged = await stageFromSource();
+      try {
+        const stat = await assertStagedPath(staged.filePath);
+        return {
+          ...staged,
+          size: staged.size ?? stat.size,
+        };
+      } catch (retryError) {
+        await staged.cleanup().catch(() => undefined);
+        throw retryError instanceof Error ? retryError : error;
+      }
+    }
   };
 
   const workerIo: RuntimeWorkerIo = {

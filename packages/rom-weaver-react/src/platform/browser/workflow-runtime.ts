@@ -45,6 +45,7 @@ const FILE_CAPTURE_REGEX = /^(.+[/\\])?([^/\\]+)$/;
 const FILE_EXTENSION_REGEX = /\.[^./\\\s]+$/;
 const LEVEL_PROFILE_REGEX = /^(min|very-low|low|medium|high|very-high|max)$/i;
 const ARCHIVE_STAGE_COPY_CHUNK_SIZE = 8 * 1024 * 1024;
+const BROWSER_VFS_PATH_RETRY_ATTEMPTS = 6;
 const ZIP_LIKE_EXTENSION_REGEX = /\.(zip|jar|apk|cbz|epub|xpi)$/i;
 
 const toFileBlobPart = (source: ArrayBufferLike | Uint8Array): BlobPart => {
@@ -279,6 +280,8 @@ const stageCompressionEntryForRomWeaver = async (
   );
   const canonicalPath = joinPath(batchDirectory, fileName);
   await copyBrowserVfsPath(staged.filePath, canonicalPath);
+  const canonicalStat = await waitForBrowserVfsPath(canonicalPath);
+  if (!canonicalStat) throw new Error(`Browser VFS staged input is not available: ${canonicalPath}`);
 
   return {
     cleanup: async () => {
@@ -346,6 +349,20 @@ const createBrowserPublicOutputAdapter = (): RuntimePublicOutputAdapter => ({
 const browserVfs = createBrowserLargeFileVfs({
   rootPath: WORKER_OPFS_MOUNTPOINT,
 });
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const waitForBrowserVfsPath = async (filePath: string) => {
+  const normalizedPath = String(filePath || "").trim();
+  if (!normalizedPath) return null;
+  let stat = await browserVfs.stat(normalizedPath);
+  if (stat) return stat;
+  for (let attempt = 0; attempt < BROWSER_VFS_PATH_RETRY_ATTEMPTS; attempt += 1) {
+    await wait(25 * (attempt + 1));
+    stat = await browserVfs.stat(normalizedPath);
+    if (stat) return stat;
+  }
+  return null;
+};
 
 const ensureBrowserVfsOutputPath = async (filePath: string) => {
   const normalizedPath = String(filePath || "").trim();
@@ -361,6 +378,12 @@ const ensureBrowserVfsOutputPaths = async (filePaths: string[]) => {
     seen.add(normalizedPath);
     await ensureBrowserVfsOutputPath(normalizedPath);
   }
+};
+
+const filterOutputCandidatesAwayFromSource = (filePaths: string[], sourcePath: string) => {
+  const normalizedSourcePath = String(sourcePath || "").trim();
+  if (!normalizedSourcePath) return filePaths;
+  return filePaths.filter((filePath) => String(filePath || "").trim() !== normalizedSourcePath);
 };
 
 const getBrowserExtractOutputPathCandidates = (outDirPath: string, entryName: string): string[] => {
@@ -517,7 +540,10 @@ const createBrowserSevenZipZstdRuntime = (workerIo: RuntimeWorkerIo): Partial<Wo
       const outputs = [];
       for (const entryName of workflowInput.entries) {
         const outDirPath = joinPath(baseOutDirPath, `.rom-weaver-extract-${++archiveExtractDirectoryId}`);
-        const outputPathCandidates = getBrowserExtractOutputPathCandidates(outDirPath, entryName);
+        const outputPathCandidates = filterOutputCandidatesAwayFromSource(
+          getBrowserExtractOutputPathCandidates(outDirPath, entryName),
+          archive.filePath,
+        );
         await ensureBrowserVfsOutputPaths(outputPathCandidates);
         const runExtract = () =>
           invokeRomWeaverExtractWorker(
@@ -786,7 +812,7 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
           .filter((entry) => !!entry) || [];
       const preseedPaths = buildChdOutputPreseedPaths(outDirPath, workerSource.filePath, listedEntryNames);
       if (outputName) preseedPaths.push(...getBrowserExtractOutputPathCandidates(outDirPath, outputName));
-      await ensureBrowserVfsOutputPaths(preseedPaths);
+      await ensureBrowserVfsOutputPaths(filterOutputCandidatesAwayFromSource(preseedPaths, workerSource.filePath));
       const runExtract = () =>
         invokeRomWeaverExtractWorker(
           {
@@ -852,14 +878,24 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
     }
   },
   extractRvz: async ({ source, fileName, outputName, logLevel, onLog, onProgress }) => {
-    const workerSource = await workerIo.stageSource({
-      fallbackFileName: fileName,
-      pathPrefix: "rvz-input",
-      scope: "rvz",
-      source,
-    });
+    const stageRvzSource = () =>
+      workerIo.stageSource({
+        fallbackFileName: fileName,
+        pathPrefix: "rvz-input",
+        scope: "rvz",
+        source,
+      });
+    let workerSource = await stageRvzSource();
+    const ensureRvzSourceExists = async () => {
+      if (await waitForBrowserVfsPath(workerSource.filePath)) return;
+      await workerSource.cleanup().catch(() => undefined);
+      workerSource = await stageRvzSource();
+      if (await waitForBrowserVfsPath(workerSource.filePath)) return;
+      throw new Error(`Browser VFS staged input is not available: ${workerSource.filePath}`);
+    };
     try {
       const outDirPath = getPathDirectory(workerSource.filePath);
+      await ensureRvzSourceExists();
       const listed = await runRomWeaverInspectListWorker(
         {
           logLevel,
@@ -868,7 +904,7 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
         undefined,
         onLog,
       ).catch(() => null);
-      const preseedPaths =
+      let preseedPaths =
         listed?.entries
           .flatMap((entry) =>
             getBrowserExtractOutputPathCandidates(
@@ -878,7 +914,9 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
           )
           .filter((entry) => !!entry) || [];
       if (outputName) preseedPaths.push(...getBrowserExtractOutputPathCandidates(outDirPath, outputName));
+      preseedPaths = filterOutputCandidatesAwayFromSource(preseedPaths, workerSource.filePath);
       await ensureBrowserVfsOutputPaths(preseedPaths);
+      await ensureRvzSourceExists();
       const extracted = await invokeRomWeaverExtractWorker(
         {
           logLevel,
@@ -933,7 +971,7 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
           )
           .filter((entry) => !!entry) || [];
       if (outputName) preseedPaths.push(...getBrowserExtractOutputPathCandidates(outDirPath, outputName));
-      await ensureBrowserVfsOutputPaths(preseedPaths);
+      await ensureBrowserVfsOutputPaths(filterOutputCandidatesAwayFromSource(preseedPaths, workerSource.filePath));
       const extracted = await invokeRomWeaverExtractWorker(
         {
           logLevel,
