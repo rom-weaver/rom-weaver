@@ -215,8 +215,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--bin",
         type=Path,
-        default=Path("target/debug/rom-weaver"),
-        help="Path to rom-weaver binary (default: target/debug/rom-weaver)",
+        default=Path("target/release/rom-weaver"),
+        help="Path to rom-weaver binary (default: target/release/rom-weaver)",
     )
     parser.add_argument(
         "--work-dir",
@@ -256,6 +256,32 @@ def parse_args() -> argparse.Namespace:
         default="compress,extract,checksum,patch-create,patch-apply",
         help="Comma-separated subset of commands to run",
     )
+    parser.add_argument(
+        "--container-formats",
+        default="all",
+        help="Comma-separated subset of container formats for compress/extract/checksum auto-extract (default: all)",
+    )
+    parser.add_argument(
+        "--patch-formats",
+        default="all",
+        help="Comma-separated subset of patch formats for patch-create/patch-apply (default: all)",
+    )
+    parser.add_argument(
+        "--checksum-algos",
+        default="all",
+        help="Comma-separated subset of checksum algorithms for raw checksum runs (default: all)",
+    )
+    parser.add_argument(
+        "--checksum-modes",
+        default="raw,auto-extract",
+        help="Checksum paths to run: raw, auto-extract, or both (default: raw,auto-extract)",
+    )
+    parser.add_argument(
+        "--rar-fixture",
+        type=Path,
+        default=Path("tests/fixtures/rar/version.rar"),
+        help="RAR fixture path used when rar create is unavailable (default: tests/fixtures/rar/version.rar)",
+    )
     return parser.parse_args()
 
 
@@ -268,6 +294,22 @@ def parse_command_filter(raw: str) -> set[str]:
     if unknown:
         raise ValueError(f"unknown commands in --commands: {', '.join(unknown)}")
     return values
+
+
+def parse_value_filter(raw: str, valid_values: list[str], flag_name: str) -> list[str]:
+    values = [value.strip().lower() for value in raw.split(",") if value.strip()]
+    if not values:
+        raise ValueError(f"{flag_name} must include at least one value")
+    value_set = set(values)
+    if value_set <= {"all", "*"}:
+        return list(valid_values)
+    if "all" in value_set or "*" in value_set:
+        raise ValueError(f"{flag_name} cannot combine 'all' with specific values")
+    valid_set = set(valid_values)
+    unknown = sorted(value_set - valid_set)
+    if unknown:
+        raise ValueError(f"unknown values in {flag_name}: {', '.join(unknown)}")
+    return [value for value in valid_values if value in value_set]
 
 
 def ensure_binary(bin_path: Path, skip_build: bool) -> None:
@@ -711,6 +753,12 @@ def print_table(rows: list[dict[str, Any]]) -> None:
 def main() -> None:
     args = parse_args()
     selected_commands = parse_command_filter(args.commands)
+    selected_container_formats = parse_value_filter(args.container_formats, CONTAINER_FORMATS, "--container-formats")
+    selected_patch_formats = parse_value_filter(args.patch_formats, PATCH_FORMATS, "--patch-formats")
+    selected_checksum_algorithms = parse_value_filter(args.checksum_algos, CHECKSUM_ALGORITHMS, "--checksum-algos")
+    selected_checksum_modes = set(
+        parse_value_filter(args.checksum_modes, ["raw", "auto-extract"], "--checksum-modes")
+    )
 
     if args.size_mib <= 0 or args.patch_size_mib <= 0:
         raise SystemExit("--size-mib and --patch-size-mib must be positive integers")
@@ -739,40 +787,74 @@ def main() -> None:
     dldi_patch_driver_path = fixtures_dir / "dldi-driver.dldi"
     dldi_modified_path = fixtures_dir / "dldi-modified.nds"
 
-    write_random_fixture(source_path, args.size_mib * MIB, seed=0xBADC0DE)
-    write_test_gamecube_iso_fixture(disc_source_path, args.size_mib * MIB)
-    write_random_fixture(original_path, args.patch_size_mib * MIB, seed=0xC0FFEE)
-    write_modified_fixture(original_path, modified_path)
-    ips_ebp_size_bytes = min(args.patch_size_mib * MIB, IPS_EBP_BENCH_MAX_BYTES)
-    write_random_fixture(ips_ebp_original_path, ips_ebp_size_bytes, seed=0x1BADB002)
-    write_modified_fixture(ips_ebp_original_path, ips_ebp_modified_path)
-    write_dldi_original_fixture(dldi_original_path, args.patch_size_mib * MIB)
-    write_dldi_patch_fixture(dldi_patch_driver_path)
+    source_ready = False
+    disc_source_ready = False
+    patch_pair_ready = False
+    ips_ebp_ready = False
+    dldi_ready = False
 
-    dldi_prep = run_timed_command(
-        base_command(
-            args.bin,
-            [
-                "patch-apply",
-                "--input",
-                str(dldi_original_path),
-                "--patch",
-                str(dldi_patch_driver_path),
-                "--output",
-                str(dldi_modified_path),
-                "--no-compress",
-                "--threads",
-                str(args.threads),
-            ],
-        ),
-        Path.cwd(),
-        args.timeout_sec,
-    )
-    if dldi_prep.exit_code != 0 or not dldi_modified_path.exists():
-        detail = (dldi_prep.stderr or "").strip()
-        tail = detail.splitlines()[-1] if detail else "unknown error"
-        raise SystemExit(f"failed to prepare DLDI benchmark fixtures: {tail}")
-    print("[bench] prepared DLDI original/modified fixtures", flush=True)
+    def ensure_source_fixture() -> None:
+        nonlocal source_ready
+        if source_ready:
+            return
+        write_random_fixture(source_path, args.size_mib * MIB, seed=0xBADC0DE)
+        source_ready = True
+
+    def ensure_disc_source_fixture() -> None:
+        nonlocal disc_source_ready
+        if disc_source_ready:
+            return
+        write_test_gamecube_iso_fixture(disc_source_path, args.size_mib * MIB)
+        disc_source_ready = True
+
+    def ensure_patch_pair_fixtures() -> None:
+        nonlocal patch_pair_ready
+        if patch_pair_ready:
+            return
+        write_random_fixture(original_path, args.patch_size_mib * MIB, seed=0xC0FFEE)
+        write_modified_fixture(original_path, modified_path)
+        patch_pair_ready = True
+
+    def ensure_ips_ebp_fixtures() -> None:
+        nonlocal ips_ebp_ready
+        if ips_ebp_ready:
+            return
+        ips_ebp_size_bytes = min(args.patch_size_mib * MIB, IPS_EBP_BENCH_MAX_BYTES)
+        write_random_fixture(ips_ebp_original_path, ips_ebp_size_bytes, seed=0x1BADB002)
+        write_modified_fixture(ips_ebp_original_path, ips_ebp_modified_path)
+        ips_ebp_ready = True
+
+    def ensure_dldi_fixtures() -> None:
+        nonlocal dldi_ready
+        if dldi_ready:
+            return
+        write_dldi_original_fixture(dldi_original_path, args.patch_size_mib * MIB)
+        write_dldi_patch_fixture(dldi_patch_driver_path)
+        dldi_prep = run_timed_command(
+            base_command(
+                args.bin,
+                [
+                    "patch-apply",
+                    "--input",
+                    str(dldi_original_path),
+                    "--patch",
+                    str(dldi_patch_driver_path),
+                    "--output",
+                    str(dldi_modified_path),
+                    "--no-compress",
+                    "--threads",
+                    str(args.threads),
+                ],
+            ),
+            Path.cwd(),
+            args.timeout_sec,
+        )
+        if dldi_prep.exit_code != 0 or not dldi_modified_path.exists():
+            detail = (dldi_prep.stderr or "").strip()
+            tail = detail.splitlines()[-1] if detail else "unknown error"
+            raise SystemExit(f"failed to prepare DLDI benchmark fixtures: {tail}")
+        print("[bench] prepared DLDI original/modified fixtures", flush=True)
+        dldi_ready = True
 
     def validate_large_ips_family_failure(format_name: str) -> None:
         extension = PATCH_EXTENSION[format_name]
@@ -812,13 +894,18 @@ def main() -> None:
             flush=True,
         )
 
-    if "patch-create" in selected_commands and original_path.stat().st_size > IPS_CREATE_MAX_INPUT_BYTES:
-        for format_name in ("ips", "ebp"):
-            validate_large_ips_family_failure(format_name)
+    if "patch-create" in selected_commands and {"ips", "ebp"} & set(selected_patch_formats):
+        ensure_patch_pair_fixtures()
+        if original_path.stat().st_size > IPS_CREATE_MAX_INPUT_BYTES:
+            for format_name in ("ips", "ebp"):
+                if format_name in selected_patch_formats:
+                    validate_large_ips_family_failure(format_name)
 
     def compress_input_for_format(format_name: str) -> Path:
         if format_name in DISC_COMPRESS_INPUT_FORMATS:
+            ensure_disc_source_fixture()
             return disc_source_path
+        ensure_source_fixture()
         return source_path
 
     rows: list[BenchmarkRow] = []
@@ -826,55 +913,59 @@ def main() -> None:
     # Prepare reusable extract/checksum archive inputs.
     archive_sources: dict[str, ArchiveSource] = {}
     static_extract_fixtures = {
-        "rar": Path("tests/fixtures/rar/version.rar"),
+        "rar": args.rar_fixture,
     }
 
-    for format_name in CONTAINER_FORMATS:
-        print(f"[bench] prep archive source {format_name}", flush=True)
-        input_path = compress_input_for_format(format_name)
-        output_path = artifacts_dir / f"seed-{token(format_name)}.{container_suffix(format_name)}"
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        if output_path.exists():
-            output_path.unlink()
+    needs_archive_sources = ("extract" in selected_commands) or (
+        "checksum" in selected_commands and "auto-extract" in selected_checksum_modes
+    )
+    if needs_archive_sources:
+        for format_name in selected_container_formats:
+            print(f"[bench] prep archive source {format_name}", flush=True)
+            input_path = compress_input_for_format(format_name)
+            output_path = artifacts_dir / f"seed-{token(format_name)}.{container_suffix(format_name)}"
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            if output_path.exists():
+                output_path.unlink()
 
-        cmd = base_command(
-            args.bin,
-            [
-                "compress",
-                str(input_path),
-                "--format",
-                format_name,
-                "--output",
-                str(output_path),
-                "--threads",
-                str(args.threads),
-            ],
-        )
-        prep = run_timed_command(cmd, Path.cwd(), args.timeout_sec)
-        if prep.exit_code == 0 and output_path.exists():
-            archive_sources[format_name] = ArchiveSource(
-                format=format_name,
-                path=output_path,
-                payload_bytes=input_path.stat().st_size,
-                source_kind="generated",
+            cmd = base_command(
+                args.bin,
+                [
+                    "compress",
+                    str(input_path),
+                    "--format",
+                    format_name,
+                    "--output",
+                    str(output_path),
+                    "--threads",
+                    str(args.threads),
+                ],
             )
-            print(f"[bench] prep ready {format_name} (generated)", flush=True)
-            continue
+            prep = run_timed_command(cmd, Path.cwd(), args.timeout_sec)
+            if prep.exit_code == 0 and output_path.exists():
+                archive_sources[format_name] = ArchiveSource(
+                    format=format_name,
+                    path=output_path,
+                    payload_bytes=input_path.stat().st_size,
+                    source_kind="generated",
+                )
+                print(f"[bench] prep ready {format_name} (generated)", flush=True)
+                continue
 
-        fixture = static_extract_fixtures.get(format_name)
-        if fixture is not None and fixture.exists():
-            archive_sources[format_name] = ArchiveSource(
-                format=format_name,
-                path=fixture,
-                payload_bytes=None,
-                source_kind="fixture",
-            )
-            print(f"[bench] prep ready {format_name} (fixture)", flush=True)
-        else:
-            print(f"[bench] prep unavailable {format_name}", flush=True)
+            fixture = static_extract_fixtures.get(format_name)
+            if fixture is not None and fixture.exists():
+                archive_sources[format_name] = ArchiveSource(
+                    format=format_name,
+                    path=fixture,
+                    payload_bytes=None,
+                    source_kind="fixture",
+                )
+                print(f"[bench] prep ready {format_name} (fixture)", flush=True)
+            else:
+                print(f"[bench] prep unavailable {format_name}", flush=True)
 
     if "compress" in selected_commands:
-        for format_name in CONTAINER_FORMATS:
+        for format_name in selected_container_formats:
             if format_name in EXPECTED_COMPRESS_SKIPS:
                 rows.append(
                     skipped_row(
@@ -937,7 +1028,7 @@ def main() -> None:
             )
 
     if "extract" in selected_commands:
-        for format_name in CONTAINER_FORMATS:
+        for format_name in selected_container_formats:
             source = archive_sources.get(format_name)
             if source is None:
                 rows.append(
@@ -992,85 +1083,88 @@ def main() -> None:
             )
 
     if "checksum" in selected_commands:
-        for algorithm in CHECKSUM_ALGORITHMS:
+        if "raw" in selected_checksum_modes:
+            ensure_source_fixture()
+            for algorithm in selected_checksum_algorithms:
 
-            def make_command(_iteration: int, _warmup: bool, algo: str = algorithm):
-                cmd = base_command(
-                    args.bin,
-                    [
-                        "checksum",
-                        str(source_path),
-                        "--algo",
-                        algo,
-                        "--no-extract",
-                        "--threads",
-                        str(args.threads),
-                    ],
-                )
-                return cmd, source_path
+                def make_command(_iteration: int, _warmup: bool, algo: str = algorithm):
+                    cmd = base_command(
+                        args.bin,
+                        [
+                            "checksum",
+                            str(source_path),
+                            "--algo",
+                            algo,
+                            "--no-extract",
+                            "--threads",
+                            str(args.threads),
+                        ],
+                    )
+                    return cmd, source_path
 
-            def processed_bytes(_context: Path) -> int:
-                return source_path.stat().st_size
+                def processed_bytes(_context: Path) -> int:
+                    return source_path.stat().st_size
 
-            rows.append(
-                run_benchmark_case(
-                    command="checksum",
-                    path_id=f"algo:{algorithm}",
-                    warmups=args.warmups,
-                    iterations=args.iterations,
-                    timeout_sec=args.timeout_sec,
-                    command_factory=make_command,
-                    processed_bytes_factory=processed_bytes,
-                )
-            )
-
-        for format_name in CONTAINER_FORMATS:
-            source = archive_sources.get(format_name)
-            if source is None:
                 rows.append(
-                    skipped_row(
-                        "checksum",
-                        f"auto-extract:{format_name}",
-                        "no valid archive artifact available for auto-extract checksum path",
-                        args.warmups,
-                        args.iterations,
+                    run_benchmark_case(
+                        command="checksum",
+                        path_id=f"algo:{algorithm}",
+                        warmups=args.warmups,
+                        iterations=args.iterations,
+                        timeout_sec=args.timeout_sec,
+                        command_factory=make_command,
+                        processed_bytes_factory=processed_bytes,
                     )
                 )
-                continue
 
-            def make_command(_iteration: int, _warmup: bool, source_value: ArchiveSource = source):
-                cmd = base_command(
-                    args.bin,
-                    [
-                        "checksum",
-                        str(source_value.path),
-                        "--algo",
-                        "sha256",
-                        "--threads",
-                        str(args.threads),
-                    ],
+        if "auto-extract" in selected_checksum_modes:
+            for format_name in selected_container_formats:
+                source = archive_sources.get(format_name)
+                if source is None:
+                    rows.append(
+                        skipped_row(
+                            "checksum",
+                            f"auto-extract:{format_name}",
+                            "no valid archive artifact available for auto-extract checksum path",
+                            args.warmups,
+                            args.iterations,
+                        )
+                    )
+                    continue
+
+                def make_command(_iteration: int, _warmup: bool, source_value: ArchiveSource = source):
+                    cmd = base_command(
+                        args.bin,
+                        [
+                            "checksum",
+                            str(source_value.path),
+                            "--algo",
+                            "sha256",
+                            "--threads",
+                            str(args.threads),
+                        ],
+                    )
+                    return cmd, source_value
+
+                def processed_bytes(source_value: ArchiveSource) -> int | None:
+                    return source_value.payload_bytes
+
+                rows.append(
+                    run_benchmark_case(
+                        command="checksum",
+                        path_id=f"auto-extract:{format_name}",
+                        warmups=args.warmups,
+                        iterations=args.iterations,
+                        timeout_sec=args.timeout_sec,
+                        command_factory=make_command,
+                        processed_bytes_factory=processed_bytes,
+                    )
                 )
-                return cmd, source_value
-
-            def processed_bytes(source_value: ArchiveSource) -> int | None:
-                return source_value.payload_bytes
-
-            rows.append(
-                run_benchmark_case(
-                    command="checksum",
-                    path_id=f"auto-extract:{format_name}",
-                    warmups=args.warmups,
-                    iterations=args.iterations,
-                    timeout_sec=args.timeout_sec,
-                    command_factory=make_command,
-                    processed_bytes_factory=processed_bytes,
-                )
-            )
 
     created_patch_sources: dict[str, tuple[Path, Path]] = {}
 
     if "patch-create" in selected_commands:
-        for format_name in PATCH_FORMATS:
+        for format_name in selected_patch_formats:
             if format_name in EXPECTED_PATCH_CREATE_SKIPS:
                 rows.append(
                     skipped_row(
@@ -1085,12 +1179,15 @@ def main() -> None:
 
             extension = PATCH_EXTENSION[format_name]
             if format_name == "dldi":
+                ensure_dldi_fixtures()
                 patch_original = dldi_original_path
                 patch_modified = dldi_modified_path
             elif format_name in {"ips", "ebp"}:
+                ensure_ips_ebp_fixtures()
                 patch_original = ips_ebp_original_path
                 patch_modified = ips_ebp_modified_path
             else:
+                ensure_patch_pair_fixtures()
                 patch_original = original_path
                 patch_modified = modified_path
 
@@ -1160,7 +1257,7 @@ def main() -> None:
     patch_apply_ignore_checksum_formats = {"mod"}
 
     if "patch-apply" in selected_commands:
-        for format_name in PATCH_FORMATS:
+        for format_name in selected_patch_formats:
             created_patch = created_patch_sources.get(format_name)
             if created_patch is not None and created_patch[0].exists():
                 patch_path, input_path = created_patch
@@ -1251,6 +1348,11 @@ def main() -> None:
             "binary": str(args.bin),
             "work_dir": str(work_dir),
             "commands": sorted(selected_commands),
+            "container_formats": selected_container_formats,
+            "patch_formats": selected_patch_formats,
+            "checksum_algorithms": selected_checksum_algorithms,
+            "checksum_modes": sorted(selected_checksum_modes),
+            "rar_fixture": str(args.rar_fixture),
             "threads": args.threads,
             "warmups": args.warmups,
             "iterations": args.iterations,

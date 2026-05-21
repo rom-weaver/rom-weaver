@@ -55,6 +55,13 @@ zeekstd = "0.6.2"
 zstd-sys = { version = "2.0.16", default-features = false }
 zstd = "0.13.3"
 
+[profile.release]
+lto = "thin"
+strip = true
+opt-level = 3
+panic = "abort"
+codegen-units = 16
+
 [profile.wasm-release]
 inherits = "release"
 codegen-units = 1
