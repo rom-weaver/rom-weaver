@@ -1700,8 +1700,10 @@ version = "0.1.0"
 dependencies = [
  "assert_cmd",
  "assert_fs",
+ "bzip2",
  "clap",
  "flate2",
+ "lzma-rust2",
  "nod",
  "predicates",
  "rom-weaver-checksum",
@@ -1710,9 +1712,11 @@ dependencies = [
  "rom-weaver-core",
  "rom-weaver-patches",
  "serde_json",
+ "tar",
  "tracing",
  "tracing-subscriber",
  "xdvdfs",
+ "zstd",
 ]
 
 [[package]]

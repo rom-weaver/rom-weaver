@@ -250,6 +250,232 @@ fn checksum_no_extract_hashes_container_bytes() {
 }
 
 #[test]
+fn checksum_auto_extract_stream_container_uses_streamed_hashing() {
+    let temp = setup_temp_dir();
+    let payload = (0..28_672)
+        .map(|index| (index % 181) as u8)
+        .collect::<Vec<_>>();
+    fs::write(temp.child("game.bin").path(), &payload).expect("payload fixture");
+
+    let compressed = temp.child("game.bin.gz");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("game.bin").path().to_str().expect("path"),
+            "--format",
+            "gz",
+            "--output",
+            compressed.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let expected_payload = checksum_value(temp.child("game.bin").path(), "sha1");
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "checksum",
+            compressed.path().to_str().expect("path"),
+            "--algo",
+            "sha1",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "checksum");
+    assert_eq!(json["status"], "succeeded");
+    let label = json["label"].as_str().expect("label");
+    let actual = label_digest_value(label, "sha1").expect("sha1 digest");
+    assert_eq!(actual, expected_payload);
+    assert!(label.contains("checksum source streamed from gz container"));
+    assert!(!label.contains("checksum source resolved via"));
+}
+
+#[test]
+fn checksum_stream_container_falls_back_when_nested_extract_is_required() {
+    let temp = setup_temp_dir();
+    let payload = (0..19_456)
+        .map(|index| (index % 173) as u8)
+        .collect::<Vec<_>>();
+    fs::write(temp.child("game.bin").path(), &payload).expect("payload fixture");
+
+    let inner = temp.child("inner.zip");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("game.bin").path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            inner.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let outer = temp.child("inner.zip.gz");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            inner.path().to_str().expect("path"),
+            "--format",
+            "gz",
+            "--output",
+            outer.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let expected = checksum_value(temp.child("game.bin").path(), "sha1");
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "checksum",
+            outer.path().to_str().expect("path"),
+            "--algo",
+            "sha1",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "checksum");
+    assert_eq!(json["status"], "succeeded");
+    let label = json["label"].as_str().expect("label");
+    let actual = label_digest_value(label, "sha1").expect("sha1 digest");
+    assert_eq!(actual, expected);
+    assert!(label.contains("checksum source resolved via 2 container extract step(s)"));
+    assert!(!label.contains("checksum source streamed from gz container"));
+}
+
+#[test]
+fn checksum_auto_extract_tar_stream_uses_streamed_hashing() {
+    let temp = setup_temp_dir();
+    let payload = (0..31_744)
+        .map(|index| (index % 167) as u8)
+        .collect::<Vec<_>>();
+    fs::write(temp.child("game.bin").path(), &payload).expect("payload fixture");
+
+    let archive = temp.child("game.tar.gz");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("game.bin").path().to_str().expect("path"),
+            "--format",
+            "tar.gz",
+            "--output",
+            archive.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let expected_payload = checksum_value(temp.child("game.bin").path(), "sha1");
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "checksum",
+            archive.path().to_str().expect("path"),
+            "--algo",
+            "sha1",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "checksum");
+    assert_eq!(json["status"], "succeeded");
+    let label = json["label"].as_str().expect("label");
+    let actual = label_digest_value(label, "sha1").expect("sha1 digest");
+    assert_eq!(actual, expected_payload);
+    assert!(label.contains("checksum source streamed from tar.gz container entry"));
+    assert!(!label.contains("checksum source resolved via"));
+}
+
+#[test]
+fn checksum_tar_stream_falls_back_when_nested_extract_is_required() {
+    let temp = setup_temp_dir();
+    let payload = (0..22_912)
+        .map(|index| (index % 149) as u8)
+        .collect::<Vec<_>>();
+    fs::write(temp.child("game.bin").path(), &payload).expect("payload fixture");
+
+    let inner = temp.child("inner.zip");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("game.bin").path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            inner.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let archive = temp.child("inner.tar.gz");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            inner.path().to_str().expect("path"),
+            "--format",
+            "tar.gz",
+            "--output",
+            archive.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let expected = checksum_value(temp.child("game.bin").path(), "sha1");
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "checksum",
+            archive.path().to_str().expect("path"),
+            "--algo",
+            "sha1",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "checksum");
+    assert_eq!(json["status"], "succeeded");
+    let label = json["label"].as_str().expect("label");
+    let actual = label_digest_value(label, "sha1").expect("sha1 digest");
+    assert_eq!(actual, expected);
+    assert!(label.contains("checksum source resolved via 2 container extract step(s)"));
+    assert!(!label.contains("checksum source streamed from tar.gz container entry"));
+}
+
+#[test]
 fn checksum_auto_extract_ambiguity_requires_select() {
     let temp = setup_temp_dir();
     fs::write(temp.child("alpha.bin").path(), b"alpha").expect("alpha fixture");
@@ -1032,4 +1258,3 @@ fn checksum_auto_trim_fix_ignores_non_trim_eligible_extensions() {
         label_digest_value(no_fix_label, "crc32")
     );
 }
-

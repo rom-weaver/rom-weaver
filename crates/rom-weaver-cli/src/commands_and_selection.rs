@@ -461,6 +461,67 @@ impl CliApp {
             );
         }
 
+        #[cfg(not(target_arch = "wasm32"))]
+        match self.try_run_checksum_tar_stream_auto_extract(
+            &source,
+            &algo,
+            &select,
+            no_extract,
+            no_ignore,
+            no_trim_fix,
+            strip_header,
+            start,
+            length,
+            &context,
+            thread_execution.clone(),
+        ) {
+            Ok(Some(report)) => return self.finish("checksum", report),
+            Ok(None) => {}
+            Err(error) => {
+                return self.finish(
+                    "checksum",
+                    OperationReport::failed(
+                        OperationFamily::Checksum,
+                        Some(self.checksum.name().to_string()),
+                        "checksum",
+                        error.to_string(),
+                        thread_execution.clone(),
+                    ),
+                );
+            }
+        }
+
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(stream_format) = self.select_streamed_checksum_auto_extract_format(
+            &source,
+            &select,
+            no_extract,
+            no_trim_fix,
+            strip_header,
+            start,
+            length,
+        ) {
+            return self.finish(
+                "checksum",
+                self.run_checksum_stream_auto_extract(
+                    &source,
+                    stream_format,
+                    &algo,
+                    &context,
+                    thread_execution.clone(),
+                )
+                .unwrap_or_else(|error| {
+                    OperationReport::failed(
+                        OperationFamily::Checksum,
+                        Some(self.checksum.name().to_string()),
+                        "checksum",
+                        error.to_string(),
+                        thread_execution.clone(),
+                    )
+                }),
+            );
+        }
+
         let resolved = match self.resolve_source_with_auto_extract(
             &source,
             &select,
@@ -642,6 +703,453 @@ impl CliApp {
         }
         Self::cleanup_temp_paths(temp_paths);
         self.finish("checksum", report)
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn try_run_checksum_tar_stream_auto_extract(
+        &self,
+        source: &Path,
+        algo: &[String],
+        select: &[String],
+        no_extract: bool,
+        no_ignore: bool,
+        no_trim_fix: bool,
+        strip_header: bool,
+        start: Option<u64>,
+        length: Option<u64>,
+        context: &OperationContext,
+        thread_execution: Option<ThreadExecution>,
+    ) -> Result<Option<OperationReport>> {
+        if no_extract
+            || strip_header
+            || !select.is_empty()
+            || start.is_some()
+            || length.is_some()
+        {
+            return Ok(None);
+        }
+
+        let Some(handler) = self.containers.probe(source) else {
+            return Ok(None);
+        };
+        let tar_format = handler.descriptor().name;
+        if !matches!(tar_format, "tar" | "tar.gz" | "tar.bz2" | "tar.xz") {
+            return Ok(None);
+        }
+
+        let Some((candidate_name, candidate_index)) =
+            self.select_tar_stream_checksum_candidate(source, tar_format, no_ignore)?
+        else {
+            return Ok(None);
+        };
+
+        if let Some(next_handler) = self.containers.probe(Path::new(&candidate_name))
+            && !next_handler.descriptor().matches_name("xiso")
+            && next_handler.capabilities().extract
+        {
+            return Ok(None);
+        }
+
+        if !no_trim_fix {
+            let candidate_lower = candidate_name.to_ascii_lowercase();
+            if self
+                .trim_eligible_kind_for_path(Path::new(&candidate_name))
+                .is_some()
+                || candidate_lower.ends_with(".iso")
+            {
+                return Ok(None);
+            }
+        }
+
+        let report = self.run_checksum_tar_stream_auto_extract(
+            source,
+            tar_format,
+            &candidate_name,
+            candidate_index,
+            algo,
+            context,
+            thread_execution,
+        )?;
+        Ok(Some(report))
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn run_checksum_tar_stream_auto_extract(
+        &self,
+        source: &Path,
+        tar_format: &str,
+        candidate_name: &str,
+        candidate_index: usize,
+        algo: &[String],
+        context: &OperationContext,
+        thread_execution: Option<ThreadExecution>,
+    ) -> Result<OperationReport> {
+        trace!(
+            source = %source.display(),
+            tar_format,
+            candidate_name,
+            candidate_index,
+            algorithm_count = algo.len(),
+            "running streamed tar checksum auto-extract fast path"
+        );
+        self.emit_running(
+            "checksum",
+            OperationFamily::Checksum,
+            Some(self.checksum.name()),
+            "prepare",
+            format!(
+                "streaming checksum payload `{candidate_name}` from `{}` ({tar_format})",
+                source.display()
+            ),
+            None,
+            thread_execution.clone(),
+        );
+
+        let reader = Self::open_tar_auto_extract_reader(source, tar_format)?;
+        let mut archive = TarArchive::new(reader);
+        let mut target_entry = None;
+        for (entry_index, entry) in archive.entries()?.enumerate() {
+            if entry_index != candidate_index {
+                continue;
+            }
+            let entry = entry?;
+            let entry_type = entry.header().entry_type();
+            if !entry_type.is_file() {
+                return Err(RomWeaverError::Validation(format!(
+                    "streamed checksum candidate `{candidate_name}` in `{}` is no longer a file entry",
+                    source.display()
+                )));
+            }
+            let Some(entry_name) = Self::normalize_tar_candidate_name(entry.path()?.as_ref()) else {
+                return Err(RomWeaverError::Validation(format!(
+                    "streamed checksum candidate `{candidate_name}` in `{}` could not be normalized",
+                    source.display()
+                )));
+            };
+            if entry_name != candidate_name {
+                return Err(RomWeaverError::Validation(format!(
+                    "streamed checksum candidate changed while reading `{}`: expected `{candidate_name}`, found `{entry_name}`",
+                    source.display()
+                )));
+            }
+            target_entry = Some(entry);
+            break;
+        }
+
+        let Some(mut entry_reader) = target_entry else {
+            return Err(RomWeaverError::Validation(format!(
+                "streamed checksum candidate `{candidate_name}` was not found in `{}`",
+                source.display()
+            )));
+        };
+
+        let algorithms = algo
+            .iter()
+            .map(|algorithm| algorithm.to_ascii_lowercase())
+            .collect::<Vec<_>>();
+        let checksum_algorithm_count = algorithms.len();
+        let values = checksum_reader_values_with_progress(
+            &mut entry_reader,
+            &algorithms,
+            context,
+            &mut |progress| {
+                self.emit_running(
+                    "checksum",
+                    OperationFamily::Checksum,
+                    Some(self.checksum.name()),
+                    "checksum",
+                    format!(
+                        "computing {} checksum algorithm(s)",
+                        checksum_algorithm_count
+                    ),
+                    Some(progress.percent()),
+                    thread_execution.clone(),
+                );
+            },
+        )?;
+
+        let mut label = Self::render_streamed_checksum_label(&algorithms, &values.values);
+        label.push_str(&format!(
+            "; checksum source streamed from {tar_format} container entry `{candidate_name}`"
+        ));
+        Ok(OperationReport::succeeded(
+            OperationFamily::Checksum,
+            Some(self.checksum.name().to_string()),
+            "checksum",
+            label,
+            Some(100.0),
+            Some(values.execution),
+        ))
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn select_tar_stream_checksum_candidate(
+        &self,
+        source: &Path,
+        tar_format: &str,
+        no_ignore: bool,
+    ) -> Result<Option<(String, usize)>> {
+        let reader = Self::open_tar_auto_extract_reader(source, tar_format)?;
+        let mut archive = TarArchive::new(reader);
+        let mut candidates = BTreeMap::new();
+        for (entry_index, entry) in archive.entries()?.enumerate() {
+            let entry = entry?;
+            let entry_type = entry.header().entry_type();
+            if !entry_type.is_file() {
+                continue;
+            }
+            let Some(entry_name) = Self::normalize_tar_candidate_name(entry.path()?.as_ref()) else {
+                continue;
+            };
+            let ignored = Self::should_ignore_checksum_candidate(&entry_name);
+            candidates.insert(entry_name, (entry_index, ignored));
+        }
+
+        let selected = if no_ignore {
+            candidates
+                .into_iter()
+                .map(|(name, (index, _ignored))| (name, index))
+                .collect::<Vec<_>>()
+        } else {
+            candidates
+                .into_iter()
+                .filter_map(|(name, (index, ignored))| (!ignored).then_some((name, index)))
+                .collect::<Vec<_>>()
+        };
+        if selected.len() != 1 {
+            return Ok(None);
+        }
+
+        Ok(selected.into_iter().next())
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn open_tar_auto_extract_reader(source: &Path, tar_format: &str) -> Result<Box<dyn Read>> {
+        match tar_format {
+            "tar" => Ok(Box::new(BufReader::new(File::open(source)?))),
+            "tar.gz" => Ok(Box::new(MultiGzDecoder::new(BufReader::new(File::open(
+                source,
+            )?)))),
+            "tar.bz2" => Ok(Box::new(MultiBzDecoder::new(BufReader::new(File::open(
+                source,
+            )?)))),
+            "tar.xz" => Ok(Box::new(XzReader::new(BufReader::new(File::open(source)?), false))),
+            _ => Err(RomWeaverError::Validation(format!(
+                "streamed checksum auto-extract does not support `{tar_format}`"
+            ))),
+        }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn normalize_tar_candidate_name(path: &Path) -> Option<String> {
+        let mut sanitized = PathBuf::new();
+        for component in path.components() {
+            match component {
+                Component::Normal(value) => sanitized.push(value),
+                Component::CurDir => {}
+                Component::Prefix(_) | Component::RootDir | Component::ParentDir => return None,
+            }
+        }
+        let name = sanitized
+            .to_string_lossy()
+            .replace('\\', "/")
+            .trim_start_matches("./")
+            .trim_matches('/')
+            .to_string();
+        if name.is_empty() { None } else { Some(name) }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn select_streamed_checksum_auto_extract_format(
+        &self,
+        source: &Path,
+        select: &[String],
+        no_extract: bool,
+        no_trim_fix: bool,
+        strip_header: bool,
+        start: Option<u64>,
+        length: Option<u64>,
+    ) -> Option<&'static str> {
+        if no_extract
+            || strip_header
+            || !select.is_empty()
+            || start.is_some()
+            || length.is_some()
+        {
+            return None;
+        }
+
+        let handler = self.containers.probe(source)?;
+        let stream_format = handler.descriptor().name;
+        if !matches!(stream_format, "gz" | "bz2" | "xz" | "zst") {
+            return None;
+        }
+
+        if let Some(inferred_output) = Self::inferred_stream_extract_output_path(source, stream_format)
+        {
+            if let Some(next_handler) = self.containers.probe(&inferred_output)
+                && !next_handler.descriptor().matches_name("xiso")
+                && next_handler.capabilities().extract
+            {
+                return None;
+            }
+
+            if !no_trim_fix && self.trim_eligible_kind_for_path(&inferred_output).is_some() {
+                return None;
+            }
+        }
+
+        Some(stream_format)
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn run_checksum_stream_auto_extract(
+        &self,
+        source: &Path,
+        stream_format: &str,
+        algo: &[String],
+        context: &OperationContext,
+        thread_execution: Option<ThreadExecution>,
+    ) -> Result<OperationReport> {
+        trace!(
+            source = %source.display(),
+            stream_format,
+            algorithm_count = algo.len(),
+            "running streamed checksum auto-extract fast path"
+        );
+        self.emit_running(
+            "checksum",
+            OperationFamily::Checksum,
+            Some(self.checksum.name()),
+            "prepare",
+            format!(
+                "streaming checksum payload from `{}` ({stream_format})",
+                source.display()
+            ),
+            None,
+            thread_execution.clone(),
+        );
+
+        let mut reader = Self::open_stream_auto_extract_reader(source, stream_format)?;
+        let algorithms = algo
+            .iter()
+            .map(|algorithm| algorithm.to_ascii_lowercase())
+            .collect::<Vec<_>>();
+        let checksum_algorithm_count = algorithms.len();
+        let values = checksum_reader_values_with_progress(
+            &mut reader,
+            &algorithms,
+            context,
+            &mut |progress| {
+                self.emit_running(
+                    "checksum",
+                    OperationFamily::Checksum,
+                    Some(self.checksum.name()),
+                    "checksum",
+                    format!(
+                        "computing {} checksum algorithm(s)",
+                        checksum_algorithm_count
+                    ),
+                    Some(progress.percent()),
+                    thread_execution.clone(),
+                );
+            },
+        )?;
+
+        let mut label = Self::render_streamed_checksum_label(&algorithms, &values.values);
+        label.push_str(&format!(
+            "; checksum source streamed from {stream_format} container"
+        ));
+        Ok(OperationReport::succeeded(
+            OperationFamily::Checksum,
+            Some(self.checksum.name().to_string()),
+            "checksum",
+            label,
+            Some(100.0),
+            Some(values.execution),
+        ))
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn open_stream_auto_extract_reader(
+        source: &Path,
+        stream_format: &str,
+    ) -> Result<Box<dyn Read>> {
+        match stream_format {
+            "gz" => Ok(Box::new(MultiGzDecoder::new(BufReader::new(File::open(
+                source,
+            )?)))),
+            "bz2" => Ok(Box::new(MultiBzDecoder::new(BufReader::new(File::open(
+                source,
+            )?)))),
+            "xz" => Ok(Box::new(XzReader::new(BufReader::new(File::open(source)?), false))),
+            "zst" => Ok(Box::new(ZstdDecoder::new(BufReader::new(File::open(
+                source,
+            )?))?)),
+            _ => Err(RomWeaverError::Validation(format!(
+                "streamed checksum auto-extract does not support `{stream_format}`"
+            ))),
+        }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn inferred_stream_extract_output_path(source: &Path, stream_format: &str) -> Option<PathBuf> {
+        let file_name = source.file_name()?.to_str()?;
+        let extension = match stream_format {
+            "gz" => ".gz",
+            "bz2" => ".bz2",
+            "xz" => ".xz",
+            "zst" => ".zst",
+            _ => return None,
+        };
+        let file_name_lower = file_name.to_ascii_lowercase();
+        let trimmed = if file_name_lower.ends_with(extension) && extension.len() < file_name.len() {
+            file_name[..file_name.len() - extension.len()].to_string()
+        } else {
+            Path::new(file_name)
+                .file_stem()
+                .and_then(|value| value.to_str())
+                .unwrap_or(file_name)
+                .to_string()
+        };
+        let normalized = trimmed.trim().trim_matches('.');
+        let output_name = if normalized.is_empty() {
+            format!("{stream_format}.out")
+        } else {
+            normalized.to_string()
+        };
+        let parent = source
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| PathBuf::from("."));
+        Some(parent.join(output_name))
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn render_streamed_checksum_label(
+        algorithms: &[String],
+        values: &BTreeMap<String, String>,
+    ) -> String {
+        let mut ordered = Vec::new();
+        let mut seen = BTreeSet::new();
+        for algorithm in algorithms {
+            let normalized = algorithm.trim().to_ascii_lowercase();
+            if !seen.insert(normalized.clone()) {
+                continue;
+            }
+            if let Some(value) = values.get(&normalized) {
+                ordered.push(format!("{normalized}={value}"));
+            }
+        }
+        if ordered.is_empty() {
+            values
+                .iter()
+                .map(|(algorithm, value)| format!("{algorithm}={value}"))
+                .collect::<Vec<_>>()
+                .join(" ")
+        } else {
+            ordered.join(" ")
+        }
     }
 
     fn resolve_source_with_auto_extract(

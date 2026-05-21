@@ -9,7 +9,7 @@ use std::{
 
 use adler2::Adler32;
 use blake3::Hasher as Blake3Hasher;
-use crc16::{ARC, State as Crc16State};
+use crc16::{State as Crc16State, ARC};
 use crc32c::{crc32c_append, crc32c_combine};
 use crc32fast::Hasher as Crc32Hasher;
 use md5::{Digest as Md5Digest, Md5};
@@ -29,6 +29,7 @@ const SUPPORTED_ALGORITHMS: &[&str] = &[
 ];
 const CACHE_SCHEMA_VERSION: u32 = 1;
 const CACHE_DIR_NAME: &str = "cache/checksums-v1";
+const MAX_EAGER_MAP_RANGE_BYTES: u64 = 32 * 1024 * 1024;
 const MIN_CHUNK_SIZE: usize = 256 * 1024;
 const MAX_CHUNK_SIZE: usize = 4 * 1024 * 1024;
 const TARGET_CHUNKS_PER_WORKER: u64 = 8;
@@ -255,6 +256,55 @@ pub fn checksum_file_values(
         length: None,
     };
     Ok(compute_checksum_values(&request, context)?.values)
+}
+
+pub fn checksum_reader_values_with_progress<R, F>(
+    reader: &mut R,
+    algorithms: &[String],
+    context: &OperationContext,
+    on_progress: &mut F,
+) -> Result<ChecksumValues>
+where
+    R: Read + ?Sized,
+    F: FnMut(ChecksumProgress),
+{
+    let algorithms = resolve_algorithms(algorithms)?;
+    let execution = context.plan_threads(ThreadCapability::single_threaded());
+    let chunk_size = tuned_chunk_size(MAX_EAGER_MAP_RANGE_BYTES, execution.effective_threads).max(1);
+    let mut buffer = vec![0u8; chunk_size];
+    let mut states = algorithms
+        .iter()
+        .copied()
+        .map(|algorithm| (algorithm, HasherState::new(algorithm)))
+        .collect::<Vec<_>>();
+    let mut processed_bytes = 0u64;
+
+    loop {
+        context.cancel().check()?;
+        let bytes_read = reader.read(&mut buffer)?;
+        if bytes_read == 0 {
+            break;
+        }
+        let chunk = &buffer[..bytes_read];
+        for (_, state) in &mut states {
+            state.update(chunk);
+        }
+        processed_bytes = processed_bytes.saturating_add(bytes_read as u64);
+    }
+
+    (on_progress)(ChecksumProgress {
+        processed_bytes,
+        total_bytes: processed_bytes,
+    });
+
+    Ok(ChecksumValues {
+        execution,
+        cached_count: 0,
+        values: states
+            .into_iter()
+            .map(|(algorithm, state)| (algorithm.name().to_string(), state.finalize()))
+            .collect(),
+    })
 }
 
 pub fn seed_checksum_file_cache(

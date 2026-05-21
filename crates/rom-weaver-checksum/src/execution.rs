@@ -775,6 +775,16 @@ fn map_range(source: &Path, range: &ResolvedRange) -> Option<MappedRange> {
     if range.file_len == 0 || range.len == 0 {
         return None;
     }
+    if range.len > MAX_EAGER_MAP_RANGE_BYTES {
+        trace!(
+            source = %source.display(),
+            start = range.start,
+            length = range.len,
+            threshold = MAX_EAGER_MAP_RANGE_BYTES,
+            "skipping eager checksum source read; using streaming mode for progress"
+        );
+        return None;
+    }
 
     let mut file = File::open(source).ok()?;
     let len = usize::try_from(range.len).ok()?;

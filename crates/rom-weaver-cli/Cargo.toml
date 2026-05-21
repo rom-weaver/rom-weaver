@@ -19,9 +19,14 @@ rom-weaver-patches = { path = "../rom-weaver-patches" }
 tracing-subscriber = { version = "0.3.20", default-features = false, features = ["fmt", "std"] }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
+bzip2.workspace = true
 clap.workspace = true
+flate2.workspace = true
+lzma-rust2.workspace = true
 rom-weaver-patches = { path = "../rom-weaver-patches" }
+tar.workspace = true
 tracing-subscriber.workspace = true
+zstd.workspace = true
 
 [dev-dependencies]
 assert_cmd.workspace = true
