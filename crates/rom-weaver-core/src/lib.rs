@@ -7,7 +7,7 @@ mod registry;
 mod threads;
 
 pub use cancel::CancellationToken;
-pub use context::{OperationContext, PatchChecksumValidation};
+pub use context::{OperationContext, PatchChecksumValidation, XdeltaSecondaryMode};
 pub use error::{
     Result, RomWeaverError, ValidationCodeError, ValidationField, ValidationFieldValue,
 };

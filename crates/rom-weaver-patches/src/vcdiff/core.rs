@@ -2,6 +2,7 @@ use std::{
     fs::{self, File, OpenOptions},
     io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use oxidelta::{
@@ -11,7 +12,7 @@ use oxidelta::{
     },
     vcdiff::{
         decoder::{self as oxidelta_decoder, DecodeError as OxideltaDecodeError},
-        header::{VCD_ADLER32, VCD_SOURCE, VCD_TARGET, WindowHeader as OxideltaWindowHeader},
+        header::{WindowHeader as OxideltaWindowHeader, VCD_ADLER32, VCD_SOURCE, VCD_TARGET},
     },
 };
 use rayon::prelude::*;
@@ -20,7 +21,7 @@ use rom_weaver_codecs::{decode_xz_exact, encode_xz_preset};
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
     PatchCapabilities, PatchChecksumValidation, PatchCreateRequest, PatchHandler, ProbeConfidence,
-    Result, RomWeaverError, ThreadCapability,
+    Result, RomWeaverError, ThreadCapability, XdeltaSecondaryMode,
 };
 
 const VCDIFF_MAGIC_BYTES: [u8; 3] = [0xD6, 0xC3, 0xC4];
@@ -51,6 +52,11 @@ const XDELTA_SECONDARY_CANDIDATES: [u8; 3] = [
     XDELTA_LZMA_SECONDARY_ID,
     XDELTA_FGK_SECONDARY_ID,
 ];
+const XDELTA_AUTO_FAST_SAMPLE_BYTES_PER_SECTION: usize = 256;
+const XDELTA_AUTO_FAST_MAX_SECTIONS: usize = 512;
+const XDELTA_AUTO_FAST_MIN_SAMPLED_BYTES: usize = 32 * 1024;
+const XDELTA_AUTO_FAST_MIN_UNIQUE_RATIO: f64 = 0.93;
+const XDELTA_AUTO_FAST_MAX_REPEAT_RATIO: f64 = 0.015;
 const DJW_MAX_CODELEN: usize = 20;
 const DJW_TOTAL_CODES: usize = DJW_MAX_CODELEN + 2;
 const DJW_BASIC_CODES: usize = 5;
@@ -71,6 +77,15 @@ const DJW_ALPHABET_SIZE: usize = 256;
 
 const DJW_ENCODE_12EXTRA: [u8; 15] = [9, 10, 3, 11, 2, 12, 13, 1, 14, 15, 16, 17, 18, 19, 20];
 const DJW_ENCODE_12BASIC: [u8; 5] = [4, 5, 6, 7, 8];
+
+fn xdelta_secondary_candidates_for_mode(mode: XdeltaSecondaryMode) -> &'static [u8] {
+    match mode {
+        XdeltaSecondaryMode::Auto => &XDELTA_SECONDARY_CANDIDATES,
+        XdeltaSecondaryMode::AutoFast => &[XDELTA_LZMA_SECONDARY_ID],
+        XdeltaSecondaryMode::Lzma => &[XDELTA_LZMA_SECONDARY_ID],
+        XdeltaSecondaryMode::None => &[],
+    }
+}
 
 pub struct VcdiffPatchHandler {
     descriptor: &'static FormatDescriptor,
@@ -289,6 +304,7 @@ impl PatchHandler for VcdiffPatchHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let compare_secondary = is_xdelta_descriptor(self.descriptor);
+        let secondary_mode = context.xdelta_secondary_mode();
         let include_checksums =
             context.patch_checksum_validation() == PatchChecksumValidation::Strict;
         let xdelta_app_header = if compare_secondary {
@@ -306,10 +322,8 @@ impl PatchHandler for VcdiffPatchHandler {
         let baseline_path = context
             .temp_paths()
             .next_path("vcdiff-create-baseline", output_extension);
-        let thread_capability = ThreadCapability::single_threaded();
 
         let create_result = (|| -> Result<(ParsedPatch, rom_weaver_core::ThreadExecution)> {
-            let planned_execution = context.plan_threads(thread_capability.clone());
             let baseline_raw = encode_patch_with_native_streaming(
                 &request.original,
                 &request.modified,
@@ -317,9 +331,42 @@ impl PatchHandler for VcdiffPatchHandler {
                 create_native_compress_options(self.descriptor, include_checksums),
             )?;
             let baseline_secondary_source_path = baseline_raw.path.clone();
+            let baseline_loaded_for_secondary = if compare_secondary {
+                Some(Arc::new(load_patch_for_xdelta_recode(
+                    &baseline_secondary_source_path,
+                )?))
+            } else {
+                None
+            };
+            let mut secondary_candidates = if compare_secondary {
+                xdelta_secondary_candidates_for_mode(secondary_mode)
+            } else {
+                &[]
+            };
+            if compare_secondary
+                && secondary_mode == XdeltaSecondaryMode::AutoFast
+                && !secondary_candidates.is_empty()
+                && baseline_loaded_for_secondary
+                    .as_ref()
+                    .is_some_and(|patch| should_skip_secondary_for_auto_fast(patch))
+            {
+                secondary_candidates = &[];
+            }
+            let (execution, secondary_pool) = if !secondary_candidates.is_empty() {
+                let (execution, pool) =
+                    context.build_pool(ThreadCapability::parallel(Some(secondary_candidates.len())))?;
+                (execution, Some(pool))
+            } else {
+                (
+                    context.plan_threads(ThreadCapability::single_threaded()),
+                    None,
+                )
+            };
             let baseline = if xdelta_app_header.is_some() {
-                recode_patch_with_xdelta_options(
-                    &baseline_raw.path,
+                recode_loaded_patch_with_xdelta_options(
+                    baseline_loaded_for_secondary
+                        .as_ref()
+                        .expect("xdelta baseline should be loaded when app header is enabled"),
                     &baseline_path,
                     None,
                     xdelta_app_header.as_deref(),
@@ -329,18 +376,59 @@ impl PatchHandler for VcdiffPatchHandler {
             };
             let selected = if compare_secondary {
                 let mut best = baseline;
-                for secondary_id in XDELTA_SECONDARY_CANDIDATES {
-                    let candidate_path = context.temp_paths().next_path(
-                        &format!("vcdiff-create-secondary-{secondary_id}"),
-                        output_extension,
+                if !secondary_candidates.is_empty() {
+                    let baseline_loaded = Arc::clone(
+                        baseline_loaded_for_secondary
+                            .as_ref()
+                            .expect("xdelta baseline should be loaded when evaluating candidates"),
                     );
-                    let candidate = recode_patch_with_xdelta_options(
-                        &baseline_secondary_source_path,
-                        &candidate_path,
-                        Some(secondary_id),
-                        xdelta_app_header.as_deref(),
-                    );
-                    if let Ok(candidate) = candidate {
+                    let candidate_specs = secondary_candidates
+                        .iter()
+                        .copied()
+                        .map(|secondary_id| {
+                            (
+                                secondary_id,
+                                context.temp_paths().next_path(
+                                    &format!("vcdiff-create-secondary-{secondary_id}"),
+                                    output_extension,
+                                ),
+                            )
+                        })
+                        .collect::<Vec<_>>();
+                    let app_header = xdelta_app_header.as_deref();
+                    let candidate_results = if let Some(pool) = secondary_pool.as_ref() {
+                        let baseline_for_workers = Arc::clone(&baseline_loaded);
+                        pool.install(|| {
+                            candidate_specs
+                                .into_par_iter()
+                                .map(|(secondary_id, candidate_path)| {
+                                    recode_loaded_patch_with_xdelta_options(
+                                        &baseline_for_workers,
+                                        &candidate_path,
+                                        Some(secondary_id),
+                                        app_header,
+                                    )
+                                })
+                                .collect::<Vec<_>>()
+                        })
+                    } else {
+                        candidate_specs
+                            .into_iter()
+                            .map(|(secondary_id, candidate_path)| {
+                                recode_loaded_patch_with_xdelta_options(
+                                    &baseline_loaded,
+                                    &candidate_path,
+                                    Some(secondary_id),
+                                    app_header,
+                                )
+                            })
+                            .collect::<Vec<_>>()
+                    };
+
+                    for candidate in candidate_results
+                        .into_iter()
+                        .filter_map(|result| result.ok())
+                    {
                         if candidate.size < best.size {
                             best = candidate;
                         }
@@ -350,7 +438,6 @@ impl PatchHandler for VcdiffPatchHandler {
             } else {
                 baseline
             };
-            let execution = planned_execution;
 
             if let Some(parent) = request.output.parent() {
                 fs::create_dir_all(parent)?;
@@ -493,6 +580,54 @@ struct DecodedWindow {
 struct CreatedPatchCandidate {
     path: PathBuf,
     size: u64,
+}
+
+#[derive(Debug)]
+struct LoadedXdeltaRecodePatch {
+    parsed: ParsedPatch,
+    windows: Vec<LoadedXdeltaRecodeWindow>,
+}
+
+#[derive(Debug)]
+struct LoadedXdeltaRecodeWindow {
+    data: Vec<u8>,
+    inst: Vec<u8>,
+    addr: Vec<u8>,
+}
+
+fn should_skip_secondary_for_auto_fast(baseline_patch: &LoadedXdeltaRecodePatch) -> bool {
+    let mut histogram = [0u32; 256];
+    let mut sampled_bytes = 0usize;
+    let mut adjacent_matches = 0usize;
+
+    for section in baseline_patch
+        .windows
+        .iter()
+        .flat_map(|window| [&window.data[..], &window.inst[..], &window.addr[..]])
+        .filter(|section| !section.is_empty())
+        .take(XDELTA_AUTO_FAST_MAX_SECTIONS)
+    {
+        let sample_len = section.len().min(XDELTA_AUTO_FAST_SAMPLE_BYTES_PER_SECTION);
+        let sample = &section[..sample_len];
+        sampled_bytes += sample.len();
+        for (index, &byte) in sample.iter().enumerate() {
+            histogram[byte as usize] = histogram[byte as usize].saturating_add(1);
+            if index > 0 && byte == sample[index - 1] {
+                adjacent_matches = adjacent_matches.saturating_add(1);
+            }
+        }
+    }
+
+    if sampled_bytes < XDELTA_AUTO_FAST_MIN_SAMPLED_BYTES {
+        return false;
+    }
+
+    let unique_values = histogram.iter().filter(|&&count| count > 0).count();
+    let unique_ratio = unique_values as f64 / 256.0;
+    let adjacent_total = sampled_bytes.saturating_sub(1).max(1);
+    let repeat_ratio = adjacent_matches as f64 / adjacent_total as f64;
+    unique_ratio >= XDELTA_AUTO_FAST_MIN_UNIQUE_RATIO
+        && repeat_ratio <= XDELTA_AUTO_FAST_MAX_REPEAT_RATIO
 }
 
 fn parse_patch<R: Read + Seek>(reader: &mut R) -> Result<ParsedPatch> {
@@ -855,12 +990,7 @@ fn native_encode_error(error: oxidelta::compress::encoder::EncodeError) -> RomWe
     RomWeaverError::Validation(format!("native VCDIFF encoder failed: {error}"))
 }
 
-fn recode_patch_with_xdelta_options(
-    baseline_patch_path: &Path,
-    output_path: &Path,
-    secondary_compressor_id: Option<u8>,
-    app_header: Option<&[u8]>,
-) -> Result<CreatedPatchCandidate> {
+fn load_patch_for_xdelta_recode(baseline_patch_path: &Path) -> Result<LoadedXdeltaRecodePatch> {
     let mut reader = BufReader::new(File::open(baseline_patch_path)?);
     let parsed = parse_patch(&mut reader)?;
     if parsed.custom_code_table.is_some() {
@@ -868,7 +998,44 @@ fn recode_patch_with_xdelta_options(
             "native VCDIFF secondary recoder does not support custom code tables".into(),
         ));
     }
-    if secondary_compressor_id.is_some() && parsed.secondary_compressor_id.is_some() {
+
+    let mut patch_reader = BufReader::new(File::open(baseline_patch_path)?);
+    let mut windows = Vec::with_capacity(parsed.windows.len());
+    for window in &parsed.windows {
+        let data = read_section(&mut patch_reader, window.data_start, window.data_len)?;
+        let inst = read_section(&mut patch_reader, window.inst_start, window.inst_len)?;
+        let addr = read_section(&mut patch_reader, window.addr_start, window.addr_len)?;
+        windows.push(LoadedXdeltaRecodeWindow { data, inst, addr });
+    }
+
+    Ok(LoadedXdeltaRecodePatch { parsed, windows })
+}
+
+#[cfg(test)]
+fn recode_patch_with_xdelta_options(
+    baseline_patch_path: &Path,
+    output_path: &Path,
+    secondary_compressor_id: Option<u8>,
+    app_header: Option<&[u8]>,
+) -> Result<CreatedPatchCandidate> {
+    let loaded = load_patch_for_xdelta_recode(baseline_patch_path)?;
+    recode_loaded_patch_with_xdelta_options(
+        &loaded,
+        output_path,
+        secondary_compressor_id,
+        app_header,
+    )
+}
+
+fn recode_loaded_patch_with_xdelta_options(
+    baseline_patch: &LoadedXdeltaRecodePatch,
+    output_path: &Path,
+    secondary_compressor_id: Option<u8>,
+    app_header: Option<&[u8]>,
+) -> Result<CreatedPatchCandidate> {
+    ensure_supported_secondary_compressor(secondary_compressor_id)?;
+    if secondary_compressor_id.is_some() && baseline_patch.parsed.secondary_compressor_id.is_some()
+    {
         return Err(RomWeaverError::Validation(
             "native VCDIFF secondary recoder expected an uncompressed baseline patch".into(),
         ));
@@ -893,26 +1060,26 @@ fn recode_patch_with_xdelta_options(
         recoded.extend_from_slice(header);
     }
 
-    let mut patch_reader = BufReader::new(File::open(baseline_patch_path)?);
-    for window in &parsed.windows {
-        let data = read_section(&mut patch_reader, window.data_start, window.data_len)?;
-        let inst = read_section(&mut patch_reader, window.inst_start, window.inst_len)?;
-        let addr = read_section(&mut patch_reader, window.addr_start, window.addr_len)?;
-
+    for (window, sections) in baseline_patch
+        .parsed
+        .windows
+        .iter()
+        .zip(baseline_patch.windows.iter())
+    {
         let (data_out, data_comp) = recode_window_section(
-            &data,
+            &sections.data,
             window.delta_indicator & DELTA_DATA_COMP != 0,
             secondary_compressor_id,
             DjwSectionKind::Data,
         )?;
         let (inst_out, inst_comp) = recode_window_section(
-            &inst,
+            &sections.inst,
             window.delta_indicator & DELTA_INST_COMP != 0,
             secondary_compressor_id,
             DjwSectionKind::Inst,
         )?;
         let (addr_out, addr_comp) = recode_window_section(
-            &addr,
+            &sections.addr,
             window.delta_indicator & DELTA_ADDR_COMP != 0,
             secondary_compressor_id,
             DjwSectionKind::Addr,

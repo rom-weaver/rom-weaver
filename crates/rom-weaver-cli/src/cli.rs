@@ -21,7 +21,7 @@ use rom_weaver_core::{
     ContainerExtractRequest, ContainerHandler, ContainerInspectRequest, OperationContext,
     OperationFamily, OperationReport, OperationStatus, PatchApplyRequest, PatchChecksumValidation,
     PatchCreateRequest, ProbeConfidence, ProgressEvent, ProgressSink, Result, RomWeaverError,
-    ThreadBudget, ThreadCapability, ThreadExecution,
+    ThreadBudget, ThreadCapability, ThreadExecution, XdeltaSecondaryMode,
 };
 use rom_weaver_patches::{
     PatchRegistry, explicitly_unsupported_patch_reason_for_name,
@@ -524,6 +524,16 @@ pub struct PatchCreateCommand {
     pub ignore_checksum_validation: bool,
     #[cfg_attr(not(target_arch = "wasm32"), arg(long, default_value = "auto"))]
     pub threads: ThreadBudget,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "xdelta-secondary",
+            default_value = "auto",
+            value_parser = ["auto", "auto-fast", "lzma", "none"],
+            help = "xdelta secondary compression mode during patch create (auto compares djw/lzma/fgk, auto-fast prefers speed via lzma-only plus incompressible-data skip, lzma evaluates only lzma, none disables secondary recoding)"
+        )
+    )]
+    pub xdelta_secondary: String,
 }
 
 #[derive(Clone, Copy, Debug)]

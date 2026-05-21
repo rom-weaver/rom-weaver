@@ -1,8 +1,8 @@
-use std::{path::Path, path::PathBuf, sync::Arc};
+use std::{fmt, path::Path, path::PathBuf, str::FromStr, sync::Arc};
 
 use crate::{
-    CancellationToken, ProgressEvent, ProgressSink, Result, SharedThreadPool, TempPathAllocator,
-    ThreadBudget, ThreadCapability, ThreadExecution,
+    CancellationToken, ProgressEvent, ProgressSink, Result, RomWeaverError, SharedThreadPool,
+    TempPathAllocator, ThreadBudget, ThreadCapability, ThreadExecution,
 };
 use tracing::trace;
 
@@ -12,6 +12,47 @@ pub enum PatchChecksumValidation {
     Ignore,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum XdeltaSecondaryMode {
+    Auto,
+    AutoFast,
+    Lzma,
+    None,
+}
+
+impl Default for XdeltaSecondaryMode {
+    fn default() -> Self {
+        Self::Auto
+    }
+}
+
+impl fmt::Display for XdeltaSecondaryMode {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Auto => formatter.write_str("auto"),
+            Self::AutoFast => formatter.write_str("auto-fast"),
+            Self::Lzma => formatter.write_str("lzma"),
+            Self::None => formatter.write_str("none"),
+        }
+    }
+}
+
+impl FromStr for XdeltaSecondaryMode {
+    type Err = RomWeaverError;
+
+    fn from_str(value: &str) -> Result<Self> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "auto" => Ok(Self::Auto),
+            "auto-fast" => Ok(Self::AutoFast),
+            "lzma" => Ok(Self::Lzma),
+            "none" => Ok(Self::None),
+            _ => Err(RomWeaverError::Validation(format!(
+                "invalid xdelta secondary mode `{value}`; expected one of: auto, auto-fast, lzma, none"
+            ))),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct OperationContext {
     thread_budget: ThreadBudget,
@@ -19,6 +60,7 @@ pub struct OperationContext {
     progress: Arc<dyn ProgressSink>,
     cancel: CancellationToken,
     patch_checksum_validation: PatchChecksumValidation,
+    xdelta_secondary_mode: XdeltaSecondaryMode,
 }
 
 impl OperationContext {
@@ -39,6 +81,7 @@ impl OperationContext {
             progress,
             cancel,
             patch_checksum_validation: PatchChecksumValidation::Strict,
+            xdelta_secondary_mode: XdeltaSecondaryMode::Auto,
         }
     }
 
@@ -65,6 +108,17 @@ impl OperationContext {
     pub fn with_patch_checksum_validation(self, validation: PatchChecksumValidation) -> Self {
         Self {
             patch_checksum_validation: validation,
+            ..self
+        }
+    }
+
+    pub fn xdelta_secondary_mode(&self) -> XdeltaSecondaryMode {
+        self.xdelta_secondary_mode
+    }
+
+    pub fn with_xdelta_secondary_mode(self, mode: XdeltaSecondaryMode) -> Self {
+        Self {
+            xdelta_secondary_mode: mode,
             ..self
         }
     }

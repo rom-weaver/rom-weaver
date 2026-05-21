@@ -25,6 +25,11 @@ enum WasmCliParseError {
         value: String,
         source: RomWeaverError,
     },
+    InvalidXdeltaSecondaryMode {
+        flag: &'static str,
+        value: String,
+        source: RomWeaverError,
+    },
     InvalidCompressionLevel {
         value: String,
     },
@@ -47,6 +52,11 @@ impl std::fmt::Display for WasmCliParseError {
                 write!(formatter, "invalid value `{value}` for {flag}")
             }
             Self::InvalidThreadBudget {
+                flag,
+                value,
+                source,
+            } => write!(formatter, "invalid value `{value}` for {flag}: {source}"),
+            Self::InvalidXdeltaSecondaryMode {
                 flag,
                 value,
                 source,
@@ -880,6 +890,7 @@ fn parse_wasm_patch_create(args: Vec<String>) -> WasmCliParseResult<PatchCreateC
     let mut output: Option<PathBuf> = None;
     let mut ignore_checksum_validation = false;
     let mut threads = ThreadBudget::Auto;
+    let mut xdelta_secondary = "auto".to_string();
     let mut index = 0usize;
     while index < args.len() {
         let arg = &args[index];
@@ -946,6 +957,18 @@ fn parse_wasm_patch_create(args: Vec<String>) -> WasmCliParseResult<PatchCreateC
             )?;
             continue;
         }
+        if let Some(value) = arg.strip_prefix("--xdelta-secondary=") {
+            xdelta_secondary = parse_wasm_xdelta_secondary_mode(value, "--xdelta-secondary")?;
+            index += 1;
+            continue;
+        }
+        if arg == "--xdelta-secondary" {
+            xdelta_secondary = parse_wasm_xdelta_secondary_mode(
+                &parse_wasm_required_value(&args, &mut index, "--xdelta-secondary")?,
+                "--xdelta-secondary",
+            )?;
+            continue;
+        }
         if arg.starts_with('-') {
             return Err(WasmCliParseError::UnknownOption {
                 command: "patch-create",
@@ -976,6 +999,7 @@ fn parse_wasm_patch_create(args: Vec<String>) -> WasmCliParseResult<PatchCreateC
         output,
         ignore_checksum_validation,
         threads,
+        xdelta_secondary,
     })
 }
 
@@ -1009,6 +1033,18 @@ fn parse_wasm_thread_budget(value: &str, flag: &'static str) -> WasmCliParseResu
     value
         .parse::<ThreadBudget>()
         .map_err(|source| WasmCliParseError::InvalidThreadBudget {
+            flag,
+            value: value.to_owned(),
+            source,
+        })
+}
+
+#[cfg(target_arch = "wasm32")]
+fn parse_wasm_xdelta_secondary_mode(value: &str, flag: &'static str) -> WasmCliParseResult<String> {
+    value
+        .parse::<XdeltaSecondaryMode>()
+        .map(|mode| mode.to_string())
+        .map_err(|source| WasmCliParseError::InvalidXdeltaSecondaryMode {
             flag,
             value: value.to_owned(),
             source,
@@ -1117,4 +1153,3 @@ fn trim_non_empty(value: String) -> Option<String> {
         Some(trimmed.to_string())
     }
 }
-

@@ -699,16 +699,33 @@ impl CliApp {
             format = %args.format,
             ignore_checksum_validation = args.ignore_checksum_validation,
             threads = %args.threads,
+            xdelta_secondary = %args.xdelta_secondary,
             "starting patch-create command"
         );
-        let context = self.context(args.threads).with_patch_checksum_validation(
-            if args.ignore_checksum_validation {
+        let base_context = self.context(args.threads);
+        let probe_threads = Some(base_context.plan_threads(ThreadCapability::single_threaded()));
+        let xdelta_secondary_mode = match args.xdelta_secondary.parse::<XdeltaSecondaryMode>() {
+            Ok(mode) => mode,
+            Err(error) => {
+                return self.finish(
+                    "patch-create",
+                    OperationReport::failed(
+                        OperationFamily::Patch,
+                        Some(args.format.clone()),
+                        "validate",
+                        error.to_string(),
+                        probe_threads.clone(),
+                    ),
+                );
+            }
+        };
+        let context = base_context
+            .with_patch_checksum_validation(if args.ignore_checksum_validation {
                 PatchChecksumValidation::Ignore
             } else {
                 PatchChecksumValidation::Strict
-            },
-        );
-        let probe_threads = Some(context.plan_threads(ThreadCapability::single_threaded()));
+            })
+            .with_xdelta_secondary_mode(xdelta_secondary_mode);
         if let Some(report) = self.require_existing_path(
             "patch-create",
             OperationFamily::Patch,
