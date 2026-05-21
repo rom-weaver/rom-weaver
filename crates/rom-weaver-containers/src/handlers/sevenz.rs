@@ -426,14 +426,7 @@ impl ContainerHandler for SevenZContainerHandler {
                 .push_archive_entry(
                     archive_entry,
                     Some({
-                        #[cfg(target_family = "wasm")]
-                        {
-                            Cursor::new(fs::read(&entry.source)?)
-                        }
-                        #[cfg(not(target_family = "wasm"))]
-                        {
-                            File::open(&entry.source)?
-                        }
+                        File::open(&entry.source)?
                     }),
                 )
                 .map_err(|error| {

@@ -308,8 +308,104 @@ impl IpsDiffRun {
 }
 
 fn parse_ips_file(path: &Path, flavor: IpsFlavor) -> Result<ParsedIpsPatch> {
-    let bytes = crate::map_file_read_only_with_fallback(path)?;
-    parse_ips_bytes(bytes.as_ref(), flavor)
+    let file = File::open(path)?;
+    let file_len = file.metadata()?.len();
+    let min_len = (flavor.header().len() + flavor.footer().len()) as u64;
+    if file_len < min_len {
+        return Err(RomWeaverError::Validation(
+            "IPS patch is too small to contain a valid header and footer".into(),
+        ));
+    }
+
+    let mut parser = IpsFileParser::new(BufReader::new(file), file_len);
+    if parser.read_exact(flavor.header().len())?.as_slice() != flavor.header() {
+        return Err(RomWeaverError::Validation("Patch header invalid".into()));
+    }
+
+    let mut records = Vec::new();
+    let mut warnings = Vec::new();
+    let mut max_written_end = 0u64;
+
+    loop {
+        let marker = parser.read_exact(flavor.footer().len())?;
+        if marker.as_slice() == flavor.footer() {
+            let trailing_len = parser.remaining()?;
+            let (truncate_size, metadata) = match flavor {
+                IpsFlavor::Ips => match trailing_len {
+                    0 => (None, None),
+                    3 => (Some(u64::from(parser.read_u24()?)), None),
+                    _ => {
+                        warnings.push(format!(
+                            "ignored {trailing_len} trailing byte(s) after EOF in IPS patch"
+                        ));
+                        (None, None)
+                    }
+                },
+                IpsFlavor::Ips32 => match trailing_len {
+                    0 => (None, None),
+                    _ => {
+                        return Err(RomWeaverError::Validation(
+                            "IPS32 patch contained unexpected trailing data after EEOF".into(),
+                        ));
+                    }
+                },
+                IpsFlavor::Ebp => match trailing_len {
+                    0 => (None, None),
+                    _ => {
+                        let trailing_len = usize::try_from(trailing_len).map_err(|_| {
+                            RomWeaverError::Validation(
+                                "EBP metadata exceeded addressable memory".into(),
+                            )
+                        })?;
+                        let metadata =
+                            parse_ebp_metadata(parser.read_exact(trailing_len)?.as_slice())?;
+                        (None, Some(metadata))
+                    }
+                },
+            };
+
+            if let Some(size) = truncate_size
+                && max_written_end > size
+            {
+                return Err(RomWeaverError::Validation(format!(
+                    "IPS record exceeded declared output size {size}"
+                )));
+            }
+
+            return Ok(ParsedIpsPatch {
+                truncate_size,
+                metadata,
+                warnings,
+                max_written_end,
+                records,
+            });
+        }
+
+        let offset = match flavor.offset_len() {
+            3 => u64::from(read_u24(&marker)),
+            4 => u64::from(read_u32(&marker)),
+            _ => unreachable!("unsupported offset length"),
+        };
+        let size = parser.read_u16()?;
+        let (len, data) = if size == 0 {
+            let rle_len = u64::from(parser.read_u16()?);
+            let byte = parser.read_exact(1)?[0];
+            if rle_len == 0 {
+                warnings.push(format!(
+                    "ignored zero-length IPS RLE record at offset {offset}"
+                ));
+                continue;
+            }
+            (rle_len, IpsRecordData::Rle { byte })
+        } else {
+            let data = parser.read_exact(usize::from(size))?;
+            (u64::from(size), IpsRecordData::Literal(data))
+        };
+
+        let end = checked_add(offset, len, "IPS record end")?;
+        max_written_end = max(max_written_end, end);
+        records.push(IpsRecord { offset, len, data });
+    }
 }
 
 fn parse_ips_bytes(bytes: &[u8], flavor: IpsFlavor) -> Result<ParsedIpsPatch> {
@@ -567,18 +663,19 @@ fn create_ips_patch_parallel(
     context: &OperationContext,
     flavor: IpsFlavor,
 ) -> Result<IpsCreateResult> {
-    let original = crate::map_file_read_only_with_fallback(original_path)?;
-    let modified = crate::map_file_read_only_with_fallback(modified_path)?;
-    let original_bytes = original.as_ref();
-    let modified_bytes = modified.as_ref();
-
     let chunk_count = ips_create_chunk_count(modified_len)?;
     let chunk_runs = pool.install(|| {
         (0..chunk_count)
             .into_par_iter()
             .map(|chunk_index| {
                 context.cancel().check()?;
-                collect_ips_diff_runs_for_chunk(chunk_index, original_bytes, modified_bytes)
+                collect_ips_diff_runs_for_chunk(
+                    chunk_index,
+                    original_path,
+                    original_len,
+                    modified_path,
+                    modified_len,
+                )
             })
             .collect::<Result<Vec<_>>>()
     })?;
@@ -608,44 +705,81 @@ fn create_ips_patch_parallel(
 
 fn collect_ips_diff_runs_for_chunk(
     chunk_index: usize,
-    original: &[u8],
-    modified: &[u8],
+    original_path: &Path,
+    original_len: u64,
+    modified_path: &Path,
+    modified_len: u64,
 ) -> Result<Vec<IpsDiffRun>> {
-    let start = chunk_index
-        .checked_mul(CREATE_SCAN_CHUNK_BYTES)
+    let start = u64::try_from(chunk_index)
+        .ok()
+        .and_then(|index| index.checked_mul(CREATE_SCAN_CHUNK_BYTES as u64))
         .ok_or_else(|| RomWeaverError::Validation("IPS create chunk offset overflowed".into()))?;
-    if start >= modified.len() {
+    if start >= modified_len {
         return Ok(Vec::new());
     }
     let end = start
-        .saturating_add(CREATE_SCAN_CHUNK_BYTES)
-        .min(modified.len());
-    let mut cursor = start;
+        .saturating_add(CREATE_SCAN_CHUNK_BYTES as u64)
+        .min(modified_len);
+    let mut original = File::open(original_path)?;
+    let mut modified = File::open(modified_path)?;
+    if start < original_len {
+        original.seek(SeekFrom::Start(start))?;
+    }
+    modified.seek(SeekFrom::Start(start))?;
+
+    let mut original_buffer = vec![0u8; COMPARE_BUFFER_SIZE];
+    let mut modified_buffer = vec![0u8; COMPARE_BUFFER_SIZE];
     let mut runs = Vec::new();
+    let mut pending_start: Option<u64> = None;
+    let mut pending_bytes = Vec::<u8>::new();
+    let mut cursor = start;
 
     while cursor < end {
-        let source = original.get(cursor).copied().unwrap_or(0);
-        let target = modified[cursor];
-        if source == target {
-            cursor += 1;
-            continue;
+        let chunk_len =
+            usize::try_from((end - cursor).min(COMPARE_BUFFER_SIZE as u64)).map_err(|_| {
+                RomWeaverError::Validation("IPS compare chunk exceeded addressable memory".into())
+            })?;
+        modified.read_exact(&mut modified_buffer[..chunk_len])?;
+
+        let original_chunk_len = if cursor >= original_len {
+            0
+        } else {
+            usize::try_from((original_len - cursor).min(chunk_len as u64)).map_err(|_| {
+                RomWeaverError::Validation("IPS original chunk exceeded addressable memory".into())
+            })?
+        };
+        if original_chunk_len > 0 {
+            original.read_exact(&mut original_buffer[..original_chunk_len])?;
+        }
+        if original_chunk_len < chunk_len {
+            original_buffer[original_chunk_len..chunk_len].fill(0);
         }
 
-        let run_start = cursor;
-        let mut run_bytes = Vec::new();
-        while cursor < end {
-            let source = original.get(cursor).copied().unwrap_or(0);
-            let target = modified[cursor];
+        for index in 0..chunk_len {
+            let source = original_buffer[index];
+            let target = modified_buffer[index];
             if source == target {
-                break;
+                if !pending_bytes.is_empty() {
+                    runs.push(IpsDiffRun {
+                        offset: pending_start.expect("pending start exists"),
+                        bytes: std::mem::take(&mut pending_bytes),
+                    });
+                    pending_start = None;
+                }
+            } else {
+                if pending_start.is_none() {
+                    pending_start = Some(cursor);
+                }
+                pending_bytes.push(target);
             }
-            run_bytes.push(target);
-            cursor += 1;
+            cursor = checked_add(cursor, 1, "IPS create scan offset")?;
         }
+    }
 
+    if !pending_bytes.is_empty() {
         runs.push(IpsDiffRun {
-            offset: run_start as u64,
-            bytes: run_bytes,
+            offset: pending_start.expect("pending start exists"),
+            bytes: pending_bytes,
         });
     }
 
@@ -1040,6 +1174,57 @@ impl<'a> IpsParser<'a> {
     fn read_u24(&mut self) -> Result<u32> {
         let bytes = self.read_exact(3)?;
         Ok(read_u24(bytes))
+    }
+}
+
+struct IpsFileParser<R> {
+    reader: R,
+    file_len: u64,
+    offset: u64,
+}
+
+impl<R: Read> IpsFileParser<R> {
+    fn new(reader: R, file_len: u64) -> Self {
+        Self {
+            reader,
+            file_len,
+            offset: 0,
+        }
+    }
+
+    fn remaining(&self) -> Result<u64> {
+        self.file_len.checked_sub(self.offset).ok_or_else(|| {
+            RomWeaverError::Validation("IPS parser offset exceeded file size".into())
+        })
+    }
+
+    fn read_exact(&mut self, len: usize) -> Result<Vec<u8>> {
+        let len_u64 = u64::try_from(len)
+            .map_err(|_| RomWeaverError::Validation("IPS read length overflowed u64".into()))?;
+        let remaining = self.remaining()?;
+        if len_u64 > remaining {
+            return Err(RomWeaverError::Validation(
+                "IPS patch ended unexpectedly while reading record data".into(),
+            ));
+        }
+
+        let mut bytes = vec![0u8; len];
+        self.reader.read_exact(&mut bytes)?;
+        self.offset = self
+            .offset
+            .checked_add(len_u64)
+            .ok_or_else(|| RomWeaverError::Validation("IPS parser offset overflowed".into()))?;
+        Ok(bytes)
+    }
+
+    fn read_u16(&mut self) -> Result<u16> {
+        let bytes = self.read_exact(2)?;
+        Ok(u16::from_be_bytes([bytes[0], bytes[1]]))
+    }
+
+    fn read_u24(&mut self) -> Result<u32> {
+        let bytes = self.read_exact(3)?;
+        Ok(read_u24(&bytes))
     }
 }
 

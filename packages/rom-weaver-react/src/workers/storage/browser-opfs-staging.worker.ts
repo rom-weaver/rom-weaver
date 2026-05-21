@@ -45,15 +45,21 @@ const normalizeFileName = (fileName: string | null | undefined, fallback = "inpu
     .replace(EDGE_UNDERSCORES_REGEX, "")
     .replace(LEADING_DOTS_REGEX, "") || fallback;
 
+const createStagePathNonce = () => {
+  const sequence = ++stagedSourceId;
+  const timeToken = Date.now().toString(36);
+  const randomToken = Math.random().toString(16).slice(2, 10);
+  return `${timeToken}-${sequence}-${randomToken}`;
+};
+
 const createInputPath = (request: StageRequest, fileName: string) => {
   const mountPoint = String(request.mountPoint || WORKER_OPFS_MOUNTPOINT).replace(TRAILING_SLASHES_REGEX, "");
   const bucket = request.bucket || "input";
   const pathPrefix = normalizeFileName(request.pathPrefix || "input", "input");
-  stagedSourceId += 1;
   return getWorkerStorageBucketPath(
     mountPoint,
     bucket,
-    `${pathPrefix}-${stagedSourceId}-${normalizeFileName(fileName)}`,
+    `${pathPrefix}-${createStagePathNonce()}-${normalizeFileName(fileName)}`,
     normalizeFileName(fileName),
   );
 };

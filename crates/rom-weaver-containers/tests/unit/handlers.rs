@@ -990,7 +990,7 @@ mod tests {
                 .supports_execution(&extract_execution)
         );
         assert_eq!(extract_execution.requested_threads, 8);
-        assert!(extract_execution.effective_threads > 1);
+        assert_eq!(extract_execution.effective_threads, 8);
         assert!(extract_execution.used_parallelism);
 
         for index in 0..8 {
@@ -1552,8 +1552,9 @@ mod tests {
                 .supports_execution(&extract_execution)
         );
         assert_eq!(extract_execution.requested_threads, 8);
-        assert!(extract_execution.effective_threads > 1);
-        assert!(extract_execution.used_parallelism);
+        assert_eq!(extract_execution.effective_threads, 1);
+        assert!(!extract_execution.used_parallelism);
+        assert!(extract_execution.thread_fallback);
 
         let extracted = fs::read(output_dir.join("source.bin")).expect("read extracted payload");
         assert_eq!(extracted, payload);

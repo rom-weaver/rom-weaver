@@ -4,121 +4,20 @@ JavaScript wrappers and WASM artifacts for `rom-weaver`.
 
 ## What You Get
 
-- Node WASI runner (`createRomWeaverWasiRunner`)
-- NodeFS runner (`createNodeFsRunner`)
-- ZenFS runners for Node and browser OPFS
-- Dedicated worker clients for Node and browser
+- Browser OPFS runner (`createRomWeaverZenFsBrowser`) for Dedicated Workers
+- Dedicated browser worker client (`createBrowserWorkerClient`)
 - First-party TypeScript declarations
+
+Node.js integration is intentionally removed from this package.
+Use the native `rom-weaver` CLI directly for Node workflows.
 
 ## Import Paths
 
 - `rom-weaver-wasm` (main entry)
-- `rom-weaver-wasm/node`
 - `rom-weaver-wasm/zenfs`
-- `rom-weaver-wasm/workers/node-client`
 - `rom-weaver-wasm/workers/browser-client`
 - `rom-weaver-wasm/workers/protocol`
-
-## Node Quick Start
-
-```js
-import { createRomWeaverWasiRunner } from 'rom-weaver-wasm';
-
-const runner = createRomWeaverWasiRunner();
-try {
-  const result = await runner.run(['--help']);
-  console.log(result.exitCode);
-  console.log(result.stdout);
-} finally {
-  await runner.dispose();
-}
-```
-
-## Node `executionIsolation`
-
-`createRomWeaverWasiRunner({ executionIsolation })` controls where each call executes in Node:
-
-- `none` (default): run in-process on the current thread. Lowest per-call latency.
-- `auto`: on the main thread, run each call in a dedicated worker; inside a worker thread, run in-process.
-- `worker`: force dedicated-worker execution per call on the main thread.
-
-Tradeoff:
-
-- Dedicated-worker isolation (`auto`/`worker`) typically adds a mostly fixed per-call startup/teardown cost.
-- In-process mode (`none`) is faster, but long-running workloads should still call `await runner.dispose()` when done.
-
-```js
-import { createRomWeaverWasiRunner } from 'rom-weaver-wasm';
-
-const runner = createRomWeaverWasiRunner({
-  executionIsolation: 'worker',
-});
-
-try {
-  const result = await runner.runJson(['checksum', '/work/game.bin', '--algo', 'crc32']);
-  console.log(result.ok);
-} finally {
-  await runner.dispose();
-}
-```
-
-## `run` vs `runJson`
-
-- `run(args)` returns raw `stdout`/`stderr`.
-- `runJson(args)` runs `--json`, parses stdout JSON progress events, and parses stderr JSON trace events.
-
-```js
-import { createRomWeaverWasiRunner } from 'rom-weaver-wasm';
-
-const runner = createRomWeaverWasiRunner();
-
-const raw = await runner.run(['inspect', 'game.bin']);
-console.log(raw.stdout);
-
-const structured = await runner.runJson(['inspect', 'game.bin'], {
-  onEvent(event) {
-    console.log('event', event);
-  },
-  onTraceEvent(event) {
-    console.log('trace', event);
-  },
-  onNonJsonLine(line) {
-    console.log('non-json', line);
-  },
-});
-
-console.log(structured.events.length);
-console.log(structured.nonJsonLines);
-console.log(structured.traceEvents.length);
-console.log(structured.traceNonJsonLines);
-```
-
-## NodeFS Example
-
-```js
-import { createNodeFsRunner } from 'rom-weaver-wasm/node';
-
-const runner = createNodeFsRunner({
-  mountCwd: false,
-  mounts: {
-    '/roms': '/absolute/path/to/roms',
-    '/out': '/absolute/path/to/output',
-  },
-});
-
-const result = await runner.runJson(
-  ['checksum', '/roms/game.bin', '--algo', 'crc32'],
-  {
-    onEvent(event) {
-      console.log(event);
-    },
-  },
-);
-
-console.log(result.exitCode, result.ok);
-```
-
-## Browser OPFS Example
+## Browser OPFS Runner Example
 
 `createRomWeaverZenFsBrowser` must run in a secure-context Dedicated Worker if you want true zero-copy OPFS access (`FileSystemSyncAccessHandle`).
 
@@ -133,7 +32,7 @@ const runner = await createRomWeaverZenFsBrowser({
   wasmUrl: '/wasm/rom-weaver-cli.wasm',
   opfsHandle,
   opfsGuestPath: '/opfs',
-  runtimeMounts: ['/opfs', '/tmp'],
+  runtimeMounts: ['/opfs', '/scratch'],
 });
 
 const result = await runner.runJson(
@@ -148,29 +47,16 @@ const result = await runner.runJson(
 console.log(result.exitCode, result.ok);
 ```
 
-## Dedicated Node Worker Example
+Scratch temp behavior:
 
-```js
-import { createNodeWorkerClient } from 'rom-weaver-wasm/workers/node-client';
+- Default scratch guest path is `/scratch`.
+- Per run, `ROM_WEAVER_TMPDIR` is set to `/scratch/.rom-weaver-scratch/<run-id>`.
+- `/opfs` remains read-only for runtime writes; temp output must go through `/scratch`.
+- Scratch must be writable. Runner initialization fails if writable scratch cannot be established.
+- Scratch namespaces are cleaned up best-effort after each run.
+- If unset, browser runs default `ROM_WEAVER_MAX_BUFFERED_PATCH_BYTES=67108864` (64 MiB) to fail early on remaining full-buffer patch paths instead of risking worker OOM.
 
-const worker = createNodeWorkerClient();
-await worker.init('nodefs', {
-  mounts: {
-    '/roms': '/absolute/path/to/roms',
-  },
-});
-
-const result = await worker.runJson(['checksum', '/roms/game.bin', '--algo', 'crc32'], {
-  onEvent(event) {
-    console.log(event);
-  },
-});
-
-console.log(result.exitCode, result.ok);
-await worker.terminate();
-```
-
-## Dedicated Browser Worker Example
+## Dedicated Browser Worker Client Example
 
 ```js
 import { createBrowserWorkerClient } from 'rom-weaver-wasm/workers/browser-client';
@@ -182,7 +68,7 @@ await worker.init({
   wasmUrl: '/wasm/rom-weaver-cli.wasm',
   opfsHandle,
   opfsGuestPath: '/opfs',
-  runtimeMounts: ['/opfs', '/tmp'],
+  runtimeMounts: ['/opfs', '/scratch'],
 });
 
 const result = await worker.runJson(['checksum', '/opfs/game.bin', '--algo', 'crc32'], {

@@ -16,6 +16,18 @@ fn compute_checksum_values(
     request: &ChecksumRequest,
     context: &OperationContext,
 ) -> Result<ChecksumValues> {
+    let mut noop_progress = |_progress: ChecksumProgress| {};
+    compute_checksum_values_with_progress(request, context, &mut noop_progress)
+}
+
+fn compute_checksum_values_with_progress<F>(
+    request: &ChecksumRequest,
+    context: &OperationContext,
+    on_progress: &mut F,
+) -> Result<ChecksumValues>
+where
+    F: FnMut(ChecksumProgress),
+{
     trace!(
         source = %request.source.display(),
         algorithms = ?request.algorithms,
@@ -37,11 +49,11 @@ fn compute_checksum_values(
 
     let cached_count = algorithms.len().saturating_sub(missing_algorithms.len());
     trace!(
-        source = %request.source.display(),
-        total_algorithms = algorithms.len(),
-        missing_algorithms = missing_algorithms.len(),
-        cached_algorithms = cached_count,
-        "resolved checksum cache coverage"
+    source = %request.source.display(),
+    total_algorithms = algorithms.len(),
+    missing_algorithms = missing_algorithms.len(),
+    cached_algorithms = cached_count,
+    "resolved checksum cache coverage"
     );
     let execution = if missing_algorithms.is_empty() {
         trace!(source = %request.source.display(), "checksum cache hit for all algorithms");
@@ -54,8 +66,14 @@ fn compute_checksum_values(
             capability = ?plan.capability,
             "selected checksum execution plan"
         );
-        let (execution, computed) =
-            execute_plan(&request.source, &range, &missing_algorithms, context, &plan)?;
+        let (execution, computed) = execute_plan(
+            &request.source,
+            &range,
+            &missing_algorithms,
+            context,
+            &plan,
+            on_progress,
+        )?;
         cached_results.extend(computed);
         let _ = cache.store(&fingerprint, &range, &cached_results);
         execution
@@ -117,6 +135,7 @@ fn execute_plan(
     algorithms: &[Algorithm],
     context: &OperationContext,
     plan: &ChecksumPlan,
+    on_progress: &mut dyn FnMut(ChecksumProgress),
 ) -> Result<(ThreadExecution, BTreeMap<String, String>)> {
     trace!(
         source = %source.display(),
@@ -129,6 +148,7 @@ fn execute_plan(
     );
     let mapped = map_range(source, range);
     let execution = context.plan_threads(plan.capability.clone());
+    let mut progress = ChecksumProgressTracker::new(range.len, on_progress);
     trace!(
         source = %source.display(),
         mapped = mapped.is_some(),
@@ -145,12 +165,14 @@ fn execute_plan(
             algorithms,
             &execution,
             context.cancel(),
+            &mut progress,
         )?;
         trace!(
             source = %source.display(),
             algorithm_count = computed.len(),
             "checksum plan completed with sequential execution"
         );
+        progress.finish();
         return Ok((execution, computed));
     }
 
@@ -163,6 +185,7 @@ fn execute_plan(
             algorithms,
             &execution,
             context.cancel(),
+            &mut progress,
         )?,
         ChecksumMode::ParallelFanout => compute_parallel_fanout(
             mapped.as_ref(),
@@ -172,6 +195,7 @@ fn execute_plan(
             &pool,
             &execution,
             context.cancel(),
+            &mut progress,
         )?,
         ChecksumMode::ParallelCrc32 => compute_parallel_crc32(
             mapped.as_ref(),
@@ -180,6 +204,7 @@ fn execute_plan(
             &pool,
             &execution,
             context.cancel(),
+            &mut progress,
         )?,
         ChecksumMode::ParallelCrc32c => compute_parallel_crc32c(
             mapped.as_ref(),
@@ -188,6 +213,7 @@ fn execute_plan(
             &pool,
             &execution,
             context.cancel(),
+            &mut progress,
         )?,
         ChecksumMode::ParallelCrc16 => compute_parallel_crc16(
             mapped.as_ref(),
@@ -196,6 +222,7 @@ fn execute_plan(
             &pool,
             &execution,
             context.cancel(),
+            &mut progress,
         )?,
         ChecksumMode::ParallelAdler32 => compute_parallel_adler32(
             mapped.as_ref(),
@@ -204,6 +231,7 @@ fn execute_plan(
             &pool,
             &execution,
             context.cancel(),
+            &mut progress,
         )?,
         ChecksumMode::ParallelBlake3 => compute_parallel_blake3(
             mapped.as_ref(),
@@ -212,6 +240,7 @@ fn execute_plan(
             &pool,
             &execution,
             context.cancel(),
+            &mut progress,
         )?,
     };
     trace!(
@@ -219,7 +248,7 @@ fn execute_plan(
         algorithm_count = computed.len(),
         "checksum plan completed with pooled execution"
     );
+    progress.finish();
 
     Ok((execution, computed))
 }
-

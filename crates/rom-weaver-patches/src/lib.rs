@@ -22,8 +22,9 @@ mod ups;
 mod vcdiff;
 
 use std::{
-    fs,
-    io::Read,
+    env, fs,
+    io::{BufReader, Read},
+    ops::Deref,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -201,6 +202,7 @@ const BSDIFF_SIGNATURE: &[u8] = b"BSDIFF40";
 const HDIFF_SIGNATURE: &[u8] = b"HDIFF";
 const PDS_UNSUPPORTED_REASON: &str =
     "PDS is explicitly unsupported because no surviving ecosystem patches are known";
+const MAX_BUFFERED_PATCH_BYTES_ENV: &str = "ROM_WEAVER_MAX_BUFFERED_PATCH_BYTES";
 
 pub(crate) fn require_single_patch_file<'a>(
     patches: &'a [PathBuf],
@@ -238,12 +240,79 @@ pub(crate) fn patch_parse_report_with(
     Ok(patch_success_report(descriptor, "parse", label, None))
 }
 
-pub(crate) fn map_file_read_only(path: &Path) -> Result<Vec<u8>> {
-    Ok(fs::read(path)?)
+pub(crate) enum ReadOnlyFile {
+    Owned(Vec<u8>),
 }
 
-pub(crate) fn map_file_read_only_with_fallback(path: &Path) -> Result<Vec<u8>> {
-    map_file_read_only(path)
+impl AsRef<[u8]> for ReadOnlyFile {
+    fn as_ref(&self) -> &[u8] {
+        match self {
+            Self::Owned(bytes) => bytes,
+        }
+    }
+}
+
+impl Deref for ReadOnlyFile {
+    type Target = [u8];
+
+    fn deref(&self) -> &Self::Target {
+        self.as_ref()
+    }
+}
+
+pub(crate) fn map_file_read_only(path: &Path) -> Result<ReadOnlyFile> {
+    let file = std::fs::File::open(path)?;
+    let file_len = file.metadata()?.len();
+    validate_patch_file_buffer_limit(path, file_len)?;
+
+    let mut reader = BufReader::new(file);
+    let mut bytes = Vec::new();
+    let mut chunk = [0u8; 64 * 1024];
+    loop {
+        let read = reader.read(&mut chunk)?;
+        if read == 0 {
+            break;
+        }
+        bytes.extend_from_slice(&chunk[..read]);
+    }
+    Ok(ReadOnlyFile::Owned(bytes))
+}
+
+fn validate_patch_file_buffer_limit(path: &Path, file_len: u64) -> Result<()> {
+    let Some(limit) = parse_max_buffered_patch_bytes()? else {
+        return Ok(());
+    };
+
+    if file_len > limit {
+        return Err(RomWeaverError::Validation(format!(
+            "patch file {} is {} byte(s), exceeding {}={} byte(s); refusing full-buffer read to avoid memory pressure",
+            path.display(),
+            file_len,
+            MAX_BUFFERED_PATCH_BYTES_ENV,
+            limit,
+        )));
+    }
+
+    Ok(())
+}
+
+fn parse_max_buffered_patch_bytes() -> Result<Option<u64>> {
+    let Some(value) = env::var_os(MAX_BUFFERED_PATCH_BYTES_ENV) else {
+        return Ok(None);
+    };
+    let value = value.to_string_lossy();
+    let parsed = value.parse::<u64>().map_err(|error| {
+        RomWeaverError::Validation(format!(
+            "{MAX_BUFFERED_PATCH_BYTES_ENV} must be a positive integer byte count: {error}"
+        ))
+    })?;
+    if parsed == 0 {
+        return Err(RomWeaverError::Validation(format!(
+            "{MAX_BUFFERED_PATCH_BYTES_ENV} must be greater than zero"
+        )));
+    }
+
+    Ok(Some(parsed))
 }
 
 pub fn explicitly_unsupported_patch_reason_for_name(name: &str) -> Option<&'static str> {

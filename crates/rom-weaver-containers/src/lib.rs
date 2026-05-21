@@ -1,10 +1,8 @@
 use std::collections::BTreeMap;
-#[cfg(target_family = "wasm")]
-use std::io::Cursor;
 use std::{
     collections::BTreeSet,
     fs::{self, File},
-    io::{self, BufReader, BufWriter, Read, Seek, SeekFrom, Write},
+    io::{self, BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write},
     path::{Component, Path, PathBuf},
     sync::{
         Arc,

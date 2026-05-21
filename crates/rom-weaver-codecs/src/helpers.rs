@@ -1,37 +1,21 @@
-fn map_file_read_only(path: &Path) -> Result<ReadOnlyFile> {
-    Ok(ReadOnlyFile::Owned(fs::read(path)?))
-}
-
-fn decode_all(mut decoder: impl Read, codec: &'static str) -> Result<Vec<u8>> {
-    let mut output = Vec::new();
-    decoder
-        .read_to_end(&mut output)
-        .map_err(|error| RomWeaverError::Validation(format!("{codec} decode failed: {error}")))?;
-    Ok(output)
-}
-
 fn decode_exact(mut decoder: impl Read, expected_len: u64, codec: &'static str) -> Result<Vec<u8>> {
     let expected = usize::try_from(expected_len).map_err(|_| {
         RomWeaverError::Validation(format!("{codec} expected size overflowed usize"))
     })?;
-    let mut output = Vec::with_capacity(expected);
+    let mut output = vec![0u8; expected];
     decoder
-        .read_to_end(&mut output)
+        .read_exact(&mut output)
         .map_err(|error| RomWeaverError::Validation(format!("{codec} decode failed: {error}")))?;
-    if output.len() != expected {
+    let mut trailing = [0u8; 1];
+    let trailing_bytes = decoder
+        .read(&mut trailing)
+        .map_err(|error| RomWeaverError::Validation(format!("{codec} decode failed: {error}")))?;
+    if trailing_bytes != 0 {
         return Err(RomWeaverError::Validation(format!(
-            "{codec} decoded size mismatch: expected {expected}, got {}",
-            output.len()
+            "{codec} decoded size mismatch: expected {expected}, got more than expected"
         )));
     }
     Ok(output)
-}
-
-pub fn decode_bzip2(payload: &[u8]) -> Result<Vec<u8>> {
-    decode_all(
-        MultiBzDecoder::new(BufReader::new(Cursor::new(payload))),
-        "bzip2",
-    )
 }
 
 pub fn decode_bzip2_exact(payload: &[u8], expected_len: u64) -> Result<Vec<u8>> {
@@ -148,4 +132,3 @@ pub fn decode_xz_exact(payload: &[u8], expected_len: usize) -> Result<Vec<u8>> {
         .map_err(|error| RomWeaverError::Validation(format!("xz decode failed: {error}")))?;
     Ok(output)
 }
-

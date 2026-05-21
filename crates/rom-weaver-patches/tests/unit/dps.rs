@@ -5,8 +5,8 @@ use rom_weaver_core::{
 };
 
 use super::{
-    DPS_PATCH_VERSION, DPS_RECORD_EMBEDDED_DATA, DpsHeaderMetadata, DpsParseMode,
-    DpsPatchHandler, DpsRecord, ParsedDpsRecord, encode_dps_patch, parse_dps_bytes,
+    DPS_PATCH_VERSION, DPS_RECORD_EMBEDDED_DATA, DpsHeaderMetadata, DpsParseMode, DpsPatchHandler,
+    DpsRecord, ParsedDpsRecord, encode_dps_patch, parse_dps_bytes,
 };
 use crate::{
     DPS,
@@ -331,7 +331,10 @@ fn create_merges_embedded_data_that_crosses_thread_chunk_boundary() {
 
     assert_eq!(embedded.0, run_start as u32);
     assert_eq!(embedded.1.len(), run_len);
-    assert_eq!(*embedded.1, &target[run_start..run_start + run_len]);
+    assert_eq!(
+        embedded.1.as_slice(),
+        &target[run_start..run_start + run_len]
+    );
 }
 
 #[test]

@@ -15,6 +15,10 @@ export interface RomWeaverRunResult {
 
 export interface RomWeaverRunOptions {
   stdin?: RomWeaverStdinInput;
+  /**
+   * Process environment variables forwarded to the wasm runtime.
+   * Browser runners inject `ROM_WEAVER_TMPDIR` per run and may set safety defaults.
+   */
   env?: RomWeaverEnv;
   preopens?: RomWeaverPreopens;
   argv0?: string;
@@ -97,50 +101,35 @@ extends RomWeaverRunResult {
   traceNonJsonLines: string[];
 }
 
-export interface RomWeaverWasiRunnerOptions {
-  wasmPath?: string;
-  argv0?: string;
-  env?: RomWeaverEnv;
-  preopens?: RomWeaverPreopens;
-  useDefaultPreopens?: boolean;
-  threadWorkerPath?: string;
-  executionIsolation?: 'auto' | 'none' | 'worker';
-}
-
-export interface NodeFsRunnerOptions extends RomWeaverWasiRunnerOptions {
-  includeHostRoot?: boolean;
-  mountCwd?: boolean;
-  cwdGuestPath?: string;
-  mountTmp?: boolean;
-  tmpGuestPath?: string;
-  tmpHostPath?: string;
-  mounts?: Record<string, string>;
-}
-
 export interface FileSystemDirectoryHandleLike {
   kind: string;
   entries: () => AsyncIterable<[string, unknown]>;
   getDirectoryHandle: (name: string, options?: { create?: boolean }) => Promise<unknown>;
   getFileHandle: (name: string, options?: { create?: boolean }) => Promise<unknown>;
+  removeEntry?: (name: string, options?: { recursive?: boolean }) => Promise<void>;
 }
 
 export type RomWeaverBrowserSyncAccessMode = 'read-only' | 'readwrite' | 'readwrite-unsafe';
-
-export interface RomWeaverZenFsNodeOptions extends NodeFsRunnerOptions {
-  cwdHostPath?: string;
-}
 
 export interface RomWeaverZenFsBrowserOptions {
   module?: WebAssembly.Module;
   wasmUrl?: string;
   opfsHandle?: FileSystemDirectoryHandleLike;
+  scratchHandle?: FileSystemDirectoryHandleLike;
   opfsGuestPath?: string;
+  scratchGuestPath?: string;
+  scratchNamespace?: string;
+  /** @deprecated Use scratchGuestPath. */
   tmpGuestPath?: string;
   runtimeMounts?: string[];
   mountHandles?: Record<string, FileSystemDirectoryHandleLike>;
   syncAccessMode?: RomWeaverBrowserSyncAccessMode;
   program?: string;
   argv0?: string;
+  /**
+   * Base environment for every browser run.
+   * If `ROM_WEAVER_MAX_BUFFERED_PATCH_BYTES` is unset, the runner defaults it to `67108864`.
+   */
   env?: RomWeaverEnv;
   debugWasi?: boolean;
 }
@@ -151,8 +140,6 @@ export interface RomWeaverZenFsBrowserRunOptions extends RomWeaverRunOptions {
   program?: string;
   debugWasi?: boolean;
 }
-
-export type RomWeaverNodeWorkerMode = 'wasi' | 'nodefs' | 'zenfs-node';
 
 export type RomWeaverWorkerErrorKind =
   | 'validation'

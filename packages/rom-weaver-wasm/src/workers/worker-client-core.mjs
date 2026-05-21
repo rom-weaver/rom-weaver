@@ -200,44 +200,6 @@ export function createBrowserWorkerTransport() {
   };
 }
 
-export function createNodeWorkerTransport() {
-  return {
-    postMessage(worker, message) {
-      worker.postMessage(message);
-    },
-    onMessage(worker, listener) {
-      worker.on('message', listener);
-    },
-    offMessage(worker, listener) {
-      worker.off('message', listener);
-    },
-    onError(worker, listener) {
-      worker.on('error', listener);
-    },
-    offError(worker, listener) {
-      worker.off('error', listener);
-    },
-    onExit(worker, listener) {
-      worker.on('exit', listener);
-    },
-    offExit(worker, listener) {
-      worker.off('exit', listener);
-    },
-    readMessage(message) {
-      return message;
-    },
-    toError(error) {
-      return error instanceof Error ? error : new Error(String(error));
-    },
-    toExitError(code) {
-      return new Error(`worker exited with code ${code}`);
-    },
-    terminate(worker) {
-      return worker.terminate();
-    },
-  };
-}
-
 function deserializeError(error) {
   const out = new Error(
     error && typeof error.message === 'string' ? error.message : 'worker request failed',

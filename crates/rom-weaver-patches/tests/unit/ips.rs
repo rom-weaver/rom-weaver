@@ -7,9 +7,9 @@ use std::{
 use rom_weaver_core::{OperationContext, PatchApplyRequest, PatchCreateRequest, PatchHandler};
 
 use super::{
-    CREATE_SCAN_CHUNK_BYTES, DEFAULT_EBP_METADATA_JSON, IPS_EOF, IPS_MAGIC, IPS32_EOF,
-    IPS32_MAGIC, IpsFlavor, IpsPatchHandler, IpsRecordData, JsonValue, MAX_IPS_RECORD_LEN,
-    OUTPUT_CHUNK_SIZE, parse_ips_bytes,
+    CREATE_SCAN_CHUNK_BYTES, DEFAULT_EBP_METADATA_JSON, IPS_EOF, IPS_MAGIC, IPS32_EOF, IPS32_MAGIC,
+    IpsFlavor, IpsPatchHandler, IpsRecordData, JsonValue, MAX_IPS_RECORD_LEN, OUTPUT_CHUNK_SIZE,
+    parse_ips_bytes,
 };
 use crate::{
     EBP, IPS, IPS32,

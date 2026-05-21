@@ -36,8 +36,7 @@ fn build_test_gdiff_patch(commands: Vec<TestGdiffCommand>) -> Vec<u8> {
                     bytes.push(249);
                     bytes.extend_from_slice(&(offset as u16).to_be_bytes());
                     bytes.push(len as u8);
-                } else if offset <= u64::from(i32::MAX as u32)
-                    && len <= u64::from(i32::MAX as u32)
+                } else if offset <= u64::from(i32::MAX as u32) && len <= u64::from(i32::MAX as u32)
                 {
                     bytes.push(254);
                     bytes.extend_from_slice(&(offset as u32).to_be_bytes());

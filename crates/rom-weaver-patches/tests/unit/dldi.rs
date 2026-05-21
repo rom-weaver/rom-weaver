@@ -3,11 +3,11 @@ use std::fs;
 use rom_weaver_core::{PatchApplyRequest, PatchCreateRequest, PatchHandler};
 
 use super::{
-    DLDI_MAGIC, DLDI_VERSION, DO_ALLOCATED_SPACE, DO_BSS_END, DO_BSS_START, DO_CODE,
-    DO_DATA_END, DO_DRIVER_SIZE, DO_FIX_SECTIONS, DO_FRIENDLY_NAME, DO_GLUE_END, DO_GLUE_START,
-    DO_GOT_END, DO_GOT_START, DO_MAGIC_STRING, DO_READ_SECTORS, DO_SHUTDOWN, DO_STARTUP,
-    DO_TEXT_START, DO_VERSION, DO_WRITE_SECTORS, DldiPatchHandler, FIX_ALL, FIX_BSS, FIX_GLUE,
-    FIX_GOT, THREAD_WORK_CHUNK_BYTES,
+    DLDI_MAGIC, DLDI_VERSION, DO_ALLOCATED_SPACE, DO_BSS_END, DO_BSS_START, DO_CODE, DO_DATA_END,
+    DO_DRIVER_SIZE, DO_FIX_SECTIONS, DO_FRIENDLY_NAME, DO_GLUE_END, DO_GLUE_START, DO_GOT_END,
+    DO_GOT_START, DO_MAGIC_STRING, DO_READ_SECTORS, DO_SHUTDOWN, DO_STARTUP, DO_TEXT_START,
+    DO_VERSION, DO_WRITE_SECTORS, DldiPatchHandler, FIX_ALL, FIX_BSS, FIX_GLUE, FIX_GOT,
+    THREAD_WORK_CHUNK_BYTES,
 };
 use crate::{
     DLDI,
@@ -83,8 +83,7 @@ fn apply_patches_slot_and_relocates_driver() {
     )
     .expect("bss start");
     let bss_end = usize::try_from(
-        i32::from_le_bytes(slot[DO_BSS_END..DO_BSS_END + 4].try_into().expect("len"))
-            - mem_offset,
+        i32::from_le_bytes(slot[DO_BSS_END..DO_BSS_END + 4].try_into().expect("len")) - mem_offset,
     )
     .expect("bss end");
     assert!(slot[bss_start..bss_end].iter().all(|byte| *byte == 0));
@@ -493,8 +492,7 @@ fn build_test_dldi_driver(
     let name_bytes = friendly_name.as_bytes();
     let max_name_len = DO_TEXT_START - DO_FRIENDLY_NAME;
     let copy_len = name_bytes.len().min(max_name_len.saturating_sub(1));
-    bytes[DO_FRIENDLY_NAME..DO_FRIENDLY_NAME + copy_len]
-        .copy_from_slice(&name_bytes[..copy_len]);
+    bytes[DO_FRIENDLY_NAME..DO_FRIENDLY_NAME + copy_len].copy_from_slice(&name_bytes[..copy_len]);
 
     let size_i32 = i32::try_from(size).expect("size fits");
     write_i32(&mut bytes, DO_TEXT_START, base_address);

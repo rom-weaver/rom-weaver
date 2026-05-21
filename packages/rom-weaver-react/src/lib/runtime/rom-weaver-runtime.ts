@@ -154,6 +154,12 @@ type RomWeaverEmittedFile = {
   sizeBytes?: number;
 };
 
+type RuntimeProgressEvent = {
+  label?: string;
+  message?: string;
+  percent?: number | null;
+};
+
 const getEmittedFiles = (result: RomWeaverRunJsonResult): RomWeaverEmittedFile[] => {
   const terminal = getTerminalEvent(result);
   const details = asRecord(terminal?.details);
@@ -192,6 +198,68 @@ const toSimpleProgress = (
   message: undefined,
   percent: clampPercent(event.percent),
 });
+
+const createSyntheticProgressForwarder = (
+  onProgress: ((progress: RuntimeProgressEvent) => void) | undefined,
+  fallbackLabel: string,
+  options: { intervalMs?: number; maxPercent?: number } = {},
+) => {
+  const noop = {
+    finish: () => undefined,
+    forward: (_event: RomWeaverRunJsonEvent) => undefined,
+  };
+  if (!onProgress) return noop;
+
+  const intervalMs = Math.max(200, Math.floor(options.intervalMs ?? 450));
+  const maxPercent = Math.max(1, Math.min(99, Math.floor(options.maxPercent ?? 95)));
+  let done = false;
+  let latestLabel = fallbackLabel;
+  let sawRealIntermediate = false;
+  let syntheticPercent = 0;
+  let timerId: ReturnType<typeof globalThis.setInterval> | null = null;
+
+  const emitSynthetic = () => {
+    if (done || sawRealIntermediate) return;
+    const step = syntheticPercent < 30 ? 2 : 1;
+    const next = Math.min(maxPercent, syntheticPercent + step);
+    if (next <= syntheticPercent) return;
+    syntheticPercent = next;
+    onProgress({
+      label: latestLabel,
+      message: undefined,
+      percent: syntheticPercent,
+    });
+  };
+
+  timerId = globalThis.setInterval(emitSynthetic, intervalMs);
+
+  return {
+    finish: () => {
+      if (done) return;
+      done = true;
+      if (timerId !== null) {
+        globalThis.clearInterval(timerId);
+        timerId = null;
+      }
+    },
+    forward: (event: RomWeaverRunJsonEvent) => {
+      const progress = toSimpleProgress(event);
+      if (progress.label) latestLabel = progress.label;
+      const percent = progress.percent;
+      if (typeof percent === "number") {
+        if (percent > 0 && percent < 100) sawRealIntermediate = true;
+        if (!sawRealIntermediate && percent < syntheticPercent && percent < 100) return;
+        syntheticPercent = Math.max(syntheticPercent, percent);
+      } else if (!sawRealIntermediate && syntheticPercent > 0) {
+        return;
+      }
+      onProgress({
+        ...progress,
+        label: progress.label || latestLabel,
+      });
+    },
+  };
+};
 
 const normalizeCodecEntries = (value: unknown): string[] => {
   const out: string[] = [];
@@ -357,15 +425,19 @@ const invokeRomWeaverExtractWorker = async (
   const threadArg = toThreadArg(input.workerThreads, "1");
   if (threadArg) args.push("--threads", threadArg);
   if (isTraceEnabled(input.logLevel)) args.unshift("--trace");
-
+  const progressForwarder = createSyntheticProgressForwarder(
+    onProgress,
+    `extracting \`${getPathBaseName(sourcePath, sourcePath)}\``,
+    { maxPercent: 96 },
+  );
   const result = await runRomWeaverJson(
     args,
     toRomWeaverOptions({
       logLevel: input.logLevel,
-      onEvent: (event) => onProgress?.(toSimpleProgress(event)),
+      onEvent: (event) => progressForwarder.forward(event),
       onLog,
     }),
-  );
+  ).finally(() => progressForwarder.finish());
   ensureRomWeaverSuccess(result, "Compression extract failed");
   return {
     emittedFiles: getEmittedFiles(result),
@@ -585,21 +657,19 @@ const runRomWeaverChecksumWorker = async (
     args.push("--start", String(Math.floor(input.checksumStartOffset)));
 
   if (isTraceEnabled(input.logLevel)) args.unshift("--trace");
-
+  const progressForwarder = createSyntheticProgressForwarder(
+    onProgress,
+    `computing ${algorithms.length} checksum algorithm(s)`,
+    { maxPercent: 97 },
+  );
   const result = await runRomWeaverJson(
     args,
     toRomWeaverOptions({
       logLevel: input.logLevel,
-      onEvent: (event) => {
-        onProgress?.({
-          label: typeof event.label === "string" && event.label ? event.label : undefined,
-          message: undefined,
-          percent: clampPercent(event.percent),
-        });
-      },
+      onEvent: (event) => progressForwarder.forward(event),
       onLog,
     }),
-  );
+  ).finally(() => progressForwarder.finish());
   ensureRomWeaverSuccess(result, "Checksum calculation failed");
 
   const terminal = getLastEvent(result);

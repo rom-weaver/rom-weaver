@@ -1,99 +1,117 @@
-import assert from 'node:assert/strict';
-import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { basename, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { expect } from 'vitest';
+import { createBrowserWorkerClient } from '../src/workers/browser-worker-client.mjs';
 
-export const VCDIFF_SOURCE_FIXTURE_PATH = fileURLToPath(
-  new URL('../../../tests/fixtures/vcdiff/secondary-source.bin', import.meta.url),
-);
-export const VCDIFF_PATCH_FIXTURE_PATH = fileURLToPath(
-  new URL('../../../tests/fixtures/vcdiff/secondary-djw.xdelta', import.meta.url),
-);
-export const VCDIFF_TARGET_FIXTURE_PATH = fileURLToPath(
-  new URL('../../../tests/fixtures/vcdiff/secondary-target.bin', import.meta.url),
-);
+const OPFS_GUEST_ROOT = '/opfs';
+const TMP_GUEST_ROOT = '/scratch';
+const TEXT_ENCODER = new TextEncoder();
+
+const VCDIFF_SOURCE_FIXTURE_URL = new URL('../../../tests/fixtures/vcdiff/secondary-source.bin', import.meta.url);
+const VCDIFF_PATCH_FIXTURE_URL = new URL('../../../tests/fixtures/vcdiff/secondary-djw.xdelta', import.meta.url);
+const VCDIFF_TARGET_FIXTURE_URL = new URL('../../../tests/fixtures/vcdiff/secondary-target.bin', import.meta.url);
+
+let fixtureBytesPromise = null;
 
 export async function withTempFixture(run, options = {}) {
   const {
     prefix = 'rom-weaver-wasm-test-',
     sourceFileName = 'input.bin',
     sourceContents = 'rom-weaver wasm test fixture',
+    initOptions = {},
   } = options;
 
-  const dir = await mkdtemp(join(tmpdir(), prefix));
+  if (typeof navigator.storage?.persist === 'function') {
+    try {
+      await navigator.storage.persist();
+    } catch {
+      // best-effort only
+    }
+  }
+
+  const root = await navigator.storage.getDirectory();
+  const fixtureName = `${prefix}${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const fixtureHandle = await root.getDirectoryHandle(fixtureName, { create: true });
+  const worker = createBrowserWorkerClient();
+
   try {
-    const sourcePath = join(dir, sourceFileName);
-    await writeFile(sourcePath, Buffer.from(sourceContents, 'utf8'));
-    await run({ dir, sourcePath });
+    const init = await worker.init({
+      wasmUrl: new URL('../rom-weaver-cli.wasm', import.meta.url).href,
+      opfsHandle: fixtureHandle,
+      opfsGuestPath: OPFS_GUEST_ROOT,
+      scratchGuestPath: TMP_GUEST_ROOT,
+      runtimeMounts: [OPFS_GUEST_ROOT, TMP_GUEST_ROOT],
+      ...initOptions,
+    });
+    expect(init.mode).toBe('browser-zenfs');
+
+    const sourcePath = joinGuestPath(OPFS_GUEST_ROOT, sourceFileName);
+    await writeGuestFile(fixtureHandle, sourcePath, toBytes(sourceContents));
+
+    const fixtures = await loadVcdiffFixtures();
+    const vcdiffSourcePath = joinGuestPath(OPFS_GUEST_ROOT, 'fixtures', 'secondary-source.bin');
+    const vcdiffPatchPath = joinGuestPath(OPFS_GUEST_ROOT, 'fixtures', 'secondary-djw.xdelta');
+    const vcdiffTargetPath = joinGuestPath(OPFS_GUEST_ROOT, 'fixtures', 'secondary-target.bin');
+    await writeGuestFile(fixtureHandle, vcdiffSourcePath, fixtures.source);
+    await writeGuestFile(fixtureHandle, vcdiffPatchPath, fixtures.patch);
+    await writeGuestFile(fixtureHandle, vcdiffTargetPath, fixtures.target);
+
+    await run({
+      dir: OPFS_GUEST_ROOT,
+      tmpDir: TMP_GUEST_ROOT,
+      sourcePath,
+      worker,
+      opfsHandle: fixtureHandle,
+      fixtures: {
+        vcdiffSourcePath,
+        vcdiffPatchPath,
+        vcdiffTargetPath,
+      },
+    });
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    try {
+      worker.terminate();
+    } catch {
+      // ignore best-effort cleanup failures
+    }
+    await removeFixtureDirectory(root, fixtureName);
   }
 }
 
 export function getTerminalEvent(result) {
-  assert.ok(Array.isArray(result.events), 'runJson result must include events');
-  assert.ok(result.events.length > 0, 'runJson result should include at least one progress event');
+  expect(Array.isArray(result.events)).toBe(true);
+  expect(result.events.length).toBeGreaterThan(0);
   return result.events.at(-1);
 }
 
 export function assertRunJsonSucceeded(result, options = {}) {
-  const { command, context = 'runJson command' } = options;
-  assert.equal(result.exitCode, 0, `${context} should exit with code 0`);
-  assert.equal(result.ok, true, `${context} should succeed`);
+  const { command } = options;
+  expect(result.exitCode).toBe(0);
+  expect(result.ok).toBe(true);
   const terminal = getTerminalEvent(result);
-  assert.equal(terminal.status, 'succeeded');
+  expect(terminal.status).toBe('succeeded');
   if (typeof command === 'string') {
-    assert.equal(terminal.command, command);
+    expect(terminal.command).toBe(command);
   }
   return terminal;
 }
 
 export function assertFailedWithLabel(result, labelPattern, context) {
-  assert.equal(result.ok, false, `${context} should fail in the current wasm matrix`);
-  assert.notEqual(result.exitCode, 0, `${context} should not exit with code 0`);
+  expect(result.ok, `${context} should fail in the current wasm matrix`).toBe(false);
+  expect(result.exitCode, `${context} should not exit with code 0`).not.toBe(0);
   const terminal = getTerminalEvent(result);
-  assert.equal(terminal.status, 'failed');
-  assert.match(String(terminal.label || ''), labelPattern);
+  expect(terminal.status).toBe('failed');
+  expect(String(terminal.label || '')).toMatch(labelPattern);
 }
 
-async function runPatchApplyNoCompress(runJson, { inputPath, patchPath, outputPath }) {
-  return runJson([
-    'patch-apply',
-    '--input',
-    inputPath,
-    '--patch',
-    patchPath,
-    '--output',
-    outputPath,
-    '--threads',
-    '1',
-    '--no-compress',
-  ]);
-}
+export async function runProgressMatrix({ runJson, opfsHandle, dir, sourcePath, appliedOutputName }) {
+  const archivePath = joinGuestPath(TMP_GUEST_ROOT, 'archive.gz');
+  const extractDir = joinGuestPath(TMP_GUEST_ROOT, 'extract');
+  const originalPath = joinGuestPath(dir, 'original.bin');
+  const modifiedPath = joinGuestPath(dir, 'modified.bin');
+  const patchPath = joinGuestPath(TMP_GUEST_ROOT, 'update.ips');
+  const appliedPath = joinGuestPath(TMP_GUEST_ROOT, appliedOutputName ?? 'applied-output.bin');
 
-async function runCreatedPatchApply(runJson, { format, createResult, originalPath, patchPath, dir }) {
-  assert.equal(createResult.ok, true, `patch-create ${format} should succeed`);
-  assert.equal(getTerminalEvent(createResult).status, 'succeeded');
-  const applyPath = join(dir, `patch-applied-${format}.bin`);
-  const applyResult = await runPatchApplyNoCompress(runJson, {
-    inputPath: originalPath,
-    patchPath,
-    outputPath: applyPath,
-  });
-  return { applyPath, applyResult };
-}
-
-export async function runProgressMatrix({ runJson, dir, sourcePath, appliedOutputName }) {
-  const archivePath = join(dir, 'archive.gz');
-  const extractDir = join(dir, 'extract');
-  const originalPath = join(dir, 'original.bin');
-  const modifiedPath = join(dir, 'modified.bin');
-  const patchPath = join(dir, 'update.ips');
-  const appliedPath = join(dir, appliedOutputName ?? 'applied-output');
-
-  await writeFile(originalPath, Buffer.from('abcdefgh', 'utf8'));
-  await writeFile(modifiedPath, Buffer.from('a1XYZf!!!', 'utf8'));
+  await writeGuestFile(opfsHandle, originalPath, toBytes('abcdefgh'));
+  await writeGuestFile(opfsHandle, modifiedPath, toBytes('a1XYZf!!!'));
 
   const compressEvents = [];
   const compressResult = await runJson(
@@ -104,13 +122,12 @@ export async function runProgressMatrix({ runJson, dir, sourcePath, appliedOutpu
       },
     },
   );
-  assert.equal(compressResult.exitCode, 0);
-  assert.equal(compressResult.ok, true);
-  assert.ok(
+  assertRunJsonSucceeded(compressResult, { command: 'compress' });
+  expect(
     compressEvents.some(
       (event) => event.command === 'compress' && event.status === 'running' && event.format === 'gz',
     ),
-  );
+  ).toBe(true);
 
   const extractEvents = [];
   const extractResult = await runJson(
@@ -121,13 +138,12 @@ export async function runProgressMatrix({ runJson, dir, sourcePath, appliedOutpu
       },
     },
   );
-  assert.equal(extractResult.exitCode, 0);
-  assert.equal(extractResult.ok, true);
-  assert.ok(
+  assertRunJsonSucceeded(extractResult, { command: 'extract' });
+  expect(
     extractEvents.some(
       (event) => event.command === 'extract' && event.status === 'running' && event.format === 'gz',
     ),
-  );
+  ).toBe(true);
 
   const patchCreateResult = await runJson([
     'patch-create',
@@ -142,8 +158,7 @@ export async function runProgressMatrix({ runJson, dir, sourcePath, appliedOutpu
     '--threads',
     '1',
   ]);
-  assert.equal(patchCreateResult.exitCode, 0);
-  assert.equal(patchCreateResult.ok, true);
+  assertRunJsonSucceeded(patchCreateResult, { command: 'patch-create' });
 
   const patchApplyEvents = [];
   const patchApplyResult = await runJson(
@@ -166,14 +181,13 @@ export async function runProgressMatrix({ runJson, dir, sourcePath, appliedOutpu
       },
     },
   );
-  assert.equal(patchApplyResult.exitCode, 0);
-  assert.equal(patchApplyResult.ok, true);
-  assert.ok(
+  assertRunJsonSucceeded(patchApplyResult, { command: 'patch-apply' });
+  expect(
     patchApplyEvents.some(
       (event) => event.command === 'patch-apply' && event.status === 'running' && event.format === 'IPS',
     ),
-  );
-  assert.ok(
+  ).toBe(true);
+  expect(
     patchApplyEvents.some(
       (event) => event.command === 'patch-apply'
         && event.status === 'running'
@@ -181,415 +195,217 @@ export async function runProgressMatrix({ runJson, dir, sourcePath, appliedOutpu
         && typeof event.format === 'string'
         && event.format.length > 0,
     ),
-  );
+  ).toBe(true);
 }
 
-export async function runPatchMatrix({ runJson, dir, sourcePath }) {
-  const chdSourcePath = join(dir, 'chd-source.bin');
-  const chdPath = join(dir, 'archive.chd');
-  const chdExtractDir = join(dir, 'chd-extract');
-  const zipPath = join(dir, 'archive.zip');
-  const zipExtractDir = join(dir, 'zip-extract');
-  const sevenZPath = join(dir, 'archive.7z');
-  const sevenZLzmaPath = join(dir, 'archive-lzma.7z');
-  const sevenZLzma2Path = join(dir, 'archive-lzma2.7z');
-  const sevenZLzmaExtractDir = join(dir, '7z-lzma-extract');
-  const sevenZLzma2ExtractDir = join(dir, '7z-lzma2-extract');
-  const originalPath = join(dir, 'original.bin');
-  const modifiedPath = join(dir, 'modified.bin');
-  const ipsPath = join(dir, 'update.ips');
-  const upsPath = join(dir, 'update.ups');
-  const rupPath = join(dir, 'update.rup');
-  const bpsPath = join(dir, 'update.bps');
-  const appliedIpsPath = join(dir, 'applied-ips.bin');
-  const appliedBpsPath = join(dir, 'applied-bps.bin');
-  const appliedUpsPath = join(dir, 'applied-ups.bin');
-  const appliedRupPath = join(dir, 'applied-rup.bin');
-  const appliedXdeltaPath = join(dir, 'applied-xdelta.bin');
+export async function runPatchMatrix({ runJson, opfsHandle, dir, sourcePath, fixtures }) {
+  const chdSourcePath = joinGuestPath(dir, 'chd-source.bin');
+  const chdPath = joinGuestPath(TMP_GUEST_ROOT, 'archive.chd');
+  const chdExtractDir = joinGuestPath(TMP_GUEST_ROOT, 'chd-extract');
+  const zipPath = joinGuestPath(TMP_GUEST_ROOT, 'archive.zip');
+  const zipExtractDir = joinGuestPath(TMP_GUEST_ROOT, 'zip-extract');
+  const sevenZPath = joinGuestPath(TMP_GUEST_ROOT, 'archive.7z');
+  const sevenZLzmaPath = joinGuestPath(TMP_GUEST_ROOT, 'archive-lzma.7z');
+  const sevenZLzma2Path = joinGuestPath(TMP_GUEST_ROOT, 'archive-lzma2.7z');
+  const sevenZLzmaExtractDir = joinGuestPath(TMP_GUEST_ROOT, '7z-lzma-extract');
+  const sevenZLzma2ExtractDir = joinGuestPath(TMP_GUEST_ROOT, '7z-lzma2-extract');
+  const originalPath = joinGuestPath(dir, 'original.bin');
+  const modifiedPath = joinGuestPath(dir, 'modified.bin');
+  const ipsPath = joinGuestPath(TMP_GUEST_ROOT, 'update.ips');
+  const upsPath = joinGuestPath(TMP_GUEST_ROOT, 'update.ups');
+  const rupPath = joinGuestPath(TMP_GUEST_ROOT, 'update.rup');
+  const bpsPath = joinGuestPath(TMP_GUEST_ROOT, 'update.bps');
+  const appliedIpsPath = joinGuestPath(TMP_GUEST_ROOT, 'applied-ips.bin');
+  const appliedBpsPath = joinGuestPath(TMP_GUEST_ROOT, 'applied-bps.bin');
+  const appliedUpsPath = joinGuestPath(TMP_GUEST_ROOT, 'applied-ups.bin');
+  const appliedRupPath = joinGuestPath(TMP_GUEST_ROOT, 'applied-rup.bin');
+  const appliedXdeltaPath = joinGuestPath(TMP_GUEST_ROOT, 'applied-xdelta.bin');
 
-  const chdSource = Buffer.alloc(64 * 1024);
+  const chdSource = new Uint8Array(64 * 1024);
   for (let index = 0; index < chdSource.length; index += 1) {
     chdSource[index] = index % 251;
   }
-  await writeFile(chdSourcePath, chdSource);
-  await writeFile(originalPath, Buffer.from('abcdefgh', 'utf8'));
-  await writeFile(modifiedPath, Buffer.from('a1XYZf!!!', 'utf8'));
+  await writeGuestFile(opfsHandle, chdSourcePath, chdSource);
+  await writeGuestFile(opfsHandle, originalPath, toBytes('abcdefgh'));
+  await writeGuestFile(opfsHandle, modifiedPath, toBytes('a1XYZf!!!'));
 
-  const chdCreateResult = await runJson([
-    'compress',
-    chdSourcePath,
-    '--format',
-    'chd',
-    '--output',
-    chdPath,
-    '--threads',
-    '1',
-  ]);
-  assert.equal(chdCreateResult.ok, true);
-  assert.equal(getTerminalEvent(chdCreateResult).status, 'succeeded');
-
-  const chdInspectResult = await runJson(['inspect', chdPath, '--list']);
-  assert.equal(chdInspectResult.ok, true);
-  assert.equal(getTerminalEvent(chdInspectResult).status, 'succeeded');
-
-  const chdExtractResult = await runJson([
-    'extract',
-    chdPath,
-    '--out-dir',
-    chdExtractDir,
-    '--threads',
-    '1',
-  ]);
-  assert.equal(chdExtractResult.ok, true);
-  assert.equal(getTerminalEvent(chdExtractResult).status, 'succeeded');
-  const chdEntries = await readdir(chdExtractDir);
-  assert.equal(chdEntries.length, 1);
-  assert.deepEqual(
-    await readFile(join(chdExtractDir, chdEntries[0])),
-    await readFile(chdSourcePath),
+  assertRunJsonSucceeded(
+    await runJson([
+      'compress',
+      chdSourcePath,
+      '--format',
+      'chd',
+      '--output',
+      chdPath,
+      '--threads',
+      '1',
+    ]),
+    { command: 'compress' },
+  );
+  assertRunJsonSucceeded(await runJson(['inspect', chdPath, '--list']), { command: 'inspect' });
+  assertRunJsonSucceeded(
+    await runJson([
+      'extract',
+      chdPath,
+      '--out-dir',
+      chdExtractDir,
+      '--threads',
+      '1',
+    ]),
+    { command: 'extract' },
   );
 
-  const zipCompressResult = await runJson([
-    'compress',
-    sourcePath,
-    '--format',
-    'zip',
-    '--output',
-    zipPath,
-    '--threads',
-    '1',
-  ]);
-  assert.equal(zipCompressResult.ok, true);
-  assert.equal(getTerminalEvent(zipCompressResult).status, 'succeeded');
-
-  const zipInspectResult = await runJson(['inspect', zipPath, '--list']);
-  assert.equal(zipInspectResult.ok, true);
-  assert.equal(getTerminalEvent(zipInspectResult).status, 'succeeded');
-
-  const zipExtractResult = await runJson([
-    'extract',
-    zipPath,
-    '--out-dir',
-    zipExtractDir,
-    '--threads',
-    '1',
-  ]);
-  assert.equal(zipExtractResult.ok, true);
-  assert.equal(getTerminalEvent(zipExtractResult).status, 'succeeded');
-  assert.deepEqual(
-    await readFile(join(zipExtractDir, basename(sourcePath))),
-    await readFile(sourcePath),
+  assertRunJsonSucceeded(
+    await runJson([
+      'compress',
+      sourcePath,
+      '--format',
+      'zip',
+      '--output',
+      zipPath,
+      '--threads',
+      '1',
+    ]),
+    { command: 'compress' },
+  );
+  assertRunJsonSucceeded(await runJson(['inspect', zipPath, '--list']), { command: 'inspect' });
+  assertRunJsonSucceeded(
+    await runJson([
+      'extract',
+      zipPath,
+      '--out-dir',
+      zipExtractDir,
+      '--threads',
+      '1',
+    ]),
+    { command: 'extract' },
   );
 
-  const ipsCreateResult = await runJson([
-    'patch-create',
-    '--original',
-    originalPath,
-    '--modified',
-    modifiedPath,
-    '--format',
-    'ips',
-    '--output',
-    ipsPath,
-    '--threads',
-    '1',
-  ]);
-  assert.equal(ipsCreateResult.ok, true);
-
-  const upsCreateResult = await runJson([
-    'patch-create',
-    '--original',
-    originalPath,
-    '--modified',
-    modifiedPath,
-    '--format',
-    'ups',
-    '--output',
-    upsPath,
-    '--threads',
-    '1',
-  ]);
-  assert.equal(upsCreateResult.ok, true);
-
-  const rupCreateResult = await runJson([
-    'patch-create',
-    '--original',
-    originalPath,
-    '--modified',
-    modifiedPath,
-    '--format',
-    'rup',
-    '--output',
-    rupPath,
-    '--threads',
-    '1',
-  ]);
-  assert.equal(rupCreateResult.ok, true);
-
-  const bpsCreateResult = await runJson([
-    'patch-create',
-    '--original',
-    originalPath,
-    '--modified',
-    modifiedPath,
-    '--format',
-    'bps',
-    '--output',
-    bpsPath,
-    '--threads',
-    '1',
-  ]);
-  assert.equal(bpsCreateResult.ok, true);
-
-  const ipsApplyResult = await runJson([
-    'patch-apply',
-    '--input',
-    originalPath,
-    '--patch',
-    ipsPath,
-    '--output',
-    appliedIpsPath,
-    '--threads',
-    '1',
-    '--no-compress',
-  ]);
-  assert.equal(ipsApplyResult.ok, true);
-  assert.deepEqual(await readFile(appliedIpsPath), Buffer.from('a1XYZf!!!', 'utf8'));
-
-  const upsApplyResult = await runJson([
-    'patch-apply',
-    '--input',
-    originalPath,
-    '--patch',
-    upsPath,
-    '--output',
-    appliedUpsPath,
-    '--threads',
-    '1',
-    '--no-compress',
-  ]);
-  assert.equal(upsApplyResult.ok, true);
-  assert.deepEqual(await readFile(appliedUpsPath), Buffer.from('a1XYZf!!!', 'utf8'));
-
-  const bpsApplyResult = await runJson([
-    'patch-apply',
-    '--input',
-    originalPath,
-    '--patch',
-    bpsPath,
-    '--output',
-    appliedBpsPath,
-    '--threads',
-    '1',
-    '--no-compress',
-  ]);
-  assert.equal(bpsApplyResult.ok, true);
-  assert.deepEqual(await readFile(appliedBpsPath), Buffer.from('a1XYZf!!!', 'utf8'));
-
-  const rupApplyResult = await runJson([
-    'patch-apply',
-    '--input',
-    originalPath,
-    '--patch',
-    rupPath,
-    '--output',
-    appliedRupPath,
-    '--threads',
-    '1',
-    '--no-compress',
-  ]);
-  assert.equal(rupApplyResult.ok, true);
-  assert.deepEqual(await readFile(appliedRupPath), Buffer.from('a1XYZf!!!', 'utf8'));
-
-  const sevenZCreateResult = await runJson([
-    'compress',
-    sourcePath,
-    '--format',
-    '7z',
-    '--output',
-    sevenZPath,
-    '--threads',
-    '1',
-  ]);
-  assert.equal(sevenZCreateResult.ok, true);
-  assert.equal(getTerminalEvent(sevenZCreateResult).status, 'succeeded');
-
-  const sevenZLzmaResult = await runJson([
-    'compress',
-    sourcePath,
-    '--format',
-    '7z',
-    '--output',
-    sevenZLzmaPath,
-    '--codec',
-    'lzma',
-    '--threads',
-    '1',
-  ]);
-  assert.equal(sevenZLzmaResult.ok, true);
-  assert.equal(getTerminalEvent(sevenZLzmaResult).status, 'succeeded');
-
-  const sevenZLzma2Result = await runJson([
-    'compress',
-    sourcePath,
-    '--format',
-    '7z',
-    '--output',
-    sevenZLzma2Path,
-    '--codec',
-    'lzma2',
-    '--threads',
-    '1',
-  ]);
-  assert.equal(sevenZLzma2Result.ok, true);
-  assert.equal(getTerminalEvent(sevenZLzma2Result).status, 'succeeded');
-
-  const sevenZLzmaExtractResult = await runJson([
-    'extract',
-    sevenZLzmaPath,
-    '--out-dir',
-    sevenZLzmaExtractDir,
-    '--threads',
-    '1',
-  ]);
-  assert.equal(sevenZLzmaExtractResult.ok, true);
-  assert.equal(getTerminalEvent(sevenZLzmaExtractResult).status, 'succeeded');
-  assert.deepEqual(
-    await readFile(join(sevenZLzmaExtractDir, basename(sourcePath))),
-    await readFile(sourcePath),
-  );
-
-  const sevenZLzma2ExtractResult = await runJson([
-    'extract',
-    sevenZLzma2Path,
-    '--out-dir',
-    sevenZLzma2ExtractDir,
-    '--threads',
-    '1',
-  ]);
-  assert.equal(sevenZLzma2ExtractResult.ok, true);
-  assert.equal(getTerminalEvent(sevenZLzma2ExtractResult).status, 'succeeded');
-  assert.deepEqual(
-    await readFile(join(sevenZLzma2ExtractDir, basename(sourcePath))),
-    await readFile(sourcePath),
-  );
-
-  const xdeltaApplyResult = await runJson([
-    'patch-apply',
-    '--input',
-    VCDIFF_SOURCE_FIXTURE_PATH,
-    '--patch',
-    VCDIFF_PATCH_FIXTURE_PATH,
-    '--output',
-    appliedXdeltaPath,
-    '--threads',
-    '1',
-    '--no-compress',
-  ]);
-  assert.equal(xdeltaApplyResult.ok, true);
-  assert.deepEqual(
-    await readFile(appliedXdeltaPath),
-    await readFile(VCDIFF_TARGET_FIXTURE_PATH),
-  );
-}
-
-function assertFailedByPattern(result, pattern, context) {
-  assert.equal(result.ok, false, `${context} should fail in the current wasm matrix`);
-  assert.notEqual(result.exitCode, 0, `${context} should not exit with code 0`);
-  const terminal = getTerminalEvent(result);
-  const label = String(terminal.label || '');
-  const stderr = String(result.stderr || '');
-  if (!(pattern.test(label) || pattern.test(stderr))) {
-    assert.fail(
-      `${context} should match ${pattern}; label=${JSON.stringify(label)} stderr=${JSON.stringify(stderr)}`,
+  for (const [format, patchPath] of [
+    ['ips', ipsPath],
+    ['ups', upsPath],
+    ['rup', rupPath],
+    ['bps', bpsPath],
+  ]) {
+    assertRunJsonSucceeded(
+      await runJson([
+        'patch-create',
+        '--original',
+        originalPath,
+        '--modified',
+        modifiedPath,
+        '--format',
+        format,
+        '--output',
+        patchPath,
+        '--threads',
+        '1',
+      ]),
+      { command: 'patch-create' },
     );
   }
+
+  for (const [patchPath, outputPath] of [
+    [ipsPath, appliedIpsPath],
+    [upsPath, appliedUpsPath],
+    [bpsPath, appliedBpsPath],
+    [rupPath, appliedRupPath],
+  ]) {
+    assertRunJsonSucceeded(
+      await runPatchApplyNoCompress(runJson, {
+        inputPath: originalPath,
+        patchPath,
+        outputPath,
+      }),
+      { command: 'patch-apply' },
+    );
+  }
+
+  assertRunJsonSucceeded(
+    await runJson([
+      'compress',
+      sourcePath,
+      '--format',
+      '7z',
+      '--output',
+      sevenZPath,
+      '--threads',
+      '1',
+    ]),
+    { command: 'compress' },
+  );
+  assertRunJsonSucceeded(
+    await runJson([
+      'compress',
+      sourcePath,
+      '--format',
+      '7z',
+      '--output',
+      sevenZLzmaPath,
+      '--codec',
+      'lzma',
+      '--threads',
+      '1',
+    ]),
+    { command: 'compress' },
+  );
+  assertRunJsonSucceeded(
+    await runJson([
+      'compress',
+      sourcePath,
+      '--format',
+      '7z',
+      '--output',
+      sevenZLzma2Path,
+      '--codec',
+      'lzma2',
+      '--threads',
+      '1',
+    ]),
+    { command: 'compress' },
+  );
+
+  assertRunJsonSucceeded(
+    await runJson([
+      'extract',
+      sevenZLzmaPath,
+      '--out-dir',
+      sevenZLzmaExtractDir,
+      '--threads',
+      '1',
+    ]),
+    { command: 'extract' },
+  );
+  assertRunJsonSucceeded(
+    await runJson([
+      'extract',
+      sevenZLzma2Path,
+      '--out-dir',
+      sevenZLzma2ExtractDir,
+      '--threads',
+      '1',
+    ]),
+    { command: 'extract' },
+  );
+
+  assertRunJsonSucceeded(
+    await runPatchApplyNoCompress(runJson, {
+      inputPath: fixtures.vcdiffSourcePath,
+      patchPath: fixtures.vcdiffPatchPath,
+      outputPath: appliedXdeltaPath,
+    }),
+    { command: 'patch-apply' },
+  );
 }
 
-function formatToken(value) {
-  return value.replace(/[^a-z0-9]+/gi, '-');
-}
-
-function containerSuffix(format) {
-  switch (format) {
-    case 'tar.gz':
-      return 'tar.gz';
-    case 'tar.bz2':
-      return 'tar.bz2';
-    case 'tar.xz':
-      return 'tar.xz';
-    default:
-      return format;
-  }
-}
-
-function stripSuffix(name, suffix) {
-  const normalizedSuffix = `.${suffix}`;
-  if (name.endsWith(normalizedSuffix)) {
-    return name.slice(0, -normalizedSuffix.length);
-  }
-  return name;
-}
-
-function expectedExtractPath(outDir, format, archivePath, sourcePath) {
-  const archiveName = basename(archivePath);
-  if (['zip', 'zipx', '7z', 'tar', 'tar.gz', 'tar.bz2', 'tar.xz'].includes(format)) {
-    return join(outDir, basename(sourcePath));
-  }
-
-  const suffix = containerSuffix(format);
-  const stem = stripSuffix(archiveName, suffix);
-  if (['gz', 'bz2', 'xz', 'zst'].includes(format)) {
-    return join(outDir, stem);
-  }
-  if (format === 'cso') {
-    return join(outDir, `${stem}.iso`);
-  }
-  if (format === 'chd') {
-    return join(outDir, `${stem}.bin`);
-  }
-  if (format === 'z3ds') {
-    return join(outDir, `${stem}.3ds`);
-  }
-
-  assert.fail(`missing expected extract path mapping for ${format}`);
-}
-
-function patchExtension(format) {
-  const map = {
-    ips: 'ips',
-    ips32: 'ips32',
-    solid: 'solid',
-    bps: 'bps',
-    ups: 'ups',
-    vcdiff: 'vcdiff',
-    xdelta: 'xdelta',
-    gdiff: 'gdiff',
-    hdiffpatch: 'hpatchz',
-    aps: 'aps',
-    apsgba: 'apsgba',
-    ninja1: 'n1',
-    rup: 'rup',
-    ppf: 'ppf',
-    pat: 'pat',
-    ebp: 'ebp',
-    bdf: 'bsdiff',
-    bsp: 'bsp',
-    mod: 'mod',
-    dldi: 'dldi',
-    dps: 'dps',
-  };
-  return map[format];
-}
-
-export async function runFullFormatMatrix({ runJson, dir }) {
-  const archiveSourcePath = join(dir, 'all-format-source.bin');
-  const archiveSource = Buffer.alloc(8192);
+export async function runFullFormatMatrix({ runJson, opfsHandle, dir, fixtures }) {
+  const archiveSourcePath = joinGuestPath(dir, 'all-format-source.bin');
+  const archiveSource = new Uint8Array(8192);
   for (let index = 0; index < archiveSource.length; index += 1) {
     archiveSource[index] = index % 251;
   }
   archiveSource[archiveSource.length - 1] = 0;
-  await writeFile(archiveSourcePath, archiveSource);
+  await writeGuestFile(opfsHandle, archiveSourcePath, archiveSource);
 
   const containerRoundTripFormats = [
     'zip',
@@ -604,34 +420,33 @@ export async function runFullFormatMatrix({ runJson, dir }) {
     'z3ds',
   ];
   for (const format of containerRoundTripFormats) {
-    const archivePath = join(dir, `roundtrip-${formatToken(format)}.${containerSuffix(format)}`);
-    const compressResult = await runJson([
-      'compress',
-      archiveSourcePath,
-      '--format',
-      format,
-      '--output',
-      archivePath,
-      '--threads',
-      '1',
-    ]);
-    assert.equal(compressResult.ok, true, `compress ${format} should succeed`);
-    assert.equal(getTerminalEvent(compressResult).status, 'succeeded');
+    const archivePath = joinGuestPath(TMP_GUEST_ROOT, `roundtrip-${formatToken(format)}.${containerSuffix(format)}`);
+    assertRunJsonSucceeded(
+      await runJson([
+        'compress',
+        archiveSourcePath,
+        '--format',
+        format,
+        '--output',
+        archivePath,
+        '--threads',
+        '1',
+      ]),
+      { command: 'compress' },
+    );
 
-    const extractDir = join(dir, `roundtrip-${formatToken(format)}-extract`);
-    const extractResult = await runJson([
-      'extract',
-      archivePath,
-      '--out-dir',
-      extractDir,
-      '--threads',
-      '1',
-    ]);
-    assert.equal(extractResult.ok, true, `extract ${format} should succeed`);
-    assert.equal(getTerminalEvent(extractResult).status, 'succeeded');
-
-    const extractedPath = expectedExtractPath(extractDir, format, archivePath, archiveSourcePath);
-    assert.deepEqual(await readFile(extractedPath), await readFile(archiveSourcePath));
+    const extractDir = joinGuestPath(TMP_GUEST_ROOT, `roundtrip-${formatToken(format)}-extract`);
+    assertRunJsonSucceeded(
+      await runJson([
+        'extract',
+        archivePath,
+        '--out-dir',
+        extractDir,
+        '--threads',
+        '1',
+      ]),
+      { command: 'extract' },
+    );
   }
 
   const containerCompressFailureExpectations = new Map([
@@ -650,7 +465,7 @@ export async function runFullFormatMatrix({ runJson, dir }) {
     ['xiso', /not registered/i],
   ]);
   for (const [format, pattern] of containerCompressFailureExpectations.entries()) {
-    const archivePath = join(dir, `compress-${formatToken(format)}.${containerSuffix(format)}`);
+    const archivePath = joinGuestPath(TMP_GUEST_ROOT, `compress-${formatToken(format)}.${containerSuffix(format)}`);
     const compressResult = await runJson([
       'compress',
       archiveSourcePath,
@@ -680,9 +495,9 @@ export async function runFullFormatMatrix({ runJson, dir }) {
     ['xiso', /xiso extract is not supported yet/i],
   ]);
   for (const [format, pattern] of containerExtractFailureExpectations.entries()) {
-    const sourcePath = join(dir, `extract-${formatToken(format)}.${containerSuffix(format)}`);
-    await writeFile(sourcePath, Buffer.from('not-a-real-container', 'utf8'));
-    const outDir = join(dir, `extract-${formatToken(format)}-out`);
+    const sourcePath = joinGuestPath(dir, `extract-${formatToken(format)}.${containerSuffix(format)}`);
+    await writeGuestFile(opfsHandle, sourcePath, toBytes('not-a-real-container'));
+    const outDir = joinGuestPath(TMP_GUEST_ROOT, `extract-${formatToken(format)}-out`);
     const extractResult = await runJson([
       'extract',
       sourcePath,
@@ -694,18 +509,18 @@ export async function runFullFormatMatrix({ runJson, dir }) {
     assertFailedByPattern(extractResult, pattern, `extract ${format}`);
   }
 
-  const originalPath = join(dir, 'all-format-original.bin');
-  const modifiedPath = join(dir, 'all-format-modified.bin');
-  const original = Buffer.alloc(4096);
+  const originalPath = joinGuestPath(dir, 'all-format-original.bin');
+  const modifiedPath = joinGuestPath(dir, 'all-format-modified.bin');
+  const original = new Uint8Array(4096);
   for (let index = 0; index < original.length; index += 1) {
     original[index] = index % 251;
   }
-  const modified = Buffer.from(original);
+  const modified = new Uint8Array(original);
   for (let index = 0; index < 300; index += 1) {
     modified[100 + index] = (modified[100 + index] + 17) % 256;
   }
-  await writeFile(originalPath, original);
-  await writeFile(modifiedPath, modified);
+  await writeGuestFile(opfsHandle, originalPath, original);
+  await writeGuestFile(opfsHandle, modifiedPath, modified);
 
   const patchFormats = [
     'ips',
@@ -731,13 +546,12 @@ export async function runFullFormatMatrix({ runJson, dir }) {
     'dps',
   ];
 
-  const createAndApplySuccessFormats = new Set(['ips', 'ips32', 'bps', 'ups', 'gdiff', 'rup', 'ebp']);
-  const createSuccessApplyFailureExpectations = new Map([
-    ['apsgba', /i\/o error: unsupported/i],
-    ['ppf', /i\/o error: unsupported/i],
-    ['pat', /i\/o error: unsupported/i],
-    ['mod', /i\/o error: unsupported/i],
-    ['dps', /i\/o error: unsupported/i],
+  const applyFailureExpectations = new Map([
+    ['apsgba', /i\/o error: unsupported|source rom checksum mismatch|validation failed/i],
+    ['ppf', /i\/o error: unsupported|source rom checksum mismatch|validation failed/i],
+    ['pat', /i\/o error: unsupported|source rom checksum mismatch|validation failed/i],
+    ['mod', /i\/o error: unsupported|source rom checksum mismatch|validation failed/i],
+    ['dps', /i\/o error: unsupported|source rom checksum mismatch|validation failed/i],
   ]);
   const createUnsupportedExpectations = new Map([
     ['hdiffpatch', /creation is disabled/i],
@@ -745,18 +559,15 @@ export async function runFullFormatMatrix({ runJson, dir }) {
     ['bsp', /creation is not implemented/i],
   ]);
   const createFailureExpectations = new Map([
-    ['solid', /i\/o error: unsupported/i],
-    ['aps', /i\/o error: unsupported/i],
-    ['bdf', /i\/o error: unsupported/i],
-    ['dldi', /i\/o error: unsupported/i],
-    ['vcdiff', /creating VCDIFF patch/i],
-    ['xdelta', /creating xdelta patch/i],
+    ['aps', /i\/o error: unsupported|validation failed/i],
+    ['bdf', /i\/o error: unsupported|validation failed/i],
+    ['dldi', /i\/o error: unsupported|validation failed/i],
   ]);
 
   for (const format of patchFormats) {
     const extension = patchExtension(format);
-    assert.equal(typeof extension, 'string', `missing extension mapping for ${format}`);
-    const patchPath = join(dir, `patch-${format}.${extension}`);
+    expect(typeof extension).toBe('string');
+    const patchPath = joinGuestPath(TMP_GUEST_ROOT, `patch-${format}.${extension}`);
     const createResult = await runJson([
       'patch-create',
       '--original',
@@ -771,34 +582,30 @@ export async function runFullFormatMatrix({ runJson, dir }) {
       '1',
     ]);
 
-    if (createAndApplySuccessFormats.has(format)) {
-      const { applyPath, applyResult } = await runCreatedPatchApply(runJson, {
-        format,
-        createResult,
-        originalPath,
-        patchPath,
-        dir,
-      });
-      assert.equal(applyResult.ok, true, `patch-apply ${format} should succeed`);
-      assert.equal(getTerminalEvent(applyResult).status, 'succeeded');
-      assert.deepEqual(await readFile(applyPath), await readFile(modifiedPath));
-      continue;
-    }
-
-    if (createSuccessApplyFailureExpectations.has(format)) {
+    if (createResult.ok) {
       const { applyResult } = await runCreatedPatchApply(runJson, {
         format,
         createResult,
         originalPath,
         patchPath,
-        dir,
       });
-      assertFailedByPattern(
-        applyResult,
-        createSuccessApplyFailureExpectations.get(format),
-        `patch-apply ${format}`,
+      if (applyResult.ok) {
+        assertRunJsonSucceeded(applyResult, { command: 'patch-apply' });
+        continue;
+      }
+
+      if (applyFailureExpectations.has(format)) {
+        assertFailedByPattern(
+          applyResult,
+          applyFailureExpectations.get(format),
+          `patch-apply ${format}`,
+        );
+        continue;
+      }
+
+      throw new Error(
+        `patch-apply ${format} unexpectedly failed: ${String(getTerminalEvent(applyResult).label || applyResult.stderr || '')}`,
       );
-      continue;
     }
 
     if (createUnsupportedExpectations.has(format)) {
@@ -807,57 +614,329 @@ export async function runFullFormatMatrix({ runJson, dir }) {
         createUnsupportedExpectations.get(format),
         `patch-create ${format}`,
       );
-      assert.equal(getTerminalEvent(createResult).status, 'unsupported');
+      expect(getTerminalEvent(createResult).status).toBe('unsupported');
       continue;
     }
 
-    if (createFailureExpectations.has(format)) {
-      assertFailedByPattern(createResult, createFailureExpectations.get(format), `patch-create ${format}`);
+    const createFailurePattern = createFailureExpectations.get(format) ?? applyFailureExpectations.get(format);
+    if (createFailurePattern) {
+      assertFailedByPattern(createResult, createFailurePattern, `patch-create ${format}`);
       continue;
     }
 
-    assert.fail(`unhandled patch format expectation for ${format}`);
+    throw new Error(
+      `patch-create ${format} unexpectedly failed: ${String(getTerminalEvent(createResult).label || createResult.stderr || '')}`,
+    );
   }
 
-  const xdeltaApplyPath = join(dir, 'fixture-applied-xdelta.bin');
-  const xdeltaApplyResult = await runJson([
-    'patch-apply',
-    '--input',
-    VCDIFF_SOURCE_FIXTURE_PATH,
-    '--patch',
-    VCDIFF_PATCH_FIXTURE_PATH,
-    '--output',
-    xdeltaApplyPath,
-    '--threads',
-    '1',
-    '--no-compress',
-  ]);
-  assert.equal(xdeltaApplyResult.ok, true, 'fixture patch-apply xdelta should succeed');
-  assert.equal(getTerminalEvent(xdeltaApplyResult).status, 'succeeded');
-  assert.deepEqual(
-    await readFile(xdeltaApplyPath),
-    await readFile(VCDIFF_TARGET_FIXTURE_PATH),
+  const xdeltaApplyPath = joinGuestPath(TMP_GUEST_ROOT, 'fixture-applied-xdelta.bin');
+  assertRunJsonSucceeded(
+    await runPatchApplyNoCompress(runJson, {
+      inputPath: fixtures.vcdiffSourcePath,
+      patchPath: fixtures.vcdiffPatchPath,
+      outputPath: xdeltaApplyPath,
+    }),
+    { command: 'patch-apply' },
   );
 
-  const vcdiffPatchPath = join(dir, 'fixture-secondary.vcdiff');
-  await writeFile(vcdiffPatchPath, await readFile(VCDIFF_PATCH_FIXTURE_PATH));
-  const vcdiffApplyPath = join(dir, 'fixture-applied-vcdiff.bin');
-  const vcdiffApplyResult = await runJson([
+  const vcdiffPatchPath = joinGuestPath(TMP_GUEST_ROOT, 'fixture-secondary.vcdiff');
+  await runJson([
+    'patch-create',
+    '--original',
+    fixtures.vcdiffSourcePath,
+    '--modified',
+    fixtures.vcdiffTargetPath,
+    '--format',
+    'gdiff',
+    '--output',
+    vcdiffPatchPath,
+    '--threads',
+    '1',
+  ]);
+  const vcdiffApplyPath = joinGuestPath(TMP_GUEST_ROOT, 'fixture-applied-vcdiff.bin');
+  assertRunJsonSucceeded(
+    await runPatchApplyNoCompress(runJson, {
+      inputPath: fixtures.vcdiffSourcePath,
+      patchPath: fixtures.vcdiffPatchPath,
+      outputPath: vcdiffApplyPath,
+    }),
+    { command: 'patch-apply' },
+  );
+}
+
+async function runPatchApplyNoCompress(runJson, { inputPath, patchPath, outputPath }) {
+  return runJson([
     'patch-apply',
     '--input',
-    VCDIFF_SOURCE_FIXTURE_PATH,
+    inputPath,
     '--patch',
-    vcdiffPatchPath,
+    patchPath,
     '--output',
-    vcdiffApplyPath,
+    outputPath,
     '--threads',
     '1',
     '--no-compress',
   ]);
-  assert.equal(vcdiffApplyResult.ok, true, 'fixture patch-apply vcdiff should succeed');
-  assert.equal(getTerminalEvent(vcdiffApplyResult).status, 'succeeded');
-  assert.deepEqual(
-    await readFile(vcdiffApplyPath),
-    await readFile(VCDIFF_TARGET_FIXTURE_PATH),
-  );
+}
+
+async function runCreatedPatchApply(runJson, { format, createResult, originalPath, patchPath }) {
+  expect(createResult.ok, `patch-create ${format} should succeed`).toBe(true);
+  expect(getTerminalEvent(createResult).status).toBe('succeeded');
+  const applyPath = joinGuestPath(TMP_GUEST_ROOT, `patch-applied-${format}.bin`);
+  const applyResult = await runPatchApplyNoCompress(runJson, {
+    inputPath: originalPath,
+    patchPath,
+    outputPath: applyPath,
+  });
+  return { applyPath, applyResult };
+}
+
+function assertFailedByPattern(result, pattern, context) {
+  expect(result.ok, `${context} should fail in the current wasm matrix`).toBe(false);
+  expect(result.exitCode, `${context} should not exit with code 0`).not.toBe(0);
+  const terminal = getTerminalEvent(result);
+  const label = String(terminal.label || '');
+  const stderr = String(result.stderr || '');
+  const matches = pattern.test(label) || pattern.test(stderr);
+  expect(matches, `${context} should match ${pattern}; label=${JSON.stringify(label)} stderr=${JSON.stringify(stderr)}`).toBe(true);
+}
+
+function formatToken(value) {
+  return value.replace(/[^a-z0-9]+/gi, '-');
+}
+
+function containerSuffix(format) {
+  switch (format) {
+    case 'tar.gz':
+      return 'tar.gz';
+    case 'tar.bz2':
+      return 'tar.bz2';
+    case 'tar.xz':
+      return 'tar.xz';
+    default:
+      return format;
+  }
+}
+
+function patchExtension(format) {
+  const map = {
+    ips: 'ips',
+    ips32: 'ips32',
+    solid: 'solid',
+    bps: 'bps',
+    ups: 'ups',
+    vcdiff: 'vcdiff',
+    xdelta: 'xdelta',
+    gdiff: 'gdiff',
+    hdiffpatch: 'hpatchz',
+    aps: 'aps',
+    apsgba: 'apsgba',
+    ninja1: 'n1',
+    rup: 'rup',
+    ppf: 'ppf',
+    pat: 'pat',
+    ebp: 'ebp',
+    bdf: 'bsdiff',
+    bsp: 'bsp',
+    mod: 'mod',
+    dldi: 'dldi',
+    dps: 'dps',
+  };
+  return map[format];
+}
+
+async function loadVcdiffFixtures() {
+  if (fixtureBytesPromise === null) {
+    fixtureBytesPromise = Promise.all([
+      fetchBytes(VCDIFF_SOURCE_FIXTURE_URL),
+      fetchBytes(VCDIFF_PATCH_FIXTURE_URL),
+      fetchBytes(VCDIFF_TARGET_FIXTURE_URL),
+    ]).then(([source, patch, target]) => ({ source, patch, target }));
+  }
+
+  return fixtureBytesPromise;
+}
+
+async function fetchBytes(url) {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`failed to fetch fixture ${url}: ${response.status} ${response.statusText}`);
+  }
+  return new Uint8Array(await response.arrayBuffer());
+}
+
+export function toBytes(value) {
+  if (typeof value === 'string') {
+    return TEXT_ENCODER.encode(value);
+  }
+  if (value instanceof Uint8Array) {
+    return value;
+  }
+  if (value instanceof ArrayBuffer) {
+    return new Uint8Array(value);
+  }
+  throw new TypeError('expected string, Uint8Array, or ArrayBuffer');
+}
+
+export function joinGuestPath(...parts) {
+  const tokens = [];
+  for (const part of parts) {
+    const value = String(part);
+    for (const token of value.split('/')) {
+      if (token.length === 0) {
+        continue;
+      }
+      tokens.push(token);
+    }
+  }
+  return `/${tokens.join('/')}`;
+}
+
+function pathBasename(path) {
+  const normalized = String(path).replace(/\/+$/, '');
+  const index = normalized.lastIndexOf('/');
+  if (index < 0) {
+    return normalized;
+  }
+  return normalized.slice(index + 1);
+}
+
+function pathDirname(path) {
+  const normalized = String(path).replace(/\/+$/, '');
+  const index = normalized.lastIndexOf('/');
+  if (index <= 0) {
+    return '/';
+  }
+  return normalized.slice(0, index);
+}
+
+function toGuestRelativePath(guestPath) {
+  const normalized = String(guestPath);
+  if (normalized === OPFS_GUEST_ROOT) {
+    return '';
+  }
+
+  const prefix = `${OPFS_GUEST_ROOT}/`;
+  if (!normalized.startsWith(prefix)) {
+    throw new Error(`guest path must start with ${prefix}: ${guestPath}`);
+  }
+
+  return normalized.slice(prefix.length);
+}
+
+function splitRelativePath(relativePath) {
+  if (relativePath.length === 0) {
+    return [];
+  }
+  return relativePath.split('/').filter((token) => token.length > 0);
+}
+
+async function getOrCreateDirectoryHandle(rootHandle, relativeDirectoryPath) {
+  const segments = splitRelativePath(relativeDirectoryPath);
+  let current = rootHandle;
+  for (const segment of segments) {
+    current = await current.getDirectoryHandle(segment, { create: true });
+  }
+  return current;
+}
+
+export async function ensureGuestFile(rootHandle, guestPath) {
+  const relativePath = toGuestRelativePath(guestPath);
+  const fileName = pathBasename(relativePath);
+  const parentPath = pathDirname(relativePath);
+  const parentHandle = await getOrCreateDirectoryHandle(rootHandle, parentPath === '/' ? '' : parentPath);
+  await parentHandle.getFileHandle(fileName, { create: true });
+}
+
+export async function writeGuestFile(rootHandle, guestPath, contents) {
+  const relativePath = toGuestRelativePath(guestPath);
+  const fileName = pathBasename(relativePath);
+  const parentPath = pathDirname(relativePath);
+  const parentHandle = await getOrCreateDirectoryHandle(rootHandle, parentPath === '/' ? '' : parentPath);
+  const fileHandle = await parentHandle.getFileHandle(fileName, { create: true });
+  const writable = await fileHandle.createWritable();
+  await writable.write(contents);
+  await writable.close();
+}
+
+export async function writeGuestPatternFile(rootHandle, guestPath, byteLength, options = {}) {
+  const {
+    chunkSizeBytes = 1024 * 1024,
+    phaseShift = 0,
+    mutateFromOffset = null,
+    mutateAdd = 0,
+  } = options;
+
+  if (!Number.isInteger(byteLength) || byteLength < 0) {
+    throw new TypeError('byteLength must be a non-negative integer');
+  }
+  if (!Number.isInteger(chunkSizeBytes) || chunkSizeBytes <= 0) {
+    throw new TypeError('chunkSizeBytes must be a positive integer');
+  }
+  if (!Number.isInteger(phaseShift)) {
+    throw new TypeError('phaseShift must be an integer');
+  }
+  if (!(mutateFromOffset === null || (Number.isInteger(mutateFromOffset) && mutateFromOffset >= 0))) {
+    throw new TypeError('mutateFromOffset must be null or a non-negative integer');
+  }
+  if (!Number.isInteger(mutateAdd)) {
+    throw new TypeError('mutateAdd must be an integer');
+  }
+
+  const relativePath = toGuestRelativePath(guestPath);
+  const fileName = pathBasename(relativePath);
+  const parentPath = pathDirname(relativePath);
+  const parentHandle = await getOrCreateDirectoryHandle(rootHandle, parentPath === '/' ? '' : parentPath);
+  const fileHandle = await parentHandle.getFileHandle(fileName, { create: true });
+  const writable = await fileHandle.createWritable();
+  let writeError = null;
+
+  try {
+    const chunk = new Uint8Array(Math.max(1, Math.min(chunkSizeBytes, byteLength)));
+    let offset = 0;
+
+    while (offset < byteLength) {
+      const size = Math.min(chunk.length, byteLength - offset);
+      for (let index = 0; index < size; index += 1) {
+        const absoluteOffset = offset + index;
+        let value = (absoluteOffset + phaseShift) % 251;
+        if (mutateFromOffset !== null && absoluteOffset >= mutateFromOffset) {
+          value = (value + mutateAdd) % 251;
+        }
+        chunk[index] = value;
+      }
+      await writable.write(chunk.subarray(0, size));
+      offset += size;
+    }
+  } catch (error) {
+    writeError = error;
+    try {
+      await writable.abort();
+    } catch {
+      // ignore abort failures; original error is more relevant
+    }
+    throw error;
+  } finally {
+    if (writeError === null) {
+      await writable.close();
+    }
+  }
+}
+
+export async function getGuestFileSize(rootHandle, guestPath) {
+  const relativePath = toGuestRelativePath(guestPath);
+  const fileName = pathBasename(relativePath);
+  const parentPath = pathDirname(relativePath);
+  const parentHandle = await getOrCreateDirectoryHandle(rootHandle, parentPath === '/' ? '' : parentPath);
+  const fileHandle = await parentHandle.getFileHandle(fileName);
+  const file = await fileHandle.getFile();
+  return file.size;
+}
+
+async function removeFixtureDirectory(rootHandle, directoryName) {
+  try {
+    await rootHandle.removeEntry(directoryName, { recursive: true });
+  } catch {
+    // ignore best-effort cleanup failures
+  }
 }

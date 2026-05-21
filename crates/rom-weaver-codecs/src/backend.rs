@@ -2,14 +2,8 @@ impl NativeCodecBackend {
     const XZ_MT_BLOCK_BYTES: u64 = 1 << 20;
     const STORE_COPY_MIN_PARALLEL_BYTES: usize = 1 << 20;
     const DEFLATE_PARALLEL_MIN_BYTES: usize = 256 * 1024;
-    const DEFLATE_PARALLEL_MIN_CHUNK_BYTES: usize = 128 * 1024;
-    const DEFLATE_PARALLEL_TARGET_CHUNKS_PER_THREAD: usize = 4;
     const BZIP2_PARALLEL_MIN_BYTES: usize = 1 << 20;
-    const BZIP2_PARALLEL_MIN_CHUNK_BYTES: usize = 900 * 1024;
-    const BZIP2_PARALLEL_TARGET_CHUNKS_PER_THREAD: usize = 2;
     const ZSTD_PARALLEL_MIN_BYTES: usize = 1 << 20;
-    const ZSTD_PARALLEL_MIN_CHUNK_BYTES: usize = 256 * 1024;
-    const ZSTD_PARALLEL_TARGET_CHUNKS_PER_THREAD: usize = 2;
 
     const fn new(descriptor: &'static CodecDescriptor, kind: NativeCodecKind) -> Self {
         Self { descriptor, kind }
@@ -118,39 +112,34 @@ impl NativeCodecBackend {
         Ok(options)
     }
 
-    fn store_copy_chunk_len(total_len: usize, effective_threads: usize) -> usize {
-        let threads = effective_threads.max(1);
-        total_len.div_ceil(threads).max(1)
+    fn io_policy(execution: &ThreadExecution) -> BoundedIoPolicy {
+        BoundedIoPolicy::for_effective_threads(execution.effective_threads)
     }
 
-    fn deflate_chunk_len(total_len: usize, effective_threads: usize) -> usize {
-        let threads = effective_threads.max(1);
-        let chunk_budget = threads
-            .saturating_mul(Self::DEFLATE_PARALLEL_TARGET_CHUNKS_PER_THREAD)
-            .max(1);
-        total_len
-            .div_ceil(chunk_budget)
-            .max(Self::DEFLATE_PARALLEL_MIN_CHUNK_BYTES)
+    fn file_chunks(path: &Path, policy: &BoundedIoPolicy) -> Result<Vec<FileChunk>> {
+        let file_len = fs::metadata(path)?.len();
+        let planner = ChunkPlanner::new(policy.chunk_size_bytes)?;
+        Ok(planner.plan(file_len))
     }
 
-    fn bzip2_chunk_len(total_len: usize, effective_threads: usize) -> usize {
-        let threads = effective_threads.max(1);
-        let chunk_budget = threads
-            .saturating_mul(Self::BZIP2_PARALLEL_TARGET_CHUNKS_PER_THREAD)
-            .max(1);
-        total_len
-            .div_ceil(chunk_budget)
-            .max(Self::BZIP2_PARALLEL_MIN_CHUNK_BYTES)
-    }
-
-    fn zstd_chunk_len(total_len: usize, effective_threads: usize) -> usize {
-        let threads = effective_threads.max(1);
-        let chunk_budget = threads
-            .saturating_mul(Self::ZSTD_PARALLEL_TARGET_CHUNKS_PER_THREAD)
-            .max(1);
-        total_len
-            .div_ceil(chunk_budget)
-            .max(Self::ZSTD_PARALLEL_MIN_CHUNK_BYTES)
+    fn read_chunk_batch(
+        source: &mut BufReader<File>,
+        chunks: &[FileChunk],
+    ) -> Result<Vec<(u64, Vec<u8>)>> {
+        let mut batch = Vec::with_capacity(chunks.len());
+        for chunk in chunks {
+            let len = usize::try_from(chunk.len).map_err(|_| {
+                RomWeaverError::Validation(format!(
+                    "chunk length exceeded addressable memory (index={}, len={})",
+                    chunk.index, chunk.len
+                ))
+            })?;
+            source.seek(SeekFrom::Start(chunk.offset))?;
+            let mut payload = vec![0u8; len];
+            source.read_exact(&mut payload)?;
+            batch.push((chunk.index, payload));
+        }
+        Ok(batch)
     }
 
     fn encode_deflate_parallel(
@@ -180,32 +169,47 @@ impl NativeCodecBackend {
             return Ok(None);
         }
 
-        let input_bytes = map_file_read_only(&request.input)?;
-        let input_bytes: &[u8] = input_bytes.as_ref();
-        let chunk_len = Self::deflate_chunk_len(input_len, execution.effective_threads);
+        let policy = Self::io_policy(execution);
+        let chunks = Self::file_chunks(&request.input, &policy)?;
+        if chunks.len() <= 1 {
+            execution.apply_pool_fallback(
+                "deflate payload produced a single chunk; using single-threaded encoder"
+                    .to_string(),
+            );
+            return Ok(None);
+        }
 
         match rayon::ThreadPoolBuilder::new()
             .num_threads(execution.effective_threads.max(1))
             .build()
         {
             Ok(pool) => {
-                let members = pool.install(|| {
-                    input_bytes
-                        .par_chunks(chunk_len)
-                        .map(|chunk| -> Result<Vec<u8>> {
-                            let mut encoder =
-                                GzEncoder::new(Vec::new(), DeflateCompression::new(level));
-                            encoder.write_all(chunk)?;
-                            encoder.finish().map_err(Into::into)
-                        })
-                        .collect::<Result<Vec<_>>>()
-                })?;
-                let mut output =
+                let mut source = BufReader::new(File::open(&request.input)?);
+                let output =
                     BufWriter::new(NonVectoredWriter::new(File::create(&request.output)?));
-                for member in members {
-                    output.write_all(&member)?;
+                let mut ordered =
+                    OrderedChunkWriter::new(output, policy.max_reorder_items.max(1))?;
+
+                for batch in chunks.chunks(policy.max_in_flight_items.max(1)) {
+                    let batch_bytes = Self::read_chunk_batch(&mut source, batch)?;
+                    let encoded_batch = pool.install(|| {
+                        batch_bytes
+                            .into_par_iter()
+                            .map(|(chunk_index, chunk)| -> Result<(u64, Vec<u8>)> {
+                                let mut encoder =
+                                    GzEncoder::new(Vec::new(), DeflateCompression::new(level));
+                                encoder.write_all(&chunk)?;
+                                let member = encoder.finish()?;
+                                Ok((chunk_index, member))
+                            })
+                            .collect::<Result<Vec<_>>>()
+                    })?;
+
+                    for (chunk_index, member) in encoded_batch {
+                        ordered.write_chunk(chunk_index, member)?;
+                    }
                 }
-                output.flush()?;
+                let _ = ordered.finish()?;
                 Ok(Some(input_len_u64))
             }
             Err(error) => {
@@ -244,32 +248,47 @@ impl NativeCodecBackend {
             return Ok(None);
         }
 
-        let input_bytes = map_file_read_only(&request.input)?;
-        let input_bytes: &[u8] = input_bytes.as_ref();
-        let chunk_len = Self::bzip2_chunk_len(input_len, execution.effective_threads);
+        let policy = Self::io_policy(execution);
+        let chunks = Self::file_chunks(&request.input, &policy)?;
+        if chunks.len() <= 1 {
+            execution.apply_pool_fallback(
+                "bzip2 payload produced a single chunk; using single-threaded encoder"
+                    .to_string(),
+            );
+            return Ok(None);
+        }
 
         match rayon::ThreadPoolBuilder::new()
             .num_threads(execution.effective_threads.max(1))
             .build()
         {
             Ok(pool) => {
-                let members = pool.install(|| {
-                    input_bytes
-                        .par_chunks(chunk_len)
-                        .map(|chunk| -> Result<Vec<u8>> {
-                            let mut encoder =
-                                BzEncoder::new(Vec::new(), Bzip2Compression::new(level));
-                            encoder.write_all(chunk)?;
-                            encoder.finish().map_err(Into::into)
-                        })
-                        .collect::<Result<Vec<_>>>()
-                })?;
-                let mut output =
+                let mut source = BufReader::new(File::open(&request.input)?);
+                let output =
                     BufWriter::new(NonVectoredWriter::new(File::create(&request.output)?));
-                for member in members {
-                    output.write_all(&member)?;
+                let mut ordered =
+                    OrderedChunkWriter::new(output, policy.max_reorder_items.max(1))?;
+
+                for batch in chunks.chunks(policy.max_in_flight_items.max(1)) {
+                    let batch_bytes = Self::read_chunk_batch(&mut source, batch)?;
+                    let encoded_batch = pool.install(|| {
+                        batch_bytes
+                            .into_par_iter()
+                            .map(|(chunk_index, chunk)| -> Result<(u64, Vec<u8>)> {
+                                let mut encoder =
+                                    BzEncoder::new(Vec::new(), Bzip2Compression::new(level));
+                                encoder.write_all(&chunk)?;
+                                let member = encoder.finish()?;
+                                Ok((chunk_index, member))
+                            })
+                            .collect::<Result<Vec<_>>>()
+                    })?;
+
+                    for (chunk_index, member) in encoded_batch {
+                        ordered.write_chunk(chunk_index, member)?;
+                    }
                 }
-                output.flush()?;
+                let _ = ordered.finish()?;
                 Ok(Some(input_len_u64))
             }
             Err(error) => {
@@ -280,38 +299,30 @@ impl NativeCodecBackend {
         }
     }
 
-    fn buffered_cursor_consumed(reader: BufReader<Cursor<&[u8]>>, codec: &str) -> Result<usize> {
-        let cursor_position_u64 = reader.get_ref().position();
-        let cursor_position = usize::try_from(cursor_position_u64).map_err(|_| {
-            RomWeaverError::Validation(format!(
-                "{codec} decoder consumed beyond addressable input size"
-            ))
-        })?;
-        let buffered_unread = reader.buffer().len();
-        cursor_position.checked_sub(buffered_unread).ok_or_else(|| {
-            RomWeaverError::Validation(format!(
-                "{codec} decoder reported invalid buffered consumption state"
-            ))
-        })
-    }
-
-    fn scan_deflate_member_ranges(payload: &[u8]) -> Result<Vec<(usize, usize)>> {
+    fn scan_deflate_member_ranges(path: &Path) -> Result<Vec<(u64, u64)>> {
+        let input_len = fs::metadata(path)?.len();
         let mut ranges = Vec::new();
-        let mut offset = 0usize;
-        while offset < payload.len() {
-            let slice = &payload[offset..];
-            let mut decoder = BufReadGzDecoder::new(BufReader::new(Cursor::new(slice)));
+        let mut offset = 0u64;
+        while offset < input_len {
+            let mut file = File::open(path)?;
+            file.seek(SeekFrom::Start(offset))?;
+            let mut decoder = BufReadGzDecoder::new(BufReader::new(file));
             let mut sink = io::sink();
             io::copy(&mut decoder, &mut sink)?;
-            let reader = decoder.into_inner();
-            let consumed = Self::buffered_cursor_consumed(reader, "deflate")?;
+            let mut reader = decoder.into_inner();
+            let consumed_position = reader.stream_position()?;
+            let consumed = consumed_position.checked_sub(offset).ok_or_else(|| {
+                RomWeaverError::Validation(
+                    "deflate decoder reported invalid buffered consumption state".to_string(),
+                )
+            })?;
             if consumed == 0 {
                 return Err(RomWeaverError::Validation(
                     "deflate decoder did not consume input while scanning members".to_string(),
                 ));
             }
             let next_offset = offset.saturating_add(consumed);
-            if next_offset > payload.len() {
+            if next_offset > input_len {
                 return Err(RomWeaverError::Validation(
                     "deflate member scanner overshot input length".to_string(),
                 ));
@@ -322,23 +333,30 @@ impl NativeCodecBackend {
         Ok(ranges)
     }
 
-    fn scan_bzip2_member_ranges(payload: &[u8]) -> Result<Vec<(usize, usize)>> {
+    fn scan_bzip2_member_ranges(path: &Path) -> Result<Vec<(u64, u64)>> {
+        let input_len = fs::metadata(path)?.len();
         let mut ranges = Vec::new();
-        let mut offset = 0usize;
-        while offset < payload.len() {
-            let slice = &payload[offset..];
-            let mut decoder = BufReadBzDecoder::new(BufReader::new(Cursor::new(slice)));
+        let mut offset = 0u64;
+        while offset < input_len {
+            let mut file = File::open(path)?;
+            file.seek(SeekFrom::Start(offset))?;
+            let mut decoder = BufReadBzDecoder::new(BufReader::new(file));
             let mut sink = io::sink();
             io::copy(&mut decoder, &mut sink)?;
-            let reader = decoder.into_inner();
-            let consumed = Self::buffered_cursor_consumed(reader, "bzip2")?;
+            let mut reader = decoder.into_inner();
+            let consumed_position = reader.stream_position()?;
+            let consumed = consumed_position.checked_sub(offset).ok_or_else(|| {
+                RomWeaverError::Validation(
+                    "bzip2 decoder reported invalid buffered consumption state".to_string(),
+                )
+            })?;
             if consumed == 0 {
                 return Err(RomWeaverError::Validation(
                     "bzip2 decoder did not consume input while scanning members".to_string(),
                 ));
             }
             let next_offset = offset.saturating_add(consumed);
-            if next_offset > payload.len() {
+            if next_offset > input_len {
                 return Err(RomWeaverError::Validation(
                     "bzip2 member scanner overshot input length".to_string(),
                 ));
@@ -349,23 +367,30 @@ impl NativeCodecBackend {
         Ok(ranges)
     }
 
-    fn scan_zstd_frame_ranges(payload: &[u8]) -> Result<Vec<(usize, usize)>> {
+    fn scan_zstd_frame_ranges(path: &Path) -> Result<Vec<(u64, u64)>> {
+        let input_len = fs::metadata(path)?.len();
         let mut ranges = Vec::new();
-        let mut offset = 0usize;
-        while offset < payload.len() {
-            let frame_size = zstd::zstd_safe::find_frame_compressed_size(&payload[offset..])
-                .map_err(|error| {
-                    RomWeaverError::Validation(format!(
-                        "zstd frame scan failed at byte {offset}: {error}"
-                    ))
-                })?;
+        let mut offset = 0u64;
+        while offset < input_len {
+            let mut file = File::open(path)?;
+            file.seek(SeekFrom::Start(offset))?;
+            let mut decoder = ZstdDecoder::new(BufReader::new(file))?.single_frame();
+            let mut sink = io::sink();
+            io::copy(&mut decoder, &mut sink)?;
+            let mut reader = decoder.finish();
+            let consumed_position = reader.stream_position()?;
+            let frame_size = consumed_position.checked_sub(offset).ok_or_else(|| {
+                RomWeaverError::Validation(
+                    "zstd decoder reported invalid buffered consumption state".to_string(),
+                )
+            })?;
             if frame_size == 0 {
                 return Err(RomWeaverError::Validation(
                     "zstd frame scanner returned a zero-sized frame".to_string(),
                 ));
             }
             let next_offset = offset.saturating_add(frame_size);
-            if next_offset > payload.len() {
+            if next_offset > input_len {
                 return Err(RomWeaverError::Validation(
                     "zstd frame scanner overshot input length".to_string(),
                 ));
@@ -403,27 +428,44 @@ impl NativeCodecBackend {
             return Ok(None);
         }
 
-        let input_bytes = map_file_read_only(&request.input)?;
-        let input_bytes: &[u8] = input_bytes.as_ref();
-        let chunk_len = Self::zstd_chunk_len(input_len, execution.effective_threads);
+        let policy = Self::io_policy(execution);
+        let chunks = Self::file_chunks(&request.input, &policy)?;
+        if chunks.len() <= 1 {
+            execution.apply_pool_fallback(
+                "zstd payload produced a single chunk; using single-threaded encoder".to_string(),
+            );
+            return Ok(None);
+        }
 
         match rayon::ThreadPoolBuilder::new()
             .num_threads(execution.effective_threads.max(1))
             .build()
         {
             Ok(pool) => {
-                let frames = pool.install(|| {
-                    input_bytes
-                        .par_chunks(chunk_len)
-                        .map(|chunk| zstd::bulk::compress(chunk, level).map_err(Into::into))
-                        .collect::<Result<Vec<_>>>()
-                })?;
-                let mut output =
+                let mut source = BufReader::new(File::open(&request.input)?);
+                let output =
                     BufWriter::new(NonVectoredWriter::new(File::create(&request.output)?));
-                for frame in frames {
-                    output.write_all(&frame)?;
+                let mut ordered =
+                    OrderedChunkWriter::new(output, policy.max_reorder_items.max(1))?;
+
+                for batch in chunks.chunks(policy.max_in_flight_items.max(1)) {
+                    let batch_bytes = Self::read_chunk_batch(&mut source, batch)?;
+                    let encoded_batch = pool.install(|| {
+                        batch_bytes
+                            .into_par_iter()
+                            .map(|(chunk_index, chunk)| {
+                                zstd::bulk::compress(&chunk, level)
+                                    .map(|frame| (chunk_index, frame))
+                                    .map_err(Into::into)
+                            })
+                            .collect::<Result<Vec<_>>>()
+                    })?;
+
+                    for (chunk_index, frame) in encoded_batch {
+                        ordered.write_chunk(chunk_index, frame)?;
+                    }
                 }
-                output.flush()?;
+                let _ = ordered.finish()?;
                 Ok(Some(input_len_u64))
             }
             Err(error) => {
@@ -451,44 +493,66 @@ impl NativeCodecBackend {
             return Ok(None);
         }
 
-        let input_bytes = map_file_read_only(&request.input)?;
-        let input_bytes: &[u8] = input_bytes.as_ref();
-        let ranges = Self::scan_deflate_member_ranges(input_bytes)?;
-        if ranges.len() <= 1 {
-            execution.apply_pool_fallback(format!(
-                "deflate stream has {} member(s); using single-threaded decoder",
-                ranges.len()
-            ));
+        let ranges = Self::scan_deflate_member_ranges(&request.input)?;
+        if ranges.is_empty() {
+            execution.apply_pool_fallback(
+                "deflate stream scan produced zero members; using single-threaded decoder"
+                    .to_string(),
+            );
             return Ok(None);
         }
+
+        let policy = Self::io_policy(execution);
+        let batch_limit = policy.max_in_flight_items.max(1);
 
         match rayon::ThreadPoolBuilder::new()
             .num_threads(execution.effective_threads.max(1))
             .build()
         {
             Ok(pool) => {
-                let decoded_members = pool.install(|| {
-                    ranges
-                        .par_iter()
-                        .map(|(start, end)| -> Result<Vec<u8>> {
-                            let member_slice = &input_bytes[*start..*end];
-                            let mut decoder =
-                                MultiGzDecoder::new(BufReader::new(Cursor::new(member_slice)));
-                            let mut decoded = Vec::new();
-                            io::copy(&mut decoder, &mut decoded)?;
-                            Ok(decoded)
-                        })
-                        .collect::<Result<Vec<_>>>()
-                })?;
-
-                let mut output =
+                let mut source = BufReader::new(File::open(&request.input)?);
+                let output =
                     BufWriter::new(NonVectoredWriter::new(File::create(&request.output)?));
+                let mut ordered =
+                    OrderedChunkWriter::new(output, policy.max_reorder_items.max(1))?;
                 let mut total_written = 0u64;
-                for member in decoded_members {
-                    total_written = total_written.saturating_add(member.len() as u64);
-                    output.write_all(&member)?;
+
+                for (batch_index, batch) in ranges.chunks(batch_limit).enumerate() {
+                    let member_start_index = batch_index.saturating_mul(batch_limit);
+                    let mut member_payloads = Vec::with_capacity(batch.len());
+                    for (relative_index, (start, end)) in batch.iter().enumerate() {
+                        let member_len_u64 = end.saturating_sub(*start);
+                        let member_len = usize::try_from(member_len_u64).map_err(|_| {
+                            RomWeaverError::Validation(
+                                "deflate member length exceeded addressable memory".to_string(),
+                            )
+                        })?;
+                        source.seek(SeekFrom::Start(*start))?;
+                        let mut member_payload = vec![0u8; member_len];
+                        source.read_exact(&mut member_payload)?;
+                        member_payloads
+                            .push((member_start_index.saturating_add(relative_index) as u64, member_payload));
+                    }
+
+                    let decoded_members = pool.install(|| {
+                        member_payloads
+                            .into_par_iter()
+                            .map(|(member_index, member_payload)| -> Result<(u64, Vec<u8>)> {
+                                let mut decoder =
+                                    MultiGzDecoder::new(BufReader::new(Cursor::new(member_payload)));
+                                let mut decoded = Vec::new();
+                                io::copy(&mut decoder, &mut decoded)?;
+                                Ok((member_index, decoded))
+                            })
+                            .collect::<Result<Vec<_>>>()
+                    })?;
+
+                    for (member_index, member) in decoded_members {
+                        total_written = total_written.saturating_add(member.len() as u64);
+                        ordered.write_chunk(member_index, member)?;
+                    }
                 }
-                output.flush()?;
+                let _ = ordered.finish()?;
                 Ok(Some(total_written))
             }
             Err(error) => {
@@ -517,44 +581,66 @@ impl NativeCodecBackend {
             return Ok(None);
         }
 
-        let input_bytes = map_file_read_only(&request.input)?;
-        let input_bytes: &[u8] = input_bytes.as_ref();
-        let ranges = Self::scan_bzip2_member_ranges(input_bytes)?;
-        if ranges.len() <= 1 {
-            execution.apply_pool_fallback(format!(
-                "bzip2 stream has {} member(s); using single-threaded decoder",
-                ranges.len()
-            ));
+        let ranges = Self::scan_bzip2_member_ranges(&request.input)?;
+        if ranges.is_empty() {
+            execution.apply_pool_fallback(
+                "bzip2 stream scan produced zero members; using single-threaded decoder"
+                    .to_string(),
+            );
             return Ok(None);
         }
+
+        let policy = Self::io_policy(execution);
+        let batch_limit = policy.max_in_flight_items.max(1);
 
         match rayon::ThreadPoolBuilder::new()
             .num_threads(execution.effective_threads.max(1))
             .build()
         {
             Ok(pool) => {
-                let decoded_members = pool.install(|| {
-                    ranges
-                        .par_iter()
-                        .map(|(start, end)| -> Result<Vec<u8>> {
-                            let member_slice = &input_bytes[*start..*end];
-                            let mut decoder =
-                                MultiBzDecoder::new(BufReader::new(Cursor::new(member_slice)));
-                            let mut decoded = Vec::new();
-                            io::copy(&mut decoder, &mut decoded)?;
-                            Ok(decoded)
-                        })
-                        .collect::<Result<Vec<_>>>()
-                })?;
-
-                let mut output =
+                let mut source = BufReader::new(File::open(&request.input)?);
+                let output =
                     BufWriter::new(NonVectoredWriter::new(File::create(&request.output)?));
+                let mut ordered =
+                    OrderedChunkWriter::new(output, policy.max_reorder_items.max(1))?;
                 let mut total_written = 0u64;
-                for member in decoded_members {
-                    total_written = total_written.saturating_add(member.len() as u64);
-                    output.write_all(&member)?;
+
+                for (batch_index, batch) in ranges.chunks(batch_limit).enumerate() {
+                    let member_start_index = batch_index.saturating_mul(batch_limit);
+                    let mut member_payloads = Vec::with_capacity(batch.len());
+                    for (relative_index, (start, end)) in batch.iter().enumerate() {
+                        let member_len_u64 = end.saturating_sub(*start);
+                        let member_len = usize::try_from(member_len_u64).map_err(|_| {
+                            RomWeaverError::Validation(
+                                "bzip2 member length exceeded addressable memory".to_string(),
+                            )
+                        })?;
+                        source.seek(SeekFrom::Start(*start))?;
+                        let mut member_payload = vec![0u8; member_len];
+                        source.read_exact(&mut member_payload)?;
+                        member_payloads
+                            .push((member_start_index.saturating_add(relative_index) as u64, member_payload));
+                    }
+
+                    let decoded_members = pool.install(|| {
+                        member_payloads
+                            .into_par_iter()
+                            .map(|(member_index, member_payload)| -> Result<(u64, Vec<u8>)> {
+                                let mut decoder =
+                                    MultiBzDecoder::new(BufReader::new(Cursor::new(member_payload)));
+                                let mut decoded = Vec::new();
+                                io::copy(&mut decoder, &mut decoded)?;
+                                Ok((member_index, decoded))
+                            })
+                            .collect::<Result<Vec<_>>>()
+                    })?;
+
+                    for (member_index, member) in decoded_members {
+                        total_written = total_written.saturating_add(member.len() as u64);
+                        ordered.write_chunk(member_index, member)?;
+                    }
                 }
-                output.flush()?;
+                let _ = ordered.finish()?;
                 Ok(Some(total_written))
             }
             Err(error) => {
@@ -582,45 +668,80 @@ impl NativeCodecBackend {
             return Ok(None);
         }
 
-        let input_bytes = map_file_read_only(&request.input)?;
-        let input_bytes: &[u8] = input_bytes.as_ref();
-        let ranges = Self::scan_zstd_frame_ranges(input_bytes)?;
-        if ranges.len() <= 1 {
-            execution.apply_pool_fallback(format!(
-                "zstd stream has {} frame(s); using single-threaded decoder",
-                ranges.len()
-            ));
+        let ranges = match Self::scan_zstd_frame_ranges(&request.input) {
+            Ok(ranges) => ranges,
+            Err(error) => {
+                execution.apply_pool_fallback(format!(
+                    "zstd frame scanner could not split stream ({error}); using single-threaded decoder"
+                ));
+                return Ok(None);
+            }
+        };
+        if ranges.is_empty() {
+            execution.apply_pool_fallback(
+                "zstd stream scan produced zero frames; using single-threaded decoder".to_string(),
+            );
             return Ok(None);
         }
+        if ranges.len() == 1 {
+            execution.apply_pool_fallback(
+                "zstd stream has one frame; using single-threaded decoder".to_string(),
+            );
+            return Ok(None);
+        }
+
+        let policy = Self::io_policy(execution);
+        let batch_limit = policy.max_in_flight_items.max(1);
 
         match rayon::ThreadPoolBuilder::new()
             .num_threads(execution.effective_threads.max(1))
             .build()
         {
             Ok(pool) => {
-                let decoded_frames = pool.install(|| {
-                    ranges
-                        .par_iter()
-                        .map(|(start, end)| -> Result<Vec<u8>> {
-                            let frame_slice = &input_bytes[*start..*end];
-                            let mut decoder =
-                                ZstdDecoder::new(BufReader::new(Cursor::new(frame_slice)))?
-                                    .single_frame();
-                            let mut decoded = Vec::new();
-                            io::copy(&mut decoder, &mut decoded)?;
-                            Ok(decoded)
-                        })
-                        .collect::<Result<Vec<_>>>()
-                })?;
-
-                let mut output =
+                let mut source = BufReader::new(File::open(&request.input)?);
+                let output =
                     BufWriter::new(NonVectoredWriter::new(File::create(&request.output)?));
+                let mut ordered =
+                    OrderedChunkWriter::new(output, policy.max_reorder_items.max(1))?;
                 let mut total_written = 0u64;
-                for frame in decoded_frames {
-                    total_written = total_written.saturating_add(frame.len() as u64);
-                    output.write_all(&frame)?;
+
+                for (batch_index, batch) in ranges.chunks(batch_limit).enumerate() {
+                    let frame_start_index = batch_index.saturating_mul(batch_limit);
+                    let mut frame_payloads = Vec::with_capacity(batch.len());
+                    for (relative_index, (start, end)) in batch.iter().enumerate() {
+                        let frame_len_u64 = end.saturating_sub(*start);
+                        let frame_len = usize::try_from(frame_len_u64).map_err(|_| {
+                            RomWeaverError::Validation(
+                                "zstd frame length exceeded addressable memory".to_string(),
+                            )
+                        })?;
+                        source.seek(SeekFrom::Start(*start))?;
+                        let mut frame_payload = vec![0u8; frame_len];
+                        source.read_exact(&mut frame_payload)?;
+                        frame_payloads
+                            .push((frame_start_index.saturating_add(relative_index) as u64, frame_payload));
+                    }
+
+                    let decoded_frames = pool.install(|| {
+                        frame_payloads
+                            .into_par_iter()
+                            .map(|(frame_index, frame_payload)| -> Result<(u64, Vec<u8>)> {
+                                let mut decoder =
+                                    ZstdDecoder::new(BufReader::new(Cursor::new(frame_payload)))?
+                                        .single_frame();
+                                let mut decoded = Vec::new();
+                                io::copy(&mut decoder, &mut decoded)?;
+                                Ok((frame_index, decoded))
+                            })
+                            .collect::<Result<Vec<_>>>()
+                    })?;
+
+                    for (frame_index, frame) in decoded_frames {
+                        total_written = total_written.saturating_add(frame.len() as u64);
+                        ordered.write_chunk(frame_index, frame)?;
+                    }
                 }
-                output.flush()?;
+                let _ = ordered.finish()?;
                 Ok(Some(total_written))
             }
             Err(error) => {
@@ -636,13 +757,18 @@ impl NativeCodecBackend {
         request: &CodecOperationRequest,
         execution: &mut ThreadExecution,
     ) -> Result<u64> {
-        let input_bytes = map_file_read_only(&request.input)?;
-        let input_bytes = input_bytes.as_ref();
-        let input_len = input_bytes.len();
-        if input_len == 0 {
-            fs::write(&request.output, [])?;
+        let input_len_u64 = fs::metadata(&request.input)?.len();
+        if input_len_u64 == 0 {
+            let mut output = BufWriter::new(NonVectoredWriter::new(File::create(&request.output)?));
+            output.flush()?;
             return Ok(0);
         }
+
+        let input_len = usize::try_from(input_len_u64).map_err(|_| {
+            RomWeaverError::Validation("store payload exceeded addressable memory".into())
+        })?;
+        let policy = Self::io_policy(execution);
+        let chunks = Self::file_chunks(&request.input, &policy)?;
 
         if execution.used_parallelism {
             if input_len < Self::STORE_COPY_MIN_PARALLEL_BYTES {
@@ -655,20 +781,25 @@ impl NativeCodecBackend {
                     .build()
                 {
                     Ok(pool) => {
-                        let mut output_bytes = vec![0u8; input_len];
-                        let chunk_len =
-                            Self::store_copy_chunk_len(input_len, execution.effective_threads);
-                        pool.install(|| {
-                            output_bytes.par_chunks_mut(chunk_len).enumerate().for_each(
-                                |(chunk_index, chunk)| {
-                                    let start = chunk_index.saturating_mul(chunk_len);
-                                    let end = start + chunk.len();
-                                    chunk.copy_from_slice(&input_bytes[start..end]);
-                                },
-                            );
-                        });
-                        fs::write(&request.output, output_bytes)?;
-                        return Ok(input_len as u64);
+                        let mut source = BufReader::new(File::open(&request.input)?);
+                        let output =
+                            BufWriter::new(NonVectoredWriter::new(File::create(&request.output)?));
+                        let mut ordered =
+                            OrderedChunkWriter::new(output, policy.max_reorder_items.max(1))?;
+                        for batch in chunks.chunks(policy.max_in_flight_items.max(1)) {
+                            let batch_bytes = Self::read_chunk_batch(&mut source, batch)?;
+                            let copied_batch = pool.install(|| {
+                                batch_bytes
+                                    .into_par_iter()
+                                    .map(|(chunk_index, chunk)| Ok((chunk_index, chunk)))
+                                    .collect::<Result<Vec<_>>>()
+                            })?;
+                            for (chunk_index, chunk) in copied_batch {
+                                ordered.write_chunk(chunk_index, chunk)?;
+                            }
+                        }
+                        let _ = ordered.finish()?;
+                        return Ok(input_len_u64);
                     }
                     Err(error) => execution.apply_pool_fallback(format!(
                         "store codec thread pool build failed: {error}"
@@ -677,8 +808,11 @@ impl NativeCodecBackend {
             }
         }
 
-        fs::write(&request.output, input_bytes)?;
-        Ok(input_len as u64)
+        let mut source = BufReader::new(File::open(&request.input)?);
+        let mut output = BufWriter::new(NonVectoredWriter::new(File::create(&request.output)?));
+        let copied = io::copy(&mut source, &mut output)?;
+        output.flush()?;
+        Ok(copied)
     }
 
     fn encode_impl(
@@ -688,7 +822,7 @@ impl NativeCodecBackend {
         execution: &mut ThreadExecution,
     ) -> Result<u64> {
         let bytes = match self.kind {
-            NativeCodecKind::Store => fs::copy(&request.input, &request.output)?,
+            NativeCodecKind::Store => self.copy_store_payload(request, execution)?,
             NativeCodecKind::Deflate => {
                 if let Some(copied) =
                     self.encode_deflate_parallel(request, level.unwrap_or(6) as u32, execution)?
@@ -910,4 +1044,3 @@ impl NativeCodecBackend {
         ))
     }
 }
-

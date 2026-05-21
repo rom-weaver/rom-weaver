@@ -1099,7 +1099,6 @@ const useLocalApplyPatchFormSession = ({
       const generation = ++inputStageGenerationRef.current;
       const progressGeneration = ++inputProgressGenerationRef.current;
       let holdDecompressedProgress = false;
-      const retainedInputKeys = new Set(previousInputs.map((input) => getInputKey(input, previousInputs)));
       if (!(snapshot.inputs[0] && stageInput)) {
         setInputStaging(false);
         setRomInputs([]);
@@ -1165,8 +1164,6 @@ const useLocalApplyPatchFormSession = ({
               };
             }
             info = getStableInputInfo(info, snapshot.inputs);
-            const source = typeof info.order === "number" ? snapshot.inputs[info.order] : fallbackSource;
-            if (source && retainedInputKeys.has(getInputKey(source, snapshot.inputs))) return;
             mergeRomInput(info, {
               ...getChecksumProgressInfoPatch(details),
               progress: toInputProgress(event),

@@ -271,21 +271,18 @@ impl CliApp {
         in_place: bool,
         dry_run: bool,
     ) -> Result<BatchHeaderFixOutcome> {
-        let mut bytes = fs::read(source)?;
-        let repair_outcome = Self::repair_checksum_if_supported(&mut bytes, Some(source));
-
-        if !dry_run {
-            if in_place {
-                if !repair_outcome.repaired_profiles.is_empty() {
-                    fs::write(destination, bytes)?;
-                }
-            } else {
-                if let Some(parent) = destination.parent() {
-                    fs::create_dir_all(parent)?;
-                }
-                fs::write(destination, bytes)?;
-            }
-        }
+        let repair_outcome = if dry_run {
+            let temp_path = Self::temporary_header_fix_path(source);
+            Self::copy_with_optional_header(source, &temp_path, None)?;
+            let repair = Self::repair_checksum_file_in_place(&temp_path, Some(source));
+            fs::remove_file(&temp_path).ok();
+            repair?
+        } else if in_place {
+            Self::repair_checksum_file_in_place(destination, Some(source))?
+        } else {
+            Self::copy_with_optional_header(source, destination, None)?;
+            Self::repair_checksum_file_in_place(destination, Some(source))?
+        };
 
         Ok(BatchHeaderFixOutcome {
             repaired_profiles: repair_outcome.repaired_profiles,
@@ -763,6 +760,25 @@ impl CliApp {
         let temp_name = format!(
             ".{name}.{}-{}-{timestamp}",
             RVZ_TRIM_TEMP_SUFFIX,
+            Self::runtime_process_id()
+        );
+        source
+            .parent()
+            .map(|parent| parent.join(&temp_name))
+            .unwrap_or_else(|| PathBuf::from(temp_name))
+    }
+
+    fn temporary_header_fix_path(source: &Path) -> PathBuf {
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|value| value.as_nanos())
+            .unwrap_or_default();
+        let name = source
+            .file_name()
+            .map(|value| value.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "header-fix".to_string());
+        let temp_name = format!(
+            ".{name}.rom-weaver-header-fix-dry-run.tmp-{}-{timestamp}",
             Self::runtime_process_id()
         );
         source

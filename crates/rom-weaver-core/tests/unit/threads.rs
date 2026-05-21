@@ -147,12 +147,11 @@ fn pool_build_falls_back_to_single_thread_when_parallel_build_fails() {
 #[test]
 fn pool_build_hard_fails_when_single_thread_fallback_also_fails() {
     let planned = ThreadCapability::parallel(None).negotiate(ThreadBudget::Fixed(8));
-    let result =
-        SharedThreadPool::with_execution_fallback_with_builder(planned, |_execution| {
-            Err(RomWeaverError::ThreadPoolBuild(
-                "operation not supported on this platform".to_string(),
-            ))
-        });
+    let result = SharedThreadPool::with_execution_fallback_with_builder(planned, |_execution| {
+        Err(RomWeaverError::ThreadPoolBuild(
+            "operation not supported on this platform".to_string(),
+        ))
+    });
     assert!(result.is_err(), "fallback should fail");
     let error = match result {
         Err(error) => error,
@@ -170,13 +169,12 @@ fn pool_build_hard_fails_when_single_thread_fallback_also_fails() {
 fn pool_build_does_not_retry_when_execution_is_already_single_threaded() {
     let mut attempts = 0usize;
     let planned = ThreadCapability::single_threaded().negotiate(ThreadBudget::Fixed(8));
-    let result =
-        SharedThreadPool::with_execution_fallback_with_builder(planned, |_execution| {
-            attempts += 1;
-            Err(RomWeaverError::ThreadPoolBuild(
-                "single thread pool unavailable".to_string(),
-            ))
-        });
+    let result = SharedThreadPool::with_execution_fallback_with_builder(planned, |_execution| {
+        attempts += 1;
+        Err(RomWeaverError::ThreadPoolBuild(
+            "single thread pool unavailable".to_string(),
+        ))
+    });
     assert!(
         result.is_err(),
         "single-thread plan should not succeed when build fails"

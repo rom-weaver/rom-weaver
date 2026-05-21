@@ -3,12 +3,14 @@ use std::{
     fs::{self, File, OpenOptions},
     io::{BufReader, Read, Seek, SeekFrom, Write},
     path::Path,
+    sync::{Arc, Mutex},
 };
 
 use crc32fast::Hasher;
 use rayon::prelude::*;
 use rom_weaver_checksum::{checksum_file_values, crc32_bytes};
 use rom_weaver_core::{
+    BlockCacheReader, DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES,
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
     PatchCapabilities, PatchChecksumValidation, PatchCreateRequest, PatchHandler, ProbeConfidence,
     Result, RomWeaverError, SharedThreadPool, ThreadCapability,
@@ -97,10 +99,15 @@ impl PatchHandler for UpsPatchHandler {
         let thread_capability = ups_apply_thread_capability(patch.changes.len());
         let planned_execution = context.plan_threads(thread_capability.clone());
         let execution = if planned_execution.used_parallelism {
-            let source = crate::map_file_read_only_with_fallback(&request.input)?;
             let (execution, pool) = context.build_pool(thread_capability)?;
-            let prepared =
-                prepare_ups_writes_parallel(&patch, source.as_ref(), working_size, &pool, context)?;
+            let prepared = prepare_ups_writes_parallel(
+                &patch,
+                &request.input,
+                input_len,
+                working_size,
+                &pool,
+                context,
+            )?;
             apply_prepared_ups_writes(&mut output, &prepared)?;
             execution
         } else {
@@ -151,6 +158,7 @@ impl PatchHandler for UpsPatchHandler {
             &request.modified,
             &pool,
             execution.used_parallelism,
+            context,
         )?;
 
         if let Some(parent) = request.output.parent() {
@@ -218,8 +226,73 @@ fn parse_ups_file_with_checksum_validation(
     path: &Path,
     validate_patch_checksum: bool,
 ) -> Result<ParsedUpsPatch> {
-    let bytes = crate::map_file_read_only_with_fallback(path)?;
-    parse_ups_bytes_with_checksum_validation(bytes.as_ref(), validate_patch_checksum)
+    let file_len = fs::metadata(path)?.len();
+    let minimum_len = (UPS_MAGIC.len() + UPS_FOOTER_SIZE) as u64;
+    if file_len < minimum_len {
+        return Err(RomWeaverError::Validation(
+            "UPS patch is too small to contain a valid header and footer".into(),
+        ));
+    }
+
+    let footer_offset = file_len
+        .checked_sub(UPS_FOOTER_SIZE as u64)
+        .expect("validated footer size");
+    let mut parser = UpsFileParser::new(BufReader::new(File::open(path)?), footer_offset);
+
+    if parser.read_exact(UPS_MAGIC.len())?.as_slice() != UPS_MAGIC {
+        return Err(RomWeaverError::Validation("Patch header invalid".into()));
+    }
+
+    let source_size = parser.read_varint()?;
+    let target_size = parser.read_varint()?;
+
+    let mut next_offset = 0u64;
+    let mut changes = Vec::new();
+    while !parser.is_at_end() {
+        let delta = parser.read_varint()?;
+        next_offset = checked_add(next_offset, delta, "UPS record offset")?;
+
+        let mut xor_bytes = Vec::new();
+        loop {
+            let byte = parser.read_u8()?;
+            if byte == 0 {
+                break;
+            }
+            xor_bytes.push(byte);
+        }
+
+        let change_len = u64::try_from(xor_bytes.len()).map_err(|_| {
+            RomWeaverError::Validation("UPS record length exceeded addressable memory".into())
+        })?;
+        changes.push(UpsChange {
+            offset: next_offset,
+            xor_bytes,
+        });
+        next_offset = checked_add(next_offset, change_len, "UPS record end")?;
+        next_offset = checked_add(next_offset, 1, "UPS record separator")?;
+    }
+
+    let footer = read_ups_footer(path, footer_offset)?;
+    let source_checksum = read_u32_le(&footer[0..4]);
+    let target_checksum = read_u32_le(&footer[4..8]);
+    let patch_checksum = read_u32_le(&footer[8..12]);
+    if validate_patch_checksum {
+        let actual_patch_checksum = crc32_prefix(path, file_len - 4)?;
+        if actual_patch_checksum != patch_checksum {
+            return Err(RomWeaverError::Validation(format!(
+                "Patch checksum invalid; expected: {patch_checksum:08x}, Actual: {actual_patch_checksum:08x}"
+            )));
+        }
+    }
+
+    Ok(ParsedUpsPatch {
+        source_size,
+        target_size,
+        source_checksum,
+        target_checksum,
+        patch_checksum,
+        changes,
+    })
 }
 
 #[cfg(test)]
@@ -387,18 +460,24 @@ fn ups_apply_thread_capability(change_count: usize) -> ThreadCapability {
 
 fn prepare_ups_writes_parallel(
     patch: &ParsedUpsPatch,
-    source: &[u8],
+    source_path: &Path,
+    source_len: u64,
     output_len: u64,
     pool: &SharedThreadPool,
     context: &OperationContext,
 ) -> Result<Vec<PreparedUpsWrite>> {
+    let shared_source = Arc::new(Mutex::new(BlockCacheReader::open(
+        source_path,
+        DEFAULT_BLOCK_CACHE_SIZE_BYTES,
+        DEFAULT_BLOCK_CACHE_MAX_BLOCKS,
+    )?));
     pool.install(|| {
         patch
             .changes
             .par_iter()
             .map(|change| {
                 context.cancel().check()?;
-                prepare_ups_write(change, source, output_len)
+                prepare_ups_write(change, source_len, output_len, &shared_source)
             })
             .collect::<Result<Vec<_>>>()
     })
@@ -406,8 +485,9 @@ fn prepare_ups_writes_parallel(
 
 fn prepare_ups_write(
     change: &UpsChange,
-    source: &[u8],
+    source_len: u64,
     output_len: u64,
+    source: &Arc<Mutex<BlockCacheReader>>,
 ) -> Result<PreparedUpsWrite> {
     let change_len = u64::try_from(change.xor_bytes.len()).map_err(|_| {
         RomWeaverError::Validation("UPS record length exceeded addressable memory".into())
@@ -419,23 +499,21 @@ fn prepare_ups_write(
         ));
     }
 
-    let source_block = match usize::try_from(change.offset) {
-        Ok(start) => {
-            let end = start
-                .saturating_add(change.xor_bytes.len())
-                .min(source.len());
-            if start >= source.len() {
-                &[][..]
-            } else {
-                &source[start..end]
-            }
+    let mut source_bytes = vec![0u8; change.xor_bytes.len()];
+    if change.offset < source_len {
+        let readable = usize::try_from((source_len - change.offset).min(change_len))
+            .map_err(|_| RomWeaverError::Validation("UPS source range exceeded usize".into()))?;
+        if readable > 0 {
+            let mut reader = source
+                .lock()
+                .map_err(|_| RomWeaverError::Validation("UPS source cache lock poisoned".into()))?;
+            reader.read_exact_at(change.offset, &mut source_bytes[..readable])?;
         }
-        Err(_) => &[][..],
-    };
+    }
 
     let mut patched = vec![0u8; change.xor_bytes.len()];
     for (index, byte) in patched.iter_mut().enumerate() {
-        *byte = source_block.get(index).copied().unwrap_or(0) ^ change.xor_bytes[index];
+        *byte = source_bytes[index] ^ change.xor_bytes[index];
     }
 
     Ok(PreparedUpsWrite {
@@ -474,9 +552,10 @@ fn create_ups_patch(
     target_path: &Path,
     pool: &SharedThreadPool,
     use_parallel_scan: bool,
+    context: &OperationContext,
 ) -> Result<CreatedUpsPatch> {
     if use_parallel_scan {
-        create_ups_patch_parallel(source_path, target_path, pool)
+        create_ups_patch_parallel(source_path, target_path, pool, context)
     } else {
         create_ups_patch_streaming(source_path, target_path)
     }
@@ -486,19 +565,14 @@ fn create_ups_patch_parallel(
     source_path: &Path,
     target_path: &Path,
     pool: &SharedThreadPool,
+    context: &OperationContext,
 ) -> Result<CreatedUpsPatch> {
-    let source = crate::map_file_read_only_with_fallback(source_path)?;
-    let target = crate::map_file_read_only_with_fallback(target_path)?;
-    let source = source.as_slice();
-    let target = target.as_slice();
-
-    let source_size = u64::try_from(source.len())
-        .map_err(|_| RomWeaverError::Validation("UPS source size exceeded u64".into()))?;
-    let target_size = u64::try_from(target.len())
-        .map_err(|_| RomWeaverError::Validation("UPS target size exceeded u64".into()))?;
-    let source_checksum = crc32_bytes(source);
-    let target_checksum = crc32_bytes(target);
-    let changes = collect_ups_changes_parallel(source, target, pool);
+    let source_size = fs::metadata(source_path)?.len();
+    let target_size = fs::metadata(target_path)?.len();
+    let source_checksum = crc32_path_cached(source_path, context)?;
+    let target_checksum = crc32_path_cached(target_path, context)?;
+    let changes =
+        collect_ups_changes_parallel(source_path, source_size, target_path, target_size, pool)?;
 
     encode_ups_patch(
         &changes,
@@ -510,20 +584,21 @@ fn create_ups_patch_parallel(
 }
 
 fn collect_ups_changes_parallel(
-    source: &[u8],
-    target: &[u8],
+    source_path: &Path,
+    source_size: u64,
+    target_path: &Path,
+    target_size: u64,
     pool: &SharedThreadPool,
-) -> Vec<UpsChange> {
-    if target.is_empty() {
-        return Vec::new();
+) -> Result<Vec<UpsChange>> {
+    if target_size == 0 {
+        return Ok(Vec::new());
     }
 
-    let chunk_ranges = (0..target.len())
+    let chunk_size = CREATE_THREAD_SCAN_CHUNK_BYTES as u64;
+    let chunk_ranges = (0..target_size)
         .step_by(CREATE_THREAD_SCAN_CHUNK_BYTES)
         .map(|start| {
-            let end = start
-                .saturating_add(CREATE_THREAD_SCAN_CHUNK_BYTES)
-                .min(target.len());
+            let end = start.saturating_add(chunk_size).min(target_size);
             start..end
         })
         .collect::<Vec<_>>();
@@ -531,12 +606,21 @@ fn collect_ups_changes_parallel(
     let per_chunk_changes = pool.install(|| {
         chunk_ranges
             .into_par_iter()
-            .map(|range| collect_ups_chunk_changes(source, target, range.start, range.end))
+            .map(|range| {
+                collect_ups_chunk_changes(
+                    source_path,
+                    source_size,
+                    target_path,
+                    range.start,
+                    range.end,
+                )
+            })
             .collect::<Vec<_>>()
     });
 
     let mut merged: Vec<UpsChange> = Vec::new();
     for changes in per_chunk_changes {
+        let changes = changes?;
         for mut change in changes {
             if let Some(last) = merged.last_mut() {
                 let last_len = u64::try_from(last.xor_bytes.len()).expect("len fits u64");
@@ -552,45 +636,79 @@ fn collect_ups_changes_parallel(
             merged.push(change);
         }
     }
-    merged
+    Ok(merged)
 }
 
 fn collect_ups_chunk_changes(
-    source: &[u8],
-    target: &[u8],
-    start: usize,
-    end: usize,
-) -> Vec<UpsChange> {
-    let mut changes = Vec::new();
-    let mut pending_start: Option<usize> = None;
-    let mut pending_xor = Vec::<u8>::new();
+    source_path: &Path,
+    source_size: u64,
+    target_path: &Path,
+    start: u64,
+    end: u64,
+) -> Result<Vec<UpsChange>> {
+    let mut source = File::open(source_path)?;
+    let mut target = File::open(target_path)?;
+    if start < source_size {
+        source.seek(SeekFrom::Start(start))?;
+    }
+    target.seek(SeekFrom::Start(start))?;
 
-    for index in start..end {
-        let source_byte = source.get(index).copied().unwrap_or(0);
-        let target_byte = target[index];
-        if source_byte != target_byte {
-            if pending_start.is_none() {
-                pending_start = Some(index);
+    let mut source_buffer = vec![0u8; UPS_IO_BUFFER_SIZE];
+    let mut target_buffer = vec![0u8; UPS_IO_BUFFER_SIZE];
+    let mut changes = Vec::new();
+    let mut pending_start: Option<u64> = None;
+    let mut pending_xor = Vec::<u8>::new();
+    let mut absolute = start;
+
+    while absolute < end {
+        let chunk_len = usize::try_from((end - absolute).min(UPS_IO_BUFFER_SIZE as u64))
+            .map_err(|_| RomWeaverError::Validation("UPS chunk length exceeded usize".into()))?;
+
+        target.read_exact(&mut target_buffer[..chunk_len])?;
+
+        let source_chunk_len = if absolute >= source_size {
+            0
+        } else {
+            usize::try_from((source_size - absolute).min(chunk_len as u64)).map_err(|_| {
+                RomWeaverError::Validation("UPS source chunk length exceeded usize".into())
+            })?
+        };
+        if source_chunk_len > 0 {
+            source.read_exact(&mut source_buffer[..source_chunk_len])?;
+        }
+        if source_chunk_len < chunk_len {
+            source_buffer[source_chunk_len..chunk_len].fill(0);
+        }
+
+        for index in 0..chunk_len {
+            let source_byte = source_buffer[index];
+            let target_byte = target_buffer[index];
+            if source_byte != target_byte {
+                if pending_start.is_none() {
+                    pending_start = Some(absolute);
+                }
+                pending_xor.push(source_byte ^ target_byte);
+            } else if !pending_xor.is_empty() {
+                let offset = pending_start.expect("pending start exists");
+                changes.push(UpsChange {
+                    offset,
+                    xor_bytes: std::mem::take(&mut pending_xor),
+                });
+                pending_start = None;
             }
-            pending_xor.push(source_byte ^ target_byte);
-        } else if !pending_xor.is_empty() {
-            let offset = pending_start.expect("pending start exists");
-            changes.push(UpsChange {
-                offset: offset as u64,
-                xor_bytes: std::mem::take(&mut pending_xor),
-            });
-            pending_start = None;
+            absolute = checked_add(absolute, 1, "UPS chunk scan offset")?;
         }
     }
 
     if !pending_xor.is_empty() {
         let offset = pending_start.expect("pending start exists");
         changes.push(UpsChange {
-            offset: offset as u64,
+            offset,
             xor_bytes: pending_xor,
         });
     }
-    changes
+
+    Ok(changes)
 }
 
 fn create_ups_patch_streaming(source_path: &Path, target_path: &Path) -> Result<CreatedUpsPatch> {
@@ -850,6 +968,29 @@ fn crc32_path_cached(path: &Path, context: &OperationContext) -> Result<u32> {
     })
 }
 
+fn read_ups_footer(path: &Path, footer_offset: u64) -> Result<[u8; UPS_FOOTER_SIZE]> {
+    let mut footer = [0u8; UPS_FOOTER_SIZE];
+    let mut file = File::open(path)?;
+    file.seek(SeekFrom::Start(footer_offset))?;
+    file.read_exact(&mut footer)?;
+    Ok(footer)
+}
+
+fn crc32_prefix(path: &Path, len: u64) -> Result<u32> {
+    let mut file = BufReader::new(File::open(path)?);
+    let mut hasher = Hasher::new();
+    let mut remaining = len;
+    let mut buffer = [0u8; UPS_IO_BUFFER_SIZE];
+    while remaining > 0 {
+        let chunk_len = usize::try_from(remaining.min(buffer.len() as u64))
+            .map_err(|_| RomWeaverError::Validation("UPS checksum chunk exceeded usize".into()))?;
+        file.read_exact(&mut buffer[..chunk_len])?;
+        hasher.update(&buffer[..chunk_len]);
+        remaining -= chunk_len as u64;
+    }
+    Ok(hasher.finalize())
+}
+
 struct UpsParser<'a> {
     bytes: &'a [u8],
     offset: usize,
@@ -883,6 +1024,70 @@ impl<'a> UpsParser<'a> {
         let start = self.offset;
         self.offset = end;
         Ok(&self.bytes[start..end])
+    }
+
+    fn read_u8(&mut self) -> Result<u8> {
+        Ok(self.read_exact(1)?[0])
+    }
+
+    fn read_varint(&mut self) -> Result<u64> {
+        let mut data = 0u64;
+        let mut shift = 1u64;
+        loop {
+            let byte = u64::from(self.read_u8()?);
+            data = data.checked_add((byte & 0x7f) * shift).ok_or_else(|| {
+                RomWeaverError::Validation("UPS varint overflowed available range".into())
+            })?;
+            if byte & 0x80 != 0 {
+                return Ok(data);
+            }
+
+            shift = shift
+                .checked_shl(7)
+                .ok_or_else(|| RomWeaverError::Validation("UPS varint shift overflowed".into()))?;
+            data = data.checked_add(shift).ok_or_else(|| {
+                RomWeaverError::Validation("UPS varint overflowed available range".into())
+            })?;
+        }
+    }
+}
+
+struct UpsFileParser<R> {
+    reader: R,
+    offset: u64,
+    end: u64,
+}
+
+impl<R: Read> UpsFileParser<R> {
+    fn new(reader: R, end: u64) -> Self {
+        Self {
+            reader,
+            offset: 0,
+            end,
+        }
+    }
+
+    fn is_at_end(&self) -> bool {
+        self.offset == self.end
+    }
+
+    fn read_exact(&mut self, len: usize) -> Result<Vec<u8>> {
+        let len_u64 = u64::try_from(len)
+            .map_err(|_| RomWeaverError::Validation("UPS parser length overflowed u64".into()))?;
+        let next = self
+            .offset
+            .checked_add(len_u64)
+            .ok_or_else(|| RomWeaverError::Validation("UPS parser offset overflowed".into()))?;
+        if next > self.end {
+            return Err(RomWeaverError::Validation(
+                "UPS patch ended unexpectedly while reading record data".into(),
+            ));
+        }
+
+        let mut bytes = vec![0u8; len];
+        self.reader.read_exact(&mut bytes)?;
+        self.offset = next;
+        Ok(bytes)
     }
 
     fn read_u8(&mut self) -> Result<u8> {

@@ -1,11 +1,20 @@
-use std::{borrow::Cow, collections::VecDeque};
+use std::{
+    collections::VecDeque,
+    fs,
+    fs::OpenOptions,
+    io::{Read, Seek, SeekFrom, Write},
+    path::Path,
+    sync::{Arc, Mutex},
+};
 
-use rayon::prelude::*;
-use rom_weaver_core::{RomWeaverError, SharedThreadPool};
+use rom_weaver_core::{
+    BlockCacheReader, RomWeaverError, SharedThreadPool, DEFAULT_BLOCK_CACHE_MAX_BLOCKS,
+    DEFAULT_BLOCK_CACHE_SIZE_BYTES,
+};
 use sha1::{Digest, Sha1};
 
 type VmResult<T> = std::result::Result<T, String>;
-const THREAD_WORK_CHUNK_BYTES: usize = 1024 * 1024;
+const FILE_IO_CHUNK_BYTES: usize = 1024 * 1024;
 
 #[derive(Clone, Copy)]
 enum StepControl {
@@ -14,21 +23,92 @@ enum StepControl {
 }
 
 enum VmOutcome {
-    Success(Vec<u8>),
+    Success,
     Failure(u32),
+}
+
+enum PatchSpace<'a> {
+    Borrowed(&'a [u8]),
+    Owned(Vec<u8>),
+    Cached {
+        len: usize,
+        reader: Arc<Mutex<BlockCacheReader>>,
+    },
+}
+
+impl<'a> PatchSpace<'a> {
+    fn len(&self) -> usize {
+        match self {
+            Self::Borrowed(bytes) => bytes.len(),
+            Self::Owned(bytes) => bytes.len(),
+            Self::Cached { len, .. } => *len,
+        }
+    }
+
+    fn read_byte(&self, position: usize) -> VmResult<u8> {
+        let mut byte = [0u8; 1];
+        self.read_exact_into(position, &mut byte)?;
+        Ok(byte[0])
+    }
+
+    fn read_halfword(&self, position: usize) -> VmResult<u16> {
+        let mut word = [0u8; 2];
+        self.read_exact_into(position, &mut word)?;
+        Ok(u16::from_le_bytes(word))
+    }
+
+    fn read_word(&self, position: usize) -> VmResult<u32> {
+        let mut word = [0u8; 4];
+        self.read_exact_into(position, &mut word)?;
+        Ok(u32::from_le_bytes(word))
+    }
+
+    fn read_vec(&self, start: usize, len: usize) -> VmResult<Vec<u8>> {
+        let mut bytes = vec![0u8; len];
+        self.read_exact_into(start, &mut bytes)?;
+        Ok(bytes)
+    }
+
+    fn read_exact_into(&self, start: usize, output: &mut [u8]) -> VmResult<()> {
+        let end = start
+            .checked_add(output.len())
+            .ok_or_else(|| "attempted to read past the end of the patch space".to_string())?;
+        if end > self.len() {
+            return Err("attempted to read past the end of the patch space".to_string());
+        }
+
+        match self {
+            Self::Borrowed(bytes) => {
+                output.copy_from_slice(&bytes[start..end]);
+                Ok(())
+            }
+            Self::Owned(bytes) => {
+                output.copy_from_slice(&bytes[start..end]);
+                Ok(())
+            }
+            Self::Cached { reader, .. } => {
+                let mut guard = reader
+                    .lock()
+                    .map_err(|_| "BSP patch block cache lock is poisoned".to_string())?;
+                guard
+                    .read_exact_at(start as u64, output)
+                    .map_err(|error| format!("failed to read BSP patch data: {error}"))
+            }
+        }
+    }
 }
 
 struct Frame<'a> {
     instruction_pointer: u32,
     variables: [u32; 256],
-    patch_space: Cow<'a, [u8]>,
+    patch_space: PatchSpace<'a>,
     stack: VecDeque<u32>,
     waiting_var: Option<u8>,
     message_buffer: String,
 }
 
 impl<'a> Frame<'a> {
-    fn new(patch_space: Cow<'a, [u8]>) -> Self {
+    fn new(patch_space: PatchSpace<'a>) -> Self {
         Self {
             instruction_pointer: 0,
             variables: [0; 256],
@@ -40,31 +120,203 @@ impl<'a> Frame<'a> {
     }
 }
 
+struct VmFileBuffer {
+    file: std::fs::File,
+    len: usize,
+}
+
+impl VmFileBuffer {
+    fn open(path: &Path) -> VmResult<Self> {
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(path)
+            .map_err(|error| format!("failed to open BSP file buffer: {error}"))?;
+        let len = usize::try_from(
+            file.metadata()
+                .map_err(|error| format!("failed to read BSP file metadata: {error}"))?
+                .len(),
+        )
+        .map_err(|_| "BSP file buffer length overflow".to_string())?;
+        Ok(Self { file, len })
+    }
+
+    fn len(&self) -> usize {
+        self.len
+    }
+
+    fn ensure_size(&mut self, size: u32) -> VmResult<()> {
+        let size = usize::try_from(size).map_err(|_| "file buffer size overflow".to_string())?;
+        if self.len < size {
+            self.file
+                .set_len(size as u64)
+                .map_err(|error| format!("failed to grow BSP file buffer: {error}"))?;
+            self.len = size;
+        }
+        Ok(())
+    }
+
+    fn truncate(&mut self, size: u32) -> VmResult<()> {
+        let size = usize::try_from(size).map_err(|_| "file buffer size overflow".to_string())?;
+        self.file
+            .set_len(size as u64)
+            .map_err(|error| format!("failed to truncate BSP file buffer: {error}"))?;
+        self.len = size;
+        Ok(())
+    }
+
+    fn write_at(&mut self, position: usize, bytes: &[u8]) -> VmResult<()> {
+        let end = position
+            .checked_add(bytes.len())
+            .ok_or_else(|| "file buffer size overflow".to_string())?;
+        if end > self.len {
+            return Err("attempted to write past the end of the file buffer".to_string());
+        }
+        self.file
+            .seek(SeekFrom::Start(position as u64))
+            .map_err(|error| format!("failed to seek BSP file buffer: {error}"))?;
+        self.file
+            .write_all(bytes)
+            .map_err(|error| format!("failed to write BSP file buffer: {error}"))?;
+        Ok(())
+    }
+
+    fn read_exact_at(&mut self, position: usize, output: &mut [u8]) -> VmResult<()> {
+        let end = position
+            .checked_add(output.len())
+            .ok_or_else(|| "file buffer size overflow".to_string())?;
+        if end > self.len {
+            return Err("attempted to read past the end of the file buffer".to_string());
+        }
+        self.file
+            .seek(SeekFrom::Start(position as u64))
+            .map_err(|error| format!("failed to seek BSP file buffer: {error}"))?;
+        self.file
+            .read_exact(output)
+            .map_err(|error| format!("failed to read BSP file buffer: {error}"))?;
+        Ok(())
+    }
+
+    fn read_vec_at(&mut self, position: usize, len: usize) -> VmResult<Vec<u8>> {
+        let mut output = vec![0u8; len];
+        self.read_exact_at(position, output.as_mut_slice())?;
+        Ok(output)
+    }
+
+    fn write_range(&mut self, position: usize, data: &[u8]) -> VmResult<()> {
+        if data.is_empty() {
+            return Ok(());
+        }
+        self.write_at(position, data)
+    }
+
+    fn xor_range(&mut self, position: usize, data: &[u8]) -> VmResult<()> {
+        if data.is_empty() {
+            return Ok(());
+        }
+        let end = position
+            .checked_add(data.len())
+            .ok_or_else(|| "attempted to read past the end of the file buffer".to_string())?;
+        if end > self.len {
+            return Err("attempted to read past the end of the file buffer".to_string());
+        }
+        let mut processed = 0usize;
+        while processed < data.len() {
+            let chunk_len = (data.len() - processed).min(FILE_IO_CHUNK_BYTES);
+            let offset = position + processed;
+            let mut chunk = self.read_vec_at(offset, chunk_len)?;
+            for (dest, src) in chunk
+                .iter_mut()
+                .zip(&data[processed..processed + chunk_len])
+            {
+                *dest ^= *src;
+            }
+            self.write_at(offset, chunk.as_slice())?;
+            processed += chunk_len;
+        }
+        Ok(())
+    }
+
+    fn sha1_digest(&mut self) -> VmResult<[u8; 20]> {
+        self.file
+            .seek(SeekFrom::Start(0))
+            .map_err(|error| format!("failed to seek BSP file buffer: {error}"))?;
+        let mut hasher = Sha1::new();
+        let mut chunk = vec![0u8; FILE_IO_CHUNK_BYTES];
+        loop {
+            let read = self
+                .file
+                .read(chunk.as_mut_slice())
+                .map_err(|error| format!("failed to read BSP file buffer: {error}"))?;
+            if read == 0 {
+                break;
+            }
+            hasher.update(&chunk[..read]);
+        }
+        let digest = hasher.finalize();
+        let mut output = [0u8; 20];
+        output.copy_from_slice(digest.as_slice());
+        Ok(output)
+    }
+}
+
 struct BspVm<'a, 'pool> {
-    file_buffer: Vec<u8>,
+    file_buffer: VmFileBuffer,
     current_file_pointer: u32,
     current_file_pointer_locked: bool,
     frames: Vec<Frame<'a>>,
     dirty: bool,
     sha1: [u8; 20],
-    thread_pool: Option<&'pool SharedThreadPool>,
+    _thread_pool: std::marker::PhantomData<&'pool SharedThreadPool>,
 }
 
 impl<'a, 'pool> BspVm<'a, 'pool> {
     fn new(
         patch_bytes: &'a [u8],
-        input_bytes: Vec<u8>,
-        thread_pool: Option<&'pool SharedThreadPool>,
-    ) -> Self {
-        Self {
-            file_buffer: input_bytes,
+        input_path: &Path,
+        _thread_pool: Option<&'pool SharedThreadPool>,
+    ) -> VmResult<Self> {
+        Self::new_with_patch_space(PatchSpace::Borrowed(patch_bytes), input_path, None)
+    }
+
+    fn new_from_patch_path(
+        patch_path: &Path,
+        input_path: &Path,
+        _thread_pool: Option<&'pool SharedThreadPool>,
+    ) -> VmResult<Self> {
+        let patch_len = usize::try_from(
+            fs::metadata(patch_path)
+                .map_err(|error| format!("failed to read BSP patch metadata: {error}"))?
+                .len(),
+        )
+        .map_err(|_| "BSP patch length overflow".to_string())?;
+        let reader = BlockCacheReader::open(
+            patch_path,
+            DEFAULT_BLOCK_CACHE_SIZE_BYTES,
+            DEFAULT_BLOCK_CACHE_MAX_BLOCKS,
+        )
+        .map_err(|error| format!("failed to open BSP patch block cache: {error}"))?;
+        let patch_space = PatchSpace::Cached {
+            len: patch_len,
+            reader: Arc::new(Mutex::new(reader)),
+        };
+        Self::new_with_patch_space(patch_space, input_path, None)
+    }
+
+    fn new_with_patch_space(
+        patch_space: PatchSpace<'a>,
+        input_path: &Path,
+        _thread_pool: Option<&'pool SharedThreadPool>,
+    ) -> VmResult<Self> {
+        Ok(Self {
+            file_buffer: VmFileBuffer::open(input_path)?,
             current_file_pointer: 0,
             current_file_pointer_locked: false,
-            frames: vec![Frame::new(Cow::Borrowed(patch_bytes))],
+            frames: vec![Frame::new(patch_space)],
             dirty: true,
             sha1: [0; 20],
-            thread_pool,
-        }
+            _thread_pool: std::marker::PhantomData,
+        })
     }
 
     fn execute(&mut self) -> VmResult<VmOutcome> {
@@ -85,7 +337,7 @@ impl<'a, 'pool> BspVm<'a, 'pool> {
                     }
 
                     if exit_code == 0 {
-                        return Ok(VmOutcome::Success(self.file_buffer.clone()));
+                        return Ok(VmOutcome::Success);
                     }
                     return Ok(VmOutcome::Failure(exit_code));
                 }
@@ -115,43 +367,23 @@ impl<'a, 'pool> BspVm<'a, 'pool> {
 
     fn get_patch_byte(&self, pos: u32) -> VmResult<u8> {
         let pos = pos as usize;
-        let patch_space = &self.top_frame().patch_space;
-        if pos >= patch_space.len() {
-            return Err("attempted to read past the end of the patch space".to_string());
-        }
-        Ok(patch_space[pos])
+        self.top_frame().patch_space.read_byte(pos)
     }
 
     fn get_patch_halfword(&self, pos: u32) -> VmResult<u16> {
         let pos = pos as usize;
-        let patch_space = &self.top_frame().patch_space;
-        if pos + 2 > patch_space.len() {
-            return Err("attempted to read past the end of the patch space".to_string());
-        }
-        Ok(u16::from_le_bytes([patch_space[pos], patch_space[pos + 1]]))
+        self.top_frame().patch_space.read_halfword(pos)
     }
 
     fn get_patch_word(&self, pos: u32) -> VmResult<u32> {
         let pos = pos as usize;
-        let patch_space = &self.top_frame().patch_space;
-        if pos + 4 > patch_space.len() {
-            return Err("attempted to read past the end of the patch space".to_string());
-        }
-        Ok(u32::from_le_bytes([
-            patch_space[pos],
-            patch_space[pos + 1],
-            patch_space[pos + 2],
-            patch_space[pos + 3],
-        ]))
+        self.top_frame().patch_space.read_word(pos)
     }
 
     fn next_patch_byte(&mut self) -> VmResult<u8> {
         let frame = self.top_frame_mut();
         let ip = frame.instruction_pointer as usize;
-        if ip + 1 > frame.patch_space.len() {
-            return Err("attempted to read past the end of the patch space".to_string());
-        }
-        let value = frame.patch_space[ip];
+        let value = frame.patch_space.read_byte(ip)?;
         frame.instruction_pointer = frame.instruction_pointer.wrapping_add(1);
         Ok(value)
     }
@@ -159,10 +391,7 @@ impl<'a, 'pool> BspVm<'a, 'pool> {
     fn next_patch_halfword(&mut self) -> VmResult<u16> {
         let frame = self.top_frame_mut();
         let ip = frame.instruction_pointer as usize;
-        if ip + 2 > frame.patch_space.len() {
-            return Err("attempted to read past the end of the patch space".to_string());
-        }
-        let value = u16::from_le_bytes([frame.patch_space[ip], frame.patch_space[ip + 1]]);
+        let value = frame.patch_space.read_halfword(ip)?;
         frame.instruction_pointer = frame.instruction_pointer.wrapping_add(2);
         Ok(value)
     }
@@ -170,15 +399,7 @@ impl<'a, 'pool> BspVm<'a, 'pool> {
     fn next_patch_word(&mut self) -> VmResult<u32> {
         let frame = self.top_frame_mut();
         let ip = frame.instruction_pointer as usize;
-        if ip + 4 > frame.patch_space.len() {
-            return Err("attempted to read past the end of the patch space".to_string());
-        }
-        let value = u32::from_le_bytes([
-            frame.patch_space[ip],
-            frame.patch_space[ip + 1],
-            frame.patch_space[ip + 2],
-            frame.patch_space[ip + 3],
-        ]);
+        let value = frame.patch_space.read_word(ip)?;
         frame.instruction_pointer = frame.instruction_pointer.wrapping_add(4);
         Ok(value)
     }
@@ -235,11 +456,7 @@ impl<'a, 'pool> BspVm<'a, 'pool> {
     }
 
     fn ensure_file_size(&mut self, size: u32) -> VmResult<()> {
-        let size = usize::try_from(size).map_err(|_| "file buffer size overflow".to_string())?;
-        if self.file_buffer.len() < size {
-            self.file_buffer.resize(size, 0);
-        }
-        Ok(())
+        self.file_buffer.ensure_size(size)
     }
 
     fn set_file_byte(&mut self, position: u32, value: u8) -> VmResult<()> {
@@ -247,8 +464,7 @@ impl<'a, 'pool> BspVm<'a, 'pool> {
             .checked_add(1)
             .ok_or_else(|| "file buffer size overflow".to_string())?;
         self.ensure_file_size(new_size)?;
-        self.file_buffer[position as usize] = value;
-        Ok(())
+        self.file_buffer.write_at(position as usize, &[value])
     }
 
     fn set_file_halfword(&mut self, position: u32, value: u16) -> VmResult<()> {
@@ -256,11 +472,8 @@ impl<'a, 'pool> BspVm<'a, 'pool> {
             .checked_add(2)
             .ok_or_else(|| "file buffer size overflow".to_string())?;
         self.ensure_file_size(new_size)?;
-        let bytes = value.to_le_bytes();
-        let position = position as usize;
-        self.file_buffer[position] = bytes[0];
-        self.file_buffer[position + 1] = bytes[1];
-        Ok(())
+        self.file_buffer
+            .write_at(position as usize, &value.to_le_bytes())
     }
 
     fn set_file_word(&mut self, position: u32, value: u32) -> VmResult<()> {
@@ -268,45 +481,38 @@ impl<'a, 'pool> BspVm<'a, 'pool> {
             .checked_add(4)
             .ok_or_else(|| "file buffer size overflow".to_string())?;
         self.ensure_file_size(new_size)?;
-        let bytes = value.to_le_bytes();
-        let position = position as usize;
-        self.file_buffer[position] = bytes[0];
-        self.file_buffer[position + 1] = bytes[1];
-        self.file_buffer[position + 2] = bytes[2];
-        self.file_buffer[position + 3] = bytes[3];
-        Ok(())
+        self.file_buffer
+            .write_at(position as usize, &value.to_le_bytes())
     }
 
-    fn get_file_byte(&self, position: u32) -> VmResult<u8> {
+    fn get_file_byte(&mut self, position: u32) -> VmResult<u8> {
         let position = position as usize;
         if position >= self.file_buffer.len() {
             return Err("attempted to read past the end of the file buffer".to_string());
         }
-        Ok(self.file_buffer[position])
+        let mut output = [0u8; 1];
+        self.file_buffer.read_exact_at(position, &mut output)?;
+        Ok(output[0])
     }
 
-    fn get_file_halfword(&self, position: u32) -> VmResult<u16> {
+    fn get_file_halfword(&mut self, position: u32) -> VmResult<u16> {
         let position = position as usize;
         if position + 2 > self.file_buffer.len() {
             return Err("attempted to read past the end of the file buffer".to_string());
         }
-        Ok(u16::from_le_bytes([
-            self.file_buffer[position],
-            self.file_buffer[position + 1],
-        ]))
+        let mut output = [0u8; 2];
+        self.file_buffer.read_exact_at(position, &mut output)?;
+        Ok(u16::from_le_bytes(output))
     }
 
-    fn get_file_word(&self, position: u32) -> VmResult<u32> {
+    fn get_file_word(&mut self, position: u32) -> VmResult<u32> {
         let position = position as usize;
         if position + 4 > self.file_buffer.len() {
             return Err("attempted to read past the end of the file buffer".to_string());
         }
-        Ok(u32::from_le_bytes([
-            self.file_buffer[position],
-            self.file_buffer[position + 1],
-            self.file_buffer[position + 2],
-            self.file_buffer[position + 3],
-        ]))
+        let mut output = [0u8; 4];
+        self.file_buffer.read_exact_at(position, &mut output)?;
+        Ok(u32::from_le_bytes(output))
     }
 
     fn update_current_file_pointer(&mut self, value: u32) {
@@ -371,8 +577,7 @@ impl<'a, 'pool> BspVm<'a, 'pool> {
     }
 
     fn truncate(&mut self, value: u32) -> VmResult<()> {
-        let size = usize::try_from(value).map_err(|_| "file buffer size overflow".to_string())?;
-        self.file_buffer.resize(size, 0);
+        self.file_buffer.truncate(value)?;
         self.dirty = true;
         Ok(())
     }
@@ -392,15 +597,13 @@ impl<'a, 'pool> BspVm<'a, 'pool> {
         Ok(decoded.to_string())
     }
 
-    fn update_hashes(&mut self) {
+    fn update_hashes(&mut self) -> VmResult<()> {
         if !self.dirty {
-            return;
+            return Ok(());
         }
-        let mut hasher = Sha1::new();
-        hasher.update(&self.file_buffer);
-        let digest = hasher.finalize();
-        self.sha1.copy_from_slice(digest.as_slice());
+        self.sha1 = self.file_buffer.sha1_digest()?;
         self.dirty = false;
+        Ok(())
     }
 
     fn write_data(&mut self, position: u32, address: u32, len: u32) -> VmResult<()> {
@@ -422,28 +625,13 @@ impl<'a, 'pool> BspVm<'a, 'pool> {
         self.ensure_file_size(end_position)?;
 
         let start = position as usize;
-        let end = end_position as usize;
         let patch_start = address as usize;
-        let patch_end = end_address as usize;
 
-        let source = self.top_frame().patch_space.as_ref()[patch_start..patch_end].to_vec();
-        let destination = &mut self.file_buffer[start..end];
-
-        if let Some(pool) = self
-            .thread_pool
-            .filter(|_| source.len() >= THREAD_WORK_CHUNK_BYTES)
-        {
-            pool.install(|| {
-                destination
-                    .par_chunks_mut(THREAD_WORK_CHUNK_BYTES)
-                    .zip(source.par_chunks(THREAD_WORK_CHUNK_BYTES))
-                    .for_each(|(dest_chunk, source_chunk)| {
-                        dest_chunk.copy_from_slice(source_chunk);
-                    });
-            });
-        } else {
-            destination.copy_from_slice(&source);
-        }
+        let source = self
+            .top_frame()
+            .patch_space
+            .read_vec(patch_start, len as usize)?;
+        self.file_buffer.write_range(start, source.as_slice())?;
 
         self.dirty = true;
         Ok(())
@@ -470,32 +658,13 @@ impl<'a, 'pool> BspVm<'a, 'pool> {
         }
 
         let start = position as usize;
-        let end = end_position as usize;
         let patch_start = address as usize;
-        let patch_end = end_address as usize;
 
-        let source = self.top_frame().patch_space.as_ref()[patch_start..patch_end].to_vec();
-        let destination = &mut self.file_buffer[start..end];
-
-        if let Some(pool) = self
-            .thread_pool
-            .filter(|_| source.len() >= THREAD_WORK_CHUNK_BYTES)
-        {
-            pool.install(|| {
-                destination
-                    .par_chunks_mut(THREAD_WORK_CHUNK_BYTES)
-                    .zip(source.par_chunks(THREAD_WORK_CHUNK_BYTES))
-                    .for_each(|(dest_chunk, source_chunk)| {
-                        for (dest, src) in dest_chunk.iter_mut().zip(source_chunk) {
-                            *dest ^= *src;
-                        }
-                    });
-            });
-        } else {
-            for (dest, src) in destination.iter_mut().zip(source.iter()) {
-                *dest ^= *src;
-            }
-        }
+        let source = self
+            .top_frame()
+            .patch_space
+            .read_vec(patch_start, len as usize)?;
+        self.file_buffer.xor_range(start, source.as_slice())?;
 
         self.dirty = true;
         Ok(())
@@ -689,7 +858,7 @@ impl<'a, 'pool> BspVm<'a, 'pool> {
                 Ok(StepControl::Continue)
             }
             0x16 | 0x17 => {
-                self.update_hashes();
+                self.update_hashes()?;
                 let mut result = 0u32;
                 for index in 0..20u32 {
                     if self.get_patch_byte(args[1].wrapping_add(index))?
@@ -1356,13 +1525,10 @@ impl<'a, 'pool> BspVm<'a, 'pool> {
             return Err("invalid zero length".to_string());
         }
 
-        let slice = {
-            let patch_space = &self.top_frame().patch_space;
-            patch_space[start..start + len].to_vec()
-        };
+        let slice = self.top_frame().patch_space.read_vec(start, len)?;
 
         self.top_frame_mut().waiting_var = Some(variable);
-        self.frames.push(Frame::new(Cow::Owned(slice)));
+        self.frames.push(Frame::new(PatchSpace::Owned(slice)));
         Ok(StepControl::Continue)
     }
 
@@ -1390,16 +1556,42 @@ impl<'a, 'pool> BspVm<'a, 'pool> {
         self.set_variable(variable, value);
         Ok(())
     }
+
+    fn output_len(&self) -> usize {
+        self.file_buffer.len()
+    }
 }
 
-pub(crate) fn apply_bsp_patch_bytes_native(
+pub(crate) fn apply_bsp_patch_file_native(
     patch_bytes: &[u8],
-    input_bytes: Vec<u8>,
+    file_path: &Path,
     pool: Option<&SharedThreadPool>,
-) -> Result<Vec<u8>, RomWeaverError> {
-    let mut vm = BspVm::new(patch_bytes, input_bytes, pool);
+) -> Result<u64, RomWeaverError> {
+    let mut vm = BspVm::new(patch_bytes, file_path, pool).map_err(|message| {
+        RomWeaverError::Validation(format!("BSP patch execution failed: {message}"))
+    })?;
     match vm.execute() {
-        Ok(VmOutcome::Success(output)) => Ok(output),
+        Ok(VmOutcome::Success) => Ok(vm.output_len() as u64),
+        Ok(VmOutcome::Failure(code)) => Err(RomWeaverError::Validation(format!(
+            "BSP patch script exited with failure status {}",
+            code as i64
+        ))),
+        Err(message) => Err(RomWeaverError::Validation(format!(
+            "BSP patch execution failed: {message}"
+        ))),
+    }
+}
+
+pub(crate) fn apply_bsp_patch_file_native_from_path(
+    patch_path: &Path,
+    file_path: &Path,
+    pool: Option<&SharedThreadPool>,
+) -> Result<u64, RomWeaverError> {
+    let mut vm = BspVm::new_from_patch_path(patch_path, file_path, pool).map_err(|message| {
+        RomWeaverError::Validation(format!("BSP patch execution failed: {message}"))
+    })?;
+    match vm.execute() {
+        Ok(VmOutcome::Success) => Ok(vm.output_len() as u64),
         Ok(VmOutcome::Failure(code)) => Err(RomWeaverError::Validation(format!(
             "BSP patch script exited with failure status {}",
             code as i64

@@ -83,8 +83,7 @@ fn apply_round_trip_for_ppf2_with_validation() {
     let patch_path = temp.child("update.ppf");
     let output_path = temp.child("output.bin");
 
-    let mut input =
-        vec![0u8; (PPF2_BLOCKCHECK_OFFSET as usize) + PPF_VALIDATION_BLOCK_SIZE + 32];
+    let mut input = vec![0u8; (PPF2_BLOCKCHECK_OFFSET as usize) + PPF_VALIDATION_BLOCK_SIZE + 32];
     for (index, byte) in input.iter_mut().enumerate() {
         *byte = (index % 251) as u8;
     }
@@ -133,8 +132,7 @@ fn apply_rejects_ppf2_when_input_size_mismatches() {
     let patch_path = temp.child("update.ppf");
     let output_path = temp.child("output.bin");
 
-    let mut input =
-        vec![0u8; (PPF2_BLOCKCHECK_OFFSET as usize) + PPF_VALIDATION_BLOCK_SIZE + 1];
+    let mut input = vec![0u8; (PPF2_BLOCKCHECK_OFFSET as usize) + PPF_VALIDATION_BLOCK_SIZE + 1];
     for (index, byte) in input.iter_mut().enumerate() {
         *byte = (index % 199) as u8;
     }
@@ -319,7 +317,7 @@ fn parse_accepts_ppf3_with_rompatcher_style_file_id_diz_trailer() {
     assert_eq!(parsed.version, PpfVersion::V3);
     assert_eq!(parsed.records.len(), 1);
     assert_eq!(parsed.records[0].offset, 1);
-    assert_eq!(parsed.records[0].data.as_ref(), b"AB");
+    assert_eq!(parsed.records[0].data.as_slice(), b"AB");
 }
 
 #[test]

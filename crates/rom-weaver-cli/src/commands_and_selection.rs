@@ -576,23 +576,41 @@ impl CliApp {
             start,
             length,
         };
-        let mut report = if request.start.is_some() || request.length.is_some() {
-            self.checksum.checksum_range(&request, &context)
+        let checksum_stage = if request.start.is_some() || request.length.is_some() {
+            "checksum-range"
         } else {
-            self.checksum.checksum_file(&request, &context)
-        }
-        .unwrap_or_else(|error| {
-            OperationReport::failed(
-                OperationFamily::Checksum,
-                Some(self.checksum.name().to_string()),
-                "checksum",
-                error.to_string(),
-                Some(
-                    context
-                        .plan_threads(ThreadCapability::parallel(Some(request.algorithms.len()))),
-                ),
-            )
-        });
+            "checksum"
+        };
+        let checksum_algorithm_count = request.algorithms.len();
+        let mut report = self
+            .checksum
+            .checksum_report_with_progress(&request, &context, checksum_stage, &mut |progress| {
+                self.emit_running(
+                    "checksum",
+                    OperationFamily::Checksum,
+                    Some(self.checksum.name()),
+                    "checksum",
+                    format!(
+                        "computing {} checksum algorithm(s)",
+                        checksum_algorithm_count
+                    ),
+                    Some(progress.percent()),
+                    thread_execution.clone(),
+                );
+            })
+            .unwrap_or_else(|error| {
+                OperationReport::failed(
+                    OperationFamily::Checksum,
+                    Some(self.checksum.name().to_string()),
+                    "checksum",
+                    error.to_string(),
+                    Some(
+                        context.plan_threads(ThreadCapability::parallel(Some(
+                            request.algorithms.len(),
+                        ))),
+                    ),
+                )
+            });
         if report.status == OperationStatus::Succeeded {
             if strip_header {
                 if let Some(header_match) = stripped_header_match {
@@ -1346,5 +1364,4 @@ impl CliApp {
             .iter()
             .any(|extension| lower.ends_with(extension))
     }
-
 }

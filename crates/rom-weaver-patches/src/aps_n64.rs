@@ -1,6 +1,6 @@
 use std::{
     fs::{self, File, OpenOptions},
-    io::{Read, Seek, SeekFrom, Write},
+    io::{BufReader, Read, Seek, SeekFrom, Write},
     path::Path,
 };
 
@@ -24,6 +24,7 @@ const APS_DEFAULT_ENCODING_METHOD: u8 = 0;
 const APS_N64_CART_ID_OFFSET: u64 = 0x3C;
 const APS_N64_CRC_OFFSET: u64 = 0x10;
 const APS_CREATE_CHUNK_BYTES: usize = 1024 * 1024;
+const APS_CREATE_IO_BUFFER_SIZE: usize = 64 * 1024;
 
 pub struct ApsN64PatchHandler {
     descriptor: &'static FormatDescriptor,
@@ -136,23 +137,30 @@ impl PatchHandler for ApsN64PatchHandler {
         request: &PatchCreateRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        let original = crate::map_file_read_only(&request.original)?;
-        let modified = crate::map_file_read_only(&request.modified)?;
-        let thread_capability = aps_create_thread_capability(modified.len())?;
+        let original_len = fs::metadata(&request.original)?.len();
+        let modified_len = fs::metadata(&request.modified)?.len();
+        let modified_len_usize = usize::try_from(modified_len).unwrap_or(usize::MAX);
+        let thread_capability = aps_create_thread_capability(modified_len_usize)?;
         let planned_execution = context.plan_threads(thread_capability.clone());
         let (execution, created) = if planned_execution.used_parallelism {
             let (execution, pool) = context.build_pool(thread_capability)?;
             let created = create_aps_patch_parallel(
                 &request.original,
-                original.as_ref(),
-                modified.as_ref(),
+                original_len,
+                &request.modified,
+                modified_len,
                 &pool,
                 context,
             )?;
             (execution, created)
         } else {
-            let created =
-                create_aps_patch_bytes(&request.original, original.as_ref(), modified.as_ref())?;
+            let created = create_aps_patch_from_files(
+                &request.original,
+                original_len,
+                &request.modified,
+                modified_len,
+                context,
+            )?;
             (planned_execution, created)
         };
 
@@ -261,8 +269,75 @@ fn aps_create_chunk_count(modified_len: usize) -> Result<usize> {
 }
 
 fn parse_aps_file(path: &Path) -> Result<ParsedApsPatch> {
-    let bytes = crate::map_file_read_only(path)?;
-    parse_aps_bytes(&bytes)
+    let file_len = fs::metadata(path)?.len();
+    if file_len < APS_N64_BASE_HEADER_SIZE as u64 {
+        return Err(RomWeaverError::Validation(
+            "APS patch is too small to contain a valid header".into(),
+        ));
+    }
+
+    let mut parser = ApsFileParser::new(BufReader::new(File::open(path)?), file_len);
+    let prefix = parser.read_exact(APS_N64_PREFIX_SIZE, "APS header")?;
+    if !prefix.starts_with(APS_N64_MAGIC) {
+        return Err(RomWeaverError::Validation("Patch header invalid".into()));
+    }
+
+    let header_type = prefix[APS_N64_MAGIC.len()];
+    let _encoding_method = prefix[APS_N64_MAGIC.len() + 1];
+    let _description = decode_description(
+        &prefix[APS_N64_MAGIC.len() + 2..APS_N64_MAGIC.len() + 2 + APS_DESCRIPTION_SIZE],
+    );
+
+    let n64_header = if header_type == APS_N64_MODE {
+        let extra = parser.read_exact(APS_N64_EXTRA_HEADER_SIZE, "APS N64 header")?;
+        let cart_id: [u8; 3] = extra[1..4]
+            .try_into()
+            .map_err(|_| RomWeaverError::Validation("APS cart id bytes were truncated".into()))?;
+        let crc: [u8; 8] = extra[4..12]
+            .try_into()
+            .map_err(|_| RomWeaverError::Validation("APS CRC bytes were truncated".into()))?;
+        Some(ApsN64Header { cart_id, crc })
+    } else {
+        None
+    };
+
+    let output_size = u64::from(parser.read_u32_le("APS output size")?);
+    let mut records = Vec::new();
+    while parser.remaining() > 0 {
+        if parser.remaining() < 5 {
+            return Err(RomWeaverError::Validation(
+                "APS record header exceeded patch bounds".into(),
+            ));
+        }
+        let offset = u64::from(parser.read_u32_le("APS record offset")?);
+        let length = parser.read_u8("APS record length")?;
+
+        if length == APS_RECORD_RLE {
+            if parser.remaining() < 2 {
+                return Err(RomWeaverError::Validation(
+                    "APS RLE record exceeded patch bounds".into(),
+                ));
+            }
+            let byte = parser.read_u8("APS RLE value")?;
+            let run_length = parser.read_u8("APS RLE length")?;
+            records.push(ApsRecord::Rle {
+                offset,
+                byte,
+                length: run_length,
+            });
+            continue;
+        }
+
+        let data = parser.read_exact(usize::from(length), "APS record data")?;
+        records.push(ApsRecord::Simple { offset, data });
+    }
+
+    Ok(ParsedApsPatch {
+        header_type,
+        n64_header,
+        output_size,
+        records,
+    })
 }
 
 fn parse_aps_bytes(bytes: &[u8]) -> Result<ParsedApsPatch> {
@@ -512,15 +587,13 @@ fn apply_prepared_aps_writes(file: &mut File, writes: &[PreparedApsWrite]) -> Re
     Ok(())
 }
 
+#[cfg(test)]
 fn create_aps_patch_bytes(
     original_path: &Path,
     original: &[u8],
     modified: &[u8],
 ) -> Result<CreatedApsPatch> {
     let n64_header = detect_n64_header(original_path, original);
-    let output_size = u32::try_from(modified.len()).map_err(|_| {
-        RomWeaverError::Validation("APS output size exceeded 32-bit header range".into())
-    })?;
     let mut records = Vec::<ApsRecord>::new();
 
     let mut index = 0usize;
@@ -566,6 +639,45 @@ fn create_aps_patch_bytes(
         }
     }
 
+    create_aps_patch_with_records(n64_header, modified.len() as u64, records)
+}
+
+fn create_aps_patch_from_files(
+    original_path: &Path,
+    original_len: u64,
+    modified_path: &Path,
+    modified_len: u64,
+    context: &OperationContext,
+) -> Result<CreatedApsPatch> {
+    let n64_header = detect_n64_header_from_path(original_path, original_len)?;
+    let modified_len_usize = usize::try_from(modified_len).map_err(|_| {
+        RomWeaverError::Validation("APS output size exceeded addressable memory".into())
+    })?;
+    let chunk_count = aps_create_chunk_count(modified_len_usize)?;
+    let mut chunk_runs = Vec::with_capacity(chunk_count);
+    for chunk_index in 0..chunk_count {
+        context.cancel().check()?;
+        chunk_runs.push(collect_diff_runs_for_chunk(
+            chunk_index,
+            original_path,
+            original_len,
+            modified_path,
+            modified_len,
+        )?);
+    }
+    let runs = merge_diff_runs(chunk_runs)?;
+    let records = encode_runs_as_aps_records(runs)?;
+    create_aps_patch_with_records(n64_header, modified_len, records)
+}
+
+fn create_aps_patch_with_records(
+    n64_header: Option<DetectedN64Header>,
+    output_len: u64,
+    records: Vec<ApsRecord>,
+) -> Result<CreatedApsPatch> {
+    let output_size = u32::try_from(output_len).map_err(|_| {
+        RomWeaverError::Validation("APS output size exceeded 32-bit header range".into())
+    })?;
     let mut bytes = Vec::new();
     bytes.extend_from_slice(APS_N64_MAGIC);
     bytes.push(if n64_header.is_some() {
@@ -626,6 +738,7 @@ fn create_aps_patch_bytes(
     })
 }
 
+#[cfg(test)]
 fn detect_n64_header(original_path: &Path, original: &[u8]) -> Option<DetectedN64Header> {
     if original.len() < (APS_N64_CART_ID_OFFSET as usize + 3) || original.len() < 0x18 {
         return None;
@@ -652,6 +765,38 @@ fn detect_n64_header(original_path: &Path, original: &[u8]) -> Option<DetectedN6
     })
 }
 
+fn detect_n64_header_from_path(
+    original_path: &Path,
+    original_len: u64,
+) -> Result<Option<DetectedN64Header>> {
+    if original_len < APS_N64_CART_ID_OFFSET + 3 || original_len < 0x18 {
+        return Ok(None);
+    }
+    let mut original = File::open(original_path)?;
+    let mut magic = [0u8; 4];
+    original.read_exact(&mut magic)?;
+    if magic != [0x80, 0x37, 0x12, 0x40] {
+        return Ok(None);
+    }
+    original.seek(SeekFrom::Start(APS_N64_CART_ID_OFFSET))?;
+    let mut cart_id = [0u8; 3];
+    original.read_exact(&mut cart_id)?;
+
+    original.seek(SeekFrom::Start(APS_N64_CRC_OFFSET))?;
+    let mut crc = [0u8; 8];
+    original.read_exact(&mut crc)?;
+
+    let original_format = original_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.to_ascii_lowercase().ends_with(".v64"));
+    Ok(Some(DetectedN64Header {
+        original_format: if original_format { 0 } else { 1 },
+        cart_id,
+        crc,
+    }))
+}
+
 struct DetectedN64Header {
     original_format: u8,
     cart_id: [u8; 3],
@@ -674,126 +819,114 @@ impl ApsDiffRun {
 
 fn create_aps_patch_parallel(
     original_path: &Path,
-    original: &[u8],
-    modified: &[u8],
+    original_len: u64,
+    modified_path: &Path,
+    modified_len: u64,
     pool: &SharedThreadPool,
     context: &OperationContext,
 ) -> Result<CreatedApsPatch> {
-    let n64_header = detect_n64_header(original_path, original);
-    let output_size = u32::try_from(modified.len()).map_err(|_| {
-        RomWeaverError::Validation("APS output size exceeded 32-bit header range".into())
+    let n64_header = detect_n64_header_from_path(original_path, original_len)?;
+    let modified_len_usize = usize::try_from(modified_len).map_err(|_| {
+        RomWeaverError::Validation("APS output size exceeded addressable memory".into())
     })?;
-    let chunk_count = aps_create_chunk_count(modified.len())?;
+    let chunk_count = aps_create_chunk_count(modified_len_usize)?;
 
     let chunk_runs = pool.install(|| {
         (0..chunk_count)
             .into_par_iter()
             .map(|chunk_index| {
                 context.cancel().check()?;
-                collect_diff_runs_for_chunk(chunk_index, original, modified)
+                collect_diff_runs_for_chunk(
+                    chunk_index,
+                    original_path,
+                    original_len,
+                    modified_path,
+                    modified_len,
+                )
             })
             .collect::<Result<Vec<_>>>()
     })?;
     let runs = merge_diff_runs(chunk_runs)?;
     let records = encode_runs_as_aps_records(runs)?;
-
-    let mut bytes = Vec::new();
-    bytes.extend_from_slice(APS_N64_MAGIC);
-    bytes.push(if n64_header.is_some() {
-        APS_N64_MODE
-    } else {
-        0
-    });
-    bytes.push(APS_DEFAULT_ENCODING_METHOD);
-
-    let mut description = [0u8; APS_DESCRIPTION_SIZE];
-    let description_bytes = APS_DEFAULT_DESCRIPTION.as_bytes();
-    let description_len = description_bytes.len().min(description.len());
-    description[..description_len].copy_from_slice(&description_bytes[..description_len]);
-    bytes.extend_from_slice(&description);
-
-    if let Some(n64_header) = n64_header {
-        bytes.push(n64_header.original_format);
-        bytes.extend_from_slice(&n64_header.cart_id);
-        bytes.extend_from_slice(&n64_header.crc);
-        bytes.extend_from_slice(&[0u8; 5]);
-    }
-
-    bytes.extend_from_slice(&output_size.to_le_bytes());
-    for record in &records {
-        match record {
-            ApsRecord::Simple { offset, data } => {
-                let offset_u32 = u32::try_from(*offset).map_err(|_| {
-                    RomWeaverError::Validation("APS record offset exceeded 32-bit range".into())
-                })?;
-                if data.len() > APS_RECORD_MAX_DATA_LEN {
-                    return Err(RomWeaverError::Validation(
-                        "APS record length exceeded 255 bytes".into(),
-                    ));
-                }
-                bytes.extend_from_slice(&offset_u32.to_le_bytes());
-                bytes.push(data.len() as u8);
-                bytes.extend_from_slice(data);
-            }
-            ApsRecord::Rle {
-                offset,
-                byte,
-                length,
-            } => {
-                let offset_u32 = u32::try_from(*offset).map_err(|_| {
-                    RomWeaverError::Validation("APS record offset exceeded 32-bit range".into())
-                })?;
-                bytes.extend_from_slice(&offset_u32.to_le_bytes());
-                bytes.push(APS_RECORD_RLE);
-                bytes.push(*byte);
-                bytes.push(*length);
-            }
-        }
-    }
-
-    Ok(CreatedApsPatch {
-        bytes,
-        record_count: records.len(),
-    })
+    create_aps_patch_with_records(n64_header, modified_len, records)
 }
 
 fn collect_diff_runs_for_chunk(
     chunk_index: usize,
-    original: &[u8],
-    modified: &[u8],
+    original_path: &Path,
+    original_len: u64,
+    modified_path: &Path,
+    modified_len: u64,
 ) -> Result<Vec<ApsDiffRun>> {
-    let start = chunk_index
-        .checked_mul(APS_CREATE_CHUNK_BYTES)
+    let start = u64::try_from(chunk_index)
+        .ok()
+        .and_then(|index| index.checked_mul(APS_CREATE_CHUNK_BYTES as u64))
         .ok_or_else(|| RomWeaverError::Validation("APS chunk offset overflowed".into()))?;
+    if start >= modified_len {
+        return Ok(Vec::new());
+    }
     let end = start
-        .saturating_add(APS_CREATE_CHUNK_BYTES)
-        .min(modified.len());
+        .saturating_add(APS_CREATE_CHUNK_BYTES as u64)
+        .min(modified_len);
+    let mut original = File::open(original_path)?;
+    let mut modified = File::open(modified_path)?;
+    if start < original_len {
+        original.seek(SeekFrom::Start(start))?;
+    }
+    modified.seek(SeekFrom::Start(start))?;
+    let mut original_buffer = vec![0u8; APS_CREATE_IO_BUFFER_SIZE];
+    let mut modified_buffer = vec![0u8; APS_CREATE_IO_BUFFER_SIZE];
     let mut cursor = start;
     let mut runs = Vec::new();
+    let mut pending_start: Option<u64> = None;
+    let mut pending_bytes = Vec::<u8>::new();
 
     while cursor < end {
-        let source = original.get(cursor).copied().unwrap_or(0);
-        let target = modified[cursor];
-        if source == target {
-            cursor += 1;
-            continue;
+        let chunk_len = usize::try_from((end - cursor).min(APS_CREATE_IO_BUFFER_SIZE as u64))
+            .map_err(|_| RomWeaverError::Validation("APS compare chunk exceeded usize".into()))?;
+        modified.read_exact(&mut modified_buffer[..chunk_len])?;
+        let original_chunk_len = if cursor >= original_len {
+            0
+        } else {
+            usize::try_from((original_len - cursor).min(chunk_len as u64))
+                .map_err(|_| RomWeaverError::Validation("APS source chunk exceeded usize".into()))?
+        };
+        if original_chunk_len > 0 {
+            original.read_exact(&mut original_buffer[..original_chunk_len])?;
         }
 
-        let run_start = cursor;
-        let mut run_bytes = Vec::new();
-        while cursor < end {
-            let source = original.get(cursor).copied().unwrap_or(0);
-            let target = modified[cursor];
+        for index in 0..chunk_len {
+            let source = if index < original_chunk_len {
+                original_buffer[index]
+            } else {
+                0
+            };
+            let target = modified_buffer[index];
             if source == target {
-                break;
+                if !pending_bytes.is_empty() {
+                    runs.push(ApsDiffRun {
+                        offset: pending_start.expect("pending start exists"),
+                        bytes: std::mem::take(&mut pending_bytes),
+                    });
+                    pending_start = None;
+                }
+            } else {
+                if pending_start.is_none() {
+                    pending_start = Some(cursor + index as u64);
+                }
+                pending_bytes.push(target);
             }
-            run_bytes.push(target);
-            cursor += 1;
         }
 
+        cursor = cursor
+            .checked_add(chunk_len as u64)
+            .ok_or_else(|| RomWeaverError::Validation("APS compare cursor overflowed".into()))?;
+    }
+
+    if !pending_bytes.is_empty() {
         runs.push(ApsDiffRun {
-            offset: run_start as u64,
-            bytes: run_bytes,
+            offset: pending_start.expect("pending start exists"),
+            bytes: pending_bytes,
         });
     }
 
@@ -852,6 +985,53 @@ fn decode_description(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes)
         .trim_end_matches(|c| c == '\0' || c == ' ')
         .to_string()
+}
+
+struct ApsFileParser<R> {
+    reader: R,
+    file_len: u64,
+    offset: u64,
+}
+
+impl<R: Read> ApsFileParser<R> {
+    fn new(reader: R, file_len: u64) -> Self {
+        Self {
+            reader,
+            file_len,
+            offset: 0,
+        }
+    }
+
+    fn remaining(&self) -> u64 {
+        self.file_len.saturating_sub(self.offset)
+    }
+
+    fn read_exact(&mut self, len: usize, label: &str) -> Result<Vec<u8>> {
+        let len_u64 = u64::try_from(len)
+            .map_err(|_| RomWeaverError::Validation(format!("{label} length overflowed u64")))?;
+        if len_u64 > self.remaining() {
+            return Err(RomWeaverError::Validation(format!(
+                "APS patch ended unexpectedly while reading {label}"
+            )));
+        }
+
+        let mut bytes = vec![0u8; len];
+        self.reader.read_exact(&mut bytes)?;
+        self.offset = self
+            .offset
+            .checked_add(len_u64)
+            .ok_or_else(|| RomWeaverError::Validation(format!("{label} offset overflowed")))?;
+        Ok(bytes)
+    }
+
+    fn read_u8(&mut self, label: &str) -> Result<u8> {
+        Ok(self.read_exact(1, label)?[0])
+    }
+
+    fn read_u32_le(&mut self, label: &str) -> Result<u32> {
+        let bytes = self.read_exact(4, label)?;
+        Ok(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+    }
 }
 
 fn read_u32_le(bytes: &[u8], offset: usize) -> Result<u32> {

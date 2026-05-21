@@ -1,6 +1,6 @@
 use std::{
     fs::{self, File, OpenOptions},
-    io::{BufReader, BufWriter, Cursor, Read, Seek, SeekFrom, Write},
+    io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
 };
 
@@ -810,20 +810,18 @@ fn create_native_compress_options(
 }
 
 fn encode_patch_with_native_streaming(
-    source_path: &Path,
+    _source_path: &Path,
     target_path: &Path,
     output_path: &Path,
     options: CompressOptions,
 ) -> Result<CreatedPatchCandidate> {
-    let source = fs::read(source_path)?;
-
     if let Some(parent) = output_path.parent() {
         fs::create_dir_all(parent)?;
     }
 
     let output_file = File::create(output_path)?;
     let writer = BufWriter::with_capacity(NATIVE_CHUNK_SIZE, output_file);
-    let mut encoder = DeltaEncoder::new(writer, &source, options);
+    let mut encoder = DeltaEncoder::new(writer, &[], options);
 
     let mut target = BufReader::with_capacity(NATIVE_CHUNK_SIZE, File::open(target_path)?);
     let mut input_buffer = vec![0; NATIVE_CHUNK_SIZE];
@@ -863,8 +861,7 @@ fn recode_patch_with_xdelta_options(
     secondary_compressor_id: Option<u8>,
     app_header: Option<&[u8]>,
 ) -> Result<CreatedPatchCandidate> {
-    let baseline_bytes = fs::read(baseline_patch_path)?;
-    let mut reader = Cursor::new(&baseline_bytes);
+    let mut reader = BufReader::new(File::open(baseline_patch_path)?);
     let parsed = parse_patch(&mut reader)?;
     if parsed.custom_code_table.is_some() {
         return Err(RomWeaverError::Validation(
@@ -896,7 +893,7 @@ fn recode_patch_with_xdelta_options(
         recoded.extend_from_slice(header);
     }
 
-    let mut patch_reader = Cursor::new(&baseline_bytes);
+    let mut patch_reader = BufReader::new(File::open(baseline_patch_path)?);
     for window in &parsed.windows {
         let data = read_section(&mut patch_reader, window.data_start, window.data_len)?;
         let inst = read_section(&mut patch_reader, window.inst_start, window.inst_len)?;
@@ -1073,4 +1070,3 @@ fn maybe_compress_xdelta_fgk_section(section: &[u8]) -> Result<(Vec<u8>, bool)> 
 fn xdelta_secondary_candidate_is_efficient(original_size: usize, candidate_size: usize) -> bool {
     candidate_size < original_size.saturating_sub(XDELTA_SECONDARY_MIN_SAVINGS)
 }
-

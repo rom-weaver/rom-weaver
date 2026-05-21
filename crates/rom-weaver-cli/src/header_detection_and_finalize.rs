@@ -145,18 +145,8 @@ impl CliApp {
         };
 
         if repair_checksum {
-            let mut output_bytes = fs::read(staged_output)?;
-            let repair_outcome =
-                Self::repair_checksum_if_supported(&mut output_bytes, repair_hint_path);
-            if let Some(parent) = final_output.parent() {
-                fs::create_dir_all(parent)?;
-            }
-            let mut writer = BufWriter::new(File::create(final_output)?);
-            if let Some(header) = header_bytes {
-                writer.write_all(header)?;
-            }
-            writer.write_all(&output_bytes)?;
-            writer.flush()?;
+            Self::copy_with_optional_header(staged_output, final_output, header_bytes)?;
+            let repair_outcome = Self::repair_checksum_file_in_place(final_output, repair_hint_path)?;
             let repair_warning = if repair_outcome.repaired_profiles.is_empty() {
                 if repair_outcome.matched_without_changes.is_empty() {
                     Some(

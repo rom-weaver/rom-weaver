@@ -23,12 +23,17 @@
             }
 
             let cue_dir = path.parent().unwrap_or_else(|| Path::new("."));
-            let text = fs::read_to_string(path)?;
+            let mut cue_reader = BufReader::new(File::open(path)?);
             let mut tracks = Vec::<PendingTrack>::new();
             let mut current_file: Option<PendingFile> = None;
             let mut current_track: Option<usize> = None;
 
-            for raw_line in text.lines() {
+            let mut raw_line = String::new();
+            loop {
+                raw_line.clear();
+                if cue_reader.read_line(&mut raw_line)? == 0 {
+                    break;
+                }
                 let line = raw_line.trim();
                 if line.is_empty() {
                     continue;
@@ -318,32 +323,37 @@
             }
 
             let gdi_dir = path.parent().unwrap_or_else(|| Path::new("."));
-            let text = fs::read_to_string(path)?;
-            let mut lines = text.lines().map(str::trim).filter(|line| !line.is_empty());
-            let track_count = lines
-                .next()
-                .ok_or_else(|| {
-                    RomWeaverError::Validation(format!(
-                        "gdi `{}` is missing its track count header",
-                        path.display()
-                    ))
-                })?
-                .parse::<usize>()
-                .map_err(|_| {
-                    RomWeaverError::Validation(format!(
-                        "gdi `{}` has an invalid track count header",
-                        path.display()
-                    ))
-                })?;
-            if track_count == 0 {
-                return Err(RomWeaverError::Validation(format!(
-                    "gdi `{}` does not define any tracks",
-                    path.display()
-                )));
-            }
+            let mut gdi_reader = BufReader::new(File::open(path)?);
+            let mut raw_line = String::new();
+            let mut track_count = None::<usize>;
+            let mut tracks = Vec::new();
+            loop {
+                raw_line.clear();
+                if gdi_reader.read_line(&mut raw_line)? == 0 {
+                    break;
+                }
+                let line = raw_line.trim();
+                if line.is_empty() {
+                    continue;
+                }
+                if track_count.is_none() {
+                    let parsed_track_count = line.parse::<usize>().map_err(|_| {
+                        RomWeaverError::Validation(format!(
+                            "gdi `{}` has an invalid track count header",
+                            path.display()
+                        ))
+                    })?;
+                    if parsed_track_count == 0 {
+                        return Err(RomWeaverError::Validation(format!(
+                            "gdi `{}` does not define any tracks",
+                            path.display()
+                        )));
+                    }
+                    track_count = Some(parsed_track_count);
+                    tracks = Vec::with_capacity(parsed_track_count);
+                    continue;
+                }
 
-            let mut tracks = Vec::with_capacity(track_count);
-            for line in lines {
                 let (number, remainder) = split_token(line).ok_or_else(|| {
                     RomWeaverError::Validation(format!(
                         "invalid gdi track entry in `{}`",
@@ -460,6 +470,13 @@
                     swap_audio_on_read,
                 });
             }
+
+            let track_count = track_count.ok_or_else(|| {
+                RomWeaverError::Validation(format!(
+                    "gdi `{}` is missing its track count header",
+                    path.display()
+                ))
+            })?;
 
             if tracks.len() != track_count {
                 return Err(RomWeaverError::Validation(format!(

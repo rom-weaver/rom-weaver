@@ -17,8 +17,9 @@ use flate2::{
 use lzma_rust2::{Lzma2Reader, LzmaReader, XzOptions, XzReader, XzReaderMt, XzWriter, XzWriterMt};
 use rayon::prelude::*;
 use rom_weaver_core::{
-    CodecBackend, CodecCapabilities, CodecDescriptor, CodecOperationRequest, FormatDescriptor,
-    OperationContext, OperationFamily, OperationReport, Result, RomWeaverError, ThreadCapability,
+    BoundedIoPolicy, ChunkPlanner, CodecBackend, CodecCapabilities, CodecDescriptor,
+    CodecOperationRequest, FileChunk, FormatDescriptor, OperationContext, OperationFamily,
+    OperationReport, OrderedChunkWriter, Result, RomWeaverError, ThreadCapability,
     ThreadExecution,
 };
 use zstd::stream::{Decoder as ZstdDecoder, Encoder as ZstdEncoder};
@@ -189,18 +190,6 @@ struct NativeCodecBackend {
     kind: NativeCodecKind,
 }
 
-enum ReadOnlyFile {
-    Owned(Vec<u8>),
-}
-
-impl AsRef<[u8]> for ReadOnlyFile {
-    fn as_ref(&self) -> &[u8] {
-        match self {
-            Self::Owned(bytes) => bytes.as_ref(),
-        }
-    }
-}
-
 /// Avoid vectored writes on WASI file descriptors, which can trigger runtime crashes
 /// in some host runtimes when certain codec pipelines flush output.
 struct NonVectoredWriter<W> {
@@ -237,4 +226,3 @@ impl<W: Seek> Seek for NonVectoredWriter<W> {
         self.inner.seek(pos)
     }
 }
-

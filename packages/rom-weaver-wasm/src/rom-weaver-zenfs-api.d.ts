@@ -5,7 +5,6 @@ import type {
   RomWeaverRunResult,
   RomWeaverZenFsBrowserOptions,
   RomWeaverZenFsBrowserRunOptions,
-  RomWeaverZenFsNodeOptions,
 } from './rom-weaver-types.d.ts';
 
 interface RomWeaverZenFsRunnerBase {
@@ -16,21 +15,16 @@ interface RomWeaverZenFsRunnerBase {
   ): Promise<RomWeaverRunJsonResult<TEvent, TTraceEvent>>;
 }
 
-export interface RomWeaverZenFsNodeRunner extends RomWeaverZenFsRunnerBase {
-  mode: 'node';
-  fs: unknown;
-  guestMounts: Record<string, string>;
-}
-
 export interface RomWeaverZenFsBrowserRunner extends RomWeaverZenFsRunnerBase {
   mode: 'browser';
   fs: unknown;
   opfsHandle: unknown;
+  scratchHandle: unknown;
   opfsGuestPath: string;
+  scratchGuestPath: string;
+  scratchNamespace: string;
   runtimeMounts: string[];
 }
-
-export function createRomWeaverZenFsNode(options?: RomWeaverZenFsNodeOptions): Promise<RomWeaverZenFsNodeRunner>;
 
 export function createRomWeaverZenFsBrowser(
   options?: RomWeaverZenFsBrowserOptions,

@@ -16,9 +16,7 @@ fn into_event_preserves_thread_fallback_metadata() {
             thread_mode: ThreadMode::Fixed,
             used_parallelism: false,
             thread_fallback: true,
-            thread_fallback_reason: Some(
-                "operation not supported on this platform".to_string(),
-            ),
+            thread_fallback_reason: Some("operation not supported on this platform".to_string()),
         }),
         status: OperationStatus::Succeeded,
     };

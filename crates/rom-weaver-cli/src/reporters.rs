@@ -48,7 +48,10 @@ impl ProgressSink for StdoutReporter {
     fn emit(&self, event: ProgressEvent) {
         match self.mode {
             OutputMode::Json => match serde_json::to_string(&event) {
-                Ok(serialized) => println!("{serialized}"),
+                Ok(serialized) => {
+                    println!("{serialized}");
+                    let _ = std::io::Write::flush(&mut std::io::stdout());
+                }
                 Err(error) => eprintln!("failed to serialize CLI progress event: {error}"),
             },
             OutputMode::Text => {
@@ -81,8 +84,8 @@ impl ProgressSink for StdoutReporter {
                     event.label,
                     threads,
                 );
+                let _ = std::io::Write::flush(&mut std::io::stdout());
             }
         }
     }
 }
-

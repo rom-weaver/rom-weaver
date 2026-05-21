@@ -563,24 +563,32 @@ fn create_gdiff_patch_parallel(
     pool: &SharedThreadPool,
     output: &mut dyn Write,
 ) -> Result<(usize, u64)> {
-    let modified = crate::map_file_read_only(modified_path)?;
+    let modified_len = fs::metadata(modified_path)?.len();
     write_gdiff_header(output)?;
+    if modified_len == 0 {
+        output.write_all(&[0])?;
+        return Ok((0, 0));
+    }
 
-    let chunk_ranges = (0..modified.len())
+    let chunk_ranges = (0..modified_len)
         .step_by(CREATE_COMMAND_CHUNK_BYTES)
         .map(|start| {
-            let end = start
-                .saturating_add(CREATE_COMMAND_CHUNK_BYTES)
-                .min(modified.len());
-            start..end
+            let len =
+                usize::try_from((modified_len - start).min(CREATE_COMMAND_CHUNK_BYTES as u64))
+                    .map_err(|_| {
+                        RomWeaverError::Validation(
+                            "GDIFF create chunk length exceeded usize".into(),
+                        )
+                    })?;
+            Ok::<(u64, usize), RomWeaverError>((start, len))
         })
-        .collect::<Vec<_>>();
+        .collect::<Result<Vec<_>>>()?;
 
     let command_count = chunk_ranges.len();
     let command_bytes = pool.install(|| {
         chunk_ranges
             .into_par_iter()
-            .map(|range| encode_data_command_bytes(&modified[range.start..range.end]))
+            .map(|(offset, len)| encode_data_command_bytes_for_chunk(modified_path, offset, len))
             .collect::<Result<Vec<_>>>()
     })?;
 
@@ -588,7 +596,19 @@ fn create_gdiff_patch_parallel(
         output.write_all(&command)?;
     }
     output.write_all(&[0])?;
-    Ok((command_count, modified.len() as u64))
+    Ok((command_count, modified_len))
+}
+
+fn encode_data_command_bytes_for_chunk(
+    modified_path: &Path,
+    offset: u64,
+    len: usize,
+) -> Result<Vec<u8>> {
+    let mut modified = BufReader::new(File::open(modified_path)?);
+    modified.seek(SeekFrom::Start(offset))?;
+    let mut chunk = vec![0u8; len];
+    modified.read_exact(&mut chunk)?;
+    encode_data_command_bytes(&chunk)
 }
 
 fn encode_data_command_bytes(data: &[u8]) -> Result<Vec<u8>> {

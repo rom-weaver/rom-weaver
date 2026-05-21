@@ -2,7 +2,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     fmt::Write as _,
     fs::{self, File},
-    io::{self, Read, Seek, SeekFrom, Write},
+    io::{self, BufReader, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -63,6 +63,78 @@ pub struct ChecksumValues {
     pub values: BTreeMap<String, String>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ChecksumProgress {
+    pub processed_bytes: u64,
+    pub total_bytes: u64,
+}
+
+impl ChecksumProgress {
+    pub fn percent(self) -> f32 {
+        if self.total_bytes == 0 {
+            return 100.0;
+        }
+        ((self.processed_bytes.min(self.total_bytes) as f64 / self.total_bytes as f64) * 100.0)
+            as f32
+    }
+}
+
+struct ChecksumProgressTracker<'a> {
+    total_bytes: u64,
+    processed_bytes: u64,
+    next_percent: u64,
+    callback: &'a mut dyn FnMut(ChecksumProgress),
+}
+
+impl<'a> ChecksumProgressTracker<'a> {
+    fn new(total_bytes: u64, callback: &'a mut dyn FnMut(ChecksumProgress)) -> Self {
+        Self {
+            total_bytes,
+            processed_bytes: 0,
+            next_percent: 1,
+            callback,
+        }
+    }
+
+    fn advance(&mut self, delta_bytes: u64) {
+        if self.total_bytes == 0 {
+            return;
+        }
+        self.processed_bytes = self
+            .processed_bytes
+            .saturating_add(delta_bytes)
+            .min(self.total_bytes);
+        self.maybe_emit();
+    }
+
+    fn finish(&mut self) {
+        if self.total_bytes == 0 {
+            return;
+        }
+        self.processed_bytes = self.total_bytes;
+        self.maybe_emit();
+    }
+
+    fn maybe_emit(&mut self) {
+        if self.total_bytes == 0 {
+            return;
+        }
+        let percent = if self.processed_bytes >= self.total_bytes {
+            100
+        } else {
+            self.processed_bytes.saturating_mul(100) / self.total_bytes
+        };
+        if percent < self.next_percent {
+            return;
+        }
+        (self.callback)(ChecksumProgress {
+            processed_bytes: self.processed_bytes,
+            total_bytes: self.total_bytes,
+        });
+        self.next_percent = percent.saturating_add(1).min(101);
+    }
+}
+
 impl Default for NativeChecksumEngine {
     fn default() -> Self {
         Self
@@ -112,12 +184,39 @@ impl NativeChecksumEngine {
         compute_checksum_values(request, context)
     }
 
+    pub fn checksum_report_with_progress<F>(
+        &self,
+        request: &ChecksumRequest,
+        context: &OperationContext,
+        stage: &'static str,
+        on_progress: &mut F,
+    ) -> Result<OperationReport>
+    where
+        F: FnMut(ChecksumProgress),
+    {
+        self.run_checksum_with_progress(request, context, stage, on_progress)
+    }
+
     fn run_checksum(
         &self,
         request: &ChecksumRequest,
         context: &OperationContext,
         stage: &'static str,
     ) -> Result<OperationReport> {
+        let mut noop_progress = |_progress: ChecksumProgress| {};
+        self.run_checksum_with_progress(request, context, stage, &mut noop_progress)
+    }
+
+    fn run_checksum_with_progress<F>(
+        &self,
+        request: &ChecksumRequest,
+        context: &OperationContext,
+        stage: &'static str,
+        on_progress: &mut F,
+    ) -> Result<OperationReport>
+    where
+        F: FnMut(ChecksumProgress),
+    {
         trace!(
             stage,
             source = %request.source.display(),
@@ -128,7 +227,7 @@ impl NativeChecksumEngine {
         );
         let algorithms = resolve_algorithms(&request.algorithms)?;
         let range = ResolvedRange::from_request(&request.source, request.start, request.length)?;
-        let computed = compute_checksum_values(request, context)?;
+        let computed = compute_checksum_values_with_progress(request, context, on_progress)?;
 
         Ok(OperationReport::succeeded(
             OperationFamily::Checksum,
@@ -442,8 +541,8 @@ impl ChecksumCache {
         range: &ResolvedRange,
     ) -> Option<BTreeMap<String, String>> {
         let path = self.entry_path(fingerprint, range);
-        let bytes = fs::read(path).ok()?;
-        let entry = serde_json::from_slice::<CacheEntry>(&bytes).ok()?;
+        let reader = BufReader::new(File::open(path).ok()?);
+        let entry = serde_json::from_reader::<_, CacheEntry>(reader).ok()?;
         if entry.version != CACHE_SCHEMA_VERSION {
             return None;
         }
@@ -535,4 +634,3 @@ impl ChecksumPlan {
         }
     }
 }
-

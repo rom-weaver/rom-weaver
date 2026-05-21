@@ -1,103 +1,42 @@
+import * as wasiShim from '@bjorn3/browser_wasi_shim';
+import * as zenfs from '@zenfs/core';
+import * as zenDom from '@zenfs/dom';
 import {
   createWasmEnvImports,
-  createRomWeaverWasiRunner,
+  normalizeGuestPath,
   parseJsonLines,
   parseTraceJsonLines,
-} from './rom-weaver-wasi-api.mjs';
+} from './rom-weaver-runtime-utils.mjs';
 
-export async function createRomWeaverZenFsNode(options = {}) {
-  const zenfs = await import('@zenfs/core');
-  const nodeFs = await import('node:fs');
-  const nodeOs = await import('node:os');
-  const nodePath = await import('node:path');
-
-  const guestMounts = normalizeGuestMountMap({
-    defaultTmpHostPath: nodeOs.tmpdir(),
-    defaultCwdHostPath: process.cwd(),
-    resolveHostPath: (pathLike) => nodePath.resolve(pathLike),
-    mounts: options.mounts,
-    includeHostRoot: options.includeHostRoot,
-    mountCwd: options.mountCwd,
-    cwdGuestPath: options.cwdGuestPath,
-    cwdHostPath: options.cwdHostPath,
-    mountTmp: options.mountTmp,
-    tmpGuestPath: options.tmpGuestPath,
-    tmpHostPath: options.tmpHostPath,
-  });
-
-  const zenMounts = {
-    '/': zenfs.InMemory,
-  };
-  const preopens = {};
-
-  for (const [guestPath, hostPath] of Object.entries(guestMounts)) {
-    nodeFs.mkdirSync(hostPath, { recursive: true });
-    zenMounts[guestPath] = {
-      backend: zenfs.Passthrough,
-      fs: nodeFs,
-      prefix: hostPath,
-    };
-    preopens[guestPath] = hostPath;
-  }
-
-  await zenfs.configure({
-    mounts: zenMounts,
-    defaultDirectories: true,
-  });
-
-  const tmpGuestPath = normalizeGuestPath(options.tmpGuestPath ?? '/tmp');
-  const runner = createRomWeaverWasiRunner({
-    wasmPath: options.wasmPath,
-    argv0: options.argv0,
-    useDefaultPreopens: false,
-    preopens: {
-      ...preopens,
-      ...(options.preopens ?? {}),
-    },
-    env: {
-      ROM_WEAVER_TMPDIR: tmpGuestPath,
-      ...(options.env ?? {}),
-    },
-  });
-
-  return {
-    mode: 'node',
-    fs: zenfs.fs,
-    guestMounts,
-    run: (args, runOptions) => runner.run(args, runOptions),
-    async runJson(args, runOptions = {}) {
-      const result = await runner.run(['--json', ...normalizeArgs(args)], runOptions);
-      const parsed = parseJsonLines(result.stdout, {
-        onEvent: runOptions.onEvent,
-        onNonJsonLine: runOptions.onNonJsonLine,
-      });
-      const parsedTrace = parseTraceJsonLines(result.stderr, {
-        onTraceEvent: runOptions.onTraceEvent,
-        onTraceNonJsonLine: runOptions.onTraceNonJsonLine,
-      });
-      return {
-        ...result,
-        events: parsed.events,
-        nonJsonLines: parsed.nonJsonLines,
-        traceEvents: parsedTrace.traceEvents,
-        traceNonJsonLines: parsedTrace.traceNonJsonLines,
-      };
-    },
-  };
-}
+const DEFAULT_OPFS_GUEST_PATH = '/opfs';
+const DEFAULT_SCRATCH_GUEST_PATH = '/scratch';
+const DEFAULT_SCRATCH_NAMESPACE = '.rom-weaver-scratch';
+const DEFAULT_MAX_BUFFERED_PATCH_BYTES = String(64 * 1024 * 1024);
 
 export async function createRomWeaverZenFsBrowser(options = {}) {
   assertDedicatedWorkerRuntime();
 
-  const zenfs = await import('@zenfs/core');
-  const zenDom = await import('@zenfs/dom');
-  const wasiShim = await import('@bjorn3/browser_wasi_shim');
-
-  const opfsGuestPath = normalizeGuestPath(options.opfsGuestPath ?? '/opfs');
-  const tmpGuestPath = normalizeGuestPath(options.tmpGuestPath ?? '/tmp');
+  const opfsGuestPath = normalizeGuestPath(
+    options.opfsGuestPath ?? DEFAULT_OPFS_GUEST_PATH,
+    { label: 'opfsGuestPath' },
+  );
+  const scratchGuestPath = normalizeGuestPath(
+    options.scratchGuestPath ?? options.tmpGuestPath ?? DEFAULT_SCRATCH_GUEST_PATH,
+    { label: 'scratchGuestPath' },
+  );
+  const scratchNamespace = normalizeScratchNamespace(
+    options.scratchNamespace ?? DEFAULT_SCRATCH_NAMESPACE,
+  );
   const opfsHandle = options.opfsHandle ?? (await navigator.storage.getDirectory());
+  const scratchRootHandle = await resolveScratchRootHandle({
+    opfsHandle,
+    scratchHandle: options.scratchHandle,
+  });
 
   assertDirectoryHandle(opfsHandle, 'opfsHandle');
+  assertDirectoryHandle(scratchRootHandle, 'scratchHandle');
+
+  await verifyWritableScratchRoot(scratchRootHandle);
 
   await zenfs.configure({
     mounts: {
@@ -106,29 +45,57 @@ export async function createRomWeaverZenFsBrowser(options = {}) {
         backend: zenDom.WebAccess,
         handle: opfsHandle,
       },
-      [tmpGuestPath]: zenfs.InMemory,
+      [scratchGuestPath]: {
+        backend: zenDom.WebAccess,
+        handle: scratchRootHandle,
+      },
     },
     defaultDirectories: true,
   });
 
   const module = await resolveBrowserModule(options.module, options.wasmUrl);
   const runtimeMounts = normalizeRuntimeMounts(
-    options.runtimeMounts ?? [opfsGuestPath, tmpGuestPath],
+    options.runtimeMounts ?? [opfsGuestPath, scratchGuestPath],
   );
+  if (!runtimeMounts.includes(scratchGuestPath)) {
+    throw new Error(
+      `runtimeMounts must include scratch guest path ${scratchGuestPath}. `
+        + 'Temporary files require a writable scratch mount.',
+    );
+  }
 
   const baseMountHandles = normalizeMountHandleMap({
     opfsGuestPath,
     opfsHandle,
+    scratchGuestPath,
+    scratchRootHandle,
     mountHandles: options.mountHandles,
   });
+  const runtimeMountState = new Map();
+  const activeScratchRunIds = new Set();
 
   const runner = {
     async run(args = [], runOptions = {}) {
       const normalizedArgs = normalizeArgs(args);
-      const env = {
-        ROM_WEAVER_TMPDIR: tmpGuestPath,
+      const scratchRun = await allocateScratchRunNamespace(
+        scratchRootHandle,
+        scratchNamespace,
+        activeScratchRunIds,
+      );
+      const mergedEnv = {
         ...(options.env ?? {}),
         ...(runOptions.env ?? {}),
+      };
+      if (mergedEnv.ROM_WEAVER_MAX_BUFFERED_PATCH_BYTES == null) {
+        mergedEnv.ROM_WEAVER_MAX_BUFFERED_PATCH_BYTES = DEFAULT_MAX_BUFFERED_PATCH_BYTES;
+      }
+      const env = {
+        ...mergedEnv,
+        ROM_WEAVER_TMPDIR: joinScratchGuestPath(
+          scratchGuestPath,
+          scratchNamespace,
+          scratchRun.runId,
+        ),
       };
       const envList = Object.entries(env).map(([key, value]) => `${key}=${String(value)}`);
 
@@ -137,6 +104,8 @@ export async function createRomWeaverZenFsBrowser(options = {}) {
         ...normalizeMountHandleMap({
           opfsGuestPath,
           opfsHandle,
+          scratchGuestPath,
+          scratchRootHandle,
           mountHandles: runOptions.mountHandles,
         }),
       };
@@ -152,8 +121,9 @@ export async function createRomWeaverZenFsBrowser(options = {}) {
         stdin: runOptions.stdin,
         runtimeMounts,
         mountHandles,
-        tmpGuestPath,
+        scratchGuestPath,
         syncAccessMode,
+        runtimeMountState,
       });
 
       try {
@@ -194,6 +164,12 @@ export async function createRomWeaverZenFsBrowser(options = {}) {
         };
       } finally {
         closeSyncAccessHandles(closeHandles);
+        await cleanupScratchRunNamespace(
+          scratchRootHandle,
+          scratchNamespace,
+          activeScratchRunIds,
+          scratchRun.runId,
+        );
       }
     },
 
@@ -222,7 +198,10 @@ export async function createRomWeaverZenFsBrowser(options = {}) {
     mode: 'browser',
     fs: zenfs.fs,
     opfsHandle,
+    scratchHandle: scratchRootHandle,
     opfsGuestPath,
+    scratchGuestPath,
+    scratchNamespace,
     runtimeMounts,
     run: (args, runOptions) => runner.run(args, runOptions),
     runJson: (args, runOptions) => runner.runJson(args, runOptions),
@@ -248,8 +227,9 @@ async function buildBrowserWasiFds({
   stdin,
   runtimeMounts,
   mountHandles,
-  tmpGuestPath,
+  scratchGuestPath,
   syncAccessMode,
+  runtimeMountState,
 }) {
   const closeHandles = [];
   const stdinBytes = normalizeStdin(stdin);
@@ -263,8 +243,13 @@ async function buildBrowserWasiFds({
   ];
 
   for (const mountPath of runtimeMounts) {
-    if (mountPath === tmpGuestPath && !(mountPath in mountHandles)) {
-      fds.push(new wasiShim.PreopenDirectory(mountPath, new Map()));
+    if (mountPath === scratchGuestPath) {
+      let scratchContents = runtimeMountState.get(mountPath);
+      if (!(scratchContents instanceof Map)) {
+        scratchContents = new Map();
+        runtimeMountState.set(mountPath, scratchContents);
+      }
+      fds.push(new wasiShim.PreopenDirectory(mountPath, scratchContents));
       continue;
     }
 
@@ -280,9 +265,9 @@ async function buildBrowserWasiFds({
       wasiShim,
       directoryHandle: handle,
       closeHandles,
+      readOnly: mountPath !== scratchGuestPath,
       syncAccessMode,
     });
-
     fds.push(createStrictOpfsPreopenDirectory(wasiShim, mountPath, preopenContents));
   }
 
@@ -307,7 +292,10 @@ function createStrictOpfsPreopenDirectory(wasiShim, mountPath, contents) {
       fsRightsInheriting,
       fdFlags,
     ) {
-      if ((oflags & oCreat) === oCreat) {
+      if (
+        (oflags & oCreat) === oCreat
+        && !pathExistsInDirectory(contents, pathStr)
+      ) {
         return { ret: rofsErrno, fd_obj: null };
       }
       return super.path_open(
@@ -344,6 +332,48 @@ function createStrictOpfsPreopenDirectory(wasiShim, mountPath, contents) {
   return new StrictOpfsPreopenDirectory(mountPath, contents);
 }
 
+function pathExistsInDirectory(contents, pathStr) {
+  if (!(contents instanceof Map)) {
+    return false;
+  }
+
+  const parts = [];
+  for (const token of String(pathStr).split('/')) {
+    if (token === '' || token === '.') {
+      continue;
+    }
+    if (token === '..') {
+      if (parts.length === 0) {
+        return false;
+      }
+      parts.pop();
+      continue;
+    }
+    parts.push(token);
+  }
+
+  let currentEntries = contents;
+  for (let index = 0; index < parts.length; index += 1) {
+    const part = parts[index];
+    const entry = currentEntries.get(part);
+    if (!entry) {
+      return false;
+    }
+
+    if (index === parts.length - 1) {
+      return true;
+    }
+
+    if (!(entry.contents instanceof Map)) {
+      return false;
+    }
+
+    currentEntries = entry.contents;
+  }
+
+  return true;
+}
+
 function createOutputCollector(ConsoleStdout) {
   const chunks = [];
   return {
@@ -368,6 +398,7 @@ async function buildOpfsInodeMap({
   wasiShim,
   directoryHandle,
   closeHandles,
+  readOnly,
   syncAccessMode,
 }) {
   const entries = new Map();
@@ -378,6 +409,7 @@ async function buildOpfsInodeMap({
         wasiShim,
         directoryHandle: entryHandle,
         closeHandles,
+        readOnly,
         syncAccessMode,
       });
       entries.set(entryName, new wasiShim.Directory(nested));
@@ -388,12 +420,15 @@ async function buildOpfsInodeMap({
       continue;
     }
 
-    const syncHandle = await openSyncAccessHandle(entryHandle, syncAccessMode);
+    const syncHandle = await openSyncAccessHandle({
+      fileHandle: entryHandle,
+      mode: readOnly ? 'read-only' : syncAccessMode,
+    });
     closeHandles.push(syncHandle);
     entries.set(
       entryName,
       new wasiShim.SyncOPFSFile(syncHandle, {
-        readonly: syncAccessMode === 'read-only',
+        readonly: readOnly,
       }),
     );
   }
@@ -401,12 +436,19 @@ async function buildOpfsInodeMap({
   return entries;
 }
 
-async function openSyncAccessHandle(fileHandle, mode) {
+async function openSyncAccessHandle({ fileHandle, mode }) {
   if (mode === undefined) {
     return fileHandle.createSyncAccessHandle();
   }
 
-  return fileHandle.createSyncAccessHandle({ mode });
+  try {
+    return await fileHandle.createSyncAccessHandle({ mode });
+  } catch (error) {
+    if (mode === 'read-only') {
+      return fileHandle.createSyncAccessHandle();
+    }
+    throw error;
+  }
 }
 
 function closeSyncAccessHandles(handles) {
@@ -419,9 +461,144 @@ function closeSyncAccessHandles(handles) {
   }
 }
 
-function normalizeMountHandleMap({ opfsGuestPath, opfsHandle, mountHandles }) {
+async function resolveScratchRootHandle({
+  opfsHandle,
+  scratchHandle,
+}) {
+  if (scratchHandle) {
+    assertDirectoryHandle(scratchHandle, 'scratchHandle');
+    return scratchHandle;
+  }
+
+  return opfsHandle;
+}
+
+async function verifyWritableScratchRoot(scratchRootHandle) {
+  const probeName = `.rw-probe-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const probeFile = await scratchRootHandle.getFileHandle(probeName, { create: true });
+  let accessHandle = null;
+  try {
+    accessHandle = await openSyncAccessHandle({
+      fileHandle: probeFile,
+      mode: 'readwrite',
+    });
+    accessHandle.write(new Uint8Array([0x52, 0x57]), { at: 0 });
+    accessHandle.flush();
+  } catch (error) {
+    throw new Error(
+      `scratch root is not writable. Temporary operations require writable OPFS scratch: ${error}`,
+    );
+  } finally {
+    if (accessHandle) {
+      try {
+        accessHandle.close();
+      } catch {
+        // ignore best-effort close failures
+      }
+    }
+    try {
+      await scratchRootHandle.removeEntry(probeName);
+    } catch {
+      // ignore best-effort cleanup failures
+    }
+  }
+}
+
+async function allocateScratchRunNamespace(scratchRootHandle, scratchNamespace, activeRunIds) {
+  const namespaceHandle = await scratchRootHandle.getDirectoryHandle(scratchNamespace, {
+    create: true,
+  });
+  await cleanupStaleScratchNamespaces(namespaceHandle, activeRunIds);
+
+  const runId = `${Date.now().toString(36)}-${Math.random().toString(16).slice(2)}`;
+  const runHandle = await namespaceHandle.getDirectoryHandle(runId, { create: true });
+  assertDirectoryHandle(runHandle, `scratch run namespace ${runId}`);
+  activeRunIds.add(runId);
+  return { runId };
+}
+
+async function cleanupScratchRunNamespace(
+  scratchRootHandle,
+  scratchNamespace,
+  activeRunIds,
+  runId,
+) {
+  activeRunIds.delete(runId);
+  try {
+    const namespaceHandle = await scratchRootHandle.getDirectoryHandle(scratchNamespace);
+    await removeDirectoryEntryBestEffort(namespaceHandle, runId);
+  } catch {
+    // ignore best-effort cleanup failures
+  }
+}
+
+async function cleanupStaleScratchNamespaces(scratchRootHandle, activeRunIds) {
+  for await (const [entryName, entryHandle] of scratchRootHandle.entries()) {
+    if (entryHandle.kind === 'directory' && !activeRunIds.has(entryName)) {
+      await removeDirectoryEntryBestEffort(scratchRootHandle, entryName);
+    }
+  }
+}
+
+async function removeDirectoryEntryBestEffort(rootHandle, entryName) {
+  try {
+    await rootHandle.removeEntry(entryName, { recursive: true });
+    return;
+  } catch {
+    // continue with non-recursive/manual fallback below
+  }
+
+  try {
+    const entry = await rootHandle.getDirectoryHandle(entryName);
+    for await (const [childName] of entry.entries()) {
+      await removeDirectoryEntryBestEffort(entry, childName);
+    }
+    await rootHandle.removeEntry(entryName);
+  } catch {
+    // ignore best-effort cleanup failures
+  }
+}
+
+function joinScratchGuestPath(scratchGuestPath, scratchNamespace, runId) {
+  return normalizeGuestPath(`${scratchGuestPath}/${scratchNamespace}/${runId}`, {
+    label: 'ROM_WEAVER_TMPDIR',
+  });
+}
+
+function normalizeScratchNamespace(value) {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new TypeError('scratchNamespace must be a non-empty string');
+  }
+
+  const normalized = value
+    .trim()
+    .replace(/^\/+/, '')
+    .replace(/\/+$/, '');
+
+  if (normalized.length === 0) {
+    throw new TypeError('scratchNamespace must contain at least one non-slash character');
+  }
+
+  const parts = normalized.split('/');
+  for (const part of parts) {
+    if (part.length === 0 || part === '.' || part === '..') {
+      throw new TypeError('scratchNamespace cannot contain "." or ".." segments');
+    }
+  }
+
+  return normalized;
+}
+
+function normalizeMountHandleMap({
+  opfsGuestPath,
+  opfsHandle,
+  scratchGuestPath,
+  scratchRootHandle,
+  mountHandles,
+}) {
   const normalized = {
     [opfsGuestPath]: opfsHandle,
+    [scratchGuestPath]: scratchRootHandle,
   };
 
   if (!mountHandles) {
@@ -429,7 +606,9 @@ function normalizeMountHandleMap({ opfsGuestPath, opfsHandle, mountHandles }) {
   }
 
   for (const [guestPath, handle] of Object.entries(mountHandles)) {
-    const normalizedGuestPath = normalizeGuestPath(guestPath);
+    const normalizedGuestPath = normalizeGuestPath(guestPath, {
+      label: `mountHandles[${guestPath}]`,
+    });
     assertDirectoryHandle(handle, `mountHandles[${guestPath}]`);
     normalized[normalizedGuestPath] = handle;
   }
@@ -474,40 +653,6 @@ function isDirectoryHandle(handle) {
   );
 }
 
-function normalizeGuestMountMap({
-  defaultTmpHostPath,
-  defaultCwdHostPath,
-  resolveHostPath,
-  mounts = {},
-  includeHostRoot = false,
-  mountCwd = true,
-  cwdGuestPath = '/work',
-  cwdHostPath = defaultCwdHostPath,
-  mountTmp = true,
-  tmpGuestPath = '/tmp',
-  tmpHostPath = defaultTmpHostPath,
-}) {
-  const result = {};
-
-  if (includeHostRoot) {
-    result['/'] = '/';
-  }
-
-  if (mountCwd) {
-    result[normalizeGuestPath(cwdGuestPath)] = normalizeHostPath(cwdHostPath, resolveHostPath);
-  }
-
-  if (mountTmp) {
-    result[normalizeGuestPath(tmpGuestPath)] = normalizeHostPath(tmpHostPath, resolveHostPath);
-  }
-
-  for (const [guestPath, hostPath] of Object.entries(mounts)) {
-    result[normalizeGuestPath(guestPath)] = normalizeHostPath(hostPath, resolveHostPath);
-  }
-
-  return result;
-}
-
 async function resolveBrowserModule(module, wasmUrl) {
   if (module instanceof WebAssembly.Module) {
     return module;
@@ -523,34 +668,13 @@ async function resolveBrowserModule(module, wasmUrl) {
   return WebAssembly.compile(bytes);
 }
 
-function normalizeGuestPath(pathLike) {
-  if (typeof pathLike !== 'string' || pathLike.trim().length === 0) {
-    throw new TypeError('guest path must be a non-empty string');
-  }
-
-  let normalized = pathLike.trim();
-  if (!normalized.startsWith('/')) {
-    normalized = `/${normalized}`;
-  }
-  if (normalized.length > 1) {
-    normalized = normalized.replace(/\/+$/, '');
-  }
-
-  return normalized;
-}
-
-function normalizeHostPath(pathLike, resolveHostPath) {
-  if (typeof pathLike !== 'string' || pathLike.trim().length === 0) {
-    throw new TypeError('host path must be a non-empty string');
-  }
-  return resolveHostPath(pathLike);
-}
-
 function normalizeRuntimeMounts(mounts) {
   if (!Array.isArray(mounts) || mounts.length === 0) {
     throw new TypeError('runtimeMounts must be a non-empty array of guest paths');
   }
-  return mounts.map((mountPath) => normalizeGuestPath(String(mountPath)));
+  return mounts.map((mountPath) => normalizeGuestPath(String(mountPath), {
+    label: 'runtime mount guest path',
+  }));
 }
 
 function normalizeArgs(args) {

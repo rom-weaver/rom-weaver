@@ -1,8 +1,8 @@
 impl CliApp {
-    fn repair_checksum_if_supported(
-        bytes: &mut Vec<u8>,
+    fn repair_checksum_file_in_place(
+        path: &Path,
         hint_path: Option<&Path>,
-    ) -> HeaderRepairOutcome {
+    ) -> Result<HeaderRepairOutcome> {
         let extension = hint_path
             .and_then(|path| path.extension())
             .and_then(|value| value.to_str())
@@ -14,329 +14,373 @@ impl CliApp {
             matched_without_changes: Vec::new(),
         };
 
+        let mut file = File::options().read(true).write(true).open(path)?;
+        let mut repaired_len = usize::try_from(file.metadata()?.len()).map_err(|_| {
+            RomWeaverError::Validation("header repair file length overflowed usize".into())
+        })?;
+
         Self::record_header_repair_status(
             &mut outcome,
             "snes",
-            Self::repair_snes_checksum(bytes.as_mut_slice()),
+            Self::repair_snes_checksum_file(&mut file, repaired_len)?,
         );
         Self::record_header_repair_status(
             &mut outcome,
             "nes",
-            Self::repair_nes_header_padding(bytes.as_mut_slice()),
+            Self::repair_nes_header_padding_file(&mut file, repaired_len)?,
         );
         Self::record_header_repair_status(
             &mut outcome,
             "fds",
-            Self::validate_fds_header(bytes.as_slice()),
+            Self::validate_fds_header_file(&mut file, repaired_len)?,
         );
         Self::record_header_repair_status(
             &mut outcome,
             "game-boy",
-            Self::repair_game_boy_checksum(bytes.as_mut_slice()),
+            Self::repair_game_boy_checksum_file(&mut file, repaired_len)?,
         );
         Self::record_header_repair_status(
             &mut outcome,
             "gba",
-            Self::repair_gba_header_checksum(bytes.as_mut_slice()),
+            Self::repair_gba_header_checksum_file(&mut file, repaired_len)?,
         );
         Self::record_header_repair_status(
             &mut outcome,
             "sega-genesis",
-            Self::repair_sega_genesis_checksum(bytes.as_mut_slice()),
+            Self::repair_sega_genesis_checksum_file(&mut file, repaired_len)?,
         );
         Self::record_header_repair_status(
             &mut outcome,
             "sms-gg",
-            Self::repair_sms_tmr_checksum(bytes.as_mut_slice()),
+            Self::repair_sms_tmr_checksum_file(&mut file, repaired_len)?,
         );
         Self::record_header_repair_status(
             &mut outcome,
             "n64",
-            Self::repair_n64_checksum(bytes.as_mut_slice()),
+            Self::repair_n64_checksum_file(&mut file, repaired_len)?,
         );
         Self::record_header_repair_status(
             &mut outcome,
             "atari-7800",
-            Self::repair_atari_7800_header(bytes.as_mut_slice()),
+            Self::repair_atari_7800_header_file(&mut file, repaired_len)?,
         );
         Self::record_header_repair_status(
             &mut outcome,
             "atari-lynx",
-            Self::repair_atari_lynx_header(bytes.as_mut_slice()),
+            Self::repair_atari_lynx_header_file(&mut file, repaired_len)?,
         );
-        Self::record_header_repair_status(
-            &mut outcome,
-            "pce-tg16",
-            Self::repair_pce_copier_header(bytes, extension),
-        );
+
+        let pce_status = Self::repair_pce_copier_header(repaired_len, extension);
+        if pce_status == HeaderRepairStatus::Repaired {
+            repaired_len = Self::remove_prefix_in_place(&mut file, ROM_HEADER_BYTES, repaired_len)?;
+        }
+        Self::record_header_repair_status(&mut outcome, "pce-tg16", pce_status);
+
         Self::record_header_repair_status(
             &mut outcome,
             "virtual-boy",
-            Self::repair_virtual_boy_header(bytes.as_mut_slice(), extension),
+            Self::repair_virtual_boy_header_file(&mut file, repaired_len, extension)?,
         );
         Self::record_header_repair_status(
             &mut outcome,
             "neo-geo-pocket",
-            Self::repair_neo_geo_pocket_header(bytes.as_mut_slice()),
+            Self::repair_neo_geo_pocket_header_file(&mut file, repaired_len)?,
         );
         Self::record_header_repair_status(
             &mut outcome,
             "msx",
-            Self::repair_msx_header(bytes.as_mut_slice()),
+            Self::repair_msx_header_file(&mut file, repaired_len)?,
         );
         Self::record_header_repair_status(
             &mut outcome,
             "nds",
-            Self::repair_nintendo_ds_header_crc(bytes.as_mut_slice()),
+            Self::repair_nintendo_ds_header_crc_file(&mut file, repaired_len)?,
         );
         Self::record_header_repair_status(
             &mut outcome,
             "atari-jaguar",
-            Self::validate_atari_jaguar_header(bytes.as_slice(), extension),
+            Self::validate_atari_jaguar_header_file(repaired_len, extension),
         );
         Self::record_header_repair_status(
             &mut outcome,
             "colecovision",
-            Self::validate_colecovision_header(bytes.as_slice(), extension),
+            Self::validate_colecovision_header_file(&mut file, repaired_len, extension)?,
         );
         Self::record_header_repair_status(
             &mut outcome,
             "watara-supervision",
-            Self::validate_watara_supervision_header(bytes.as_slice(), extension),
+            Self::validate_watara_supervision_header_file(repaired_len, extension),
         );
         Self::record_header_repair_status(
             &mut outcome,
             "intellivision",
-            Self::validate_intellivision_header(bytes.as_slice(), extension),
+            Self::validate_intellivision_header_file(repaired_len, extension),
         );
 
-        outcome
+        file.flush()?;
+        Ok(outcome)
     }
 
-    fn repair_snes_checksum(bytes: &mut [u8]) -> HeaderRepairStatus {
-        if bytes.len() <= ROM_HEADER_BYTES {
-            return HeaderRepairStatus::NotMatched;
+    fn repair_snes_checksum_file(file: &mut File, file_len: usize) -> Result<HeaderRepairStatus> {
+        if file_len <= ROM_HEADER_BYTES {
+            return Ok(HeaderRepairStatus::NotMatched);
         }
 
-        let copier_offset = if bytes.len() % SNES_COPIER_HEADER_MODULUS as usize == ROM_HEADER_BYTES
+        let copier_offset = if file_len as u64 % SNES_COPIER_HEADER_MODULUS == ROM_HEADER_BYTES as u64
         {
             ROM_HEADER_BYTES
         } else {
             0
         };
-        let rom_size = bytes.len().saturating_sub(copier_offset);
+        let rom_size = file_len.saturating_sub(copier_offset);
         if rom_size == 0 {
-            return HeaderRepairStatus::NotMatched;
+            return Ok(HeaderRepairStatus::NotMatched);
         }
 
         let lo_rom_header = copier_offset.saturating_add(0x7FC0);
         let hi_rom_header = copier_offset.saturating_add(0xFFC0);
-        let header_offset = if hi_rom_header + 0x30 <= bytes.len()
-            && Self::is_valid_snes_title(bytes, hi_rom_header)
+        let header_offset = if hi_rom_header + 0x30 <= file_len
+            && Self::is_valid_snes_title_file(file, hi_rom_header, file_len)?
         {
             hi_rom_header
-        } else if lo_rom_header + 0x30 <= bytes.len()
-            && Self::is_valid_snes_title(bytes, lo_rom_header)
+        } else if lo_rom_header + 0x30 <= file_len
+            && Self::is_valid_snes_title_file(file, lo_rom_header, file_len)?
         {
             lo_rom_header
         } else {
-            return HeaderRepairStatus::NotMatched;
+            return Ok(HeaderRepairStatus::NotMatched);
         };
 
         let checksum_complement_offset = header_offset + 0x1C;
         let checksum_offset = header_offset + 0x1E;
-        if checksum_offset + 2 > bytes.len() || checksum_complement_offset + 2 > bytes.len() {
-            return HeaderRepairStatus::NotMatched;
+        if checksum_offset + 2 > file_len || checksum_complement_offset + 2 > file_len {
+            return Ok(HeaderRepairStatus::NotMatched);
         }
 
-        let old_complement = u16::from_le_bytes([
-            bytes[checksum_complement_offset],
-            bytes[checksum_complement_offset + 1],
-        ]);
-        let old_checksum = u16::from_le_bytes([bytes[checksum_offset], bytes[checksum_offset + 1]]);
+        let old_complement_bytes =
+            Self::read_vec_at(file, checksum_complement_offset as u64, 2)?;
+        let old_checksum_bytes = Self::read_vec_at(file, checksum_offset as u64, 2)?;
+        let old_complement = u16::from_le_bytes([old_complement_bytes[0], old_complement_bytes[1]]);
+        let old_checksum = u16::from_le_bytes([old_checksum_bytes[0], old_checksum_bytes[1]]);
 
-        bytes[checksum_complement_offset] = 0;
-        bytes[checksum_complement_offset + 1] = 0;
-        bytes[checksum_offset] = 0;
-        bytes[checksum_offset + 1] = 0;
+        let zeroed_ranges = [
+            (checksum_complement_offset, checksum_complement_offset + 2),
+            (checksum_offset, checksum_offset + 2),
+        ];
 
-        let mut sum = 0_u32;
-        if rom_size.is_power_of_two() {
-            for value in &bytes[copier_offset..] {
-                sum = sum.wrapping_add(u32::from(*value));
-            }
+        let sum = if rom_size.is_power_of_two() {
+            Self::sum_range_with_zeroed(file, copier_offset, file_len, &zeroed_ranges)?
         } else {
-            let base_size = rom_size.next_power_of_two() / 2;
+            let Some(next_power_of_two) = rom_size.checked_next_power_of_two() else {
+                return Ok(HeaderRepairStatus::NotMatched);
+            };
+            let base_size = next_power_of_two / 2;
             let excess_size = rom_size.saturating_sub(base_size);
-            for value in &bytes[copier_offset..copier_offset + base_size] {
-                sum = sum.wrapping_add(u32::from(*value));
-            }
+            let mut sum = Self::sum_range_with_zeroed(
+                file,
+                copier_offset,
+                copier_offset + base_size,
+                &zeroed_ranges,
+            )?;
             if excess_size > 0 {
-                let mut excess_sum = 0_u32;
-                for value in &bytes[copier_offset + base_size..] {
-                    excess_sum = excess_sum.wrapping_add(u32::from(*value));
-                }
-                let mirror_count = (rom_size.next_power_of_two() - base_size) / excess_size;
+                let excess_sum = Self::sum_range_with_zeroed(
+                    file,
+                    copier_offset + base_size,
+                    file_len,
+                    &zeroed_ranges,
+                )?;
+                let mirror_count = (next_power_of_two - base_size) / excess_size;
                 sum = sum.wrapping_add(excess_sum.wrapping_mul(mirror_count as u32));
             }
-        }
+            sum
+        };
 
         let new_checksum = (sum & 0xFFFF) as u16;
         let new_complement = new_checksum ^ 0xFFFF;
-        bytes[checksum_complement_offset..checksum_complement_offset + 2]
-            .copy_from_slice(&new_complement.to_le_bytes());
-        bytes[checksum_offset..checksum_offset + 2].copy_from_slice(&new_checksum.to_le_bytes());
+        Self::write_all_at(
+            file,
+            checksum_complement_offset as u64,
+            &new_complement.to_le_bytes(),
+        )?;
+        Self::write_all_at(file, checksum_offset as u64, &new_checksum.to_le_bytes())?;
 
         if old_checksum == new_checksum && old_complement == new_complement {
-            HeaderRepairStatus::MatchedNoChange
+            Ok(HeaderRepairStatus::MatchedNoChange)
         } else {
-            HeaderRepairStatus::Repaired
+            Ok(HeaderRepairStatus::Repaired)
         }
     }
 
-    fn is_valid_snes_title(bytes: &[u8], offset: usize) -> bool {
-        if offset + 21 > bytes.len() {
-            return false;
+    fn is_valid_snes_title_file(file: &mut File, offset: usize, file_len: usize) -> Result<bool> {
+        if offset + 21 > file_len {
+            return Ok(false);
         }
-        let mut printable_count = 0usize;
-        for value in &bytes[offset..offset + 21] {
-            if (0x20..=0x7E).contains(value) {
-                printable_count = printable_count.saturating_add(1);
-            }
-        }
-        printable_count >= 10
+        let bytes = Self::read_vec_at(file, offset as u64, 21)?;
+        let printable_count = bytes
+            .iter()
+            .filter(|value| (0x20..=0x7E).contains(*value))
+            .count();
+        Ok(printable_count >= 10)
     }
 
-    fn repair_nes_header_padding(bytes: &mut [u8]) -> HeaderRepairStatus {
-        if bytes.len() < 16 || bytes[..4] != INES_HEADER_MAGIC {
-            return HeaderRepairStatus::NotMatched;
+    fn repair_nes_header_padding_file(
+        file: &mut File,
+        file_len: usize,
+    ) -> Result<HeaderRepairStatus> {
+        if file_len < 16 {
+            return Ok(HeaderRepairStatus::NotMatched);
         }
-        let is_nes2 = (bytes[7] & 0x0C) == 0x08;
+        let mut header = Self::read_vec_at(file, 0, 16)?;
+        if header[..4] != INES_HEADER_MAGIC {
+            return Ok(HeaderRepairStatus::NotMatched);
+        }
+        let is_nes2 = (header[7] & 0x0C) == 0x08;
         if is_nes2 {
-            return HeaderRepairStatus::MatchedNoChange;
+            return Ok(HeaderRepairStatus::MatchedNoChange);
         }
 
         let mut changed = false;
-        for value in &mut bytes[11..16] {
+        for value in &mut header[11..16] {
             if *value != 0 {
                 *value = 0;
                 changed = true;
             }
         }
         if changed {
-            HeaderRepairStatus::Repaired
+            Self::write_all_at(file, 11, &header[11..16])?;
+            Ok(HeaderRepairStatus::Repaired)
         } else {
-            HeaderRepairStatus::MatchedNoChange
+            Ok(HeaderRepairStatus::MatchedNoChange)
         }
     }
 
-    fn validate_fds_header(bytes: &[u8]) -> HeaderRepairStatus {
-        if bytes.len() < 16 || bytes[..FDS_HEADER_MAGIC.len()] != FDS_HEADER_MAGIC {
-            return HeaderRepairStatus::NotMatched;
+    fn validate_fds_header_file(file: &mut File, file_len: usize) -> Result<HeaderRepairStatus> {
+        if file_len < 16 {
+            return Ok(HeaderRepairStatus::NotMatched);
         }
-        HeaderRepairStatus::MatchedNoChange
+        let prefix = Self::read_vec_at(file, 0, FDS_HEADER_MAGIC.len())?;
+        if prefix == FDS_HEADER_MAGIC {
+            Ok(HeaderRepairStatus::MatchedNoChange)
+        } else {
+            Ok(HeaderRepairStatus::NotMatched)
+        }
     }
 
-    fn repair_gba_header_checksum(bytes: &mut [u8]) -> HeaderRepairStatus {
-        if bytes.len() < 0x1BE || bytes[0x04..0x08] != GBA_HEADER_MAGIC {
-            return HeaderRepairStatus::NotMatched;
+    fn repair_gba_header_checksum_file(
+        file: &mut File,
+        file_len: usize,
+    ) -> Result<HeaderRepairStatus> {
+        if file_len < 0x1BE {
+            return Ok(HeaderRepairStatus::NotMatched);
         }
-        let old_checksum = bytes[0x1BD];
+        let header = Self::read_vec_at(file, 0, 0x1BE)?;
+        if header[0x04..0x08] != GBA_HEADER_MAGIC {
+            return Ok(HeaderRepairStatus::NotMatched);
+        }
+        let old_checksum = header[0x1BD];
         let mut checksum = 0_i32;
-        for value in &bytes[0xA0..=0xBC] {
+        for value in &header[0xA0..=0xBC] {
             checksum -= i32::from(*value);
         }
         let new_checksum = ((checksum - 0x19) & 0xFF) as u8;
-        bytes[0x1BD] = new_checksum;
+        Self::write_all_at(file, 0x1BD, &[new_checksum])?;
+
         if old_checksum == new_checksum {
-            HeaderRepairStatus::MatchedNoChange
+            Ok(HeaderRepairStatus::MatchedNoChange)
         } else {
-            HeaderRepairStatus::Repaired
+            Ok(HeaderRepairStatus::Repaired)
         }
     }
 
-    fn repair_sega_genesis_checksum(bytes: &mut [u8]) -> HeaderRepairStatus {
-        if bytes.len() <= 0x18F || bytes.len() < 0x200 {
-            return HeaderRepairStatus::NotMatched;
+    fn repair_sega_genesis_checksum_file(
+        file: &mut File,
+        file_len: usize,
+    ) -> Result<HeaderRepairStatus> {
+        if file_len <= 0x18F || file_len < 0x200 {
+            return Ok(HeaderRepairStatus::NotMatched);
         }
-        if bytes[0x100..0x104] != *b"SEGA" && bytes[0x101..0x105] != *b"SEGA" {
-            return HeaderRepairStatus::NotMatched;
+        let sega_probe = Self::read_vec_at(file, 0x100, 5)?;
+        if sega_probe[0..4] != *b"SEGA" && sega_probe[1..5] != *b"SEGA" {
+            return Ok(HeaderRepairStatus::NotMatched);
         }
-        let old_checksum = u16::from_be_bytes([bytes[0x18E], bytes[0x18F]]);
-        let mut sum = 0_u32;
-        let mut cursor = 0x200usize;
-        while cursor + 1 < bytes.len() {
-            let word = u16::from_be_bytes([bytes[cursor], bytes[cursor + 1]]);
-            sum = sum.wrapping_add(u32::from(word));
-            cursor += 2;
-        }
-        if cursor < bytes.len() {
-            sum = sum.wrapping_add(u32::from(bytes[cursor]) << 8);
-        }
-        let checksum = (sum & 0xFFFF) as u16;
-        bytes[0x18E..=0x18F].copy_from_slice(&checksum.to_be_bytes());
-        if old_checksum == checksum {
-            HeaderRepairStatus::MatchedNoChange
+
+        let old_checksum_bytes = Self::read_vec_at(file, 0x18E, 2)?;
+        let old_checksum = u16::from_be_bytes([old_checksum_bytes[0], old_checksum_bytes[1]]);
+        let sum = Self::sum_sega_words(file, 0x200, file_len)?;
+        let new_checksum = (sum & 0xFFFF) as u16;
+        Self::write_all_at(file, 0x18E, &new_checksum.to_be_bytes())?;
+
+        if old_checksum == new_checksum {
+            Ok(HeaderRepairStatus::MatchedNoChange)
         } else {
-            HeaderRepairStatus::Repaired
+            Ok(HeaderRepairStatus::Repaired)
         }
     }
 
-    fn repair_game_boy_checksum(bytes: &mut [u8]) -> HeaderRepairStatus {
-        if bytes.len() <= 0x14F {
-            return HeaderRepairStatus::NotMatched;
-        }
-        if bytes[0x104..0x134] != GAME_BOY_NINTENDO_LOGO {
-            return HeaderRepairStatus::NotMatched;
+    fn repair_game_boy_checksum_file(
+        file: &mut File,
+        file_len: usize,
+    ) -> Result<HeaderRepairStatus> {
+        if file_len <= 0x14F {
+            return Ok(HeaderRepairStatus::NotMatched);
         }
 
-        let old_header_checksum = bytes[0x14D];
-        let old_global_checksum = u16::from_be_bytes([bytes[0x14E], bytes[0x14F]]);
+        let header = Self::read_vec_at(file, 0, 0x150)?;
+        if header[0x104..0x134] != GAME_BOY_NINTENDO_LOGO {
+            return Ok(HeaderRepairStatus::NotMatched);
+        }
+
+        let old_header_checksum = header[0x14D];
+        let old_global_checksum = u16::from_be_bytes([header[0x14E], header[0x14F]]);
 
         let mut header_checksum = 0_u8;
-        for value in &bytes[0x134..=0x14C] {
+        for value in &header[0x134..=0x14C] {
             header_checksum = header_checksum.wrapping_sub(*value).wrapping_sub(1);
         }
-        bytes[0x14D] = header_checksum;
 
-        let mut global_checksum = 0_u16;
-        for (index, value) in bytes.iter().copied().enumerate() {
-            if index == 0x14E || index == 0x14F {
-                continue;
-            }
-            global_checksum = global_checksum.wrapping_add(u16::from(value));
-        }
-        bytes[0x14E..=0x14F].copy_from_slice(&global_checksum.to_be_bytes());
+        let global_sum = Self::sum_range_with_zeroed(file, 0, file_len, &[(0x14E, 0x150)])?;
+        let global_checksum = (global_sum & 0xFFFF) as u16;
+
+        Self::write_all_at(file, 0x14D, &[header_checksum])?;
+        Self::write_all_at(file, 0x14E, &global_checksum.to_be_bytes())?;
 
         if old_header_checksum == header_checksum && old_global_checksum == global_checksum {
-            HeaderRepairStatus::MatchedNoChange
+            Ok(HeaderRepairStatus::MatchedNoChange)
         } else {
-            HeaderRepairStatus::Repaired
+            Ok(HeaderRepairStatus::Repaired)
         }
     }
 
-    fn repair_sms_tmr_checksum(bytes: &mut [u8]) -> HeaderRepairStatus {
+    fn repair_sms_tmr_checksum_file(
+        file: &mut File,
+        file_len: usize,
+    ) -> Result<HeaderRepairStatus> {
         let mut header_offset = None;
         for offset in [0x7FF0usize, 0x3FF0, 0x1FF0] {
-            if bytes.get(offset..offset + SMS_TMR_SEGA_MAGIC.len())
-                == Some(SMS_TMR_SEGA_MAGIC.as_slice())
-            {
+            if offset + SMS_TMR_SEGA_MAGIC.len() > file_len {
+                continue;
+            }
+            let probe = Self::read_vec_at(file, offset as u64, SMS_TMR_SEGA_MAGIC.len())?;
+            if probe == SMS_TMR_SEGA_MAGIC {
                 header_offset = Some(offset);
                 break;
             }
         }
         let Some(header_offset) = header_offset else {
-            return HeaderRepairStatus::NotMatched;
+            return Ok(HeaderRepairStatus::NotMatched);
         };
-        if header_offset + 0x10 > bytes.len() {
-            return HeaderRepairStatus::NotMatched;
+
+        if header_offset + 0x10 > file_len {
+            return Ok(HeaderRepairStatus::NotMatched);
         }
         let checksum_offset = header_offset + 0x0A;
-        if checksum_offset + 2 > bytes.len() {
-            return HeaderRepairStatus::NotMatched;
+        if checksum_offset + 2 > file_len {
+            return Ok(HeaderRepairStatus::NotMatched);
         }
-        let old_checksum = u16::from_le_bytes([bytes[checksum_offset], bytes[checksum_offset + 1]]);
-        let size_nibble = bytes[header_offset + 0x0F] & 0x0F;
+
+        let header = Self::read_vec_at(file, header_offset as u64, 16)?;
+        let old_checksum = u16::from_le_bytes([header[0x0A], header[0x0B]]);
+        let size_nibble = header[0x0F] & 0x0F;
         let declared_end = match size_nibble {
             0xA => 0x2000usize,
             0xB => 0x4000,
@@ -347,40 +391,37 @@ impl CliApp {
             0x0 => 0x40000,
             0x1 => 0x80000,
             0x2 => 0x100000,
-            _ => bytes.len(),
+            _ => file_len,
         };
-        let checksum_end = declared_end.min(bytes.len());
-        let header_end = header_offset + 16;
+        let checksum_end = declared_end.min(file_len);
 
-        let mut sum = 0_u32;
-        for value in &bytes[..header_offset.min(checksum_end)] {
-            sum = sum.wrapping_add(u32::from(*value));
-        }
-        if header_end < checksum_end {
-            for value in &bytes[header_end..checksum_end] {
-                sum = sum.wrapping_add(u32::from(*value));
-            }
-        }
+        let sum = Self::sum_range_with_zeroed(
+            file,
+            0,
+            checksum_end,
+            &[(header_offset, header_offset + 16)],
+        )?;
         let new_checksum = (sum & 0xFFFF) as u16;
-        bytes[checksum_offset..checksum_offset + 2].copy_from_slice(&new_checksum.to_le_bytes());
+        Self::write_all_at(file, checksum_offset as u64, &new_checksum.to_le_bytes())?;
+
         if old_checksum == new_checksum {
-            HeaderRepairStatus::MatchedNoChange
+            Ok(HeaderRepairStatus::MatchedNoChange)
         } else {
-            HeaderRepairStatus::Repaired
+            Ok(HeaderRepairStatus::Repaired)
         }
     }
 
-    fn repair_n64_checksum(bytes: &mut [u8]) -> HeaderRepairStatus {
-        if bytes.len() < 0x101000 {
-            return HeaderRepairStatus::NotMatched;
+    fn repair_n64_checksum_file(file: &mut File, file_len: usize) -> Result<HeaderRepairStatus> {
+        if file_len < 0x101000 {
+            return Ok(HeaderRepairStatus::NotMatched);
         }
-        let Some(original_order) = Self::detect_n64_byte_order(bytes) else {
-            return HeaderRepairStatus::NotMatched;
-        };
-        Self::normalize_n64_to_big_endian(bytes, original_order);
 
-        let old_crc1 = u32::from_be_bytes([bytes[0x10], bytes[0x11], bytes[0x12], bytes[0x13]]);
-        let old_crc2 = u32::from_be_bytes([bytes[0x14], bytes[0x15], bytes[0x16], bytes[0x17]]);
+        let Some(order) = Self::detect_n64_byte_order_file(file, file_len)? else {
+            return Ok(HeaderRepairStatus::NotMatched);
+        };
+
+        let old_crc1 = Self::read_n64_word_normalized(file, 0x10, order)?;
+        let old_crc2 = Self::read_n64_word_normalized(file, 0x14, order)?;
 
         let seed = 0xF8CA4DDCu32;
         let mut t1 = seed;
@@ -390,8 +431,8 @@ impl CliApp {
         let mut t5 = seed;
         let mut t6 = seed;
 
-        for chunk in bytes[0x1000..0x101000].chunks_exact(4) {
-            let d = u32::from_be_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+        for offset in (0x1000usize..0x101000usize).step_by(4) {
+            let d = Self::read_n64_word_normalized(file, offset as u64, order)?;
             if t6.wrapping_add(d) < t6 {
                 t4 = t4.wrapping_add(1);
             }
@@ -412,253 +453,409 @@ impl CliApp {
 
         let new_crc1 = t6 ^ t4 ^ t3;
         let new_crc2 = t5 ^ t2 ^ t1;
-        bytes[0x10..0x14].copy_from_slice(&new_crc1.to_be_bytes());
-        bytes[0x14..0x18].copy_from_slice(&new_crc2.to_be_bytes());
-        Self::denormalize_n64_from_big_endian(bytes, original_order);
+        Self::write_n64_word_original_order(file, 0x10, new_crc1, order)?;
+        Self::write_n64_word_original_order(file, 0x14, new_crc2, order)?;
 
         if old_crc1 == new_crc1 && old_crc2 == new_crc2 {
-            HeaderRepairStatus::MatchedNoChange
+            Ok(HeaderRepairStatus::MatchedNoChange)
         } else {
-            HeaderRepairStatus::Repaired
+            Ok(HeaderRepairStatus::Repaired)
         }
     }
 
-    fn detect_n64_byte_order(bytes: &[u8]) -> Option<N64ByteOrder> {
-        if bytes.len() < 4 {
-            return None;
+    fn detect_n64_byte_order_file(
+        file: &mut File,
+        file_len: usize,
+    ) -> Result<Option<N64ByteOrder>> {
+        if file_len < 4 {
+            return Ok(None);
         }
-        let magic = [bytes[0], bytes[1], bytes[2], bytes[3]];
+        let magic = Self::read_vec_at(file, 0, 4)?;
         if magic == N64_BIG_ENDIAN_MAGIC {
-            Some(N64ByteOrder::BigEndian)
+            Ok(Some(N64ByteOrder::BigEndian))
         } else if magic == N64_LITTLE_ENDIAN_MAGIC {
-            Some(N64ByteOrder::LittleEndian)
+            Ok(Some(N64ByteOrder::LittleEndian))
         } else if magic == N64_BYTE_SWAPPED_MAGIC {
-            Some(N64ByteOrder::ByteSwapped)
+            Ok(Some(N64ByteOrder::ByteSwapped))
         } else {
-            None
+            Ok(None)
         }
     }
 
-    fn normalize_n64_to_big_endian(bytes: &mut [u8], order: N64ByteOrder) {
+    fn transform_n64_word(bytes: &mut [u8; 4], order: N64ByteOrder) {
         match order {
             N64ByteOrder::BigEndian => {}
-            N64ByteOrder::LittleEndian => {
-                for chunk in bytes.chunks_exact_mut(4) {
-                    chunk.reverse();
-                }
-            }
+            N64ByteOrder::LittleEndian => bytes.reverse(),
             N64ByteOrder::ByteSwapped => {
-                for chunk in bytes.chunks_exact_mut(4) {
-                    chunk.swap(0, 1);
-                    chunk.swap(2, 3);
-                }
+                bytes.swap(0, 1);
+                bytes.swap(2, 3);
             }
         }
     }
 
-    fn denormalize_n64_from_big_endian(bytes: &mut [u8], order: N64ByteOrder) {
-        match order {
-            N64ByteOrder::BigEndian => {}
-            N64ByteOrder::LittleEndian => {
-                for chunk in bytes.chunks_exact_mut(4) {
-                    chunk.reverse();
-                }
-            }
-            N64ByteOrder::ByteSwapped => {
-                for chunk in bytes.chunks_exact_mut(4) {
-                    chunk.swap(0, 1);
-                    chunk.swap(2, 3);
-                }
-            }
-        }
+    fn read_n64_word_normalized(file: &mut File, offset: u64, order: N64ByteOrder) -> Result<u32> {
+        let mut bytes = [0u8; 4];
+        Self::read_exact_at(file, offset, &mut bytes)?;
+        Self::transform_n64_word(&mut bytes, order);
+        Ok(u32::from_be_bytes(bytes))
     }
 
-    fn repair_atari_7800_header(bytes: &mut [u8]) -> HeaderRepairStatus {
-        if bytes.len() < 128 {
-            return HeaderRepairStatus::NotMatched;
+    fn write_n64_word_original_order(
+        file: &mut File,
+        offset: u64,
+        value: u32,
+        order: N64ByteOrder,
+    ) -> Result<()> {
+        let mut bytes = value.to_be_bytes();
+        Self::transform_n64_word(&mut bytes, order);
+        Self::write_all_at(file, offset, &bytes)
+    }
+
+    fn repair_atari_7800_header_file(
+        file: &mut File,
+        file_len: usize,
+    ) -> Result<HeaderRepairStatus> {
+        if file_len < 128 {
+            return Ok(HeaderRepairStatus::NotMatched);
         }
-        if bytes[1..1 + A78_HEADER_MAGIC.len()] != A78_HEADER_MAGIC {
-            return HeaderRepairStatus::NotMatched;
+        let probe = Self::read_vec_at(file, 0, 1 + A78_HEADER_MAGIC.len())?;
+        if probe[1..1 + A78_HEADER_MAGIC.len()] != A78_HEADER_MAGIC {
+            return Ok(HeaderRepairStatus::NotMatched);
         }
+        let mut header_tail = Self::read_vec_at(file, 0x64, 0x80 - 0x64)?;
         let mut changed = false;
-        for value in &mut bytes[0x64..0x80] {
+        for value in &mut header_tail {
             if *value != 0 {
                 *value = 0;
                 changed = true;
             }
         }
         if changed {
-            HeaderRepairStatus::Repaired
+            Self::write_all_at(file, 0x64, &header_tail)?;
+            Ok(HeaderRepairStatus::Repaired)
         } else {
-            HeaderRepairStatus::MatchedNoChange
+            Ok(HeaderRepairStatus::MatchedNoChange)
         }
     }
 
-    fn repair_atari_lynx_header(bytes: &mut [u8]) -> HeaderRepairStatus {
-        if bytes.len() < 64 || bytes[..4] != LNX_HEADER_MAGIC {
-            return HeaderRepairStatus::NotMatched;
+    fn repair_atari_lynx_header_file(
+        file: &mut File,
+        file_len: usize,
+    ) -> Result<HeaderRepairStatus> {
+        if file_len < 64 {
+            return Ok(HeaderRepairStatus::NotMatched);
+        }
+        let mut header = Self::read_vec_at(file, 0, 64)?;
+        if header[..4] != LNX_HEADER_MAGIC {
+            return Ok(HeaderRepairStatus::NotMatched);
         }
         let mut changed = false;
-        let page_size = u16::from_le_bytes([bytes[4], bytes[5]]);
+        let page_size = u16::from_le_bytes([header[4], header[5]]);
         if page_size == 0 {
-            bytes[4] = 0x00;
-            bytes[5] = 0x01;
+            header[4] = 0x00;
+            header[5] = 0x01;
             changed = true;
         }
-        for value in &mut bytes[59..64] {
+        for value in &mut header[59..64] {
             if *value != 0 {
                 *value = 0;
                 changed = true;
             }
         }
         if changed {
-            HeaderRepairStatus::Repaired
+            Self::write_all_at(file, 0, &header)?;
+            Ok(HeaderRepairStatus::Repaired)
         } else {
-            HeaderRepairStatus::MatchedNoChange
+            Ok(HeaderRepairStatus::MatchedNoChange)
         }
     }
 
-    fn repair_neo_geo_pocket_header(bytes: &mut [u8]) -> HeaderRepairStatus {
-        if bytes.len() < 0x30 {
-            return HeaderRepairStatus::NotMatched;
+    fn repair_neo_geo_pocket_header_file(
+        file: &mut File,
+        file_len: usize,
+    ) -> Result<HeaderRepairStatus> {
+        if file_len < 0x30 {
+            return Ok(HeaderRepairStatus::NotMatched);
         }
-        if bytes[..NGP_COPYRIGHT_MAGIC.len()] != NGP_COPYRIGHT_MAGIC {
-            return HeaderRepairStatus::NotMatched;
+        let mut header = Self::read_vec_at(file, 0, 0x30)?;
+        if header[..NGP_COPYRIGHT_MAGIC.len()] != NGP_COPYRIGHT_MAGIC {
+            return Ok(HeaderRepairStatus::NotMatched);
         }
         let mut changed = false;
-        for value in &mut bytes[0x24..0x30] {
+        for value in &mut header[0x24..0x30] {
             if *value != 0 {
                 *value = 0;
                 changed = true;
             }
         }
         if changed {
-            HeaderRepairStatus::Repaired
+            Self::write_all_at(file, 0x24, &header[0x24..0x30])?;
+            Ok(HeaderRepairStatus::Repaired)
         } else {
-            HeaderRepairStatus::MatchedNoChange
+            Ok(HeaderRepairStatus::MatchedNoChange)
         }
     }
 
-    fn repair_msx_header(bytes: &mut [u8]) -> HeaderRepairStatus {
-        if bytes.len() < 16 || bytes[..2] != *b"AB" {
-            return HeaderRepairStatus::NotMatched;
+    fn repair_msx_header_file(file: &mut File, file_len: usize) -> Result<HeaderRepairStatus> {
+        if file_len < 16 {
+            return Ok(HeaderRepairStatus::NotMatched);
+        }
+        let mut header = Self::read_vec_at(file, 0, 16)?;
+        if header[..2] != *b"AB" {
+            return Ok(HeaderRepairStatus::NotMatched);
         }
         let mut changed = false;
-        for value in &mut bytes[0x0A..0x10] {
+        for value in &mut header[0x0A..0x10] {
             if *value != 0 {
                 *value = 0;
                 changed = true;
             }
         }
         if changed {
-            HeaderRepairStatus::Repaired
+            Self::write_all_at(file, 0x0A, &header[0x0A..0x10])?;
+            Ok(HeaderRepairStatus::Repaired)
         } else {
-            HeaderRepairStatus::MatchedNoChange
+            Ok(HeaderRepairStatus::MatchedNoChange)
         }
     }
 
-    fn repair_nintendo_ds_header_crc(bytes: &mut [u8]) -> HeaderRepairStatus {
-        if bytes.len() < 0x200 || bytes[0xC0..0xC4] != GBA_HEADER_MAGIC {
-            return HeaderRepairStatus::NotMatched;
+    fn repair_nintendo_ds_header_crc_file(
+        file: &mut File,
+        file_len: usize,
+    ) -> Result<HeaderRepairStatus> {
+        if file_len < 0x200 {
+            return Ok(HeaderRepairStatus::NotMatched);
         }
-        let old_crc = u16::from_le_bytes([bytes[0x15E], bytes[0x15F]]);
-        let new_crc = Self::nds_crc16(&bytes[..0x15E]);
-        bytes[0x15E..0x160].copy_from_slice(&new_crc.to_le_bytes());
+        let header = Self::read_vec_at(file, 0, 0x200)?;
+        if header[0xC0..0xC4] != GBA_HEADER_MAGIC {
+            return Ok(HeaderRepairStatus::NotMatched);
+        }
+        let old_crc = u16::from_le_bytes([header[0x15E], header[0x15F]]);
+        let new_crc = Self::nds_crc16(&header[..0x15E]);
+        Self::write_all_at(file, 0x15E, &new_crc.to_le_bytes())?;
         if old_crc == new_crc {
-            HeaderRepairStatus::MatchedNoChange
+            Ok(HeaderRepairStatus::MatchedNoChange)
         } else {
-            HeaderRepairStatus::Repaired
+            Ok(HeaderRepairStatus::Repaired)
         }
     }
 
     fn repair_pce_copier_header(
-        bytes: &mut Vec<u8>,
+        repaired_len: usize,
         extension: Option<&str>,
     ) -> HeaderRepairStatus {
         let is_pce = matches!(extension, Some("pce" | "tg16"));
         if !is_pce {
             return HeaderRepairStatus::NotMatched;
         }
-        if bytes.len() <= ROM_HEADER_BYTES || bytes.len() < PCE_COPIER_HEADER_MODULUS as usize {
+        if repaired_len <= ROM_HEADER_BYTES || repaired_len < PCE_COPIER_HEADER_MODULUS as usize {
             return HeaderRepairStatus::MatchedNoChange;
         }
-        if bytes.len() as u64 % PCE_COPIER_HEADER_MODULUS != ROM_HEADER_BYTES as u64 {
+        if repaired_len as u64 % PCE_COPIER_HEADER_MODULUS != ROM_HEADER_BYTES as u64 {
             return HeaderRepairStatus::MatchedNoChange;
         }
-        bytes.drain(0..ROM_HEADER_BYTES);
         HeaderRepairStatus::Repaired
     }
 
-    fn repair_virtual_boy_header(bytes: &mut [u8], extension: Option<&str>) -> HeaderRepairStatus {
+    fn repair_virtual_boy_header_file(
+        file: &mut File,
+        file_len: usize,
+        extension: Option<&str>,
+    ) -> Result<HeaderRepairStatus> {
         let is_virtual_boy = matches!(extension, Some("vb" | "vboy"));
-        if !is_virtual_boy || bytes.len() < 1024 {
-            return HeaderRepairStatus::NotMatched;
+        if !is_virtual_boy || file_len < 1024 {
+            return Ok(HeaderRepairStatus::NotMatched);
         }
-        if bytes.len() < 0x220 {
-            return HeaderRepairStatus::MatchedNoChange;
+        if file_len < 0x220 {
+            return Ok(HeaderRepairStatus::MatchedNoChange);
         }
-        let header_offset = bytes.len() - 0x220;
+        let header_offset = file_len - 0x220;
+        let mut bytes = Self::read_vec_at(file, (header_offset + 0x14) as u64, 5)?;
         let mut changed = false;
-        for value in &mut bytes[header_offset + 0x14..header_offset + 0x19] {
+        for value in &mut bytes {
             if *value != 0 {
                 *value = 0;
                 changed = true;
             }
         }
         if changed {
-            HeaderRepairStatus::Repaired
+            Self::write_all_at(file, (header_offset + 0x14) as u64, &bytes)?;
+            Ok(HeaderRepairStatus::Repaired)
         } else {
-            HeaderRepairStatus::MatchedNoChange
+            Ok(HeaderRepairStatus::MatchedNoChange)
         }
     }
 
-    fn validate_atari_jaguar_header(bytes: &[u8], extension: Option<&str>) -> HeaderRepairStatus {
+    fn validate_atari_jaguar_header_file(
+        file_len: usize,
+        extension: Option<&str>,
+    ) -> HeaderRepairStatus {
         if !matches!(extension, Some("j64" | "jag")) {
             return HeaderRepairStatus::NotMatched;
         }
-        if bytes.len() >= 0x2000 {
+        if file_len >= 0x2000 {
             HeaderRepairStatus::MatchedNoChange
         } else {
             HeaderRepairStatus::NotMatched
         }
     }
 
-    fn validate_colecovision_header(bytes: &[u8], extension: Option<&str>) -> HeaderRepairStatus {
+    fn validate_colecovision_header_file(
+        file: &mut File,
+        file_len: usize,
+        extension: Option<&str>,
+    ) -> Result<HeaderRepairStatus> {
         if !matches!(extension, Some("col" | "cv")) {
-            return HeaderRepairStatus::NotMatched;
+            return Ok(HeaderRepairStatus::NotMatched);
         }
-        if bytes.len() >= 16
-            && ((bytes[0] == 0xAA && bytes[1] == 0x55) || (bytes[0] == 0x55 && bytes[1] == 0xAA))
-        {
-            HeaderRepairStatus::MatchedNoChange
+        if file_len < 16 {
+            return Ok(HeaderRepairStatus::NotMatched);
+        }
+        let bytes = Self::read_vec_at(file, 0, 2)?;
+        if (bytes[0] == 0xAA && bytes[1] == 0x55) || (bytes[0] == 0x55 && bytes[1] == 0xAA) {
+            Ok(HeaderRepairStatus::MatchedNoChange)
         } else {
-            HeaderRepairStatus::NotMatched
+            Ok(HeaderRepairStatus::NotMatched)
         }
     }
 
-    fn validate_watara_supervision_header(
-        bytes: &[u8],
+    fn validate_watara_supervision_header_file(
+        file_len: usize,
         extension: Option<&str>,
     ) -> HeaderRepairStatus {
         if !matches!(extension, Some("sv")) {
             return HeaderRepairStatus::NotMatched;
         }
-        if bytes.len() >= 64 {
+        if file_len >= 64 {
             HeaderRepairStatus::MatchedNoChange
         } else {
             HeaderRepairStatus::NotMatched
         }
     }
 
-    fn validate_intellivision_header(bytes: &[u8], extension: Option<&str>) -> HeaderRepairStatus {
+    fn validate_intellivision_header_file(
+        file_len: usize,
+        extension: Option<&str>,
+    ) -> HeaderRepairStatus {
         if !matches!(extension, Some("int")) {
             return HeaderRepairStatus::NotMatched;
         }
-        if bytes.len() >= 0x50 {
+        if file_len >= 0x50 {
             HeaderRepairStatus::MatchedNoChange
         } else {
             HeaderRepairStatus::NotMatched
         }
     }
 
+    fn remove_prefix_in_place(file: &mut File, prefix: usize, file_len: usize) -> Result<usize> {
+        if prefix == 0 {
+            return Ok(file_len);
+        }
+        if file_len <= prefix {
+            file.set_len(0)?;
+            return Ok(0);
+        }
+
+        let mut buffer = vec![0u8; 64 * 1024];
+        let mut read_pos = prefix as u64;
+        let mut write_pos = 0u64;
+        let file_len_u64 = file_len as u64;
+
+        while read_pos < file_len_u64 {
+            let chunk_len = ((file_len_u64 - read_pos) as usize).min(buffer.len());
+            Self::read_exact_at(file, read_pos, &mut buffer[..chunk_len])?;
+            Self::write_all_at(file, write_pos, &buffer[..chunk_len])?;
+            read_pos = read_pos.saturating_add(chunk_len as u64);
+            write_pos = write_pos.saturating_add(chunk_len as u64);
+        }
+
+        file.set_len(write_pos)?;
+        Ok(write_pos as usize)
+    }
+
+    fn read_exact_at(file: &mut File, offset: u64, output: &mut [u8]) -> Result<()> {
+        file.seek(SeekFrom::Start(offset))?;
+        file.read_exact(output)?;
+        Ok(())
+    }
+
+    fn write_all_at(file: &mut File, offset: u64, bytes: &[u8]) -> Result<()> {
+        file.seek(SeekFrom::Start(offset))?;
+        file.write_all(bytes)?;
+        Ok(())
+    }
+
+    fn read_vec_at(file: &mut File, offset: u64, len: usize) -> Result<Vec<u8>> {
+        let mut output = vec![0u8; len];
+        Self::read_exact_at(file, offset, output.as_mut_slice())?;
+        Ok(output)
+    }
+
+    fn sum_range_with_zeroed(
+        file: &mut File,
+        start: usize,
+        end: usize,
+        zeroed_ranges: &[(usize, usize)],
+    ) -> Result<u32> {
+        if end <= start {
+            return Ok(0);
+        }
+
+        let mut sum = 0_u32;
+        let mut buffer = vec![0u8; 64 * 1024];
+        let mut cursor = start as u64;
+        let end_u64 = end as u64;
+
+        while cursor < end_u64 {
+            let chunk_len = ((end_u64 - cursor) as usize).min(buffer.len());
+            Self::read_exact_at(file, cursor, &mut buffer[..chunk_len])?;
+            for (index, value) in buffer[..chunk_len].iter().enumerate() {
+                let absolute = cursor + index as u64;
+                if zeroed_ranges
+                    .iter()
+                    .any(|(range_start, range_end)| {
+                        absolute >= *range_start as u64 && absolute < *range_end as u64
+                    })
+                {
+                    continue;
+                }
+                sum = sum.wrapping_add(u32::from(*value));
+            }
+            cursor = cursor.saturating_add(chunk_len as u64);
+        }
+
+        Ok(sum)
+    }
+
+    fn sum_sega_words(file: &mut File, start: usize, end: usize) -> Result<u32> {
+        if end <= start {
+            return Ok(0);
+        }
+
+        let mut sum = 0_u32;
+        let mut pending_high = None::<u8>;
+        let mut buffer = vec![0u8; 64 * 1024];
+        let mut cursor = start as u64;
+        let end_u64 = end as u64;
+
+        while cursor < end_u64 {
+            let chunk_len = ((end_u64 - cursor) as usize).min(buffer.len());
+            Self::read_exact_at(file, cursor, &mut buffer[..chunk_len])?;
+            for value in &buffer[..chunk_len] {
+                if let Some(high) = pending_high.take() {
+                    let word = u16::from_be_bytes([high, *value]);
+                    sum = sum.wrapping_add(u32::from(word));
+                } else {
+                    pending_high = Some(*value);
+                }
+            }
+            cursor = cursor.saturating_add(chunk_len as u64);
+        }
+
+        if let Some(high) = pending_high {
+            sum = sum.wrapping_add(u32::from(high) << 8);
+        }
+
+        Ok(sum)
+    }
 }

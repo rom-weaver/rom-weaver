@@ -309,6 +309,33 @@ mod tests {
     }
 
     #[test]
+    fn checksum_report_with_progress_emits_incremental_updates() {
+        let temp = TestDir::new();
+        let source = temp.path().join("progress.bin");
+        write_patterned_file(&source, (FANOUT_PARALLEL_THRESHOLD + (4 << 20)) as usize);
+
+        let request = ChecksumRequest {
+            source,
+            algorithms: vec!["crc32".into(), "md5".into(), "sha1".into()],
+            start: None,
+            length: None,
+        };
+
+        let context = checksum_context(temp.path(), ThreadBudget::Fixed(1));
+        let mut checkpoints = Vec::new();
+        let report = NativeChecksumEngine
+            .checksum_report_with_progress(&request, &context, "checksum", &mut |progress| {
+                checkpoints.push(progress.percent())
+            })
+            .expect("checksum report");
+
+        assert_eq!(report.status, rom_weaver_core::OperationStatus::Succeeded);
+        assert!(!checkpoints.is_empty());
+        assert!((checkpoints.last().copied().unwrap_or_default() - 100.0).abs() < 0.001);
+        assert!(checkpoints.windows(2).all(|window| window[0] <= window[1]));
+    }
+
+    #[test]
     fn standalone_crc32_uses_parallel_chunks_on_large_files() {
         let temp = TestDir::new();
         let source = temp.path().join("large-crc32.bin");

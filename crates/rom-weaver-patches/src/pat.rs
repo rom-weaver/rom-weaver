@@ -7,6 +7,7 @@ use std::{
 
 use rayon::prelude::*;
 use rom_weaver_core::{
+    BlockCacheReader, DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES,
     FormatDescriptor, OperationContext, OperationReport, PatchApplyRequest, PatchCapabilities,
     PatchCreateRequest, PatchHandler, Result, RomWeaverError, SharedThreadPool, ThreadCapability,
 };
@@ -46,7 +47,7 @@ impl PatPatchHandler {
         fs::copy(&request.input, &request.output)?;
         let output_len = fs::metadata(&request.output)?.len();
         validate_pat_record_offsets(&grouped_records, output_len)?;
-        let input = crate::map_file_read_only(&request.input)?;
+        let input_bytes = read_pat_group_input_bytes(&grouped_records, &request.input, context)?;
         let thread_capability = pat_apply_thread_capability(grouped_records.len());
         let planned_execution = context.plan_threads(thread_capability.clone());
 
@@ -55,14 +56,18 @@ impl PatPatchHandler {
             let writes = pool.install(|| {
                 grouped_records
                     .par_iter()
-                    .map(|group| prepare_pat_offset_write(group, input.as_ref(), context))
+                    .enumerate()
+                    .map(|(index, group)| {
+                        prepare_pat_offset_write(group, input_bytes[index], context)
+                    })
                     .collect::<Result<Vec<_>>>()
             })?;
             (execution, writes)
         } else {
             let writes = grouped_records
                 .iter()
-                .map(|group| prepare_pat_offset_write(group, input.as_ref(), context))
+                .enumerate()
+                .map(|(index, group)| prepare_pat_offset_write(group, input_bytes[index], context))
                 .collect::<Result<Vec<_>>>()?;
             (planned_execution, writes)
         };
@@ -260,15 +265,10 @@ fn pat_apply_thread_capability(group_count: usize) -> ThreadCapability {
 
 fn prepare_pat_offset_write(
     group: &PatOffsetGroup,
-    input: &[u8],
+    mut current: u8,
     context: &OperationContext,
 ) -> Result<PreparedPatWrite> {
     context.cancel().check()?;
-    let index = usize::try_from(group.offset)
-        .map_err(|_| RomWeaverError::Validation("PAT offset exceeded addressable memory".into()))?;
-    let mut current = *input.get(index).ok_or_else(|| {
-        RomWeaverError::Validation("PAT record offset exceeded addressable memory".into())
-    })?;
 
     let mut forward_applied = 0usize;
     let mut reverse_applied = 0usize;
@@ -299,6 +299,26 @@ fn prepare_pat_offset_write(
         reverse_applied,
         skipped,
     })
+}
+
+fn read_pat_group_input_bytes(
+    groups: &[PatOffsetGroup],
+    input_path: &Path,
+    context: &OperationContext,
+) -> Result<Vec<u8>> {
+    let mut reader = BlockCacheReader::open(
+        input_path,
+        DEFAULT_BLOCK_CACHE_SIZE_BYTES,
+        DEFAULT_BLOCK_CACHE_MAX_BLOCKS,
+    )?;
+    let mut bytes = Vec::with_capacity(groups.len());
+    let mut byte = [0u8; 1];
+    for group in groups {
+        context.cancel().check()?;
+        reader.read_exact_at(group.offset, &mut byte)?;
+        bytes.push(byte[0]);
+    }
+    Ok(bytes)
 }
 
 fn parse_pat_file(path: &Path) -> Result<ParsedPatPatch> {
@@ -479,50 +499,40 @@ fn create_pat_patch_parallel(
     modified_path: &Path,
     pool: &SharedThreadPool,
 ) -> Result<CreatedPatPatch> {
-    let original = crate::map_file_read_only(original_path)?;
-    let modified = crate::map_file_read_only(modified_path)?;
-    if original.len() != modified.len() {
+    let original_len = fs::metadata(original_path)?.len();
+    let modified_len = fs::metadata(modified_path)?.len();
+    if original_len != modified_len {
         return Err(RomWeaverError::Validation(format!(
-            "PAT create requires equal input lengths (original: {}, modified: {})",
-            original.len(),
-            modified.len()
+            "PAT create requires equal input lengths (original: {original_len}, modified: {modified_len})"
         )));
     }
-    if original.len() > (u32::MAX as usize).saturating_add(1) {
+    if original_len > u64::from(u32::MAX).saturating_add(1) {
         return Err(RomWeaverError::Validation(
             "PAT create supports offsets up to 0xFFFFFFFF".into(),
         ));
     }
 
-    if original.is_empty() {
+    if original_len == 0 {
         return Ok(CreatedPatPatch {
             records: Vec::new(),
         });
     }
 
-    let chunk_ranges = (0..original.len())
-        .step_by(CREATE_THREAD_SCAN_CHUNK_BYTES)
-        .map(|start| {
-            let end = start
-                .saturating_add(CREATE_THREAD_SCAN_CHUNK_BYTES)
-                .min(original.len());
-            start..end
-        })
-        .collect::<Vec<_>>();
-
+    let chunk_count = pat_create_chunk_count(original_len);
     let per_chunk_records = pool.install(|| {
-        chunk_ranges
+        (0..chunk_count)
             .into_par_iter()
-            .map(|range| {
-                collect_pat_chunk_records(
-                    original.as_ref(),
-                    modified.as_ref(),
-                    range.start,
-                    range.end,
+            .map(|chunk_index| {
+                collect_pat_chunk_records_for_chunk(
+                    chunk_index,
+                    original_path,
+                    modified_path,
+                    original_len,
                 )
             })
-            .collect::<Vec<_>>()
+            .collect::<Result<Vec<_>>>()
     });
+    let per_chunk_records = per_chunk_records?;
 
     let mut records = Vec::new();
     for mut chunk_records in per_chunk_records {
@@ -532,25 +542,58 @@ fn create_pat_patch_parallel(
     Ok(CreatedPatPatch { records })
 }
 
-fn collect_pat_chunk_records(
-    original: &[u8],
-    modified: &[u8],
-    start: usize,
-    end: usize,
-) -> Vec<PatRecord> {
-    let mut records = Vec::new();
-    for index in start..end {
-        let source_byte = original[index];
-        let modified_byte = modified[index];
-        if source_byte != modified_byte {
-            records.push(PatRecord {
-                offset: index as u64,
-                source_byte,
-                modified_byte,
-            });
-        }
+fn collect_pat_chunk_records_for_chunk(
+    chunk_index: usize,
+    original_path: &Path,
+    modified_path: &Path,
+    input_len: u64,
+) -> Result<Vec<PatRecord>> {
+    let start = u64::try_from(chunk_index)
+        .ok()
+        .and_then(|index| index.checked_mul(CREATE_THREAD_SCAN_CHUNK_BYTES as u64))
+        .ok_or_else(|| RomWeaverError::Validation("PAT create chunk offset overflowed".into()))?;
+    if start >= input_len {
+        return Ok(Vec::new());
     }
-    records
+    let end = start
+        .saturating_add(CREATE_THREAD_SCAN_CHUNK_BYTES as u64)
+        .min(input_len);
+
+    let mut original = BufReader::new(File::open(original_path)?);
+    let mut modified = BufReader::new(File::open(modified_path)?);
+    original.seek(SeekFrom::Start(start))?;
+    modified.seek(SeekFrom::Start(start))?;
+
+    let mut original_buffer = vec![0u8; PAT_SCAN_BUFFER_SIZE];
+    let mut modified_buffer = vec![0u8; PAT_SCAN_BUFFER_SIZE];
+    let mut records = Vec::new();
+    let mut cursor = start;
+    while cursor < end {
+        let chunk_len =
+            usize::try_from((end - cursor).min(PAT_SCAN_BUFFER_SIZE as u64)).map_err(|_| {
+                RomWeaverError::Validation("PAT compare chunk exceeded addressable memory".into())
+            })?;
+        original.read_exact(&mut original_buffer[..chunk_len])?;
+        modified.read_exact(&mut modified_buffer[..chunk_len])?;
+
+        for index in 0..chunk_len {
+            let source_byte = original_buffer[index];
+            let modified_byte = modified_buffer[index];
+            if source_byte != modified_byte {
+                let offset = cursor.checked_add(index as u64).ok_or_else(|| {
+                    RomWeaverError::Validation("PAT create offset overflowed".into())
+                })?;
+                records.push(PatRecord {
+                    offset,
+                    source_byte,
+                    modified_byte,
+                });
+            }
+        }
+        cursor = cursor.saturating_add(chunk_len as u64);
+    }
+
+    Ok(records)
 }
 
 #[cfg(test)]

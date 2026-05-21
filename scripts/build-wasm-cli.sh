@@ -5,9 +5,8 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WASM_PACKAGE_DIR="$ROOT_DIR/packages/rom-weaver-wasm"
 DEFAULT_OUT_DIR="$WASM_PACKAGE_DIR"
 OUT_DIR="${1:-${ROM_WEAVER_WASM_OUT_DIR:-$DEFAULT_OUT_DIR}}"
-JS_API_SOURCE="$ROOT_DIR/scripts/wasm/rom-weaver-wasi-api.mjs"
+RUNTIME_UTILS_SOURCE="$ROOT_DIR/scripts/wasm/rom-weaver-runtime-utils.mjs"
 ZENFS_API_SOURCE="$ROOT_DIR/scripts/wasm/rom-weaver-zenfs-api.mjs"
-THREAD_WORKER_SOURCE="$ROOT_DIR/scripts/wasm/rom-weaver-wasi-thread-worker.mjs"
 JS_API_README="$ROOT_DIR/scripts/wasm/README.md"
 WASM_NPM_PACKAGE_SYNC="$ROOT_DIR/packages/rom-weaver-wasm/scripts/sync-dist.mjs"
 PTHREAD_COUNT="${PTHREAD_COUNT:-16}"
@@ -182,26 +181,19 @@ postprocess_artifact "$OUT_DIR/rom-weaver-cli-threaded.wasm" "threaded"
 
 if [[ "$OUT_DIR" == "$WASM_PACKAGE_DIR" ]]; then
   mkdir -p "$OUT_DIR/src"
-  if [[ -f "$JS_API_SOURCE" ]]; then
-    cp "$JS_API_SOURCE" "$OUT_DIR/src/rom-weaver-wasi-api.mjs"
+  if [[ -f "$RUNTIME_UTILS_SOURCE" ]]; then
+    cp "$RUNTIME_UTILS_SOURCE" "$OUT_DIR/src/rom-weaver-runtime-utils.mjs"
   fi
   if [[ -f "$ZENFS_API_SOURCE" ]]; then
     cp "$ZENFS_API_SOURCE" "$OUT_DIR/src/rom-weaver-zenfs-api.mjs"
   fi
-  if [[ -f "$THREAD_WORKER_SOURCE" ]]; then
-    cp "$THREAD_WORKER_SOURCE" "$OUT_DIR/src/rom-weaver-wasi-thread-worker.mjs"
-  fi
 else
-  if [[ -f "$JS_API_SOURCE" ]]; then
-    cp "$JS_API_SOURCE" "$OUT_DIR/rom-weaver-wasi-api.mjs"
+  if [[ -f "$RUNTIME_UTILS_SOURCE" ]]; then
+    cp "$RUNTIME_UTILS_SOURCE" "$OUT_DIR/rom-weaver-runtime-utils.mjs"
   fi
 
   if [[ -f "$ZENFS_API_SOURCE" ]]; then
     cp "$ZENFS_API_SOURCE" "$OUT_DIR/rom-weaver-zenfs-api.mjs"
-  fi
-
-  if [[ -f "$THREAD_WORKER_SOURCE" ]]; then
-    cp "$THREAD_WORKER_SOURCE" "$OUT_DIR/rom-weaver-wasi-thread-worker.mjs"
   fi
 
   if [[ -f "$JS_API_README" ]]; then

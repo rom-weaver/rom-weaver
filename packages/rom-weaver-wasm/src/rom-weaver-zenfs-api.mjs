@@ -4,13 +4,12 @@ import * as zenDom from '@zenfs/dom';
 import {
   createWasmEnvImports,
   normalizeGuestPath,
-  parseJsonLines,
-  parseTraceJsonLines,
 } from './rom-weaver-runtime-utils.mjs';
 
 const DEFAULT_OPFS_GUEST_PATH = '/opfs';
 const DEFAULT_SCRATCH_GUEST_PATH = '/scratch';
 const DEFAULT_SCRATCH_NAMESPACE = '.rom-weaver-scratch';
+const DEFAULT_MAX_BUFFERED_PATCH_BYTES = String(64 * 1024 * 1024);
 
 export async function createRomWeaverZenFsBrowser(options = {}) {
   assertDedicatedWorkerRuntime();
@@ -80,9 +79,15 @@ export async function createRomWeaverZenFsBrowser(options = {}) {
         scratchNamespace,
         activeScratchRunIds,
       );
-      const env = {
+      const mergedEnv = {
         ...(options.env ?? {}),
         ...(runOptions.env ?? {}),
+      };
+      if (mergedEnv.ROM_WEAVER_MAX_BUFFERED_PATCH_BYTES == null) {
+        mergedEnv.ROM_WEAVER_MAX_BUFFERED_PATCH_BYTES = DEFAULT_MAX_BUFFERED_PATCH_BYTES;
+      }
+      const env = {
+        ...mergedEnv,
         ROM_WEAVER_TMPDIR: joinScratchGuestPath(
           scratchGuestPath,
           scratchNamespace,
@@ -106,6 +111,8 @@ export async function createRomWeaverZenFsBrowser(options = {}) {
       const {
         fds,
         closeHandles,
+        flushStderr,
+        flushStdout,
         stdoutChunks,
         stderrChunks,
       } = await buildBrowserWasiFds({
@@ -114,6 +121,8 @@ export async function createRomWeaverZenFsBrowser(options = {}) {
         opfsGuestPath,
         runtimeMounts,
         mountHandles,
+        onStderrChunk: runOptions.onStderrChunk,
+        onStdoutChunk: runOptions.onStdoutChunk,
         scratchGuestPath,
         syncAccessMode,
       });
@@ -132,6 +141,8 @@ export async function createRomWeaverZenFsBrowser(options = {}) {
         });
 
         const exitCode = wasi.start(instance);
+        flushStdout();
+        flushStderr();
         const stdout = decodeChunks(stdoutChunks);
         const stderr = decodeChunks(stderrChunks);
 
@@ -143,6 +154,8 @@ export async function createRomWeaverZenFsBrowser(options = {}) {
           ok: exitCode === 0,
         };
       } catch (error) {
+        flushStdout();
+        flushStderr();
         const stdout = decodeChunks(stdoutChunks);
         const stderr = decodeChunks(stderrChunks);
 
@@ -166,22 +179,32 @@ export async function createRomWeaverZenFsBrowser(options = {}) {
     },
 
     async runJson(args = [], runOptions = {}) {
-      const result = await this.run(['--json', ...normalizeArgs(args)], runOptions);
-      const parsed = parseJsonLines(result.stdout, {
+      const jsonStream = createJsonLineStream({
         onEvent: runOptions.onEvent,
         onNonJsonLine: runOptions.onNonJsonLine,
       });
-      const parsedTrace = parseTraceJsonLines(result.stderr, {
-        onTraceEvent: runOptions.onTraceEvent,
-        onTraceNonJsonLine: runOptions.onTraceNonJsonLine,
+      const traceStream = createJsonLineStream({
+        onEvent: runOptions.onTraceEvent,
+        onNonJsonLine: runOptions.onTraceNonJsonLine,
       });
+      const result = await this.run(['--json', ...normalizeArgs(args)], {
+        ...runOptions,
+        onStderrChunk(text) {
+          traceStream.push(text);
+        },
+        onStdoutChunk(text) {
+          jsonStream.push(text);
+        },
+      });
+      jsonStream.flush();
+      traceStream.flush();
 
       return {
         ...result,
-        events: parsed.events,
-        nonJsonLines: parsed.nonJsonLines,
-        traceEvents: parsedTrace.traceEvents,
-        traceNonJsonLines: parsedTrace.traceNonJsonLines,
+        events: jsonStream.events,
+        nonJsonLines: jsonStream.nonJsonLines,
+        traceEvents: traceStream.events,
+        traceNonJsonLines: traceStream.nonJsonLines,
       };
     },
   };
@@ -220,13 +243,15 @@ async function buildBrowserWasiFds({
   opfsGuestPath,
   runtimeMounts,
   mountHandles,
+  onStdoutChunk,
+  onStderrChunk,
   scratchGuestPath,
   syncAccessMode,
 }) {
   const closeHandles = [];
   const stdinBytes = normalizeStdin(stdin);
-  const stdoutCollector = createOutputCollector(wasiShim.ConsoleStdout);
-  const stderrCollector = createOutputCollector(wasiShim.ConsoleStdout);
+  const stdoutCollector = createOutputCollector(wasiShim.ConsoleStdout, onStdoutChunk);
+  const stderrCollector = createOutputCollector(wasiShim.ConsoleStdout, onStderrChunk);
 
   const fds = [
     new wasiShim.OpenFile(new wasiShim.File(stdinBytes)),
@@ -243,7 +268,7 @@ async function buildBrowserWasiFds({
       );
     }
 
-    const writableMount = mountPath === opfsGuestPath || mountPath === scratchGuestPath;
+    const writableMount = mountPath === scratchGuestPath;
     const preopenContents = await buildOpfsInodeMap({
       wasiShim,
       directoryHandle: handle,
@@ -261,6 +286,8 @@ async function buildBrowserWasiFds({
   return {
     fds,
     closeHandles,
+    flushStderr: () => stderrCollector.flush(),
+    flushStdout: () => stdoutCollector.flush(),
     stdoutChunks: stdoutCollector.chunks,
     stderrChunks: stderrCollector.chunks,
   };
@@ -361,12 +388,26 @@ function pathExistsInDirectory(contents, pathStr) {
   return true;
 }
 
-function createOutputCollector(ConsoleStdout) {
+function createOutputCollector(ConsoleStdout, onTextChunk) {
   const chunks = [];
+  const decoder = new TextDecoder();
   return {
     chunks,
+    flush() {
+      const trailing = decoder.decode();
+      if (typeof onTextChunk === 'function' && trailing.length > 0) {
+        onTextChunk(trailing);
+      }
+    },
     fd: new ConsoleStdout((bytes) => {
-      chunks.push(copyUint8Array(bytes));
+      const chunk = copyUint8Array(bytes);
+      chunks.push(chunk);
+      if (typeof onTextChunk === 'function') {
+        const decoded = decoder.decode(chunk, { stream: true });
+        if (decoded.length > 0) {
+          onTextChunk(decoded);
+        }
+      }
     }),
   };
 }
@@ -379,6 +420,51 @@ function decodeChunks(chunks) {
   }
   output += decoder.decode();
   return output;
+}
+
+function createJsonLineStream({ onEvent, onNonJsonLine } = {}) {
+  const events = [];
+  const nonJsonLines = [];
+  let pending = '';
+  const emitLine = (line) => {
+    if (line.length === 0) {
+      return;
+    }
+    try {
+      const event = JSON.parse(line);
+      events.push(event);
+      if (typeof onEvent === 'function') {
+        onEvent(event);
+      }
+    } catch {
+      nonJsonLines.push(line);
+      if (typeof onNonJsonLine === 'function') {
+        onNonJsonLine(line);
+      }
+    }
+  };
+  const push = (text) => {
+    if (typeof text !== 'string' || text.length === 0) {
+      return;
+    }
+    pending += text;
+    let splitAt = pending.indexOf('\n');
+    while (splitAt !== -1) {
+      const rawLine = pending.slice(0, splitAt);
+      pending = pending.slice(splitAt + 1);
+      emitLine(rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine);
+      splitAt = pending.indexOf('\n');
+    }
+  };
+  const flush = () => {
+    if (pending.length === 0) {
+      return;
+    }
+    const line = pending.endsWith('\r') ? pending.slice(0, -1) : pending;
+    pending = '';
+    emitLine(line);
+  };
+  return { events, flush, nonJsonLines, push };
 }
 
 async function buildOpfsInodeMap({

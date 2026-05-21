@@ -2,12 +2,14 @@ use std::{
     fs::{self, File, OpenOptions},
     io::{self, BufReader, BufWriter, Read, Seek, SeekFrom, Write},
     path::Path,
+    sync::{Arc, Mutex},
 };
 
 use crc32fast::Hasher;
 use rayon::prelude::*;
 use rom_weaver_checksum::{checksum_file_values, crc32_bytes};
 use rom_weaver_core::{
+    BlockCacheReader, DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES,
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
     PatchCapabilities, PatchChecksumValidation, PatchCreateRequest, PatchHandler, ProbeConfidence,
     Result, RomWeaverError, SharedThreadPool, ThreadCapability,
@@ -103,10 +105,14 @@ impl PatchHandler for BpsPatchHandler {
         let planned_execution = context.plan_threads(thread_capability.clone());
         let has_target_copy = patch_contains_target_copy(&patch.actions);
         let execution = if planned_execution.used_parallelism && !has_target_copy {
-            let source_map = crate::map_file_read_only_with_fallback(&request.input)?;
             let (execution, pool) = context.build_pool(thread_capability)?;
-            let prepared =
-                prepare_bps_writes_parallel(&patch, source_map.as_ref(), &pool, context)?;
+            let prepared = prepare_bps_writes_parallel(
+                &patch,
+                &request.input,
+                patch.source_size,
+                &pool,
+                context,
+            )?;
             apply_prepared_bps_writes(&mut output, &prepared)?;
             execution
         } else {
@@ -275,8 +281,92 @@ fn parse_bps_file_with_checksum_validation(
     path: &Path,
     validate_patch_checksum: bool,
 ) -> Result<ParsedBpsPatch> {
-    let bytes = crate::map_file_read_only_with_fallback(path)?;
-    parse_bps_bytes_with_checksum_validation(bytes.as_ref(), validate_patch_checksum)
+    let file_len = fs::metadata(path)?.len();
+    let minimum_len = (BPS_MAGIC.len() + BPS_FOOTER_SIZE) as u64;
+    if file_len < minimum_len {
+        return Err(RomWeaverError::Validation(
+            "BPS patch is too small to contain a valid header and footer".into(),
+        ));
+    }
+
+    let footer_offset = file_len
+        .checked_sub(BPS_FOOTER_SIZE as u64)
+        .expect("validated footer size");
+    let mut parser = BpsFileParser::new(BufReader::new(File::open(path)?), footer_offset);
+
+    if parser.read_exact(BPS_MAGIC.len())?.as_slice() != BPS_MAGIC {
+        return Err(RomWeaverError::Validation("Patch header invalid".into()));
+    }
+
+    let source_size = parser.read_varint()?;
+    let target_size = parser.read_varint()?;
+    let metadata_size = usize::try_from(parser.read_varint()?).map_err(|_| {
+        RomWeaverError::Validation("BPS metadata size exceeded addressable memory".into())
+    })?;
+    let _metadata = parser.read_exact(metadata_size)?;
+
+    let mut actions = Vec::new();
+    let mut output_size = 0u64;
+    while !parser.is_at_end() {
+        let raw = parser.read_varint()?;
+        let command = raw & 0x03;
+        let length = (raw >> 2)
+            .checked_add(1)
+            .ok_or_else(|| RomWeaverError::Validation("BPS action length overflowed".into()))?;
+        output_size = output_size
+            .checked_add(length)
+            .ok_or_else(|| RomWeaverError::Validation("BPS target size overflowed".into()))?;
+
+        let action = match command {
+            0 => BpsAction::SourceRead { length },
+            1 => {
+                let data = parser.read_exact(usize::try_from(length).map_err(|_| {
+                    RomWeaverError::Validation(
+                        "BPS target-read length exceeded addressable memory".into(),
+                    )
+                })?)?;
+                BpsAction::TargetRead { data }
+            }
+            2 => BpsAction::SourceCopy {
+                length,
+                relative_offset: decode_signed_offset(parser.read_varint()?),
+            },
+            3 => BpsAction::TargetCopy {
+                length,
+                relative_offset: decode_signed_offset(parser.read_varint()?),
+            },
+            _ => unreachable!(),
+        };
+        actions.push(action);
+    }
+
+    if output_size != target_size {
+        return Err(RomWeaverError::Validation(format!(
+            "Output size invalid; Expected: {target_size}, Actual: {output_size}"
+        )));
+    }
+
+    let footer = read_bps_footer(path, footer_offset)?;
+    let source_checksum = read_u32_le(&footer[0..4]);
+    let target_checksum = read_u32_le(&footer[4..8]);
+    let patch_checksum = read_u32_le(&footer[8..12]);
+    if validate_patch_checksum {
+        let actual_patch_checksum = crc32_prefix(path, file_len - 4)?;
+        if actual_patch_checksum != patch_checksum {
+            return Err(RomWeaverError::Validation(format!(
+                "Patch checksum invalid; expected: {patch_checksum:x}, Actual: {actual_patch_checksum:x}"
+            )));
+        }
+    }
+
+    Ok(ParsedBpsPatch {
+        source_size,
+        target_size,
+        source_checksum,
+        target_checksum,
+        patch_checksum,
+        actions,
+    })
 }
 
 #[cfg(test)]
@@ -681,11 +771,17 @@ fn collect_parallel_bps_write_plans(patch: &ParsedBpsPatch) -> Result<Vec<BpsWri
 
 fn prepare_bps_writes_parallel(
     patch: &ParsedBpsPatch,
-    source: &[u8],
+    source_path: &Path,
+    source_len: u64,
     pool: &SharedThreadPool,
     context: &OperationContext,
 ) -> Result<Vec<PreparedBpsWrite>> {
     let plans = collect_parallel_bps_write_plans(patch)?;
+    let shared_source = Arc::new(Mutex::new(BlockCacheReader::open(
+        source_path,
+        DEFAULT_BLOCK_CACHE_SIZE_BYTES,
+        DEFAULT_BLOCK_CACHE_MAX_BLOCKS,
+    )?));
     pool.install(|| {
         plans
             .par_iter()
@@ -694,25 +790,30 @@ fn prepare_bps_writes_parallel(
                 let data = match &plan.kind {
                     BpsWritePlanKind::Literal(data) => data.clone(),
                     BpsWritePlanKind::SourceRange { source_offset, len } => {
-                        let start = usize::try_from(*source_offset).map_err(|_| {
-                            RomWeaverError::Validation(
-                                "BPS source offset exceeded addressable memory".into(),
-                            )
-                        })?;
                         let range_len = usize::try_from(*len).map_err(|_| {
                             RomWeaverError::Validation(
                                 "BPS source length exceeded addressable memory".into(),
                             )
                         })?;
-                        let end = start.checked_add(range_len).ok_or_else(|| {
-                            RomWeaverError::Validation("BPS source range overflowed".into())
-                        })?;
-                        let slice = source.get(start..end).ok_or_else(|| {
-                            RomWeaverError::Validation(
-                                "BPS source range exceeded source bounds".into(),
-                            )
-                        })?;
-                        slice.to_vec()
+                        let mut bytes = vec![0u8; range_len];
+                        if *source_offset < source_len {
+                            let readable = usize::try_from((source_len - *source_offset).min(*len))
+                                .map_err(|_| {
+                                    RomWeaverError::Validation(
+                                        "BPS source readable length exceeded addressable memory"
+                                            .into(),
+                                    )
+                                })?;
+                            if readable > 0 {
+                                let mut reader = shared_source.lock().map_err(|_| {
+                                    RomWeaverError::Validation(
+                                        "BPS source cache lock poisoned".into(),
+                                    )
+                                })?;
+                                reader.read_exact_at(*source_offset, &mut bytes[..readable])?;
+                            }
+                        }
+                        bytes
                     }
                 };
                 Ok(PreparedBpsWrite {
@@ -759,12 +860,7 @@ fn create_bps_patch_parallel(
     output: &mut impl Write,
     context: &OperationContext,
 ) -> Result<CreatedBpsPatch> {
-    let original = crate::map_file_read_only_with_fallback(original_path)?;
-    let modified = crate::map_file_read_only_with_fallback(modified_path)?;
-    let original = original.as_slice();
-    let modified = modified.as_slice();
-
-    if u64::try_from(modified.len()).ok() != Some(modified_len) {
+    if fs::metadata(modified_path)?.len() != modified_len {
         return Err(RomWeaverError::Validation(
             "BPS create modified size changed during processing".into(),
         ));
@@ -776,7 +872,17 @@ fn create_bps_patch_parallel(
     writer.write_varint(modified_len)?;
     writer.write_varint(0)?;
 
-    let runs = collect_bps_diff_runs_parallel(original, modified, pool);
+    let runs = collect_bps_diff_runs_parallel(
+        original_path,
+        original_len,
+        modified_path,
+        modified_len,
+        pool,
+        context,
+    )?;
+    let target_checksum = crc32_path_cached(modified_path, context)?;
+    let mut modified = BufReader::new(File::open(modified_path)?);
+    let mut target_read_buffer = vec![0u8; TARGET_READ_FLUSH_SIZE];
     let mut created = CreatedBpsPatch::default();
     for run in runs {
         context.cancel().check()?;
@@ -786,48 +892,50 @@ fn create_bps_patch_parallel(
                 created.action_count = created.action_count.saturating_add(1);
             }
             BpsDiffKind::Different => {
-                let mut start = usize::try_from(run.offset).map_err(|_| {
-                    RomWeaverError::Validation(
-                        "BPS diff run offset exceeded platform limits".into(),
-                    )
-                })?;
-                let mut remaining = usize::try_from(run.len).map_err(|_| {
-                    RomWeaverError::Validation(
-                        "BPS diff run length exceeded platform limits".into(),
-                    )
-                })?;
+                let mut remaining = run.len;
+                let mut read_offset = run.offset;
                 while remaining > 0 {
-                    let chunk_len = remaining.min(TARGET_READ_FLUSH_SIZE);
-                    let end = start.checked_add(chunk_len).ok_or_else(|| {
-                        RomWeaverError::Validation("BPS diff run chunk overflowed".into())
+                    let chunk_len = usize::try_from(remaining.min(TARGET_READ_FLUSH_SIZE as u64))
+                        .map_err(|_| {
+                        RomWeaverError::Validation(
+                            "BPS diff run chunk exceeded addressable memory".into(),
+                        )
                     })?;
-                    writer.write_target_read(&modified[start..end])?;
+                    modified.seek(SeekFrom::Start(read_offset))?;
+                    modified.read_exact(&mut target_read_buffer[..chunk_len])?;
+                    writer.write_target_read(&target_read_buffer[..chunk_len])?;
                     created.action_count = created.action_count.saturating_add(1);
-                    start = end;
-                    remaining -= chunk_len;
+                    read_offset = checked_add(
+                        read_offset,
+                        u64::try_from(chunk_len).expect("chunk len fits u64"),
+                        "BPS target-read offset",
+                    )?;
+                    remaining = remaining.saturating_sub(chunk_len as u64);
                 }
             }
         }
     }
 
-    writer.finish(source_checksum, crc32_bytes(modified))?;
+    writer.finish(source_checksum, target_checksum)?;
     Ok(created)
 }
 
 fn collect_bps_diff_runs_parallel(
-    original: &[u8],
-    modified: &[u8],
+    original_path: &Path,
+    original_len: u64,
+    modified_path: &Path,
+    modified_len: u64,
     pool: &SharedThreadPool,
-) -> Vec<BpsDiffRun> {
-    if modified.is_empty() {
-        return Vec::new();
+    context: &OperationContext,
+) -> Result<Vec<BpsDiffRun>> {
+    if modified_len == 0 {
+        return Ok(Vec::new());
     }
-    let ranges = (0..modified.len())
+    let chunk_size = CREATE_THREAD_SCAN_CHUNK_BYTES as u64;
+    let ranges = (0..modified_len)
         .step_by(CREATE_THREAD_SCAN_CHUNK_BYTES)
         .map(|start| {
-            let end = start
-                .saturating_add(CREATE_THREAD_SCAN_CHUNK_BYTES)
-                .min(modified.len());
+            let end = start.saturating_add(chunk_size).min(modified_len);
             start..end
         })
         .collect::<Vec<_>>();
@@ -836,13 +944,21 @@ fn collect_bps_diff_runs_parallel(
         ranges
             .into_par_iter()
             .map(|range| {
-                collect_bps_diff_runs_for_range(original, modified, range.start, range.end)
+                context.cancel().check()?;
+                collect_bps_diff_runs_for_range(
+                    original_path,
+                    original_len,
+                    modified_path,
+                    range.start,
+                    range.end,
+                )
             })
-            .collect::<Vec<_>>()
+            .collect::<Vec<Result<Vec<BpsDiffRun>>>>()
     });
 
     let mut merged: Vec<BpsDiffRun> = Vec::new();
     for runs in per_chunk {
+        let runs = runs?;
         for run in runs {
             if let Some(last) = merged.last_mut() {
                 let contiguous = last
@@ -857,50 +973,86 @@ fn collect_bps_diff_runs_parallel(
             merged.push(run);
         }
     }
-    merged
+    Ok(merged)
 }
 
 fn collect_bps_diff_runs_for_range(
-    original: &[u8],
-    modified: &[u8],
-    start: usize,
-    end: usize,
-) -> Vec<BpsDiffRun> {
+    original_path: &Path,
+    original_len: u64,
+    modified_path: &Path,
+    start: u64,
+    end: u64,
+) -> Result<Vec<BpsDiffRun>> {
+    let mut original = File::open(original_path)?;
+    let mut modified = File::open(modified_path)?;
+    if start < original_len {
+        original.seek(SeekFrom::Start(start))?;
+    }
+    modified.seek(SeekFrom::Start(start))?;
+    let mut original_buffer = vec![0u8; CREATE_STREAM_BUFFER_SIZE];
+    let mut modified_buffer = vec![0u8; CREATE_STREAM_BUFFER_SIZE];
     let mut runs = Vec::new();
     let mut current_kind: Option<BpsDiffKind> = None;
     let mut run_start = start;
-    let mut run_len = 0usize;
+    let mut run_len = 0u64;
+    let mut absolute = start;
 
-    for index in start..end {
-        let kind = match original.get(index) {
-            Some(byte) if *byte == modified[index] => BpsDiffKind::Shared,
-            _ => BpsDiffKind::Different,
+    while absolute < end {
+        let chunk_len = usize::try_from((end - absolute).min(CREATE_STREAM_BUFFER_SIZE as u64))
+            .map_err(|_| {
+                RomWeaverError::Validation("BPS compare chunk exceeded addressable memory".into())
+            })?;
+        modified.read_exact(&mut modified_buffer[..chunk_len])?;
+
+        let original_chunk_len = if absolute >= original_len {
+            0
+        } else {
+            usize::try_from((original_len - absolute).min(chunk_len as u64)).map_err(|_| {
+                RomWeaverError::Validation("BPS source chunk exceeded addressable memory".into())
+            })?
         };
-        if current_kind == Some(kind) {
-            run_len = run_len.saturating_add(1);
-            continue;
+        if original_chunk_len > 0 {
+            original.read_exact(&mut original_buffer[..original_chunk_len])?;
+        }
+        if original_chunk_len < chunk_len {
+            original_buffer[original_chunk_len..chunk_len].fill(0);
         }
 
-        if let Some(previous) = current_kind {
-            runs.push(BpsDiffRun {
-                kind: previous,
-                offset: run_start as u64,
-                len: run_len as u64,
-            });
+        for index in 0..chunk_len {
+            let kind = if original_buffer[index] == modified_buffer[index] {
+                BpsDiffKind::Shared
+            } else {
+                BpsDiffKind::Different
+            };
+
+            if current_kind == Some(kind) {
+                run_len = run_len.saturating_add(1);
+                absolute = checked_add(absolute, 1, "BPS chunk scan offset")?;
+                continue;
+            }
+
+            if let Some(previous) = current_kind {
+                runs.push(BpsDiffRun {
+                    kind: previous,
+                    offset: run_start,
+                    len: run_len,
+                });
+            }
+            current_kind = Some(kind);
+            run_start = absolute;
+            run_len = 1;
+            absolute = checked_add(absolute, 1, "BPS chunk scan offset")?;
         }
-        current_kind = Some(kind);
-        run_start = index;
-        run_len = 1;
     }
 
     if let Some(kind) = current_kind {
         runs.push(BpsDiffRun {
             kind,
-            offset: run_start as u64,
-            len: run_len as u64,
+            offset: run_start,
+            len: run_len,
         });
     }
-    runs
+    Ok(runs)
 }
 
 fn current_bytes_equal(
@@ -1318,6 +1470,29 @@ fn crc32_path_cached(path: &Path, context: &OperationContext) -> Result<u32> {
     })
 }
 
+fn read_bps_footer(path: &Path, footer_offset: u64) -> Result<[u8; BPS_FOOTER_SIZE]> {
+    let mut footer = [0u8; BPS_FOOTER_SIZE];
+    let mut file = File::open(path)?;
+    file.seek(SeekFrom::Start(footer_offset))?;
+    file.read_exact(&mut footer)?;
+    Ok(footer)
+}
+
+fn crc32_prefix(path: &Path, len: u64) -> Result<u32> {
+    let mut file = BufReader::new(File::open(path)?);
+    let mut hasher = Hasher::new();
+    let mut remaining = len;
+    let mut buffer = [0u8; COPY_BUFFER_SIZE];
+    while remaining > 0 {
+        let chunk_len = usize::try_from(remaining.min(buffer.len() as u64))
+            .map_err(|_| RomWeaverError::Validation("BPS checksum chunk exceeded usize".into()))?;
+        file.read_exact(&mut buffer[..chunk_len])?;
+        hasher.update(&buffer[..chunk_len]);
+        remaining -= chunk_len as u64;
+    }
+    Ok(hasher.finalize())
+}
+
 #[cfg(test)]
 fn push_varint(bytes: &mut Vec<u8>, mut data: u64) {
     loop {
@@ -1529,6 +1704,11 @@ impl<R: Read> BufferedByteStream<R> {
     }
 }
 
+fn checked_add(lhs: u64, rhs: u64, label: &str) -> Result<u64> {
+    lhs.checked_add(rhs)
+        .ok_or_else(|| RomWeaverError::Validation(format!("{label} overflowed")))
+}
+
 struct BpsParser<'a> {
     bytes: &'a [u8],
     offset: usize,
@@ -1575,6 +1755,70 @@ impl<'a> BpsParser<'a> {
             if byte & 0x80 != 0 {
                 return Ok(data);
             }
+            shift = shift
+                .checked_shl(7)
+                .ok_or_else(|| RomWeaverError::Validation("BPS varint shift overflowed".into()))?;
+            data = data.checked_add(shift).ok_or_else(|| {
+                RomWeaverError::Validation("BPS varint overflowed available range".into())
+            })?;
+        }
+    }
+}
+
+struct BpsFileParser<R> {
+    reader: R,
+    offset: u64,
+    end: u64,
+}
+
+impl<R: Read> BpsFileParser<R> {
+    fn new(reader: R, end: u64) -> Self {
+        Self {
+            reader,
+            offset: 0,
+            end,
+        }
+    }
+
+    fn is_at_end(&self) -> bool {
+        self.offset == self.end
+    }
+
+    fn read_exact(&mut self, len: usize) -> Result<Vec<u8>> {
+        let len_u64 = u64::try_from(len)
+            .map_err(|_| RomWeaverError::Validation("BPS parser length overflowed u64".into()))?;
+        let next = self
+            .offset
+            .checked_add(len_u64)
+            .ok_or_else(|| RomWeaverError::Validation("BPS parser offset overflowed".into()))?;
+        if next > self.end {
+            return Err(RomWeaverError::Validation(
+                "BPS patch ended unexpectedly while reading record data".into(),
+            ));
+        }
+
+        let mut bytes = vec![0u8; len];
+        self.reader.read_exact(&mut bytes)?;
+        self.offset = next;
+        Ok(bytes)
+    }
+
+    fn read_u8(&mut self) -> Result<u8> {
+        Ok(self.read_exact(1)?[0])
+    }
+
+    fn read_varint(&mut self) -> Result<u64> {
+        let mut data = 0u64;
+        let mut shift = 1u64;
+        loop {
+            let byte = u64::from(self.read_u8()?);
+            data = data.checked_add((byte & 0x7f) * shift).ok_or_else(|| {
+                RomWeaverError::Validation("BPS varint overflowed available range".into())
+            })?;
+            if byte & 0x80 != 0 {
+                return Ok(data);
+            }
+
             shift = shift
                 .checked_shl(7)
                 .ok_or_else(|| RomWeaverError::Validation("BPS varint shift overflowed".into()))?;

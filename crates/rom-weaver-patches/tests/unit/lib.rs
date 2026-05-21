@@ -1,10 +1,14 @@
 use std::{
     env, fs,
     path::{Path, PathBuf},
+    sync::Mutex,
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use super::PatchRegistry;
+
+const MAX_BUFFERED_PATCH_BYTES_ENV: &str = "ROM_WEAVER_MAX_BUFFERED_PATCH_BYTES";
+static PATCH_ENV_LOCK: Mutex<()> = Mutex::new(());
 
 fn temp_file_path(label: &str) -> PathBuf {
     temp_file_path_with_extension(label, "ips")
@@ -34,6 +38,33 @@ fn assert_probe_for_fixture(
     assert_eq!(handler.descriptor().name, expected_handler_name);
 
     let _ = fs::remove_file(path);
+}
+
+fn with_patch_buffer_limit_env<T>(value: Option<&str>, run: impl FnOnce() -> T) -> T {
+    let _guard = PATCH_ENV_LOCK.lock().expect("env lock");
+    let previous = env::var_os(MAX_BUFFERED_PATCH_BYTES_ENV);
+    match value {
+        Some(value) => {
+            // SAFETY: tests mutate process env behind a global mutex to avoid concurrent access.
+            unsafe { env::set_var(MAX_BUFFERED_PATCH_BYTES_ENV, value) };
+        }
+        None => {
+            // SAFETY: tests mutate process env behind a global mutex to avoid concurrent access.
+            unsafe { env::remove_var(MAX_BUFFERED_PATCH_BYTES_ENV) };
+        }
+    }
+    let result = run();
+    match previous {
+        Some(previous) => {
+            // SAFETY: tests mutate process env behind a global mutex to avoid concurrent access.
+            unsafe { env::set_var(MAX_BUFFERED_PATCH_BYTES_ENV, previous) };
+        }
+        None => {
+            // SAFETY: tests mutate process env behind a global mutex to avoid concurrent access.
+            unsafe { env::remove_var(MAX_BUFFERED_PATCH_BYTES_ENV) };
+        }
+    }
+    result
 }
 
 #[test]
@@ -261,6 +292,36 @@ fn probe_routes_unknown_extension_with_ninja1_signature_to_ninja1_handler() {
     let registry = PatchRegistry::new();
     let handler = registry.probe(&path).expect("ninja1 probe");
     assert_eq!(handler.descriptor().name, "NINJA1");
+
+    let _ = fs::remove_file(path);
+}
+
+#[test]
+fn map_file_read_only_rejects_patch_file_over_configured_limit() {
+    let path = temp_file_path_with_extension("patch-buffer-limit-reject", "bin");
+    fs::write(&path, [0u8; 8]).expect("write fixture");
+
+    let error = match with_patch_buffer_limit_env(Some("4"), || super::map_file_read_only(&path)) {
+        Ok(_) => panic!("expected configured limit failure"),
+        Err(error) => error,
+    };
+    let message = error.to_string();
+    assert!(
+        message.contains(MAX_BUFFERED_PATCH_BYTES_ENV),
+        "expected env var name in error: {message}"
+    );
+
+    let _ = fs::remove_file(path);
+}
+
+#[test]
+fn map_file_read_only_allows_patch_file_within_configured_limit() {
+    let path = temp_file_path_with_extension("patch-buffer-limit-allow", "bin");
+    fs::write(&path, [7u8; 8]).expect("write fixture");
+
+    let file = with_patch_buffer_limit_env(Some("16"), || super::map_file_read_only(&path))
+        .expect("expected read to succeed");
+    assert_eq!(file.as_ref(), [7u8; 8]);
 
     let _ = fs::remove_file(path);
 }

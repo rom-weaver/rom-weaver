@@ -4,9 +4,7 @@ use rom_weaver_core::{
     PatchApplyRequest, PatchChecksumValidation, PatchCreateRequest, PatchHandler,
 };
 
-use super::{
-    CREATE_SCAN_CHUNK_BYTES, PmsrPatchHandler, create_pmsr_patch_bytes, parse_pmsr_bytes,
-};
+use super::{CREATE_SCAN_CHUNK_BYTES, PmsrPatchHandler, create_pmsr_patch_bytes, parse_pmsr_bytes};
 use crate::{
     MOD,
     test_support::{TestDir, test_context_with_threads},

@@ -20,9 +20,8 @@ const REQUIRED_DIST_COPIES = [
   { src: 'rom-weaver-cli.wasm.br', dst: 'rom-weaver-cli.wasm.br' },
   { src: 'rom-weaver-cli-threaded.wasm', dst: 'rom-weaver-cli-threaded.wasm' },
   { src: 'rom-weaver-cli-threaded.wasm.br', dst: 'rom-weaver-cli-threaded.wasm.br' },
-  { src: 'rom-weaver-wasi-api.mjs', dst: 'src/rom-weaver-wasi-api.mjs' },
+  { src: 'rom-weaver-runtime-utils.mjs', dst: 'src/rom-weaver-runtime-utils.mjs' },
   { src: 'rom-weaver-zenfs-api.mjs', dst: 'src/rom-weaver-zenfs-api.mjs' },
-  { src: 'rom-weaver-wasi-thread-worker.mjs', dst: 'src/rom-weaver-wasi-thread-worker.mjs' },
   { src: 'threaded.args', dst: 'threaded.args' },
 ];
 

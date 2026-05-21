@@ -221,8 +221,51 @@ struct CreatedPmsrPatch {
 }
 
 fn parse_pmsr_file(path: &Path) -> Result<ParsedPmsrPatch> {
-    let bytes = crate::map_file_read_only(path)?;
-    parse_pmsr_bytes(&bytes)
+    let file_len = fs::metadata(path)?.len();
+    if file_len < PMSR_HEADER_SIZE as u64 {
+        return Err(RomWeaverError::Validation(
+            "MOD patch is too small to contain a valid header".into(),
+        ));
+    }
+
+    let mut parser = PmsrFileParser::new(BufReader::new(File::open(path)?), file_len);
+    if parser
+        .read_exact(PMSR_MAGIC.len(), "MOD header")?
+        .as_slice()
+        != PMSR_MAGIC
+    {
+        return Err(RomWeaverError::Validation("Patch header invalid".into()));
+    }
+
+    let record_count = parser.read_u32_be("MOD record count")?;
+    let record_capacity = usize::try_from(record_count).map_err(|_| {
+        RomWeaverError::Validation("MOD record count exceeded platform addressable range".into())
+    })?;
+    let mut records = Vec::with_capacity(record_capacity);
+    let mut min_target_size = 0u64;
+
+    for _ in 0..record_count {
+        let offset = u64::from(parser.read_u32_be("MOD record offset")?);
+        let data_len_u32 = parser.read_u32_be("MOD record length")?;
+        let data_len = usize::try_from(data_len_u32).map_err(|_| {
+            RomWeaverError::Validation("MOD record length exceeded addressable memory".into())
+        })?;
+        let data = parser.read_exact(data_len, "MOD record data")?;
+        let end = checked_add(offset, u64::from(data_len_u32), "MOD record end")?;
+        min_target_size = min_target_size.max(end);
+        records.push(PmsrRecord { offset, data });
+    }
+
+    if parser.remaining() != 0 {
+        return Err(RomWeaverError::Validation(
+            "MOD patch contained unexpected trailing data".into(),
+        ));
+    }
+
+    Ok(ParsedPmsrPatch {
+        min_target_size,
+        records,
+    })
 }
 
 fn parse_pmsr_bytes(bytes: &[u8]) -> Result<ParsedPmsrPatch> {
@@ -558,18 +601,19 @@ fn create_pmsr_patch_parallel(
         )));
     }
 
-    let original = crate::map_file_read_only(original_path)?;
-    let modified = crate::map_file_read_only(modified_path)?;
-    let original_bytes = original.as_ref();
-    let modified_bytes = modified.as_ref();
-
     let chunk_count = pmsr_create_chunk_count(modified_len)?;
     let chunk_records = pool.install(|| {
         (0..chunk_count)
             .into_par_iter()
             .map(|chunk_index| {
                 context.cancel().check()?;
-                collect_pmsr_records_for_chunk(chunk_index, original_bytes, modified_bytes)
+                collect_pmsr_records_for_chunk(
+                    chunk_index,
+                    original_path,
+                    original_len,
+                    modified_path,
+                    modified_len,
+                )
             })
             .collect::<Result<Vec<_>>>()
     })?;
@@ -579,44 +623,80 @@ fn create_pmsr_patch_parallel(
 
 fn collect_pmsr_records_for_chunk(
     chunk_index: usize,
-    original: &[u8],
-    modified: &[u8],
+    original_path: &Path,
+    original_len: u64,
+    modified_path: &Path,
+    modified_len: u64,
 ) -> Result<Vec<PmsrRecord>> {
-    let start = chunk_index
-        .checked_mul(CREATE_SCAN_CHUNK_BYTES)
+    let start = u64::try_from(chunk_index)
+        .ok()
+        .and_then(|index| index.checked_mul(CREATE_SCAN_CHUNK_BYTES as u64))
         .ok_or_else(|| RomWeaverError::Validation("MOD create chunk offset overflowed".into()))?;
-    if start >= modified.len() {
+    if start >= modified_len {
         return Ok(Vec::new());
     }
     let end = start
-        .saturating_add(CREATE_SCAN_CHUNK_BYTES)
-        .min(modified.len());
-    let mut cursor = start;
+        .saturating_add(CREATE_SCAN_CHUNK_BYTES as u64)
+        .min(modified_len);
+    let mut original = BufReader::new(File::open(original_path)?);
+    let mut modified = BufReader::new(File::open(modified_path)?);
+    if start < original_len {
+        original.seek(SeekFrom::Start(start))?;
+    }
+    modified.seek(SeekFrom::Start(start))?;
+    let mut original_buffer = vec![0u8; PMSR_IO_BUFFER_SIZE];
+    let mut modified_buffer = vec![0u8; PMSR_IO_BUFFER_SIZE];
     let mut records = Vec::new();
+    let mut pending_start: Option<u64> = None;
+    let mut pending_data = Vec::new();
+    let mut cursor = start;
 
     while cursor < end {
-        let source = original.get(cursor).copied().unwrap_or(0);
-        let target = modified[cursor];
-        if source == target {
-            cursor += 1;
-            continue;
+        let chunk_len =
+            usize::try_from((end - cursor).min(PMSR_IO_BUFFER_SIZE as u64)).map_err(|_| {
+                RomWeaverError::Validation("MOD compare chunk exceeded addressable memory".into())
+            })?;
+        modified.read_exact(&mut modified_buffer[..chunk_len])?;
+        let original_chunk_len = if cursor >= original_len {
+            0
+        } else {
+            usize::try_from((original_len - cursor).min(chunk_len as u64)).map_err(|_| {
+                RomWeaverError::Validation("MOD source chunk exceeded addressable memory".into())
+            })?
+        };
+        if original_chunk_len > 0 {
+            original.read_exact(&mut original_buffer[..original_chunk_len])?;
         }
 
-        let run_start = cursor;
-        let mut run_data = Vec::new();
-        while cursor < end {
-            let source = original.get(cursor).copied().unwrap_or(0);
-            let target = modified[cursor];
+        for index in 0..chunk_len {
+            let source = if index < original_chunk_len {
+                original_buffer[index]
+            } else {
+                0
+            };
+            let target = modified_buffer[index];
             if source == target {
-                break;
+                if !pending_data.is_empty() {
+                    records.push(PmsrRecord {
+                        offset: pending_start.expect("pending start exists"),
+                        data: std::mem::take(&mut pending_data),
+                    });
+                    pending_start = None;
+                }
+            } else {
+                if pending_start.is_none() {
+                    pending_start = Some(cursor);
+                }
+                pending_data.push(target);
             }
-            run_data.push(target);
-            cursor += 1;
+            cursor = checked_add(cursor, 1, "MOD scan offset")?;
         }
+    }
 
+    if !pending_data.is_empty() {
         records.push(PmsrRecord {
-            offset: run_start as u64,
-            data: run_data,
+            offset: pending_start.expect("pending start exists"),
+            data: pending_data,
         });
     }
 
@@ -725,6 +805,49 @@ fn checked_add(offset: u64, len: u64, label: &str) -> Result<u64> {
     offset
         .checked_add(len)
         .ok_or_else(|| RomWeaverError::Validation(format!("{label} overflowed")))
+}
+
+struct PmsrFileParser<R> {
+    reader: R,
+    file_len: u64,
+    offset: u64,
+}
+
+impl<R: Read> PmsrFileParser<R> {
+    fn new(reader: R, file_len: u64) -> Self {
+        Self {
+            reader,
+            file_len,
+            offset: 0,
+        }
+    }
+
+    fn remaining(&self) -> u64 {
+        self.file_len.saturating_sub(self.offset)
+    }
+
+    fn read_exact(&mut self, len: usize, label: &str) -> Result<Vec<u8>> {
+        let len_u64 = u64::try_from(len)
+            .map_err(|_| RomWeaverError::Validation(format!("{label} length overflowed u64")))?;
+        if len_u64 > self.remaining() {
+            return Err(RomWeaverError::Validation(format!(
+                "MOD patch ended unexpectedly while reading {label}"
+            )));
+        }
+
+        let mut bytes = vec![0u8; len];
+        self.reader.read_exact(&mut bytes)?;
+        self.offset = self
+            .offset
+            .checked_add(len_u64)
+            .ok_or_else(|| RomWeaverError::Validation(format!("{label} offset overflowed")))?;
+        Ok(bytes)
+    }
+
+    fn read_u32_be(&mut self, label: &str) -> Result<u32> {
+        let bytes = self.read_exact(4, label)?;
+        Ok(u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
+    }
 }
 
 #[cfg(test)]

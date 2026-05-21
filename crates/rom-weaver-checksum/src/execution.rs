@@ -5,12 +5,13 @@ fn compute_sequential(
     algorithms: &[Algorithm],
     execution: &ThreadExecution,
     cancel: &CancellationToken,
+    progress: &mut ChecksumProgressTracker<'_>,
 ) -> Result<BTreeMap<String, String>> {
     if let Some(mapped) = mapped {
-        return compute_sequential_mapped(mapped.bytes(), algorithms, execution, cancel);
+        return compute_sequential_mapped(mapped.bytes(), algorithms, execution, cancel, progress);
     }
 
-    compute_sequential_stream(source, range, algorithms, execution, cancel)
+    compute_sequential_stream(source, range, algorithms, execution, cancel, progress)
 }
 
 fn compute_sequential_mapped(
@@ -18,6 +19,7 @@ fn compute_sequential_mapped(
     algorithms: &[Algorithm],
     execution: &ThreadExecution,
     cancel: &CancellationToken,
+    progress: &mut ChecksumProgressTracker<'_>,
 ) -> Result<BTreeMap<String, String>> {
     let chunk_size = tuned_chunk_size(bytes.len() as u64, execution.effective_threads);
     let mut states = algorithms
@@ -31,6 +33,7 @@ fn compute_sequential_mapped(
         for (_, state) in &mut states {
             state.update(chunk);
         }
+        progress.advance(chunk.len() as u64);
     }
 
     Ok(states
@@ -45,6 +48,7 @@ fn compute_sequential_stream(
     algorithms: &[Algorithm],
     execution: &ThreadExecution,
     cancel: &CancellationToken,
+    progress: &mut ChecksumProgressTracker<'_>,
 ) -> Result<BTreeMap<String, String>> {
     let mut file = File::open(source)?;
     file.seek(SeekFrom::Start(range.start))?;
@@ -73,6 +77,7 @@ fn compute_sequential_stream(
             state.update(chunk);
         }
         remaining -= bytes_read as u64;
+        progress.advance(bytes_read as u64);
     }
 
     Ok(states
@@ -89,12 +94,20 @@ fn compute_parallel_fanout(
     pool: &SharedThreadPool,
     execution: &ThreadExecution,
     cancel: &CancellationToken,
+    progress: &mut ChecksumProgressTracker<'_>,
 ) -> Result<BTreeMap<String, String>> {
     if let Some(mapped) = mapped {
-        return compute_parallel_fanout_mapped(mapped.bytes(), algorithms, pool, execution, cancel);
+        return compute_parallel_fanout_mapped(
+            mapped.bytes(),
+            algorithms,
+            pool,
+            execution,
+            cancel,
+            progress,
+        );
     }
 
-    compute_parallel_fanout_stream(source, range, algorithms, pool, execution, cancel)
+    compute_parallel_fanout_stream(source, range, algorithms, pool, execution, cancel, progress)
 }
 
 fn compute_parallel_fanout_mapped(
@@ -103,6 +116,7 @@ fn compute_parallel_fanout_mapped(
     pool: &SharedThreadPool,
     execution: &ThreadExecution,
     cancel: &CancellationToken,
+    progress: &mut ChecksumProgressTracker<'_>,
 ) -> Result<BTreeMap<String, String>> {
     let worker_count = execution.effective_threads.min(algorithms.len()).max(1);
     let mut workers = partition_algorithms(algorithms, worker_count)
@@ -118,6 +132,7 @@ fn compute_parallel_fanout_mapped(
                 .par_iter_mut()
                 .for_each(|worker| worker.update(chunk));
         });
+        progress.advance(chunk.len() as u64);
     }
 
     let mut results = BTreeMap::new();
@@ -134,6 +149,7 @@ fn compute_parallel_fanout_stream(
     pool: &SharedThreadPool,
     execution: &ThreadExecution,
     cancel: &CancellationToken,
+    progress: &mut ChecksumProgressTracker<'_>,
 ) -> Result<BTreeMap<String, String>> {
     let worker_count = execution.effective_threads.min(algorithms.len()).max(1);
     let mut workers = partition_algorithms(algorithms, worker_count)
@@ -166,6 +182,7 @@ fn compute_parallel_fanout_stream(
                 .for_each(|worker| worker.update(chunk));
         });
         remaining -= bytes_read as u64;
+        progress.advance(bytes_read as u64);
     }
 
     let mut results = BTreeMap::new();
@@ -182,12 +199,13 @@ fn compute_parallel_crc32(
     pool: &SharedThreadPool,
     execution: &ThreadExecution,
     cancel: &CancellationToken,
+    progress: &mut ChecksumProgressTracker<'_>,
 ) -> Result<BTreeMap<String, String>> {
     if let Some(mapped) = mapped {
-        return compute_parallel_crc32_mapped(mapped.bytes(), pool, execution, cancel);
+        return compute_parallel_crc32_mapped(mapped.bytes(), pool, execution, cancel, progress);
     }
 
-    compute_parallel_crc32_stream(source, range, pool, execution, cancel)
+    compute_parallel_crc32_stream(source, range, pool, execution, cancel, progress)
 }
 
 fn compute_parallel_crc32_mapped(
@@ -195,19 +213,20 @@ fn compute_parallel_crc32_mapped(
     pool: &SharedThreadPool,
     execution: &ThreadExecution,
     cancel: &CancellationToken,
+    progress: &mut ChecksumProgressTracker<'_>,
 ) -> Result<BTreeMap<String, String>> {
     let chunk_size = crc32_parallel_chunk_size(bytes.len() as u64, execution.effective_threads);
-    let partials = pool.install(|| {
-        bytes
-            .par_chunks(chunk_size as usize)
-            .map(|chunk| {
-                cancel.check()?;
-                let mut hasher = Crc32Hasher::new();
-                hasher.update(chunk);
-                Ok::<_, RomWeaverError>(hasher)
-            })
-            .collect::<Vec<_>>()
-    });
+    let mut partials = Vec::with_capacity(bytes.len().div_ceil(chunk_size as usize));
+    for chunk in bytes.chunks(chunk_size as usize) {
+        cancel.check()?;
+        let partial = pool.install(|| {
+            let mut hasher = Crc32Hasher::new();
+            hasher.update(chunk);
+            hasher
+        });
+        partials.push(Ok(partial));
+        progress.advance(chunk.len() as u64);
+    }
 
     let combined = combine_crc32_partials(partials)?;
 
@@ -222,6 +241,7 @@ fn compute_parallel_crc32_stream(
     pool: &SharedThreadPool,
     execution: &ThreadExecution,
     cancel: &CancellationToken,
+    progress: &mut ChecksumProgressTracker<'_>,
 ) -> Result<BTreeMap<String, String>> {
     let chunk_size = crc32_parallel_chunk_size(range.len, execution.effective_threads) as usize;
     let mut file = File::open(source)?;
@@ -251,6 +271,7 @@ fn compute_parallel_crc32_stream(
         });
         partials.push(Ok(partial));
         remaining -= bytes_read as u64;
+        progress.advance(bytes_read as u64);
     }
 
     let combined = combine_crc32_partials(partials)?;
@@ -267,12 +288,13 @@ fn compute_parallel_crc32c(
     pool: &SharedThreadPool,
     execution: &ThreadExecution,
     cancel: &CancellationToken,
+    progress: &mut ChecksumProgressTracker<'_>,
 ) -> Result<BTreeMap<String, String>> {
     if let Some(mapped) = mapped {
-        return compute_parallel_crc32c_mapped(mapped.bytes(), pool, execution, cancel);
+        return compute_parallel_crc32c_mapped(mapped.bytes(), pool, execution, cancel, progress);
     }
 
-    compute_parallel_crc32c_stream(source, range, pool, execution, cancel)
+    compute_parallel_crc32c_stream(source, range, pool, execution, cancel, progress)
 }
 
 fn compute_parallel_crc32c_mapped(
@@ -280,17 +302,16 @@ fn compute_parallel_crc32c_mapped(
     pool: &SharedThreadPool,
     execution: &ThreadExecution,
     cancel: &CancellationToken,
+    progress: &mut ChecksumProgressTracker<'_>,
 ) -> Result<BTreeMap<String, String>> {
     let chunk_size = crc32_parallel_chunk_size(bytes.len() as u64, execution.effective_threads);
-    let partials = pool.install(|| {
-        bytes
-            .par_chunks(chunk_size as usize)
-            .map(|chunk| {
-                cancel.check()?;
-                Ok::<_, RomWeaverError>((crc32c_append(0, chunk), chunk.len()))
-            })
-            .collect::<Vec<_>>()
-    });
+    let mut partials = Vec::with_capacity(bytes.len().div_ceil(chunk_size as usize));
+    for chunk in bytes.chunks(chunk_size as usize) {
+        cancel.check()?;
+        let partial = pool.install(|| (crc32c_append(0, chunk), chunk.len()));
+        partials.push(Ok(partial));
+        progress.advance(chunk.len() as u64);
+    }
     let combined = combine_crc32c_partials(partials)?;
 
     let mut results = BTreeMap::new();
@@ -307,6 +328,7 @@ fn compute_parallel_crc32c_stream(
     pool: &SharedThreadPool,
     execution: &ThreadExecution,
     cancel: &CancellationToken,
+    progress: &mut ChecksumProgressTracker<'_>,
 ) -> Result<BTreeMap<String, String>> {
     let chunk_size = crc32_parallel_chunk_size(range.len, execution.effective_threads) as usize;
     let mut file = File::open(source)?;
@@ -331,6 +353,7 @@ fn compute_parallel_crc32c_stream(
         let partial = pool.install(|| (crc32c_append(0, chunk), chunk.len()));
         partials.push(Ok(partial));
         remaining -= bytes_read as u64;
+        progress.advance(bytes_read as u64);
     }
     let combined = combine_crc32c_partials(partials)?;
 
@@ -349,12 +372,13 @@ fn compute_parallel_crc16(
     pool: &SharedThreadPool,
     execution: &ThreadExecution,
     cancel: &CancellationToken,
+    progress: &mut ChecksumProgressTracker<'_>,
 ) -> Result<BTreeMap<String, String>> {
     if let Some(mapped) = mapped {
-        return compute_parallel_crc16_mapped(mapped.bytes(), pool, execution, cancel);
+        return compute_parallel_crc16_mapped(mapped.bytes(), pool, execution, cancel, progress);
     }
 
-    compute_parallel_crc16_stream(source, range, pool, execution, cancel)
+    compute_parallel_crc16_stream(source, range, pool, execution, cancel, progress)
 }
 
 fn compute_parallel_crc16_mapped(
@@ -362,19 +386,20 @@ fn compute_parallel_crc16_mapped(
     pool: &SharedThreadPool,
     execution: &ThreadExecution,
     cancel: &CancellationToken,
+    progress: &mut ChecksumProgressTracker<'_>,
 ) -> Result<BTreeMap<String, String>> {
     let chunk_size = crc32_parallel_chunk_size(bytes.len() as u64, execution.effective_threads);
-    let partials = pool.install(|| {
-        bytes
-            .par_chunks(chunk_size as usize)
-            .map(|chunk| {
-                cancel.check()?;
-                let mut state = Crc16State::<ARC>::new();
-                state.update(chunk);
-                Ok::<_, RomWeaverError>((state.get(), chunk.len()))
-            })
-            .collect::<Vec<_>>()
-    });
+    let mut partials = Vec::with_capacity(bytes.len().div_ceil(chunk_size as usize));
+    for chunk in bytes.chunks(chunk_size as usize) {
+        cancel.check()?;
+        let partial = pool.install(|| {
+            let mut state = Crc16State::<ARC>::new();
+            state.update(chunk);
+            (state.get(), chunk.len())
+        });
+        partials.push(Ok(partial));
+        progress.advance(chunk.len() as u64);
+    }
     let combined = combine_crc16_partials(partials)?;
 
     let mut results = BTreeMap::new();
@@ -391,6 +416,7 @@ fn compute_parallel_crc16_stream(
     pool: &SharedThreadPool,
     execution: &ThreadExecution,
     cancel: &CancellationToken,
+    progress: &mut ChecksumProgressTracker<'_>,
 ) -> Result<BTreeMap<String, String>> {
     let chunk_size = crc32_parallel_chunk_size(range.len, execution.effective_threads) as usize;
     let mut file = File::open(source)?;
@@ -419,6 +445,7 @@ fn compute_parallel_crc16_stream(
         });
         partials.push(Ok(partial));
         remaining -= bytes_read as u64;
+        progress.advance(bytes_read as u64);
     }
     let combined = combine_crc16_partials(partials)?;
 
@@ -437,12 +464,13 @@ fn compute_parallel_adler32(
     pool: &SharedThreadPool,
     execution: &ThreadExecution,
     cancel: &CancellationToken,
+    progress: &mut ChecksumProgressTracker<'_>,
 ) -> Result<BTreeMap<String, String>> {
     if let Some(mapped) = mapped {
-        return compute_parallel_adler32_mapped(mapped.bytes(), pool, execution, cancel);
+        return compute_parallel_adler32_mapped(mapped.bytes(), pool, execution, cancel, progress);
     }
 
-    compute_parallel_adler32_stream(source, range, pool, execution, cancel)
+    compute_parallel_adler32_stream(source, range, pool, execution, cancel, progress)
 }
 
 fn compute_parallel_adler32_mapped(
@@ -450,17 +478,16 @@ fn compute_parallel_adler32_mapped(
     pool: &SharedThreadPool,
     execution: &ThreadExecution,
     cancel: &CancellationToken,
+    progress: &mut ChecksumProgressTracker<'_>,
 ) -> Result<BTreeMap<String, String>> {
     let chunk_size = crc32_parallel_chunk_size(bytes.len() as u64, execution.effective_threads);
-    let partials = pool.install(|| {
-        bytes
-            .par_chunks(chunk_size as usize)
-            .map(|chunk| {
-                cancel.check()?;
-                Ok::<_, RomWeaverError>((adler32_checksum(chunk), chunk.len()))
-            })
-            .collect::<Vec<_>>()
-    });
+    let mut partials = Vec::with_capacity(bytes.len().div_ceil(chunk_size as usize));
+    for chunk in bytes.chunks(chunk_size as usize) {
+        cancel.check()?;
+        let partial = pool.install(|| (adler32_checksum(chunk), chunk.len()));
+        partials.push(Ok(partial));
+        progress.advance(chunk.len() as u64);
+    }
     let combined = combine_adler32_partials(partials)?;
 
     let mut results = BTreeMap::new();
@@ -477,6 +504,7 @@ fn compute_parallel_adler32_stream(
     pool: &SharedThreadPool,
     execution: &ThreadExecution,
     cancel: &CancellationToken,
+    progress: &mut ChecksumProgressTracker<'_>,
 ) -> Result<BTreeMap<String, String>> {
     let chunk_size = crc32_parallel_chunk_size(range.len, execution.effective_threads) as usize;
     let mut file = File::open(source)?;
@@ -501,6 +529,7 @@ fn compute_parallel_adler32_stream(
         let partial = pool.install(|| (adler32_checksum(chunk), chunk.len()));
         partials.push(Ok(partial));
         remaining -= bytes_read as u64;
+        progress.advance(bytes_read as u64);
     }
     let combined = combine_adler32_partials(partials)?;
 
@@ -519,14 +548,19 @@ fn compute_parallel_blake3(
     pool: &SharedThreadPool,
     execution: &ThreadExecution,
     cancel: &CancellationToken,
+    progress: &mut ChecksumProgressTracker<'_>,
 ) -> Result<BTreeMap<String, String>> {
     let mut hasher = Blake3Hasher::new();
 
     if let Some(mapped) = mapped {
-        cancel.check()?;
-        pool.install(|| {
-            hasher.update_rayon(mapped.bytes());
-        });
+        let chunk_size = tuned_chunk_size(range.len, execution.effective_threads);
+        for chunk in mapped.bytes().chunks(chunk_size.max(1)) {
+            cancel.check()?;
+            pool.install(|| {
+                hasher.update_rayon(chunk);
+            });
+            progress.advance(chunk.len() as u64);
+        }
     } else {
         let mut file = File::open(source)?;
         file.seek(SeekFrom::Start(range.start))?;
@@ -550,6 +584,7 @@ fn compute_parallel_blake3(
                 hasher.update_rayon(chunk);
             });
             remaining -= bytes_read as u64;
+            progress.advance(bytes_read as u64);
         }
     }
 
@@ -767,4 +802,3 @@ fn tuned_chunk_size(range_len: u64, worker_count: usize) -> usize {
     let suggested = (range_len / (worker_count * TARGET_CHUNKS_PER_WORKER)).max(1);
     suggested.clamp(MIN_CHUNK_SIZE as u64, MAX_CHUNK_SIZE as u64) as usize
 }
-

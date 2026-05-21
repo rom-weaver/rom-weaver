@@ -1,11 +1,12 @@
 use std::{
-    fs,
+    fs::{self, File, OpenOptions},
+    io::{BufReader, BufWriter, ErrorKind, Read, Seek, SeekFrom, Write},
     path::Path,
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use rayon::prelude::*;
-use rom_weaver_checksum::md5_bytes;
+use rom_weaver_checksum::md5_file;
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
     PatchCapabilities, PatchChecksumValidation, PatchCreateRequest, PatchHandler, ProbeConfidence,
@@ -39,6 +40,7 @@ const SOLID_PATCH_AUTHOR_ENV: &str = "ROM_WEAVER_SOLID_AUTHOR";
 const SOLID_PATCH_CONTACT_ENV: &str = "ROM_WEAVER_SOLID_CONTACT";
 const SOLID_PATCH_COMMENT_ENV: &str = "ROM_WEAVER_SOLID_COMMENT";
 const CREATE_THREAD_SCAN_CHUNK_BYTES: usize = 4 * 1024 * 1024;
+const CREATE_IO_BUFFER_SIZE: usize = 64 * 1024;
 
 fn solid_validation_code(code: &'static str) -> ValidationCodeError {
     ValidationCodeError::new(code)
@@ -64,8 +66,7 @@ impl PatchHandler for SolidPatchHandler {
     }
 
     fn parse(&self, patch_path: &Path, _context: &OperationContext) -> Result<OperationReport> {
-        let patch = crate::map_file_read_only(patch_path)?;
-        let parsed = parse_solid_patch_bytes(patch.as_ref())?;
+        let parsed = parse_solid_patch_file(patch_path)?;
 
         let mut label = format!(
             "parsed {} v{} patch with {} {}",
@@ -110,29 +111,31 @@ impl PatchHandler for SolidPatchHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
-        let patch = crate::map_file_read_only(patch_path)?;
-        let parsed = parse_solid_patch_bytes(patch.as_ref())?;
+        let parsed = parse_solid_patch_file(patch_path)?;
         let validate_checksums =
             context.patch_checksum_validation() == PatchChecksumValidation::Strict;
-        let input = crate::map_file_read_only(&request.input)?;
         if validate_checksums {
-            validate_source_checksum(parsed.source_md5, input.as_ref())?;
+            validate_source_checksum(parsed.source_md5, &request.input)?;
         }
         let thread_capability = solid_apply_thread_capability(parsed.primitives.len());
         let planned_execution = context.plan_threads(thread_capability.clone());
-        let (execution, output) = if planned_execution.used_parallelism {
-            let (execution, pool) = context.build_pool(thread_capability)?;
-            let output = apply_parsed_patch_parallel(&parsed, input.as_ref(), &pool, context)?;
-            (execution, output)
-        } else {
-            let output = apply_parsed_patch(&parsed, input.as_ref())?;
-            (planned_execution, output)
-        };
-
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
         }
-        fs::write(&request.output, output)?;
+        let execution = if planned_execution.used_parallelism {
+            let (execution, pool) = context.build_pool(thread_capability)?;
+            apply_parsed_patch_parallel_to_file(
+                &parsed,
+                &request.input,
+                &request.output,
+                &pool,
+                context,
+            )?;
+            execution
+        } else {
+            apply_parsed_patch_to_file(&parsed, &request.input, &request.output, context)?;
+            planned_execution
+        };
 
         let checksum_suffix = if validate_checksums {
             String::new()
@@ -164,39 +167,33 @@ impl PatchHandler for SolidPatchHandler {
         let modified_len = fs::metadata(&request.modified)?.len();
         let shared_len = original_len.min(modified_len);
         let (execution, pool) = context.build_pool(solid_create_thread_capability(shared_len))?;
-        let original = crate::map_file_read_only(&request.original)?;
-        let modified = crate::map_file_read_only(&request.modified)?;
-
-        let expansion = build_created_expansion(original.as_ref(), modified.as_ref())?;
+        let expansion =
+            build_created_expansion_from_paths(original_len, &request.modified, modified_len)?;
         let mod_action = if expansion.is_some() {
             MOD_ACTION_EXPAND
-        } else if modified.len() < original.len() {
+        } else if modified_len < original_len {
             MOD_ACTION_TRUNCATE
         } else {
             MOD_ACTION_NONE
         };
         let descriptions = build_description_strings(&request.original, &request.output);
-        let uses_big_fields = original.len() > u32::MAX as usize
-            || modified.len() > u32::MAX as usize
-            || diff_primitive_count_with_threads(
-                original.as_ref(),
-                modified.as_ref(),
-                expansion.is_none(),
-                &pool,
-                execution.used_parallelism,
-            )? > u32::MAX as u64;
-        let addr_param =
-            build_created_addr_param(mod_action, uses_big_fields, descriptions.patch_info_flag);
-
-        let primitives = build_created_primitives_with_threads(
-            original.as_ref(),
-            modified.as_ref(),
+        let primitives = build_created_primitives_with_threads_from_paths(
+            &request.original,
+            original_len,
+            &request.modified,
+            modified_len,
             expansion.is_none(),
             &pool,
             execution.used_parallelism,
+            context,
         )?;
+        let uses_big_fields = original_len > u64::from(u32::MAX)
+            || modified_len > u64::from(u32::MAX)
+            || primitives.len() > u32::MAX as usize;
+        let addr_param =
+            build_created_addr_param(mod_action, uses_big_fields, descriptions.patch_info_flag);
         let primitive_count = primitives.len() as u64;
-        let source_md5 = md5_bytes(original.as_ref());
+        let source_md5 = md5_file(&request.original)?;
         let date = current_patch_date();
 
         let mut patch = Vec::new();
@@ -234,12 +231,7 @@ impl PatchHandler for SolidPatchHandler {
                 )?;
             }
             MOD_ACTION_TRUNCATE => {
-                write_u64_le(
-                    &mut patch,
-                    modified.len() as u64,
-                    field_width,
-                    "SOLID truncate size",
-                )?;
+                write_u64_le(&mut patch, modified_len, field_width, "SOLID truncate size")?;
             }
             MOD_ACTION_NONE => {}
             _ => unreachable!(),
@@ -263,8 +255,13 @@ impl PatchHandler for SolidPatchHandler {
 
         // Validate that created patches are deterministic by replaying them.
         let parsed = parse_solid_patch_bytes(&patch)?;
-        let replay = apply_parsed_patch(&parsed, original.as_ref())?;
-        if replay != modified.as_slice() {
+        let replay_path = context
+            .temp_paths()
+            .next_path("solid-create-replay", Some("bin"));
+        apply_parsed_patch_to_file(&parsed, &request.original, &replay_path, context)?;
+        let replay_matches = files_equal(&replay_path, &request.modified)?;
+        let _ = fs::remove_file(&replay_path);
+        if !replay_matches {
             return Err(RomWeaverError::Validation(
                 "created SOLID patch does not round-trip to modified input".into(),
             ));
@@ -310,13 +307,13 @@ struct PatchDate {
 }
 
 #[derive(Debug)]
-struct ParsedSolidPatch<'a> {
+struct ParsedSolidPatch {
     version: u8,
     source_md5: [u8; SOLID_MD5_LEN],
     creation_date: Option<PatchDate>,
     resize: ResizeAction,
-    primitives: Vec<ParsedPrimitive<'a>>,
-    expansion_data: &'a [u8],
+    primitives: Vec<ParsedPrimitive>,
+    expansion_data: Vec<u8>,
 }
 
 #[derive(Debug)]
@@ -327,15 +324,15 @@ enum ResizeAction {
 }
 
 #[derive(Debug)]
-struct ParsedPrimitive<'a> {
+struct ParsedPrimitive {
     addr_byte: u8,
     base_delta: Option<u64>,
-    payload: PrimitivePayload<'a>,
+    payload: PrimitivePayload,
 }
 
 #[derive(Debug)]
-enum PrimitivePayload<'a> {
-    Literal(&'a [u8]),
+enum PrimitivePayload {
+    Literal(Vec<u8>),
     Rle { len: u8, value: u8 },
 }
 
@@ -368,7 +365,144 @@ struct SolidDescriptionStrings {
     patch_info_flag: bool,
 }
 
-fn parse_solid_patch_bytes<'a>(bytes: &'a [u8]) -> Result<ParsedSolidPatch<'a>> {
+fn parse_solid_patch_file(path: &Path) -> Result<ParsedSolidPatch> {
+    let file_len = fs::metadata(path)?.len();
+    if file_len < (SOLID_MAGIC.len() + 2 + SOLID_MD5_LEN + SOLID_DATE_LEN) as u64 {
+        return Err(RomWeaverError::Validation(
+            "SOLID patch is too small to contain a valid header".into(),
+        ));
+    }
+
+    let mut parser = SolidFileParser::new(BufReader::new(File::open(path)?), file_len);
+    let magic = parser.read_exact(SOLID_MAGIC.len(), "SOLID magic header")?;
+    if magic.as_slice() != SOLID_MAGIC {
+        return Err(RomWeaverError::Validation(
+            "SOLID patch has an invalid magic header".into(),
+        ));
+    }
+
+    let version = parser.read_u8("SOLID version")?;
+    if version != SOLID_FORMAT_VERSION {
+        return Err(RomWeaverError::ValidationCode(
+            solid_validation_code("SOLID_VERSION_UNSUPPORTED")
+                .with_message("SOLID patch has unsupported version")
+                .with_field("version", version)
+                .with_field("expected_version", SOLID_FORMAT_VERSION),
+        ));
+    }
+
+    let addr_param = parser.read_u8("SOLID addrParam")?;
+    let uses_big_fields = addr_param & BIG_FILE_FLAG != 0;
+    let base_addr_len = decode_base_addr_len(addr_param)?;
+    let mod_action = (addr_param & MOD_ACTION_MASK) >> 4;
+    if mod_action > MOD_ACTION_TRUNCATE {
+        return Err(RomWeaverError::ValidationCode(
+            solid_validation_code("SOLID_MOD_FILE_ACTION_UNSUPPORTED")
+                .with_message("SOLID patch uses unsupported modFileAction value")
+                .with_field("mod_file_action", mod_action),
+        ));
+    }
+    if addr_param & EXTENSION_FLAG != 0 {
+        return Err(RomWeaverError::Validation(
+            "SOLID patch uses extensionFlag, which is unsupported in specification v4".into(),
+        ));
+    }
+
+    let primitive_count =
+        parser.read_u64_le(if uses_big_fields { 8 } else { 4 }, "SOLID primitive count")?;
+    let primitive_count = usize::try_from(primitive_count).map_err(|_| {
+        RomWeaverError::Validation("SOLID primitive count exceeded addressable memory".into())
+    })?;
+
+    let source_md5 = parser.read_md5()?;
+    let creation_date = decode_patch_date(
+        parser
+            .read_exact(SOLID_DATE_LEN, "SOLID patch date")?
+            .as_slice(),
+    );
+
+    let description_count = if addr_param & PATCH_INFO_FLAG != 0 {
+        SOLID_MAX_DESCRIPTION_COUNT
+    } else {
+        3
+    };
+    for _ in 0..description_count {
+        let _ = parser.read_null_terminated_string()?;
+    }
+
+    let field_size = if uses_big_fields { 8 } else { 4 };
+    let resize = match mod_action {
+        MOD_ACTION_NONE => ResizeAction::None,
+        MOD_ACTION_EXPAND => {
+            let address = parser.read_u64_le(field_size, "SOLID resizeFileAddr")?;
+            let size = parser.read_u64_le(field_size, "SOLID resizeFileDataSize")?;
+            ResizeAction::Expand { address, size }
+        }
+        MOD_ACTION_TRUNCATE => {
+            let size = parser.read_u64_le(field_size, "SOLID resizeFileDataSize")?;
+            ResizeAction::Truncate { size }
+        }
+        _ => unreachable!(),
+    };
+
+    let mut primitives = Vec::with_capacity(primitive_count);
+    for _ in 0..primitive_count {
+        let addr_byte = parser.read_u8("SOLID primitive addrByteArr")?;
+        let size_byte = parser.read_u8("SOLID primitive sizeByteArr")?;
+        let base_delta = if addr_byte == 0 {
+            let Some(base_addr_len) = base_addr_len else {
+                return Err(RomWeaverError::Validation(
+                    "SOLID patch references BaseAddr but baseAddrSize is disabled".into(),
+                ));
+            };
+            Some(parser.read_u64_le(base_addr_len, "SOLID primitive base address")?)
+        } else {
+            None
+        };
+
+        let payload = if size_byte == 0 {
+            let len = parser.read_u8("SOLID RLE length")?;
+            let value = parser.read_u8("SOLID RLE value")?;
+            PrimitivePayload::Rle { len, value }
+        } else {
+            PrimitivePayload::Literal(
+                parser.read_exact(usize::from(size_byte), "SOLID literal payload")?,
+            )
+        };
+        primitives.push(ParsedPrimitive {
+            addr_byte,
+            base_delta,
+            payload,
+        });
+    }
+
+    let expansion_data = match resize {
+        ResizeAction::Expand { size, .. } => {
+            let size_usize = usize::try_from(size).map_err(|_| {
+                RomWeaverError::Validation("SOLID expansion size exceeded usize".into())
+            })?;
+            parser.read_exact(size_usize, "SOLID expansion data")?
+        }
+        _ => Vec::new(),
+    };
+
+    if !parser.is_at_end() {
+        return Err(RomWeaverError::Validation(
+            "SOLID patch contained unexpected trailing data".into(),
+        ));
+    }
+
+    Ok(ParsedSolidPatch {
+        version,
+        source_md5,
+        creation_date,
+        resize,
+        primitives,
+        expansion_data,
+    })
+}
+
+fn parse_solid_patch_bytes(bytes: &[u8]) -> Result<ParsedSolidPatch> {
     if bytes.len() < SOLID_MAGIC.len() + 2 + SOLID_MD5_LEN + SOLID_DATE_LEN {
         return Err(RomWeaverError::Validation(
             "SOLID patch is too small to contain a valid header".into(),
@@ -468,7 +602,7 @@ fn parse_solid_patch_bytes<'a>(bytes: &'a [u8]) -> Result<ParsedSolidPatch<'a>> 
             PrimitivePayload::Rle { len, value }
         } else {
             let literal = read_exact(bytes, &mut cursor, usize::from(size_byte))?;
-            PrimitivePayload::Literal(literal)
+            PrimitivePayload::Literal(literal.to_vec())
         };
         primitives.push(ParsedPrimitive {
             addr_byte,
@@ -488,9 +622,9 @@ fn parse_solid_patch_bytes<'a>(bytes: &'a [u8]) -> Result<ParsedSolidPatch<'a>> 
                     "SOLID expansion data length did not match resizeFileDataSize".into(),
                 ));
             }
-            data
+            data.to_vec()
         }
-        _ => &[],
+        _ => Vec::new(),
     };
 
     if cursor != bytes.len() {
@@ -509,55 +643,51 @@ fn parse_solid_patch_bytes<'a>(bytes: &'a [u8]) -> Result<ParsedSolidPatch<'a>> 
     })
 }
 
-fn apply_parsed_patch(parsed: &ParsedSolidPatch<'_>, source: &[u8]) -> Result<Vec<u8>> {
-    let mut output = source.to_vec();
-    let mut cursor = 0u64;
+fn apply_parsed_patch_to_file(
+    parsed: &ParsedSolidPatch,
+    source_path: &Path,
+    output_path: &Path,
+    context: &OperationContext,
+) -> Result<()> {
+    let source_len = usize_from_u64(fs::metadata(source_path)?.len(), "SOLID source length")?;
+    let (plans, required_output_len) = build_primitive_write_plans(parsed, source_len)?;
 
-    for primitive in &parsed.primitives {
-        match primitive.addr_byte {
-            0 => {
-                let delta = primitive.base_delta.ok_or_else(|| {
-                    RomWeaverError::Validation(
-                        "SOLID primitive used base addressing without base address bytes".into(),
-                    )
-                })?;
-                cursor = checked_add_u64(cursor, delta, "SOLID primitive address overflow")?;
-            }
-            0xFF => {}
-            relative => {
-                cursor = checked_add_u64(
-                    cursor,
-                    u64::from(relative),
-                    "SOLID primitive relative address overflow",
-                )?;
-            }
-        }
+    let writes = plans
+        .iter()
+        .map(|plan| {
+            let primitive = parsed.primitives.get(plan.primitive_index).ok_or_else(|| {
+                RomWeaverError::Validation(
+                    "SOLID primitive plan referenced an out-of-range primitive".into(),
+                )
+            })?;
+            let mut data = vec![0u8; plan.len];
+            primitive.write_into(&mut data);
+            Ok(PreparedSolidWrite {
+                start: plan.start,
+                data,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
 
-        let start = usize_from_u64(cursor, "SOLID primitive address")?;
-        let write_len = primitive.write_len();
-        let end = checked_add_usize(start, write_len, "SOLID primitive write end")?;
-        if end > output.len() {
-            output.resize(end, 0);
-        }
-        primitive.write_into(&mut output[start..end]);
-        cursor = checked_add_u64(
-            cursor,
-            write_len as u64,
-            "SOLID primitive cursor advance overflow",
-        )?;
-    }
-
-    apply_resize_action(parsed, &mut output)?;
-    Ok(output)
+    apply_solid_writes_and_resize_to_file(
+        parsed,
+        source_path,
+        output_path,
+        required_output_len,
+        writes,
+        context,
+    )
 }
 
-fn apply_parsed_patch_parallel(
-    parsed: &ParsedSolidPatch<'_>,
-    source: &[u8],
+fn apply_parsed_patch_parallel_to_file(
+    parsed: &ParsedSolidPatch,
+    source_path: &Path,
+    output_path: &Path,
     pool: &SharedThreadPool,
     context: &OperationContext,
-) -> Result<Vec<u8>> {
-    let (plans, required_output_len) = build_primitive_write_plans(parsed, source.len())?;
+) -> Result<()> {
+    let source_len = usize_from_u64(fs::metadata(source_path)?.len(), "SOLID source length")?;
+    let (plans, required_output_len) = build_primitive_write_plans(parsed, source_len)?;
     let writes = pool.install(|| {
         plans
             .par_iter()
@@ -578,23 +708,146 @@ fn apply_parsed_patch_parallel(
             .collect::<Result<Vec<_>>>()
     })?;
 
-    let mut output = source.to_vec();
-    if output.len() < required_output_len {
-        output.resize(required_output_len, 0);
+    apply_solid_writes_and_resize_to_file(
+        parsed,
+        source_path,
+        output_path,
+        required_output_len,
+        writes,
+        context,
+    )
+}
+
+fn apply_solid_writes_and_resize_to_file(
+    parsed: &ParsedSolidPatch,
+    source_path: &Path,
+    output_path: &Path,
+    required_output_len: usize,
+    writes: Vec<PreparedSolidWrite>,
+    context: &OperationContext,
+) -> Result<()> {
+    if let Some(parent) = output_path.parent() {
+        fs::create_dir_all(parent)?;
     }
+    fs::copy(source_path, output_path)?;
+    let mut output = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(output_path)?;
+    let required_output_len_u64 = u64::try_from(required_output_len)
+        .map_err(|_| RomWeaverError::Validation("SOLID output length exceeded u64".into()))?;
+    if output.metadata()?.len() < required_output_len_u64 {
+        output.set_len(required_output_len_u64)?;
+    }
+
     for write in writes {
-        let end = checked_add_usize(write.start, write.data.len(), "SOLID write range end")?;
-        let target = output.get_mut(write.start..end).ok_or_else(|| {
-            RomWeaverError::Validation("SOLID write range exceeded output bounds".into())
-        })?;
-        target.copy_from_slice(&write.data);
+        let start = u64::try_from(write.start)
+            .map_err(|_| RomWeaverError::Validation("SOLID write start exceeded u64".into()))?;
+        output.seek(SeekFrom::Start(start))?;
+        output.write_all(&write.data)?;
     }
-    apply_resize_action(parsed, &mut output)?;
-    Ok(output)
+    output.flush()?;
+    drop(output);
+
+    apply_resize_action_to_file(parsed, output_path, context)
+}
+
+fn apply_resize_action_to_file(
+    parsed: &ParsedSolidPatch,
+    output_path: &Path,
+    context: &OperationContext,
+) -> Result<()> {
+    match parsed.resize {
+        ResizeAction::None => {}
+        ResizeAction::Expand { address, size } => {
+            if size != parsed.expansion_data.len() as u64 {
+                return Err(RomWeaverError::Validation(
+                    "SOLID expansion payload length does not match resizeFileDataSize".into(),
+                ));
+            }
+            let output_len = fs::metadata(output_path)?.len();
+            if address > output_len {
+                return Err(RomWeaverError::ValidationCode(
+                    solid_validation_code("SOLID_RESIZE_ADDR_EXCEEDED_OUTPUT_LENGTH")
+                        .with_message("SOLID resizeFileAddr exceeds output length")
+                        .with_field("resize_addr", address)
+                        .with_field("output_len", output_len),
+                ));
+            }
+            if size == 0 {
+                return Ok(());
+            }
+
+            let temp_path = context
+                .temp_paths()
+                .next_path("solid-apply-expand", Some("bin"));
+            if let Some(parent) = temp_path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            let mut output = File::open(output_path)?;
+            let temp_file = File::create(&temp_path)?;
+            let mut temp = BufWriter::new(temp_file);
+            copy_file_range(&mut output, &mut temp, 0, address)?;
+            temp.write_all(&parsed.expansion_data)?;
+            copy_file_range(
+                &mut output,
+                &mut temp,
+                address,
+                output_len.saturating_sub(address),
+            )?;
+            temp.flush()?;
+            drop(temp);
+
+            if let Err(error) = fs::rename(&temp_path, output_path) {
+                if error.kind() == ErrorKind::AlreadyExists
+                    || error.kind() == ErrorKind::PermissionDenied
+                {
+                    fs::remove_file(output_path)?;
+                    fs::rename(&temp_path, output_path)?;
+                } else {
+                    let _ = fs::remove_file(&temp_path);
+                    return Err(error.into());
+                }
+            }
+        }
+        ResizeAction::Truncate { size } => {
+            let output_len = fs::metadata(output_path)?.len();
+            if size > output_len {
+                return Err(RomWeaverError::ValidationCode(
+                    solid_validation_code("SOLID_TRUNCATE_SIZE_EXCEEDED_OUTPUT_LENGTH")
+                        .with_message("SOLID truncate size exceeds output length")
+                        .with_field("truncate_size", size)
+                        .with_field("output_len", output_len),
+                ));
+            }
+            OpenOptions::new()
+                .write(true)
+                .open(output_path)?
+                .set_len(size)?;
+        }
+    }
+    Ok(())
+}
+
+fn copy_file_range(reader: &mut File, writer: &mut dyn Write, start: u64, len: u64) -> Result<()> {
+    if len == 0 {
+        return Ok(());
+    }
+    reader.seek(SeekFrom::Start(start))?;
+    let mut remaining = len;
+    let mut buffer = [0u8; 64 * 1024];
+    while remaining > 0 {
+        let chunk_len = usize::try_from(remaining.min(buffer.len() as u64))
+            .map_err(|_| RomWeaverError::Validation("SOLID copy chunk exceeded usize".into()))?;
+        reader.read_exact(&mut buffer[..chunk_len])?;
+        writer.write_all(&buffer[..chunk_len])?;
+        remaining -= chunk_len as u64;
+    }
+    Ok(())
 }
 
 fn build_primitive_write_plans(
-    parsed: &ParsedSolidPatch<'_>,
+    parsed: &ParsedSolidPatch,
     initial_output_len: usize,
 ) -> Result<(Vec<PrimitiveWritePlan>, usize)> {
     let mut plans = Vec::with_capacity(parsed.primitives.len());
@@ -641,45 +894,8 @@ fn build_primitive_write_plans(
     Ok((plans, required_output_len))
 }
 
-fn apply_resize_action(parsed: &ParsedSolidPatch<'_>, output: &mut Vec<u8>) -> Result<()> {
-    match parsed.resize {
-        ResizeAction::None => {}
-        ResizeAction::Expand { address, size } => {
-            if size != parsed.expansion_data.len() as u64 {
-                return Err(RomWeaverError::Validation(
-                    "SOLID expansion payload length does not match resizeFileDataSize".into(),
-                ));
-            }
-            let at = usize_from_u64(address, "SOLID resizeFileAddr")?;
-            if at > output.len() {
-                return Err(RomWeaverError::ValidationCode(
-                    solid_validation_code("SOLID_RESIZE_ADDR_EXCEEDED_OUTPUT_LENGTH")
-                        .with_message("SOLID resizeFileAddr exceeds output length")
-                        .with_field("resize_addr", address)
-                        .with_field("output_len", output.len()),
-                ));
-            }
-            output.splice(at..at, parsed.expansion_data.iter().copied());
-        }
-        ResizeAction::Truncate { size } => {
-            let size = usize_from_u64(size, "SOLID resizeFileDataSize")?;
-            if size > output.len() {
-                return Err(RomWeaverError::ValidationCode(
-                    solid_validation_code("SOLID_TRUNCATE_SIZE_EXCEEDED_OUTPUT_LENGTH")
-                        .with_message("SOLID truncate size exceeds output length")
-                        .with_field("truncate_size", size)
-                        .with_field("output_len", output.len()),
-                ));
-            }
-            output.truncate(size);
-        }
-    }
-
-    Ok(())
-}
-
-fn validate_source_checksum(expected: [u8; SOLID_MD5_LEN], input: &[u8]) -> Result<()> {
-    let actual = md5_bytes(input);
+fn validate_source_checksum(expected: [u8; SOLID_MD5_LEN], input_path: &Path) -> Result<()> {
+    let actual = md5_file(input_path)?;
     if actual != expected {
         return Err(RomWeaverError::ValidationCode(
             solid_validation_code("SOLID_SOURCE_MD5_MISMATCH")
@@ -720,114 +936,141 @@ fn solid_create_chunk_count(shared_len: u64) -> usize {
     usize::try_from(chunk_count).unwrap_or(usize::MAX)
 }
 
-fn diff_primitive_count_with_threads(
-    original: &[u8],
-    modified: &[u8],
+fn build_created_primitives_with_threads_from_paths(
+    original_path: &Path,
+    original_len: u64,
+    modified_path: &Path,
+    modified_len: u64,
     include_suffix: bool,
     pool: &SharedThreadPool,
     use_parallel_scan: bool,
-) -> Result<u64> {
-    Ok(build_created_primitives_with_threads(
-        original,
-        modified,
-        include_suffix,
-        pool,
-        use_parallel_scan,
-    )?
-    .len() as u64)
-}
-
-fn build_created_primitives_with_threads(
-    original: &[u8],
-    modified: &[u8],
-    include_suffix: bool,
-    pool: &SharedThreadPool,
-    use_parallel_scan: bool,
+    context: &OperationContext,
 ) -> Result<Vec<CreatedPrimitive>> {
-    if use_parallel_scan {
-        build_created_primitives_parallel(original, modified, include_suffix, pool)
+    let chunks = if use_parallel_scan {
+        collect_created_chunks_parallel_from_paths(
+            original_path,
+            original_len,
+            modified_path,
+            modified_len,
+            include_suffix,
+            pool,
+            context,
+        )?
     } else {
-        build_created_primitives(original, modified, include_suffix)
-    }
-}
-
-fn build_created_primitives(
-    original: &[u8],
-    modified: &[u8],
-    include_suffix: bool,
-) -> Result<Vec<CreatedPrimitive>> {
-    let chunks = collect_created_chunks_sequential(original, modified, include_suffix);
+        collect_created_chunks_sequential_from_paths(
+            original_path,
+            original_len,
+            modified_path,
+            modified_len,
+            include_suffix,
+            context,
+        )?
+    };
     build_created_primitives_from_chunks(chunks)
 }
 
-fn build_created_primitives_parallel(
-    original: &[u8],
-    modified: &[u8],
+fn collect_created_chunks_sequential_from_paths(
+    original_path: &Path,
+    original_len: u64,
+    modified_path: &Path,
+    modified_len: u64,
     include_suffix: bool,
-    pool: &SharedThreadPool,
-) -> Result<Vec<CreatedPrimitive>> {
-    let chunks = collect_created_chunks_parallel(original, modified, include_suffix, pool)?;
-    build_created_primitives_from_chunks(chunks)
-}
-
-fn collect_created_chunks_sequential(
-    original: &[u8],
-    modified: &[u8],
-    include_suffix: bool,
-) -> Vec<(u64, Vec<u8>)> {
-    let shared_len = original.len().min(modified.len());
-    let mut chunks = Vec::<(u64, Vec<u8>)>::new();
-
-    let mut index = 0usize;
-    while index < shared_len {
-        if original[index] == modified[index] {
-            index += 1;
-            continue;
-        }
-
-        let start = index;
-        while index < shared_len && original[index] != modified[index] {
-            index += 1;
-        }
-        chunks.push((start as u64, modified[start..index].to_vec()));
-    }
-
-    if include_suffix && modified.len() > shared_len {
-        chunks.push((shared_len as u64, modified[shared_len..].to_vec()));
-    }
-    chunks
-}
-
-fn collect_created_chunks_parallel(
-    original: &[u8],
-    modified: &[u8],
-    include_suffix: bool,
-    pool: &SharedThreadPool,
+    context: &OperationContext,
 ) -> Result<Vec<(u64, Vec<u8>)>> {
-    let shared_len = original.len().min(modified.len());
+    let shared_len = original_len.min(modified_len);
     if shared_len == 0 {
-        if include_suffix && !modified.is_empty() {
-            return Ok(vec![(0, modified.to_vec())]);
+        if include_suffix && modified_len > 0 {
+            let suffix = read_solid_suffix(modified_path, 0, modified_len)?;
+            return Ok(vec![(0, suffix)]);
         }
         return Ok(Vec::new());
     }
 
-    let chunk_ranges = (0..shared_len)
-        .step_by(CREATE_THREAD_SCAN_CHUNK_BYTES)
-        .map(|start| {
-            let end = start
-                .saturating_add(CREATE_THREAD_SCAN_CHUNK_BYTES)
-                .min(shared_len);
-            start..end
-        })
-        .collect::<Vec<_>>();
+    let mut original = File::open(original_path)?;
+    let mut modified = File::open(modified_path)?;
+    let mut original_buffer = vec![0u8; CREATE_IO_BUFFER_SIZE];
+    let mut modified_buffer = vec![0u8; CREATE_IO_BUFFER_SIZE];
+    let mut chunks = Vec::<(u64, Vec<u8>)>::new();
+    let mut pending_start: Option<u64> = None;
+    let mut pending_bytes = Vec::<u8>::new();
+    let mut cursor = 0u64;
 
+    while cursor < shared_len {
+        context.cancel().check()?;
+        let chunk_len = usize::try_from((shared_len - cursor).min(CREATE_IO_BUFFER_SIZE as u64))
+            .map_err(|_| RomWeaverError::Validation("SOLID compare chunk exceeded usize".into()))?;
+        original.read_exact(&mut original_buffer[..chunk_len])?;
+        modified.read_exact(&mut modified_buffer[..chunk_len])?;
+
+        for index in 0..chunk_len {
+            let source = original_buffer[index];
+            let target = modified_buffer[index];
+            if source == target {
+                if !pending_bytes.is_empty() {
+                    chunks.push((
+                        pending_start.expect("pending start exists"),
+                        std::mem::take(&mut pending_bytes),
+                    ));
+                    pending_start = None;
+                }
+            } else {
+                if pending_start.is_none() {
+                    pending_start = Some(cursor + index as u64);
+                }
+                pending_bytes.push(target);
+            }
+        }
+        cursor = cursor
+            .checked_add(chunk_len as u64)
+            .ok_or_else(|| RomWeaverError::Validation("SOLID compare cursor overflowed".into()))?;
+    }
+
+    if !pending_bytes.is_empty() {
+        chunks.push((pending_start.expect("pending start exists"), pending_bytes));
+    }
+    if include_suffix && modified_len > shared_len {
+        chunks.push((
+            shared_len,
+            read_solid_suffix(modified_path, shared_len, modified_len)?,
+        ));
+    }
+    Ok(chunks)
+}
+
+fn collect_created_chunks_parallel_from_paths(
+    original_path: &Path,
+    original_len: u64,
+    modified_path: &Path,
+    modified_len: u64,
+    include_suffix: bool,
+    pool: &SharedThreadPool,
+    context: &OperationContext,
+) -> Result<Vec<(u64, Vec<u8>)>> {
+    let shared_len = original_len.min(modified_len);
+    if shared_len == 0 {
+        if include_suffix && modified_len > 0 {
+            let suffix = read_solid_suffix(modified_path, 0, modified_len)?;
+            return Ok(vec![(0, suffix)]);
+        }
+        return Ok(Vec::new());
+    }
+
+    let chunk_count = solid_create_chunk_count(shared_len);
     let per_chunk = pool.install(|| {
-        chunk_ranges
+        (0..chunk_count)
             .into_par_iter()
-            .map(|range| collect_created_chunk_ranges(original, modified, range.start, range.end))
-            .collect::<Vec<_>>()
-    });
+            .map(|chunk_index| {
+                context.cancel().check()?;
+                collect_created_chunk_ranges_from_file_chunk(
+                    original_path,
+                    original_len,
+                    modified_path,
+                    modified_len,
+                    chunk_index,
+                )
+            })
+            .collect::<Result<Vec<_>>>()
+    })?;
 
     let mut merged = Vec::<(u64, Vec<u8>)>::new();
     for chunks in per_chunk {
@@ -850,8 +1093,11 @@ fn collect_created_chunks_parallel(
         }
     }
 
-    if include_suffix && modified.len() > shared_len {
-        let mut suffix = (shared_len as u64, modified[shared_len..].to_vec());
+    if include_suffix && modified_len > shared_len {
+        let mut suffix = (
+            shared_len,
+            read_solid_suffix(modified_path, shared_len, modified_len)?,
+        );
         if let Some(last) = merged.last_mut() {
             let last_len = u64::try_from(last.1.len()).map_err(|_| {
                 RomWeaverError::Validation("SOLID create chunk length exceeded 64-bit range".into())
@@ -870,27 +1116,70 @@ fn collect_created_chunks_parallel(
     Ok(merged)
 }
 
-fn collect_created_chunk_ranges(
-    original: &[u8],
-    modified: &[u8],
-    start: usize,
-    end: usize,
-) -> Vec<(u64, Vec<u8>)> {
-    let mut chunks = Vec::<(u64, Vec<u8>)>::new();
-    let mut index = start;
-    while index < end {
-        if original[index] == modified[index] {
-            index += 1;
-            continue;
-        }
-
-        let chunk_start = index;
-        while index < end && original[index] != modified[index] {
-            index += 1;
-        }
-        chunks.push((chunk_start as u64, modified[chunk_start..index].to_vec()));
+fn collect_created_chunk_ranges_from_file_chunk(
+    original_path: &Path,
+    original_len: u64,
+    modified_path: &Path,
+    modified_len: u64,
+    chunk_index: usize,
+) -> Result<Vec<(u64, Vec<u8>)>> {
+    let shared_len = original_len.min(modified_len);
+    let start = u64::try_from(chunk_index)
+        .ok()
+        .and_then(|index| index.checked_mul(CREATE_THREAD_SCAN_CHUNK_BYTES as u64))
+        .ok_or_else(|| RomWeaverError::Validation("SOLID chunk offset overflowed".into()))?;
+    if start >= shared_len {
+        return Ok(Vec::new());
     }
-    chunks
+    let end = start
+        .saturating_add(CREATE_THREAD_SCAN_CHUNK_BYTES as u64)
+        .min(shared_len);
+
+    let mut original = File::open(original_path)?;
+    let mut modified = File::open(modified_path)?;
+    original.seek(SeekFrom::Start(start))?;
+    modified.seek(SeekFrom::Start(start))?;
+
+    let mut original_buffer = vec![0u8; CREATE_IO_BUFFER_SIZE];
+    let mut modified_buffer = vec![0u8; CREATE_IO_BUFFER_SIZE];
+    let mut chunks = Vec::<(u64, Vec<u8>)>::new();
+    let mut pending_start: Option<u64> = None;
+    let mut pending_bytes = Vec::<u8>::new();
+    let mut cursor = start;
+
+    while cursor < end {
+        let chunk_len = usize::try_from((end - cursor).min(CREATE_IO_BUFFER_SIZE as u64))
+            .map_err(|_| RomWeaverError::Validation("SOLID compare chunk exceeded usize".into()))?;
+        original.read_exact(&mut original_buffer[..chunk_len])?;
+        modified.read_exact(&mut modified_buffer[..chunk_len])?;
+
+        for index in 0..chunk_len {
+            let source = original_buffer[index];
+            let target = modified_buffer[index];
+            if source == target {
+                if !pending_bytes.is_empty() {
+                    chunks.push((
+                        pending_start.expect("pending start exists"),
+                        std::mem::take(&mut pending_bytes),
+                    ));
+                    pending_start = None;
+                }
+            } else {
+                if pending_start.is_none() {
+                    pending_start = Some(cursor + index as u64);
+                }
+                pending_bytes.push(target);
+            }
+        }
+        cursor = cursor
+            .checked_add(chunk_len as u64)
+            .ok_or_else(|| RomWeaverError::Validation("SOLID compare cursor overflowed".into()))?;
+    }
+
+    if !pending_bytes.is_empty() {
+        chunks.push((pending_start.expect("pending start exists"), pending_bytes));
+    }
+    Ok(chunks)
 }
 
 fn build_created_primitives_from_chunks(
@@ -926,14 +1215,65 @@ fn build_created_primitives_from_chunks(
     Ok(primitives)
 }
 
-fn build_created_expansion(original: &[u8], modified: &[u8]) -> Result<Option<CreatedExpansion>> {
-    if modified.len() <= original.len() {
+fn read_solid_suffix(path: &Path, start: u64, end: u64) -> Result<Vec<u8>> {
+    if end <= start {
+        return Ok(Vec::new());
+    }
+    let mut file = File::open(path)?;
+    file.seek(SeekFrom::Start(start))?;
+    let capacity = usize::try_from(end - start)
+        .map_err(|_| RomWeaverError::Validation("SOLID suffix length exceeded usize".into()))?;
+    let mut data = Vec::with_capacity(capacity);
+    let mut buffer = [0u8; CREATE_IO_BUFFER_SIZE];
+    let mut remaining = end - start;
+    while remaining > 0 {
+        let chunk_len = usize::try_from(remaining.min(buffer.len() as u64))
+            .map_err(|_| RomWeaverError::Validation("SOLID suffix chunk exceeded usize".into()))?;
+        file.read_exact(&mut buffer[..chunk_len])?;
+        data.extend_from_slice(&buffer[..chunk_len]);
+        remaining -= chunk_len as u64;
+    }
+    Ok(data)
+}
+
+fn build_created_expansion_from_paths(
+    original_len: u64,
+    modified_path: &Path,
+    modified_len: u64,
+) -> Result<Option<CreatedExpansion>> {
+    if modified_len <= original_len {
         return Ok(None);
     }
 
-    let address = original.len() as u64;
-    let data = modified[original.len()..].to_vec();
+    let address = original_len;
+    let data = read_solid_suffix(modified_path, original_len, modified_len)?;
     Ok(Some(CreatedExpansion { address, data }))
+}
+
+fn files_equal(left: &Path, right: &Path) -> Result<bool> {
+    let left_len = fs::metadata(left)?.len();
+    let right_len = fs::metadata(right)?.len();
+    if left_len != right_len {
+        return Ok(false);
+    }
+    let mut left_file = File::open(left)?;
+    let mut right_file = File::open(right)?;
+    let mut left_buffer = [0u8; CREATE_IO_BUFFER_SIZE];
+    let mut right_buffer = [0u8; CREATE_IO_BUFFER_SIZE];
+    loop {
+        let left_read = left_file.read(&mut left_buffer)?;
+        let right_read = right_file.read(&mut right_buffer)?;
+        if left_read != right_read {
+            return Ok(false);
+        }
+        if left_read == 0 {
+            break;
+        }
+        if left_buffer[..left_read] != right_buffer[..right_read] {
+            return Ok(false);
+        }
+    }
+    Ok(true)
 }
 
 fn build_description_strings(original: &Path, output_patch: &Path) -> SolidDescriptionStrings {
@@ -1074,6 +1414,113 @@ fn read_null_terminated_string(bytes: &[u8], cursor: &mut usize) -> Result<Strin
         .to_string();
     *cursor = checked_add_usize(start, terminator + 1, "SOLID description cursor")?;
     Ok(string)
+}
+
+struct SolidFileParser<R> {
+    reader: R,
+    file_len: u64,
+    cursor: u64,
+}
+
+impl<R: Read> SolidFileParser<R> {
+    fn new(reader: R, file_len: u64) -> Self {
+        Self {
+            reader,
+            file_len,
+            cursor: 0,
+        }
+    }
+
+    fn is_at_end(&self) -> bool {
+        self.cursor == self.file_len
+    }
+
+    fn read_exact(&mut self, len: usize, label: &'static str) -> Result<Vec<u8>> {
+        let len_u64 = u64::try_from(len).map_err(|_| {
+            RomWeaverError::ValidationCode(
+                solid_validation_code("SOLID_USIZE_CONVERSION_OVERFLOW")
+                    .with_field("label", label)
+                    .with_field("value", len),
+            )
+        })?;
+        let next = self.cursor.checked_add(len_u64).ok_or_else(|| {
+            RomWeaverError::ValidationCode(
+                solid_validation_code("SOLID_U64_ADD_OVERFLOW")
+                    .with_field("label", label)
+                    .with_field("lhs", self.cursor)
+                    .with_field("rhs", len_u64),
+            )
+        })?;
+        if next > self.file_len {
+            return Err(RomWeaverError::Validation(
+                "SOLID patch ended unexpectedly while reading binary data".into(),
+            ));
+        }
+
+        let mut bytes = vec![0u8; len];
+        self.reader.read_exact(&mut bytes)?;
+        self.cursor = next;
+        Ok(bytes)
+    }
+
+    fn read_u8(&mut self, label: &'static str) -> Result<u8> {
+        Ok(self.read_exact(1, label)?[0])
+    }
+
+    fn read_u64_le(&mut self, width: usize, label: &'static str) -> Result<u64> {
+        if width == 0 || width > 8 {
+            return Err(RomWeaverError::ValidationCode(
+                solid_validation_code("SOLID_INTEGER_WIDTH_UNSUPPORTED")
+                    .with_field("label", label)
+                    .with_field("width", width),
+            ));
+        }
+        let raw = self.read_exact(width, label)?;
+        let mut value = 0u64;
+        for (index, byte) in raw.iter().enumerate() {
+            value |= u64::from(*byte) << (index * 8);
+        }
+        Ok(value)
+    }
+
+    fn read_md5(&mut self) -> Result<[u8; SOLID_MD5_LEN]> {
+        let raw = self.read_exact(SOLID_MD5_LEN, "SOLID source md5")?;
+        let mut md5 = [0u8; SOLID_MD5_LEN];
+        md5.copy_from_slice(&raw);
+        Ok(md5)
+    }
+
+    fn read_null_terminated_string(&mut self) -> Result<String> {
+        if self.cursor >= self.file_len {
+            return Err(RomWeaverError::Validation(
+                "SOLID patch ended unexpectedly while reading description strings".into(),
+            ));
+        }
+
+        let mut bytes = Vec::new();
+        loop {
+            let byte = self.read_u8("SOLID description string byte")?;
+            if byte == 0 {
+                break;
+            }
+            bytes.push(byte);
+            if bytes.len() > SOLID_MAX_DESCRIPTION_LEN {
+                return Err(RomWeaverError::ValidationCode(
+                    solid_validation_code("SOLID_DESCRIPTION_STRING_EXCEEDED_MAX_LEN")
+                        .with_message("SOLID description string exceeded max length")
+                        .with_field("max_len", SOLID_MAX_DESCRIPTION_LEN)
+                        .with_field("actual_len", bytes.len()),
+                ));
+            }
+        }
+
+        let string = std::str::from_utf8(&bytes)
+            .map_err(|_| {
+                RomWeaverError::Validation("SOLID description string is not valid UTF-8".into())
+            })?
+            .to_string();
+        Ok(string)
+    }
 }
 
 fn current_patch_date() -> PatchDate {
@@ -1272,7 +1719,7 @@ fn pluralize<'a>(count: usize, singular: &'a str, plural: &'a str) -> &'a str {
     if count == 1 { singular } else { plural }
 }
 
-impl ParsedPrimitive<'_> {
+impl ParsedPrimitive {
     fn write_len(&self) -> usize {
         match self.payload {
             PrimitivePayload::Literal(ref data) => data.len(),

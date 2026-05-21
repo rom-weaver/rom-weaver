@@ -11,7 +11,11 @@ pub use context::{OperationContext, PatchChecksumValidation};
 pub use error::{
     Result, RomWeaverError, ValidationCodeError, ValidationField, ValidationFieldValue,
 };
-pub use io::{ChunkPlanner, FileChunk, TempPathAllocator};
+pub use io::{
+    BlockCacheReader, BoundedIoPolicy, ChunkPlanner, DEFAULT_BLOCK_CACHE_MAX_BLOCKS,
+    DEFAULT_BLOCK_CACHE_SIZE_BYTES, DEFAULT_CHUNK_SIZE_BYTES, FileChunk, IoWatermark,
+    OrderedChunkWriter, TempPathAllocator, bounded_items_for_threads,
+};
 pub use progress::{
     NoopProgressSink, OperationFamily, OperationStatus, ProgressEvent, ProgressSink,
     RecordingProgressSink,

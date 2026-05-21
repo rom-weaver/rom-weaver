@@ -1,5 +1,4 @@
 use std::{
-    borrow::Cow,
     fs::{self, File, OpenOptions},
     io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write},
     path::Path,
@@ -50,8 +49,7 @@ impl PatchHandler for PpfPatchHandler {
     }
 
     fn parse(&self, patch_path: &Path, _context: &OperationContext) -> Result<OperationReport> {
-        let patch = crate::map_file_read_only(patch_path)?;
-        let parsed = parse_ppf_bytes(patch.as_ref())?;
+        let parsed = parse_ppf_file(patch_path)?;
         let mut label = format!(
             "parsed {} patch ({}) with {} record(s)",
             self.descriptor.name,
@@ -77,8 +75,7 @@ impl PatchHandler for PpfPatchHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
-        let patch = crate::map_file_read_only(patch_path)?;
-        let parsed = parse_ppf_bytes(patch.as_ref())?;
+        let parsed = parse_ppf_file(patch_path)?;
         let validate_checksums =
             context.patch_checksum_validation() == PatchChecksumValidation::Strict;
         let input_len = fs::metadata(&request.input)?.len();
@@ -216,24 +213,24 @@ impl PpfVersion {
 }
 
 #[derive(Debug)]
-struct ParsedPpfPatch<'a> {
+struct ParsedPpfPatch {
     version: PpfVersion,
     expected_input_len: Option<u64>,
-    blockcheck: Option<PpfBlockcheck<'a>>,
-    records: Vec<PpfRecord<'a>>,
+    blockcheck: Option<PpfBlockcheck>,
+    records: Vec<PpfRecord>,
 }
 
 #[derive(Debug)]
-struct PpfBlockcheck<'a> {
+struct PpfBlockcheck {
     input_offset: u64,
-    expected: Cow<'a, [u8]>,
+    expected: Vec<u8>,
 }
 
 #[derive(Debug)]
-struct PpfRecord<'a> {
+struct PpfRecord {
     offset: u64,
-    data: Cow<'a, [u8]>,
-    undo_data: Option<Cow<'a, [u8]>>,
+    data: Vec<u8>,
+    undo_data: Option<Vec<u8>>,
 }
 
 #[derive(Debug)]
@@ -294,7 +291,124 @@ fn create_ppf3_patch(
     }
 }
 
-fn parse_ppf_bytes<'a>(bytes: &'a [u8]) -> Result<ParsedPpfPatch<'a>> {
+fn parse_ppf_file(path: &Path) -> Result<ParsedPpfPatch> {
+    let file_len = fs::metadata(path)?.len();
+    if file_len < PPF_HEADER_MIN_SIZE as u64 {
+        return Err(RomWeaverError::Validation(
+            "PPF patch is too small to contain a valid header".into(),
+        ));
+    }
+
+    let mut file = File::open(path)?;
+    let mut header = vec![0u8; PPF_HEADER_MIN_SIZE];
+    file.read_exact(&mut header)?;
+    let version = detect_version(&header)?;
+
+    match version {
+        PpfVersion::V1 => {
+            let records =
+                parse_records_v1_v2_from_path(path, PPF_HEADER_MIN_SIZE as u64, file_len)?;
+            Ok(ParsedPpfPatch {
+                version: PpfVersion::V1,
+                expected_input_len: None,
+                blockcheck: None,
+                records,
+            })
+        }
+        PpfVersion::V2 => {
+            if file_len < PPF2_HEADER_SIZE as u64 {
+                return Err(RomWeaverError::Validation(
+                    "PPF2 patch is too small to contain a validation header".into(),
+                ));
+            }
+            file.seek(SeekFrom::Start(0))?;
+            let mut v2_header = vec![0u8; PPF2_HEADER_SIZE];
+            file.read_exact(&mut v2_header)?;
+            let expected_input_len = u64::from(read_u32_le(&v2_header, 56)?);
+            let file_id_len = detect_file_id_len_v2_from_path(path, file_len)?;
+            let payload_end = file_len.checked_sub(file_id_len as u64).ok_or_else(|| {
+                RomWeaverError::Validation("PPF2 file_id length exceeded file size".into())
+            })?;
+            if payload_end < PPF2_HEADER_SIZE as u64 {
+                return Err(RomWeaverError::Validation(
+                    "PPF2 payload ended before record data started".into(),
+                ));
+            }
+
+            let records =
+                parse_records_v1_v2_from_path(path, PPF2_HEADER_SIZE as u64, payload_end)?;
+            Ok(ParsedPpfPatch {
+                version: PpfVersion::V2,
+                expected_input_len: Some(expected_input_len),
+                blockcheck: Some(PpfBlockcheck {
+                    input_offset: PPF2_BLOCKCHECK_OFFSET,
+                    expected: v2_header[60..(60 + PPF_VALIDATION_BLOCK_SIZE)].to_vec(),
+                }),
+                records,
+            })
+        }
+        PpfVersion::V3 => {
+            if file_len < PPF3_HEADER_BASE_SIZE as u64 {
+                return Err(RomWeaverError::Validation(
+                    "PPF3 patch is too small to contain a valid header".into(),
+                ));
+            }
+            file.seek(SeekFrom::Start(0))?;
+            let mut v3_header = vec![0u8; PPF3_HEADER_BASE_SIZE];
+            file.read_exact(&mut v3_header)?;
+
+            let imagetype = v3_header[56];
+            let blockcheck_enabled = v3_header[57] != 0;
+            let undo_enabled = v3_header[58] != 0;
+
+            let (payload_start, blockcheck) = if blockcheck_enabled {
+                if file_len < PPF2_HEADER_SIZE as u64 {
+                    return Err(RomWeaverError::Validation(
+                        "PPF3 patch enabled blockcheck but omitted the validation block".into(),
+                    ));
+                }
+                file.seek(SeekFrom::Start(60))?;
+                let mut expected = vec![0u8; PPF_VALIDATION_BLOCK_SIZE];
+                file.read_exact(&mut expected)?;
+                let input_offset = if imagetype == 0 {
+                    PPF3_BIN_BLOCKCHECK_OFFSET
+                } else {
+                    PPF3_GI_BLOCKCHECK_OFFSET
+                };
+                (
+                    PPF2_HEADER_SIZE as u64,
+                    Some(PpfBlockcheck {
+                        input_offset,
+                        expected,
+                    }),
+                )
+            } else {
+                (PPF3_HEADER_BASE_SIZE as u64, None)
+            };
+
+            let file_id_len = detect_file_id_len_v3_from_path(path, file_len)?;
+            let payload_end = file_len.checked_sub(file_id_len as u64).ok_or_else(|| {
+                RomWeaverError::Validation("PPF3 file_id length exceeded file size".into())
+            })?;
+            if payload_end < payload_start {
+                return Err(RomWeaverError::Validation(
+                    "PPF3 payload ended before record data started".into(),
+                ));
+            }
+            let records =
+                parse_records_v3_from_path(path, payload_start, payload_end, undo_enabled)?;
+
+            Ok(ParsedPpfPatch {
+                version: PpfVersion::V3,
+                expected_input_len: None,
+                blockcheck,
+                records,
+            })
+        }
+    }
+}
+
+fn parse_ppf_bytes(bytes: &[u8]) -> Result<ParsedPpfPatch> {
     if bytes.len() < PPF_HEADER_MIN_SIZE {
         return Err(RomWeaverError::Validation(
             "PPF patch is too small to contain a valid header".into(),
@@ -442,21 +556,21 @@ fn create_ppf3_patch_parallel(
     }
 
     let blockcheck_enabled = write_ppf3_header(output, original_path, original_len)?;
-    let original = crate::map_file_read_only(original_path)?;
-    let modified = crate::map_file_read_only(modified_path)?;
-    let runs = collect_ppf_diff_runs_parallel(original.as_ref(), modified.as_ref(), pool)?;
+    let runs = collect_ppf_diff_runs_parallel(
+        original_path,
+        original_len,
+        modified_path,
+        modified_len,
+        pool,
+    )?;
+    let mut modified = BufReader::new(File::open(modified_path)?);
 
     for run in &runs {
-        let start = usize::try_from(run.offset).map_err(|_| {
-            RomWeaverError::Validation("PPF record offset exceeded platform limits".into())
-        })?;
-        let end = start
-            .checked_add(usize::from(run.len))
-            .ok_or_else(|| RomWeaverError::Validation("PPF record offset overflowed".into()))?;
-        let data = modified.get(start..end).ok_or_else(|| {
-            RomWeaverError::Validation("PPF record data exceeded modified file bounds".into())
-        })?;
-        write_ppf3_record(output, run.offset, data)?;
+        let data_len = usize::from(run.len);
+        let mut data = vec![0u8; data_len];
+        modified.seek(SeekFrom::Start(run.offset))?;
+        modified.read_exact(&mut data)?;
+        write_ppf3_record(output, run.offset, &data)?;
     }
 
     Ok(CreatedPpfPatch {
@@ -466,16 +580,17 @@ fn create_ppf3_patch_parallel(
 }
 
 fn collect_ppf_diff_runs_parallel(
-    original: &[u8],
-    modified: &[u8],
+    original_path: &Path,
+    original_len: u64,
+    modified_path: &Path,
+    modified_len: u64,
     pool: &SharedThreadPool,
 ) -> Result<Vec<PpfDiffRun>> {
-    let chunk_ranges = (0..modified.len())
+    let chunk_size = CREATE_THREAD_SCAN_CHUNK_BYTES as u64;
+    let chunk_ranges = (0..modified_len)
         .step_by(CREATE_THREAD_SCAN_CHUNK_BYTES)
         .map(|start| {
-            let end = start
-                .saturating_add(CREATE_THREAD_SCAN_CHUNK_BYTES)
-                .min(modified.len());
+            let end = start.saturating_add(chunk_size).min(modified_len);
             start..end
         })
         .collect::<Vec<_>>();
@@ -483,7 +598,15 @@ fn collect_ppf_diff_runs_parallel(
     let per_chunk_runs = pool.install(|| {
         chunk_ranges
             .into_par_iter()
-            .map(|range| collect_ppf_chunk_diff_runs(original, modified, range.start, range.end))
+            .map(|range| {
+                collect_ppf_chunk_diff_runs(
+                    original_path,
+                    original_len,
+                    modified_path,
+                    range.start,
+                    range.end,
+                )
+            })
             .collect::<Vec<_>>()
     });
 
@@ -511,52 +634,86 @@ fn collect_ppf_diff_runs_parallel(
 }
 
 fn collect_ppf_chunk_diff_runs(
-    original: &[u8],
-    modified: &[u8],
-    start: usize,
-    end: usize,
+    original_path: &Path,
+    original_len: u64,
+    modified_path: &Path,
+    start: u64,
+    end: u64,
 ) -> Result<Vec<PpfDiffRun>> {
-    let mut runs = Vec::new();
-    let mut pending_start: Option<usize> = None;
-    let mut pending_len = 0usize;
+    let mut original = BufReader::new(File::open(original_path)?);
+    let mut modified = BufReader::new(File::open(modified_path)?);
+    if start < original_len {
+        original.seek(SeekFrom::Start(start))?;
+    }
+    modified.seek(SeekFrom::Start(start))?;
 
-    for index in start..end {
-        let differs = match original.get(index) {
-            Some(byte) => *byte != modified[index],
-            None => true,
-        };
-        if differs {
-            if pending_start.is_none() {
-                pending_start = Some(index);
-            }
-            pending_len = pending_len.checked_add(1).ok_or_else(|| {
-                RomWeaverError::Validation("PPF diff run length overflowed".into())
+    let mut original_buffer = vec![0u8; CREATE_COMPARE_BUFFER_SIZE];
+    let mut modified_buffer = vec![0u8; CREATE_COMPARE_BUFFER_SIZE];
+    let mut runs = Vec::new();
+    let mut pending_start: Option<u64> = None;
+    let mut pending_len = 0usize;
+    let mut absolute = start;
+
+    while absolute < end {
+        let chunk_len = usize::try_from((end - absolute).min(CREATE_COMPARE_BUFFER_SIZE as u64))
+            .map_err(|_| {
+                RomWeaverError::Validation("PPF create chunk exceeded addressable memory".into())
             })?;
-            if pending_len == usize::from(u8::MAX) {
+        modified.read_exact(&mut modified_buffer[..chunk_len])?;
+
+        let original_chunk_len = if absolute >= original_len {
+            0
+        } else {
+            usize::try_from((original_len - absolute).min(chunk_len as u64)).map_err(|_| {
+                RomWeaverError::Validation("PPF create source chunk exceeded usize".into())
+            })?
+        };
+        if original_chunk_len > 0 {
+            original.read_exact(&mut original_buffer[..original_chunk_len])?;
+        }
+
+        for index in 0..chunk_len {
+            let differs = if index < original_chunk_len {
+                original_buffer[index] != modified_buffer[index]
+            } else {
+                true
+            };
+            if differs {
+                if pending_start.is_none() {
+                    pending_start = Some(absolute);
+                }
+                pending_len = pending_len.checked_add(1).ok_or_else(|| {
+                    RomWeaverError::Validation("PPF diff run length overflowed".into())
+                })?;
+                if pending_len == usize::from(u8::MAX) {
+                    let run_start = pending_start.ok_or_else(|| {
+                        RomWeaverError::Validation(
+                            "internal PPF state error: pending run missing start offset".into(),
+                        )
+                    })?;
+                    runs.push(PpfDiffRun {
+                        offset: run_start,
+                        len: u8::MAX,
+                    });
+                    pending_start = None;
+                    pending_len = 0;
+                }
+            } else if pending_len > 0 {
                 let run_start = pending_start.ok_or_else(|| {
                     RomWeaverError::Validation(
                         "internal PPF state error: pending run missing start offset".into(),
                     )
                 })?;
                 runs.push(PpfDiffRun {
-                    offset: run_start as u64,
-                    len: u8::MAX,
+                    offset: run_start,
+                    len: pending_len as u8,
                 });
                 pending_start = None;
                 pending_len = 0;
             }
-        } else if pending_len > 0 {
-            let run_start = pending_start.ok_or_else(|| {
-                RomWeaverError::Validation(
-                    "internal PPF state error: pending run missing start offset".into(),
-                )
-            })?;
-            runs.push(PpfDiffRun {
-                offset: run_start as u64,
-                len: pending_len as u8,
-            });
-            pending_start = None;
-            pending_len = 0;
+            absolute = absolute
+                .checked_add(1)
+                .ok_or_else(|| RomWeaverError::Validation("PPF create offset overflowed".into()))?;
         }
     }
 
@@ -567,7 +724,7 @@ fn collect_ppf_chunk_diff_runs(
             )
         })?;
         runs.push(PpfDiffRun {
-            offset: run_start as u64,
+            offset: run_start,
             len: pending_len as u8,
         });
     }
@@ -673,7 +830,7 @@ fn detect_version(bytes: &[u8]) -> Result<PpfVersion> {
     Ok(version_from_digits)
 }
 
-fn parse_ppf_v1<'a>(bytes: &'a [u8]) -> Result<ParsedPpfPatch<'a>> {
+fn parse_ppf_v1(bytes: &[u8]) -> Result<ParsedPpfPatch> {
     let records = parse_records_v1_v2(bytes, PPF_HEADER_MIN_SIZE, bytes.len())?;
     Ok(ParsedPpfPatch {
         version: PpfVersion::V1,
@@ -683,7 +840,7 @@ fn parse_ppf_v1<'a>(bytes: &'a [u8]) -> Result<ParsedPpfPatch<'a>> {
     })
 }
 
-fn parse_ppf_v2<'a>(bytes: &'a [u8]) -> Result<ParsedPpfPatch<'a>> {
+fn parse_ppf_v2(bytes: &[u8]) -> Result<ParsedPpfPatch> {
     if bytes.len() < PPF2_HEADER_SIZE {
         return Err(RomWeaverError::Validation(
             "PPF2 patch is too small to contain a validation header".into(),
@@ -702,7 +859,7 @@ fn parse_ppf_v2<'a>(bytes: &'a [u8]) -> Result<ParsedPpfPatch<'a>> {
     }
 
     let records = parse_records_v1_v2(bytes, PPF2_HEADER_SIZE, payload_end)?;
-    let expected = Cow::Borrowed(&bytes[60..(60 + PPF_VALIDATION_BLOCK_SIZE)]);
+    let expected = bytes[60..(60 + PPF_VALIDATION_BLOCK_SIZE)].to_vec();
 
     Ok(ParsedPpfPatch {
         version: PpfVersion::V2,
@@ -715,7 +872,7 @@ fn parse_ppf_v2<'a>(bytes: &'a [u8]) -> Result<ParsedPpfPatch<'a>> {
     })
 }
 
-fn parse_ppf_v3<'a>(bytes: &'a [u8]) -> Result<ParsedPpfPatch<'a>> {
+fn parse_ppf_v3(bytes: &[u8]) -> Result<ParsedPpfPatch> {
     if bytes.len() < PPF3_HEADER_BASE_SIZE {
         return Err(RomWeaverError::Validation(
             "PPF3 patch is too small to contain a valid header".into(),
@@ -741,7 +898,7 @@ fn parse_ppf_v3<'a>(bytes: &'a [u8]) -> Result<ParsedPpfPatch<'a>> {
             PPF2_HEADER_SIZE,
             Some(PpfBlockcheck {
                 input_offset,
-                expected: Cow::Borrowed(&bytes[60..(60 + PPF_VALIDATION_BLOCK_SIZE)]),
+                expected: bytes[60..(60 + PPF_VALIDATION_BLOCK_SIZE)].to_vec(),
             }),
         )
     } else {
@@ -768,11 +925,7 @@ fn parse_ppf_v3<'a>(bytes: &'a [u8]) -> Result<ParsedPpfPatch<'a>> {
     })
 }
 
-fn parse_records_v1_v2<'a>(
-    bytes: &'a [u8],
-    mut cursor: usize,
-    end: usize,
-) -> Result<Vec<PpfRecord<'a>>> {
+fn parse_records_v1_v2(bytes: &[u8], mut cursor: usize, end: usize) -> Result<Vec<PpfRecord>> {
     let mut records = Vec::new();
     while cursor < end {
         let header_end = cursor
@@ -799,7 +952,7 @@ fn parse_records_v1_v2<'a>(
 
         records.push(PpfRecord {
             offset,
-            data: Cow::Borrowed(&bytes[cursor..data_end]),
+            data: bytes[cursor..data_end].to_vec(),
             undo_data: None,
         });
         cursor = data_end;
@@ -808,12 +961,12 @@ fn parse_records_v1_v2<'a>(
     Ok(records)
 }
 
-fn parse_records_v3<'a>(
-    bytes: &'a [u8],
+fn parse_records_v3(
+    bytes: &[u8],
     mut cursor: usize,
     end: usize,
     undo_enabled: bool,
-) -> Result<Vec<PpfRecord<'a>>> {
+) -> Result<Vec<PpfRecord>> {
     let mut records = Vec::new();
     while cursor < end {
         let header_end = cursor
@@ -843,7 +996,7 @@ fn parse_records_v3<'a>(
             ));
         }
 
-        let data = Cow::Borrowed(&bytes[cursor..data_end]);
+        let data = bytes[cursor..data_end].to_vec();
         cursor = data_end;
 
         let undo_data = if undo_enabled {
@@ -855,7 +1008,7 @@ fn parse_records_v3<'a>(
                     "PPF3 undo data exceeded patch bounds".into(),
                 ));
             }
-            let undo_data = Cow::Borrowed(&bytes[cursor..undo_end]);
+            let undo_data = bytes[cursor..undo_end].to_vec();
             cursor = undo_end;
             Some(undo_data)
         } else {
@@ -870,6 +1023,200 @@ fn parse_records_v3<'a>(
     }
 
     Ok(records)
+}
+
+fn parse_records_v1_v2_from_path(path: &Path, start: u64, end: u64) -> Result<Vec<PpfRecord>> {
+    let mut file = BufReader::new(File::open(path)?);
+    file.seek(SeekFrom::Start(start))?;
+    let mut cursor = start;
+    let mut records = Vec::new();
+
+    while cursor < end {
+        let remaining = end.saturating_sub(cursor);
+        if remaining < 5 {
+            return Err(RomWeaverError::Validation(
+                "PPF record header exceeded patch bounds".into(),
+            ));
+        }
+
+        let mut header = [0u8; 5];
+        file.read_exact(&mut header)?;
+        cursor = cursor.saturating_add(5);
+        let offset = u64::from(u32::from_le_bytes([
+            header[0], header[1], header[2], header[3],
+        ]));
+        let len = usize::from(header[4]);
+        let len_u64 = u64::try_from(len)
+            .map_err(|_| RomWeaverError::Validation("PPF record length overflowed".into()))?;
+        if cursor.saturating_add(len_u64) > end {
+            return Err(RomWeaverError::Validation(
+                "PPF record data exceeded patch bounds".into(),
+            ));
+        }
+
+        let mut data = vec![0u8; len];
+        file.read_exact(&mut data)?;
+        cursor = cursor.saturating_add(len_u64);
+        records.push(PpfRecord {
+            offset,
+            data,
+            undo_data: None,
+        });
+    }
+
+    Ok(records)
+}
+
+fn parse_records_v3_from_path(
+    path: &Path,
+    start: u64,
+    end: u64,
+    undo_enabled: bool,
+) -> Result<Vec<PpfRecord>> {
+    let mut file = BufReader::new(File::open(path)?);
+    file.seek(SeekFrom::Start(start))?;
+    let mut cursor = start;
+    let mut records = Vec::new();
+
+    while cursor < end {
+        let remaining = end.saturating_sub(cursor);
+        if remaining < 9 {
+            return Err(RomWeaverError::Validation(
+                "PPF3 record header exceeded patch bounds".into(),
+            ));
+        }
+
+        let mut header = [0u8; 9];
+        file.read_exact(&mut header)?;
+        cursor = cursor.saturating_add(9);
+        let offset = u64::from_le_bytes([
+            header[0], header[1], header[2], header[3], header[4], header[5], header[6], header[7],
+        ]);
+        if offset > i64::MAX as u64 {
+            return Err(RomWeaverError::Validation(
+                "PPF3 record offset exceeded supported range".into(),
+            ));
+        }
+        let len = usize::from(header[8]);
+        let len_u64 = u64::try_from(len)
+            .map_err(|_| RomWeaverError::Validation("PPF3 record length overflowed".into()))?;
+        if cursor.saturating_add(len_u64) > end {
+            return Err(RomWeaverError::Validation(
+                "PPF3 record data exceeded patch bounds".into(),
+            ));
+        }
+
+        let mut data = vec![0u8; len];
+        file.read_exact(&mut data)?;
+        cursor = cursor.saturating_add(len_u64);
+
+        let undo_data = if undo_enabled {
+            if cursor.saturating_add(len_u64) > end {
+                return Err(RomWeaverError::Validation(
+                    "PPF3 undo data exceeded patch bounds".into(),
+                ));
+            }
+            let mut undo = vec![0u8; len];
+            file.read_exact(&mut undo)?;
+            cursor = cursor.saturating_add(len_u64);
+            Some(undo)
+        } else {
+            None
+        };
+
+        records.push(PpfRecord {
+            offset,
+            data,
+            undo_data,
+        });
+    }
+
+    Ok(records)
+}
+
+fn detect_file_id_len_v2_from_path(path: &Path, file_len: u64) -> Result<usize> {
+    detect_file_id_len_from_footer_magic_path(path, file_len, 4, PPF2_FILE_ID_OVERHEAD, "PPF2")
+}
+
+fn detect_file_id_len_v3_from_path(path: &Path, file_len: u64) -> Result<usize> {
+    let unpadded = detect_file_id_len_from_footer_magic_path(
+        path,
+        file_len,
+        2,
+        PPF3_FILE_ID_OVERHEAD,
+        "PPF3",
+    )?;
+    if unpadded != 0 {
+        return Ok(unpadded);
+    }
+    detect_file_id_len_from_footer_magic_path(
+        path,
+        file_len,
+        4,
+        PPF3_FILE_ID_PADDED_OVERHEAD,
+        "PPF3",
+    )
+}
+
+fn detect_file_id_len_from_footer_magic_path(
+    path: &Path,
+    file_len: u64,
+    length_size: usize,
+    overhead: usize,
+    label: &str,
+) -> Result<usize> {
+    let minimum = length_size
+        .checked_add(FILE_ID_TRAILER_MAGIC.len())
+        .ok_or_else(|| RomWeaverError::Validation("file_id footer size overflowed".into()))?;
+    if file_len < minimum as u64 {
+        return Ok(0);
+    }
+
+    let magic_offset = file_len
+        .checked_sub(minimum as u64)
+        .ok_or_else(|| RomWeaverError::Validation("file_id footer offset overflowed".into()))?;
+    let mut file = File::open(path)?;
+    file.seek(SeekFrom::Start(magic_offset))?;
+    let mut footer = vec![0u8; minimum];
+    file.read_exact(&mut footer)?;
+    if &footer[..FILE_ID_TRAILER_MAGIC.len()] != FILE_ID_TRAILER_MAGIC {
+        return Ok(0);
+    }
+
+    let id_len = match length_size {
+        2 => usize::from(u16::from_le_bytes([
+            footer[minimum - 2],
+            footer[minimum - 1],
+        ])),
+        4 => usize::try_from(u32::from_le_bytes([
+            footer[minimum - 4],
+            footer[minimum - 3],
+            footer[minimum - 2],
+            footer[minimum - 1],
+        ]))
+        .map_err(|_| {
+            RomWeaverError::Validation(format!("{label} file_id length exceeded platform limits"))
+        })?,
+        _ => {
+            return Err(RomWeaverError::Validation(
+                "unsupported file_id length field width".into(),
+            ));
+        }
+    };
+
+    let total = id_len
+        .checked_add(overhead)
+        .ok_or_else(|| RomWeaverError::Validation(format!("{label} file_id size overflowed")))?;
+    if u64::try_from(total)
+        .ok()
+        .is_none_or(|total_u64| total_u64 > file_len)
+    {
+        return Err(RomWeaverError::Validation(format!(
+            "{label} file_id length exceeded patch size"
+        )));
+    }
+
+    Ok(total)
 }
 
 fn detect_file_id_len_v2(bytes: &[u8], payload_start: usize) -> Result<usize> {
@@ -1031,7 +1378,7 @@ fn rfind_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
         .rposition(|window| window == needle)
 }
 
-fn validate_blockcheck(input_path: &Path, blockcheck: &PpfBlockcheck<'_>) -> Result<()> {
+fn validate_blockcheck(input_path: &Path, blockcheck: &PpfBlockcheck) -> Result<()> {
     let mut input = File::open(input_path)?;
     input.seek(SeekFrom::Start(blockcheck.input_offset))?;
 
@@ -1047,7 +1394,7 @@ fn validate_blockcheck(input_path: &Path, blockcheck: &PpfBlockcheck<'_>) -> Res
         }
     })?;
 
-    if actual != blockcheck.expected.as_ref() {
+    if actual.as_slice() != blockcheck.expected.as_slice() {
         return Err(RomWeaverError::Validation(
             "PPF binblock/patchvalidation failed".into(),
         ));
@@ -1056,7 +1403,7 @@ fn validate_blockcheck(input_path: &Path, blockcheck: &PpfBlockcheck<'_>) -> Res
     Ok(())
 }
 
-fn should_apply_undo_data(file: &mut File, records: &[PpfRecord<'_>]) -> Result<bool> {
+fn should_apply_undo_data(file: &mut File, records: &[PpfRecord]) -> Result<bool> {
     let Some(first_record) = records.first() else {
         return Ok(false);
     };
@@ -1073,10 +1420,10 @@ fn should_apply_undo_data(file: &mut File, records: &[PpfRecord<'_>]) -> Result<
         return Err(error.into());
     }
 
-    Ok(current_bytes == first_record.data.as_ref())
+    Ok(current_bytes.as_slice() == first_record.data.as_slice())
 }
 
-fn apply_records(file: &mut File, records: &[PpfRecord<'_>], use_undo_data: bool) -> Result<()> {
+fn apply_records(file: &mut File, records: &[PpfRecord], use_undo_data: bool) -> Result<()> {
     for record in records {
         file.seek(SeekFrom::Start(record.offset))?;
         let payload = if use_undo_data {
@@ -1090,7 +1437,7 @@ fn apply_records(file: &mut File, records: &[PpfRecord<'_>], use_undo_data: bool
 }
 
 fn prepare_ppf_writes_parallel(
-    records: &[PpfRecord<'_>],
+    records: &[PpfRecord],
     use_undo_data: bool,
     pool: &SharedThreadPool,
     context: &OperationContext,

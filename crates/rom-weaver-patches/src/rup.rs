@@ -308,8 +308,121 @@ struct CreatedRupPatch {
 }
 
 fn parse_rup_file(path: &Path) -> Result<ParsedRupPatch> {
-    let bytes = crate::map_file_read_only_with_fallback(path)?;
-    parse_rup_bytes(bytes.as_ref())
+    let file_len = fs::metadata(path)?.len();
+    if file_len < RUP_HEADER_SIZE as u64 {
+        return Err(RomWeaverError::Validation(
+            "RUP patch is too small to contain a valid header".into(),
+        ));
+    }
+
+    let mut parser = RupFileParser::new(BufReader::new(File::open(path)?), file_len);
+    if parser.read_exact(RUP_MAGIC.len())?.as_slice() != RUP_MAGIC {
+        return Err(RomWeaverError::Validation("Patch header invalid".into()));
+    }
+
+    let _metadata = RupMetadata {
+        text_encoding: parser.read_u8()?,
+        author: parser.read_fixed_string(AUTHOR_LEN)?,
+        version: parser.read_fixed_string(VERSION_LEN)?,
+        title: parser.read_fixed_string(TITLE_LEN)?,
+        genre: parser.read_fixed_string(GENRE_LEN)?,
+        language: parser.read_fixed_string(LANGUAGE_LEN)?,
+        date: parser.read_fixed_string(DATE_LEN)?,
+        web: parser.read_fixed_string(WEB_LEN)?,
+        description: parser
+            .read_fixed_string(DESCRIPTION_LEN)?
+            .replace(r"\n", "\n"),
+    };
+
+    if parser.offset != RUP_HEADER_SIZE as u64 {
+        return Err(RomWeaverError::Validation(
+            "RUP header size validation failed".into(),
+        ));
+    }
+
+    let mut files = Vec::new();
+    let mut next_file: Option<RupFile> = None;
+    let mut found_end = false;
+
+    while !parser.is_at_end() {
+        let command = parser.read_u8()?;
+        match command {
+            RUP_COMMAND_OPEN_NEW_FILE => {
+                if let Some(file) = next_file.take() {
+                    files.push(file);
+                }
+
+                let file_name_len = usize_from_u64(parser.read_vlv()?, "RUP file name length")?;
+                let file_name = parser.read_fixed_string(file_name_len)?;
+                let rom_type = parser.read_u8()?;
+                let source_file_size = parser.read_vlv()?;
+                let target_file_size = parser.read_vlv()?;
+                let source_md5 = parser.read_u128_md5()?;
+                let target_md5 = parser.read_u128_md5()?;
+
+                let mut overflow_mode = None;
+                let mut overflow_data = Vec::new();
+                if source_file_size != target_file_size {
+                    let mode_byte = parser.read_u8()?;
+                    overflow_mode = Some(match mode_byte {
+                        b'A' => RupOverflowMode::Append,
+                        b'M' => RupOverflowMode::Minify,
+                        _ => {
+                            return Err(RomWeaverError::Validation(
+                                "RUP patch contains an invalid overflow mode".into(),
+                            ));
+                        }
+                    });
+                    let overflow_len = usize_from_u64(parser.read_vlv()?, "RUP overflow length")?;
+                    overflow_data = parser.read_exact(overflow_len)?;
+                }
+
+                next_file = Some(RupFile {
+                    file_name,
+                    rom_type,
+                    source_file_size,
+                    target_file_size,
+                    source_md5,
+                    target_md5,
+                    overflow_mode,
+                    overflow_data,
+                    records: Vec::new(),
+                });
+            }
+            RUP_COMMAND_XOR_RECORD => {
+                let Some(file) = next_file.as_mut() else {
+                    return Err(RomWeaverError::Validation(
+                        "RUP patch contains an XOR record before any file header".into(),
+                    ));
+                };
+
+                let offset = parser.read_vlv()?;
+                let xor_len = usize_from_u64(parser.read_vlv()?, "RUP XOR record length")?;
+                let xor = parser.read_exact(xor_len)?;
+                file.records.push(RupRecord { offset, xor });
+            }
+            RUP_COMMAND_END => {
+                if let Some(file) = next_file.take() {
+                    files.push(file);
+                }
+                found_end = true;
+                break;
+            }
+            _ => {
+                return Err(RomWeaverError::Validation(
+                    "RUP patch contains an invalid command".into(),
+                ));
+            }
+        }
+    }
+
+    if !found_end {
+        return Err(RomWeaverError::Validation(
+            "RUP patch is missing the end command".into(),
+        ));
+    }
+
+    Ok(ParsedRupPatch { files })
 }
 
 fn parse_rup_bytes(bytes: &[u8]) -> Result<ParsedRupPatch> {
@@ -869,39 +982,30 @@ fn create_rup_patch_parallel(
     modified_path: &Path,
     pool: &SharedThreadPool,
 ) -> Result<CreatedRupPatch> {
-    let original = crate::map_file_read_only_with_fallback(original_path)?;
-    let modified = crate::map_file_read_only_with_fallback(modified_path)?;
-    let original = original.as_slice();
-    let modified = modified.as_slice();
+    let source_file_size = fs::metadata(original_path)?.len();
+    let target_file_size = fs::metadata(modified_path)?.len();
+    let shared_len = min(source_file_size, target_file_size);
+    let records = collect_rup_records_parallel(
+        original_path,
+        source_file_size,
+        modified_path,
+        target_file_size,
+        shared_len,
+        pool,
+    )?;
 
-    let source_file_size = u64::try_from(original.len())
-        .map_err(|_| RomWeaverError::Validation("RUP source size exceeded u64".into()))?;
-    let target_file_size = u64::try_from(modified.len())
-        .map_err(|_| RomWeaverError::Validation("RUP target size exceeded u64".into()))?;
-    let shared_len = min(original.len(), modified.len());
-    let records =
-        collect_rup_records_parallel(&original[..shared_len], &modified[..shared_len], pool);
+    let source_md5 = md5_file(original_path)?;
+    let target_md5 = md5_file(modified_path)?;
 
-    let source_md5: [u8; 16] = Md5::digest(original).into();
-    let target_md5: [u8; 16] = Md5::digest(modified).into();
-
-    let (overflow_mode, overflow_data) = if original.len() < modified.len() {
+    let (overflow_mode, overflow_data) = if source_file_size < target_file_size {
         (
             Some(RupOverflowMode::Append),
-            modified[original.len()..]
-                .iter()
-                .copied()
-                .map(|byte| byte ^ 0xff)
-                .collect::<Vec<_>>(),
+            read_xor_suffix(modified_path, source_file_size)?,
         )
-    } else if original.len() > modified.len() {
+    } else if source_file_size > target_file_size {
         (
             Some(RupOverflowMode::Minify),
-            original[modified.len()..]
-                .iter()
-                .copied()
-                .map(|byte| byte ^ 0xff)
-                .collect::<Vec<_>>(),
+            read_xor_suffix(original_path, target_file_size)?,
         )
     } else {
         (None, Vec::new())
@@ -932,20 +1036,22 @@ fn create_rup_patch_parallel(
 }
 
 fn collect_rup_records_parallel(
-    source: &[u8],
-    target: &[u8],
+    source_path: &Path,
+    source_size: u64,
+    target_path: &Path,
+    target_size: u64,
+    shared_len: u64,
     pool: &SharedThreadPool,
-) -> Vec<RupRecord> {
-    if target.is_empty() {
-        return Vec::new();
+) -> Result<Vec<RupRecord>> {
+    if shared_len == 0 {
+        return Ok(Vec::new());
     }
 
-    let chunk_ranges = (0..target.len())
+    let chunk_size = CREATE_THREAD_SCAN_CHUNK_BYTES as u64;
+    let chunk_ranges = (0..shared_len)
         .step_by(CREATE_THREAD_SCAN_CHUNK_BYTES)
         .map(|start| {
-            let end = start
-                .saturating_add(CREATE_THREAD_SCAN_CHUNK_BYTES)
-                .min(target.len());
+            let end = start.saturating_add(chunk_size).min(shared_len);
             start..end
         })
         .collect::<Vec<_>>();
@@ -953,12 +1059,22 @@ fn collect_rup_records_parallel(
     let per_chunk = pool.install(|| {
         chunk_ranges
             .into_par_iter()
-            .map(|range| collect_rup_chunk_records(source, target, range.start, range.end))
+            .map(|range| {
+                collect_rup_chunk_records(
+                    source_path,
+                    source_size,
+                    target_path,
+                    target_size,
+                    range.start,
+                    range.end,
+                )
+            })
             .collect::<Vec<_>>()
     });
 
     let mut merged: Vec<RupRecord> = Vec::new();
     for runs in per_chunk {
+        let runs = runs?;
         for mut run in runs {
             if let Some(last) = merged.last_mut() {
                 let last_len = u64::try_from(last.xor.len()).expect("len fits u64");
@@ -974,45 +1090,89 @@ fn collect_rup_records_parallel(
             merged.push(run);
         }
     }
-    merged
+    Ok(merged)
 }
 
 fn collect_rup_chunk_records(
-    source: &[u8],
-    target: &[u8],
-    start: usize,
-    end: usize,
-) -> Vec<RupRecord> {
-    let mut records = Vec::new();
-    let mut pending_start: Option<usize> = None;
-    let mut pending_xor = Vec::<u8>::new();
+    source_path: &Path,
+    source_size: u64,
+    target_path: &Path,
+    _target_size: u64,
+    start: u64,
+    end: u64,
+) -> Result<Vec<RupRecord>> {
+    let mut source = File::open(source_path)?;
+    let mut target = File::open(target_path)?;
+    if start < source_size {
+        source.seek(SeekFrom::Start(start))?;
+    }
+    target.seek(SeekFrom::Start(start))?;
 
-    for index in start..end {
-        let source_byte = source[index];
-        let target_byte = target[index];
-        if source_byte != target_byte {
-            if pending_start.is_none() {
-                pending_start = Some(index);
+    let mut source_buffer = vec![0u8; RUP_IO_BUFFER_SIZE];
+    let mut target_buffer = vec![0u8; RUP_IO_BUFFER_SIZE];
+    let mut records = Vec::new();
+    let mut pending_start: Option<u64> = None;
+    let mut pending_xor = Vec::<u8>::new();
+    let mut absolute = start;
+
+    while absolute < end {
+        let chunk_len = usize::try_from((end - absolute).min(RUP_IO_BUFFER_SIZE as u64))
+            .map_err(|_| RomWeaverError::Validation("RUP chunk length exceeded usize".into()))?;
+        let source_chunk_len = usize::try_from((source_size - absolute).min(chunk_len as u64))
+            .map_err(|_| {
+                RomWeaverError::Validation("RUP source chunk length exceeded usize".into())
+            })?;
+        source.read_exact(&mut source_buffer[..source_chunk_len])?;
+        target.read_exact(&mut target_buffer[..chunk_len])?;
+        if source_chunk_len < chunk_len {
+            source_buffer[source_chunk_len..chunk_len].fill(0);
+        }
+
+        for index in 0..chunk_len {
+            let source_byte = source_buffer[index];
+            let target_byte = target_buffer[index];
+            if source_byte != target_byte {
+                if pending_start.is_none() {
+                    pending_start = Some(absolute);
+                }
+                pending_xor.push(source_byte ^ target_byte);
+            } else if !pending_xor.is_empty() {
+                let offset = pending_start.expect("pending start exists");
+                records.push(RupRecord {
+                    offset,
+                    xor: std::mem::take(&mut pending_xor),
+                });
+                pending_start = None;
             }
-            pending_xor.push(source_byte ^ target_byte);
-        } else if !pending_xor.is_empty() {
-            let offset = pending_start.expect("pending start exists");
-            records.push(RupRecord {
-                offset: offset as u64,
-                xor: std::mem::take(&mut pending_xor),
-            });
-            pending_start = None;
+            absolute = absolute
+                .checked_add(1)
+                .ok_or_else(|| RomWeaverError::Validation("RUP scan offset overflowed".into()))?;
         }
     }
 
     if !pending_xor.is_empty() {
         let offset = pending_start.expect("pending start exists");
         records.push(RupRecord {
-            offset: offset as u64,
+            offset,
             xor: pending_xor,
         });
     }
-    records
+    Ok(records)
+}
+
+fn read_xor_suffix(path: &Path, offset: u64) -> Result<Vec<u8>> {
+    let mut file = BufReader::new(File::open(path)?);
+    file.seek(SeekFrom::Start(offset))?;
+    let mut buffer = vec![0u8; RUP_IO_BUFFER_SIZE];
+    let mut output = Vec::new();
+    loop {
+        let read = file.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        output.extend(buffer[..read].iter().copied().map(|byte| byte ^ 0xff));
+    }
+    Ok(output)
 }
 
 #[cfg(test)]
@@ -1212,6 +1372,86 @@ fn civil_from_days(days_since_epoch: i64) -> (i32, u32, u32) {
         year += 1;
     }
     (year, month, day)
+}
+
+struct RupFileParser<R> {
+    reader: R,
+    file_len: u64,
+    offset: u64,
+}
+
+impl<R: Read> RupFileParser<R> {
+    fn new(reader: R, file_len: u64) -> Self {
+        Self {
+            reader,
+            file_len,
+            offset: 0,
+        }
+    }
+
+    fn is_at_end(&self) -> bool {
+        self.offset == self.file_len
+    }
+
+    fn read_exact(&mut self, len: usize) -> Result<Vec<u8>> {
+        let len_u64 = u64::try_from(len)
+            .map_err(|_| RomWeaverError::Validation("RUP parser length overflowed".into()))?;
+        let next = self
+            .offset
+            .checked_add(len_u64)
+            .ok_or_else(|| RomWeaverError::Validation("RUP parser offset overflowed".into()))?;
+        if next > self.file_len {
+            return Err(RomWeaverError::Validation(
+                "RUP patch ended unexpectedly while reading data".into(),
+            ));
+        }
+
+        let mut bytes = vec![0u8; len];
+        self.reader.read_exact(&mut bytes)?;
+        self.offset = next;
+        Ok(bytes)
+    }
+
+    fn read_u8(&mut self) -> Result<u8> {
+        Ok(self.read_exact(1)?[0])
+    }
+
+    fn read_vlv(&mut self) -> Result<u64> {
+        let encoded_len = usize::from(self.read_u8()?);
+        if encoded_len > 8 {
+            return Err(RomWeaverError::Validation(
+                "RUP VLV length exceeded 64-bit range".into(),
+            ));
+        }
+
+        let mut value = 0u64;
+        for index in 0..encoded_len {
+            let byte = u64::from(self.read_u8()?);
+            let shift = (index * 8) as u32;
+            value |= byte << shift;
+        }
+
+        Ok(value)
+    }
+
+    fn read_fixed_string(&mut self, len: usize) -> Result<String> {
+        let bytes = self.read_exact(len)?;
+        let trimmed_len = bytes
+            .iter()
+            .position(|byte| *byte == 0)
+            .unwrap_or(bytes.len());
+        Ok(bytes[..trimmed_len]
+            .iter()
+            .map(|byte| char::from(*byte))
+            .collect())
+    }
+
+    fn read_u128_md5(&mut self) -> Result<[u8; 16]> {
+        let raw = self.read_exact(16)?;
+        let mut value = [0u8; 16];
+        value.copy_from_slice(&raw);
+        Ok(value)
+    }
 }
 
 struct RupParser<'a> {

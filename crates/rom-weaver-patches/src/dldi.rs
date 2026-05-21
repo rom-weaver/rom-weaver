@@ -1,10 +1,15 @@
-use std::{fs, path::Path};
+use std::{
+    fs::{self, OpenOptions},
+    io::{Read, Seek, SeekFrom, Write},
+    path::Path,
+};
 
-use rayon::{join, prelude::*};
+use rayon::join;
 use rom_weaver_core::{
+    BlockCacheReader, DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES,
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
     PatchCapabilities, PatchCreateRequest, PatchHandler, ProbeConfidence, Result, RomWeaverError,
-    SharedThreadPool, ThreadCapability,
+    ThreadCapability,
 };
 
 const DLDI_VERSION: u8 = 1;
@@ -62,8 +67,7 @@ impl PatchHandler for DldiPatchHandler {
     }
 
     fn parse(&self, patch_path: &Path, _context: &OperationContext) -> Result<OperationReport> {
-        let patch = crate::map_file_read_only(patch_path)?;
-        let header = parse_dldi_bytes(patch.as_ref(), "DLDI patch")?;
+        let header = parse_dldi_header_from_path(patch_path, "DLDI patch", false)?;
 
         Ok(OperationReport::succeeded(
             OperationFamily::Patch,
@@ -84,27 +88,37 @@ impl PatchHandler for DldiPatchHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
-        let patch = crate::map_file_read_only(patch_path)?;
-        let input = crate::map_file_read_only(&request.input)?;
-        let (execution, pool) = context.build_pool(dldi_apply_thread_capability(input.len()))?;
-        let apply = match apply_dldi_patch(input.as_ref(), patch.as_ref(), &pool, &execution) {
-            Ok(apply) => apply,
-            Err(RomWeaverError::Validation(message)) if message == INPUT_NO_DLDI_SLOT_MESSAGE => {
-                return Ok(OperationReport::unsupported(
-                    OperationFamily::Patch,
-                    Some(self.descriptor.name.to_string()),
-                    "apply",
-                    message,
-                    Some(execution),
-                ));
-            }
-            Err(error) => return Err(error),
-        };
+        let patch_header = parse_dldi_header_from_path(patch_path, "DLDI patch", true)?;
+        let patch_file_len = fs::metadata(patch_path)?.len();
+        let patch_read_len = usize::try_from(
+            patch_file_len.min(u64::try_from(patch_header.driver_size_bytes).unwrap_or(u64::MAX)),
+        )
+        .map_err(|_| RomWeaverError::Validation("DLDI patch length exceeded usize".into()))?;
+        let patch = read_dldi_range_from_path(patch_path, 0, patch_read_len)?;
+        let input_len = fs::metadata(&request.input)?.len();
+        let input_len_usize = usize::try_from(input_len).unwrap_or(usize::MAX);
+        let (execution, _pool) =
+            context.build_pool(dldi_apply_thread_capability(input_len_usize))?;
+        let apply =
+            match apply_dldi_patch_to_file(&request.input, &request.output, &patch, input_len) {
+                Ok(apply) => apply,
+                Err(RomWeaverError::Validation(message))
+                    if message == INPUT_NO_DLDI_SLOT_MESSAGE =>
+                {
+                    return Ok(OperationReport::unsupported(
+                        OperationFamily::Patch,
+                        Some(self.descriptor.name.to_string()),
+                        "apply",
+                        message,
+                        Some(execution),
+                    ));
+                }
+                Err(error) => return Err(error),
+            };
 
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
         }
-        fs::write(&request.output, &apply.output)?;
 
         let mut label = format!(
             "applied {} driver `{}` over `{}` at 0x{:08X}",
@@ -130,24 +144,27 @@ impl PatchHandler for DldiPatchHandler {
         request: &PatchCreateRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        let original = crate::map_file_read_only(&request.original)?;
-        let modified = crate::map_file_read_only(&request.modified)?;
+        let original_len = fs::metadata(&request.original)?.len();
+        let modified_len = fs::metadata(&request.modified)?.len();
+        let original_len_usize = usize::try_from(original_len).unwrap_or(usize::MAX);
+        let modified_len_usize = usize::try_from(modified_len).unwrap_or(usize::MAX);
         let (execution, pool) = context.build_pool(dldi_create_thread_capability(
-            original.len(),
-            modified.len(),
+            original_len_usize,
+            modified_len_usize,
         ))?;
 
         let (original_slot, modified_slot) = if execution.used_parallelism {
-            pool.install(|| {
+            let (left, right) = pool.install(|| {
                 join(
-                    || find_dldi_slot(original.as_ref()),
-                    || find_dldi_slot(modified.as_ref()),
+                    || find_dldi_slot_in_path(&request.original),
+                    || find_dldi_slot_in_path(&request.modified),
                 )
-            })
+            });
+            (left?, right?)
         } else {
             (
-                find_dldi_slot(original.as_ref()),
-                find_dldi_slot(modified.as_ref()),
+                find_dldi_slot_in_path(&request.original)?,
+                find_dldi_slot_in_path(&request.modified)?,
             )
         };
 
@@ -169,29 +186,36 @@ impl PatchHandler for DldiPatchHandler {
         }
 
         let modified_header =
-            parse_dldi_at(modified.as_ref(), modified_slot, "modified DLDI section")?;
+            read_dldi_header_for_apply_from_path(&request.modified, modified_slot, modified_len)?;
         let modified_slot_end = modified_slot
             .checked_add(modified_header.driver_size_bytes)
             .ok_or_else(|| {
                 RomWeaverError::Validation("modified DLDI section range overflowed".into())
             })?;
-        if modified_slot_end > modified.len() {
+        if u64::try_from(modified_slot_end)
+            .ok()
+            .is_none_or(|end| end > modified_len)
+        {
             return Err(RomWeaverError::Validation(
                 "modified DLDI section exceeded input length".into(),
             ));
         }
 
-        let patch_bytes = modified[modified_slot..modified_slot_end].to_vec();
+        let patch_bytes = read_dldi_range_from_path(
+            &request.modified,
+            modified_slot,
+            modified_header.driver_size_bytes,
+        )?;
         parse_dldi_bytes(&patch_bytes, "generated DLDI patch")?;
 
         // DLDI create is defined as extracting the relocated driver bytes from `modified`.
         // Validate determinism by replaying that patch against `original`.
-        let replay = apply_dldi_patch(original.as_ref(), &patch_bytes, &pool, &execution)?;
-        let replay_matches = if execution.used_parallelism {
-            bytes_equal_parallel(replay.output.as_slice(), modified.as_slice(), &pool)
-        } else {
-            replay.output == modified.as_slice()
-        };
+        let replay_path = context
+            .temp_paths()
+            .next_path("dldi-create-replay", Some("bin"));
+        apply_dldi_patch_to_file(&request.original, &replay_path, &patch_bytes, original_len)?;
+        let replay_matches = files_equal(&replay_path, &request.modified)?;
+        let _ = fs::remove_file(&replay_path);
         if !replay_matches {
             return Err(RomWeaverError::Validation(
                 "modified input is not representable as a pure DLDI patch over original".into(),
@@ -242,25 +266,161 @@ struct DldiHeader {
 
 #[derive(Debug)]
 struct DldiApplyOutput {
-    output: Vec<u8>,
     patch_offset: usize,
     old_driver: String,
     new_driver: String,
     warnings: Vec<String>,
 }
 
-fn parse_dldi_at(bytes: &[u8], start: usize, label: &str) -> Result<DldiHeader> {
-    if start >= bytes.len() {
+fn apply_dldi_patch_to_file(
+    input_path: &Path,
+    output_path: &Path,
+    patch: &[u8],
+    input_len: u64,
+) -> Result<DldiApplyOutput> {
+    let patch_header = parse_dldi_bytes_for_apply(patch, "DLDI patch")?;
+    let mut input_reader = BlockCacheReader::open(
+        input_path,
+        DEFAULT_BLOCK_CACHE_SIZE_BYTES,
+        DEFAULT_BLOCK_CACHE_MAX_BLOCKS,
+    )?;
+    let patch_offset = find_dldi_slot_in_reader(&mut input_reader, input_len)?
+        .ok_or_else(|| RomWeaverError::Validation(INPUT_NO_DLDI_SLOT_MESSAGE.into()))?;
+    let patch_offset_u64 = u64::try_from(patch_offset)
+        .map_err(|_| RomWeaverError::Validation("DLDI slot offset exceeded u64".into()))?;
+    let available_len = input_len.saturating_sub(patch_offset_u64);
+    let available_len_usize = usize::try_from(available_len)
+        .map_err(|_| RomWeaverError::Validation("input DLDI section exceeded usize".into()))?;
+
+    let header_len = usize::try_from(available_len.min(DO_CODE as u64))
+        .map_err(|_| RomWeaverError::Validation("DLDI header length exceeded usize".into()))?;
+    let mut header_bytes = vec![0u8; header_len];
+    if header_len > 0 {
+        input_reader.read_exact_at(patch_offset_u64, &mut header_bytes)?;
+    }
+    let existing_header = parse_dldi_bytes_for_apply(&header_bytes, "input DLDI section")?;
+    if existing_header.driver_size_bytes > available_len_usize {
         return Err(RomWeaverError::Validation(format!(
-            "{label} offset is outside file bounds"
+            "input DLDI section declares {} byte(s), but only {} byte(s) are available",
+            existing_header.driver_size_bytes, available_len_usize
         )));
     }
-    parse_dldi_bytes(
-        bytes.get(start..).ok_or_else(|| {
-            RomWeaverError::Validation(format!("{label} offset is outside file bounds"))
-        })?,
-        label,
-    )
+
+    let mut warnings = Vec::new();
+    if patch_header.driver_size_log2 > existing_header.allocated_space_log2 {
+        let available = size_from_log2(existing_header.allocated_space_log2, "input DLDI space")?;
+        warnings.push(format!(
+            "not enough space for DLDI patch (available {available} byte(s), need {} byte(s))",
+            patch_header.driver_size_bytes
+        ));
+    }
+
+    let patch_len_u64 = u64::try_from(patch_header.driver_size_bytes)
+        .map_err(|_| RomWeaverError::Validation("DLDI patch length exceeded u64".into()))?;
+    let patch_end = patch_offset_u64
+        .checked_add(patch_len_u64)
+        .ok_or_else(|| RomWeaverError::Validation("DLDI patch range overflowed".into()))?;
+    if patch_end > input_len {
+        warnings.push(format!(
+            "input file ended before the DLDI patch slot; extending output from {} to {} byte(s)",
+            input_len, patch_end
+        ));
+    }
+
+    if let Some(parent) = output_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::copy(input_path, output_path)?;
+    let mut output = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(output_path)?;
+    output.set_len(patch_end.max(input_len))?;
+
+    let mut slot = vec![0u8; patch_header.driver_size_bytes];
+    let existing_slot_len = available_len_usize.min(patch_header.driver_size_bytes);
+    if existing_slot_len > 0 {
+        input_reader.read_exact_at(patch_offset_u64, &mut slot[..existing_slot_len])?;
+    }
+
+    let patch_copy_len = patch.len().min(patch_header.driver_size_bytes);
+    slot[..patch_copy_len].copy_from_slice(&patch[..patch_copy_len]);
+    slot[DO_ALLOCATED_SPACE] = existing_header.allocated_space_log2;
+
+    let mut mem_offset = existing_header.text_start;
+    if mem_offset == 0 {
+        mem_offset = read_addr_i32(&slot, DO_STARTUP)?
+            .checked_sub(DO_CODE_I32)
+            .ok_or_else(|| {
+                RomWeaverError::Validation(
+                    "DLDI startup pointer underflowed while deriving memory offset".into(),
+                )
+            })?;
+    }
+
+    let relocation = i64::from(mem_offset) - i64::from(patch_header.text_start);
+    relocate_header_pointers(&mut slot, relocation)?;
+
+    let ddmem_start = i64::from(patch_header.text_start);
+    let ddmem_end = ddmem_start
+        .checked_add(i64::try_from(patch_header.driver_size_bytes).map_err(|_| {
+            RomWeaverError::Validation("DLDI driver size exceeded 64-bit range".into())
+        })?)
+        .ok_or_else(|| RomWeaverError::Validation("DLDI address range overflowed".into()))?;
+
+    if patch_header.fix_sections & FIX_ALL != 0 {
+        relocate_pointer_range(
+            &mut slot,
+            patch,
+            DO_TEXT_START,
+            DO_DATA_END,
+            ddmem_start,
+            ddmem_end,
+            relocation,
+            "DLDI text/data",
+        )?;
+    }
+
+    if patch_header.fix_sections & FIX_GLUE != 0 {
+        relocate_pointer_range(
+            &mut slot,
+            patch,
+            DO_GLUE_START,
+            DO_GLUE_END,
+            ddmem_start,
+            ddmem_end,
+            relocation,
+            "DLDI interwork glue",
+        )?;
+    }
+
+    if patch_header.fix_sections & FIX_GOT != 0 {
+        relocate_pointer_range(
+            &mut slot,
+            patch,
+            DO_GOT_START,
+            DO_GOT_END,
+            ddmem_start,
+            ddmem_end,
+            relocation,
+            "DLDI global offset table",
+        )?;
+    }
+
+    if patch_header.fix_sections & FIX_BSS != 0 {
+        clear_bss(&mut slot, patch, ddmem_start)?;
+    }
+
+    output.seek(SeekFrom::Start(patch_offset_u64))?;
+    output.write_all(&slot)?;
+    output.flush()?;
+
+    Ok(DldiApplyOutput {
+        patch_offset,
+        old_driver: existing_header.friendly_name,
+        new_driver: patch_header.friendly_name,
+        warnings,
+    })
 }
 
 fn parse_dldi_bytes(bytes: &[u8], label: &str) -> Result<DldiHeader> {
@@ -269,6 +429,37 @@ fn parse_dldi_bytes(bytes: &[u8], label: &str) -> Result<DldiHeader> {
 
 fn parse_dldi_bytes_for_apply(bytes: &[u8], label: &str) -> Result<DldiHeader> {
     parse_dldi_bytes_with_options(bytes, label, true)
+}
+
+fn parse_dldi_header_from_path(
+    path: &Path,
+    label: &str,
+    allow_truncated_driver_bytes: bool,
+) -> Result<DldiHeader> {
+    let file_len = fs::metadata(path)?.len();
+    let read_len = usize::try_from(file_len.min(DO_CODE as u64))
+        .map_err(|_| RomWeaverError::Validation("DLDI header length exceeded usize".into()))?;
+    let mut reader = BlockCacheReader::open(
+        path,
+        DEFAULT_BLOCK_CACHE_SIZE_BYTES,
+        DEFAULT_BLOCK_CACHE_MAX_BLOCKS,
+    )?;
+    let mut header = vec![0u8; read_len];
+    if read_len > 0 {
+        reader.read_exact_at(0, &mut header)?;
+    }
+    let parsed = parse_dldi_bytes_with_options(&header, label, true)?;
+    if !allow_truncated_driver_bytes
+        && u64::try_from(parsed.driver_size_bytes)
+            .ok()
+            .is_some_and(|declared| declared > file_len)
+    {
+        return Err(RomWeaverError::Validation(format!(
+            "{label} declares {} byte(s), but only {file_len} byte(s) are available",
+            parsed.driver_size_bytes
+        )));
+    }
+    Ok(parsed)
 }
 
 fn parse_dldi_bytes_with_options(
@@ -353,165 +544,6 @@ fn dldi_thread_chunk_count(byte_len: usize) -> usize {
         .saturating_add(THREAD_WORK_CHUNK_BYTES - 1)
         .saturating_div(THREAD_WORK_CHUNK_BYTES)
         .max(1)
-}
-
-fn apply_dldi_patch(
-    input: &[u8],
-    patch: &[u8],
-    pool: &SharedThreadPool,
-    execution: &rom_weaver_core::ThreadExecution,
-) -> Result<DldiApplyOutput> {
-    let patch_header = parse_dldi_bytes_for_apply(patch, "DLDI patch")?;
-    let patch_offset = find_dldi_slot(input)
-        .ok_or_else(|| RomWeaverError::Validation(INPUT_NO_DLDI_SLOT_MESSAGE.into()))?;
-    let mut warnings = Vec::new();
-
-    if patch_offset
-        .checked_add(DO_CODE)
-        .ok_or_else(|| RomWeaverError::Validation("DLDI slot range overflowed".into()))?
-        > input.len()
-    {
-        return Err(RomWeaverError::Validation(
-            "input DLDI section is truncated".into(),
-        ));
-    }
-
-    let existing_header = parse_dldi_at(input, patch_offset, "input DLDI section")?;
-    if patch_header.driver_size_log2 > existing_header.allocated_space_log2 {
-        let available = size_from_log2(existing_header.allocated_space_log2, "input DLDI space")?;
-        warnings.push(format!(
-            "not enough space for DLDI patch (available {available} byte(s), need {} byte(s))",
-            patch_header.driver_size_bytes
-        ));
-    }
-
-    let patch_end = patch_offset
-        .checked_add(patch_header.driver_size_bytes)
-        .ok_or_else(|| RomWeaverError::Validation("DLDI patch range overflowed".into()))?;
-    if patch_end > input.len() {
-        warnings.push(format!(
-            "input file ended before the DLDI patch slot; extending output from {} to {} byte(s)",
-            input.len(),
-            patch_end
-        ));
-    }
-    let output_len = patch_end.max(input.len());
-    let mut output = vec![0u8; output_len];
-    copy_input_bytes(&mut output, input, pool, execution);
-
-    // Keep oversized applies deterministic: legacy dlditool overflow behavior is undefined,
-    // so we copy only available patch bytes and still run full relocation/BSS fixups.
-    let patch_copy_len = patch.len().min(patch_header.driver_size_bytes);
-    output[patch_offset..patch_offset + patch_copy_len].copy_from_slice(&patch[..patch_copy_len]);
-    output[patch_offset + DO_ALLOCATED_SPACE] = existing_header.allocated_space_log2;
-
-    let input_slot = &input[patch_offset..];
-    let mut mem_offset = existing_header.text_start;
-    if mem_offset == 0 {
-        mem_offset = read_addr_i32(input_slot, DO_STARTUP)?
-            .checked_sub(DO_CODE_I32)
-            .ok_or_else(|| {
-                RomWeaverError::Validation(
-                    "DLDI startup pointer underflowed while deriving memory offset".into(),
-                )
-            })?;
-    }
-
-    let relocation = i64::from(mem_offset) - i64::from(patch_header.text_start);
-    let app_slot = &mut output[patch_offset..patch_end];
-    relocate_header_pointers(app_slot, relocation)?;
-
-    let ddmem_start = i64::from(patch_header.text_start);
-    let ddmem_end = ddmem_start
-        .checked_add(i64::try_from(patch_header.driver_size_bytes).map_err(|_| {
-            RomWeaverError::Validation("DLDI driver size exceeded 64-bit range".into())
-        })?)
-        .ok_or_else(|| RomWeaverError::Validation("DLDI address range overflowed".into()))?;
-
-    if patch_header.fix_sections & FIX_ALL != 0 {
-        relocate_pointer_range(
-            app_slot,
-            patch,
-            DO_TEXT_START,
-            DO_DATA_END,
-            ddmem_start,
-            ddmem_end,
-            relocation,
-            "DLDI text/data",
-        )?;
-    }
-
-    if patch_header.fix_sections & FIX_GLUE != 0 {
-        relocate_pointer_range(
-            app_slot,
-            patch,
-            DO_GLUE_START,
-            DO_GLUE_END,
-            ddmem_start,
-            ddmem_end,
-            relocation,
-            "DLDI interwork glue",
-        )?;
-    }
-
-    if patch_header.fix_sections & FIX_GOT != 0 {
-        relocate_pointer_range(
-            app_slot,
-            patch,
-            DO_GOT_START,
-            DO_GOT_END,
-            ddmem_start,
-            ddmem_end,
-            relocation,
-            "DLDI global offset table",
-        )?;
-    }
-
-    if patch_header.fix_sections & FIX_BSS != 0 {
-        clear_bss(app_slot, patch, ddmem_start)?;
-    }
-
-    Ok(DldiApplyOutput {
-        output,
-        patch_offset,
-        old_driver: existing_header.friendly_name,
-        new_driver: patch_header.friendly_name,
-        warnings,
-    })
-}
-
-fn copy_input_bytes(
-    output: &mut [u8],
-    input: &[u8],
-    pool: &SharedThreadPool,
-    execution: &rom_weaver_core::ThreadExecution,
-) {
-    let input_len = input.len();
-    if execution.used_parallelism {
-        pool.install(|| {
-            output[..input_len]
-                .par_chunks_mut(THREAD_WORK_CHUNK_BYTES)
-                .enumerate()
-                .for_each(|(chunk_index, chunk)| {
-                    let start = chunk_index * THREAD_WORK_CHUNK_BYTES;
-                    let end = start + chunk.len();
-                    chunk.copy_from_slice(&input[start..end]);
-                });
-        });
-    } else {
-        output[..input_len].copy_from_slice(input);
-    }
-}
-
-fn bytes_equal_parallel(left: &[u8], right: &[u8], pool: &SharedThreadPool) -> bool {
-    if left.len() != right.len() {
-        return false;
-    }
-    pool.install(|| {
-        left.par_chunks(THREAD_WORK_CHUNK_BYTES)
-            .zip(right.par_chunks(THREAD_WORK_CHUNK_BYTES))
-            .all(|(lhs, rhs)| lhs == rhs)
-    })
 }
 
 fn relocate_header_pointers(slot: &mut [u8], relocation: i64) -> Result<()> {
@@ -657,16 +689,105 @@ fn size_from_log2(log2: u8, label: &str) -> Result<usize> {
     Ok(1usize << shift)
 }
 
-fn find_dldi_slot(input: &[u8]) -> Option<usize> {
-    let search_end = input.len().checked_sub(DLDI_MAGIC.len())?;
-    let mut offset = 0usize;
-    while offset <= search_end {
-        if input[offset..offset + DLDI_MAGIC.len()] == DLDI_MAGIC {
-            return Some(offset);
-        }
-        offset = offset.checked_add(4)?;
+fn find_dldi_slot_in_path(path: &Path) -> Result<Option<usize>> {
+    let input_len = fs::metadata(path)?.len();
+    let mut reader = BlockCacheReader::open(
+        path,
+        DEFAULT_BLOCK_CACHE_SIZE_BYTES,
+        DEFAULT_BLOCK_CACHE_MAX_BLOCKS,
+    )?;
+    find_dldi_slot_in_reader(&mut reader, input_len)
+}
+
+fn read_dldi_header_for_apply_from_path(
+    path: &Path,
+    start: usize,
+    file_len: u64,
+) -> Result<DldiHeader> {
+    let offset = u64::try_from(start)
+        .map_err(|_| RomWeaverError::Validation("DLDI offset exceeded u64".into()))?;
+    if offset >= file_len {
+        return Err(RomWeaverError::Validation(
+            "modified DLDI section offset is outside file bounds".into(),
+        ));
     }
-    None
+    let mut reader = BlockCacheReader::open(
+        path,
+        DEFAULT_BLOCK_CACHE_SIZE_BYTES,
+        DEFAULT_BLOCK_CACHE_MAX_BLOCKS,
+    )?;
+    let read_len = usize::try_from((file_len - offset).min(DO_CODE as u64))
+        .map_err(|_| RomWeaverError::Validation("DLDI header length exceeded usize".into()))?;
+    let mut header = vec![0u8; read_len];
+    reader.read_exact_at(offset, &mut header)?;
+    parse_dldi_bytes_for_apply(&header, "modified DLDI section")
+}
+
+fn read_dldi_range_from_path(path: &Path, start: usize, len: usize) -> Result<Vec<u8>> {
+    let offset = u64::try_from(start)
+        .map_err(|_| RomWeaverError::Validation("DLDI offset exceeded u64".into()))?;
+    let mut reader = BlockCacheReader::open(
+        path,
+        DEFAULT_BLOCK_CACHE_SIZE_BYTES,
+        DEFAULT_BLOCK_CACHE_MAX_BLOCKS,
+    )?;
+    let mut bytes = vec![0u8; len];
+    reader.read_exact_at(offset, &mut bytes)?;
+    Ok(bytes)
+}
+
+fn files_equal(left: &Path, right: &Path) -> Result<bool> {
+    let left_len = fs::metadata(left)?.len();
+    let right_len = fs::metadata(right)?.len();
+    if left_len != right_len {
+        return Ok(false);
+    }
+
+    let mut left_file = fs::File::open(left)?;
+    let mut right_file = fs::File::open(right)?;
+    let mut left_buffer = [0u8; 64 * 1024];
+    let mut right_buffer = [0u8; 64 * 1024];
+    loop {
+        let left_read = left_file.read(&mut left_buffer)?;
+        let right_read = right_file.read(&mut right_buffer)?;
+        if left_read != right_read {
+            return Ok(false);
+        }
+        if left_read == 0 {
+            break;
+        }
+        if left_buffer[..left_read] != right_buffer[..right_read] {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+fn find_dldi_slot_in_reader(
+    reader: &mut BlockCacheReader,
+    input_len: u64,
+) -> Result<Option<usize>> {
+    let magic_len = u64::try_from(DLDI_MAGIC.len())
+        .map_err(|_| RomWeaverError::Validation("DLDI magic length exceeded u64".into()))?;
+    if input_len < magic_len {
+        return Ok(None);
+    }
+    let search_end = input_len - magic_len;
+    let mut offset = 0u64;
+    let mut probe = [0u8; DLDI_MAGIC.len()];
+    while offset <= search_end {
+        reader.read_exact_at(offset, &mut probe)?;
+        if probe == DLDI_MAGIC {
+            let slot = usize::try_from(offset).map_err(|_| {
+                RomWeaverError::Validation("DLDI slot offset exceeded usize".into())
+            })?;
+            return Ok(Some(slot));
+        }
+        offset = offset
+            .checked_add(4)
+            .ok_or_else(|| RomWeaverError::Validation("DLDI slot scan overflowed".into()))?;
+    }
+    Ok(None)
 }
 
 #[cfg(test)]

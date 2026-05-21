@@ -6,6 +6,7 @@ rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
+bzip2.workspace = true
 crc32fast.workspace = true
 md-5.workspace = true
 oxidelta = { version = "0.1.4", default-features = false, features = ["adler32", "lzma-secondary"] }

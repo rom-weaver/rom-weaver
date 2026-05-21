@@ -1,5 +1,4 @@
 import type {
-  RomWeaverNodeWorkerMode,
   RomWeaverProgressEvent,
   RomWeaverRunJsonOptions,
   RomWeaverRunJsonResult,
@@ -14,7 +13,7 @@ export const WORKER_RESPONSE_TYPES: readonly ['ready', 'result', 'event', 'nonJs
 export interface RomWeaverWorkerInitRequest {
   type: 'init';
   requestId: number;
-  mode?: RomWeaverNodeWorkerMode | 'browser-zenfs';
+  mode?: 'browser-zenfs';
   options?: Record<string, unknown>;
 }
 
