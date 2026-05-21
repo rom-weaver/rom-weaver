@@ -3,7 +3,7 @@ const TRAILING_POSIX_SLASHES_REGEX = /\/+$/;
 
 /*
  * DolphinRvzManager.js
- * Shared RVZ conversion helper for Rom Patcher JS.
+ * Shared RVZ conversion helper for RomWeaver.
  *
  * Uses Dolphin's RVZ conversion code compiled to WebAssembly.
  */
@@ -212,7 +212,7 @@ const DolphinRvzManager = ((
       const moduleArg = createRuntimeLoaderModuleArg({}, selectionKey);
 
       return Promise.resolve(getModuleObject(moduleArg)).then((moduleObject) => {
-        if (!moduleObject) throw new Error("Rom Patcher JS: dolphin-rvz-wasm not found");
+        if (!moduleObject) throw new Error("RomWeaver: dolphin-rvz-wasm not found");
         if (moduleObject.dolphinRvz) {
           return moduleObject.dolphinRvz as RuntimeValue as DolphinRvzModule;
         }

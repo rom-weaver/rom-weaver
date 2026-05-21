@@ -9,7 +9,7 @@ const XDELTA_COPY_CHUNK_SIZE = 8 * 1024 * 1024;
 
 /*
  * XdeltaManager.js
- * Shared xdelta3 apply helper for Rom Patcher JS.
+ * Shared xdelta3 apply helper for RomWeaver.
  *
  * Uses xdelta3 compiled to WebAssembly. Input files are staged into the
  * module filesystem before invoking xdelta.

@@ -1,5 +1,5 @@
 /*
- * Runtime loader for the Rom Patcher JS xdelta3 WebAssembly build.
+ * Runtime loader for the RomWeaver xdelta3 WebAssembly build.
  */
 
 import type { WasmToolLoaderModuleArg, WasmToolLoaderModuleObject } from "../../../shared/wasm-loader-utils.ts";

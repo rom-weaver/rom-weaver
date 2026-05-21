@@ -1,6 +1,6 @@
 /*
  * Z3dsManager.js
- * Shared Z3DS compression/decompression helper for Rom Patcher JS.
+ * Shared Z3DS compression/decompression helper for RomWeaver.
  *
  * Uses Azahar's standalone Z3DS WebAssembly module.
  */
@@ -330,7 +330,7 @@ const Z3dsManager = ((root: RootWithModules, PatchFileClass: RuntimeValue, azaha
       const getModuleObject = typeof azaharZ3dsModule === "function" ? azaharZ3dsModule : () => azaharZ3dsModule;
       const moduleArg = createRuntimeLoaderModuleArg({}, runtimeSelectionKey);
       return Promise.resolve(getModuleObject(moduleArg)).then((moduleObject) => {
-        if (!moduleObject) throw new Error("Rom Patcher JS: azahar-z3ds-wasm not found");
+        if (!moduleObject) throw new Error("RomWeaver: azahar-z3ds-wasm not found");
         const z3dsModule = moduleObject as RuntimeValue as Z3dsModule;
         z3dsModule.wasmToolName = "azahar-z3ds";
         z3dsModule.threaded = z3dsModule.__azaharZ3dsThreaded === true;

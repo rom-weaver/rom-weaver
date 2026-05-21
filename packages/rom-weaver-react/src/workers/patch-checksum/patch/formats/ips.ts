@@ -1,4 +1,4 @@
-/* IPS module for Rom Patcher JS v20250430 - Marc Robledo 2016-2025 - http://www.marcrobledo.com/license */
+/* IPS module for RomWeaver v20250430 - Marc Robledo 2016-2025 - http://www.marcrobledo.com/license */
 /* File format specification: http://www.smwiki.net/wiki/IPS_file_format */
 
 /* This file also acts as EBP (EarthBound Patch) module */

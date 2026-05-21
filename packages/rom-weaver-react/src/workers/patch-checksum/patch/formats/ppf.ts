@@ -1,6 +1,6 @@
 const TRAILING_SPACE_REGEX = / +$/;
 
-/* PPF module for Rom Patcher JS v20200221 - Marc Robledo 2019-2020 - http://www.marcrobledo.com/license */
+/* PPF module for RomWeaver v20200221 - Marc Robledo 2019-2020 - http://www.marcrobledo.com/license */
 /* File format specification: https://www.romhacking.net/utilities/353/  */
 
 import type { PatchWritablePatchFile, TypedPatchFileConstructor } from "../../../shared/binary/types.ts";

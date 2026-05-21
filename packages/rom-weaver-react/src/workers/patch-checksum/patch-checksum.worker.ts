@@ -1,4 +1,4 @@
-/* Rom Patcher JS v20250922 - Marc Robledo 2016-2025 - http://www.marcrobledo.com/license */
+/* RomWeaver v20250922 - Marc Robledo 2016-2025 - http://www.marcrobledo.com/license */
 
 import type { ChecksumWorkerRequest } from "../protocol/worker-protocol.ts";
 import type { WorkerRequestData } from "../protocol/worker-runtime-payloads.ts";

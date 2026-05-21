@@ -1,5 +1,5 @@
 /*
- * Runtime selector for Rom Patcher JS Azahar Z3DS WebAssembly builds.
+ * Runtime selector for RomWeaver Azahar Z3DS WebAssembly builds.
  */
 
 import {
@@ -87,7 +87,7 @@ const loadAzaharZ3ds = (moduleArg?: LoaderModuleArg): Promise<LoaderFactoryModul
       moduleArg: activeModuleArg,
       root,
       threadedWasmAliases: [ASSET_NAMES.singleWasm],
-      warningMessage: "Rom Patcher JS: threaded Azahar Z3DS failed to load, using single-threaded Z3DS.",
+      warningMessage: "RomWeaver: threaded Azahar Z3DS failed to load, using single-threaded Z3DS.",
     }).then((moduleObject) =>
       _markSelection(
         moduleObject as LoaderFactoryModule,

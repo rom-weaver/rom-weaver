@@ -1,5 +1,5 @@
 /*
- * Runtime selector for Rom Patcher JS 7-Zip-zstd WebAssembly builds.
+ * Runtime selector for RomWeaver 7-Zip-zstd WebAssembly builds.
  */
 
 import type { WasmToolLoaderModuleArg, WasmToolLoaderModuleObject } from "../shared/wasm-loader-utils.ts";
@@ -62,7 +62,7 @@ const sevenZipZstdLoader = (moduleArg?: LoaderModuleArg) => {
     moduleArg,
     noInitialRun: true,
     root,
-    warningMessage: "Rom Patcher JS: threaded 7-Zip-zstd failed to load, using fallback 7-Zip-zstd.",
+    warningMessage: "RomWeaver: threaded 7-Zip-zstd failed to load, using fallback 7-Zip-zstd.",
   });
 };
 

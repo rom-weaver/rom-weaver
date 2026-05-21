@@ -1,4 +1,4 @@
-/* UPS module for Rom Patcher JS v20240721 - Marc Robledo 2017-2024 - http://www.marcrobledo.com/license */
+/* UPS module for RomWeaver v20240721 - Marc Robledo 2017-2024 - http://www.marcrobledo.com/license */
 /* File format specification: http://www.romhacking.net/documents/392/ */
 
 import type {

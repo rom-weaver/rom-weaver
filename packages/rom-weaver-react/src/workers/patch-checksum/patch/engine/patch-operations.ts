@@ -35,7 +35,7 @@ type JsonRecord = {
 };
 
 /*
- * Rom Patcher JS core
+ * RomWeaver core
  * A ROM patcher/builder made in JavaScript, can be implemented as a webapp or a Node.JS CLI tool
  * By Marc Robledo https://www.marcrobledo.com
  * Sourcecode: https://github.com/marcrobledo/PatchEngine.js

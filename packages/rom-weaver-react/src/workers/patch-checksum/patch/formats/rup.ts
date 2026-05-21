@@ -1,4 +1,4 @@
-/* RUP module for Rom Patcher JS v20250430 - Marc Robledo 2018-2025 - http://www.marcrobledo.com/license */
+/* RUP module for RomWeaver v20250430 - Marc Robledo 2018-2025 - http://www.marcrobledo.com/license */
 /* File format specification: http://www.romhacking.net/documents/288/ */
 
 import type {

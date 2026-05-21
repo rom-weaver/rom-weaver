@@ -1,4 +1,4 @@
-/* Rom Patcher JS - Z3DS conversion worker */
+/* RomWeaver - Z3DS conversion worker */
 
 import {
   attachCompressionWorker,

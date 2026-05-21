@@ -1,5 +1,5 @@
 /*
- * Runtime selector for Rom Patcher JS chdman WebAssembly builds.
+ * Runtime selector for RomWeaver chdman WebAssembly builds.
  */
 
 import {
@@ -159,7 +159,7 @@ const loadChdman = (moduleArg?: LoaderModuleArg) => {
       moduleArg: activeModuleArg,
       prepareModuleObject: (moduleObject) => _prepareModuleObject(moduleObject),
       root,
-      warningMessage: "Rom Patcher JS: threaded chdman failed to load, using single-threaded chdman.",
+      warningMessage: "RomWeaver: threaded chdman failed to load, using single-threaded chdman.",
     }).then((moduleObject) =>
       _markSelection(
         moduleObject as LoaderModuleObject,

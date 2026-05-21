@@ -38,7 +38,7 @@ const getSevenZipFactoryOptions = () =>
 const createSevenZipPromise = (factoryOptions?: SevenZipFactoryOptions) => {
   assertNotBrowserMainThread();
   const factory = sevenZipFactory;
-  if (!factory) throw new Error("Rom Patcher JS: 7-Zip-zstd wasm not found");
+  if (!factory) throw new Error("RomWeaver: 7-Zip-zstd wasm not found");
   let outputState: SevenZipOutputState;
   const stderrProgressParser = createSevenZipStderrProgressParser((percent) => {
     if (typeof outputState.onStderrProgress === "function") outputState.onStderrProgress(percent);

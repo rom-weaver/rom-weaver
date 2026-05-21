@@ -2,7 +2,7 @@ const COMPRESSION_CODEC_LEVEL_ENTRY_REGEX = /^([a-z0-9_+-]+)(?::(\d+))?$/;
 
 /*
  * OutputCompressionManager.js
- * Shared compressed output settings for Rom Patcher JS.
+ * Shared compressed output settings for RomWeaver.
  */
 
 import {

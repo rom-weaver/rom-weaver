@@ -1,4 +1,4 @@
-/* APS (GBA) module for Rom Patcher JS v20230331 - Marc Robledo 2017-2023 - http://www.marcrobledo.com/license */
+/* APS (GBA) module for RomWeaver v20230331 - Marc Robledo 2017-2023 - http://www.marcrobledo.com/license */
 /* File format specification: https://github.com/btimofeev/UniPatcher/wiki/APS-(GBA) */
 
 import type { PatchWritablePatchFile, TypedPatchFileConstructor } from "../../../shared/binary/types.ts";

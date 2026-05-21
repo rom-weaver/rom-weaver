@@ -1,4 +1,4 @@
-/* BPS module for Rom Patcher JS v20240821 - Marc Robledo 2016-2024 - http://www.romhacking.net/license */
+/* BPS module for RomWeaver v20240821 - Marc Robledo 2016-2024 - http://www.romhacking.net/license */
 /* File format specification: https://www.romhacking.net/documents/746/ */
 
 import type { TypedPatchFileConstructor } from "../../../shared/binary/types.ts";

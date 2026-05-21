@@ -133,7 +133,7 @@ type NormalizedProgressEvent = {
 const getPatchFileClass = (root: RuntimeRoot | null | undefined, PatchFileClass?: PatchFileConstructor) => {
   if (typeof PatchFileClass === "function") return PatchFileClass;
   if (root && typeof root.PatchFile === "function") return root.PatchFile;
-  throw new Error("Rom Patcher JS: PatchFile not found");
+  throw new Error("RomWeaver: PatchFile not found");
 };
 
 const toUint8ArrayCopy = (source: BinaryLikeSource, fallbackMessage = "Invalid wasm tool output data") => {

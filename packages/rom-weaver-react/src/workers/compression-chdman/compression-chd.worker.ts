@@ -1,4 +1,4 @@
-/* Rom Patcher JS - disc conversion worker */
+/* RomWeaver - disc conversion worker */
 
 import {
   attachCompressionWorker,

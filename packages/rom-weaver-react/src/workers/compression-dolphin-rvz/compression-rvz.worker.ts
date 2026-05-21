@@ -1,4 +1,4 @@
-/* Rom Patcher JS - RVZ conversion worker */
+/* RomWeaver - RVZ conversion worker */
 
 import {
   attachCompressionWorker,

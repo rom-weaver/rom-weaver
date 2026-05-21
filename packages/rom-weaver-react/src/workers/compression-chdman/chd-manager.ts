@@ -4,7 +4,7 @@ const BIN_EXTENSION_REGEX = /\.bin$/i;
 
 /*
  * ChdManager.js
- * Shared CHD extraction helper for Rom Patcher JS.
+ * Shared CHD extraction helper for RomWeaver.
  *
  * Uses MAME chdman compiled to WebAssembly.
  */
@@ -414,7 +414,7 @@ const ChdManager = ((root, PatchFileClass, chdmanModule) => {
       const moduleArg = createRuntimeLoaderModuleArg({}, selectionKey);
 
       return Promise.resolve(getModuleObject(moduleArg)).then((moduleObject) => {
-        if (!moduleObject) throw new Error("Rom Patcher JS: chdman-wasm not found");
+        if (!moduleObject) throw new Error("RomWeaver: chdman-wasm not found");
         if (_getWasmTool(moduleObject)) {
           return _prepareChdman(moduleObject) as ChdmanRuntime;
         }

@@ -1,6 +1,6 @@
 const V64_EXTENSION_REGEX = /\.v64$/i;
 
-/* APS (N64) module for Rom Patcher JS v20180930 - Marc Robledo 2017-2018 - http://www.marcrobledo.com/license */
+/* APS (N64) module for RomWeaver v20180930 - Marc Robledo 2017-2018 - http://www.marcrobledo.com/license */
 /* File format specification: https://github.com/btimofeev/UniPatcher/wiki/APS-(N64) */
 
 import type { PatchWritablePatchFile, TypedPatchFileConstructor } from "../../../shared/binary/types.ts";

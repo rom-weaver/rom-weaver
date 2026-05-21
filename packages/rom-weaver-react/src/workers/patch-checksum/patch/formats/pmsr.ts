@@ -1,4 +1,4 @@
-/* PMSR (Paper Mario Star Rod) module for Rom Patcher JS v20240721 - Marc Robledo 2020-2024 - http://www.marcrobledo.com/license */
+/* PMSR (Paper Mario Star Rod) module for RomWeaver v20240721 - Marc Robledo 2020-2024 - http://www.marcrobledo.com/license */
 /* File format specification: http://origami64.net/attachment.php?aid=790 (dead link) */
 
 import type { PatchWritablePatchFile, TypedPatchFileConstructor } from "../../../shared/binary/types.ts";

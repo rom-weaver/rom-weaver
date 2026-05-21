@@ -257,7 +257,7 @@ function ApplyWorkflowFormView({
       >
         {startup.status === "loading" ? <span aria-hidden="true" className="rom-weaver-spinner" /> : null}
         <span id="rom-weaver-startup-status-message">
-          {startup.message || (startupIsError ? "Rom Patcher JS failed to load." : "Loading patcher tools...")}
+          {startup.message || (startupIsError ? "RomWeaver failed to load." : "Loading patcher tools...")}
         </span>
       </div>
       <div className={cx(rowClasses.upload, "mb-0 !block xl:col-start-1")} id="rom-weaver-row-file-rom">

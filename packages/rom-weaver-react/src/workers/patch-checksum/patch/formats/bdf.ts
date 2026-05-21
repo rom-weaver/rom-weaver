@@ -1,4 +1,4 @@
-/* BDF module for Rom Patcher JS v20250922 - Marc Robledo 2025 - http://www.marcrobledo.com/license */
+/* BDF module for RomWeaver v20250922 - Marc Robledo 2025 - http://www.marcrobledo.com/license */
 /* File format specification: https://www.daemonology.net/bsdiff/ */
 
 import bz2 from "../../../../../vendor/bz2.js";
