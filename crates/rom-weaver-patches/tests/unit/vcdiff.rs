@@ -585,6 +585,13 @@ mod tests {
         let parsed = parse_patch(&mut Cursor::new(&patch)).expect("parse created patch");
         assert_eq!(parsed.secondary_compressor_id, None);
         assert_eq!(parsed.app_header, None);
+        assert!(
+            parsed
+                .windows
+                .iter()
+                .any(|window| matches!(window.source_kind, Some(WindowSourceKind::Source))),
+            "expected create to emit source-referenced windows when source is non-empty"
+        );
 
         handler
             .apply(
@@ -1452,9 +1459,14 @@ mod tests {
             let value = state.wrapping_mul(0x2545_F491_4F6C_DD1Du64);
             source.push((value >> 56) as u8);
         }
-        let mut target = source.clone();
-        for (index, byte) in target.iter_mut().step_by(4096).enumerate() {
-            *byte ^= ((index * 73) & 0xFF) as u8;
+        let mut target = Vec::with_capacity(len);
+        state = 0x1234_5678_9ABC_DEF0u64;
+        for _ in 0..len {
+            state ^= state >> 12;
+            state ^= state << 25;
+            state ^= state >> 27;
+            let value = state.wrapping_mul(0x2545_F491_4F6C_DD1Du64);
+            target.push((value >> 56) as u8);
         }
 
         (source, target)

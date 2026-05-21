@@ -937,7 +937,9 @@ fn create_native_compress_options(
     descriptor: &FormatDescriptor,
     include_checksums: bool,
 ) -> CompressOptions {
+    let level = if is_xdelta_descriptor(descriptor) { 2 } else { 6 };
     CompressOptions {
+        level,
         checksum: is_xdelta_descriptor(descriptor) && include_checksums,
         secondary: SecondaryCompression::None,
         ..CompressOptions::default()
@@ -945,7 +947,7 @@ fn create_native_compress_options(
 }
 
 fn encode_patch_with_native_streaming(
-    _source_path: &Path,
+    source_path: &Path,
     target_path: &Path,
     output_path: &Path,
     options: CompressOptions,
@@ -956,7 +958,8 @@ fn encode_patch_with_native_streaming(
 
     let output_file = File::create(output_path)?;
     let writer = BufWriter::with_capacity(NATIVE_CHUNK_SIZE, output_file);
-    let mut encoder = DeltaEncoder::new(writer, &[], options);
+    let source = fs::read(source_path)?;
+    let mut encoder = DeltaEncoder::new(writer, &source, options);
 
     let mut target = BufReader::with_capacity(NATIVE_CHUNK_SIZE, File::open(target_path)?);
     let mut input_buffer = vec![0; NATIVE_CHUNK_SIZE];
