@@ -1,5 +1,6 @@
 impl NativeCodecBackend {
     const XZ_MT_BLOCK_BYTES: u64 = 1 << 20;
+    const XZ_MAX_ENCODE_DICT_BYTES: u32 = 8 << 20;
     const STORE_COPY_MIN_PARALLEL_BYTES: usize = 1 << 20;
     const DEFLATE_PARALLEL_MIN_BYTES: usize = 256 * 1024;
     const BZIP2_PARALLEL_MIN_BYTES: usize = 1 << 20;
@@ -103,8 +104,17 @@ impl NativeCodecBackend {
         }
     }
 
-    fn xz_mt_options(level: u32) -> Result<XzOptions> {
+    fn xz_options(level: u32) -> XzOptions {
         let mut options = XzOptions::with_preset(level);
+        options.lzma_options.dict_size = options
+            .lzma_options
+            .dict_size
+            .min(Self::XZ_MAX_ENCODE_DICT_BYTES);
+        options
+    }
+
+    fn xz_mt_options(level: u32) -> Result<XzOptions> {
+        let mut options = Self::xz_options(level);
         let block_size = NonZeroU64::new(Self::XZ_MT_BLOCK_BYTES).ok_or_else(|| {
             RomWeaverError::Validation("lzma2 internal block size must be non-zero".into())
         })?;
@@ -887,7 +897,7 @@ impl NativeCodecBackend {
                     output.flush()?;
                     copied
                 } else {
-                    let mut encoder = XzWriter::new(output, XzOptions::with_preset(level))?;
+                    let mut encoder = XzWriter::new(output, Self::xz_options(level))?;
                     let copied = io::copy(&mut source, &mut encoder)?;
                     let mut output = encoder.finish()?;
                     output.flush()?;
