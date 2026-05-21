@@ -1,4 +1,4 @@
-use libarchive_src::{
+use rom_weaver_libarchive_sys::{
     archive, archive_errno, archive_error_string, archive_set_error, ARCHIVE_OK, ARCHIVE_WARN,
 };
 use std::ffi::{CStr, CString};
@@ -32,7 +32,7 @@ macro_rules! check_io_result {
             ::std::io::Result::Ok(ok) => ok,
             ::std::io::Result::Err(err) => {
                 $crate::error::set_archive_error($archive_ptr, &err);
-                return ::libarchive_src::ARCHIVE_FATAL as _;
+                return ::rom_weaver_libarchive_sys::ARCHIVE_FATAL as _;
             }
         }
     };

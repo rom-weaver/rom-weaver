@@ -5,7 +5,7 @@ mod seek_conv;
 use crate::{Archive, SuccessResult};
 use callback::Callback;
 use callback::{callback_into_ffi, IoCallback};
-use libarchive_src::{
+use rom_weaver_libarchive_sys::{
     archive, archive_entry, archive_read_new, archive_read_next_header, archive_read_open2,
     archive_read_set_seek_callback, archive_read_support_filter_bzip2,
     archive_read_support_filter_compress, archive_read_support_filter_gzip,

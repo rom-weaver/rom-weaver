@@ -9,12 +9,9 @@ homepage = "https://github.com/patr0nus/akv"
 repository = "https://github.com/patr0nus/akv"
 
 [dependencies]
-libarchive_src = { version = "0.1", path = "libarchive_src" }
+rom-weaver-libarchive-sys = { path = "../../crates/rom-weaver-libarchive-sys" }
 libc = "0.2.137"
 always-assert = "0.1.2"
-
-[workspace]
-members = ["libarchive_src"]
 
 [profile.release]
 panic = "abort"

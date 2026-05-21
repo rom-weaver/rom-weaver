@@ -13,6 +13,7 @@ flate2.workspace = true
 flacenc.workspace = true
 lz4_flex.workspace = true
 lzma-rust2.workspace = true
+rom-weaver-libarchive-sys.workspace = true
 nod.workspace = true
 rayon.workspace = true
 rars = "0.1.0"

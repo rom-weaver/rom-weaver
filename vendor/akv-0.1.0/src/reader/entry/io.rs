@@ -1,6 +1,6 @@
 use crate::reader::entry::Entry;
 use crate::reader::seek_conv::FFISeekFrom;
-use libarchive_src::{archive_read_data, archive_seek_data};
+use rom_weaver_libarchive_sys::{archive_read_data, archive_seek_data};
 use std::io;
 use std::io::SeekFrom;
 

@@ -5,6 +5,7 @@ members = [
     "crates/rom-weaver-codecs",
     "crates/rom-weaver-containers",
     "crates/rom-weaver-core",
+    "crates/rom-weaver-libarchive-sys",
     "crates/rom-weaver-patches",
 ]
 resolver = "2"
@@ -23,7 +24,6 @@ blake3 = "1.8.2"
 bzip2 = "0.6.1"
 ciso = { version = "0.2.1", default-features = false, features = ["sync"] }
 chd = { version = "0.3.4", features = ["verify_block_crc"] }
-cc = "1.2.43"
 clap = { version = "4.5.51", features = ["derive"] }
 claxon = "0.4.3"
 crc16 = "0.4.0"
@@ -36,7 +36,6 @@ lzma-rust2 = { version = "0.16.2", default-features = false, features = ["std", 
 libz-sys = { version = "1.1.28", default-features = false }
 md-5 = "0.11.0"
 nod = { version = "2.0.0-alpha.6", default-features = false, features = ["compress-bzip2-vendored", "compress-lzma-vendored", "compress-zlib-vendored", "compress-zstd-vendored", "threading"] }
-pkg-config = "0.3.32"
 predicates = "3.1.3"
 qbsdiff = "1.4.4"
 rayon = "1.11.0"
@@ -54,6 +53,7 @@ zip = { version = "6.0.0", default-features = false, features = ["deflate-flate2
 zeekstd = "0.6.2"
 zstd-sys = { version = "2.0.16", default-features = false }
 zstd = "0.13.3"
+rom-weaver-libarchive-sys = { path = "crates/rom-weaver-libarchive-sys" }
 
 [profile.release]
 lto = "thin"
@@ -74,5 +74,4 @@ strip = "symbols"
 
 [patch.crates-io]
 sevenz-rust2 = { path = "vendor/sevenz-rust2-0.21.0" }
-libarchive_src = { path = "vendor/libarchive_src-0.1.0" }
 akv = { path = "vendor/akv-0.1.0" }

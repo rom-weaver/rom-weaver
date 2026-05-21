@@ -1,6 +1,6 @@
 use super::seek_conv::FFISeekFrom;
 use crate::error;
-use libarchive_src::{
+use rom_weaver_libarchive_sys::{
     archive, archive_close_callback, archive_read_callback, archive_seek_callback, la_int64_t,
     la_ssize_t, ARCHIVE_OK,
 };

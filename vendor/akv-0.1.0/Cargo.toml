@@ -29,8 +29,8 @@ panic = "abort"
 [dependencies.always-assert]
 version = "0.1.2"
 
-[dependencies.libarchive_src]
-version = "0.1"
+[dependencies.rom-weaver-libarchive-sys]
+path = "../../crates/rom-weaver-libarchive-sys"
 
 [dependencies.libc]
 version = "0.2.137"

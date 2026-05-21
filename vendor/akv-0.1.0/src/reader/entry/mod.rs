@@ -2,7 +2,7 @@ mod io;
 
 use crate::Archive;
 use io::EntryReader;
-use libarchive_src::{
+use rom_weaver_libarchive_sys::{
     archive_entry, archive_entry_filetype, archive_entry_pathname, archive_entry_pathname_utf8,
 };
 use libc::{S_IFDIR, S_IFMT, S_IFREG, mode_t};

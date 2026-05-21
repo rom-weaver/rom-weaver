@@ -1,5 +1,5 @@
 use crate::error::check_result;
-use libarchive_src::{archive, archive_errno, archive_error_string, archive_free};
+use rom_weaver_libarchive_sys::{archive, archive_errno, archive_error_string, archive_free};
 use libc::c_int;
 use std::ffi::CStr;
 use std::io;
@@ -48,8 +48,8 @@ impl<'a> Archive<'a> {
     }
     pub(crate) unsafe fn check_result(&self, num: c_int) -> io::Result<SuccessResult> {
         match num {
-            libarchive_src::ARCHIVE_OK => Ok(SuccessResult::Ok),
-            libarchive_src::ARCHIVE_WARN => Ok(SuccessResult::Warn),
+            rom_weaver_libarchive_sys::ARCHIVE_OK => Ok(SuccessResult::Ok),
+            rom_weaver_libarchive_sys::ARCHIVE_WARN => Ok(SuccessResult::Warn),
             _ => Err(self.get_error()),
         }
     }
