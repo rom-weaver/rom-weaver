@@ -1,15 +1,16 @@
 use std::collections::BTreeMap;
 use std::{
     collections::BTreeSet,
-    fs::{self, File},
+    fs::{self, File, OpenOptions},
     io::{self, BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write},
     path::{Component, Path, PathBuf},
     sync::{
-        atomic::{AtomicU64, AtomicUsize, Ordering},
+        atomic::{AtomicUsize, Ordering},
         Arc, Mutex,
     },
 };
 
+use akv::reader::ArchiveReader as LibarchiveReadArchive;
 use bzip2::read::MultiBzDecoder as Bzip2Decoder;
 use ciso::{read::CSOReader as CsoReader, split::SplitFileReader};
 use flacenc::{component::BitRepr as _, error::Verify as _};
@@ -835,6 +836,254 @@ fn emit_container_step_progress(
         percent,
         thread_execution,
     );
+}
+
+#[derive(Clone, Debug)]
+struct LibarchiveExtractTask {
+    index: usize,
+    archive_name: String,
+    output_path: PathBuf,
+    is_dir: bool,
+}
+
+fn open_libarchive_reader(
+    source: &Path,
+    format_name: &str,
+) -> Result<LibarchiveReadArchive<'static>> {
+    let file = File::open(source)?;
+    LibarchiveReadArchive::open_io(file).map_err(|error| {
+        RomWeaverError::Validation(format!("{format_name} archive is invalid: {error}"))
+    })
+}
+
+fn build_libarchive_extract_tasks(
+    source: &Path,
+    out_dir: &Path,
+    selections: &[String],
+    format_name: &str,
+) -> Result<Vec<LibarchiveExtractTask>> {
+    let mut reader = open_libarchive_reader(source, format_name)?;
+    let mut matcher = SelectionMatcher::new(selections);
+    let mut tasks = Vec::new();
+    let mut index = 0usize;
+
+    while let Some(entry) = reader.next_entry().map_err(|error| {
+        RomWeaverError::Validation(format!(
+            "{format_name} extract failed while reading entry {index}: {error}"
+        ))
+    })? {
+        let entry_path = match entry.pathname_utf8() {
+            Ok(path) => path.to_owned(),
+            Err(_) => entry
+                .pathname_mb()
+                .map(|path| path.to_string_lossy().into_owned())
+                .map_err(|error| {
+                    RomWeaverError::Validation(format!(
+                        "{format_name} extract failed while decoding entry {index}: {error}"
+                    ))
+                })?,
+        };
+        let archive_name = normalize_archive_name(&entry_path);
+        if archive_name.is_empty() || !matcher.matches(&archive_name) {
+            index = index.saturating_add(1);
+            continue;
+        }
+        let relative = sanitize_archive_relative_path_from_str(&entry_path)?;
+        tasks.push(LibarchiveExtractTask {
+            index,
+            archive_name,
+            output_path: out_dir.join(relative),
+            is_dir: entry.is_dir() || entry_path.ends_with('/') || entry_path.ends_with('\\'),
+        });
+        index = index.saturating_add(1);
+    }
+
+    matcher.ensure_all_matched()?;
+    Ok(tasks)
+}
+
+fn extract_libarchive_task_chunk<F>(
+    source: &Path,
+    chunk: &[LibarchiveExtractTask],
+    format_name: &str,
+    mut on_task_complete: F,
+) -> Result<u64>
+where
+    F: FnMut(),
+{
+    if chunk.is_empty() {
+        return Ok(0);
+    }
+
+    let mut reader = open_libarchive_reader(source, format_name)?;
+    let mut tasks_by_index = BTreeMap::new();
+    for task in chunk {
+        tasks_by_index.insert(task.index, task);
+    }
+
+    let mut current_index = 0usize;
+    let mut matched_tasks = 0usize;
+    let mut written_bytes = 0u64;
+
+    while let Some(entry) = reader.next_entry().map_err(|error| {
+        RomWeaverError::Validation(format!(
+            "{format_name} extract failed while reading entry {current_index}: {error}"
+        ))
+    })? {
+        let Some(task) = tasks_by_index.get(&current_index).copied() else {
+            current_index = current_index.saturating_add(1);
+            continue;
+        };
+
+        if task.is_dir {
+            fs::create_dir_all(&task.output_path)?;
+        } else {
+            if let Some(parent) = task.output_path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            let mut input = entry.into_reader();
+            let mut output = BufWriter::new(File::create(&task.output_path)?);
+            let copied = io::copy(&mut input, &mut output).map_err(|error| {
+                RomWeaverError::Validation(format!(
+                    "{format_name} extract failed while reading entry {} (`{}`): {error}",
+                    task.index, task.archive_name
+                ))
+            })?;
+            output.flush()?;
+            written_bytes = written_bytes.saturating_add(copied);
+        }
+
+        matched_tasks = matched_tasks.saturating_add(1);
+        on_task_complete();
+        if matched_tasks == tasks_by_index.len() {
+            break;
+        }
+        current_index = current_index.saturating_add(1);
+    }
+
+    if matched_tasks != tasks_by_index.len() {
+        return Err(RomWeaverError::Validation(format!(
+            "{format_name} extract failed because selected entries changed while processing"
+        )));
+    }
+
+    Ok(written_bytes)
+}
+
+fn extract_regular_archive_with_libarchive(
+    request: &ContainerExtractRequest,
+    context: &OperationContext,
+    format_name: &'static str,
+    limit_threads_to_task_count: bool,
+) -> Result<OperationReport> {
+    fs::create_dir_all(&request.out_dir)?;
+    let tasks =
+        build_libarchive_extract_tasks(&request.source, &request.out_dir, &request.selections, format_name)?;
+    let total_tasks = tasks.len();
+
+    let mut output_paths = BTreeSet::new();
+    let mut duplicate_output_paths = false;
+    for task in &tasks {
+        if task.is_dir {
+            continue;
+        }
+        duplicate_output_paths |= !output_paths.insert(task.output_path.clone());
+    }
+
+    let (execution, written_bytes) = if tasks.is_empty() || duplicate_output_paths {
+        let execution = context.plan_threads(ThreadCapability::single_threaded());
+        let mut completed = 0usize;
+        let written = extract_libarchive_task_chunk(&request.source, &tasks, format_name, || {
+            completed = completed.saturating_add(1);
+            emit_container_step_progress(
+                context,
+                "extract",
+                format_name,
+                "extract",
+                completed,
+                total_tasks,
+                format!("extracting `{format_name}` ({completed}/{total_tasks})"),
+                Some(&execution),
+            );
+        })?;
+        (execution, written)
+    } else {
+        let file_task_count = tasks.iter().filter(|task| !task.is_dir).count().max(1);
+        let capability = if limit_threads_to_task_count {
+            ThreadCapability::parallel(Some(file_task_count))
+        } else {
+            ThreadCapability::parallel(None)
+        };
+        let (execution, pool) = context.build_pool(capability)?;
+        let source = request.source.clone();
+        let completed_tasks = Arc::new(AtomicUsize::new(0));
+        let progress_context = context.clone();
+        let progress_execution = execution.clone();
+
+        let written_bytes = if execution.used_parallelism {
+            let worker_count = execution.effective_threads.max(1);
+            let chunk_size = tasks.len().div_ceil(worker_count).max(1);
+            let chunk_results = pool.install(|| {
+                tasks
+                    .par_chunks(chunk_size)
+                    .map(|chunk| {
+                        let completed_tasks = Arc::clone(&completed_tasks);
+                        let progress_context = progress_context.clone();
+                        let progress_execution = progress_execution.clone();
+                        extract_libarchive_task_chunk(&source, chunk, format_name, || {
+                            let completed = completed_tasks
+                                .fetch_add(1, Ordering::Relaxed)
+                                .saturating_add(1);
+                            emit_container_step_progress(
+                                &progress_context,
+                                "extract",
+                                format_name,
+                                "extract",
+                                completed,
+                                total_tasks,
+                                format!("extracting `{format_name}` ({completed}/{total_tasks})"),
+                                Some(&progress_execution),
+                            );
+                        })
+                    })
+                    .collect::<Result<Vec<_>>>()
+            })?;
+            chunk_results
+                .into_iter()
+                .fold(0u64, |acc, value| acc.saturating_add(value))
+        } else {
+            let mut completed = 0usize;
+            extract_libarchive_task_chunk(&source, &tasks, format_name, || {
+                completed = completed.saturating_add(1);
+                emit_container_step_progress(
+                    &progress_context,
+                    "extract",
+                    format_name,
+                    "extract",
+                    completed,
+                    total_tasks,
+                    format!("extracting `{format_name}` ({completed}/{total_tasks})"),
+                    Some(&progress_execution),
+                );
+            })?
+        };
+        (execution, written_bytes)
+    };
+
+    Ok(OperationReport::succeeded(
+        OperationFamily::Container,
+        Some(format_name.to_string()),
+        "extract",
+        format!(
+            "extracted `{}` to `{}` ({} file(s), {} bytes written)",
+            request.source.display(),
+            request.out_dir.display(),
+            tasks.iter().filter(|task| !task.is_dir).count(),
+            written_bytes
+        ),
+        Some(100.0),
+        Some(execution),
+    ))
 }
 
 fn collect_archive_inputs(inputs: &[PathBuf]) -> Result<Vec<ArchiveInputEntry>> {

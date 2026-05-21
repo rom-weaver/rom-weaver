@@ -10,13 +10,6 @@ struct ZipContainerHandler {
 }
 
 #[derive(Clone, Debug)]
-struct ZipExtractTask {
-    index: usize,
-    archive_name: String,
-    output_path: PathBuf,
-}
-
-#[derive(Clone, Debug)]
 struct ZipCreateTask {
     entry_index: usize,
     source: PathBuf,
@@ -119,47 +112,6 @@ impl ZipContainerHandler {
                 self.descriptor.name
             ))
         })
-    }
-
-    fn extract_task_with_archive(
-        &self,
-        archive: &mut ZipFileArchive<BufReader<File>>,
-        task: &ZipExtractTask,
-    ) -> Result<u64> {
-        let mut entry = archive.by_index(task.index).map_err(|error| {
-            RomWeaverError::Validation(format!(
-                "{} extract failed while reading entry {} (`{}`): {error}",
-                self.descriptor.name, task.index, task.archive_name
-            ))
-        })?;
-        if entry.is_dir() {
-            fs::create_dir_all(&task.output_path)?;
-            return Ok(0);
-        }
-        if let Some(parent) = task.output_path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        let mut output = BufWriter::new(File::create(&task.output_path)?);
-        io::copy(&mut entry, &mut output).map_err(Into::into)
-    }
-
-    fn extract_task_chunk<F>(
-        &self,
-        source: &Path,
-        chunk: &[ZipExtractTask],
-        mut on_task_complete: F,
-    ) -> Result<u64>
-    where
-        F: FnMut(),
-    {
-        let mut archive = self.open_archive(source)?;
-        let mut chunk_bytes = 0u64;
-        for task in chunk {
-            chunk_bytes =
-                chunk_bytes.saturating_add(self.extract_task_with_archive(&mut archive, task)?);
-            on_task_complete();
-        }
-        Ok(chunk_bytes)
     }
 
     fn build_create_tasks(
@@ -348,147 +300,7 @@ impl ContainerHandler for ZipContainerHandler {
         request: &ContainerExtractRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        fs::create_dir_all(&request.out_dir)?;
-
-        let mut archive = self.open_archive(&request.source)?;
-        let mut selections = SelectionMatcher::new(&request.selections);
-        let mut tasks = Vec::new();
-        let mut output_paths = BTreeSet::new();
-        let mut duplicate_output_paths = false;
-
-        for index in 0..archive.len() {
-            let entry = archive.by_index(index).map_err(|error| {
-                RomWeaverError::Validation(format!(
-                    "{} extract failed while reading entry {index}: {error}",
-                    self.descriptor.name
-                ))
-            })?;
-            let entry_name = normalize_archive_name(entry.name());
-            if entry_name.is_empty() || !selections.matches(&entry_name) {
-                continue;
-            }
-
-            let relative = sanitize_archive_relative_path_from_str(entry.name())?;
-            let output_path = request.out_dir.join(relative);
-            if entry.is_dir() {
-                fs::create_dir_all(&output_path)?;
-                continue;
-            }
-            duplicate_output_paths |= !output_paths.insert(output_path.clone());
-            tasks.push(ZipExtractTask {
-                index,
-                archive_name: entry_name,
-                output_path,
-            });
-        }
-
-        selections.ensure_all_matched()?;
-        let total_tasks = tasks.len();
-
-        let (execution, written_bytes) = if tasks.is_empty() || duplicate_output_paths {
-            let execution = context.plan_threads(ThreadCapability::single_threaded());
-            let mut archive = self.open_archive(&request.source)?;
-            let mut written_bytes = 0u64;
-            for (task_index, task) in tasks.iter().enumerate() {
-                written_bytes = written_bytes
-                    .saturating_add(self.extract_task_with_archive(&mut archive, task)?);
-                emit_container_step_progress(
-                    context,
-                    "extract",
-                    self.descriptor.name,
-                    "extract",
-                    task_index.saturating_add(1),
-                    total_tasks,
-                    format!(
-                        "extracting `{}` ({}/{})",
-                        self.descriptor.name,
-                        task_index.saturating_add(1),
-                        total_tasks
-                    ),
-                    Some(&execution),
-                );
-            }
-            (execution, written_bytes)
-        } else {
-            let task_count = tasks.len().max(1);
-            let (execution, pool) =
-                context.build_pool(ThreadCapability::parallel(Some(task_count)))?;
-            let source = request.source.clone();
-            let completed_tasks = Arc::new(AtomicUsize::new(0));
-            let progress_context = context.clone();
-            let progress_execution = execution.clone();
-            let progress_format = self.descriptor.name;
-            let written_bytes = if execution.used_parallelism {
-                let worker_count = execution.effective_threads.max(1);
-                let chunk_size = tasks.len().div_ceil(worker_count).max(1);
-                let chunk_bytes = pool.install(|| {
-                    tasks
-                        .par_chunks(chunk_size)
-                        .map(|chunk| {
-                            let completed_tasks = Arc::clone(&completed_tasks);
-                            let progress_context = progress_context.clone();
-                            let progress_execution = progress_execution.clone();
-                            self.extract_task_chunk(&source, chunk, || {
-                                let completed = completed_tasks
-                                    .fetch_add(1, Ordering::Relaxed)
-                                    .saturating_add(1);
-                                emit_container_step_progress(
-                                    &progress_context,
-                                    "extract",
-                                    progress_format,
-                                    "extract",
-                                    completed,
-                                    total_tasks,
-                                    format!(
-                                        "extracting `{}` ({}/{})",
-                                        progress_format, completed, total_tasks
-                                    ),
-                                    Some(&progress_execution),
-                                );
-                            })
-                        })
-                        .collect::<Result<Vec<_>>>()
-                })?;
-                chunk_bytes
-                    .into_iter()
-                    .fold(0u64, |acc, value| acc.saturating_add(value))
-            } else {
-                self.extract_task_chunk(&source, &tasks, || {
-                    let completed = completed_tasks
-                        .fetch_add(1, Ordering::Relaxed)
-                        .saturating_add(1);
-                    emit_container_step_progress(
-                        &progress_context,
-                        "extract",
-                        progress_format,
-                        "extract",
-                        completed,
-                        total_tasks,
-                        format!(
-                            "extracting `{}` ({}/{})",
-                            progress_format, completed, total_tasks
-                        ),
-                        Some(&progress_execution),
-                    );
-                })?
-            };
-            (execution, written_bytes)
-        };
-
-        Ok(OperationReport::succeeded(
-            OperationFamily::Container,
-            Some(self.descriptor.name.to_string()),
-            "extract",
-            format!(
-                "extracted `{}` to `{}` ({} file(s), {} bytes written)",
-                request.source.display(),
-                request.out_dir.display(),
-                tasks.len(),
-                written_bytes
-            ),
-            Some(100.0),
-            Some(execution),
-        ))
+        extract_regular_archive_with_libarchive(request, context, self.descriptor.name, true)
     }
 
     fn create(
@@ -657,4 +469,3 @@ impl ContainerHandler for ZipContainerHandler {
         }
     }
 }
-

@@ -1,0 +1,39 @@
+name: CI Check
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  style_check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: dtolnay/rust-toolchain@beta
+        with:
+          components: clippy, rustfmt
+      - run: npm install -g zx
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+      - run: ./scripts/ci.mjs style-check
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [
+          macos-latest, ubuntu-latest, windows-latest
+        ]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: dtolnay/rust-toolchain@beta
+      - run: sudo apt-get install -y valgrind
+        if: runner.os == 'Linux'
+      - uses: taiki-e/install-action@cargo-valgrind
+        if: runner.os == 'Linux'
+      - run: npm install -g zx
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+      - run: zx ./scripts/ci.mjs test

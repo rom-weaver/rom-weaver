@@ -16,12 +16,35 @@ impl RvzContainerHandler {
     }
 
     fn open_disc(&self, source: &Path) -> Result<NodDiscReader> {
-        NodDiscReader::new(source, &self.read_options(0)).map_err(|error| {
+        self.open_disc_with_threads(source, 0)
+    }
+
+    fn open_disc_with_threads(&self, source: &Path, preloader_threads: usize) -> Result<NodDiscReader> {
+        let options = self.read_options(preloader_threads);
+        #[cfg(target_arch = "wasm32")]
+        let result = File::open(source)
+            .map_err(|error| {
+                RomWeaverError::Validation(format!(
+                    "failed to open rvz source `{}`: {error}",
+                    source.display()
+                ))
+            })
+            .and_then(|file| {
+                NodDiscReader::new_from_non_cloneable_read(file, &options).map_err(|error| {
+                    RomWeaverError::Validation(format!(
+                        "failed to open rvz source `{}`: {error}",
+                        source.display()
+                    ))
+                })
+            });
+        #[cfg(not(target_arch = "wasm32"))]
+        let result = NodDiscReader::new(source, &options).map_err(|error| {
             RomWeaverError::Validation(format!(
                 "failed to open rvz source `{}`: {error}",
                 source.display()
             ))
-        })
+        });
+        result
     }
 
     fn validate_rvz_meta(
@@ -48,6 +71,77 @@ impl RvzContainerHandler {
             .filter(|value| !value.is_empty())
             .unwrap_or("output");
         format!("{stem}.iso")
+    }
+
+    fn create_extract_output(&self, output_path: &Path) -> Result<File> {
+        match File::create(output_path) {
+            Ok(file) => Ok(file),
+            Err(error) if error.raw_os_error() == Some(69) => OpenOptions::new()
+                .write(true)
+                .truncate(true)
+                .open(output_path)
+                .map_err(RomWeaverError::from),
+            Err(error) => Err(RomWeaverError::from(error)),
+        }
+    }
+
+    fn copy_extract_with_progress<R: Read, W: Write>(
+        &self,
+        reader: &mut R,
+        writer: &mut W,
+        total_bytes: u64,
+        context: &OperationContext,
+        execution: &ThreadExecution,
+    ) -> Result<u64> {
+        let buffer_size = if total_bytes == 0 {
+            64 * 1024
+        } else {
+            ((total_bytes / 100).max(16 * 1024).min(1024 * 1024)) as usize
+        };
+
+        let mut buffer = vec![0_u8; buffer_size];
+        let mut bytes_written = 0_u64;
+        let mut last_emitted_percent = -1.0_f32;
+
+        emit_container_running_progress(
+            context,
+            "extract",
+            RVZ.name,
+            "extract",
+            "extracting rvz",
+            0.0,
+            Some(execution),
+        );
+
+        loop {
+            let bytes_read = reader.read(&mut buffer)?;
+            if bytes_read == 0 {
+                break;
+            }
+            writer.write_all(&buffer[..bytes_read])?;
+            bytes_written = bytes_written.saturating_add(bytes_read as u64);
+
+            if total_bytes == 0 {
+                continue;
+            }
+
+            let percent = ((bytes_written.min(total_bytes) as f32 / total_bytes as f32) * 100.0)
+                .clamp(0.0, 100.0);
+            if percent < 100.0 && percent - last_emitted_percent >= 1.0 {
+                last_emitted_percent = percent;
+                emit_container_running_progress(
+                    context,
+                    "extract",
+                    RVZ.name,
+                    "extract",
+                    format!("extracting rvz ({percent:.0}%)"),
+                    percent,
+                    Some(execution),
+                );
+            }
+        }
+
+        Ok(bytes_written)
     }
 
     fn to_u8_level(&self, level: i32, codec: &str) -> Result<u8> {
@@ -181,21 +275,18 @@ impl ContainerHandler for RvzContainerHandler {
         let execution = context.plan_threads(ThreadCapability::parallel(None));
         let preloader_threads =
             self.negotiated_threads(execution.used_parallelism, execution.effective_threads);
-        let mut disc = NodDiscReader::new(&request.source, &self.read_options(preloader_threads))
-            .map_err(|error| {
-            RomWeaverError::Validation(format!(
-                "failed to open rvz source `{}`: {error}",
-                request.source.display()
-            ))
-        })?;
+        let mut disc = self.open_disc_with_threads(&request.source, preloader_threads)?;
         let meta = self.validate_rvz_meta(&request.source, &disc)?;
         let disc_size = meta.disc_size.unwrap_or_else(|| disc.disc_size());
         let compression_label = normalize_codec_label(&meta.compression.to_string());
 
-        fs::create_dir_all(&request.out_dir)?;
+        if !request.out_dir.exists() {
+            fs::create_dir_all(&request.out_dir)?;
+        }
         let output_path = request.out_dir.join(&output_name);
-        let mut output = BufWriter::new(File::create(&output_path)?);
-        let bytes_written = nod_buf_copy(&mut disc, &mut output)?;
+        let mut output = BufWriter::new(self.create_extract_output(&output_path)?);
+        let bytes_written =
+            self.copy_extract_with_progress(&mut disc, &mut output, disc_size, context, &execution)?;
         output.flush()?;
 
         Ok(OperationReport::succeeded(
@@ -257,9 +348,30 @@ impl ContainerHandler for RvzContainerHandler {
         let mut process_options = NodProcessOptions::default();
         process_options.processor_threads =
             self.negotiated_threads(execution.used_parallelism, execution.effective_threads);
+        let mut last_emitted_percent = -1.0_f32;
         let finalization = writer
             .process(
-                |data, _processed, _total| output.write_all(data.as_ref()),
+                |data, processed, total| {
+                    output.write_all(data.as_ref())?;
+                    if total > 0 {
+                        let processed_bytes = processed.saturating_add(data.as_ref().len() as u64);
+                        let percent = ((processed_bytes.min(total) as f32 / total as f32) * 100.0)
+                            .clamp(0.0, 100.0);
+                        if percent < 100.0 && percent - last_emitted_percent >= 1.0 {
+                            last_emitted_percent = percent;
+                            emit_container_running_progress(
+                                context,
+                                "compress",
+                                RVZ.name,
+                                "create",
+                                format!("creating rvz ({percent:.0}%)"),
+                                percent,
+                                Some(&execution),
+                            );
+                        }
+                    }
+                    Ok(())
+                },
                 &process_options,
             )
             .map_err(|error| RomWeaverError::Validation(format!("rvz create failed: {error}")))?;
@@ -297,4 +409,3 @@ impl ContainerHandler for RvzContainerHandler {
         }
     }
 }
-

@@ -6,6 +6,7 @@ rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
+akv = "0.1.0"
 bzip2.workspace = true
 ciso.workspace = true
 flate2.workspace = true

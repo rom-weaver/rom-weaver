@@ -74,3 +74,5 @@ strip = "symbols"
 
 [patch.crates-io]
 sevenz-rust2 = { path = "vendor/sevenz-rust2-0.21.0" }
+libarchive_src = { path = "vendor/libarchive_src-0.1.0" }
+akv = { path = "vendor/akv-0.1.0" }
