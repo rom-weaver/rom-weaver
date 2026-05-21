@@ -405,6 +405,7 @@ impl CliApp {
                     intermediate_output
                 };
                 if let Some(parent) = apply_output.parent()
+                    && !parent.exists()
                     && let Err(error) = fs::create_dir_all(parent)
                 {
                     return OperationReport::failed(
