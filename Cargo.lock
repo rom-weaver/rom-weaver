@@ -1926,15 +1926,26 @@ dependencies = [
  "bzip2",
  "crc32fast",
  "md-5 0.11.0",
- "oxidelta",
  "qbsdiff",
  "rayon",
  "rom-weaver-checksum",
  "rom-weaver-codecs",
  "rom-weaver-core",
+ "rom-weaver-xdelta",
  "serde_json",
  "sha1",
  "tracing",
+]
+
+[[package]]
+name = "rom-weaver-xdelta"
+version = "0.1.0"
+dependencies = [
+ "oxidelta",
+ "rayon",
+ "rom-weaver-checksum",
+ "rom-weaver-codecs",
+ "rom-weaver-core",
 ]
 
 [[package]]
