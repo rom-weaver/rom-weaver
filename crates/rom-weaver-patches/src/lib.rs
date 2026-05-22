@@ -19,7 +19,6 @@ mod solid;
 #[cfg(test)]
 mod test_support;
 mod ups;
-mod vcdiff;
 
 use std::{
     env, fs,
@@ -47,11 +46,11 @@ use rom_weaver_core::{
     FormatDescriptor, OperationFamily, OperationReport, PatchHandler, Result, RomWeaverError,
     ThreadExecution,
 };
+use rom_weaver_xdelta::VcdiffPatchHandler;
 use rup::RupPatchHandler;
 use solid::SolidPatchHandler;
 use tracing::trace;
 use ups::UpsPatchHandler;
-use vcdiff::VcdiffPatchHandler;
 
 const IPS: FormatDescriptor = FormatDescriptor {
     family: OperationFamily::Patch,

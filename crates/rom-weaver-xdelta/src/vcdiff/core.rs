@@ -88,6 +88,15 @@ fn xdelta_secondary_candidates_for_mode(mode: XdeltaSecondaryMode) -> &'static [
     }
 }
 
+fn require_single_patch_file<'a>(patches: &'a [PathBuf], format_name: &str) -> Result<&'a PathBuf> {
+    if patches.len() != 1 {
+        return Err(RomWeaverError::Validation(format!(
+            "{format_name} apply expects exactly one patch file"
+        )));
+    }
+    Ok(&patches[0])
+}
+
 pub struct VcdiffPatchHandler {
     descriptor: &'static FormatDescriptor,
 }
@@ -158,8 +167,7 @@ impl PatchHandler for VcdiffPatchHandler {
         request: &PatchApplyRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        let patch_path =
-            crate::require_single_patch_file(&request.patches, self.descriptor.name)?.clone();
+        let patch_path = require_single_patch_file(&request.patches, self.descriptor.name)?.clone();
         let mut patch_reader = BufReader::new(File::open(&patch_path)?);
         let patch = parse_patch(&mut patch_reader)?;
         if patch.custom_code_table.is_some() {

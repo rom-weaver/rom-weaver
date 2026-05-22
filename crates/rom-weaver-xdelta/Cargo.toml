@@ -1,20 +1,13 @@
 [package]
-name = "rom-weaver-patches"
+name = "rom-weaver-xdelta"
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
-bzip2.workspace = true
-crc32fast.workspace = true
-md-5.workspace = true
-qbsdiff.workspace = true
+oxidelta = { version = "0.1.4", default-features = false, features = ["adler32", "lzma-secondary"] }
+rayon.workspace = true
 rom-weaver-checksum = { path = "../rom-weaver-checksum" }
 rom-weaver-codecs = { path = "../rom-weaver-codecs" }
 rom-weaver-core = { path = "../rom-weaver-core" }
-rom-weaver-xdelta = { path = "../rom-weaver-xdelta" }
-rayon.workspace = true
-serde_json.workspace = true
-sha1.workspace = true
-tracing.workspace = true
