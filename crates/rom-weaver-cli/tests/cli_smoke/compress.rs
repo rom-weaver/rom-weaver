@@ -1086,7 +1086,7 @@ fn extract_xz_reports_parallel_decode_threads() {
 }
 
 #[test]
-fn extract_zst_reports_single_threaded_decode_threads() {
+fn extract_zst_reports_parallel_decode_threads() {
     let temp = setup_temp_dir();
     let payload = (0..131_072)
         .map(|index| ((index * 17) % 251) as u8)
@@ -1137,8 +1137,8 @@ fn extract_zst_reports_single_threaded_decode_threads() {
     assert_eq!(json["family"], "container");
     assert_eq!(json["format"], "zst");
     assert_eq!(json["requested_threads"], 8);
-    assert_eq!(json["effective_threads"], 1);
-    assert_eq!(json["used_parallelism"], false);
+    assert_eq!(json["effective_threads"], 8);
+    assert_eq!(json["used_parallelism"], true);
     assert_eq!(json["status"], "succeeded");
     assert_eq!(
         fs::read(out_dir.child("source.bin").path()).expect("extracted"),

@@ -2,6 +2,13 @@ struct SevenZContainerHandler {
     descriptor: &'static FormatDescriptor,
 }
 
+#[derive(Clone)]
+struct SevenZCodecSettings {
+    codec: CanonicalCodec,
+    level: u32,
+    method: SevenZMethodConfiguration,
+}
+
 impl SevenZContainerHandler {
     const DEFAULT_CODEC_LEVEL: u32 = 6;
     const MAX_LZMA_DICTIONARY_BYTES: u32 = 16 * 1024 * 1024;
@@ -31,12 +38,23 @@ impl SevenZContainerHandler {
             .map_err(|error| RomWeaverError::Validation(format!("7z archive is invalid: {error}")))
     }
 
+    #[cfg(test)]
     fn parse_codec(
         &self,
         codec: Option<&str>,
         level: Option<i32>,
         execution: &rom_weaver_core::ThreadExecution,
     ) -> Result<SevenZMethodConfiguration> {
+        self.resolve_codec_settings(codec, level, execution)
+            .map(|settings| settings.method)
+    }
+
+    fn resolve_codec_settings(
+        &self,
+        codec: Option<&str>,
+        level: Option<i32>,
+        execution: &rom_weaver_core::ThreadExecution,
+    ) -> Result<SevenZCodecSettings> {
         let codec = match parse_requested_codec(codec) {
             RequestedCodec::Unspecified => CanonicalCodec::Lzma2,
             RequestedCodec::Known(codec) => codec,
@@ -123,7 +141,11 @@ impl SevenZContainerHandler {
             }
         };
 
-        Ok(method)
+        Ok(SevenZCodecSettings {
+            codec,
+            level,
+            method,
+        })
     }
 
     fn parse_level(level: Option<i32>) -> Result<Option<u32>> {
@@ -172,21 +194,252 @@ impl SevenZContainerHandler {
         }
     }
 
-    fn create_archive_entry(&self, entry: &ArchiveInputEntry) -> SevenZArchiveEntry {
-        #[cfg(target_family = "wasm")]
-        {
-            // Avoid filesystem timestamp conversion in sevenz-rust on wasm, which can panic on
-            // platforms that cannot represent pre-UNIX-EPOCH SystemTime values.
+    fn method_name_from_codec(codec: CanonicalCodec) -> &'static str {
+        match codec {
+            CanonicalCodec::Store => "store",
+            CanonicalCodec::Deflate => "deflate",
+            CanonicalCodec::Bzip2 => "bzip2",
+            CanonicalCodec::Lzma => "lzma",
+            CanonicalCodec::Lzma2 => "lzma2",
+            CanonicalCodec::Zstd => "zstd",
+            CanonicalCodec::Lz4 => "lz4",
+            CanonicalCodec::Brotli => "brotli",
+            CanonicalCodec::Ppmd => "ppmd",
+            CanonicalCodec::Huffman => "huffman",
+        }
+    }
+
+    fn libarchive_method_name(codec: CanonicalCodec) -> Option<&'static str> {
+        match codec {
+            CanonicalCodec::Store => Some("copy"),
+            CanonicalCodec::Deflate => Some("deflate"),
+            CanonicalCodec::Bzip2 => Some("bzip2"),
+            CanonicalCodec::Lzma => Some("lzma1"),
+            CanonicalCodec::Lzma2 => Some("lzma2"),
+            CanonicalCodec::Ppmd => Some("ppmd"),
+            CanonicalCodec::Zstd | CanonicalCodec::Lz4 | CanonicalCodec::Brotli => None,
+            CanonicalCodec::Huffman => None,
+        }
+    }
+
+    const fn prefers_sevenz_rust_for_codec(codec: CanonicalCodec) -> bool {
+        matches!(
+            codec,
+            CanonicalCodec::Lzma | CanonicalCodec::Lzma2 | CanonicalCodec::Bzip2
+        )
+    }
+
+    fn archive_prefers_sevenz_rust_backend(&self, reader: &SevenZReader<File>) -> bool {
+        reader.archive().blocks.iter().any(|block| {
+            block.ordered_coder_iter().any(|(_, coder)| {
+                matches!(
+                    SevenZMethod::by_id(coder.encoder_method_id()),
+                    Some(SevenZMethod::LZMA | SevenZMethod::LZMA2 | SevenZMethod::BZIP2)
+                )
+            })
+        })
+    }
+
+    fn create_with_sevenz_rust(
+        &self,
+        request: &ContainerCreateRequest,
+        entries: &[ArchiveInputEntry],
+        settings: &SevenZCodecSettings,
+        execution: &ThreadExecution,
+        context: &OperationContext,
+    ) -> Result<u64> {
+        if let Some(parent) = request.output.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        let output = File::create(&request.output)?;
+        let mut writer = SevenZWriter::new(output).map_err(|error| {
+            RomWeaverError::Validation(format!(
+                "7z create failed while opening `{}`: {error}",
+                request.output.display()
+            ))
+        })?;
+        writer.set_content_methods(vec![settings.method.clone()]);
+
+        let mut logical_bytes = 0u64;
+        let total_entries = entries.len();
+        for (entry_index, entry) in entries.iter().enumerate() {
+            let archive_entry =
+                SevenZArchiveEntry::from_path(&entry.source, entry.archive_name.clone());
             if entry.is_dir {
-                SevenZArchiveEntry::new_directory(&entry.archive_name)
+                writer
+                    .push_archive_entry::<&[u8]>(archive_entry, None)
+                    .map_err(|error| {
+                        RomWeaverError::Validation(format!(
+                            "7z create failed while adding directory `{}`: {error}",
+                            entry.archive_name
+                        ))
+                    })?;
             } else {
-                SevenZArchiveEntry::new_file(&entry.archive_name)
+                let source = File::open(&entry.source)?;
+                logical_bytes = logical_bytes.saturating_add(fs::metadata(&entry.source)?.len());
+                writer
+                    .push_archive_entry::<File>(archive_entry, Some(source))
+                    .map_err(|error| {
+                        RomWeaverError::Validation(format!(
+                            "7z create failed while adding file `{}`: {error}",
+                            entry.archive_name
+                        ))
+                    })?;
             }
+
+            emit_container_step_progress(
+                context,
+                "compress",
+                self.descriptor.name,
+                "create",
+                entry_index.saturating_add(1),
+                total_entries,
+                format!(
+                    "creating `{}` ({}/{})",
+                    self.descriptor.name,
+                    entry_index.saturating_add(1),
+                    total_entries
+                ),
+                Some(execution),
+            );
         }
-        #[cfg(not(target_family = "wasm"))]
-        {
-            SevenZArchiveEntry::from_path(&entry.source, entry.archive_name.clone())
+
+        writer.finish().map_err(|error| {
+            RomWeaverError::Validation(format!(
+                "7z create failed while finalizing `{}`: {error}",
+                request.output.display()
+            ))
+        })?;
+
+        Ok(logical_bytes)
+    }
+
+    fn extract_with_sevenz_rust(
+        &self,
+        request: &ContainerExtractRequest,
+        context: &OperationContext,
+        mut reader: SevenZReader<File>,
+    ) -> Result<OperationReport> {
+        fs::create_dir_all(&request.out_dir)?;
+        let execution = context.plan_threads(ThreadCapability::parallel(None));
+        reader.set_thread_count(self.thread_count(execution.effective_threads));
+
+        let mut counting_matcher = SelectionMatcher::new(&request.selections);
+        let mut total_entries = 0usize;
+        for entry in &reader.archive().files {
+            let entry_name = normalize_archive_name(entry.name());
+            if entry_name.is_empty() || !counting_matcher.matches(&entry_name) {
+                continue;
+            }
+            total_entries = total_entries.saturating_add(1);
         }
+        counting_matcher.ensure_all_matched()?;
+
+        let mut matcher = SelectionMatcher::new(&request.selections);
+        let mut completed = 0usize;
+        let mut files_written = 0usize;
+        let mut written_bytes = 0u64;
+        let out_dir = request.out_dir.clone();
+        reader
+            .for_each_entries(|entry, input| {
+                let entry_name = normalize_archive_name(entry.name());
+                if entry_name.is_empty() || !matcher.matches(&entry_name) {
+                    return Ok(true);
+                }
+
+                let relative =
+                    sanitize_archive_relative_path_from_str(entry.name()).map_err(|error| {
+                        std::io::Error::new(std::io::ErrorKind::InvalidData, error.to_string())
+                    })?;
+                let output_path = out_dir.join(relative);
+                if entry.is_directory() || !entry.has_stream() {
+                    fs::create_dir_all(&output_path)?;
+                } else {
+                    if let Some(parent) = output_path.parent() {
+                        fs::create_dir_all(parent)?;
+                    }
+                    let mut output = BufWriter::new(File::create(&output_path)?);
+                    let copied = io::copy(input, &mut output)?;
+                    output.flush()?;
+                    files_written = files_written.saturating_add(1);
+                    written_bytes = written_bytes.saturating_add(copied);
+                }
+
+                completed = completed.saturating_add(1);
+                emit_container_step_progress(
+                    context,
+                    "extract",
+                    self.descriptor.name,
+                    "extract",
+                    completed,
+                    total_entries,
+                    format!(
+                        "extracting `{}` ({}/{})",
+                        self.descriptor.name, completed, total_entries
+                    ),
+                    Some(&execution),
+                );
+                Ok(true)
+            })
+            .map_err(|error| {
+                RomWeaverError::Validation(format!(
+                    "{} extract failed: {error}",
+                    self.descriptor.name
+                ))
+            })?;
+        matcher.ensure_all_matched()?;
+
+        Ok(OperationReport::succeeded(
+            OperationFamily::Container,
+            Some(self.descriptor.name.to_string()),
+            "extract",
+            format!(
+                "extracted `{}` to `{}` ({} file(s), {} bytes written)",
+                request.source.display(),
+                request.out_dir.display(),
+                files_written,
+                written_bytes
+            ),
+            Some(100.0),
+            Some(execution),
+        ))
+    }
+
+    fn create_with_libarchive(
+        &self,
+        request: &ContainerCreateRequest,
+        entries: &[ArchiveInputEntry],
+        settings: &SevenZCodecSettings,
+        execution: &ThreadExecution,
+        context: &OperationContext,
+    ) -> Result<u64> {
+        let method_name = Self::libarchive_method_name(settings.codec).ok_or_else(|| {
+            RomWeaverError::Unsupported(format!(
+                "libarchive does not support 7z codec `{}`",
+                Self::method_name_from_codec(settings.codec)
+            ))
+        })?;
+        let logical_bytes = write_archive_with_libarchive(
+            request,
+            entries,
+            context,
+            execution,
+            LibarchiveCreateConfig {
+                format_name: self.descriptor.name,
+                format: LibarchiveCreateFormat::SevenZ,
+                filter: LibarchiveCreateFilter::None,
+                format_compression: Some(method_name),
+                compression_level: if matches!(settings.codec, CanonicalCodec::Store) {
+                    None
+                } else {
+                    Some(settings.level as i32)
+                },
+                format_threads: Some(execution.effective_threads.max(1)),
+                filter_threads: None,
+            },
+        )?;
+        Ok(logical_bytes)
     }
 }
 
@@ -266,6 +519,10 @@ impl ContainerHandler for SevenZContainerHandler {
         request: &ContainerExtractRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
+        let reader = self.open_reader(&request.source)?;
+        if self.archive_prefers_sevenz_rust_backend(&reader) {
+            return self.extract_with_sevenz_rust(request, context, reader);
+        }
         extract_regular_archive_with_libarchive(request, context, self.descriptor.name, false)
     }
 
@@ -275,80 +532,14 @@ impl ContainerHandler for SevenZContainerHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let execution = context.plan_threads(ThreadCapability::parallel(None));
-        let method = self.parse_codec(request.codec.as_deref(), request.level, &execution)?;
+        let settings =
+            self.resolve_codec_settings(request.codec.as_deref(), request.level, &execution)?;
         let entries = collect_archive_inputs(&request.inputs)?;
-
-        if let Some(parent) = request.output.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        let output = File::create(&request.output)?;
-        let mut writer = SevenZWriter::new(output).map_err(|error| {
-            RomWeaverError::Validation(format!("7z create failed to initialize writer: {error}"))
-        })?;
-        writer.set_content_methods(vec![method.clone()]);
-
-        let mut logical_bytes = 0u64;
-        let total_entries = entries.len();
-        for (entry_index, entry) in entries.iter().enumerate() {
-            let archive_entry = self.create_archive_entry(entry);
-            if entry.is_dir {
-                writer
-                    .push_archive_entry::<&[u8]>(archive_entry, None)
-                    .map_err(|error| {
-                        RomWeaverError::Validation(format!(
-                            "7z create failed for `{}`: {error}",
-                            entry.archive_name
-                        ))
-                    })?;
-                emit_container_step_progress(
-                    context,
-                    "compress",
-                    self.descriptor.name,
-                    "create",
-                    entry_index.saturating_add(1),
-                    total_entries,
-                    format!(
-                        "creating `{}` ({}/{})",
-                        self.descriptor.name,
-                        entry_index.saturating_add(1),
-                        total_entries
-                    ),
-                    Some(&execution),
-                );
-                continue;
-            }
-
-            writer
-                .push_archive_entry(archive_entry, Some(File::open(&entry.source)?))
-                .map_err(|error| {
-                    RomWeaverError::Validation(format!(
-                        "7z create failed for `{}`: {error}",
-                        entry.archive_name
-                    ))
-                })?;
-            logical_bytes = logical_bytes.saturating_add(fs::metadata(&entry.source)?.len());
-            emit_container_step_progress(
-                context,
-                "compress",
-                self.descriptor.name,
-                "create",
-                entry_index.saturating_add(1),
-                total_entries,
-                format!(
-                    "creating `{}` ({}/{})",
-                    self.descriptor.name,
-                    entry_index.saturating_add(1),
-                    total_entries
-                ),
-                Some(&execution),
-            );
-        }
-
-        writer.finish().map_err(|error| {
-            RomWeaverError::Validation(format!(
-                "7z create failed while finalizing archive: {error}"
-            ))
-        })?;
+        let logical_bytes = if Self::prefers_sevenz_rust_for_codec(settings.codec) {
+            self.create_with_sevenz_rust(request, &entries, &settings, &execution, context)?
+        } else {
+            self.create_with_libarchive(request, &entries, &settings, &execution, context)?
+        };
 
         Ok(OperationReport::succeeded(
             OperationFamily::Container,
@@ -358,7 +549,7 @@ impl ContainerHandler for SevenZContainerHandler {
                 "created `{}` from {} input(s) with {} ({} bytes)",
                 request.output.display(),
                 request.inputs.len(),
-                Self::method_name(&method),
+                Self::method_name(&settings.method),
                 logical_bytes
             ),
             Some(100.0),

@@ -12,6 +12,7 @@ mod tests {
     use super::{
         CSO_DEFAULT_BLOCK_BYTES, ChdCodec, ContainerCreateRequest, ContainerRegistry, SEVEN_Z,
         SelectionMatcher, SevenZContainerHandler, SevenZMethod, Z3dsContainerHandler,
+        ZipContainerHandler,
     };
     use chd::{
         header::Header,
@@ -28,6 +29,7 @@ mod tests {
             ProcessOptions as NodProcessOptions,
         },
     };
+    use rom_weaver_codecs::CanonicalCodec;
     use rom_weaver_core::{
         CancellationToken, ContainerHandler, NoopProgressSink, OperationContext, ThreadBudget,
         ThreadCapability,
@@ -788,6 +790,88 @@ mod tests {
     }
 
     #[test]
+    fn seven_z_backend_routing_prefers_sevenz_rust_for_lzma_family_and_bzip2() {
+        assert!(SevenZContainerHandler::prefers_sevenz_rust_for_codec(
+            CanonicalCodec::Lzma
+        ));
+        assert!(SevenZContainerHandler::prefers_sevenz_rust_for_codec(
+            CanonicalCodec::Lzma2
+        ));
+        assert!(SevenZContainerHandler::prefers_sevenz_rust_for_codec(
+            CanonicalCodec::Bzip2
+        ));
+
+        for codec in [
+            CanonicalCodec::Store,
+            CanonicalCodec::Deflate,
+            CanonicalCodec::Ppmd,
+            CanonicalCodec::Zstd,
+            CanonicalCodec::Lz4,
+            CanonicalCodec::Brotli,
+        ] {
+            assert!(
+                !SevenZContainerHandler::prefers_sevenz_rust_for_codec(codec),
+                "codec `{}` should stay on libarchive backend",
+                codec.name()
+            );
+        }
+    }
+
+    #[test]
+    fn seven_z_backend_routing_detects_extract_archives_that_need_sevenz_rust() {
+        let temp_dir = temp_dir_path("seven-z-backend-routing-detect");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input_path = temp_dir.join("payload.bin");
+        let source_bytes = (0..(96 * 1024))
+            .map(|index| (index as u8).wrapping_mul(37))
+            .collect::<Vec<_>>();
+        fs::write(&input_path, &source_bytes).expect("fixture");
+
+        let handler = SevenZContainerHandler::new(&SEVEN_Z);
+        let context = test_context(&temp_dir, 8);
+
+        let lzma_archive = temp_dir.join("payload-lzma.7z");
+        handler
+            .create(
+                &ContainerCreateRequest {
+                    inputs: vec![input_path.clone()],
+                    output: lzma_archive.clone(),
+                    format: "7z".to_string(),
+                    codec: Some("lzma".to_string()),
+                    level: Some(6),
+                    parent: None,
+                },
+                &context,
+            )
+            .expect("create lzma archive");
+        let lzma_reader = handler
+            .open_reader(&lzma_archive)
+            .expect("open lzma archive");
+        assert!(handler.archive_prefers_sevenz_rust_backend(&lzma_reader));
+
+        let deflate_archive = temp_dir.join("payload-deflate.7z");
+        handler
+            .create(
+                &ContainerCreateRequest {
+                    inputs: vec![input_path],
+                    output: deflate_archive.clone(),
+                    format: "7z".to_string(),
+                    codec: Some("deflate".to_string()),
+                    level: Some(6),
+                    parent: None,
+                },
+                &context,
+            )
+            .expect("create deflate archive");
+        let deflate_reader = handler
+            .open_reader(&deflate_archive)
+            .expect("open deflate archive");
+        assert!(!handler.archive_prefers_sevenz_rust_backend(&deflate_reader));
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
     fn zip_capabilities_report_parallel_extract_threads() {
         let registry = ContainerRegistry::new();
         let handler = registry.find_by_name("zip").expect("zip handler");
@@ -803,6 +887,98 @@ mod tests {
             capabilities.create_threads,
             ThreadCapability::parallel(None)
         );
+    }
+
+    #[test]
+    fn zip_zstd_levels_map_to_libarchive_zip_scale() {
+        let cases = [
+            (-7, 1),
+            (0, 3),
+            (3, 4),
+            (5, 5),
+            (12, 7),
+            (19, 9),
+            (21, 9),
+            (22, 9),
+        ];
+
+        for (zstd_level, zip_level) in cases {
+            assert_eq!(
+                ZipContainerHandler::map_zstd_level_to_zip_level(zstd_level),
+                zip_level,
+                "zstd level {zstd_level} should map to zip level {zip_level}"
+            );
+        }
+    }
+
+    #[test]
+    fn zip_create_keeps_requested_threads_for_single_file() {
+        let temp_dir = temp_dir_path("zip-single-file-threads");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input_path = temp_dir.join("payload.bin");
+        fs::write(&input_path, vec![0xAB; 512 * 1024]).expect("fixture");
+
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("zipx").expect("zipx handler");
+
+        let report = handler
+            .create(
+                &ContainerCreateRequest {
+                    inputs: vec![input_path],
+                    output: temp_dir.join("payload.zipx"),
+                    format: "zipx".to_string(),
+                    codec: Some("zstd".to_string()),
+                    level: Some(19),
+                    parent: None,
+                },
+                &test_context(&temp_dir, 8),
+            )
+            .expect("zipx create");
+        let execution = report.thread_execution.expect("thread execution");
+        assert_eq!(execution.requested_threads, 8);
+        assert_eq!(execution.effective_threads, 8);
+        assert!(execution.used_parallelism);
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn zip_create_rejects_codecs_not_supported_by_libarchive() {
+        let temp_dir = temp_dir_path("zip-unsupported-codecs");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input_path = temp_dir.join("payload.bin");
+        let source_bytes = (0..(96 * 1024))
+            .map(|index| (index as u8).wrapping_mul(31))
+            .collect::<Vec<_>>();
+        fs::write(&input_path, &source_bytes).expect("fixture");
+
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("zip").expect("zip handler");
+
+        for codec in ["lzma", "lz4"] {
+            let archive_path = temp_dir.join(format!("payload-{codec}.zip"));
+            let error = handler
+                .create(
+                    &ContainerCreateRequest {
+                        inputs: vec![input_path.clone()],
+                        output: archive_path,
+                        format: "zip".to_string(),
+                        codec: Some(codec.to_string()),
+                        level: Some(6),
+                        parent: None,
+                    },
+                    &test_context(&temp_dir, 8),
+                )
+                .expect_err("codec should be rejected");
+            assert!(
+                error
+                    .to_string()
+                    .contains("supported codecs are store, deflate, bzip2, and zstd"),
+                "unexpected error for codec `{codec}`: {error}"
+            );
+        }
+
+        let _ = fs::remove_dir_all(temp_dir);
     }
 
     #[test]
@@ -1027,7 +1203,7 @@ mod tests {
     }
 
     #[test]
-    fn zip_runtime_threads_fall_back_to_single_thread_for_single_entry() {
+    fn zip_runtime_threads_keep_parallel_create_for_single_entry() {
         let temp_dir = temp_dir_path("zip-thread-single-entry");
         fs::create_dir_all(&temp_dir).expect("temp dir");
         let input_dir = temp_dir.join("input");
@@ -1058,8 +1234,8 @@ mod tests {
             .expect("create zip");
         let create_execution = create_report.thread_execution.expect("thread execution");
         assert_eq!(create_execution.requested_threads, 8);
-        assert_eq!(create_execution.effective_threads, 1);
-        assert!(!create_execution.used_parallelism);
+        assert_eq!(create_execution.effective_threads, 8);
+        assert!(create_execution.used_parallelism);
 
         let extract_report = handler
             .extract(
@@ -1573,9 +1749,9 @@ mod tests {
                 .supports_execution(&extract_execution)
         );
         assert_eq!(extract_execution.requested_threads, 8);
-        assert_eq!(extract_execution.effective_threads, 1);
-        assert!(!extract_execution.used_parallelism);
-        assert!(extract_execution.thread_fallback);
+        assert!(extract_execution.effective_threads > 1);
+        assert!(extract_execution.used_parallelism);
+        assert!(!extract_execution.thread_fallback);
 
         let extracted = fs::read(output_dir.join("source.bin")).expect("read extracted payload");
         assert_eq!(extracted, payload);
@@ -2648,7 +2824,7 @@ mod tests {
     }
 
     #[test]
-    fn seven_z_round_trip_supports_expanded_codec_set() {
+    fn seven_z_round_trip_supports_supported_codec_set() {
         let temp_dir = temp_dir_path("seven-z-expanded-codec-roundtrip");
         fs::create_dir_all(&temp_dir).expect("temp dir");
         let input_path = temp_dir.join("payload.bin");
@@ -2661,7 +2837,14 @@ mod tests {
         let handler = registry.find_by_name("7z").expect("7z handler");
         let capabilities = handler.capabilities();
 
-        for codec in ["zstd", "deflate", "bzip2", "lz4", "brotli", "ppmd"] {
+        for (codec, level) in [
+            ("store", None),
+            ("deflate", Some(6)),
+            ("bzip2", Some(6)),
+            ("lzma", Some(6)),
+            ("lzma2", Some(6)),
+            ("ppmd", Some(6)),
+        ] {
             let archive_path = temp_dir.join(format!("payload-{codec}.7z"));
             let output_dir = temp_dir.join(format!("out-{codec}"));
 
@@ -2672,7 +2855,7 @@ mod tests {
                         output: archive_path.clone(),
                         format: "7z".to_string(),
                         codec: Some(codec.to_string()),
-                        level: Some(6),
+                        level,
                         parent: None,
                     },
                     &test_context(&temp_dir, 8),
@@ -2706,6 +2889,45 @@ mod tests {
 
             let extracted = fs::read(output_dir.join("payload.bin")).expect("read extracted file");
             assert_eq!(extracted, source_bytes);
+        }
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn seven_z_create_rejects_codecs_not_supported_by_libarchive() {
+        let temp_dir = temp_dir_path("seven-z-unsupported-codecs");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input_path = temp_dir.join("payload.bin");
+        let source_bytes = (0..(96 * 1024))
+            .map(|index| (index as u8).wrapping_mul(17))
+            .collect::<Vec<_>>();
+        fs::write(&input_path, &source_bytes).expect("fixture");
+
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("7z").expect("7z handler");
+
+        for codec in ["zstd", "lz4", "brotli"] {
+            let archive_path = temp_dir.join(format!("payload-{codec}.7z"));
+            let error = handler
+                .create(
+                    &ContainerCreateRequest {
+                        inputs: vec![input_path.clone()],
+                        output: archive_path,
+                        format: "7z".to_string(),
+                        codec: Some(codec.to_string()),
+                        level: Some(6),
+                        parent: None,
+                    },
+                    &test_context(&temp_dir, 8),
+                )
+                .expect_err("codec should be rejected");
+            assert!(
+                error
+                    .to_string()
+                    .contains("libarchive does not support 7z codec"),
+                "unexpected error for codec `{codec}`: {error}"
+            );
         }
 
         let _ = fs::remove_dir_all(temp_dir);

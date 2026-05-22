@@ -1,10 +1,7 @@
 impl NativeCodecBackend {
-    const XZ_MT_BLOCK_BYTES: u64 = 1 << 20;
-    const XZ_MAX_ENCODE_DICT_BYTES: u32 = 8 << 20;
     const STORE_COPY_MIN_PARALLEL_BYTES: usize = 1 << 20;
-    const DEFLATE_PARALLEL_MIN_BYTES: usize = 256 * 1024;
-    const BZIP2_PARALLEL_MIN_BYTES: usize = 1 << 20;
-    const ZSTD_PARALLEL_MIN_BYTES: usize = 1 << 20;
+    const LIBARCHIVE_IO_BUFFER_BYTES: usize = 128 * 1024;
+    const LIBARCHIVE_OPEN_BLOCK_BYTES: usize = 64 * 1024;
 
     const fn new(descriptor: &'static CodecDescriptor, kind: NativeCodecKind) -> Self {
         Self { descriptor, kind }
@@ -97,31 +94,6 @@ impl NativeCodecBackend {
         }
     }
 
-    fn xz_thread_count(effective_threads: usize) -> u32 {
-        match u32::try_from(effective_threads) {
-            Ok(count) => count.clamp(1, 256),
-            Err(_) => 256,
-        }
-    }
-
-    fn xz_options(level: u32) -> XzOptions {
-        let mut options = XzOptions::with_preset(level);
-        options.lzma_options.dict_size = options
-            .lzma_options
-            .dict_size
-            .min(Self::XZ_MAX_ENCODE_DICT_BYTES);
-        options
-    }
-
-    fn xz_mt_options(level: u32) -> Result<XzOptions> {
-        let mut options = Self::xz_options(level);
-        let block_size = NonZeroU64::new(Self::XZ_MT_BLOCK_BYTES).ok_or_else(|| {
-            RomWeaverError::Validation("lzma2 internal block size must be non-zero".into())
-        })?;
-        options.set_block_size(Some(block_size));
-        Ok(options)
-    }
-
     fn io_policy(execution: &ThreadExecution) -> BoundedIoPolicy {
         BoundedIoPolicy::for_effective_threads(execution.effective_threads)
     }
@@ -152,613 +124,91 @@ impl NativeCodecBackend {
         Ok(batch)
     }
 
-    fn encode_deflate_parallel(
-        &self,
-        request: &CodecOperationRequest,
-        level: u32,
-        execution: &mut ThreadExecution,
-    ) -> Result<Option<u64>> {
-        if !execution.used_parallelism {
-            return Ok(None);
-        }
-
-        let input_len_u64 = fs::metadata(&request.input)?.len();
-        if input_len_u64 == 0 {
-            execution.apply_pool_fallback(
-                "deflate payload is empty; using single-threaded encoder".to_string(),
-            );
-            return Ok(None);
-        }
-        let input_len = usize::try_from(input_len_u64).map_err(|_| {
-            RomWeaverError::Validation("deflate payload exceeded addressable memory".into())
-        })?;
-        if input_len < Self::DEFLATE_PARALLEL_MIN_BYTES {
-            execution.apply_pool_fallback(format!(
-                "deflate payload too small for threaded encode ({input_len} bytes)"
-            ));
-            return Ok(None);
-        }
-
-        let policy = Self::io_policy(execution);
-        let chunks = Self::file_chunks(&request.input, &policy)?;
-        if chunks.len() <= 1 {
-            execution.apply_pool_fallback(
-                "deflate payload produced a single chunk; using single-threaded encoder"
-                    .to_string(),
-            );
-            return Ok(None);
-        }
-
-        match rayon::ThreadPoolBuilder::new()
-            .num_threads(execution.effective_threads.max(1))
-            .build()
-        {
-            Ok(pool) => {
-                let mut source = BufReader::new(File::open(&request.input)?);
-                let output =
-                    BufWriter::new(NonVectoredWriter::new(File::create(&request.output)?));
-                let mut ordered =
-                    OrderedChunkWriter::new(output, policy.max_reorder_items.max(1))?;
-
-                for batch in chunks.chunks(policy.max_in_flight_items.max(1)) {
-                    let batch_bytes = Self::read_chunk_batch(&mut source, batch)?;
-                    let encoded_batch = pool.install(|| {
-                        batch_bytes
-                            .into_par_iter()
-                            .map(|(chunk_index, chunk)| -> Result<(u64, Vec<u8>)> {
-                                let mut encoder =
-                                    GzEncoder::new(Vec::new(), DeflateCompression::new(level));
-                                encoder.write_all(&chunk)?;
-                                let member = encoder.finish()?;
-                                Ok((chunk_index, member))
-                            })
-                            .collect::<Result<Vec<_>>>()
-                    })?;
-
-                    for (chunk_index, member) in encoded_batch {
-                        ordered.write_chunk(chunk_index, member)?;
-                    }
-                }
-                let _ = ordered.finish()?;
-                Ok(Some(input_len_u64))
-            }
-            Err(error) => {
-                execution.apply_pool_fallback(format!(
-                    "deflate codec thread pool build failed: {error}"
-                ));
-                Ok(None)
-            }
-        }
-    }
-
-    fn encode_bzip2_parallel(
-        &self,
-        request: &CodecOperationRequest,
-        level: u32,
-        execution: &mut ThreadExecution,
-    ) -> Result<Option<u64>> {
-        if !execution.used_parallelism {
-            return Ok(None);
-        }
-
-        let input_len_u64 = fs::metadata(&request.input)?.len();
-        if input_len_u64 == 0 {
-            execution.apply_pool_fallback(
-                "bzip2 payload is empty; using single-threaded encoder".to_string(),
-            );
-            return Ok(None);
-        }
-        let input_len = usize::try_from(input_len_u64).map_err(|_| {
-            RomWeaverError::Validation("bzip2 payload exceeded addressable memory".into())
-        })?;
-        if input_len < Self::BZIP2_PARALLEL_MIN_BYTES {
-            execution.apply_pool_fallback(format!(
-                "bzip2 payload too small for threaded encode ({input_len} bytes)"
-            ));
-            return Ok(None);
-        }
-
-        let policy = Self::io_policy(execution);
-        let chunks = Self::file_chunks(&request.input, &policy)?;
-        if chunks.len() <= 1 {
-            execution.apply_pool_fallback(
-                "bzip2 payload produced a single chunk; using single-threaded encoder"
-                    .to_string(),
-            );
-            return Ok(None);
-        }
-
-        match rayon::ThreadPoolBuilder::new()
-            .num_threads(execution.effective_threads.max(1))
-            .build()
-        {
-            Ok(pool) => {
-                let mut source = BufReader::new(File::open(&request.input)?);
-                let output =
-                    BufWriter::new(NonVectoredWriter::new(File::create(&request.output)?));
-                let mut ordered =
-                    OrderedChunkWriter::new(output, policy.max_reorder_items.max(1))?;
-
-                for batch in chunks.chunks(policy.max_in_flight_items.max(1)) {
-                    let batch_bytes = Self::read_chunk_batch(&mut source, batch)?;
-                    let encoded_batch = pool.install(|| {
-                        batch_bytes
-                            .into_par_iter()
-                            .map(|(chunk_index, chunk)| -> Result<(u64, Vec<u8>)> {
-                                let mut encoder =
-                                    BzEncoder::new(Vec::new(), Bzip2Compression::new(level));
-                                encoder.write_all(&chunk)?;
-                                let member = encoder.finish()?;
-                                Ok((chunk_index, member))
-                            })
-                            .collect::<Result<Vec<_>>>()
-                    })?;
-
-                    for (chunk_index, member) in encoded_batch {
-                        ordered.write_chunk(chunk_index, member)?;
-                    }
-                }
-                let _ = ordered.finish()?;
-                Ok(Some(input_len_u64))
-            }
-            Err(error) => {
-                execution
-                    .apply_pool_fallback(format!("bzip2 codec thread pool build failed: {error}"));
-                Ok(None)
-            }
-        }
-    }
-
-    fn scan_deflate_member_ranges(path: &Path) -> Result<Vec<(u64, u64)>> {
-        let input_len = fs::metadata(path)?.len();
-        let mut ranges = Vec::new();
-        let mut offset = 0u64;
-        while offset < input_len {
-            let mut file = File::open(path)?;
-            file.seek(SeekFrom::Start(offset))?;
-            let mut decoder = BufReadGzDecoder::new(BufReader::new(file));
-            let mut sink = io::sink();
-            io::copy(&mut decoder, &mut sink)?;
-            let mut reader = decoder.into_inner();
-            let consumed_position = reader.stream_position()?;
-            let consumed = consumed_position.checked_sub(offset).ok_or_else(|| {
-                RomWeaverError::Validation(
-                    "deflate decoder reported invalid buffered consumption state".to_string(),
-                )
-            })?;
-            if consumed == 0 {
-                return Err(RomWeaverError::Validation(
-                    "deflate decoder did not consume input while scanning members".to_string(),
-                ));
-            }
-            let next_offset = offset.saturating_add(consumed);
-            if next_offset > input_len {
-                return Err(RomWeaverError::Validation(
-                    "deflate member scanner overshot input length".to_string(),
-                ));
-            }
-            ranges.push((offset, next_offset));
-            offset = next_offset;
-        }
-        Ok(ranges)
-    }
-
-    fn scan_bzip2_member_ranges(path: &Path) -> Result<Vec<(u64, u64)>> {
-        let input_len = fs::metadata(path)?.len();
-        let mut ranges = Vec::new();
-        let mut offset = 0u64;
-        while offset < input_len {
-            let mut file = File::open(path)?;
-            file.seek(SeekFrom::Start(offset))?;
-            let mut decoder = BufReadBzDecoder::new(BufReader::new(file));
-            let mut sink = io::sink();
-            io::copy(&mut decoder, &mut sink)?;
-            let mut reader = decoder.into_inner();
-            let consumed_position = reader.stream_position()?;
-            let consumed = consumed_position.checked_sub(offset).ok_or_else(|| {
-                RomWeaverError::Validation(
-                    "bzip2 decoder reported invalid buffered consumption state".to_string(),
-                )
-            })?;
-            if consumed == 0 {
-                return Err(RomWeaverError::Validation(
-                    "bzip2 decoder did not consume input while scanning members".to_string(),
-                ));
-            }
-            let next_offset = offset.saturating_add(consumed);
-            if next_offset > input_len {
-                return Err(RomWeaverError::Validation(
-                    "bzip2 member scanner overshot input length".to_string(),
-                ));
-            }
-            ranges.push((offset, next_offset));
-            offset = next_offset;
-        }
-        Ok(ranges)
-    }
-
-    fn scan_zstd_frame_ranges(path: &Path) -> Result<Vec<(u64, u64)>> {
-        let input_len = fs::metadata(path)?.len();
-        let mut ranges = Vec::new();
-        let mut offset = 0u64;
-        while offset < input_len {
-            let mut file = File::open(path)?;
-            file.seek(SeekFrom::Start(offset))?;
-            let mut decoder = ZstdDecoder::new(BufReader::new(file))?.single_frame();
-            let mut sink = io::sink();
-            io::copy(&mut decoder, &mut sink)?;
-            let mut reader = decoder.finish();
-            let consumed_position = reader.stream_position()?;
-            let frame_size = consumed_position.checked_sub(offset).ok_or_else(|| {
-                RomWeaverError::Validation(
-                    "zstd decoder reported invalid buffered consumption state".to_string(),
-                )
-            })?;
-            if frame_size == 0 {
-                return Err(RomWeaverError::Validation(
-                    "zstd frame scanner returned a zero-sized frame".to_string(),
-                ));
-            }
-            let next_offset = offset.saturating_add(frame_size);
-            if next_offset > input_len {
-                return Err(RomWeaverError::Validation(
-                    "zstd frame scanner overshot input length".to_string(),
-                ));
-            }
-            ranges.push((offset, next_offset));
-            offset = next_offset;
-        }
-        Ok(ranges)
-    }
-
-    fn encode_zstd_parallel(
+    fn encode_with_libarchive(
         &self,
         request: &CodecOperationRequest,
         level: i32,
         execution: &mut ThreadExecution,
-    ) -> Result<Option<u64>> {
-        if !execution.used_parallelism {
-            return Ok(None);
-        }
+    ) -> Result<u64> {
+        let input_len = fs::metadata(&request.input)?.len();
+        let mut source = BufReader::new(File::open(&request.input)?);
+        let archive_name = request
+            .input
+            .file_name()
+            .and_then(|value| value.to_str())
+            .filter(|value| !value.is_empty())
+            .unwrap_or("data");
 
-        let input_len_u64 = fs::metadata(&request.input)?.len();
-        if input_len_u64 == 0 {
-            execution.apply_pool_fallback(
-                "zstd payload is empty; using single-threaded encoder".to_string(),
-            );
-            return Ok(None);
-        }
-        let input_len = usize::try_from(input_len_u64).map_err(|_| {
-            RomWeaverError::Validation("zstd payload exceeded addressable memory".into())
-        })?;
-        if input_len < Self::ZSTD_PARALLEL_MIN_BYTES {
-            execution.apply_pool_fallback(format!(
-                "zstd payload too small for threaded encode ({input_len} bytes)"
-            ));
-            return Ok(None);
-        }
+        let thread_count = Some(execution.effective_threads.max(1));
+        let archive_ptr = libarchive_open_write_archive(
+            self.descriptor.name,
+            self.kind,
+            &request.output,
+            level,
+            thread_count,
+        )?;
+        let result = (|| -> Result<u64> {
+            libarchive_write_raw_entry_from_reader(
+                archive_ptr,
+                self.descriptor.name,
+                archive_name,
+                input_len,
+                &mut source,
+                Self::LIBARCHIVE_IO_BUFFER_BYTES,
+            )?;
+            Ok(input_len)
+        })();
 
-        let policy = Self::io_policy(execution);
-        let chunks = Self::file_chunks(&request.input, &policy)?;
-        if chunks.len() <= 1 {
-            execution.apply_pool_fallback(
-                "zstd payload produced a single chunk; using single-threaded encoder".to_string(),
-            );
-            return Ok(None);
-        }
-
-        match rayon::ThreadPoolBuilder::new()
-            .num_threads(execution.effective_threads.max(1))
-            .build()
-        {
-            Ok(pool) => {
-                let mut source = BufReader::new(File::open(&request.input)?);
-                let output =
-                    BufWriter::new(NonVectoredWriter::new(File::create(&request.output)?));
-                let mut ordered =
-                    OrderedChunkWriter::new(output, policy.max_reorder_items.max(1))?;
-
-                for batch in chunks.chunks(policy.max_in_flight_items.max(1)) {
-                    let batch_bytes = Self::read_chunk_batch(&mut source, batch)?;
-                    let encoded_batch = pool.install(|| {
-                        batch_bytes
-                            .into_par_iter()
-                            .map(|(chunk_index, chunk)| {
-                                zstd::bulk::compress(&chunk, level)
-                                    .map(|frame| (chunk_index, frame))
-                                    .map_err(Into::into)
-                            })
-                            .collect::<Result<Vec<_>>>()
-                    })?;
-
-                    for (chunk_index, frame) in encoded_batch {
-                        ordered.write_chunk(chunk_index, frame)?;
-                    }
-                }
-                let _ = ordered.finish()?;
-                Ok(Some(input_len_u64))
-            }
-            Err(error) => {
-                execution
-                    .apply_pool_fallback(format!("zstd codec thread pool build failed: {error}"));
-                Ok(None)
-            }
+        match (
+            result,
+            libarchive_close_write_archive(archive_ptr, self.descriptor.name),
+        ) {
+            (Ok(bytes), Ok(())) => Ok(bytes),
+            (Err(error), _) => Err(error),
+            (Ok(_), Err(error)) => Err(error),
         }
     }
 
-    fn decode_deflate_parallel(
-        &self,
-        request: &CodecOperationRequest,
-        execution: &mut ThreadExecution,
-    ) -> Result<Option<u64>> {
-        if !execution.used_parallelism {
-            return Ok(None);
-        }
-
-        let input_len_u64 = fs::metadata(&request.input)?.len();
-        if input_len_u64 == 0 {
-            execution.apply_pool_fallback(
-                "deflate payload is empty; using single-threaded decoder".to_string(),
-            );
-            return Ok(None);
-        }
-
-        let ranges = Self::scan_deflate_member_ranges(&request.input)?;
-        if ranges.is_empty() {
-            execution.apply_pool_fallback(
-                "deflate stream scan produced zero members; using single-threaded decoder"
-                    .to_string(),
-            );
-            return Ok(None);
-        }
-
-        let policy = Self::io_policy(execution);
-        let batch_limit = policy.max_in_flight_items.max(1);
-
-        match rayon::ThreadPoolBuilder::new()
-            .num_threads(execution.effective_threads.max(1))
-            .build()
-        {
-            Ok(pool) => {
-                let mut source = BufReader::new(File::open(&request.input)?);
-                let output =
-                    BufWriter::new(NonVectoredWriter::new(File::create(&request.output)?));
-                let mut ordered =
-                    OrderedChunkWriter::new(output, policy.max_reorder_items.max(1))?;
-                let mut total_written = 0u64;
-
-                for (batch_index, batch) in ranges.chunks(batch_limit).enumerate() {
-                    let member_start_index = batch_index.saturating_mul(batch_limit);
-                    let mut member_payloads = Vec::with_capacity(batch.len());
-                    for (relative_index, (start, end)) in batch.iter().enumerate() {
-                        let member_len_u64 = end.saturating_sub(*start);
-                        let member_len = usize::try_from(member_len_u64).map_err(|_| {
-                            RomWeaverError::Validation(
-                                "deflate member length exceeded addressable memory".to_string(),
-                            )
-                        })?;
-                        source.seek(SeekFrom::Start(*start))?;
-                        let mut member_payload = vec![0u8; member_len];
-                        source.read_exact(&mut member_payload)?;
-                        member_payloads
-                            .push((member_start_index.saturating_add(relative_index) as u64, member_payload));
-                    }
-
-                    let decoded_members = pool.install(|| {
-                        member_payloads
-                            .into_par_iter()
-                            .map(|(member_index, member_payload)| -> Result<(u64, Vec<u8>)> {
-                                let mut decoder =
-                                    MultiGzDecoder::new(BufReader::new(Cursor::new(member_payload)));
-                                let mut decoded = Vec::new();
-                                io::copy(&mut decoder, &mut decoded)?;
-                                Ok((member_index, decoded))
-                            })
-                            .collect::<Result<Vec<_>>>()
-                    })?;
-
-                    for (member_index, member) in decoded_members {
-                        total_written = total_written.saturating_add(member.len() as u64);
-                        ordered.write_chunk(member_index, member)?;
-                    }
-                }
-                let _ = ordered.finish()?;
-                Ok(Some(total_written))
+    fn decode_with_libarchive(&self, request: &CodecOperationRequest) -> Result<u64> {
+        let archive_ptr =
+            libarchive_open_read_archive(self.descriptor.name, self.kind, &request.input)?;
+        let result = (|| -> Result<u64> {
+            let mut entry: *mut archive_entry = ptr::null_mut();
+            let next_status = unsafe { archive_read_next_header(archive_ptr, &mut entry) };
+            if next_status == ARCHIVE_EOF {
+                return Err(RomWeaverError::Validation(format!(
+                    "{} decode found no compressed payload entries",
+                    self.descriptor.name
+                )));
             }
-            Err(error) => {
-                execution.apply_pool_fallback(format!(
-                    "deflate codec thread pool build failed: {error}"
-                ));
-                Ok(None)
-            }
-        }
-    }
+            libarchive_check_status(
+                next_status,
+                archive_ptr,
+                &format!(
+                    "{} decode failed while reading header",
+                    self.descriptor.name
+                ),
+            )?;
 
-    fn decode_bzip2_parallel(
-        &self,
-        request: &CodecOperationRequest,
-        execution: &mut ThreadExecution,
-    ) -> Result<Option<u64>> {
-        if !execution.used_parallelism {
-            return Ok(None);
-        }
+            let output = BufWriter::new(NonVectoredWriter::new(File::create(&request.output)?));
+            let mut output = output;
+            let copied = libarchive_read_entry_to_writer(
+                archive_ptr,
+                self.descriptor.name,
+                &mut output,
+                Self::LIBARCHIVE_IO_BUFFER_BYTES,
+            )?;
+            output.flush()?;
+            Ok(copied)
+        })();
 
-        let input_len_u64 = fs::metadata(&request.input)?.len();
-        if input_len_u64 == 0 {
-            execution.apply_pool_fallback(
-                "bzip2 payload is empty; using single-threaded decoder".to_string(),
-            );
-            return Ok(None);
-        }
-
-        let ranges = Self::scan_bzip2_member_ranges(&request.input)?;
-        if ranges.is_empty() {
-            execution.apply_pool_fallback(
-                "bzip2 stream scan produced zero members; using single-threaded decoder"
-                    .to_string(),
-            );
-            return Ok(None);
-        }
-
-        let policy = Self::io_policy(execution);
-        let batch_limit = policy.max_in_flight_items.max(1);
-
-        match rayon::ThreadPoolBuilder::new()
-            .num_threads(execution.effective_threads.max(1))
-            .build()
-        {
-            Ok(pool) => {
-                let mut source = BufReader::new(File::open(&request.input)?);
-                let output =
-                    BufWriter::new(NonVectoredWriter::new(File::create(&request.output)?));
-                let mut ordered =
-                    OrderedChunkWriter::new(output, policy.max_reorder_items.max(1))?;
-                let mut total_written = 0u64;
-
-                for (batch_index, batch) in ranges.chunks(batch_limit).enumerate() {
-                    let member_start_index = batch_index.saturating_mul(batch_limit);
-                    let mut member_payloads = Vec::with_capacity(batch.len());
-                    for (relative_index, (start, end)) in batch.iter().enumerate() {
-                        let member_len_u64 = end.saturating_sub(*start);
-                        let member_len = usize::try_from(member_len_u64).map_err(|_| {
-                            RomWeaverError::Validation(
-                                "bzip2 member length exceeded addressable memory".to_string(),
-                            )
-                        })?;
-                        source.seek(SeekFrom::Start(*start))?;
-                        let mut member_payload = vec![0u8; member_len];
-                        source.read_exact(&mut member_payload)?;
-                        member_payloads
-                            .push((member_start_index.saturating_add(relative_index) as u64, member_payload));
-                    }
-
-                    let decoded_members = pool.install(|| {
-                        member_payloads
-                            .into_par_iter()
-                            .map(|(member_index, member_payload)| -> Result<(u64, Vec<u8>)> {
-                                let mut decoder =
-                                    MultiBzDecoder::new(BufReader::new(Cursor::new(member_payload)));
-                                let mut decoded = Vec::new();
-                                io::copy(&mut decoder, &mut decoded)?;
-                                Ok((member_index, decoded))
-                            })
-                            .collect::<Result<Vec<_>>>()
-                    })?;
-
-                    for (member_index, member) in decoded_members {
-                        total_written = total_written.saturating_add(member.len() as u64);
-                        ordered.write_chunk(member_index, member)?;
-                    }
-                }
-                let _ = ordered.finish()?;
-                Ok(Some(total_written))
-            }
-            Err(error) => {
-                execution
-                    .apply_pool_fallback(format!("bzip2 codec thread pool build failed: {error}"));
-                Ok(None)
-            }
-        }
-    }
-
-    fn decode_zstd_parallel(
-        &self,
-        request: &CodecOperationRequest,
-        execution: &mut ThreadExecution,
-    ) -> Result<Option<u64>> {
-        if !execution.used_parallelism {
-            return Ok(None);
-        }
-
-        let input_len_u64 = fs::metadata(&request.input)?.len();
-        if input_len_u64 == 0 {
-            execution.apply_pool_fallback(
-                "zstd payload is empty; using single-threaded decoder".to_string(),
-            );
-            return Ok(None);
-        }
-
-        let ranges = match Self::scan_zstd_frame_ranges(&request.input) {
-            Ok(ranges) => ranges,
-            Err(error) => {
-                execution.apply_pool_fallback(format!(
-                    "zstd frame scanner could not split stream ({error}); using single-threaded decoder"
-                ));
-                return Ok(None);
-            }
-        };
-        if ranges.is_empty() {
-            execution.apply_pool_fallback(
-                "zstd stream scan produced zero frames; using single-threaded decoder".to_string(),
-            );
-            return Ok(None);
-        }
-        if ranges.len() == 1 {
-            execution.apply_pool_fallback(
-                "zstd stream has one frame; using single-threaded decoder".to_string(),
-            );
-            return Ok(None);
-        }
-
-        let policy = Self::io_policy(execution);
-        let batch_limit = policy.max_in_flight_items.max(1);
-
-        match rayon::ThreadPoolBuilder::new()
-            .num_threads(execution.effective_threads.max(1))
-            .build()
-        {
-            Ok(pool) => {
-                let mut source = BufReader::new(File::open(&request.input)?);
-                let output =
-                    BufWriter::new(NonVectoredWriter::new(File::create(&request.output)?));
-                let mut ordered =
-                    OrderedChunkWriter::new(output, policy.max_reorder_items.max(1))?;
-                let mut total_written = 0u64;
-
-                for (batch_index, batch) in ranges.chunks(batch_limit).enumerate() {
-                    let frame_start_index = batch_index.saturating_mul(batch_limit);
-                    let mut frame_payloads = Vec::with_capacity(batch.len());
-                    for (relative_index, (start, end)) in batch.iter().enumerate() {
-                        let frame_len_u64 = end.saturating_sub(*start);
-                        let frame_len = usize::try_from(frame_len_u64).map_err(|_| {
-                            RomWeaverError::Validation(
-                                "zstd frame length exceeded addressable memory".to_string(),
-                            )
-                        })?;
-                        source.seek(SeekFrom::Start(*start))?;
-                        let mut frame_payload = vec![0u8; frame_len];
-                        source.read_exact(&mut frame_payload)?;
-                        frame_payloads
-                            .push((frame_start_index.saturating_add(relative_index) as u64, frame_payload));
-                    }
-
-                    let decoded_frames = pool.install(|| {
-                        frame_payloads
-                            .into_par_iter()
-                            .map(|(frame_index, frame_payload)| -> Result<(u64, Vec<u8>)> {
-                                let mut decoder =
-                                    ZstdDecoder::new(BufReader::new(Cursor::new(frame_payload)))?
-                                        .single_frame();
-                                let mut decoded = Vec::new();
-                                io::copy(&mut decoder, &mut decoded)?;
-                                Ok((frame_index, decoded))
-                            })
-                            .collect::<Result<Vec<_>>>()
-                    })?;
-
-                    for (frame_index, frame) in decoded_frames {
-                        total_written = total_written.saturating_add(frame.len() as u64);
-                        ordered.write_chunk(frame_index, frame)?;
-                    }
-                }
-                let _ = ordered.finish()?;
-                Ok(Some(total_written))
-            }
-            Err(error) => {
-                execution
-                    .apply_pool_fallback(format!("zstd codec thread pool build failed: {error}"));
-                Ok(None)
-            }
+        match (
+            result,
+            libarchive_close_read_archive(archive_ptr, self.descriptor.name),
+        ) {
+            (Ok(bytes), Ok(())) => Ok(bytes),
+            (Err(error), _) => Err(error),
+            (Ok(_), Err(error)) => Err(error),
         }
     }
 
@@ -833,93 +283,17 @@ impl NativeCodecBackend {
     ) -> Result<u64> {
         let bytes = match self.kind {
             NativeCodecKind::Store => self.copy_store_payload(request, execution)?,
-            NativeCodecKind::Deflate => {
-                if let Some(copied) =
-                    self.encode_deflate_parallel(request, level.unwrap_or(6) as u32, execution)?
-                {
-                    copied
-                } else {
-                    let mut source = BufReader::new(File::open(&request.input)?);
-                    let output =
-                        BufWriter::new(NonVectoredWriter::new(File::create(&request.output)?));
-                    let mut encoder =
-                        GzEncoder::new(output, DeflateCompression::new(level.unwrap_or(6) as u32));
-                    let copied = io::copy(&mut source, &mut encoder)?;
-                    let mut output = encoder.finish()?;
-                    output.flush()?;
-                    copied
-                }
-            }
-            NativeCodecKind::Zstd => {
-                if let Some(copied) =
-                    self.encode_zstd_parallel(request, level.unwrap_or(3), execution)?
-                {
-                    copied
-                } else {
-                    let mut source = BufReader::new(File::open(&request.input)?);
-                    let output =
-                        BufWriter::new(NonVectoredWriter::new(File::create(&request.output)?));
-                    let mut encoder = ZstdEncoder::new(output, level.unwrap_or(3))?;
-                    if execution.effective_threads > 1 {
-                        match u32::try_from(execution.effective_threads) {
-                            Ok(workers) => {
-                                if let Err(error) = encoder
-                                    .set_parameter(zstd::zstd_safe::CParameter::NbWorkers(workers))
-                                {
-                                    execution.apply_pool_fallback(format!(
-                                        "zstd encoder rejected multithread setting: {error}"
-                                    ));
-                                }
-                            }
-                            Err(_) => execution.apply_pool_fallback(
-                                "zstd encoder thread count exceeded supported range".to_string(),
-                            ),
-                        }
-                    }
-                    let copied = io::copy(&mut source, &mut encoder)?;
-                    let mut output = encoder.finish()?;
-                    output.flush()?;
-                    copied
-                }
-            }
-            NativeCodecKind::Lzma2 => {
-                let mut source = BufReader::new(File::open(&request.input)?);
-                let output = BufWriter::new(NonVectoredWriter::new(File::create(&request.output)?));
-                let level = level.unwrap_or(6) as u32;
-                if execution.used_parallelism {
-                    let mut encoder = XzWriterMt::new(
-                        output,
-                        Self::xz_mt_options(level)?,
-                        Self::xz_thread_count(execution.effective_threads),
-                    )?;
-                    let copied = io::copy(&mut source, &mut encoder)?;
-                    let mut output = encoder.finish()?;
-                    output.flush()?;
-                    copied
-                } else {
-                    let mut encoder = XzWriter::new(output, Self::xz_options(level))?;
-                    let copied = io::copy(&mut source, &mut encoder)?;
-                    let mut output = encoder.finish()?;
-                    output.flush()?;
-                    copied
-                }
-            }
-            NativeCodecKind::Bzip2 => {
-                if let Some(copied) =
-                    self.encode_bzip2_parallel(request, level.unwrap_or(6) as u32, execution)?
-                {
-                    copied
-                } else {
-                    let mut source = BufReader::new(File::open(&request.input)?);
-                    let output =
-                        BufWriter::new(NonVectoredWriter::new(File::create(&request.output)?));
-                    let mut encoder =
-                        BzEncoder::new(output, Bzip2Compression::new(level.unwrap_or(6) as u32));
-                    let copied = io::copy(&mut source, &mut encoder)?;
-                    let mut output = encoder.finish()?;
-                    output.flush()?;
-                    copied
-                }
+            NativeCodecKind::Deflate
+            | NativeCodecKind::Zstd
+            | NativeCodecKind::Lzma2
+            | NativeCodecKind::Bzip2 => {
+                let resolved_level = level.ok_or_else(|| {
+                    RomWeaverError::Validation(format!(
+                        "{} encode level resolution failed",
+                        self.descriptor.name
+                    ))
+                })?;
+                self.encode_with_libarchive(request, resolved_level, execution)?
             }
         };
         Ok(bytes)
@@ -932,74 +306,10 @@ impl NativeCodecBackend {
     ) -> Result<u64> {
         let bytes = match self.kind {
             NativeCodecKind::Store => self.copy_store_payload(request, execution)?,
-            NativeCodecKind::Deflate => {
-                if let Some(copied) = self.decode_deflate_parallel(request, execution)? {
-                    copied
-                } else {
-                    let source = BufReader::new(File::open(&request.input)?);
-                    let mut decoder = MultiGzDecoder::new(source);
-                    let mut output = BufWriter::new(File::create(&request.output)?);
-                    let copied = io::copy(&mut decoder, &mut output)?;
-                    output.flush()?;
-                    copied
-                }
-            }
-            NativeCodecKind::Zstd => {
-                if let Some(copied) = self.decode_zstd_parallel(request, execution)? {
-                    copied
-                } else {
-                    let source = BufReader::new(File::open(&request.input)?);
-                    let mut decoder = ZstdDecoder::new(source)?;
-                    let mut output = BufWriter::new(File::create(&request.output)?);
-                    let copied = io::copy(&mut decoder, &mut output)?;
-                    output.flush()?;
-                    copied
-                }
-            }
-            NativeCodecKind::Lzma2 => {
-                if execution.used_parallelism {
-                    let workers = Self::xz_thread_count(execution.effective_threads);
-                    let source = BufReader::new(File::open(&request.input)?);
-                    match XzReaderMt::new(source, false, workers) {
-                        Ok(mut decoder) => {
-                            let mut output = BufWriter::new(File::create(&request.output)?);
-                            let copied = io::copy(&mut decoder, &mut output)?;
-                            output.flush()?;
-                            copied
-                        }
-                        Err(error) => {
-                            execution.apply_pool_fallback(format!(
-                                "lzma2 decoder rejected multithread setting: {error}"
-                            ));
-                            let source = BufReader::new(File::open(&request.input)?);
-                            let mut decoder = XzReader::new(source, false);
-                            let mut output = BufWriter::new(File::create(&request.output)?);
-                            let copied = io::copy(&mut decoder, &mut output)?;
-                            output.flush()?;
-                            copied
-                        }
-                    }
-                } else {
-                    let source = BufReader::new(File::open(&request.input)?);
-                    let mut decoder = XzReader::new(source, false);
-                    let mut output = BufWriter::new(File::create(&request.output)?);
-                    let copied = io::copy(&mut decoder, &mut output)?;
-                    output.flush()?;
-                    copied
-                }
-            }
-            NativeCodecKind::Bzip2 => {
-                if let Some(copied) = self.decode_bzip2_parallel(request, execution)? {
-                    copied
-                } else {
-                    let source = BufReader::new(File::open(&request.input)?);
-                    let mut decoder = MultiBzDecoder::new(source);
-                    let mut output = BufWriter::new(File::create(&request.output)?);
-                    let copied = io::copy(&mut decoder, &mut output)?;
-                    output.flush()?;
-                    copied
-                }
-            }
+            NativeCodecKind::Deflate
+            | NativeCodecKind::Zstd
+            | NativeCodecKind::Lzma2
+            | NativeCodecKind::Bzip2 => self.decode_with_libarchive(request)?,
         };
         Ok(bytes)
     }
@@ -1053,4 +363,464 @@ impl NativeCodecBackend {
             Some(execution),
         ))
     }
+}
+
+fn libarchive_open_write_archive(
+    codec_name: &str,
+    kind: NativeCodecKind,
+    output: &Path,
+    level: i32,
+    thread_count: Option<usize>,
+) -> Result<*mut archive> {
+    let archive_ptr = unsafe { archive_write_new() };
+    if archive_ptr.is_null() {
+        return Err(RomWeaverError::Validation(format!(
+            "{codec_name} encode failed: libarchive writer allocation returned null"
+        )));
+    }
+
+    let output_path = path_to_cstring(output, "codec output")?;
+    let setup_result = (|| -> Result<()> {
+        libarchive_check_status(
+            unsafe { archive_write_set_format_raw(archive_ptr) },
+            archive_ptr,
+            &format!("{codec_name} encode failed while selecting raw format"),
+        )?;
+
+        match kind {
+            NativeCodecKind::Deflate => libarchive_check_status(
+                unsafe { archive_write_add_filter_gzip(archive_ptr) },
+                archive_ptr,
+                &format!("{codec_name} encode failed while enabling gzip filter"),
+            )?,
+            NativeCodecKind::Zstd => libarchive_check_status(
+                unsafe { archive_write_add_filter_zstd(archive_ptr) },
+                archive_ptr,
+                &format!("{codec_name} encode failed while enabling zstd filter"),
+            )?,
+            NativeCodecKind::Lzma2 => libarchive_check_status(
+                unsafe { archive_write_add_filter_xz(archive_ptr) },
+                archive_ptr,
+                &format!("{codec_name} encode failed while enabling xz filter"),
+            )?,
+            NativeCodecKind::Bzip2 => libarchive_check_status(
+                unsafe { archive_write_add_filter_bzip2(archive_ptr) },
+                archive_ptr,
+                &format!("{codec_name} encode failed while enabling bzip2 filter"),
+            )?,
+            NativeCodecKind::Store => {
+                return Err(RomWeaverError::Validation(
+                    "store codec does not use libarchive filters".to_string(),
+                ));
+            }
+        }
+
+        let module = match kind {
+            NativeCodecKind::Deflate => "gzip",
+            NativeCodecKind::Zstd => "zstd",
+            NativeCodecKind::Lzma2 => "xz",
+            NativeCodecKind::Bzip2 => "bzip2",
+            NativeCodecKind::Store => "",
+        };
+        if !module.is_empty() {
+            libarchive_set_filter_option(
+                archive_ptr,
+                codec_name,
+                module,
+                "compression-level",
+                &level.to_string(),
+            )?;
+        }
+        if let Some(threads) = thread_count {
+            libarchive_try_set_filter_option(
+                archive_ptr,
+                codec_name,
+                module,
+                "threads",
+                &threads.to_string(),
+            )?;
+        }
+
+        libarchive_check_status(
+            unsafe { archive_write_open_filename(archive_ptr, output_path.as_ptr()) },
+            archive_ptr,
+            &format!(
+                "{codec_name} encode failed while opening output `{}`",
+                output.display()
+            ),
+        )?;
+        Ok(())
+    })();
+
+    if let Err(error) = setup_result {
+        let _ = unsafe { archive_write_free(archive_ptr) };
+        return Err(error);
+    }
+
+    Ok(archive_ptr)
+}
+
+fn libarchive_open_read_archive(
+    codec_name: &str,
+    kind: NativeCodecKind,
+    input: &Path,
+) -> Result<*mut archive> {
+    let archive_ptr = unsafe { archive_read_new() };
+    if archive_ptr.is_null() {
+        return Err(RomWeaverError::Validation(format!(
+            "{codec_name} decode failed: libarchive reader allocation returned null"
+        )));
+    }
+
+    let input_path = path_to_cstring(input, "codec input")?;
+    let setup_result = (|| -> Result<()> {
+        libarchive_check_status(
+            unsafe { archive_read_support_format_raw(archive_ptr) },
+            archive_ptr,
+            &format!("{codec_name} decode failed while enabling raw format"),
+        )?;
+
+        match kind {
+            NativeCodecKind::Deflate => libarchive_check_status(
+                unsafe { archive_read_support_filter_gzip(archive_ptr) },
+                archive_ptr,
+                &format!("{codec_name} decode failed while enabling gzip filter"),
+            )?,
+            NativeCodecKind::Zstd => libarchive_check_status(
+                unsafe { archive_read_support_filter_zstd(archive_ptr) },
+                archive_ptr,
+                &format!("{codec_name} decode failed while enabling zstd filter"),
+            )?,
+            NativeCodecKind::Lzma2 => libarchive_check_status(
+                unsafe { archive_read_support_filter_xz(archive_ptr) },
+                archive_ptr,
+                &format!("{codec_name} decode failed while enabling xz filter"),
+            )?,
+            NativeCodecKind::Bzip2 => libarchive_check_status(
+                unsafe { archive_read_support_filter_bzip2(archive_ptr) },
+                archive_ptr,
+                &format!("{codec_name} decode failed while enabling bzip2 filter"),
+            )?,
+            NativeCodecKind::Store => {
+                return Err(RomWeaverError::Validation(
+                    "store codec does not use libarchive filters".to_string(),
+                ));
+            }
+        }
+
+        libarchive_check_status(
+            unsafe {
+                archive_read_open_filename(
+                    archive_ptr,
+                    input_path.as_ptr(),
+                    NativeCodecBackend::LIBARCHIVE_OPEN_BLOCK_BYTES,
+                )
+            },
+            archive_ptr,
+            &format!(
+                "{codec_name} decode failed while opening input `{}`",
+                input.display()
+            ),
+        )?;
+        Ok(())
+    })();
+
+    if let Err(error) = setup_result {
+        let _ = unsafe { archive_read_free(archive_ptr) };
+        return Err(error);
+    }
+
+    Ok(archive_ptr)
+}
+
+fn libarchive_set_filter_option(
+    archive_ptr: *mut archive,
+    codec_name: &str,
+    module: &str,
+    option: &str,
+    value: &str,
+) -> Result<()> {
+    let module_cstr = CString::new(module).map_err(|_| {
+        RomWeaverError::Validation(format!(
+            "{codec_name} encode failed: filter module contained interior NUL"
+        ))
+    })?;
+    let option_cstr = CString::new(option).map_err(|_| {
+        RomWeaverError::Validation(format!(
+            "{codec_name} encode failed: filter option contained interior NUL"
+        ))
+    })?;
+    let value_cstr = CString::new(value).map_err(|_| {
+        RomWeaverError::Validation(format!(
+            "{codec_name} encode failed: filter option value contained interior NUL"
+        ))
+    })?;
+
+    libarchive_check_status(
+        unsafe {
+            archive_write_set_filter_option(
+                archive_ptr,
+                module_cstr.as_ptr(),
+                option_cstr.as_ptr(),
+                value_cstr.as_ptr(),
+            )
+        },
+        archive_ptr,
+        &format!("{codec_name} encode failed while setting {module}:{option}={value}"),
+    )
+}
+
+fn libarchive_try_set_filter_option(
+    archive_ptr: *mut archive,
+    codec_name: &str,
+    module: &str,
+    option: &str,
+    value: &str,
+) -> Result<()> {
+    let module_cstr = CString::new(module).map_err(|_| {
+        RomWeaverError::Validation(format!(
+            "{codec_name} encode failed: filter module contained interior NUL"
+        ))
+    })?;
+    let option_cstr = CString::new(option).map_err(|_| {
+        RomWeaverError::Validation(format!(
+            "{codec_name} encode failed: filter option contained interior NUL"
+        ))
+    })?;
+    let value_cstr = CString::new(value).map_err(|_| {
+        RomWeaverError::Validation(format!(
+            "{codec_name} encode failed: filter option value contained interior NUL"
+        ))
+    })?;
+
+    let status = unsafe {
+        archive_write_set_filter_option(
+            archive_ptr,
+            module_cstr.as_ptr(),
+            option_cstr.as_ptr(),
+            value_cstr.as_ptr(),
+        )
+    };
+    match status {
+        ARCHIVE_OK | ARCHIVE_WARN => Ok(()),
+        _ if libarchive_unsupported_option_error(archive_ptr) => Ok(()),
+        _ => Err(libarchive_error(
+            archive_ptr,
+            &format!("{codec_name} encode failed while setting {module}:{option}={value}"),
+        )),
+    }
+}
+
+fn libarchive_write_raw_entry_from_reader<R: Read>(
+    archive_ptr: *mut archive,
+    codec_name: &str,
+    entry_name: &str,
+    input_len: u64,
+    source: &mut R,
+    buffer_bytes: usize,
+) -> Result<()> {
+    const AE_IFREG_MODE: c_uint = 0o100000;
+    let entry_ptr = unsafe { archive_entry_new() };
+    if entry_ptr.is_null() {
+        return Err(RomWeaverError::Validation(format!(
+            "{codec_name} encode failed: libarchive entry allocation returned null"
+        )));
+    }
+
+    let entry_name_cstr = CString::new(entry_name).map_err(|_| {
+        RomWeaverError::Validation(format!(
+            "{codec_name} encode failed: archive entry name contained interior NUL"
+        ))
+    })?;
+    let size = i64::try_from(input_len).map_err(|_| {
+        RomWeaverError::Validation(format!(
+            "{codec_name} encode failed: input length exceeded libarchive entry size range"
+        ))
+    })?;
+
+    let write_result = (|| -> Result<()> {
+        unsafe {
+            archive_entry_set_pathname(entry_ptr, entry_name_cstr.as_ptr());
+            archive_entry_set_filetype(entry_ptr, AE_IFREG_MODE);
+            archive_entry_set_perm(entry_ptr, 0o644);
+            archive_entry_set_size(entry_ptr, size);
+        }
+
+        libarchive_check_status(
+            unsafe { archive_write_header(archive_ptr, entry_ptr) },
+            archive_ptr,
+            &format!("{codec_name} encode failed while writing raw entry header"),
+        )?;
+
+        let mut buffer = vec![0u8; buffer_bytes];
+        loop {
+            let read = source.read(&mut buffer)?;
+            if read == 0 {
+                break;
+            }
+            libarchive_write_payload(archive_ptr, codec_name, &buffer[..read])?;
+        }
+
+        libarchive_check_status(
+            unsafe { archive_write_finish_entry(archive_ptr) },
+            archive_ptr,
+            &format!("{codec_name} encode failed while finalizing entry"),
+        )?;
+        Ok(())
+    })();
+
+    unsafe { archive_entry_free(entry_ptr) };
+    write_result
+}
+
+fn libarchive_write_payload(
+    archive_ptr: *mut archive,
+    codec_name: &str,
+    payload: &[u8],
+) -> Result<()> {
+    let mut offset = 0usize;
+    while offset < payload.len() {
+        let written = unsafe {
+            archive_write_data(
+                archive_ptr,
+                payload[offset..].as_ptr().cast(),
+                payload.len() - offset,
+            )
+        };
+        if written < 0 {
+            return Err(libarchive_error(
+                archive_ptr,
+                &format!("{codec_name} encode failed while writing payload data"),
+            ));
+        }
+        if written == 0 {
+            // libarchive can report zero on success in some code paths.
+            offset = payload.len();
+            continue;
+        }
+        let advanced = usize::try_from(written).map_err(|_| {
+            RomWeaverError::Validation(format!(
+                "{codec_name} encode failed: libarchive reported an invalid write length"
+            ))
+        })?;
+        if advanced > payload.len() - offset {
+            return Err(RomWeaverError::Validation(format!(
+                "{codec_name} encode failed: libarchive reported a write length larger than the buffered payload"
+            )));
+        }
+        offset = offset.saturating_add(advanced);
+    }
+    Ok(())
+}
+
+fn libarchive_read_entry_to_writer<W: Write>(
+    archive_ptr: *mut archive,
+    codec_name: &str,
+    output: &mut W,
+    buffer_bytes: usize,
+) -> Result<u64> {
+    let mut copied = 0u64;
+    let mut buffer = vec![0u8; buffer_bytes];
+    loop {
+        let read =
+            unsafe { archive_read_data(archive_ptr, buffer.as_mut_ptr().cast(), buffer.len()) };
+        if read > 0 {
+            let bytes = usize::try_from(read).map_err(|_| {
+                RomWeaverError::Validation(format!(
+                    "{codec_name} decode failed: libarchive returned an invalid read length"
+                ))
+            })?;
+            output.write_all(&buffer[..bytes])?;
+            copied = copied.saturating_add(bytes as u64);
+            continue;
+        }
+        if read == 0 {
+            break;
+        }
+        return Err(libarchive_error(
+            archive_ptr,
+            &format!("{codec_name} decode failed while reading payload data"),
+        ));
+    }
+    Ok(copied)
+}
+
+fn libarchive_close_write_archive(archive_ptr: *mut archive, codec_name: &str) -> Result<()> {
+    let close_result = libarchive_check_status(
+        unsafe { archive_write_close(archive_ptr) },
+        archive_ptr,
+        &format!("{codec_name} encode failed while closing writer"),
+    );
+    let free_result = libarchive_check_status(
+        unsafe { archive_write_free(archive_ptr) },
+        archive_ptr,
+        &format!("{codec_name} encode failed while freeing writer"),
+    );
+    close_result.and(free_result)
+}
+
+fn libarchive_close_read_archive(archive_ptr: *mut archive, codec_name: &str) -> Result<()> {
+    let close_result = libarchive_check_status(
+        unsafe { archive_read_close(archive_ptr) },
+        archive_ptr,
+        &format!("{codec_name} decode failed while closing reader"),
+    );
+    let free_result = libarchive_check_status(
+        unsafe { archive_read_free(archive_ptr) },
+        archive_ptr,
+        &format!("{codec_name} decode failed while freeing reader"),
+    );
+    close_result.and(free_result)
+}
+
+fn libarchive_check_status(status: i32, archive_ptr: *mut archive, context: &str) -> Result<()> {
+    match status {
+        ARCHIVE_OK | ARCHIVE_WARN => Ok(()),
+        _ => Err(libarchive_error(archive_ptr, context)),
+    }
+}
+
+fn libarchive_error(archive_ptr: *mut archive, context: &str) -> RomWeaverError {
+    unsafe {
+        let error_ptr = archive_error_string(archive_ptr);
+        if !error_ptr.is_null() {
+            let message = CStr::from_ptr(error_ptr).to_string_lossy().into_owned();
+            return RomWeaverError::Validation(format!("{context}: {message}"));
+        }
+        let error_number = archive_errno(archive_ptr);
+        let message = if error_number != 0 {
+            io::Error::from_raw_os_error(error_number).to_string()
+        } else {
+            "unknown libarchive failure".to_string()
+        };
+        RomWeaverError::Validation(format!("{context}: {message}"))
+    }
+}
+
+fn libarchive_unsupported_option_error(archive_ptr: *mut archive) -> bool {
+    unsafe {
+        let error_ptr = archive_error_string(archive_ptr);
+        if error_ptr.is_null() {
+            return false;
+        }
+        let message = CStr::from_ptr(error_ptr)
+            .to_string_lossy()
+            .to_ascii_lowercase();
+        message.contains("undefined option") || message.contains("unknown module name")
+    }
+}
+
+fn path_to_cstring(path: &Path, label: &str) -> Result<CString> {
+    let path_text = path.to_str().ok_or_else(|| {
+        RomWeaverError::Validation(format!(
+            "{label} path is not valid UTF-8: `{}`",
+            path.display()
+        ))
+    })?;
+    CString::new(path_text).map_err(|_| {
+        RomWeaverError::Validation(format!(
+            "{label} path contains an interior NUL byte: `{}`",
+            path.display()
+        ))
+    })
 }

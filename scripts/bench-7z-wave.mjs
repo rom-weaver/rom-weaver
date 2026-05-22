@@ -8,22 +8,44 @@ import { fileURLToPath } from 'node:url';
 import { performance } from 'node:perf_hooks';
 import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 
-import { createRomWeaverWasiRunner } from '../packages/rom-weaver-wasm/src/rom-weaver-wasi-api.mjs';
-
 const MIB = 1024 * 1024;
 const DEFAULT_SIZE_MIB = 8;
-const DEFAULT_CODECS = ['lzma2', 'lzma', 'zstd', 'deflate', 'bzip2', 'lz4', 'brotli', 'ppmd'];
+const DEFAULT_LEVEL = 6;
+const DEFAULT_CODECS = ['store', 'lzma2', 'lzma', 'deflate', 'bzip2', 'ppmd'];
+const DEFAULT_RUNTIMES = ['native'];
+const VALID_RUNTIMES = new Set(['native', 'wasm', '7zz']);
+const SEVENZIP_METHODS = {
+  store: 'Copy',
+  lzma2: 'LZMA2',
+  lzma: 'LZMA',
+  deflate: 'Deflate',
+  bzip2: 'BZip2',
+  ppmd: 'PPMd',
+  zstd: 'ZSTD',
+  lz4: 'LZ4',
+  brotli: 'BROTLI',
+};
 
 const __filename = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = dirname(__filename);
 const REPO_ROOT = resolve(SCRIPT_DIR, '..');
 
+function parseCsv(raw) {
+  return raw
+    .split(',')
+    .map((value) => value.trim().toLowerCase())
+    .filter((value) => value.length > 0);
+}
+
 function parseArgs(argv) {
   const options = {
     nativeBin: resolve(REPO_ROOT, 'target/debug/rom-weaver'),
     output: resolve(REPO_ROOT, 'target/bench-7z-wave.json'),
+    sevenzipBin: '7zz',
     sizeMiB: DEFAULT_SIZE_MIB,
     codecs: [...DEFAULT_CODECS],
+    runtimes: [...DEFAULT_RUNTIMES],
+    level: DEFAULT_LEVEL,
     noBuild: false,
     threads: null,
   };
@@ -42,16 +64,28 @@ function parseArgs(argv) {
       index += 1;
       continue;
     }
+    if (arg === '--sevenzip-bin' && next) {
+      options.sevenzipBin = next;
+      index += 1;
+      continue;
+    }
     if (arg === '--size-mib' && next) {
       options.sizeMiB = Number.parseInt(next, 10);
       index += 1;
       continue;
     }
     if (arg === '--codecs' && next) {
-      options.codecs = next
-        .split(',')
-        .map((value) => value.trim().toLowerCase())
-        .filter((value) => value.length > 0);
+      options.codecs = parseCsv(next);
+      index += 1;
+      continue;
+    }
+    if (arg === '--runtimes' && next) {
+      options.runtimes = parseCsv(next);
+      index += 1;
+      continue;
+    }
+    if (arg === '--level' && next) {
+      options.level = Number.parseInt(next, 10);
       index += 1;
       continue;
     }
@@ -78,8 +112,18 @@ function parseArgs(argv) {
   if (!Number.isInteger(options.sizeMiB) || options.sizeMiB <= 0) {
     throw new Error('--size-mib must be a positive integer');
   }
+  if (!Number.isInteger(options.level) || options.level < 0 || options.level > 9) {
+    throw new Error('--level must be an integer in range 0..9');
+  }
   if (options.codecs.length === 0) {
     throw new Error('--codecs must include at least one codec');
+  }
+  if (options.runtimes.length === 0) {
+    throw new Error('--runtimes must include at least one runtime');
+  }
+  const unknownRuntimes = options.runtimes.filter((runtime) => !VALID_RUNTIMES.has(runtime));
+  if (unknownRuntimes.length > 0) {
+    throw new Error(`unsupported runtime(s): ${unknownRuntimes.join(', ')}`);
   }
 
   return options;
@@ -90,9 +134,12 @@ function printHelp() {
     `Options:\n` +
     `  --native-bin <path>   Native rom-weaver binary path (default: target/debug/rom-weaver)\n` +
     `  --output <path>       JSON output path (default: target/bench-7z-wave.json)\n` +
+    `  --sevenzip-bin <path> 7zz binary path when runtimes include 7zz (default: 7zz)\n` +
     `  --size-mib <int>      Fixture size per profile in MiB (default: ${DEFAULT_SIZE_MIB})\n` +
     `  --codecs <csv>        Codec matrix (default: ${DEFAULT_CODECS.join(',')})\n` +
+    `  --level <int>         7z compression level for non-store codecs (default: ${DEFAULT_LEVEL})\n` +
     `  --threads <csv>       Thread counts (default: 1 and min(8, logical CPUs))\n` +
+    `  --runtimes <csv>      Runtime matrix (native,wasm,7zz; default: ${DEFAULT_RUNTIMES.join(',')})\n` +
     `  --no-build            Skip cargo build if native binary is missing\n` +
     `  -h, --help            Show this message\n`);
 }
@@ -170,6 +217,36 @@ async function runWasm(runner, args) {
   }
 }
 
+async function createWasmRunner() {
+  try {
+    const module = await import('../packages/rom-weaver-wasm/src/rom-weaver-wasi-api.mjs');
+    if (typeof module.createRomWeaverWasiRunner !== 'function') {
+      throw new Error('createRomWeaverWasiRunner export is missing');
+    }
+    return module.createRomWeaverWasiRunner();
+  } catch (error) {
+    throw new Error(
+      `wasm runtime benchmarking is unavailable in this checkout: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+}
+
+function runSevenZip(binaryPath, args) {
+  const result = spawnSync(binaryPath, args, {
+    cwd: REPO_ROOT,
+    encoding: 'utf8',
+    maxBuffer: 16 * 1024 * 1024,
+  });
+  if (result.error) {
+    throw result.error;
+  }
+  if (result.status !== 0) {
+    throw new Error(
+      `7zz command failed (${result.status}): ${binaryPath} ${args.join(' ')}\n${result.stderr || result.stdout}`,
+    );
+  }
+}
+
 function toMiBPerSecond(bytes, seconds) {
   return bytes / MIB / seconds;
 }
@@ -181,7 +258,25 @@ async function verifyExtractedMatches(sourcePath, extractedPath) {
   }
 }
 
-async function runMatrix({ runtime, codecs, threads, fixtures, workDir, nativeBin, wasmRunner }) {
+function resolveCodecValue(codec, level) {
+  return codec === 'store' ? codec : `${codec}:${level}`;
+}
+
+function resolveSevenZipMethod(codec) {
+  return SEVENZIP_METHODS[codec] ?? null;
+}
+
+async function runMatrix({
+  runtime,
+  codecs,
+  threads,
+  level,
+  fixtures,
+  workDir,
+  nativeBin,
+  wasmRunner,
+  sevenzipBin,
+}) {
   const rows = [];
 
   for (const fixture of fixtures) {
@@ -191,24 +286,37 @@ async function runMatrix({ runtime, codecs, threads, fixtures, workDir, nativeBi
         const artifactDir = join(workDir, runtime, fixture.name, `threads-${threadCount}`);
         const archivePath = join(artifactDir, `${codec}.7z`);
         const extractDir = join(artifactDir, `${codec}-extract`);
-        const codecValue = codec === 'store' ? codec : `${codec}:6`;
+        const codecValue = resolveCodecValue(codec, level);
 
         await mkdir(artifactDir, { recursive: true });
         await rm(archivePath, { force: true });
         await rm(extractDir, { recursive: true, force: true });
 
-        const compressArgs = [
-          'compress',
-          fixture.path,
-          '--format',
-          '7z',
-          '--output',
-          archivePath,
-          '--codec',
-          codecValue,
-          '--threads',
-          String(threadCount),
-        ];
+        const compressArgs = runtime === '7zz'
+          ? (() => {
+            const method = resolveSevenZipMethod(codec);
+            if (!method) {
+              throw new Error(`7zz method mapping is missing for codec: ${codec}`);
+            }
+            const args = ['a', '-y', '-bd', `-mmt=${threadCount}`, '-t7z', `-m0=${method}`];
+            if (codec !== 'store') {
+              args.push(`-mx=${level}`);
+            }
+            args.push(archivePath, fixture.path);
+            return args;
+          })()
+          : [
+            'compress',
+            fixture.path,
+            '--format',
+            '7z',
+            '--output',
+            archivePath,
+            '--codec',
+            codecValue,
+            '--threads',
+            String(threadCount),
+          ];
 
         let status = 'succeeded';
         let failureMessage = null;
@@ -220,28 +328,34 @@ async function runMatrix({ runtime, codecs, threads, fixtures, workDir, nativeBi
           const compressStart = performance.now();
           if (runtime === 'native') {
             runNative(nativeBin, compressArgs);
-          } else {
+          } else if (runtime === 'wasm') {
             await runWasm(wasmRunner, compressArgs);
+          } else {
+            runSevenZip(sevenzipBin, compressArgs);
           }
           compressSeconds = (performance.now() - compressStart) / 1000;
 
           archiveSize = (await stat(archivePath)).size;
-          const extractArgs = [
-            'extract',
-            archivePath,
-            '--select',
-            sourceName,
-            '--out-dir',
-            extractDir,
-            '--threads',
-            String(threadCount),
-          ];
+          const extractArgs = runtime === '7zz'
+            ? ['x', '-y', '-bd', `-mmt=${threadCount}`, archivePath, `-o${extractDir}`]
+            : [
+              'extract',
+              archivePath,
+              '--select',
+              sourceName,
+              '--out-dir',
+              extractDir,
+              '--threads',
+              String(threadCount),
+            ];
 
           const extractStart = performance.now();
           if (runtime === 'native') {
             runNative(nativeBin, extractArgs);
-          } else {
+          } else if (runtime === 'wasm') {
             await runWasm(wasmRunner, extractArgs);
+          } else {
+            runSevenZip(sevenzipBin, extractArgs);
           }
           extractSeconds = (performance.now() - extractStart) / 1000;
 
@@ -278,6 +392,7 @@ async function runMatrix({ runtime, codecs, threads, fixtures, workDir, nativeBi
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
+  const runtimes = [...new Set(options.runtimes)];
   const threads = options.threads && options.threads.length > 0
     ? uniqueSorted(options.threads)
     : defaultThreads();
@@ -295,7 +410,7 @@ async function main() {
     { name: 'text_like', path: join(fixturesDir, 'text-like.bin'), sizeBytes: fixtureBytes },
   ];
 
-  if (!existsSync(options.nativeBin)) {
+  if (runtimes.includes('native') && !existsSync(options.nativeBin)) {
     if (options.noBuild) {
       throw new Error(`native binary not found at ${options.nativeBin} (and --no-build was set)`);
     }
@@ -308,30 +423,42 @@ async function main() {
     }
   }
 
-  const wasmRunner = createRomWeaverWasiRunner();
+  const wasmRunner = runtimes.includes('wasm')
+    ? await createWasmRunner()
+    : null;
   let rows;
   try {
-    const nativeRows = await runMatrix({
-      runtime: 'native',
-      codecs: options.codecs,
-      threads,
-      fixtures,
-      workDir: benchRoot,
-      nativeBin: options.nativeBin,
-      wasmRunner,
-    });
-    const wasmRows = await runMatrix({
-      runtime: 'wasm',
-      codecs: options.codecs,
-      threads,
-      fixtures,
-      workDir: benchRoot,
-      nativeBin: options.nativeBin,
-      wasmRunner,
-    });
-    rows = [...nativeRows, ...wasmRows];
+    if (runtimes.includes('7zz')) {
+      const sevenzipProbe = spawnSync(options.sevenzipBin, ['i'], {
+        cwd: REPO_ROOT,
+        encoding: 'utf8',
+      });
+      if (sevenzipProbe.error || sevenzipProbe.status !== 0) {
+        throw new Error(
+          `failed to run 7zz binary at ${options.sevenzipBin}: ${sevenzipProbe.error?.message ?? sevenzipProbe.stderr ?? sevenzipProbe.stdout}`,
+        );
+      }
+    }
+
+    const runtimeRows = [];
+    for (const runtime of runtimes) {
+      runtimeRows.push(
+        ...(await runMatrix({
+          runtime,
+          codecs: options.codecs,
+          threads,
+          level: options.level,
+          fixtures,
+          workDir: benchRoot,
+          nativeBin: options.nativeBin,
+          wasmRunner,
+          sevenzipBin: options.sevenzipBin,
+        })),
+      );
+    }
+    rows = runtimeRows;
   } finally {
-    if (typeof wasmRunner.dispose === 'function') {
+    if (wasmRunner && typeof wasmRunner.dispose === 'function') {
       await wasmRunner.dispose();
     }
   }
@@ -345,9 +472,12 @@ async function main() {
     },
     config: {
       codecs: options.codecs,
+      level: options.level,
       threads,
+      runtimes,
       profile_size_mib: options.sizeMiB,
       native_bin: options.nativeBin,
+      sevenzip_bin: options.sevenzipBin,
     },
     rows,
   };

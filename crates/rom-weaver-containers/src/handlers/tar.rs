@@ -11,23 +11,6 @@ struct TarContainerHandler {
     compression: TarCompression,
 }
 
-#[derive(Clone, Debug)]
-struct TarCreateTask {
-    entry_index: usize,
-    source: PathBuf,
-    archive_name: String,
-    is_dir: bool,
-    temp_archive: PathBuf,
-}
-
-#[derive(Clone, Debug)]
-struct TarCreateArtifact {
-    entry_index: usize,
-    archive_name: String,
-    logical_bytes: u64,
-    temp_archive: PathBuf,
-}
-
 impl TarContainerHandler {
     const fn new(descriptor: &'static FormatDescriptor, compression: TarCompression) -> Self {
         Self {
@@ -141,147 +124,6 @@ impl TarContainerHandler {
                     ))),
                 }
             }
-        }
-    }
-
-    fn backend_codec_name(&self) -> Option<&'static str> {
-        match self.compression {
-            TarCompression::None => None,
-            TarCompression::Gzip => Some("deflate"),
-            TarCompression::Bzip2 => Some("bzip2"),
-            TarCompression::Xz => Some("lzma2"),
-        }
-    }
-
-    fn codec_backend(&self) -> Result<Arc<dyn CodecBackend>> {
-        let codec_name = self.backend_codec_name().ok_or_else(|| {
-            RomWeaverError::Unsupported(format!(
-                "codec backend is not defined for {}",
-                self.descriptor.name
-            ))
-        })?;
-        resolve_container_codec_backend(self.descriptor.name, codec_name)
-    }
-
-    fn append_entries<W: Write>(
-        &self,
-        builder: &mut TarBuilder<W>,
-        entries: &[ArchiveInputEntry],
-        context: &OperationContext,
-        execution: &ThreadExecution,
-    ) -> Result<u64> {
-        let mut logical_bytes = 0u64;
-        let total_entries = entries.len();
-        for (entry_index, entry) in entries.iter().enumerate() {
-            if entry.is_dir {
-                builder.append_dir(&entry.archive_name, &entry.source)?;
-            } else {
-                builder.append_path_with_name(&entry.source, &entry.archive_name)?;
-                logical_bytes = logical_bytes.saturating_add(fs::metadata(&entry.source)?.len());
-            }
-            emit_container_step_progress(
-                context,
-                "compress",
-                self.descriptor.name,
-                "create",
-                entry_index.saturating_add(1),
-                total_entries,
-                format!(
-                    "creating `{}` ({}/{})",
-                    self.descriptor.name,
-                    entry_index.saturating_add(1),
-                    total_entries
-                ),
-                Some(execution),
-            );
-        }
-        Ok(logical_bytes)
-    }
-
-    fn build_uncompressed_create_tasks(
-        &self,
-        entries: &[ArchiveInputEntry],
-        context: &OperationContext,
-    ) -> Vec<TarCreateTask> {
-        entries
-            .iter()
-            .enumerate()
-            .map(|(entry_index, entry)| TarCreateTask {
-                entry_index,
-                source: entry.source.clone(),
-                archive_name: entry.archive_name.clone(),
-                is_dir: entry.is_dir,
-                temp_archive: context.temp_paths().next_path(
-                    &format!("{}-create-{entry_index}", self.descriptor.name),
-                    Some("tar"),
-                ),
-            })
-            .collect()
-    }
-
-    fn stage_uncompressed_create_task(&self, task: &TarCreateTask) -> Result<TarCreateArtifact> {
-        if let Some(parent) = task.temp_archive.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        let output = BufWriter::new(File::create(&task.temp_archive)?);
-        let mut builder = TarBuilder::new(output);
-        if task.is_dir {
-            builder.append_dir(&task.archive_name, &task.source)?;
-        } else {
-            builder.append_path_with_name(&task.source, &task.archive_name)?;
-        }
-        builder.finish()?;
-
-        Ok(TarCreateArtifact {
-            entry_index: task.entry_index,
-            archive_name: task.archive_name.clone(),
-            logical_bytes: if task.is_dir {
-                0
-            } else {
-                fs::metadata(&task.source)?.len()
-            },
-            temp_archive: task.temp_archive.clone(),
-        })
-    }
-
-    fn merge_uncompressed_create_artifact<W: Write>(
-        &self,
-        output: &mut W,
-        artifact: &TarCreateArtifact,
-    ) -> Result<()> {
-        let staged_len = fs::metadata(&artifact.temp_archive)?.len();
-        if staged_len < 1024 {
-            return Err(RomWeaverError::Validation(format!(
-                "{} create failed while finalizing staged entry `{}`",
-                self.descriptor.name, artifact.archive_name
-            )));
-        }
-        let payload_len = staged_len.saturating_sub(1024);
-        let mut staged = BufReader::new(File::open(&artifact.temp_archive)?);
-        let copied = io::copy(&mut staged.by_ref().take(payload_len), output).map_err(|error| {
-            RomWeaverError::Validation(format!(
-                "{} create failed while reading staged entry `{}`: {error}",
-                self.descriptor.name, artifact.archive_name
-            ))
-        })?;
-        if copied != payload_len {
-            return Err(RomWeaverError::Validation(format!(
-                "{} create failed while reading staged entry `{}`: expected {} bytes, copied {} bytes",
-                self.descriptor.name, artifact.archive_name, payload_len, copied
-            )));
-        }
-        Ok(())
-    }
-
-    fn cleanup_uncompressed_create_tasks(&self, tasks: &[TarCreateTask]) {
-        for task in tasks {
-            let _ = fs::remove_file(&task.temp_archive);
-        }
-    }
-
-    fn cleanup_uncompressed_create_artifacts(&self, artifacts: &[TarCreateArtifact]) {
-        for artifact in artifacts {
-            let _ = fs::remove_file(&artifact.temp_archive);
         }
     }
 
@@ -472,177 +314,49 @@ impl ContainerHandler for TarContainerHandler {
         request: &ContainerCreateRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        let mut execution = context.plan_threads(self.create_thread_capability());
+        let execution = context.plan_threads(self.create_thread_capability());
         let level = self.parse_codec_and_level(request.codec.as_deref(), request.level)?;
         let entries = collect_archive_inputs(&request.inputs)?;
-
-        if let Some(parent) = request.output.parent() {
-            fs::create_dir_all(parent)?;
-        }
-
-        let logical_bytes = match self.compression {
-            TarCompression::None => {
-                let create_tasks = self.build_uncompressed_create_tasks(&entries, context);
-                if create_tasks.is_empty() || !execution.used_parallelism {
-                    let output = BufWriter::new(File::create(&request.output)?);
-                    let mut builder = TarBuilder::new(output);
-                    let bytes = self.append_entries(&mut builder, &entries, context, &execution)?;
-                    builder.finish()?;
-                    bytes
-                } else {
-                    let (create_execution, pool) =
-                        context.build_pool(ThreadCapability::parallel(Some(create_tasks.len())))?;
-                    execution = create_execution;
-                    let completed_tasks = Arc::new(AtomicUsize::new(0));
-                    let progress_context = context.clone();
-                    let progress_execution = execution.clone();
-                    let progress_format = self.descriptor.name;
-                    let total_create_tasks = create_tasks.len();
-                    let staged_result = if execution.used_parallelism {
-                        pool.install(|| {
-                            create_tasks
-                                .par_iter()
-                                .map(|task| {
-                                    let artifact = self.stage_uncompressed_create_task(task)?;
-                                    let completed = completed_tasks
-                                        .fetch_add(1, Ordering::Relaxed)
-                                        .saturating_add(1);
-                                    emit_container_step_progress(
-                                        &progress_context,
-                                        "compress",
-                                        progress_format,
-                                        "create",
-                                        completed,
-                                        total_create_tasks,
-                                        format!(
-                                            "creating `{}` ({}/{})",
-                                            progress_format, completed, total_create_tasks
-                                        ),
-                                        Some(&progress_execution),
-                                    );
-                                    Ok(artifact)
-                                })
-                                .collect::<Result<Vec<_>>>()
-                        })
-                    } else {
-                        create_tasks
-                            .iter()
-                            .map(|task| {
-                                let artifact = self.stage_uncompressed_create_task(task)?;
-                                let completed = completed_tasks
-                                    .fetch_add(1, Ordering::Relaxed)
-                                    .saturating_add(1);
-                                emit_container_step_progress(
-                                    &progress_context,
-                                    "compress",
-                                    progress_format,
-                                    "create",
-                                    completed,
-                                    total_create_tasks,
-                                    format!(
-                                        "creating `{}` ({}/{})",
-                                        progress_format, completed, total_create_tasks
-                                    ),
-                                    Some(&progress_execution),
-                                );
-                                Ok(artifact)
-                            })
-                            .collect::<Result<Vec<_>>>()
-                    };
-                    let mut staged_artifacts = match staged_result {
-                        Ok(artifacts) => artifacts,
-                        Err(error) => {
-                            self.cleanup_uncompressed_create_tasks(&create_tasks);
-                            return Err(error);
-                        }
-                    };
-                    staged_artifacts.sort_by_key(|artifact| artifact.entry_index);
-
-                    let create_result: Result<u64> = (|| {
-                        let output = BufWriter::new(File::create(&request.output)?);
-                        let mut output = output;
-                        let mut logical_bytes = 0u64;
-                        let mut staged_iter = staged_artifacts.iter();
-
-                        for (entry_index, entry) in entries.iter().enumerate() {
-                            let staged = staged_iter.next().ok_or_else(|| {
-                                RomWeaverError::Validation(format!(
-                                    "{} create failed while finalizing staged entries for `{}`",
-                                    self.descriptor.name, entry.archive_name
-                                ))
-                            })?;
-                            if staged.entry_index != entry_index {
-                                return Err(RomWeaverError::Validation(format!(
-                                    "{} create failed due to staged entry order mismatch for `{}`",
-                                    self.descriptor.name, entry.archive_name
-                                )));
-                            }
-                            self.merge_uncompressed_create_artifact(&mut output, staged)?;
-                            logical_bytes = logical_bytes.saturating_add(staged.logical_bytes);
-                        }
-                        if staged_iter.next().is_some() {
-                            return Err(RomWeaverError::Validation(format!(
-                                "{} create failed due to unexpected staged entries",
-                                self.descriptor.name
-                            )));
-                        }
-                        output.write_all(&[0u8; 1024])?;
-                        output.flush()?;
-                        Ok(logical_bytes)
-                    })();
-                    self.cleanup_uncompressed_create_artifacts(&staged_artifacts);
-                    create_result?
-                }
-            }
-            TarCompression::Gzip | TarCompression::Bzip2 | TarCompression::Xz => {
-                let staged_label = match self.compression {
-                    TarCompression::None => unreachable!(),
-                    TarCompression::Gzip => "tar-gz-create-stage",
-                    TarCompression::Bzip2 => "tar-bz2-create-stage",
-                    TarCompression::Xz => "tar-xz-create-stage",
-                };
-                let staged_tar = context.temp_paths().next_path(staged_label, Some("tar"));
-                let staged_result = (|| -> Result<(u64, Option<ThreadExecution>)> {
-                    if let Some(parent) = staged_tar.parent() {
-                        fs::create_dir_all(parent)?;
-                    }
-                    let staged_output = BufWriter::new(File::create(&staged_tar)?);
-                    let mut builder = TarBuilder::new(staged_output);
-                    let bytes = self.append_entries(&mut builder, &entries, context, &execution)?;
-                    let mut staged_output = builder.into_inner().map_err(|error| {
-                        RomWeaverError::Validation(format!(
-                            "{} create failed while finalizing staged archive: {error}",
-                            self.descriptor.name
-                        ))
-                    })?;
-                    staged_output.flush()?;
-                    drop(staged_output);
-
-                    let backend = self.codec_backend()?;
-                    let level = i32::try_from(level).map_err(|_| {
-                        RomWeaverError::Validation("tar compression level exceeded i32".into())
-                    })?;
-                    let encode_report = backend.encode(
-                        &CodecOperationRequest {
-                            input: staged_tar.clone(),
-                            output: request.output.clone(),
-                            level: Some(level),
-                        },
-                        context,
-                    )?;
-                    if encode_report.status != OperationStatus::Succeeded {
-                        return Err(RomWeaverError::Unsupported(encode_report.label));
-                    }
-                    Ok((bytes, encode_report.thread_execution))
-                })();
-                let _ = fs::remove_file(&staged_tar);
-                let (bytes, encode_execution) = staged_result?;
-                if let Some(encode_execution) = encode_execution {
-                    execution = encode_execution;
-                }
-                bytes
-            }
+        let config = match self.compression {
+            TarCompression::None => LibarchiveCreateConfig {
+                format_name: self.descriptor.name,
+                format: LibarchiveCreateFormat::TarPax,
+                filter: LibarchiveCreateFilter::None,
+                format_compression: None,
+                compression_level: None,
+                format_threads: None,
+                filter_threads: None,
+            },
+            TarCompression::Gzip => LibarchiveCreateConfig {
+                format_name: self.descriptor.name,
+                format: LibarchiveCreateFormat::TarPax,
+                filter: LibarchiveCreateFilter::Gzip,
+                format_compression: None,
+                compression_level: Some(level as i32),
+                format_threads: None,
+                filter_threads: Some(execution.effective_threads.max(1)),
+            },
+            TarCompression::Bzip2 => LibarchiveCreateConfig {
+                format_name: self.descriptor.name,
+                format: LibarchiveCreateFormat::TarPax,
+                filter: LibarchiveCreateFilter::Bzip2,
+                format_compression: None,
+                compression_level: Some(level as i32),
+                format_threads: None,
+                filter_threads: Some(execution.effective_threads.max(1)),
+            },
+            TarCompression::Xz => LibarchiveCreateConfig {
+                format_name: self.descriptor.name,
+                format: LibarchiveCreateFormat::TarPax,
+                filter: LibarchiveCreateFilter::Xz,
+                format_compression: None,
+                compression_level: Some(level as i32),
+                format_threads: None,
+                filter_threads: Some(execution.effective_threads.max(1)),
+            },
         };
+        let logical_bytes =
+            write_archive_with_libarchive(request, &entries, context, &execution, config)?;
 
         Ok(OperationReport::succeeded(
             OperationFamily::Container,

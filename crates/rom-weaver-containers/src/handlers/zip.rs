@@ -9,23 +9,12 @@ struct ZipContainerHandler {
     flavor: ZipContainerFlavor,
 }
 
-#[derive(Clone, Debug)]
-struct ZipCreateTask {
-    entry_index: usize,
-    source: PathBuf,
-    archive_name: String,
-    temp_archive: PathBuf,
-}
-
-#[derive(Clone, Debug)]
-struct ZipCreateArtifact {
-    entry_index: usize,
-    archive_name: String,
-    logical_bytes: u64,
-    temp_archive: PathBuf,
-}
-
 impl ZipContainerHandler {
+    const ZSTD_LEVEL_MIN: i32 = -7;
+    // Keep parity with common zstd CLI guidance and avoid libarchive's
+    // highest-memory zip-zstd path on newer libzstd builds.
+    const ZSTD_LEVEL_MAX: i32 = 19;
+
     const fn new(descriptor: &'static FormatDescriptor, flavor: ZipContainerFlavor) -> Self {
         Self { descriptor, flavor }
     }
@@ -37,7 +26,7 @@ impl ZipContainerHandler {
     ) -> Result<(ZipCompressionMethod, Option<i32>)> {
         let default = match self.flavor {
             ZipContainerFlavor::Zip => ZipCompressionMethod::Deflated,
-            ZipContainerFlavor::Zipx => ZipCompressionMethod::Zstd,
+            ZipContainerFlavor::Zipx => ZipCompressionMethod::Deflated,
         };
         let method = match parse_requested_codec(codec) {
             RequestedCodec::Unspecified => default,
@@ -63,9 +52,8 @@ impl ZipContainerHandler {
         if let Some(level) = level {
             let in_range = match method {
                 ZipCompressionMethod::Stored => false,
-                ZipCompressionMethod::Deflated | ZipCompressionMethod::Bzip2 => {
-                    (0..=9).contains(&level)
-                }
+                ZipCompressionMethod::Deflated => (0..=9).contains(&level),
+                ZipCompressionMethod::Bzip2 => (1..=9).contains(&level),
                 ZipCompressionMethod::Zstd => (-7..=22).contains(&level),
                 _ => false,
             };
@@ -98,10 +86,49 @@ impl ZipContainerHandler {
         }
     }
 
-    fn build_options(&self, method: ZipCompressionMethod, level: Option<i32>) -> ZipFileOptions {
-        ZipFileOptions::default()
-            .compression_method(method)
-            .compression_level(level.map(i64::from))
+    fn libarchive_method_name(&self, method: ZipCompressionMethod) -> Option<&'static str> {
+        match method {
+            ZipCompressionMethod::Stored => Some("store"),
+            ZipCompressionMethod::Deflated => Some("deflate"),
+            ZipCompressionMethod::Bzip2 => Some("bzip2"),
+            ZipCompressionMethod::Zstd => Some("zstd"),
+            _ => None,
+        }
+    }
+
+    fn libarchive_level(&self, method: ZipCompressionMethod, level: Option<i32>) -> Option<i32> {
+        match method {
+            ZipCompressionMethod::Deflated => level,
+            ZipCompressionMethod::Bzip2 => level,
+            ZipCompressionMethod::Zstd => {
+                level.map(|value| Self::map_zstd_level_to_zip_level(value))
+            }
+            _ => None,
+        }
+    }
+
+    fn libarchive_threads(
+        &self,
+        method: ZipCompressionMethod,
+        execution: &ThreadExecution,
+    ) -> Option<usize> {
+        match method {
+            ZipCompressionMethod::Stored
+            | ZipCompressionMethod::Deflated
+            | ZipCompressionMethod::Bzip2
+            | ZipCompressionMethod::Zstd => Some(execution.effective_threads.max(1)),
+            _ => None,
+        }
+    }
+
+    fn map_zstd_level_to_zip_level(level: i32) -> i32 {
+        const ZIP_LEVEL_MIN: i32 = 1;
+        const ZIP_LEVEL_MAX: i32 = 9;
+        let clamped = level.clamp(Self::ZSTD_LEVEL_MIN, Self::ZSTD_LEVEL_MAX);
+        let zstd_span = Self::ZSTD_LEVEL_MAX - Self::ZSTD_LEVEL_MIN;
+        let zip_span = ZIP_LEVEL_MAX - ZIP_LEVEL_MIN;
+        let normalized = clamped - Self::ZSTD_LEVEL_MIN;
+        ZIP_LEVEL_MIN + ((normalized * zip_span + (zstd_span / 2)) / zstd_span)
     }
 
     fn open_archive(&self, source: &Path) -> Result<ZipFileArchive<BufReader<File>>> {
@@ -114,104 +141,39 @@ impl ZipContainerHandler {
         })
     }
 
-    fn build_create_tasks(
+    fn create_with_libarchive(
         &self,
+        request: &ContainerCreateRequest,
         entries: &[ArchiveInputEntry],
-        context: &OperationContext,
-    ) -> Vec<ZipCreateTask> {
-        entries
-            .iter()
-            .enumerate()
-            .filter_map(|(entry_index, entry)| {
-                (!entry.is_dir).then(|| ZipCreateTask {
-                    entry_index,
-                    source: entry.source.clone(),
-                    archive_name: entry.archive_name.clone(),
-                    temp_archive: context.temp_paths().next_path(
-                        &format!("{}-create-{entry_index}", self.descriptor.name),
-                        Some("zip"),
-                    ),
-                })
-            })
-            .collect()
-    }
-
-    fn compress_create_task(
-        &self,
-        task: &ZipCreateTask,
         method: ZipCompressionMethod,
         level: Option<i32>,
-    ) -> Result<ZipCreateArtifact> {
-        if let Some(parent) = task.temp_archive.parent() {
-            fs::create_dir_all(parent)?;
-        }
+        context: &OperationContext,
+    ) -> Result<(u64, ThreadExecution)> {
+        let execution = context.plan_threads(ThreadCapability::parallel(None));
 
-        let output = File::create(&task.temp_archive)?;
-        let mut staged_archive = ZipFileWriter::new(BufWriter::new(output));
-        staged_archive
-            .start_file(task.archive_name.clone(), self.build_options(method, level))
-            .map_err(|error| {
-                RomWeaverError::Validation(format!(
-                    "{} create failed for `{}`: {error}",
-                    self.descriptor.name, task.archive_name
-                ))
-            })?;
-
-        let mut source = BufReader::new(File::open(&task.source)?);
-        let logical_bytes = io::copy(&mut source, &mut staged_archive)?;
-        staged_archive.finish().map_err(|error| {
-            RomWeaverError::Validation(format!(
-                "{} create failed for `{}`: {error}",
-                self.descriptor.name, task.archive_name
+        let method_name = self.libarchive_method_name(method).ok_or_else(|| {
+            RomWeaverError::Unsupported(format!(
+                "libarchive does not support {} codec `{}`",
+                self.descriptor.name,
+                self.method_name(method)
             ))
         })?;
-
-        Ok(ZipCreateArtifact {
-            entry_index: task.entry_index,
-            archive_name: task.archive_name.clone(),
-            logical_bytes,
-            temp_archive: task.temp_archive.clone(),
-        })
-    }
-
-    fn merge_create_artifact(
-        &self,
-        archive: &mut ZipFileWriter<BufWriter<File>>,
-        artifact: &ZipCreateArtifact,
-    ) -> Result<()> {
-        let staged_file = File::open(&artifact.temp_archive)?;
-        let mut staged_archive =
-            ZipFileArchive::new(BufReader::new(staged_file)).map_err(|error| {
-                RomWeaverError::Validation(format!(
-                    "{} create failed while reading staged entry `{}`: {error}",
-                    self.descriptor.name, artifact.archive_name
-                ))
-            })?;
-        let staged_entry = staged_archive.by_index(0).map_err(|error| {
-            RomWeaverError::Validation(format!(
-                "{} create failed while reading staged entry `{}`: {error}",
-                self.descriptor.name, artifact.archive_name
-            ))
-        })?;
-        archive.raw_copy_file(staged_entry).map_err(|error| {
-            RomWeaverError::Validation(format!(
-                "{} create failed for `{}`: {error}",
-                self.descriptor.name, artifact.archive_name
-            ))
-        })?;
-        Ok(())
-    }
-
-    fn cleanup_create_artifacts(&self, artifacts: &[ZipCreateArtifact]) {
-        for artifact in artifacts {
-            let _ = fs::remove_file(&artifact.temp_archive);
-        }
-    }
-
-    fn cleanup_create_tasks(&self, tasks: &[ZipCreateTask]) {
-        for task in tasks {
-            let _ = fs::remove_file(&task.temp_archive);
-        }
+        let logical_bytes = write_archive_with_libarchive(
+            request,
+            entries,
+            context,
+            &execution,
+            LibarchiveCreateConfig {
+                format_name: self.descriptor.name,
+                format: LibarchiveCreateFormat::Zip,
+                filter: LibarchiveCreateFilter::None,
+                format_compression: Some(method_name),
+                compression_level: self.libarchive_level(method, level),
+                format_threads: self.libarchive_threads(method, &execution),
+                filter_threads: None,
+            },
+        )?;
+        Ok((logical_bytes, execution))
     }
 }
 
@@ -310,138 +272,8 @@ impl ContainerHandler for ZipContainerHandler {
     ) -> Result<OperationReport> {
         let (method, level) = self.parse_codec(request.codec.as_deref(), request.level)?;
         let entries = collect_archive_inputs(&request.inputs)?;
-        let create_tasks = self.build_create_tasks(&entries, context);
-        let total_create_tasks = create_tasks.len();
-        let (execution, staged_artifacts) = if create_tasks.is_empty() {
-            (
-                context.plan_threads(ThreadCapability::parallel(None)),
-                Vec::new(),
-            )
-        } else {
-            let (execution, pool) =
-                context.build_pool(ThreadCapability::parallel(Some(create_tasks.len())))?;
-            let completed_tasks = Arc::new(AtomicUsize::new(0));
-            let progress_context = context.clone();
-            let progress_execution = execution.clone();
-            let progress_format = self.descriptor.name;
-            let staged_result = if execution.used_parallelism {
-                pool.install(|| {
-                    create_tasks
-                        .par_iter()
-                        .map(|task| {
-                            let artifact = self.compress_create_task(task, method, level)?;
-                            let completed = completed_tasks
-                                .fetch_add(1, Ordering::Relaxed)
-                                .saturating_add(1);
-                            emit_container_step_progress(
-                                &progress_context,
-                                "compress",
-                                progress_format,
-                                "create",
-                                completed,
-                                total_create_tasks,
-                                format!(
-                                    "creating `{}` ({}/{})",
-                                    progress_format, completed, total_create_tasks
-                                ),
-                                Some(&progress_execution),
-                            );
-                            Ok(artifact)
-                        })
-                        .collect::<Result<Vec<_>>>()
-                })
-            } else {
-                create_tasks
-                    .iter()
-                    .map(|task| {
-                        let artifact = self.compress_create_task(task, method, level)?;
-                        let completed = completed_tasks
-                            .fetch_add(1, Ordering::Relaxed)
-                            .saturating_add(1);
-                        emit_container_step_progress(
-                            &progress_context,
-                            "compress",
-                            progress_format,
-                            "create",
-                            completed,
-                            total_create_tasks,
-                            format!(
-                                "creating `{}` ({}/{})",
-                                progress_format, completed, total_create_tasks
-                            ),
-                            Some(&progress_execution),
-                        );
-                        Ok(artifact)
-                    })
-                    .collect::<Result<Vec<_>>>()
-            };
-            let mut staged_artifacts = match staged_result {
-                Ok(staged_artifacts) => staged_artifacts,
-                Err(error) => {
-                    self.cleanup_create_tasks(&create_tasks);
-                    return Err(error);
-                }
-            };
-            staged_artifacts.sort_by_key(|artifact| artifact.entry_index);
-            (execution, staged_artifacts)
-        };
-
-        if let Some(parent) = request.output.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        let file = File::create(&request.output)?;
-        let writer = BufWriter::new(file);
-        let mut archive = ZipFileWriter::new(writer);
-        let create_result: Result<u64> = (|| {
-            let mut logical_bytes = 0u64;
-            let mut staged_iter = staged_artifacts.iter();
-
-            for (entry_index, entry) in entries.iter().enumerate() {
-                if entry.is_dir {
-                    let directory_name = format!("{}/", entry.archive_name);
-                    archive
-                        .add_directory(directory_name, self.build_options(method, level))
-                        .map_err(|error| {
-                            RomWeaverError::Validation(format!(
-                                "{} create failed for `{}`: {error}",
-                                self.descriptor.name, entry.archive_name
-                            ))
-                        })?;
-                    continue;
-                }
-
-                let staged = staged_iter.next().ok_or_else(|| {
-                    RomWeaverError::Validation(format!(
-                        "{} create failed while finalizing staged entries for `{}`",
-                        self.descriptor.name, entry.archive_name
-                    ))
-                })?;
-                if staged.entry_index != entry_index {
-                    return Err(RomWeaverError::Validation(format!(
-                        "{} create failed due to staged entry order mismatch for `{}`",
-                        self.descriptor.name, entry.archive_name
-                    )));
-                }
-                self.merge_create_artifact(&mut archive, staged)?;
-                logical_bytes = logical_bytes.saturating_add(staged.logical_bytes);
-            }
-            if staged_iter.next().is_some() {
-                return Err(RomWeaverError::Validation(format!(
-                    "{} create failed due to unexpected staged entries",
-                    self.descriptor.name
-                )));
-            }
-
-            archive.finish().map_err(|error| {
-                RomWeaverError::Validation(format!(
-                    "{} create failed while finalizing archive: {error}",
-                    self.descriptor.name
-                ))
-            })?;
-            Ok(logical_bytes)
-        })();
-        self.cleanup_create_artifacts(&staged_artifacts);
-        let logical_bytes = create_result?;
+        let (logical_bytes, execution) =
+            self.create_with_libarchive(request, &entries, method, level, context)?;
 
         Ok(OperationReport::succeeded(
             OperationFamily::Container,

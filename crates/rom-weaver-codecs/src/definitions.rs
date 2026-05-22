@@ -1,20 +1,31 @@
 use std::{
+    ffi::{CStr, CString},
     fs::{self, File},
     io::{self, BufReader, BufWriter, Cursor, Read, Seek, SeekFrom, Write},
-    num::NonZeroU64,
+    os::raw::c_uint,
     path::Path,
+    ptr,
     sync::Arc,
 };
 
-use bzip2::{
-    Compression as Bzip2Compression, bufread::BzDecoder as BufReadBzDecoder, read::MultiBzDecoder,
-    write::BzEncoder,
-};
+use bzip2::read::MultiBzDecoder;
 use flate2::{
-    Compression as DeflateCompression, bufread::GzDecoder as BufReadGzDecoder,
-    read::DeflateDecoder, read::MultiGzDecoder, read::ZlibDecoder, write::GzEncoder,
+    read::DeflateDecoder, read::ZlibDecoder,
 };
-use lzma_rust2::{Lzma2Reader, LzmaReader, XzOptions, XzReader, XzReaderMt, XzWriter, XzWriterMt};
+use lzma_rust2::{Lzma2Reader, LzmaReader, XzOptions, XzReader, XzWriter};
+use rom_weaver_libarchive_sys::{
+    ARCHIVE_EOF, ARCHIVE_OK, ARCHIVE_WARN, archive, archive_entry, archive_entry_free,
+    archive_entry_new, archive_entry_set_filetype, archive_entry_set_pathname,
+    archive_entry_set_perm, archive_entry_set_size, archive_errno, archive_error_string,
+    archive_read_close, archive_read_data, archive_read_free, archive_read_new,
+    archive_read_next_header, archive_read_open_filename, archive_read_support_filter_bzip2,
+    archive_read_support_filter_gzip, archive_read_support_filter_xz,
+    archive_read_support_filter_zstd, archive_read_support_format_raw, archive_write_add_filter_bzip2,
+    archive_write_add_filter_gzip, archive_write_add_filter_xz, archive_write_add_filter_zstd,
+    archive_write_close, archive_write_data, archive_write_finish_entry, archive_write_free,
+    archive_write_header, archive_write_new, archive_write_open_filename,
+    archive_write_set_filter_option, archive_write_set_format_raw,
+};
 use rayon::prelude::*;
 use rom_weaver_core::{
     BoundedIoPolicy, ChunkPlanner, CodecBackend, CodecCapabilities, CodecDescriptor,
@@ -22,7 +33,7 @@ use rom_weaver_core::{
     OperationReport, OrderedChunkWriter, Result, RomWeaverError, ThreadCapability,
     ThreadExecution,
 };
-use zstd::stream::{Decoder as ZstdDecoder, Encoder as ZstdEncoder};
+use zstd::stream::Decoder as ZstdDecoder;
 
 const STORE: CodecDescriptor = FormatDescriptor {
     family: OperationFamily::Codec,
