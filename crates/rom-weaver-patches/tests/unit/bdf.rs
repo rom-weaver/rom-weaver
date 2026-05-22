@@ -4,8 +4,8 @@ use rom_weaver_core::{PatchApplyRequest, PatchCreateRequest, PatchHandler};
 
 use super::BdfPatchHandler;
 use crate::{
-    test_support::{test_context_with_threads, TestDir},
     BDF_BSDIFF40,
+    test_support::{TestDir, test_context_with_threads},
 };
 
 fn bdf_fixture_paths(temp: &TestDir) -> (PathBuf, PathBuf, PathBuf, PathBuf) {

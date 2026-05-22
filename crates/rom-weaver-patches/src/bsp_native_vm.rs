@@ -8,8 +8,8 @@ use std::{
 };
 
 use rom_weaver_core::{
-    BlockCacheReader, RomWeaverError, SharedThreadPool, DEFAULT_BLOCK_CACHE_MAX_BLOCKS,
-    DEFAULT_BLOCK_CACHE_SIZE_BYTES,
+    BlockCacheReader, DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES,
+    RomWeaverError, SharedThreadPool,
 };
 use sha1::{Digest, Sha1};
 

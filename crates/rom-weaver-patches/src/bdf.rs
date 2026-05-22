@@ -5,14 +5,14 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use bzip2::{read::MultiBzDecoder, write::BzEncoder, Compression};
+use bzip2::{Compression, read::MultiBzDecoder, write::BzEncoder};
 use rayon::prelude::*;
 use rom_weaver_codecs::decode_bzip2_exact;
 use rom_weaver_core::{
-    BlockCacheReader, ChunkPlanner, FormatDescriptor, OperationContext, OperationReport,
+    BlockCacheReader, ChunkPlanner, DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES,
+    DEFAULT_CHUNK_SIZE_BYTES, FormatDescriptor, OperationContext, OperationReport,
     PatchApplyRequest, PatchCapabilities, PatchCreateRequest, PatchHandler, Result, RomWeaverError,
-    SharedThreadPool, ThreadCapability, DEFAULT_BLOCK_CACHE_MAX_BLOCKS,
-    DEFAULT_BLOCK_CACHE_SIZE_BYTES, DEFAULT_CHUNK_SIZE_BYTES,
+    SharedThreadPool, ThreadCapability,
 };
 
 use crate::qbsdiff_support::qbsdiff_thread_capability;

@@ -17,13 +17,11 @@ use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
 use flate2::read::MultiGzDecoder;
 #[cfg(not(target_arch = "wasm32"))]
 use lzma_rust2::XzReader;
+#[cfg(not(target_arch = "wasm32"))]
+use rom_weaver_checksum::checksum_reader_values_with_progress;
 use rom_weaver_checksum::{
     NativeChecksumEngine, checksum_file_values, seed_checksum_file_cache, supported_algorithms,
 };
-#[cfg(not(target_arch = "wasm32"))]
-use rom_weaver_checksum::checksum_reader_values_with_progress;
-#[cfg(not(target_arch = "wasm32"))]
-use tar::Archive as TarArchive;
 use rom_weaver_codecs::{CanonicalCodec, RequestedCodec, parse_requested_codec};
 use rom_weaver_containers::{CompressFormatRecommendation, ContainerRegistry};
 use rom_weaver_core::{
@@ -38,15 +36,17 @@ use rom_weaver_patches::{
     explicitly_unsupported_patch_reason_for_path,
 };
 use serde_json::{Map, Value, json};
+#[cfg(not(target_arch = "wasm32"))]
+use tar::Archive as TarArchive;
 use tracing::trace;
 #[cfg(not(target_arch = "wasm32"))]
 use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
-#[cfg(not(target_arch = "wasm32"))]
-use zstd::stream::Decoder as ZstdDecoder;
 use xdvdfs::{
     blockdev::OffsetWrapper as XdvdfsOffsetWrapper,
     write::{fs::XDVDFSFilesystem as XdvdfsFilesystem, img::create_xdvdfs_image},
 };
+#[cfg(not(target_arch = "wasm32"))]
+use zstd::stream::Decoder as ZstdDecoder;
 
 #[derive(Debug)]
 #[cfg_attr(not(target_arch = "wasm32"), derive(Parser))]

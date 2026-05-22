@@ -7,14 +7,14 @@ use std::{
 
 use rayon::prelude::*;
 use rom_weaver_codecs::{
-    decode_bzip2_exact, decode_deflate_exact, decode_lzma2, decode_lzma_with_props,
+    decode_bzip2_exact, decode_deflate_exact, decode_lzma_with_props, decode_lzma2,
     decode_zlib_exact, decode_zstd_exact,
 };
 use rom_weaver_core::{
-    BlockCacheReader, FormatDescriptor, OperationContext, OperationFamily, OperationReport,
-    PatchApplyRequest, PatchCapabilities, PatchCreateRequest, PatchHandler, ProbeConfidence,
-    Result, RomWeaverError, ThreadCapability, ValidationCodeError, DEFAULT_BLOCK_CACHE_MAX_BLOCKS,
-    DEFAULT_BLOCK_CACHE_SIZE_BYTES,
+    BlockCacheReader, DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES,
+    FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
+    PatchCapabilities, PatchCreateRequest, PatchHandler, ProbeConfidence, Result, RomWeaverError,
+    ThreadCapability, ValidationCodeError,
 };
 
 fn hdiff_validation_code(code: &'static str) -> ValidationCodeError {

@@ -3,12 +3,12 @@ use std::{fs, path::PathBuf};
 use rom_weaver_core::{PatchApplyRequest, PatchCreateRequest, PatchHandler};
 
 use super::{
-    apply_hdiff13, apply_hdiffsf20, build_uncompressed_hdiff13_patch, write_var_u64,
-    HdiffPatchHandler,
+    HdiffPatchHandler, apply_hdiff13, apply_hdiffsf20, build_uncompressed_hdiff13_patch,
+    write_var_u64,
 };
 use crate::{
-    test_support::{test_context_with_threads, TestDir},
     HDIFFPATCH,
+    test_support::{TestDir, test_context_with_threads},
 };
 
 #[test]
@@ -386,11 +386,13 @@ fn apply_hdiffsf20_reports_parallel_fallback_for_single_step_patch() {
     let execution = report.thread_execution.expect("thread execution");
     assert!(!execution.used_parallelism);
     assert!(execution.thread_fallback);
-    assert!(execution
-        .thread_fallback_reason
-        .as_deref()
-        .unwrap_or_default()
-        .contains("no independent step-level parallel work"));
+    assert!(
+        execution
+            .thread_fallback_reason
+            .as_deref()
+            .unwrap_or_default()
+            .contains("no independent step-level parallel work")
+    );
     assert_eq!(execution.effective_threads, 1);
     assert_eq!(fs::read(output_path).expect("output"), source);
 }

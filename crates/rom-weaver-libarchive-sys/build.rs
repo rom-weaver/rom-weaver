@@ -289,7 +289,9 @@ fn generate_bindings(libarchive_dir: &Path) {
         bindgen_builder = bindgen_builder.clang_arg(format!("--sysroot={sysroot}"));
     }
 
-    let bindings = bindgen_builder.generate().expect("failed to generate bindings");
+    let bindings = bindgen_builder
+        .generate()
+        .expect("failed to generate bindings");
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap());
     bindings
         .write_to_file(out_path.join("bindings.rs"))

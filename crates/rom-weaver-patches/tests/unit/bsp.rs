@@ -7,10 +7,10 @@ use std::{
 use rom_weaver_core::{PatchApplyRequest, PatchCreateRequest, PatchHandler};
 use serde_json::Value;
 
-use super::{apply_bsp_patch_bytes, BspPatchHandler, BSP_THREAD_WORK_CHUNK_BYTES, BSP_VM_SOURCE};
+use super::{BSP_THREAD_WORK_CHUNK_BYTES, BSP_VM_SOURCE, BspPatchHandler, apply_bsp_patch_bytes};
 use crate::{
-    test_support::{test_context_with_threads, TestDir},
     BSP,
+    test_support::{TestDir, test_context_with_threads},
 };
 
 struct ReferenceVector {
@@ -285,9 +285,11 @@ fn apply_surfaces_non_zero_exit_status() {
         )
         .expect_err("non-zero exit should fail");
 
-    assert!(error
-        .to_string()
-        .contains("BSP patch script exited with failure status 1"));
+    assert!(
+        error
+            .to_string()
+            .contains("BSP patch script exited with failure status 1")
+    );
 }
 
 #[test]
@@ -414,7 +416,9 @@ fn create_is_reported_as_unsupported() {
         )
         .expect_err("create should be unsupported");
 
-    assert!(error
-        .to_string()
-        .contains("BSP patch creation is not implemented"));
+    assert!(
+        error
+            .to_string()
+            .contains("BSP patch creation is not implemented")
+    );
 }
