@@ -35,6 +35,9 @@ from typing import Any
 
 MIB = 1024 * 1024
 TIME_BIN = Path("/usr/bin/time")
+SCRIPT_PATH = Path(__file__).resolve()
+REPO_ROOT = SCRIPT_PATH.parent.parent
+WASM_BUILD_SCRIPT = REPO_ROOT / "scripts" / "build-wasm-cli.sh"
 
 CONTAINER_FORMATS = [
     "zip",
@@ -68,7 +71,7 @@ CONTAINER_SUFFIX = {
     "tar.xz": "tar.xz",
 }
 
-ARCHIVE_TOOLS = ["rom-weaver", "7zz"]
+ARCHIVE_TOOLS = ["rom-weaver", "rom-weaver-wasm", "7zz"]
 
 EXPECTED_COMPRESS_SKIPS = {
     "rar": "intentionally unsupported: rar create is not supported",
@@ -108,6 +111,48 @@ SEVENZIP_EXTRACT_FORMATS = {
 }
 
 DISC_COMPRESS_INPUT_FORMATS = {"rvz", "wia", "wbfs", "tgc"}
+
+ROM_WEAVER_COMPRESS_CODEC_BY_FORMAT = {
+    "zipx": "zstd",
+}
+
+# Codec matrix for rom-weaver format/codec coverage.
+# Entry tuples are (codec_label, codec_cli_value).
+# zipx intentionally stays out of this matrix to avoid counting it in permutation totals.
+ROM_WEAVER_CODEC_MATRIX_BY_FORMAT = {
+    "zip": [("store", "store"), ("deflate", "deflate"), ("bzip2", "bzip2"), ("zstd", "zstd")],
+    "7z": [
+        ("lzma2", "lzma2"),
+        ("lzma", "lzma"),
+        ("store", "store"),
+        ("zstd", "zstd:7"),
+        ("deflate", "deflate"),
+        ("bzip2", "bzip2"),
+        ("ppmd", "ppmd"),
+    ],
+    "tar": [("store", "store")],
+    "tar.gz": [("deflate", "deflate")],
+    "tar.bz2": [("bzip2", "bzip2")],
+    "tar.xz": [("lzma2", "lzma2"), ("lzma", "lzma")],
+    "gz": [("deflate", "deflate")],
+    "bz2": [("bzip2", "bzip2")],
+    "xz": [("lzma2", "lzma2"), ("lzma", "lzma")],
+    "zst": [("zstd", "zstd")],
+    "cso": [("store", "store")],
+    "chd": [
+        ("zstd", "zstd"),
+        ("zlib", "zlib"),
+        ("lzma", "lzma"),
+        ("huffman", "huffman"),
+        ("flac", "flac"),
+        ("store", "store"),
+    ],
+    "wia": [("store", "store"), ("zstd", "zstd"), ("bzip2", "bzip2"), ("lzma", "lzma"), ("lzma2", "lzma2")],
+    "tgc": [("store", "store")],
+    "wbfs": [("store", "store")],
+    "rvz": [("store", "store"), ("zstd", "zstd"), ("bzip2", "bzip2"), ("lzma", "lzma"), ("lzma2", "lzma2")],
+    "z3ds": [("zstd", "zstd")],
+}
 
 DLDI_MAGIC = bytes([0xED, 0xA5, 0x8D, 0xBF, ord(" "), ord("C"), ord("h"), ord("i"), ord("s"), ord("h"), ord("m"), 0x00])
 DLDI_VERSION = 1
@@ -269,7 +314,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--skip-build",
         action="store_true",
-        help="Skip automatic cargo build when the binary is missing",
+        help="Skip automatic pre-benchmark native+wasm rebuilds (still requires an existing binary)",
     )
     parser.add_argument(
         "--keep-work-dir",
@@ -310,13 +355,31 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--archive-tools",
         default="rom-weaver",
-        help="Archive benchmark tools to run for compress/extract (rom-weaver,7zz). Default: rom-weaver",
+        help="Archive benchmark tools to run for compress/extract (rom-weaver,rom-weaver-wasm,7zz). Default: rom-weaver",
     )
     parser.add_argument(
         "--sevenzip-bin",
         type=Path,
         default=Path(shutil.which("7zz") or "7zz"),
         help="Path to 7zz binary used when archive-tools includes 7zz (default: PATH lookup for 7zz)",
+    )
+    parser.add_argument(
+        "--node-bin",
+        type=Path,
+        default=Path(shutil.which("node") or "node"),
+        help="Path to Node.js binary used when archive-tools includes rom-weaver-wasm (default: PATH lookup for node)",
+    )
+    parser.add_argument(
+        "--wasm-runner",
+        type=Path,
+        default=Path("scripts/wasm/run-wasi-cli.mjs"),
+        help="Path to wasm runner wrapper script used for rom-weaver-wasm archive tool",
+    )
+    parser.add_argument(
+        "--wasm-module",
+        type=Path,
+        default=Path("packages/rom-weaver-wasm/rom-weaver-cli.wasm"),
+        help="Path to rom-weaver CLI wasm module used for rom-weaver-wasm archive tool",
     )
     return parser.parse_args()
 
@@ -358,6 +421,15 @@ def ensure_binary(bin_path: Path, skip_build: bool) -> None:
     if release:
         cmd.append("--release")
     subprocess.run(cmd, check=True)
+
+
+def rebuild_release_and_wasm(skip_build: bool, needs_rom_weaver: bool) -> None:
+    if skip_build or not needs_rom_weaver:
+        return
+    print("[bench] rebuild release binary", flush=True)
+    subprocess.run(["cargo", "build", "-p", "rom-weaver-cli", "--release"], check=True, cwd=REPO_ROOT)
+    print("[bench] rebuild wasm artifacts", flush=True)
+    subprocess.run(["bash", str(WASM_BUILD_SCRIPT)], check=True, cwd=REPO_ROOT)
 
 
 def resolve_external_binary(bin_path: Path, flag_name: str) -> Path:
@@ -551,8 +623,66 @@ def base_command(bin_path: Path, args: list[str]) -> list[str]:
     return [str(bin_path), "--no-progress", *args]
 
 
+def rom_weaver_codec_cases_for_format(format_name: str) -> list[tuple[str, str | None]]:
+    codecs = ROM_WEAVER_CODEC_MATRIX_BY_FORMAT.get(format_name)
+    if codecs is not None:
+        return list(codecs)
+    default_codec = ROM_WEAVER_COMPRESS_CODEC_BY_FORMAT.get(format_name)
+    if default_codec is not None:
+        return [(default_codec, default_codec)]
+    return [("default", None)]
+
+
+def format_codec_path_id(format_name: str, codec_label: str) -> str:
+    return f"format:{format_name},codec:{codec_label}"
+
+
+def rom_weaver_compress_args(
+    *,
+    input_path: Path,
+    format_name: str,
+    output_path: Path,
+    threads: int,
+    codec_override: str | None = None,
+) -> list[str]:
+    args = [
+        "compress",
+        str(input_path),
+        "--format",
+        format_name,
+        "--output",
+        str(output_path),
+        "--threads",
+        str(threads),
+    ]
+    codec = codec_override
+    if codec is None:
+        codec = ROM_WEAVER_COMPRESS_CODEC_BY_FORMAT.get(format_name)
+    if codec is not None:
+        args.extend(["--codec", codec])
+    return args
+
+
 def sevenzip_command(sevenzip_bin: Path, args: list[str]) -> list[str]:
     return [str(sevenzip_bin), *args]
+
+
+def wasm_rom_weaver_command(
+    *,
+    node_bin: Path,
+    wasm_runner: Path,
+    wasm_module: Path,
+    args: list[str],
+) -> list[str]:
+    return [
+        str(node_bin),
+        "--no-warnings",
+        str(wasm_runner),
+        "--wasm-module",
+        str(wasm_module),
+        "--",
+        *args,
+    ]
 
 
 def sevenzip_compress_command(
@@ -878,10 +1008,30 @@ def main() -> None:
     if args.threads <= 0 or args.warmups < 0 or args.iterations <= 0:
         raise SystemExit("--threads must be > 0, --warmups >= 0, and --iterations > 0")
 
-    ensure_binary(args.bin, args.skip_build)
+    needs_rom_weaver = (
+        "rom-weaver" in selected_archive_tools
+        or "rom-weaver-wasm" in selected_archive_tools
+        or "checksum" in selected_commands
+        or "patch-create" in selected_commands
+        or "patch-apply" in selected_commands
+    )
+    rebuild_release_and_wasm(args.skip_build, needs_rom_weaver)
+    if needs_rom_weaver:
+        ensure_binary(args.bin, args.skip_build)
     sevenzip_bin: Path | None = None
     if "7zz" in selected_archive_tools:
         sevenzip_bin = resolve_external_binary(args.sevenzip_bin, "--sevenzip-bin")
+    node_bin: Path | None = None
+    wasm_runner: Path | None = None
+    wasm_module: Path | None = None
+    if "rom-weaver-wasm" in selected_archive_tools:
+        node_bin = resolve_external_binary(args.node_bin, "--node-bin")
+        wasm_runner = args.wasm_runner.expanduser().resolve()
+        if not wasm_runner.exists():
+            raise SystemExit(f"--wasm-runner file not found: {wasm_runner}")
+        wasm_module = args.wasm_module.expanduser().resolve()
+        if not wasm_module.exists():
+            raise SystemExit(f"--wasm-module file not found: {wasm_module}")
 
     work_dir = args.work_dir.resolve()
     if work_dir.exists():
@@ -1027,7 +1177,8 @@ def main() -> None:
     rows: list[BenchmarkRow] = []
 
     # Prepare reusable extract/checksum archive inputs.
-    archive_sources: dict[str, ArchiveSource] = {}
+    archive_sources: dict[tuple[str, str], ArchiveSource] = {}
+    archive_sources_default: dict[str, ArchiveSource] = {}
     static_extract_fixtures = {
         "rar": args.rar_fixture,
     }
@@ -1037,48 +1188,63 @@ def main() -> None:
     )
     if needs_archive_sources:
         for format_name in selected_container_formats:
-            print(f"[bench] prep archive source {format_name}", flush=True)
-            input_path = compress_input_for_format(format_name)
-            output_path = artifacts_dir / f"seed-{token(format_name)}.{container_suffix(format_name)}"
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            if output_path.exists():
-                output_path.unlink()
-
-            cmd = base_command(
-                args.bin,
-                [
-                    "compress",
-                    str(input_path),
-                    "--format",
-                    format_name,
-                    "--output",
-                    str(output_path),
-                    "--threads",
-                    str(args.threads),
-                ],
-            )
-            prep = run_timed_command(cmd, Path.cwd(), args.timeout_sec)
-            if prep.exit_code == 0 and output_path.exists():
-                archive_sources[format_name] = ArchiveSource(
-                    format=format_name,
-                    path=output_path,
-                    payload_bytes=input_path.stat().st_size,
-                    source_kind="generated",
+            codec_cases = rom_weaver_codec_cases_for_format(format_name)
+            for codec_label, codec_value in codec_cases:
+                print(f"[bench] prep archive source {format_name} codec:{codec_label}", flush=True)
+                input_path = compress_input_for_format(format_name)
+                output_path = (
+                    artifacts_dir
+                    / f"seed-{token(format_name)}-{token(codec_label)}.{container_suffix(format_name)}"
                 )
-                print(f"[bench] prep ready {format_name} (generated)", flush=True)
-                continue
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                if output_path.exists():
+                    output_path.unlink()
 
-            fixture = static_extract_fixtures.get(format_name)
-            if fixture is not None and fixture.exists():
-                archive_sources[format_name] = ArchiveSource(
-                    format=format_name,
-                    path=fixture,
-                    payload_bytes=None,
-                    source_kind="fixture",
+                cmd = base_command(
+                    args.bin,
+                    rom_weaver_compress_args(
+                        input_path=input_path,
+                        format_name=format_name,
+                        output_path=output_path,
+                        threads=args.threads,
+                        codec_override=codec_value,
+                    ),
                 )
-                print(f"[bench] prep ready {format_name} (fixture)", flush=True)
-            else:
-                print(f"[bench] prep unavailable {format_name}", flush=True)
+                prep = run_timed_command(cmd, Path.cwd(), args.timeout_sec)
+                if prep.exit_code == 0 and output_path.exists():
+                    source = ArchiveSource(
+                        format=format_name,
+                        path=output_path,
+                        payload_bytes=input_path.stat().st_size,
+                        source_kind="generated",
+                    )
+                    archive_sources[(format_name, codec_label)] = source
+                    archive_sources_default.setdefault(format_name, source)
+                    print(
+                        f"[bench] prep ready {format_name} codec:{codec_label} (generated)",
+                        flush=True,
+                    )
+                    continue
+
+                fixture = static_extract_fixtures.get(format_name)
+                if fixture is not None and fixture.exists():
+                    source = ArchiveSource(
+                        format=format_name,
+                        path=fixture,
+                        payload_bytes=None,
+                        source_kind="fixture",
+                    )
+                    archive_sources[(format_name, codec_label)] = source
+                    archive_sources_default.setdefault(format_name, source)
+                    print(
+                        f"[bench] prep ready {format_name} codec:{codec_label} (fixture)",
+                        flush=True,
+                    )
+                else:
+                    print(
+                        f"[bench] prep unavailable {format_name} codec:{codec_label}",
+                        flush=True,
+                    )
 
     if "compress" in selected_commands:
         for format_name in selected_container_formats:
@@ -1087,63 +1253,133 @@ def main() -> None:
 
             if "rom-weaver" in selected_archive_tools:
                 if format_name in EXPECTED_COMPRESS_SKIPS:
-                    rows.append(
-                        skipped_row(
-                            "compress",
-                            f"format:{format_name}",
-                            EXPECTED_COMPRESS_SKIPS[format_name],
-                            args.warmups,
-                            args.iterations,
-                            tool="rom-weaver",
-                        )
-                    )
-                else:
-                    def make_command(
-                        iteration: int,
-                        warmup: bool,
-                        format_value: str = format_name,
-                        suffix_value: str = suffix,
-                        input_value: Path = input_path,
-                    ):
-                        run_kind = "warmup" if warmup else "run"
-                        output_path = (
-                            outputs_dir
-                            / "compress"
-                            / f"{token(format_value)}-{run_kind}-{iteration}.{suffix_value}"
-                        )
-                        output_path.parent.mkdir(parents=True, exist_ok=True)
-                        if output_path.exists():
-                            output_path.unlink()
-                        cmd = base_command(
-                            args.bin,
-                            [
+                    for codec_label, _codec_value in rom_weaver_codec_cases_for_format(format_name):
+                        rows.append(
+                            skipped_row(
                                 "compress",
-                                str(input_value),
-                                "--format",
-                                format_value,
-                                "--output",
-                                str(output_path),
-                                "--threads",
-                                str(args.threads),
-                            ],
+                                format_codec_path_id(format_name, codec_label),
+                                EXPECTED_COMPRESS_SKIPS[format_name],
+                                args.warmups,
+                                args.iterations,
+                                tool="rom-weaver",
+                            )
                         )
-                        return cmd, output_path
+                else:
+                    for codec_label, codec_value in rom_weaver_codec_cases_for_format(format_name):
+                        def make_command(
+                            iteration: int,
+                            warmup: bool,
+                            format_value: str = format_name,
+                            suffix_value: str = suffix,
+                            input_value: Path = input_path,
+                            codec_label_value: str = codec_label,
+                            codec_value_override: str | None = codec_value,
+                        ):
+                            run_kind = "warmup" if warmup else "run"
+                            output_path = (
+                                outputs_dir
+                                / "compress"
+                                / f"{token(format_value)}-{token(codec_label_value)}-{run_kind}-{iteration}.{suffix_value}"
+                            )
+                            output_path.parent.mkdir(parents=True, exist_ok=True)
+                            if output_path.exists():
+                                output_path.unlink()
+                            cmd = base_command(
+                                args.bin,
+                                rom_weaver_compress_args(
+                                    input_path=input_value,
+                                    format_name=format_value,
+                                    output_path=output_path,
+                                    threads=args.threads,
+                                    codec_override=codec_value_override,
+                                ),
+                            )
+                            return cmd, output_path
 
-                    def processed_bytes(_context: Path, input_value: Path = input_path) -> int:
-                        return input_value.stat().st_size
+                        def processed_bytes(_context: Path, input_value: Path = input_path) -> int:
+                            return input_value.stat().st_size
 
-                    rows.append(
-                        run_benchmark_case(
-                            command="compress",
-                            path_id=f"format:{format_name}",
-                            warmups=args.warmups,
-                            iterations=args.iterations,
-                            timeout_sec=args.timeout_sec,
-                            command_factory=make_command,
-                            processed_bytes_factory=processed_bytes,
-                            tool="rom-weaver",
+                        rows.append(
+                            run_benchmark_case(
+                                command="compress",
+                                path_id=format_codec_path_id(format_name, codec_label),
+                                warmups=args.warmups,
+                                iterations=args.iterations,
+                                timeout_sec=args.timeout_sec,
+                                command_factory=make_command,
+                                processed_bytes_factory=processed_bytes,
+                                tool="rom-weaver",
+                            )
                         )
-                    )
+
+            if "rom-weaver-wasm" in selected_archive_tools:
+                assert node_bin is not None
+                assert wasm_runner is not None
+                assert wasm_module is not None
+                if format_name in EXPECTED_COMPRESS_SKIPS:
+                    for codec_label, _codec_value in rom_weaver_codec_cases_for_format(format_name):
+                        rows.append(
+                            skipped_row(
+                                "compress",
+                                format_codec_path_id(format_name, codec_label),
+                                EXPECTED_COMPRESS_SKIPS[format_name],
+                                args.warmups,
+                                args.iterations,
+                                tool="rom-weaver-wasm",
+                            )
+                        )
+                else:
+                    for codec_label, codec_value in rom_weaver_codec_cases_for_format(format_name):
+                        def make_wasm_command(
+                            iteration: int,
+                            warmup: bool,
+                            format_value: str = format_name,
+                            suffix_value: str = suffix,
+                            input_value: Path = input_path,
+                            codec_label_value: str = codec_label,
+                            codec_value_override: str | None = codec_value,
+                            node_bin_value: Path = node_bin,
+                            wasm_runner_value: Path = wasm_runner,
+                            wasm_module_value: Path = wasm_module,
+                        ):
+                            run_kind = "warmup" if warmup else "run"
+                            output_path = (
+                                outputs_dir
+                                / "compress-wasm"
+                                / f"{token(format_value)}-{token(codec_label_value)}-{run_kind}-{iteration}.{suffix_value}"
+                            )
+                            output_path.parent.mkdir(parents=True, exist_ok=True)
+                            if output_path.exists():
+                                output_path.unlink()
+                            cmd = wasm_rom_weaver_command(
+                                node_bin=node_bin_value,
+                                wasm_runner=wasm_runner_value,
+                                wasm_module=wasm_module_value,
+                                args=rom_weaver_compress_args(
+                                    input_path=input_value,
+                                    format_name=format_value,
+                                    output_path=output_path,
+                                    threads=args.threads,
+                                    codec_override=codec_value_override,
+                                ),
+                            )
+                            return cmd, output_path
+
+                        def processed_bytes(_context: Path, input_value: Path = input_path) -> int:
+                            return input_value.stat().st_size
+
+                        rows.append(
+                            run_benchmark_case(
+                                command="compress",
+                                path_id=format_codec_path_id(format_name, codec_label),
+                                warmups=args.warmups,
+                                iterations=args.iterations,
+                                timeout_sec=args.timeout_sec,
+                                command_factory=make_wasm_command,
+                                processed_bytes_factory=processed_bytes,
+                                tool="rom-weaver-wasm",
+                            )
+                        )
 
             if "7zz" in selected_archive_tools:
                 assert sevenzip_bin is not None
@@ -1204,28 +1440,35 @@ def main() -> None:
 
     if "extract" in selected_commands:
         for format_name in selected_container_formats:
-            source = archive_sources.get(format_name)
             if "rom-weaver" in selected_archive_tools:
-                if source is None:
-                    rows.append(
-                        skipped_row(
-                            "extract",
-                            f"format:{format_name}",
-                            "no valid source artifact available for this format",
-                            args.warmups,
-                            args.iterations,
-                            tool="rom-weaver",
+                for codec_label, _codec_value in rom_weaver_codec_cases_for_format(format_name):
+                    source = archive_sources.get((format_name, codec_label))
+                    if source is None:
+                        rows.append(
+                            skipped_row(
+                                "extract",
+                                format_codec_path_id(format_name, codec_label),
+                                "no valid source artifact available for this format+codec",
+                                args.warmups,
+                                args.iterations,
+                                tool="rom-weaver",
+                            )
                         )
-                    )
-                else:
+                        continue
+
                     def make_command(
                         iteration: int,
                         warmup: bool,
                         format_value: str = format_name,
+                        codec_label_value: str = codec_label,
                         source_value: ArchiveSource = source,
                     ):
                         run_kind = "warmup" if warmup else "run"
-                        out_dir = outputs_dir / "extract" / f"{token(format_value)}-{run_kind}-{iteration}"
+                        out_dir = (
+                            outputs_dir
+                            / "extract"
+                            / f"{token(format_value)}-{token(codec_label_value)}-{run_kind}-{iteration}"
+                        )
                         if out_dir.exists():
                             shutil.rmtree(out_dir)
                         out_dir.mkdir(parents=True, exist_ok=True)
@@ -1249,18 +1492,89 @@ def main() -> None:
                     rows.append(
                         run_benchmark_case(
                             command="extract",
-                            path_id=f"format:{format_name}",
+                            path_id=format_codec_path_id(format_name, codec_label),
                             warmups=args.warmups,
                             iterations=args.iterations,
                             timeout_sec=args.timeout_sec,
                             command_factory=make_command,
                             processed_bytes_factory=processed_bytes,
-                            tool="rom-weaver",
+                                tool="rom-weaver",
+                            )
+                        )
+
+            if "rom-weaver-wasm" in selected_archive_tools:
+                assert node_bin is not None
+                assert wasm_runner is not None
+                assert wasm_module is not None
+                for codec_label, _codec_value in rom_weaver_codec_cases_for_format(format_name):
+                    source = archive_sources.get((format_name, codec_label))
+                    if source is None:
+                        rows.append(
+                            skipped_row(
+                                "extract",
+                                format_codec_path_id(format_name, codec_label),
+                                "no valid source artifact available for this format+codec",
+                                args.warmups,
+                                args.iterations,
+                                tool="rom-weaver-wasm",
+                            )
+                        )
+                        continue
+
+                    def make_wasm_extract_command(
+                        iteration: int,
+                        warmup: bool,
+                        format_value: str = format_name,
+                        codec_label_value: str = codec_label,
+                        source_value: ArchiveSource = source,
+                        node_bin_value: Path = node_bin,
+                        wasm_runner_value: Path = wasm_runner,
+                        wasm_module_value: Path = wasm_module,
+                    ):
+                        run_kind = "warmup" if warmup else "run"
+                        out_dir = (
+                            outputs_dir
+                            / "extract-wasm"
+                            / f"{token(format_value)}-{token(codec_label_value)}-{run_kind}-{iteration}"
+                        )
+                        if out_dir.exists():
+                            shutil.rmtree(out_dir)
+                        out_dir.mkdir(parents=True, exist_ok=True)
+                        cmd = wasm_rom_weaver_command(
+                            node_bin=node_bin_value,
+                            wasm_runner=wasm_runner_value,
+                            wasm_module=wasm_module_value,
+                            args=[
+                                "extract",
+                                str(source_value.path),
+                                "--out-dir",
+                                str(out_dir),
+                                "--threads",
+                                str(args.threads),
+                            ],
+                        )
+                        return cmd, out_dir
+
+                    def processed_bytes(out_dir: Path, source_value: ArchiveSource = source) -> int | None:
+                        extracted = sum_file_bytes(out_dir)
+                        return extracted if extracted > 0 else source_value.payload_bytes
+
+                    rows.append(
+                        run_benchmark_case(
+                            command="extract",
+                            path_id=format_codec_path_id(format_name, codec_label),
+                            warmups=args.warmups,
+                            iterations=args.iterations,
+                            timeout_sec=args.timeout_sec,
+                            command_factory=make_wasm_extract_command,
+                            processed_bytes_factory=processed_bytes,
+                            tool="rom-weaver-wasm",
                         )
                     )
 
             if "7zz" in selected_archive_tools:
                 assert sevenzip_bin is not None
+                source = archive_sources_default.get(format_name)
                 if source is None:
                     rows.append(
                         skipped_row(
@@ -1361,7 +1675,7 @@ def main() -> None:
 
         if "auto-extract" in selected_checksum_modes:
             for format_name in selected_container_formats:
-                source = archive_sources.get(format_name)
+                source = archive_sources_default.get(format_name)
                 if source is None:
                     rows.append(
                         skipped_row(
@@ -1591,6 +1905,9 @@ def main() -> None:
             "work_dir": str(work_dir),
             "archive_tools": selected_archive_tools,
             "sevenzip_bin": str(sevenzip_bin) if sevenzip_bin is not None else None,
+            "node_bin": str(node_bin) if node_bin is not None else None,
+            "wasm_runner": str(wasm_runner) if wasm_runner is not None else None,
+            "wasm_module": str(wasm_module) if wasm_module is not None else None,
             "commands": sorted(selected_commands),
             "container_formats": selected_container_formats,
             "patch_formats": selected_patch_formats,
