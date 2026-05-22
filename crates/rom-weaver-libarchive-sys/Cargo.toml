@@ -10,13 +10,19 @@ links = "archive"
 [dependencies]
 bzip2-sys = { version = "0.1.11", features = ["static"] }
 libc = "0.2.137"
-liblzma-sys = { version = "0.4.6", features = ["static"] }
 libz-sys = { workspace = true, features = ["static"] }
 lz4-sys = "1.9.4"
 zstd-sys.workspace = true
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
+liblzma-sys = { version = "0.4.6", features = ["static", "parallel"] }
 zstd-sys = { workspace = true, features = ["zstdmt"] }
+
+[target.wasm32-wasip1.dependencies]
+liblzma-sys = { version = "0.4.6", features = ["static"] }
+
+[target.wasm32-wasip1-threads.dependencies]
+liblzma-sys = { version = "0.4.6", features = ["static", "parallel"] }
 
 [target.'cfg(all(not(target_vendor = "apple"), not(target_family = "wasm")))'.dependencies]
 openssl-sys = { version = "0.9.80", features = ["vendored"] }

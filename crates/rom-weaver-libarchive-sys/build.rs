@@ -65,6 +65,14 @@ fn is_wasm_threads_target() -> bool {
         .unwrap_or(false)
 }
 
+fn target_tool_env(tool: &str) -> Option<String> {
+    let target = env::var("TARGET").ok()?;
+    let target_key = target.replace('-', "_");
+    env::var(format!("{tool}_{target_key}"))
+        .ok()
+        .or_else(|| env::var(tool).ok())
+}
+
 fn prepare_wasm_source_tree(libarchive_dir: &Path, out_dir: &Path) -> PathBuf {
     let staged = out_dir.join("libarchive-wasm-src");
     if staged.exists() {
@@ -168,6 +176,15 @@ fn build_libarchive(libarchive_dir: &Path) {
             .define("CMAKE_C_FLAGS", joined.as_str())
             .define("CMAKE_CXX_FLAGS", joined.as_str())
             .define("CMAKE_ASM_FLAGS", joined.as_str());
+    }
+
+    if is_wasm_target() {
+        if let Some(ar) = target_tool_env("AR") {
+            cmake_config.define("CMAKE_AR", ar);
+        }
+        if let Some(ranlib) = target_tool_env("RANLIB") {
+            cmake_config.define("CMAKE_RANLIB", ranlib);
+        }
     }
 
     if env::var("DEP_OPENSSL_VERSION").is_ok() {
