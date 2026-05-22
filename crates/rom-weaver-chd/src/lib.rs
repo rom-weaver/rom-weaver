@@ -1,15 +1,17 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::{
     collections::BTreeSet,
+    ffi::c_void,
     fs::{self, File},
     io::{self, BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write},
+    mem::MaybeUninit,
     path::{Path, PathBuf},
+    ptr,
     sync::Arc,
 };
 
 use flacenc::{component::BitRepr as _, error::Verify as _};
 use flate2::{Compression as GzipCompression, write::DeflateEncoder};
-use lzma_rust2::{LzmaOptions, LzmaWriter};
 use rayon::prelude::*;
 use rom_weaver_codecs::{CanonicalCodec, RequestedCodec, parse_requested_codec};
 use rom_weaver_core::{
@@ -17,6 +19,7 @@ use rom_weaver_core::{
     ContainerInspectRequest, FormatDescriptor, OperationContext, OperationFamily, OperationReport,
     ProbeConfidence, Result, RomWeaverError, ThreadCapability,
 };
+use rom_weaver_libarchive_sys::liblzma_sys as lzma_sys;
 use sha1::{Digest, Sha1};
 use zstd::bulk::compress as zstd_compress;
 

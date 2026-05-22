@@ -13,8 +13,8 @@ test-utils = []
 chd.workspace = true
 flacenc.workspace = true
 flate2.workspace = true
-lzma-rust2.workspace = true
 rayon.workspace = true
+rom-weaver-libarchive-sys.workspace = true
 rom-weaver-codecs = { path = "../rom-weaver-codecs" }
 rom-weaver-core = { path = "../rom-weaver-core" }
 sha1.workspace = true

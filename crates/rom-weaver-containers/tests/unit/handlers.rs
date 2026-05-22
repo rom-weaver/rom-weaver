@@ -3556,6 +3556,77 @@ mod tests {
         assert_eq!(consumed, encoded.len().saturating_sub(1));
     }
 
+    fn build_cd_mode1_sector_for_ecc_test(seed: u8) -> [u8; 2352] {
+        let mut sector = [0_u8; 2352];
+        sector[..12].copy_from_slice(&[
+            0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00,
+        ]);
+        for (offset, byte) in sector[12..].iter_mut().enumerate() {
+            *byte = seed.wrapping_add((offset as u8).wrapping_mul(13));
+        }
+        sector[0x0f] = 1;
+        sector[0x81c..].fill(0);
+        super::ChdContainerHandler::generate_cd_sector_ecc_for_tests(&mut sector);
+        sector
+    }
+
+    #[cfg(not(target_family = "wasm"))]
+    #[test]
+    fn chd_rust_cd_zlib_payload_marks_and_clears_reconstructable_ecc() {
+        const SECTOR_BYTES: usize = 2352;
+        const SUBCODE_BYTES: usize = 96;
+        const ECC_P_OFFSET: usize = 0x81c;
+
+        let handler = super::ChdContainerHandler;
+        let valid_sector = build_cd_mode1_sector_for_ecc_test(17);
+        let mut invalid_sector = build_cd_mode1_sector_for_ecc_test(41);
+        invalid_sector[ECC_P_OFFSET] ^= 0x55;
+
+        let sectors = [valid_sector, invalid_sector];
+        let mut source = Vec::with_capacity(sectors.len() * (SECTOR_BYTES + SUBCODE_BYTES));
+        let mut expected_subcode = Vec::with_capacity(sectors.len() * SUBCODE_BYTES);
+        for (frame_index, sector) in sectors.iter().enumerate() {
+            source.extend_from_slice(sector);
+            for subcode_index in 0..SUBCODE_BYTES {
+                let byte = ((frame_index * 37 + subcode_index * 11) % 251) as u8;
+                source.push(byte);
+                expected_subcode.push(byte);
+            }
+        }
+
+        let encoded = handler
+            .encode_cd_zlib_payload_for_tests(&source)
+            .expect("encode cdzl payload");
+
+        assert_eq!(encoded[0], 0b0000_0001);
+        let compressed_sector_len = u16::from_be_bytes([encoded[1], encoded[2]]) as usize;
+        let sector_stream_start = 3usize;
+        let subcode_stream_start = sector_stream_start + compressed_sector_len;
+
+        let mut sector_decoder =
+            DeflateDecoder::new(&encoded[sector_stream_start..subcode_stream_start]);
+        let mut decoded_sectors = Vec::new();
+        sector_decoder
+            .read_to_end(&mut decoded_sectors)
+            .expect("decode cdzl sector stream");
+        assert_eq!(decoded_sectors.len(), sectors.len() * SECTOR_BYTES);
+
+        let valid_decoded = &decoded_sectors[..SECTOR_BYTES];
+        assert!(valid_decoded[..12].iter().all(|byte| *byte == 0));
+        assert!(valid_decoded[ECC_P_OFFSET..].iter().all(|byte| *byte == 0));
+        assert_eq!(&valid_decoded[12..ECC_P_OFFSET], &valid_sector[12..ECC_P_OFFSET]);
+
+        let invalid_decoded = &decoded_sectors[SECTOR_BYTES..SECTOR_BYTES * 2];
+        assert_eq!(invalid_decoded, &invalid_sector);
+
+        let mut subcode_decoder = DeflateDecoder::new(&encoded[subcode_stream_start..]);
+        let mut decoded_subcode = Vec::new();
+        subcode_decoder
+            .read_to_end(&mut decoded_subcode)
+            .expect("decode cdzl subcode stream");
+        assert_eq!(decoded_subcode, expected_subcode);
+    }
+
     #[cfg(not(target_family = "wasm"))]
     #[test]
     fn chd_rust_cd_flac_payload_round_trip_matches_input_bytes() {

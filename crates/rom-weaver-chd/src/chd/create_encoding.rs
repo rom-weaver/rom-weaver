@@ -1,3 +1,107 @@
+    const CD_SYNC_HEADER: [u8; 12] = [
+        0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00,
+    ];
+    const CD_SYNC_BYTES: usize = 12;
+    const CD_MODE_OFFSET: usize = 0x0f;
+    const CD_ECC_DATA_BYTES: usize = 0x8bc;
+    const CD_ECC_P_OFFSET: usize = 0x81c;
+    const CD_ECC_P_NUM_BYTES: usize = 86;
+    const CD_ECC_P_COMPONENTS: usize = 24;
+    const CD_ECC_Q_OFFSET: usize = CD_ECC_P_OFFSET + CD_ECC_P_NUM_BYTES * 2;
+    const CD_ECC_Q_NUM_BYTES: usize = 52;
+    const CD_ECC_Q_COMPONENTS: usize = 43;
+    const CD_ECC_Q_STEP: usize = 88;
+    const CD_ECC_LOW: [u8; 256] = build_cd_ecc_low_table();
+    const CD_ECC_HIGH: [u8; 256] = build_cd_ecc_high_table();
+    const CRC16_IBM3740_TABLE: [u16; 256] = build_crc16_ibm3740_table();
+    const LZMA_FILTER_LZMA1EXT_NO_EOPM: lzma_sys::lzma_vli = 0x4000_0000_0000_0002;
+
+    #[derive(Default)]
+    struct ChdCompressionScratch {
+        cd: CdHunkScratch,
+    }
+
+    #[derive(Default)]
+    struct CdHunkScratch {
+        sectors: Vec<u8>,
+        raw_sectors: Vec<u8>,
+        subcode: Vec<u8>,
+        ecc_bitmap: Vec<u8>,
+    }
+
+    struct PreparedCdHunk<'a> {
+        frame_count: usize,
+        sectors: &'a [u8],
+        raw_sectors: Option<&'a [u8]>,
+        subcode: &'a [u8],
+        ecc_bitmap: &'a [u8],
+    }
+
+    #[derive(Default)]
+    struct CdSharedCompressedStreams {
+        deflate_subcode_default: Option<Vec<u8>>,
+    }
+
+    impl<'a> PreparedCdHunk<'a> {
+        fn sectors_for_codec(&self, codec: ChdCodec) -> &'a [u8] {
+            if codec == ChdCodec::CD_FLAC {
+                self.raw_sectors.unwrap_or(self.sectors)
+            } else {
+                self.sectors
+            }
+        }
+    }
+
+    const fn cd_ecc_low_value(value: u8) -> u8 {
+        let mut doubled = (value as u16) << 1;
+        if value & 0x80 != 0 {
+            doubled ^= 0x11d;
+        }
+        (doubled & 0xff) as u8
+    }
+
+    const fn build_cd_ecc_low_table() -> [u8; 256] {
+        let mut table = [0_u8; 256];
+        let mut value = 0usize;
+        while value < 256 {
+            table[value] = cd_ecc_low_value(value as u8);
+            value += 1;
+        }
+        table
+    }
+
+    const fn build_cd_ecc_high_table() -> [u8; 256] {
+        let mut table = [0_u8; 256];
+        let mut value = 0usize;
+        while value < 256 {
+            let byte = value as u8;
+            let low = cd_ecc_low_value(byte);
+            table[(low ^ byte) as usize] = byte;
+            value += 1;
+        }
+        table
+    }
+
+    const fn build_crc16_ibm3740_table() -> [u16; 256] {
+        let mut table = [0_u16; 256];
+        let mut value = 0usize;
+        while value < 256 {
+            let mut crc = (value as u16) << 8;
+            let mut bit = 0;
+            while bit < 8 {
+                if (crc & 0x8000) != 0 {
+                    crc = (crc << 1) ^ 0x1021;
+                } else {
+                    crc <<= 1;
+                }
+                bit += 1;
+            }
+            table[value] = crc;
+            value += 1;
+        }
+        table
+    }
+
     impl ChdContainerHandler {
         fn build_chd_v5_header(
             &self,
@@ -126,6 +230,113 @@
             config.subframe_coding.qlpc.lpc_order = lpc_order;
             config.subframe_coding.prc.max_parameter = prc_max_parameter;
             config
+        }
+
+        fn cd_sector_has_reconstructable_ecc(sector: &[u8]) -> bool {
+            sector.len() == Self::CD_SECTOR_DATA_BYTES
+                && sector.starts_with(&CD_SYNC_HEADER)
+                && Self::cd_sector_verify_ecc(sector)
+        }
+
+        fn cd_sector_clear_sync_and_ecc(sector: &mut [u8]) {
+            if sector.len() != Self::CD_SECTOR_DATA_BYTES {
+                return;
+            }
+            sector[..CD_SYNC_BYTES].fill(0);
+            sector[CD_ECC_P_OFFSET..].fill(0);
+        }
+
+        fn cd_sector_verify_ecc(sector: &[u8]) -> bool {
+            if sector.len() != Self::CD_SECTOR_DATA_BYTES {
+                return false;
+            }
+
+            for ecc_byte in 0..CD_ECC_P_NUM_BYTES {
+                let (low, high) = Self::cd_sector_compute_ecc(
+                    sector,
+                    ecc_byte,
+                    CD_ECC_P_NUM_BYTES,
+                    CD_ECC_P_COMPONENTS,
+                );
+                if sector[CD_ECC_P_OFFSET + ecc_byte] != low
+                    || sector[CD_ECC_P_OFFSET + CD_ECC_P_NUM_BYTES + ecc_byte] != high
+                {
+                    return false;
+                }
+            }
+
+            for ecc_byte in 0..CD_ECC_Q_NUM_BYTES {
+                let start = (ecc_byte / 2) * CD_ECC_P_NUM_BYTES + (ecc_byte & 1);
+                let (low, high) =
+                    Self::cd_sector_compute_ecc(sector, start, CD_ECC_Q_STEP, CD_ECC_Q_COMPONENTS);
+                if sector[CD_ECC_Q_OFFSET + ecc_byte] != low
+                    || sector[CD_ECC_Q_OFFSET + CD_ECC_Q_NUM_BYTES + ecc_byte] != high
+                {
+                    return false;
+                }
+            }
+
+            true
+        }
+
+        fn cd_sector_compute_ecc(
+            sector: &[u8],
+            start: usize,
+            step: usize,
+            components: usize,
+        ) -> (u8, u8) {
+            let mut value1 = 0_u8;
+            let mut value2 = 0_u8;
+            let mut offset = start;
+            let mode2 = sector[CD_MODE_OFFSET] == 2;
+            for component in 0..components {
+                let value = if mode2 && offset < 4 {
+                    0
+                } else {
+                    sector[CD_SYNC_BYTES + offset]
+                };
+                value1 = CD_ECC_LOW[(value ^ value1) as usize];
+                value2 ^= value;
+                if component + 1 < components {
+                    offset += step;
+                    if offset >= CD_ECC_DATA_BYTES {
+                        offset -= CD_ECC_DATA_BYTES;
+                    }
+                }
+            }
+            value1 = CD_ECC_HIGH[(CD_ECC_LOW[value1 as usize] ^ value2) as usize];
+            (value1, value1 ^ value2)
+        }
+
+        #[cfg(any(test, feature = "test-utils"))]
+        pub fn generate_cd_sector_ecc_for_tests(sector: &mut [u8]) {
+            if sector.len() != Self::CD_SECTOR_DATA_BYTES {
+                return;
+            }
+
+            for ecc_byte in 0..CD_ECC_P_NUM_BYTES {
+                let (low, high) = Self::cd_sector_compute_ecc(
+                    sector,
+                    ecc_byte,
+                    CD_ECC_P_NUM_BYTES,
+                    CD_ECC_P_COMPONENTS,
+                );
+                sector[CD_ECC_P_OFFSET + ecc_byte] = low;
+                sector[CD_ECC_P_OFFSET + CD_ECC_P_NUM_BYTES + ecc_byte] = high;
+            }
+
+            for ecc_byte in 0..CD_ECC_Q_NUM_BYTES {
+                let start = (ecc_byte / 2) * CD_ECC_P_NUM_BYTES + (ecc_byte & 1);
+                let (low, high) =
+                    Self::cd_sector_compute_ecc(sector, start, CD_ECC_Q_STEP, CD_ECC_Q_COMPONENTS);
+                sector[CD_ECC_Q_OFFSET + ecc_byte] = low;
+                sector[CD_ECC_Q_OFFSET + CD_ECC_Q_NUM_BYTES + ecc_byte] = high;
+            }
+        }
+
+        #[cfg(any(test, feature = "test-utils"))]
+        pub fn encode_cd_zlib_payload_for_tests(&self, hunk: &[u8]) -> Result<Vec<u8>> {
+            self.compress_rust_cd_hunk(ChdCodec::CD_ZLIB, 0, hunk)
         }
 
         fn encode_huffman_identity_payload(&self, hunk: &[u8]) -> Vec<u8> {
@@ -454,29 +665,8 @@
                     })
                 }
                 ChdCodec::LZMA => {
-                    let lzma_level = if compression_level <= 0 {
-                        9
-                    } else {
-                        compression_level as u32
-                    }
-                    .min(9);
-                    let mut options = LzmaOptions::with_preset(lzma_level);
-                    options.lc = 3;
-                    options.lp = 0;
-                    options.pb = 2;
-                    options.dict_size = Self::chd_lzma_dict_size(lzma_level, hunk.len() as u32);
-                    let mut compressed = Vec::new();
-                    let mut writer = LzmaWriter::new_no_header(&mut compressed, &options, false)
-                        .map_err(|error| {
-                            RomWeaverError::Validation(format!("lzma compression failed: {error}"))
-                        })?;
-                    writer.write_all(hunk).map_err(|error| {
-                        RomWeaverError::Validation(format!("lzma compression failed: {error}"))
-                    })?;
-                    writer.finish().map_err(|error| {
-                        RomWeaverError::Validation(format!("lzma compression failed: {error}"))
-                    })?;
-                    Ok(compressed)
+                    let lzma_level = Self::resolved_chd_lzma_level(compression_level);
+                    Self::compress_lzma_raw_no_header_no_eopm(hunk, lzma_level, "lzma")
                 }
                 ChdCodec::HUFFMAN => Ok(self.encode_huffman_identity_payload(hunk)),
                 ChdCodec::AVHUFF => match create_kind {
@@ -503,12 +693,100 @@
             }
         }
 
+        fn compress_best_rust_hunk(
+            &self,
+            create_kind: &ChdCreateKind,
+            primary_codec: ChdCodec,
+            encodable_codecs: &[(u8, ChdCodec)],
+            compression_level: i32,
+            hunk: Vec<u8>,
+            scratch: &mut ChdCompressionScratch,
+        ) -> Result<(u8, Vec<u8>)> {
+            if encodable_codecs.is_empty() {
+                return Ok((Self::CHD_V5_MAP_TYPE_UNCOMPRESSED, hunk));
+            }
+
+            let mut best: Option<(u8, Vec<u8>)> = None;
+            if matches!(create_kind, ChdCreateKind::Disc(_)) {
+                let needs_raw_sectors = encodable_codecs
+                    .iter()
+                    .any(|(_, codec)| *codec == ChdCodec::CD_FLAC);
+                let normalize_ecc = encodable_codecs
+                    .iter()
+                    .any(|(_, codec)| *codec != ChdCodec::CD_FLAC);
+                let prepared = self.prepare_cd_hunk_streams(
+                    &hunk,
+                    needs_raw_sectors,
+                    normalize_ecc,
+                    &mut scratch.cd,
+                )?;
+                let mut shared_streams = CdSharedCompressedStreams::default();
+                for (codec_slot, codec) in encodable_codecs {
+                    let compressed = self.compress_prepared_cd_hunk(
+                        *codec,
+                        compression_level,
+                        hunk.len(),
+                        &prepared,
+                        Some(&mut shared_streams),
+                    )?;
+                    if best
+                        .as_ref()
+                        .map(|(_, candidate)| compressed.len() < candidate.len())
+                        .unwrap_or(true)
+                    {
+                        best = Some((*codec_slot, compressed));
+                    }
+                }
+            } else {
+                for (codec_slot, codec) in encodable_codecs {
+                    let compressed =
+                        self.compress_rust_hunk(create_kind, *codec, compression_level, &hunk)?;
+                    if best
+                        .as_ref()
+                        .map(|(_, candidate)| compressed.len() < candidate.len())
+                        .unwrap_or(true)
+                    {
+                        best = Some((*codec_slot, compressed));
+                    }
+                }
+            }
+
+            Ok(best
+                .filter(|(_, compressed)| {
+                    self.prefer_compressed_payload(primary_codec, compressed.len(), hunk.len())
+                })
+                .unwrap_or((Self::CHD_V5_MAP_TYPE_UNCOMPRESSED, hunk)))
+        }
+
         fn compress_rust_cd_hunk(
             &self,
             primary_codec: ChdCodec,
             compression_level: i32,
             hunk: &[u8],
         ) -> Result<Vec<u8>> {
+            let mut scratch = ChdCompressionScratch::default();
+            let prepared = self.prepare_cd_hunk_streams(
+                hunk,
+                primary_codec == ChdCodec::CD_FLAC,
+                primary_codec != ChdCodec::CD_FLAC,
+                &mut scratch.cd,
+            )?;
+            self.compress_prepared_cd_hunk(
+                primary_codec,
+                compression_level,
+                hunk.len(),
+                &prepared,
+                None,
+            )
+        }
+
+        fn prepare_cd_hunk_streams<'a>(
+            &self,
+            hunk: &[u8],
+            needs_raw_sectors: bool,
+            normalize_ecc: bool,
+            scratch: &'a mut CdHunkScratch,
+        ) -> Result<PreparedCdHunk<'a>> {
             let frame_bytes = usize::try_from(Self::CD_FRAME_BYTES).map_err(|_| {
                 RomWeaverError::Validation("invalid CD frame size for rust CHD encoder".to_string())
             })?;
@@ -524,125 +802,131 @@
             }
 
             let frame_count = hunk.len() / frame_bytes;
-            let mut sectors = Vec::with_capacity(frame_count * Self::CD_SECTOR_DATA_BYTES);
-            let mut subcode = Vec::with_capacity(frame_count * Self::CD_SUBCODE_BYTES);
-            for frame in hunk.chunks_exact(frame_bytes) {
-                sectors.extend_from_slice(&frame[..Self::CD_SECTOR_DATA_BYTES]);
-                subcode.extend_from_slice(
+            let sector_bytes = frame_count * Self::CD_SECTOR_DATA_BYTES;
+            let subcode_bytes = frame_count * Self::CD_SUBCODE_BYTES;
+            let keep_separate_raw = needs_raw_sectors && normalize_ecc;
+
+            scratch.sectors.clear();
+            scratch.subcode.clear();
+            scratch.raw_sectors.clear();
+            scratch.ecc_bitmap.clear();
+            if scratch.sectors.capacity() < sector_bytes {
+                scratch
+                    .sectors
+                    .reserve(sector_bytes - scratch.sectors.capacity());
+            }
+            if scratch.subcode.capacity() < subcode_bytes {
+                scratch
+                    .subcode
+                    .reserve(subcode_bytes - scratch.subcode.capacity());
+            }
+            if keep_separate_raw && scratch.raw_sectors.capacity() < sector_bytes {
+                scratch
+                    .raw_sectors
+                    .reserve(sector_bytes - scratch.raw_sectors.capacity());
+            }
+            if normalize_ecc {
+                scratch.ecc_bitmap.resize(frame_count.div_ceil(8), 0);
+            }
+
+            // CHD CD codecs can regenerate standard sync/ECC bytes when the hunk bitmap marks them.
+            for (frame_index, frame) in hunk.chunks_exact(frame_bytes).enumerate() {
+                let sector_start = scratch.sectors.len();
+                if keep_separate_raw {
+                    scratch
+                        .raw_sectors
+                        .extend_from_slice(&frame[..Self::CD_SECTOR_DATA_BYTES]);
+                }
+                scratch
+                    .sectors
+                    .extend_from_slice(&frame[..Self::CD_SECTOR_DATA_BYTES]);
+                if normalize_ecc {
+                    let sector = &mut scratch.sectors
+                        [sector_start..sector_start + Self::CD_SECTOR_DATA_BYTES];
+                    if Self::cd_sector_has_reconstructable_ecc(sector) {
+                        scratch.ecc_bitmap[frame_index / 8] |= 1_u8 << (frame_index % 8);
+                        Self::cd_sector_clear_sync_and_ecc(sector);
+                    }
+                }
+                scratch.subcode.extend_from_slice(
                     &frame[Self::CD_SECTOR_DATA_BYTES
                         ..Self::CD_SECTOR_DATA_BYTES + Self::CD_SUBCODE_BYTES],
                 );
             }
 
-            let sector_stream = match primary_codec {
-                ChdCodec::CD_ZSTD => {
-                    zstd_compress(&sectors, compression_level).map_err(|error| {
-                        RomWeaverError::Validation(format!("cd zstd compression failed: {error}"))
-                    })?
-                }
-                ChdCodec::CD_ZLIB => {
-                    let compression = if compression_level <= 0 {
-                        GzipCompression::default()
-                    } else {
-                        GzipCompression::new(compression_level.clamp(1, 9) as u32)
-                    };
-                    let mut encoder = DeflateEncoder::new(Vec::new(), compression);
-                    encoder.write_all(&sectors).map_err(|error| {
-                        RomWeaverError::Validation(format!("cd zlib compression failed: {error}"))
-                    })?;
-                    encoder.finish().map_err(|error| {
-                        RomWeaverError::Validation(format!("cd zlib compression failed: {error}"))
-                    })?
-                }
-                ChdCodec::CD_LZMA => {
-                    let lzma_level = if compression_level <= 0 {
-                        9
-                    } else {
-                        compression_level as u32
-                    }
-                    .min(9);
-                    let mut options = LzmaOptions::with_preset(lzma_level);
-                    options.lc = 3;
-                    options.lp = 0;
-                    options.pb = 2;
-                    options.dict_size = Self::chd_lzma_dict_size(lzma_level, sectors.len() as u32);
-                    let mut compressed = Vec::new();
-                    let mut writer = LzmaWriter::new_no_header(&mut compressed, &options, false)
-                        .map_err(|error| {
-                            RomWeaverError::Validation(format!(
-                                "cd lzma compression failed: {error}"
-                            ))
-                        })?;
-                    writer.write_all(&sectors).map_err(|error| {
-                        RomWeaverError::Validation(format!("cd lzma compression failed: {error}"))
-                    })?;
-                    writer.finish().map_err(|error| {
-                        RomWeaverError::Validation(format!("cd lzma compression failed: {error}"))
-                    })?;
-                    compressed
-                }
+            Ok(PreparedCdHunk {
+                frame_count,
+                sectors: &scratch.sectors,
+                raw_sectors: keep_separate_raw.then_some(scratch.raw_sectors.as_slice()),
+                subcode: &scratch.subcode,
+                ecc_bitmap: &scratch.ecc_bitmap,
+            })
+        }
+
+        fn compress_prepared_cd_hunk(
+            &self,
+            primary_codec: ChdCodec,
+            compression_level: i32,
+            hunk_len: usize,
+            prepared: &PreparedCdHunk<'_>,
+            shared_streams: Option<&mut CdSharedCompressedStreams>,
+        ) -> Result<Vec<u8>> {
+            let sectors = prepared.sectors_for_codec(primary_codec);
+            match primary_codec {
+                ChdCodec::CD_ZSTD => self.compress_prepared_cd_zstd_payload(
+                    sectors,
+                    prepared,
+                    compression_level,
+                    hunk_len,
+                ),
+                ChdCodec::CD_ZLIB => self.compress_prepared_cd_zlib_payload(
+                    sectors,
+                    prepared,
+                    compression_level,
+                    hunk_len,
+                    shared_streams,
+                ),
+                ChdCodec::CD_LZMA => self.compress_prepared_cd_lzma_payload(
+                    sectors,
+                    prepared,
+                    compression_level,
+                    hunk_len,
+                    shared_streams,
+                ),
                 ChdCodec::CD_FLAC => {
-                    self.encode_flac_frame_stream(
-                        &sectors,
-                        FlacSampleByteOrder::BigEndian,
-                        compression_level,
-                    )?
+                    self.compress_prepared_cd_flac_payload(sectors, prepared, compression_level)
                 }
-                other => {
-                    return Err(RomWeaverError::Unsupported(format!(
-                        "rust chd compressed create does not support codec `{}` for disc media",
-                        self.codec_label(other)
-                    )));
-                }
-            };
-
-            let subcode_stream = match primary_codec {
-                ChdCodec::CD_ZSTD => {
-                    zstd_compress(&subcode, compression_level).map_err(|error| {
-                        RomWeaverError::Validation(format!(
-                            "cd subcode zstd compression failed: {error}"
-                        ))
-                    })?
-                }
-                ChdCodec::CD_ZLIB | ChdCodec::CD_LZMA | ChdCodec::CD_FLAC => {
-                    let compression = if primary_codec == ChdCodec::CD_FLAC && compression_level > 0
-                    {
-                        GzipCompression::new(compression_level.clamp(1, 9) as u32)
-                    } else {
-                        GzipCompression::default()
-                    };
-                    let mut encoder = DeflateEncoder::new(Vec::new(), compression);
-                    encoder.write_all(&subcode).map_err(|error| {
-                        RomWeaverError::Validation(format!(
-                            "cd subcode zlib compression failed: {error}"
-                        ))
-                    })?;
-                    encoder.finish().map_err(|error| {
-                        RomWeaverError::Validation(format!(
-                            "cd subcode zlib compression failed: {error}"
-                        ))
-                    })?
-                }
-                _ => Vec::new(),
-            };
-
-            if primary_codec == ChdCodec::CD_FLAC {
-                // cdfl stores frame FLAC stream directly, followed by deflate-compressed subcode.
-                let mut output = Vec::with_capacity(sector_stream.len() + subcode_stream.len());
-                output.extend_from_slice(&sector_stream);
-                output.extend_from_slice(&subcode_stream);
-                return Ok(output);
+                other => Err(RomWeaverError::Unsupported(format!(
+                    "rust chd compressed create does not support codec `{}` for disc media",
+                    self.codec_label(other)
+                ))),
             }
+        }
 
-            let sector_len_u32 = u32::try_from(sector_stream.len()).map_err(|_| {
+        fn cd_payload_header(
+            prepared: &PreparedCdHunk<'_>,
+            hunk_len: usize,
+            compressed_capacity_hint: usize,
+        ) -> (Vec<u8>, usize, usize) {
+            let ecc_bytes = prepared.frame_count.div_ceil(8);
+            let comp_len_bytes = if hunk_len < 65_536 { 2 } else { 3 };
+            let mut output =
+                Vec::with_capacity(ecc_bytes + comp_len_bytes + compressed_capacity_hint);
+            debug_assert_eq!(prepared.ecc_bitmap.len(), ecc_bytes);
+            output.extend_from_slice(prepared.ecc_bitmap);
+            output.resize(ecc_bytes + comp_len_bytes, 0);
+            (output, ecc_bytes, comp_len_bytes)
+        }
+
+        fn write_cd_sector_stream_len(
+            output: &mut [u8],
+            ecc_bytes: usize,
+            comp_len_bytes: usize,
+            sector_stream_len: usize,
+        ) -> Result<()> {
+            let sector_len_u32 = u32::try_from(sector_stream_len).map_err(|_| {
                 RomWeaverError::Validation("cd sector stream size exceeded u32".to_string())
             })?;
-            let ecc_bytes = frame_count.div_ceil(8);
-            let comp_len_bytes = if hunk.len() < 65_536 { 2 } else { 3 };
-            let mut output = Vec::with_capacity(
-                ecc_bytes + comp_len_bytes + sector_stream.len() + subcode_stream.len(),
-            );
-            output.resize(ecc_bytes + comp_len_bytes, 0);
             if comp_len_bytes == 2 {
                 if sector_len_u32 > 0xFFFF {
                     return Err(RomWeaverError::Validation(
@@ -661,9 +945,300 @@
                 output[ecc_bytes + 1] = ((sector_len_u32 >> 8) & 0xFF) as u8;
                 output[ecc_bytes + 2] = (sector_len_u32 & 0xFF) as u8;
             }
+            Ok(())
+        }
+
+        fn deflate_append(
+            output: Vec<u8>,
+            input: &[u8],
+            compression: GzipCompression,
+            label: &str,
+        ) -> Result<Vec<u8>> {
+            let mut encoder = DeflateEncoder::new(output, compression);
+            encoder.write_all(input).map_err(|error| {
+                RomWeaverError::Validation(format!("{label} compression failed: {error}"))
+            })?;
+            encoder.finish().map_err(|error| {
+                RomWeaverError::Validation(format!("{label} compression failed: {error}"))
+            })
+        }
+
+        fn deflate_bytes(
+            input: &[u8],
+            compression: GzipCompression,
+            label: &str,
+        ) -> Result<Vec<u8>> {
+            Self::deflate_append(Vec::new(), input, compression, label)
+        }
+
+        fn append_default_cd_subcode_deflate(
+            mut output: Vec<u8>,
+            prepared: &PreparedCdHunk<'_>,
+            shared_streams: Option<&mut CdSharedCompressedStreams>,
+        ) -> Result<Vec<u8>> {
+            if let Some(shared_streams) = shared_streams {
+                if shared_streams.deflate_subcode_default.is_none() {
+                    shared_streams.deflate_subcode_default = Some(Self::deflate_bytes(
+                        prepared.subcode,
+                        GzipCompression::default(),
+                        "cd subcode zlib",
+                    )?);
+                }
+                if let Some(subcode_stream) = &shared_streams.deflate_subcode_default {
+                    output.extend_from_slice(subcode_stream);
+                    return Ok(output);
+                }
+            }
+            Self::deflate_append(
+                output,
+                prepared.subcode,
+                GzipCompression::default(),
+                "cd subcode zlib",
+            )
+        }
+
+        fn zstd_append(
+            output: Vec<u8>,
+            input: &[u8],
+            compression_level: i32,
+            label: &str,
+        ) -> Result<Vec<u8>> {
+            let mut encoder = zstd::stream::write::Encoder::new(output, compression_level)
+                .map_err(|error| {
+                    RomWeaverError::Validation(format!("{label} compression failed: {error}"))
+                })?;
+            encoder.write_all(input).map_err(|error| {
+                RomWeaverError::Validation(format!("{label} compression failed: {error}"))
+            })?;
+            encoder.finish().map_err(|error| {
+                RomWeaverError::Validation(format!("{label} compression failed: {error}"))
+            })
+        }
+
+        fn chd_zlib_compression(compression_level: i32) -> GzipCompression {
+            if compression_level <= 0 {
+                GzipCompression::default()
+            } else {
+                GzipCompression::new(compression_level.clamp(1, 9) as u32)
+            }
+        }
+
+        fn compress_prepared_cd_zstd_payload(
+            &self,
+            sectors: &[u8],
+            prepared: &PreparedCdHunk<'_>,
+            compression_level: i32,
+            hunk_len: usize,
+        ) -> Result<Vec<u8>> {
+            let (mut output, ecc_bytes, comp_len_bytes) =
+                Self::cd_payload_header(prepared, hunk_len, sectors.len() / 4);
+            let sector_start = output.len();
+            output = Self::zstd_append(output, sectors, compression_level, "cd zstd")?;
+            let sector_stream_len = output.len().saturating_sub(sector_start);
+            Self::write_cd_sector_stream_len(
+                &mut output,
+                ecc_bytes,
+                comp_len_bytes,
+                sector_stream_len,
+            )?;
+            Self::zstd_append(
+                output,
+                prepared.subcode,
+                compression_level,
+                "cd subcode zstd",
+            )
+        }
+
+        fn compress_prepared_cd_zlib_payload(
+            &self,
+            sectors: &[u8],
+            prepared: &PreparedCdHunk<'_>,
+            compression_level: i32,
+            hunk_len: usize,
+            shared_streams: Option<&mut CdSharedCompressedStreams>,
+        ) -> Result<Vec<u8>> {
+            let (mut output, ecc_bytes, comp_len_bytes) =
+                Self::cd_payload_header(prepared, hunk_len, sectors.len() / 4);
+            let sector_start = output.len();
+            output = Self::deflate_append(
+                output,
+                sectors,
+                Self::chd_zlib_compression(compression_level),
+                "cd zlib",
+            )?;
+            let sector_stream_len = output.len().saturating_sub(sector_start);
+            Self::write_cd_sector_stream_len(
+                &mut output,
+                ecc_bytes,
+                comp_len_bytes,
+                sector_stream_len,
+            )?;
+            Self::append_default_cd_subcode_deflate(output, prepared, shared_streams)
+        }
+
+        fn compress_prepared_cd_lzma_payload(
+            &self,
+            sectors: &[u8],
+            prepared: &PreparedCdHunk<'_>,
+            compression_level: i32,
+            hunk_len: usize,
+            shared_streams: Option<&mut CdSharedCompressedStreams>,
+        ) -> Result<Vec<u8>> {
+            let lzma_level = Self::resolved_chd_lzma_level(compression_level);
+
+            let (mut output, ecc_bytes, comp_len_bytes) =
+                Self::cd_payload_header(prepared, hunk_len, sectors.len() / 4);
+            let sector_start = output.len();
+            Self::append_lzma_raw_no_header_no_eopm(&mut output, sectors, lzma_level, "cd lzma")?;
+            let sector_stream_len = output.len().saturating_sub(sector_start);
+            Self::write_cd_sector_stream_len(
+                &mut output,
+                ecc_bytes,
+                comp_len_bytes,
+                sector_stream_len,
+            )?;
+            Self::append_default_cd_subcode_deflate(output, prepared, shared_streams)
+        }
+
+        fn compress_prepared_cd_flac_payload(
+            &self,
+            sectors: &[u8],
+            prepared: &PreparedCdHunk<'_>,
+            compression_level: i32,
+        ) -> Result<Vec<u8>> {
+            let sector_stream = self.encode_flac_frame_stream(
+                sectors,
+                FlacSampleByteOrder::BigEndian,
+                compression_level,
+            )?;
+            // cdfl stores frame FLAC stream directly, followed by deflate-compressed subcode.
+            let mut output = Vec::with_capacity(sector_stream.len() + prepared.subcode.len() / 2);
             output.extend_from_slice(&sector_stream);
-            output.extend_from_slice(&subcode_stream);
-            Ok(output)
+            let subcode_compression = if compression_level > 0 {
+                GzipCompression::new(compression_level.clamp(1, 9) as u32)
+            } else {
+                GzipCompression::default()
+            };
+            Self::deflate_append(
+                output,
+                prepared.subcode,
+                subcode_compression,
+                "cd subcode zlib",
+            )
+        }
+
+        fn resolved_chd_lzma_level(compression_level: i32) -> u32 {
+            if compression_level <= 0 {
+                9
+            } else {
+                compression_level as u32
+            }
+            .min(9)
+        }
+
+        fn append_lzma_raw_no_header_no_eopm(
+            output: &mut Vec<u8>,
+            input: &[u8],
+            level: u32,
+            context: &str,
+        ) -> Result<()> {
+            let compressed = Self::compress_lzma_raw_no_header_no_eopm(input, level, context)?;
+            output.extend_from_slice(&compressed);
+            Ok(())
+        }
+
+        fn compress_lzma_raw_no_header_no_eopm(
+            input: &[u8],
+            level: u32,
+            context: &str,
+        ) -> Result<Vec<u8>> {
+            let mut options = Self::liblzma_chd_options(level, input.len() as u32, context)?;
+            let mut filters = [
+                lzma_sys::lzma_filter {
+                    id: LZMA_FILTER_LZMA1EXT_NO_EOPM,
+                    options: (&mut options as *mut lzma_sys::lzma_options_lzma).cast::<c_void>(),
+                },
+                lzma_sys::lzma_filter {
+                    id: lzma_sys::LZMA_VLI_UNKNOWN,
+                    options: ptr::null_mut(),
+                },
+            ];
+
+            let mut capacity = input
+                .len()
+                .saturating_add(input.len() / 8)
+                .saturating_add(4096)
+                .max(4096);
+            loop {
+                let mut compressed = vec![0_u8; capacity];
+                let mut output_pos = 0usize;
+                let status = unsafe {
+                    lzma_sys::lzma_raw_buffer_encode(
+                        filters.as_mut_ptr(),
+                        ptr::null(),
+                        input.as_ptr(),
+                        input.len(),
+                        compressed.as_mut_ptr(),
+                        &mut output_pos,
+                        compressed.len(),
+                    )
+                };
+
+                match status {
+                    lzma_sys::LZMA_OK => {
+                        compressed.truncate(output_pos);
+                        return Ok(compressed);
+                    }
+                    lzma_sys::LZMA_BUF_ERROR => {
+                        let next_capacity = capacity.saturating_mul(2);
+                        if next_capacity <= capacity {
+                            return Err(RomWeaverError::Validation(format!(
+                                "{context} compression failed: liblzma output buffer overflow"
+                            )));
+                        }
+                        capacity = next_capacity;
+                    }
+                    other => {
+                        return Err(RomWeaverError::Validation(format!(
+                            "{context} compression failed: {}",
+                            Self::liblzma_status_name(other)
+                        )));
+                    }
+                }
+            }
+        }
+
+        fn liblzma_chd_options(
+            level: u32,
+            reduce_size: u32,
+            context: &str,
+        ) -> Result<lzma_sys::lzma_options_lzma> {
+            let mut options =
+                unsafe { MaybeUninit::<lzma_sys::lzma_options_lzma>::zeroed().assume_init() };
+            let preset_status = unsafe { lzma_sys::lzma_lzma_preset(&mut options, level.min(9)) };
+            if preset_status != 0 {
+                return Err(RomWeaverError::Validation(format!(
+                    "{context} compression failed: liblzma rejected preset {level}"
+                )));
+            }
+
+            options.lc = 3;
+            options.lp = 0;
+            options.pb = 2;
+            options.dict_size = Self::chd_lzma_dict_size(level, reduce_size);
+            Ok(options)
+        }
+
+        fn liblzma_status_name(status: lzma_sys::lzma_ret) -> &'static str {
+            match status {
+                lzma_sys::LZMA_MEM_ERROR => "memory allocation failed",
+                lzma_sys::LZMA_MEMLIMIT_ERROR => "memory limit reached",
+                lzma_sys::LZMA_OPTIONS_ERROR => "unsupported options",
+                lzma_sys::LZMA_DATA_ERROR => "input data error",
+                lzma_sys::LZMA_BUF_ERROR => "output buffer too small",
+                lzma_sys::LZMA_PROG_ERROR => "programming error",
+                _ => "unknown liblzma error",
+            }
         }
 
         fn chd_lzma_dict_size(level: u32, reduce_size: u32) -> u32 {
@@ -961,14 +1536,8 @@
         fn crc16_ibm3740(bytes: &[u8]) -> u16 {
             let mut crc = 0xFFFFu16;
             for &byte in bytes {
-                crc ^= u16::from(byte) << 8;
-                for _ in 0..8 {
-                    if (crc & 0x8000) != 0 {
-                        crc = (crc << 1) ^ 0x1021;
-                    } else {
-                        crc <<= 1;
-                    }
-                }
+                let table_index = usize::from(((crc >> 8) as u8) ^ byte);
+                crc = (crc << 8) ^ CRC16_IBM3740_TABLE[table_index];
             }
             crc
         }
