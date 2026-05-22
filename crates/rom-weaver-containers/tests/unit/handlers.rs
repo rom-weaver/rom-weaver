@@ -890,25 +890,52 @@ mod tests {
     }
 
     #[test]
-    fn zip_zstd_levels_map_to_libarchive_zip_scale() {
+    fn zip_zstd_levels_pass_through_to_libarchive() {
         let cases = [
-            (-7, 1),
-            (0, 3),
-            (3, 4),
+            (-7, -7),
+            (0, 0),
+            (3, 3),
             (5, 5),
-            (12, 7),
-            (19, 9),
-            (21, 9),
-            (22, 9),
+            (12, 12),
+            (19, 19),
+            (21, 21),
+            (22, 22),
         ];
 
         for (zstd_level, zip_level) in cases {
             assert_eq!(
                 ZipContainerHandler::map_zstd_level_to_zip_level(zstd_level),
                 zip_level,
-                "zstd level {zstd_level} should map to zip level {zip_level}"
+                "zstd level {zstd_level} should pass through as {zip_level}"
             );
         }
+    }
+
+    #[test]
+    fn zip_create_accepts_zstd_level_22() {
+        let temp_dir = temp_dir_path("zip-zstd-level-22");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input_path = temp_dir.join("payload.bin");
+        fs::write(&input_path, vec![0xCD; 256 * 1024]).expect("fixture");
+
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("zipx").expect("zipx handler");
+
+        handler
+            .create(
+                &ContainerCreateRequest {
+                    inputs: vec![input_path],
+                    output: temp_dir.join("payload.zipx"),
+                    format: "zipx".to_string(),
+                    codec: Some("zstd".to_string()),
+                    level: Some(22),
+                    parent: None,
+                },
+                &test_context(&temp_dir, 4),
+            )
+            .expect("zipx create at level 22");
+
+        let _ = fs::remove_dir_all(temp_dir);
     }
 
     #[test]

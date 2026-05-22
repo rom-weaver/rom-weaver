@@ -11,9 +11,7 @@ struct ZipContainerHandler {
 
 impl ZipContainerHandler {
     const ZSTD_LEVEL_MIN: i32 = -7;
-    // Keep parity with common zstd CLI guidance and avoid libarchive's
-    // highest-memory zip-zstd path on newer libzstd builds.
-    const ZSTD_LEVEL_MAX: i32 = 19;
+    const ZSTD_LEVEL_MAX: i32 = 22;
 
     const fn new(descriptor: &'static FormatDescriptor, flavor: ZipContainerFlavor) -> Self {
         Self { descriptor, flavor }
@@ -121,14 +119,15 @@ impl ZipContainerHandler {
         }
     }
 
+    fn libarchive_io_buffer_bytes(method: ZipCompressionMethod) -> usize {
+        match method {
+            ZipCompressionMethod::Zstd => LIBARCHIVE_CREATE_ZSTD_IO_BUFFER_BYTES,
+            _ => LIBARCHIVE_CREATE_IO_BUFFER_BYTES,
+        }
+    }
+
     fn map_zstd_level_to_zip_level(level: i32) -> i32 {
-        const ZIP_LEVEL_MIN: i32 = 1;
-        const ZIP_LEVEL_MAX: i32 = 9;
-        let clamped = level.clamp(Self::ZSTD_LEVEL_MIN, Self::ZSTD_LEVEL_MAX);
-        let zstd_span = Self::ZSTD_LEVEL_MAX - Self::ZSTD_LEVEL_MIN;
-        let zip_span = ZIP_LEVEL_MAX - ZIP_LEVEL_MIN;
-        let normalized = clamped - Self::ZSTD_LEVEL_MIN;
-        ZIP_LEVEL_MIN + ((normalized * zip_span + (zstd_span / 2)) / zstd_span)
+        level.clamp(Self::ZSTD_LEVEL_MIN, Self::ZSTD_LEVEL_MAX)
     }
 
     fn open_archive(&self, source: &Path) -> Result<ZipFileArchive<BufReader<File>>> {
@@ -171,6 +170,7 @@ impl ZipContainerHandler {
                 compression_level: self.libarchive_level(method, level),
                 format_threads: self.libarchive_threads(method, &execution),
                 filter_threads: None,
+                io_buffer_bytes: Self::libarchive_io_buffer_bytes(method),
             },
         )?;
         Ok((logical_bytes, execution))

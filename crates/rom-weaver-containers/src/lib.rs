@@ -731,6 +731,7 @@ fn archive_path_to_name(path: &Path) -> Result<String> {
 }
 
 const LIBARCHIVE_CREATE_IO_BUFFER_BYTES: usize = 128 * 1024;
+const LIBARCHIVE_CREATE_ZSTD_IO_BUFFER_BYTES: usize = 1024 * 1024;
 const AE_IFREG_MODE: c_uint = 0o100000;
 const AE_IFDIR_MODE: c_uint = 0o040000;
 
@@ -769,6 +770,7 @@ struct LibarchiveCreateConfig {
     compression_level: Option<i32>,
     format_threads: Option<usize>,
     filter_threads: Option<usize>,
+    io_buffer_bytes: usize,
 }
 
 fn libarchive_open_create_archive(
@@ -942,6 +944,7 @@ fn libarchive_write_archive_entry(
     archive_ptr: *mut archive,
     format_name: &str,
     entry: &ArchiveInputEntry,
+    io_buffer_bytes: usize,
 ) -> Result<u64> {
     let entry_ptr = unsafe { archive_entry_new() };
     if entry_ptr.is_null() {
@@ -999,7 +1002,7 @@ fn libarchive_write_archive_entry(
         let mut logical_bytes = 0u64;
         if !entry.is_dir {
             let mut source = BufReader::new(File::open(&entry.source)?);
-            let mut buffer = vec![0u8; LIBARCHIVE_CREATE_IO_BUFFER_BYTES];
+            let mut buffer = vec![0u8; io_buffer_bytes];
             loop {
                 let read = source.read(&mut buffer)?;
                 if read == 0 {
@@ -1099,6 +1102,7 @@ fn write_archive_with_libarchive(
                 archive_ptr,
                 config.format_name,
                 entry,
+                config.io_buffer_bytes,
             )?);
             emit_container_step_progress(
                 context,

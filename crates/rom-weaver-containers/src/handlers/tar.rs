@@ -326,6 +326,7 @@ impl ContainerHandler for TarContainerHandler {
                 compression_level: None,
                 format_threads: None,
                 filter_threads: None,
+                io_buffer_bytes: LIBARCHIVE_CREATE_IO_BUFFER_BYTES,
             },
             TarCompression::Gzip => LibarchiveCreateConfig {
                 format_name: self.descriptor.name,
@@ -335,6 +336,7 @@ impl ContainerHandler for TarContainerHandler {
                 compression_level: Some(level as i32),
                 format_threads: None,
                 filter_threads: Some(execution.effective_threads.max(1)),
+                io_buffer_bytes: LIBARCHIVE_CREATE_IO_BUFFER_BYTES,
             },
             TarCompression::Bzip2 => LibarchiveCreateConfig {
                 format_name: self.descriptor.name,
@@ -344,6 +346,7 @@ impl ContainerHandler for TarContainerHandler {
                 compression_level: Some(level as i32),
                 format_threads: None,
                 filter_threads: Some(execution.effective_threads.max(1)),
+                io_buffer_bytes: LIBARCHIVE_CREATE_IO_BUFFER_BYTES,
             },
             TarCompression::Xz => LibarchiveCreateConfig {
                 format_name: self.descriptor.name,
@@ -353,6 +356,7 @@ impl ContainerHandler for TarContainerHandler {
                 compression_level: Some(level as i32),
                 format_threads: None,
                 filter_threads: Some(execution.effective_threads.max(1)),
+                io_buffer_bytes: LIBARCHIVE_CREATE_IO_BUFFER_BYTES,
             },
         };
         let logical_bytes =

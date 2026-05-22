@@ -437,6 +437,7 @@ impl SevenZContainerHandler {
                 },
                 format_threads: Some(execution.effective_threads.max(1)),
                 filter_threads: None,
+                io_buffer_bytes: LIBARCHIVE_CREATE_IO_BUFFER_BYTES,
             },
         )?;
         Ok(logical_bytes)

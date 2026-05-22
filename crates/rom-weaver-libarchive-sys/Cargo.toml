@@ -15,6 +15,9 @@ libz-sys = { workspace = true, features = ["static"] }
 lz4-sys = "1.9.4"
 zstd-sys.workspace = true
 
+[target.'cfg(not(target_family = "wasm"))'.dependencies]
+zstd-sys = { workspace = true, features = ["zstdmt"] }
+
 [target.'cfg(all(not(target_vendor = "apple"), not(target_family = "wasm")))'.dependencies]
 openssl-sys = { version = "0.9.80", features = ["vendored"] }
 
