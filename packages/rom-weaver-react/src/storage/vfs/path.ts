@@ -1,4 +1,4 @@
-const DEFAULT_VFS_ROOT = "/workspace";
+const DEFAULT_VFS_ROOT = "/work";
 
 type AbsoluteVfsPath = string & {
   readonly __absoluteVfsPath: unique symbol;

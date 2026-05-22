@@ -116,13 +116,19 @@ export interface RomWeaverZenFsBrowserOptions {
   wasmUrl?: string;
   opfsHandle?: FileSystemDirectoryHandleLike;
   scratchHandle?: FileSystemDirectoryHandleLike;
+  /** Guest path for staged OPFS content. Defaults to `/work`. */
   opfsGuestPath?: string;
+  /** Guest scratch path for temporary files. Defaults to `/scratch`. */
   scratchGuestPath?: string;
   scratchNamespace?: string;
   /** @deprecated Use scratchGuestPath. */
   tmpGuestPath?: string;
   runtimeMounts?: string[];
   mountHandles?: Record<string, FileSystemDirectoryHandleLike>;
+  /**
+   * Mounts that should open files as writable during WASI execution.
+   * This only affects pre-prepared files; dynamic path creation stays unsupported.
+   */
   writableMounts?: string[];
   syncAccessMode?: RomWeaverBrowserSyncAccessMode;
   program?: string;

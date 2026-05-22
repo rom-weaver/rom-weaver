@@ -21,6 +21,8 @@ const PATH_PART_SPLIT_REGEX = /[/\\]+/;
 const PATH_FILE_CAPTURE_REGEX = /^(.+[/\\])?([^/\\]+)$/;
 const FILE_EXTENSION_CAPTURE_REGEX = /^(.+?)(\.[^./\\]*)?$/;
 const COMPRESSION_LEVEL_PROFILE_REGEX = /^(min|very-low|low|medium|high|very-high|max)$/i;
+const WORK_ROOT_PATH = "/work";
+const WORK_OUTPUT_PATH = "/work/output";
 
 const nowIso = () => new Date().toISOString();
 
@@ -97,10 +99,27 @@ const joinPath = (directory: string, fileName: string): string => {
   return `${normalizedDirectory}${separator}${fileName}`;
 };
 
+const normalizeAbsolutePosixPath = (pathValue: string): string => {
+  const normalized = String(pathValue || "")
+    .trim()
+    .replace(/\\/g, "/")
+    .replace(/\/+/g, "/");
+  if (!normalized.startsWith("/")) return "";
+  return normalized.length > 1 ? normalized.replace(/\/+$/, "") : normalized;
+};
+
+const getPreferredOutputDirectory = (sourcePath: string): string => {
+  const normalizedSourcePath = normalizeAbsolutePosixPath(sourcePath);
+  if (normalizedSourcePath === WORK_ROOT_PATH || normalizedSourcePath.startsWith(`${WORK_ROOT_PATH}/`)) {
+    return WORK_OUTPUT_PATH;
+  }
+  return getPathDirectory(sourcePath);
+};
+
 let romWeaverOutputPathId = 0;
 
 const selectRomWeaverOutputPath = (sourcePath: string, outputFileName: string, blockedPaths: string[] = []) => {
-  const directory = getPathDirectory(sourcePath);
+  const directory = getPreferredOutputDirectory(sourcePath);
   const preferredPath = joinPath(directory, outputFileName);
   const normalizedBlocked = new Set(
     [sourcePath, ...blockedPaths].map((pathValue) => String(pathValue || "").trim()).filter((pathValue) => !!pathValue),

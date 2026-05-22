@@ -1,7 +1,7 @@
 import { expect } from 'vitest';
 import { createBrowserWorkerClient } from '../src/workers/browser-worker-client.mjs';
 
-const OPFS_GUEST_ROOT = '/opfs';
+const OPFS_GUEST_ROOT = '/work';
 const TMP_GUEST_ROOT = '/scratch';
 const TEXT_ENCODER = new TextEncoder();
 

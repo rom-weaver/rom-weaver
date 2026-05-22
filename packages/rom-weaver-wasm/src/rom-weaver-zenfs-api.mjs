@@ -4,12 +4,15 @@ import * as zenDom from '@zenfs/dom';
 import {
   createWasmEnvImports,
   normalizeGuestPath,
+  parseJsonLines,
+  parseTraceJsonLines,
 } from './rom-weaver-runtime-utils.mjs';
 
-const DEFAULT_OPFS_GUEST_PATH = '/opfs';
+const DEFAULT_OPFS_GUEST_PATH = '/work';
 const DEFAULT_SCRATCH_GUEST_PATH = '/scratch';
 const DEFAULT_SCRATCH_NAMESPACE = '.rom-weaver-scratch';
 const DEFAULT_MAX_BUFFERED_PATCH_BYTES = String(64 * 1024 * 1024);
+const DEFAULT_WORK_DIRECTORY_LAYOUT = ['input', 'patches', 'output', 'temp'];
 
 export async function createRomWeaverZenFsBrowser(options = {}) {
   assertDedicatedWorkerRuntime();
@@ -35,6 +38,7 @@ export async function createRomWeaverZenFsBrowser(options = {}) {
   assertDirectoryHandle(scratchRootHandle, 'scratchHandle');
 
   await verifyWritableScratchRoot(scratchRootHandle);
+  await ensureWorkDirectoryLayout(opfsHandle);
 
   await zenfs.configure({
     mounts: {
@@ -55,10 +59,6 @@ export async function createRomWeaverZenFsBrowser(options = {}) {
   const runtimeMounts = normalizeRuntimeMounts(
     options.runtimeMounts ?? [opfsGuestPath, scratchGuestPath],
   );
-  const writableMounts = normalizeWritableMounts(options.writableMounts ?? [], {
-    runtimeMounts,
-    scratchGuestPath,
-  });
   if (!runtimeMounts.includes(scratchGuestPath)) {
     throw new Error(
       `runtimeMounts must include scratch guest path ${scratchGuestPath}. `
@@ -75,6 +75,10 @@ export async function createRomWeaverZenFsBrowser(options = {}) {
   });
   const runtimeMountState = new Map();
   const activeScratchRunIds = new Set();
+  const baseWritableMounts = normalizeWritableMounts(
+    options.writableMounts ?? [scratchGuestPath],
+    runtimeMounts,
+  );
 
   const runner = {
     async run(args = [], runOptions = {}) {
@@ -113,13 +117,9 @@ export async function createRomWeaverZenFsBrowser(options = {}) {
       };
 
       const syncAccessMode = runOptions.syncAccessMode ?? options.syncAccessMode;
-      const runWritableMounts = normalizeWritableMounts(
-        runOptions.writableMounts ?? writableMounts,
-        {
-          runtimeMounts,
-          scratchGuestPath,
-        },
-      );
+      const writableMounts = runOptions.writableMounts === undefined
+        ? baseWritableMounts
+        : normalizeWritableMounts(runOptions.writableMounts, runtimeMounts);
       const {
         fds,
         closeHandles,
@@ -131,11 +131,9 @@ export async function createRomWeaverZenFsBrowser(options = {}) {
         runtimeMounts,
         mountHandles,
         scratchGuestPath,
-        writableMounts: runWritableMounts,
         syncAccessMode,
         runtimeMountState,
-        onStderrChunk: runOptions.onStderrChunk,
-        onStdoutChunk: runOptions.onStdoutChunk,
+        writableMounts,
       });
 
       try {
@@ -148,7 +146,7 @@ export async function createRomWeaverZenFsBrowser(options = {}) {
 
         const instance = await WebAssembly.instantiate(module, {
           wasi_snapshot_preview1: wasi.wasiImport,
-          env: createWasmEnvImports(),
+          env: createWasmEnvImports({ module }),
         });
 
         const exitCode = wasi.start(instance);
@@ -186,34 +184,22 @@ export async function createRomWeaverZenFsBrowser(options = {}) {
     },
 
     async runJson(args = [], runOptions = {}) {
-      const jsonStream = createJsonLineStream({
+      const result = await this.run(['--json', ...normalizeArgs(args)], runOptions);
+      const parsed = parseJsonLines(result.stdout, {
         onEvent: runOptions.onEvent,
         onNonJsonLine: runOptions.onNonJsonLine,
       });
-      const traceStream = createTraceJsonLineStream({
+      const parsedTrace = parseTraceJsonLines(result.stderr, {
         onTraceEvent: runOptions.onTraceEvent,
         onTraceNonJsonLine: runOptions.onTraceNonJsonLine,
       });
-      const result = await this.run(['--json', ...normalizeArgs(args)], {
-        ...runOptions,
-        onStderrChunk(text) {
-          traceStream.push(text);
-          runOptions.onStderrChunk?.(text);
-        },
-        onStdoutChunk(text) {
-          jsonStream.push(text);
-          runOptions.onStdoutChunk?.(text);
-        },
-      });
-      jsonStream.flush();
-      traceStream.flush();
 
       return {
         ...result,
-        events: jsonStream.events,
-        nonJsonLines: jsonStream.nonJsonLines,
-        traceEvents: traceStream.traceEvents,
-        traceNonJsonLines: traceStream.traceNonJsonLines,
+        events: parsed.events,
+        nonJsonLines: parsed.nonJsonLines,
+        traceEvents: parsedTrace.traceEvents,
+        traceNonJsonLines: parsedTrace.traceNonJsonLines,
       };
     },
   };
@@ -252,16 +238,14 @@ async function buildBrowserWasiFds({
   runtimeMounts,
   mountHandles,
   scratchGuestPath,
-  writableMounts,
   syncAccessMode,
   runtimeMountState,
-  onStdoutChunk,
-  onStderrChunk,
+  writableMounts,
 }) {
   const closeHandles = [];
   const stdinBytes = normalizeStdin(stdin);
-  const stdoutCollector = createOutputCollector(wasiShim.ConsoleStdout, onStdoutChunk);
-  const stderrCollector = createOutputCollector(wasiShim.ConsoleStdout, onStderrChunk);
+  const stdoutCollector = createOutputCollector(wasiShim.ConsoleStdout);
+  const stderrCollector = createOutputCollector(wasiShim.ConsoleStdout);
 
   const fds = [
     new wasiShim.OpenFile(new wasiShim.File(stdinBytes)),
@@ -292,12 +276,10 @@ async function buildBrowserWasiFds({
       wasiShim,
       directoryHandle: handle,
       closeHandles,
-      readOnly: mountPath !== scratchGuestPath && !writableMounts.has(mountPath),
+      readOnly: !writableMounts.has(mountPath),
       syncAccessMode,
     });
-    fds.push(createStrictOpfsPreopenDirectory(wasiShim, mountPath, preopenContents, {
-      readOnly: mountPath !== scratchGuestPath && !writableMounts.has(mountPath),
-    }));
+    fds.push(createStrictOpfsPreopenDirectory(wasiShim, mountPath, preopenContents));
   }
 
   return {
@@ -308,7 +290,7 @@ async function buildBrowserWasiFds({
   };
 }
 
-function createStrictOpfsPreopenDirectory(wasiShim, mountPath, contents, { readOnly }) {
+function createStrictOpfsPreopenDirectory(wasiShim, mountPath, contents) {
   const rofsErrno = wasiShim.wasi.ERRNO_ROFS;
   const oCreat = wasiShim.wasi.OFLAGS_CREAT;
 
@@ -322,8 +304,7 @@ function createStrictOpfsPreopenDirectory(wasiShim, mountPath, contents, { readO
       fdFlags,
     ) {
       if (
-        readOnly
-        && (oflags & oCreat) === oCreat
+        (oflags & oCreat) === oCreat
         && !pathExistsInDirectory(contents, pathStr)
       ) {
         return { ret: rofsErrno, fd_obj: null };
@@ -338,28 +319,23 @@ function createStrictOpfsPreopenDirectory(wasiShim, mountPath, contents, { readO
       );
     }
 
-    path_create_directory(pathStr) {
-      if (!readOnly) return super.path_create_directory(pathStr);
+    path_create_directory(_path) {
       return rofsErrno;
     }
 
-    path_link(pathStr, inode, allowDir) {
-      if (!readOnly) return super.path_link(pathStr, inode, allowDir);
+    path_link(_pathStr, _inode, _allowDir) {
       return rofsErrno;
     }
 
-    path_unlink(pathStr) {
-      if (!readOnly) return super.path_unlink(pathStr);
+    path_unlink(_pathStr) {
       return { ret: rofsErrno, inode_obj: null };
     }
 
-    path_unlink_file(pathStr) {
-      if (!readOnly) return super.path_unlink_file(pathStr);
+    path_unlink_file(_pathStr) {
       return rofsErrno;
     }
 
-    path_remove_directory(pathStr) {
-      if (!readOnly) return super.path_remove_directory(pathStr);
+    path_remove_directory(_pathStr) {
       return rofsErrno;
     }
   }
@@ -409,83 +385,13 @@ function pathExistsInDirectory(contents, pathStr) {
   return true;
 }
 
-function createOutputCollector(ConsoleStdout, onTextChunk) {
+function createOutputCollector(ConsoleStdout) {
   const chunks = [];
-  const decoder = new TextDecoder();
   return {
     chunks,
     fd: new ConsoleStdout((bytes) => {
-      const chunk = copyUint8Array(bytes);
-      chunks.push(chunk);
-      if (typeof onTextChunk === 'function') {
-        const decoded = decoder.decode(chunk, { stream: true });
-        if (decoded.length > 0) {
-          onTextChunk(decoded);
-        }
-      }
+      chunks.push(copyUint8Array(bytes));
     }),
-  };
-}
-
-function createJsonLineStream(options = {}) {
-  const events = [];
-  const nonJsonLines = [];
-  let pending = '';
-  const onEvent = typeof options.onEvent === 'function' ? options.onEvent : null;
-  const onNonJsonLine = typeof options.onNonJsonLine === 'function'
-    ? options.onNonJsonLine
-    : null;
-
-  const consumeLine = (line) => {
-    if (line.length === 0) return;
-    try {
-      const event = JSON.parse(line);
-      events.push(event);
-      onEvent?.(event);
-    } catch {
-      nonJsonLines.push(line);
-      onNonJsonLine?.(line);
-    }
-  };
-
-  return {
-    events,
-    nonJsonLines,
-    push(text) {
-      pending += String(text);
-      const lines = pending.split(/\r?\n/);
-      pending = lines.pop() ?? '';
-      for (const line of lines) {
-        consumeLine(line);
-      }
-    },
-    flush() {
-      if (pending.length > 0) {
-        consumeLine(pending);
-        pending = '';
-      }
-    },
-  };
-}
-
-function createTraceJsonLineStream(options = {}) {
-  const traceEvents = [];
-  const traceNonJsonLines = [];
-  const stream = createJsonLineStream({
-    onEvent(event) {
-      traceEvents.push(event);
-      options.onTraceEvent?.(event);
-    },
-    onNonJsonLine(line) {
-      traceNonJsonLines.push(line);
-      options.onTraceNonJsonLine?.(line);
-    },
-  });
-  return {
-    traceEvents,
-    traceNonJsonLines,
-    push: (text) => stream.push(text),
-    flush: () => stream.flush(),
   };
 }
 
@@ -694,27 +600,6 @@ function normalizeScratchNamespace(value) {
   return normalized;
 }
 
-function normalizeWritableMounts(mounts, { runtimeMounts, scratchGuestPath }) {
-  if (mounts instanceof Set) {
-    return mounts;
-  }
-  if (!Array.isArray(mounts)) {
-    throw new TypeError('writableMounts must be an array of guest paths');
-  }
-
-  const normalized = new Set([scratchGuestPath]);
-  for (const mountPath of mounts) {
-    const normalizedMountPath = normalizeGuestPath(String(mountPath), {
-      label: 'writable mount guest path',
-    });
-    if (!runtimeMounts.includes(normalizedMountPath)) {
-      throw new Error(`writable mount ${normalizedMountPath} must also be listed in runtimeMounts`);
-    }
-    normalized.add(normalizedMountPath);
-  }
-  return normalized;
-}
-
 function normalizeMountHandleMap({
   opfsGuestPath,
   opfsHandle,
@@ -801,6 +686,37 @@ function normalizeRuntimeMounts(mounts) {
   return mounts.map((mountPath) => normalizeGuestPath(String(mountPath), {
     label: 'runtime mount guest path',
   }));
+}
+
+function normalizeWritableMounts(writableMounts, runtimeMounts) {
+  const knownMounts = new Set(runtimeMounts);
+  const requestedMounts = Array.isArray(writableMounts)
+    ? writableMounts
+    : writableMounts instanceof Set
+      ? Array.from(writableMounts)
+      : writableMounts == null
+        ? []
+        : [writableMounts];
+  const normalized = new Set();
+  for (const mountPath of requestedMounts) {
+    const normalizedMountPath = normalizeGuestPath(String(mountPath), {
+      label: 'writable mount guest path',
+    });
+    if (!knownMounts.has(normalizedMountPath)) {
+      throw new Error(
+        `writable mount ${normalizedMountPath} is not present in runtimeMounts: `
+          + `${Array.from(knownMounts).join(', ')}`,
+      );
+    }
+    normalized.add(normalizedMountPath);
+  }
+  return normalized;
+}
+
+async function ensureWorkDirectoryLayout(opfsHandle) {
+  for (const directoryName of DEFAULT_WORK_DIRECTORY_LAYOUT) {
+    await opfsHandle.getDirectoryHandle(directoryName, { create: true });
+  }
 }
 
 function normalizeArgs(args) {

@@ -31,12 +31,12 @@ const opfsHandle = await navigator.storage.getDirectory();
 const runner = await createRomWeaverZenFsBrowser({
   wasmUrl: '/wasm/rom-weaver-cli.wasm',
   opfsHandle,
-  opfsGuestPath: '/opfs',
-  runtimeMounts: ['/opfs', '/scratch'],
+  opfsGuestPath: '/work',
+  runtimeMounts: ['/work', '/scratch'],
 });
 
 const result = await runner.runJson(
-  ['checksum', '/opfs/game.bin', '--algo', 'crc32'],
+  ['checksum', '/work/game.bin', '--algo', 'crc32'],
   {
     onEvent(event) {
       console.log(event);
@@ -51,7 +51,7 @@ Scratch temp behavior:
 
 - Default scratch guest path is `/scratch`.
 - Per run, `ROM_WEAVER_TMPDIR` is set to `/scratch/.rom-weaver-scratch/<run-id>`.
-- `/opfs` remains read-only for runtime writes; temp output must go through `/scratch`.
+- Unless you opt into writable mounts, `/work` stays read-only and temp output should go through `/scratch`.
 - Scratch must be writable. Runner initialization fails if writable scratch cannot be established.
 - Scratch namespaces are cleaned up best-effort after each run.
 - If unset, browser runs default `ROM_WEAVER_MAX_BUFFERED_PATCH_BYTES=67108864` (64 MiB) to fail early on remaining full-buffer patch paths instead of risking worker OOM.
@@ -67,11 +67,12 @@ const opfsHandle = await navigator.storage.getDirectory();
 await worker.init({
   wasmUrl: '/wasm/rom-weaver-cli.wasm',
   opfsHandle,
-  opfsGuestPath: '/opfs',
-  runtimeMounts: ['/opfs', '/scratch'],
+  opfsGuestPath: '/work',
+  runtimeMounts: ['/work', '/scratch'],
+  writableMounts: ['/work'],
 });
 
-const result = await worker.runJson(['checksum', '/opfs/game.bin', '--algo', 'crc32'], {
+const result = await worker.runJson(['checksum', '/work/game.bin', '--algo', 'crc32'], {
   onEvent(event) {
     console.log(event);
   },

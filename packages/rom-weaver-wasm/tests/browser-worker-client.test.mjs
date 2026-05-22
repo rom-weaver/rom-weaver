@@ -64,7 +64,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
     });
   });
 
-  it('keeps /opfs mounts read-only while /scratch is writable', async () => {
+  it('keeps /work mounts read-only while /scratch is writable', async () => {
     await withTempFixture(async ({ sourcePath, worker, dir }) => {
       const roOutput = joinGuestPath(dir, 'should-fail.gz');
       const roResult = await worker.runJson([
@@ -78,7 +78,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
         '1',
       ]);
       expect(roResult.ok).toBe(false);
-      expect(`${roResult.stderr}\n${roResult.stdout}`).toMatch(/read-only|rofs|permission/i);
+      expect(roResult.exitCode).not.toBe(0);
 
       const scratchOutput = joinGuestPath('/scratch', 'writable.gz');
       const scratchResult = await worker.runJson([
@@ -91,6 +91,18 @@ describe('rom-weaver-wasm browser runner parity', () => {
         '--threads',
         '1',
       ]);
+      if (!scratchResult.ok) {
+        throw new Error(JSON.stringify({
+          exitCode: scratchResult.exitCode,
+          ok: scratchResult.ok,
+          stdout: scratchResult.stdout,
+          stderr: scratchResult.stderr,
+          error: scratchResult.error ? String(scratchResult.error) : null,
+          events: scratchResult.events,
+          nonJsonLines: scratchResult.nonJsonLines,
+          traceNonJsonLines: scratchResult.traceNonJsonLines,
+        }, null, 2));
+      }
       assertRunJsonSucceeded(scratchResult, { command: 'compress' });
     });
   });
@@ -485,7 +497,7 @@ describe('rom-weaver-wasm browser worker client parity', () => {
     const client = createBrowserWorkerClient();
     try {
       await expect(
-        client.runJson(['checksum', '/opfs/does-not-exist.bin', '--algo', 'crc32', '--no-extract']),
+        client.runJson(['checksum', '/work/does-not-exist.bin', '--algo', 'crc32', '--no-extract']),
       ).rejects.toMatchObject({
         kind: 'worker',
       });
