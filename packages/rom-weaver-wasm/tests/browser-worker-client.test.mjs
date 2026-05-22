@@ -91,18 +91,6 @@ describe('rom-weaver-wasm browser runner parity', () => {
         '--threads',
         '1',
       ]);
-      if (!scratchResult.ok) {
-        throw new Error(JSON.stringify({
-          exitCode: scratchResult.exitCode,
-          ok: scratchResult.ok,
-          stdout: scratchResult.stdout,
-          stderr: scratchResult.stderr,
-          error: scratchResult.error ? String(scratchResult.error) : null,
-          events: scratchResult.events,
-          nonJsonLines: scratchResult.nonJsonLines,
-          traceNonJsonLines: scratchResult.traceNonJsonLines,
-        }, null, 2));
-      }
       assertRunJsonSucceeded(scratchResult, { command: 'compress' });
     });
   });
@@ -260,7 +248,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
       }
       await writeGuestFile(opfsHandle, sourcePath, sourceData);
 
-      for (const codec of ['store', 'deflate', 'bzip2', 'zstd', 'lz4', 'brotli', 'ppmd', 'lzma', 'lzma2']) {
+      for (const codec of ['store', 'deflate', 'bzip2', 'zstd', 'ppmd', 'lzma', 'lzma2']) {
         for (let attempt = 0; attempt < 4; attempt += 1) {
           const archivePath = joinGuestPath(tmpDir, `repeat-${codec}-${attempt}.7z`);
           const resolvedCodec = codec === 'store' ? codec : `${codec}:6`;

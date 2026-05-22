@@ -2,10 +2,11 @@ mod io;
 
 use crate::Archive;
 use io::EntryReader;
+use libc::{mode_t, S_IFDIR, S_IFMT, S_IFREG};
 use rom_weaver_libarchive_sys::{
     archive_entry, archive_entry_filetype, archive_entry_pathname, archive_entry_pathname_utf8,
+    archive_entry_size, archive_entry_size_is_set,
 };
-use libc::{S_IFDIR, S_IFMT, S_IFREG, mode_t};
 use std::ffi::CStr;
 use std::io as io_;
 use std::marker::PhantomData;
@@ -30,6 +31,14 @@ impl<'entry, 'archive: 'entry> Entry<'entry, 'archive> {
 
     pub fn is_file(&self) -> bool {
         (self.filetype() & S_IFMT as mode_t) == S_IFREG as mode_t
+    }
+
+    pub fn size(&self) -> Option<u64> {
+        if unsafe { archive_entry_size_is_set(self.ptr) } == 0 {
+            return None;
+        }
+        let size = unsafe { archive_entry_size(self.ptr) };
+        u64::try_from(size).ok()
     }
 
     pub fn pathname_mb(&self) -> io_::Result<&CStr> {

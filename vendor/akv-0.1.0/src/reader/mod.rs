@@ -6,8 +6,8 @@ use crate::{Archive, SuccessResult};
 use callback::Callback;
 use callback::{callback_into_ffi, IoCallback};
 use rom_weaver_libarchive_sys::{
-    archive, archive_entry, archive_read_new, archive_read_next_header, archive_read_open2,
-    archive_read_set_seek_callback, archive_read_support_filter_bzip2,
+    archive, archive_entry, archive_format, archive_read_new, archive_read_next_header,
+    archive_read_open2, archive_read_set_seek_callback, archive_read_support_filter_bzip2,
     archive_read_support_filter_compress, archive_read_support_filter_gzip,
     archive_read_support_filter_lzip, archive_read_support_filter_lzma,
     archive_read_support_filter_rpm, archive_read_support_filter_uu,
@@ -127,6 +127,10 @@ impl<'a> ArchiveReader<'a> {
                 }))
             }
         }
+    }
+
+    pub fn format(&self) -> c_int {
+        unsafe { archive_format(self.0.ptr) }
     }
 
     pub fn close(self) -> io::Result<()> {

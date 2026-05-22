@@ -4,6 +4,14 @@ enum ZipContainerFlavor {
     Zipx,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ZipCompressionMethod {
+    Stored,
+    Deflated,
+    Bzip2,
+    Zstd,
+}
+
 struct ZipContainerHandler {
     descriptor: &'static FormatDescriptor,
     flavor: ZipContainerFlavor,
@@ -53,7 +61,6 @@ impl ZipContainerHandler {
                 ZipCompressionMethod::Deflated => (0..=9).contains(&level),
                 ZipCompressionMethod::Bzip2 => (1..=9).contains(&level),
                 ZipCompressionMethod::Zstd => (-7..=22).contains(&level),
-                _ => false,
             };
             if !in_range {
                 return Err(RomWeaverError::Validation(format!(
@@ -80,7 +87,6 @@ impl ZipContainerHandler {
             ZipCompressionMethod::Deflated => "deflate",
             ZipCompressionMethod::Bzip2 => "bzip2",
             ZipCompressionMethod::Zstd => "zstd",
-            _ => "unknown",
         }
     }
 
@@ -90,7 +96,6 @@ impl ZipContainerHandler {
             ZipCompressionMethod::Deflated => Some("deflate"),
             ZipCompressionMethod::Bzip2 => Some("bzip2"),
             ZipCompressionMethod::Zstd => Some("zstd"),
-            _ => None,
         }
     }
 
@@ -115,7 +120,6 @@ impl ZipContainerHandler {
             | ZipCompressionMethod::Deflated
             | ZipCompressionMethod::Bzip2
             | ZipCompressionMethod::Zstd => Some(execution.effective_threads.max(1)),
-            _ => None,
         }
     }
 
@@ -128,16 +132,6 @@ impl ZipContainerHandler {
 
     fn map_zstd_level_to_zip_level(level: i32) -> i32 {
         level.clamp(Self::ZSTD_LEVEL_MIN, Self::ZSTD_LEVEL_MAX)
-    }
-
-    fn open_archive(&self, source: &Path) -> Result<ZipFileArchive<BufReader<File>>> {
-        let file = File::open(source)?;
-        ZipFileArchive::new(BufReader::new(file)).map_err(|error| {
-            RomWeaverError::Validation(format!(
-                "{} archive is invalid: {error}",
-                self.descriptor.name
-            ))
-        })
     }
 
     fn create_with_libarchive(
@@ -183,11 +177,7 @@ impl ContainerHandler for ZipContainerHandler {
     }
 
     fn probe(&self, source: &Path) -> ProbeConfidence {
-        if self.open_archive(source).is_ok() {
-            ProbeConfidence::Signature
-        } else {
-            ProbeConfidence::Extension
-        }
+        probe_regular_archive_with_libarchive(source, self.descriptor.name, LibarchiveProbeFormat::Zip)
     }
 
     fn inspect(
@@ -195,27 +185,8 @@ impl ContainerHandler for ZipContainerHandler {
         request: &ContainerInspectRequest,
         _context: &OperationContext,
     ) -> Result<OperationReport> {
-        let mut archive = self.open_archive(&request.source)?;
-        let mut files = 0usize;
-        let mut directories = 0usize;
-        let mut compressed_bytes = 0u64;
-        let mut logical_bytes = 0u64;
-
-        for index in 0..archive.len() {
-            let entry = archive.by_index(index).map_err(|error| {
-                RomWeaverError::Validation(format!(
-                    "{} inspect failed while reading entry {index}: {error}",
-                    self.descriptor.name
-                ))
-            })?;
-            if entry.is_dir() {
-                directories += 1;
-            } else {
-                files += 1;
-            }
-            compressed_bytes = compressed_bytes.saturating_add(entry.compressed_size());
-            logical_bytes = logical_bytes.saturating_add(entry.size());
-        }
+        let summary =
+            inspect_regular_archive_with_libarchive(&request.source, self.descriptor.name)?;
 
         Ok(OperationReport::succeeded(
             OperationFamily::Container,
@@ -224,11 +195,11 @@ impl ContainerHandler for ZipContainerHandler {
             format!(
                 "{}: {} entries ({} files, {} directories), {} bytes compressed, {} bytes uncompressed",
                 self.descriptor.name,
-                archive.len(),
-                files,
-                directories,
-                compressed_bytes,
-                logical_bytes
+                summary.entries_total,
+                summary.files,
+                summary.directories,
+                summary.archive_bytes,
+                summary.logical_bytes
             ),
             Some(100.0),
             None,
@@ -240,21 +211,7 @@ impl ContainerHandler for ZipContainerHandler {
         request: &ContainerInspectRequest,
         _context: &OperationContext,
     ) -> Result<Vec<String>> {
-        let mut archive = self.open_archive(&request.source)?;
-        let mut entries = Vec::new();
-        for index in 0..archive.len() {
-            let entry = archive.by_index(index).map_err(|error| {
-                RomWeaverError::Validation(format!(
-                    "{} list failed while reading entry {index}: {error}",
-                    self.descriptor.name
-                ))
-            })?;
-            let entry_name = normalize_archive_name(entry.name());
-            if !entry_name.is_empty() {
-                entries.push(entry_name);
-            }
-        }
-        Ok(entries)
+        list_regular_archive_entries_with_libarchive(&request.source, self.descriptor.name)
     }
 
     fn extract(

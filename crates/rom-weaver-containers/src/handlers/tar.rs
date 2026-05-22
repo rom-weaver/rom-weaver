@@ -127,55 +127,6 @@ impl TarContainerHandler {
         }
     }
 
-    fn xz_thread_count(effective_threads: usize) -> u32 {
-        match u32::try_from(effective_threads) {
-            Ok(count) => count.clamp(1, 256),
-            Err(_) => 256,
-        }
-    }
-
-    fn open_reader_with_execution(
-        &self,
-        source: &Path,
-        execution: Option<&mut ThreadExecution>,
-    ) -> Result<Box<dyn Read>> {
-        let reader: Box<dyn Read> = match self.compression {
-            TarCompression::None => Box::new(BufReader::new(File::open(source)?)),
-            TarCompression::Gzip => {
-                Box::new(MultiGzDecoder::new(BufReader::new(File::open(source)?)))
-            }
-            TarCompression::Bzip2 => {
-                Box::new(Bzip2Decoder::new(BufReader::new(File::open(source)?)))
-            }
-            TarCompression::Xz => {
-                if let Some(execution) = execution {
-                    if execution.used_parallelism {
-                        let workers = Self::xz_thread_count(execution.effective_threads);
-                        let source_reader = BufReader::new(File::open(source)?);
-                        match XzReaderMt::new(source_reader, false, workers) {
-                            Ok(reader) => Box::new(reader),
-                            Err(error) => {
-                                execution.apply_pool_fallback(format!(
-                                    "tar.xz decoder rejected multithread setting: {error}"
-                                ));
-                                Box::new(XzReader::new(BufReader::new(File::open(source)?), false))
-                            }
-                        }
-                    } else {
-                        Box::new(XzReader::new(BufReader::new(File::open(source)?), false))
-                    }
-                } else {
-                    Box::new(XzReader::new(BufReader::new(File::open(source)?), false))
-                }
-            }
-        };
-        Ok(reader)
-    }
-
-    fn open_reader(&self, source: &Path) -> Result<Box<dyn Read>> {
-        self.open_reader_with_execution(source, None)
-    }
-
     fn extract_thread_capability(&self) -> ThreadCapability {
         match self.compression {
             TarCompression::None
@@ -193,58 +144,6 @@ impl TarContainerHandler {
             | TarCompression::Xz => ThreadCapability::parallel(None),
         }
     }
-
-    fn inspect_archive_reader<R: Read>(&self, reader: R) -> Result<(usize, usize, usize, u64)> {
-        let mut archive = TarArchive::new(reader);
-        let mut files = 0usize;
-        let mut directories = 0usize;
-        let mut logical_bytes = 0u64;
-        let mut entries_total = 0usize;
-        for entry in archive.entries()? {
-            let entry = entry?;
-            entries_total += 1;
-            let entry_type = entry.header().entry_type();
-            if entry_type.is_dir() {
-                directories += 1;
-            } else if entry_type.is_file() {
-                files += 1;
-                logical_bytes = logical_bytes.saturating_add(entry.header().size()?);
-            }
-        }
-        Ok((entries_total, files, directories, logical_bytes))
-    }
-
-    fn inspect_uncompressed_archive(&self, source: &Path) -> Result<(usize, usize, usize, u64)> {
-        self.inspect_archive_reader(BufReader::new(File::open(source)?))
-    }
-
-    fn list_entries_from_reader<R: Read>(&self, reader: R) -> Result<Vec<String>> {
-        let mut archive = TarArchive::new(reader);
-        let mut entries = Vec::new();
-        for entry in archive.entries()? {
-            let entry = entry?;
-            let raw_path = entry.path()?;
-            let relative = sanitize_archive_relative_path(raw_path.as_ref())?;
-            let archive_name = archive_path_to_name(&relative)?;
-            if !archive_name.is_empty() {
-                entries.push(archive_name);
-            }
-        }
-        Ok(entries)
-    }
-
-    fn list_uncompressed_entries(&self, source: &Path) -> Result<Vec<String>> {
-        self.list_entries_from_reader(BufReader::new(File::open(source)?))
-    }
-
-    fn looks_like_tar_archive(&self, source: &Path) -> bool {
-        let mut reader = match self.open_reader(source) {
-            Ok(reader) => reader,
-            Err(_) => return false,
-        };
-        let mut header = [0u8; 512];
-        reader.read_exact(&mut header).is_ok() && is_ustar_header(&header)
-    }
 }
 
 impl ContainerHandler for TarContainerHandler {
@@ -253,27 +152,16 @@ impl ContainerHandler for TarContainerHandler {
     }
 
     fn probe(&self, source: &Path) -> ProbeConfidence {
-        if self.looks_like_tar_archive(source) {
-            ProbeConfidence::Signature
-        } else {
-            ProbeConfidence::Extension
-        }
+        probe_regular_archive_with_libarchive(source, self.descriptor.name, LibarchiveProbeFormat::Tar)
     }
 
     fn inspect(
         &self,
         request: &ContainerInspectRequest,
-        context: &OperationContext,
+        _context: &OperationContext,
     ) -> Result<OperationReport> {
-        let (entries_total, files, directories, logical_bytes) =
-            if matches!(self.compression, TarCompression::None) {
-                self.inspect_uncompressed_archive(&request.source)?
-            } else {
-                let mut execution = context.plan_threads(self.extract_thread_capability());
-                let reader =
-                    self.open_reader_with_execution(&request.source, Some(&mut execution))?;
-                self.inspect_archive_reader(reader)?
-            };
+        let summary =
+            inspect_regular_archive_with_libarchive(&request.source, self.descriptor.name)?;
 
         Ok(OperationReport::succeeded(
             OperationFamily::Container,
@@ -281,7 +169,11 @@ impl ContainerHandler for TarContainerHandler {
             "inspect",
             format!(
                 "{}: {} entries ({} files, {} directories), {} bytes uncompressed",
-                self.descriptor.name, entries_total, files, directories, logical_bytes
+                self.descriptor.name,
+                summary.entries_total,
+                summary.files,
+                summary.directories,
+                summary.logical_bytes
             ),
             Some(100.0),
             None,
@@ -291,14 +183,9 @@ impl ContainerHandler for TarContainerHandler {
     fn list_entries(
         &self,
         request: &ContainerInspectRequest,
-        context: &OperationContext,
+        _context: &OperationContext,
     ) -> Result<Vec<String>> {
-        if matches!(self.compression, TarCompression::None) {
-            return self.list_uncompressed_entries(&request.source);
-        }
-        let mut execution = context.plan_threads(self.extract_thread_capability());
-        let reader = self.open_reader_with_execution(&request.source, Some(&mut execution))?;
-        self.list_entries_from_reader(reader)
+        list_regular_archive_entries_with_libarchive(&request.source, self.descriptor.name)
     }
 
     fn extract(

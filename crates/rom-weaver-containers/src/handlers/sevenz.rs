@@ -6,36 +6,25 @@ struct SevenZContainerHandler {
 struct SevenZCodecSettings {
     codec: CanonicalCodec,
     level: u32,
-    method: SevenZMethodConfiguration,
+    method: SevenZMethod,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SevenZMethod {
+    Store,
+    Lzma2,
+    Lzma,
+    Zstd,
+    Deflate,
+    Bzip2,
+    Ppmd,
 }
 
 impl SevenZContainerHandler {
     const DEFAULT_CODEC_LEVEL: u32 = 6;
-    const MAX_LZMA_DICTIONARY_BYTES: u32 = 16 * 1024 * 1024;
-    const LZMA2_MT_CHUNK_BYTES: u64 = 1 << 20;
-    const ZSTD_LEVEL_MAP: [u32; 10] = [1, 3, 5, 7, 9, 11, 13, 15, 18, 22];
-    const BROTLI_QUALITY_MAP: [u32; 10] = [0, 1, 3, 4, 5, 6, 7, 8, 10, 11];
-    const LZ4_SKIPPABLE_FRAME_BYTES: [u32; 10] = [
-        0,
-        64 * 1024,
-        128 * 1024,
-        256 * 1024,
-        512 * 1024,
-        1024 * 1024,
-        2 * 1024 * 1024,
-        4 * 1024 * 1024,
-        8 * 1024 * 1024,
-        16 * 1024 * 1024,
-    ];
 
     const fn new(descriptor: &'static FormatDescriptor) -> Self {
         Self { descriptor }
-    }
-
-    fn open_reader(&self, source: &Path) -> Result<SevenZReader<File>> {
-        let file = File::open(source)?;
-        SevenZReader::new(file, SevenZPassword::empty())
-            .map_err(|error| RomWeaverError::Validation(format!("7z archive is invalid: {error}")))
     }
 
     #[cfg(test)]
@@ -43,9 +32,9 @@ impl SevenZContainerHandler {
         &self,
         codec: Option<&str>,
         level: Option<i32>,
-        execution: &rom_weaver_core::ThreadExecution,
-    ) -> Result<SevenZMethodConfiguration> {
-        self.resolve_codec_settings(codec, level, execution)
+        _execution: &rom_weaver_core::ThreadExecution,
+    ) -> Result<SevenZMethod> {
+        self.resolve_codec_settings(codec, level)
             .map(|settings| settings.method)
     }
 
@@ -53,14 +42,13 @@ impl SevenZContainerHandler {
         &self,
         codec: Option<&str>,
         level: Option<i32>,
-        execution: &rom_weaver_core::ThreadExecution,
     ) -> Result<SevenZCodecSettings> {
         let codec = match parse_requested_codec(codec) {
             RequestedCodec::Unspecified => CanonicalCodec::Lzma2,
             RequestedCodec::Known(codec) => codec,
             RequestedCodec::Unknown(name) => {
                 return Err(RomWeaverError::Validation(format!(
-                    "unsupported 7z codec `{name}`; supported codecs are lzma2, lzma, store, zstd, deflate, bzip2, lz4, brotli, and ppmd"
+                    "unsupported 7z codec `{name}`; supported codecs are lzma2, lzma, store, zstd, deflate, bzip2, and ppmd"
                 )));
             }
         };
@@ -73,17 +61,15 @@ impl SevenZContainerHandler {
                 | CanonicalCodec::Zstd
                 | CanonicalCodec::Deflate
                 | CanonicalCodec::Bzip2
-                | CanonicalCodec::Lz4
-                | CanonicalCodec::Brotli
                 | CanonicalCodec::Ppmd
         ) {
             return Err(RomWeaverError::Validation(format!(
-                "unsupported 7z codec `{}`; supported codecs are lzma2, lzma, store, zstd, deflate, bzip2, lz4, brotli, and ppmd",
+                "unsupported 7z codec `{}`; supported codecs are lzma2, lzma, store, zstd, deflate, bzip2, and ppmd",
                 codec.name()
             )));
         }
 
-        let level = Self::parse_level(level)?;
+        let level = Self::parse_level(codec, level)?;
         if codec == CanonicalCodec::Store && level.is_some() {
             return Err(RomWeaverError::Validation(
                 "7z codec `store` does not accept --level".into(),
@@ -92,51 +78,19 @@ impl SevenZContainerHandler {
 
         let level = level.unwrap_or(Self::DEFAULT_CODEC_LEVEL);
         let method = match codec {
-            CanonicalCodec::Lzma2 => {
-                let mut method = SevenZMethodConfiguration::new(SevenZMethod::LZMA2);
-                let options = if execution.used_parallelism {
-                    SevenZLzma2Options::from_level_mt_with_dictionary_size(
-                        level,
-                        self.thread_count(execution.effective_threads),
-                        Self::LZMA2_MT_CHUNK_BYTES,
-                        Self::MAX_LZMA_DICTIONARY_BYTES,
-                    )
-                } else {
-                    let mut options = SevenZLzma2Options::from_level(level);
-                    options.set_dictionary_size(Self::MAX_LZMA_DICTIONARY_BYTES);
-                    options
-                };
-                method = method.with_options(options.into());
-                method
-            }
-            CanonicalCodec::Lzma => {
-                let mut options = SevenZLzmaOptions::from_level(level);
-                options.set_dictionary_size(Self::MAX_LZMA_DICTIONARY_BYTES);
-                SevenZMethodConfiguration::new(SevenZMethod::LZMA)
-                    .with_options(SevenZEncoderOptions::Lzma(options))
-            }
-            CanonicalCodec::Store => SevenZMethodConfiguration::new(SevenZMethod::COPY),
-            CanonicalCodec::Zstd => SevenZMethodConfiguration::new(SevenZMethod::ZSTD)
-                .with_options(SevenZZstdOptions::from_level(Self::map_zstd_level(level)).into()),
-            CanonicalCodec::Deflate => SevenZMethodConfiguration::new(SevenZMethod::DEFLATE)
-                .with_options(SevenZDeflateOptions::from_level(level).into()),
-            CanonicalCodec::Bzip2 => SevenZMethodConfiguration::new(SevenZMethod::BZIP2)
-                .with_options(SevenZBzip2Options::from_level(level.max(1)).into()),
-            CanonicalCodec::Lz4 => SevenZMethodConfiguration::new(SevenZMethod::LZ4).with_options(
-                SevenZLz4Options::default()
-                    .with_skippable_frame_size(Self::map_lz4_skippable_frame_size(level))
-                    .into(),
-            ),
-            CanonicalCodec::Brotli => SevenZMethodConfiguration::new(SevenZMethod::BROTLI)
-                .with_options(
-                    SevenZBrotliOptions::from_quality_window(Self::map_brotli_quality(level), 22)
-                        .into(),
-                ),
-            CanonicalCodec::Ppmd => SevenZMethodConfiguration::new(SevenZMethod::PPMD)
-                .with_options(SevenZPpmdOptions::from_level(level).into()),
-            CanonicalCodec::Huffman => {
+            CanonicalCodec::Lzma2 => SevenZMethod::Lzma2,
+            CanonicalCodec::Lzma => SevenZMethod::Lzma,
+            CanonicalCodec::Store => SevenZMethod::Store,
+            CanonicalCodec::Zstd => SevenZMethod::Zstd,
+            CanonicalCodec::Deflate => SevenZMethod::Deflate,
+            CanonicalCodec::Bzip2 => SevenZMethod::Bzip2,
+            CanonicalCodec::Ppmd => SevenZMethod::Ppmd,
+            CanonicalCodec::Lz4 | CanonicalCodec::Brotli | CanonicalCodec::Huffman => {
                 return Err(RomWeaverError::Validation(
-                    "unsupported 7z codec `huffman`; supported codecs are lzma2, lzma, store, zstd, deflate, bzip2, lz4, brotli, and ppmd".to_string(),
+                    format!(
+                        "unsupported 7z codec `{}`; supported codecs are lzma2, lzma, store, zstd, deflate, bzip2, and ppmd",
+                        codec.name()
+                    ),
                 ));
             }
         };
@@ -148,49 +102,33 @@ impl SevenZContainerHandler {
         })
     }
 
-    fn parse_level(level: Option<i32>) -> Result<Option<u32>> {
+    fn parse_level(codec: CanonicalCodec, level: Option<i32>) -> Result<Option<u32>> {
         let Some(level) = level else {
             return Ok(None);
         };
-        if !(0..=9).contains(&level) {
+        let max_level = if matches!(codec, CanonicalCodec::Zstd) {
+            22
+        } else {
+            9
+        };
+        if !(0..=max_level).contains(&level) {
             return Err(RomWeaverError::Validation(format!(
-                "7z level `{level}` is out of range (0..=9)"
+                "7z level `{level}` is out of range for codec `{}` (0..={max_level})",
+                codec.name()
             )));
         }
         Ok(Some(level as u32))
     }
 
-    const fn map_zstd_level(level: u32) -> u32 {
-        Self::ZSTD_LEVEL_MAP[level as usize]
-    }
-
-    const fn map_brotli_quality(level: u32) -> u32 {
-        Self::BROTLI_QUALITY_MAP[level as usize]
-    }
-
-    const fn map_lz4_skippable_frame_size(level: u32) -> u32 {
-        Self::LZ4_SKIPPABLE_FRAME_BYTES[level as usize]
-    }
-
-    fn thread_count(&self, effective_threads: usize) -> u32 {
-        match u32::try_from(effective_threads) {
-            Ok(count) => count.clamp(1, 256),
-            Err(_) => 256,
-        }
-    }
-
-    fn method_name(method: &SevenZMethodConfiguration) -> &'static str {
-        match method.method {
-            SevenZMethod::COPY => "store",
-            SevenZMethod::LZMA2 => "lzma2",
-            SevenZMethod::LZMA => "lzma",
-            SevenZMethod::ZSTD => "zstd",
-            SevenZMethod::DEFLATE => "deflate",
-            SevenZMethod::BZIP2 => "bzip2",
-            SevenZMethod::LZ4 => "lz4",
-            SevenZMethod::BROTLI => "brotli",
-            SevenZMethod::PPMD => "ppmd",
-            _ => "unknown",
+    fn method_name(method: SevenZMethod) -> &'static str {
+        match method {
+            SevenZMethod::Store => "store",
+            SevenZMethod::Lzma2 => "lzma2",
+            SevenZMethod::Lzma => "lzma",
+            SevenZMethod::Zstd => "zstd",
+            SevenZMethod::Deflate => "deflate",
+            SevenZMethod::Bzip2 => "bzip2",
+            SevenZMethod::Ppmd => "ppmd",
         }
     }
 
@@ -216,194 +154,11 @@ impl SevenZContainerHandler {
             CanonicalCodec::Bzip2 => Some("bzip2"),
             CanonicalCodec::Lzma => Some("lzma1"),
             CanonicalCodec::Lzma2 => Some("lzma2"),
+            CanonicalCodec::Zstd => Some("zstd"),
             CanonicalCodec::Ppmd => Some("ppmd"),
-            CanonicalCodec::Zstd | CanonicalCodec::Lz4 | CanonicalCodec::Brotli => None,
+            CanonicalCodec::Lz4 | CanonicalCodec::Brotli => None,
             CanonicalCodec::Huffman => None,
         }
-    }
-
-    const fn prefers_sevenz_rust_for_codec(codec: CanonicalCodec) -> bool {
-        matches!(
-            codec,
-            CanonicalCodec::Lzma | CanonicalCodec::Lzma2 | CanonicalCodec::Bzip2
-        )
-    }
-
-    fn archive_prefers_sevenz_rust_backend(&self, reader: &SevenZReader<File>) -> bool {
-        reader.archive().blocks.iter().any(|block| {
-            block.ordered_coder_iter().any(|(_, coder)| {
-                matches!(
-                    SevenZMethod::by_id(coder.encoder_method_id()),
-                    Some(SevenZMethod::LZMA | SevenZMethod::LZMA2 | SevenZMethod::BZIP2)
-                )
-            })
-        })
-    }
-
-    fn create_with_sevenz_rust(
-        &self,
-        request: &ContainerCreateRequest,
-        entries: &[ArchiveInputEntry],
-        settings: &SevenZCodecSettings,
-        execution: &ThreadExecution,
-        context: &OperationContext,
-    ) -> Result<u64> {
-        if let Some(parent) = request.output.parent() {
-            fs::create_dir_all(parent)?;
-        }
-
-        let output = File::create(&request.output)?;
-        let mut writer = SevenZWriter::new(output).map_err(|error| {
-            RomWeaverError::Validation(format!(
-                "7z create failed while opening `{}`: {error}",
-                request.output.display()
-            ))
-        })?;
-        writer.set_content_methods(vec![settings.method.clone()]);
-
-        let mut logical_bytes = 0u64;
-        let total_entries = entries.len();
-        for (entry_index, entry) in entries.iter().enumerate() {
-            let archive_entry =
-                SevenZArchiveEntry::from_path(&entry.source, entry.archive_name.clone());
-            if entry.is_dir {
-                writer
-                    .push_archive_entry::<&[u8]>(archive_entry, None)
-                    .map_err(|error| {
-                        RomWeaverError::Validation(format!(
-                            "7z create failed while adding directory `{}`: {error}",
-                            entry.archive_name
-                        ))
-                    })?;
-            } else {
-                let source = File::open(&entry.source)?;
-                logical_bytes = logical_bytes.saturating_add(fs::metadata(&entry.source)?.len());
-                writer
-                    .push_archive_entry::<File>(archive_entry, Some(source))
-                    .map_err(|error| {
-                        RomWeaverError::Validation(format!(
-                            "7z create failed while adding file `{}`: {error}",
-                            entry.archive_name
-                        ))
-                    })?;
-            }
-
-            emit_container_step_progress(
-                context,
-                "compress",
-                self.descriptor.name,
-                "create",
-                entry_index.saturating_add(1),
-                total_entries,
-                format!(
-                    "creating `{}` ({}/{})",
-                    self.descriptor.name,
-                    entry_index.saturating_add(1),
-                    total_entries
-                ),
-                Some(execution),
-            );
-        }
-
-        writer.finish().map_err(|error| {
-            RomWeaverError::Validation(format!(
-                "7z create failed while finalizing `{}`: {error}",
-                request.output.display()
-            ))
-        })?;
-
-        Ok(logical_bytes)
-    }
-
-    fn extract_with_sevenz_rust(
-        &self,
-        request: &ContainerExtractRequest,
-        context: &OperationContext,
-        mut reader: SevenZReader<File>,
-    ) -> Result<OperationReport> {
-        fs::create_dir_all(&request.out_dir)?;
-        let execution = context.plan_threads(ThreadCapability::parallel(None));
-        reader.set_thread_count(self.thread_count(execution.effective_threads));
-
-        let mut counting_matcher = SelectionMatcher::new(&request.selections);
-        let mut total_entries = 0usize;
-        for entry in &reader.archive().files {
-            let entry_name = normalize_archive_name(entry.name());
-            if entry_name.is_empty() || !counting_matcher.matches(&entry_name) {
-                continue;
-            }
-            total_entries = total_entries.saturating_add(1);
-        }
-        counting_matcher.ensure_all_matched()?;
-
-        let mut matcher = SelectionMatcher::new(&request.selections);
-        let mut completed = 0usize;
-        let mut files_written = 0usize;
-        let mut written_bytes = 0u64;
-        let out_dir = request.out_dir.clone();
-        reader
-            .for_each_entries(|entry, input| {
-                let entry_name = normalize_archive_name(entry.name());
-                if entry_name.is_empty() || !matcher.matches(&entry_name) {
-                    return Ok(true);
-                }
-
-                let relative =
-                    sanitize_archive_relative_path_from_str(entry.name()).map_err(|error| {
-                        std::io::Error::new(std::io::ErrorKind::InvalidData, error.to_string())
-                    })?;
-                let output_path = out_dir.join(relative);
-                if entry.is_directory() || !entry.has_stream() {
-                    fs::create_dir_all(&output_path)?;
-                } else {
-                    if let Some(parent) = output_path.parent() {
-                        fs::create_dir_all(parent)?;
-                    }
-                    let mut output = BufWriter::new(File::create(&output_path)?);
-                    let copied = io::copy(input, &mut output)?;
-                    output.flush()?;
-                    files_written = files_written.saturating_add(1);
-                    written_bytes = written_bytes.saturating_add(copied);
-                }
-
-                completed = completed.saturating_add(1);
-                emit_container_step_progress(
-                    context,
-                    "extract",
-                    self.descriptor.name,
-                    "extract",
-                    completed,
-                    total_entries,
-                    format!(
-                        "extracting `{}` ({}/{})",
-                        self.descriptor.name, completed, total_entries
-                    ),
-                    Some(&execution),
-                );
-                Ok(true)
-            })
-            .map_err(|error| {
-                RomWeaverError::Validation(format!(
-                    "{} extract failed: {error}",
-                    self.descriptor.name
-                ))
-            })?;
-        matcher.ensure_all_matched()?;
-
-        Ok(OperationReport::succeeded(
-            OperationFamily::Container,
-            Some(self.descriptor.name.to_string()),
-            "extract",
-            format!(
-                "extracted `{}` to `{}` ({} file(s), {} bytes written)",
-                request.source.display(),
-                request.out_dir.display(),
-                files_written,
-                written_bytes
-            ),
-            Some(100.0),
-            Some(execution),
-        ))
     }
 
     fn create_with_libarchive(
@@ -450,13 +205,11 @@ impl ContainerHandler for SevenZContainerHandler {
     }
 
     fn probe(&self, source: &Path) -> ProbeConfidence {
-        let mut signature = [0u8; SEVEN_Z_SIGNATURE.len()];
-        if let Ok(mut file) = File::open(source) {
-            if file.read_exact(&mut signature).is_ok() && signature == SEVEN_Z_SIGNATURE {
-                return ProbeConfidence::Signature;
-            }
-        }
-        ProbeConfidence::Extension
+        probe_regular_archive_with_libarchive(
+            source,
+            self.descriptor.name,
+            LibarchiveProbeFormat::SevenZ,
+        )
     }
 
     fn inspect(
@@ -464,22 +217,8 @@ impl ContainerHandler for SevenZContainerHandler {
         request: &ContainerInspectRequest,
         _context: &OperationContext,
     ) -> Result<OperationReport> {
-        let reader = self.open_reader(&request.source)?;
-        let archive = reader.archive();
-        let mut files = 0usize;
-        let mut directories = 0usize;
-        let mut compressed_bytes = 0u64;
-        let mut logical_bytes = 0u64;
-
-        for entry in &archive.files {
-            if entry.is_directory() {
-                directories += 1;
-            } else {
-                files += 1;
-            }
-            compressed_bytes = compressed_bytes.saturating_add(entry.compressed_size);
-            logical_bytes = logical_bytes.saturating_add(entry.size());
-        }
+        let summary =
+            inspect_regular_archive_with_libarchive(&request.source, self.descriptor.name)?;
 
         Ok(OperationReport::succeeded(
             OperationFamily::Container,
@@ -487,11 +226,11 @@ impl ContainerHandler for SevenZContainerHandler {
             "inspect",
             format!(
                 "7z: {} entries ({} files, {} directories), {} bytes compressed, {} bytes uncompressed",
-                archive.files.len(),
-                files,
-                directories,
-                compressed_bytes,
-                logical_bytes
+                summary.entries_total,
+                summary.files,
+                summary.directories,
+                summary.archive_bytes,
+                summary.logical_bytes
             ),
             Some(100.0),
             None,
@@ -503,16 +242,7 @@ impl ContainerHandler for SevenZContainerHandler {
         request: &ContainerInspectRequest,
         _context: &OperationContext,
     ) -> Result<Vec<String>> {
-        let reader = self.open_reader(&request.source)?;
-        let archive = reader.archive();
-        let mut entries = Vec::new();
-        for entry in &archive.files {
-            let entry_name = normalize_archive_name(entry.name());
-            if !entry_name.is_empty() {
-                entries.push(entry_name);
-            }
-        }
-        Ok(entries)
+        list_regular_archive_entries_with_libarchive(&request.source, self.descriptor.name)
     }
 
     fn extract(
@@ -520,10 +250,6 @@ impl ContainerHandler for SevenZContainerHandler {
         request: &ContainerExtractRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        let reader = self.open_reader(&request.source)?;
-        if self.archive_prefers_sevenz_rust_backend(&reader) {
-            return self.extract_with_sevenz_rust(request, context, reader);
-        }
         extract_regular_archive_with_libarchive(request, context, self.descriptor.name, false)
     }
 
@@ -533,14 +259,10 @@ impl ContainerHandler for SevenZContainerHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let execution = context.plan_threads(ThreadCapability::parallel(None));
-        let settings =
-            self.resolve_codec_settings(request.codec.as_deref(), request.level, &execution)?;
+        let settings = self.resolve_codec_settings(request.codec.as_deref(), request.level)?;
         let entries = collect_archive_inputs(&request.inputs)?;
-        let logical_bytes = if Self::prefers_sevenz_rust_for_codec(settings.codec) {
-            self.create_with_sevenz_rust(request, &entries, &settings, &execution, context)?
-        } else {
-            self.create_with_libarchive(request, &entries, &settings, &execution, context)?
-        };
+        let logical_bytes =
+            self.create_with_libarchive(request, &entries, &settings, &execution, context)?;
 
         Ok(OperationReport::succeeded(
             OperationFamily::Container,
@@ -550,7 +272,7 @@ impl ContainerHandler for SevenZContainerHandler {
                 "created `{}` from {} input(s) with {} ({} bytes)",
                 request.output.display(),
                 request.inputs.len(),
-                Self::method_name(&settings.method),
+                Self::method_name(settings.method),
                 logical_bytes
             ),
             Some(100.0),

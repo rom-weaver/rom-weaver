@@ -31,7 +31,6 @@ use nod::{
         ProcessOptions as NodProcessOptions,
     },
 };
-use rars::ArchiveReader as RarRsArchiveReader;
 use rayon::prelude::*;
 #[cfg(test)]
 use rom_weaver_chd::ChdCodec;
@@ -48,34 +47,21 @@ use rom_weaver_core::{
     bounded_items_for_threads,
 };
 use rom_weaver_libarchive_sys::{
-    ARCHIVE_OK, ARCHIVE_WARN, archive, archive_entry_free, archive_entry_new,
-    archive_entry_set_filetype, archive_entry_set_pathname, archive_entry_set_perm,
-    archive_entry_set_size, archive_errno, archive_error_string, archive_write_add_filter_bzip2,
-    archive_write_add_filter_gzip, archive_write_add_filter_none, archive_write_add_filter_xz,
-    archive_write_close, archive_write_data, archive_write_finish_entry, archive_write_free,
-    archive_write_header, archive_write_new, archive_write_open_filename,
-    archive_write_set_filter_option, archive_write_set_format_7zip,
+    ARCHIVE_FORMAT_7ZIP, ARCHIVE_FORMAT_BASE_MASK, ARCHIVE_FORMAT_RAR, ARCHIVE_FORMAT_RAR_V5,
+    ARCHIVE_FORMAT_TAR, ARCHIVE_FORMAT_ZIP, ARCHIVE_OK, ARCHIVE_WARN, archive, archive_entry_free,
+    archive_entry_new, archive_entry_set_filetype, archive_entry_set_pathname,
+    archive_entry_set_perm, archive_entry_set_size, archive_errno, archive_error_string,
+    archive_write_add_filter_bzip2, archive_write_add_filter_gzip, archive_write_add_filter_none,
+    archive_write_add_filter_xz, archive_write_close, archive_write_data,
+    archive_write_finish_entry, archive_write_free, archive_write_header, archive_write_new,
+    archive_write_open_filename, archive_write_set_filter_option, archive_write_set_format_7zip,
     archive_write_set_format_option, archive_write_set_format_pax_restricted,
     archive_write_set_format_zip,
 };
-use sevenz_rust::{
-    ArchiveEntry as SevenZArchiveEntry, ArchiveReader as SevenZReader,
-    ArchiveWriter as SevenZWriter, EncoderConfiguration as SevenZMethodConfiguration,
-    EncoderMethod as SevenZMethod, Password as SevenZPassword,
-    encoder_options::{
-        BrotliOptions as SevenZBrotliOptions, Bzip2Options as SevenZBzip2Options,
-        DeflateOptions as SevenZDeflateOptions, EncoderOptions as SevenZEncoderOptions,
-        Lz4Options as SevenZLz4Options, Lzma2Options as SevenZLzma2Options,
-        LzmaOptions as SevenZLzmaOptions, PpmdOptions as SevenZPpmdOptions,
-        ZstandardOptions as SevenZZstdOptions,
-    },
-};
-use tar::Archive as TarArchive;
 use xdvdfs::{
     blockdev::OffsetWrapper as XdvdfsOffsetWrapper, write::fs::XDVDFSFilesystem as XdvdfsFilesystem,
 };
 use zeekstd::{Decoder as ZeekstdDecoder, SeekTable as ZeekstdSeekTable};
-use zip::{CompressionMethod as ZipCompressionMethod, ZipArchive as ZipFileArchive};
 use zstd::bulk::compress as zstd_compress;
 
 const ZIP: FormatDescriptor = FormatDescriptor {
@@ -339,9 +325,6 @@ impl ContainerRegistry {
     }
 }
 
-const SEVEN_Z_SIGNATURE: [u8; 6] = [b'7', b'z', 0xBC, 0xAF, 0x27, 0x1C];
-const RAR4_SIGNATURE: [u8; 7] = [b'R', b'a', b'r', b'!', 0x1A, 0x07, 0x00];
-const RAR5_SIGNATURE: [u8; 8] = [b'R', b'a', b'r', b'!', 0x1A, 0x07, 0x01, 0x00];
 const GZIP_SIGNATURE: [u8; 2] = [0x1F, 0x8B];
 const BZIP2_SIGNATURE: [u8; 3] = [b'B', b'Z', b'h'];
 const XZ_SIGNATURE: [u8; 6] = [0xFD, b'7', b'z', b'X', b'Z', 0x00];
@@ -355,12 +338,6 @@ fn file_starts_with(source: &Path, signature: &[u8]) -> bool {
         return file.read_exact(&mut bytes).is_ok() && bytes == signature;
     }
     false
-}
-
-fn is_ustar_header(header: &[u8]) -> bool {
-    header.len() >= 512
-        && (header[257..263] == [b'u', b's', b't', b'a', b'r', 0x00]
-            || header[257..263] == [b'u', b's', b't', b'a', b'r', b' '])
 }
 
 fn resolve_container_codec_backend(
@@ -1411,6 +1388,23 @@ struct LibarchiveExtractTask {
     is_dir: bool,
 }
 
+#[derive(Clone, Copy, Debug)]
+enum LibarchiveProbeFormat {
+    Zip,
+    SevenZ,
+    Rar,
+    Tar,
+}
+
+#[derive(Clone, Debug)]
+struct LibarchiveInspectSummary {
+    entries_total: usize,
+    files: usize,
+    directories: usize,
+    archive_bytes: u64,
+    logical_bytes: u64,
+}
+
 fn open_libarchive_reader(
     source: &Path,
     format_name: &str,
@@ -1419,6 +1413,124 @@ fn open_libarchive_reader(
     LibarchiveReadArchive::open_io(file).map_err(|error| {
         RomWeaverError::Validation(format!("{format_name} archive is invalid: {error}"))
     })
+}
+
+fn libarchive_format_matches(format: i32, expected: LibarchiveProbeFormat) -> bool {
+    let base_format = format & ARCHIVE_FORMAT_BASE_MASK;
+    match expected {
+        LibarchiveProbeFormat::Zip => base_format == ARCHIVE_FORMAT_ZIP,
+        LibarchiveProbeFormat::SevenZ => base_format == ARCHIVE_FORMAT_7ZIP,
+        LibarchiveProbeFormat::Rar => {
+            base_format == ARCHIVE_FORMAT_RAR || base_format == ARCHIVE_FORMAT_RAR_V5
+        }
+        LibarchiveProbeFormat::Tar => base_format == ARCHIVE_FORMAT_TAR,
+    }
+}
+
+fn detect_libarchive_format(source: &Path, format_name: &str) -> Result<i32> {
+    let mut reader = open_libarchive_reader(source, format_name)?;
+    let first_entry = reader.next_entry().map_err(|error| {
+        RomWeaverError::Validation(format!(
+            "{format_name} probe failed while reading header: {error}"
+        ))
+    })?;
+    drop(first_entry);
+    Ok(reader.format())
+}
+
+fn probe_regular_archive_with_libarchive(
+    source: &Path,
+    format_name: &str,
+    expected: LibarchiveProbeFormat,
+) -> ProbeConfidence {
+    match detect_libarchive_format(source, format_name) {
+        Ok(format) if libarchive_format_matches(format, expected) => ProbeConfidence::Signature,
+        _ => ProbeConfidence::Extension,
+    }
+}
+
+fn inspect_regular_archive_with_libarchive(
+    source: &Path,
+    format_name: &str,
+) -> Result<LibarchiveInspectSummary> {
+    let mut reader = open_libarchive_reader(source, format_name)?;
+    let mut summary = LibarchiveInspectSummary {
+        entries_total: 0,
+        files: 0,
+        directories: 0,
+        archive_bytes: fs::metadata(source)?.len(),
+        logical_bytes: 0,
+    };
+    let mut index = 0usize;
+
+    while let Some(entry) = reader.next_entry().map_err(|error| {
+        RomWeaverError::Validation(format!(
+            "{format_name} inspect failed while reading entry {index}: {error}"
+        ))
+    })? {
+        let entry_path = match entry.pathname_utf8() {
+            Ok(path) => path.to_owned(),
+            Err(_) => entry
+                .pathname_mb()
+                .map(|path| path.to_string_lossy().into_owned())
+                .map_err(|error| {
+                    RomWeaverError::Validation(format!(
+                        "{format_name} inspect failed while decoding entry {index}: {error}"
+                    ))
+                })?,
+        };
+        if normalize_archive_name(&entry_path).is_empty() {
+            index = index.saturating_add(1);
+            continue;
+        }
+
+        summary.entries_total = summary.entries_total.saturating_add(1);
+        if entry.is_dir() {
+            summary.directories = summary.directories.saturating_add(1);
+        } else {
+            summary.files = summary.files.saturating_add(1);
+            if let Some(size) = entry.size() {
+                summary.logical_bytes = summary.logical_bytes.saturating_add(size);
+            }
+        }
+        index = index.saturating_add(1);
+    }
+
+    Ok(summary)
+}
+
+fn list_regular_archive_entries_with_libarchive(
+    source: &Path,
+    format_name: &str,
+) -> Result<Vec<String>> {
+    let mut reader = open_libarchive_reader(source, format_name)?;
+    let mut entries = Vec::new();
+    let mut index = 0usize;
+
+    while let Some(entry) = reader.next_entry().map_err(|error| {
+        RomWeaverError::Validation(format!(
+            "{format_name} list failed while reading entry {index}: {error}"
+        ))
+    })? {
+        let entry_path = match entry.pathname_utf8() {
+            Ok(path) => path.to_owned(),
+            Err(_) => entry
+                .pathname_mb()
+                .map(|path| path.to_string_lossy().into_owned())
+                .map_err(|error| {
+                    RomWeaverError::Validation(format!(
+                        "{format_name} list failed while decoding entry {index}: {error}"
+                    ))
+                })?,
+        };
+        let archive_name = normalize_archive_name(&entry_path);
+        if !archive_name.is_empty() {
+            entries.push(archive_name);
+        }
+        index = index.saturating_add(1);
+    }
+
+    Ok(entries)
 }
 
 fn build_libarchive_extract_tasks(

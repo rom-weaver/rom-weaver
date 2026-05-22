@@ -17,6 +17,7 @@ unsafe extern "C" {
     pub fn archive_free(arg1: *mut archive) -> ::std::os::raw::c_int;
     pub fn archive_errno(arg1: *mut archive) -> ::std::os::raw::c_int;
     pub fn archive_error_string(arg1: *mut archive) -> *const ::std::os::raw::c_char;
+    pub fn archive_format(arg1: *mut archive) -> ::std::os::raw::c_int;
     pub fn archive_set_error(
         arg1: *mut archive,
         _err: ::std::os::raw::c_int,
@@ -126,6 +127,8 @@ unsafe extern "C" {
     pub fn archive_entry_filetype(arg1: *mut archive_entry) -> libc::mode_t;
     pub fn archive_entry_pathname(arg1: *mut archive_entry) -> *const ::std::os::raw::c_char;
     pub fn archive_entry_pathname_utf8(arg1: *mut archive_entry) -> *const ::std::os::raw::c_char;
+    pub fn archive_entry_size(arg1: *mut archive_entry) -> la_int64_t;
+    pub fn archive_entry_size_is_set(arg1: *mut archive_entry) -> ::std::os::raw::c_int;
     pub fn archive_entry_set_filetype(arg1: *mut archive_entry, arg2: ::std::os::raw::c_uint);
     pub fn archive_entry_set_pathname(
         arg1: *mut archive_entry,

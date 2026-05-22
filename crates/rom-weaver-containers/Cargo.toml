@@ -15,14 +15,10 @@ lzma-rust2.workspace = true
 rom-weaver-libarchive-sys.workspace = true
 nod.workspace = true
 rayon.workspace = true
-rars = "0.1.0"
 rom-weaver-codecs = { path = "../rom-weaver-codecs" }
 rom-weaver-chd = { path = "../rom-weaver-chd" }
 rom-weaver-core = { path = "../rom-weaver-core" }
-sevenz-rust.workspace = true
-tar.workspace = true
 xdvdfs.workspace = true
-zip.workspace = true
 zstd.workspace = true
 zeekstd.workspace = true
 
