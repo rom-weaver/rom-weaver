@@ -8,11 +8,10 @@ import {
   parseTraceJsonLines,
 } from './rom-weaver-runtime-utils.mjs';
 
-const DEFAULT_OPFS_GUEST_PATH = '/work';
+const DEFAULT_OPFS_GUEST_PATH = '/opfs';
 const DEFAULT_SCRATCH_GUEST_PATH = '/scratch';
 const DEFAULT_SCRATCH_NAMESPACE = '.rom-weaver-scratch';
 const DEFAULT_MAX_BUFFERED_PATCH_BYTES = String(64 * 1024 * 1024);
-const DEFAULT_WORK_DIRECTORY_LAYOUT = ['input', 'patches', 'output', 'temp'];
 
 export async function createRomWeaverZenFsBrowser(options = {}) {
   assertDedicatedWorkerRuntime();
@@ -38,7 +37,6 @@ export async function createRomWeaverZenFsBrowser(options = {}) {
   assertDirectoryHandle(scratchRootHandle, 'scratchHandle');
 
   await verifyWritableScratchRoot(scratchRootHandle);
-  await ensureWorkDirectoryLayout(opfsHandle);
 
   await zenfs.configure({
     mounts: {
@@ -75,10 +73,6 @@ export async function createRomWeaverZenFsBrowser(options = {}) {
   });
   const runtimeMountState = new Map();
   const activeScratchRunIds = new Set();
-  const baseWritableMounts = normalizeWritableMounts(
-    options.writableMounts ?? [scratchGuestPath],
-    runtimeMounts,
-  );
 
   const runner = {
     async run(args = [], runOptions = {}) {
@@ -117,9 +111,6 @@ export async function createRomWeaverZenFsBrowser(options = {}) {
       };
 
       const syncAccessMode = runOptions.syncAccessMode ?? options.syncAccessMode;
-      const writableMounts = runOptions.writableMounts === undefined
-        ? baseWritableMounts
-        : normalizeWritableMounts(runOptions.writableMounts, runtimeMounts);
       const {
         fds,
         closeHandles,
@@ -133,7 +124,6 @@ export async function createRomWeaverZenFsBrowser(options = {}) {
         scratchGuestPath,
         syncAccessMode,
         runtimeMountState,
-        writableMounts,
       });
 
       try {
@@ -146,7 +136,7 @@ export async function createRomWeaverZenFsBrowser(options = {}) {
 
         const instance = await WebAssembly.instantiate(module, {
           wasi_snapshot_preview1: wasi.wasiImport,
-          env: createWasmEnvImports({ module }),
+          env: createWasmEnvImports(),
         });
 
         const exitCode = wasi.start(instance);
@@ -240,7 +230,6 @@ async function buildBrowserWasiFds({
   scratchGuestPath,
   syncAccessMode,
   runtimeMountState,
-  writableMounts,
 }) {
   const closeHandles = [];
   const stdinBytes = normalizeStdin(stdin);
@@ -276,7 +265,7 @@ async function buildBrowserWasiFds({
       wasiShim,
       directoryHandle: handle,
       closeHandles,
-      readOnly: !writableMounts.has(mountPath),
+      readOnly: mountPath !== scratchGuestPath,
       syncAccessMode,
     });
     fds.push(createStrictOpfsPreopenDirectory(wasiShim, mountPath, preopenContents));
@@ -686,37 +675,6 @@ function normalizeRuntimeMounts(mounts) {
   return mounts.map((mountPath) => normalizeGuestPath(String(mountPath), {
     label: 'runtime mount guest path',
   }));
-}
-
-function normalizeWritableMounts(writableMounts, runtimeMounts) {
-  const knownMounts = new Set(runtimeMounts);
-  const requestedMounts = Array.isArray(writableMounts)
-    ? writableMounts
-    : writableMounts instanceof Set
-      ? Array.from(writableMounts)
-      : writableMounts == null
-        ? []
-        : [writableMounts];
-  const normalized = new Set();
-  for (const mountPath of requestedMounts) {
-    const normalizedMountPath = normalizeGuestPath(String(mountPath), {
-      label: 'writable mount guest path',
-    });
-    if (!knownMounts.has(normalizedMountPath)) {
-      throw new Error(
-        `writable mount ${normalizedMountPath} is not present in runtimeMounts: `
-          + `${Array.from(knownMounts).join(', ')}`,
-      );
-    }
-    normalized.add(normalizedMountPath);
-  }
-  return normalized;
-}
-
-async function ensureWorkDirectoryLayout(opfsHandle) {
-  for (const directoryName of DEFAULT_WORK_DIRECTORY_LAYOUT) {
-    await opfsHandle.getDirectoryHandle(directoryName, { create: true });
-  }
 }
 
 function normalizeArgs(args) {

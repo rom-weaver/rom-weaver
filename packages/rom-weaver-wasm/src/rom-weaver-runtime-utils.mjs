@@ -1,5 +1,4 @@
-export function createWasmEnvImports(memoryOrOptions, maybeOptions = {}) {
-  const { memory, module } = normalizeCreateWasmEnvImportOptions(memoryOrOptions, maybeOptions);
+export function createWasmEnvImports(memory) {
   const imports = {
     __cxa_allocate_exception() {
       return 0;
@@ -15,41 +14,7 @@ export function createWasmEnvImports(memoryOrOptions, maybeOptions = {}) {
     imports.memory = memory;
   }
 
-  if (module instanceof WebAssembly.Module) {
-    const descriptors = WebAssembly.Module.imports(module);
-    for (const descriptor of descriptors) {
-      if (descriptor.module !== 'env' || descriptor.kind !== 'function') {
-        continue;
-      }
-      if (typeof imports[descriptor.name] === 'function') {
-        continue;
-      }
-      imports[descriptor.name] = function unresolvedEnvImportNoop() {
-        return 0;
-      };
-    }
-  }
-
   return imports;
-}
-
-function normalizeCreateWasmEnvImportOptions(memoryOrOptions, maybeOptions) {
-  if (
-    memoryOrOptions
-    && typeof memoryOrOptions === 'object'
-    && !(memoryOrOptions instanceof WebAssembly.Memory)
-    && !(memoryOrOptions instanceof WebAssembly.Module)
-  ) {
-    return {
-      memory: memoryOrOptions.memory,
-      module: memoryOrOptions.module,
-    };
-  }
-
-  return {
-    memory: memoryOrOptions,
-    module: maybeOptions?.module,
-  };
 }
 
 export function normalizeGuestPath(pathLike, options = {}) {
