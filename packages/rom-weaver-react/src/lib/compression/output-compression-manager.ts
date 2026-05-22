@@ -295,7 +295,7 @@ const OutputCompressionManager = (() => {
     fallback?: number,
   ) => {
     const selected = _normalizeOutputCompression(compression);
-    if (selected === OUTPUT_COMPRESSION.ZIP) return _normalizeCompressionLevel(value, fallback);
+    if (selected === OUTPUT_COMPRESSION.ZIP) return _normalizeArchiveCompressionLevel(codec, value, fallback);
     return _normalizeArchiveCompressionLevel(codec, value, fallback);
   };
   const _normalizeCompressionProfile = (
@@ -381,9 +381,6 @@ const OutputCompressionManager = (() => {
       const codec = _getArchiveCodec(compression, options);
       if (codec === "store") return null;
       const level = _normalizeArchiveCompressionLevelForFormat(selected, codec, options.zipLevel, 9);
-      const threads = _getArchiveThreadsOption(options);
-      // Threaded ZIP+ZSTD is unstable at level 9 in our WASM build; cap it one notch lower.
-      if (codec === "zstd" && threads !== null && threads > 1 && level >= 9) return 8;
       return level;
     }
     return null;

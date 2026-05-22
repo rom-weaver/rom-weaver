@@ -448,15 +448,20 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     kind: "number",
     label: getSettingsLabel("zipLevel"),
     labelDataLocalize: "ZIP compression level override",
-    max: 9,
+    max: ({ settings }) => (settings.zipCodec === "zstd" ? 22 : 9),
     min: 0,
     placeholder: "Profile",
     step: 1,
     suggestion: ({ settings }) =>
       settings.zipCodec === "store"
         ? "Unused for Store. Blank uses the compression profile."
+        : settings.zipCodec === "zstd"
+          ? "Optional override. Blank uses the compression profile. Valid values: 0-22."
+          : "Optional override. Blank uses the compression profile. Valid values: 0-9.",
+    suggestionDataLocalize: ({ settings }) =>
+      settings.zipCodec === "zstd"
+        ? "Optional override. Blank uses the compression profile. Valid values: 0-22."
         : "Optional override. Blank uses the compression profile. Valid values: 0-9.",
-    suggestionDataLocalize: "Optional override. Blank uses the compression profile. Valid values: 0-9.",
     validationLabel: "ZIP compression level override",
   },
 };
