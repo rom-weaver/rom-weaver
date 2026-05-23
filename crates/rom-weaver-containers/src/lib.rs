@@ -33,14 +33,13 @@ use rom_weaver_chd::ChdCodec;
 use rom_weaver_chd::ChdContainerHandler;
 use rom_weaver_codecs::{
     decode_deflate_into_buffer, normalize_codec_label, parse_requested_codec, CanonicalCodec,
-    CodecRegistry, RequestedCodec,
+    RequestedCodec,
 };
 use rom_weaver_core::{
-    bounded_items_for_threads, CodecBackend, CodecOperationRequest, ContainerCapabilities,
-    ContainerCreateRequest, ContainerExtractRequest, ContainerHandler, ContainerInspectRequest,
-    FormatDescriptor, OperationContext, OperationFamily, OperationReport, OperationStatus,
-    OrderedChunkWriter, ProbeConfidence, ProgressEvent, Result, RomWeaverError, ThreadCapability,
-    ThreadExecution,
+    bounded_items_for_threads, ContainerCapabilities, ContainerCreateRequest,
+    ContainerExtractRequest, ContainerHandler, ContainerInspectRequest, FormatDescriptor,
+    OperationContext, OperationFamily, OperationReport, OperationStatus, OrderedChunkWriter,
+    ProbeConfidence, ProgressEvent, Result, RomWeaverError, ThreadCapability, ThreadExecution,
 };
 use rom_weaver_libarchive_sys::{
     archive, archive_entry_free, archive_entry_new, archive_entry_set_filetype,
@@ -50,17 +49,17 @@ use rom_weaver_libarchive_sys::{
     archive_read_support_filter_bzip2, archive_read_support_filter_gzip,
     archive_read_support_filter_xz, archive_read_support_filter_zstd,
     archive_read_support_format_raw, archive_write_add_filter_bzip2, archive_write_add_filter_gzip,
-    archive_write_add_filter_none, archive_write_add_filter_xz, archive_write_close,
-    archive_write_data, archive_write_finish_entry, archive_write_free, archive_write_header,
-    archive_write_new, archive_write_open_filename, archive_write_set_filter_option,
-    archive_write_set_format_7zip, archive_write_set_format_option,
-    archive_write_set_format_pax_restricted, archive_write_set_format_zip, ARCHIVE_EOF,
-    ARCHIVE_FORMAT_7ZIP, ARCHIVE_FORMAT_BASE_MASK, ARCHIVE_FORMAT_RAR, ARCHIVE_FORMAT_RAR_V5,
-    ARCHIVE_FORMAT_TAR, ARCHIVE_FORMAT_ZIP, ARCHIVE_OK, ARCHIVE_WARN,
+    archive_write_add_filter_none, archive_write_add_filter_xz, archive_write_add_filter_zstd,
+    archive_write_close, archive_write_data, archive_write_finish_entry, archive_write_free,
+    archive_write_header, archive_write_new, archive_write_open_filename,
+    archive_write_set_filter_option, archive_write_set_format_7zip,
+    archive_write_set_format_option, archive_write_set_format_pax_restricted,
+    archive_write_set_format_raw, archive_write_set_format_zip, ARCHIVE_EOF, ARCHIVE_FORMAT_7ZIP,
+    ARCHIVE_FORMAT_BASE_MASK, ARCHIVE_FORMAT_RAR, ARCHIVE_FORMAT_RAR_V5, ARCHIVE_FORMAT_TAR,
+    ARCHIVE_FORMAT_ZIP, ARCHIVE_OK, ARCHIVE_WARN,
 };
 use xdvdfs::{
-    blockdev::OffsetWrapper as XdvdfsOffsetWrapper,
-    write::fs::XDVDFSFilesystem as XdvdfsFilesystem,
+    blockdev::OffsetWrapper as XdvdfsOffsetWrapper, write::fs::XDVDFSFilesystem as XdvdfsFilesystem,
 };
 use zeekstd::{Decoder as ZeekstdDecoder, SeekTable as ZeekstdSeekTable};
 use zstd::bulk::compress as zstd_compress;
@@ -339,19 +338,6 @@ fn file_starts_with(source: &Path, signature: &[u8]) -> bool {
         return file.read_exact(&mut bytes).is_ok() && bytes == signature;
     }
     false
-}
-
-fn resolve_container_codec_backend(
-    descriptor_name: &str,
-    codec_name: &str,
-) -> Result<Arc<dyn CodecBackend>> {
-    CodecRegistry::new()
-        .find_by_name(codec_name)
-        .ok_or_else(|| {
-            RomWeaverError::Unsupported(format!(
-                "codec backend `{codec_name}` is not registered for {descriptor_name}"
-            ))
-        })
 }
 
 #[derive(Clone, Debug)]
@@ -723,6 +709,7 @@ enum LibarchiveCreateFormat {
     Zip,
     SevenZ,
     TarPax,
+    Raw,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -731,6 +718,7 @@ enum LibarchiveCreateFilter {
     Gzip,
     Bzip2,
     Xz,
+    Zstd,
 }
 
 impl LibarchiveCreateFilter {
@@ -740,6 +728,7 @@ impl LibarchiveCreateFilter {
             Self::Gzip => Some("gzip"),
             Self::Bzip2 => Some("bzip2"),
             Self::Xz => Some("xz"),
+            Self::Zstd => Some("zstd"),
         }
     }
 }
@@ -803,6 +792,14 @@ fn libarchive_open_create_archive(
                     config.format_name
                 ),
             )?,
+            LibarchiveCreateFormat::Raw => libarchive_check_status(
+                unsafe { archive_write_set_format_raw(archive_ptr) },
+                archive_ptr,
+                &format!(
+                    "{} create failed while selecting raw format",
+                    config.format_name
+                ),
+            )?,
         }
 
         match config.filter {
@@ -835,6 +832,14 @@ fn libarchive_open_create_archive(
                 archive_ptr,
                 &format!(
                     "{} create failed while enabling xz filter",
+                    config.format_name
+                ),
+            )?,
+            LibarchiveCreateFilter::Zstd => libarchive_check_status(
+                unsafe { archive_write_add_filter_zstd(archive_ptr) },
+                archive_ptr,
+                &format!(
+                    "{} create failed while enabling zstd filter",
                     config.format_name
                 ),
             )?,
@@ -879,6 +884,13 @@ fn libarchive_open_create_archive(
                         archive_ptr,
                         config.format_name,
                         "xz",
+                        "compression-level",
+                        &level.to_string(),
+                    )?,
+                    LibarchiveCreateFilter::Zstd => libarchive_set_filter_option(
+                        archive_ptr,
+                        config.format_name,
+                        "zstd",
                         "compression-level",
                         &level.to_string(),
                     )?,
