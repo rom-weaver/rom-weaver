@@ -222,7 +222,7 @@
                 ));
             }
             let units_per_hunk = expected_hunk_bytes / expected_unit_bytes;
-            let mut by_hash = BTreeMap::new();
+            let mut by_hash = HashMap::with_capacity(parent_header.hunk_count() as usize);
             let mut hunk_buffer = parent.get_hunksized_buffer();
             let mut compressed_buffer = Vec::new();
             for hunk_index in 0..parent_header.hunk_count() {
@@ -380,7 +380,8 @@
             let mut entries = Vec::with_capacity(hunk_count_usize);
             let mut remaining = logical_bytes;
             let mut current_offset = Self::CHD_V5_HEADER_BYTES;
-            let mut self_hunks_by_hash = BTreeMap::<HunkHashKey, u64>::new();
+            let mut self_hunks_by_hash =
+                HashMap::<HunkHashKey, u64>::with_capacity(hunk_count_usize);
             let parent_hunks_by_hash = parent_reuse.as_ref().map(|value| &value.by_hash);
             let mut next_hunk = 0usize;
             while next_hunk < hunk_count_usize {
@@ -388,7 +389,7 @@
                 enum BatchHunkEntry {
                     SelfCopy(u64),
                     ParentCopy(u64),
-                    Data(Vec<u8>),
+                    Data { hunk: Vec<u8>, crc16: u16 },
                 }
                 let mut batch_hunks = Vec::with_capacity(this_batch);
                 for batch_index in 0..this_batch {
@@ -419,13 +420,16 @@
                     }
                     let hunk_index = next_hunk.saturating_add(batch_index);
                     self_hunks_by_hash.insert(key, hunk_index as u64);
-                    batch_hunks.push(BatchHunkEntry::Data(hunk));
+                    batch_hunks.push(BatchHunkEntry::Data {
+                        hunk,
+                        crc16: key.crc16,
+                    });
                 }
 
-                let mut data_hunks = Vec::<(usize, Vec<u8>)>::new();
+                let mut data_hunks = Vec::<(usize, Vec<u8>, u16)>::new();
                 for (index, entry) in batch_hunks.iter_mut().enumerate() {
-                    if let BatchHunkEntry::Data(hunk) = entry {
-                        data_hunks.push((index, std::mem::take(hunk)));
+                    if let BatchHunkEntry::Data { hunk, crc16 } = entry {
+                        data_hunks.push((index, std::mem::take(hunk), *crc16));
                     }
                 }
                 let compressed_hunks: Vec<Result<(usize, u8, Vec<u8>, u16)>> = if let Some(pool) =
@@ -435,104 +439,56 @@
                         pool.install(|| {
                             data_hunks
                                 .into_par_iter()
-                                .map(|(index, hunk)| {
-                                    let crc = Self::crc16_ibm3740(&hunk);
-                                    let mut best: Option<(u8, Vec<u8>)> = None;
-                                    for (codec_slot, codec) in &encodable_codecs {
-                                        let compressed = self.compress_rust_hunk(
-                                            create_kind,
-                                            *codec,
-                                            compression_level,
-                                            &hunk,
-                                        )?;
-                                        if best
-                                            .as_ref()
-                                            .map(|(_, candidate)| {
-                                                compressed.len() < candidate.len()
-                                            })
-                                            .unwrap_or(true)
-                                        {
-                                            best = Some((*codec_slot, compressed));
-                                        }
-                                    }
-                                    let (compression_type, payload) = best
-                                        .filter(|(_, compressed)| {
-                                            self.prefer_compressed_payload(
+                                .map_init(
+                                    ChdCompressionScratch::default,
+                                    |scratch, (index, hunk, crc16)| {
+                                        let (compression_type, payload) =
+                                            self.compress_best_rust_hunk(
+                                                create_kind,
                                                 primary_codec,
-                                                compressed.len(),
-                                                hunk.len(),
-                                            )
-                                        })
-                                        .unwrap_or((Self::CHD_V5_MAP_TYPE_UNCOMPRESSED, hunk));
-                                    Ok((index, compression_type, payload, crc))
-                                })
+                                                &encodable_codecs,
+                                                compression_level,
+                                                hunk,
+                                                scratch,
+                                            )?;
+                                        Ok((index, compression_type, payload, crc16))
+                                    },
+                                )
                                 .collect()
                         })
                     } else {
+                        let mut scratch = ChdCompressionScratch::default();
                         data_hunks
                             .into_iter()
-                            .map(|(index, hunk)| {
-                                let crc = Self::crc16_ibm3740(&hunk);
-                                let mut best: Option<(u8, Vec<u8>)> = None;
-                                for (codec_slot, codec) in &encodable_codecs {
-                                    let compressed = self.compress_rust_hunk(
+                            .map(|(index, hunk, crc16)| {
+                                let (compression_type, payload) =
+                                    self.compress_best_rust_hunk(
                                         create_kind,
-                                        *codec,
+                                        primary_codec,
+                                        &encodable_codecs,
                                         compression_level,
-                                        &hunk,
+                                        hunk,
+                                        &mut scratch,
                                     )?;
-                                    if best
-                                        .as_ref()
-                                        .map(|(_, candidate)| compressed.len() < candidate.len())
-                                        .unwrap_or(true)
-                                    {
-                                        best = Some((*codec_slot, compressed));
-                                    }
-                                }
-                                let (compression_type, payload) = best
-                                    .filter(|(_, compressed)| {
-                                        self.prefer_compressed_payload(
-                                            primary_codec,
-                                            compressed.len(),
-                                            hunk.len(),
-                                        )
-                                    })
-                                    .unwrap_or((Self::CHD_V5_MAP_TYPE_UNCOMPRESSED, hunk));
-                                Ok((index, compression_type, payload, crc))
+                                Ok((index, compression_type, payload, crc16))
                             })
                             .collect()
                     }
                 } else {
+                    let mut scratch = ChdCompressionScratch::default();
                     data_hunks
                         .into_iter()
-                        .map(|(index, hunk)| {
-                            let crc = Self::crc16_ibm3740(&hunk);
-                            let mut best: Option<(u8, Vec<u8>)> = None;
-                            for (codec_slot, codec) in &encodable_codecs {
-                                let compressed = self.compress_rust_hunk(
+                        .map(|(index, hunk, crc16)| {
+                            let (compression_type, payload) =
+                                self.compress_best_rust_hunk(
                                     create_kind,
-                                    *codec,
+                                    primary_codec,
+                                    &encodable_codecs,
                                     compression_level,
-                                    &hunk,
+                                    hunk,
+                                    &mut scratch,
                                 )?;
-                                if best
-                                    .as_ref()
-                                    .map(|(_, candidate)| compressed.len() < candidate.len())
-                                    .unwrap_or(true)
-                                {
-                                    best = Some((*codec_slot, compressed));
-                                }
-                            }
-                            let (compression_type, payload) = best
-                                .filter(|(_, compressed)| {
-                                    self.prefer_compressed_payload(
-                                        primary_codec,
-                                        compressed.len(),
-                                        hunk.len(),
-                                    )
-                                })
-                                .unwrap_or((Self::CHD_V5_MAP_TYPE_UNCOMPRESSED, hunk));
-                            Ok((index, compression_type, payload, crc))
+                            Ok((index, compression_type, payload, crc16))
                         })
                         .collect()
                 };
@@ -560,7 +516,7 @@
                                 crc16: 0,
                             })
                         }
-                        BatchHunkEntry::Data(_) => {
+                        BatchHunkEntry::Data { .. } => {
                             let Some((compression_type, payload, crc16)) =
                                 data_results[index].take()
                             else {

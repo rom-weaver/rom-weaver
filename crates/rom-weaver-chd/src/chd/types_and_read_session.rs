@@ -163,14 +163,14 @@
         crc16: u16,
     }
 
-    #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
     struct HunkHashKey {
         crc16: u16,
         sha1: [u8; 20],
     }
 
     struct ParentReuseIndex {
-        by_hash: BTreeMap<HunkHashKey, u64>,
+        by_hash: HashMap<HunkHashKey, u64>,
         sha1: [u8; 20],
     }
 
