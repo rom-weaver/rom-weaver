@@ -1,3 +1,7 @@
 [submodule "vendor/libarchive"]
 	path = vendor/libarchive
 	url = https://github.com/libarchive/libarchive.git
+[submodule "vendor/nod"]
+	path = vendor/nod
+	url = git@github.com:brandonocasey/nod.git
+	branch = fix/rvz-zstd-groups-compress-bound
