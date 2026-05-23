@@ -40,7 +40,7 @@ const THREAD_DEBUG_ENV = 'ROM_WEAVER_WASI_THREAD_DEBUG';
 const THREAD_POOL_SIZE_ENV = 'ROM_WEAVER_WASM_THREAD_POOL_SIZE';
 const THREAD_PREWARM_ENV = 'ROM_WEAVER_WASM_PREWARM_THREADS';
 const THREAD_DEBUG_LOG_FILE_ENV = 'ROM_WEAVER_WASI_THREAD_DEBUG_LOG_FILE';
-const DEFAULT_THREAD_POOL_SIZE = 4;
+const DEFAULT_THREAD_POOL_SIZE = 8;
 const MAX_THREAD_POOL_SIZE = 256;
 
 function parseArgs(argv) {
@@ -135,7 +135,7 @@ function threadDebugLog(message) {
 
 function parseRequestedThreadCount(commandArgs) {
   if (!Array.isArray(commandArgs) || commandArgs.length === 0) {
-    return 1;
+    return DEFAULT_THREAD_POOL_SIZE;
   }
   for (let index = commandArgs.length - 1; index >= 0; index -= 1) {
     if (commandArgs[index] !== '--threads') {
@@ -151,7 +151,7 @@ function parseRequestedThreadCount(commandArgs) {
     }
     break;
   }
-  return 1;
+  return DEFAULT_THREAD_POOL_SIZE;
 }
 
 function parseThreadPoolSize(defaultValue) {

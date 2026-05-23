@@ -35,6 +35,9 @@ impl ThreadBudget {
 
     pub fn requested_threads(self) -> usize {
         match self {
+            #[cfg(target_family = "wasm")]
+            Self::Auto => 8,
+            #[cfg(not(target_family = "wasm"))]
             Self::Auto => std::thread::available_parallelism()
                 .map(usize::from)
                 .unwrap_or(4),
