@@ -205,6 +205,65 @@ impl RvzContainerHandler {
             ))),
         }
     }
+
+    fn process_create_attempt(
+        &self,
+        input: &Path,
+        output_path: &Path,
+        options: &NodFormatOptions,
+        preloader_threads: usize,
+        processor_threads: usize,
+        context: &OperationContext,
+        execution: &ThreadExecution,
+    ) -> Result<u64> {
+        let input_disc =
+            NodDiscReader::new(input, &self.read_options(preloader_threads)).map_err(|error| {
+                RomWeaverError::Validation(format!(
+                    "failed to open input `{}` for rvz create: {error}",
+                    input.display()
+                ))
+            })?;
+        let writer = NodDiscWriter::new(input_disc, options).map_err(|error| {
+            RomWeaverError::Validation(format!("failed to initialize rvz writer: {error}"))
+        })?;
+
+        let mut output = File::create(output_path)?;
+        let mut process_options = NodProcessOptions::default();
+        process_options.processor_threads = processor_threads;
+        let mut last_emitted_percent = -1.0_f32;
+        let finalization = writer
+            .process(
+                |data, processed, total| {
+                    output.write_all(data.as_ref())?;
+                    if total > 0 {
+                        let processed_bytes = processed.saturating_add(data.as_ref().len() as u64);
+                        let percent = ((processed_bytes.min(total) as f32 / total as f32) * 100.0)
+                            .clamp(0.0, 100.0);
+                        if percent < 100.0 && percent - last_emitted_percent >= 1.0 {
+                            last_emitted_percent = percent;
+                            emit_container_running_progress(
+                                context,
+                                "compress",
+                                RVZ.name,
+                                "create",
+                                format!("creating rvz ({percent:.0}%)"),
+                                percent,
+                                Some(execution),
+                            );
+                        }
+                    }
+                    Ok(())
+                },
+                &process_options,
+            )
+            .map_err(|error| RomWeaverError::Validation(format!("rvz create failed: {error}")))?;
+        if !finalization.header.is_empty() {
+            output.seek(SeekFrom::Start(0))?;
+            output.write_all(finalization.header.as_ref())?;
+        }
+        output.flush()?;
+        Ok(fs::metadata(output_path)?.len())
+    }
 }
 
 impl ContainerHandler for RvzContainerHandler {
@@ -333,54 +392,17 @@ impl ContainerHandler for RvzContainerHandler {
 
         let preloader_threads =
             self.negotiated_threads(execution.used_parallelism, execution.effective_threads);
-        let input_disc =
-            NodDiscReader::new(input, &self.read_options(preloader_threads)).map_err(|error| {
-                RomWeaverError::Validation(format!(
-                    "failed to open input `{}` for rvz create: {error}",
-                    input.display()
-                ))
-            })?;
-        let writer = NodDiscWriter::new(input_disc, &options).map_err(|error| {
-            RomWeaverError::Validation(format!("failed to initialize rvz writer: {error}"))
-        })?;
-
-        let mut output = File::create(&request.output)?;
-        let mut process_options = NodProcessOptions::default();
-        process_options.processor_threads =
+        let processor_threads =
             self.negotiated_threads(execution.used_parallelism, execution.effective_threads);
-        let mut last_emitted_percent = -1.0_f32;
-        let finalization = writer
-            .process(
-                |data, processed, total| {
-                    output.write_all(data.as_ref())?;
-                    if total > 0 {
-                        let processed_bytes = processed.saturating_add(data.as_ref().len() as u64);
-                        let percent = ((processed_bytes.min(total) as f32 / total as f32) * 100.0)
-                            .clamp(0.0, 100.0);
-                        if percent < 100.0 && percent - last_emitted_percent >= 1.0 {
-                            last_emitted_percent = percent;
-                            emit_container_running_progress(
-                                context,
-                                "compress",
-                                RVZ.name,
-                                "create",
-                                format!("creating rvz ({percent:.0}%)"),
-                                percent,
-                                Some(&execution),
-                            );
-                        }
-                    }
-                    Ok(())
-                },
-                &process_options,
-            )
-            .map_err(|error| RomWeaverError::Validation(format!("rvz create failed: {error}")))?;
-        if !finalization.header.is_empty() {
-            output.seek(SeekFrom::Start(0))?;
-            output.write_all(finalization.header.as_ref())?;
-        }
-        output.flush()?;
-        let output_bytes = fs::metadata(&request.output)?.len();
+        let output_bytes = self.process_create_attempt(
+            input,
+            &request.output,
+            &options,
+            preloader_threads,
+            processor_threads,
+            context,
+            &execution,
+        )?;
 
         Ok(OperationReport::succeeded(
             OperationFamily::Container,
