@@ -294,6 +294,8 @@ impl CliApp {
             } else {
                 (split_bin, None)
             };
+        let suppress_scaffold_percent =
+            Self::container_handler_emits_incremental_byte_progress(handler.descriptor().name);
         let extract_threads = Some(context.plan_threads(handler.capabilities().extract_threads));
         self.emit_running(
             "extract",
@@ -310,7 +312,11 @@ impl CliApp {
             Some(handler.descriptor().name),
             "extract",
             format!("preparing extraction for `{}`", source.display()),
-            Some(1.0),
+            if suppress_scaffold_percent {
+                None
+            } else {
+                Some(1.0)
+            },
             extract_threads.clone(),
         );
         let mut report = self
@@ -347,7 +353,11 @@ impl CliApp {
                 Some(handler.descriptor().name),
                 "extract",
                 format!("extracting `{}`", source.display()),
-                Some(95.0),
+                if suppress_scaffold_percent {
+                    None
+                } else {
+                    Some(95.0)
+                },
                 progress_execution,
             );
             self.emit_running(
@@ -397,7 +407,11 @@ impl CliApp {
                 Some(handler.descriptor().name),
                 "extract",
                 format!("finalizing extracted output from `{}`", source.display()),
-                Some(99.0),
+                if suppress_scaffold_percent {
+                    None
+                } else {
+                    Some(99.0)
+                },
                 report.thread_execution.clone(),
             );
         }
@@ -720,12 +734,7 @@ impl CliApp {
         context: &OperationContext,
         thread_execution: Option<ThreadExecution>,
     ) -> Result<Option<OperationReport>> {
-        if no_extract
-            || strip_header
-            || !select.is_empty()
-            || start.is_some()
-            || length.is_some()
-        {
+        if no_extract || strip_header || !select.is_empty() || start.is_some() || length.is_some() {
             return Ok(None);
         }
 
@@ -820,7 +829,8 @@ impl CliApp {
                     source.display()
                 )));
             }
-            let Some(entry_name) = Self::normalize_tar_candidate_name(entry.path()?.as_ref()) else {
+            let Some(entry_name) = Self::normalize_tar_candidate_name(entry.path()?.as_ref())
+            else {
                 return Err(RomWeaverError::Validation(format!(
                     "streamed checksum candidate `{candidate_name}` in `{}` could not be normalized",
                     source.display()
@@ -898,7 +908,8 @@ impl CliApp {
             if !entry_type.is_file() {
                 continue;
             }
-            let Some(entry_name) = Self::normalize_tar_candidate_name(entry.path()?.as_ref()) else {
+            let Some(entry_name) = Self::normalize_tar_candidate_name(entry.path()?.as_ref())
+            else {
                 continue;
             };
             let ignored = Self::should_ignore_checksum_candidate(&entry_name);
@@ -933,7 +944,10 @@ impl CliApp {
             "tar.bz2" => Ok(Box::new(MultiBzDecoder::new(BufReader::new(File::open(
                 source,
             )?)))),
-            "tar.xz" => Ok(Box::new(XzReader::new(BufReader::new(File::open(source)?), false))),
+            "tar.xz" => Ok(Box::new(XzReader::new(
+                BufReader::new(File::open(source)?),
+                false,
+            ))),
             _ => Err(RomWeaverError::Validation(format!(
                 "streamed checksum auto-extract does not support `{tar_format}`"
             ))),
@@ -970,12 +984,7 @@ impl CliApp {
         start: Option<u64>,
         length: Option<u64>,
     ) -> Option<&'static str> {
-        if no_extract
-            || strip_header
-            || !select.is_empty()
-            || start.is_some()
-            || length.is_some()
-        {
+        if no_extract || strip_header || !select.is_empty() || start.is_some() || length.is_some() {
             return None;
         }
 
@@ -985,7 +994,8 @@ impl CliApp {
             return None;
         }
 
-        if let Some(inferred_output) = Self::inferred_stream_extract_output_path(source, stream_format)
+        if let Some(inferred_output) =
+            Self::inferred_stream_extract_output_path(source, stream_format)
         {
             if let Some(next_handler) = self.containers.probe(&inferred_output)
                 && !next_handler.descriptor().matches_name("xiso")
@@ -1082,7 +1092,10 @@ impl CliApp {
             "bz2" => Ok(Box::new(MultiBzDecoder::new(BufReader::new(File::open(
                 source,
             )?)))),
-            "xz" => Ok(Box::new(XzReader::new(BufReader::new(File::open(source)?), false))),
+            "xz" => Ok(Box::new(XzReader::new(
+                BufReader::new(File::open(source)?),
+                false,
+            ))),
             "zst" => Ok(Box::new(ZstdDecoder::new(BufReader::new(File::open(
                 source,
             )?))?)),

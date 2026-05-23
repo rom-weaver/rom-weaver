@@ -1318,6 +1318,56 @@ fn seven_z_emits_incremental_running_progress_beyond_placeholders() {
 }
 
 #[test]
+fn tar_gz_single_large_file_emits_running_progress_before_completion() {
+    let temp = setup_temp_dir();
+    let payload = (0..(4 * 1024 * 1024))
+        .map(|index| (index % 251) as u8)
+        .collect::<Vec<_>>();
+    let source_path = temp.child("single.bin");
+    fs::write(source_path.path(), &payload).expect("fixture");
+
+    let archive = temp.child("single.tar.gz");
+    let compress_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            source_path.path().to_str().expect("path"),
+            "--format",
+            "tar.gz",
+            "--output",
+            archive.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let compress_events = parse_json_lines(&compress_output);
+    assert_running_percent_event_in_range(&compress_events, "compress", "tar.gz", 0.0, 100.0);
+    assert_unique_integer_running_progress(&compress_events, "compress", "tar.gz", "creating `");
+
+    let out_dir = temp.child("extract");
+    let extract_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "extract",
+            archive.path().to_str().expect("path"),
+            "--out-dir",
+            out_dir.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let extract_events = parse_json_lines(&extract_output);
+    assert_running_percent_event_in_range(&extract_events, "extract", "tar.gz", 0.0, 100.0);
+    assert_unique_integer_running_progress(&extract_events, "extract", "tar.gz", "extracting `");
+}
+
+#[test]
 fn extract_recursively_handles_nested_containers() {
     let temp = setup_temp_dir();
     let payload = (0..24_576)

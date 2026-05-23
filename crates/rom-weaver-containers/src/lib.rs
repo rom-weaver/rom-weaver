@@ -9,7 +9,7 @@ use std::{
     ptr,
     sync::{
         Arc, Mutex,
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicU8, AtomicU64, AtomicUsize, Ordering},
     },
 };
 
@@ -709,6 +709,7 @@ fn archive_path_to_name(path: &Path) -> Result<String> {
 
 const LIBARCHIVE_CREATE_IO_BUFFER_BYTES: usize = 128 * 1024;
 const LIBARCHIVE_CREATE_ZSTD_IO_BUFFER_BYTES: usize = 1024 * 1024;
+const LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES: usize = 128 * 1024;
 const AE_IFREG_MODE: c_uint = 0o100000;
 const AE_IFDIR_MODE: c_uint = 0o040000;
 
@@ -917,12 +918,17 @@ fn libarchive_open_create_archive(
     Ok(archive_ptr)
 }
 
-fn libarchive_write_archive_entry(
+fn libarchive_write_archive_entry<F>(
     archive_ptr: *mut archive,
     format_name: &str,
     entry: &ArchiveInputEntry,
+    entry_size_bytes: u64,
     io_buffer_bytes: usize,
-) -> Result<u64> {
+    mut on_bytes_written: F,
+) -> Result<u64>
+where
+    F: FnMut(u64),
+{
     let entry_ptr = unsafe { archive_entry_new() };
     if entry_ptr.is_null() {
         return Err(RomWeaverError::Validation(format!(
@@ -941,12 +947,7 @@ fn libarchive_write_archive_entry(
         ))
     })?;
 
-    let entry_size = if entry.is_dir {
-        0u64
-    } else {
-        fs::metadata(&entry.source)?.len()
-    };
-    let entry_size = i64::try_from(entry_size).map_err(|_| {
+    let entry_size = i64::try_from(entry_size_bytes).map_err(|_| {
         RomWeaverError::Validation(format!(
             "{format_name} create failed: input length exceeded libarchive entry size range"
         ))
@@ -987,6 +988,7 @@ fn libarchive_write_archive_entry(
                 }
                 libarchive_write_payload(archive_ptr, format_name, &buffer[..read])?;
                 logical_bytes = logical_bytes.saturating_add(read as u64);
+                on_bytes_written(read as u64);
             }
         }
 
@@ -1070,32 +1072,65 @@ fn write_archive_with_libarchive(
         fs::create_dir_all(parent)?;
     }
 
+    let mut entry_sizes = Vec::with_capacity(entries.len());
+    let mut total_input_bytes = 0u64;
+    for entry in entries {
+        let size = if entry.is_dir {
+            0u64
+        } else {
+            fs::metadata(&entry.source)?.len()
+        };
+        total_input_bytes = total_input_bytes.saturating_add(size);
+        entry_sizes.push(size);
+    }
+
     let archive_ptr = libarchive_open_create_archive(&request.output, config)?;
     let result = (|| -> Result<u64> {
         let total_entries = entries.len();
         let mut logical_bytes = 0u64;
-        for (entry_index, entry) in entries.iter().enumerate() {
+        let mut copied_bytes = 0u64;
+        let emitted_progress_bucket = AtomicU8::new(0);
+        for (entry_index, (entry, entry_size_bytes)) in
+            entries.iter().zip(entry_sizes.iter().copied()).enumerate()
+        {
             logical_bytes = logical_bytes.saturating_add(libarchive_write_archive_entry(
                 archive_ptr,
                 config.format_name,
                 entry,
+                entry_size_bytes,
                 config.io_buffer_bytes,
+                |delta| {
+                    copied_bytes = copied_bytes.saturating_add(delta).min(total_input_bytes);
+                    maybe_emit_container_byte_progress(
+                        context,
+                        "compress",
+                        config.format_name,
+                        "create",
+                        copied_bytes,
+                        total_input_bytes,
+                        &format!("creating `{}`", config.format_name),
+                        Some(execution),
+                        &emitted_progress_bucket,
+                    );
+                },
             )?);
-            emit_container_step_progress(
-                context,
-                "compress",
-                config.format_name,
-                "create",
-                entry_index.saturating_add(1),
-                total_entries,
-                format!(
-                    "creating `{}` ({}/{})",
+            if total_input_bytes == 0 {
+                emit_container_step_progress(
+                    context,
+                    "compress",
                     config.format_name,
+                    "create",
                     entry_index.saturating_add(1),
-                    total_entries
-                ),
-                Some(execution),
-            );
+                    total_entries,
+                    format!(
+                        "creating `{}` ({}/{})",
+                        config.format_name,
+                        entry_index.saturating_add(1),
+                        total_entries
+                    ),
+                    Some(execution),
+                );
+            }
         }
         Ok(logical_bytes)
     })();
@@ -1380,12 +1415,66 @@ fn emit_container_step_progress(
     );
 }
 
+fn maybe_emit_container_byte_progress(
+    context: &OperationContext,
+    command: &str,
+    format: &str,
+    stage: &str,
+    completed_bytes: u64,
+    total_bytes: u64,
+    label: &str,
+    thread_execution: Option<&ThreadExecution>,
+    emitted_progress_bucket: &AtomicU8,
+) {
+    if total_bytes == 0 || completed_bytes == 0 {
+        return;
+    }
+    let completed = completed_bytes.min(total_bytes);
+    let percent_bucket = completed
+        .saturating_mul(100)
+        .checked_div(total_bytes)
+        .unwrap_or(100)
+        .min(100) as u8;
+    if percent_bucket == 0 {
+        return;
+    }
+
+    let (start_bucket, end_bucket) = loop {
+        let previous_bucket = emitted_progress_bucket.load(Ordering::Relaxed);
+        if percent_bucket <= previous_bucket {
+            return;
+        }
+        match emitted_progress_bucket.compare_exchange(
+            previous_bucket,
+            percent_bucket,
+            Ordering::Relaxed,
+            Ordering::Relaxed,
+        ) {
+            Ok(_) => break (previous_bucket.saturating_add(1), percent_bucket),
+            Err(_) => continue,
+        }
+    };
+
+    for bucket in start_bucket..=end_bucket {
+        emit_container_running_progress(
+            context,
+            command,
+            format,
+            stage,
+            label.to_string(),
+            bucket as f32,
+            thread_execution,
+        );
+    }
+}
+
 #[derive(Clone, Debug)]
 struct LibarchiveExtractTask {
     index: usize,
     archive_name: String,
     output_path: PathBuf,
     is_dir: bool,
+    logical_bytes: Option<u64>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -1566,11 +1655,13 @@ fn build_libarchive_extract_tasks(
             continue;
         }
         let relative = sanitize_archive_relative_path_from_str(&entry_path)?;
+        let is_dir = entry.is_dir() || entry_path.ends_with('/') || entry_path.ends_with('\\');
         tasks.push(LibarchiveExtractTask {
             index,
             archive_name,
             output_path: out_dir.join(relative),
-            is_dir: entry.is_dir() || entry_path.ends_with('/') || entry_path.ends_with('\\'),
+            is_dir,
+            logical_bytes: if is_dir { Some(0) } else { entry.size() },
         });
         index = index.saturating_add(1);
     }
@@ -1579,14 +1670,27 @@ fn build_libarchive_extract_tasks(
     Ok(tasks)
 }
 
-fn extract_libarchive_task_chunk<F>(
+fn libarchive_extract_total_file_bytes(tasks: &[LibarchiveExtractTask]) -> Option<u64> {
+    let mut total = 0u64;
+    for task in tasks {
+        if task.is_dir {
+            continue;
+        }
+        total = total.saturating_add(task.logical_bytes?);
+    }
+    Some(total)
+}
+
+fn extract_libarchive_task_chunk<F, G>(
     source: &Path,
     chunk: &[LibarchiveExtractTask],
     format_name: &str,
-    mut on_task_complete: F,
+    mut on_bytes_written: F,
+    mut on_task_complete: G,
 ) -> Result<u64>
 where
-    F: FnMut(),
+    F: FnMut(u64),
+    G: FnMut(),
 {
     if chunk.is_empty() {
         return Ok(0);
@@ -1620,12 +1724,28 @@ where
             }
             let mut input = entry.into_reader();
             let mut output = BufWriter::new(File::create(&task.output_path)?);
-            let copied = io::copy(&mut input, &mut output).map_err(|error| {
-                RomWeaverError::Validation(format!(
-                    "{format_name} extract failed while reading entry {} (`{}`): {error}",
-                    task.index, task.archive_name
-                ))
-            })?;
+            let mut copied = 0u64;
+            let mut buffer = vec![0u8; LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES];
+            loop {
+                let read = input.read(&mut buffer).map_err(|error| {
+                    RomWeaverError::Validation(format!(
+                        "{format_name} extract failed while reading entry {} (`{}`): {error}",
+                        task.index, task.archive_name
+                    ))
+                })?;
+                if read == 0 {
+                    break;
+                }
+                output.write_all(&buffer[..read]).map_err(|error| {
+                    RomWeaverError::Validation(format!(
+                        "{format_name} extract failed while writing entry {} (`{}`): {error}",
+                        task.index, task.archive_name
+                    ))
+                })?;
+                let read_u64 = read as u64;
+                copied = copied.saturating_add(read_u64);
+                on_bytes_written(read_u64);
+            }
             output.flush()?;
             written_bytes = written_bytes.saturating_add(copied);
         }
@@ -1661,6 +1781,7 @@ fn extract_regular_archive_with_libarchive(
         format_name,
     )?;
     let total_tasks = tasks.len();
+    let total_file_bytes = libarchive_extract_total_file_bytes(&tasks).filter(|total| *total > 0);
 
     let mut output_paths = BTreeSet::new();
     let mut duplicate_output_paths = false;
@@ -1673,20 +1794,45 @@ fn extract_regular_archive_with_libarchive(
 
     let (execution, written_bytes) = if tasks.is_empty() || duplicate_output_paths {
         let execution = context.plan_threads(ThreadCapability::single_threaded());
+        let emitted_progress_bucket = AtomicU8::new(0);
+        let mut copied_bytes = 0u64;
         let mut completed = 0usize;
-        let written = extract_libarchive_task_chunk(&request.source, &tasks, format_name, || {
-            completed = completed.saturating_add(1);
-            emit_container_step_progress(
-                context,
-                "extract",
-                format_name,
-                "extract",
-                completed,
-                total_tasks,
-                format!("extracting `{format_name}` ({completed}/{total_tasks})"),
-                Some(&execution),
-            );
-        })?;
+        let written = extract_libarchive_task_chunk(
+            &request.source,
+            &tasks,
+            format_name,
+            |delta| {
+                if let Some(total_bytes) = total_file_bytes {
+                    copied_bytes = copied_bytes.saturating_add(delta).min(total_bytes);
+                    maybe_emit_container_byte_progress(
+                        context,
+                        "extract",
+                        format_name,
+                        "extract",
+                        copied_bytes,
+                        total_bytes,
+                        &format!("extracting `{format_name}`"),
+                        Some(&execution),
+                        &emitted_progress_bucket,
+                    );
+                }
+            },
+            || {
+                if total_file_bytes.is_none() {
+                    completed = completed.saturating_add(1);
+                    emit_container_step_progress(
+                        context,
+                        "extract",
+                        format_name,
+                        "extract",
+                        completed,
+                        total_tasks,
+                        format!("extracting `{format_name}` ({completed}/{total_tasks})"),
+                        Some(&execution),
+                    );
+                }
+            },
+        )?;
         (execution, written)
     } else {
         let file_task_count = tasks.iter().filter(|task| !task.is_dir).count().max(1);
@@ -1698,6 +1844,8 @@ fn extract_regular_archive_with_libarchive(
         let (execution, pool) = context.build_pool(capability)?;
         let source = request.source.clone();
         let completed_tasks = Arc::new(AtomicUsize::new(0));
+        let copied_bytes = Arc::new(AtomicU64::new(0));
+        let emitted_progress_bucket = Arc::new(AtomicU8::new(0));
         let progress_context = context.clone();
         let progress_execution = execution.clone();
 
@@ -1709,23 +1857,53 @@ fn extract_regular_archive_with_libarchive(
                     .par_chunks(chunk_size)
                     .map(|chunk| {
                         let completed_tasks = Arc::clone(&completed_tasks);
+                        let copied_bytes = Arc::clone(&copied_bytes);
+                        let emitted_progress_bucket = Arc::clone(&emitted_progress_bucket);
                         let progress_context = progress_context.clone();
                         let progress_execution = progress_execution.clone();
-                        extract_libarchive_task_chunk(&source, chunk, format_name, || {
-                            let completed = completed_tasks
-                                .fetch_add(1, Ordering::Relaxed)
-                                .saturating_add(1);
-                            emit_container_step_progress(
-                                &progress_context,
-                                "extract",
-                                format_name,
-                                "extract",
-                                completed,
-                                total_tasks,
-                                format!("extracting `{format_name}` ({completed}/{total_tasks})"),
-                                Some(&progress_execution),
-                            );
-                        })
+                        extract_libarchive_task_chunk(
+                            &source,
+                            chunk,
+                            format_name,
+                            |delta| {
+                                if let Some(total_bytes) = total_file_bytes {
+                                    let completed_bytes = copied_bytes
+                                        .fetch_add(delta, Ordering::Relaxed)
+                                        .saturating_add(delta)
+                                        .min(total_bytes);
+                                    maybe_emit_container_byte_progress(
+                                        &progress_context,
+                                        "extract",
+                                        format_name,
+                                        "extract",
+                                        completed_bytes,
+                                        total_bytes,
+                                        &format!("extracting `{format_name}`"),
+                                        Some(&progress_execution),
+                                        emitted_progress_bucket.as_ref(),
+                                    );
+                                }
+                            },
+                            || {
+                                if total_file_bytes.is_none() {
+                                    let completed = completed_tasks
+                                        .fetch_add(1, Ordering::Relaxed)
+                                        .saturating_add(1);
+                                    emit_container_step_progress(
+                                        &progress_context,
+                                        "extract",
+                                        format_name,
+                                        "extract",
+                                        completed,
+                                        total_tasks,
+                                        format!(
+                                            "extracting `{format_name}` ({completed}/{total_tasks})"
+                                        ),
+                                        Some(&progress_execution),
+                                    );
+                                }
+                            },
+                        )
                     })
                     .collect::<Result<Vec<_>>>()
             })?;
@@ -1733,20 +1911,45 @@ fn extract_regular_archive_with_libarchive(
                 .into_iter()
                 .fold(0u64, |acc, value| acc.saturating_add(value))
         } else {
+            let emitted_progress_bucket = AtomicU8::new(0);
+            let mut copied_bytes = 0u64;
             let mut completed = 0usize;
-            extract_libarchive_task_chunk(&source, &tasks, format_name, || {
-                completed = completed.saturating_add(1);
-                emit_container_step_progress(
-                    &progress_context,
-                    "extract",
-                    format_name,
-                    "extract",
-                    completed,
-                    total_tasks,
-                    format!("extracting `{format_name}` ({completed}/{total_tasks})"),
-                    Some(&progress_execution),
-                );
-            })?
+            extract_libarchive_task_chunk(
+                &source,
+                &tasks,
+                format_name,
+                |delta| {
+                    if let Some(total_bytes) = total_file_bytes {
+                        copied_bytes = copied_bytes.saturating_add(delta).min(total_bytes);
+                        maybe_emit_container_byte_progress(
+                            &progress_context,
+                            "extract",
+                            format_name,
+                            "extract",
+                            copied_bytes,
+                            total_bytes,
+                            &format!("extracting `{format_name}`"),
+                            Some(&progress_execution),
+                            &emitted_progress_bucket,
+                        );
+                    }
+                },
+                || {
+                    if total_file_bytes.is_none() {
+                        completed = completed.saturating_add(1);
+                        emit_container_step_progress(
+                            &progress_context,
+                            "extract",
+                            format_name,
+                            "extract",
+                            completed,
+                            total_tasks,
+                            format!("extracting `{format_name}` ({completed}/{total_tasks})"),
+                            Some(&progress_execution),
+                        );
+                    }
+                },
+            )?
         };
         (execution, written_bytes)
     };
