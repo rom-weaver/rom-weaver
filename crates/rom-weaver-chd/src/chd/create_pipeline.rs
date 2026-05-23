@@ -5,6 +5,7 @@
             output: &Path,
             logical_bytes: u64,
             create_kind: &ChdCreateKind,
+            on_progress: Option<&Arc<dyn Fn(u64) + Send + Sync>>,
         ) -> Result<ChdHeader> {
             if matches!(create_kind, ChdCreateKind::Av(_)) {
                 return Err(RomWeaverError::Unsupported(
@@ -131,6 +132,9 @@
                     ))
                 })?;
                 remaining = remaining.saturating_sub(read_len as u64);
+                if let Some(on_progress) = on_progress {
+                    on_progress(read_len as u64);
+                }
             }
             let metadata_entries = self.rust_metadata_entries(create_kind)?;
             if let Some(meta_offset) =
@@ -273,6 +277,7 @@
             compression_level: i32,
             thread_count: usize,
             parent_source: Option<&Path>,
+            on_progress: Option<&Arc<dyn Fn(u64) + Send + Sync>>,
         ) -> Result<ChdHeader> {
             let mut active_codecs = Vec::new();
             for (index, codec) in codecs.into_iter().enumerate() {
@@ -407,6 +412,9 @@
                         ))
                     })?;
                     remaining = remaining.saturating_sub(read_len as u64);
+                    if let Some(on_progress) = on_progress {
+                        on_progress(read_len as u64);
+                    }
                     let key = Self::hunk_hash_key(&hunk);
                     if let Some(&other_hunk) = self_hunks_by_hash.get(&key) {
                         batch_hunks.push(BatchHunkEntry::SelfCopy(other_hunk));

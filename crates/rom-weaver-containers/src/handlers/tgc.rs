@@ -151,7 +151,18 @@ impl ContainerHandler for TgcContainerHandler {
         fs::create_dir_all(&request.out_dir)?;
         let output_path = request.out_dir.join(&output_name);
         let mut output = BufWriter::new(File::create(&output_path)?);
-        let bytes_written = nod_buf_copy(&mut disc, &mut output)?;
+        let progress_label = format!("extracting `{}`", TGC.name);
+        let bytes_written = copy_reader_with_progress(
+            &mut disc,
+            &mut output,
+            disc_size,
+            context,
+            "extract",
+            TGC.name,
+            "extract",
+            &progress_label,
+            Some(&execution),
+        )?;
         output.flush()?;
 
         Ok(OperationReport::succeeded(
@@ -213,9 +224,29 @@ impl ContainerHandler for TgcContainerHandler {
         let mut process_options = NodProcessOptions::default();
         process_options.processor_threads =
             self.negotiated_threads(execution.used_parallelism, execution.effective_threads);
+        let progress_label = format!("creating `{}`", TGC.name);
+        let emitted_progress_bucket = AtomicU8::new(0);
         let finalization = writer
             .process(
-                |data, _processed, _total| output.write_all(data.as_ref()),
+                |data, processed, total| {
+                    output.write_all(data.as_ref())?;
+                    if total > 0 {
+                        let processed_bytes =
+                            processed.saturating_add(data.as_ref().len() as u64).min(total);
+                        maybe_emit_container_byte_progress(
+                            context,
+                            "compress",
+                            TGC.name,
+                            "create",
+                            processed_bytes,
+                            total,
+                            &progress_label,
+                            Some(&execution),
+                            &emitted_progress_bucket,
+                        );
+                    }
+                    Ok(())
+                },
                 &process_options,
             )
             .map_err(|error| RomWeaverError::Validation(format!("tgc create failed: {error}")))?;
@@ -251,4 +282,3 @@ impl ContainerHandler for TgcContainerHandler {
         }
     }
 }
-

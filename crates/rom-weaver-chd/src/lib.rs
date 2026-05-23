@@ -7,7 +7,10 @@ use std::{
     mem::MaybeUninit,
     path::{Path, PathBuf},
     ptr,
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicU8, AtomicU64, Ordering},
+    },
 };
 
 use flacenc::{component::BitRepr as _, error::Verify as _};
@@ -17,7 +20,8 @@ use rom_weaver_codecs::{CanonicalCodec, RequestedCodec, parse_requested_codec};
 use rom_weaver_core::{
     ContainerCapabilities, ContainerCreateRequest, ContainerExtractRequest, ContainerHandler,
     ContainerInspectRequest, FormatDescriptor, OperationContext, OperationFamily, OperationReport,
-    ProbeConfidence, Result, RomWeaverError, ThreadCapability,
+    OperationStatus, ProbeConfidence, ProgressEvent, Result, RomWeaverError, ThreadCapability,
+    ThreadExecution,
 };
 use rom_weaver_libarchive_sys::liblzma_sys as lzma_sys;
 use sha1::{Digest, Sha1};
@@ -92,6 +96,85 @@ fn file_starts_with(source: &Path, signature: &[u8]) -> bool {
         return file.read_exact(&mut bytes).is_ok() && bytes == signature;
     }
     false
+}
+
+fn emit_chd_running_progress(
+    context: &OperationContext,
+    command: &str,
+    stage: &str,
+    label: impl Into<String>,
+    percent: f32,
+    thread_execution: Option<&ThreadExecution>,
+) {
+    let clamped_percent = percent.clamp(0.0, 100.0);
+    context.emit(ProgressEvent {
+        command: command.to_string(),
+        family: OperationFamily::Container,
+        format: Some(CHD.name.to_string()),
+        stage: stage.to_string(),
+        label: label.into(),
+        details: None,
+        percent: Some(clamped_percent),
+        requested_threads: thread_execution.map(|value| value.requested_threads),
+        effective_threads: thread_execution.map(|value| value.effective_threads),
+        thread_mode: thread_execution.map(|value| value.thread_mode),
+        used_parallelism: thread_execution.map(|value| value.used_parallelism),
+        thread_fallback: thread_execution.map(|value| value.thread_fallback),
+        thread_fallback_reason: thread_execution
+            .and_then(|value| value.thread_fallback_reason.clone()),
+        status: OperationStatus::Running,
+    });
+}
+
+fn maybe_emit_chd_byte_progress(
+    context: &OperationContext,
+    command: &str,
+    stage: &str,
+    completed_bytes: u64,
+    total_bytes: u64,
+    label: &str,
+    thread_execution: Option<&ThreadExecution>,
+    emitted_progress_bucket: &AtomicU8,
+) {
+    if total_bytes == 0 || completed_bytes == 0 {
+        return;
+    }
+    let completed = completed_bytes.min(total_bytes);
+    let percent_bucket = completed
+        .saturating_mul(100)
+        .checked_div(total_bytes)
+        .unwrap_or(100)
+        .min(100) as u8;
+    if percent_bucket == 0 {
+        return;
+    }
+
+    let (start_bucket, end_bucket) = loop {
+        let previous_bucket = emitted_progress_bucket.load(Ordering::Relaxed);
+        if percent_bucket <= previous_bucket {
+            return;
+        }
+        match emitted_progress_bucket.compare_exchange(
+            previous_bucket,
+            percent_bucket,
+            Ordering::Relaxed,
+            Ordering::Relaxed,
+        ) {
+            Ok(_) => break (previous_bucket.saturating_add(1), percent_bucket),
+            Err(_) => continue,
+        }
+    };
+
+    for bucket in start_bucket..=end_bucket {
+        emit_chd_running_progress(
+            context,
+            command,
+            stage,
+            label.to_string(),
+            bucket as f32,
+            thread_execution,
+        );
+    }
 }
 
 #[derive(Clone, Debug)]

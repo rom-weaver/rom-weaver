@@ -702,6 +702,7 @@
             &self,
             chd: ChdReadSession,
             request: &ContainerExtractRequest,
+            context: &OperationContext,
             execution: rom_weaver_core::ThreadExecution,
         ) -> Result<OperationReport> {
             let header = chd.header();
@@ -723,7 +724,19 @@
                 .unwrap_or("output");
             let cue_path = request.out_dir.join(format!("{stem}.cue"));
             let temp_path = self.create_temp_file_path("cd-extract", ".bin");
-            let extract_result = chd.extract_to_file(&temp_path, execution.effective_threads);
+            let extract_progress = self.progress_bytes_callback(
+                context,
+                &execution,
+                "extract",
+                "extract",
+                header.logical_bytes,
+                format!("extracting `{}`", CHD.name),
+            );
+            let extract_result = chd.extract_to_file_with_progress(
+                &temp_path,
+                execution.effective_threads,
+                Some(&extract_progress),
+            );
             if extract_result.is_err() {
                 let _ = fs::remove_file(&temp_path);
             }
@@ -1038,6 +1051,7 @@
             &self,
             chd: ChdReadSession,
             request: &ContainerExtractRequest,
+            context: &OperationContext,
             execution: rom_weaver_core::ThreadExecution,
         ) -> Result<OperationReport> {
             let header = chd.header();
@@ -1059,7 +1073,19 @@
                 .unwrap_or("output");
             let gdi_path = request.out_dir.join(format!("{stem}.gdi"));
             let temp_path = self.create_temp_file_path("gd-extract", ".bin");
-            let extract_result = chd.extract_to_file(&temp_path, execution.effective_threads);
+            let extract_progress = self.progress_bytes_callback(
+                context,
+                &execution,
+                "extract",
+                "extract",
+                header.logical_bytes,
+                format!("extracting `{}`", CHD.name),
+            );
+            let extract_result = chd.extract_to_file_with_progress(
+                &temp_path,
+                execution.effective_threads,
+                Some(&extract_progress),
+            );
             if extract_result.is_err() {
                 let _ = fs::remove_file(&temp_path);
             }

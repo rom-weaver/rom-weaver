@@ -40,6 +40,41 @@
         const AVHUFF_DELTA_TREE_BITS: u8 = 5;
         const AVHUFF_DELTA_TREE_8BIT_COUNT: usize = 240;
 
+        fn progress_bytes_callback(
+            &self,
+            context: &OperationContext,
+            execution: &ThreadExecution,
+            command: &'static str,
+            stage: &'static str,
+            total_bytes: u64,
+            label: String,
+        ) -> Arc<dyn Fn(u64) + Send + Sync> {
+            let context = context.clone();
+            let execution = execution.clone();
+            let label = Arc::new(label);
+            let completed_bytes = Arc::new(AtomicU64::new(0));
+            let emitted_progress_bucket = Arc::new(AtomicU8::new(0));
+            Arc::new(move |delta_bytes: u64| {
+                if total_bytes == 0 || delta_bytes == 0 {
+                    return;
+                }
+                let completed = completed_bytes
+                    .fetch_add(delta_bytes, Ordering::Relaxed)
+                    .saturating_add(delta_bytes)
+                    .min(total_bytes);
+                maybe_emit_chd_byte_progress(
+                    &context,
+                    command,
+                    stage,
+                    completed,
+                    total_bytes,
+                    label.as_str(),
+                    Some(&execution),
+                    emitted_progress_bucket.as_ref(),
+                );
+            })
+        }
+
         fn supports_rust_create(
             &self,
             create_kind: &ChdCreateKind,
@@ -243,7 +278,13 @@
             output: &Path,
         ) -> Result<ChdHeader> {
             let logical_bytes = fs::metadata(source)?.len();
-            self.create_uncompressed_rust_raw(source, output, logical_bytes, &ChdCreateKind::Raw)
+            self.create_uncompressed_rust_raw(
+                source,
+                output,
+                logical_bytes,
+                &ChdCreateKind::Raw,
+                None,
+            )
         }
 
         #[cfg(any(test, feature = "test-utils"))]
@@ -262,6 +303,7 @@
                     output,
                     logical_bytes,
                     &ChdCreateKind::Raw,
+                    None,
                 )
             } else {
                 self.create_compressed_rust_raw(
@@ -272,6 +314,7 @@
                     [codec, ChdCodec::NONE, ChdCodec::NONE, ChdCodec::NONE],
                     level,
                     thread_count,
+                    None,
                     None,
                 )
             }
@@ -292,7 +335,9 @@
                     "rust backend raw extract helper only supports non-disc media".to_string(),
                 ));
             }
-            session.extract_to_file(output, thread_count).map(|_| ())
+            session
+                .extract_to_file_with_progress(output, thread_count, None)
+                .map(|_| ())
         }
 
         #[cfg(any(test, feature = "test-utils"))]

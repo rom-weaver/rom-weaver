@@ -705,6 +705,9 @@ impl ContainerHandler for Z3dsContainerHandler {
 
         let (execution, pool) =
             context.build_pool(ThreadCapability::parallel(Some(tasks.len().max(1))))?;
+        let extract_progress_label = format!("extracting `{}`", Z3DS.name);
+        let extract_progress_bytes = Arc::new(AtomicU64::new(0));
+        let extract_progress_bucket = Arc::new(AtomicU8::new(0));
 
         #[cfg(target_family = "wasm")]
         {
@@ -771,7 +774,27 @@ impl ContainerHandler for Z3dsContainerHandler {
                     let chunk_index = u64::try_from(chunk.index).map_err(|_| {
                         RomWeaverError::Validation("z3ds extract chunk index overflowed".into())
                     })?;
+                    let chunk_len = u64::try_from(chunk.data.len()).map_err(|_| {
+                        RomWeaverError::Validation("z3ds extract chunk length overflowed".into())
+                    })?;
                     ordered_writer.write_chunk(chunk_index, chunk.data)?;
+                    if header.uncompressed_size > 0 {
+                        let completed = extract_progress_bytes
+                            .fetch_add(chunk_len, Ordering::Relaxed)
+                            .saturating_add(chunk_len)
+                            .min(header.uncompressed_size);
+                        maybe_emit_container_byte_progress(
+                            context,
+                            "extract",
+                            Z3DS.name,
+                            "extract",
+                            completed,
+                            header.uncompressed_size,
+                            &extract_progress_label,
+                            Some(&execution),
+                            extract_progress_bucket.as_ref(),
+                        );
+                    }
                 }
                 ordered_writer.finish().map(|_| ())
             })();
@@ -804,7 +827,25 @@ impl ContainerHandler for Z3dsContainerHandler {
                     let chunk_index = u64::try_from(chunk.index).map_err(|_| {
                         RomWeaverError::Validation("z3ds extract chunk index overflowed".into())
                     })?;
-                    ordered_writer.write_chunk(chunk_index, chunk.data)
+                    ordered_writer.write_chunk(chunk_index, chunk.data)?;
+                    if header.uncompressed_size > 0 {
+                        let completed = extract_progress_bytes
+                            .fetch_add(chunk_len, Ordering::Relaxed)
+                            .saturating_add(chunk_len)
+                            .min(header.uncompressed_size);
+                        maybe_emit_container_byte_progress(
+                            context,
+                            "extract",
+                            Z3DS.name,
+                            "extract",
+                            completed,
+                            header.uncompressed_size,
+                            &extract_progress_label,
+                            Some(&execution),
+                            extract_progress_bucket.as_ref(),
+                        );
+                    }
+                    Ok(())
                 };
 
             let decode_result: Result<()> = if execution.used_parallelism {
@@ -880,6 +921,9 @@ impl ContainerHandler for Z3dsContainerHandler {
         let create_tasks = self.build_create_tasks(input_size, context)?;
         let (execution, pool) =
             context.build_pool(ThreadCapability::parallel(Some(create_tasks.len().max(1))))?;
+        let create_progress_label = format!("creating `{}`", Z3DS.name);
+        let create_progress_bytes = Arc::new(AtomicU64::new(0));
+        let create_progress_bucket = Arc::new(AtomicU8::new(0));
 
         let mut underlying_magic = [0_u8; 4];
         {
@@ -900,16 +944,60 @@ impl ContainerHandler for Z3dsContainerHandler {
 
         let source = input_path.clone();
         let compress_result = if execution.used_parallelism {
+            let progress_context = context.clone();
+            let progress_execution = execution.clone();
+            let create_progress_bytes = Arc::clone(&create_progress_bytes);
+            let create_progress_bucket = Arc::clone(&create_progress_bucket);
             pool.install(|| {
                 create_tasks
                     .par_iter()
-                    .map(|task| self.compress_create_task(&source, level, task))
+                    .map(|task| {
+                        let frame = self.compress_create_task(&source, level, task)?;
+                        if input_size > 0 {
+                            let completed = create_progress_bytes
+                                .fetch_add(task.len, Ordering::Relaxed)
+                                .saturating_add(task.len)
+                                .min(input_size);
+                            maybe_emit_container_byte_progress(
+                                &progress_context,
+                                "compress",
+                                Z3DS.name,
+                                "create",
+                                completed,
+                                input_size,
+                                &create_progress_label,
+                                Some(&progress_execution),
+                                create_progress_bucket.as_ref(),
+                            );
+                        }
+                        Ok(frame)
+                    })
                     .collect::<Result<Vec<_>>>()
             })
         } else {
             create_tasks
                 .iter()
-                .map(|task| self.compress_create_task(&source, level, task))
+                .map(|task| {
+                    let frame = self.compress_create_task(&source, level, task)?;
+                    if input_size > 0 {
+                        let completed = create_progress_bytes
+                            .fetch_add(task.len, Ordering::Relaxed)
+                            .saturating_add(task.len)
+                            .min(input_size);
+                        maybe_emit_container_byte_progress(
+                            context,
+                            "compress",
+                            Z3DS.name,
+                            "create",
+                            completed,
+                            input_size,
+                            &create_progress_label,
+                            Some(&execution),
+                            create_progress_bucket.as_ref(),
+                        );
+                    }
+                    Ok(frame)
+                })
                 .collect::<Result<Vec<_>>>()
         };
         let mut frames = match compress_result {

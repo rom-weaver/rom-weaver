@@ -98,10 +98,10 @@
                 )));
             }
             if media_kind == ChdMediaKind::CdRom {
-                return self.extract_cd(chd, request, execution);
+                return self.extract_cd(chd, request, context, execution);
             }
             if media_kind == ChdMediaKind::GdRom {
-                return self.extract_gd(chd, request, execution);
+                return self.extract_gd(chd, request, context, execution);
             }
             fs::create_dir_all(&request.out_dir)?;
             let output_name = self.extract_name(&request.source, media_kind)?;
@@ -111,7 +111,19 @@
             }
             selections.ensure_all_matched()?;
             let output_path = request.out_dir.join(&output_name);
-            let header = chd.extract_to_file(&output_path, execution.effective_threads)?;
+            let extract_progress = self.progress_bytes_callback(
+                context,
+                &execution,
+                "extract",
+                "extract",
+                chd.header().logical_bytes,
+                format!("extracting `{}`", CHD.name),
+            );
+            let header = chd.extract_to_file_with_progress(
+                &output_path,
+                execution.effective_threads,
+                Some(&extract_progress),
+            )?;
             Ok(OperationReport::succeeded(
                 OperationFamily::Container,
                 Some(CHD.name.to_string()),
@@ -188,6 +200,14 @@
                 }
                 _ => (input, input_bytes),
             };
+            let create_progress = self.progress_bytes_callback(
+                context,
+                &execution,
+                "compress",
+                "create",
+                logical_bytes,
+                format!("creating `{}`", CHD.name),
+            );
 
             let rust_create = || -> Result<(ChdHeader, ChdMediaKind)> {
                 let header = if compression_plan.primary_codec == ChdCodec::NONE {
@@ -202,6 +222,7 @@
                         &request.output,
                         logical_bytes,
                         &create_kind,
+                        Some(&create_progress),
                     )?
                 } else {
                     self.create_compressed_rust_raw(
@@ -213,6 +234,7 @@
                         compression_level,
                         execution.effective_threads,
                         request.parent.as_deref(),
+                        Some(&create_progress),
                     )?
                 };
                 Ok((header, self.media_kind_from_create_kind(&create_kind)))

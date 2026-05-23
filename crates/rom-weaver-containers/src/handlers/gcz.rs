@@ -132,7 +132,18 @@ impl ContainerHandler for GczContainerHandler {
         selections.ensure_all_matched()?;
         let output_path = request.out_dir.join(&output_name);
         let mut output = BufWriter::new(File::create(&output_path)?);
-        let bytes_written = nod_buf_copy(&mut disc, &mut output)?;
+        let progress_label = format!("extracting `{}`", GCZ.name);
+        let bytes_written = copy_reader_with_progress(
+            &mut disc,
+            &mut output,
+            disc_size,
+            context,
+            "extract",
+            GCZ.name,
+            "extract",
+            &progress_label,
+            Some(&execution),
+        )?;
         output.flush()?;
 
         Ok(OperationReport::succeeded(
@@ -172,4 +183,3 @@ impl ContainerHandler for GczContainerHandler {
         }
     }
 }
-

@@ -402,7 +402,12 @@
                 .map_err(|error| format!("failed to parse `{}`: {error}", source.display()))
         }
 
-        fn extract_to_file(&self, output_path: &Path, thread_count: usize) -> Result<ChdHeader> {
+        fn extract_to_file_with_progress(
+            &self,
+            output_path: &Path,
+            thread_count: usize,
+            on_progress: Option<&Arc<dyn Fn(u64) + Send + Sync>>,
+        ) -> Result<ChdHeader> {
             match &self.backend {
                 ChdReadBackend::Rust { .. } => Self::extract_to_file_with_rust(
                     &self.source,
@@ -410,6 +415,7 @@
                     self.header.logical_bytes,
                     output_path,
                     thread_count,
+                    on_progress,
                 )
                 .map_err(RomWeaverError::Validation)
                 .map(|_| self.header),
@@ -422,6 +428,7 @@
             logical_bytes: u64,
             output_path: &Path,
             thread_count: usize,
+            on_progress: Option<&Arc<dyn Fn(u64) + Send + Sync>>,
         ) -> std::result::Result<(), String> {
             #[cfg(any(unix, windows))]
             if thread_count > 1 {
@@ -431,6 +438,7 @@
                     logical_bytes,
                     output_path,
                     thread_count,
+                    on_progress,
                 );
             }
 
@@ -470,6 +478,9 @@
                         format!("failed to write `{}`: {error}", output_path.display())
                     })?;
                 remaining -= write_len as u64;
+                if let Some(on_progress) = on_progress {
+                    on_progress(write_len as u64);
+                }
             }
 
             Ok(())
@@ -482,6 +493,7 @@
             logical_bytes: u64,
             output_path: &Path,
             thread_count: usize,
+            on_progress: Option<&Arc<dyn Fn(u64) + Send + Sync>>,
         ) -> std::result::Result<(), String> {
             let chd = Self::open_rust_chd(source, parent_source)
                 .map_err(|error| format!("failed to decode `{}`: {error}", source.display()))?;
@@ -513,6 +525,7 @@
                     logical_bytes,
                     output_path,
                     1,
+                    on_progress,
                 );
             }
 
@@ -529,6 +542,7 @@
             let source = source.to_path_buf();
             let parent_source = parent_source.map(Path::to_path_buf);
             let output = Arc::new(output);
+            let on_progress = on_progress.cloned();
             let hunk_indices: Vec<u32> = (0..hunk_count).collect();
             let chunk_size = hunk_indices.len().div_ceil(effective_threads).max(1);
 
@@ -581,6 +595,9 @@
                                         offset
                                     )
                                 })?;
+                            if let Some(on_progress) = on_progress.as_ref() {
+                                on_progress(write_len as u64);
+                            }
                         }
                         Ok(())
                     })

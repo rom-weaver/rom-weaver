@@ -25,7 +25,6 @@ use lzma_rust2::{XzReader, XzReaderMt};
 use nod::{
     common::{Compression as NodCompression, Format as NodFormat},
     read::{DiscOptions as NodDiscOptions, DiscReader as NodDiscReader},
-    util::buf_copy as nod_buf_copy,
     write::{
         DiscWriter as NodDiscWriter, FormatOptions as NodFormatOptions,
         ProcessOptions as NodProcessOptions,
@@ -1466,6 +1465,51 @@ fn maybe_emit_container_byte_progress(
             thread_execution,
         );
     }
+}
+
+fn copy_reader_with_progress<R: Read, W: Write>(
+    reader: &mut R,
+    writer: &mut W,
+    total_bytes: u64,
+    context: &OperationContext,
+    command: &str,
+    format: &str,
+    stage: &str,
+    label: &str,
+    thread_execution: Option<&ThreadExecution>,
+) -> Result<u64> {
+    let buffer_size = if total_bytes == 0 {
+        64 * 1024
+    } else {
+        ((total_bytes / 100).max(16 * 1024).min(1024 * 1024)) as usize
+    };
+    let mut buffer = vec![0_u8; buffer_size];
+    let mut bytes_written = 0_u64;
+    let emitted_progress_bucket = AtomicU8::new(0);
+
+    loop {
+        let bytes_read = reader.read(&mut buffer)?;
+        if bytes_read == 0 {
+            break;
+        }
+        writer.write_all(&buffer[..bytes_read])?;
+        bytes_written = bytes_written.saturating_add(bytes_read as u64);
+        if total_bytes > 0 {
+            maybe_emit_container_byte_progress(
+                context,
+                command,
+                format,
+                stage,
+                bytes_written.min(total_bytes),
+                total_bytes,
+                label,
+                thread_execution,
+                &emitted_progress_bucket,
+            );
+        }
+    }
+
+    Ok(bytes_written)
 }
 
 #[derive(Clone, Debug)]
