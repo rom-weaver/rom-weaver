@@ -53,7 +53,7 @@ impl CliApp {
     }
 
     fn context(&self, thread_budget: ThreadBudget) -> OperationContext {
-        let temp_root = Self::resolve_temp_dir().join("rom-weaver");
+        let temp_root = PathBuf::from("rom-weaver");
         let reporter: Arc<dyn ProgressSink> = if self.emit_progress_events {
             self.reporter.clone()
         } else {
@@ -62,24 +62,6 @@ impl CliApp {
             ))
         };
         OperationContext::new(thread_budget, temp_root, reporter, CancellationToken::new())
-    }
-
-    fn resolve_temp_dir() -> PathBuf {
-        #[cfg(target_family = "wasm")]
-        {
-            if let Some(path) = std::env::var_os("ROM_WEAVER_TMPDIR")
-                && !path.is_empty()
-            {
-                return PathBuf::from(path);
-            }
-
-            return PathBuf::from("/tmp");
-        }
-
-        #[cfg(not(target_family = "wasm"))]
-        {
-            std::env::temp_dir()
-        }
     }
 
     fn runtime_process_id() -> u32 {

@@ -22,7 +22,6 @@ export interface RomWeaverZenFsBrowserRunner extends RomWeaverZenFsRunnerBase {
   scratchHandle: unknown;
   opfsGuestPath: string;
   scratchGuestPath: string;
-  scratchNamespace: string;
   runtimeMounts: string[];
 }
 

@@ -10,7 +10,6 @@ import {
 
 const DEFAULT_OPFS_GUEST_PATH = '/opfs';
 const DEFAULT_SCRATCH_GUEST_PATH = '/scratch';
-const DEFAULT_SCRATCH_NAMESPACE = '.rom-weaver-scratch';
 const DEFAULT_MAX_BUFFERED_PATCH_BYTES = String(64 * 1024 * 1024);
 
 export async function createRomWeaverZenFsBrowser(options = {}) {
@@ -23,9 +22,6 @@ export async function createRomWeaverZenFsBrowser(options = {}) {
   const scratchGuestPath = normalizeGuestPath(
     options.scratchGuestPath ?? options.tmpGuestPath ?? DEFAULT_SCRATCH_GUEST_PATH,
     { label: 'scratchGuestPath' },
-  );
-  const scratchNamespace = normalizeScratchNamespace(
-    options.scratchNamespace ?? DEFAULT_SCRATCH_NAMESPACE,
   );
   const opfsHandle = options.opfsHandle ?? (await navigator.storage.getDirectory());
   const scratchRootHandle = await resolveScratchRootHandle({
@@ -72,16 +68,10 @@ export async function createRomWeaverZenFsBrowser(options = {}) {
     mountHandles: options.mountHandles,
   });
   const runtimeMountState = new Map();
-  const activeScratchRunIds = new Set();
 
   const runner = {
     async run(args = [], runOptions = {}) {
       const normalizedArgs = normalizeArgs(args);
-      const scratchRun = await allocateScratchRunNamespace(
-        scratchRootHandle,
-        scratchNamespace,
-        activeScratchRunIds,
-      );
       const mergedEnv = {
         ...(options.env ?? {}),
         ...(runOptions.env ?? {}),
@@ -89,14 +79,7 @@ export async function createRomWeaverZenFsBrowser(options = {}) {
       if (mergedEnv.ROM_WEAVER_MAX_BUFFERED_PATCH_BYTES == null) {
         mergedEnv.ROM_WEAVER_MAX_BUFFERED_PATCH_BYTES = DEFAULT_MAX_BUFFERED_PATCH_BYTES;
       }
-      const env = {
-        ...mergedEnv,
-        ROM_WEAVER_TMPDIR: joinScratchGuestPath(
-          scratchGuestPath,
-          scratchNamespace,
-          scratchRun.runId,
-        ),
-      };
+      const env = { ...mergedEnv };
       const envList = Object.entries(env).map(([key, value]) => `${key}=${String(value)}`);
 
       const mountHandles = {
@@ -164,12 +147,6 @@ export async function createRomWeaverZenFsBrowser(options = {}) {
         };
       } finally {
         closeSyncAccessHandles(closeHandles);
-        await cleanupScratchRunNamespace(
-          scratchRootHandle,
-          scratchNamespace,
-          activeScratchRunIds,
-          scratchRun.runId,
-        );
       }
     },
 
@@ -201,7 +178,6 @@ export async function createRomWeaverZenFsBrowser(options = {}) {
     scratchHandle: scratchRootHandle,
     opfsGuestPath,
     scratchGuestPath,
-    scratchNamespace,
     runtimeMounts,
     run: (args, runOptions) => runner.run(args, runOptions),
     runJson: (args, runOptions) => runner.runJson(args, runOptions),
@@ -502,91 +478,6 @@ async function verifyWritableScratchRoot(scratchRootHandle) {
       // ignore best-effort cleanup failures
     }
   }
-}
-
-async function allocateScratchRunNamespace(scratchRootHandle, scratchNamespace, activeRunIds) {
-  const namespaceHandle = await scratchRootHandle.getDirectoryHandle(scratchNamespace, {
-    create: true,
-  });
-  await cleanupStaleScratchNamespaces(namespaceHandle, activeRunIds);
-
-  const runId = `${Date.now().toString(36)}-${Math.random().toString(16).slice(2)}`;
-  const runHandle = await namespaceHandle.getDirectoryHandle(runId, { create: true });
-  assertDirectoryHandle(runHandle, `scratch run namespace ${runId}`);
-  activeRunIds.add(runId);
-  return { runId };
-}
-
-async function cleanupScratchRunNamespace(
-  scratchRootHandle,
-  scratchNamespace,
-  activeRunIds,
-  runId,
-) {
-  activeRunIds.delete(runId);
-  try {
-    const namespaceHandle = await scratchRootHandle.getDirectoryHandle(scratchNamespace);
-    await removeDirectoryEntryBestEffort(namespaceHandle, runId);
-  } catch {
-    // ignore best-effort cleanup failures
-  }
-}
-
-async function cleanupStaleScratchNamespaces(scratchRootHandle, activeRunIds) {
-  for await (const [entryName, entryHandle] of scratchRootHandle.entries()) {
-    if (entryHandle.kind === 'directory' && !activeRunIds.has(entryName)) {
-      await removeDirectoryEntryBestEffort(scratchRootHandle, entryName);
-    }
-  }
-}
-
-async function removeDirectoryEntryBestEffort(rootHandle, entryName) {
-  try {
-    await rootHandle.removeEntry(entryName, { recursive: true });
-    return;
-  } catch {
-    // continue with non-recursive/manual fallback below
-  }
-
-  try {
-    const entry = await rootHandle.getDirectoryHandle(entryName);
-    for await (const [childName] of entry.entries()) {
-      await removeDirectoryEntryBestEffort(entry, childName);
-    }
-    await rootHandle.removeEntry(entryName);
-  } catch {
-    // ignore best-effort cleanup failures
-  }
-}
-
-function joinScratchGuestPath(scratchGuestPath, scratchNamespace, runId) {
-  return normalizeGuestPath(`${scratchGuestPath}/${scratchNamespace}/${runId}`, {
-    label: 'ROM_WEAVER_TMPDIR',
-  });
-}
-
-function normalizeScratchNamespace(value) {
-  if (typeof value !== 'string' || value.trim().length === 0) {
-    throw new TypeError('scratchNamespace must be a non-empty string');
-  }
-
-  const normalized = value
-    .trim()
-    .replace(/^\/+/, '')
-    .replace(/\/+$/, '');
-
-  if (normalized.length === 0) {
-    throw new TypeError('scratchNamespace must contain at least one non-slash character');
-  }
-
-  const parts = normalized.split('/');
-  for (const part of parts) {
-    if (part.length === 0 || part === '.' || part === '..') {
-      throw new TypeError('scratchNamespace cannot contain "." or ".." segments');
-    }
-  }
-
-  return normalized;
 }
 
 function normalizeMountHandleMap({

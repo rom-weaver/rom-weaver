@@ -17,7 +17,7 @@ export interface RomWeaverRunOptions {
   stdin?: RomWeaverStdinInput;
   /**
    * Process environment variables forwarded to the wasm runtime.
-   * Browser runners inject `ROM_WEAVER_TMPDIR` per run and may set safety defaults.
+   * Browser runners may set safety defaults.
    */
   env?: RomWeaverEnv;
   preopens?: RomWeaverPreopens;
@@ -120,7 +120,6 @@ export interface RomWeaverZenFsBrowserOptions {
   opfsGuestPath?: string;
   /** Guest scratch path for temporary files. Defaults to `/scratch`. */
   scratchGuestPath?: string;
-  scratchNamespace?: string;
   /** @deprecated Use scratchGuestPath. */
   tmpGuestPath?: string;
   runtimeMounts?: string[];

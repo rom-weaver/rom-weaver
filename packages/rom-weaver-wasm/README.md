@@ -50,7 +50,6 @@ console.log(result.exitCode, result.ok);
 Scratch temp behavior:
 
 - Default scratch guest path is `/scratch`.
-- Per run, `ROM_WEAVER_TMPDIR` is set to `/scratch/.rom-weaver-scratch/<run-id>`.
 - Unless you opt into writable mounts, `/work` stays read-only and temp output should go through `/scratch`.
 - Scratch must be writable. Runner initialization fails if writable scratch cannot be established.
 - Scratch namespaces are cleaned up best-effort after each run.
