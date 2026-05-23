@@ -2549,12 +2549,12 @@ mod tests {
     }
 
     #[test]
-    fn xiso_capabilities_disable_container_create() {
+    fn xiso_capabilities_allow_extract_but_disable_create() {
         let registry = ContainerRegistry::new();
         let handler = registry.find_by_name("xiso").expect("xiso handler");
         let capabilities = handler.capabilities();
         assert!(!capabilities.inspect);
-        assert!(!capabilities.extract);
+        assert!(capabilities.extract);
         assert!(!capabilities.create);
         assert_eq!(
             capabilities.extract_threads,

@@ -883,6 +883,24 @@ impl ContainerHandler for PbpContainerHandler {
                 "requested selections resolved to no extractable pbp outputs".into(),
             ));
         }
+        let total_extract_bytes =
+            extract_plan
+                .iter()
+                .try_fold(0_u64, |total, (disc_index, _, write_bin)| {
+                    if !*write_bin {
+                        return Ok(total);
+                    }
+                    total
+                        .checked_add(archive.discs[*disc_index].iso_size)
+                        .ok_or_else(|| {
+                            RomWeaverError::Validation(
+                                "pbp extract selected output size overflowed".into(),
+                            )
+                        })
+                })?;
+        let extract_progress_label = format!("extracting `{}`", PBP.name);
+        let extract_progress_bytes = Arc::new(AtomicU64::new(0));
+        let extract_progress_bucket = Arc::new(AtomicU8::new(0));
         let mut execution = context.plan_threads(ThreadCapability::parallel(None));
 
         let mut produced_outputs = Vec::new();
@@ -908,6 +926,10 @@ impl ContainerHandler for PbpContainerHandler {
                 let source = request.source.clone();
                 let decode_result = if execution.used_parallelism {
                     let writer = Arc::clone(&ordered_writer);
+                    let progress_context = context.clone();
+                    let progress_execution = execution.clone();
+                    let extract_progress_bytes = Arc::clone(&extract_progress_bytes);
+                    let extract_progress_bucket = Arc::clone(&extract_progress_bucket);
                     pool.install(|| {
                         tasks.par_iter().try_for_each(|task| {
                             let chunk = self.decode_disc_extract_task(&source, disc, task)?;
@@ -939,12 +961,32 @@ impl ContainerHandler for PbpContainerHandler {
                                     "pbp extract chunk index overflowed".into(),
                                 )
                             })?;
-                            let mut ordered = writer.lock().map_err(|_| {
-                                RomWeaverError::Validation(
-                                    "pbp extract output writer lock poisoned".into(),
-                                )
-                            })?;
-                            ordered.write_chunk(chunk_index, chunk.data)
+                            {
+                                let mut ordered = writer.lock().map_err(|_| {
+                                    RomWeaverError::Validation(
+                                        "pbp extract output writer lock poisoned".into(),
+                                    )
+                                })?;
+                                ordered.write_chunk(chunk_index, chunk.data)?;
+                            }
+                            if total_extract_bytes > 0 {
+                                let completed = extract_progress_bytes
+                                    .fetch_add(chunk_len, Ordering::Relaxed)
+                                    .saturating_add(chunk_len)
+                                    .min(total_extract_bytes);
+                                maybe_emit_container_byte_progress(
+                                    &progress_context,
+                                    "extract",
+                                    PBP.name,
+                                    "extract",
+                                    completed,
+                                    total_extract_bytes,
+                                    &extract_progress_label,
+                                    Some(&progress_execution),
+                                    extract_progress_bucket.as_ref(),
+                                );
+                            }
+                            Ok(())
                         })
                     })
                 } else {
@@ -970,12 +1012,32 @@ impl ContainerHandler for PbpContainerHandler {
                         let chunk_index = u64::try_from(task.task_index).map_err(|_| {
                             RomWeaverError::Validation("pbp extract chunk index overflowed".into())
                         })?;
-                        let mut ordered = ordered_writer.lock().map_err(|_| {
-                            RomWeaverError::Validation(
-                                "pbp extract output writer lock poisoned".into(),
-                            )
-                        })?;
-                        ordered.write_chunk(chunk_index, chunk.data)
+                        {
+                            let mut ordered = ordered_writer.lock().map_err(|_| {
+                                RomWeaverError::Validation(
+                                    "pbp extract output writer lock poisoned".into(),
+                                )
+                            })?;
+                            ordered.write_chunk(chunk_index, chunk.data)?;
+                        }
+                        if total_extract_bytes > 0 {
+                            let completed = extract_progress_bytes
+                                .fetch_add(chunk_len, Ordering::Relaxed)
+                                .saturating_add(chunk_len)
+                                .min(total_extract_bytes);
+                            maybe_emit_container_byte_progress(
+                                context,
+                                "extract",
+                                PBP.name,
+                                "extract",
+                                completed,
+                                total_extract_bytes,
+                                &extract_progress_label,
+                                Some(&execution),
+                                extract_progress_bucket.as_ref(),
+                            );
+                        }
+                        Ok(())
                     })
                 };
                 if let Err(error) = decode_result {

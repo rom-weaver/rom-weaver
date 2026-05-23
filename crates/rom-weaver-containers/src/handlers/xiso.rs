@@ -25,6 +25,33 @@ impl XisoContainerHandler {
             ))
         })
     }
+
+    fn output_name(&self, source: &Path) -> String {
+        let file_name = source
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or(XISO.name);
+        let file_name_lower = file_name.to_ascii_lowercase();
+
+        let trimmed = if file_name_lower.ends_with(".xiso.iso") {
+            file_name[..file_name.len() - ".xiso.iso".len()].to_string()
+        } else if file_name_lower.ends_with(".xiso") {
+            file_name[..file_name.len() - ".xiso".len()].to_string()
+        } else {
+            Path::new(file_name)
+                .file_stem()
+                .and_then(|value| value.to_str())
+                .unwrap_or(file_name)
+                .to_string()
+        };
+
+        let normalized = trimmed.trim().trim_matches('.');
+        if normalized.is_empty() {
+            "xiso.iso".to_string()
+        } else {
+            format!("{normalized}.iso")
+        }
+    }
 }
 
 impl ContainerHandler for XisoContainerHandler {
@@ -50,13 +77,114 @@ impl ContainerHandler for XisoContainerHandler {
         ))
     }
 
+    fn list_entries(
+        &self,
+        request: &ContainerInspectRequest,
+        _context: &OperationContext,
+    ) -> Result<Vec<String>> {
+        Ok(vec![self.output_name(&request.source)])
+    }
+
     fn extract(
         &self,
-        _request: &ContainerExtractRequest,
-        _context: &OperationContext,
+        request: &ContainerExtractRequest,
+        context: &OperationContext,
     ) -> Result<OperationReport> {
-        Err(RomWeaverError::Validation(
-            "xiso extract is not supported yet".into(),
+        fs::create_dir_all(&request.out_dir)?;
+
+        let output_name = self.output_name(&request.source);
+        let mut selections = SelectionMatcher::new(&request.selections);
+        if !selections.matches(&output_name) {
+            selections.ensure_all_matched()?;
+        }
+        selections.ensure_all_matched()?;
+
+        let execution = context.plan_threads(ThreadCapability::single_threaded());
+        let mut source_fs = self.open_source_filesystem(&request.source)?;
+        let output_path = request.out_dir.join(&output_name);
+        if let Some(parent) = output_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        let output_file = File::create(&output_path)?;
+        let mut output = BufWriter::new(output_file);
+        let extract_progress_label = format!("extracting `{}`", XISO.name);
+        let mut listed_entries = 0usize;
+        let mut listed_directories = 0usize;
+        let mut completed_steps = 0usize;
+        let extract_result =
+            xdvdfs::write::img::create_xdvdfs_image(&mut source_fs, &mut output, |progress| {
+                match progress {
+                    xdvdfs::write::img::ProgressInfo::FileCount(count) => {
+                        listed_entries = count;
+                        let total_steps = listed_entries.saturating_add(listed_directories);
+                        emit_container_step_progress(
+                            context,
+                            "extract",
+                            XISO.name,
+                            "extract",
+                            completed_steps,
+                            total_steps,
+                            extract_progress_label.as_str(),
+                            Some(&execution),
+                        );
+                    }
+                    xdvdfs::write::img::ProgressInfo::DirCount(count) => {
+                        listed_directories = count;
+                        let total_steps = listed_entries.saturating_add(listed_directories);
+                        emit_container_step_progress(
+                            context,
+                            "extract",
+                            XISO.name,
+                            "extract",
+                            completed_steps,
+                            total_steps,
+                            extract_progress_label.as_str(),
+                            Some(&execution),
+                        );
+                    }
+                    xdvdfs::write::img::ProgressInfo::DirAdded(_, _)
+                    | xdvdfs::write::img::ProgressInfo::FileAdded(_, _) => {
+                        completed_steps = completed_steps.saturating_add(1);
+                        let total_steps = listed_entries.saturating_add(listed_directories);
+                        emit_container_step_progress(
+                            context,
+                            "extract",
+                            XISO.name,
+                            "extract",
+                            completed_steps,
+                            total_steps,
+                            extract_progress_label.as_str(),
+                            Some(&execution),
+                        );
+                    }
+                    xdvdfs::write::img::ProgressInfo::DiscoveredDirectory(_)
+                    | xdvdfs::write::img::ProgressInfo::FinishedPacking => {}
+                    _ => {}
+                }
+            });
+        if let Err(error) = extract_result {
+            let _ = fs::remove_file(&output_path);
+            return Err(RomWeaverError::Validation(format!(
+                "xiso extract failed while rebuilding `{}`: {error}",
+                request.source.display()
+            )));
+        }
+        output.flush()?;
+        let output_bytes = fs::metadata(&output_path)?.len();
+
+        Ok(OperationReport::succeeded(
+            OperationFamily::Container,
+            Some(XISO.name.to_string()),
+            "extract",
+            format!(
+                "extracted `{}` to `{}` (1 file, {} bytes written)",
+                request.source.display(),
+                output_path.display(),
+                output_bytes
+            ),
+            Some(100.0),
+            Some(execution),
         ))
     }
 
@@ -73,11 +201,10 @@ impl ContainerHandler for XisoContainerHandler {
     fn capabilities(&self) -> ContainerCapabilities {
         ContainerCapabilities {
             inspect: false,
-            extract: false,
+            extract: true,
             create: false,
             extract_threads: ThreadCapability::single_threaded(),
             create_threads: ThreadCapability::single_threaded(),
         }
     }
 }
-

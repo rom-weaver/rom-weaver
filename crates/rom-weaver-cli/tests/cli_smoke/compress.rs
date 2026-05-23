@@ -439,7 +439,7 @@ fn extract_tgc_invalid_source_emits_running_progress() {
 }
 
 #[test]
-fn extract_xiso_unsupported_emits_running_progress() {
+fn extract_xiso_invalid_source_emits_running_progress() {
     let temp = setup_temp_dir();
     fs::write(temp.child("disc.xiso").path(), b"not-a-real-xiso").expect("fixture");
     let out_dir = temp.child("extract");
@@ -470,7 +470,7 @@ fn extract_xiso_unsupported_emits_running_progress() {
         json["label"]
             .as_str()
             .expect("label")
-            .contains("xiso extract is not supported yet")
+            .contains("is not an Xbox XDVDFS image")
     );
 }
 

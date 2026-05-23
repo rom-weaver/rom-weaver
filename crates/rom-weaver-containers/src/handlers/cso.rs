@@ -259,6 +259,28 @@ impl CsoContainerHandler {
         tasks
     }
 
+    fn create_task_logical_bytes(&self, task: &CsoCreateTask, logical_bytes: u64) -> Result<u64> {
+        let block_bytes = CSO_DEFAULT_BLOCK_BYTES as u64;
+        let start = u64::try_from(task.start_sector)
+            .ok()
+            .and_then(|sector| sector.checked_mul(block_bytes))
+            .ok_or_else(|| {
+                RomWeaverError::Validation("cso create source offset overflowed".into())
+            })?;
+        let task_len = u64::try_from(task.sector_count)
+            .ok()
+            .and_then(|sector_count| sector_count.checked_mul(block_bytes))
+            .ok_or_else(|| {
+                RomWeaverError::Validation("cso create task length overflowed".into())
+            })?;
+        let end = start.checked_add(task_len).ok_or_else(|| {
+            RomWeaverError::Validation("cso create source offset overflowed".into())
+        })?;
+        let clamped_start = start.min(logical_bytes);
+        let clamped_end = end.min(logical_bytes);
+        Ok(clamped_end.saturating_sub(clamped_start))
+    }
+
     fn compress_sector_for_create(&self, sector: &[u8]) -> Result<(Vec<u8>, bool)> {
         let frame_info = Lz4FrameInfo::new()
             .block_mode(Lz4BlockMode::Independent)
@@ -537,6 +559,9 @@ impl ContainerHandler for CsoContainerHandler {
         let tasks = self.build_extract_tasks(logical_bytes);
         let (execution, pool) =
             context.build_pool(ThreadCapability::parallel(Some(tasks.len().max(1))))?;
+        let extract_progress_label = format!("extracting `{}`", self.descriptor.name);
+        let extract_progress_bytes = Arc::new(AtomicU64::new(0));
+        let extract_progress_bucket = Arc::new(AtomicU8::new(0));
 
         if let Some(parent) = output_path.parent() {
             fs::create_dir_all(parent)?;
@@ -548,6 +573,10 @@ impl ContainerHandler for CsoContainerHandler {
         let source = request.source.clone();
         let decode_result = if execution.used_parallelism {
             let writer = Arc::clone(&ordered_writer);
+            let progress_context = context.clone();
+            let progress_execution = execution.clone();
+            let extract_progress_bytes = Arc::clone(&extract_progress_bytes);
+            let extract_progress_bucket = Arc::clone(&extract_progress_bucket);
             pool.install(|| {
                 tasks.par_iter().try_for_each(|task| {
                     let chunk = self.decode_extract_task(&source, task)?;
@@ -563,10 +592,32 @@ impl ContainerHandler for CsoContainerHandler {
                     let chunk_index = u64::try_from(chunk.index).map_err(|_| {
                         RomWeaverError::Validation("cso extract chunk index overflowed".into())
                     })?;
-                    let mut ordered = writer.lock().map_err(|_| {
-                        RomWeaverError::Validation("cso extract output writer lock poisoned".into())
-                    })?;
-                    ordered.write_chunk(chunk_index, chunk.data)
+                    {
+                        let mut ordered = writer.lock().map_err(|_| {
+                            RomWeaverError::Validation(
+                                "cso extract output writer lock poisoned".into(),
+                            )
+                        })?;
+                        ordered.write_chunk(chunk_index, chunk.data)?;
+                    }
+                    if logical_bytes > 0 {
+                        let completed = extract_progress_bytes
+                            .fetch_add(chunk_len, Ordering::Relaxed)
+                            .saturating_add(chunk_len)
+                            .min(logical_bytes);
+                        maybe_emit_container_byte_progress(
+                            &progress_context,
+                            "extract",
+                            self.descriptor.name,
+                            "extract",
+                            completed,
+                            logical_bytes,
+                            &extract_progress_label,
+                            Some(&progress_execution),
+                            extract_progress_bucket.as_ref(),
+                        );
+                    }
+                    Ok(())
                 })
             })
         } else {
@@ -584,10 +635,30 @@ impl ContainerHandler for CsoContainerHandler {
                 let chunk_index = u64::try_from(chunk.index).map_err(|_| {
                     RomWeaverError::Validation("cso extract chunk index overflowed".into())
                 })?;
-                let mut ordered = ordered_writer.lock().map_err(|_| {
-                    RomWeaverError::Validation("cso extract output writer lock poisoned".into())
-                })?;
-                ordered.write_chunk(chunk_index, chunk.data)
+                {
+                    let mut ordered = ordered_writer.lock().map_err(|_| {
+                        RomWeaverError::Validation("cso extract output writer lock poisoned".into())
+                    })?;
+                    ordered.write_chunk(chunk_index, chunk.data)?;
+                }
+                if logical_bytes > 0 {
+                    let completed = extract_progress_bytes
+                        .fetch_add(chunk_len, Ordering::Relaxed)
+                        .saturating_add(chunk_len)
+                        .min(logical_bytes);
+                    maybe_emit_container_byte_progress(
+                        context,
+                        "extract",
+                        self.descriptor.name,
+                        "extract",
+                        completed,
+                        logical_bytes,
+                        &extract_progress_label,
+                        Some(&execution),
+                        extract_progress_bucket.as_ref(),
+                    );
+                }
+                Ok(())
             })
         };
         if let Err(error) = decode_result {
@@ -635,6 +706,9 @@ impl ContainerHandler for CsoContainerHandler {
             self.resolve_create_compression(request.codec.as_deref(), request.level)?;
         let logical_bytes = fs::metadata(input)?.len();
         let create_tasks = self.build_create_tasks(logical_bytes, context);
+        let create_progress_label = format!("creating `{}`", self.descriptor.name);
+        let create_progress_bytes = Arc::new(AtomicU64::new(0));
+        let create_progress_bucket = Arc::new(AtomicU8::new(0));
 
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
@@ -650,16 +724,64 @@ impl ContainerHandler for CsoContainerHandler {
                 context.build_pool(ThreadCapability::parallel(Some(create_tasks.len().max(1))))?;
             let source = input.clone();
             let encode_result = if execution.used_parallelism {
+                let progress_context = context.clone();
+                let progress_execution = execution.clone();
+                let create_progress_bytes = Arc::clone(&create_progress_bytes);
+                let create_progress_bucket = Arc::clone(&create_progress_bucket);
                 pool.install(|| {
                     create_tasks
                         .par_iter()
-                        .map(|task| self.encode_create_task(&source, task))
+                        .map(|task| {
+                            let encoded = self.encode_create_task(&source, task)?;
+                            if logical_bytes > 0 {
+                                let task_logical_bytes =
+                                    self.create_task_logical_bytes(task, logical_bytes)?;
+                                let completed = create_progress_bytes
+                                    .fetch_add(task_logical_bytes, Ordering::Relaxed)
+                                    .saturating_add(task_logical_bytes)
+                                    .min(logical_bytes);
+                                maybe_emit_container_byte_progress(
+                                    &progress_context,
+                                    "compress",
+                                    self.descriptor.name,
+                                    "create",
+                                    completed,
+                                    logical_bytes,
+                                    &create_progress_label,
+                                    Some(&progress_execution),
+                                    create_progress_bucket.as_ref(),
+                                );
+                            }
+                            Ok(encoded)
+                        })
                         .collect::<Result<Vec<_>>>()
                 })
             } else {
                 create_tasks
                     .iter()
-                    .map(|task| self.encode_create_task(&source, task))
+                    .map(|task| {
+                        let encoded = self.encode_create_task(&source, task)?;
+                        if logical_bytes > 0 {
+                            let task_logical_bytes =
+                                self.create_task_logical_bytes(task, logical_bytes)?;
+                            let completed = create_progress_bytes
+                                .fetch_add(task_logical_bytes, Ordering::Relaxed)
+                                .saturating_add(task_logical_bytes)
+                                .min(logical_bytes);
+                            maybe_emit_container_byte_progress(
+                                context,
+                                "compress",
+                                self.descriptor.name,
+                                "create",
+                                completed,
+                                logical_bytes,
+                                &create_progress_label,
+                                Some(&execution),
+                                create_progress_bucket.as_ref(),
+                            );
+                        }
+                        Ok(encoded)
+                    })
                     .collect::<Result<Vec<_>>>()
             };
             (execution, encode_result)
