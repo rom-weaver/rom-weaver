@@ -274,11 +274,7 @@ impl Z3dsContainerHandler {
 
     fn align_16(size: usize) -> usize {
         let rem = size % 16;
-        if rem == 0 {
-            size
-        } else {
-            size + (16 - rem)
-        }
+        if rem == 0 { size } else { size + (16 - rem) }
     }
 
     fn format_magic(&self, magic: [u8; 4]) -> String {
@@ -292,7 +288,24 @@ impl Z3dsContainerHandler {
         }
     }
 
-    fn decompressed_extension_for_source(&self, source: &Path) -> &'static str {
+    fn decompressed_extension_for_underlying_magic(
+        &self,
+        underlying_magic: [u8; 4],
+    ) -> Option<&'static str> {
+        match underlying_magic {
+            [b'C', b'I', b'A', 0] => Some(".cia"),
+            [b'N', b'C', b'S', b'D'] => Some(".cci"),
+            [b'N', b'C', b'C', b'H'] => Some(".cxi"),
+            [b'3', b'D', b'S', b'X'] => Some(".3dsx"),
+            _ => None,
+        }
+    }
+
+    fn decompressed_extension_for_source(
+        &self,
+        source: &Path,
+        underlying_magic: Option<[u8; 4]>,
+    ) -> &'static str {
         let source_name = source
             .file_name()
             .and_then(|value| value.to_str())
@@ -302,18 +315,29 @@ impl Z3dsContainerHandler {
             Some(name) if name.ends_with(".zcxi") => ".cxi",
             Some(name) if name.ends_with(".zcia") => ".cia",
             Some(name) if name.ends_with(".z3dsx") => ".3dsx",
-            Some(name) if name.ends_with(".z3ds") => ".3ds",
-            _ => ".3ds",
+            Some(name) if name.ends_with(".z3ds") => underlying_magic
+                .and_then(|magic| self.decompressed_extension_for_underlying_magic(magic))
+                .unwrap_or(".3ds"),
+            _ => underlying_magic
+                .and_then(|magic| self.decompressed_extension_for_underlying_magic(magic))
+                .unwrap_or(".3ds"),
         }
     }
 
-    fn extract_name(&self, source: &Path) -> String {
+    fn extract_name_with_underlying_magic(
+        &self,
+        source: &Path,
+        underlying_magic: Option<[u8; 4]>,
+    ) -> String {
         let stem = source
             .file_stem()
             .and_then(|value| value.to_str())
             .filter(|value| !value.is_empty())
             .unwrap_or("output");
-        format!("{stem}{}", self.decompressed_extension_for_source(source))
+        format!(
+            "{stem}{}",
+            self.decompressed_extension_for_source(source, underlying_magic)
+        )
     }
 
     fn map_zstd_error(&self, stage: &str, error: zeekstd::Error) -> RomWeaverError {
@@ -612,7 +636,12 @@ impl ContainerHandler for Z3dsContainerHandler {
         request: &ContainerInspectRequest,
         _context: &OperationContext,
     ) -> Result<Vec<String>> {
-        Ok(vec![self.extract_name(&request.source)])
+        let mut file = File::open(&request.source)?;
+        let header = self.read_header(&request.source, &mut file)?;
+        Ok(vec![self.extract_name_with_underlying_magic(
+            &request.source,
+            Some(header.underlying_magic),
+        )])
     }
 
     fn extract(
@@ -620,15 +649,16 @@ impl ContainerHandler for Z3dsContainerHandler {
         request: &ContainerExtractRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        let output_name = self.extract_name(&request.source);
+        let mut file = File::open(&request.source)?;
+        let header = self.read_header(&request.source, &mut file)?;
+        let output_name =
+            self.extract_name_with_underlying_magic(&request.source, Some(header.underlying_magic));
         let mut selections = SelectionMatcher::new(&request.selections);
         if !selections.matches(&output_name) {
             selections.ensure_all_matched()?;
         }
         selections.ensure_all_matched()?;
 
-        let mut file = File::open(&request.source)?;
-        let header = self.read_header(&request.source, &mut file)?;
         let payload_start = header.payload_offset();
         let tasks = self.build_extract_tasks(header.uncompressed_size)?;
         let (execution, pool) =

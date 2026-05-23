@@ -323,6 +323,60 @@ fn z3ds_compress_inspect_and_extract_round_trip() {
 }
 
 #[test]
+fn z3ds_extract_uses_underlying_magic_for_output_extension() {
+    let temp = setup_temp_dir();
+    let mut source = (0..65_536)
+        .map(|index| (index % 239) as u8)
+        .collect::<Vec<_>>();
+    source[..4].copy_from_slice(b"NCSD");
+    fs::write(temp.child("disc.cci").path(), &source).expect("fixture");
+
+    let z3ds_path = temp.child("disc.z3ds");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("disc.cci").path().to_str().expect("path"),
+            "--format",
+            "z3ds",
+            "--output",
+            z3ds_path.path().to_str().expect("path"),
+            "--codec",
+            "zstd",
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let out_dir = temp.child("extract");
+    let extract_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "extract",
+            z3ds_path.path().to_str().expect("path"),
+            "--out-dir",
+            out_dir.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let extract_json = parse_single_json_line(&extract_output);
+    assert_eq!(extract_json["command"], "extract");
+    assert_eq!(extract_json["family"], "container");
+    assert_eq!(extract_json["format"], "z3ds");
+    assert_eq!(extract_json["status"], "succeeded");
+
+    assert_eq!(
+        fs::read(out_dir.child("disc.cci").path()).expect("extracted cci"),
+        source
+    );
+    assert!(!out_dir.child("disc.3ds").path().exists());
+}
+
+#[test]
 fn z3ds_extract_reports_parallel_threads_for_large_file() {
     let temp = setup_temp_dir();
     let source = (0..(10 * 1024 * 1024))
@@ -529,4 +583,3 @@ fn z3ds_extract_rejects_invalid_header() {
             .contains("missing Z3DS magic")
     );
 }
-

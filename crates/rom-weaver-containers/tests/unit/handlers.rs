@@ -417,28 +417,56 @@ mod tests {
     fn z3ds_extract_name_maps_to_matching_uncompressed_extension() {
         let handler = Z3dsContainerHandler;
         assert_eq!(
-            handler.extract_name(Path::new("rom.z3ds")),
+            handler.extract_name_with_underlying_magic(Path::new("rom.z3ds"), None),
             "rom.3ds".to_string()
         );
         assert_eq!(
-            handler.extract_name(Path::new("rom.zcci")),
+            handler.extract_name_with_underlying_magic(Path::new("rom.zcci"), None),
             "rom.cci".to_string()
         );
         assert_eq!(
-            handler.extract_name(Path::new("rom.zcxi")),
+            handler.extract_name_with_underlying_magic(Path::new("rom.zcxi"), None),
             "rom.cxi".to_string()
         );
         assert_eq!(
-            handler.extract_name(Path::new("rom.zcia")),
+            handler.extract_name_with_underlying_magic(Path::new("rom.zcia"), None),
             "rom.cia".to_string()
         );
         assert_eq!(
-            handler.extract_name(Path::new("rom.z3dsx")),
+            handler.extract_name_with_underlying_magic(Path::new("rom.z3dsx"), None),
             "rom.3dsx".to_string()
         );
         assert_eq!(
-            handler.extract_name(Path::new("ROM.ZCCI")),
+            handler.extract_name_with_underlying_magic(Path::new("ROM.ZCCI"), None),
             "ROM.cci".to_string()
+        );
+    }
+
+    #[test]
+    fn z3ds_extract_name_uses_underlying_magic_for_generic_z3ds_inputs() {
+        let handler = Z3dsContainerHandler;
+        assert_eq!(
+            handler.extract_name_with_underlying_magic(Path::new("rom.z3ds"), Some(*b"NCSD")),
+            "rom.cci".to_string()
+        );
+        assert_eq!(
+            handler.extract_name_with_underlying_magic(Path::new("rom.z3ds"), Some(*b"NCCH")),
+            "rom.cxi".to_string()
+        );
+        assert_eq!(
+            handler.extract_name_with_underlying_magic(Path::new("rom.z3ds"), Some(*b"3DSX")),
+            "rom.3dsx".to_string()
+        );
+        assert_eq!(
+            handler.extract_name_with_underlying_magic(
+                Path::new("rom.z3ds"),
+                Some([b'C', b'I', b'A', 0])
+            ),
+            "rom.cia".to_string()
+        );
+        assert_eq!(
+            handler.extract_name_with_underlying_magic(Path::new("rom.z3ds"), Some(*b"ABCD")),
+            "rom.3ds".to_string()
         );
     }
 

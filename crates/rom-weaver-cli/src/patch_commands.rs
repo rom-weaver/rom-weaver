@@ -583,6 +583,7 @@ impl CliApp {
                 let compression_plan = match self.resolve_patch_apply_compression_plan(
                     &output,
                     &raw_ready_output,
+                    &resolved_input,
                     outer_container_format.as_deref(),
                     &compression_options,
                 ) {
@@ -924,5 +925,4 @@ impl CliApp {
             _ => None,
         }
     }
-
 }

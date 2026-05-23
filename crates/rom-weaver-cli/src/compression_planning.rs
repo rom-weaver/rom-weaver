@@ -335,6 +335,7 @@ impl CliApp {
         &self,
         requested_output: &Path,
         raw_output: &Path,
+        extension_source: &Path,
         outer_container_format: Option<&str>,
         options: &PatchApplyCompressionOptions,
     ) -> Result<PatchApplyCompressionPlan> {
@@ -423,6 +424,7 @@ impl CliApp {
         let (output_path, extension_appended) = Self::append_output_extension_if_missing(
             requested_output,
             handler.descriptor().extensions,
+            Some(extension_source),
         );
         Ok(PatchApplyCompressionPlan {
             format: resolved_format,
@@ -470,9 +472,23 @@ impl CliApp {
     fn append_output_extension_if_missing(
         requested_output: &Path,
         extensions: &[&str],
+        source_extension_hint: Option<&Path>,
     ) -> (PathBuf, bool) {
         let Some(primary_extension) = extensions.first().copied() else {
             return (requested_output.to_path_buf(), false);
+        };
+
+        let preferred_extension = if extensions
+            .iter()
+            .any(|extension| extension.eq_ignore_ascii_case(".z3ds"))
+        {
+            Self::z3ds_compressed_extension_for_path(requested_output)
+                .or_else(|| {
+                    source_extension_hint.and_then(Self::z3ds_compressed_extension_for_path)
+                })
+                .unwrap_or(primary_extension)
+        } else {
+            primary_extension
         };
 
         let Some(file_name) = requested_output.file_name() else {
@@ -487,10 +503,22 @@ impl CliApp {
         }
 
         let mut appended_name = file_name.to_os_string();
-        appended_name.push(primary_extension);
+        appended_name.push(preferred_extension);
         let mut appended_path = requested_output.to_path_buf();
         appended_path.set_file_name(appended_name);
         (appended_path, true)
+    }
+
+    fn z3ds_compressed_extension_for_path(path: &Path) -> Option<&'static str> {
+        let extension = path.extension()?.to_str()?.trim().to_ascii_lowercase();
+        match extension.as_str() {
+            "cia" | "zcia" => Some(".zcia"),
+            "3ds" | "z3d" | "z3ds" => Some(".z3ds"),
+            "cci" | "zcci" => Some(".zcci"),
+            "cxi" | "app" | "zcxi" => Some(".zcxi"),
+            "3dsx" | "z3dsx" => Some(".z3dsx"),
+            _ => None,
+        }
     }
 
     fn normalize_trim_extension(extension: &str) -> Result<String> {
@@ -514,5 +542,4 @@ impl CliApp {
             TrimOperation::Revert => "untrim.{ext}",
         }
     }
-
 }

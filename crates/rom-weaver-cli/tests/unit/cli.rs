@@ -1,5 +1,7 @@
 #[cfg(test)]
 mod tests {
+    use std::path::{Path, PathBuf};
+
     use super::{CliApp, CompressionLevelProfile, ParsedSelectionInput, RunCommandOptions};
 
     #[test]
@@ -195,6 +197,60 @@ mod tests {
             ),
             Some(3)
         );
+    }
+
+    #[test]
+    fn z3ds_compressed_extension_mapping_covers_known_source_types() {
+        assert_eq!(
+            CliApp::z3ds_compressed_extension_for_path(Path::new("disc.cia")),
+            Some(".zcia")
+        );
+        assert_eq!(
+            CliApp::z3ds_compressed_extension_for_path(Path::new("disc.cci")),
+            Some(".zcci")
+        );
+        assert_eq!(
+            CliApp::z3ds_compressed_extension_for_path(Path::new("disc.cxi")),
+            Some(".zcxi")
+        );
+        assert_eq!(
+            CliApp::z3ds_compressed_extension_for_path(Path::new("disc.app")),
+            Some(".zcxi")
+        );
+        assert_eq!(
+            CliApp::z3ds_compressed_extension_for_path(Path::new("disc.3ds")),
+            Some(".z3ds")
+        );
+        assert_eq!(
+            CliApp::z3ds_compressed_extension_for_path(Path::new("disc.3dsx")),
+            Some(".z3dsx")
+        );
+        assert_eq!(
+            CliApp::z3ds_compressed_extension_for_path(Path::new("disc.bin")),
+            None
+        );
+    }
+
+    #[test]
+    fn z3ds_extension_append_uses_hint_when_output_has_no_extension() {
+        let extensions = [".z3ds", ".zcci", ".zcxi", ".zcia", ".z3dsx"];
+        let cases = [
+            ("source.cia", "patched.zcia"),
+            ("source.cci", "patched.zcci"),
+            ("source.cxi", "patched.zcxi"),
+            ("source.3dsx", "patched.z3dsx"),
+            ("source.3ds", "patched.z3ds"),
+        ];
+
+        for (source, expected) in cases {
+            let (output_path, appended) = CliApp::append_output_extension_if_missing(
+                Path::new("patched"),
+                &extensions,
+                Some(Path::new(source)),
+            );
+            assert!(appended);
+            assert_eq!(output_path, PathBuf::from(expected));
+        }
     }
 
     #[test]

@@ -181,6 +181,77 @@ fn patch_apply_defaults_to_compressed_output_and_appends_extension() {
 }
 
 #[test]
+fn patch_apply_z3ds_compression_uses_matching_container_suffix() {
+    let temp = setup_temp_dir();
+    let cases = [
+        ("3ds", "z3ds"),
+        ("cci", "zcci"),
+        ("cia", "zcia"),
+        ("cxi", "zcxi"),
+        ("3dsx", "z3dsx"),
+    ];
+
+    for (input_extension, compressed_extension) in cases {
+        let original = temp.child(format!("old-{input_extension}.{input_extension}"));
+        let modified = temp.child(format!("new-{input_extension}.{input_extension}"));
+        let patch = temp.child(format!("update-{input_extension}.bps"));
+        let output_base = temp.child(format!("patched-{input_extension}"));
+
+        fs::write(original.path(), b"hello old world").expect("fixture");
+        fs::write(modified.path(), b"hello new world").expect("fixture");
+
+        Command::cargo_bin("rom-weaver")
+            .expect("binary")
+            .args([
+                "patch-create",
+                "--original",
+                original.path().to_str().expect("path"),
+                "--modified",
+                modified.path().to_str().expect("path"),
+                "--format",
+                "bps",
+                "--output",
+                patch.path().to_str().expect("path"),
+                "--json",
+            ])
+            .assert()
+            .code(0);
+
+        let apply_output = Command::cargo_bin("rom-weaver")
+            .expect("binary")
+            .args([
+                "patch-apply",
+                "--input",
+                original.path().to_str().expect("path"),
+                "--patch",
+                patch.path().to_str().expect("path"),
+                "--output",
+                output_base.path().to_str().expect("path"),
+                "--compress-format",
+                "z3ds",
+                "--json",
+            ])
+            .assert()
+            .code(0)
+            .get_output()
+            .stdout
+            .clone();
+        let apply_json = parse_single_json_line(&apply_output);
+        assert_eq!(apply_json["command"], "patch-apply");
+        assert_eq!(apply_json["family"], "patch");
+        assert_eq!(apply_json["format"], "BPS");
+        assert_eq!(apply_json["status"], "succeeded");
+        let apply_label = apply_json["label"].as_str().expect("label");
+        assert!(apply_label.contains("patch output compressed as z3ds"));
+
+        let compressed_path =
+            temp.child(format!("patched-{input_extension}.{compressed_extension}"));
+        assert!(compressed_path.path().exists());
+        assert_emitted_file(&apply_json, compressed_path.path(), Some("archive"));
+    }
+}
+
+#[test]
 fn patch_apply_auto_prefers_outer_input_container_format() {
     let temp = setup_temp_dir();
     let original = temp.child("old.bin");
