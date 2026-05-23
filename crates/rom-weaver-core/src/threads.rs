@@ -86,6 +86,13 @@ impl ThreadCapability {
     }
 
     pub fn parallel(max_threads: Option<usize>) -> Self {
+        #[cfg(all(target_family = "wasm", not(rom_weaver_wasi_threads)))]
+        {
+            let _ = max_threads;
+            return Self::SingleThreaded;
+        }
+
+        #[cfg(not(all(target_family = "wasm", not(rom_weaver_wasi_threads))))]
         Self::Parallel { max_threads }
     }
 
