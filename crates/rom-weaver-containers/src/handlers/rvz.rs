@@ -246,6 +246,44 @@ impl ContainerHandler for RvzContainerHandler {
         ))
     }
 
+    fn create_dry_run_size(
+        &self,
+        request: &ContainerCreateRequest,
+        context: &OperationContext,
+    ) -> Result<u64> {
+        let input = RVZ_NOD_CORE.ensure_single_create_input(request)?;
+        let execution = context.plan_threads(ThreadCapability::parallel(None));
+        let compression =
+            self.resolve_create_compression(request.codec.as_deref(), request.level)?;
+        let options = NodFormatOptions {
+            format: NodFormat::Rvz,
+            compression,
+            block_size: NodFormat::Rvz.default_block_size(),
+        };
+
+        let mut last_emitted_percent = -1.0_f32;
+        RVZ_NOD_CORE.process_create_dry_run_size_with_progress(
+            input,
+            &options,
+            &execution,
+            |processed_bytes, total| {
+                let percent = ((processed_bytes as f32 / total as f32) * 100.0).clamp(0.0, 100.0);
+                if percent < 100.0 && percent - last_emitted_percent >= 1.0 {
+                    last_emitted_percent = percent;
+                    emit_container_running_progress(
+                        context,
+                        "compress",
+                        RVZ.name,
+                        "create",
+                        format!("creating rvz ({percent:.0}%)"),
+                        percent,
+                        Some(&execution),
+                    );
+                }
+            },
+        )
+    }
+
     fn capabilities(&self) -> ContainerCapabilities {
         ContainerCapabilities {
             inspect: true,

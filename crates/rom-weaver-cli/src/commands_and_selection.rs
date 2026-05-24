@@ -537,7 +537,7 @@ impl CliApp {
         let resolved = match self.resolve_source_with_auto_extract(
             &source,
             &select,
-            no_extract,
+            no_extract || strip_header,
             no_ignore,
             &context,
             AutoExtractResolutionLabels {
@@ -580,7 +580,13 @@ impl CliApp {
 
         let mut temp_paths = Vec::new();
         let mut stripped_header_match = None;
-        let checksum_source = if strip_header {
+        let mut stripped_header_offset = 0_u64;
+        let mut trimmed_plan = None;
+        let user_requested_range = start.is_some() || length.is_some();
+        let mut start = start;
+        let mut length = length;
+        let should_auto_trim_fix = !no_trim_fix && !user_requested_range;
+        if strip_header {
             self.emit_running(
                 "checksum",
                 OperationFamily::Checksum,
@@ -590,18 +596,26 @@ impl CliApp {
                 None,
                 thread_execution.clone(),
             );
-            let stripped_extension = resolved_source
-                .extension()
-                .and_then(|value| value.to_str())
-                .unwrap_or("bin");
-            let stripped_path = context
-                .temp_paths()
-                .next_path("checksum-input-noheader", Some(stripped_extension));
-            match Self::strip_header_to_temp(&resolved_source, &stripped_path) {
-                Ok(result) => {
-                    stripped_header_match = result.matched_header;
-                    temp_paths.push(stripped_path.clone());
-                    stripped_path
+            match Self::detect_strippable_rom_header(&resolved_source) {
+                Ok(header_match) => {
+                    stripped_header_offset =
+                        u64::try_from(header_match.stripped_bytes().unwrap_or(ROM_HEADER_BYTES))
+                            .unwrap_or(ROM_HEADER_BYTES as u64);
+                    stripped_header_match = Some(header_match);
+                    let translated_start = start.unwrap_or(0).checked_add(stripped_header_offset);
+                    let Some(translated_start) = translated_start else {
+                        return self.finish(
+                            "checksum",
+                            OperationReport::failed(
+                                OperationFamily::Checksum,
+                                Some(self.checksum.name().to_string()),
+                                "validate",
+                                "checksum range start overflows after header stripping",
+                                thread_execution,
+                            ),
+                        );
+                    };
+                    start = Some(translated_start);
                 }
                 Err(error) => {
                     return self.finish(
@@ -616,13 +630,8 @@ impl CliApp {
                     );
                 }
             }
-        } else {
-            resolved_source.clone()
-        };
-        let mut trimmed_plan = None;
-        let mut start = start;
-        let mut length = length;
-        let should_auto_trim_fix = !no_trim_fix && start.is_none() && length.is_none();
+        }
+        let checksum_source = resolved_source.clone();
         if should_auto_trim_fix {
             self.emit_running(
                 "checksum",
@@ -633,8 +642,10 @@ impl CliApp {
                 None,
                 thread_execution.clone(),
             );
-            if let Ok(plan) = self.read_checksum_trim_plan(&checksum_source) {
-                start = Some(0);
+            if let Ok(plan) =
+                self.read_checksum_trim_plan_with_offset(&checksum_source, stripped_header_offset)
+            {
+                start = Some(stripped_header_offset);
                 length = Some(plan.trimmed_size);
                 trimmed_plan = Some(plan);
             }
@@ -649,7 +660,16 @@ impl CliApp {
             start,
             length,
         };
-        let checksum_stage = if request.start.is_some() || request.length.is_some() {
+        let header_only_translated_range =
+            strip_header
+                && !user_requested_range
+                && !should_auto_trim_fix
+                && stripped_header_offset > 0
+                && request.start == Some(stripped_header_offset)
+                && request.length.is_none();
+        let checksum_stage = if (request.start.is_some() || request.length.is_some())
+            && !header_only_translated_range
+        {
             "checksum-range"
         } else {
             "checksum"

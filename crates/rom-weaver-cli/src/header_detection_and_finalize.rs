@@ -87,36 +87,49 @@ impl CliApp {
         None
     }
 
-    fn strip_header_to_temp(input: &Path, stripped_path: &Path) -> Result<StripHeaderResult> {
-        let input_len = fs::metadata(input)?.len();
-        if let Some(parent) = stripped_path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-
-        let mut source = BufReader::new(File::open(input)?);
+    fn detect_strippable_rom_header(path: &Path) -> Result<KnownRomHeaderMatch> {
+        let input_len = fs::metadata(path)?.len();
+        let mut source = BufReader::new(File::open(path)?);
         let probe_len =
             ROM_HEADER_SCAN_BYTES.min(usize::try_from(input_len).unwrap_or(ROM_HEADER_SCAN_BYTES));
         let mut probe_bytes = vec![0_u8; probe_len];
         source.read_exact(&mut probe_bytes)?;
-        let mut matched_header = Self::detect_known_rom_header_from_prefix(input, &probe_bytes);
+        let mut matched_header = Self::detect_known_rom_header_from_prefix(path, &probe_bytes);
         if matched_header
             .and_then(|value| value.stripped_bytes())
             .is_none()
         {
-            matched_header = Self::detect_size_based_copier_header(input, input_len);
+            matched_header = Self::detect_size_based_copier_header(path, input_len);
         }
-        let Some(header_len) = matched_header.and_then(|value| value.stripped_bytes()) else {
+        let Some(header_match) = matched_header else {
             return Err(RomWeaverError::Validation(format!(
                 "could not detect a supported removable ROM header for `{}`",
-                input.display()
+                path.display()
+            )));
+        };
+        let Some(header_len) = header_match.stripped_bytes() else {
+            return Err(RomWeaverError::Validation(format!(
+                "could not detect a supported removable ROM header for `{}`",
+                path.display()
             )));
         };
         if input_len < header_len as u64 {
             return Err(RomWeaverError::Validation(format!(
                 "cannot strip {header_len}-byte header from `{}` (file is only {input_len} byte(s))",
-                input.display()
+                path.display()
             )));
         }
+        Ok(header_match)
+    }
+
+    fn strip_header_to_temp(input: &Path, stripped_path: &Path) -> Result<StripHeaderResult> {
+        let header_match = Self::detect_strippable_rom_header(input)?;
+        let header_len = header_match.stripped_bytes().unwrap_or(ROM_HEADER_BYTES);
+        if let Some(parent) = stripped_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        let mut source = BufReader::new(File::open(input)?);
         source.seek(SeekFrom::Start(0))?;
         let mut header = vec![0_u8; header_len];
         source.read_exact(&mut header)?;
@@ -126,7 +139,7 @@ impl CliApp {
         stripped.flush()?;
         Ok(StripHeaderResult {
             header_bytes: header,
-            matched_header,
+            matched_header: Some(header_match),
         })
     }
 

@@ -40,7 +40,6 @@ const NDS_DOWNLOAD_PLAY_CERT_MAGIC: [u8; 2] = [0x61, 0x63];
 const NDS_DOWNLOAD_PLAY_CERT_SIZE_BYTES: u64 = 0x88;
 const TRIM_BINARY_SCAN_CHUNK_BYTES: usize = 128 * 1024;
 const XISO_TRIM_TEMP_SUFFIX: &str = "rom-weaver-trim-xiso.tmp";
-const RVZ_TRIM_TEMP_SUFFIX: &str = "rom-weaver-trim-rvz.tmp";
 const CHECKSUM_IGNORE_SIDECAR_EXTENSIONS: &[&str] = &[
     ".txt", ".nfo", ".diz", ".sfv", ".md5", ".sha1", ".sha256", ".sha512", ".crc", ".log", ".json",
 ];
@@ -307,6 +306,31 @@ struct StripHeaderResult {
 
 type XisoTrimSourceDevice = XdvdfsOffsetWrapper<BufReader<File>, io::Error>;
 type XisoTrimSourceFilesystem = XdvdfsFilesystem<io::Error, XisoTrimSourceDevice>;
+
+#[derive(Default)]
+struct XisoMeasuredLengthSink {
+    output_len: u64,
+}
+
+impl XisoMeasuredLengthSink {
+    const fn output_len(&self) -> u64 {
+        self.output_len
+    }
+}
+
+impl XdvdfsBlockDeviceWrite<io::Error> for XisoMeasuredLengthSink {
+    fn write(&mut self, offset: u64, buffer: &[u8]) -> std::result::Result<(), io::Error> {
+        let end = offset
+            .checked_add(buffer.len() as u64)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "xiso output overflow"))?;
+        self.output_len = self.output_len.max(end);
+        Ok(())
+    }
+
+    fn len(&mut self) -> std::result::Result<u64, io::Error> {
+        Ok(self.output_len)
+    }
+}
 
 struct NdsTrimPlan {
     trimmed_size: u64,

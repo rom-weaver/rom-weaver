@@ -322,6 +322,59 @@ impl NodHandlerCore {
         Ok(fs::metadata(output_path)?.len())
     }
 
+    fn process_create_dry_run_size_with_progress<F>(
+        &self,
+        input: &Path,
+        options: &NodFormatOptions,
+        execution: &ThreadExecution,
+        mut emit_progress: F,
+    ) -> Result<u64>
+    where
+        F: FnMut(u64, u64),
+    {
+        let preloader_threads = self.negotiated_threads(execution);
+        let input_disc =
+            NodDiscReader::new(input, &self.read_options(preloader_threads)).map_err(|error| {
+                RomWeaverError::Validation(format!(
+                    "failed to open input `{}` for {} create: {error}",
+                    input.display(),
+                    self.format_name()
+                ))
+            })?;
+
+        let writer = NodDiscWriter::new(input_disc, options).map_err(|error| {
+            RomWeaverError::Validation(format!(
+                "failed to initialize {} writer: {error}",
+                self.format_name()
+            ))
+        })?;
+
+        let mut output_bytes = 0_u64;
+        let mut process_options = NodProcessOptions::default();
+        process_options.processor_threads = self.negotiated_threads(execution);
+        let finalization = writer
+            .process(
+                |data, processed, total| {
+                    output_bytes = output_bytes.saturating_add(data.as_ref().len() as u64);
+                    if total > 0 {
+                        let processed_bytes = processed
+                            .saturating_add(data.as_ref().len() as u64)
+                            .min(total);
+                        emit_progress(processed_bytes, total);
+                    }
+                    Ok(())
+                },
+                &process_options,
+            )
+            .map_err(|error| {
+                RomWeaverError::Validation(format!("{} create failed: {error}", self.format_name()))
+            })?;
+        if !finalization.header.is_empty() {
+            output_bytes = output_bytes.max(finalization.header.len() as u64);
+        }
+        Ok(output_bytes)
+    }
+
     fn validate_u8_level(&self, codec: &str, level: i32) -> Result<u8> {
         if level < 0 {
             return Err(RomWeaverError::Validation(format!(

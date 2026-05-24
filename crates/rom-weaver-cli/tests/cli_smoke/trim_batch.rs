@@ -413,6 +413,101 @@ fn trim_simulate_alias_does_not_write_outputs() {
 }
 
 #[test]
+fn trim_xiso_simulate_does_not_write_outputs() {
+    let temp = setup_temp_dir();
+    let source_tree = temp.child("xiso-source");
+    let source = temp.child("disc.xiso");
+    write_xiso_fixture_from_directory(source_tree.path(), source.path());
+    let mut source_file = File::options()
+        .read(true)
+        .write(true)
+        .open(source.path())
+        .expect("open xiso");
+    source_file
+        .seek(std::io::SeekFrom::End(0))
+        .expect("seek xiso end");
+    source_file
+        .write_all(&vec![0_u8; 64 * 2048])
+        .expect("append xiso padding");
+    source_file.flush().expect("flush xiso padding");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "trim",
+            source.path().to_str().expect("path"),
+            "--simulate",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let terminal = parse_single_json_line(&output);
+    assert_eq!(terminal["command"], "trim");
+    assert_eq!(terminal["status"], "succeeded");
+    let label = terminal["label"].as_str().expect("label");
+    assert!(label.contains("trim simulation complete"));
+    assert!(label.contains("mode=xiso"));
+    assert!(!source.path().with_extension("trim.xiso").exists());
+}
+
+#[test]
+fn trim_wbfs_simulate_does_not_write_outputs() {
+    let temp = setup_temp_dir();
+    let iso_bytes = build_test_gamecube_iso(0x4000);
+    let source_iso = temp.child("disc.iso");
+    let source_wbfs = temp.child("disc.wbfs");
+    fs::write(source_iso.path(), &iso_bytes).expect("iso fixture");
+    let disc = NodDiscReader::new(source_iso.path(), &NodDiscOptions::default()).expect("open iso");
+    let options = NodFormatOptions {
+        format: NodFormat::Wbfs,
+        compression: NodCompression::None,
+        block_size: NodFormat::Wbfs.default_block_size(),
+    };
+    let writer = NodDiscWriter::new(disc, &options).expect("create wbfs writer");
+    let mut output = File::create(source_wbfs.path()).expect("create wbfs");
+    let finalization = writer
+        .process(
+            |data, _processed, _total| output.write_all(data.as_ref()),
+            &NodProcessOptions::default(),
+        )
+        .expect("write wbfs");
+    if !finalization.header.is_empty() {
+        output.rewind().expect("seek wbfs");
+        output
+            .write_all(finalization.header.as_ref())
+            .expect("write wbfs header");
+    }
+    output.flush().expect("flush wbfs");
+
+    let trim_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "trim",
+            source_wbfs.path().to_str().expect("path"),
+            "--simulate",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let terminal = parse_single_json_line(&trim_output);
+    assert_eq!(terminal["command"], "trim");
+    assert_eq!(terminal["family"], "command");
+    assert_eq!(terminal["status"], "succeeded");
+    let label = terminal["label"].as_str().expect("label");
+    assert!(label.contains("trim simulation complete"));
+    assert!(label.contains("mode=rvz-scrub"));
+    assert!(!source_wbfs.path().with_extension("trim.rvz").exists());
+}
+
+#[test]
 fn trim_short_inplace_flag_trims_source_file() {
     let temp = setup_temp_dir();
     let source = temp.child("sample.nds");
@@ -1243,4 +1338,3 @@ fn batch_header_fixer_dry_run_does_not_write_outputs() {
     assert_eq!(fs::read(source.path()).expect("source bytes"), gba);
     assert!(!source.path().with_extension("fixed.gba").exists());
 }
-

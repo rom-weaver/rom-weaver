@@ -288,6 +288,17 @@ pub trait ContainerHandler: Send + Sync {
         request: &ContainerCreateRequest,
         context: &OperationContext,
     ) -> Result<OperationReport>;
+    fn create_dry_run_size(
+        &self,
+        request: &ContainerCreateRequest,
+        context: &OperationContext,
+    ) -> Result<u64> {
+        let _ = (request, context);
+        Err(RomWeaverError::Unsupported(format!(
+            "{} does not support create dry-run size measurement",
+            self.descriptor().name
+        )))
+    }
     fn capabilities(&self) -> ContainerCapabilities;
 }
 
@@ -461,6 +472,14 @@ impl ContainerHandler for TracingContainerHandler {
         let result = self.inner.create(request, context);
         trace_operation_result("create", descriptor, &result);
         result
+    }
+
+    fn create_dry_run_size(
+        &self,
+        request: &ContainerCreateRequest,
+        context: &OperationContext,
+    ) -> Result<u64> {
+        self.inner.create_dry_run_size(request, context)
     }
 
     fn capabilities(&self) -> ContainerCapabilities {

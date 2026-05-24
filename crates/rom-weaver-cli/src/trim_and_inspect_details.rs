@@ -38,7 +38,11 @@ impl CliApp {
         recommendation.format_name.eq_ignore_ascii_case("rvz")
     }
 
-    fn read_checksum_trim_plan(&self, source: &Path) -> Result<ChecksumTrimPlan> {
+    fn read_checksum_trim_plan_with_offset(
+        &self,
+        source: &Path,
+        data_start_offset: u64,
+    ) -> Result<ChecksumTrimPlan> {
         let Some(kind) = self.trim_eligible_kind_for_path(source) else {
             return Err(RomWeaverError::Validation(format!(
                 "trim-fix unavailable for non-trim-eligible input: `{}`",
@@ -46,32 +50,39 @@ impl CliApp {
             )));
         };
         let file_size = fs::metadata(source)?.len();
-        if file_size == 0 {
+        if file_size == 0 || data_start_offset >= file_size {
             return Err(RomWeaverError::Validation(format!(
                 "input is empty and cannot be processed: `{}`",
                 source.display()
             )));
         }
+        let effective_file_size = file_size.saturating_sub(data_start_offset);
         match kind {
             TrimInputKind::NdsFamily => {
-                if file_size < NDS_HEADER_TOTAL_BYTES as u64 {
+                if effective_file_size < NDS_HEADER_TOTAL_BYTES as u64 {
                     return Err(RomWeaverError::Validation(format!(
                         "input is too small to contain a valid NDS/DSi header: `{}`",
                         source.display()
                     )));
                 }
                 let mut input = File::open(source)?;
-                let plan = Self::read_nds_trim_plan(&mut input, file_size, false)?;
+                let plan = Self::read_nds_trim_plan(
+                    &mut input,
+                    effective_file_size,
+                    false,
+                    data_start_offset,
+                )?;
                 Ok(ChecksumTrimPlan {
-                    trimmed_size: plan.trimmed_size.min(file_size),
+                    trimmed_size: plan.trimmed_size.min(effective_file_size),
                     mode: if plan.dsi_mode { "dsi" } else { "ds" },
                     preserved_download_play_cert: plan.preserved_download_play_cert,
                 })
             }
             TrimInputKind::Gba | TrimInputKind::ThreeDs => {
-                let trimmed_size = Self::scan_trimmed_size_from_trailing_padding(
+                let trimmed_size = Self::scan_trimmed_size_from_trailing_padding_from_offset(
                     source,
                     kind.default_padding_byte(),
+                    data_start_offset,
                 )?;
                 Ok(ChecksumTrimPlan {
                     trimmed_size,
@@ -80,6 +91,12 @@ impl CliApp {
                 })
             }
             TrimInputKind::Xiso => {
+                if data_start_offset > 0 {
+                    return Err(RomWeaverError::Validation(format!(
+                        "checksum trim-fix is not supported for header-stripped xiso inputs: `{}`",
+                        source.display()
+                    )));
+                }
                 let trimmed_size = Self::measure_trimmed_xiso_size(source).map_err(|error| {
                     RomWeaverError::Validation(format!(
                         "checksum trim-fix failed while evaluating xiso `{}`: {error}",
@@ -361,6 +378,7 @@ impl CliApp {
             &mut input,
             original_size,
             operation == TrimOperation::Revert,
+            0,
         )?;
         let (target_size, already_target_size, fill_byte) = match operation {
             TrimOperation::Trim => (
@@ -674,11 +692,29 @@ impl CliApp {
     }
 
     fn measure_rvz_scrubbed_size(&self, source: &Path, context: &OperationContext) -> Result<u64> {
-        let temp_path = Self::temporary_rvz_trim_path(source);
-        self.create_rvz_scrubbed_output(source, &temp_path, context)?;
-        let measured = fs::metadata(&temp_path)?.len();
-        fs::remove_file(&temp_path).ok();
-        Ok(measured)
+        let handler = self.containers.find_by_name("rvz").ok_or_else(|| {
+            RomWeaverError::Unsupported(
+                "rvz handler is not registered; rvz-scrub trim is unavailable".to_string(),
+            )
+        })?;
+        handler
+            .create_dry_run_size(
+                &ContainerCreateRequest {
+                    inputs: vec![source.to_path_buf()],
+                    output: source.with_extension("rvz"),
+                    format: "rvz".to_string(),
+                    codec: None,
+                    level: None,
+                    parent: None,
+                },
+                context,
+            )
+            .map_err(|error| {
+                RomWeaverError::Validation(format!(
+                    "rvz-scrub trim simulation failed while rebuilding `{}`: {error}",
+                    source.display()
+                ))
+            })
     }
 
     fn open_xiso_trim_source_filesystem(source_path: &Path) -> Result<XisoTrimSourceFilesystem> {
@@ -721,11 +757,15 @@ impl CliApp {
     }
 
     fn measure_trimmed_xiso_size(source: &Path) -> Result<u64> {
-        let temp_path = Self::temporary_xiso_trim_path(source);
-        Self::create_trimmed_xiso(source, &temp_path)?;
-        let measured = fs::metadata(&temp_path)?.len();
-        fs::remove_file(&temp_path).ok();
-        Ok(measured)
+        let mut source_fs = Self::open_xiso_trim_source_filesystem(source)?;
+        let mut sink = XisoMeasuredLengthSink::default();
+        create_xdvdfs_image(&mut source_fs, &mut sink, |_| {}).map_err(|error| {
+            RomWeaverError::Validation(format!(
+                "xiso trim failed while rebuilding `{}`: {error}",
+                source.display()
+            ))
+        })?;
+        Ok(sink.output_len())
     }
 
     fn temporary_xiso_trim_path(source: &Path) -> PathBuf {
@@ -740,26 +780,6 @@ impl CliApp {
         let temp_name = format!(
             ".{name}.{}-{}-{timestamp}",
             XISO_TRIM_TEMP_SUFFIX,
-            Self::runtime_process_id()
-        );
-        source
-            .parent()
-            .map(|parent| parent.join(&temp_name))
-            .unwrap_or_else(|| PathBuf::from(temp_name))
-    }
-
-    fn temporary_rvz_trim_path(source: &Path) -> PathBuf {
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|value| value.as_nanos())
-            .unwrap_or_default();
-        let name = source
-            .file_name()
-            .map(|value| value.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "rvz".to_string());
-        let temp_name = format!(
-            ".{name}.{}-{}-{timestamp}",
-            RVZ_TRIM_TEMP_SUFFIX,
             Self::runtime_process_id()
         );
         source
@@ -841,23 +861,32 @@ impl CliApp {
     }
 
     fn scan_trimmed_size_from_trailing_padding(path: &Path, fill_byte: u8) -> Result<u64> {
+        Self::scan_trimmed_size_from_trailing_padding_from_offset(path, fill_byte, 0)
+    }
+
+    fn scan_trimmed_size_from_trailing_padding_from_offset(
+        path: &Path,
+        fill_byte: u8,
+        start_offset: u64,
+    ) -> Result<u64> {
         let mut input = File::open(path)?;
         let file_size = input.metadata()?.len();
-        if file_size == 0 {
+        if file_size == 0 || start_offset >= file_size {
             return Ok(0);
         }
 
         let mut cursor = file_size;
         let mut buffer = vec![0_u8; TRIM_BINARY_SCAN_CHUNK_BYTES];
-        while cursor > 0 {
-            let read_len = usize::try_from(cursor.min(TRIM_BINARY_SCAN_CHUNK_BYTES as u64))
+        while cursor > start_offset {
+            let remaining = cursor.saturating_sub(start_offset);
+            let read_len = usize::try_from(remaining.min(TRIM_BINARY_SCAN_CHUNK_BYTES as u64))
                 .unwrap_or(TRIM_BINARY_SCAN_CHUNK_BYTES);
             cursor -= read_len as u64;
             input.seek(SeekFrom::Start(cursor))?;
             input.read_exact(&mut buffer[..read_len])?;
             for (offset, byte) in buffer[..read_len].iter().enumerate().rev() {
                 if *byte != fill_byte {
-                    return Ok(cursor + offset as u64 + 1);
+                    return Ok(cursor + offset as u64 + 1 - start_offset);
                 }
             }
         }
@@ -880,9 +909,10 @@ impl CliApp {
         input: &mut File,
         file_size: u64,
         allow_boundary_past_eof: bool,
+        start_offset: u64,
     ) -> Result<NdsTrimPlan> {
         let mut header = vec![0_u8; NDS_HEADER_TOTAL_BYTES];
-        input.seek(SeekFrom::Start(0))?;
+        input.seek(SeekFrom::Start(start_offset))?;
         input.read_exact(&mut header)?;
         Self::validate_nds_header(&header)?;
 
@@ -912,7 +942,7 @@ impl CliApp {
 
         let mut preserved_download_play_cert = false;
         if !dsi_mode && trimmed_size + 2 <= file_size {
-            input.seek(SeekFrom::Start(trimmed_size))?;
+            input.seek(SeekFrom::Start(start_offset.saturating_add(trimmed_size)))?;
             let mut cert_magic = [0_u8; 2];
             input.read_exact(&mut cert_magic)?;
             if cert_magic == NDS_DOWNLOAD_PLAY_CERT_MAGIC {

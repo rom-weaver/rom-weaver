@@ -37,7 +37,7 @@ use tracing::trace;
 #[cfg(not(target_arch = "wasm32"))]
 use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 use xdvdfs::{
-    blockdev::OffsetWrapper as XdvdfsOffsetWrapper,
+    blockdev::{BlockDeviceWrite as XdvdfsBlockDeviceWrite, OffsetWrapper as XdvdfsOffsetWrapper},
     write::{fs::XDVDFSFilesystem as XdvdfsFilesystem, img::create_xdvdfs_image},
 };
 
