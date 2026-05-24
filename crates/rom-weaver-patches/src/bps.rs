@@ -667,8 +667,8 @@ fn create_bps_patch_streaming(
     Ok(created)
 }
 
-fn bps_apply_thread_capability(action_count: usize) -> ThreadCapability {
-    ThreadCapability::parallel(Some(action_count.max(1)))
+fn bps_apply_thread_capability(_action_count: usize) -> ThreadCapability {
+    ThreadCapability::single_threaded()
 }
 
 fn patch_contains_target_copy(actions: &[BpsAction]) -> bool {
