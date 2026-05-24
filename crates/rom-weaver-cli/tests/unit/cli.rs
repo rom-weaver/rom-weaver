@@ -106,7 +106,7 @@ mod tests {
                 None,
                 CompressionLevelProfile::Max,
             ),
-            Some(22)
+            Some(9)
         );
     }
 

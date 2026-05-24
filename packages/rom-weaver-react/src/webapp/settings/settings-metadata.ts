@@ -160,14 +160,14 @@ const SETTINGS_FIELD_ORDER = [
 
 const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<K> } = {
   chdCreateCdCodecs: {
-    defaultValue: "cdzs,cdzl,cdfl",
+    defaultValue: "cdlz,cdzl,cdfl",
     disabled: ({ uiState }) => !uiState.chdEnabled,
     id: "settings-chd-createcd-codecs",
     key: "chdCreateCdCodecs",
     kind: "text",
     label: getSettingsLabel("chdCreateCdCodecs"),
     labelDataLocalize: "Create CD codecs",
-    placeholder: "cdzs:19,cdzl:9,cdfl:8",
+    placeholder: "cdlz:9,cdzl:9,cdfl:8",
     suggestion:
       "Valid values: cdzs, cdlz, cdzl, cdfl. Optional levels: cdzs[:0-22], cdlz[:0-9], cdzl[:0-9], cdfl[:0-8]",
     suggestionDataLocalize:
@@ -176,14 +176,14 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     validValues: ["cdzs", "cdlz", "cdzl", "cdfl"],
   },
   chdCreateDvdCodecs: {
-    defaultValue: "zstd,zlib,huff,flac",
+    defaultValue: "lzma,zlib,huff,flac",
     disabled: ({ uiState }) => !uiState.chdEnabled,
     id: "settings-chd-createdvd-codecs",
     key: "chdCreateDvdCodecs",
     kind: "text",
     label: getSettingsLabel("chdCreateDvdCodecs"),
     labelDataLocalize: "Create DVD codecs",
-    placeholder: "zstd:19,zlib:9,huff,flac:8",
+    placeholder: "lzma:9,zlib:9,huff,flac:8",
     suggestion:
       "Valid values: zstd, lzma, zlib, huff, flac. Optional levels: zstd[:0-22], lzma[:0-9], zlib[:0-9], huff, flac[:0-8]",
     suggestionDataLocalize:

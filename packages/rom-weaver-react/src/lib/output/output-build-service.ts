@@ -23,8 +23,8 @@ import { reportProgress } from "../progress/progress-reporting.ts";
 import { createPatchFileFromPublicOutput } from "../runtime/public-output-bin-file.ts";
 import { createPatchedOutputPlan, type PatchedOutputPlan } from "./patched-output-plan.ts";
 
-const DEFAULT_CHD_CREATE_CD_CODECS = "cdzs,cdzl,cdfl";
-const DEFAULT_CHD_CREATE_DVD_CODECS = "zstd,zlib,huff,flac";
+const DEFAULT_CHD_CREATE_CD_CODECS = "cdlz,cdzl,cdfl";
+const DEFAULT_CHD_CREATE_DVD_CODECS = "lzma,zlib,huff,flac";
 
 const hasDiscCompressionMetadata = (source: PatchFileInstance | null | undefined) =>
   !!(

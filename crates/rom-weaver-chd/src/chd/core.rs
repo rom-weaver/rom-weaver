@@ -394,31 +394,31 @@
                 ChdCreateKind::Disc(layout) => match layout.kind {
                     DiscKind::CdRom | DiscKind::GdRom => ChdCompressionPlan {
                         codecs: [
-                            ChdCodec::CD_ZSTD,
+                            ChdCodec::CD_LZMA,
                             ChdCodec::CD_ZLIB,
                             ChdCodec::CD_FLAC,
                             ChdCodec::NONE,
                         ],
-                        primary_codec: ChdCodec::CD_ZSTD,
+                        primary_codec: ChdCodec::CD_LZMA,
                     },
                 },
                 ChdCreateKind::Dvd => ChdCompressionPlan {
                     codecs: [
-                        ChdCodec::ZSTD,
+                        ChdCodec::LZMA,
                         ChdCodec::ZLIB,
                         ChdCodec::HUFFMAN,
                         ChdCodec::FLAC,
                     ],
-                    primary_codec: ChdCodec::ZSTD,
+                    primary_codec: ChdCodec::LZMA,
                 },
                 _ => ChdCompressionPlan {
                     codecs: [
-                        ChdCodec::ZSTD,
+                        ChdCodec::LZMA,
                         ChdCodec::ZLIB,
                         ChdCodec::HUFFMAN,
                         ChdCodec::FLAC,
                     ],
-                    primary_codec: ChdCodec::ZSTD,
+                    primary_codec: ChdCodec::LZMA,
                 },
             }
         }

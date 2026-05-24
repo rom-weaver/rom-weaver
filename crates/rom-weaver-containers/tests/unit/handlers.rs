@@ -3162,13 +3162,13 @@ mod tests {
         assert_eq!(
             codecs,
             [
-                ChdCodec::CD_ZSTD,
+                ChdCodec::CD_LZMA,
                 ChdCodec::CD_ZLIB,
                 ChdCodec::CD_FLAC,
                 ChdCodec::NONE,
             ]
         );
-        assert_eq!(primary_codec, ChdCodec::CD_ZSTD);
+        assert_eq!(primary_codec, ChdCodec::CD_LZMA);
     }
 
     #[cfg(not(target_family = "wasm"))]
@@ -3181,13 +3181,13 @@ mod tests {
         assert_eq!(
             codecs,
             [
-                ChdCodec::ZSTD,
+                ChdCodec::LZMA,
                 ChdCodec::ZLIB,
                 ChdCodec::HUFFMAN,
                 ChdCodec::FLAC,
             ]
         );
-        assert_eq!(primary_codec, ChdCodec::ZSTD);
+        assert_eq!(primary_codec, ChdCodec::LZMA);
     }
 
     #[cfg(not(target_family = "wasm"))]
@@ -3200,13 +3200,13 @@ mod tests {
         assert_eq!(
             codecs,
             [
-                ChdCodec::ZSTD,
+                ChdCodec::LZMA,
                 ChdCodec::ZLIB,
                 ChdCodec::HUFFMAN,
                 ChdCodec::FLAC,
             ]
         );
-        assert_eq!(primary_codec, ChdCodec::ZSTD);
+        assert_eq!(primary_codec, ChdCodec::LZMA);
     }
 
     #[cfg(not(target_family = "wasm"))]
