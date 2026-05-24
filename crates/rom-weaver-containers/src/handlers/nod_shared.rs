@@ -1,0 +1,383 @@
+#[derive(Clone, Copy)]
+struct NodHandlerCore {
+    descriptor: &'static FormatDescriptor,
+    nod_format: NodFormat,
+}
+
+struct NodExtractPlan {
+    execution: ThreadExecution,
+    disc: NodDiscReader,
+    disc_size: u64,
+    compression_label: String,
+    output_path: PathBuf,
+}
+
+impl NodHandlerCore {
+    const fn new(descriptor: &'static FormatDescriptor, nod_format: NodFormat) -> Self {
+        Self {
+            descriptor,
+            nod_format,
+        }
+    }
+
+    fn format_name(&self) -> &'static str {
+        self.descriptor.name
+    }
+
+    fn negotiated_threads(&self, execution: &ThreadExecution) -> usize {
+        if execution.used_parallelism {
+            execution.effective_threads
+        } else {
+            0
+        }
+    }
+
+    fn read_options(&self, preloader_threads: usize) -> NodDiscOptions {
+        let mut options = NodDiscOptions::default();
+        options.preloader_threads = preloader_threads;
+        options
+    }
+
+    fn open_disc_with<E, F>(
+        &self,
+        source: &Path,
+        preloader_threads: usize,
+        open_disc: F,
+    ) -> Result<NodDiscReader>
+    where
+        E: std::fmt::Display,
+        F: FnOnce(&Path, &NodDiscOptions) -> std::result::Result<NodDiscReader, E>,
+    {
+        let options = self.read_options(preloader_threads);
+        open_disc(source, &options).map_err(|error| {
+            RomWeaverError::Validation(format!(
+                "failed to open {} source `{}`: {error}",
+                self.format_name(),
+                source.display()
+            ))
+        })
+    }
+
+    fn open_disc(&self, source: &Path, preloader_threads: usize) -> Result<NodDiscReader> {
+        self.open_disc_with(source, preloader_threads, |path, options| {
+            NodDiscReader::new(path, options)
+        })
+    }
+
+    fn open_disc_for_inspect(&self, source: &Path) -> Result<NodDiscReader> {
+        self.open_disc(source, 0)
+    }
+
+    fn validate_meta(&self, source: &Path, disc: &NodDiscReader) -> Result<nod::read::DiscMeta> {
+        let meta = disc.meta();
+        if meta.format == self.nod_format {
+            Ok(meta)
+        } else {
+            Err(RomWeaverError::Validation(format!(
+                "source `{}` is not a {} container (detected {})",
+                source.display(),
+                self.format_name(),
+                meta.format
+            )))
+        }
+    }
+
+    fn probe(&self, source: &Path) -> ProbeConfidence {
+        if let Ok(disc) = self.open_disc_for_inspect(source)
+            && disc.meta().format == self.nod_format
+        {
+            return ProbeConfidence::Signature;
+        }
+        ProbeConfidence::Extension
+    }
+
+    fn inspect_with(
+        &self,
+        request: &ContainerInspectRequest,
+        context: &OperationContext,
+        open_disc: impl FnOnce(&Path) -> Result<NodDiscReader>,
+    ) -> Result<OperationReport> {
+        let execution = context.plan_threads(ThreadCapability::single_threaded());
+        let disc = open_disc(&request.source)?;
+        let meta = self.validate_meta(&request.source, &disc)?;
+        let disc_size = meta.disc_size.unwrap_or_else(|| disc.disc_size());
+        let compression_label = normalize_codec_label(&meta.compression.to_string());
+        let block_label = meta
+            .block_size
+            .map(|size| format!("{size} bytes"))
+            .unwrap_or_else(|| "unknown".to_string());
+        Ok(OperationReport::succeeded(
+            OperationFamily::Container,
+            Some(self.format_name().to_string()),
+            "inspect",
+            format!(
+                "{}: {disc_size} bytes, compression={}, block={}, lossless={}, decrypted={}, needs_hash_recovery={}",
+                self.format_name(),
+                compression_label,
+                block_label,
+                meta.lossless,
+                meta.decrypted,
+                meta.needs_hash_recovery
+            ),
+            Some(100.0),
+            Some(execution),
+        ))
+    }
+
+    fn inspect(
+        &self,
+        request: &ContainerInspectRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        self.inspect_with(request, context, |source| {
+            self.open_disc_for_inspect(source)
+        })
+    }
+
+    fn list_entries(&self, source: &Path) -> Vec<String> {
+        vec![self.extract_name(source)]
+    }
+
+    fn extract_name(&self, source: &Path) -> String {
+        let stem = source
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .filter(|value| !value.is_empty())
+            .unwrap_or("output");
+        format!("{stem}.iso")
+    }
+
+    fn prepare_extract_with(
+        &self,
+        request: &ContainerExtractRequest,
+        context: &OperationContext,
+        open_disc: impl FnOnce(&Path, usize) -> Result<NodDiscReader>,
+    ) -> Result<NodExtractPlan> {
+        let output_name = self.extract_name(&request.source);
+        let mut selections = SelectionMatcher::new(&request.selections);
+        if !selections.matches(&output_name) {
+            selections.ensure_all_matched()?;
+        }
+        selections.ensure_all_matched()?;
+
+        let execution = context.plan_threads(ThreadCapability::parallel(None));
+        let preloader_threads = self.negotiated_threads(&execution);
+        let disc = open_disc(&request.source, preloader_threads)?;
+        let meta = self.validate_meta(&request.source, &disc)?;
+        let disc_size = meta.disc_size.unwrap_or_else(|| disc.disc_size());
+        let compression_label = normalize_codec_label(&meta.compression.to_string());
+
+        fs::create_dir_all(&request.out_dir)?;
+        let output_path = request.out_dir.join(output_name);
+
+        Ok(NodExtractPlan {
+            execution,
+            disc,
+            disc_size,
+            compression_label,
+            output_path,
+        })
+    }
+
+    fn prepare_extract(
+        &self,
+        request: &ContainerExtractRequest,
+        context: &OperationContext,
+    ) -> Result<NodExtractPlan> {
+        self.prepare_extract_with(request, context, |source, preloader_threads| {
+            self.open_disc(source, preloader_threads)
+        })
+    }
+
+    fn extract_with_standard_copy(
+        &self,
+        request: &ContainerExtractRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let mut plan = self.prepare_extract(request, context)?;
+        let mut output = BufWriter::new(File::create(&plan.output_path)?);
+        let progress_label = format!("extracting `{}`", self.format_name());
+        let bytes_written = copy_reader_with_progress(
+            &mut plan.disc,
+            &mut output,
+            plan.disc_size,
+            context,
+            "extract",
+            self.format_name(),
+            "extract",
+            &progress_label,
+            Some(&plan.execution),
+        )?;
+        output.flush()?;
+
+        Ok(self.extracted_report(
+            &request.source,
+            &plan.output_path,
+            bytes_written,
+            plan.disc_size,
+            &plan.compression_label,
+            plan.execution,
+        ))
+    }
+
+    fn extracted_report(
+        &self,
+        source: &Path,
+        output_path: &Path,
+        bytes_written: u64,
+        disc_size: u64,
+        compression_label: &str,
+        execution: ThreadExecution,
+    ) -> OperationReport {
+        OperationReport::succeeded(
+            OperationFamily::Container,
+            Some(self.format_name().to_string()),
+            "extract",
+            format!(
+                "extracted `{}` to `{}` ({} bytes written, expected {}, compression={})",
+                source.display(),
+                output_path.display(),
+                bytes_written,
+                disc_size,
+                compression_label
+            ),
+            Some(100.0),
+            Some(execution),
+        )
+    }
+
+    fn ensure_single_create_input<'a>(
+        &self,
+        request: &'a ContainerCreateRequest,
+    ) -> Result<&'a Path> {
+        if request.inputs.len() != 1 {
+            return Err(RomWeaverError::Validation(format!(
+                "{} create currently requires exactly one input file",
+                self.format_name()
+            )));
+        }
+        Ok(request.inputs[0].as_path())
+    }
+
+    fn ensure_create_output_parent(&self, output: &Path) -> Result<()> {
+        if let Some(parent) = output.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        Ok(())
+    }
+
+    fn process_create_with_progress<F>(
+        &self,
+        input: &Path,
+        output_path: &Path,
+        options: &NodFormatOptions,
+        execution: &ThreadExecution,
+        mut emit_progress: F,
+    ) -> Result<u64>
+    where
+        F: FnMut(u64, u64),
+    {
+        let preloader_threads = self.negotiated_threads(execution);
+        let input_disc =
+            NodDiscReader::new(input, &self.read_options(preloader_threads)).map_err(|error| {
+                RomWeaverError::Validation(format!(
+                    "failed to open input `{}` for {} create: {error}",
+                    input.display(),
+                    self.format_name()
+                ))
+            })?;
+
+        let writer = NodDiscWriter::new(input_disc, options).map_err(|error| {
+            RomWeaverError::Validation(format!(
+                "failed to initialize {} writer: {error}",
+                self.format_name()
+            ))
+        })?;
+
+        let mut output = File::create(output_path)?;
+        let mut process_options = NodProcessOptions::default();
+        process_options.processor_threads = self.negotiated_threads(execution);
+        let finalization = writer
+            .process(
+                |data, processed, total| {
+                    output.write_all(data.as_ref())?;
+                    if total > 0 {
+                        let processed_bytes = processed
+                            .saturating_add(data.as_ref().len() as u64)
+                            .min(total);
+                        emit_progress(processed_bytes, total);
+                    }
+                    Ok(())
+                },
+                &process_options,
+            )
+            .map_err(|error| {
+                RomWeaverError::Validation(format!("{} create failed: {error}", self.format_name()))
+            })?;
+        if !finalization.header.is_empty() {
+            output.seek(SeekFrom::Start(0))?;
+            output.write_all(finalization.header.as_ref())?;
+        }
+        output.flush()?;
+        Ok(fs::metadata(output_path)?.len())
+    }
+
+    fn validate_u8_level(&self, codec: &str, level: i32) -> Result<u8> {
+        if level < 0 {
+            return Err(RomWeaverError::Validation(format!(
+                "{} codec `{codec}` requires a non-negative level",
+                self.format_name()
+            )));
+        }
+        u8::try_from(level).map_err(|_| {
+            RomWeaverError::Validation(format!(
+                "{} codec `{codec}` level `{level}` is too large",
+                self.format_name()
+            ))
+        })
+    }
+
+    fn validate_i8_level(&self, codec: &str, level: i32) -> Result<i8> {
+        i8::try_from(level).map_err(|_| {
+            RomWeaverError::Validation(format!(
+                "{} codec `{codec}` level `{level}` is out of range",
+                self.format_name()
+            ))
+        })
+    }
+
+    fn reject_store_level_error(&self) -> RomWeaverError {
+        RomWeaverError::Validation(format!(
+            "{} codec `store` does not accept --level",
+            self.format_name()
+        ))
+    }
+
+    fn unsupported_codec_error(&self, codec_name: &str, supported_clause: &str) -> RomWeaverError {
+        RomWeaverError::Validation(format!(
+            "unsupported {} codec `{codec_name}`; {supported_clause}",
+            self.format_name()
+        ))
+    }
+
+    fn resolve_store_only_compression(
+        &self,
+        codec: Option<&str>,
+        level: Option<i32>,
+    ) -> Result<NodCompression> {
+        match parse_requested_codec(codec) {
+            RequestedCodec::Unspecified | RequestedCodec::Known(CanonicalCodec::Store) => {
+                if level.is_some() {
+                    return Err(self.reject_store_level_error());
+                }
+                Ok(NodCompression::None)
+            }
+            RequestedCodec::Known(codec) => {
+                Err(self.unsupported_codec_error(codec.name(), "supported codec is store"))
+            }
+            RequestedCodec::Unknown(name) => {
+                Err(self.unsupported_codec_error(&name, "supported codec is store"))
+            }
+        }
+    }
+}

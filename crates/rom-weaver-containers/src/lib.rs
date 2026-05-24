@@ -1808,6 +1808,8 @@ include!("handlers/pbp.rs");
 
 include!("handlers/xiso.rs");
 
+include!("handlers/nod_shared.rs");
+
 include!("handlers/gcz.rs");
 
 include!("handlers/wia.rs");
