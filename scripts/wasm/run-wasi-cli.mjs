@@ -30,16 +30,18 @@ const THREAD_SLOT_ERROR_INDEX = 3;
 const THREAD_SLOT_LENGTH = 4;
 const THREAD_SLOT_STATE_IDLE = 0;
 const THREAD_SLOT_STATE_REQUESTED = 1;
-const THREAD_SLOT_STATE_RUNNING = 2;
-const THREAD_SLOT_STATE_DONE = 3;
-const THREAD_SLOT_STATE_FAILED = 4;
-const THREAD_SLOT_STATE_SHUTDOWN = 5;
+const THREAD_SLOT_STATE_STARTING = 2;
+const THREAD_SLOT_STATE_RUNNING = 3;
+const THREAD_SLOT_STATE_DONE = 4;
+const THREAD_SLOT_STATE_FAILED = 5;
+const THREAD_SLOT_STATE_SHUTDOWN = 6;
 const WASI_ERRNO_AGAIN = 6;
 const WASI_ERRNO_ENOSYS = 52;
 const THREAD_DEBUG_ENV = 'ROM_WEAVER_WASI_THREAD_DEBUG';
 const THREAD_POOL_SIZE_ENV = 'ROM_WEAVER_WASM_THREAD_POOL_SIZE';
 const THREAD_PREWARM_ENV = 'ROM_WEAVER_WASM_PREWARM_THREADS';
 const THREAD_DEBUG_LOG_FILE_ENV = 'ROM_WEAVER_WASI_THREAD_DEBUG_LOG_FILE';
+const THREAD_START_ACK_TIMEOUT_MS = 30000;
 const DEFAULT_THREAD_POOL_SIZE = 8;
 const MAX_THREAD_POOL_SIZE = 256;
 
@@ -173,10 +175,14 @@ function shouldPrewarmThreadPool() {
     return false;
   }
   const normalized = rawValue.trim().toLowerCase();
-  return normalized.length > 0
+  const enabled = normalized.length > 0
     && normalized !== '0'
     && normalized !== 'false'
     && normalized !== 'off';
+  if (enabled) {
+    threadDebugLog(`${THREAD_PREWARM_ENV} is ignored; WASI threads use one Worker per thread-spawn`);
+  }
+  return false;
 }
 
 function clampThreadPoolSize(value) {
@@ -188,7 +194,10 @@ function createWasiRuntime(args) {
     version: 'preview1',
     args,
     env: process.env,
-    preopens: { '/': '/' },
+    preopens: {
+      '.': process.cwd(),
+      '/': '/',
+    },
     returnOnExit: true,
   });
 }
@@ -222,6 +231,99 @@ function allocateThreadId(threadIdState) {
     return -WASI_ERRNO_AGAIN;
   }
   return tid;
+}
+
+function threadStartControlFromBuffer(controlBuffer) {
+  if (!(controlBuffer instanceof SharedArrayBuffer)) {
+    return null;
+  }
+  const control = new Int32Array(controlBuffer);
+  if (control.length < THREAD_SLOT_LENGTH) {
+    return null;
+  }
+  return control;
+}
+
+function signalThreadStartState(control, state) {
+  if (!(control instanceof Int32Array) || control.length < THREAD_SLOT_LENGTH) {
+    return;
+  }
+  Atomics.store(control, THREAD_SLOT_STATE_INDEX, state);
+  Atomics.notify(control, THREAD_SLOT_STATE_INDEX, 1);
+}
+
+function storeThreadSpawnResult(wasmMemory, errorOrTidPtr, isError, value) {
+  if (!(wasmMemory instanceof WebAssembly.Memory)) {
+    return false;
+  }
+  if (!(wasmMemory.buffer instanceof SharedArrayBuffer)) {
+    return false;
+  }
+  const pointer = Number(errorOrTidPtr);
+  if (!Number.isInteger(pointer) || pointer < 0) {
+    return false;
+  }
+  try {
+    const result = new Int32Array(wasmMemory.buffer, pointer, 2);
+    Atomics.store(result, 0, isError ? 1 : 0);
+    Atomics.store(result, 1, Number(value) | 0);
+    Atomics.notify(result, 1, 1);
+    return true;
+  } catch (error) {
+    threadDebugLog(`failed to write thread-spawn result at ${pointer}: ${error instanceof Error ? error.message : String(error)}`);
+    return false;
+  }
+}
+
+function finishThreadSpawn(wasmMemory, errorOrTidPtr, tidOrErrno, isError = false) {
+  const usesResultPointer = errorOrTidPtr !== undefined;
+  if (!usesResultPointer) {
+    return isError ? -Math.abs(Number(tidOrErrno) || WASI_ERRNO_AGAIN) : tidOrErrno;
+  }
+  const value = Math.abs(Number(tidOrErrno) || WASI_ERRNO_AGAIN);
+  const stored = storeThreadSpawnResult(wasmMemory, errorOrTidPtr, isError, value);
+  return stored && !isError ? 0 : 1;
+}
+
+function waitForThreadStartAck(control, tid) {
+  const deadline = Date.now() + THREAD_START_ACK_TIMEOUT_MS;
+  while (true) {
+    const state = Atomics.load(control, THREAD_SLOT_STATE_INDEX);
+    if (
+      state === THREAD_SLOT_STATE_RUNNING
+      || state === THREAD_SLOT_STATE_IDLE
+    ) {
+      return null;
+    }
+    if (state === THREAD_SLOT_STATE_FAILED) {
+      return new Error(`wasi thread ${tid} failed before start acknowledgement`);
+    }
+    if (state === THREAD_SLOT_STATE_SHUTDOWN) {
+      return new Error(`wasi thread ${tid} was shut down before start acknowledgement`);
+    }
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) {
+      return new Error(`wasi thread ${tid} start acknowledgement timed out`);
+    }
+    if (state === THREAD_SLOT_STATE_STARTING) {
+      Atomics.wait(
+        control,
+        THREAD_SLOT_STATE_INDEX,
+        THREAD_SLOT_STATE_STARTING,
+        Math.min(remainingMs, 100),
+      );
+      continue;
+    }
+    if (state !== THREAD_SLOT_STATE_REQUESTED) {
+      return new Error(`wasi thread ${tid} entered unexpected start state ${state}`);
+    }
+    Atomics.wait(
+      control,
+      THREAD_SLOT_STATE_INDEX,
+      THREAD_SLOT_STATE_REQUESTED,
+      Math.min(remainingMs, 100),
+    );
+  }
 }
 
 function createThreadSpawner({
@@ -304,7 +406,7 @@ function createOnDemandThreadSpawner({
     const tid = allocateThreadId(threadIdState);
     if (tid < 0) {
       threadDebugLog(`thread-spawn rejected startArg=${startArg} errno=${tid} argc=${spawnArgCount}`);
-      return tid;
+      return finishThreadSpawn(wasmMemory, errorOrTidPtr, Math.abs(tid), true);
     }
 
     let worker;
@@ -326,7 +428,7 @@ function createOnDemandThreadSpawner({
       threadDebugLog(`spawned tid=${tid} startArg=${Number(startArg) | 0} argc=${spawnArgCount} errPtr=${errorOrTidPtr ?? 'n/a'}`);
     } catch {
       threadDebugLog(`failed to spawn worker tid=${tid}`);
-      return -WASI_ERRNO_AGAIN;
+      return finishThreadSpawn(wasmMemory, errorOrTidPtr, WASI_ERRNO_AGAIN, true);
     }
 
     activeWorkers.set(tid, worker);
@@ -353,7 +455,7 @@ function createOnDemandThreadSpawner({
     });
     workerCompletions.add(completion);
 
-    return tid;
+    return finishThreadSpawn(wasmMemory, errorOrTidPtr, tid, false);
   }
 
   const waitForWorkers = async () => {
@@ -385,7 +487,7 @@ function createPrewarmedThreadSpawner({
 }) {
   const requestedThreads = Math.max(1, Number(spawnPoolSize) || DEFAULT_THREAD_POOL_SIZE);
   const requestedPoolSize = parseThreadPoolSize(
-    Math.max(DEFAULT_THREAD_POOL_SIZE, requestedThreads * 4),
+    Math.max(DEFAULT_THREAD_POOL_SIZE, requestedThreads),
   );
   const activeWorkers = new Map();
   const poolWorkers = [];
@@ -549,14 +651,14 @@ function createPrewarmedThreadSpawner({
     const tid = allocateThreadId(threadIdState);
     if (tid < 0) {
       threadDebugLog(`thread-spawn rejected startArg=${startArg} errno=${tid} argc=${spawnArgCount}`);
-      return tid;
+      return finishThreadSpawn(wasmMemory, errorOrTidPtr, Math.abs(tid), true);
     }
     const slot = poolWorkers.find((candidate) => candidate.online
       && !candidate.busy
       && Atomics.load(candidate.control, THREAD_SLOT_STATE_INDEX) === THREAD_SLOT_STATE_IDLE);
     if (!slot) {
       threadDebugLog(`thread-spawn no idle worker tid=${tid} startArg=${Number(startArg) | 0} argc=${spawnArgCount}`);
-      return -WASI_ERRNO_AGAIN;
+      return finishThreadSpawn(wasmMemory, errorOrTidPtr, WASI_ERRNO_AGAIN, true);
     }
 
     slot.busy = true;
@@ -570,13 +672,21 @@ function createPrewarmedThreadSpawner({
       Atomics.store(slot.control, THREAD_SLOT_STATE_INDEX, THREAD_SLOT_STATE_REQUESTED);
       Atomics.notify(slot.control, THREAD_SLOT_STATE_INDEX, 1);
       threadDebugLog(`pool dispatch tid=${tid} worker=${slot.index} startArg=${Number(startArg) | 0} argc=${spawnArgCount} errPtr=${errorOrTidPtr ?? 'n/a'}`);
-      return tid;
+      const startAckError = waitForThreadStartAck(slot.control, tid);
+      if (startAckError) {
+        activeWorkers.delete(tid);
+        slot.busy = false;
+        slot.tid = null;
+        threadDebugLog(`pool dispatch failed tid=${tid}: ${startAckError.message}`);
+        return finishThreadSpawn(wasmMemory, errorOrTidPtr, WASI_ERRNO_AGAIN, true);
+      }
+      return finishThreadSpawn(wasmMemory, errorOrTidPtr, tid, false);
     } catch (error) {
       activeWorkers.delete(tid);
       slot.busy = false;
       slot.tid = null;
       threadDebugLog(`pool dispatch failed tid=${tid}: ${error instanceof Error ? error.message : String(error)}`);
-      return -WASI_ERRNO_AGAIN;
+      return finishThreadSpawn(wasmMemory, errorOrTidPtr, WASI_ERRNO_AGAIN, true);
     }
   }
 
@@ -670,13 +780,18 @@ async function runThreadPoolWorker(payload) {
     if (state === THREAD_SLOT_STATE_SHUTDOWN) {
       return;
     }
+    if (state === THREAD_SLOT_STATE_FAILED) {
+      Atomics.wait(control, THREAD_SLOT_STATE_INDEX, THREAD_SLOT_STATE_FAILED, 100);
+      continue;
+    }
     if (state !== THREAD_SLOT_STATE_REQUESTED) {
       continue;
     }
     const tid = Atomics.load(control, THREAD_SLOT_TID_INDEX) | 0;
     const startArg = Atomics.load(control, THREAD_SLOT_START_ARG_INDEX) | 0;
     Atomics.store(control, THREAD_SLOT_ERROR_INDEX, 0);
-    Atomics.store(control, THREAD_SLOT_STATE_INDEX, THREAD_SLOT_STATE_RUNNING);
+    Atomics.store(control, THREAD_SLOT_STATE_INDEX, THREAD_SLOT_STATE_STARTING);
+    Atomics.notify(control, THREAD_SLOT_STATE_INDEX, 1);
     threadDebugLog(`pool worker running tid=${tid} startArg=${startArg}`);
     try {
       await runSpawnedThread({
@@ -687,6 +802,7 @@ async function runThreadPoolWorker(payload) {
         wasmMemory,
         wasiArgs,
         threadIdState,
+        startControlBuffer: control.buffer,
       });
       Atomics.store(control, THREAD_SLOT_STATE_INDEX, THREAD_SLOT_STATE_IDLE);
     } catch {
@@ -709,51 +825,64 @@ async function runSpawnedThread(payload) {
     wasmModule,
     wasmMemory,
     threadIdState,
+    startControlBuffer,
   } = payload;
-  if (!(wasmModule instanceof WebAssembly.Module)) {
-    throw new Error('worker payload missing compiled WebAssembly.Module');
-  }
-  if (!(wasmMemory instanceof WebAssembly.Memory)) {
-    throw new Error('worker payload missing shared WebAssembly.Memory');
-  }
-  if (!(wasmMemory.buffer instanceof SharedArrayBuffer)) {
-    throw new Error('worker payload memory is not shared');
-  }
+  const startControl = threadStartControlFromBuffer(startControlBuffer);
+  signalThreadStartState(startControl, THREAD_SLOT_STATE_STARTING);
+  let startAcked = false;
+  try {
+    if (!(wasmModule instanceof WebAssembly.Module)) {
+      throw new Error('worker payload missing compiled WebAssembly.Module');
+    }
+    if (!(wasmMemory instanceof WebAssembly.Memory)) {
+      throw new Error('worker payload missing shared WebAssembly.Memory');
+    }
+    if (!(wasmMemory.buffer instanceof SharedArrayBuffer)) {
+      throw new Error('worker payload memory is not shared');
+    }
 
-  const moduleImports = WebAssembly.Module.imports(wasmModule);
-  const threadWasi = createWasiRuntime(
-    Array.isArray(wasiArgs) && wasiArgs.length > 0 ? wasiArgs : ['rom-weaver'],
-  );
-  const threadSpawner = createThreadSpawner({
-    moduleImports,
-    wasmModule,
-    wasmMemory,
-    wasiArgs: Array.isArray(wasiArgs) && wasiArgs.length > 0 ? wasiArgs : ['rom-weaver'],
-    threadIdState,
-    allowPrewarmedPool: false,
-  });
-  await threadSpawner.ready;
-  const importObject = createImportObject({
-    moduleImports,
-    wasi: threadWasi,
-    memory: wasmMemory,
-    threadSpawner,
-  });
+    const moduleImports = WebAssembly.Module.imports(wasmModule);
+    const threadWasi = createWasiRuntime(
+      Array.isArray(wasiArgs) && wasiArgs.length > 0 ? wasiArgs : ['rom-weaver'],
+    );
+    const threadSpawner = createThreadSpawner({
+      moduleImports,
+      wasmModule,
+      wasmMemory,
+      wasiArgs: Array.isArray(wasiArgs) && wasiArgs.length > 0 ? wasiArgs : ['rom-weaver'],
+      threadIdState,
+      allowPrewarmedPool: false,
+    });
+    await threadSpawner.ready;
+    const importObject = createImportObject({
+      moduleImports,
+      wasi: threadWasi,
+      memory: wasmMemory,
+      threadSpawner,
+    });
 
-  const instance = await WebAssembly.instantiate(wasmModule, importObject);
-  threadDebugLog(`worker tid=${Number(tid) | 0} entering wasi_thread_start startArg=${Number(startArg) | 0}`);
-  if (typeof threadWasi.finalizeBindings === 'function') {
-    threadWasi.finalizeBindings(instance, { memory: wasmMemory });
-  } else {
-    threadWasi.initialize(instance);
+    const instance = await WebAssembly.instantiate(wasmModule, importObject);
+    threadDebugLog(`worker tid=${Number(tid) | 0} entering wasi_thread_start startArg=${Number(startArg) | 0}`);
+    if (typeof threadWasi.finalizeBindings === 'function') {
+      threadWasi.finalizeBindings(instance, { memory: wasmMemory });
+    } else {
+      threadWasi.initialize(instance);
+    }
+    if (typeof instance.exports.wasi_thread_start !== 'function') {
+      throw new Error('threaded wasm module does not export wasi_thread_start');
+    }
+    signalThreadStartState(startControl, THREAD_SLOT_STATE_RUNNING);
+    startAcked = true;
+    instance.exports.wasi_thread_start(Number(tid) | 0, Number(startArg) | 0);
+    threadDebugLog(`worker tid=${Number(tid) | 0} completed wasi_thread_start`);
+    await threadSpawner.waitForWorkers();
+    threadDebugLog(`worker tid=${Number(tid) | 0} completed nested worker waits`);
+  } catch (error) {
+    if (!startAcked) {
+      signalThreadStartState(startControl, THREAD_SLOT_STATE_FAILED);
+    }
+    throw error;
   }
-  if (typeof instance.exports.wasi_thread_start !== 'function') {
-    throw new Error('threaded wasm module does not export wasi_thread_start');
-  }
-  instance.exports.wasi_thread_start(Number(tid) | 0, Number(startArg) | 0);
-  threadDebugLog(`worker tid=${Number(tid) | 0} completed wasi_thread_start`);
-  await threadSpawner.waitForWorkers();
-  threadDebugLog(`worker tid=${Number(tid) | 0} completed nested worker waits`);
 }
 
 function needsEnvMemoryImport(moduleImports) {
