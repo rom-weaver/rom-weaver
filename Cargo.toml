@@ -6,6 +6,7 @@ members = [
     "crates/rom-weaver-codecs",
     "crates/rom-weaver-containers",
     "crates/rom-weaver-core",
+    "crates/rom-weaver-libarchive",
     "crates/rom-weaver-libarchive-sys",
     "crates/rom-weaver-patches",
     "crates/rom-weaver-xdelta",
@@ -56,6 +57,7 @@ zeekstd = "0.6.2"
 zstd-sys = { version = "2.0.16", default-features = false }
 zstd = "0.13.3"
 rom-weaver-libarchive-sys = { path = "crates/rom-weaver-libarchive-sys" }
+rom-weaver-libarchive = { path = "crates/rom-weaver-libarchive" }
 
 [profile.release]
 lto = "thin"

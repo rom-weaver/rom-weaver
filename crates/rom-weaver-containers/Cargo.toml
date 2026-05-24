@@ -13,12 +13,12 @@ crc32fast.workspace = true
 flate2.workspace = true
 lz4_flex.workspace = true
 lzma-rust2.workspace = true
-rom-weaver-libarchive-sys.workspace = true
 nod.workspace = true
 rayon.workspace = true
 rom-weaver-codecs = { path = "../rom-weaver-codecs" }
 rom-weaver-chd = { path = "../rom-weaver-chd" }
 rom-weaver-core = { path = "../rom-weaver-core" }
+rom-weaver-libarchive.workspace = true
 xdvdfs.workspace = true
 zstd.workspace = true
 zeekstd.workspace = true

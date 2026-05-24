@@ -1,0 +1,11 @@
+[package]
+name = "rom-weaver-libarchive"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+akv = "0.1.0"
+rom-weaver-core = { path = "../rom-weaver-core" }
+rom-weaver-libarchive-sys.workspace = true

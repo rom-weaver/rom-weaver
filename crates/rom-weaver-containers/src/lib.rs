@@ -1,15 +1,12 @@
 use std::collections::BTreeMap;
 use std::{
     collections::BTreeSet,
-    ffi::CString,
     fs::{self, File, OpenOptions},
     io::{self, BufReader, BufWriter, Read, Seek, SeekFrom, Write},
-    os::raw::c_uint,
     path::{Component, Path, PathBuf},
-    ptr,
     sync::{
-        atomic::{AtomicU64, AtomicU8, AtomicUsize, Ordering},
         Arc, Mutex,
+        atomic::{AtomicU8, AtomicU64, AtomicUsize, Ordering},
     },
 };
 
@@ -32,31 +29,23 @@ use rayon::prelude::*;
 use rom_weaver_chd::ChdCodec;
 use rom_weaver_chd::ChdContainerHandler;
 use rom_weaver_codecs::{
-    decode_deflate_into_buffer, normalize_codec_label, parse_requested_codec, CanonicalCodec,
-    RequestedCodec,
+    CanonicalCodec, RequestedCodec, decode_deflate_into_buffer, normalize_codec_label,
+    parse_requested_codec,
 };
 use rom_weaver_core::{
-    bounded_items_for_threads, ContainerCapabilities, ContainerCreateRequest,
-    ContainerExtractRequest, ContainerHandler, ContainerInspectRequest, FormatDescriptor,
-    OperationContext, OperationFamily, OperationReport, OperationStatus, OrderedChunkWriter,
-    ProbeConfidence, ProgressEvent, Result, RomWeaverError, ThreadCapability, ThreadExecution,
+    ContainerCapabilities, ContainerCreateRequest, ContainerExtractRequest, ContainerHandler,
+    ContainerInspectRequest, FormatDescriptor, OperationContext, OperationFamily, OperationReport,
+    OperationStatus, OrderedChunkWriter, ProbeConfidence, ProgressEvent, Result, RomWeaverError,
+    ThreadCapability, ThreadExecution, bounded_items_for_threads,
 };
-use rom_weaver_libarchive_sys::{
-    archive, archive_entry_free, archive_entry_new, archive_entry_set_filetype,
-    archive_entry_set_pathname, archive_entry_set_perm, archive_entry_set_size, archive_errno,
-    archive_error_string, archive_read_close, archive_read_data, archive_read_free,
-    archive_read_new, archive_read_next_header, archive_read_open_filename,
-    archive_read_support_filter_bzip2, archive_read_support_filter_gzip,
-    archive_read_support_filter_xz, archive_read_support_filter_zstd,
-    archive_read_support_format_raw, archive_write_add_filter_bzip2, archive_write_add_filter_gzip,
-    archive_write_add_filter_none, archive_write_add_filter_xz, archive_write_add_filter_zstd,
-    archive_write_close, archive_write_data, archive_write_finish_entry, archive_write_free,
-    archive_write_header, archive_write_new, archive_write_open_filename,
-    archive_write_set_filter_option, archive_write_set_format_7zip,
-    archive_write_set_format_option, archive_write_set_format_pax_restricted,
-    archive_write_set_format_raw, archive_write_set_format_zip, ARCHIVE_EOF, ARCHIVE_FORMAT_7ZIP,
-    ARCHIVE_FORMAT_BASE_MASK, ARCHIVE_FORMAT_RAR, ARCHIVE_FORMAT_RAR_V5, ARCHIVE_FORMAT_TAR,
-    ARCHIVE_FORMAT_ZIP, ARCHIVE_OK, ARCHIVE_WARN,
+use rom_weaver_libarchive::{
+    EntryFileType, EntrySpec, ReadArchive, ReadFilter as LibarchiveReadFilter, WriteArchive,
+    WriteFilter as LibarchiveCreateFilter, WriteFormat as LibarchiveCreateFormat,
+    ZeroWriteBehavior,
+    sys::{
+        ARCHIVE_FORMAT_7ZIP, ARCHIVE_FORMAT_BASE_MASK, ARCHIVE_FORMAT_RAR, ARCHIVE_FORMAT_RAR_V5,
+        ARCHIVE_FORMAT_TAR, ARCHIVE_FORMAT_ZIP,
+    },
 };
 use xdvdfs::{
     blockdev::OffsetWrapper as XdvdfsOffsetWrapper, write::fs::XDVDFSFilesystem as XdvdfsFilesystem,
@@ -701,45 +690,6 @@ fn archive_path_to_name(path: &Path) -> Result<String> {
 const LIBARCHIVE_CREATE_IO_BUFFER_BYTES: usize = 128 * 1024;
 const LIBARCHIVE_CREATE_ZSTD_IO_BUFFER_BYTES: usize = 1024 * 1024;
 const LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES: usize = 128 * 1024;
-const AE_IFREG_MODE: c_uint = 0o100000;
-const AE_IFDIR_MODE: c_uint = 0o040000;
-
-#[derive(Clone, Copy, Debug)]
-enum LibarchiveCreateFormat {
-    Zip,
-    SevenZ,
-    TarPax,
-    Raw,
-}
-
-#[derive(Clone, Copy, Debug)]
-enum LibarchiveCreateFilter {
-    None,
-    Gzip,
-    Bzip2,
-    Xz,
-    Zstd,
-}
-
-impl LibarchiveCreateFilter {
-    const fn module_name(self) -> Option<&'static str> {
-        match self {
-            Self::None => None,
-            Self::Gzip => Some("gzip"),
-            Self::Bzip2 => Some("bzip2"),
-            Self::Xz => Some("xz"),
-            Self::Zstd => Some("zstd"),
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug)]
-enum LibarchiveReadFilter {
-    Gzip,
-    Bzip2,
-    Xz,
-    Zstd,
-}
 
 #[derive(Clone, Copy, Debug)]
 struct LibarchiveCreateConfig {
@@ -756,144 +706,72 @@ struct LibarchiveCreateConfig {
 fn libarchive_open_create_archive(
     output: &Path,
     config: LibarchiveCreateConfig,
-) -> Result<*mut archive> {
-    let archive_ptr = unsafe { archive_write_new() };
-    if archive_ptr.is_null() {
-        return Err(RomWeaverError::Validation(format!(
-            "{} create failed: libarchive writer allocation returned null",
-            config.format_name
-        )));
-    }
-
-    let output_path = path_to_libarchive_cstring(output, "container output")?;
+) -> Result<WriteArchive> {
+    let mut archive = WriteArchive::new(&format!("{} create failed", config.format_name))?;
     let setup_result = (|| -> Result<()> {
-        match config.format {
-            LibarchiveCreateFormat::Zip => libarchive_check_status(
-                unsafe { archive_write_set_format_zip(archive_ptr) },
-                archive_ptr,
-                &format!(
-                    "{} create failed while selecting zip format",
-                    config.format_name
-                ),
-            )?,
-            LibarchiveCreateFormat::SevenZ => libarchive_check_status(
-                unsafe { archive_write_set_format_7zip(archive_ptr) },
-                archive_ptr,
-                &format!(
-                    "{} create failed while selecting 7z format",
-                    config.format_name
-                ),
-            )?,
-            LibarchiveCreateFormat::TarPax => libarchive_check_status(
-                unsafe { archive_write_set_format_pax_restricted(archive_ptr) },
-                archive_ptr,
-                &format!(
-                    "{} create failed while selecting tar format",
-                    config.format_name
-                ),
-            )?,
-            LibarchiveCreateFormat::Raw => libarchive_check_status(
-                unsafe { archive_write_set_format_raw(archive_ptr) },
-                archive_ptr,
-                &format!(
-                    "{} create failed while selecting raw format",
-                    config.format_name
-                ),
-            )?,
-        }
+        archive.set_format(
+            config.format,
+            &format!(
+                "{} create failed while selecting {} format",
+                config.format_name,
+                libarchive_create_format_name(config.format)
+            ),
+        )?;
 
-        match config.filter {
-            LibarchiveCreateFilter::None => libarchive_check_status(
-                unsafe { archive_write_add_filter_none(archive_ptr) },
-                archive_ptr,
-                &format!(
-                    "{} create failed while enabling no-op filter",
-                    config.format_name
-                ),
-            )?,
-            LibarchiveCreateFilter::Gzip => libarchive_check_status(
-                unsafe { archive_write_add_filter_gzip(archive_ptr) },
-                archive_ptr,
-                &format!(
-                    "{} create failed while enabling gzip filter",
-                    config.format_name
-                ),
-            )?,
-            LibarchiveCreateFilter::Bzip2 => libarchive_check_status(
-                unsafe { archive_write_add_filter_bzip2(archive_ptr) },
-                archive_ptr,
-                &format!(
-                    "{} create failed while enabling bzip2 filter",
-                    config.format_name
-                ),
-            )?,
-            LibarchiveCreateFilter::Xz => libarchive_check_status(
-                unsafe { archive_write_add_filter_xz(archive_ptr) },
-                archive_ptr,
-                &format!(
-                    "{} create failed while enabling xz filter",
-                    config.format_name
-                ),
-            )?,
-            LibarchiveCreateFilter::Zstd => libarchive_check_status(
-                unsafe { archive_write_add_filter_zstd(archive_ptr) },
-                archive_ptr,
-                &format!(
-                    "{} create failed while enabling zstd filter",
-                    config.format_name
-                ),
-            )?,
-        }
+        archive.add_filter(
+            config.filter,
+            &format!(
+                "{} create failed while enabling {} filter",
+                config.format_name,
+                config.filter.module_name().unwrap_or("no-op")
+            ),
+        )?;
 
         if let Some(compression) = config.format_compression {
-            libarchive_set_format_option(
-                archive_ptr,
-                config.format_name,
+            archive.set_format_option(
                 None,
                 "compression",
                 compression,
+                &format!(
+                    "{} create failed while setting format option `compression`",
+                    config.format_name
+                ),
             )?;
         }
 
         if let Some(level) = config.compression_level {
             if config.format_compression.is_some() {
-                libarchive_set_format_option(
-                    archive_ptr,
-                    config.format_name,
+                archive.set_format_option(
                     None,
                     "compression-level",
                     &level.to_string(),
+                    &format!(
+                        "{} create failed while setting format option `compression-level`",
+                        config.format_name
+                    ),
                 )?;
             } else {
                 match config.filter {
-                    LibarchiveCreateFilter::Gzip => libarchive_set_filter_option(
-                        archive_ptr,
-                        config.format_name,
-                        "gzip",
-                        "compression-level",
-                        &level.to_string(),
-                    )?,
-                    LibarchiveCreateFilter::Bzip2 => libarchive_set_filter_option(
-                        archive_ptr,
-                        config.format_name,
-                        "bzip2",
-                        "compression-level",
-                        &level.to_string(),
-                    )?,
-                    LibarchiveCreateFilter::Xz => libarchive_set_filter_option(
-                        archive_ptr,
-                        config.format_name,
-                        "xz",
-                        "compression-level",
-                        &level.to_string(),
-                    )?,
-                    LibarchiveCreateFilter::Zstd => libarchive_set_filter_option(
-                        archive_ptr,
-                        config.format_name,
-                        "zstd",
-                        "compression-level",
-                        &level.to_string(),
-                    )?,
+                    LibarchiveCreateFilter::Gzip
+                    | LibarchiveCreateFilter::Bzip2
+                    | LibarchiveCreateFilter::Xz
+                    | LibarchiveCreateFilter::Zstd => {
+                        let module = config.filter.module_name().ok_or_else(|| {
+                            RomWeaverError::Validation(format!(
+                                "{} create failed: no filter module for compression level",
+                                config.format_name
+                            ))
+                        })?;
+                        archive.set_filter_option(
+                            module,
+                            "compression-level",
+                            &level.to_string(),
+                            &format!(
+                                "{} create failed while setting {module}:compression-level={level}",
+                                config.format_name
+                            ),
+                        )?;
+                    }
                     LibarchiveCreateFilter::None => {}
                 }
             }
@@ -901,31 +779,35 @@ fn libarchive_open_create_archive(
 
         if let Some(threads) = config.format_threads {
             if config.format_compression.is_some() {
-                libarchive_try_set_format_option(
-                    archive_ptr,
-                    config.format_name,
+                archive.try_set_format_option(
                     None,
                     "threads",
                     &threads.to_string(),
+                    &format!(
+                        "{} create failed while setting format option `threads`",
+                        config.format_name
+                    ),
                 )?;
             }
         }
 
         if let Some(threads) = config.filter_threads {
             if let Some(module) = config.filter.module_name() {
-                libarchive_try_set_filter_option(
-                    archive_ptr,
-                    config.format_name,
+                archive.try_set_filter_option(
                     module,
                     "threads",
                     &threads.to_string(),
+                    &format!(
+                        "{} create failed while setting {module}:threads={threads}",
+                        config.format_name
+                    ),
                 )?;
             }
         }
 
-        libarchive_check_status(
-            unsafe { archive_write_open_filename(archive_ptr, output_path.as_ptr()) },
-            archive_ptr,
+        archive.open_filename(
+            output,
+            "container output",
             &format!(
                 "{} create failed while opening output `{}`",
                 config.format_name,
@@ -935,16 +817,22 @@ fn libarchive_open_create_archive(
         Ok(())
     })();
 
-    if let Err(error) = setup_result {
-        let _ = unsafe { archive_write_free(archive_ptr) };
-        return Err(error);
-    }
+    setup_result?;
 
-    Ok(archive_ptr)
+    Ok(archive)
+}
+
+fn libarchive_create_format_name(format: LibarchiveCreateFormat) -> &'static str {
+    match format {
+        LibarchiveCreateFormat::Zip => "zip",
+        LibarchiveCreateFormat::SevenZ => "7z",
+        LibarchiveCreateFormat::TarPax => "tar",
+        LibarchiveCreateFormat::Raw => "raw",
+    }
 }
 
 fn libarchive_write_archive_entry<F>(
-    archive_ptr: *mut archive,
+    archive: &mut WriteArchive,
     format_name: &str,
     entry: &ArchiveInputEntry,
     entry_size_bytes: u64,
@@ -954,136 +842,60 @@ fn libarchive_write_archive_entry<F>(
 where
     F: FnMut(u64),
 {
-    let entry_ptr = unsafe { archive_entry_new() };
-    if entry_ptr.is_null() {
-        return Err(RomWeaverError::Validation(format!(
-            "{format_name} create failed: libarchive entry allocation returned null"
-        )));
-    }
-
     let path_name = if entry.is_dir && !entry.archive_name.ends_with('/') {
         format!("{}/", entry.archive_name)
     } else {
         entry.archive_name.clone()
     };
-    let path_name = CString::new(path_name).map_err(|_| {
-        RomWeaverError::Validation(format!(
-            "{format_name} create failed: archive entry name contained interior NUL"
-        ))
-    })?;
 
-    let entry_size = i64::try_from(entry_size_bytes).map_err(|_| {
-        RomWeaverError::Validation(format!(
-            "{format_name} create failed: input length exceeded libarchive entry size range"
-        ))
-    })?;
+    archive.start_entry(
+        EntrySpec {
+            pathname: &path_name,
+            file_type: if entry.is_dir {
+                EntryFileType::Directory
+            } else {
+                EntryFileType::Regular
+            },
+            perm: if entry.is_dir { 0o755 } else { 0o644 },
+            size: entry_size_bytes,
+        },
+        &format!(
+            "{format_name} create failed while writing header for `{}`",
+            entry.archive_name
+        ),
+    )?;
 
-    let write_result = (|| -> Result<u64> {
-        unsafe {
-            archive_entry_set_pathname(entry_ptr, path_name.as_ptr());
-            archive_entry_set_filetype(
-                entry_ptr,
-                if entry.is_dir {
-                    AE_IFDIR_MODE
-                } else {
-                    AE_IFREG_MODE
-                },
-            );
-            archive_entry_set_perm(entry_ptr, if entry.is_dir { 0o755 } else { 0o644 });
-            archive_entry_set_size(entry_ptr, entry_size);
-        }
-
-        libarchive_check_status(
-            unsafe { archive_write_header(archive_ptr, entry_ptr) },
-            archive_ptr,
-            &format!(
-                "{format_name} create failed while writing header for `{}`",
-                entry.archive_name
-            ),
-        )?;
-
-        let mut logical_bytes = 0u64;
-        if !entry.is_dir {
-            let mut source = BufReader::new(File::open(&entry.source)?);
-            let mut buffer = vec![0u8; io_buffer_bytes];
-            loop {
-                let read = source.read(&mut buffer)?;
-                if read == 0 {
-                    break;
-                }
-                libarchive_write_payload(archive_ptr, format_name, &buffer[..read])?;
-                logical_bytes = logical_bytes.saturating_add(read as u64);
-                on_bytes_written(read as u64);
+    let mut logical_bytes = 0u64;
+    if !entry.is_dir {
+        let mut source = BufReader::new(File::open(&entry.source)?);
+        let mut buffer = vec![0u8; io_buffer_bytes];
+        loop {
+            let read = source.read(&mut buffer)?;
+            if read == 0 {
+                break;
             }
-        }
-
-        libarchive_check_status(
-            unsafe { archive_write_finish_entry(archive_ptr) },
-            archive_ptr,
-            &format!(
-                "{format_name} create failed while finalizing entry `{}`",
-                entry.archive_name
-            ),
-        )?;
-        Ok(logical_bytes)
-    })();
-
-    unsafe { archive_entry_free(entry_ptr) };
-    write_result
-}
-
-fn libarchive_write_payload(
-    archive_ptr: *mut archive,
-    format_name: &str,
-    payload: &[u8],
-) -> Result<()> {
-    let mut offset = 0usize;
-    while offset < payload.len() {
-        let written = unsafe {
-            archive_write_data(
-                archive_ptr,
-                payload[offset..].as_ptr() as *const std::os::raw::c_void,
-                payload.len() - offset,
-            )
-        };
-        if written < 0 {
-            return Err(libarchive_error(
-                archive_ptr,
+            archive.write_data_all(
+                &buffer[..read],
                 &format!("{format_name} create failed while writing payload"),
-            ));
+                ZeroWriteBehavior::Error,
+            )?;
+            logical_bytes = logical_bytes.saturating_add(read as u64);
+            on_bytes_written(read as u64);
         }
-        if written == 0 {
-            return Err(RomWeaverError::Validation(format!(
-                "{format_name} create failed: libarchive reported a zero-length write"
-            )));
-        }
-        let written = usize::try_from(written).map_err(|_| {
-            RomWeaverError::Validation(format!(
-                "{format_name} create failed: libarchive reported an invalid write length"
-            ))
-        })?;
-        if written > payload.len() - offset {
-            return Err(RomWeaverError::Validation(format!(
-                "{format_name} create failed: libarchive wrote more bytes than provided"
-            )));
-        }
-        offset = offset.saturating_add(written);
     }
-    Ok(())
+
+    archive.finish_entry(&format!(
+        "{format_name} create failed while finalizing entry `{}`",
+        entry.archive_name
+    ))?;
+    Ok(logical_bytes)
 }
 
-fn libarchive_close_create_archive(archive_ptr: *mut archive, format_name: &str) -> Result<()> {
-    let close_result = libarchive_check_status(
-        unsafe { archive_write_close(archive_ptr) },
-        archive_ptr,
+fn libarchive_close_create_archive(archive: WriteArchive, format_name: &str) -> Result<()> {
+    archive.close(
         &format!("{format_name} create failed while closing output"),
-    );
-    let free_result = libarchive_check_status(
-        unsafe { archive_write_free(archive_ptr) },
-        archive_ptr,
         &format!("{format_name} create failed while releasing writer"),
-    );
-    close_result.and(free_result)
+    )
 }
 
 fn write_archive_with_libarchive(
@@ -1109,7 +921,7 @@ fn write_archive_with_libarchive(
         entry_sizes.push(size);
     }
 
-    let archive_ptr = libarchive_open_create_archive(&request.output, config)?;
+    let mut archive = libarchive_open_create_archive(&request.output, config)?;
     let result = (|| -> Result<u64> {
         let total_entries = entries.len();
         let mut logical_bytes = 0u64;
@@ -1119,7 +931,7 @@ fn write_archive_with_libarchive(
             entries.iter().zip(entry_sizes.iter().copied()).enumerate()
         {
             logical_bytes = logical_bytes.saturating_add(libarchive_write_archive_entry(
-                archive_ptr,
+                &mut archive,
                 config.format_name,
                 entry,
                 entry_size_bytes,
@@ -1162,7 +974,7 @@ fn write_archive_with_libarchive(
 
     match (
         result,
-        libarchive_close_create_archive(archive_ptr, config.format_name),
+        libarchive_close_create_archive(archive, config.format_name),
     ) {
         (Ok(bytes), Ok(())) => Ok(bytes),
         (Err(error), _) => Err(error),
@@ -1170,271 +982,27 @@ fn write_archive_with_libarchive(
     }
 }
 
-fn libarchive_set_format_option(
-    archive_ptr: *mut archive,
-    format_name: &str,
-    module: Option<&str>,
-    option: &str,
-    value: &str,
-) -> Result<()> {
-    let module_cstring = match module {
-        Some(value) => Some(CString::new(value).map_err(|_| {
-            RomWeaverError::Validation(format!(
-                "{format_name} create failed: format option module contained interior NUL"
-            ))
-        })?),
-        None => None,
-    };
-    let option_cstring = CString::new(option).map_err(|_| {
-        RomWeaverError::Validation(format!(
-            "{format_name} create failed: format option key contained interior NUL"
-        ))
-    })?;
-    let value_cstring = CString::new(value).map_err(|_| {
-        RomWeaverError::Validation(format!(
-            "{format_name} create failed: format option value contained interior NUL"
-        ))
-    })?;
-
-    libarchive_check_status(
-        unsafe {
-            archive_write_set_format_option(
-                archive_ptr,
-                module_cstring
-                    .as_ref()
-                    .map_or(ptr::null(), |value| value.as_ptr()),
-                option_cstring.as_ptr(),
-                value_cstring.as_ptr(),
-            )
-        },
-        archive_ptr,
-        &format!("{format_name} create failed while setting format option `{option}`"),
-    )
-}
-
-fn libarchive_set_filter_option(
-    archive_ptr: *mut archive,
-    format_name: &str,
-    module: &str,
-    option: &str,
-    value: &str,
-) -> Result<()> {
-    let module_cstring = CString::new(module).map_err(|_| {
-        RomWeaverError::Validation(format!(
-            "{format_name} create failed: filter module contained interior NUL"
-        ))
-    })?;
-    let option_cstring = CString::new(option).map_err(|_| {
-        RomWeaverError::Validation(format!(
-            "{format_name} create failed: filter option key contained interior NUL"
-        ))
-    })?;
-    let value_cstring = CString::new(value).map_err(|_| {
-        RomWeaverError::Validation(format!(
-            "{format_name} create failed: filter option value contained interior NUL"
-        ))
-    })?;
-
-    libarchive_check_status(
-        unsafe {
-            archive_write_set_filter_option(
-                archive_ptr,
-                module_cstring.as_ptr(),
-                option_cstring.as_ptr(),
-                value_cstring.as_ptr(),
-            )
-        },
-        archive_ptr,
-        &format!("{format_name} create failed while setting {module}:{option}={value}"),
-    )
-}
-
-fn libarchive_try_set_format_option(
-    archive_ptr: *mut archive,
-    format_name: &str,
-    module: Option<&str>,
-    option: &str,
-    value: &str,
-) -> Result<()> {
-    let module_cstring = match module {
-        Some(value) => Some(CString::new(value).map_err(|_| {
-            RomWeaverError::Validation(format!(
-                "{format_name} create failed: format option module contained interior NUL"
-            ))
-        })?),
-        None => None,
-    };
-    let option_cstring = CString::new(option).map_err(|_| {
-        RomWeaverError::Validation(format!(
-            "{format_name} create failed: format option key contained interior NUL"
-        ))
-    })?;
-    let value_cstring = CString::new(value).map_err(|_| {
-        RomWeaverError::Validation(format!(
-            "{format_name} create failed: format option value contained interior NUL"
-        ))
-    })?;
-
-    let status = unsafe {
-        archive_write_set_format_option(
-            archive_ptr,
-            module_cstring
-                .as_ref()
-                .map_or(ptr::null(), |value| value.as_ptr()),
-            option_cstring.as_ptr(),
-            value_cstring.as_ptr(),
-        )
-    };
-    match status {
-        ARCHIVE_OK | ARCHIVE_WARN => Ok(()),
-        _ if libarchive_unsupported_option_error(archive_ptr) => Ok(()),
-        _ => Err(libarchive_error(
-            archive_ptr,
-            &format!("{format_name} create failed while setting format option `{option}`"),
-        )),
-    }
-}
-
-fn libarchive_try_set_filter_option(
-    archive_ptr: *mut archive,
-    format_name: &str,
-    module: &str,
-    option: &str,
-    value: &str,
-) -> Result<()> {
-    let module_cstring = CString::new(module).map_err(|_| {
-        RomWeaverError::Validation(format!(
-            "{format_name} create failed: filter module contained interior NUL"
-        ))
-    })?;
-    let option_cstring = CString::new(option).map_err(|_| {
-        RomWeaverError::Validation(format!(
-            "{format_name} create failed: filter option key contained interior NUL"
-        ))
-    })?;
-    let value_cstring = CString::new(value).map_err(|_| {
-        RomWeaverError::Validation(format!(
-            "{format_name} create failed: filter option value contained interior NUL"
-        ))
-    })?;
-
-    let status = unsafe {
-        archive_write_set_filter_option(
-            archive_ptr,
-            module_cstring.as_ptr(),
-            option_cstring.as_ptr(),
-            value_cstring.as_ptr(),
-        )
-    };
-    match status {
-        ARCHIVE_OK | ARCHIVE_WARN => Ok(()),
-        _ if libarchive_unsupported_option_error(archive_ptr) => Ok(()),
-        _ => Err(libarchive_error(
-            archive_ptr,
-            &format!("{format_name} create failed while setting {module}:{option}={value}"),
-        )),
-    }
-}
-
-fn libarchive_check_status(status: i32, archive_ptr: *mut archive, context: &str) -> Result<()> {
-    match status {
-        ARCHIVE_OK | ARCHIVE_WARN => Ok(()),
-        _ => Err(libarchive_error(archive_ptr, context)),
-    }
-}
-
-fn libarchive_error(archive_ptr: *mut archive, context: &str) -> RomWeaverError {
-    let message = unsafe {
-        let error_ptr = archive_error_string(archive_ptr);
-        if error_ptr.is_null() {
-            String::new()
-        } else {
-            std::ffi::CStr::from_ptr(error_ptr)
-                .to_string_lossy()
-                .into_owned()
-        }
-    };
-    let message = if message.trim().is_empty() {
-        "unknown libarchive failure".to_string()
-    } else {
-        message
-    };
-    let errno = unsafe { archive_errno(archive_ptr) };
-    RomWeaverError::Validation(format!("{context}: {message} (errno={errno})"))
-}
-
-fn libarchive_unsupported_option_error(archive_ptr: *mut archive) -> bool {
-    let message = unsafe {
-        let error_ptr = archive_error_string(archive_ptr);
-        if error_ptr.is_null() {
-            return false;
-        }
-        std::ffi::CStr::from_ptr(error_ptr)
-            .to_string_lossy()
-            .to_ascii_lowercase()
-    };
-    message.contains("undefined option") || message.contains("unknown module name")
-}
-
-fn path_to_libarchive_cstring(path: &Path, label: &str) -> Result<CString> {
-    CString::new(path.to_string_lossy().as_bytes()).map_err(|_| {
-        RomWeaverError::Validation(format!(
-            "{label} path contains interior NUL bytes: `{}`",
-            path.display()
-        ))
-    })
-}
-
 fn libarchive_open_read_stream(
     source: &Path,
     format_name: &str,
     filter: LibarchiveReadFilter,
-) -> Result<*mut archive> {
-    let archive_ptr = unsafe { archive_read_new() };
-    if archive_ptr.is_null() {
-        return Err(RomWeaverError::Validation(format!(
-            "{format_name} inspect failed: libarchive reader allocation returned null"
-        )));
-    }
-
-    let source_path = path_to_libarchive_cstring(source, "container source")?;
+) -> Result<ReadArchive> {
+    let mut archive = ReadArchive::new(&format!("{format_name} inspect failed"))?;
     let setup_result = (|| -> Result<()> {
-        libarchive_check_status(
-            unsafe { archive_read_support_format_raw(archive_ptr) },
-            archive_ptr,
-            &format!("{format_name} inspect failed while enabling raw format"),
+        archive.support_raw_format(&format!(
+            "{format_name} inspect failed while enabling raw format"
+        ))?;
+        archive.support_filter(
+            filter,
+            &format!(
+                "{format_name} inspect failed while enabling {} filter",
+                libarchive_read_filter_name(filter)
+            ),
         )?;
-        match filter {
-            LibarchiveReadFilter::Gzip => libarchive_check_status(
-                unsafe { archive_read_support_filter_gzip(archive_ptr) },
-                archive_ptr,
-                &format!("{format_name} inspect failed while enabling gzip filter"),
-            )?,
-            LibarchiveReadFilter::Bzip2 => libarchive_check_status(
-                unsafe { archive_read_support_filter_bzip2(archive_ptr) },
-                archive_ptr,
-                &format!("{format_name} inspect failed while enabling bzip2 filter"),
-            )?,
-            LibarchiveReadFilter::Xz => libarchive_check_status(
-                unsafe { archive_read_support_filter_xz(archive_ptr) },
-                archive_ptr,
-                &format!("{format_name} inspect failed while enabling xz filter"),
-            )?,
-            LibarchiveReadFilter::Zstd => libarchive_check_status(
-                unsafe { archive_read_support_filter_zstd(archive_ptr) },
-                archive_ptr,
-                &format!("{format_name} inspect failed while enabling zstd filter"),
-            )?,
-        }
-        libarchive_check_status(
-            unsafe {
-                archive_read_open_filename(
-                    archive_ptr,
-                    source_path.as_ptr(),
-                    LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES,
-                )
-            },
-            archive_ptr,
+        archive.open_filename(
+            source,
+            "container source",
+            LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES,
             &format!(
                 "{format_name} inspect failed while opening input `{}`",
                 source.display()
@@ -1443,25 +1011,24 @@ fn libarchive_open_read_stream(
         Ok(())
     })();
 
-    if let Err(error) = setup_result {
-        let _ = unsafe { archive_read_free(archive_ptr) };
-        return Err(error);
-    }
-    Ok(archive_ptr)
+    setup_result?;
+    Ok(archive)
 }
 
-fn libarchive_close_read_stream(archive_ptr: *mut archive, format_name: &str) -> Result<()> {
-    let close_result = libarchive_check_status(
-        unsafe { archive_read_close(archive_ptr) },
-        archive_ptr,
+fn libarchive_read_filter_name(filter: LibarchiveReadFilter) -> &'static str {
+    match filter {
+        LibarchiveReadFilter::Gzip => "gzip",
+        LibarchiveReadFilter::Bzip2 => "bzip2",
+        LibarchiveReadFilter::Xz => "xz",
+        LibarchiveReadFilter::Zstd => "zstd",
+    }
+}
+
+fn libarchive_close_read_stream(archive: ReadArchive, format_name: &str) -> Result<()> {
+    archive.close(
         &format!("{format_name} inspect failed while closing reader"),
-    );
-    let free_result = libarchive_check_status(
-        unsafe { archive_read_free(archive_ptr) },
-        archive_ptr,
         &format!("{format_name} inspect failed while releasing reader"),
-    );
-    close_result.and(free_result)
+    )
 }
 
 fn inspect_stream_with_libarchive(
@@ -1469,44 +1036,25 @@ fn inspect_stream_with_libarchive(
     format_name: &str,
     filter: LibarchiveReadFilter,
 ) -> Result<u64> {
-    let archive_ptr = libarchive_open_read_stream(source, format_name, filter)?;
+    let mut archive = libarchive_open_read_stream(source, format_name, filter)?;
     let result = (|| -> Result<u64> {
-        let mut entry: *mut rom_weaver_libarchive_sys::archive_entry = ptr::null_mut();
-        let next_status = unsafe { archive_read_next_header(archive_ptr, &mut entry) };
-        if next_status == ARCHIVE_EOF {
+        if !archive.next_header(&format!(
+            "{format_name} inspect failed while reading header"
+        ))? {
             return Err(RomWeaverError::Validation(format!(
                 "{format_name} inspect found no compressed payload entries"
             )));
         }
-        libarchive_check_status(
-            next_status,
-            archive_ptr,
-            &format!("{format_name} inspect failed while reading header"),
-        )?;
 
         let mut total = 0_u64;
         let mut buffer = vec![0_u8; LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES];
         loop {
-            let bytes =
-                unsafe { archive_read_data(archive_ptr, buffer.as_mut_ptr().cast(), buffer.len()) };
+            let bytes = archive.read_data(
+                &mut buffer,
+                &format!("{format_name} inspect failed while reading payload"),
+            )?;
             if bytes == 0 {
                 break;
-            }
-            if bytes < 0 {
-                return Err(libarchive_error(
-                    archive_ptr,
-                    &format!("{format_name} inspect failed while reading payload"),
-                ));
-            }
-            let bytes = usize::try_from(bytes).map_err(|_| {
-                RomWeaverError::Validation(format!(
-                    "{format_name} inspect failed: libarchive returned an invalid read length"
-                ))
-            })?;
-            if bytes > buffer.len() {
-                return Err(RomWeaverError::Validation(format!(
-                    "{format_name} inspect failed: libarchive returned a read length larger than the buffer"
-                )));
             }
             let bytes_u64 = u64::try_from(bytes).map_err(|_| {
                 RomWeaverError::Validation(format!(
@@ -1522,10 +1070,7 @@ fn inspect_stream_with_libarchive(
         Ok(total)
     })();
 
-    match (
-        result,
-        libarchive_close_read_stream(archive_ptr, format_name),
-    ) {
+    match (result, libarchive_close_read_stream(archive, format_name)) {
         (Ok(bytes), Ok(())) => Ok(bytes),
         (Err(error), _) => Err(error),
         (Ok(_), Err(error)) => Err(error),

@@ -183,21 +183,15 @@ impl StreamContainerHandler {
         let format_name = self.descriptor.name;
         let total_bytes =
             inspect_stream_with_libarchive(source, format_name, self.libarchive_read_filter())?;
-        let archive_ptr =
+        let mut archive =
             libarchive_open_read_stream(source, format_name, self.libarchive_read_filter())?;
         let result = (|| -> Result<u64> {
-            let mut entry: *mut rom_weaver_libarchive_sys::archive_entry = ptr::null_mut();
-            let next_status = unsafe { archive_read_next_header(archive_ptr, &mut entry) };
-            if next_status == ARCHIVE_EOF {
+            if !archive.next_header(&format!("{format_name} extract failed while reading header"))?
+            {
                 return Err(RomWeaverError::Validation(format!(
                     "{format_name} extract found no compressed payload entries"
                 )));
             }
-            libarchive_check_status(
-                next_status,
-                archive_ptr,
-                &format!("{format_name} extract failed while reading header"),
-            )?;
 
             if let Some(parent) = output_path.parent() {
                 fs::create_dir_all(parent)?;
@@ -208,30 +202,15 @@ impl StreamContainerHandler {
             let mut copied = 0_u64;
             let mut buffer = vec![0_u8; LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES];
             loop {
-                let read = unsafe {
-                    archive_read_data(archive_ptr, buffer.as_mut_ptr().cast(), buffer.len())
-                };
+                let read = archive.read_data(
+                    &mut buffer,
+                    &format!("{format_name} extract failed while reading payload"),
+                )?;
                 if read == 0 {
                     break;
                 }
-                if read < 0 {
-                    return Err(libarchive_error(
-                        archive_ptr,
-                        &format!("{format_name} extract failed while reading payload"),
-                    ));
-                }
-                let bytes = usize::try_from(read).map_err(|_| {
-                    RomWeaverError::Validation(format!(
-                        "{format_name} extract failed: libarchive returned an invalid read length"
-                    ))
-                })?;
-                if bytes > buffer.len() {
-                    return Err(RomWeaverError::Validation(format!(
-                        "{format_name} extract failed: libarchive returned a read length larger than the buffer"
-                    )));
-                }
-                output.write_all(&buffer[..bytes])?;
-                copied = copied.saturating_add(bytes as u64).min(total_bytes);
+                output.write_all(&buffer[..read])?;
+                copied = copied.saturating_add(read as u64).min(total_bytes);
                 maybe_emit_container_byte_progress(
                     context,
                     "extract",
@@ -250,7 +229,7 @@ impl StreamContainerHandler {
 
         match (
             result,
-            libarchive_close_read_stream(archive_ptr, format_name),
+            libarchive_close_read_stream(archive, format_name),
         ) {
             (Ok(bytes), Ok(())) => Ok(bytes),
             (Err(error), _) => Err(error),

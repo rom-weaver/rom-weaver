@@ -140,7 +140,7 @@ impl NativeCodecBackend {
             .unwrap_or("data");
 
         let thread_count = Some(execution.effective_threads.max(1));
-        let archive_ptr = libarchive_open_write_archive(
+        let mut archive = libarchive_open_write_archive(
             self.descriptor.name,
             self.kind,
             &request.output,
@@ -149,7 +149,7 @@ impl NativeCodecBackend {
         )?;
         let result = (|| -> Result<u64> {
             libarchive_write_raw_entry_from_reader(
-                archive_ptr,
+                &mut archive,
                 self.descriptor.name,
                 archive_name,
                 input_len,
@@ -161,7 +161,7 @@ impl NativeCodecBackend {
 
         match (
             result,
-            libarchive_close_write_archive(archive_ptr, self.descriptor.name),
+            libarchive_close_write_archive(archive, self.descriptor.name),
         ) {
             (Ok(bytes), Ok(())) => Ok(bytes),
             (Err(error), _) => Err(error),
@@ -170,30 +170,23 @@ impl NativeCodecBackend {
     }
 
     fn decode_with_libarchive(&self, request: &CodecOperationRequest) -> Result<u64> {
-        let archive_ptr =
+        let mut archive =
             libarchive_open_read_archive(self.descriptor.name, self.kind, &request.input)?;
         let result = (|| -> Result<u64> {
-            let mut entry: *mut archive_entry = ptr::null_mut();
-            let next_status = unsafe { archive_read_next_header(archive_ptr, &mut entry) };
-            if next_status == ARCHIVE_EOF {
+            if !archive.next_header(&format!(
+                "{} decode failed while reading header",
+                self.descriptor.name
+            ))? {
                 return Err(RomWeaverError::Validation(format!(
                     "{} decode found no compressed payload entries",
                     self.descriptor.name
                 )));
             }
-            libarchive_check_status(
-                next_status,
-                archive_ptr,
-                &format!(
-                    "{} decode failed while reading header",
-                    self.descriptor.name
-                ),
-            )?;
 
             let output = BufWriter::new(NonVectoredWriter::new(File::create(&request.output)?));
             let mut output = output;
             let copied = libarchive_read_entry_to_writer(
-                archive_ptr,
+                &mut archive,
                 self.descriptor.name,
                 &mut output,
                 Self::LIBARCHIVE_IO_BUFFER_BYTES,
@@ -204,7 +197,7 @@ impl NativeCodecBackend {
 
         match (
             result,
-            libarchive_close_read_archive(archive_ptr, self.descriptor.name),
+            libarchive_close_read_archive(archive, self.descriptor.name),
         ) {
             (Ok(bytes), Ok(())) => Ok(bytes),
             (Err(error), _) => Err(error),
@@ -371,79 +364,44 @@ fn libarchive_open_write_archive(
     output: &Path,
     level: i32,
     thread_count: Option<usize>,
-) -> Result<*mut archive> {
-    let archive_ptr = unsafe { archive_write_new() };
-    if archive_ptr.is_null() {
-        return Err(RomWeaverError::Validation(format!(
-            "{codec_name} encode failed: libarchive writer allocation returned null"
-        )));
-    }
-
-    let output_path = path_to_cstring(output, "codec output")?;
+) -> Result<WriteArchive> {
+    let mut archive = WriteArchive::new(&format!("{codec_name} encode failed"))?;
     let setup_result = (|| -> Result<()> {
-        libarchive_check_status(
-            unsafe { archive_write_set_format_raw(archive_ptr) },
-            archive_ptr,
+        archive.set_format(
+            WriteFormat::Raw,
             &format!("{codec_name} encode failed while selecting raw format"),
         )?;
 
-        match kind {
-            NativeCodecKind::Deflate => libarchive_check_status(
-                unsafe { archive_write_add_filter_gzip(archive_ptr) },
-                archive_ptr,
-                &format!("{codec_name} encode failed while enabling gzip filter"),
-            )?,
-            NativeCodecKind::Zstd => libarchive_check_status(
-                unsafe { archive_write_add_filter_zstd(archive_ptr) },
-                archive_ptr,
-                &format!("{codec_name} encode failed while enabling zstd filter"),
-            )?,
-            NativeCodecKind::Lzma2 => libarchive_check_status(
-                unsafe { archive_write_add_filter_xz(archive_ptr) },
-                archive_ptr,
-                &format!("{codec_name} encode failed while enabling xz filter"),
-            )?,
-            NativeCodecKind::Bzip2 => libarchive_check_status(
-                unsafe { archive_write_add_filter_bzip2(archive_ptr) },
-                archive_ptr,
-                &format!("{codec_name} encode failed while enabling bzip2 filter"),
-            )?,
-            NativeCodecKind::Store => {
-                return Err(RomWeaverError::Validation(
-                    "store codec does not use libarchive filters".to_string(),
-                ));
-            }
-        }
+        let filter = libarchive_write_filter(kind)?;
+        archive.add_filter(
+            filter,
+            &format!(
+                "{codec_name} encode failed while enabling {} filter",
+                filter.module_name().unwrap_or("no-op")
+            ),
+        )?;
 
-        let module = match kind {
-            NativeCodecKind::Deflate => "gzip",
-            NativeCodecKind::Zstd => "zstd",
-            NativeCodecKind::Lzma2 => "xz",
-            NativeCodecKind::Bzip2 => "bzip2",
-            NativeCodecKind::Store => "",
-        };
-        if !module.is_empty() {
-            libarchive_set_filter_option(
-                archive_ptr,
-                codec_name,
-                module,
-                "compression-level",
-                &level.to_string(),
-            )?;
-        }
+        let module = filter.module_name().ok_or_else(|| {
+            RomWeaverError::Validation("store codec does not use libarchive filters".to_string())
+        })?;
+        archive.set_filter_option(
+            module,
+            "compression-level",
+            &level.to_string(),
+            &format!("{codec_name} encode failed while setting {module}:compression-level={level}"),
+        )?;
         if let Some(threads) = thread_count {
-            libarchive_try_set_filter_option(
-                archive_ptr,
-                codec_name,
+            archive.try_set_filter_option(
                 module,
                 "threads",
                 &threads.to_string(),
+                &format!("{codec_name} encode failed while setting {module}:threads={threads}"),
             )?;
         }
 
-        libarchive_check_status(
-            unsafe { archive_write_open_filename(archive_ptr, output_path.as_ptr()) },
-            archive_ptr,
+        archive.open_filename(
+            output,
+            "codec output",
             &format!(
                 "{codec_name} encode failed while opening output `{}`",
                 output.display()
@@ -452,71 +410,33 @@ fn libarchive_open_write_archive(
         Ok(())
     })();
 
-    if let Err(error) = setup_result {
-        let _ = unsafe { archive_write_free(archive_ptr) };
-        return Err(error);
-    }
+    setup_result?;
 
-    Ok(archive_ptr)
+    Ok(archive)
 }
 
 fn libarchive_open_read_archive(
     codec_name: &str,
     kind: NativeCodecKind,
     input: &Path,
-) -> Result<*mut archive> {
-    let archive_ptr = unsafe { archive_read_new() };
-    if archive_ptr.is_null() {
-        return Err(RomWeaverError::Validation(format!(
-            "{codec_name} decode failed: libarchive reader allocation returned null"
-        )));
-    }
-
-    let input_path = path_to_cstring(input, "codec input")?;
+) -> Result<ReadArchive> {
+    let mut archive = ReadArchive::new(&format!("{codec_name} decode failed"))?;
     let setup_result = (|| -> Result<()> {
-        libarchive_check_status(
-            unsafe { archive_read_support_format_raw(archive_ptr) },
-            archive_ptr,
-            &format!("{codec_name} decode failed while enabling raw format"),
+        archive.support_raw_format(&format!("{codec_name} decode failed while enabling raw format"))?;
+
+        let filter = libarchive_read_filter(kind)?;
+        archive.support_filter(
+            filter,
+            &format!(
+                "{codec_name} decode failed while enabling {} filter",
+                libarchive_read_filter_name(filter)
+            ),
         )?;
 
-        match kind {
-            NativeCodecKind::Deflate => libarchive_check_status(
-                unsafe { archive_read_support_filter_gzip(archive_ptr) },
-                archive_ptr,
-                &format!("{codec_name} decode failed while enabling gzip filter"),
-            )?,
-            NativeCodecKind::Zstd => libarchive_check_status(
-                unsafe { archive_read_support_filter_zstd(archive_ptr) },
-                archive_ptr,
-                &format!("{codec_name} decode failed while enabling zstd filter"),
-            )?,
-            NativeCodecKind::Lzma2 => libarchive_check_status(
-                unsafe { archive_read_support_filter_xz(archive_ptr) },
-                archive_ptr,
-                &format!("{codec_name} decode failed while enabling xz filter"),
-            )?,
-            NativeCodecKind::Bzip2 => libarchive_check_status(
-                unsafe { archive_read_support_filter_bzip2(archive_ptr) },
-                archive_ptr,
-                &format!("{codec_name} decode failed while enabling bzip2 filter"),
-            )?,
-            NativeCodecKind::Store => {
-                return Err(RomWeaverError::Validation(
-                    "store codec does not use libarchive filters".to_string(),
-                ));
-            }
-        }
-
-        libarchive_check_status(
-            unsafe {
-                archive_read_open_filename(
-                    archive_ptr,
-                    input_path.as_ptr(),
-                    NativeCodecBackend::LIBARCHIVE_OPEN_BLOCK_BYTES,
-                )
-            },
-            archive_ptr,
+        archive.open_filename(
+            input,
+            "codec input",
+            NativeCodecBackend::LIBARCHIVE_OPEN_BLOCK_BYTES,
             &format!(
                 "{codec_name} decode failed while opening input `{}`",
                 input.display()
@@ -525,302 +445,101 @@ fn libarchive_open_read_archive(
         Ok(())
     })();
 
-    if let Err(error) = setup_result {
-        let _ = unsafe { archive_read_free(archive_ptr) };
-        return Err(error);
-    }
+    setup_result?;
 
-    Ok(archive_ptr)
+    Ok(archive)
 }
 
-fn libarchive_set_filter_option(
-    archive_ptr: *mut archive,
-    codec_name: &str,
-    module: &str,
-    option: &str,
-    value: &str,
-) -> Result<()> {
-    let module_cstr = CString::new(module).map_err(|_| {
-        RomWeaverError::Validation(format!(
-            "{codec_name} encode failed: filter module contained interior NUL"
-        ))
-    })?;
-    let option_cstr = CString::new(option).map_err(|_| {
-        RomWeaverError::Validation(format!(
-            "{codec_name} encode failed: filter option contained interior NUL"
-        ))
-    })?;
-    let value_cstr = CString::new(value).map_err(|_| {
-        RomWeaverError::Validation(format!(
-            "{codec_name} encode failed: filter option value contained interior NUL"
-        ))
-    })?;
-
-    libarchive_check_status(
-        unsafe {
-            archive_write_set_filter_option(
-                archive_ptr,
-                module_cstr.as_ptr(),
-                option_cstr.as_ptr(),
-                value_cstr.as_ptr(),
-            )
-        },
-        archive_ptr,
-        &format!("{codec_name} encode failed while setting {module}:{option}={value}"),
-    )
-}
-
-fn libarchive_try_set_filter_option(
-    archive_ptr: *mut archive,
-    codec_name: &str,
-    module: &str,
-    option: &str,
-    value: &str,
-) -> Result<()> {
-    let module_cstr = CString::new(module).map_err(|_| {
-        RomWeaverError::Validation(format!(
-            "{codec_name} encode failed: filter module contained interior NUL"
-        ))
-    })?;
-    let option_cstr = CString::new(option).map_err(|_| {
-        RomWeaverError::Validation(format!(
-            "{codec_name} encode failed: filter option contained interior NUL"
-        ))
-    })?;
-    let value_cstr = CString::new(value).map_err(|_| {
-        RomWeaverError::Validation(format!(
-            "{codec_name} encode failed: filter option value contained interior NUL"
-        ))
-    })?;
-
-    let status = unsafe {
-        archive_write_set_filter_option(
-            archive_ptr,
-            module_cstr.as_ptr(),
-            option_cstr.as_ptr(),
-            value_cstr.as_ptr(),
-        )
-    };
-    match status {
-        ARCHIVE_OK | ARCHIVE_WARN => Ok(()),
-        _ if libarchive_unsupported_option_error(archive_ptr) => Ok(()),
-        _ => Err(libarchive_error(
-            archive_ptr,
-            &format!("{codec_name} encode failed while setting {module}:{option}={value}"),
+fn libarchive_write_filter(kind: NativeCodecKind) -> Result<WriteFilter> {
+    match kind {
+        NativeCodecKind::Deflate => Ok(WriteFilter::Gzip),
+        NativeCodecKind::Zstd => Ok(WriteFilter::Zstd),
+        NativeCodecKind::Lzma2 => Ok(WriteFilter::Xz),
+        NativeCodecKind::Bzip2 => Ok(WriteFilter::Bzip2),
+        NativeCodecKind::Store => Err(RomWeaverError::Validation(
+            "store codec does not use libarchive filters".to_string(),
         )),
     }
 }
 
+fn libarchive_read_filter(kind: NativeCodecKind) -> Result<ReadFilter> {
+    match kind {
+        NativeCodecKind::Deflate => Ok(ReadFilter::Gzip),
+        NativeCodecKind::Zstd => Ok(ReadFilter::Zstd),
+        NativeCodecKind::Lzma2 => Ok(ReadFilter::Xz),
+        NativeCodecKind::Bzip2 => Ok(ReadFilter::Bzip2),
+        NativeCodecKind::Store => Err(RomWeaverError::Validation(
+            "store codec does not use libarchive filters".to_string(),
+        )),
+    }
+}
+
+fn libarchive_read_filter_name(filter: ReadFilter) -> &'static str {
+    match filter {
+        ReadFilter::Gzip => "gzip",
+        ReadFilter::Bzip2 => "bzip2",
+        ReadFilter::Xz => "xz",
+        ReadFilter::Zstd => "zstd",
+    }
+}
+
 fn libarchive_write_raw_entry_from_reader<R: Read>(
-    archive_ptr: *mut archive,
+    archive: &mut WriteArchive,
     codec_name: &str,
     entry_name: &str,
     input_len: u64,
     source: &mut R,
     buffer_bytes: usize,
 ) -> Result<()> {
-    const AE_IFREG_MODE: c_uint = 0o100000;
-    let entry_ptr = unsafe { archive_entry_new() };
-    if entry_ptr.is_null() {
-        return Err(RomWeaverError::Validation(format!(
-            "{codec_name} encode failed: libarchive entry allocation returned null"
-        )));
+    archive.start_entry(
+        EntrySpec {
+            pathname: entry_name,
+            file_type: EntryFileType::Regular,
+            perm: 0o644,
+            size: input_len,
+        },
+        &format!("{codec_name} encode failed while writing raw entry header"),
+    )?;
+
+    let mut buffer = vec![0u8; buffer_bytes];
+    loop {
+        let read = source.read(&mut buffer)?;
+        if read == 0 {
+            break;
+        }
+        archive.write_data_all(
+            &buffer[..read],
+            &format!("{codec_name} encode failed while writing payload data"),
+            ZeroWriteBehavior::Complete,
+        )?;
     }
 
-    let entry_name_cstr = CString::new(entry_name).map_err(|_| {
-        RomWeaverError::Validation(format!(
-            "{codec_name} encode failed: archive entry name contained interior NUL"
-        ))
-    })?;
-    let size = i64::try_from(input_len).map_err(|_| {
-        RomWeaverError::Validation(format!(
-            "{codec_name} encode failed: input length exceeded libarchive entry size range"
-        ))
-    })?;
-
-    let write_result = (|| -> Result<()> {
-        unsafe {
-            archive_entry_set_pathname(entry_ptr, entry_name_cstr.as_ptr());
-            archive_entry_set_filetype(entry_ptr, AE_IFREG_MODE);
-            archive_entry_set_perm(entry_ptr, 0o644);
-            archive_entry_set_size(entry_ptr, size);
-        }
-
-        libarchive_check_status(
-            unsafe { archive_write_header(archive_ptr, entry_ptr) },
-            archive_ptr,
-            &format!("{codec_name} encode failed while writing raw entry header"),
-        )?;
-
-        let mut buffer = vec![0u8; buffer_bytes];
-        loop {
-            let read = source.read(&mut buffer)?;
-            if read == 0 {
-                break;
-            }
-            libarchive_write_payload(archive_ptr, codec_name, &buffer[..read])?;
-        }
-
-        libarchive_check_status(
-            unsafe { archive_write_finish_entry(archive_ptr) },
-            archive_ptr,
-            &format!("{codec_name} encode failed while finalizing entry"),
-        )?;
-        Ok(())
-    })();
-
-    unsafe { archive_entry_free(entry_ptr) };
-    write_result
-}
-
-fn libarchive_write_payload(
-    archive_ptr: *mut archive,
-    codec_name: &str,
-    payload: &[u8],
-) -> Result<()> {
-    let mut offset = 0usize;
-    while offset < payload.len() {
-        let written = unsafe {
-            archive_write_data(
-                archive_ptr,
-                payload[offset..].as_ptr().cast(),
-                payload.len() - offset,
-            )
-        };
-        if written < 0 {
-            return Err(libarchive_error(
-                archive_ptr,
-                &format!("{codec_name} encode failed while writing payload data"),
-            ));
-        }
-        if written == 0 {
-            // libarchive can report zero on success in some code paths.
-            offset = payload.len();
-            continue;
-        }
-        let advanced = usize::try_from(written).map_err(|_| {
-            RomWeaverError::Validation(format!(
-                "{codec_name} encode failed: libarchive reported an invalid write length"
-            ))
-        })?;
-        if advanced > payload.len() - offset {
-            return Err(RomWeaverError::Validation(format!(
-                "{codec_name} encode failed: libarchive reported a write length larger than the buffered payload"
-            )));
-        }
-        offset = offset.saturating_add(advanced);
-    }
-    Ok(())
+    archive.finish_entry(&format!("{codec_name} encode failed while finalizing entry"))
 }
 
 fn libarchive_read_entry_to_writer<W: Write>(
-    archive_ptr: *mut archive,
+    archive: &mut ReadArchive,
     codec_name: &str,
     output: &mut W,
     buffer_bytes: usize,
 ) -> Result<u64> {
-    let mut copied = 0u64;
-    let mut buffer = vec![0u8; buffer_bytes];
-    loop {
-        let read =
-            unsafe { archive_read_data(archive_ptr, buffer.as_mut_ptr().cast(), buffer.len()) };
-        if read > 0 {
-            let bytes = usize::try_from(read).map_err(|_| {
-                RomWeaverError::Validation(format!(
-                    "{codec_name} decode failed: libarchive returned an invalid read length"
-                ))
-            })?;
-            output.write_all(&buffer[..bytes])?;
-            copied = copied.saturating_add(bytes as u64);
-            continue;
-        }
-        if read == 0 {
-            break;
-        }
-        return Err(libarchive_error(
-            archive_ptr,
-            &format!("{codec_name} decode failed while reading payload data"),
-        ));
-    }
-    Ok(copied)
+    archive.read_entry_to_writer(
+        output,
+        buffer_bytes,
+        &format!("{codec_name} decode failed while reading payload data"),
+    )
 }
 
-fn libarchive_close_write_archive(archive_ptr: *mut archive, codec_name: &str) -> Result<()> {
-    let close_result = libarchive_check_status(
-        unsafe { archive_write_close(archive_ptr) },
-        archive_ptr,
+fn libarchive_close_write_archive(archive: WriteArchive, codec_name: &str) -> Result<()> {
+    archive.close(
         &format!("{codec_name} encode failed while closing writer"),
-    );
-    let free_result = libarchive_check_status(
-        unsafe { archive_write_free(archive_ptr) },
-        archive_ptr,
         &format!("{codec_name} encode failed while freeing writer"),
-    );
-    close_result.and(free_result)
+    )
 }
 
-fn libarchive_close_read_archive(archive_ptr: *mut archive, codec_name: &str) -> Result<()> {
-    let close_result = libarchive_check_status(
-        unsafe { archive_read_close(archive_ptr) },
-        archive_ptr,
+fn libarchive_close_read_archive(archive: ReadArchive, codec_name: &str) -> Result<()> {
+    archive.close(
         &format!("{codec_name} decode failed while closing reader"),
-    );
-    let free_result = libarchive_check_status(
-        unsafe { archive_read_free(archive_ptr) },
-        archive_ptr,
         &format!("{codec_name} decode failed while freeing reader"),
-    );
-    close_result.and(free_result)
-}
-
-fn libarchive_check_status(status: i32, archive_ptr: *mut archive, context: &str) -> Result<()> {
-    match status {
-        ARCHIVE_OK | ARCHIVE_WARN => Ok(()),
-        _ => Err(libarchive_error(archive_ptr, context)),
-    }
-}
-
-fn libarchive_error(archive_ptr: *mut archive, context: &str) -> RomWeaverError {
-    unsafe {
-        let error_ptr = archive_error_string(archive_ptr);
-        if !error_ptr.is_null() {
-            let message = CStr::from_ptr(error_ptr).to_string_lossy().into_owned();
-            return RomWeaverError::Validation(format!("{context}: {message}"));
-        }
-        let error_number = archive_errno(archive_ptr);
-        let message = if error_number != 0 {
-            io::Error::from_raw_os_error(error_number).to_string()
-        } else {
-            "unknown libarchive failure".to_string()
-        };
-        RomWeaverError::Validation(format!("{context}: {message}"))
-    }
-}
-
-fn libarchive_unsupported_option_error(archive_ptr: *mut archive) -> bool {
-    unsafe {
-        let error_ptr = archive_error_string(archive_ptr);
-        if error_ptr.is_null() {
-            return false;
-        }
-        let message = CStr::from_ptr(error_ptr)
-            .to_string_lossy()
-            .to_ascii_lowercase();
-        message.contains("undefined option") || message.contains("unknown module name")
-    }
-}
-
-fn path_to_cstring(path: &Path, label: &str) -> Result<CString> {
-    let path_text = path.to_str().ok_or_else(|| {
-        RomWeaverError::Validation(format!(
-            "{label} path is not valid UTF-8: `{}`",
-            path.display()
-        ))
-    })?;
-    CString::new(path_text).map_err(|_| {
-        RomWeaverError::Validation(format!(
-            "{label} path contains an interior NUL byte: `{}`",
-            path.display()
-        ))
-    })
+    )
 }
