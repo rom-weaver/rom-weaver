@@ -1,6 +1,84 @@
+use std::collections::HashSet;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
+
+const WASM_PATCH_ROOT: &str = "patches/wasm";
+const WASM_PATCH_FILES: &[&str] = &[
+    "archive_write_set_format_wasm_shim.c",
+    "archive_util_tempdir.original.txt",
+    "archive_util_tempdir.replacement.txt",
+    "cmakelists_drop_entries.txt",
+];
+
+const WASM_BINDGEN_FUNCTIONS: &[&str] = &[
+    "archive_free",
+    "archive_errno",
+    "archive_error_string",
+    "archive_format",
+    "archive_set_error",
+    "archive_read_new",
+    "archive_read_support_filter_bzip2",
+    "archive_read_support_filter_compress",
+    "archive_read_support_filter_gzip",
+    "archive_read_support_filter_lzip",
+    "archive_read_support_filter_lzma",
+    "archive_read_support_filter_rpm",
+    "archive_read_support_filter_uu",
+    "archive_read_support_filter_xz",
+    "archive_read_support_filter_zstd",
+    "archive_read_support_format_7zip",
+    "archive_read_support_format_ar",
+    "archive_read_support_format_cab",
+    "archive_read_support_format_cpio",
+    "archive_read_support_format_empty",
+    "archive_read_support_format_iso9660",
+    "archive_read_support_format_lha",
+    "archive_read_support_format_mtree",
+    "archive_read_support_format_rar",
+    "archive_read_support_format_rar5",
+    "archive_read_support_format_raw",
+    "archive_read_support_format_tar",
+    "archive_read_support_format_warc",
+    "archive_read_support_format_zip",
+    "archive_read_set_seek_callback",
+    "archive_read_open2",
+    "archive_read_open_filename",
+    "archive_read_next_header",
+    "archive_read_data",
+    "archive_seek_data",
+    "archive_read_close",
+    "archive_read_free",
+    "archive_write_new",
+    "archive_write_set_format_7zip",
+    "archive_write_set_format_pax_restricted",
+    "archive_write_set_format_raw",
+    "archive_write_set_format_zip",
+    "archive_write_add_filter_none",
+    "archive_write_add_filter_gzip",
+    "archive_write_add_filter_bzip2",
+    "archive_write_add_filter_xz",
+    "archive_write_add_filter_zstd",
+    "archive_write_open_filename",
+    "archive_write_header",
+    "archive_write_data",
+    "archive_write_finish_entry",
+    "archive_write_close",
+    "archive_write_free",
+    "archive_write_set_format_option",
+    "archive_write_set_filter_option",
+    "archive_entry_free",
+    "archive_entry_new",
+    "archive_entry_filetype",
+    "archive_entry_pathname",
+    "archive_entry_pathname_utf8",
+    "archive_entry_size",
+    "archive_entry_size_is_set",
+    "archive_entry_set_filetype",
+    "archive_entry_set_pathname",
+    "archive_entry_set_perm",
+    "archive_entry_set_size",
+];
 
 fn lib_filename(lib_name: &str) -> String {
     if env::var("CARGO_CFG_TARGET_OS").unwrap() == "windows" {
@@ -40,9 +118,10 @@ fn main() {
     }
 
     println!("cargo:rerun-if-changed={}", libarchive_dir.display());
+    emit_wasm_patch_rerun_if_changed(&manifest_dir);
 
     let source_dir = if is_wasm32_target() {
-        prepare_wasm_source_tree(&libarchive_dir, &out_dir)
+        prepare_wasm_source_tree(&manifest_dir, &libarchive_dir, &out_dir)
     } else {
         libarchive_dir
     };
@@ -73,18 +152,31 @@ fn target_tool_env(tool: &str) -> Option<String> {
         .or_else(|| env::var(tool).ok())
 }
 
-fn prepare_wasm_source_tree(libarchive_dir: &Path, out_dir: &Path) -> PathBuf {
+fn wasm_patch_path(manifest_dir: &Path, relative_path: &str) -> PathBuf {
+    manifest_dir.join(WASM_PATCH_ROOT).join(relative_path)
+}
+
+fn emit_wasm_patch_rerun_if_changed(manifest_dir: &Path) {
+    for patch_file in WASM_PATCH_FILES {
+        println!(
+            "cargo:rerun-if-changed={}",
+            wasm_patch_path(manifest_dir, patch_file).display()
+        );
+    }
+}
+
+fn prepare_wasm_source_tree(manifest_dir: &Path, libarchive_dir: &Path, out_dir: &Path) -> PathBuf {
     let staged = out_dir.join("libarchive-wasm-src");
     if staged.exists() {
         fs::remove_dir_all(&staged).expect("failed to clear staged wasm libarchive source tree");
     }
     copy_dir_recursive(libarchive_dir, &staged)
         .expect("failed to stage libarchive source tree for wasm");
-    add_wasm_archive_write_format_shim(&staged.join("libarchive"))
+    add_wasm_archive_write_format_shim(manifest_dir, &staged.join("libarchive"))
         .expect("failed to add wasm libarchive format shim");
-    patch_archive_util_tempdir_for_wasm(&staged.join("libarchive/archive_util.c"))
+    patch_archive_util_tempdir_for_wasm(manifest_dir, &staged.join("libarchive/archive_util.c"))
         .expect("failed to patch libarchive temporary directory fallback for wasm");
-    patch_cmakelists_for_wasm(&staged.join("libarchive/CMakeLists.txt"))
+    patch_cmakelists_for_wasm(manifest_dir, &staged.join("libarchive/CMakeLists.txt"))
         .expect("failed to patch libarchive CMakeLists.txt for wasm");
     staged
 }
@@ -105,97 +197,80 @@ fn copy_dir_recursive(source: &Path, destination: &Path) -> std::io::Result<()> 
     Ok(())
 }
 
-fn add_wasm_archive_write_format_shim(libarchive_source_dir: &Path) -> std::io::Result<()> {
+fn add_wasm_archive_write_format_shim(
+    manifest_dir: &Path,
+    libarchive_source_dir: &Path,
+) -> std::io::Result<()> {
+    let shim_source = fs::read_to_string(wasm_patch_path(
+        manifest_dir,
+        "archive_write_set_format_wasm_shim.c",
+    ))?;
     fs::write(
         libarchive_source_dir.join("archive_write_set_format_wasm_shim.c"),
-        r#"#include "archive_platform.h"
-
-#include "archive.h"
-#include "archive_entry.h"
-
-/*
- * archive_write_set_format.c pulls in setters for every write format, which is
- * too broad for the wasm build we stage here. Some retained format writers
- * still reference this internal helper for unsupported file-type diagnostics,
- * so provide the small helper locally and keep normal file writes self-contained.
- */
-void
-__archive_write_entry_filetype_unsupported(struct archive *a,
-    struct archive_entry *entry, const char *format)
-{
-	(void)a;
-	(void)entry;
-	(void)format;
-}
-"#,
+        shim_source,
     )?;
     Ok(())
 }
 
-fn patch_archive_util_tempdir_for_wasm(archive_util_path: &Path) -> std::io::Result<()> {
-    let content = fs::read_to_string(archive_util_path)?;
-    let original = r#"	if (tmp == NULL)
-#ifdef _PATH_TMP
-		tmp = _PATH_TMP;
-#else
-                tmp = "/tmp";
-#endif
-"#;
-    let replacement = r#"	if (tmp == NULL)
-#ifdef __wasi__
-		tmp = "/work";
-#else
-#ifdef _PATH_TMP
-		tmp = _PATH_TMP;
-#else
-                tmp = "/tmp";
-#endif
-#endif
-"#;
-    if content.contains(replacement) {
+fn replace_file_fragment(
+    target_path: &Path,
+    original_fragment_path: &Path,
+    replacement_fragment_path: &Path,
+    description: &str,
+) -> std::io::Result<()> {
+    let content = fs::read_to_string(target_path)?;
+    let original = fs::read_to_string(original_fragment_path)?;
+    let replacement = fs::read_to_string(replacement_fragment_path)?;
+
+    if content.contains(&replacement) {
         return Ok(());
     }
 
-    let patched = content.replace(original, replacement);
+    let patched = content.replace(&original, &replacement);
     if patched == content {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
-            "libarchive archive_util.c tempdir fallback block was not found",
+            format!("{description} was not found in {}", target_path.display()),
         ));
     }
 
-    fs::write(archive_util_path, patched)?;
+    fs::write(target_path, patched)?;
     Ok(())
 }
 
-fn patch_cmakelists_for_wasm(cmakelists_path: &Path) -> std::io::Result<()> {
-    let drop_entries = [
-        "archive_read_disk_entry_from_file.c",
-        "archive_read_disk_posix.c",
-        "archive_read_disk_private.h",
-        "archive_read_disk_set_standard_lookup.c",
-        "archive_read_support_filter_program.c",
-        "archive_write_disk_posix.c",
-        "archive_write_disk_private.h",
-        "archive_write_disk_set_standard_lookup.c",
-        "archive_write_add_filter_program.c",
-        "archive_write_set_format.c",
-        "archive_write_set_format_by_name.c",
-        "archive_write_set_format_filter_by_ext.c",
-        "archive_write_set_format_iso9660.c",
-        "filter_fork_posix.c",
-        "filter_fork.h",
-    ];
+fn patch_archive_util_tempdir_for_wasm(
+    manifest_dir: &Path,
+    archive_util_path: &Path,
+) -> std::io::Result<()> {
+    replace_file_fragment(
+        archive_util_path,
+        &wasm_patch_path(manifest_dir, "archive_util_tempdir.original.txt"),
+        &wasm_patch_path(manifest_dir, "archive_util_tempdir.replacement.txt"),
+        "libarchive archive_util.c tempdir fallback block",
+    )
+}
+
+fn patch_cmakelists_for_wasm(manifest_dir: &Path, cmakelists_path: &Path) -> std::io::Result<()> {
+    let drop_entries_path = wasm_patch_path(manifest_dir, "cmakelists_drop_entries.txt");
+    let drop_entries: HashSet<String> = fs::read_to_string(drop_entries_path)?
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .map(ToOwned::to_owned)
+        .collect();
+
     let content = fs::read_to_string(cmakelists_path)?;
     let mut lines = Vec::new();
+    let mut shim_inserted = false;
     for line in content.lines() {
         let trimmed = line.trim();
-        if drop_entries.contains(&trimmed) {
+        if drop_entries.contains(trimmed) {
             continue;
         }
         lines.push(line);
-        if trimmed == "archive_write_set_format_private.h" {
+        if !shim_inserted && trimmed == "archive_write_set_format_private.h" {
             lines.push("  archive_write_set_format_wasm_shim.c");
+            shim_inserted = true;
         }
     }
     let filtered = lines.join("\n");
@@ -347,7 +422,6 @@ fn generate_bindings(libarchive_dir: &Path) {
     let mut bindgen_builder = bindgen::builder()
         .header("wrapper.h")
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
-        .allowlist_function("archive_.*")
         .allowlist_var("ARCHIVE_.*")
         .allowlist_type("archive")
         .allowlist_type("archive_.*")
@@ -364,13 +438,25 @@ fn generate_bindings(libarchive_dir: &Path) {
                 .expect("libarchive include path should be valid UTF-8"),
         ]);
 
-    if !wasm_target {
-        bindgen_builder = bindgen_builder.raw_line("use libc::{stat, FILE};");
+    if wasm_target {
+        for function in WASM_BINDGEN_FUNCTIONS {
+            bindgen_builder = bindgen_builder.allowlist_function(function);
+        }
+        bindgen_builder = bindgen_builder
+            .blocklist_type("mode_t")
+            .raw_line("pub type mode_t = libc::mode_t;");
+        if let Ok(host) = env::var("HOST") {
+            bindgen_builder = bindgen_builder.clang_arg(format!("--target={host}"));
+        }
+    } else {
+        bindgen_builder = bindgen_builder
+            .allowlist_function("archive_.*")
+            .raw_line("use libc::{stat, FILE};");
+        if let Ok(target) = env::var("TARGET") {
+            bindgen_builder = bindgen_builder.clang_arg(format!("--target={target}"));
+        }
     }
 
-    if !wasm_target && let Ok(target) = env::var("TARGET") {
-        bindgen_builder = bindgen_builder.clang_arg(format!("--target={target}"));
-    }
     if let Ok(sysroot) = env::var("WASI_SYSROOT")
         && !sysroot.trim().is_empty()
     {
