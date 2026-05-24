@@ -1,6 +1,5 @@
 use std::{
-    cell::RefCell,
-    collections::{BTreeMap, HashMap, VecDeque, hash_map::Entry},
+    collections::{BTreeMap, HashMap, VecDeque},
     fs::File,
     io::{Read, Seek, SeekFrom, Write},
     num::NonZeroU64,
@@ -60,13 +59,7 @@ pub const DEFAULT_CHUNK_SIZE_BYTES: u64 = 1 << 20;
 pub const DEFAULT_BLOCK_CACHE_SIZE_BYTES: usize = 1 << 20;
 pub const DEFAULT_BLOCK_CACHE_MAX_BLOCKS: usize = 32;
 
-static NEXT_BLOCK_CACHE_READER_ID: AtomicU64 = AtomicU64::new(1);
 static NEXT_TEMP_NAMESPACE_ID: AtomicU64 = AtomicU64::new(1);
-
-thread_local! {
-    static THREAD_LOCAL_BLOCK_CACHE_READERS: RefCell<HashMap<u64, BlockCacheReader>> =
-        RefCell::new(HashMap::new());
-}
 
 pub fn bounded_items_for_threads(effective_threads: usize) -> usize {
     let threads = effective_threads.max(1);
@@ -183,8 +176,6 @@ pub struct BlockCacheReader {
 
 pub struct SharedBlockCacheReader {
     source: BlockCacheReaderSource,
-    block_size: usize,
-    max_blocks: usize,
 }
 
 impl SharedBlockCacheReader {
@@ -192,18 +183,11 @@ impl SharedBlockCacheReader {
         BlockCacheReader::validate_options(block_size, max_blocks)?;
         Ok(Self {
             source: BlockCacheReaderSource::new(path),
-            block_size,
-            max_blocks,
         })
     }
 
     pub fn read_exact_at(&self, offset: u64, output: &mut [u8]) -> Result<()> {
-        with_thread_local_block_cache_reader(
-            self.source.for_current_thread(),
-            self.block_size,
-            self.max_blocks,
-            |reader| reader.read_exact_at(offset, output),
-        )
+        read_exact_from_path(&self.source.path, offset, output)
     }
 }
 
@@ -350,38 +334,35 @@ impl BlockCacheReader {
     }
 
     fn read_exact_at_on_current_thread(&self, offset: u64, output: &mut [u8]) -> Result<()> {
-        with_thread_local_block_cache_reader(
-            self.source.for_current_thread(),
-            self.block_size,
-            self.max_blocks,
-            |reader| reader.read_exact_at(offset, output),
-        )
+        read_exact_from_path(&self.source.path, offset, output)
     }
 }
 
-fn with_thread_local_block_cache_reader<T>(
-    source: BlockCacheReaderSource,
-    block_size: usize,
-    max_blocks: usize,
-    f: impl FnOnce(&mut BlockCacheReader) -> Result<T>,
-) -> Result<T> {
-    THREAD_LOCAL_BLOCK_CACHE_READERS.with(|readers| {
-        let mut readers = readers.borrow_mut();
-        let reader = match readers.entry(source.id) {
-            Entry::Occupied(entry) => entry.into_mut(),
-            Entry::Vacant(entry) => {
-                let reader =
-                    BlockCacheReader::open_with_source(source.clone(), block_size, max_blocks)?;
-                entry.insert(reader)
-            }
-        };
-        f(reader)
-    })
+fn read_exact_from_path(path: &Path, offset: u64, output: &mut [u8]) -> Result<()> {
+    if output.is_empty() {
+        return Ok(());
+    }
+    let mut file = File::open(path)?;
+    let file_len = file.metadata()?.len();
+    let read_len_u64 = u64::try_from(output.len()).map_err(|_| {
+        RomWeaverError::Validation("requested read length overflowed u64".to_string())
+    })?;
+    if offset
+        .checked_add(read_len_u64)
+        .is_none_or(|end| end > file_len)
+    {
+        return Err(RomWeaverError::Validation(format!(
+            "read range exceeds file bounds (offset={offset}, len={})",
+            output.len()
+        )));
+    }
+    file.seek(SeekFrom::Start(offset))?;
+    file.read_exact(output)?;
+    Ok(())
 }
 
 #[derive(Clone, Debug)]
 struct BlockCacheReaderSource {
-    id: u64,
     path: PathBuf,
     owner_thread_id: ThreadId,
 }
@@ -389,16 +370,7 @@ struct BlockCacheReaderSource {
 impl BlockCacheReaderSource {
     fn new(path: &Path) -> Self {
         Self {
-            id: NEXT_BLOCK_CACHE_READER_ID.fetch_add(1, Ordering::Relaxed),
             path: path.to_path_buf(),
-            owner_thread_id: std::thread::current().id(),
-        }
-    }
-
-    fn for_current_thread(&self) -> Self {
-        Self {
-            id: self.id,
-            path: self.path.clone(),
             owner_thread_id: std::thread::current().id(),
         }
     }

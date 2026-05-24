@@ -14,7 +14,7 @@ pub use error::{
 pub use io::{
     BlockCacheReader, BoundedIoPolicy, ChunkPlanner, DEFAULT_BLOCK_CACHE_MAX_BLOCKS,
     DEFAULT_BLOCK_CACHE_SIZE_BYTES, DEFAULT_CHUNK_SIZE_BYTES, FileChunk, IoWatermark,
-    OrderedChunkWriter, TempPathAllocator, bounded_items_for_threads,
+    OrderedChunkWriter, SharedBlockCacheReader, TempPathAllocator, bounded_items_for_threads,
 };
 pub use progress::{
     NoopProgressSink, OperationFamily, OperationStatus, ProgressEvent, ProgressSink,
