@@ -40,7 +40,8 @@ SCRIPT_PATH = Path(__file__).resolve()
 REPO_ROOT = SCRIPT_PATH.parent.parent
 WASM_BUILD_SCRIPT = REPO_ROOT / "scripts" / "build-wasm-cli.sh"
 CACHE_SCHEMA_VERSION = 1
-DEFAULT_COMMANDS = "compress,extract,checksum"
+DEFAULT_COMMANDS = "compress,extract,checksum,patch-create,patch-apply"
+DEFAULT_PATCH_SIZE_MIB = 128
 DEFAULT_BENCH_FORMATS = [
     "chd",
     "rvz",
@@ -423,8 +424,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--patch-size-mib",
         type=int,
-        default=16,
-        help="Patch original/modified fixture size in MiB",
+        default=DEFAULT_PATCH_SIZE_MIB,
+        help=f"Patch original/modified fixture size in MiB (default: {DEFAULT_PATCH_SIZE_MIB})",
     )
     parser.add_argument("--threads", type=int, default=8, help="Thread count passed to CLI commands")
     parser.add_argument("--warmups", type=int, default=1, help="Warmup runs per benchmark case")
@@ -3214,6 +3215,9 @@ def main() -> None:
         patch_tools.append("rom-weaver-wasm")
     created_patch_sources: dict[tuple[str, str], tuple[Path, Path]] = {}
 
+    def patch_artifact_path(format_name: str, patch_tool: str, extension: str) -> Path:
+        return artifacts_dir / "patches" / f"{token(format_name)}-{token(patch_tool)}.{extension}"
+
     if "patch-create" in selected_commands:
         for format_name in selected_patch_formats:
             if format_name in EXPECTED_PATCH_CREATE_SKIPS:
@@ -3260,7 +3264,7 @@ def main() -> None:
                     wasm_runner_value: Path | None = wasm_runner,
                     wasm_module_value: Path | None = wasm_module,
                 ):
-                    patch_path = artifacts_dir / "patches" / f"{token(format_value)}-{token(tool_value)}.{extension_value}"
+                    patch_path = patch_artifact_path(format_value, tool_value, extension_value)
                     patch_path.parent.mkdir(parents=True, exist_ok=True)
                     if patch_path.exists():
                         patch_path.unlink()
@@ -3312,7 +3316,46 @@ def main() -> None:
                 rows.append(row)
 
                 if row.status == "succeeded":
-                    patch_path = artifacts_dir / "patches" / f"{token(format_name)}-{token(patch_tool)}.{extension}"
+                    patch_path = patch_artifact_path(format_name, patch_tool, extension)
+                    if "patch-apply" in selected_commands and not patch_path.exists():
+                        patch_path.parent.mkdir(parents=True, exist_ok=True)
+                        patch_args = [
+                            "patch-create",
+                            "--original",
+                            str(patch_original),
+                            "--modified",
+                            str(patch_modified),
+                            "--format",
+                            format_name,
+                            "--output",
+                            str(patch_path),
+                            "--threads",
+                            str(args.threads),
+                        ]
+                        if patch_tool == "rom-weaver":
+                            prep_cmd = base_command(args.bin, patch_args)
+                        else:
+                            assert node_bin is not None
+                            assert wasm_runner is not None
+                            assert wasm_module is not None
+                            prep_cmd = wasm_rom_weaver_command(
+                                node_bin=node_bin,
+                                wasm_runner=wasm_runner,
+                                wasm_module=wasm_module,
+                                args=["--no-progress", *patch_args],
+                            )
+                        prep = run_timed_command(prep_cmd, Path.cwd(), args.timeout_sec)
+                        if prep.exit_code == 0 and patch_path.exists():
+                            print(
+                                f"[bench] materialized cached patch artifact {patch_tool} {format_name}",
+                                flush=True,
+                            )
+                        else:
+                            tail = outcome_tail_message(prep) or "patch artifact was not produced"
+                            print(
+                                f"[bench] failed to materialize cached patch artifact {patch_tool} {format_name}: {tail}",
+                                flush=True,
+                            )
                     if patch_path.exists():
                         created_patch_sources[(patch_tool, format_name)] = (patch_path, patch_original)
 
