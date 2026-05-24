@@ -475,7 +475,6 @@ impl CliApp {
             );
         }
 
-        #[cfg(not(target_arch = "wasm32"))]
         match self.try_run_checksum_tar_stream_auto_extract(
             &source,
             &algo,
@@ -505,7 +504,6 @@ impl CliApp {
             }
         }
 
-        #[cfg(not(target_arch = "wasm32"))]
         if let Some(stream_format) = self.select_streamed_checksum_auto_extract_format(
             &source,
             &select,
@@ -719,7 +717,6 @@ impl CliApp {
         self.finish("checksum", report)
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
     fn try_run_checksum_tar_stream_auto_extract(
         &self,
         source: &Path,
@@ -782,7 +779,6 @@ impl CliApp {
         Ok(Some(report))
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
     fn run_checksum_tar_stream_auto_extract(
         &self,
         source: &Path,
@@ -861,7 +857,6 @@ impl CliApp {
         ))
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
     fn select_tar_stream_checksum_candidate(
         &self,
         source: &Path,
@@ -892,7 +887,6 @@ impl CliApp {
         Ok(selected.into_iter().next())
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
     fn select_streamed_checksum_auto_extract_format(
         &self,
         source: &Path,
@@ -931,7 +925,6 @@ impl CliApp {
         Some(stream_format)
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
     fn run_checksum_stream_auto_extract(
         &self,
         source: &Path,
@@ -965,12 +958,8 @@ impl CliApp {
             .map(|algorithm| algorithm.to_ascii_lowercase())
             .collect::<Vec<_>>();
         let checksum_algorithm_count = algorithms.len();
-        let values = with_raw_stream_reader(
-            source,
-            stream_format,
-            filter,
-            64 * 1024,
-            |stream_reader| {
+        let values =
+            with_raw_stream_reader(source, stream_format, filter, 64 * 1024, |stream_reader| {
                 checksum_reader_values_with_progress(
                     stream_reader,
                     &algorithms,
@@ -990,8 +979,7 @@ impl CliApp {
                         );
                     },
                 )
-            },
-        )?;
+            })?;
 
         let mut label = Self::render_streamed_checksum_label(&algorithms, &values.values);
         label.push_str(&format!(
@@ -1007,8 +995,9 @@ impl CliApp {
         ))
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
-    fn libarchive_read_filter_for_stream_format(stream_format: &str) -> Result<LibarchiveReadFilter> {
+    fn libarchive_read_filter_for_stream_format(
+        stream_format: &str,
+    ) -> Result<LibarchiveReadFilter> {
         match stream_format {
             "gz" => Ok(LibarchiveReadFilter::Gzip),
             "bz2" => Ok(LibarchiveReadFilter::Bzip2),
@@ -1020,7 +1009,6 @@ impl CliApp {
         }
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
     fn inferred_stream_extract_output_path(source: &Path, stream_format: &str) -> Option<PathBuf> {
         let file_name = source.file_name()?.to_str()?;
         let extension = match stream_format {
@@ -1053,7 +1041,6 @@ impl CliApp {
         Some(parent.join(output_name))
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
     fn render_streamed_checksum_label(
         algorithms: &[String],
         values: &BTreeMap<String, String>,

@@ -11,7 +11,6 @@ use std::{
 
 #[cfg(not(target_arch = "wasm32"))]
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
-#[cfg(not(target_arch = "wasm32"))]
 use rom_weaver_checksum::checksum_reader_values_with_progress;
 use rom_weaver_checksum::{
     NativeChecksumEngine, checksum_file_values, seed_checksum_file_cache, supported_algorithms,
@@ -25,7 +24,6 @@ use rom_weaver_core::{
     PatchCreateRequest, ProbeConfidence, ProgressEvent, ProgressSink, Result, RomWeaverError,
     ThreadBudget, ThreadCapability, ThreadExecution, XdeltaSecondaryMode,
 };
-#[cfg(not(target_arch = "wasm32"))]
 use rom_weaver_libarchive::{
     ReadFilter as LibarchiveReadFilter, list_regular_archive_file_entries, with_raw_stream_reader,
     with_regular_archive_file_entry_reader,
