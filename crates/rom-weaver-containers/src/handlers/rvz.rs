@@ -12,20 +12,7 @@ impl RvzContainerHandler {
         source: &Path,
         preloader_threads: usize,
     ) -> Result<NodDiscReader> {
-        #[cfg(target_arch = "wasm32")]
-        {
-            RVZ_NOD_CORE.open_disc_with(source, preloader_threads, |path, options| {
-                let file = File::open(path).map_err(|error| error.to_string())?;
-                NodDiscReader::new_from_non_cloneable_read(file, options)
-                    .map_err(|error| error.to_string())
-            })
-        }
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            RVZ_NOD_CORE.open_disc_with(source, preloader_threads, |path, options| {
-                NodDiscReader::new(path, options)
-            })
-        }
+        RVZ_NOD_CORE.open_disc(source, preloader_threads)
     }
 
     fn create_extract_output(&self, output_path: &Path) -> Result<File> {

@@ -23,6 +23,13 @@ WASM artifacts + JS wrappers:
 scripts/build-wasm-cli.sh
 ```
 
+Ad-hoc WASI target checks/builds (uses LLVM + WASI sysroot wiring):
+
+```bash
+scripts/wasm/with-wasi-env.sh cargo check -p rom-weaver-containers --target wasm32-wasip1
+scripts/wasm/with-wasi-env.sh cargo check -p rom-weaver-containers --target wasm32-wasip1-threads
+```
+
 By default this writes artifacts to `packages/rom-weaver-wasm` (generated files are gitignored).
 Pass an explicit output directory as the first argument to override.
 
