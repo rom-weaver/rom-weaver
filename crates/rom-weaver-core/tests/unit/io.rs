@@ -39,6 +39,31 @@ fn temp_paths_are_unique() {
 }
 
 #[test]
+fn temp_allocator_drop_removes_namespace_directory() {
+    let root = std::env::temp_dir().join(format!(
+        "rom-weaver-tests-cleanup-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("time")
+            .as_nanos()
+    ));
+
+    let namespace_dir = {
+        let allocator = TempPathAllocator::new(root.clone());
+        let temp_path = allocator.next_path("cleanup", Some("tmp"));
+        let namespace_dir = temp_path.parent().expect("namespace parent").to_path_buf();
+        fs::create_dir_all(&namespace_dir).expect("create namespace dir");
+        fs::write(&temp_path, b"cleanup").expect("write namespace file");
+        assert!(namespace_dir.exists());
+        namespace_dir
+    };
+
+    assert!(!namespace_dir.exists());
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
 fn bounded_items_scale_with_threads() {
     assert_eq!(bounded_items_for_threads(0), 2);
     assert_eq!(bounded_items_for_threads(1), 2);

@@ -369,6 +369,7 @@ impl PatchHandler for VcdiffPatchHandler {
         let baseline_path = context
             .temp_paths()
             .next_path("vcdiff-create-baseline", output_extension);
+        let mut secondary_candidate_paths = Vec::new();
 
         let create_result = (|| -> Result<(ParsedPatch, rom_weaver_core::ThreadExecution)> {
             let baseline_raw = encode_patch_with_native_streaming(
@@ -447,6 +448,8 @@ impl PatchHandler for VcdiffPatchHandler {
                             )
                         })
                         .collect::<Vec<_>>();
+                    secondary_candidate_paths
+                        .extend(candidate_specs.iter().map(|(_, path)| path.clone()));
                     let app_header = xdelta_app_header.as_deref();
                     let candidate_results = if let Some(pool) = secondary_pool.as_ref() {
                         let baseline_for_workers = Arc::clone(&baseline_loaded);
@@ -500,6 +503,9 @@ impl PatchHandler for VcdiffPatchHandler {
             Ok((parse_patch(&mut reader)?, execution))
         })();
 
+        for candidate_path in secondary_candidate_paths {
+            let _ = fs::remove_file(candidate_path);
+        }
         let _ = fs::remove_file(&baseline_raw_path);
         let _ = fs::remove_file(&baseline_path);
 

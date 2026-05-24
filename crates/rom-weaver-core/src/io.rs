@@ -1,6 +1,6 @@
 use std::{
     collections::{BTreeMap, HashMap, VecDeque},
-    fs::File,
+    fs::{self, File},
     io::{Read, Seek, SeekFrom, Write},
     num::NonZeroU64,
     path::{Path, PathBuf},
@@ -431,6 +431,12 @@ impl TempPathAllocator {
             }
         }
         self.root.join(&self.namespace).join(file_name)
+    }
+}
+
+impl Drop for TempPathAllocator {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(self.root.join(&self.namespace));
     }
 }
 
