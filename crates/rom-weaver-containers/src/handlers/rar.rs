@@ -71,7 +71,7 @@ impl ContainerHandler for RarContainerHandler {
             inspect: true,
             extract: true,
             create: false,
-            extract_threads: ThreadCapability::parallel(None),
+            extract_threads: regular_archive_extract_thread_capability(),
             create_threads: ThreadCapability::single_threaded(),
         }
     }

@@ -129,12 +129,7 @@ impl TarContainerHandler {
     }
 
     fn extract_thread_capability(&self) -> ThreadCapability {
-        match self.compression {
-            TarCompression::None
-            | TarCompression::Gzip
-            | TarCompression::Bzip2
-            | TarCompression::Xz => ThreadCapability::parallel(None),
-        }
+        regular_archive_extract_thread_capability()
     }
 
     fn create_thread_capability(&self) -> ThreadCapability {

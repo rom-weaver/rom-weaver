@@ -286,7 +286,7 @@ impl ContainerHandler for SevenZContainerHandler {
             inspect: true,
             extract: true,
             create: true,
-            extract_threads: ThreadCapability::parallel(None),
+            extract_threads: regular_archive_extract_thread_capability(),
             create_threads: ThreadCapability::parallel(None),
         }
     }

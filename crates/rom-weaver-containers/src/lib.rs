@@ -1396,6 +1396,42 @@ where
     Ok(written_bytes)
 }
 
+fn wasm_threaded_runtime_extract_is_unstable() -> bool {
+    cfg!(all(target_family = "wasm", rom_weaver_wasi_threads))
+}
+
+fn wasm_threaded_runtime_cso_parallel_is_unstable() -> bool {
+    cfg!(all(target_family = "wasm", rom_weaver_wasi_threads))
+}
+
+fn wasm_threaded_runtime_pbp_parallel_is_unstable() -> bool {
+    cfg!(all(target_family = "wasm", rom_weaver_wasi_threads))
+}
+
+fn regular_archive_extract_thread_capability() -> ThreadCapability {
+    if wasm_threaded_runtime_extract_is_unstable() {
+        ThreadCapability::single_threaded()
+    } else {
+        ThreadCapability::parallel(None)
+    }
+}
+
+fn cso_thread_capability() -> ThreadCapability {
+    if wasm_threaded_runtime_cso_parallel_is_unstable() {
+        ThreadCapability::single_threaded()
+    } else {
+        ThreadCapability::parallel(None)
+    }
+}
+
+fn pbp_extract_thread_capability() -> ThreadCapability {
+    if wasm_threaded_runtime_pbp_parallel_is_unstable() {
+        ThreadCapability::single_threaded()
+    } else {
+        ThreadCapability::parallel(None)
+    }
+}
+
 fn extract_regular_archive_with_libarchive(
     request: &ContainerExtractRequest,
     context: &OperationContext,
@@ -1465,7 +1501,9 @@ fn extract_regular_archive_with_libarchive(
         (execution, written)
     } else {
         let file_task_count = tasks.iter().filter(|task| !task.is_dir).count().max(1);
-        let capability = if limit_threads_to_task_count {
+        let capability = if wasm_threaded_runtime_extract_is_unstable() {
+            ThreadCapability::single_threaded()
+        } else if limit_threads_to_task_count {
             ThreadCapability::parallel(Some(file_task_count))
         } else {
             ThreadCapability::parallel(None)

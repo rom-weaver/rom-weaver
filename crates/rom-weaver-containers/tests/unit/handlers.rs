@@ -32,17 +32,57 @@ mod tests {
     use rom_weaver_codecs::CanonicalCodec;
     use rom_weaver_core::{
         CancellationToken, ContainerHandler, NoopProgressSink, OperationContext, ThreadBudget,
-        ThreadCapability,
+        ThreadCapability, ThreadExecution,
     };
+
+    fn test_temp_root() -> PathBuf {
+        #[cfg(target_family = "wasm")]
+        {
+            let candidates = [
+                env::var_os("ROM_WEAVER_TEST_TMPDIR").map(PathBuf::from),
+                env::var_os("TMPDIR").map(PathBuf::from),
+                Some(PathBuf::from("/tmp/.rom-weaver-containers-tests-tmp")),
+                Some(PathBuf::from(".rom-weaver-containers-tests-tmp")),
+            ];
+
+            for candidate in candidates.into_iter().flatten() {
+                if candidate.as_os_str().is_empty() {
+                    continue;
+                }
+                if fs::create_dir_all(&candidate).is_ok() {
+                    return candidate;
+                }
+            }
+
+            panic!("unable to find writable wasm temp root");
+        }
+
+        #[cfg(not(target_family = "wasm"))]
+        {
+            env::temp_dir()
+        }
+    }
+
+    fn test_process_id() -> u32 {
+        #[cfg(target_family = "wasm")]
+        {
+            return 0;
+        }
+
+        #[cfg(not(target_family = "wasm"))]
+        {
+            std::process::id()
+        }
+    }
 
     fn temp_file_path_with_extension(label: &str, extension: &str) -> PathBuf {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .expect("time")
             .as_nanos();
-        env::temp_dir().join(format!(
+        test_temp_root().join(format!(
             "rom-weaver-containers-probe-{label}-{}-{timestamp}.{extension}",
-            std::process::id(),
+            test_process_id(),
         ))
     }
 
@@ -51,9 +91,9 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("time")
             .as_nanos();
-        env::temp_dir().join(format!(
+        test_temp_root().join(format!(
             "rom-weaver-containers-tests-{label}-{}-{timestamp}",
-            std::process::id(),
+            test_process_id(),
         ))
     }
 
@@ -64,6 +104,45 @@ mod tests {
             Arc::new(NoopProgressSink),
             CancellationToken::new(),
         )
+    }
+
+    fn assert_execution_matches_capability(
+        execution: &ThreadExecution,
+        capability: &ThreadCapability,
+        requested_threads: usize,
+    ) {
+        assert!(capability.supports_execution(execution));
+        assert_eq!(execution.requested_threads, requested_threads);
+    }
+
+    fn assert_execution_parallel_when_available(
+        execution: &ThreadExecution,
+        capability: &ThreadCapability,
+        requested_threads: usize,
+    ) {
+        assert_execution_matches_capability(execution, capability, requested_threads);
+        let planned = capability
+            .clone()
+            .negotiate(ThreadBudget::Fixed(requested_threads));
+        if planned.effective_threads > 1 {
+            assert!(execution.effective_threads > 1);
+            assert!(execution.used_parallelism);
+        } else {
+            assert_eq!(execution.effective_threads, 1);
+            assert!(!execution.used_parallelism);
+        }
+    }
+
+    fn expected_parallel_or_single_for_wasm_threads() -> ThreadCapability {
+        #[cfg(all(target_family = "wasm", rom_weaver_wasi_threads))]
+        {
+            ThreadCapability::single_threaded()
+        }
+
+        #[cfg(not(all(target_family = "wasm", rom_weaver_wasi_threads)))]
+        {
+            ThreadCapability::parallel(None)
+        }
     }
 
     fn build_test_gamecube_iso(payload_len: usize) -> Vec<u8> {
@@ -616,11 +695,11 @@ mod tests {
         assert!(capabilities.create);
         assert_eq!(
             capabilities.extract_threads,
-            ThreadCapability::parallel(None)
+            expected_parallel_or_single_for_wasm_threads()
         );
         assert_eq!(
             capabilities.create_threads,
-            ThreadCapability::parallel(None)
+            expected_parallel_or_single_for_wasm_threads()
         );
     }
 
@@ -634,7 +713,7 @@ mod tests {
         assert!(!capabilities.create);
         assert_eq!(
             capabilities.extract_threads,
-            ThreadCapability::parallel(None)
+            expected_parallel_or_single_for_wasm_threads()
         );
         assert_eq!(
             capabilities.create_threads,
@@ -642,7 +721,7 @@ mod tests {
         );
     }
 
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     #[test]
     fn rar_capabilities_report_parallel_extract_threads() {
         let registry = ContainerRegistry::new();
@@ -653,7 +732,7 @@ mod tests {
         assert!(!capabilities.create);
         assert_eq!(
             capabilities.extract_threads,
-            ThreadCapability::parallel(None)
+            expected_parallel_or_single_for_wasm_threads()
         );
         assert_eq!(
             capabilities.create_threads,
@@ -661,7 +740,7 @@ mod tests {
         );
     }
 
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     #[test]
     fn chd_runtime_threads_match_capabilities_for_create_and_extract() {
         let temp_dir = temp_dir_path("chd-thread-parity");
@@ -747,7 +826,7 @@ mod tests {
         assert!(capabilities.create);
         assert_eq!(
             capabilities.extract_threads,
-            ThreadCapability::parallel(None)
+            expected_parallel_or_single_for_wasm_threads()
         );
         assert_eq!(
             capabilities.create_threads,
@@ -902,7 +981,7 @@ mod tests {
         assert!(capabilities.create);
         assert_eq!(
             capabilities.extract_threads,
-            ThreadCapability::parallel(None)
+            expected_parallel_or_single_for_wasm_threads()
         );
         assert_eq!(
             capabilities.create_threads,
@@ -983,9 +1062,7 @@ mod tests {
             )
             .expect("zipx create");
         let execution = report.thread_execution.expect("thread execution");
-        assert_eq!(execution.requested_threads, 8);
-        assert_eq!(execution.effective_threads, 8);
-        assert!(execution.used_parallelism);
+        assert_execution_parallel_when_available(&execution, &ThreadCapability::parallel(None), 8);
 
         let _ = fs::remove_dir_all(temp_dir);
     }
@@ -1039,7 +1116,7 @@ mod tests {
         assert!(capabilities.create);
         assert_eq!(
             capabilities.extract_threads,
-            ThreadCapability::parallel(None)
+            expected_parallel_or_single_for_wasm_threads()
         );
         assert_eq!(
             capabilities.create_threads,
@@ -1057,7 +1134,7 @@ mod tests {
         assert!(capabilities.create);
         assert_eq!(
             capabilities.extract_threads,
-            ThreadCapability::parallel(None)
+            expected_parallel_or_single_for_wasm_threads()
         );
         assert_eq!(
             capabilities.create_threads,
@@ -1075,7 +1152,7 @@ mod tests {
         assert!(capabilities.create);
         assert_eq!(
             capabilities.extract_threads,
-            ThreadCapability::parallel(None)
+            expected_parallel_or_single_for_wasm_threads()
         );
         assert_eq!(
             capabilities.create_threads,
@@ -1093,7 +1170,7 @@ mod tests {
         assert!(capabilities.create);
         assert_eq!(
             capabilities.extract_threads,
-            ThreadCapability::parallel(None)
+            expected_parallel_or_single_for_wasm_threads()
         );
         assert_eq!(
             capabilities.create_threads,
@@ -1206,14 +1283,11 @@ mod tests {
             )
             .expect("create zip");
         let create_execution = create_report.thread_execution.expect("thread execution");
-        assert!(
-            capabilities
-                .create_threads
-                .supports_execution(&create_execution)
+        assert_execution_parallel_when_available(
+            &create_execution,
+            &capabilities.create_threads,
+            8,
         );
-        assert_eq!(create_execution.requested_threads, 8);
-        assert_eq!(create_execution.effective_threads, 8);
-        assert!(create_execution.used_parallelism);
 
         let extract_report = handler
             .extract(
@@ -1229,14 +1303,11 @@ mod tests {
             .expect("extract zip");
 
         let extract_execution = extract_report.thread_execution.expect("thread execution");
-        assert!(
-            capabilities
-                .extract_threads
-                .supports_execution(&extract_execution)
+        assert_execution_parallel_when_available(
+            &extract_execution,
+            &capabilities.extract_threads,
+            8,
         );
-        assert_eq!(extract_execution.requested_threads, 8);
-        assert_eq!(extract_execution.effective_threads, 8);
-        assert!(extract_execution.used_parallelism);
 
         for index in 0..8 {
             let path = output_dir.join(format!("input/file-{index}.bin"));
@@ -1266,6 +1337,7 @@ mod tests {
 
         let registry = ContainerRegistry::new();
         let handler = registry.find_by_name("zip").expect("zip handler");
+        let capabilities = handler.capabilities();
 
         let create_report = handler
             .create(
@@ -1281,9 +1353,11 @@ mod tests {
             )
             .expect("create zip");
         let create_execution = create_report.thread_execution.expect("thread execution");
-        assert_eq!(create_execution.requested_threads, 8);
-        assert_eq!(create_execution.effective_threads, 8);
-        assert!(create_execution.used_parallelism);
+        assert_execution_parallel_when_available(
+            &create_execution,
+            &capabilities.create_threads,
+            8,
+        );
 
         let extract_report = handler
             .extract(
@@ -1298,7 +1372,7 @@ mod tests {
             )
             .expect("extract zip");
         let extract_execution = extract_report.thread_execution.expect("thread execution");
-        assert_eq!(extract_execution.requested_threads, 8);
+        assert_execution_matches_capability(&extract_execution, &capabilities.extract_threads, 8);
         assert_eq!(extract_execution.effective_threads, 1);
         assert!(!extract_execution.used_parallelism);
 
@@ -1341,12 +1415,7 @@ mod tests {
             )
             .expect("create tar.gz");
         let create_execution = create_report.thread_execution.expect("thread execution");
-        assert!(
-            capabilities
-                .create_threads
-                .supports_execution(&create_execution)
-        );
-        assert_eq!(create_execution.requested_threads, 8);
+        assert_execution_matches_capability(&create_execution, &capabilities.create_threads, 8);
 
         let extract_report = handler
             .extract(
@@ -1361,14 +1430,11 @@ mod tests {
             )
             .expect("extract tar.gz");
         let extract_execution = extract_report.thread_execution.expect("thread execution");
-        assert!(
-            capabilities
-                .extract_threads
-                .supports_execution(&extract_execution)
+        assert_execution_parallel_when_available(
+            &extract_execution,
+            &capabilities.extract_threads,
+            8,
         );
-        assert_eq!(extract_execution.requested_threads, 8);
-        assert!(extract_execution.effective_threads > 1);
-        assert!(extract_execution.used_parallelism);
 
         for index in 0..6 {
             let path = output_dir.join(format!("input/blob-{index}.bin"));
@@ -1415,14 +1481,11 @@ mod tests {
             )
             .expect("create tar.bz2");
         let create_execution = create_report.thread_execution.expect("thread execution");
-        assert!(
-            capabilities
-                .create_threads
-                .supports_execution(&create_execution)
+        assert_execution_parallel_when_available(
+            &create_execution,
+            &capabilities.create_threads,
+            8,
         );
-        assert_eq!(create_execution.requested_threads, 8);
-        assert_eq!(create_execution.effective_threads, 8);
-        assert!(create_execution.used_parallelism);
 
         let extract_report = handler
             .extract(
@@ -1437,14 +1500,11 @@ mod tests {
             )
             .expect("extract tar.bz2");
         let extract_execution = extract_report.thread_execution.expect("thread execution");
-        assert!(
-            capabilities
-                .extract_threads
-                .supports_execution(&extract_execution)
+        assert_execution_parallel_when_available(
+            &extract_execution,
+            &capabilities.extract_threads,
+            8,
         );
-        assert_eq!(extract_execution.requested_threads, 8);
-        assert!(extract_execution.effective_threads > 1);
-        assert!(extract_execution.used_parallelism);
 
         for index in 0..6 {
             let path = output_dir.join(format!("input/blob-{index}.bin"));
@@ -1492,14 +1552,11 @@ mod tests {
             .expect("create tar");
 
         let create_execution = create_report.thread_execution.expect("thread execution");
-        assert!(
-            capabilities
-                .create_threads
-                .supports_execution(&create_execution)
+        assert_execution_parallel_when_available(
+            &create_execution,
+            &capabilities.create_threads,
+            8,
         );
-        assert_eq!(create_execution.requested_threads, 8);
-        assert_eq!(create_execution.effective_threads, 8);
-        assert!(create_execution.used_parallelism);
 
         let extract_report = handler
             .extract(
@@ -1515,14 +1572,11 @@ mod tests {
             .expect("extract tar");
 
         let extract_execution = extract_report.thread_execution.expect("thread execution");
-        assert!(
-            capabilities
-                .extract_threads
-                .supports_execution(&extract_execution)
+        assert_execution_parallel_when_available(
+            &extract_execution,
+            &capabilities.extract_threads,
+            8,
         );
-        assert_eq!(extract_execution.requested_threads, 8);
-        assert_eq!(extract_execution.effective_threads, 8);
-        assert!(extract_execution.used_parallelism);
 
         for index in 0..8 {
             let path = output_dir.join(format!("input/blob-{index}.bin"));
@@ -1570,14 +1624,11 @@ mod tests {
             .expect("create tar.xz");
 
         let create_execution = create_report.thread_execution.expect("thread execution");
-        assert!(
-            capabilities
-                .create_threads
-                .supports_execution(&create_execution)
+        assert_execution_parallel_when_available(
+            &create_execution,
+            &capabilities.create_threads,
+            8,
         );
-        assert_eq!(create_execution.requested_threads, 8);
-        assert_eq!(create_execution.effective_threads, 8);
-        assert!(create_execution.used_parallelism);
 
         let extract_report = handler
             .extract(
@@ -1593,14 +1644,11 @@ mod tests {
             .expect("extract tar.xz");
 
         let extract_execution = extract_report.thread_execution.expect("thread execution");
-        assert!(
-            capabilities
-                .extract_threads
-                .supports_execution(&extract_execution)
+        assert_execution_parallel_when_available(
+            &extract_execution,
+            &capabilities.extract_threads,
+            8,
         );
-        assert_eq!(extract_execution.requested_threads, 8);
-        assert!(extract_execution.effective_threads > 1);
-        assert!(extract_execution.used_parallelism);
 
         for index in 0..6 {
             let path = output_dir.join(format!("input/blob-{index}.bin"));
@@ -1643,12 +1691,7 @@ mod tests {
             )
             .expect("create gz");
         let create_execution = create_report.thread_execution.expect("thread execution");
-        assert!(
-            capabilities
-                .create_threads
-                .supports_execution(&create_execution)
-        );
-        assert_eq!(create_execution.requested_threads, 8);
+        assert_execution_matches_capability(&create_execution, &capabilities.create_threads, 8);
 
         let extract_report = handler
             .extract(
@@ -1663,14 +1706,11 @@ mod tests {
             )
             .expect("extract gz");
         let extract_execution = extract_report.thread_execution.expect("thread execution");
-        assert!(
-            capabilities
-                .extract_threads
-                .supports_execution(&extract_execution)
+        assert_execution_parallel_when_available(
+            &extract_execution,
+            &capabilities.extract_threads,
+            8,
         );
-        assert_eq!(extract_execution.requested_threads, 8);
-        assert!(extract_execution.effective_threads > 1);
-        assert!(extract_execution.used_parallelism);
 
         let extracted = fs::read(output_dir.join("source.bin")).expect("read extracted payload");
         assert_eq!(extracted, payload);
@@ -1706,14 +1746,11 @@ mod tests {
             )
             .expect("create bz2");
         let create_execution = create_report.thread_execution.expect("thread execution");
-        assert!(
-            capabilities
-                .create_threads
-                .supports_execution(&create_execution)
+        assert_execution_parallel_when_available(
+            &create_execution,
+            &capabilities.create_threads,
+            8,
         );
-        assert_eq!(create_execution.requested_threads, 8);
-        assert_eq!(create_execution.effective_threads, 8);
-        assert!(create_execution.used_parallelism);
 
         let extract_report = handler
             .extract(
@@ -1728,14 +1765,11 @@ mod tests {
             )
             .expect("extract bz2");
         let extract_execution = extract_report.thread_execution.expect("thread execution");
-        assert!(
-            capabilities
-                .extract_threads
-                .supports_execution(&extract_execution)
+        assert_execution_parallel_when_available(
+            &extract_execution,
+            &capabilities.extract_threads,
+            8,
         );
-        assert_eq!(extract_execution.requested_threads, 8);
-        assert!(extract_execution.effective_threads > 1);
-        assert!(extract_execution.used_parallelism);
 
         let extracted = fs::read(output_dir.join("source.bin")).expect("read extracted payload");
         assert_eq!(extracted, payload);
@@ -1771,12 +1805,7 @@ mod tests {
             )
             .expect("create zst");
         let create_execution = create_report.thread_execution.expect("thread execution");
-        assert!(
-            capabilities
-                .create_threads
-                .supports_execution(&create_execution)
-        );
-        assert_eq!(create_execution.requested_threads, 8);
+        assert_execution_matches_capability(&create_execution, &capabilities.create_threads, 8);
 
         let extract_report = handler
             .extract(
@@ -1791,14 +1820,11 @@ mod tests {
             )
             .expect("extract zst");
         let extract_execution = extract_report.thread_execution.expect("thread execution");
-        assert!(
-            capabilities
-                .extract_threads
-                .supports_execution(&extract_execution)
+        assert_execution_parallel_when_available(
+            &extract_execution,
+            &capabilities.extract_threads,
+            8,
         );
-        assert_eq!(extract_execution.requested_threads, 8);
-        assert!(extract_execution.effective_threads > 1);
-        assert!(extract_execution.used_parallelism);
         assert!(!extract_execution.thread_fallback);
 
         let extracted = fs::read(output_dir.join("source.bin")).expect("read extracted payload");
@@ -1882,14 +1908,11 @@ mod tests {
             )
             .expect("create xz");
         let create_execution = create_report.thread_execution.expect("thread execution");
-        assert!(
-            capabilities
-                .create_threads
-                .supports_execution(&create_execution)
+        assert_execution_parallel_when_available(
+            &create_execution,
+            &capabilities.create_threads,
+            8,
         );
-        assert_eq!(create_execution.requested_threads, 8);
-        assert_eq!(create_execution.effective_threads, 8);
-        assert!(create_execution.used_parallelism);
 
         let extract_report = handler
             .extract(
@@ -1904,14 +1927,11 @@ mod tests {
             )
             .expect("extract xz");
         let extract_execution = extract_report.thread_execution.expect("thread execution");
-        assert!(
-            capabilities
-                .extract_threads
-                .supports_execution(&extract_execution)
+        assert_execution_parallel_when_available(
+            &extract_execution,
+            &capabilities.extract_threads,
+            8,
         );
-        assert_eq!(extract_execution.requested_threads, 8);
-        assert_eq!(extract_execution.effective_threads, 8);
-        assert!(extract_execution.used_parallelism);
 
         let extracted = fs::read(output_dir.join("source.bin")).expect("read extracted payload");
         assert_eq!(extracted, payload);
@@ -2599,13 +2619,11 @@ mod tests {
             )
             .expect("create cso");
         let create_execution = create_report.thread_execution.expect("thread execution");
-        assert!(
-            capabilities
-                .create_threads
-                .supports_execution(&create_execution)
+        assert_execution_parallel_when_available(
+            &create_execution,
+            &capabilities.create_threads,
+            8,
         );
-        assert_eq!(create_execution.requested_threads, 8);
-        assert!(create_execution.used_parallelism);
 
         let extract_report = handler
             .extract(
@@ -2620,13 +2638,11 @@ mod tests {
             )
             .expect("extract cso");
         let extract_execution = extract_report.thread_execution.expect("thread execution");
-        assert!(
-            capabilities
-                .extract_threads
-                .supports_execution(&extract_execution)
+        assert_execution_parallel_when_available(
+            &extract_execution,
+            &capabilities.extract_threads,
+            8,
         );
-        assert_eq!(extract_execution.requested_threads, 8);
-        assert!(extract_execution.used_parallelism);
 
         let extracted = fs::read(output_dir.join("disc.iso")).expect("read extracted output");
         assert_eq!(extracted, source);
@@ -2661,9 +2677,7 @@ mod tests {
             .expect("extract pbp");
 
         let execution = report.thread_execution.expect("thread execution");
-        assert!(capabilities.extract_threads.supports_execution(&execution));
-        assert_eq!(execution.requested_threads, 8);
-        assert!(execution.used_parallelism);
+        assert_execution_parallel_when_available(&execution, &capabilities.extract_threads, 8);
         assert_eq!(fs::read(out_dir.join("game.bin")).expect("bin"), source_iso);
 
         let _ = fs::remove_dir_all(temp_dir);
@@ -2695,9 +2709,7 @@ mod tests {
             .expect("rvz create");
 
         let execution = report.thread_execution.expect("thread execution");
-        assert!(capabilities.create_threads.supports_execution(&execution));
-        assert_eq!(execution.requested_threads, 8);
-        assert!(execution.used_parallelism);
+        assert_execution_parallel_when_available(&execution, &capabilities.create_threads, 8);
         assert!(output_path.exists());
 
         let _ = fs::remove_dir_all(temp_dir);
@@ -2831,14 +2843,11 @@ mod tests {
             .expect("create seven-z");
 
         let create_execution = create_report.thread_execution.expect("thread execution");
-        assert!(
-            capabilities
-                .create_threads
-                .supports_execution(&create_execution)
+        assert_execution_parallel_when_available(
+            &create_execution,
+            &capabilities.create_threads,
+            8,
         );
-        assert_eq!(create_execution.requested_threads, 8);
-        assert_eq!(create_execution.effective_threads, 8);
-        assert!(create_execution.used_parallelism);
         assert!(archive_path.exists());
 
         let extract_report = handler
@@ -2855,14 +2864,11 @@ mod tests {
             .expect("extract seven-z");
 
         let extract_execution = extract_report.thread_execution.expect("thread execution");
-        assert!(
-            capabilities
-                .extract_threads
-                .supports_execution(&extract_execution)
+        assert_execution_parallel_when_available(
+            &extract_execution,
+            &capabilities.extract_threads,
+            8,
         );
-        assert_eq!(extract_execution.requested_threads, 8);
-        assert_eq!(extract_execution.effective_threads, 8);
-        assert!(extract_execution.used_parallelism);
 
         let extracted_bytes =
             fs::read(output_dir.join("payload.bin")).expect("read extracted file");
@@ -3107,7 +3113,7 @@ mod tests {
         }
     }
 
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     #[test]
     fn chd_create_mode_overrides_adjust_inferred_kind() {
         let handler = super::ChdContainerHandler;
@@ -3138,7 +3144,7 @@ mod tests {
         );
     }
 
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     #[test]
     fn chd_cd_override_rejects_invalid_raw_sector_size() {
         let handler = super::ChdContainerHandler;
@@ -3152,7 +3158,7 @@ mod tests {
         );
     }
 
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     #[test]
     fn chd_default_codecs_for_cd_inputs_match_rust_native_policy() {
         let handler = super::ChdContainerHandler;
@@ -3171,7 +3177,7 @@ mod tests {
         assert_eq!(primary_codec, ChdCodec::CD_LZMA);
     }
 
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     #[test]
     fn chd_default_codecs_for_dvd_inputs_match_rust_native_policy() {
         let handler = super::ChdContainerHandler;
@@ -3190,7 +3196,7 @@ mod tests {
         assert_eq!(primary_codec, ChdCodec::LZMA);
     }
 
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     #[test]
     fn chd_default_codecs_for_raw_inputs_match_rust_native_policy() {
         let handler = super::ChdContainerHandler;
@@ -3209,7 +3215,7 @@ mod tests {
         assert_eq!(primary_codec, ChdCodec::LZMA);
     }
 
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     #[test]
     fn chd_explicit_codec_lists_support_multiple_codecs() {
         let handler = super::ChdContainerHandler;
@@ -3228,7 +3234,7 @@ mod tests {
         assert_eq!(primary_codec, ChdCodec::CD_ZSTD);
     }
 
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     #[test]
     fn chd_explicit_codec_lists_reject_too_many_entries() {
         let handler = super::ChdContainerHandler;
@@ -3238,7 +3244,7 @@ mod tests {
         assert!(error.to_string().contains("chd supports at most 4 codecs"));
     }
 
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     #[test]
     fn chd_explicit_codec_lists_accept_huff_and_avhuff_aliases() {
         let handler = super::ChdContainerHandler;
@@ -3268,7 +3274,7 @@ mod tests {
         assert_eq!(primary_codec, ChdCodec::AVHUFF);
     }
 
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     #[test]
     fn chd_rust_backend_store_attempt_policy_matches_supported_codecs() {
         let handler = super::ChdContainerHandler;
@@ -3279,7 +3285,7 @@ mod tests {
         );
     }
 
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     #[test]
     fn chd_rust_backend_create_attempt_accepts_huff_codec_slots() {
         let handler = super::ChdContainerHandler;
@@ -3310,7 +3316,7 @@ mod tests {
         );
     }
 
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     #[test]
     fn chd_rust_only_create_supports_huff_codec_slots() {
         let temp_dir = temp_dir_path("chd-rust-unsupported-codec-slots");
@@ -3356,7 +3362,10 @@ mod tests {
         let _ = fs::remove_dir_all(temp_dir);
     }
 
-    #[cfg(all(not(target_family = "wasm"), any(unix, windows)))]
+    #[cfg(any(
+        all(not(target_family = "wasm"), any(unix, windows)),
+        all(target_family = "wasm", rom_weaver_wasi_threads)
+    ))]
     #[test]
     fn chd_rust_backend_parallel_extract_matches_source_payload() {
         let temp_dir = temp_dir_path("chd-rust-parallel-extract");
@@ -3400,7 +3409,7 @@ mod tests {
         let _ = fs::remove_dir_all(temp_dir);
     }
 
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     #[test]
     fn chd_rust_store_create_round_trip_matches_source_payload() {
         let temp_dir = temp_dir_path("chd-rust-store-create");
@@ -3427,7 +3436,7 @@ mod tests {
         let _ = fs::remove_dir_all(temp_dir);
     }
 
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     #[test]
     fn chd_rust_compressed_create_compacts_repeated_map_hunks() {
         let temp_dir = temp_dir_path("chd-rust-repeated-map");
@@ -3471,7 +3480,7 @@ mod tests {
         let _ = fs::remove_dir_all(temp_dir);
     }
 
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     #[test]
     fn chd_extract_with_parent_option_rejects_non_parented_chd() {
         let temp_dir = temp_dir_path("chd-parent-option-extract");
@@ -3521,7 +3530,7 @@ mod tests {
         let _ = fs::remove_dir_all(temp_dir);
     }
 
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     #[test]
     fn chd_create_and_extract_with_parent_round_trip() {
         let temp_dir = temp_dir_path("chd-parented-create-extract");
@@ -3602,7 +3611,7 @@ mod tests {
         let _ = fs::remove_dir_all(temp_dir);
     }
 
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     #[test]
     fn chd_rust_compressed_create_round_trip_matches_source_payload() {
         let temp_dir = temp_dir_path("chd-rust-compressed-create");
@@ -3645,7 +3654,7 @@ mod tests {
         let _ = fs::remove_dir_all(temp_dir);
     }
 
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     #[test]
     fn chd_rust_raw_flac_payload_round_trip_matches_input_bytes() {
         let handler = super::ChdContainerHandler;
@@ -3682,7 +3691,7 @@ mod tests {
         sector
     }
 
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     #[test]
     fn chd_rust_cd_zlib_payload_marks_and_clears_reconstructable_ecc() {
         const SECTOR_BYTES: usize = 2352;
@@ -3742,7 +3751,7 @@ mod tests {
         assert_eq!(decoded_subcode, expected_subcode);
     }
 
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     #[test]
     fn chd_rust_cd_flac_payload_round_trip_matches_input_bytes() {
         let handler = super::ChdContainerHandler;
@@ -3799,7 +3808,7 @@ mod tests {
         assert_eq!(reconstructed, source);
     }
 
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     #[test]
     fn chd_rust_only_create_supports_multi_codec_raw_round_trip() {
         let temp_dir = temp_dir_path("chd-rust-multi-codec-create");
@@ -3846,7 +3855,7 @@ mod tests {
         let _ = fs::remove_dir_all(temp_dir);
     }
 
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     #[test]
     fn chd_rust_only_create_supports_avhuff_round_trip() {
         let temp_dir = temp_dir_path("chd-rust-avhuff-create");
@@ -3892,7 +3901,7 @@ mod tests {
         let _ = fs::remove_dir_all(temp_dir);
     }
 
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     #[test]
     fn chd_rust_only_create_supports_dvd_and_hd_round_trip() {
         let temp_dir = temp_dir_path("chd-rust-nondisc-create");
@@ -3955,7 +3964,7 @@ mod tests {
         let _ = fs::remove_dir_all(temp_dir);
     }
 
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     #[test]
     fn chd_rust_only_create_supports_cd_store_round_trip() {
         let temp_dir = temp_dir_path("chd-rust-cd-store-create");
@@ -4012,7 +4021,7 @@ mod tests {
         let _ = fs::remove_dir_all(temp_dir);
     }
 
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     #[test]
     fn chd_rust_only_create_supports_cd_compressed_round_trip() {
         let temp_dir = temp_dir_path("chd-rust-cd-compressed-create");
@@ -4072,7 +4081,7 @@ mod tests {
         let _ = fs::remove_dir_all(temp_dir);
     }
 
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     #[test]
     fn chd_rust_only_create_supports_dvd_default_codec_plan_round_trip() {
         let temp_dir = temp_dir_path("chd-rust-dvd-default-codec-plan");
@@ -4118,7 +4127,7 @@ mod tests {
         let _ = fs::remove_dir_all(temp_dir);
     }
 
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     #[test]
     fn chd_rust_only_create_supports_cd_default_codec_plan_round_trip() {
         let temp_dir = temp_dir_path("chd-rust-cd-default-codec-plan");
@@ -4171,7 +4180,7 @@ mod tests {
         let _ = fs::remove_dir_all(temp_dir);
     }
 
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     #[test]
     fn chd_rust_only_create_supports_cd_multi_codec_round_trip() {
         let temp_dir = temp_dir_path("chd-rust-cd-multi-codec-create");
@@ -4224,7 +4233,7 @@ mod tests {
         let _ = fs::remove_dir_all(temp_dir);
     }
 
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     #[test]
     fn chd_rust_only_create_supports_cd_codec_aliases_round_trip() {
         let temp_dir = temp_dir_path("chd-rust-cd-alias-codec-create");

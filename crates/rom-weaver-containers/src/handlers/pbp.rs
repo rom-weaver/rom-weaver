@@ -902,7 +902,7 @@ impl ContainerHandler for PbpContainerHandler {
         let extract_progress_label = format!("extracting `{}`", PBP.name);
         let extract_progress_bytes = Arc::new(AtomicU64::new(0));
         let extract_progress_bucket = Arc::new(AtomicU8::new(0));
-        let mut execution = context.plan_threads(ThreadCapability::parallel(None));
+        let mut execution = context.plan_threads(pbp_extract_thread_capability());
 
         let mut produced_outputs = Vec::new();
         let mut total_written = 0u64;
@@ -913,8 +913,12 @@ impl ContainerHandler for PbpContainerHandler {
             let bin_path = request.out_dir.join(&output.bin_name);
             if write_bin {
                 let tasks = self.build_disc_extract_tasks(disc_index, disc)?;
-                let (disc_execution, pool) =
-                    context.build_pool(ThreadCapability::parallel(Some(tasks.len().max(1))))?;
+                let extract_capability = if wasm_threaded_runtime_pbp_parallel_is_unstable() {
+                    ThreadCapability::single_threaded()
+                } else {
+                    ThreadCapability::parallel(Some(tasks.len().max(1)))
+                };
+                let (disc_execution, pool) = context.build_pool(extract_capability)?;
                 execution = disc_execution;
 
                 if let Some(parent) = bin_path.parent() {
@@ -1132,7 +1136,7 @@ impl ContainerHandler for PbpContainerHandler {
             inspect: true,
             extract: true,
             create: false,
-            extract_threads: ThreadCapability::parallel(None),
+            extract_threads: pbp_extract_thread_capability(),
             create_threads: ThreadCapability::single_threaded(),
         }
     }

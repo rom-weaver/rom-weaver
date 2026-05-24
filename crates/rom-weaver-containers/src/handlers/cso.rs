@@ -558,8 +558,12 @@ impl ContainerHandler for CsoContainerHandler {
         let reader = self.open_reader(&request.source)?;
         let logical_bytes = reader.file_size();
         let tasks = self.build_extract_tasks(logical_bytes);
-        let (execution, pool) =
-            context.build_pool(ThreadCapability::parallel(Some(tasks.len().max(1))))?;
+        let extract_capability = if wasm_threaded_runtime_cso_parallel_is_unstable() {
+            ThreadCapability::single_threaded()
+        } else {
+            ThreadCapability::parallel(Some(tasks.len().max(1)))
+        };
+        let (execution, pool) = context.build_pool(extract_capability)?;
         let extract_progress_label = format!("extracting `{}`", self.descriptor.name);
         let extract_progress_bytes = Arc::new(AtomicU64::new(0));
         let extract_progress_bucket = Arc::new(AtomicU8::new(0));
@@ -716,13 +720,14 @@ impl ContainerHandler for CsoContainerHandler {
         }
 
         let (execution, encode_result) = if create_tasks.is_empty() {
-            (
-                context.plan_threads(ThreadCapability::parallel(None)),
-                Ok(Vec::new()),
-            )
+            (context.plan_threads(cso_thread_capability()), Ok(Vec::new()))
         } else {
-            let (execution, pool) =
-                context.build_pool(ThreadCapability::parallel(Some(create_tasks.len().max(1))))?;
+            let create_capability = if wasm_threaded_runtime_cso_parallel_is_unstable() {
+                ThreadCapability::single_threaded()
+            } else {
+                ThreadCapability::parallel(Some(create_tasks.len().max(1)))
+            };
+            let (execution, pool) = context.build_pool(create_capability)?;
             let source = input.clone();
             let encode_result = if execution.used_parallelism {
                 let progress_context = context.clone();
@@ -827,8 +832,8 @@ impl ContainerHandler for CsoContainerHandler {
             inspect: true,
             extract: true,
             create: true,
-            extract_threads: ThreadCapability::parallel(None),
-            create_threads: ThreadCapability::parallel(None),
+            extract_threads: cso_thread_capability(),
+            create_threads: cso_thread_capability(),
         }
     }
 }
