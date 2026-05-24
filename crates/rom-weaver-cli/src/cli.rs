@@ -3,20 +3,14 @@ use std::{
     fs,
     fs::File,
     io::{self, BufReader, BufWriter, IsTerminal, Read, Seek, SeekFrom, Write},
-    path::{Component, Path, PathBuf},
+    path::{Path, PathBuf},
     process::ExitCode,
     sync::{Arc, OnceLock},
     time::{SystemTime, UNIX_EPOCH},
 };
 
 #[cfg(not(target_arch = "wasm32"))]
-use bzip2::read::MultiBzDecoder;
-#[cfg(not(target_arch = "wasm32"))]
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum};
-#[cfg(not(target_arch = "wasm32"))]
-use flate2::read::MultiGzDecoder;
-#[cfg(not(target_arch = "wasm32"))]
-use lzma_rust2::XzReader;
 #[cfg(not(target_arch = "wasm32"))]
 use rom_weaver_checksum::checksum_reader_values_with_progress;
 use rom_weaver_checksum::{
@@ -31,13 +25,16 @@ use rom_weaver_core::{
     PatchCreateRequest, ProbeConfidence, ProgressEvent, ProgressSink, Result, RomWeaverError,
     ThreadBudget, ThreadCapability, ThreadExecution, XdeltaSecondaryMode,
 };
+#[cfg(not(target_arch = "wasm32"))]
+use rom_weaver_libarchive::{
+    ReadFilter as LibarchiveReadFilter, list_regular_archive_file_entries, with_raw_stream_reader,
+    with_regular_archive_file_entry_reader,
+};
 use rom_weaver_patches::{
     PatchRegistry, explicitly_unsupported_patch_reason_for_name,
     explicitly_unsupported_patch_reason_for_path,
 };
 use serde_json::{Map, Value, json};
-#[cfg(not(target_arch = "wasm32"))]
-use tar::Archive as TarArchive;
 use tracing::trace;
 #[cfg(not(target_arch = "wasm32"))]
 use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
@@ -45,8 +42,6 @@ use xdvdfs::{
     blockdev::OffsetWrapper as XdvdfsOffsetWrapper,
     write::{fs::XDVDFSFilesystem as XdvdfsFilesystem, img::create_xdvdfs_image},
 };
-#[cfg(not(target_arch = "wasm32"))]
-use zstd::stream::Decoder as ZstdDecoder;
 
 #[derive(Debug)]
 #[cfg_attr(not(target_arch = "wasm32"), derive(Parser))]

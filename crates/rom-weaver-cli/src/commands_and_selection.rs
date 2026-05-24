@@ -814,67 +814,36 @@ impl CliApp {
             thread_execution.clone(),
         );
 
-        let reader = Self::open_tar_auto_extract_reader(source, tar_format)?;
-        let mut archive = TarArchive::new(reader);
-        let mut target_entry = None;
-        for (entry_index, entry) in archive.entries()?.enumerate() {
-            if entry_index != candidate_index {
-                continue;
-            }
-            let entry = entry?;
-            let entry_type = entry.header().entry_type();
-            if !entry_type.is_file() {
-                return Err(RomWeaverError::Validation(format!(
-                    "streamed checksum candidate `{candidate_name}` in `{}` is no longer a file entry",
-                    source.display()
-                )));
-            }
-            let Some(entry_name) = Self::normalize_tar_candidate_name(entry.path()?.as_ref())
-            else {
-                return Err(RomWeaverError::Validation(format!(
-                    "streamed checksum candidate `{candidate_name}` in `{}` could not be normalized",
-                    source.display()
-                )));
-            };
-            if entry_name != candidate_name {
-                return Err(RomWeaverError::Validation(format!(
-                    "streamed checksum candidate changed while reading `{}`: expected `{candidate_name}`, found `{entry_name}`",
-                    source.display()
-                )));
-            }
-            target_entry = Some(entry);
-            break;
-        }
-
-        let Some(mut entry_reader) = target_entry else {
-            return Err(RomWeaverError::Validation(format!(
-                "streamed checksum candidate `{candidate_name}` was not found in `{}`",
-                source.display()
-            )));
-        };
-
         let algorithms = algo
             .iter()
             .map(|algorithm| algorithm.to_ascii_lowercase())
             .collect::<Vec<_>>();
         let checksum_algorithm_count = algorithms.len();
-        let values = checksum_reader_values_with_progress(
-            &mut entry_reader,
-            &algorithms,
-            context,
-            &mut |progress| {
-                self.emit_running(
-                    "checksum",
-                    OperationFamily::Checksum,
-                    Some(self.checksum.name()),
-                    "checksum",
-                    format!(
-                        "computing {} checksum algorithm(s)",
-                        checksum_algorithm_count
-                    ),
-                    Some(progress.percent()),
-                    thread_execution.clone(),
-                );
+        let values = with_regular_archive_file_entry_reader(
+            source,
+            tar_format,
+            candidate_index,
+            candidate_name,
+            |entry_reader| {
+                checksum_reader_values_with_progress(
+                    entry_reader,
+                    &algorithms,
+                    context,
+                    &mut |progress| {
+                        self.emit_running(
+                            "checksum",
+                            OperationFamily::Checksum,
+                            Some(self.checksum.name()),
+                            "checksum",
+                            format!(
+                                "computing {} checksum algorithm(s)",
+                                checksum_algorithm_count
+                            ),
+                            Some(progress.percent()),
+                            thread_execution.clone(),
+                        );
+                    },
+                )
             },
         )?;
 
@@ -899,21 +868,10 @@ impl CliApp {
         tar_format: &str,
         no_ignore: bool,
     ) -> Result<Option<(String, usize)>> {
-        let reader = Self::open_tar_auto_extract_reader(source, tar_format)?;
-        let mut archive = TarArchive::new(reader);
         let mut candidates = BTreeMap::new();
-        for (entry_index, entry) in archive.entries()?.enumerate() {
-            let entry = entry?;
-            let entry_type = entry.header().entry_type();
-            if !entry_type.is_file() {
-                continue;
-            }
-            let Some(entry_name) = Self::normalize_tar_candidate_name(entry.path()?.as_ref())
-            else {
-                continue;
-            };
-            let ignored = Self::should_ignore_checksum_candidate(&entry_name);
-            candidates.insert(entry_name, (entry_index, ignored));
+        for entry in list_regular_archive_file_entries(source, tar_format)? {
+            let ignored = Self::should_ignore_checksum_candidate(&entry.name);
+            candidates.insert(entry.name, (entry.index, ignored));
         }
 
         let selected = if no_ignore {
@@ -932,45 +890,6 @@ impl CliApp {
         }
 
         Ok(selected.into_iter().next())
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    fn open_tar_auto_extract_reader(source: &Path, tar_format: &str) -> Result<Box<dyn Read>> {
-        match tar_format {
-            "tar" => Ok(Box::new(BufReader::new(File::open(source)?))),
-            "tar.gz" => Ok(Box::new(MultiGzDecoder::new(BufReader::new(File::open(
-                source,
-            )?)))),
-            "tar.bz2" => Ok(Box::new(MultiBzDecoder::new(BufReader::new(File::open(
-                source,
-            )?)))),
-            "tar.xz" => Ok(Box::new(XzReader::new(
-                BufReader::new(File::open(source)?),
-                false,
-            ))),
-            _ => Err(RomWeaverError::Validation(format!(
-                "streamed checksum auto-extract does not support `{tar_format}`"
-            ))),
-        }
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    fn normalize_tar_candidate_name(path: &Path) -> Option<String> {
-        let mut sanitized = PathBuf::new();
-        for component in path.components() {
-            match component {
-                Component::Normal(value) => sanitized.push(value),
-                Component::CurDir => {}
-                Component::Prefix(_) | Component::RootDir | Component::ParentDir => return None,
-            }
-        }
-        let name = sanitized
-            .to_string_lossy()
-            .replace('\\', "/")
-            .trim_start_matches("./")
-            .trim_matches('/')
-            .to_string();
-        if name.is_empty() { None } else { Some(name) }
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -1040,29 +959,37 @@ impl CliApp {
             thread_execution.clone(),
         );
 
-        let mut reader = Self::open_stream_auto_extract_reader(source, stream_format)?;
+        let filter = Self::libarchive_read_filter_for_stream_format(stream_format)?;
         let algorithms = algo
             .iter()
             .map(|algorithm| algorithm.to_ascii_lowercase())
             .collect::<Vec<_>>();
         let checksum_algorithm_count = algorithms.len();
-        let values = checksum_reader_values_with_progress(
-            &mut reader,
-            &algorithms,
-            context,
-            &mut |progress| {
-                self.emit_running(
-                    "checksum",
-                    OperationFamily::Checksum,
-                    Some(self.checksum.name()),
-                    "checksum",
-                    format!(
-                        "computing {} checksum algorithm(s)",
-                        checksum_algorithm_count
-                    ),
-                    Some(progress.percent()),
-                    thread_execution.clone(),
-                );
+        let values = with_raw_stream_reader(
+            source,
+            stream_format,
+            filter,
+            64 * 1024,
+            |stream_reader| {
+                checksum_reader_values_with_progress(
+                    stream_reader,
+                    &algorithms,
+                    context,
+                    &mut |progress| {
+                        self.emit_running(
+                            "checksum",
+                            OperationFamily::Checksum,
+                            Some(self.checksum.name()),
+                            "checksum",
+                            format!(
+                                "computing {} checksum algorithm(s)",
+                                checksum_algorithm_count
+                            ),
+                            Some(progress.percent()),
+                            thread_execution.clone(),
+                        );
+                    },
+                )
             },
         )?;
 
@@ -1081,24 +1008,12 @@ impl CliApp {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    fn open_stream_auto_extract_reader(
-        source: &Path,
-        stream_format: &str,
-    ) -> Result<Box<dyn Read>> {
+    fn libarchive_read_filter_for_stream_format(stream_format: &str) -> Result<LibarchiveReadFilter> {
         match stream_format {
-            "gz" => Ok(Box::new(MultiGzDecoder::new(BufReader::new(File::open(
-                source,
-            )?)))),
-            "bz2" => Ok(Box::new(MultiBzDecoder::new(BufReader::new(File::open(
-                source,
-            )?)))),
-            "xz" => Ok(Box::new(XzReader::new(
-                BufReader::new(File::open(source)?),
-                false,
-            ))),
-            "zst" => Ok(Box::new(ZstdDecoder::new(BufReader::new(File::open(
-                source,
-            )?))?)),
+            "gz" => Ok(LibarchiveReadFilter::Gzip),
+            "bz2" => Ok(LibarchiveReadFilter::Bzip2),
+            "xz" => Ok(LibarchiveReadFilter::Xz),
+            "zst" => Ok(LibarchiveReadFilter::Zstd),
             _ => Err(RomWeaverError::Validation(format!(
                 "streamed checksum auto-extract does not support `{stream_format}`"
             ))),
