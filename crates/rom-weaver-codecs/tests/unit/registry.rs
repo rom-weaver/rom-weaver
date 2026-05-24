@@ -3,8 +3,8 @@ mod tests {
     use std::{
         fs,
         path::{Path, PathBuf},
-        sync::Arc,
         sync::atomic::{AtomicU64, Ordering},
+        sync::Arc,
         time::{SystemTime, UNIX_EPOCH},
     };
 
@@ -14,7 +14,7 @@ mod tests {
     };
 
     use super::{
-        CanonicalCodec, CodecRegistry, RequestedCodec, normalize_codec_label, parse_requested_codec,
+        normalize_codec_label, parse_requested_codec, CanonicalCodec, CodecRegistry, RequestedCodec,
     };
 
     static TEST_DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -121,6 +121,190 @@ mod tests {
             )
             .expect_err("level should fail");
         assert!(error.to_string().contains(expected_message));
+    }
+
+    fn patterned_payload(byte_len: usize, multiplier: u8, add: u8) -> Vec<u8> {
+        (0..byte_len)
+            .map(|index| (index as u8).wrapping_mul(multiplier).wrapping_add(add))
+            .collect::<Vec<_>>()
+    }
+
+    fn assert_encode_runtime_threads_match_capability(
+        codec: &str,
+        encoded_name: &str,
+        level: i32,
+        payload_len: usize,
+        payload_multiplier: u8,
+        payload_add: u8,
+    ) {
+        let temp = TestDir::new();
+        let source = temp.path().join("source.bin");
+        let encoded = temp.path().join(encoded_name);
+        let payload = patterned_payload(payload_len, payload_multiplier, payload_add);
+        fs::write(&source, payload).expect("write source");
+
+        let registry = CodecRegistry::new();
+        let backend = registry.find_by_name(codec).expect("codec backend");
+        let capabilities = backend.capabilities();
+        let context = codec_context(temp.path());
+
+        let encode = backend
+            .encode(
+                &CodecOperationRequest {
+                    input: source,
+                    output: encoded,
+                    level: Some(level),
+                },
+                &context,
+            )
+            .expect("encode");
+        assert_eq!(encode.status, OperationStatus::Succeeded);
+
+        let execution = encode.thread_execution.expect("thread execution");
+        assert!(capabilities.encode_threads.supports_execution(&execution));
+        assert_eq!(execution.requested_threads, 8);
+        assert_eq!(execution.effective_threads, 8);
+        assert!(execution.used_parallelism);
+    }
+
+    fn assert_decode_runtime_threads_match_capability(
+        codec: &str,
+        encoded_name: &str,
+        encode_level: Option<i32>,
+        payload_len: usize,
+        payload_multiplier: u8,
+        payload_add: u8,
+    ) {
+        let temp = TestDir::new();
+        let source = temp.path().join("source.bin");
+        let encoded = temp.path().join(encoded_name);
+        let decoded = temp.path().join("decoded.bin");
+        let payload = patterned_payload(payload_len, payload_multiplier, payload_add);
+        fs::write(&source, &payload).expect("write source");
+
+        let registry = CodecRegistry::new();
+        let backend = registry.find_by_name(codec).expect("codec backend");
+        let capabilities = backend.capabilities();
+        let context = codec_context(temp.path());
+
+        backend
+            .encode(
+                &CodecOperationRequest {
+                    input: source,
+                    output: encoded.clone(),
+                    level: encode_level,
+                },
+                &context,
+            )
+            .expect("encode");
+
+        let decode = backend
+            .decode(
+                &CodecOperationRequest {
+                    input: encoded,
+                    output: decoded.clone(),
+                    level: None,
+                },
+                &context,
+            )
+            .expect("decode");
+        assert_eq!(decode.status, OperationStatus::Succeeded);
+
+        let execution = decode.thread_execution.expect("thread execution");
+        assert!(capabilities.decode_threads.supports_execution(&execution));
+        assert_eq!(execution.requested_threads, 8);
+        assert_eq!(execution.effective_threads, 8);
+        assert!(execution.used_parallelism);
+        assert_eq!(fs::read(decoded).expect("decoded bytes"), payload);
+    }
+
+    struct JoinedStreamDecodeCase<'a> {
+        codec: &'a str,
+        segment_ext: &'a str,
+        level: i32,
+        payload_len: usize,
+        payload_multiplier: u8,
+        payload_add: u8,
+        decode_expect: &'a str,
+        include_fallback_context: bool,
+    }
+
+    fn assert_joined_stream_decode_runtime_threads(case: JoinedStreamDecodeCase<'_>) {
+        let temp = TestDir::new();
+        let segment_a = temp.path().join(format!("segment-a.{}", case.segment_ext));
+        let segment_b = temp.path().join(format!("segment-b.{}", case.segment_ext));
+        let joined = temp.path().join(format!("joined.{}", case.segment_ext));
+        let decoded = temp.path().join("decoded.bin");
+        let payload =
+            patterned_payload(case.payload_len, case.payload_multiplier, case.payload_add);
+        let split = payload.len() / 2;
+
+        let registry = CodecRegistry::new();
+        let backend = registry.find_by_name(case.codec).expect("codec backend");
+        let capabilities = backend.capabilities();
+        let context = codec_context(temp.path());
+
+        let part_a = temp.path().join("part-a.bin");
+        let part_b = temp.path().join("part-b.bin");
+        fs::write(&part_a, &payload[..split]).expect("write part a");
+        fs::write(&part_b, &payload[split..]).expect("write part b");
+
+        backend
+            .encode(
+                &CodecOperationRequest {
+                    input: part_a,
+                    output: segment_a.clone(),
+                    level: Some(case.level),
+                },
+                &context,
+            )
+            .expect("encode segment a");
+        backend
+            .encode(
+                &CodecOperationRequest {
+                    input: part_b,
+                    output: segment_b.clone(),
+                    level: Some(case.level),
+                },
+                &context,
+            )
+            .expect("encode segment b");
+
+        let mut joined_bytes = fs::read(&segment_a).expect("read segment a");
+        joined_bytes.extend(fs::read(&segment_b).expect("read segment b"));
+        fs::write(&joined, joined_bytes).expect("write joined");
+
+        let decode = backend
+            .decode(
+                &CodecOperationRequest {
+                    input: joined,
+                    output: decoded.clone(),
+                    level: None,
+                },
+                &context,
+            )
+            .expect(case.decode_expect);
+        assert_eq!(decode.status, OperationStatus::Succeeded);
+
+        let execution = decode.thread_execution.expect("thread execution");
+        assert!(capabilities.decode_threads.supports_execution(&execution));
+        assert_eq!(execution.requested_threads, 8);
+        if case.include_fallback_context {
+            assert!(
+                execution.effective_threads > 1,
+                "fallback: {:?}",
+                execution.thread_fallback_reason
+            );
+            assert!(
+                execution.used_parallelism,
+                "fallback: {:?}",
+                execution.thread_fallback_reason
+            );
+        } else {
+            assert!(execution.effective_threads > 1);
+            assert!(execution.used_parallelism);
+        }
+        assert_eq!(fs::read(decoded).expect("decoded bytes"), payload);
     }
 
     #[test]
@@ -262,11 +446,9 @@ mod tests {
                 &context,
             )
             .expect_err("decode level should fail");
-        assert!(
-            error
-                .to_string()
-                .contains("deflate decode does not accept a compression level")
-        );
+        assert!(error
+            .to_string()
+            .contains("deflate decode does not accept a compression level"));
     }
 
     #[test]
@@ -301,415 +483,103 @@ mod tests {
 
     #[test]
     fn lzma2_backend_encode_runtime_threads_match_capability() {
-        let temp = TestDir::new();
-        let source = temp.path().join("source.bin");
-        let encoded = temp.path().join("encoded.xz");
-        let payload = (0..(2 * 1024 * 1024))
-            .map(|index| (index as u8).wrapping_mul(19))
-            .collect::<Vec<_>>();
-        fs::write(&source, payload).expect("write source");
-
-        let registry = CodecRegistry::new();
-        let backend = registry.find_by_name("lzma2").expect("lzma2 backend");
-        let capabilities = backend.capabilities();
-        let context = codec_context(temp.path());
-
-        let encode = backend
-            .encode(
-                &CodecOperationRequest {
-                    input: source,
-                    output: encoded,
-                    level: Some(6),
-                },
-                &context,
-            )
-            .expect("encode");
-        assert_eq!(encode.status, OperationStatus::Succeeded);
-
-        let execution = encode.thread_execution.expect("thread execution");
-        assert!(capabilities.encode_threads.supports_execution(&execution));
-        assert_eq!(execution.requested_threads, 8);
-        assert_eq!(execution.effective_threads, 8);
-        assert!(execution.used_parallelism);
+        assert_encode_runtime_threads_match_capability(
+            "lzma2",
+            "encoded.xz",
+            6,
+            2 * 1024 * 1024,
+            19,
+            0,
+        );
     }
 
     #[test]
     fn deflate_backend_encode_runtime_threads_match_capability() {
-        let temp = TestDir::new();
-        let source = temp.path().join("source.bin");
-        let encoded = temp.path().join("encoded.gz");
-        let payload = (0..(2 * 1024 * 1024))
-            .map(|index| (index as u8).wrapping_mul(23))
-            .collect::<Vec<_>>();
-        fs::write(&source, payload).expect("write source");
-
-        let registry = CodecRegistry::new();
-        let backend = registry.find_by_name("deflate").expect("deflate backend");
-        let capabilities = backend.capabilities();
-        let context = codec_context(temp.path());
-
-        let encode = backend
-            .encode(
-                &CodecOperationRequest {
-                    input: source,
-                    output: encoded,
-                    level: Some(6),
-                },
-                &context,
-            )
-            .expect("encode");
-        assert_eq!(encode.status, OperationStatus::Succeeded);
-
-        let execution = encode.thread_execution.expect("thread execution");
-        assert!(capabilities.encode_threads.supports_execution(&execution));
-        assert_eq!(execution.requested_threads, 8);
-        assert_eq!(execution.effective_threads, 8);
-        assert!(execution.used_parallelism);
+        assert_encode_runtime_threads_match_capability(
+            "deflate",
+            "encoded.gz",
+            6,
+            2 * 1024 * 1024,
+            23,
+            0,
+        );
     }
 
     #[test]
     fn bzip2_backend_encode_runtime_threads_match_capability() {
-        let temp = TestDir::new();
-        let source = temp.path().join("source.bin");
-        let encoded = temp.path().join("encoded.bz2");
-        let payload = (0..(3 * 1024 * 1024))
-            .map(|index| (index as u8).wrapping_mul(17))
-            .collect::<Vec<_>>();
-        fs::write(&source, payload).expect("write source");
-
-        let registry = CodecRegistry::new();
-        let backend = registry.find_by_name("bzip2").expect("bzip2 backend");
-        let capabilities = backend.capabilities();
-        let context = codec_context(temp.path());
-
-        let encode = backend
-            .encode(
-                &CodecOperationRequest {
-                    input: source,
-                    output: encoded,
-                    level: Some(6),
-                },
-                &context,
-            )
-            .expect("encode");
-        assert_eq!(encode.status, OperationStatus::Succeeded);
-
-        let execution = encode.thread_execution.expect("thread execution");
-        assert!(capabilities.encode_threads.supports_execution(&execution));
-        assert_eq!(execution.requested_threads, 8);
-        assert_eq!(execution.effective_threads, 8);
-        assert!(execution.used_parallelism);
+        assert_encode_runtime_threads_match_capability(
+            "bzip2",
+            "encoded.bz2",
+            6,
+            3 * 1024 * 1024,
+            17,
+            0,
+        );
     }
 
     #[test]
     fn bzip2_backend_decode_supports_multistream_payloads() {
-        let temp = TestDir::new();
-        let member_a = temp.path().join("member-a.bz2");
-        let member_b = temp.path().join("member-b.bz2");
-        let joined = temp.path().join("joined.bz2");
-        let decoded = temp.path().join("decoded.bin");
-        let payload = (0..(2 * 1024 * 1024))
-            .map(|index| (index as u8).wrapping_mul(5).wrapping_add(3))
-            .collect::<Vec<_>>();
-        let split = payload.len() / 2;
-
-        let registry = CodecRegistry::new();
-        let backend = registry.find_by_name("bzip2").expect("bzip2 backend");
-        let capabilities = backend.capabilities();
-        let context = codec_context(temp.path());
-
-        let part_a = temp.path().join("part-a.bin");
-        let part_b = temp.path().join("part-b.bin");
-        fs::write(&part_a, &payload[..split]).expect("write part a");
-        fs::write(&part_b, &payload[split..]).expect("write part b");
-
-        backend
-            .encode(
-                &CodecOperationRequest {
-                    input: part_a,
-                    output: member_a.clone(),
-                    level: Some(6),
-                },
-                &context,
-            )
-            .expect("encode member a");
-        backend
-            .encode(
-                &CodecOperationRequest {
-                    input: part_b,
-                    output: member_b.clone(),
-                    level: Some(6),
-                },
-                &context,
-            )
-            .expect("encode member b");
-
-        let mut joined_bytes = fs::read(&member_a).expect("read member a");
-        joined_bytes.extend(fs::read(&member_b).expect("read member b"));
-        fs::write(&joined, joined_bytes).expect("write joined");
-
-        let decode = backend
-            .decode(
-                &CodecOperationRequest {
-                    input: joined,
-                    output: decoded.clone(),
-                    level: None,
-                },
-                &context,
-            )
-            .expect("decode multistream");
-        assert_eq!(decode.status, OperationStatus::Succeeded);
-        let execution = decode.thread_execution.expect("thread execution");
-        assert!(capabilities.decode_threads.supports_execution(&execution));
-        assert_eq!(execution.requested_threads, 8);
-        assert!(
-            execution.effective_threads > 1,
-            "fallback: {:?}",
-            execution.thread_fallback_reason
-        );
-        assert!(
-            execution.used_parallelism,
-            "fallback: {:?}",
-            execution.thread_fallback_reason
-        );
-        assert_eq!(fs::read(decoded).expect("decoded bytes"), payload);
+        assert_joined_stream_decode_runtime_threads(JoinedStreamDecodeCase {
+            codec: "bzip2",
+            segment_ext: "bz2",
+            level: 6,
+            payload_len: 2 * 1024 * 1024,
+            payload_multiplier: 5,
+            payload_add: 3,
+            decode_expect: "decode multistream",
+            include_fallback_context: true,
+        });
     }
 
     #[test]
     fn deflate_backend_decode_runtime_threads_match_capability_with_multimember_input() {
-        let temp = TestDir::new();
-        let member_a = temp.path().join("member-a.gz");
-        let member_b = temp.path().join("member-b.gz");
-        let joined = temp.path().join("joined.gz");
-        let decoded = temp.path().join("decoded.bin");
-        let payload = (0..(2 * 1024 * 1024))
-            .map(|index| (index as u8).wrapping_mul(13).wrapping_add(11))
-            .collect::<Vec<_>>();
-        let split = payload.len() / 2;
-
-        let registry = CodecRegistry::new();
-        let backend = registry.find_by_name("deflate").expect("deflate backend");
-        let capabilities = backend.capabilities();
-        let context = codec_context(temp.path());
-
-        let part_a = temp.path().join("part-a.bin");
-        let part_b = temp.path().join("part-b.bin");
-        fs::write(&part_a, &payload[..split]).expect("write part a");
-        fs::write(&part_b, &payload[split..]).expect("write part b");
-
-        backend
-            .encode(
-                &CodecOperationRequest {
-                    input: part_a,
-                    output: member_a.clone(),
-                    level: Some(6),
-                },
-                &context,
-            )
-            .expect("encode member a");
-        backend
-            .encode(
-                &CodecOperationRequest {
-                    input: part_b,
-                    output: member_b.clone(),
-                    level: Some(6),
-                },
-                &context,
-            )
-            .expect("encode member b");
-
-        let mut joined_bytes = fs::read(&member_a).expect("read member a");
-        joined_bytes.extend(fs::read(&member_b).expect("read member b"));
-        fs::write(&joined, joined_bytes).expect("write joined");
-
-        let decode = backend
-            .decode(
-                &CodecOperationRequest {
-                    input: joined,
-                    output: decoded.clone(),
-                    level: None,
-                },
-                &context,
-            )
-            .expect("decode multistream");
-        assert_eq!(decode.status, OperationStatus::Succeeded);
-        let execution = decode.thread_execution.expect("thread execution");
-        assert!(capabilities.decode_threads.supports_execution(&execution));
-        assert_eq!(execution.requested_threads, 8);
-        assert!(
-            execution.effective_threads > 1,
-            "fallback: {:?}",
-            execution.thread_fallback_reason
-        );
-        assert!(
-            execution.used_parallelism,
-            "fallback: {:?}",
-            execution.thread_fallback_reason
-        );
-        assert_eq!(fs::read(decoded).expect("decoded bytes"), payload);
+        assert_joined_stream_decode_runtime_threads(JoinedStreamDecodeCase {
+            codec: "deflate",
+            segment_ext: "gz",
+            level: 6,
+            payload_len: 2 * 1024 * 1024,
+            payload_multiplier: 13,
+            payload_add: 11,
+            decode_expect: "decode multistream",
+            include_fallback_context: true,
+        });
     }
 
     #[test]
     fn zstd_backend_decode_runtime_threads_match_capability_with_multiframe_input() {
-        let temp = TestDir::new();
-        let frame_a = temp.path().join("frame-a.zst");
-        let frame_b = temp.path().join("frame-b.zst");
-        let joined = temp.path().join("joined.zst");
-        let decoded = temp.path().join("decoded.bin");
-        let payload = (0..(2 * 1024 * 1024))
-            .map(|index| (index as u8).wrapping_mul(19).wrapping_add(7))
-            .collect::<Vec<_>>();
-        let split = payload.len() / 2;
-
-        let registry = CodecRegistry::new();
-        let backend = registry.find_by_name("zstd").expect("zstd backend");
-        let capabilities = backend.capabilities();
-        let context = codec_context(temp.path());
-
-        let part_a = temp.path().join("part-a.bin");
-        let part_b = temp.path().join("part-b.bin");
-        fs::write(&part_a, &payload[..split]).expect("write part a");
-        fs::write(&part_b, &payload[split..]).expect("write part b");
-
-        backend
-            .encode(
-                &CodecOperationRequest {
-                    input: part_a,
-                    output: frame_a.clone(),
-                    level: Some(3),
-                },
-                &context,
-            )
-            .expect("encode frame a");
-        backend
-            .encode(
-                &CodecOperationRequest {
-                    input: part_b,
-                    output: frame_b.clone(),
-                    level: Some(3),
-                },
-                &context,
-            )
-            .expect("encode frame b");
-
-        let mut joined_bytes = fs::read(&frame_a).expect("read frame a");
-        joined_bytes.extend(fs::read(&frame_b).expect("read frame b"));
-        fs::write(&joined, joined_bytes).expect("write joined");
-
-        let decode = backend
-            .decode(
-                &CodecOperationRequest {
-                    input: joined,
-                    output: decoded.clone(),
-                    level: None,
-                },
-                &context,
-            )
-            .expect("decode multiframe");
-        assert_eq!(decode.status, OperationStatus::Succeeded);
-        let execution = decode.thread_execution.expect("thread execution");
-        assert!(capabilities.decode_threads.supports_execution(&execution));
-        assert_eq!(execution.requested_threads, 8);
-        assert!(execution.effective_threads > 1);
-        assert!(execution.used_parallelism);
-        assert_eq!(fs::read(decoded).expect("decoded bytes"), payload);
+        assert_joined_stream_decode_runtime_threads(JoinedStreamDecodeCase {
+            codec: "zstd",
+            segment_ext: "zst",
+            level: 3,
+            payload_len: 2 * 1024 * 1024,
+            payload_multiplier: 19,
+            payload_add: 7,
+            decode_expect: "decode multiframe",
+            include_fallback_context: false,
+        });
     }
 
     #[test]
     fn lzma2_backend_decode_runtime_threads_match_capability() {
-        let temp = TestDir::new();
-        let source = temp.path().join("source.bin");
-        let encoded = temp.path().join("encoded.xz");
-        let decoded = temp.path().join("decoded.bin");
-        let payload = (0..(3 * 1024 * 1024))
-            .map(|index| (index as u8).wrapping_mul(29))
-            .collect::<Vec<_>>();
-        fs::write(&source, &payload).expect("write source");
-
-        let registry = CodecRegistry::new();
-        let backend = registry.find_by_name("lzma2").expect("lzma2 backend");
-        let capabilities = backend.capabilities();
-        let context = codec_context(temp.path());
-
-        backend
-            .encode(
-                &CodecOperationRequest {
-                    input: source,
-                    output: encoded.clone(),
-                    level: Some(6),
-                },
-                &context,
-            )
-            .expect("encode");
-
-        let decode = backend
-            .decode(
-                &CodecOperationRequest {
-                    input: encoded,
-                    output: decoded.clone(),
-                    level: None,
-                },
-                &context,
-            )
-            .expect("decode");
-        assert_eq!(decode.status, OperationStatus::Succeeded);
-
-        let execution = decode.thread_execution.expect("thread execution");
-        assert!(capabilities.decode_threads.supports_execution(&execution));
-        assert_eq!(execution.requested_threads, 8);
-        assert_eq!(execution.effective_threads, 8);
-        assert!(execution.used_parallelism);
-        assert_eq!(fs::read(decoded).expect("decoded bytes"), payload);
+        assert_decode_runtime_threads_match_capability(
+            "lzma2",
+            "encoded.xz",
+            Some(6),
+            3 * 1024 * 1024,
+            29,
+            0,
+        );
     }
 
     #[test]
     fn store_backend_decode_runs_with_parallel_runtime_when_budget_allows() {
-        let temp = TestDir::new();
-        let source = temp.path().join("source.bin");
-        let encoded = temp.path().join("encoded.store");
-        let decoded = temp.path().join("decoded.bin");
-        let payload = (0..(2 * 1024 * 1024))
-            .map(|index| (index as u8).wrapping_mul(7))
-            .collect::<Vec<_>>();
-        fs::write(&source, &payload).expect("write source");
-
-        let registry = CodecRegistry::new();
-        let backend = registry.find_by_name("store").expect("store backend");
-        let context = codec_context(temp.path());
-
-        backend
-            .encode(
-                &CodecOperationRequest {
-                    input: source,
-                    output: encoded.clone(),
-                    level: None,
-                },
-                &context,
-            )
-            .expect("encode");
-
-        let decode = backend
-            .decode(
-                &CodecOperationRequest {
-                    input: encoded,
-                    output: decoded.clone(),
-                    level: None,
-                },
-                &context,
-            )
-            .expect("decode");
-        assert_eq!(decode.status, OperationStatus::Succeeded);
-
-        let execution = decode.thread_execution.expect("thread execution");
-        assert!(
-            backend
-                .capabilities()
-                .decode_threads
-                .supports_execution(&execution)
+        assert_decode_runtime_threads_match_capability(
+            "store",
+            "encoded.store",
+            None,
+            2 * 1024 * 1024,
+            7,
+            0,
         );
-        assert_eq!(execution.requested_threads, 8);
-        assert_eq!(execution.effective_threads, 8);
-        assert!(execution.used_parallelism);
-        assert_eq!(fs::read(decoded).expect("decoded bytes"), payload);
     }
 }

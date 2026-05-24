@@ -5,10 +5,10 @@ use std::path::PathBuf;
 
 use assert_cmd::Command;
 use assert_fs::{
-    TempDir,
     fixture::{FileWriteStr, PathChild},
+    TempDir,
 };
-use flate2::{Compression as DeflateCompression, write::DeflateEncoder};
+use flate2::{write::DeflateEncoder, Compression as DeflateCompression};
 use nod::{
     common::{Compression as NodCompression, Format as NodFormat},
     read::{DiscOptions as NodDiscOptions, DiscReader as NodDiscReader},
@@ -42,6 +42,25 @@ fn parse_single_json_line(output: &[u8]) -> Value {
         .into_iter()
         .last()
         .expect("json line")
+}
+
+fn command_stdout(args: &[&str], expected_code: i32) -> Vec<u8> {
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args(args)
+        .assert()
+        .code(expected_code)
+        .get_output()
+        .stdout
+        .clone()
+}
+
+fn run_json_events(args: &[&str], expected_code: i32) -> Vec<Value> {
+    parse_json_lines(&command_stdout(args, expected_code))
+}
+
+fn run_single_json_event(args: &[&str], expected_code: i32) -> Value {
+    parse_single_json_line(&command_stdout(args, expected_code))
 }
 
 fn assert_running_percent_event(events: &[Value], command: &str, format: &str) {

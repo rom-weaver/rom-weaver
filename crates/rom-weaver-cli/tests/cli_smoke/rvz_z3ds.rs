@@ -5,31 +5,25 @@ fn rvz_inspect_reports_succeeded() {
     fs::write(temp.child("disc.iso").path(), &iso_bytes).expect("iso fixture");
     write_rvz_fixture_from_iso(temp.child("disc.iso").path(), temp.child("disc.rvz").path());
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "inspect",
             temp.child("disc.rvz").path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let json = parse_single_json_line(&output);
     assert_eq!(json["command"], "inspect");
     assert_eq!(json["family"], "container");
     assert_eq!(json["format"], "rvz");
     assert_eq!(json["status"], "succeeded");
-    assert!(
-        json["label"]
-            .as_str()
-            .expect("label")
-            .to_ascii_lowercase()
-            .contains("compression")
-    );
+    assert!(json["label"]
+        .as_str()
+        .expect("label")
+        .to_ascii_lowercase()
+        .contains("compression"));
 }
 
 #[test]
@@ -39,9 +33,8 @@ fn rvz_compress_and_extract_round_trips() {
     fs::write(temp.child("disc.iso").path(), &iso_bytes).expect("iso fixture");
 
     let rvz_path = temp.child("disc.rvz");
-    let compress_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let compress_output = command_stdout(
+        &[
             "compress",
             temp.child("disc.iso").path().to_str().expect("path"),
             "--format",
@@ -53,12 +46,9 @@ fn rvz_compress_and_extract_round_trips() {
             "--threads",
             "8",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let compress_events = parse_json_lines(&compress_output);
     assert_running_percent_event(&compress_events, "compress", "rvz");
@@ -72,9 +62,8 @@ fn rvz_compress_and_extract_round_trips() {
     assert_eq!(compress_json["status"], "succeeded");
 
     let out_dir = temp.child("extract");
-    let extract_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let extract_output = command_stdout(
+        &[
             "extract",
             rvz_path.path().to_str().expect("path"),
             "--out-dir",
@@ -82,12 +71,9 @@ fn rvz_compress_and_extract_round_trips() {
             "--threads",
             "8",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let extract_events = parse_json_lines(&extract_output);
     assert_running_percent_event(&extract_events, "extract", "rvz");
@@ -111,9 +97,8 @@ fn rvz_compress_store_ignores_level_profile() {
     let iso_bytes = build_test_gamecube_iso(0x4000);
     fs::write(temp.child("disc.iso").path(), &iso_bytes).expect("iso fixture");
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "compress",
             temp.child("disc.iso").path().to_str().expect("path"),
             "--format",
@@ -125,24 +110,19 @@ fn rvz_compress_store_ignores_level_profile() {
             "--level",
             "min",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let json = parse_single_json_line(&output);
     assert_eq!(json["command"], "compress");
     assert_eq!(json["family"], "container");
     assert_eq!(json["format"], "rvz");
     assert_eq!(json["status"], "succeeded");
-    assert!(
-        json["label"]
-            .as_str()
-            .expect("label")
-            .contains("codec=store")
-    );
+    assert!(json["label"]
+        .as_str()
+        .expect("label")
+        .contains("codec=store"));
 }
 
 #[test]
@@ -153,20 +133,16 @@ fn rvz_extract_round_trips_to_iso() {
     write_rvz_fixture_from_iso(temp.child("disc.iso").path(), temp.child("disc.rvz").path());
 
     let out_dir = temp.child("extract");
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "extract",
             temp.child("disc.rvz").path().to_str().expect("path"),
             "--out-dir",
             out_dir.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let json = parse_single_json_line(&output);
     assert_eq!(json["command"], "extract");
@@ -206,9 +182,8 @@ fn rvz_extract_supports_single_output_selection() {
         iso_bytes
     );
 
-    let missing_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let missing_output = command_stdout(
+        &[
             "extract",
             temp.child("disc.rvz").path().to_str().expect("path"),
             "--select",
@@ -216,21 +191,16 @@ fn rvz_extract_supports_single_output_selection() {
             "--out-dir",
             out_dir.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(1)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        1,
+    );
     let missing_json = parse_single_json_line(&missing_output);
     assert_eq!(missing_json["format"], "rvz");
     assert_eq!(missing_json["status"], "failed");
-    assert!(
-        missing_json["label"]
-            .as_str()
-            .expect("label")
-            .contains("requested selections were not found")
-    );
+    assert!(missing_json["label"]
+        .as_str()
+        .expect("label")
+        .contains("requested selections were not found"));
 }
 
 #[test]
@@ -242,9 +212,8 @@ fn z3ds_compress_inspect_and_extract_round_trip() {
     fs::write(temp.child("disc.3ds").path(), &source).expect("fixture");
 
     let z3ds_path = temp.child("disc.z3ds");
-    let compress_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let compress_output = command_stdout(
+        &[
             "compress",
             temp.child("disc.3ds").path().to_str().expect("path"),
             "--format",
@@ -254,12 +223,9 @@ fn z3ds_compress_inspect_and_extract_round_trip() {
             "--codec",
             "zstd",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let compress_events = parse_json_lines(&compress_output);
     assert_running_percent_event(&compress_events, "compress", "z3ds");
@@ -269,45 +235,35 @@ fn z3ds_compress_inspect_and_extract_round_trip() {
     assert_eq!(compress_json["format"], "z3ds");
     assert_eq!(compress_json["status"], "succeeded");
 
-    let inspect_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let inspect_output = command_stdout(
+        &[
             "inspect",
             z3ds_path.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
     let inspect_json = parse_single_json_line(&inspect_output);
     assert_eq!(inspect_json["command"], "inspect");
     assert_eq!(inspect_json["family"], "container");
     assert_eq!(inspect_json["format"], "z3ds");
     assert_eq!(inspect_json["status"], "succeeded");
-    assert!(
-        inspect_json["label"]
-            .as_str()
-            .expect("label")
-            .contains("underlying_magic")
-    );
+    assert!(inspect_json["label"]
+        .as_str()
+        .expect("label")
+        .contains("underlying_magic"));
 
     let out_dir = temp.child("extract");
-    let extract_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let extract_output = command_stdout(
+        &[
             "extract",
             z3ds_path.path().to_str().expect("path"),
             "--out-dir",
             out_dir.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let extract_events = parse_json_lines(&extract_output);
     assert_running_percent_event(&extract_events, "extract", "z3ds");
@@ -349,20 +305,16 @@ fn z3ds_extract_uses_underlying_magic_for_output_extension() {
         .code(0);
 
     let out_dir = temp.child("extract");
-    let extract_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let extract_output = command_stdout(
+        &[
             "extract",
             z3ds_path.path().to_str().expect("path"),
             "--out-dir",
             out_dir.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
     let extract_json = parse_single_json_line(&extract_output);
     assert_eq!(extract_json["command"], "extract");
     assert_eq!(extract_json["family"], "container");
@@ -402,9 +354,8 @@ fn z3ds_extract_reports_parallel_threads_for_large_file() {
         .code(0);
 
     let out_dir = temp.child("extract");
-    let extract_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let extract_output = command_stdout(
+        &[
             "extract",
             z3ds_path.path().to_str().expect("path"),
             "--out-dir",
@@ -412,12 +363,9 @@ fn z3ds_extract_reports_parallel_threads_for_large_file() {
             "--threads",
             "8",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let json = parse_single_json_line(&extract_output);
     assert_eq!(json["command"], "extract");
@@ -479,9 +427,8 @@ fn z3ds_extract_supports_single_output_selection() {
         source
     );
 
-    let missing_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let missing_output = command_stdout(
+        &[
             "extract",
             z3ds_path.path().to_str().expect("path"),
             "--select",
@@ -489,21 +436,16 @@ fn z3ds_extract_supports_single_output_selection() {
             "--out-dir",
             selected_out.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(1)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        1,
+    );
     let missing_json = parse_single_json_line(&missing_output);
     assert_eq!(missing_json["format"], "z3ds");
     assert_eq!(missing_json["status"], "failed");
-    assert!(
-        missing_json["label"]
-            .as_str()
-            .expect("label")
-            .contains("requested selections were not found")
-    );
+    assert!(missing_json["label"]
+        .as_str()
+        .expect("label")
+        .contains("requested selections were not found"));
 }
 
 #[test]
@@ -515,9 +457,8 @@ fn z3ds_compress_reports_parallel_threads_for_large_file() {
     fs::write(temp.child("large.3ds").path(), &source).expect("fixture");
 
     let z3ds_path = temp.child("large.z3ds");
-    let compress_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let compress_output = command_stdout(
+        &[
             "compress",
             temp.child("large.3ds").path().to_str().expect("path"),
             "--format",
@@ -529,12 +470,9 @@ fn z3ds_compress_reports_parallel_threads_for_large_file() {
             "--threads",
             "8",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let json = parse_single_json_line(&compress_output);
     assert_eq!(json["command"], "compress");
@@ -556,30 +494,24 @@ fn z3ds_extract_rejects_invalid_header() {
     bytes[..4].copy_from_slice(b"BAD!");
     fs::write(invalid.path(), bytes).expect("fixture");
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "extract",
             invalid.path().to_str().expect("path"),
             "--out-dir",
             temp.child("out").path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(1)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        1,
+    );
 
     let json = parse_single_json_line(&output);
     assert_eq!(json["command"], "extract");
     assert_eq!(json["family"], "container");
     assert_eq!(json["format"], "z3ds");
     assert_eq!(json["status"], "failed");
-    assert!(
-        json["label"]
-            .as_str()
-            .expect("label")
-            .contains("missing Z3DS magic")
-    );
+    assert!(json["label"]
+        .as_str()
+        .expect("label")
+        .contains("missing Z3DS magic"));
 }

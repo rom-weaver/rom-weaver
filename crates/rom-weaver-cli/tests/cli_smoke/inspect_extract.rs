@@ -20,16 +20,10 @@ fn inspect_reports_known_container_as_supported() {
         .assert()
         .code(0);
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args(["inspect", archive.path().to_str().expect("path"), "--json"])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
-
-    let json = parse_single_json_line(&output);
+    let json = run_single_json_event(
+        &["inspect", archive.path().to_str().expect("path"), "--json"],
+        0,
+    );
     assert_eq!(json["command"], "inspect");
     assert_eq!(json["family"], "container");
     assert_eq!(json["format"], "zip");
@@ -43,12 +37,10 @@ fn inspect_reports_known_container_as_supported() {
         "not-wii-gc-or-unrecognized"
     );
     assert!(json["details"]["container"]["entry_count"].is_null());
-    assert!(
-        !json["label"]
-            .as_str()
-            .expect("label")
-            .contains("recommended_compress_format")
-    );
+    assert!(!json["label"]
+        .as_str()
+        .expect("label")
+        .contains("recommended_compress_format"));
 }
 
 #[test]
@@ -71,21 +63,15 @@ fn inspect_list_reports_selectable_zip_entries() {
         .assert()
         .code(0);
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let json = run_single_json_event(
+        &[
             "inspect",
             archive.path().to_str().expect("path"),
             "--list",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
-
-    let json = parse_single_json_line(&output);
+        ],
+        0,
+    );
     assert_eq!(json["command"], "inspect");
     assert_eq!(json["family"], "container");
     assert_eq!(json["format"], "zip");
@@ -100,12 +86,10 @@ fn inspect_list_reports_selectable_zip_entries() {
         json["details"]["container"]["reason"],
         "not-wii-gc-or-unrecognized"
     );
-    assert!(
-        !json["label"]
-            .as_str()
-            .expect("label")
-            .contains("selectable entries")
-    );
+    assert!(!json["label"]
+        .as_str()
+        .expect("label")
+        .contains("selectable entries"));
 }
 
 #[test]
@@ -114,16 +98,10 @@ fn inspect_reports_rar_container_as_supported() {
     let source = temp.child("version.rar");
     fs::copy(rar_fixture_path("version.rar"), source.path()).expect("copy fixture");
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args(["inspect", source.path().to_str().expect("path"), "--json"])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
-
-    let json = parse_single_json_line(&output);
+    let json = run_single_json_event(
+        &["inspect", source.path().to_str().expect("path"), "--json"],
+        0,
+    );
     assert_eq!(json["command"], "inspect");
     assert_eq!(json["family"], "container");
     assert_eq!(json["format"], "rar");
@@ -136,20 +114,14 @@ fn inspect_reports_known_rom_header_as_supported() {
     let payload = b"header-aware inspect payload".to_vec();
     fs::write(temp.child("headered.nes").path(), with_nes_header(&payload)).expect("fixture");
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let json = run_single_json_event(
+        &[
             "inspect",
             temp.child("headered.nes").path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
-
-    let json = parse_single_json_line(&output);
+        ],
+        0,
+    );
     assert_eq!(json["command"], "inspect");
     assert_eq!(json["family"], "command");
     assert_eq!(json["format"], "rom-header");
@@ -167,30 +139,22 @@ fn inspect_reports_gba_header_profile() {
     let rom = build_test_gba_rom(0x2000);
     fs::write(temp.child("test.gba").path(), rom).expect("fixture");
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let json = run_single_json_event(
+        &[
             "inspect",
             temp.child("test.gba").path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
-
-    let json = parse_single_json_line(&output);
+        ],
+        0,
+    );
     assert_eq!(json["command"], "inspect");
     assert_eq!(json["family"], "command");
     assert_eq!(json["format"], "rom-header");
     assert_eq!(json["status"], "succeeded");
-    assert!(
-        json["label"]
-            .as_str()
-            .expect("label")
-            .contains("detected ROM header Game Boy Advance")
-    );
+    assert!(json["label"]
+        .as_str()
+        .expect("label")
+        .contains("detected ROM header Game Boy Advance"));
 }
 
 #[test]
@@ -208,30 +172,22 @@ fn inspect_list_rejects_patch_inputs() {
     )
     .expect("fixture");
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let json = run_single_json_event(
+        &[
             "inspect",
             temp.child("update.ips").path().to_str().expect("path"),
             "--list",
             "--json",
-        ])
-        .assert()
-        .code(1)
-        .get_output()
-        .stdout
-        .clone();
-
-    let json = parse_single_json_line(&output);
+        ],
+        1,
+    );
     assert_eq!(json["command"], "inspect");
     assert_eq!(json["family"], "patch");
     assert_eq!(json["status"], "failed");
-    assert!(
-        json["label"]
-            .as_str()
-            .expect("label")
-            .contains("only supported for container formats")
-    );
+    assert!(json["label"]
+        .as_str()
+        .expect("label")
+        .contains("only supported for container formats"));
 }
 
 #[test]
@@ -243,21 +199,15 @@ fn inspect_list_reports_pbp_multi_disc_selectable_outputs() {
     let source = temp.child("multi.pbp");
     fs::write(source.path(), pbp).expect("pbp fixture");
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let json = run_single_json_event(
+        &[
             "inspect",
             source.path().to_str().expect("path"),
             "--list",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
-
-    let json = parse_single_json_line(&output);
+        ],
+        0,
+    );
     assert_eq!(json["command"], "inspect");
     assert_eq!(json["family"], "container");
     assert_eq!(json["format"], "pbp");
@@ -289,22 +239,16 @@ fn extract_pbp_without_select_emits_all_discs() {
     fs::write(source.path(), pbp).expect("pbp fixture");
     let out_dir = temp.child("all");
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let events = run_json_events(
+        &[
             "extract",
             source.path().to_str().expect("path"),
             "--out-dir",
             out_dir.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
-
-    let events = parse_json_lines(&output);
+        ],
+        0,
+    );
     assert_running_percent_event(&events, "extract", "pbp");
     let json = events.last().expect("extract terminal event");
     assert_eq!(json["format"], "pbp");
@@ -352,9 +296,8 @@ fn extract_reports_thread_fallback_in_json() {
 
     let out_dir = temp.child("out");
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let events = run_json_events(
+        &[
             "extract",
             archive.path().to_str().expect("path"),
             "--select",
@@ -364,14 +307,9 @@ fn extract_reports_thread_fallback_in_json() {
             "--threads",
             "8",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
-
-    let events = parse_json_lines(&output);
+        ],
+        0,
+    );
     assert_running_percent_event(&events, "extract", "zip");
     let json = events.last().expect("extract terminal event");
     assert_eq!(json["command"], "extract");
@@ -458,9 +396,8 @@ fn extract_select_glob_reports_missing_match() {
         .code(0);
 
     let out_dir = temp.child("selected");
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let json = run_single_json_event(
+        &[
             "extract",
             archive.path().to_str().expect("path"),
             "--select",
@@ -468,21 +405,15 @@ fn extract_select_glob_reports_missing_match() {
             "--out-dir",
             out_dir.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(1)
-        .get_output()
-        .stdout
-        .clone();
-    let json = parse_single_json_line(&output);
+        ],
+        1,
+    );
     assert_eq!(json["format"], "zip");
     assert_eq!(json["status"], "failed");
-    assert!(
-        json["label"]
-            .as_str()
-            .expect("label")
-            .contains("requested selections were not found")
-    );
+    assert!(json["label"]
+        .as_str()
+        .expect("label")
+        .contains("requested selections were not found"));
 }
 
 #[test]
@@ -495,9 +426,8 @@ fn extract_pbp_select_cue_emits_matching_bin_pair() {
     fs::write(source.path(), pbp).expect("pbp fixture");
     let out_dir = temp.child("selected");
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let json = run_single_json_event(
+        &[
             "extract",
             source.path().to_str().expect("path"),
             "--select",
@@ -505,14 +435,9 @@ fn extract_pbp_select_cue_emits_matching_bin_pair() {
             "--out-dir",
             out_dir.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
-
-    let json = parse_single_json_line(&output);
+        ],
+        0,
+    );
     assert_eq!(json["format"], "pbp");
     assert_eq!(json["status"], "succeeded");
     assert!(out_dir.child("multi.disc02.cue").path().exists());
@@ -535,9 +460,8 @@ fn extract_pbp_select_missing_target_reports_not_found() {
     fs::write(source.path(), pbp).expect("pbp fixture");
     let out_dir = temp.child("selected");
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let json = run_single_json_event(
+        &[
             "extract",
             source.path().to_str().expect("path"),
             "--select",
@@ -545,22 +469,15 @@ fn extract_pbp_select_missing_target_reports_not_found() {
             "--out-dir",
             out_dir.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(1)
-        .get_output()
-        .stdout
-        .clone();
-
-    let json = parse_single_json_line(&output);
+        ],
+        1,
+    );
     assert_eq!(json["format"], "pbp");
     assert_eq!(json["status"], "failed");
-    assert!(
-        json["label"]
-            .as_str()
-            .expect("label")
-            .contains("requested selections were not found")
-    );
+    assert!(json["label"]
+        .as_str()
+        .expect("label")
+        .contains("requested selections were not found"));
 }
 
 #[test]
@@ -570,9 +487,8 @@ fn extract_rar_reports_thread_fallback_in_json() {
     fs::copy(rar_fixture_path("version.rar"), archive.path()).expect("copy fixture");
     let out_dir = temp.child("out");
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let events = run_json_events(
+        &[
             "extract",
             archive.path().to_str().expect("path"),
             "--select",
@@ -582,14 +498,9 @@ fn extract_rar_reports_thread_fallback_in_json() {
             "--threads",
             "8",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
-
-    let events = parse_json_lines(&output);
+        ],
+        0,
+    );
     assert_running_percent_event(&events, "extract", "rar");
     let json = events.last().expect("extract terminal event");
     assert_eq!(json["command"], "extract");
@@ -607,4 +518,3 @@ fn extract_rar_reports_thread_fallback_in_json() {
         b"unrar-0.4.0".to_vec()
     );
 }
-

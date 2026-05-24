@@ -17,6 +17,65 @@ import {
 const RUN_1GB_STRESS = typeof __ROM_WEAVER_WASM_STRESS_1GB__ !== 'undefined'
   && __ROM_WEAVER_WASM_STRESS_1GB__ === true;
 
+function runJsonFromWorker(worker) {
+  return (args, options) => worker.runJson(args, options);
+}
+
+async function runMatrix(matrixRunner, worker, options) {
+  await matrixRunner({
+    runJson: runJsonFromWorker(worker),
+    ...options,
+  });
+}
+
+async function runJsonAndAssert(worker, args, command) {
+  assertRunJsonSucceeded(await worker.runJson(args), { command });
+}
+
+async function runCompressExtractChecksumSequence({
+  worker,
+  sourcePath,
+  archivePath,
+  extractDir,
+  extractedPath,
+}) {
+  await runJsonAndAssert(worker, [
+    'compress',
+    sourcePath,
+    '--format',
+    'gz',
+    '--output',
+    archivePath,
+    '--threads',
+    '1',
+  ], 'compress');
+
+  await runJsonAndAssert(worker, [
+    'extract',
+    archivePath,
+    '--out-dir',
+    extractDir,
+    '--threads',
+    '1',
+  ], 'extract');
+
+  await runJsonAndAssert(worker, [
+    'checksum',
+    sourcePath,
+    '--algo',
+    'crc32',
+    '--no-extract',
+  ], 'checksum');
+
+  await runJsonAndAssert(worker, [
+    'checksum',
+    extractedPath,
+    '--algo',
+    'crc32',
+    '--no-extract',
+  ], 'checksum');
+}
+
 describe('rom-weaver-wasm browser runner parity', () => {
   it('requires createRomWeaverBrowserOpfs to run in a dedicated worker', async () => {
     await expect(createRomWeaverBrowserOpfs()).rejects.toThrow(/Dedicated Worker/i);
@@ -122,8 +181,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
 
   it('runJson emits progress events for compress, extract, and patch-apply', async () => {
     await withTempFixture(async ({ dir, sourcePath, worker, opfsHandle }) => {
-      await runProgressMatrix({
-        runJson: (args, options) => worker.runJson(args, options),
+      await runMatrix(runProgressMatrix, worker, {
         opfsHandle,
         dir,
         sourcePath,
@@ -134,8 +192,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
 
   it('runJson integration matrix covers chd, zip, and patch wasm paths', async () => {
     await withTempFixture(async ({ dir, sourcePath, worker, opfsHandle, fixtures }) => {
-      await runPatchMatrix({
-        runJson: (args, options) => worker.runJson(args, options),
+      await runMatrix(runPatchMatrix, worker, {
         opfsHandle,
         dir,
         sourcePath,
@@ -146,8 +203,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
 
   it('runJson full format matrix covers patch and container registries', async () => {
     await withTempFixture(async ({ dir, worker, opfsHandle, fixtures }) => {
-      await runFullFormatMatrix({
-        runJson: (args, options) => worker.runJson(args, options),
+      await runMatrix(runFullFormatMatrix, worker, {
         opfsHandle,
         dir,
         fixtures,
@@ -247,53 +303,13 @@ describe('rom-weaver-wasm browser runner parity', () => {
       const extractDir = joinGuestPath(workDir, 'large-memory-extract');
       const extractedPath = joinGuestPath(extractDir, 'large-memory');
 
-      assertRunJsonSucceeded(
-        await worker.runJson([
-          'compress',
-          sourcePath,
-          '--format',
-          'gz',
-          '--output',
-          archivePath,
-          '--threads',
-          '1',
-        ]),
-        { command: 'compress' },
-      );
-
-      assertRunJsonSucceeded(
-        await worker.runJson([
-          'extract',
-          archivePath,
-          '--out-dir',
-          extractDir,
-          '--threads',
-          '1',
-        ]),
-        { command: 'extract' },
-      );
-
-      assertRunJsonSucceeded(
-        await worker.runJson([
-          'checksum',
-          sourcePath,
-          '--algo',
-          'crc32',
-          '--no-extract',
-        ]),
-        { command: 'checksum' },
-      );
-
-      assertRunJsonSucceeded(
-        await worker.runJson([
-          'checksum',
-          extractedPath,
-          '--algo',
-          'crc32',
-          '--no-extract',
-        ]),
-        { command: 'checksum' },
-      );
+      await runCompressExtractChecksumSequence({
+        worker,
+        sourcePath,
+        archivePath,
+        extractDir,
+        extractedPath,
+      });
     });
   });
 
@@ -320,52 +336,13 @@ describe('rom-weaver-wasm browser runner parity', () => {
           mutateAdd: 29,
         });
 
-        assertRunJsonSucceeded(
-          await worker.runJson([
-            'compress',
-            sourcePath,
-            '--format',
-            'gz',
-            '--output',
-            archivePath,
-            '--threads',
-            '1',
-          ]),
-          { command: 'compress' },
-        );
-
-        assertRunJsonSucceeded(
-          await worker.runJson([
-            'extract',
-            archivePath,
-            '--out-dir',
-            extractDir,
-            '--threads',
-            '1',
-          ]),
-          { command: 'extract' },
-        );
-
-        assertRunJsonSucceeded(
-          await worker.runJson([
-            'checksum',
-            sourcePath,
-            '--algo',
-            'crc32',
-            '--no-extract',
-          ]),
-          { command: 'checksum' },
-        );
-        assertRunJsonSucceeded(
-          await worker.runJson([
-            'checksum',
-            extractedPath,
-            '--algo',
-            'crc32',
-            '--no-extract',
-          ]),
-          { command: 'checksum' },
-        );
+        await runCompressExtractChecksumSequence({
+          worker,
+          sourcePath,
+          archivePath,
+          extractDir,
+          extractedPath,
+        });
 
         assertRunJsonSucceeded(
           await worker.runJson([
@@ -495,8 +472,7 @@ describe('rom-weaver-wasm browser worker client parity', () => {
 
   it('browser worker client streams progress events for compress, extract, and patch-apply', async () => {
     await withTempFixture(async ({ dir, sourcePath, worker, opfsHandle }) => {
-      await runProgressMatrix({
-        runJson: (args, options) => worker.runJson(args, options),
+      await runMatrix(runProgressMatrix, worker, {
         opfsHandle,
         dir,
         sourcePath,
@@ -511,8 +487,7 @@ describe('rom-weaver-wasm browser worker client parity', () => {
 
   it('browser worker client integration matrix covers chd, zip, and patch wasm paths', async () => {
     await withTempFixture(async ({ dir, sourcePath, worker, opfsHandle, fixtures }) => {
-      await runPatchMatrix({
-        runJson: (args, options) => worker.runJson(args, options),
+      await runMatrix(runPatchMatrix, worker, {
         opfsHandle,
         dir,
         sourcePath,
@@ -527,8 +502,7 @@ describe('rom-weaver-wasm browser worker client parity', () => {
 
   it('browser worker client full format matrix covers patch and container registries', async () => {
     await withTempFixture(async ({ dir, worker, opfsHandle, fixtures }) => {
-      await runFullFormatMatrix({
-        runJson: (args, options) => worker.runJson(args, options),
+      await runMatrix(runFullFormatMatrix, worker, {
         opfsHandle,
         dir,
         fixtures,

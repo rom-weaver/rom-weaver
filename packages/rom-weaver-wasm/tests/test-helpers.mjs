@@ -860,20 +860,20 @@ async function getOrCreateDirectoryHandle(rootHandle, relativeDirectoryPath) {
   return current;
 }
 
-export async function ensureGuestFile(rootHandle, guestPath) {
+async function getGuestFileHandle(rootHandle, guestPath, { create = false } = {}) {
   const relativePath = toGuestRelativePath(guestPath);
   const fileName = pathBasename(relativePath);
   const parentPath = pathDirname(relativePath);
   const parentHandle = await getOrCreateDirectoryHandle(rootHandle, parentPath === '/' ? '' : parentPath);
-  await parentHandle.getFileHandle(fileName, { create: true });
+  return parentHandle.getFileHandle(fileName, { create });
+}
+
+export async function ensureGuestFile(rootHandle, guestPath) {
+  await getGuestFileHandle(rootHandle, guestPath, { create: true });
 }
 
 export async function writeGuestFile(rootHandle, guestPath, contents) {
-  const relativePath = toGuestRelativePath(guestPath);
-  const fileName = pathBasename(relativePath);
-  const parentPath = pathDirname(relativePath);
-  const parentHandle = await getOrCreateDirectoryHandle(rootHandle, parentPath === '/' ? '' : parentPath);
-  const fileHandle = await parentHandle.getFileHandle(fileName, { create: true });
+  const fileHandle = await getGuestFileHandle(rootHandle, guestPath, { create: true });
   const writable = await fileHandle.createWritable();
   await writable.write(contents);
   await writable.close();
@@ -903,11 +903,7 @@ export async function writeGuestPatternFile(rootHandle, guestPath, byteLength, o
     throw new TypeError('mutateAdd must be an integer');
   }
 
-  const relativePath = toGuestRelativePath(guestPath);
-  const fileName = pathBasename(relativePath);
-  const parentPath = pathDirname(relativePath);
-  const parentHandle = await getOrCreateDirectoryHandle(rootHandle, parentPath === '/' ? '' : parentPath);
-  const fileHandle = await parentHandle.getFileHandle(fileName, { create: true });
+  const fileHandle = await getGuestFileHandle(rootHandle, guestPath, { create: true });
   const writable = await fileHandle.createWritable();
   let writeError = null;
 
@@ -944,11 +940,7 @@ export async function writeGuestPatternFile(rootHandle, guestPath, byteLength, o
 }
 
 export async function getGuestFileSize(rootHandle, guestPath) {
-  const relativePath = toGuestRelativePath(guestPath);
-  const fileName = pathBasename(relativePath);
-  const parentPath = pathDirname(relativePath);
-  const parentHandle = await getOrCreateDirectoryHandle(rootHandle, parentPath === '/' ? '' : parentPath);
-  const fileHandle = await parentHandle.getFileHandle(fileName);
+  const fileHandle = await getGuestFileHandle(rootHandle, guestPath);
   const file = await fileHandle.getFile();
   return file.size;
 }
