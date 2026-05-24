@@ -18,7 +18,9 @@ const PPF_VALIDATION_BLOCK_SIZE: usize = 1024;
 const PPF2_BLOCKCHECK_OFFSET: u64 = 0x9320;
 const PPF3_BIN_BLOCKCHECK_OFFSET: u64 = 0x9320;
 const PPF3_GI_BLOCKCHECK_OFFSET: u64 = 0x80A0;
+#[cfg(test)]
 const FILE_ID_BEGIN_MARKER: &[u8] = b"@BEGIN_FILE_ID.DIZ";
+#[cfg(test)]
 const FILE_ID_END_MARKER: &[u8] = b"@END_FILE_ID.DIZ";
 const FILE_ID_TRAILER_MAGIC: &[u8; 4] = b".DIZ";
 const PPF2_FILE_ID_OVERHEAD: usize = 38;
@@ -408,6 +410,7 @@ fn parse_ppf_file(path: &Path) -> Result<ParsedPpfPatch> {
     }
 }
 
+#[cfg(test)]
 fn parse_ppf_bytes(bytes: &[u8]) -> Result<ParsedPpfPatch> {
     if bytes.len() < PPF_HEADER_MIN_SIZE {
         return Err(RomWeaverError::Validation(
@@ -830,6 +833,7 @@ fn detect_version(bytes: &[u8]) -> Result<PpfVersion> {
     Ok(version_from_digits)
 }
 
+#[cfg(test)]
 fn parse_ppf_v1(bytes: &[u8]) -> Result<ParsedPpfPatch> {
     let records = parse_records_v1_v2(bytes, PPF_HEADER_MIN_SIZE, bytes.len())?;
     Ok(ParsedPpfPatch {
@@ -840,6 +844,7 @@ fn parse_ppf_v1(bytes: &[u8]) -> Result<ParsedPpfPatch> {
     })
 }
 
+#[cfg(test)]
 fn parse_ppf_v2(bytes: &[u8]) -> Result<ParsedPpfPatch> {
     if bytes.len() < PPF2_HEADER_SIZE {
         return Err(RomWeaverError::Validation(
@@ -872,6 +877,7 @@ fn parse_ppf_v2(bytes: &[u8]) -> Result<ParsedPpfPatch> {
     })
 }
 
+#[cfg(test)]
 fn parse_ppf_v3(bytes: &[u8]) -> Result<ParsedPpfPatch> {
     if bytes.len() < PPF3_HEADER_BASE_SIZE {
         return Err(RomWeaverError::Validation(
@@ -925,6 +931,7 @@ fn parse_ppf_v3(bytes: &[u8]) -> Result<ParsedPpfPatch> {
     })
 }
 
+#[cfg(test)]
 fn parse_records_v1_v2(bytes: &[u8], mut cursor: usize, end: usize) -> Result<Vec<PpfRecord>> {
     let mut records = Vec::new();
     while cursor < end {
@@ -961,6 +968,7 @@ fn parse_records_v1_v2(bytes: &[u8], mut cursor: usize, end: usize) -> Result<Ve
     Ok(records)
 }
 
+#[cfg(test)]
 fn parse_records_v3(
     bytes: &[u8],
     mut cursor: usize,
@@ -1219,14 +1227,17 @@ fn detect_file_id_len_from_footer_magic_path(
     Ok(total)
 }
 
+#[cfg(test)]
 fn detect_file_id_len_v2(bytes: &[u8], payload_start: usize) -> Result<usize> {
     detect_file_id_len(bytes, payload_start, FileIdTrailerKind::V2)
 }
 
+#[cfg(test)]
 fn detect_file_id_len_v3(bytes: &[u8], payload_start: usize) -> Result<usize> {
     detect_file_id_len(bytes, payload_start, FileIdTrailerKind::V3)
 }
 
+#[cfg(test)]
 fn detect_file_id_len(
     bytes: &[u8],
     payload_start: usize,
@@ -1251,6 +1262,7 @@ fn detect_file_id_len(
     }
 }
 
+#[cfg(test)]
 fn detect_file_id_len_from_markers(
     bytes: &[u8],
     payload_start: usize,
@@ -1309,6 +1321,7 @@ fn detect_file_id_len_from_markers(
     Ok(Some(bytes.len() - begin_offset))
 }
 
+#[cfg(test)]
 fn detect_file_id_len_from_footer_magic(
     bytes: &[u8],
     length_size: usize,
@@ -1355,11 +1368,13 @@ fn detect_file_id_len_from_footer_magic(
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg(test)]
 enum FileIdTrailerKind {
     V2,
     V3,
 }
 
+#[cfg(test)]
 fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     if needle.is_empty() {
         return Some(0);
@@ -1369,6 +1384,7 @@ fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
         .position(|window| window == needle)
 }
 
+#[cfg(test)]
 fn rfind_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     if needle.is_empty() {
         return Some(haystack.len());
@@ -1472,6 +1488,7 @@ fn apply_prepared_ppf_writes(file: &mut File, writes: &[PreparedPpfWrite]) -> Re
     Ok(())
 }
 
+#[cfg(test)]
 fn read_u16_le(bytes: &[u8], offset: usize) -> Result<u16> {
     let end = offset
         .checked_add(2)
@@ -1496,6 +1513,7 @@ fn read_u32_le(bytes: &[u8], offset: usize) -> Result<u32> {
     Ok(u32::from_le_bytes(buf))
 }
 
+#[cfg(test)]
 fn read_u64_le(bytes: &[u8], offset: usize) -> Result<u64> {
     let end = offset
         .checked_add(8)

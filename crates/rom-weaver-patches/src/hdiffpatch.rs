@@ -2,7 +2,7 @@ use std::{
     fs::{self, File},
     io::{BufReader, BufWriter, Read, Write},
     path::Path,
-    sync::{Arc, Mutex},
+    sync::Arc,
 };
 
 use rayon::prelude::*;
@@ -11,10 +11,10 @@ use rom_weaver_codecs::{
     decode_zlib_exact, decode_zstd_exact,
 };
 use rom_weaver_core::{
-    BlockCacheReader, DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES,
-    FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
-    PatchCapabilities, PatchCreateRequest, PatchHandler, ProbeConfidence, Result, RomWeaverError,
-    ThreadCapability, ValidationCodeError,
+    DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES, FormatDescriptor,
+    OperationContext, OperationFamily, OperationReport, PatchApplyRequest, PatchCapabilities,
+    PatchCreateRequest, PatchHandler, ProbeConfidence, Result, RomWeaverError,
+    SharedBlockCacheReader, ThreadCapability, ValidationCodeError,
 };
 
 fn hdiff_validation_code(code: &'static str) -> ValidationCodeError {
@@ -90,11 +90,11 @@ impl PatchHandler for HdiffPatchHandler {
         let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
         let variant = parse_hdiff_patch_file(patch_path)?;
         let patch_len = fs::metadata(patch_path)?.len();
-        let patch_reader = Arc::new(Mutex::new(BlockCacheReader::open(
+        let patch_reader = Arc::new(SharedBlockCacheReader::open(
             patch_path,
             DEFAULT_BLOCK_CACHE_SIZE_BYTES,
             DEFAULT_BLOCK_CACHE_MAX_BLOCKS,
-        )?));
+        )?);
         let old_len = fs::metadata(&request.input)?.len();
         let old_data = HdiffOldData::from_path(&request.input)?;
 
@@ -448,16 +448,17 @@ impl<R: Read> HdiffFileParser<R> {
 }
 
 enum HdiffOldData<'a> {
+    #[allow(dead_code)]
     Bytes(&'a [u8]),
     Cached {
         len: usize,
-        reader: Arc<Mutex<BlockCacheReader>>,
+        reader: Arc<SharedBlockCacheReader>,
     },
 }
 
 impl<'a> HdiffOldData<'a> {
     fn from_path(path: &Path) -> Result<Self> {
-        let reader = BlockCacheReader::open(
+        let reader = SharedBlockCacheReader::open(
             path,
             DEFAULT_BLOCK_CACHE_SIZE_BYTES,
             DEFAULT_BLOCK_CACHE_MAX_BLOCKS,
@@ -467,7 +468,7 @@ impl<'a> HdiffOldData<'a> {
         })?;
         Ok(Self::Cached {
             len,
-            reader: Arc::new(Mutex::new(reader)),
+            reader: Arc::new(reader),
         })
     }
 
@@ -504,12 +505,7 @@ impl<'a> HdiffOldData<'a> {
                     ));
                 }
                 let mut range = vec![0u8; len];
-                let mut guard = reader.lock().map_err(|_| {
-                    RomWeaverError::Validation(
-                        "HDiffPatch source block cache lock is poisoned".into(),
-                    )
-                })?;
-                guard.read_exact_at(start as u64, range.as_mut_slice())?;
+                reader.read_exact_at(start as u64, range.as_mut_slice())?;
                 Ok(range)
             }
         }
@@ -621,6 +617,7 @@ fn parse_hdiff_patch_file(path: &Path) -> Result<ParsedPatchVariant> {
     Ok(variant)
 }
 
+#[cfg(test)]
 fn parse_hdiff_patch_view(raw: &[u8]) -> Result<ParsedPatchVariant> {
     let (header_text, mut index) = read_null_terminated_string(raw, 1024)?;
     let parts = header_text.split('&').collect::<Vec<_>>();
@@ -713,11 +710,13 @@ fn parse_hdiff_patch_view(raw: &[u8]) -> Result<ParsedPatchVariant> {
     Ok(variant)
 }
 
+#[cfg(test)]
 fn apply_hdiff13(old_bytes: &[u8], patch_bytes: &[u8], header: &ParsedHdiff13) -> Result<Vec<u8>> {
     let old_data = HdiffOldData::Bytes(old_bytes);
     apply_hdiff13_with_chunk_parallelism(&old_data, patch_bytes, header, false)
 }
 
+#[cfg(test)]
 fn apply_hdiff13_with_chunk_parallelism(
     old_data: &HdiffOldData<'_>,
     patch_bytes: &[u8],
@@ -730,7 +729,7 @@ fn apply_hdiff13_with_chunk_parallelism(
 
 fn apply_hdiff13_with_chunk_parallelism_from_reader(
     old_data: &HdiffOldData<'_>,
-    patch_reader: &Arc<Mutex<BlockCacheReader>>,
+    patch_reader: &Arc<SharedBlockCacheReader>,
     patch_len: u64,
     header: &ParsedHdiff13,
     parallel_chunks: bool,
@@ -771,6 +770,7 @@ fn hdiff13_chunk_offsets(header: &ParsedHdiff13) -> Result<(usize, usize, usize,
     Ok((cover_start, rle_ctrl_start, rle_code_start, new_diff_start))
 }
 
+#[cfg(test)]
 fn read_hdiff13_chunks_from_patch_bytes(
     patch_bytes: &[u8],
     header: &ParsedHdiff13,
@@ -876,7 +876,7 @@ fn read_hdiff13_chunks_from_patch_bytes(
 }
 
 fn read_hdiff13_chunks_from_patch_reader(
-    patch_reader: &Arc<Mutex<BlockCacheReader>>,
+    patch_reader: &Arc<SharedBlockCacheReader>,
     patch_len: u64,
     header: &ParsedHdiff13,
     parallel_chunks: bool,
@@ -1168,6 +1168,7 @@ fn hdiff13_apply_thread_capability(header: &ParsedHdiff13) -> ThreadCapability {
     }
 }
 
+#[cfg(test)]
 fn apply_hdiffsf20(
     old_bytes: &[u8],
     patch_bytes: &[u8],
@@ -1186,6 +1187,7 @@ fn hdiffsf20_apply_thread_capability(header: &ParsedHdiffSf20) -> ThreadCapabili
     }
 }
 
+#[cfg(test)]
 fn apply_hdiffsf20_with_step_parallelism(
     old_data: &HdiffOldData<'_>,
     patch_bytes: &[u8],
@@ -1198,7 +1200,7 @@ fn apply_hdiffsf20_with_step_parallelism(
 
 fn apply_hdiffsf20_with_step_parallelism_from_reader(
     old_data: &HdiffOldData<'_>,
-    patch_reader: &Arc<Mutex<BlockCacheReader>>,
+    patch_reader: &Arc<SharedBlockCacheReader>,
     patch_len: u64,
     header: &ParsedHdiffSf20,
     enable_parallel_steps: bool,
@@ -1207,6 +1209,7 @@ fn apply_hdiffsf20_with_step_parallelism_from_reader(
     apply_hdiffsf20_with_diff(old_data, diff.as_slice(), header, enable_parallel_steps)
 }
 
+#[cfg(test)]
 fn read_hdiffsf20_diff_from_patch_bytes(
     patch_bytes: &[u8],
     header: &ParsedHdiffSf20,
@@ -1234,7 +1237,7 @@ fn read_hdiffsf20_diff_from_patch_bytes(
 }
 
 fn read_hdiffsf20_diff_from_patch_reader(
-    patch_reader: &Arc<Mutex<BlockCacheReader>>,
+    patch_reader: &Arc<SharedBlockCacheReader>,
     patch_len: u64,
     header: &ParsedHdiffSf20,
 ) -> Result<Vec<u8>> {
@@ -1552,6 +1555,7 @@ fn write_hdiffsf20_step_bytes(
     Ok(())
 }
 
+#[cfg(test)]
 fn read_hdiff_chunk(
     patch_bytes: &[u8],
     start: usize,
@@ -1594,7 +1598,7 @@ fn read_hdiff_chunk(
 }
 
 fn read_hdiff_chunk_from_reader(
-    patch_reader: &Arc<Mutex<BlockCacheReader>>,
+    patch_reader: &Arc<SharedBlockCacheReader>,
     patch_len: u64,
     start: usize,
     plain_size: u64,
@@ -1628,12 +1632,7 @@ fn read_hdiff_chunk_from_reader(
         )
     })?;
     let mut raw = vec![0u8; raw_len];
-    {
-        let mut guard = patch_reader.lock().map_err(|_| {
-            RomWeaverError::Validation("HDiffPatch block cache lock is poisoned".into())
-        })?;
-        guard.read_exact_at(start as u64, raw.as_mut_slice())?;
-    }
+    patch_reader.read_exact_at(start as u64, raw.as_mut_slice())?;
 
     if compressed_size == 0 {
         return Ok(raw);
@@ -2079,6 +2078,7 @@ fn append_from_new_diff(
     Ok(())
 }
 
+#[cfg(test)]
 fn read_null_terminated_string(bytes: &[u8], max_len: usize) -> Result<(String, usize)> {
     let limit = bytes.len().min(max_len);
     for index in 0..limit {
@@ -2095,6 +2095,7 @@ fn read_null_terminated_string(bytes: &[u8], max_len: usize) -> Result<(String, 
     ))
 }
 
+#[cfg(test)]
 fn read_bool_byte(bytes: &[u8], index: &mut usize, label: &'static str) -> Result<bool> {
     Ok(read_u8_slice(bytes, index, label)? != 0)
 }

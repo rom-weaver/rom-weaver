@@ -268,6 +268,7 @@ fn parse_pmsr_file(path: &Path) -> Result<ParsedPmsrPatch> {
     })
 }
 
+#[cfg(test)]
 fn parse_pmsr_bytes(bytes: &[u8]) -> Result<ParsedPmsrPatch> {
     if bytes.len() < PMSR_HEADER_SIZE {
         return Err(RomWeaverError::Validation(
@@ -778,11 +779,13 @@ fn encode_pmsr_records(records: &[PmsrRecord]) -> Result<Vec<u8>> {
     Ok(bytes)
 }
 
+#[cfg(test)]
 fn read_u32_be(bytes: &[u8], cursor: &mut usize, label: &str) -> Result<u32> {
     let slice = read_exact(bytes, cursor, 4, label)?;
     Ok(u32::from_be_bytes([slice[0], slice[1], slice[2], slice[3]]))
 }
 
+#[cfg(test)]
 fn read_exact<'a>(
     bytes: &'a [u8],
     cursor: &mut usize,

@@ -408,6 +408,7 @@ fn parse_ips_file(path: &Path, flavor: IpsFlavor) -> Result<ParsedIpsPatch> {
     }
 }
 
+#[cfg(test)]
 fn parse_ips_bytes(bytes: &[u8], flavor: IpsFlavor) -> Result<ParsedIpsPatch> {
     if bytes.len() < flavor.header().len() + flavor.footer().len() {
         return Err(RomWeaverError::Validation(
@@ -1136,11 +1137,13 @@ fn read_u32(bytes: &[u8]) -> u32 {
         | u32::from(bytes[3])
 }
 
+#[cfg(test)]
 struct IpsParser<'a> {
     bytes: &'a [u8],
     offset: usize,
 }
 
+#[cfg(test)]
 impl<'a> IpsParser<'a> {
     fn new(bytes: &'a [u8]) -> Self {
         Self { bytes, offset: 0 }

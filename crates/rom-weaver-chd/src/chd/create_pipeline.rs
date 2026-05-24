@@ -38,7 +38,7 @@
 
             let hunk_bytes = self.hunk_bytes(create_kind, logical_bytes, ChdCodec::NONE);
             let unit_bytes = self.unit_bytes(create_kind);
-            if hunk_bytes == 0 || unit_bytes == 0 || hunk_bytes % unit_bytes != 0 {
+            if hunk_bytes == 0 || unit_bytes == 0 || !hunk_bytes.is_multiple_of(unit_bytes) {
                 return Err(RomWeaverError::Validation(
                     "invalid CHD geometry for rust create".into(),
                 ));
@@ -243,7 +243,9 @@
                     expected_hunk_bytes
                 )));
             }
-            if expected_unit_bytes == 0 || expected_hunk_bytes % expected_unit_bytes != 0 {
+            if expected_unit_bytes == 0
+                || !expected_hunk_bytes.is_multiple_of(expected_unit_bytes)
+            {
                 return Err(RomWeaverError::Validation(
                     "invalid parent/child geometry for differential create".to_string(),
                 ));
@@ -290,6 +292,7 @@
                 || Self::force_compressed_payload_for_primary_codec(primary_codec)
         }
 
+        #[allow(clippy::too_many_arguments)]
         fn create_compressed_rust_raw(
             &self,
             input: &Path,
@@ -320,6 +323,7 @@
             )
         }
 
+        #[allow(clippy::too_many_arguments)]
         fn create_compressed_rust_stream(
             &self,
             source: &mut dyn Read,
@@ -361,7 +365,7 @@
 
             let hunk_bytes = self.hunk_bytes(create_kind, logical_bytes, primary_codec);
             let unit_bytes = self.unit_bytes(create_kind);
-            if hunk_bytes == 0 || unit_bytes == 0 || hunk_bytes % unit_bytes != 0 {
+            if hunk_bytes == 0 || unit_bytes == 0 || !hunk_bytes.is_multiple_of(unit_bytes) {
                 return Err(RomWeaverError::Validation(
                     "invalid CHD geometry for rust compressed create".into(),
                 ));
@@ -492,9 +496,8 @@
                         data_hunks.push((index, std::mem::take(hunk), *crc16));
                     }
                 }
-                let compressed_hunks: Vec<Result<(usize, u8, Vec<u8>, u16)>> = if let Some(pool) =
-                    &pool
-                {
+                type CompressedHunkResult = Result<(usize, u8, Vec<u8>, u16)>;
+                let compressed_hunks: Vec<CompressedHunkResult> = if let Some(pool) = &pool {
                     if data_hunks.len() > 1 {
                         pool.install(|| {
                             data_hunks

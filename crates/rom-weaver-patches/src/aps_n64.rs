@@ -340,6 +340,7 @@ fn parse_aps_file(path: &Path) -> Result<ParsedApsPatch> {
     })
 }
 
+#[cfg(test)]
 fn parse_aps_bytes(bytes: &[u8]) -> Result<ParsedApsPatch> {
     if bytes.len() < APS_N64_BASE_HEADER_SIZE {
         return Err(RomWeaverError::Validation(
@@ -1034,6 +1035,7 @@ impl<R: Read> ApsFileParser<R> {
     }
 }
 
+#[cfg(test)]
 fn read_u32_le(bytes: &[u8], offset: usize) -> Result<u32> {
     let end = offset
         .checked_add(4)

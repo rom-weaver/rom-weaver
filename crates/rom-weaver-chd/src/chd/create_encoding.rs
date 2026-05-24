@@ -138,7 +138,7 @@
             pcm_bytes: &[u8],
             byte_order: FlacSampleByteOrder,
         ) -> Result<Vec<i32>> {
-            if pcm_bytes.len() % (Self::FLAC_CHANNELS * 2) != 0 {
+            if !pcm_bytes.len().is_multiple_of(Self::FLAC_CHANNELS * 2) {
                 return Err(RomWeaverError::Validation(format!(
                     "flac encode expects stereo 16-bit interleaved PCM bytes (len={} is not divisible by {})",
                     pcm_bytes.len(),
@@ -461,7 +461,7 @@
             if width == 0 || height == 0 {
                 return Ok(vec![0x80]);
             }
-            if width % 2 != 0 {
+            if !width.is_multiple_of(2) {
                 return Err(RomWeaverError::Validation(format!(
                     "avhuff encode expects even frame width; received {width}"
                 )));
@@ -795,7 +795,7 @@
                     "unexpected CD frame layout for rust CHD encoder".to_string(),
                 ));
             }
-            if hunk.len() % frame_bytes != 0 {
+            if !hunk.len().is_multiple_of(frame_bytes) {
                 return Err(RomWeaverError::Validation(
                     "cd hunk size must be a multiple of frame size".to_string(),
                 ));
@@ -1309,13 +1309,10 @@
             );
             let mut first_offset = 0_u64;
             for entry in entries {
-                match entry.compression_type {
-                    0..=Self::CHD_V5_MAP_TYPE_UNCOMPRESSED => {
-                        if first_offset == 0 {
-                            first_offset = entry.offset;
-                        }
-                    }
-                    _ => {}
+                if let 0..=Self::CHD_V5_MAP_TYPE_UNCOMPRESSED = entry.compression_type
+                    && first_offset == 0
+                {
+                    first_offset = entry.offset;
                 }
             }
 

@@ -281,7 +281,8 @@ mod tests {
             );
         }
 
-        for codec in ["store"] {
+        {
+            let codec = "store";
             let backend = registry.find_by_name(codec).expect("codec backend");
             assert_eq!(
                 backend.capabilities().encode_threads,

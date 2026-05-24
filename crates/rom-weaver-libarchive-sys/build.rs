@@ -190,7 +190,7 @@ fn patch_cmakelists_for_wasm(cmakelists_path: &Path) -> std::io::Result<()> {
     let mut lines = Vec::new();
     for line in content.lines() {
         let trimmed = line.trim();
-        if drop_entries.iter().any(|entry| trimmed == *entry) {
+        if drop_entries.contains(&trimmed) {
             continue;
         }
         lines.push(line);

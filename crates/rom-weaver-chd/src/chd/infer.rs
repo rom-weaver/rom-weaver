@@ -65,18 +65,18 @@
                             )));
                         }
                         _ => {
-                            let (mode, sector_bytes) = if logical_bytes
-                                % u64::try_from(DiscTrackMode::Mode1Raw.data_bytes())
-                                    .unwrap_or(2352)
-                                == 0
+                            let (mode, sector_bytes) = if logical_bytes.is_multiple_of(
+                                u64::try_from(DiscTrackMode::Mode1Raw.data_bytes())
+                                    .unwrap_or(2352),
+                            )
                             {
                                 (
                                     DiscTrackMode::Mode1Raw,
                                     DiscTrackMode::Mode1Raw.data_bytes(),
                                 )
-                            } else if logical_bytes
-                                % u64::try_from(DiscTrackMode::Mode1.data_bytes()).unwrap_or(2048)
-                                == 0
+                            } else if logical_bytes.is_multiple_of(
+                                u64::try_from(DiscTrackMode::Mode1.data_bytes()).unwrap_or(2048),
+                            )
                             {
                                 (DiscTrackMode::Mode1, DiscTrackMode::Mode1.data_bytes())
                             } else {
@@ -209,7 +209,7 @@
 
             for &(heads, sectors) in CANDIDATES {
                 let span = u64::from(heads) * u64::from(sectors);
-                if span == 0 || total_sectors % span != 0 {
+                if span == 0 || !total_sectors.is_multiple_of(span) {
                     continue;
                 }
 
@@ -289,7 +289,7 @@
             unit_bytes: u32,
             label: &str,
         ) -> Result<()> {
-            if logical_bytes % u64::from(unit_bytes) == 0 {
+            if logical_bytes.is_multiple_of(u64::from(unit_bytes)) {
                 Ok(())
             } else {
                 Err(RomWeaverError::Validation(format!(

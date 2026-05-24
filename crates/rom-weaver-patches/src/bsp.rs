@@ -146,6 +146,7 @@ fn apply_bsp_patch_bytes(
     write_result
 }
 
+#[cfg(test)]
 fn apply_bsp_patch_file(
     patch_bytes: &[u8],
     input_path: &Path,

@@ -12,20 +12,15 @@ pub enum PatchChecksumValidation {
     Ignore,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum XdeltaSecondaryMode {
     Auto,
     AutoFast,
     Djw,
     Fgk,
+    #[default]
     Lzma,
     None,
-}
-
-impl Default for XdeltaSecondaryMode {
-    fn default() -> Self {
-        Self::Lzma
-    }
 }
 
 impl fmt::Display for XdeltaSecondaryMode {

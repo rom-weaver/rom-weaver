@@ -2,17 +2,19 @@ use std::{
     fs::{self, File, OpenOptions},
     io::{self, BufReader, BufWriter, Read, Seek, SeekFrom, Write},
     path::Path,
-    sync::{Arc, Mutex},
+    sync::Arc,
 };
 
 use crc32fast::Hasher;
 use rayon::prelude::*;
-use rom_weaver_checksum::{checksum_file_values, crc32_bytes};
+use rom_weaver_checksum::checksum_file_values;
+#[cfg(test)]
+use rom_weaver_checksum::crc32_bytes;
 use rom_weaver_core::{
-    BlockCacheReader, DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES,
-    FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
-    PatchCapabilities, PatchChecksumValidation, PatchCreateRequest, PatchHandler, ProbeConfidence,
-    Result, RomWeaverError, SharedThreadPool, ThreadCapability,
+    DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES, FormatDescriptor,
+    OperationContext, OperationFamily, OperationReport, PatchApplyRequest, PatchCapabilities,
+    PatchChecksumValidation, PatchCreateRequest, PatchHandler, ProbeConfidence, Result,
+    RomWeaverError, SharedBlockCacheReader, SharedThreadPool, ThreadCapability,
 };
 use serde_json::json;
 
@@ -374,6 +376,7 @@ fn parse_bps_bytes(bytes: &[u8]) -> Result<ParsedBpsPatch> {
     parse_bps_bytes_with_checksum_validation(bytes, true)
 }
 
+#[cfg(test)]
 fn parse_bps_bytes_with_checksum_validation(
     bytes: &[u8],
     validate_patch_checksum: bool,
@@ -647,9 +650,9 @@ fn create_bps_patch_streaming(
                 )?;
             }
             None => {
-                append_target_read_bytes(
+                append_replacement_run_bytes(
+                    &mut original,
                     &mut modified,
-                    1,
                     &mut target_read,
                     &mut target_checksum,
                     &mut writer,
@@ -777,11 +780,11 @@ fn prepare_bps_writes_parallel(
     context: &OperationContext,
 ) -> Result<Vec<PreparedBpsWrite>> {
     let plans = collect_parallel_bps_write_plans(patch)?;
-    let shared_source = Arc::new(Mutex::new(BlockCacheReader::open(
+    let shared_source = Arc::new(SharedBlockCacheReader::open(
         source_path,
         DEFAULT_BLOCK_CACHE_SIZE_BYTES,
         DEFAULT_BLOCK_CACHE_MAX_BLOCKS,
-    )?));
+    )?);
     pool.install(|| {
         plans
             .par_iter()
@@ -805,12 +808,11 @@ fn prepare_bps_writes_parallel(
                                     )
                                 })?;
                             if readable > 0 {
-                                let mut reader = shared_source.lock().map_err(|_| {
-                                    RomWeaverError::Validation(
-                                        "BPS source cache lock poisoned".into(),
-                                    )
-                                })?;
-                                reader.read_exact_at(*source_offset, &mut bytes[..readable])?;
+                                read_parallel_bps_source_range(
+                                    &shared_source,
+                                    *source_offset,
+                                    &mut bytes[..readable],
+                                )?;
                             }
                         }
                         bytes
@@ -823,6 +825,14 @@ fn prepare_bps_writes_parallel(
             })
             .collect::<Result<Vec<_>>>()
     })
+}
+
+fn read_parallel_bps_source_range(
+    shared_source: &Arc<SharedBlockCacheReader>,
+    source_offset: u64,
+    output: &mut [u8],
+) -> Result<()> {
+    shared_source.read_exact_at(source_offset, output)
 }
 
 fn apply_prepared_bps_writes(output: &mut File, writes: &[PreparedBpsWrite]) -> Result<()> {
@@ -1208,6 +1218,75 @@ fn common_prefix_len(
         }
     }
     Ok(matched)
+}
+
+fn append_replacement_run_bytes(
+    original: &mut BufferedByteStream<impl Read>,
+    modified: &mut BufferedByteStream<impl Read>,
+    target_read: &mut Vec<u8>,
+    target_checksum: &mut Hasher,
+    writer: &mut BpsCreateWriter<'_, impl Write>,
+    created: &mut CreatedBpsPatch,
+) -> Result<()> {
+    loop {
+        original.fill_at_least(1)?;
+        modified.fill_at_least(1)?;
+        let original_slice = original.available_slice();
+        let modified_slice = modified.available_slice();
+        if modified_slice.is_empty() {
+            return Ok(());
+        }
+        if original_slice.is_empty() {
+            drain_remaining_target(modified, target_read, target_checksum, writer, created)?;
+            return Ok(());
+        }
+
+        let limit = original_slice.len().min(modified_slice.len());
+        let mut diff_len = 0usize;
+        while diff_len < limit && original_slice[diff_len] != modified_slice[diff_len] {
+            diff_len += 1;
+        }
+        if diff_len == 0 {
+            return Ok(());
+        }
+
+        append_target_read_slice(
+            &modified_slice[..diff_len],
+            target_read,
+            target_checksum,
+            writer,
+            created,
+        )?;
+        original.advance(diff_len)?;
+        modified.advance(diff_len)?;
+
+        if diff_len < limit {
+            return Ok(());
+        }
+    }
+}
+
+fn append_target_read_slice(
+    data: &[u8],
+    target_read: &mut Vec<u8>,
+    target_checksum: &mut Hasher,
+    writer: &mut BpsCreateWriter<'_, impl Write>,
+    created: &mut CreatedBpsPatch,
+) -> Result<()> {
+    let mut consumed = 0usize;
+    while consumed < data.len() {
+        let free = TARGET_READ_FLUSH_SIZE.saturating_sub(target_read.len());
+        let chunk = (data.len() - consumed).min(free.max(1));
+        let end = consumed + chunk;
+        target_checksum.update(&data[consumed..end]);
+        target_read.extend_from_slice(&data[consumed..end]);
+        consumed = end;
+
+        if target_read.len() >= TARGET_READ_FLUSH_SIZE {
+            flush_target_read(writer, target_read, created)?;
+        }
+    }
+    Ok(())
 }
 
 fn append_target_read_bytes(
@@ -1709,12 +1788,14 @@ fn checked_add(lhs: u64, rhs: u64, label: &str) -> Result<u64> {
         .ok_or_else(|| RomWeaverError::Validation(format!("{label} overflowed")))
 }
 
+#[cfg(test)]
 struct BpsParser<'a> {
     bytes: &'a [u8],
     offset: usize,
     end: usize,
 }
 
+#[cfg(test)]
 impl<'a> BpsParser<'a> {
     fn new(bytes: &'a [u8], end: usize) -> Self {
         Self {

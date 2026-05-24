@@ -6,14 +6,12 @@ fn xdelta_djw_compress(section: &[u8], section_kind: DjwSectionKind) -> Result<V
     }
 
     let (groups, sector_size) = djw_select_groups_and_sector_size(section.len(), section_kind)?;
-    if groups > 1 {
-        if let Ok(compressed) = xdelta_djw_compress_multi_group(section, groups, sector_size) {
-            if let Ok(decoded) = decode_djw_secondary(&compressed, section.len()) {
-                if decoded == section {
-                    return Ok(compressed);
-                }
-            }
-        }
+    if groups > 1
+        && let Ok(compressed) = xdelta_djw_compress_multi_group(section, groups, sector_size)
+        && let Ok(decoded) = decode_djw_secondary(&compressed, section.len())
+        && decoded == section
+    {
+        return Ok(compressed);
     }
 
     let frequencies = djw_count_byte_frequencies(section);
@@ -99,9 +97,8 @@ fn djw_select_groups_and_sector_size(
     if groups == 1 {
         return Ok((1, 0));
     }
-    if sector_size < DJW_SECTORSZ_MULT
-        || sector_size > DJW_SECTORSZ_MAX
-        || sector_size % DJW_SECTORSZ_MULT != 0
+    if !(DJW_SECTORSZ_MULT..=DJW_SECTORSZ_MAX).contains(&sector_size)
+        || !sector_size.is_multiple_of(DJW_SECTORSZ_MULT)
     {
         return Err(RomWeaverError::Validation(
             "xdelta djw encoder selected an invalid sector size".into(),
@@ -120,9 +117,8 @@ fn xdelta_djw_compress_multi_group(
             "xdelta djw encoder received an invalid group count".into(),
         ));
     }
-    if sector_size < DJW_SECTORSZ_MULT
-        || sector_size > DJW_SECTORSZ_MAX
-        || sector_size % DJW_SECTORSZ_MULT != 0
+    if !(DJW_SECTORSZ_MULT..=DJW_SECTORSZ_MAX).contains(&sector_size)
+        || !sector_size.is_multiple_of(DJW_SECTORSZ_MULT)
     {
         return Err(RomWeaverError::Validation(
             "xdelta djw encoder received an invalid sector size".into(),
@@ -213,6 +209,7 @@ fn xdelta_djw_compress_multi_group(
     Ok(writer.finish())
 }
 
+#[allow(clippy::needless_range_loop)]
 fn djw_seed_group_frequencies(groups: usize) -> Vec<[u32; DJW_ALPHABET_SIZE]> {
     let mut frequencies = vec![[0u32; DJW_ALPHABET_SIZE]; groups];
     for symbol in 0..DJW_ALPHABET_SIZE {
@@ -238,10 +235,12 @@ fn djw_smooth_group_frequencies(
     }
 }
 
+type DjwGroupCodeTables = (Vec<Vec<u8>>, Vec<Vec<usize>>);
+
 fn djw_build_group_code_tables(
     group_frequencies: &[[u32; DJW_ALPHABET_SIZE]],
     real_frequencies: &[u32; DJW_ALPHABET_SIZE],
-) -> Result<(Vec<Vec<u8>>, Vec<Vec<usize>>)> {
+) -> Result<DjwGroupCodeTables> {
     let mut lengths = Vec::with_capacity(group_frequencies.len());
     let mut codes = Vec::with_capacity(group_frequencies.len());
     for group in group_frequencies {

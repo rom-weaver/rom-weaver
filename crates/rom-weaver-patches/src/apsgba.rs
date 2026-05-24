@@ -1,17 +1,17 @@
 use std::{
     fs::{self, File, OpenOptions},
-    io::{BufReader, Read, Seek, SeekFrom, Write},
+    io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write},
     path::Path,
-    sync::{Arc, Mutex},
+    sync::Arc,
 };
 
 use rayon::prelude::*;
 use rom_weaver_checksum::crc16_ccitt_bytes as crc16_bytes;
 use rom_weaver_core::{
-    BlockCacheReader, DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES,
-    FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
-    PatchCapabilities, PatchChecksumValidation, PatchCreateRequest, PatchHandler, ProbeConfidence,
-    Result, RomWeaverError, SharedThreadPool, ThreadCapability,
+    DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES, FormatDescriptor,
+    OperationContext, OperationFamily, OperationReport, PatchApplyRequest, PatchCapabilities,
+    PatchChecksumValidation, PatchCreateRequest, PatchHandler, ProbeConfidence, Result,
+    RomWeaverError, SharedBlockCacheReader, SharedThreadPool, ThreadCapability,
 };
 
 const APS_GBA_MAGIC: &[u8; 4] = b"APS1";
@@ -154,7 +154,11 @@ impl PatchHandler for ApsGbaPatchHandler {
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
         }
-        fs::write(&request.output, created.bytes)?;
+        let mut output = BufWriter::new(File::create(&request.output)?);
+        for chunk in created.bytes.chunks(APS_GBA_IO_BUFFER_SIZE) {
+            output.write_all(chunk)?;
+        }
+        output.flush()?;
 
         Ok(OperationReport::succeeded(
             OperationFamily::Patch,
@@ -293,6 +297,7 @@ fn parse_apsgba_file(path: &Path) -> Result<ParsedApsGbaPatch> {
     })
 }
 
+#[cfg(test)]
 fn parse_apsgba_bytes(bytes: &[u8]) -> Result<ParsedApsGbaPatch> {
     if bytes.len() < APS_GBA_HEADER_SIZE {
         return Err(RomWeaverError::Validation(
@@ -463,11 +468,11 @@ fn prepare_apsgba_writes_parallel(
     context: &OperationContext,
 ) -> Result<Vec<PreparedApsGbaWrite>> {
     let output_len = usize::try_from(patch.target_size).expect("u32 fits usize");
-    let source = Arc::new(Mutex::new(BlockCacheReader::open(
+    let source = Arc::new(SharedBlockCacheReader::open(
         source_path,
         DEFAULT_BLOCK_CACHE_SIZE_BYTES,
         DEFAULT_BLOCK_CACHE_MAX_BLOCKS,
-    )?));
+    )?);
     pool.install(|| {
         patch
             .records
@@ -482,7 +487,7 @@ fn prepare_apsgba_writes_parallel(
 
 fn prepare_apsgba_write(
     record: &ApsGbaRecord,
-    source: &Arc<Mutex<BlockCacheReader>>,
+    source: &Arc<SharedBlockCacheReader>,
     source_len: u64,
     output_len: usize,
     validate_checksums: bool,
@@ -498,10 +503,7 @@ fn prepare_apsgba_write(
     };
     let mut source_block = vec![0u8; source_read_len];
     if source_read_len > 0 {
-        let mut source_reader = source.lock().map_err(|_| {
-            RomWeaverError::Validation("APSGBA source block cache lock poisoned".into())
-        })?;
-        source_reader.read_exact_at(source_offset, &mut source_block)?;
+        source.read_exact_at(source_offset, &mut source_block)?;
     }
 
     if validate_checksums {
@@ -647,16 +649,16 @@ fn create_apsgba_patch_parallel(
         RomWeaverError::Validation("APSGBA target size exceeded 32-bit header range".into())
     })?;
     let block_count = apsgba_create_block_count(source_size_u64.max(target_size_u64))?;
-    let source = Arc::new(Mutex::new(BlockCacheReader::open(
+    let source = Arc::new(SharedBlockCacheReader::open(
         source_path,
         DEFAULT_BLOCK_CACHE_SIZE_BYTES,
         DEFAULT_BLOCK_CACHE_MAX_BLOCKS,
-    )?));
-    let target = Arc::new(Mutex::new(BlockCacheReader::open(
+    )?);
+    let target = Arc::new(SharedBlockCacheReader::open(
         target_path,
         DEFAULT_BLOCK_CACHE_SIZE_BYTES,
         DEFAULT_BLOCK_CACHE_MAX_BLOCKS,
-    )?));
+    )?);
 
     let records = pool.install(|| {
         (0..block_count)
@@ -685,8 +687,8 @@ fn create_apsgba_record_for_block(
     block_index: usize,
     source_len: u64,
     target_len: u64,
-    source_reader: &Arc<Mutex<BlockCacheReader>>,
-    target_reader: &Arc<Mutex<BlockCacheReader>>,
+    source_reader: &Arc<SharedBlockCacheReader>,
+    target_reader: &Arc<SharedBlockCacheReader>,
 ) -> Result<Option<ApsGbaRecord>> {
     let offset = block_index
         .checked_mul(APS_GBA_BLOCK_SIZE)
@@ -723,7 +725,7 @@ fn create_apsgba_record_for_block(
 }
 
 fn read_apsgba_block(
-    reader: &Arc<Mutex<BlockCacheReader>>,
+    reader: &Arc<SharedBlockCacheReader>,
     file_len: u64,
     offset: u64,
 ) -> Result<Vec<u8>> {
@@ -734,10 +736,7 @@ fn read_apsgba_block(
         .map_err(|_| RomWeaverError::Validation("APSGBA block length exceeded usize".into()))?;
     let mut block = vec![0u8; read_len];
     if read_len > 0 {
-        let mut locked = reader
-            .lock()
-            .map_err(|_| RomWeaverError::Validation("APSGBA block cache lock poisoned".into()))?;
-        locked.read_exact_at(offset, &mut block)?;
+        reader.read_exact_at(offset, &mut block)?;
     }
     Ok(block)
 }
@@ -800,6 +799,7 @@ fn crc16_range(bytes: &[u8], offset: usize, len: usize) -> u16 {
     crc16_bytes(&bytes[offset..end])
 }
 
+#[cfg(test)]
 fn read_u16_le(bytes: &[u8], offset: usize) -> Result<u16> {
     let end = offset
         .checked_add(2)

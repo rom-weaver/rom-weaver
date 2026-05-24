@@ -86,6 +86,7 @@ fn compute_sequential_stream(
         .collect())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn compute_parallel_fanout(
     mapped: Option<&MappedRange>,
     source: &Path,

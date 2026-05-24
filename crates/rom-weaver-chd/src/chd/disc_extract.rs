@@ -725,9 +725,7 @@
                     if single_bin {
                         write_single_bin = true;
                     } else {
-                        for selected in &mut write_split_tracks {
-                            *selected = true;
-                        }
+                        write_split_tracks.fill(true);
                     }
                 }
             }
@@ -875,49 +873,40 @@
                     for (track_index, track) in layout.tracks.iter().enumerate() {
                         let track_name = &split_track_names[track_index];
                         let track_selected = write_split_tracks[track_index];
-                        if let Some(writer) = cue_writer.as_mut() {
-                            if track_selected {
-                                writer.write_all(
-                                    format!("FILE \"{track_name}\" BINARY\n").as_bytes(),
-                                )?;
+                        if track_selected
+                            && let Some(writer) = cue_writer.as_mut()
+                        {
+                            writer.write_all(format!("FILE \"{track_name}\" BINARY\n").as_bytes())?;
+                            writer.write_all(
+                                format!("  TRACK {:02} {}\n", track.number, track.mode.cue_label())
+                                    .as_bytes(),
+                            )?;
+                            if track.pregap_frames > 0 && track.pregap_has_data {
+                                writer.write_all(b"    INDEX 00 00:00:00\n")?;
                                 writer.write_all(
                                     format!(
-                                        "  TRACK {:02} {}\n",
-                                        track.number,
-                                        track.mode.cue_label()
+                                        "    INDEX 01 {}\n",
+                                        self.format_msf(track.pregap_frames)
                                     )
                                     .as_bytes(),
                                 )?;
-                                if track.pregap_frames > 0 && track.pregap_has_data {
-                                    writer.write_all(b"    INDEX 00 00:00:00\n")?;
-                                    writer.write_all(
-                                        format!(
-                                            "    INDEX 01 {}\n",
-                                            self.format_msf(track.pregap_frames)
-                                        )
+                            } else if track.pregap_frames > 0 {
+                                writer.write_all(
+                                    format!("    PREGAP {}\n", self.format_msf(track.pregap_frames))
                                         .as_bytes(),
-                                    )?;
-                                } else if track.pregap_frames > 0 {
-                                    writer.write_all(
-                                        format!(
-                                            "    PREGAP {}\n",
-                                            self.format_msf(track.pregap_frames)
-                                        )
-                                        .as_bytes(),
-                                    )?;
-                                    writer.write_all(b"    INDEX 01 00:00:00\n")?;
-                                } else {
-                                    writer.write_all(b"    INDEX 01 00:00:00\n")?;
-                                }
-                                if track.postgap_frames > 0 {
-                                    writer.write_all(
-                                        format!(
-                                            "    POSTGAP {}\n",
-                                            self.format_msf(track.postgap_frames)
-                                        )
-                                        .as_bytes(),
-                                    )?;
-                                }
+                                )?;
+                                writer.write_all(b"    INDEX 01 00:00:00\n")?;
+                            } else {
+                                writer.write_all(b"    INDEX 01 00:00:00\n")?;
+                            }
+                            if track.postgap_frames > 0 {
+                                writer.write_all(
+                                    format!(
+                                        "    POSTGAP {}\n",
+                                        self.format_msf(track.postgap_frames)
+                                    )
+                                    .as_bytes(),
+                                )?;
                             }
                         }
                     }
@@ -1118,9 +1107,7 @@
                 track_names.push(track_name);
             }
             if selection_requested && write_gdi && !write_tracks.iter().any(|selected| *selected) {
-                for selected in &mut write_tracks {
-                    *selected = true;
-                }
+                write_tracks.fill(true);
             }
             selections.ensure_all_matched()?;
 

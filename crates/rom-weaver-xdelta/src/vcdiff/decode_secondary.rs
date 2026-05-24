@@ -82,9 +82,9 @@ fn decode_djw_secondary(input: &[u8], output_size: usize) -> Result<Vec<u8>> {
         )?;
     }
 
-    for sector_index in 0..sectors {
+    for &selected_group in selected_groups.iter().take(sectors) {
         let group_index = if groups > 1 {
-            usize::from(selected_groups[sector_index])
+            usize::from(selected_group)
         } else {
             0
         };
@@ -155,6 +155,7 @@ fn decode_djw_clclen_table(
     build_djw_decoder_table(&cl_clen, DJW_TOTAL_CODES, DJW_MAX_CLCLEN)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn decode_djw_1_2(
     state: &mut DjwBitState,
     input: &[u8],
@@ -816,14 +817,14 @@ impl FgkState {
         })?;
 
         let mut nodes = vec![FgkNode::default(); total_nodes];
-        for index in 0..alphabet_size {
+        for (index, node) in nodes.iter_mut().enumerate().take(alphabet_size) {
             let right_child = if index + 1 < alphabet_size {
                 Some(index + 1)
             } else {
                 None
             };
             let left_child = if index >= 1 { Some(index - 1) } else { None };
-            nodes[index] = FgkNode {
+            *node = FgkNode {
                 weight: 0,
                 parent: None,
                 left_child,

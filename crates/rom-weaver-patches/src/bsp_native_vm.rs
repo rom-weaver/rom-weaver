@@ -4,12 +4,12 @@ use std::{
     fs::OpenOptions,
     io::{Read, Seek, SeekFrom, Write},
     path::Path,
-    sync::{Arc, Mutex},
+    sync::Arc,
 };
 
 use rom_weaver_core::{
-    BlockCacheReader, DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES,
-    RomWeaverError, SharedThreadPool,
+    DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES, RomWeaverError,
+    SharedBlockCacheReader, SharedThreadPool,
 };
 use sha1::{Digest, Sha1};
 
@@ -28,11 +28,12 @@ enum VmOutcome {
 }
 
 enum PatchSpace<'a> {
+    #[allow(dead_code)]
     Borrowed(&'a [u8]),
     Owned(Vec<u8>),
     Cached {
         len: usize,
-        reader: Arc<Mutex<BlockCacheReader>>,
+        reader: Arc<SharedBlockCacheReader>,
     },
 }
 
@@ -86,14 +87,9 @@ impl<'a> PatchSpace<'a> {
                 output.copy_from_slice(&bytes[start..end]);
                 Ok(())
             }
-            Self::Cached { reader, .. } => {
-                let mut guard = reader
-                    .lock()
-                    .map_err(|_| "BSP patch block cache lock is poisoned".to_string())?;
-                guard
-                    .read_exact_at(start as u64, output)
-                    .map_err(|error| format!("failed to read BSP patch data: {error}"))
-            }
+            Self::Cached { reader, .. } => reader
+                .read_exact_at(start as u64, output)
+                .map_err(|error| format!("failed to read BSP patch data: {error}")),
         }
     }
 }
@@ -271,6 +267,7 @@ struct BspVm<'a, 'pool> {
 }
 
 impl<'a, 'pool> BspVm<'a, 'pool> {
+    #[cfg(test)]
     fn new(
         patch_bytes: &'a [u8],
         input_path: &Path,
@@ -290,7 +287,7 @@ impl<'a, 'pool> BspVm<'a, 'pool> {
                 .len(),
         )
         .map_err(|_| "BSP patch length overflow".to_string())?;
-        let reader = BlockCacheReader::open(
+        let reader = SharedBlockCacheReader::open(
             patch_path,
             DEFAULT_BLOCK_CACHE_SIZE_BYTES,
             DEFAULT_BLOCK_CACHE_MAX_BLOCKS,
@@ -298,7 +295,7 @@ impl<'a, 'pool> BspVm<'a, 'pool> {
         .map_err(|error| format!("failed to open BSP patch block cache: {error}"))?;
         let patch_space = PatchSpace::Cached {
             len: patch_len,
-            reader: Arc::new(Mutex::new(reader)),
+            reader: Arc::new(reader),
         };
         Self::new_with_patch_space(patch_space, input_path, None)
     }
@@ -1562,6 +1559,7 @@ impl<'a, 'pool> BspVm<'a, 'pool> {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn apply_bsp_patch_file_native(
     patch_bytes: &[u8],
     file_path: &Path,

@@ -126,6 +126,7 @@ fn emit_chd_running_progress(
     });
 }
 
+#[allow(clippy::too_many_arguments)]
 fn maybe_emit_chd_byte_progress(
     context: &OperationContext,
     command: &str,

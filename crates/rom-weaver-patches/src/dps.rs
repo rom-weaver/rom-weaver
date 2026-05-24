@@ -2,15 +2,16 @@ use std::{
     fs::{self, File, OpenOptions},
     io::{BufReader, Read, Seek, SeekFrom, Write},
     path::Path,
-    sync::{Arc, Mutex},
+    sync::Arc,
 };
 
 use rayon::prelude::*;
 use rom_weaver_core::{
-    BlockCacheReader, DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES,
-    FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
-    PatchCapabilities, PatchChecksumValidation, PatchCreateRequest, PatchHandler, ProbeConfidence,
-    Result, RomWeaverError, SharedThreadPool, ThreadCapability, ValidationCodeError,
+    DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES, FormatDescriptor,
+    OperationContext, OperationFamily, OperationReport, PatchApplyRequest, PatchCapabilities,
+    PatchChecksumValidation, PatchCreateRequest, PatchHandler, ProbeConfidence, Result,
+    RomWeaverError, SharedBlockCacheReader, SharedThreadPool, ThreadCapability,
+    ValidationCodeError,
 };
 
 const DPS_TEXT_FIELD_BYTES: usize = 64;
@@ -127,7 +128,6 @@ impl PatchHandler for DpsPatchHandler {
             fs::create_dir_all(parent)?;
         }
         let mut output = OpenOptions::new()
-            .read(true)
             .write(true)
             .create(true)
             .truncate(true)
@@ -527,6 +527,7 @@ fn parse_dps_file(path: &Path, mode: DpsParseMode) -> Result<ParsedDpsPatch> {
     })
 }
 
+#[cfg(test)]
 fn parse_dps_bytes(bytes: &[u8], mode: DpsParseMode) -> Result<ParsedDpsPatch> {
     if bytes.len() < DPS_HEADER_BYTES {
         return Err(RomWeaverError::ValidationCode(
@@ -1152,11 +1153,11 @@ fn prepare_dps_writes_parallel(
     pool: &SharedThreadPool,
     context: &OperationContext,
 ) -> Result<Vec<PreparedDpsWrite>> {
-    let shared_source = Arc::new(Mutex::new(BlockCacheReader::open(
+    let shared_source = Arc::new(SharedBlockCacheReader::open(
         source_path,
         DEFAULT_BLOCK_CACHE_SIZE_BYTES,
         DEFAULT_BLOCK_CACHE_MAX_BLOCKS,
-    )?));
+    )?);
     pool.install(|| {
         records
             .par_iter()
@@ -1172,7 +1173,7 @@ fn prepare_dps_write(
     record: &ParsedDpsRecord,
     source_len: usize,
     output_len: usize,
-    source: &Arc<Mutex<BlockCacheReader>>,
+    source: &Arc<SharedBlockCacheReader>,
 ) -> Result<PreparedDpsWrite> {
     match record {
         ParsedDpsRecord::CopyFromSource {
@@ -1187,10 +1188,7 @@ fn prepare_dps_write(
             debug_assert_eq!(source_end - source_start, output_end - output_start);
             let mut bytes = vec![0u8; source_end - source_start];
             if !bytes.is_empty() {
-                let mut reader = source.lock().map_err(|_| {
-                    RomWeaverError::Validation("DPS source cache lock poisoned".into())
-                })?;
-                reader.read_exact_at(source_start as u64, &mut bytes)?;
+                source.read_exact_at(source_start as u64, &mut bytes)?;
             }
             Ok(PreparedDpsWrite {
                 output_offset: output_start as u64,
@@ -1340,15 +1338,18 @@ fn parse_text_field(bytes: &[u8]) -> String {
     String::from_utf8_lossy(&bytes[..end]).trim().to_string()
 }
 
+#[cfg(test)]
 fn read_u8(bytes: &[u8], cursor: &mut usize, label: &'static str) -> Result<u8> {
     Ok(read_exact(bytes, cursor, 1, label)?[0])
 }
 
+#[cfg(test)]
 fn read_u32_le(bytes: &[u8], cursor: &mut usize, label: &'static str) -> Result<u32> {
     let raw = read_exact(bytes, cursor, 4, label)?;
     Ok(u32::from_le_bytes([raw[0], raw[1], raw[2], raw[3]]))
 }
 
+#[cfg(test)]
 fn read_exact<'a>(
     bytes: &'a [u8],
     cursor: &mut usize,

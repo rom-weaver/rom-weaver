@@ -13,16 +13,11 @@ pub enum ThreadMode {
     Fixed,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum ThreadBudget {
+    #[default]
     Auto,
     Fixed(usize),
-}
-
-impl Default for ThreadBudget {
-    fn default() -> Self {
-        Self::Auto
-    }
 }
 
 impl ThreadBudget {
@@ -101,6 +96,7 @@ impl ThreadCapability {
 
     pub fn negotiate(&self, budget: ThreadBudget) -> ThreadExecution {
         let requested_threads = budget.requested_threads();
+        let effective_budget_threads = requested_threads;
         let execution = match self {
             Self::SingleThreaded => ThreadExecution {
                 requested_threads,
@@ -112,8 +108,8 @@ impl ThreadCapability {
             },
             Self::Parallel { max_threads } => {
                 let effective_threads = max_threads
-                    .map(|limit| requested_threads.min(limit.max(1)))
-                    .unwrap_or(requested_threads)
+                    .map(|limit| effective_budget_threads.min(limit.max(1)))
+                    .unwrap_or(effective_budget_threads)
                     .max(1);
                 ThreadExecution {
                     requested_threads,
