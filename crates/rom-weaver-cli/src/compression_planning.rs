@@ -53,7 +53,7 @@ impl CliApp {
     }
 
     fn context(&self, thread_budget: ThreadBudget) -> OperationContext {
-        let temp_root = PathBuf::from("rom-weaver");
+        let temp_root = Self::default_temp_root();
         let reporter: Arc<dyn ProgressSink> = if self.emit_progress_events {
             self.reporter.clone()
         } else {
@@ -62,6 +62,16 @@ impl CliApp {
             ))
         };
         OperationContext::new(thread_budget, temp_root, reporter, CancellationToken::new())
+    }
+
+    fn default_temp_root() -> PathBuf {
+        if let Some(pwd) = std::env::var_os("PWD").map(PathBuf::from)
+            && pwd.is_absolute()
+        {
+            return pwd.join("rom-weaver");
+        }
+
+        PathBuf::from("rom-weaver")
     }
 
     fn runtime_process_id() -> u32 {
