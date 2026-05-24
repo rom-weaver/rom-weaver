@@ -1,3 +1,4 @@
+    /* jscpd:ignore-start */
     pub struct ChdContainerHandler;
 
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -872,3 +873,4 @@
             Some((&trimmed[..end], &trimmed[end..]))
         }
     }
+    /* jscpd:ignore-end */

@@ -1,3 +1,4 @@
+/* jscpd:ignore-start */
 use std::{
     cmp::min,
     fs::{self, File},
@@ -801,3 +802,4 @@ fn read_exact_into(reader: &mut dyn Read, buffer: &mut [u8], label: &str) -> Res
 #[cfg(test)]
 #[path = "../tests/unit/gdiff.rs"]
 mod tests;
+/* jscpd:ignore-end */

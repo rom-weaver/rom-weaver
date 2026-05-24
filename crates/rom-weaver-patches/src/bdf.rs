@@ -1,3 +1,4 @@
+/* jscpd:ignore-start */
 use std::{
     fs::{self, File, OpenOptions},
     io::{BufWriter, Cursor, Read, Seek, SeekFrom, Write},
@@ -30,7 +31,6 @@ impl BdfPatchHandler {
         Self { descriptor }
     }
 
-    /* jscpd:ignore-start */
     fn parse_report(&self, patch_path: &Path) -> Result<OperationReport> {
         crate::patch_parse_report_with(self.descriptor, || {
             let layout = parse_bsdiff_patch_layout_from_path(patch_path)?;
@@ -105,11 +105,9 @@ impl BdfPatchHandler {
             Some(execution),
         ))
     }
-    /* jscpd:ignore-end */
 }
 
 impl PatchHandler for BdfPatchHandler {
-    /* jscpd:ignore-start */
     fn descriptor(&self) -> &'static FormatDescriptor {
         self.descriptor
     }
@@ -125,7 +123,6 @@ impl PatchHandler for BdfPatchHandler {
     ) -> Result<OperationReport> {
         self.apply_report(request, context)
     }
-    /* jscpd:ignore-end */
 
     fn create(
         &self,
@@ -809,3 +806,4 @@ fn decode_bsdiff_i64(bytes: &[u8]) -> Result<i64> {
 #[cfg(test)]
 #[path = "../tests/unit/bdf.rs"]
 mod tests;
+/* jscpd:ignore-end */

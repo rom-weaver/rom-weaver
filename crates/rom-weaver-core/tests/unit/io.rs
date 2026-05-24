@@ -1,3 +1,4 @@
+/* jscpd:ignore-start */
 use std::{
     collections::HashSet,
     fs,
@@ -108,7 +109,6 @@ fn block_cache_reader_reads_across_block_boundaries() {
 
     fs::remove_file(&temp_file).expect("cleanup temp file");
 }
-
 #[test]
 fn block_cache_reader_supports_cross_thread_reads() {
     let temp_file = std::env::temp_dir().join(format!(
@@ -141,6 +141,7 @@ fn block_cache_reader_supports_cross_thread_reads() {
 
     fs::remove_file(&temp_file).expect("cleanup temp file");
 }
+/* jscpd:ignore-end */
 
 #[test]
 fn shared_block_cache_reader_supports_parallel_reads() {

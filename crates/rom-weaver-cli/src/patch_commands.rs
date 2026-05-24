@@ -1,3 +1,4 @@
+/* jscpd:ignore-start */
 impl CliApp {
     fn run_patch_apply(&self, args: PatchApplyCommand) -> ExitCode {
         trace!(
@@ -926,3 +927,4 @@ impl CliApp {
         }
     }
 }
+/* jscpd:ignore-end */

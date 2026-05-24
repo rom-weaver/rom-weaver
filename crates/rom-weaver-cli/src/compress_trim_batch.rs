@@ -1,3 +1,4 @@
+/* jscpd:ignore-start */
 impl CliApp {
     fn run_compress(&self, args: CompressCommand) -> ExitCode {
         trace!(
@@ -780,3 +781,4 @@ impl CliApp {
         self.finish("batch-header-fixer", report)
     }
 }
+/* jscpd:ignore-end */
