@@ -10,7 +10,6 @@ use std::{
     },
 };
 
-use akv::reader::ArchiveReader as LibarchiveReadArchive;
 use ciso::{read::CSOReader as CsoReader, split::SplitFileReader};
 use lz4_flex::frame::{
     BlockMode as Lz4BlockMode, BlockSize as Lz4BlockSize, FrameEncoder as Lz4FrameEncoder,
@@ -39,13 +38,12 @@ use rom_weaver_core::{
     ThreadCapability, ThreadExecution, bounded_items_for_threads,
 };
 use rom_weaver_libarchive::{
-    EntryFileType, EntrySpec, ReadArchive, ReadFilter as LibarchiveReadFilter, WriteArchive,
+    EntryFileType, EntrySpec, ReadArchive, ReadFilter as LibarchiveReadFilter,
+    RegularArchiveProbeFormat as LibarchiveProbeFormat, SelectedRegularArchiveEntry, WriteArchive,
     WriteFilter as LibarchiveCreateFilter, WriteFormat as LibarchiveCreateFormat,
-    ZeroWriteBehavior,
-    sys::{
-        ARCHIVE_FORMAT_7ZIP, ARCHIVE_FORMAT_BASE_MASK, ARCHIVE_FORMAT_RAR, ARCHIVE_FORMAT_RAR_V5,
-        ARCHIVE_FORMAT_TAR, ARCHIVE_FORMAT_ZIP,
-    },
+    ZeroWriteBehavior, inspect_regular_archive as inspect_regular_archive_with_libarchive_impl,
+    list_regular_archive_entries, probe_regular_archive_format,
+    visit_selected_regular_archive_entries,
 };
 use xdvdfs::{
     blockdev::OffsetWrapper as XdvdfsOffsetWrapper, write::fs::XDVDFSFilesystem as XdvdfsFilesystem,
@@ -561,11 +559,7 @@ fn character_class_matches(class: &[char], value: char) -> bool {
         index += 1;
     }
 
-    if negated {
-        !matched
-    } else {
-        matched
-    }
+    if negated { !matched } else { matched }
 }
 
 #[derive(Debug, Default)]
@@ -1239,63 +1233,15 @@ struct LibarchiveExtractTask {
     logical_bytes: Option<u64>,
 }
 
-#[derive(Clone, Copy, Debug)]
-enum LibarchiveProbeFormat {
-    Zip,
-    SevenZ,
-    Rar,
-    Tar,
-}
-
-#[derive(Clone, Debug)]
-struct LibarchiveInspectSummary {
-    entries_total: usize,
-    files: usize,
-    directories: usize,
-    archive_bytes: u64,
-    logical_bytes: u64,
-}
-
-fn open_libarchive_reader(
-    source: &Path,
-    format_name: &str,
-) -> Result<LibarchiveReadArchive<'static>> {
-    let file = File::open(source)?;
-    LibarchiveReadArchive::open_io(file).map_err(|error| {
-        RomWeaverError::Validation(format!("{format_name} archive is invalid: {error}"))
-    })
-}
-
-fn libarchive_format_matches(format: i32, expected: LibarchiveProbeFormat) -> bool {
-    let base_format = format & ARCHIVE_FORMAT_BASE_MASK;
-    match expected {
-        LibarchiveProbeFormat::Zip => base_format == ARCHIVE_FORMAT_ZIP,
-        LibarchiveProbeFormat::SevenZ => base_format == ARCHIVE_FORMAT_7ZIP,
-        LibarchiveProbeFormat::Rar => {
-            base_format == ARCHIVE_FORMAT_RAR || base_format == ARCHIVE_FORMAT_RAR_V5
-        }
-        LibarchiveProbeFormat::Tar => base_format == ARCHIVE_FORMAT_TAR,
-    }
-}
-
-fn detect_libarchive_format(source: &Path, format_name: &str) -> Result<i32> {
-    let mut reader = open_libarchive_reader(source, format_name)?;
-    let first_entry = reader.next_entry().map_err(|error| {
-        RomWeaverError::Validation(format!(
-            "{format_name} probe failed while reading header: {error}"
-        ))
-    })?;
-    drop(first_entry);
-    Ok(reader.format())
-}
+type LibarchiveInspectSummary = rom_weaver_libarchive::RegularArchiveInspectSummary;
 
 fn probe_regular_archive_with_libarchive(
     source: &Path,
     format_name: &str,
     expected: LibarchiveProbeFormat,
 ) -> ProbeConfidence {
-    match detect_libarchive_format(source, format_name) {
-        Ok(format) if libarchive_format_matches(format, expected) => ProbeConfidence::Signature,
+    match probe_regular_archive_format(source, format_name, expected) {
+        Ok(true) => ProbeConfidence::Signature,
         _ => ProbeConfidence::Extension,
     }
 }
@@ -1304,84 +1250,18 @@ fn inspect_regular_archive_with_libarchive(
     source: &Path,
     format_name: &str,
 ) -> Result<LibarchiveInspectSummary> {
-    let mut reader = open_libarchive_reader(source, format_name)?;
-    let mut summary = LibarchiveInspectSummary {
-        entries_total: 0,
-        files: 0,
-        directories: 0,
-        archive_bytes: fs::metadata(source)?.len(),
-        logical_bytes: 0,
-    };
-    let mut index = 0usize;
-
-    while let Some(entry) = reader.next_entry().map_err(|error| {
-        RomWeaverError::Validation(format!(
-            "{format_name} inspect failed while reading entry {index}: {error}"
-        ))
-    })? {
-        let entry_path = match entry.pathname_utf8() {
-            Ok(path) => path.to_owned(),
-            Err(_) => entry
-                .pathname_mb()
-                .map(|path| path.to_string_lossy().into_owned())
-                .map_err(|error| {
-                    RomWeaverError::Validation(format!(
-                        "{format_name} inspect failed while decoding entry {index}: {error}"
-                    ))
-                })?,
-        };
-        if normalize_archive_name(&entry_path).is_empty() {
-            index = index.saturating_add(1);
-            continue;
-        }
-
-        summary.entries_total = summary.entries_total.saturating_add(1);
-        if entry.is_dir() {
-            summary.directories = summary.directories.saturating_add(1);
-        } else {
-            summary.files = summary.files.saturating_add(1);
-            if let Some(size) = entry.size() {
-                summary.logical_bytes = summary.logical_bytes.saturating_add(size);
-            }
-        }
-        index = index.saturating_add(1);
-    }
-
-    Ok(summary)
+    inspect_regular_archive_with_libarchive_impl(source, format_name)
 }
 
 fn list_regular_archive_entries_with_libarchive(
     source: &Path,
     format_name: &str,
 ) -> Result<Vec<String>> {
-    let mut reader = open_libarchive_reader(source, format_name)?;
-    let mut entries = Vec::new();
-    let mut index = 0usize;
-
-    while let Some(entry) = reader.next_entry().map_err(|error| {
-        RomWeaverError::Validation(format!(
-            "{format_name} list failed while reading entry {index}: {error}"
-        ))
-    })? {
-        let entry_path = match entry.pathname_utf8() {
-            Ok(path) => path.to_owned(),
-            Err(_) => entry
-                .pathname_mb()
-                .map(|path| path.to_string_lossy().into_owned())
-                .map_err(|error| {
-                    RomWeaverError::Validation(format!(
-                        "{format_name} list failed while decoding entry {index}: {error}"
-                    ))
-                })?,
-        };
-        let archive_name = normalize_archive_name(&entry_path);
-        if !archive_name.is_empty() {
-            entries.push(archive_name);
-        }
-        index = index.saturating_add(1);
-    }
-
-    Ok(entries)
+    Ok(list_regular_archive_entries(source, format_name)?
+        .into_iter()
+        .map(|entry| normalize_archive_name(&entry.path))
+        .filter(|entry| !entry.is_empty())
+        .collect())
 }
 
 fn build_libarchive_extract_tasks(
@@ -1390,42 +1270,24 @@ fn build_libarchive_extract_tasks(
     selections: &[String],
     format_name: &str,
 ) -> Result<Vec<LibarchiveExtractTask>> {
-    let mut reader = open_libarchive_reader(source, format_name)?;
     let mut matcher = SelectionMatcher::new(selections);
     let mut tasks = Vec::new();
-    let mut index = 0usize;
 
-    while let Some(entry) = reader.next_entry().map_err(|error| {
-        RomWeaverError::Validation(format!(
-            "{format_name} extract failed while reading entry {index}: {error}"
-        ))
-    })? {
-        let entry_path = match entry.pathname_utf8() {
-            Ok(path) => path.to_owned(),
-            Err(_) => entry
-                .pathname_mb()
-                .map(|path| path.to_string_lossy().into_owned())
-                .map_err(|error| {
-                    RomWeaverError::Validation(format!(
-                        "{format_name} extract failed while decoding entry {index}: {error}"
-                    ))
-                })?,
-        };
+    for entry in list_regular_archive_entries(source, format_name)? {
+        let entry_path = entry.path;
         let archive_name = normalize_archive_name(&entry_path);
         if archive_name.is_empty() || !matcher.matches(&archive_name) {
-            index = index.saturating_add(1);
             continue;
         }
         let relative = sanitize_archive_relative_path_from_str(&entry_path)?;
-        let is_dir = entry.is_dir() || entry_path.ends_with('/') || entry_path.ends_with('\\');
+        let is_dir = entry.is_dir;
         tasks.push(LibarchiveExtractTask {
-            index,
+            index: entry.index,
             archive_name,
             output_path: out_dir.join(relative),
             is_dir,
-            logical_bytes: if is_dir { Some(0) } else { entry.size() },
+            logical_bytes: if is_dir { Some(0) } else { entry.size },
         });
-        index = index.saturating_add(1);
     }
 
     matcher.ensure_all_matched()?;
@@ -1458,67 +1320,72 @@ where
         return Ok(0);
     }
 
-    let mut reader = open_libarchive_reader(source, format_name)?;
     let mut tasks_by_index = BTreeMap::new();
     for task in chunk {
         tasks_by_index.insert(task.index, task);
     }
-
-    let mut current_index = 0usize;
-    let mut matched_tasks = 0usize;
+    let selected_indices = tasks_by_index.keys().copied().collect::<BTreeSet<_>>();
     let mut written_bytes = 0u64;
-
-    while let Some(entry) = reader.next_entry().map_err(|error| {
-        RomWeaverError::Validation(format!(
-            "{format_name} extract failed while reading entry {current_index}: {error}"
-        ))
-    })? {
-        let Some(task) = tasks_by_index.get(&current_index).copied() else {
-            current_index = current_index.saturating_add(1);
-            continue;
-        };
-
-        if task.is_dir {
-            fs::create_dir_all(&task.output_path)?;
-        } else {
-            if let Some(parent) = task.output_path.parent() {
-                fs::create_dir_all(parent)?;
-            }
-            let mut input = entry.into_reader();
-            let mut output = BufWriter::new(File::create(&task.output_path)?);
-            let mut copied = 0u64;
-            let mut buffer = vec![0u8; LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES];
-            loop {
-                let read = input.read(&mut buffer).map_err(|error| {
-                    RomWeaverError::Validation(format!(
-                        "{format_name} extract failed while reading entry {} (`{}`): {error}",
-                        task.index, task.archive_name
-                    ))
-                })?;
-                if read == 0 {
-                    break;
+    let matched_tasks = visit_selected_regular_archive_entries(
+        source,
+        format_name,
+        &selected_indices,
+        |selected_entry| -> Result<()> {
+            match selected_entry {
+                SelectedRegularArchiveEntry::Directory { entry } => {
+                    let task = tasks_by_index.get(&entry.index).copied().ok_or_else(|| {
+                        RomWeaverError::Validation(format!(
+                            "{format_name} extract failed while resolving selected directory index {}",
+                            entry.index
+                        ))
+                    })?;
+                    fs::create_dir_all(&task.output_path)?;
                 }
-                output.write_all(&buffer[..read]).map_err(|error| {
-                    RomWeaverError::Validation(format!(
-                        "{format_name} extract failed while writing entry {} (`{}`): {error}",
-                        task.index, task.archive_name
-                    ))
-                })?;
-                let read_u64 = read as u64;
-                copied = copied.saturating_add(read_u64);
-                on_bytes_written(read_u64);
+                SelectedRegularArchiveEntry::File { entry, reader } => {
+                    let task = tasks_by_index.get(&entry.index).copied().ok_or_else(|| {
+                        RomWeaverError::Validation(format!(
+                            "{format_name} extract failed while resolving selected file index {}",
+                            entry.index
+                        ))
+                    })?;
+                    if task.is_dir {
+                        fs::create_dir_all(&task.output_path)?;
+                    } else {
+                        if let Some(parent) = task.output_path.parent() {
+                            fs::create_dir_all(parent)?;
+                        }
+                        let mut output = BufWriter::new(File::create(&task.output_path)?);
+                        let mut copied = 0u64;
+                        let mut buffer = vec![0u8; LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES];
+                        loop {
+                            let read = reader.read(&mut buffer).map_err(|error| {
+                                RomWeaverError::Validation(format!(
+                                    "{format_name} extract failed while reading entry {} (`{}`): {error}",
+                                    task.index, task.archive_name
+                                ))
+                            })?;
+                            if read == 0 {
+                                break;
+                            }
+                            output.write_all(&buffer[..read]).map_err(|error| {
+                                RomWeaverError::Validation(format!(
+                                    "{format_name} extract failed while writing entry {} (`{}`): {error}",
+                                    task.index, task.archive_name
+                                ))
+                            })?;
+                            let read_u64 = read as u64;
+                            copied = copied.saturating_add(read_u64);
+                            on_bytes_written(read_u64);
+                        }
+                        output.flush()?;
+                        written_bytes = written_bytes.saturating_add(copied);
+                    }
+                }
             }
-            output.flush()?;
-            written_bytes = written_bytes.saturating_add(copied);
-        }
-
-        matched_tasks = matched_tasks.saturating_add(1);
-        on_task_complete();
-        if matched_tasks == tasks_by_index.len() {
-            break;
-        }
-        current_index = current_index.saturating_add(1);
-    }
+            on_task_complete();
+            Ok(())
+        },
+    )?;
 
     if matched_tasks != tasks_by_index.len() {
         return Err(RomWeaverError::Validation(format!(
