@@ -37,6 +37,7 @@ flacenc = { version = "0.5.1", default-features = false }
 lz4_flex = "0.11.6"
 lzma-rust2 = { version = "0.16.2", default-features = false, features = ["std", "encoder", "xz"] }
 libz-sys = { version = "1.1.28", default-features = false }
+liblzma-sys = { version = "0.4.6", features = ["static"] }
 md-5 = "0.11.0"
 nod = { path = "vendor/nod/nod", version = "2.0.0-alpha.8", default-features = false, features = ["compress-bzip2-vendored", "compress-lzma-vendored", "compress-zlib-vendored", "compress-zstd-vendored", "threading"] }
 predicates = "3.1.3"

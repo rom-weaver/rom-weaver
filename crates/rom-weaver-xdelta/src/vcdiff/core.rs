@@ -18,7 +18,6 @@ use oxidelta::{
 };
 use rayon::prelude::*;
 use rom_weaver_checksum::adler32_checksum as adler32;
-use rom_weaver_codecs::{decode_xz_exact, encode_xz_preset};
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
     PatchCapabilities, PatchChecksumValidation, PatchCreateRequest, PatchHandler, ProbeConfidence,
@@ -83,6 +82,8 @@ fn xdelta_secondary_candidates_for_mode(mode: XdeltaSecondaryMode) -> &'static [
     match mode {
         XdeltaSecondaryMode::Auto => &XDELTA_SECONDARY_CANDIDATES,
         XdeltaSecondaryMode::AutoFast => &[XDELTA_LZMA_SECONDARY_ID],
+        XdeltaSecondaryMode::Djw => &[XDELTA_DJW_SECONDARY_ID],
+        XdeltaSecondaryMode::Fgk => &[XDELTA_FGK_SECONDARY_ID],
         XdeltaSecondaryMode::Lzma => &[XDELTA_LZMA_SECONDARY_ID],
         XdeltaSecondaryMode::None => &[],
     }
@@ -178,6 +179,39 @@ impl PatchHandler for VcdiffPatchHandler {
         let validate_checksums =
             context.patch_checksum_validation() == PatchChecksumValidation::Strict;
         let input_len = std::fs::metadata(&request.input)?.len();
+        let uses_xdelta_lzma_sections = patch.secondary_compressor_id == Some(XDELTA_LZMA_SECONDARY_ID)
+            && patch_uses_xdelta_lzma_sections(&patch, &patch_path)?;
+
+        if uses_xdelta_lzma_sections {
+            apply_windows_with_xdelta_lzma_sections(
+                &patch,
+                &patch_path,
+                &request.input,
+                &request.output,
+                input_len,
+                validate_checksums,
+            )?;
+
+            let execution = context.plan_threads(ThreadCapability::single_threaded());
+            let checksum_suffix = if validate_checksums {
+                String::new()
+            } else {
+                "; checksum validation skipped".to_string()
+            };
+            return Ok(OperationReport::succeeded(
+                OperationFamily::Patch,
+                Some(self.descriptor.name.to_string()),
+                "apply",
+                format!(
+                    "applied {} patch with {} window(s){}",
+                    self.descriptor.name,
+                    patch.windows.len(),
+                    checksum_suffix
+                ),
+                Some(100.0),
+                Some(execution),
+            ));
+        }
 
         if patch
             .windows
@@ -366,7 +400,7 @@ impl PatchHandler for VcdiffPatchHandler {
             if skip_auto_fast_secondary {
                 secondary_candidates = &[];
             }
-            let (execution, secondary_pool) = if !secondary_candidates.is_empty() {
+            let (execution, secondary_pool) = if secondary_candidates.len() > 1 {
                 let (execution, pool) = context
                     .build_pool(ThreadCapability::parallel(Some(secondary_candidates.len())))?;
                 (execution, Some(pool))
@@ -889,6 +923,74 @@ fn decode_window_task(
     })
 }
 
+fn apply_windows_with_xdelta_lzma_sections(
+    patch: &ParsedPatch,
+    patch_path: &Path,
+    input_path: &Path,
+    output_path: &Path,
+    input_len: u64,
+    validate_checksums: bool,
+) -> Result<()> {
+    if let Some(parent) = output_path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    let mut input_reader = BufReader::new(File::open(input_path)?);
+    let mut patch_reader = BufReader::new(File::open(patch_path)?);
+    let mut output = OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .read(true)
+        .write(true)
+        .open(output_path)?;
+    let mut assembled_output_size = 0u64;
+    let mut lzma_decoders = XdeltaLzmaSectionDecoders::new();
+
+    for window in &patch.windows {
+        if window.output_offset != assembled_output_size {
+            return Err(RomWeaverError::Validation(format!(
+                "window output offset mismatch: expected {assembled_output_size}, got {}",
+                window.output_offset
+            )));
+        }
+
+        let source = match window.source_kind {
+            None => Vec::new(),
+            Some(WindowSourceKind::Source) => read_source_segment(
+                &mut input_reader,
+                window.source_segment_position,
+                window.source_segment_size,
+                input_len,
+                "source",
+            )?,
+            Some(WindowSourceKind::Target) => read_source_segment(
+                &mut output,
+                window.source_segment_position,
+                window.source_segment_size,
+                assembled_output_size,
+                "target",
+            )?,
+        };
+
+        let target = decode_window_with_xdelta_lzma_sections(
+            &mut patch_reader,
+            window,
+            &mut lzma_decoders,
+            &source,
+            validate_checksums,
+        )?;
+        output.seek(SeekFrom::Start(assembled_output_size))?;
+        output.write_all(&target)?;
+        assembled_output_size = checked_add(
+            assembled_output_size,
+            target.len() as u64,
+            "assembled output size",
+        )?;
+    }
+
+    Ok(())
+}
+
 fn apply_windows_with_target_sources(
     patch: &ParsedPatch,
     patch_path: &Path,
@@ -960,12 +1062,42 @@ fn is_xdelta_descriptor(descriptor: &FormatDescriptor) -> bool {
     descriptor.name.eq_ignore_ascii_case("xdelta")
 }
 
+fn patch_uses_xdelta_lzma_sections(patch: &ParsedPatch, patch_path: &Path) -> Result<bool> {
+    let mut patch_reader = BufReader::new(File::open(patch_path)?);
+    for window in &patch.windows {
+        for (compressed, start, len) in [
+            (
+                window.delta_indicator & DELTA_DATA_COMP != 0,
+                window.data_start,
+                window.data_len,
+            ),
+            (
+                window.delta_indicator & DELTA_INST_COMP != 0,
+                window.inst_start,
+                window.inst_len,
+            ),
+            (
+                window.delta_indicator & DELTA_ADDR_COMP != 0,
+                window.addr_start,
+                window.addr_len,
+            ),
+        ] {
+            if !compressed {
+                continue;
+            }
+            let section = read_section(&mut patch_reader, start, len)?;
+            return Ok(xdelta_lzma_section_has_stream_header(&section));
+        }
+    }
+    Ok(false)
+}
+
 fn create_native_compress_options(
     descriptor: &FormatDescriptor,
     include_checksums: bool,
 ) -> CompressOptions {
     let level = if is_xdelta_descriptor(descriptor) {
-        2
+        3
     } else {
         6
     };
@@ -1079,13 +1211,17 @@ fn recode_loaded_patch_with_xdelta_options(
             "native VCDIFF secondary recoder expected an uncompressed baseline patch".into(),
         ));
     }
-
     if let Some(parent) = output_path.parent() {
         fs::create_dir_all(parent)?;
     }
 
     let output_file = File::create(output_path)?;
     let mut recoded = BufWriter::with_capacity(NATIVE_CHUNK_SIZE, output_file);
+    let mut lzma_encoders = if secondary_compressor_id == Some(XDELTA_LZMA_SECONDARY_ID) {
+        Some(XdeltaLzmaSectionEncoders::new()?)
+    } else {
+        None
+    };
     recoded.write_all(&VCDIFF_MAGIC_BYTES)?;
     recoded.write_all(&[VCDIFF_VERSION_STANDARD])?;
     let mut header_flags = 0u8;
@@ -1107,24 +1243,33 @@ fn recode_loaded_patch_with_xdelta_options(
     let mut patch_reader = BufReader::new(File::open(&baseline_patch.path)?);
     for window in &baseline_patch.parsed.windows {
         let sections = read_xdelta_recode_window_sections(&mut patch_reader, window)?;
-        let (data_out, data_comp) = recode_window_section(
-            &sections.data,
-            window.delta_indicator & DELTA_DATA_COMP != 0,
-            secondary_compressor_id,
-            DjwSectionKind::Data,
-        )?;
-        let (inst_out, inst_comp) = recode_window_section(
-            &sections.inst,
-            window.delta_indicator & DELTA_INST_COMP != 0,
-            secondary_compressor_id,
-            DjwSectionKind::Inst,
-        )?;
-        let (addr_out, addr_comp) = recode_window_section(
-            &sections.addr,
-            window.delta_indicator & DELTA_ADDR_COMP != 0,
-            secondary_compressor_id,
-            DjwSectionKind::Addr,
-        )?;
+        let (data_out, data_comp, inst_out, inst_comp, addr_out, addr_comp) =
+            if let Some(encoders) = lzma_encoders.as_mut() {
+                let (data_out, data_comp) = encoders.encode_data(&sections.data)?;
+                let (inst_out, inst_comp) = encoders.encode_inst(&sections.inst)?;
+                let (addr_out, addr_comp) = encoders.encode_addr(&sections.addr)?;
+                (data_out, data_comp, inst_out, inst_comp, addr_out, addr_comp)
+            } else {
+                let (data_out, data_comp) = recode_window_section(
+                    &sections.data,
+                    window.delta_indicator & DELTA_DATA_COMP != 0,
+                    secondary_compressor_id,
+                    DjwSectionKind::Data,
+                )?;
+                let (inst_out, inst_comp) = recode_window_section(
+                    &sections.inst,
+                    window.delta_indicator & DELTA_INST_COMP != 0,
+                    secondary_compressor_id,
+                    DjwSectionKind::Inst,
+                )?;
+                let (addr_out, addr_comp) = recode_window_section(
+                    &sections.addr,
+                    window.delta_indicator & DELTA_ADDR_COMP != 0,
+                    secondary_compressor_id,
+                    DjwSectionKind::Addr,
+                )?;
+                (data_out, data_comp, inst_out, inst_comp, addr_out, addr_comp)
+            };
 
         let delta_indicator = recode_delta_indicator(
             window.delta_indicator,
@@ -1180,7 +1325,6 @@ fn recode_window_section(
     section_kind: DjwSectionKind,
 ) -> Result<(Cow<'_, [u8]>, bool)> {
     match secondary_compressor_id {
-        Some(XDELTA_LZMA_SECONDARY_ID) => maybe_compress_xdelta_lzma_section(section),
         Some(XDELTA_DJW_SECONDARY_ID) => maybe_compress_xdelta_djw_section(section, section_kind),
         Some(XDELTA_FGK_SECONDARY_ID) => maybe_compress_xdelta_fgk_section(section),
         Some(_) => {
@@ -1300,23 +1444,6 @@ fn xdelta_app_header_name_component(path: &Path) -> String {
         .filter(|value| !value.is_empty())
         .unwrap_or("-")
         .to_string()
-}
-
-fn maybe_compress_xdelta_lzma_section(section: &[u8]) -> Result<(Cow<'_, [u8]>, bool)> {
-    if section.len() < XDELTA_SECONDARY_MIN_INPUT {
-        return Ok((Cow::Borrowed(section), false));
-    }
-
-    let compressed = xdelta_lzma2_compress(section)?;
-    let mut candidate = Vec::new();
-    encode_varint_raw(&mut candidate, section.len() as u64);
-    candidate.extend_from_slice(&compressed);
-
-    if xdelta_secondary_candidate_is_efficient(section.len(), candidate.len()) {
-        Ok((Cow::Owned(candidate), true))
-    } else {
-        Ok((Cow::Borrowed(section), false))
-    }
 }
 
 fn maybe_compress_xdelta_djw_section(

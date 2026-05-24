@@ -414,16 +414,251 @@ impl DjwBitWriter {
     }
 }
 
-fn xdelta_lzma2_compress(bytes: &[u8]) -> Result<Vec<u8>> {
-    encode_xz_preset(bytes, 6).map_err(|error| {
-        RomWeaverError::Validation(format!("xdelta lzma secondary encode failed: {error}"))
-    })
+const XZ_MAGIC_BYTES: &[u8; 6] = b"\xFD7zXZ\0";
+const XDELTA_LZMA_PRESET: u32 = 3;
+
+#[derive(Clone, Default)]
+struct XdeltaLzmaFeed {
+    pending: std::rc::Rc<std::cell::RefCell<std::collections::VecDeque<u8>>>,
 }
 
-fn xdelta_lzma2_decompress(bytes: &[u8], expected_size: usize) -> Result<Vec<u8>> {
-    decode_xz_exact(bytes, expected_size).map_err(|error| {
-        RomWeaverError::Validation(format!("xdelta lzma secondary decode failed: {error}"))
-    })
+impl XdeltaLzmaFeed {
+    fn push(&self, bytes: &[u8]) {
+        self.pending.borrow_mut().extend(bytes.iter().copied());
+    }
+}
+
+impl Read for XdeltaLzmaFeed {
+    fn read(&mut self, output: &mut [u8]) -> std::io::Result<usize> {
+        let mut pending = self.pending.borrow_mut();
+        let len = output.len().min(pending.len());
+        for value in output.iter_mut().take(len) {
+            *value = pending
+                .pop_front()
+                .expect("pending length should match popped bytes");
+        }
+        Ok(len)
+    }
+}
+
+struct XdeltaLzmaSectionDecoder {
+    feed: XdeltaLzmaFeed,
+    decoder: lzma_rust2::XzReader<XdeltaLzmaFeed>,
+}
+
+impl XdeltaLzmaSectionDecoder {
+    fn new() -> Self {
+        let feed = XdeltaLzmaFeed::default();
+        let decoder = lzma_rust2::XzReader::new(feed.clone(), false);
+        Self { feed, decoder }
+    }
+
+    fn decode(&mut self, payload: &[u8], expected_size: usize) -> Result<Vec<u8>> {
+        self.feed.push(payload);
+        let mut output = vec![0u8; expected_size];
+        self.decoder.read_exact(&mut output).map_err(|error| {
+            RomWeaverError::Validation(format!("xdelta lzma secondary decode failed: {error}"))
+        })?;
+        Ok(output)
+    }
+}
+
+struct XdeltaLzmaSectionDecoders {
+    data: XdeltaLzmaSectionDecoder,
+    inst: XdeltaLzmaSectionDecoder,
+    addr: XdeltaLzmaSectionDecoder,
+}
+
+impl XdeltaLzmaSectionDecoders {
+    fn new() -> Self {
+        Self {
+            data: XdeltaLzmaSectionDecoder::new(),
+            inst: XdeltaLzmaSectionDecoder::new(),
+            addr: XdeltaLzmaSectionDecoder::new(),
+        }
+    }
+
+    fn decode_sections(
+        &mut self,
+        data: &[u8],
+        inst: &[u8],
+        addr: &[u8],
+        delta_indicator: u8,
+    ) -> Result<(Vec<u8>, Vec<u8>, Vec<u8>)> {
+        let data =
+            decode_xdelta_lzma_section_with_state(data, delta_indicator & DELTA_DATA_COMP != 0, &mut self.data)?;
+        let inst =
+            decode_xdelta_lzma_section_with_state(inst, delta_indicator & DELTA_INST_COMP != 0, &mut self.inst)?;
+        let addr =
+            decode_xdelta_lzma_section_with_state(addr, delta_indicator & DELTA_ADDR_COMP != 0, &mut self.addr)?;
+        Ok((data, inst, addr))
+    }
+}
+
+struct XdeltaLzmaSectionEncoder {
+    stream: liblzma_sys::lzma_stream,
+    _options: Box<liblzma_sys::lzma_options_lzma>,
+    _filters: [liblzma_sys::lzma_filter; 2],
+    output: Vec<u8>,
+}
+
+impl XdeltaLzmaSectionEncoder {
+    fn new() -> Result<Self> {
+        use liblzma_sys as lzma_sys;
+
+        let mut stream = unsafe { std::mem::zeroed::<lzma_sys::lzma_stream>() };
+        let mut options = Box::new(unsafe { std::mem::zeroed::<lzma_sys::lzma_options_lzma>() });
+        let preset_status =
+            unsafe { lzma_sys::lzma_lzma_preset(&mut *options, XDELTA_LZMA_PRESET) };
+        if preset_status != 0 {
+            return Err(RomWeaverError::Validation(format!(
+                "xdelta lzma secondary encode init failed: preset {XDELTA_LZMA_PRESET} is invalid"
+            )));
+        }
+
+        let mut filters = [
+            lzma_sys::lzma_filter {
+                id: lzma_sys::LZMA_FILTER_LZMA2,
+                options: (&mut *options as *mut lzma_sys::lzma_options_lzma)
+                    .cast::<std::ffi::c_void>(),
+            },
+            lzma_sys::lzma_filter {
+                id: lzma_sys::LZMA_VLI_UNKNOWN,
+                options: std::ptr::null_mut(),
+            },
+        ];
+
+        let init_status = unsafe {
+            lzma_sys::lzma_stream_encoder(
+                &mut stream,
+                filters.as_mut_ptr(),
+                lzma_sys::LZMA_CHECK_NONE,
+            )
+        };
+        if init_status != lzma_sys::LZMA_OK {
+            return Err(RomWeaverError::Validation(format!(
+                "xdelta lzma secondary encode init failed: {}",
+                lzma_status_name(init_status)
+            )));
+        }
+
+        Ok(Self {
+            stream,
+            _options: options,
+            _filters: filters,
+            output: Vec::new(),
+        })
+    }
+
+    fn encode<'a>(&mut self, section: &'a [u8]) -> Result<(Cow<'a, [u8]>, bool)> {
+        if section.len() < XDELTA_SECONDARY_MIN_INPUT {
+            return Ok((Cow::Borrowed(section), false));
+        }
+
+        let emitted_start = self.output.len();
+        self.encode_sync_flush(section)?;
+        let compressed = self.output[emitted_start..].to_vec();
+
+        let mut candidate = Vec::with_capacity(varint_len(section.len() as u64) + compressed.len());
+        encode_varint_raw(&mut candidate, section.len() as u64);
+        candidate.extend_from_slice(&compressed);
+        Ok((Cow::Owned(candidate), true))
+    }
+
+    fn encode_sync_flush(&mut self, section: &[u8]) -> Result<()> {
+        use liblzma_sys as lzma_sys;
+
+        self.stream.next_in = section.as_ptr();
+        self.stream.avail_in = section.len();
+        let mut output = [0u8; 16 * 1024];
+
+        loop {
+            self.stream.next_out = output.as_mut_ptr();
+            self.stream.avail_out = output.len();
+
+            let status =
+                unsafe { lzma_sys::lzma_code(&mut self.stream, lzma_sys::LZMA_SYNC_FLUSH) };
+            let written = output.len() - self.stream.avail_out;
+            self.output.extend_from_slice(&output[..written]);
+
+            match status {
+                value if value == lzma_sys::LZMA_OK => {
+                    if self.stream.avail_in == 0 && self.stream.avail_out > 0 {
+                        return Ok(());
+                    }
+                }
+                value if value == lzma_sys::LZMA_STREAM_END => return Ok(()),
+                other => {
+                    return Err(RomWeaverError::Validation(format!(
+                        "xdelta lzma secondary encode failed: {}",
+                        lzma_status_name(other)
+                    )));
+                }
+            }
+        }
+    }
+}
+
+impl Drop for XdeltaLzmaSectionEncoder {
+    fn drop(&mut self) {
+        unsafe {
+            liblzma_sys::lzma_end(&mut self.stream);
+        }
+    }
+}
+
+fn lzma_status_name(status: liblzma_sys::lzma_ret) -> &'static str {
+    use liblzma_sys as lzma_sys;
+
+    match status {
+        value if value == lzma_sys::LZMA_OK => "ok",
+        value if value == lzma_sys::LZMA_STREAM_END => "stream end",
+        value if value == lzma_sys::LZMA_MEM_ERROR => "memory allocation failed",
+        value if value == lzma_sys::LZMA_MEMLIMIT_ERROR => "memory limit reached",
+        value if value == lzma_sys::LZMA_FORMAT_ERROR => "format error",
+        value if value == lzma_sys::LZMA_OPTIONS_ERROR => "unsupported options",
+        value if value == lzma_sys::LZMA_DATA_ERROR => "input data error",
+        value if value == lzma_sys::LZMA_BUF_ERROR => "output buffer too small",
+        value if value == lzma_sys::LZMA_PROG_ERROR => "programming error",
+        _ => "unknown error",
+    }
+}
+
+struct XdeltaLzmaSectionEncoders {
+    data: XdeltaLzmaSectionEncoder,
+    inst: XdeltaLzmaSectionEncoder,
+    addr: XdeltaLzmaSectionEncoder,
+}
+
+impl XdeltaLzmaSectionEncoders {
+    fn new() -> Result<Self> {
+        Ok(Self {
+            data: XdeltaLzmaSectionEncoder::new()?,
+            inst: XdeltaLzmaSectionEncoder::new()?,
+            addr: XdeltaLzmaSectionEncoder::new()?,
+        })
+    }
+
+    fn encode_data<'a>(&mut self, section: &'a [u8]) -> Result<(Cow<'a, [u8]>, bool)> {
+        self.data.encode(section)
+    }
+
+    fn encode_inst<'a>(&mut self, section: &'a [u8]) -> Result<(Cow<'a, [u8]>, bool)> {
+        self.inst.encode(section)
+    }
+
+    fn encode_addr<'a>(&mut self, section: &'a [u8]) -> Result<(Cow<'a, [u8]>, bool)> {
+        self.addr.encode(section)
+    }
+}
+
+fn xdelta_lzma_section_has_stream_header(section: &[u8]) -> bool {
+    let Ok((_, prefix_len)) = decode_varint_raw(section) else {
+        return false;
+    };
+    section
+        .get(prefix_len..)
+        .is_some_and(|payload| payload.starts_with(XZ_MAGIC_BYTES))
 }
 
 fn window_win_indicator(window: &WindowIndex) -> u8 {
@@ -523,6 +758,62 @@ fn decode_window_with_native_engine<R: Read + Seek>(
     Ok(decoded)
 }
 
+fn decode_window_with_xdelta_lzma_sections<R: Read + Seek>(
+    patch_reader: &mut R,
+    window: &WindowIndex,
+    decoders: &mut XdeltaLzmaSectionDecoders,
+    source_segment: &[u8],
+    validate_checksums: bool,
+) -> Result<Vec<u8>> {
+    let data = read_section(patch_reader, window.data_start, window.data_len)?;
+    let inst = read_section(patch_reader, window.inst_start, window.inst_len)?;
+    let addr = read_section(patch_reader, window.addr_start, window.addr_len)?;
+    let (data, inst, addr) = if window.delta_indicator == 0 {
+        (data, inst, addr)
+    } else {
+        decoders.decode_sections(&data, &inst, &addr, window.delta_indicator)?
+    };
+
+    let source_len = if window.source_kind.is_some() {
+        window.source_segment_size
+    } else {
+        0
+    };
+    let header = build_native_window_header(window, source_len);
+    let mut source: &[u8] = source_segment;
+    let mut copy_buf = Vec::new();
+
+    let decoded = oxidelta_decoder::decode_window(
+        &header,
+        &data,
+        &inst,
+        &addr,
+        &mut source,
+        validate_checksums,
+        &mut copy_buf,
+    )
+    .map_err(|error| native_decode_error(error, window))?;
+
+    if decoded.len() as u64 != window.target_window_size {
+        return Err(RomWeaverError::Validation(format!(
+            "native VCDIFF decoder produced {} byte(s) but expected {}",
+            decoded.len(),
+            window.target_window_size
+        )));
+    }
+
+    if validate_checksums && let Some(expected) = window.checksum {
+        let actual = adler32(&decoded);
+        if actual != expected {
+            return Err(RomWeaverError::Validation(format!(
+                "target window checksum mismatch: expected 0x{expected:08X}, got 0x{actual:08X}"
+            )));
+        }
+    }
+
+    Ok(decoded)
+}
+
 fn read_window_sections<R: Read + Seek>(
     patch_reader: &mut R,
     window: &WindowIndex,
@@ -534,13 +825,6 @@ fn read_window_sections<R: Read + Seek>(
 
     if window.delta_indicator == 0 {
         return Ok((data, inst, addr));
-    }
-
-    if secondary_compressor_id == Some(XDELTA_LZMA_SECONDARY_ID)
-        && let Ok(decoded) =
-            try_decode_xdelta_lzma_sections(&data, &inst, &addr, window.delta_indicator)
-    {
-        return Ok(decoded);
     }
 
     if secondary_compressor_id == Some(XDELTA_DJW_SECONDARY_ID) {
@@ -568,19 +852,11 @@ fn read_window_sections<R: Read + Seek>(
     })
 }
 
-fn try_decode_xdelta_lzma_sections(
-    data: &[u8],
-    inst: &[u8],
-    addr: &[u8],
-    delta_indicator: u8,
-) -> Result<(Vec<u8>, Vec<u8>, Vec<u8>)> {
-    let data = decode_xdelta_lzma_section_if_flag(data, delta_indicator & DELTA_DATA_COMP != 0)?;
-    let inst = decode_xdelta_lzma_section_if_flag(inst, delta_indicator & DELTA_INST_COMP != 0)?;
-    let addr = decode_xdelta_lzma_section_if_flag(addr, delta_indicator & DELTA_ADDR_COMP != 0)?;
-    Ok((data, inst, addr))
-}
-
-fn decode_xdelta_lzma_section_if_flag(section: &[u8], compressed: bool) -> Result<Vec<u8>> {
+fn decode_xdelta_lzma_section_with_state(
+    section: &[u8],
+    compressed: bool,
+    decoder: &mut XdeltaLzmaSectionDecoder,
+) -> Result<Vec<u8>> {
     if !compressed {
         return Ok(section.to_vec());
     }
@@ -592,7 +868,7 @@ fn decode_xdelta_lzma_section_if_flag(section: &[u8], compressed: bool) -> Resul
     let expected = usize::try_from(decoded_size).map_err(|_| {
         RomWeaverError::Validation("xdelta lzma section decoded size is too large".into())
     })?;
-    let decoded = xdelta_lzma2_decompress(payload, expected)?;
+    let decoded = decoder.decode(payload, expected)?;
     if decoded.len() != expected {
         return Err(RomWeaverError::Validation(format!(
             "xdelta lzma section decoded to {} byte(s) but expected {}",
@@ -626,4 +902,3 @@ struct DjwDecodeTable {
     min_len: usize,
     max_len: usize,
 }
-

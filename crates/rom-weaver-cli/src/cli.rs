@@ -540,9 +540,9 @@ pub struct PatchCreateCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "xdelta-secondary",
-            default_value = "auto",
-            value_parser = ["auto", "auto-fast", "lzma", "none"],
-            help = "xdelta secondary compression mode during patch create (auto compares djw/lzma/fgk, auto-fast prefers speed via lzma-only plus incompressible-data skip, lzma evaluates only lzma, none disables secondary recoding)"
+            default_value = "lzma",
+            value_parser = ["auto", "auto-fast", "lzma", "djw", "fgk", "none"],
+            help = "xdelta secondary compression mode during patch create (default lzma matches upstream xdelta when LZMA is available; auto compares djw/lzma/fgk; auto-fast prefers speed via lzma-only plus incompressible-data skip; none disables secondary recoding)"
         )
     )]
     pub xdelta_secondary: String,

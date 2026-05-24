@@ -6,8 +6,9 @@ rust-version.workspace = true
 version.workspace = true
 
 [dependencies]
+liblzma-sys.workspace = true
+lzma-rust2.workspace = true
 oxidelta = { version = "0.1.4", default-features = false, features = ["adler32", "lzma-secondary"] }
 rayon.workspace = true
 rom-weaver-checksum = { path = "../rom-weaver-checksum" }
-rom-weaver-codecs = { path = "../rom-weaver-codecs" }
 rom-weaver-core = { path = "../rom-weaver-core" }

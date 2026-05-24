@@ -890,7 +890,7 @@ fn parse_wasm_patch_create(args: Vec<String>) -> WasmCliParseResult<PatchCreateC
     let mut output: Option<PathBuf> = None;
     let mut ignore_checksum_validation = false;
     let mut threads = ThreadBudget::Auto;
-    let mut xdelta_secondary = "auto".to_string();
+    let mut xdelta_secondary = "lzma".to_string();
     let mut index = 0usize;
     while index < args.len() {
         let arg = &args[index];

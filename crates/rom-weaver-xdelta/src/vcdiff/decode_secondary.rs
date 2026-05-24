@@ -118,6 +118,12 @@ fn decode_djw_secondary(input: &[u8], output_size: usize) -> Result<Vec<u8>> {
             output_size
         )));
     }
+    if input_pos != input.len() {
+        return Err(RomWeaverError::Validation(format!(
+            "xdelta djw secondary decoder finished with {} unused input byte(s)",
+            input.len() - input_pos
+        )));
+    }
 
     Ok(output)
 }
@@ -1387,6 +1393,12 @@ fn decode_fgk_secondary(input: &[u8], output_size: usize) -> Result<Vec<u8>> {
             }
         }
     }
+    if input_pos != input.len() {
+        return Err(RomWeaverError::Validation(format!(
+            "xdelta fgk secondary decoder finished with {} unused input byte(s)",
+            input.len() - input_pos
+        )));
+    }
 
     Ok(output)
 }
@@ -1450,4 +1462,3 @@ fn decode_xdelta_fgk_section_if_flag(section: &[u8], compressed: bool) -> Result
     )?;
     Ok(decoded)
 }
-

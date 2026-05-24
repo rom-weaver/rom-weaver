@@ -607,7 +607,7 @@ mod tests {
     }
 
     #[test]
-    fn create_xdelta_patch_prefers_secondary_when_it_is_smaller() {
+    fn create_xdelta_patch_defaults_to_lzma_secondary_when_it_is_smaller() {
         let (input, expected) = generated_secondary_source_and_target();
 
         let temp = create_temp_dir();
@@ -632,7 +632,7 @@ mod tests {
             .expect("create xdelta patch");
         assert_eq!(report.status, rom_weaver_core::OperationStatus::Succeeded);
         assert!(
-            report
+            !report
                 .thread_execution
                 .expect("thread execution")
                 .used_parallelism
@@ -693,6 +693,62 @@ mod tests {
                 &test_context(),
             )
             .expect("apply created xdelta patch");
+        assert_eq!(fs::read(output_path).expect("read output"), expected);
+    }
+
+    #[test]
+    fn create_xdelta_patch_mode_auto_compares_all_secondary_candidates() {
+        let (input, expected) = generated_secondary_source_and_target();
+
+        let temp = create_temp_dir();
+        let input_path = temp.join("input.bin");
+        let modified_path = temp.join("modified.bin");
+        let patch_path = temp.join("update.xdelta");
+        let output_path = temp.join("output.bin");
+        fs::write(&input_path, &input).expect("write input");
+        fs::write(&modified_path, &expected).expect("write modified");
+
+        let handler = VcdiffPatchHandler::new(&crate::XDELTA);
+        let report = handler
+            .create(
+                &PatchCreateRequest {
+                    original: input_path.clone(),
+                    modified: modified_path,
+                    output: patch_path.clone(),
+                    format: "xdelta".into(),
+                },
+                &test_context_with_threads(8)
+                    .with_xdelta_secondary_mode(rom_weaver_core::XdeltaSecondaryMode::Auto),
+            )
+            .expect("create xdelta patch");
+        assert_eq!(report.status, rom_weaver_core::OperationStatus::Succeeded);
+        assert!(
+            report
+                .thread_execution
+                .expect("thread execution")
+                .used_parallelism
+        );
+
+        let patch = fs::read(&patch_path).expect("read patch");
+        let parsed = parse_patch(&mut Cursor::new(&patch)).expect("parse created patch");
+        assert!(matches!(
+            parsed.secondary_compressor_id,
+            None
+                | Some(XDELTA_DJW_SECONDARY_ID)
+                | Some(XDELTA_LZMA_SECONDARY_ID)
+                | Some(XDELTA_FGK_SECONDARY_ID)
+        ));
+
+        handler
+            .apply(
+                &PatchApplyRequest {
+                    input: input_path,
+                    patches: vec![patch_path],
+                    output: output_path.clone(),
+                },
+                &test_context(),
+            )
+            .expect("apply auto-created xdelta patch");
         assert_eq!(fs::read(output_path).expect("read output"), expected);
     }
 
@@ -772,6 +828,62 @@ mod tests {
             parsed.secondary_compressor_id,
             None | Some(XDELTA_LZMA_SECONDARY_ID)
         ));
+    }
+
+    #[test]
+    fn create_xdelta_patch_supports_explicit_djw_and_fgk_secondary_modes() {
+        for (mode, expected_id) in [
+            (
+                rom_weaver_core::XdeltaSecondaryMode::Djw,
+                XDELTA_DJW_SECONDARY_ID,
+            ),
+            (
+                rom_weaver_core::XdeltaSecondaryMode::Fgk,
+                XDELTA_FGK_SECONDARY_ID,
+            ),
+        ] {
+            let (input, expected) = generated_secondary_source_and_target();
+
+            let temp = create_temp_dir();
+            let input_path = temp.join("input.bin");
+            let modified_path = temp.join("modified.bin");
+            let patch_path = temp.join(format!("update-{expected_id}.xdelta"));
+            let output_path = temp.join(format!("output-{expected_id}.bin"));
+            fs::write(&input_path, &input).expect("write input");
+            fs::write(&modified_path, &expected).expect("write modified");
+
+            let handler = VcdiffPatchHandler::new(&crate::XDELTA);
+            let report = handler
+                .create(
+                    &PatchCreateRequest {
+                        original: input_path.clone(),
+                        modified: modified_path,
+                        output: patch_path.clone(),
+                        format: "xdelta".into(),
+                    },
+                    &test_context_with_threads(8).with_xdelta_secondary_mode(mode),
+                )
+                .expect("create xdelta patch");
+            assert_eq!(report.status, rom_weaver_core::OperationStatus::Succeeded);
+
+            let patch = fs::read(&patch_path).expect("read patch");
+            let parsed = parse_patch(&mut Cursor::new(&patch)).expect("parse created patch");
+            if let Some(id) = parsed.secondary_compressor_id {
+                assert_eq!(id, expected_id);
+            }
+
+            handler
+                .apply(
+                    &PatchApplyRequest {
+                        input: input_path,
+                        patches: vec![patch_path],
+                        output: output_path.clone(),
+                    },
+                    &test_context(),
+                )
+                .expect("apply created xdelta patch");
+            assert_eq!(fs::read(output_path).expect("read output"), expected);
+        }
     }
 
     #[test]
@@ -861,7 +973,7 @@ mod tests {
     }
 
     #[test]
-    fn create_xdelta_large_streaming_patch_round_trips_with_parallel_apply() {
+    fn create_xdelta_large_streaming_patch_round_trips_with_stateful_lzma() {
         let (input, expected) = generated_large_streaming_source_and_target();
 
         let temp = create_temp_dir();
@@ -897,6 +1009,10 @@ mod tests {
             parsed.windows.len() >= 2,
             "expected streaming create to produce multiple windows for >8 MiB input"
         );
+        assert_eq!(
+            parsed.secondary_compressor_id,
+            Some(XDELTA_LZMA_SECONDARY_ID)
+        );
 
         let report = handler
             .apply(
@@ -909,7 +1025,7 @@ mod tests {
             )
             .expect("apply created xdelta patch");
         let execution = report.thread_execution.expect("thread execution");
-        assert!(execution.used_parallelism);
+        assert!(!execution.used_parallelism);
         assert_eq!(fs::read(output_path).expect("read output"), expected);
     }
 
@@ -1031,6 +1147,53 @@ mod tests {
                 &test_context_with_threads(8),
             )
             .expect("apply oxidelta lzma patch");
+        assert_eq!(fs::read(output_path).expect("read output"), expected);
+    }
+
+    #[test]
+    fn apply_supports_stateful_xdelta_lzma_secondary_across_windows() {
+        let chunks = [b"abc".repeat(12), b"def".repeat(12)];
+        let mut encoders = XdeltaLzmaSectionEncoders::new().expect("lzma encoders");
+        let mut windows = Vec::new();
+        let mut expected = Vec::new();
+
+        for (index, chunk) in chunks.iter().enumerate() {
+            let (compressed, compressed_flag) =
+                encoders.encode_data(chunk).expect("compress lzma data section");
+            assert!(compressed_flag);
+            if index == 0 {
+                assert!(xdelta_lzma_section_has_stream_header(&compressed));
+            } else {
+                assert!(!xdelta_lzma_section_has_stream_header(&compressed));
+            }
+            windows.push((
+                chunk.len() as u64,
+                compressed.into_owned(),
+                vec![4; chunk.len() / 3],
+            ));
+            expected.extend_from_slice(chunk);
+        }
+
+        let patch_bytes =
+            build_secondary_data_add_windows_patch(XDELTA_LZMA_SECONDARY_ID, windows);
+        let temp = create_temp_dir();
+        let input_path = temp.join("input.bin");
+        let patch_path = temp.join("stateful-lzma.xdelta");
+        let output_path = temp.join("output.bin");
+        fs::write(&input_path, b"").expect("write input");
+        fs::write(&patch_path, patch_bytes).expect("write patch");
+
+        let handler = VcdiffPatchHandler::new(&crate::XDELTA);
+        handler
+            .apply(
+                &PatchApplyRequest {
+                    input: input_path,
+                    patches: vec![patch_path],
+                    output: output_path.clone(),
+                },
+                &test_context(),
+            )
+            .expect("apply stateful lzma patch");
         assert_eq!(fs::read(output_path).expect("read output"), expected);
     }
 
@@ -1376,8 +1539,59 @@ mod tests {
         assert!(
             message.contains("native VCDIFF secondary decompression failed")
                 || message.contains("native VCDIFF decoder failed")
+                || message.contains("xdelta lzma secondary decode failed")
                 || message.contains("checksum mismatch")
         );
+    }
+
+    #[test]
+    fn apply_fails_for_trailing_secondary_payload_bytes() {
+        for secondary_id in [XDELTA_DJW_SECONDARY_ID, XDELTA_FGK_SECONDARY_ID] {
+            let expected = b"ZZ";
+            let compressed_payload = match secondary_id {
+                XDELTA_DJW_SECONDARY_ID => {
+                    xdelta_djw_compress(expected, DjwSectionKind::Data).expect("compress djw")
+                }
+                XDELTA_FGK_SECONDARY_ID => xdelta_fgk_compress(expected).expect("compress fgk"),
+                _ => unreachable!("unknown test secondary id"),
+            };
+            let mut compressed_section = Vec::new();
+            encode_varint(&mut compressed_section, expected.len() as u64);
+            compressed_section.extend_from_slice(&compressed_payload);
+            compressed_section.push(0);
+
+            let patch = build_secondary_data_add_patch(
+                secondary_id,
+                expected.len() as u64,
+                compressed_section,
+            );
+
+            let temp = create_temp_dir();
+            let input_path = temp.join(format!("input-{secondary_id}.bin"));
+            let patch_path = temp.join(format!("trailing-{secondary_id}.xdelta"));
+            let output_path = temp.join(format!("output-{secondary_id}.bin"));
+            fs::write(&input_path, b"").expect("write input");
+            fs::write(&patch_path, patch).expect("write patch");
+
+            let handler = VcdiffPatchHandler::new(&crate::XDELTA);
+            let error = handler
+                .apply(
+                    &PatchApplyRequest {
+                        input: input_path,
+                        patches: vec![patch_path],
+                        output: output_path,
+                    },
+                    &test_context(),
+                )
+                .expect_err("trailing secondary payload bytes should fail");
+            let message = format!("{error}");
+            assert!(
+                message.contains("unused input")
+                    || message.contains("invalid data after stream")
+                    || message.contains("more output than expected"),
+                "unexpected error for secondary {secondary_id}: {message}"
+            );
+        }
     }
 
     fn create_temp_dir() -> PathBuf {
@@ -1514,6 +1728,61 @@ mod tests {
             delta.extend_from_slice(&window.data);
             delta.extend_from_slice(&window.inst);
             delta.extend_from_slice(&window.addr);
+
+            encode_varint(&mut bytes, delta.len() as u64);
+            bytes.extend_from_slice(&delta);
+        }
+
+        bytes
+    }
+
+    fn build_secondary_data_add_patch(
+        secondary_id: u8,
+        target_window_size: u64,
+        compressed_data: Vec<u8>,
+    ) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&VCDIFF_MAGIC_BYTES);
+        bytes.push(VCDIFF_VERSION_STANDARD);
+        bytes.push(HDR_SECONDARY);
+        bytes.push(secondary_id);
+        bytes.push(0);
+
+        let mut delta = Vec::new();
+        encode_varint(&mut delta, target_window_size);
+        delta.push(DELTA_DATA_COMP);
+        encode_varint(&mut delta, compressed_data.len() as u64);
+        delta.push(1);
+        delta.push(0);
+        delta.extend_from_slice(&compressed_data);
+        delta.push(3);
+
+        encode_varint(&mut bytes, delta.len() as u64);
+        bytes.extend_from_slice(&delta);
+        bytes
+    }
+
+    fn build_secondary_data_add_windows_patch(
+        secondary_id: u8,
+        windows: Vec<(u64, Vec<u8>, Vec<u8>)>,
+    ) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&VCDIFF_MAGIC_BYTES);
+        bytes.push(VCDIFF_VERSION_STANDARD);
+        bytes.push(HDR_SECONDARY);
+        bytes.push(secondary_id);
+
+        for (target_window_size, compressed_data, inst) in windows {
+            bytes.push(0);
+
+            let mut delta = Vec::new();
+            encode_varint(&mut delta, target_window_size);
+            delta.push(DELTA_DATA_COMP);
+            encode_varint(&mut delta, compressed_data.len() as u64);
+            encode_varint(&mut delta, inst.len() as u64);
+            delta.push(0);
+            delta.extend_from_slice(&compressed_data);
+            delta.extend_from_slice(&inst);
 
             encode_varint(&mut bytes, delta.len() as u64);
             bytes.extend_from_slice(&delta);

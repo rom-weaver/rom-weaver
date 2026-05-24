@@ -16,13 +16,15 @@ pub enum PatchChecksumValidation {
 pub enum XdeltaSecondaryMode {
     Auto,
     AutoFast,
+    Djw,
+    Fgk,
     Lzma,
     None,
 }
 
 impl Default for XdeltaSecondaryMode {
     fn default() -> Self {
-        Self::Auto
+        Self::Lzma
     }
 }
 
@@ -31,6 +33,8 @@ impl fmt::Display for XdeltaSecondaryMode {
         match self {
             Self::Auto => formatter.write_str("auto"),
             Self::AutoFast => formatter.write_str("auto-fast"),
+            Self::Djw => formatter.write_str("djw"),
+            Self::Fgk => formatter.write_str("fgk"),
             Self::Lzma => formatter.write_str("lzma"),
             Self::None => formatter.write_str("none"),
         }
@@ -44,10 +48,12 @@ impl FromStr for XdeltaSecondaryMode {
         match value.trim().to_ascii_lowercase().as_str() {
             "auto" => Ok(Self::Auto),
             "auto-fast" => Ok(Self::AutoFast),
+            "djw" => Ok(Self::Djw),
+            "fgk" => Ok(Self::Fgk),
             "lzma" => Ok(Self::Lzma),
             "none" => Ok(Self::None),
             _ => Err(RomWeaverError::Validation(format!(
-                "invalid xdelta secondary mode `{value}`; expected one of: auto, auto-fast, lzma, none"
+                "invalid xdelta secondary mode `{value}`; expected one of: auto, auto-fast, lzma, djw, fgk, none"
             ))),
         }
     }
@@ -81,7 +87,7 @@ impl OperationContext {
             progress,
             cancel,
             patch_checksum_validation: PatchChecksumValidation::Strict,
-            xdelta_secondary_mode: XdeltaSecondaryMode::Auto,
+            xdelta_secondary_mode: XdeltaSecondaryMode::default(),
         }
     }
 

@@ -4112,8 +4112,8 @@ fn patch_create_succeeds_for_xdelta_with_secondary_when_helpful() {
     assert_eq!(create_json["family"], "patch");
     assert_eq!(create_json["format"], "xdelta");
     assert_eq!(create_json["requested_threads"], 8);
-    assert_eq!(create_json["effective_threads"], 3);
-    assert_eq!(create_json["used_parallelism"], true);
+    assert_eq!(create_json["effective_threads"], 1);
+    assert_eq!(create_json["used_parallelism"], false);
     assert_eq!(create_json["status"], "succeeded");
 
     let patch_bytes = fs::read(patch.path()).expect("patch");

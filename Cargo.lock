@@ -1782,10 +1782,11 @@ dependencies = [
 name = "rom-weaver-xdelta"
 version = "0.1.0"
 dependencies = [
+ "liblzma-sys",
+ "lzma-rust2",
  "oxidelta",
  "rayon",
  "rom-weaver-checksum",
- "rom-weaver-codecs",
  "rom-weaver-core",
 ]
 
