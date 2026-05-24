@@ -134,15 +134,11 @@ mod tests {
     }
 
     fn expected_parallel_or_single_for_wasm_threads() -> ThreadCapability {
-        #[cfg(all(target_family = "wasm", rom_weaver_wasi_threads))]
-        {
-            ThreadCapability::single_threaded()
-        }
+        ThreadCapability::parallel(None)
+    }
 
-        #[cfg(not(all(target_family = "wasm", rom_weaver_wasi_threads)))]
-        {
-            ThreadCapability::parallel(None)
-        }
+    fn expected_regular_archive_extract_thread_capability() -> ThreadCapability {
+        ThreadCapability::parallel(None)
     }
 
     fn build_test_gamecube_iso(payload_len: usize) -> Vec<u8> {
@@ -732,7 +728,7 @@ mod tests {
         assert!(!capabilities.create);
         assert_eq!(
             capabilities.extract_threads,
-            expected_parallel_or_single_for_wasm_threads()
+            expected_regular_archive_extract_thread_capability()
         );
         assert_eq!(
             capabilities.create_threads,
@@ -826,7 +822,7 @@ mod tests {
         assert!(capabilities.create);
         assert_eq!(
             capabilities.extract_threads,
-            expected_parallel_or_single_for_wasm_threads()
+            expected_regular_archive_extract_thread_capability()
         );
         assert_eq!(
             capabilities.create_threads,
@@ -981,7 +977,7 @@ mod tests {
         assert!(capabilities.create);
         assert_eq!(
             capabilities.extract_threads,
-            expected_parallel_or_single_for_wasm_threads()
+            expected_regular_archive_extract_thread_capability()
         );
         assert_eq!(
             capabilities.create_threads,
@@ -1116,7 +1112,7 @@ mod tests {
         assert!(capabilities.create);
         assert_eq!(
             capabilities.extract_threads,
-            expected_parallel_or_single_for_wasm_threads()
+            expected_regular_archive_extract_thread_capability()
         );
         assert_eq!(
             capabilities.create_threads,
@@ -1134,7 +1130,7 @@ mod tests {
         assert!(capabilities.create);
         assert_eq!(
             capabilities.extract_threads,
-            expected_parallel_or_single_for_wasm_threads()
+            expected_regular_archive_extract_thread_capability()
         );
         assert_eq!(
             capabilities.create_threads,
@@ -1152,7 +1148,7 @@ mod tests {
         assert!(capabilities.create);
         assert_eq!(
             capabilities.extract_threads,
-            expected_parallel_or_single_for_wasm_threads()
+            expected_regular_archive_extract_thread_capability()
         );
         assert_eq!(
             capabilities.create_threads,
@@ -1170,7 +1166,7 @@ mod tests {
         assert!(capabilities.create);
         assert_eq!(
             capabilities.extract_threads,
-            expected_parallel_or_single_for_wasm_threads()
+            expected_regular_archive_extract_thread_capability()
         );
         assert_eq!(
             capabilities.create_threads,

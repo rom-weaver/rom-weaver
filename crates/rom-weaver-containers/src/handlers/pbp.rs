@@ -902,7 +902,7 @@ impl ContainerHandler for PbpContainerHandler {
         let extract_progress_label = format!("extracting `{}`", PBP.name);
         let extract_progress_bytes = Arc::new(AtomicU64::new(0));
         let extract_progress_bucket = Arc::new(AtomicU8::new(0));
-        let mut execution = context.plan_threads(pbp_extract_thread_capability());
+        let mut execution = context.plan_threads(pbp_extract_thread_capability(None));
 
         let mut produced_outputs = Vec::new();
         let mut total_written = 0u64;
@@ -913,30 +913,27 @@ impl ContainerHandler for PbpContainerHandler {
             let bin_path = request.out_dir.join(&output.bin_name);
             if write_bin {
                 let tasks = self.build_disc_extract_tasks(disc_index, disc)?;
-                let extract_capability = if wasm_threaded_runtime_pbp_parallel_is_unstable() {
-                    ThreadCapability::single_threaded()
-                } else {
-                    ThreadCapability::parallel(Some(tasks.len().max(1)))
-                };
+                let extract_capability = pbp_extract_thread_capability(Some(tasks.len().max(1)));
                 let (disc_execution, pool) = context.build_pool(extract_capability)?;
                 execution = disc_execution;
 
                 if let Some(parent) = bin_path.parent() {
                     fs::create_dir_all(parent)?;
                 }
-                let ordered_writer = Arc::new(Mutex::new(OrderedChunkWriter::new(
+                let mut ordered_writer = OrderedChunkWriter::new(
                     BufWriter::new(File::create(&bin_path)?),
                     bounded_items_for_threads(execution.effective_threads),
-                )?));
+                )?;
                 let source = request.source.clone();
                 let decode_result = if execution.used_parallelism {
-                    let writer = Arc::clone(&ordered_writer);
                     let progress_context = context.clone();
                     let progress_execution = execution.clone();
-                    let extract_progress_bytes = Arc::clone(&extract_progress_bytes);
-                    let extract_progress_bucket = Arc::clone(&extract_progress_bucket);
-                    pool.install(|| {
-                        tasks.par_iter().try_for_each(|task| {
+                    write_decoded_chunks_from_workers(
+                        &pool,
+                        &tasks,
+                        bounded_items_for_threads(execution.effective_threads),
+                        "pbp extract output receiver closed",
+                        |task| {
                             let chunk = self.decode_disc_extract_task(&source, disc, task)?;
                             let chunk_len = u64::try_from(chunk.data.len()).map_err(|_| {
                                 RomWeaverError::Validation(
@@ -966,14 +963,10 @@ impl ContainerHandler for PbpContainerHandler {
                                     "pbp extract chunk index overflowed".into(),
                                 )
                             })?;
-                            {
-                                let mut ordered = writer.lock().map_err(|_| {
-                                    RomWeaverError::Validation(
-                                        "pbp extract output writer lock poisoned".into(),
-                                    )
-                                })?;
-                                ordered.write_chunk(chunk_index, chunk.data)?;
-                            }
+                            Ok((chunk_index, chunk.data, chunk_len))
+                        },
+                        |(chunk_index, data, chunk_len)| {
+                            ordered_writer.write_chunk(chunk_index, data)?;
                             if total_extract_bytes > 0 {
                                 let completed = extract_progress_bytes
                                     .fetch_add(chunk_len, Ordering::Relaxed)
@@ -992,8 +985,8 @@ impl ContainerHandler for PbpContainerHandler {
                                 );
                             }
                             Ok(())
-                        })
-                    })
+                        },
+                    )
                 } else {
                     tasks.iter().try_for_each(|task| {
                         let chunk = self.decode_disc_extract_task(&source, disc, task)?;
@@ -1017,14 +1010,7 @@ impl ContainerHandler for PbpContainerHandler {
                         let chunk_index = u64::try_from(task.task_index).map_err(|_| {
                             RomWeaverError::Validation("pbp extract chunk index overflowed".into())
                         })?;
-                        {
-                            let mut ordered = ordered_writer.lock().map_err(|_| {
-                                RomWeaverError::Validation(
-                                    "pbp extract output writer lock poisoned".into(),
-                                )
-                            })?;
-                            ordered.write_chunk(chunk_index, chunk.data)?;
-                        }
+                        ordered_writer.write_chunk(chunk_index, chunk.data)?;
                         if total_extract_bytes > 0 {
                             let completed = extract_progress_bytes
                                 .fetch_add(chunk_len, Ordering::Relaxed)
@@ -1049,13 +1035,7 @@ impl ContainerHandler for PbpContainerHandler {
                     let _ = fs::remove_file(&bin_path);
                     return Err(error);
                 }
-                let ordered = Arc::try_unwrap(ordered_writer).map_err(|_| {
-                    RomWeaverError::Validation("pbp extract output writer still in use".into())
-                })?;
-                let ordered = ordered.into_inner().map_err(|_| {
-                    RomWeaverError::Validation("pbp extract output writer lock poisoned".into())
-                })?;
-                if let Err(error) = ordered.finish() {
+                if let Err(error) = ordered_writer.finish() {
                     let _ = fs::remove_file(&bin_path);
                     return Err(error);
                 }
@@ -1136,7 +1116,7 @@ impl ContainerHandler for PbpContainerHandler {
             inspect: true,
             extract: true,
             create: false,
-            extract_threads: pbp_extract_thread_capability(),
+            extract_threads: pbp_extract_thread_capability(None),
             create_threads: ThreadCapability::single_threaded(),
         }
     }

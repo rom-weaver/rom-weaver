@@ -5,9 +5,11 @@ use std::{
     io::{self, BufReader, BufWriter, Read, Seek, SeekFrom, Write},
     path::{Component, Path, PathBuf},
     sync::{
-        Arc, Mutex,
-        atomic::{AtomicU8, AtomicU64, AtomicUsize, Ordering},
+        Arc,
+        atomic::{AtomicU8, AtomicU64, Ordering},
+        mpsc,
     },
+    thread,
 };
 
 use ciso::{read::CSOReader as CsoReader, split::SplitFileReader};
@@ -35,7 +37,7 @@ use rom_weaver_core::{
     ContainerCapabilities, ContainerCreateRequest, ContainerExtractRequest, ContainerHandler,
     ContainerInspectRequest, FormatDescriptor, OperationContext, OperationFamily, OperationReport,
     OperationStatus, OrderedChunkWriter, ProbeConfidence, ProgressEvent, Result, RomWeaverError,
-    ThreadCapability, ThreadExecution, bounded_items_for_threads,
+    SharedThreadPool, ThreadCapability, ThreadExecution, bounded_items_for_threads,
 };
 use rom_weaver_libarchive::{
     EntryFileType, EntrySpec, ReadArchive, ReadFilter as LibarchiveReadFilter,
@@ -1233,6 +1235,32 @@ struct LibarchiveExtractTask {
     logical_bytes: Option<u64>,
 }
 
+#[derive(Debug)]
+enum LibarchiveExtractOutput {
+    Directory {
+        output_path: PathBuf,
+    },
+    FileStart {
+        index: usize,
+        archive_name: String,
+        output_path: PathBuf,
+    },
+    FileData {
+        index: usize,
+        archive_name: String,
+        bytes: Vec<u8>,
+    },
+    FileEnd {
+        index: usize,
+        archive_name: String,
+    },
+}
+
+struct LibarchiveOpenExtractOutput {
+    archive_name: String,
+    writer: BufWriter<File>,
+}
+
 type LibarchiveInspectSummary = rom_weaver_libarchive::RegularArchiveInspectSummary;
 
 fn probe_regular_archive_with_libarchive(
@@ -1396,40 +1424,136 @@ where
     Ok(written_bytes)
 }
 
-fn wasm_threaded_runtime_extract_is_unstable() -> bool {
-    cfg!(all(target_family = "wasm", rom_weaver_wasi_threads))
+fn send_libarchive_extract_output(
+    sender: &mpsc::SyncSender<LibarchiveExtractOutput>,
+    output: LibarchiveExtractOutput,
+    format_name: &str,
+) -> Result<()> {
+    sender.send(output).map_err(|_| {
+        RomWeaverError::Validation(format!("{format_name} extract output receiver closed"))
+    })
 }
 
-fn wasm_threaded_runtime_cso_parallel_is_unstable() -> bool {
-    cfg!(all(target_family = "wasm", rom_weaver_wasi_threads))
-}
+fn extract_libarchive_task_chunk_to_sender(
+    source: &Path,
+    chunk: &[LibarchiveExtractTask],
+    format_name: &str,
+    sender: &mpsc::SyncSender<LibarchiveExtractOutput>,
+) -> Result<()> {
+    if chunk.is_empty() {
+        return Ok(());
+    }
 
-fn wasm_threaded_runtime_pbp_parallel_is_unstable() -> bool {
-    cfg!(all(target_family = "wasm", rom_weaver_wasi_threads))
+    let mut tasks_by_index = BTreeMap::new();
+    for task in chunk {
+        tasks_by_index.insert(task.index, task);
+    }
+    let selected_indices = tasks_by_index.keys().copied().collect::<BTreeSet<_>>();
+    let matched_tasks = visit_selected_regular_archive_entries(
+        source,
+        format_name,
+        &selected_indices,
+        |selected_entry| -> Result<()> {
+            match selected_entry {
+                SelectedRegularArchiveEntry::Directory { entry } => {
+                    let task = tasks_by_index.get(&entry.index).copied().ok_or_else(|| {
+                        RomWeaverError::Validation(format!(
+                            "{format_name} extract failed while resolving selected directory index {}",
+                            entry.index
+                        ))
+                    })?;
+                    send_libarchive_extract_output(
+                        sender,
+                        LibarchiveExtractOutput::Directory {
+                            output_path: task.output_path.clone(),
+                        },
+                        format_name,
+                    )?;
+                }
+                SelectedRegularArchiveEntry::File { entry, reader } => {
+                    let task = tasks_by_index.get(&entry.index).copied().ok_or_else(|| {
+                        RomWeaverError::Validation(format!(
+                            "{format_name} extract failed while resolving selected file index {}",
+                            entry.index
+                        ))
+                    })?;
+                    if task.is_dir {
+                        send_libarchive_extract_output(
+                            sender,
+                            LibarchiveExtractOutput::Directory {
+                                output_path: task.output_path.clone(),
+                            },
+                            format_name,
+                        )?;
+                    } else {
+                        send_libarchive_extract_output(
+                            sender,
+                            LibarchiveExtractOutput::FileStart {
+                                index: task.index,
+                                archive_name: task.archive_name.clone(),
+                                output_path: task.output_path.clone(),
+                            },
+                            format_name,
+                        )?;
+                        let mut buffer = vec![0u8; LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES];
+                        loop {
+                            let read = reader.read(&mut buffer).map_err(|error| {
+                                RomWeaverError::Validation(format!(
+                                    "{format_name} extract failed while reading entry {} (`{}`): {error}",
+                                    task.index, task.archive_name
+                                ))
+                            })?;
+                            if read == 0 {
+                                break;
+                            }
+                            send_libarchive_extract_output(
+                                sender,
+                                LibarchiveExtractOutput::FileData {
+                                    index: task.index,
+                                    archive_name: task.archive_name.clone(),
+                                    bytes: buffer[..read].to_vec(),
+                                },
+                                format_name,
+                            )?;
+                        }
+                        send_libarchive_extract_output(
+                            sender,
+                            LibarchiveExtractOutput::FileEnd {
+                                index: task.index,
+                                archive_name: task.archive_name.clone(),
+                            },
+                            format_name,
+                        )?;
+                    }
+                }
+            }
+            Ok(())
+        },
+    )?;
+
+    if matched_tasks != tasks_by_index.len() {
+        return Err(RomWeaverError::Validation(format!(
+            "{format_name} extract failed because selected entries changed while processing"
+        )));
+    }
+
+    Ok(())
 }
 
 fn regular_archive_extract_thread_capability() -> ThreadCapability {
-    if wasm_threaded_runtime_extract_is_unstable() {
-        ThreadCapability::single_threaded()
-    } else {
-        ThreadCapability::parallel(None)
-    }
+    ThreadCapability::parallel(None)
 }
 
-fn cso_thread_capability() -> ThreadCapability {
-    if wasm_threaded_runtime_cso_parallel_is_unstable() {
-        ThreadCapability::single_threaded()
-    } else {
-        ThreadCapability::parallel(None)
-    }
+fn cso_create_thread_capability(max_threads: Option<usize>) -> ThreadCapability {
+    ThreadCapability::parallel(max_threads)
 }
 
-fn pbp_extract_thread_capability() -> ThreadCapability {
-    if wasm_threaded_runtime_pbp_parallel_is_unstable() {
-        ThreadCapability::single_threaded()
-    } else {
-        ThreadCapability::parallel(None)
-    }
+fn cso_extract_thread_capability(max_threads: Option<usize>) -> ThreadCapability {
+    ThreadCapability::parallel(max_threads)
+}
+
+fn pbp_extract_thread_capability(max_threads: Option<usize>) -> ThreadCapability {
+    ThreadCapability::parallel(max_threads)
 }
 
 fn extract_regular_archive_with_libarchive(
@@ -1501,82 +1625,193 @@ fn extract_regular_archive_with_libarchive(
         (execution, written)
     } else {
         let file_task_count = tasks.iter().filter(|task| !task.is_dir).count().max(1);
-        let capability = if wasm_threaded_runtime_extract_is_unstable() {
-            ThreadCapability::single_threaded()
-        } else if limit_threads_to_task_count {
+        let capability = if limit_threads_to_task_count {
             ThreadCapability::parallel(Some(file_task_count))
         } else {
             ThreadCapability::parallel(None)
         };
         let (execution, pool) = context.build_pool(capability)?;
         let source = request.source.clone();
-        let completed_tasks = Arc::new(AtomicUsize::new(0));
-        let copied_bytes = Arc::new(AtomicU64::new(0));
-        let emitted_progress_bucket = Arc::new(AtomicU8::new(0));
         let progress_context = context.clone();
         let progress_execution = execution.clone();
 
         let written_bytes = if execution.used_parallelism {
             let worker_count = execution.effective_threads.max(1);
             let chunk_size = tasks.len().div_ceil(worker_count).max(1);
-            let chunk_results = pool.install(|| {
-                tasks
-                    .par_chunks(chunk_size)
-                    .map(|chunk| {
-                        let completed_tasks = Arc::clone(&completed_tasks);
-                        let copied_bytes = Arc::clone(&copied_bytes);
-                        let emitted_progress_bucket = Arc::clone(&emitted_progress_bucket);
-                        let progress_context = progress_context.clone();
-                        let progress_execution = progress_execution.clone();
-                        extract_libarchive_task_chunk(
-                            &source,
-                            chunk,
-                            format_name,
-                            |delta| {
-                                if let Some(total_bytes) = total_file_bytes {
-                                    let completed_bytes = copied_bytes
-                                        .fetch_add(delta, Ordering::Relaxed)
-                                        .saturating_add(delta)
-                                        .min(total_bytes);
-                                    maybe_emit_container_byte_progress(
-                                        &progress_context,
-                                        "extract",
+            let (sender, receiver) = mpsc::sync_channel::<LibarchiveExtractOutput>(
+                bounded_items_for_threads(execution.effective_threads),
+            );
+            let emitted_progress_bucket = AtomicU8::new(0);
+            let mut copied_bytes = 0u64;
+            let mut completed = 0usize;
+            let mut written_bytes = 0u64;
+            let mut open_outputs = BTreeMap::<usize, LibarchiveOpenExtractOutput>::new();
+            let mut write_result = Ok(());
+
+            thread::scope(|scope| -> Result<u64> {
+                let producer = thread::Builder::new()
+                    .name("rom-weaver-libarchive-extract".to_string())
+                    .spawn_scoped(scope, || {
+                        pool.install(|| {
+                            tasks.par_chunks(chunk_size).try_for_each_with(
+                                sender,
+                                |sender, chunk| {
+                                    extract_libarchive_task_chunk_to_sender(
+                                        &source,
+                                        chunk,
                                         format_name,
-                                        "extract",
-                                        completed_bytes,
-                                        total_bytes,
-                                        &format!("extracting `{format_name}`"),
-                                        Some(&progress_execution),
-                                        emitted_progress_bucket.as_ref(),
-                                    );
-                                }
-                            },
-                            || {
-                                if total_file_bytes.is_none() {
-                                    let completed = completed_tasks
-                                        .fetch_add(1, Ordering::Relaxed)
-                                        .saturating_add(1);
-                                    emit_container_step_progress(
-                                        &progress_context,
-                                        "extract",
-                                        format_name,
-                                        "extract",
-                                        completed,
-                                        total_tasks,
-                                        format!(
-                                            "extracting `{format_name}` ({completed}/{total_tasks})"
-                                        ),
-                                        Some(&progress_execution),
-                                    );
-                                }
-                            },
-                        )
+                                        sender,
+                                    )
+                                },
+                            )
+                        })
                     })
-                    .collect::<Result<Vec<_>>>()
-            })?;
-            chunk_results
-                .into_iter()
-                .fold(0u64, |acc, value| acc.saturating_add(value))
+                    .map_err(|error| {
+                        RomWeaverError::Validation(format!(
+                            "failed to start parallel {format_name} extract coordinator: {error}"
+                        ))
+                    })?;
+
+                let mut receiver = Some(receiver);
+                while let Some(active_receiver) = receiver.as_ref() {
+                    let item = match active_receiver.recv() {
+                        Ok(item) => item,
+                        Err(_) => break,
+                    };
+                    let item_result = match item {
+                        LibarchiveExtractOutput::Directory { output_path } => {
+                            fs::create_dir_all(output_path)?;
+                            if total_file_bytes.is_none() {
+                                completed = completed.saturating_add(1);
+                                emit_container_step_progress(
+                                    &progress_context,
+                                    "extract",
+                                    format_name,
+                                    "extract",
+                                    completed,
+                                    total_tasks,
+                                    format!(
+                                        "extracting `{format_name}` ({completed}/{total_tasks})"
+                                    ),
+                                    Some(&progress_execution),
+                                );
+                            }
+                            Ok(())
+                        }
+                        LibarchiveExtractOutput::FileStart {
+                            index,
+                            archive_name,
+                            output_path,
+                        } => {
+                            if let Some(parent) = output_path.parent() {
+                                fs::create_dir_all(parent)?;
+                            }
+                            if open_outputs.contains_key(&index) {
+                                Err(RomWeaverError::Validation(format!(
+                                    "{format_name} extract received duplicate start for entry {index} (`{archive_name}`)"
+                                )))
+                            } else {
+                                let writer = BufWriter::new(File::create(&output_path)?);
+                                open_outputs.insert(
+                                    index,
+                                    LibarchiveOpenExtractOutput {
+                                        archive_name,
+                                        writer,
+                                    },
+                                );
+                                Ok(())
+                            }
+                        }
+                        LibarchiveExtractOutput::FileData {
+                            index,
+                            archive_name,
+                            bytes,
+                        } => {
+                            let output = open_outputs.get_mut(&index).ok_or_else(|| {
+                                RomWeaverError::Validation(format!(
+                                    "{format_name} extract received data before start for entry {index} (`{archive_name}`)"
+                                ))
+                            })?;
+                            output.writer.write_all(&bytes).map_err(|error| {
+                                RomWeaverError::Validation(format!(
+                                    "{format_name} extract failed while writing entry {index} (`{archive_name}`): {error}"
+                                ))
+                            })?;
+                            let delta = bytes.len() as u64;
+                            written_bytes = written_bytes.saturating_add(delta);
+                            if let Some(total_bytes) = total_file_bytes {
+                                copied_bytes = copied_bytes.saturating_add(delta).min(total_bytes);
+                                maybe_emit_container_byte_progress(
+                                    &progress_context,
+                                    "extract",
+                                    format_name,
+                                    "extract",
+                                    copied_bytes,
+                                    total_bytes,
+                                    &format!("extracting `{format_name}`"),
+                                    Some(&progress_execution),
+                                    &emitted_progress_bucket,
+                                );
+                            }
+                            Ok(())
+                        }
+                        LibarchiveExtractOutput::FileEnd {
+                            index,
+                            archive_name,
+                        } => {
+                            let mut output = open_outputs.remove(&index).ok_or_else(|| {
+                                RomWeaverError::Validation(format!(
+                                    "{format_name} extract received end before start for entry {index} (`{archive_name}`)"
+                                ))
+                            })?;
+                            output.writer.flush().map_err(|error| {
+                                RomWeaverError::Validation(format!(
+                                    "{format_name} extract failed while flushing entry {index} (`{}`): {error}",
+                                    output.archive_name
+                                ))
+                            })?;
+                            if total_file_bytes.is_none() {
+                                completed = completed.saturating_add(1);
+                                emit_container_step_progress(
+                                    &progress_context,
+                                    "extract",
+                                    format_name,
+                                    "extract",
+                                    completed,
+                                    total_tasks,
+                                    format!(
+                                        "extracting `{format_name}` ({completed}/{total_tasks})"
+                                    ),
+                                    Some(&progress_execution),
+                                );
+                            }
+                            Ok(())
+                        }
+                    };
+                    if let Err(error) = item_result {
+                        write_result = Err(error);
+                        drop(receiver.take());
+                        break;
+                    }
+                }
+
+                let producer_result = producer.join().map_err(|_| {
+                    RomWeaverError::Validation(format!(
+                        "parallel {format_name} extract coordinator panicked"
+                    ))
+                })?;
+                if let Err(error) = write_result {
+                    return Err(error);
+                }
+                producer_result?;
+                if let Some((index, output)) = open_outputs.into_iter().next() {
+                    return Err(RomWeaverError::Validation(format!(
+                        "{format_name} extract finished with unclosed entry {index} (`{}`)",
+                        output.archive_name
+                    )));
+                }
+                Ok(written_bytes)
+            })?
         } else {
             let emitted_progress_bucket = AtomicU8::new(0);
             let mut copied_bytes = 0u64;
@@ -1635,6 +1870,66 @@ fn extract_regular_archive_with_libarchive(
         Some(100.0),
         Some(execution),
     ))
+}
+
+fn write_decoded_chunks_from_workers<TTask, TChunk, Decode, WriteChunk>(
+    pool: &SharedThreadPool,
+    tasks: &[TTask],
+    max_in_flight_items: usize,
+    receiver_closed_message: &'static str,
+    decode: Decode,
+    mut write_chunk: WriteChunk,
+) -> Result<()>
+where
+    TTask: Sync,
+    TChunk: Send,
+    Decode: Fn(&TTask) -> Result<TChunk> + Send + Sync,
+    WriteChunk: FnMut(TChunk) -> Result<()>,
+{
+    let (sender, receiver) = mpsc::sync_channel::<TChunk>(max_in_flight_items.max(1));
+    let mut write_result = Ok(());
+
+    thread::scope(|scope| -> Result<()> {
+        let producer = thread::Builder::new()
+            .name("rom-weaver-decode".to_string())
+            .spawn_scoped(scope, || {
+                pool.install(|| {
+                    tasks.par_iter().try_for_each_with(sender, |sender, task| {
+                        let chunk = decode(task)?;
+                        sender.send(chunk).map_err(|_| {
+                            RomWeaverError::Validation(receiver_closed_message.to_string())
+                        })
+                    })
+                })
+            })
+            .map_err(|error| {
+                RomWeaverError::Validation(format!(
+                    "failed to start parallel decode coordinator: {error}"
+                ))
+            })?;
+
+        let mut receiver = Some(receiver);
+        while let Some(active_receiver) = receiver.as_ref() {
+            match active_receiver.recv() {
+                Ok(chunk) => {
+                    if let Err(error) = write_chunk(chunk) {
+                        write_result = Err(error);
+                        drop(receiver.take());
+                        break;
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+
+        let producer_result = producer.join().map_err(|_| {
+            RomWeaverError::Validation("parallel decode coordinator panicked".into())
+        })?;
+        if let Err(error) = write_result {
+            return Err(error);
+        }
+        producer_result
+    })
 }
 
 fn collect_archive_inputs(inputs: &[PathBuf]) -> Result<Vec<ArchiveInputEntry>> {

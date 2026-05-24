@@ -728,6 +728,7 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
     outputName,
     rvzCompression,
     rvzCompressionLevel,
+    threads,
     logLevel,
     onLog,
     onProgress,
@@ -750,7 +751,7 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
             logLevel,
             outputFileName,
             outputPath,
-            workerThreads: 1,
+            workerThreads: threads,
           },
           onProgress ? forwardDiscProgress(onProgress) : undefined,
           onLog,
@@ -877,7 +878,7 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
       await workerSource.cleanup().catch(() => undefined);
     }
   },
-  extractRvz: async ({ source, fileName, outputName, logLevel, onLog, onProgress }) => {
+  extractRvz: async ({ source, fileName, outputName, threads, logLevel, onLog, onProgress }) => {
     const stageRvzSource = () =>
       workerIo.stageSource({
         fallbackFileName: fileName,
@@ -929,7 +930,7 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
           outDirPath,
           select: [],
           sourcePath: workerSource.filePath,
-          workerThreads: 1,
+          workerThreads: threads,
         },
         onProgress ? forwardDiscProgress(onProgress) : undefined,
         onLog,

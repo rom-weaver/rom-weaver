@@ -336,7 +336,7 @@ const invokeRomWeaverCompressionCreateWorker = async (
   for (const codec of normalizeCodecEntries(input.codecs)) args.push("--codec", codec);
   const levelProfile = normalizeCompressionLevelProfile(input.levelProfile);
   if (levelProfile) args.push("--level", levelProfile);
-  const threadArg = toThreadArg(input.workerThreads, "1");
+  const threadArg = toThreadArg(input.workerThreads);
   if (threadArg) args.push("--threads", threadArg);
   if (isTraceEnabled(input.logLevel)) args.unshift("--trace");
 
@@ -382,7 +382,7 @@ const invokeRomWeaverExtractWorker = async (
     args.push("--select", value);
   }
   if (input.splitBin) args.push("--split-bin");
-  const threadArg = toThreadArg(input.workerThreads, "1");
+  const threadArg = toThreadArg(input.workerThreads);
   if (threadArg) args.push("--threads", threadArg);
   if (isTraceEnabled(input.logLevel)) args.unshift("--trace");
   const result = await runRomWeaverJson(

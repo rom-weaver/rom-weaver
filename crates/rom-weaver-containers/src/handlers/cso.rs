@@ -558,11 +558,7 @@ impl ContainerHandler for CsoContainerHandler {
         let reader = self.open_reader(&request.source)?;
         let logical_bytes = reader.file_size();
         let tasks = self.build_extract_tasks(logical_bytes);
-        let extract_capability = if wasm_threaded_runtime_cso_parallel_is_unstable() {
-            ThreadCapability::single_threaded()
-        } else {
-            ThreadCapability::parallel(Some(tasks.len().max(1)))
-        };
+        let extract_capability = cso_extract_thread_capability(Some(tasks.len().max(1)));
         let (execution, pool) = context.build_pool(extract_capability)?;
         let extract_progress_label = format!("extracting `{}`", self.descriptor.name);
         let extract_progress_bytes = Arc::new(AtomicU64::new(0));
@@ -571,19 +567,20 @@ impl ContainerHandler for CsoContainerHandler {
         if let Some(parent) = output_path.parent() {
             fs::create_dir_all(parent)?;
         }
-        let ordered_writer = Arc::new(Mutex::new(OrderedChunkWriter::new(
+        let mut ordered_writer = OrderedChunkWriter::new(
             BufWriter::new(File::create(&output_path)?),
             bounded_items_for_threads(execution.effective_threads),
-        )?));
+        )?;
         let source = request.source.clone();
         let decode_result = if execution.used_parallelism {
-            let writer = Arc::clone(&ordered_writer);
             let progress_context = context.clone();
             let progress_execution = execution.clone();
-            let extract_progress_bytes = Arc::clone(&extract_progress_bytes);
-            let extract_progress_bucket = Arc::clone(&extract_progress_bucket);
-            pool.install(|| {
-                tasks.par_iter().try_for_each(|task| {
+            write_decoded_chunks_from_workers(
+                &pool,
+                &tasks,
+                bounded_items_for_threads(execution.effective_threads),
+                "cso extract output receiver closed",
+                |task| {
                     let chunk = self.decode_extract_task(&source, task)?;
                     let chunk_len = u64::try_from(chunk.data.len()).map_err(|_| {
                         RomWeaverError::Validation("cso extract chunk length overflowed".into())
@@ -597,14 +594,10 @@ impl ContainerHandler for CsoContainerHandler {
                     let chunk_index = u64::try_from(chunk.index).map_err(|_| {
                         RomWeaverError::Validation("cso extract chunk index overflowed".into())
                     })?;
-                    {
-                        let mut ordered = writer.lock().map_err(|_| {
-                            RomWeaverError::Validation(
-                                "cso extract output writer lock poisoned".into(),
-                            )
-                        })?;
-                        ordered.write_chunk(chunk_index, chunk.data)?;
-                    }
+                    Ok((chunk_index, chunk.data, chunk_len))
+                },
+                |(chunk_index, data, chunk_len)| {
+                    ordered_writer.write_chunk(chunk_index, data)?;
                     if logical_bytes > 0 {
                         let completed = extract_progress_bytes
                             .fetch_add(chunk_len, Ordering::Relaxed)
@@ -623,8 +616,8 @@ impl ContainerHandler for CsoContainerHandler {
                         );
                     }
                     Ok(())
-                })
-            })
+                },
+            )
         } else {
             tasks.iter().try_for_each(|task| {
                 let chunk = self.decode_extract_task(&source, task)?;
@@ -640,12 +633,7 @@ impl ContainerHandler for CsoContainerHandler {
                 let chunk_index = u64::try_from(chunk.index).map_err(|_| {
                     RomWeaverError::Validation("cso extract chunk index overflowed".into())
                 })?;
-                {
-                    let mut ordered = ordered_writer.lock().map_err(|_| {
-                        RomWeaverError::Validation("cso extract output writer lock poisoned".into())
-                    })?;
-                    ordered.write_chunk(chunk_index, chunk.data)?;
-                }
+                ordered_writer.write_chunk(chunk_index, chunk.data)?;
                 if logical_bytes > 0 {
                     let completed = extract_progress_bytes
                         .fetch_add(chunk_len, Ordering::Relaxed)
@@ -670,12 +658,7 @@ impl ContainerHandler for CsoContainerHandler {
             let _ = fs::remove_file(&output_path);
             return Err(error);
         }
-        let ordered = Arc::try_unwrap(ordered_writer)
-            .map_err(|_| RomWeaverError::Validation("cso extract writer still in use".into()))?;
-        let ordered = ordered.into_inner().map_err(|_| {
-            RomWeaverError::Validation("cso extract output writer lock poisoned".into())
-        })?;
-        if let Err(error) = ordered.finish() {
+        if let Err(error) = ordered_writer.finish() {
             let _ = fs::remove_file(&output_path);
             return Err(error);
         }
@@ -720,13 +703,12 @@ impl ContainerHandler for CsoContainerHandler {
         }
 
         let (execution, encode_result) = if create_tasks.is_empty() {
-            (context.plan_threads(cso_thread_capability()), Ok(Vec::new()))
+            (
+                context.plan_threads(cso_create_thread_capability(None)),
+                Ok(Vec::new()),
+            )
         } else {
-            let create_capability = if wasm_threaded_runtime_cso_parallel_is_unstable() {
-                ThreadCapability::single_threaded()
-            } else {
-                ThreadCapability::parallel(Some(create_tasks.len().max(1)))
-            };
+            let create_capability = cso_create_thread_capability(Some(create_tasks.len().max(1)));
             let (execution, pool) = context.build_pool(create_capability)?;
             let source = input.clone();
             let encode_result = if execution.used_parallelism {
@@ -832,8 +814,8 @@ impl ContainerHandler for CsoContainerHandler {
             inspect: true,
             extract: true,
             create: true,
-            extract_threads: cso_thread_capability(),
-            create_threads: cso_thread_capability(),
+            extract_threads: cso_extract_thread_capability(None),
+            create_threads: cso_create_thread_capability(None),
         }
     }
 }
