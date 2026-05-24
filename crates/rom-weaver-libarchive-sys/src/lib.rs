@@ -7,12 +7,12 @@ pub use libz_sys;
 pub use lz4_sys;
 pub use zstd_sys;
 
-#[cfg(all(not(target_vendor = "apple"), not(target_family = "wasm")))]
+#[cfg(all(not(target_vendor = "apple"), not(target_arch = "wasm32")))]
 pub use openssl_sys;
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
-#[cfg(target_family = "wasm")]
+#[cfg(target_arch = "wasm32")]
 unsafe extern "C" {
     pub fn archive_free(arg1: *mut archive) -> ::std::os::raw::c_int;
     pub fn archive_errno(arg1: *mut archive) -> ::std::os::raw::c_int;

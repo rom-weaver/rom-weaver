@@ -41,7 +41,7 @@ fn main() {
 
     println!("cargo:rerun-if-changed={}", libarchive_dir.display());
 
-    let source_dir = if is_wasm_target() {
+    let source_dir = if is_wasm32_target() {
         prepare_wasm_source_tree(&libarchive_dir, &out_dir)
     } else {
         libarchive_dir
@@ -51,10 +51,10 @@ fn main() {
     generate_bindings(&source_dir);
 }
 
-fn is_wasm_target() -> bool {
-    env::var("CARGO_CFG_TARGET_FAMILY")
+fn is_wasm32_target() -> bool {
+    env::var("CARGO_CFG_TARGET_ARCH")
         .ok()
-        .map(|family| family.split(',').any(|value| value == "wasm"))
+        .map(|arch| arch == "wasm32")
         .unwrap_or(false)
 }
 
@@ -249,7 +249,7 @@ fn build_libarchive(libarchive_dir: &Path) {
             .define("CMAKE_ASM_FLAGS", joined.as_str());
     }
 
-    if is_wasm_target() {
+    if is_wasm32_target() {
         if let Some(ar) = target_tool_env("AR") {
             cmake_config.define("CMAKE_AR", ar);
         }
@@ -343,7 +343,7 @@ fn generate_bindings(libarchive_dir: &Path) {
     );
 
     let include_path = libarchive_dir.join("libarchive");
-    let wasm_target = is_wasm_target();
+    let wasm_target = is_wasm32_target();
     let mut bindgen_builder = bindgen::builder()
         .header("wrapper.h")
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))

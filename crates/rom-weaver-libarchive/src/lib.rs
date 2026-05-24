@@ -1051,15 +1051,12 @@ fn path_to_cstring(path: &Path, label: &str) -> Result<CString> {
     })
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, target_os = "wasi"))]
 fn path_bytes(path: &Path) -> Cow<'_, [u8]> {
+    #[cfg(unix)]
     use std::os::unix::ffi::OsStrExt;
 
-    Cow::Borrowed(path.as_os_str().as_bytes())
-}
-
-#[cfg(all(not(unix), target_os = "wasi"))]
-fn path_bytes(path: &Path) -> Cow<'_, [u8]> {
+    #[cfg(all(not(unix), target_os = "wasi"))]
     use std::os::wasi::ffi::OsStrExt;
 
     Cow::Borrowed(path.as_os_str().as_bytes())
