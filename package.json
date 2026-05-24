@@ -1,0 +1,14 @@
+{
+  "name": "rom-weaver-quality-hooks",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "prepare": "lefthook install",
+    "hooks:install": "lefthook install",
+    "hooks:run": "lefthook run pre-commit --force",
+    "hooks:validate": "lefthook validate"
+  },
+  "devDependencies": {
+    "lefthook": "2.1.8"
+  }
+}

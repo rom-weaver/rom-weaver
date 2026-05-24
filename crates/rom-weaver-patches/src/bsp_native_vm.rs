@@ -1483,8 +1483,10 @@ impl<'a, 'pool> BspVm<'a, 'pool> {
             if position == 0x45_4F_46 {
                 break;
             }
-            position = position.wrapping_add(self.current_file_pointer);
-            if position >= 0xFFFF_FFFF {
+            position = position
+                .checked_add(self.current_file_pointer)
+                .ok_or_else(|| "file position overflow".to_string())?;
+            if position == u32::MAX {
                 return Err("file position overflow".to_string());
             }
 

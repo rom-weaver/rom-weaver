@@ -641,6 +641,9 @@
             thread_count: usize,
             on_progress: Option<&Arc<dyn Fn(u64) + Send + Sync>>,
         ) -> std::result::Result<(), String> {
+            #[cfg(not(any(unix, windows)))]
+            let _ = thread_count;
+
             #[cfg(any(unix, windows))]
             if thread_count > 1 {
                 return Self::extract_to_file_with_rust_parallel(

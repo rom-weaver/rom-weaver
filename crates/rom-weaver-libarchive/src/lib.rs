@@ -898,12 +898,11 @@ fn close_regular_archive_reader(
 fn detect_regular_archive_format(source: &Path, format_name: &str) -> Result<i32> {
     let mut reader = open_regular_archive_reader(source, format_name)?;
     let result = (|| -> Result<i32> {
-        let first_entry = reader.next_entry().map_err(|error| {
+        let _ = reader.next_entry().map_err(|error| {
             RomWeaverError::Validation(format!(
                 "{format_name} probe failed while reading header: {error}"
             ))
         })?;
-        drop(first_entry);
         Ok(reader.format())
     })();
 
