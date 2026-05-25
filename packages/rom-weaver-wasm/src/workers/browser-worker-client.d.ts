@@ -18,13 +18,19 @@ export type BrowserWorkerRunJsonOptions<TEvent = RomWeaverProgressEvent, TTraceE
 
 export type BrowserWorkerClientError = RomWeaverWorkerError;
 
+export interface BrowserWorkerReady {
+  mode: string;
+  threaded: boolean;
+  wasmUrl: string | null;
+}
+
 export function createBrowserWorkerClient(
   options?: BrowserWorkerClientCreateOptions,
 ): BrowserRomWeaverWorkerClient;
 
 export class BrowserRomWeaverWorkerClient {
   constructor(worker: Worker);
-  init(options?: Record<string, unknown>): Promise<{ mode: string }>;
+  init(options?: Record<string, unknown>): Promise<BrowserWorkerReady>;
   run(args?: unknown[], options?: RomWeaverRunOptions & Record<string, unknown>): Promise<RomWeaverRunResult>;
   runJson<TEvent = RomWeaverProgressEvent, TTraceEvent = unknown>(
     args?: unknown[],

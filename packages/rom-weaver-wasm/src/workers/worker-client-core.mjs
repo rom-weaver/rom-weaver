@@ -94,7 +94,11 @@ export class RomWeaverWorkerClientCore {
         return;
       case 'ready':
         this._pending.delete(requestId);
-        pending?.resolve({ mode: message.mode });
+        pending?.resolve({
+          mode: message.mode,
+          threaded: Boolean(message.threaded),
+          wasmUrl: message.wasmUrl ?? null,
+        });
         return;
       case 'disposed':
         this._pending.delete(requestId);

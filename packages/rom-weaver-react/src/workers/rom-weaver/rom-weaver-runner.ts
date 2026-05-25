@@ -1,3 +1,4 @@
+import { canUseThreadedWasm } from "../../platform/shared/compression-options.ts";
 import { isBrowserRuntime } from "../shared/runtime-env.ts";
 import { WORKER_OPFS_MOUNTPOINT } from "../shared/worker-storage/storage-layout.ts";
 
@@ -30,47 +31,102 @@ type RomWeaverRunJsonResult = {
 };
 
 type RomWeaverWorkerClient = {
-  init: (...args: unknown[]) => Promise<unknown>;
+  init: (...args: unknown[]) => Promise<RomWeaverRunnerReadyMetadata>;
   dispose?: () => Promise<void>;
   runJson: (args?: unknown[], options?: RomWeaverRunJsonOptions) => Promise<RomWeaverRunJsonResult>;
 };
 
+type RomWeaverRunnerReadyMetadata = {
+  mode: string;
+  threaded: boolean;
+  wasmUrl: string | null;
+};
+
 type RomWeaverRunner = {
   dispose?: () => Promise<void>;
+  ready: RomWeaverRunnerReadyMetadata;
   runJson: (args: string[], options?: RomWeaverRunJsonOptions) => Promise<RomWeaverRunJsonResult>;
 };
 
-let browserWasmUrlPromise: Promise<string> | null = null;
+type BrowserWasmAssetSelection = {
+  selectedWasmUrl: string;
+  threaded: boolean;
+  threadedWasmUrl: string;
+  wasmUrl: string;
+};
+
+let browserWasmAssetPromise: Promise<BrowserWasmAssetSelection> | null = null;
 let browserRunnerPromise: Promise<RomWeaverRunner> | null = null;
 
 const normalizeArgs = (args: string[]) => args.map((value) => String(value));
 
-const resolveBrowserWasmUrl = async () => {
-  if (!browserWasmUrlPromise) {
-    browserWasmUrlPromise = import("rom-weaver-wasm/rom-weaver-cli.wasm?url")
+const readWasmUrlModuleDefault = (module: { default?: unknown }, fallback: string) => {
+  const candidate = module.default;
+  if (typeof candidate === "string" && candidate.trim()) return candidate;
+  return fallback;
+};
+
+const selectRomWeaverBrowserWasmAsset = (options: {
+  threadedSupported?: boolean;
+  threadedWasmUrl: string;
+  wasmUrl: string;
+}): BrowserWasmAssetSelection => {
+  const threaded = options.threadedSupported ?? canUseThreadedWasm();
+  return {
+    selectedWasmUrl: threaded ? options.threadedWasmUrl : options.wasmUrl,
+    threaded,
+    threadedWasmUrl: options.threadedWasmUrl,
+    wasmUrl: options.wasmUrl,
+  };
+};
+
+const resolveBrowserWasmAsset = async () => {
+  if (!browserWasmAssetPromise) {
+    browserWasmAssetPromise = Promise.all([
+      import("rom-weaver-wasm/rom-weaver-cli.wasm?url")
+        .then((module) => readWasmUrlModuleDefault(module, "rom-weaver-wasm/rom-weaver-cli.wasm"))
+        .catch(() => "rom-weaver-wasm/rom-weaver-cli.wasm"),
+      import("rom-weaver-wasm/rom-weaver-cli-threaded.wasm?url")
+        .then((module) => readWasmUrlModuleDefault(module, "rom-weaver-wasm/rom-weaver-cli-threaded.wasm"))
+        .catch(() => "rom-weaver-wasm/rom-weaver-cli-threaded.wasm"),
+    ])
       .then((module) => {
-        const candidate = (module as { default?: unknown }).default;
-        if (typeof candidate === "string" && candidate.trim()) return candidate;
-        return "rom-weaver-wasm/rom-weaver-cli.wasm";
+        const [wasmUrl, threadedWasmUrl] = module;
+        return selectRomWeaverBrowserWasmAsset({ threadedWasmUrl, wasmUrl });
       })
-      .catch(() => "rom-weaver-wasm/rom-weaver-cli.wasm");
+      .catch(() =>
+        selectRomWeaverBrowserWasmAsset({
+          threadedWasmUrl: "rom-weaver-wasm/rom-weaver-cli-threaded.wasm",
+          wasmUrl: "rom-weaver-wasm/rom-weaver-cli.wasm",
+        }),
+      );
   }
-  return browserWasmUrlPromise;
+  return browserWasmAssetPromise;
 };
 
 const createBrowserRunner = async (): Promise<RomWeaverRunner> => {
   const { createBrowserWorkerClient } = await import("rom-weaver-wasm/workers/browser-client");
   const client = createBrowserWorkerClient() as unknown as RomWeaverWorkerClient;
-  const wasmUrl = await resolveBrowserWasmUrl();
-  await client.init({
+  const wasmAsset = await resolveBrowserWasmAsset();
+  const ready = await client.init({
+    preferThreadedWasm: wasmAsset.threaded,
     runtimeMounts: [WORKER_OPFS_MOUNTPOINT],
-    wasmUrl,
+    threadedWasmUrl: wasmAsset.threadedWasmUrl,
+    wasmUrl: wasmAsset.wasmUrl,
     workGuestPath: WORKER_OPFS_MOUNTPOINT,
+  });
+  publishRomWeaverWasmDiagnostic({
+    context: "rom-weaver browser runner",
+    contextUrl: wasmAsset.selectedWasmUrl,
+    reason: ready.threaded ? "cross-origin isolated" : "single-thread fallback",
+    threaded: ready.threaded,
+    url: ready.wasmUrl || wasmAsset.selectedWasmUrl,
   });
   return {
     dispose: async () => {
       await client.dispose?.().catch(() => undefined);
     },
+    ready,
     runJson: (args, options) => client.runJson(normalizeArgs(args), options),
   };
 };
@@ -99,7 +155,42 @@ const runRomWeaverJson = async (args: string[], options?: RomWeaverRunJsonOption
 };
 
 const warmupRomWeaverRunner = async () => {
-  await createRomWeaverRunner();
+  return (await createRomWeaverRunner()).ready;
+};
+
+const getRomWeaverRunnerMetadata = async () => {
+  return (await createRomWeaverRunner()).ready;
+};
+
+const publishRomWeaverWasmDiagnostic = (message: {
+  context?: string;
+  contextUrl?: string;
+  reason?: string;
+  threaded: boolean;
+  url: string;
+}) => {
+  if (typeof BroadcastChannel !== "function") return;
+  try {
+    const channel = new BroadcastChannel("rom-weaver-runtime-diagnostics");
+    channel.postMessage({
+      id: `rom-weaver-runner:${message.url}`,
+      kind: "wasm",
+      name: getResourceName(message.url),
+      ...message,
+    });
+    channel.close();
+  } catch (_err) {
+    // diagnostics are best-effort
+  }
+};
+
+const getResourceName = (urlLike: string) => {
+  try {
+    const url = new URL(urlLike, globalThis.location?.href || "http://localhost/");
+    return url.pathname.split("/").filter(Boolean).pop() || "rom-weaver-cli.wasm";
+  } catch (_err) {
+    return urlLike.split("/").filter(Boolean).pop() || "rom-weaver-cli.wasm";
+  }
 };
 
 const getErrorMessage = (value: unknown) => {
@@ -165,4 +256,11 @@ const getRomWeaverFailureMessage = (
 };
 
 export type { RomWeaverRunJsonEvent, RomWeaverRunJsonOptions, RomWeaverRunJsonResult };
-export { getRomWeaverFailureMessage, resetRomWeaverRunner, runRomWeaverJson, warmupRomWeaverRunner };
+export {
+  getRomWeaverFailureMessage,
+  getRomWeaverRunnerMetadata,
+  resetRomWeaverRunner,
+  runRomWeaverJson,
+  selectRomWeaverBrowserWasmAsset,
+  warmupRomWeaverRunner,
+};

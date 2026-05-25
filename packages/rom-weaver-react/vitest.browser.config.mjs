@@ -40,6 +40,10 @@ export default mergeConfig(baseConfig, {
     fs: {
       allow: [REPO_ROOT],
     },
+    headers: {
+      "Cross-Origin-Embedder-Policy": "require-corp",
+      "Cross-Origin-Opener-Policy": "same-origin",
+    },
   },
   test: {
     browser: {

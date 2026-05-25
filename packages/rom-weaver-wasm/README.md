@@ -5,6 +5,7 @@ JavaScript wrappers and WASM artifacts for browser `rom-weaver` execution.
 ## What You Get
 
 - Browser OPFS runner (`createRomWeaverBrowserOpfs`) for Dedicated Workers
+- Browser WASI thread support for `rom-weaver-cli-threaded.wasm` when cross-origin isolation enables `SharedArrayBuffer`
 - Dedicated browser worker client (`createBrowserWorkerClient`)
 - First-party TypeScript declarations
 
@@ -47,6 +48,8 @@ console.log(result.exitCode, result.ok);
 Runtime behavior:
 
 - WASI sees a single mounted directory: `/work`.
+- Threaded wasm must be selected explicitly with `threadedWasmUrl`/`preferThreadedWasm` or a threaded `wasmUrl`.
+- `runner.threaded` and `runner.wasmUrl` report the loaded runtime.
 - Browser picker handles/files should be staged into OPFS before `run()`.
 - Known CLI output paths are created in OPFS before `_start()` because WASI Preview 1 filesystem calls are synchronous.
 - Dynamic files created during a run are flushed back to OPFS after `_start()` returns.

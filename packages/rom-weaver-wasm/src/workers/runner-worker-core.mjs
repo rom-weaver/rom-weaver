@@ -32,7 +32,13 @@ export function createRunnerWorkerMessageQueue({ postMessage, initRunner }) {
           options: message.options ?? {},
         });
         runner = nextRunner;
-        postMessage({ type: 'ready', requestId, mode: String(mode) });
+        postMessage({
+          type: 'ready',
+          requestId,
+          mode: String(mode),
+          threaded: Boolean(nextRunner?.threaded),
+          wasmUrl: nextRunner?.wasmUrl ?? null,
+        });
         return;
       }
 

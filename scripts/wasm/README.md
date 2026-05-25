@@ -6,12 +6,14 @@ This folder contains ESM wrappers for browser execution of `rom-weaver-cli.wasm`
 
 - `rom-weaver-runtime-utils.mjs`: shared wasm import and JSON/trace parsing helpers
 - `rom-weaver-browser-opfs-api.mjs`: browser OPFS + WASI `/work` runner
+- `workers/browser-wasi-thread-worker.mjs`: browser WASI thread worker for `rom-weaver-cli-threaded.wasm`
 
 ## Runtime Requirements
 
 - Secure-context Dedicated Worker runtime
 - `rom-weaver-cli.wasm` artifact from `scripts/build-wasm-cli.sh`
 - Browser support for OPFS + `FileSystemSyncAccessHandle`
+- Cross-origin isolation and `SharedArrayBuffer` when using `rom-weaver-cli-threaded.wasm`
 - `@bjorn3/browser_wasi_shim`
 
 ## Quick Use (Dedicated Worker)

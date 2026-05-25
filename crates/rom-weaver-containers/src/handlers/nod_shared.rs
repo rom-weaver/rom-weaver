@@ -61,8 +61,27 @@ impl NodHandlerCore {
 
     fn open_disc(&self, source: &Path, preloader_threads: usize) -> Result<NodDiscReader> {
         self.open_disc_with(source, preloader_threads, |path, options| {
-            NodDiscReader::new(path, options)
+            self.open_disc_from_path_or_stream(path, options)
         })
+    }
+
+    fn open_disc_from_path_or_stream(
+        &self,
+        source: &Path,
+        options: &NodDiscOptions,
+    ) -> std::result::Result<NodDiscReader, String> {
+        match NodDiscReader::new(source, options) {
+            Ok(disc) => Ok(disc),
+            Err(path_error) if self.nod_format != NodFormat::Nfs => {
+                let file = File::open(source).map_err(|stream_open_error| {
+                    format!("{path_error}; stream fallback open failed: {stream_open_error}")
+                })?;
+                NodDiscReader::new_from_non_cloneable_read(file, options).map_err(|stream_error| {
+                    format!("{path_error}; stream fallback failed: {stream_error}")
+                })
+            }
+            Err(path_error) => Err(path_error.to_string()),
+        }
     }
 
     fn open_disc_for_inspect(&self, source: &Path) -> Result<NodDiscReader> {

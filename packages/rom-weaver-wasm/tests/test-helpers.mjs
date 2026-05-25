@@ -55,6 +55,7 @@ export async function withTempFixture(run, options = {}) {
     await run({
       dir: OPFS_GUEST_ROOT,
       workDir: OPFS_GUEST_ROOT,
+      init,
       sourcePath,
       worker,
       opfsHandle: fixtureHandle,

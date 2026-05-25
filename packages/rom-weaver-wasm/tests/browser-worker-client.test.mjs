@@ -212,7 +212,9 @@ describe('rom-weaver-wasm browser runner parity', () => {
   });
 
   it('runner supports explicit wasm module URL paths', async () => {
-    await withTempFixture(async ({ sourcePath, worker }) => {
+    await withTempFixture(async ({ init, sourcePath, worker }) => {
+      expect(init.threaded).toBe(false);
+      expect(init.wasmUrl).toContain('rom-weaver-cli.wasm');
       const result = await worker.runJson([
         'checksum',
         sourcePath,
@@ -227,6 +229,66 @@ describe('rom-weaver-wasm browser runner parity', () => {
     }, {
       initOptions: {
         wasmUrl: new URL('../rom-weaver-cli.wasm', import.meta.url).href,
+      },
+    });
+  });
+
+  it('runner initializes the threaded wasm module when selected', async () => {
+    await withTempFixture(async ({ init, sourcePath, worker }) => {
+      expect(init.threaded).toBe(true);
+      expect(init.wasmUrl).toContain('rom-weaver-cli-threaded.wasm');
+
+      const result = await worker.runJson([
+        'checksum',
+        sourcePath,
+        '--algo',
+        'crc32',
+        '--no-extract',
+        '--threads',
+        '1',
+      ]);
+
+      assertRunJsonSucceeded(result, {
+        command: 'checksum',
+      });
+    }, {
+      initOptions: {
+        wasmUrl: new URL('../rom-weaver-cli-threaded.wasm', import.meta.url).href,
+      },
+    });
+  });
+
+  it('threaded browser runner executes parallel checksum work with wasm workers', async () => {
+    await withTempFixture(async ({ dir, init, worker, opfsHandle }) => {
+      expect(init.threaded).toBe(true);
+      const sourcePath = joinGuestPath(dir, 'threaded-checksum-source.bin');
+      await writeGuestPatternFile(opfsHandle, sourcePath, 9 * 1024 * 1024);
+
+      const result = await worker.runJson([
+        'checksum',
+        sourcePath,
+        '--algo',
+        'crc32',
+        '--algo',
+        'sha1',
+        '--algo',
+        'sha256',
+        '--algo',
+        'blake3',
+        '--no-extract',
+        '--threads',
+        '4',
+      ]);
+
+      const terminal = assertRunJsonSucceeded(result, {
+        command: 'checksum',
+      });
+      expect(terminal.requested_threads).toBe(4);
+      expect(terminal.effective_threads).toBeGreaterThan(1);
+      expect(terminal.used_parallelism).toBe(true);
+    }, {
+      initOptions: {
+        wasmUrl: new URL('../rom-weaver-cli-threaded.wasm', import.meta.url).href,
       },
     });
   });
@@ -398,7 +460,9 @@ describe('rom-weaver-wasm browser runner parity', () => {
 
 describe('rom-weaver-wasm browser worker client parity', () => {
   it('browser worker client initializes and runs checksum with runJson', async () => {
-    await withTempFixture(async ({ sourcePath, worker }) => {
+    await withTempFixture(async ({ init, sourcePath, worker }) => {
+      expect(init.threaded).toBe(false);
+      expect(init.wasmUrl).toContain('rom-weaver-cli.wasm');
       let streamedEvents = 0;
       const result = await worker.runJson(
         ['checksum', sourcePath, '--algo', 'crc32', '--no-extract'],

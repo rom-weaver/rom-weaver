@@ -17,6 +17,10 @@ export default defineConfig({
     fs: {
       allow: [REPO_ROOT],
     },
+    headers: {
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+      'Cross-Origin-Opener-Policy': 'same-origin',
+    },
   },
   test: {
     include: ['tests/*.test.mjs'],

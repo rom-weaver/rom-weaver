@@ -298,7 +298,9 @@ impl ContainerRegistry {
     pub fn recommend_compress_format(&self, path: &Path) -> CompressFormatRecommendation {
         let mut options = NodDiscOptions::default();
         options.preloader_threads = 0;
-        if let Ok(disc) = NodDiscReader::new(path, &options) {
+        if let Ok(file) = File::open(path)
+            && let Ok(disc) = NodDiscReader::new_from_non_cloneable_read(file, &options)
+        {
             let header = disc.header();
             if header.is_wii() || header.is_gamecube() {
                 return CompressFormatRecommendation {

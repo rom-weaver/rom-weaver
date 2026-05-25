@@ -22,6 +22,7 @@ const REQUIRED_DIST_COPIES = [
   { src: 'rom-weaver-cli-threaded.wasm.br', dst: 'rom-weaver-cli-threaded.wasm.br' },
   { src: 'rom-weaver-runtime-utils.mjs', dst: 'src/rom-weaver-runtime-utils.mjs' },
   { src: 'rom-weaver-browser-opfs-api.mjs', dst: 'src/rom-weaver-browser-opfs-api.mjs' },
+  { src: 'workers/browser-wasi-thread-worker.mjs', dst: 'src/workers/browser-wasi-thread-worker.mjs' },
   { src: 'threaded.args', dst: 'threaded.args' },
 ];
 

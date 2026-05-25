@@ -114,6 +114,11 @@ export type RomWeaverBrowserSyncAccessMode = 'read-only' | 'readwrite' | 'readwr
 export interface RomWeaverBrowserOpfsOptions {
   module?: WebAssembly.Module;
   wasmUrl?: string;
+  threadedWasmUrl?: string;
+  preferThreadedWasm?: boolean;
+  threadWorkerUrl?: string | URL;
+  sharedMemoryInitialPages?: number;
+  sharedMemoryMaximumPages?: number;
   opfsHandle?: FileSystemDirectoryHandleLike;
   /** Guest path for the single staged OPFS mount. Defaults to `/work`. */
   workGuestPath?: string;
@@ -138,6 +143,7 @@ export interface RomWeaverBrowserOpfsRunOptions extends RomWeaverRunOptions {
   writableDirectories?: string[];
   syncAccessMode?: RomWeaverBrowserSyncAccessMode;
   scratchFilePoolSize?: number;
+  threadWorkerUrl?: string | URL;
   program?: string;
   debugWasi?: boolean;
 }

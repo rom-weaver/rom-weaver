@@ -22,6 +22,8 @@ export interface RomWeaverBrowserOpfsRunner extends RomWeaverBrowserOpfsRunnerBa
   opfsGuestPath: string;
   workGuestPath: string;
   runtimeMounts: string[];
+  threaded: boolean;
+  wasmUrl: string | null;
   writableRoots: string[];
 }
 
