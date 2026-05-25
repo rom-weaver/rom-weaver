@@ -233,6 +233,19 @@ describe('rom-weaver-wasm browser runner parity', () => {
     });
   });
 
+  it('runner auto-selects threaded wasm when runtime capability is available', async () => {
+    await withTempFixture(async ({ init }) => {
+      const canUseThreadedWasm = typeof SharedArrayBuffer === 'function' && globalThis.crossOriginIsolated === true;
+      expect(init.threaded).toBe(canUseThreadedWasm);
+      expect(init.wasmUrl).toContain(canUseThreadedWasm ? 'rom-weaver-cli-threaded.wasm' : 'rom-weaver-cli.wasm');
+    }, {
+      initOptions: {
+        wasmUrl: new URL('../rom-weaver-cli.wasm', import.meta.url).href,
+        threadedWasmUrl: new URL('../rom-weaver-cli-threaded.wasm', import.meta.url).href,
+      },
+    });
+  });
+
   it('runner initializes the threaded wasm module when selected', async () => {
     await withTempFixture(async ({ init, sourcePath, worker }) => {
       expect(init.threaded).toBe(true);

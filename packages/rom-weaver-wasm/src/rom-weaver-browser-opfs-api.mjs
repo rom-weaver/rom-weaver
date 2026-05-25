@@ -7,6 +7,8 @@ import {
 } from './rom-weaver-runtime-utils.mjs';
 
 const DEFAULT_WORK_GUEST_PATH = '/work';
+const DEFAULT_BROWSER_WASM_URL = new URL('../rom-weaver-cli.wasm', import.meta.url).href;
+const DEFAULT_BROWSER_THREADED_WASM_URL = new URL('../rom-weaver-cli-threaded.wasm', import.meta.url).href;
 const DEFAULT_SCRATCH_FILE_POOL_SIZE = 256;
 const DEFAULT_SHARED_MEMORY_INITIAL_PAGES = 256;
 const DEFAULT_SHARED_MEMORY_MAX_PAGES = 16384;
@@ -1657,7 +1659,7 @@ function normalizePositiveInteger(value, fallback, label) {
 }
 
 function assertThreadedWasmRuntimeSupported({ wasmUrl }) {
-  if (typeof SharedArrayBuffer === 'function' && globalThis.crossOriginIsolated === true) return;
+  if (canUseThreadedWasmRuntime()) return;
   throw new Error(
     `threaded wasm requires SharedArrayBuffer and cross-origin isolation (COOP/COEP); selected ${wasmUrl ?? 'WebAssembly.Module'} cannot run in this browser runtime`,
   );
@@ -1721,18 +1723,53 @@ async function resolveBrowserModule({
   if (module instanceof WebAssembly.Module) {
     return {
       module,
-      wasmUrl: typeof wasmUrl === 'string' ? wasmUrl : null,
+      wasmUrl: normalizeConfiguredWasmUrl(wasmUrl, null),
     };
   }
 
-  const url = preferThreadedWasm && threadedWasmUrl
-    ? threadedWasmUrl
-    : wasmUrl ?? './rom-weaver-cli.wasm';
+  const runtimeSupportsThreadedWasm = canUseThreadedWasmRuntime();
+  const requestedThreadedWasm = preferThreadedWasm === undefined
+    ? runtimeSupportsThreadedWasm
+    : Boolean(preferThreadedWasm);
+  const shouldUseThreadedWasm = requestedThreadedWasm && runtimeSupportsThreadedWasm;
+
+  const hasExplicitWasmUrl = hasConfiguredWasmUrl(wasmUrl);
+  const resolvedWasmUrl = normalizeConfiguredWasmUrl(wasmUrl, DEFAULT_BROWSER_WASM_URL);
+  const resolvedThreadedWasmUrl = normalizeConfiguredWasmUrl(
+    threadedWasmUrl,
+    hasExplicitWasmUrl ? null : DEFAULT_BROWSER_THREADED_WASM_URL,
+  );
+  const useThreadedCandidate = shouldUseThreadedWasm && Boolean(resolvedThreadedWasmUrl);
+  const primaryUrl = useThreadedCandidate ? resolvedThreadedWasmUrl : resolvedWasmUrl;
+  const fallbackUrl = useThreadedCandidate ? resolvedWasmUrl : null;
+
+  try {
+    return await compileBrowserModuleFromUrl(primaryUrl);
+  } catch (error) {
+    if (!fallbackUrl || fallbackUrl === primaryUrl) throw error;
+    return compileBrowserModuleFromUrl(fallbackUrl);
+  }
+}
+
+function canUseThreadedWasmRuntime() {
+  return typeof SharedArrayBuffer === 'function' && globalThis.crossOriginIsolated === true;
+}
+
+function hasConfiguredWasmUrl(url) {
+  return url instanceof URL || (typeof url === 'string' && url.trim().length > 0);
+}
+
+function normalizeConfiguredWasmUrl(url, fallback) {
+  if (url instanceof URL) return url.href;
+  if (typeof url === 'string' && url.trim().length > 0) return url;
+  return fallback;
+}
+
+async function compileBrowserModuleFromUrl(url) {
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`failed to fetch wasm module from ${url}: ${response.status} ${response.statusText}`);
   }
-
   const bytes = await response.arrayBuffer();
   return {
     module: await WebAssembly.compile(bytes),

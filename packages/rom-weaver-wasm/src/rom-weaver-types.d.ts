@@ -113,8 +113,11 @@ export type RomWeaverBrowserSyncAccessMode = 'read-only' | 'readwrite' | 'readwr
 
 export interface RomWeaverBrowserOpfsOptions {
   module?: WebAssembly.Module;
+  /** URL for the non-threaded wasm artifact. Defaults to the package artifact URL. */
   wasmUrl?: string;
+  /** URL for the threaded wasm artifact. Defaults to the package artifact URL. */
   threadedWasmUrl?: string;
+  /** Optional override for threaded selection; default behavior auto-selects by runtime capability. */
   preferThreadedWasm?: boolean;
   threadWorkerUrl?: string | URL;
   sharedMemoryInitialPages?: number;

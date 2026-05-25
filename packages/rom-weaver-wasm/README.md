@@ -48,7 +48,7 @@ console.log(result.exitCode, result.ok);
 Runtime behavior:
 
 - WASI sees a single mounted directory: `/work`.
-- Threaded wasm must be selected explicitly with `threadedWasmUrl`/`preferThreadedWasm` or a threaded `wasmUrl`.
+- When both `wasmUrl` and `threadedWasmUrl` are available, the runner auto-selects threaded wasm only when `SharedArrayBuffer` and `crossOriginIsolated` are available; otherwise it falls back to non-threaded wasm.
 - `runner.threaded` and `runner.wasmUrl` report the loaded runtime.
 - Browser picker handles/files should be staged into OPFS before `run()`.
 - Known CLI output paths are created in OPFS before `_start()` because WASI Preview 1 filesystem calls are synchronous.
