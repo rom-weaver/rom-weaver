@@ -10,7 +10,7 @@ BROWSER_OPFS_API_SOURCE="$ROOT_DIR/scripts/wasm/rom-weaver-browser-opfs-api.mjs"
 BROWSER_WASI_THREAD_WORKER_SOURCE="$ROOT_DIR/scripts/wasm/workers/browser-wasi-thread-worker.mjs"
 JS_API_README="$ROOT_DIR/scripts/wasm/README.md"
 WASM_NPM_PACKAGE_SYNC="$ROOT_DIR/packages/rom-weaver-wasm/scripts/sync-dist.mjs"
-PTHREAD_COUNT="${PTHREAD_COUNT:-8}"
+PTHREAD_COUNT="${PTHREAD_COUNT:-4}"
 SYNC_WASM_PACKAGE="${SYNC_WASM_PACKAGE:-0}"
 ALLOW_REPO_OUTPUT="${ALLOW_REPO_OUTPUT:-0}"
 
@@ -232,7 +232,7 @@ fi
 echo "artifacts written to ${OUT_DIR}"
 echo "compressed artifacts: rom-weaver-cli.wasm.br rom-weaver-cli-threaded.wasm.br"
 echo "threaded cli args file: threaded.args"
-echo "auto threads: WASI fixed default 8"
+echo "auto threads: fixed default 4"
 echo "force thread count: pass --threads ${PTHREAD_COUNT}"
 if [[ "$SYNC_WASM_PACKAGE" != "1" ]]; then
   echo "package sync: disabled (set SYNC_WASM_PACKAGE=1 to sync package artifacts)"

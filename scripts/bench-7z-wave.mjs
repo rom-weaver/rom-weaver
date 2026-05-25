@@ -138,7 +138,7 @@ function printHelp() {
     `  --size-mib <int>      Fixture size per profile in MiB (default: ${DEFAULT_SIZE_MIB})\n` +
     `  --codecs <csv>        Codec matrix (default: ${DEFAULT_CODECS.join(',')})\n` +
     `  --level <int>         7z compression level for non-store codecs (default: ${DEFAULT_LEVEL})\n` +
-    `  --threads <csv>       Thread counts (default: 1 and min(8, logical CPUs))\n` +
+    `  --threads <csv>       Thread counts (default: 1 and min(4, logical CPUs))\n` +
     `  --runtimes <csv>      Runtime matrix (native,wasm,7zz; default: ${DEFAULT_RUNTIMES.join(',')})\n` +
     `  --no-build            Skip cargo build if native binary is missing\n` +
     `  -h, --help            Show this message\n`);
@@ -149,7 +149,7 @@ function uniqueSorted(values) {
 }
 
 function defaultThreads() {
-  const maxThreads = Math.max(1, Math.min(8, cpus().length));
+  const maxThreads = Math.max(1, Math.min(4, cpus().length));
   return uniqueSorted([1, maxThreads]);
 }
 

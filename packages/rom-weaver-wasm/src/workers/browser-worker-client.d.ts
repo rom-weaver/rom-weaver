@@ -1,5 +1,6 @@
 import type {
   RomWeaverProgressEvent,
+  RomWeaverDefaultThreads,
   RomWeaverRunJsonResult,
   RomWeaverRunOptions,
   RomWeaverRunResult,
@@ -8,6 +9,7 @@ import type {
 import type { WorkerClientRunJsonOptions } from './worker-client-types.d.ts';
 
 export interface BrowserWorkerClientCreateOptions {
+  defaultThreads?: RomWeaverDefaultThreads;
   worker?: Worker;
   workerUrl?: URL | string;
   workerOptions?: WorkerOptions;
@@ -29,7 +31,7 @@ export function createBrowserWorkerClient(
 ): BrowserRomWeaverWorkerClient;
 
 export class BrowserRomWeaverWorkerClient {
-  constructor(worker: Worker);
+  constructor(worker: Worker, options?: { defaultThreads?: RomWeaverDefaultThreads });
   init(options?: Record<string, unknown>): Promise<BrowserWorkerReady>;
   run(args?: unknown[], options?: RomWeaverRunOptions & Record<string, unknown>): Promise<RomWeaverRunResult>;
   runJson<TEvent = RomWeaverProgressEvent, TTraceEvent = unknown>(

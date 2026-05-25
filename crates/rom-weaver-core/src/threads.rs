@@ -6,6 +6,8 @@ use tracing::trace;
 
 use crate::{Result, RomWeaverError};
 
+const DEFAULT_THREAD_COUNT: usize = 4;
+
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ThreadMode {
@@ -30,12 +32,7 @@ impl ThreadBudget {
 
     pub fn requested_threads(self) -> usize {
         match self {
-            #[cfg(target_family = "wasm")]
-            Self::Auto => 8,
-            #[cfg(not(target_family = "wasm"))]
-            Self::Auto => std::thread::available_parallelism()
-                .map(usize::from)
-                .unwrap_or(4),
+            Self::Auto => DEFAULT_THREAD_COUNT,
             Self::Fixed(count) => count.max(1),
         }
     }

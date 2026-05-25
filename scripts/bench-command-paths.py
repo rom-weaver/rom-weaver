@@ -427,7 +427,7 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_PATCH_SIZE_MIB,
         help=f"Patch original/modified fixture size in MiB (default: {DEFAULT_PATCH_SIZE_MIB})",
     )
-    parser.add_argument("--threads", type=int, default=8, help="Thread count passed to CLI commands")
+    parser.add_argument("--threads", type=int, default=4, help="Thread count passed to CLI commands")
     parser.add_argument("--warmups", type=int, default=1, help="Warmup runs per benchmark case")
     parser.add_argument("--iterations", type=int, default=3, help="Measured runs per benchmark case")
     parser.add_argument("--timeout-sec", type=int, default=900, help="Per-command timeout in seconds")

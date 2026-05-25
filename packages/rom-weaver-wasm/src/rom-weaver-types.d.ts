@@ -1,4 +1,5 @@
 export type RomWeaverArg = string | number | boolean | bigint;
+export type RomWeaverDefaultThreads = number | string | false | null | undefined;
 export type RomWeaverEnv = Record<string, string>;
 export type RomWeaverPreopens = Record<string, string>;
 
@@ -134,6 +135,11 @@ export interface RomWeaverBrowserOpfsOptions {
   syncAccessMode?: RomWeaverBrowserSyncAccessMode;
   /** Number of preopened OPFS scratch files available for dynamically created WASI files. */
   scratchFilePoolSize?: number;
+  /**
+   * Default CLI thread count appended for threaded commands when args omit --threads.
+   * Use null, false, 0, or "off" to leave args unchanged.
+   */
+  defaultThreads?: RomWeaverDefaultThreads;
   program?: string;
   argv0?: string;
   /** Base environment for every browser run. */
@@ -147,6 +153,11 @@ export interface RomWeaverBrowserOpfsRunOptions extends RomWeaverRunOptions {
   syncAccessMode?: RomWeaverBrowserSyncAccessMode;
   scratchFilePoolSize?: number;
   threadWorkerUrl?: string | URL;
+  /**
+   * Per-run default CLI thread count appended for threaded commands when args omit --threads.
+   * Use null, false, 0, or "off" to leave args unchanged.
+   */
+  defaultThreads?: RomWeaverDefaultThreads;
   program?: string;
   debugWasi?: boolean;
 }

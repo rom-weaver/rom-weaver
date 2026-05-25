@@ -7,14 +7,32 @@ import {
 } from './rom-weaver-runtime-utils.mjs';
 
 const DEFAULT_WORK_GUEST_PATH = '/work';
+const DEFAULT_BROWSER_WASM_URLS = [
+  new URL('../rom-weaver-cli.wasm', import.meta.url).href,
+  new URL('./rom-weaver-cli.wasm', import.meta.url).href,
+];
+const DEFAULT_BROWSER_THREADED_WASM_URLS = [
+  new URL('../rom-weaver-cli-threaded.wasm', import.meta.url).href,
+  new URL('./rom-weaver-cli-threaded.wasm', import.meta.url).href,
+];
 const DEFAULT_SCRATCH_FILE_POOL_SIZE = 256;
 const DEFAULT_SHARED_MEMORY_INITIAL_PAGES = 256;
 const DEFAULT_SHARED_MEMORY_MAX_PAGES = 16384;
 const PATH_SEPARATOR_REGEX = /[/\\]+/;
 const SCRATCH_DIRECTORY_NAME = '.rom-weaver-opfs-scratch';
 const OPFS_COPY_CHUNK_SIZE = 8 * 1024 * 1024;
-const DEFAULT_BROWSER_THREAD_POOL_SIZE = 8;
+const DEFAULT_BROWSER_THREAD_COUNT = 4;
+const DEFAULT_BROWSER_THREAD_POOL_SIZE = 4;
 const MAX_BROWSER_THREAD_POOL_SIZE = 64;
+const THREAD_AWARE_COMMANDS = new Set([
+  'batch-header-fixer',
+  'checksum',
+  'compress',
+  'extract',
+  'patch-apply',
+  'patch-create',
+  'trim',
+]);
 const MAX_WASI_THREAD_ID = 0x1fffffff;
 const THREAD_ID_COUNTER_INDEX = 0;
 const THREAD_ID_COUNTER_INITIAL = 43;
@@ -66,10 +84,17 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
     workGuestPath,
     writableDirectories: options.writableDirectories,
   });
+  const baseDefaultThreads = resolveConfiguredDefaultThreads(
+    options,
+    resolveBrowserDefaultThreads(),
+  );
 
   const runner = {
     async run(args = [], runOptions = {}) {
-      const normalizedArgs = normalizeArgs(args);
+      const normalizedArgs = withDefaultThreadArgs(
+        normalizeArgs(args),
+        resolveConfiguredDefaultThreads(runOptions, baseDefaultThreads),
+      );
       const env = createRunEnv({
         baseEnv: options.env,
         runEnv: runOptions.env,
@@ -1486,7 +1511,7 @@ function createBrowserWasiThreadSpawner({
 function resolveBrowserThreadPoolSize(wasiArgs) {
   const requestedThreadCount = parseRequestedThreadCount(wasiArgs);
   return Math.min(
-    Math.max(DEFAULT_BROWSER_THREAD_POOL_SIZE, requestedThreadCount * 2),
+    Math.max(DEFAULT_BROWSER_THREAD_POOL_SIZE, requestedThreadCount),
     MAX_BROWSER_THREAD_POOL_SIZE,
   );
 }
@@ -1656,8 +1681,61 @@ function normalizePositiveInteger(value, fallback, label) {
   return parsed;
 }
 
+function resolveBrowserDefaultThreads(root = globalThis) {
+  const hardwareConcurrency = Number(root?.navigator?.hardwareConcurrency);
+  if (Number.isFinite(hardwareConcurrency) && hardwareConcurrency > 0) {
+    return Math.max(1, Math.min(DEFAULT_BROWSER_THREAD_COUNT, Math.floor(hardwareConcurrency)));
+  }
+  return DEFAULT_BROWSER_THREAD_COUNT;
+}
+
+function resolveConfiguredDefaultThreads(options, fallback) {
+  if (options && Object.hasOwn(options, 'defaultThreads')) {
+    return normalizeDefaultThreads(options.defaultThreads);
+  }
+  return fallback;
+}
+
+function normalizeDefaultThreads(value) {
+  if (
+    value === undefined
+    || value === null
+    || value === false
+    || value === 0
+    || value === '0'
+    || value === 'off'
+  ) {
+    return null;
+  }
+  const parsed = Number.parseInt(String(value), 10);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new TypeError(`defaultThreads must be a positive integer; received: ${value}`);
+  }
+  return Math.max(1, Math.min(MAX_BROWSER_THREAD_POOL_SIZE, parsed));
+}
+
+function withDefaultThreadArgs(args, defaultThreads) {
+  if (!defaultThreads || hasThreadArg(args)) return args;
+  const commandIndex = findCommandIndex(args);
+  if (commandIndex === -1 || !THREAD_AWARE_COMMANDS.has(args[commandIndex])) return args;
+  return [...args, '--threads', String(defaultThreads)];
+}
+
+function hasThreadArg(args) {
+  return args.some((arg) => arg === '--threads' || arg.startsWith('--threads='));
+}
+
+function findCommandIndex(args) {
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === '--json' || arg === '--progress' || arg === '--no-progress' || arg === '--trace') continue;
+    return index;
+  }
+  return -1;
+}
+
 function assertThreadedWasmRuntimeSupported({ wasmUrl }) {
-  if (typeof SharedArrayBuffer === 'function' && globalThis.crossOriginIsolated === true) return;
+  if (canUseThreadedWasmRuntime()) return;
   throw new Error(
     `threaded wasm requires SharedArrayBuffer and cross-origin isolation (COOP/COEP); selected ${wasmUrl ?? 'WebAssembly.Module'} cannot run in this browser runtime`,
   );
@@ -1721,18 +1799,60 @@ async function resolveBrowserModule({
   if (module instanceof WebAssembly.Module) {
     return {
       module,
-      wasmUrl: typeof wasmUrl === 'string' ? wasmUrl : null,
+      wasmUrl: normalizeConfiguredWasmUrls(wasmUrl, [null])[0],
     };
   }
 
-  const url = preferThreadedWasm && threadedWasmUrl
-    ? threadedWasmUrl
-    : wasmUrl ?? './rom-weaver-cli.wasm';
+  const runtimeSupportsThreadedWasm = canUseThreadedWasmRuntime();
+  const requestedThreadedWasm = preferThreadedWasm === undefined
+    ? runtimeSupportsThreadedWasm
+    : Boolean(preferThreadedWasm);
+  const shouldUseThreadedWasm = requestedThreadedWasm && runtimeSupportsThreadedWasm;
+
+  const hasExplicitWasmUrl = hasConfiguredWasmUrl(wasmUrl);
+  const resolvedWasmUrls = normalizeConfiguredWasmUrls(wasmUrl, DEFAULT_BROWSER_WASM_URLS);
+  const resolvedThreadedWasmUrls = normalizeConfiguredWasmUrls(
+    threadedWasmUrl,
+    hasExplicitWasmUrl ? [] : DEFAULT_BROWSER_THREADED_WASM_URLS,
+  );
+  const useThreadedCandidate = shouldUseThreadedWasm && resolvedThreadedWasmUrls.length > 0;
+  const primaryUrls = useThreadedCandidate ? resolvedThreadedWasmUrls : resolvedWasmUrls;
+  const fallbackUrls = useThreadedCandidate ? resolvedWasmUrls : [];
+  return compileBrowserModuleFromUrls([...primaryUrls, ...fallbackUrls]);
+}
+
+function canUseThreadedWasmRuntime() {
+  return typeof SharedArrayBuffer === 'function' && globalThis.crossOriginIsolated === true;
+}
+
+function hasConfiguredWasmUrl(url) {
+  return url instanceof URL || (typeof url === 'string' && url.trim().length > 0);
+}
+
+function normalizeConfiguredWasmUrls(url, fallbacks) {
+  if (url instanceof URL) return [url.href];
+  if (typeof url === 'string' && url.trim().length > 0) return [url];
+  return fallbacks;
+}
+
+async function compileBrowserModuleFromUrls(urls) {
+  let lastError = null;
+  for (const url of urls) {
+    if (!url) continue;
+    try {
+      return await compileBrowserModuleFromUrl(url);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError ?? new Error('no wasm module URL was configured');
+}
+
+async function compileBrowserModuleFromUrl(url) {
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`failed to fetch wasm module from ${url}: ${response.status} ${response.statusText}`);
   }
-
   const bytes = await response.arrayBuffer();
   return {
     module: await WebAssembly.compile(bytes),

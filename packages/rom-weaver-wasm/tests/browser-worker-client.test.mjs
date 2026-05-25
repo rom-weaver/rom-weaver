@@ -103,6 +103,48 @@ describe('rom-weaver-wasm browser runner parity', () => {
     });
   });
 
+  it('browser client passes default threads when command args omit them', async () => {
+    await withTempFixture(async ({ sourcePath, worker }) => {
+      const result = await worker.runJson([
+        'checksum',
+        sourcePath,
+        '--algo',
+        'crc32',
+        '--no-extract',
+      ]);
+
+      const terminal = assertRunJsonSucceeded(result, { command: 'checksum' });
+      expect(result.args.slice(-2)).toEqual(['--threads', '3']);
+      expect(terminal.requested_threads).toBe(3);
+    }, {
+      clientOptions: {
+        defaultThreads: 3,
+      },
+    });
+  });
+
+  it('browser client does not override explicit command thread args', async () => {
+    await withTempFixture(async ({ sourcePath, worker }) => {
+      const result = await worker.runJson([
+        'checksum',
+        sourcePath,
+        '--algo',
+        'crc32',
+        '--no-extract',
+        '--threads',
+        '2',
+      ]);
+
+      const terminal = assertRunJsonSucceeded(result, { command: 'checksum' });
+      expect(result.args.slice(-2)).toEqual(['--threads', '2']);
+      expect(terminal.requested_threads).toBe(2);
+    }, {
+      clientOptions: {
+        defaultThreads: 3,
+      },
+    });
+  });
+
   it('uses a single writable /work mount', async () => {
     await withTempFixture(async ({ sourcePath, worker, opfsHandle }) => {
       const outputPath = joinGuestPath('/work', 'single-mount-output.gz');

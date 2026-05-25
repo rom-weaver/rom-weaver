@@ -78,7 +78,7 @@ const getHardwareConcurrency = (root?: NavigatorRoot | null): number => {
 };
 
 const getDefaultThreadCount = (root?: NavigatorRoot | null): number =>
-  Math.max(1, Math.min(8, getHardwareConcurrency(root)));
+  Math.max(1, Math.min(4, getHardwareConcurrency(root)));
 
 const getDefaultBrowserThreadCount = (root?: NavigatorRoot | null): number =>
   canUseThreadedWasm(root) ? getDefaultThreadCount(root) : 1;

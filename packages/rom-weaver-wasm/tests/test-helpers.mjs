@@ -15,6 +15,7 @@ export async function withTempFixture(run, options = {}) {
     prefix = 'rom-weaver-wasm-test-',
     sourceFileName = 'input.bin',
     sourceContents = 'rom-weaver wasm test fixture',
+    clientOptions = {},
     initOptions = {},
   } = options;
 
@@ -29,7 +30,7 @@ export async function withTempFixture(run, options = {}) {
   const root = await navigator.storage.getDirectory();
   const fixtureName = `${prefix}${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const fixtureHandle = await root.getDirectoryHandle(fixtureName, { create: true });
-  const worker = createBrowserWorkerClient();
+  const worker = createBrowserWorkerClient(clientOptions);
 
   try {
     const init = await worker.init({

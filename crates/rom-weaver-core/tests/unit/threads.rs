@@ -20,7 +20,7 @@ impl Drop for ScopedFailMode {
 
 #[test]
 fn auto_budget_resolves_to_a_positive_thread_count() {
-    assert!(ThreadBudget::Auto.requested_threads() >= 1);
+    assert_eq!(ThreadBudget::Auto.requested_threads(), 4);
     assert_eq!(ThreadBudget::Auto.mode(), ThreadMode::Auto);
 }
 

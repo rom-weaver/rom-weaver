@@ -276,7 +276,7 @@ def main() -> None:
         help="Comma-separated test sizes in MiB",
     )
     parser.add_argument("--sequential-threads", type=int, default=1)
-    parser.add_argument("--parallel-threads", type=int, default=8)
+    parser.add_argument("--parallel-threads", type=int, default=4)
     parser.add_argument("--trials", type=int, default=5)
     parser.add_argument("--warmups", type=int, default=1)
     parser.add_argument("--stride-mib", type=int, default=2)
