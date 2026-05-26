@@ -1,4 +1,5 @@
 mod cancel;
+mod common_files;
 mod context;
 mod error;
 mod io;
@@ -7,6 +8,7 @@ mod registry;
 mod threads;
 
 pub use cancel::CancellationToken;
+pub use common_files::should_ignore_common_container_file;
 pub use context::{OperationContext, PatchChecksumValidation, XdeltaSecondaryMode};
 pub use error::{
     Result, RomWeaverError, ValidationCodeError, ValidationField, ValidationFieldValue,

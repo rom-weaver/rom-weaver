@@ -184,6 +184,7 @@ fn parse_wasm_extract(args: Vec<String>) -> WasmCliParseResult<ExtractCommand> {
     let mut select = Vec::new();
     let mut out_dir: Option<PathBuf> = None;
     let mut split_bin = false;
+    let mut no_ignore = false;
     let mut threads = ThreadBudget::Auto;
     let mut index = 0usize;
     while index < args.len() {
@@ -212,6 +213,11 @@ fn parse_wasm_extract(args: Vec<String>) -> WasmCliParseResult<ExtractCommand> {
         }
         if arg == "--split-bin" {
             split_bin = true;
+            index += 1;
+            continue;
+        }
+        if arg == "--no-ignore" {
+            no_ignore = true;
             index += 1;
             continue;
         }
@@ -252,6 +258,7 @@ fn parse_wasm_extract(args: Vec<String>) -> WasmCliParseResult<ExtractCommand> {
         select,
         out_dir,
         split_bin,
+        no_ignore,
         threads,
     })
 }

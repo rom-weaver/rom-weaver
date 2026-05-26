@@ -135,7 +135,8 @@ Notes:
 Notes:
 
 - `xiso` is intentionally trim-only (via `trim`).
-- `extract` supports `--select` (exact/prefix/glob) and recursively extracts nested containers up to depth 8.
+- `extract` ignores common sidecar/metadata files by default (`.txt`, `.nfo`, `.sfv`, `.md5`, `__MACOSX`, etc.), supports `--select` (exact/prefix/glob), and recursively extracts nested containers up to depth 8.
+- `extract --no-ignore` disables the default common-file filter.
 - `extract --split-bin` is CHD-only (ignored for non-CHD input).
 - CHD parent/differential workflows are supported when a parent CHD is supplied by the caller.
 - CHD create accepts full MAME-style codec lists; Rust-native encoding emits CHD-compatible payloads for `zstd`, `zlib`, `lzma`, `huff`, `flac`, `cdzs`, `cdzl`, `cdlz`, `cdfl`, and `avhuff` (aliases `huffman` and `avhu` are accepted).

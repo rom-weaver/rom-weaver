@@ -228,6 +228,87 @@ fn inspect_list_reports_pbp_multi_disc_selectable_outputs() {
 }
 
 #[test]
+fn extract_ignores_common_sidecars_unless_no_ignore() {
+    let temp = setup_temp_dir();
+    fs::create_dir_all(temp.child("__MACOSX").path()).expect("metadata dir");
+    fs::write(temp.child("game.bin").path(), b"game payload").expect("game fixture");
+    fs::write(temp.child("notes.txt").path(), b"notes").expect("txt sidecar");
+    fs::write(temp.child("meta.json").path(), b"{}").expect("json sidecar");
+    fs::write(temp.child("cover.jpg").path(), b"cover").expect("image sidecar");
+    fs::write(temp.child("._game.bin").path(), b"resource fork").expect("resource fork");
+    fs::write(temp.child("__MACOSX/ghost.bin").path(), b"ghost").expect("mac metadata");
+
+    let archive = temp.child("bundle.zip");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("game.bin").path().to_str().expect("path"),
+            temp.child("notes.txt").path().to_str().expect("path"),
+            temp.child("meta.json").path().to_str().expect("path"),
+            temp.child("cover.jpg").path().to_str().expect("path"),
+            temp.child("._game.bin").path().to_str().expect("path"),
+            temp.child("__MACOSX").path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            archive.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let default_out = temp.child("default-out");
+    let default_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "extract",
+            archive.path().to_str().expect("path"),
+            "--out-dir",
+            default_out.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let default_json = parse_single_json_line(&default_output);
+    assert_eq!(default_json["command"], "extract");
+    assert_eq!(default_json["status"], "succeeded");
+    assert!(default_json["label"]
+        .as_str()
+        .expect("label")
+        .contains("1 file(s)"));
+    assert!(default_out.child("game.bin").path().exists());
+    assert!(!default_out.child("notes.txt").path().exists());
+    assert!(!default_out.child("meta.json").path().exists());
+    assert!(!default_out.child("cover.jpg").path().exists());
+    assert!(!default_out.child("._game.bin").path().exists());
+    assert!(!default_out.child("__MACOSX/ghost.bin").path().exists());
+
+    let no_ignore_out = temp.child("no-ignore-out");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "extract",
+            archive.path().to_str().expect("path"),
+            "--out-dir",
+            no_ignore_out.path().to_str().expect("path"),
+            "--no-ignore",
+            "--json",
+        ])
+        .assert()
+        .code(0);
+    assert!(no_ignore_out.child("game.bin").path().exists());
+    assert!(no_ignore_out.child("notes.txt").path().exists());
+    assert!(no_ignore_out.child("meta.json").path().exists());
+    assert!(no_ignore_out.child("cover.jpg").path().exists());
+    assert!(no_ignore_out.child("._game.bin").path().exists());
+    assert!(no_ignore_out.child("__MACOSX/ghost.bin").path().exists());
+}
+
+#[test]
 fn extract_pbp_without_select_emits_all_discs() {
     let temp = setup_temp_dir();
     let disc1 = build_test_pbp_iso(72, 7);

@@ -38,6 +38,7 @@ use rom_weaver_core::{
     ContainerInspectRequest, FormatDescriptor, OperationContext, OperationFamily, OperationReport,
     OperationStatus, OrderedChunkWriter, ProbeConfidence, ProgressEvent, Result, RomWeaverError,
     SharedThreadPool, ThreadCapability, ThreadExecution, bounded_items_for_threads,
+    should_ignore_common_container_file,
 };
 use rom_weaver_libarchive::{
     EntryFileType, EntrySpec, ReadArchive, ReadFilter as LibarchiveReadFilter,
@@ -1298,15 +1299,22 @@ fn build_libarchive_extract_tasks(
     source: &Path,
     out_dir: &Path,
     selections: &[String],
+    ignore_common_files: bool,
     format_name: &str,
 ) -> Result<Vec<LibarchiveExtractTask>> {
     let mut matcher = SelectionMatcher::new(selections);
+    let should_filter_common = ignore_common_files && selections.is_empty();
+    let mut ignored_count = 0usize;
     let mut tasks = Vec::new();
 
     for entry in list_regular_archive_entries(source, format_name)? {
         let entry_path = entry.path;
         let archive_name = normalize_archive_name(&entry_path);
         if archive_name.is_empty() || !matcher.matches(&archive_name) {
+            continue;
+        }
+        if should_filter_common && should_ignore_common_container_file(&archive_name) {
+            ignored_count = ignored_count.saturating_add(1);
             continue;
         }
         let relative = sanitize_archive_relative_path_from_str(&entry_path)?;
@@ -1321,6 +1329,12 @@ fn build_libarchive_extract_tasks(
     }
 
     matcher.ensure_all_matched()?;
+    if should_filter_common && ignored_count > 0 && !tasks.iter().any(|task| !task.is_dir) {
+        return Err(RomWeaverError::Validation(format!(
+            "all extract entries from `{}` were ignored by default filters; rerun with --no-ignore or pass --select <pattern>",
+            source.display()
+        )));
+    }
     Ok(tasks)
 }
 
@@ -1568,6 +1582,7 @@ fn extract_regular_archive_with_libarchive(
         &request.source,
         &request.out_dir,
         &request.selections,
+        request.ignore_common_files,
         format_name,
     )?;
     let total_tasks = tasks.len();

@@ -23,6 +23,7 @@ use rom_weaver_core::{
     OperationFamily, OperationReport, OperationStatus, PatchApplyRequest, PatchChecksumValidation,
     PatchCreateRequest, ProbeConfidence, ProgressEvent, ProgressSink, Result, RomWeaverError,
     ThreadBudget, ThreadCapability, ThreadExecution, XdeltaSecondaryMode,
+    should_ignore_common_container_file,
 };
 use rom_weaver_libarchive::{
     ReadFilter as LibarchiveReadFilter, list_regular_archive_file_entries, with_raw_stream_reader,
@@ -183,6 +184,14 @@ pub struct ExtractCommand {
         )
     )]
     pub split_bin: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            help = "Disable default common-file ignore filtering during container extraction"
+        )
+    )]
+    pub no_ignore: bool,
     #[cfg_attr(not(target_arch = "wasm32"), arg(long, default_value = "auto"))]
     pub threads: ThreadBudget,
 }

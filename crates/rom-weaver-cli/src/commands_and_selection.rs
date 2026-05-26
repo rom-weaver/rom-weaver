@@ -246,6 +246,7 @@ impl CliApp {
             selections = args.select.len(),
             out_dir = %args.out_dir.display(),
             split_bin = args.split_bin,
+            no_ignore = args.no_ignore,
             threads = %args.threads,
             "starting extract command"
         );
@@ -254,6 +255,7 @@ impl CliApp {
             select: selections,
             out_dir,
             split_bin,
+            no_ignore,
             threads,
         } = args;
         let out_dir_before = Self::snapshot_file_tree(&out_dir).unwrap_or_default();
@@ -326,6 +328,7 @@ impl CliApp {
                 &out_dir,
                 &selections,
                 extract_split_bin,
+                !no_ignore,
                 "extract input",
                 &context,
             )
@@ -369,7 +372,7 @@ impl CliApp {
                 None,
                 Some(context.plan_threads(ThreadCapability::single_threaded())),
             );
-            match self.extract_nested_archives(&source, &out_dir, &context) {
+            match self.extract_nested_archives(&source, &out_dir, !no_ignore, &context) {
                 Ok(0) => {}
                 Ok(nested_count) => {
                     report.label = format!(
@@ -1213,6 +1216,7 @@ impl CliApp {
                 &out_dir,
                 select,
                 false,
+                false,
                 labels.source_label,
                 context,
             )
@@ -1388,6 +1392,7 @@ impl CliApp {
         out_dir: &Path,
         selections: &[String],
         split_bin: bool,
+        ignore_common_files: bool,
         source_label: &str,
         context: &OperationContext,
     ) -> Result<OperationReport> {
@@ -1396,6 +1401,7 @@ impl CliApp {
             selections: selections.to_vec(),
             out_dir: out_dir.to_path_buf(),
             split_bin,
+            ignore_common_files,
             parent: None,
         };
         match handler.extract(&request, context) {
@@ -1421,6 +1427,7 @@ impl CliApp {
                     selections: vec![selected_entry],
                     out_dir: out_dir.to_path_buf(),
                     split_bin,
+                    ignore_common_files,
                     parent: None,
                 };
                 handler.extract(&retry_request, context)
@@ -1787,24 +1794,6 @@ impl CliApp {
     }
 
     fn should_ignore_checksum_candidate(candidate_name: &str) -> bool {
-        let normalized = candidate_name.replace('\\', "/");
-        let lower = normalized.to_ascii_lowercase();
-        if lower.contains("maxcso") {
-            return true;
-        }
-        if lower
-            .split('/')
-            .any(|component| component.eq_ignore_ascii_case("__macosx"))
-        {
-            return true;
-        }
-        if let Some(file_name) = lower.rsplit('/').next()
-            && matches!(file_name, ".ds_store" | "thumbs.db" | "desktop.ini")
-        {
-            return true;
-        }
-        CHECKSUM_IGNORE_SIDECAR_EXTENSIONS
-            .iter()
-            .any(|extension| lower.ends_with(extension))
+        should_ignore_common_container_file(candidate_name)
     }
 }

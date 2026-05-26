@@ -165,6 +165,7 @@ pub struct ContainerExtractRequest {
     pub selections: Vec<String>,
     pub out_dir: PathBuf,
     pub split_bin: bool,
+    pub ignore_common_files: bool,
     pub parent: Option<PathBuf>,
 }
 

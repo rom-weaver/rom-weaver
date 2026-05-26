@@ -40,9 +40,6 @@ const NDS_DOWNLOAD_PLAY_CERT_MAGIC: [u8; 2] = [0x61, 0x63];
 const NDS_DOWNLOAD_PLAY_CERT_SIZE_BYTES: u64 = 0x88;
 const TRIM_BINARY_SCAN_CHUNK_BYTES: usize = 128 * 1024;
 const XISO_TRIM_TEMP_SUFFIX: &str = "rom-weaver-trim-xiso.tmp";
-const CHECKSUM_IGNORE_SIDECAR_EXTENSIONS: &[&str] = &[
-    ".txt", ".nfo", ".diz", ".sfv", ".md5", ".sha1", ".sha256", ".sha512", ".crc", ".log", ".json",
-];
 const EMITTED_ARCHIVE_EXTENSIONS: &[&str] = &[
     ".7z", ".zip", ".zipx", ".tar", ".tgz", ".tar.gz", ".tbz2", ".tar.bz2", ".txz", ".tar.xz",
     ".zst", ".zstd", ".gz", ".bz2", ".xz", ".chd", ".rvz", ".gcz", ".wbfs", ".wia", ".cso",

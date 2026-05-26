@@ -40,6 +40,7 @@ impl CliApp {
         &self,
         root_source: &Path,
         root_out_dir: &Path,
+        ignore_common_files: bool,
         context: &OperationContext,
     ) -> Result<usize> {
         trace!(
@@ -136,6 +137,7 @@ impl CliApp {
                 selections: Vec::new(),
                 out_dir: nested_out_dir.clone(),
                 split_bin: false,
+                ignore_common_files,
                 parent: None,
             };
             self.emit_running(
