@@ -316,6 +316,11 @@ fn build_libarchive(libarchive_dir: &Path) {
         let joined = thread_flags.join(" ");
         cmake_config
             .no_default_flags(true)
+            // The libarchive CMake probe for lzma_stream_encoder_mt is a
+            // cross-compile try-compile that currently fails for WASI threads,
+            // even though liblzma-sys is built with its parallel API enabled.
+            // Force the detected define so xz filters can use liblzma MT.
+            .define("HAVE_LZMA_STREAM_ENCODER_MT", "1")
             .define("CMAKE_C_COMPILER_TARGET", "wasm32-wasip1-threads")
             .define("CMAKE_CXX_COMPILER_TARGET", "wasm32-wasip1-threads")
             .define("CMAKE_ASM_COMPILER_TARGET", "wasm32-wasip1-threads")

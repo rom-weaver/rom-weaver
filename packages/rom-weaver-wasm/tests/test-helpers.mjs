@@ -941,6 +941,46 @@ export async function writeGuestPatternFile(rootHandle, guestPath, byteLength, o
   }
 }
 
+export async function writeGuestGeneratedFile(rootHandle, guestPath, byteLength, fillChunk, options = {}) {
+  const { chunkSizeBytes = 1024 * 1024 } = options;
+  if (!Number.isInteger(byteLength) || byteLength < 0) {
+    throw new TypeError('byteLength must be a non-negative integer');
+  }
+  if (!Number.isInteger(chunkSizeBytes) || chunkSizeBytes <= 0) {
+    throw new TypeError('chunkSizeBytes must be a positive integer');
+  }
+  if (typeof fillChunk !== 'function') {
+    throw new TypeError('fillChunk must be a function');
+  }
+
+  const fileHandle = await getGuestFileHandle(rootHandle, guestPath, { create: true });
+  const writable = await fileHandle.createWritable();
+  let writeError = null;
+
+  try {
+    const chunk = new Uint8Array(Math.max(1, Math.min(chunkSizeBytes, byteLength)));
+    let offset = 0;
+    while (offset < byteLength) {
+      const size = Math.min(chunk.length, byteLength - offset);
+      fillChunk(chunk.subarray(0, size), offset);
+      await writable.write(chunk.subarray(0, size));
+      offset += size;
+    }
+  } catch (error) {
+    writeError = error;
+    try {
+      await writable.abort();
+    } catch {
+      // ignore abort failures; original error is more relevant
+    }
+    throw error;
+  } finally {
+    if (writeError === null) {
+      await writable.close();
+    }
+  }
+}
+
 export async function getGuestFileSize(rootHandle, guestPath) {
   const fileHandle = await getGuestFileHandle(rootHandle, guestPath);
   const file = await fileHandle.getFile();

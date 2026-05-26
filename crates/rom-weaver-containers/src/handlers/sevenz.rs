@@ -251,7 +251,7 @@ impl ContainerHandler for SevenZContainerHandler {
         request: &ContainerExtractRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        extract_regular_archive_with_libarchive(request, context, self.descriptor.name, false)
+        extract_regular_archive_with_libarchive(request, context, self.descriptor.name)
     }
 
     fn create(

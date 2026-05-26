@@ -53,7 +53,7 @@ impl ContainerHandler for RarContainerHandler {
         request: &ContainerExtractRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        extract_regular_archive_with_libarchive(request, context, self.descriptor.name, true)
+        extract_regular_archive_with_libarchive(request, context, self.descriptor.name)
     }
 
     fn create(

@@ -1510,8 +1510,12 @@ function createBrowserWasiThreadSpawner({
 
 function resolveBrowserThreadPoolSize(wasiArgs) {
   const requestedThreadCount = parseRequestedThreadCount(wasiArgs);
+  // Codec libraries can spawn pthreads internally in addition to the CLI's
+  // requested worker count; keep spare slots so those nested spawns do not
+  // fail with EAGAIN in browsers.
+  const nestedCodecThreadSlots = requestedThreadCount * 4;
   return Math.min(
-    Math.max(DEFAULT_BROWSER_THREAD_POOL_SIZE, requestedThreadCount),
+    Math.max(DEFAULT_BROWSER_THREAD_POOL_SIZE, nestedCodecThreadSlots),
     MAX_BROWSER_THREAD_POOL_SIZE,
   );
 }

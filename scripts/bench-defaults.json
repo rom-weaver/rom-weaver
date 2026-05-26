@@ -1,0 +1,171 @@
+{
+  "fixture_cache_version": 1,
+  "command_paths": {
+    "commands": "compress,extract,checksum,patch-create,patch-apply",
+    "size_mib": 128,
+    "patch_size_mib": 128,
+    "archive_tools": "auto",
+    "container_formats_default": [
+      "chd",
+      "rvz",
+      "7z",
+      "zip",
+      "tar",
+      "tar.gz",
+      "tar.bz2",
+      "tar.xz",
+      "z3ds",
+      "gz",
+      "bz2",
+      "xz",
+      "zst"
+    ],
+    "container_formats": [
+      "zip",
+      "zipx",
+      "7z",
+      "rar",
+      "tar",
+      "tar.gz",
+      "tar.bz2",
+      "tar.xz",
+      "gz",
+      "bz2",
+      "xz",
+      "zst",
+      "cso",
+      "pbp",
+      "chd",
+      "gcz",
+      "wia",
+      "tgc",
+      "nfs",
+      "wbfs",
+      "rvz",
+      "z3ds",
+      "xiso"
+    ],
+    "checksum_algorithms": [
+      "crc32",
+      "md5",
+      "sha1",
+      "sha256",
+      "blake3",
+      "crc32c",
+      "crc16",
+      "adler32"
+    ],
+    "checksum_modes": "raw",
+    "checksum_combo_algorithms": [
+      "crc32",
+      "md5",
+      "sha1"
+    ],
+    "patch_formats": [
+      "ips",
+      "ips32",
+      "solid",
+      "bps",
+      "ups",
+      "vcdiff",
+      "xdelta",
+      "gdiff",
+      "hdiffpatch",
+      "aps",
+      "apsgba",
+      "ninja1",
+      "rup",
+      "ppf",
+      "pat",
+      "ebp",
+      "bdf",
+      "bsp",
+      "mod",
+      "dldi",
+      "dps"
+    ],
+    "patch_extension": {
+      "ips": "ips",
+      "ips32": "ips32",
+      "solid": "solid",
+      "bps": "bps",
+      "ups": "ups",
+      "vcdiff": "vcdiff",
+      "xdelta": "xdelta",
+      "gdiff": "gdiff",
+      "hdiffpatch": "hpatchz",
+      "aps": "aps",
+      "apsgba": "apsgba",
+      "ninja1": "n1",
+      "rup": "rup",
+      "ppf": "ppf",
+      "pat": "pat",
+      "ebp": "ebp",
+      "bdf": "bsdiff",
+      "bsp": "bsp",
+      "mod": "mod",
+      "dldi": "dldi",
+      "dps": "dps"
+    },
+    "expected_compress_skips": {
+      "rar": "intentionally unsupported: rar create is not supported",
+      "xiso": "intentionally unsupported: xiso is trim-only and not a compress format",
+      "pbp": "intentionally unsupported: pbp create is not supported",
+      "gcz": "intentionally unsupported: gcz compression is not supported (use rvz)",
+      "nfs": "intentionally unsupported: nfs compression is not supported",
+      "tgc": "benchmark fixture limitation: tgc create requires a full GC disc image with readable DOL"
+    },
+    "expected_patch_create_skips": {
+      "ips": "intentionally skipped: 128 MiB benchmark inputs exceed the IPS 24-bit offset limit",
+      "ebp": "intentionally skipped: 128 MiB benchmark inputs exceed the EBP 24-bit offset limit",
+      "ninja1": "intentionally unsupported: NINJA1 patch creation is not supported",
+      "bsp": "intentionally unsupported: BSP patch creation is not implemented",
+      "hdiffpatch": "intentionally unsupported: HDiffPatch/HPatchZ patch creation is disabled"
+    },
+    "disc_compress_input_formats": [
+      "rvz",
+      "wia",
+      "wbfs",
+      "tgc"
+    ],
+    "compress_codec_by_format": {
+      "zipx": "zstd"
+    },
+    "codec_matrix_by_format": {
+      "zip": [["store", "store"], ["deflate", "deflate"], ["bzip2", "bzip2"], ["zstd", "zstd"]],
+      "7z": [["lzma2", "lzma2"], ["lzma", "lzma"], ["store", "store"], ["zstd", "zstd:7"], ["deflate", "deflate"], ["bzip2", "bzip2"], ["ppmd", "ppmd"]],
+      "tar": [["store", "store"]],
+      "tar.gz": [["deflate", "deflate"]],
+      "tar.bz2": [["bzip2", "bzip2"]],
+      "tar.xz": [["lzma2", "lzma2"], ["lzma", "lzma"]],
+      "gz": [["deflate", "deflate"]],
+      "bz2": [["bzip2", "bzip2"]],
+      "xz": [["lzma2", "lzma2"], ["lzma", "lzma"]],
+      "zst": [["zstd", "zstd"]],
+      "cso": [["store", "store"]],
+      "chd": [["zstd", "zstd"], ["zlib", "zlib"], ["lzma", "lzma"], ["huffman", "huffman"], ["flac", "flac"], ["store", "store"]],
+      "wia": [["store", "store"], ["zstd", "zstd"], ["bzip2", "bzip2"], ["lzma", "lzma"], ["lzma2", "lzma2"]],
+      "tgc": [["store", "store"]],
+      "wbfs": [["store", "store"]],
+      "rvz": [["store", "store"], ["zstd", "zstd"], ["bzip2", "bzip2"], ["lzma", "lzma"], ["lzma2", "lzma2"]],
+      "z3ds": [["zstd", "zstd"]]
+    }
+  },
+  "checksum_threading": {
+    "algorithms": [
+      "crc32c",
+      "crc16",
+      "adler32"
+    ],
+    "sizes_mib": [
+      128
+    ],
+    "sequential_threads": 1,
+    "parallel_threads": 4,
+    "stride_mib": 2,
+    "trials": 5,
+    "warmups": 1,
+    "min_p50_gain": 1.1,
+    "min_p90_gain": 1.05
+  }
+}

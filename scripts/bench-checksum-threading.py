@@ -20,6 +20,23 @@ from pathlib import Path
 from typing import Iterable
 
 MIB = 1024 * 1024
+SCRIPT_PATH = Path(__file__).resolve()
+REPO_ROOT = SCRIPT_PATH.parent.parent
+BENCH_DEFAULTS_PATH = REPO_ROOT / "scripts" / "bench-defaults.json"
+
+
+def load_benchmark_defaults() -> dict:
+    try:
+        return json.loads(BENCH_DEFAULTS_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise SystemExit(f"failed to load shared benchmark defaults {BENCH_DEFAULTS_PATH}: {error}") from error
+
+
+BENCH_DEFAULTS = load_benchmark_defaults()
+CHECKSUM_THREADING_DEFAULTS = BENCH_DEFAULTS["checksum_threading"]
+DEFAULT_FIXTURE_CACHE_DIR = (
+    REPO_ROOT / "target" / "bench-fixtures" / f"checksum-threading-v{BENCH_DEFAULTS['fixture_cache_version']}"
+)
 
 
 @dataclass
@@ -262,34 +279,40 @@ def main() -> None:
     parser.add_argument(
         "--source",
         type=Path,
-        default=Path(".tmp/checksum-bench/fixture.bin"),
-        help="Path to reusable benchmark fixture file",
+        default=None,
+        help="Path to reusable benchmark fixture file (default: fixture-cache-dir/fixture.bin)",
+    )
+    parser.add_argument(
+        "--fixture-cache-dir",
+        type=Path,
+        default=DEFAULT_FIXTURE_CACHE_DIR,
+        help=f"Persistent generated fixture cache directory (default: {DEFAULT_FIXTURE_CACHE_DIR})",
     )
     parser.add_argument(
         "--algorithms",
-        default="crc32c,crc16,adler32",
+        default=",".join(str(value) for value in CHECKSUM_THREADING_DEFAULTS["algorithms"]),
         help="Comma-separated algorithms",
     )
     parser.add_argument(
         "--sizes-mib",
-        default="8,16,24,32,40,48,64,96",
+        default=",".join(str(value) for value in CHECKSUM_THREADING_DEFAULTS["sizes_mib"]),
         help="Comma-separated test sizes in MiB",
     )
-    parser.add_argument("--sequential-threads", type=int, default=1)
-    parser.add_argument("--parallel-threads", type=int, default=4)
-    parser.add_argument("--trials", type=int, default=5)
-    parser.add_argument("--warmups", type=int, default=1)
-    parser.add_argument("--stride-mib", type=int, default=2)
+    parser.add_argument("--sequential-threads", type=int, default=int(CHECKSUM_THREADING_DEFAULTS["sequential_threads"]))
+    parser.add_argument("--parallel-threads", type=int, default=int(CHECKSUM_THREADING_DEFAULTS["parallel_threads"]))
+    parser.add_argument("--trials", type=int, default=int(CHECKSUM_THREADING_DEFAULTS["trials"]))
+    parser.add_argument("--warmups", type=int, default=int(CHECKSUM_THREADING_DEFAULTS["warmups"]))
+    parser.add_argument("--stride-mib", type=int, default=int(CHECKSUM_THREADING_DEFAULTS["stride_mib"]))
     parser.add_argument(
         "--min-p50-gain",
         type=float,
-        default=1.10,
+        default=float(CHECKSUM_THREADING_DEFAULTS["min_p50_gain"]),
         help="Minimum p50 speedup required to recommend crossover",
     )
     parser.add_argument(
         "--min-p90-gain",
         type=float,
-        default=1.05,
+        default=float(CHECKSUM_THREADING_DEFAULTS["min_p90_gain"]),
         help="Minimum p90 speedup required to recommend crossover",
     )
     parser.add_argument(
@@ -317,11 +340,14 @@ def main() -> None:
     # Need headroom for warmups+trials plus two phases.
     stride_bytes = args.stride_mib * MIB
     headroom = (args.warmups + args.trials + 2) * stride_bytes
-    ensure_fixture(args.source, max_size + headroom)
+    fixture_cache_dir = args.fixture_cache_dir.expanduser().resolve()
+    fixture_cache_dir.mkdir(parents=True, exist_ok=True)
+    source_path = args.source.expanduser().resolve() if args.source is not None else fixture_cache_dir / "fixture.bin"
+    ensure_fixture(source_path, max_size + headroom)
 
     samples = gather_samples(
         bin_path=args.bin,
-        source_path=args.source,
+        source_path=source_path,
         algorithms=algorithms,
         sizes_mib=sizes_mib,
         sequential_threads=args.sequential_threads,
@@ -337,7 +363,8 @@ def main() -> None:
     payload = {
         "meta": {
             "bin": str(args.bin),
-            "source": str(args.source),
+            "source": str(source_path),
+            "fixture_cache_dir": str(fixture_cache_dir),
             "algorithms": algorithms,
             "sizes_mib": sizes_mib,
             "sequential_threads": args.sequential_threads,

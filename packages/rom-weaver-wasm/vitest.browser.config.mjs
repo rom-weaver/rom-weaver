@@ -4,14 +4,24 @@ import { defineConfig } from 'vitest/config';
 
 const REPO_ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const STRESS_1GB = process.env.ROM_WEAVER_WASM_STRESS_1GB === '1';
+const BENCH_OUTPUT_JSON = process.env.ROM_WEAVER_WASM_BENCH_OUTPUT_JSON;
+const BENCH_ENV = Object.fromEntries(
+  Object.entries(process.env).filter(([key]) => key.startsWith('ROM_WEAVER_WASM_')),
+);
+const BENCH_MODE = process.env.ROM_WEAVER_WASM_BENCH === '1'
+  || Object.keys(BENCH_ENV).some((key) => key.startsWith('ROM_WEAVER_WASM_BENCH_'));
+const BENCH_PROFILE_DIR = fileURLToPath(new URL('../../target/browser-bench-profile', import.meta.url));
+const PERSISTENT_CONTEXT = STRESS_1GB ? true : (BENCH_MODE ? BENCH_PROFILE_DIR : false);
 
-const stressLaunchArgs = STRESS_1GB
+const stressLaunchArgs = (STRESS_1GB || BENCH_MODE)
   ? ['--unlimited-storage']
   : [];
 
 export default defineConfig({
+  envPrefix: ['VITE_', 'ROM_WEAVER_WASM_'],
   define: {
     __ROM_WEAVER_WASM_STRESS_1GB__: JSON.stringify(STRESS_1GB),
+    __ROM_WEAVER_WASM_BENCH_ENV__: JSON.stringify(BENCH_ENV),
   },
   server: {
     fs: {
@@ -32,14 +42,19 @@ export default defineConfig({
         launchOptions: {
           args: stressLaunchArgs,
         },
-        persistentContext: STRESS_1GB,
+        persistentContext: PERSISTENT_CONTEXT,
       }),
       instances: [
         {
           browser: 'chromium',
         },
       ],
+      fileParallelism: !BENCH_MODE,
       headless: true,
     },
+  },
+  benchmark: {
+    include: ['tests/*.bench.mjs'],
+    outputFile: BENCH_OUTPUT_JSON || undefined,
   },
 });

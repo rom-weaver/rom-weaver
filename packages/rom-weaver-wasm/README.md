@@ -92,3 +92,45 @@ npm run prepare:dist -- "$ARTIFACT_DIR"
 npm run check
 npm pack
 ```
+
+## Browser Benchmarks
+
+Run all browser-worker benchmarks with Vitest bench mode:
+
+```bash
+npm run test:browser:bench
+```
+
+Run suites that mirror the Python benchmark scripts:
+
+```bash
+npm run test:browser:bench:command-paths
+npm run test:browser:bench:checksum-threading
+```
+
+Optional environment knobs:
+
+- Shared Vitest bench timing:
+  - `ROM_WEAVER_WASM_BENCH_TIME_MS` (default `50`)
+  - `ROM_WEAVER_WASM_BENCH_ITERATIONS` (default `1`)
+  - `ROM_WEAVER_WASM_BENCH_WARMUP_TIME_MS` (default `0`)
+  - `ROM_WEAVER_WASM_BENCH_WARMUP_ITERATIONS` (default `0`)
+  - `ROM_WEAVER_WASM_BENCH_THREADED` (`1`/`0`, default `1`)
+  - `ROM_WEAVER_WASM_BENCH_OUTPUT_JSON` (optional output JSON path)
+  - `ROM_WEAVER_WASM_BENCH_CLEAR_FIXTURE_CACHE` (`1` clears the persistent OPFS fixture cache before setup)
+- `bench-command-paths.py` parity suite (`tests/browser-worker-client.bench.mjs`):
+  - `ROM_WEAVER_WASM_BENCH_COMMANDS` (default `compress,extract,checksum,patch-create,patch-apply`)
+  - `ROM_WEAVER_WASM_BENCH_CONTAINER_FORMATS` (default `chd,rvz,7z,zip,tar,tar.gz,tar.bz2,tar.xz,z3ds,gz,bz2,xz,zst`)
+  - `ROM_WEAVER_WASM_BENCH_PATCH_FORMATS` (default `all`)
+  - `ROM_WEAVER_WASM_BENCH_CHECKSUM_ALGOS` (default `all`)
+  - `ROM_WEAVER_WASM_BENCH_CHECKSUM_MODES` (default `raw`)
+  - `ROM_WEAVER_WASM_BENCH_CHECKSUM_COMBO_ALGOS` (default `crc32,md5,sha1`, `none` to disable)
+  - `ROM_WEAVER_WASM_BENCH_SOURCE_MIB` (default `128`)
+  - `ROM_WEAVER_WASM_BENCH_PATCH_SOURCE_MIB` (default `128`)
+  - `ROM_WEAVER_WASM_BENCH_THREADS` (default `4`)
+- `bench-checksum-threading.py` parity suite (`tests/browser-checksum-threading.bench.mjs`):
+  - `ROM_WEAVER_WASM_BENCH_THREADING_ALGORITHMS` (default `crc32c,crc16,adler32`)
+  - `ROM_WEAVER_WASM_BENCH_THREADING_SIZES_MIB` (default `128`)
+  - `ROM_WEAVER_WASM_BENCH_THREADING_SEQUENTIAL_THREADS` (default `1`)
+  - `ROM_WEAVER_WASM_BENCH_THREADING_PARALLEL_THREADS` (default `4`)
+  - `ROM_WEAVER_WASM_BENCH_THREADING_STRIDE_MIB` (default `2`)

@@ -53,6 +53,9 @@
     "check": "node --check ./src/index.mjs && node --check ./src/rom-weaver-runtime-utils.mjs && node --check ./src/rom-weaver-browser-opfs-api.mjs && node --check ./src/workers/runner-worker-core.mjs && node --check ./src/workers/browser-runner-worker.mjs && node --check ./src/workers/browser-wasi-thread-worker.mjs && node --check ./src/workers/worker-client-core.mjs && node --check ./src/workers/browser-worker-client.mjs && node --check ./src/workers/worker-protocol.mjs",
     "test": "npm run test:browser",
     "test:browser": "vitest --config ./vitest.browser.config.mjs run",
+    "test:browser:bench": "ROM_WEAVER_WASM_BENCH=1 vitest --config ./vitest.browser.config.mjs bench",
+    "test:browser:bench:command-paths": "ROM_WEAVER_WASM_BENCH=1 vitest --config ./vitest.browser.config.mjs bench tests/browser-worker-client.bench.mjs",
+    "test:browser:bench:checksum-threading": "ROM_WEAVER_WASM_BENCH=1 vitest --config ./vitest.browser.config.mjs bench tests/browser-checksum-threading.bench.mjs",
     "test:browser:stress:1gb": "ROM_WEAVER_WASM_STRESS_1GB=1 vitest --config ./vitest.browser.config.mjs run -t \"survives 1 GiB compress extract checksum and 100MB-class xdelta apply workload\""
   },
   "devDependencies": {

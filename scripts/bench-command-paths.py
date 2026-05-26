@@ -22,6 +22,7 @@ import json
 import os
 import platform
 import random
+import select
 import shutil
 import statistics
 import struct
@@ -39,55 +40,32 @@ TIME_BIN = Path("/usr/bin/time")
 SCRIPT_PATH = Path(__file__).resolve()
 REPO_ROOT = SCRIPT_PATH.parent.parent
 WASM_BUILD_SCRIPT = REPO_ROOT / "scripts" / "build-wasm-cli.sh"
+BENCH_DEFAULTS_PATH = REPO_ROOT / "scripts" / "bench-defaults.json"
 CACHE_SCHEMA_VERSION = 1
-DEFAULT_COMMANDS = "compress,extract,checksum,patch-create,patch-apply"
-DEFAULT_PATCH_SIZE_MIB = 128
-DEFAULT_BENCH_FORMATS = [
-    "chd",
-    "rvz",
-    "7z",
-    "zip",
-    "tar",
-    "tar.gz",
-    "tar.bz2",
-    "tar.xz",
-    "z3ds",
-    "gz",
-    "bz2",
-    "xz",
-    "zst",
-]
+
+
+def load_benchmark_defaults() -> dict[str, Any]:
+    try:
+        return json.loads(BENCH_DEFAULTS_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise SystemExit(f"failed to load shared benchmark defaults {BENCH_DEFAULTS_PATH}: {error}") from error
+
+
+BENCH_DEFAULTS = load_benchmark_defaults()
+COMMAND_PATHS_DEFAULTS = BENCH_DEFAULTS["command_paths"]
+DEFAULT_COMMANDS = str(COMMAND_PATHS_DEFAULTS["commands"])
+DEFAULT_SIZE_MIB = int(COMMAND_PATHS_DEFAULTS["size_mib"])
+DEFAULT_PATCH_SIZE_MIB = int(COMMAND_PATHS_DEFAULTS["patch_size_mib"])
+DEFAULT_BENCH_FORMATS = [str(value) for value in COMMAND_PATHS_DEFAULTS["container_formats_default"]]
 DEFAULT_BENCH_FORMATS_CSV = ",".join(DEFAULT_BENCH_FORMATS)
-DEFAULT_ARCHIVE_TOOLS = "auto"
+DEFAULT_ARCHIVE_TOOLS = str(COMMAND_PATHS_DEFAULTS["archive_tools"])
 CHECKSUM_MODE_VALUES = ["raw", "auto-extract", "archive-no-extract"]
 CONTAINER_FORMAT_ALIASES = {"z3d3": "z3ds"}
-DEFAULT_CHECKSUM_COMBO_ALGOS = ["crc32", "md5", "sha1"]
-DEFAULT_CHECKSUM_COMBO_ALGOS_CSV = ",".join(DEFAULT_CHECKSUM_COMBO_ALGOS)
-CONTAINER_FORMATS = [
-    "zip",
-    "zipx",
-    "7z",
-    "rar",
-    "tar",
-    "tar.gz",
-    "tar.bz2",
-    "tar.xz",
-    "gz",
-    "bz2",
-    "xz",
-    "zst",
-    "cso",
-    "pbp",
-    "chd",
-    "gcz",
-    "wia",
-    "tgc",
-    "nfs",
-    "wbfs",
-    "rvz",
-    "z3ds",
-    "xiso",
+DEFAULT_CHECKSUM_COMBO_ALGOS = [
+    str(value) for value in COMMAND_PATHS_DEFAULTS["checksum_combo_algorithms"]
 ]
+DEFAULT_CHECKSUM_COMBO_ALGOS_CSV = ",".join(DEFAULT_CHECKSUM_COMBO_ALGOS)
+CONTAINER_FORMATS = [str(value) for value in COMMAND_PATHS_DEFAULTS["container_formats"]]
 
 CONTAINER_SUFFIX = {
     "tar.gz": "tar.gz",
@@ -96,20 +74,16 @@ CONTAINER_SUFFIX = {
 }
 
 ARCHIVE_TOOLS = ["rom-weaver", "rom-weaver-wasm", "7zz", "chdman", "dolphin-tool"]
+WASM_SINGLETHREAD_FALLBACK_FORMATS = {"rvz", "wia", "wbfs", "z3ds"}
 
 EXPECTED_COMPRESS_SKIPS = {
-    "rar": "intentionally unsupported: rar create is not supported",
-    "xiso": "intentionally unsupported: xiso is trim-only and not a compress format",
-    "pbp": "intentionally unsupported: pbp create is not supported",
-    "gcz": "intentionally unsupported: gcz compression is not supported (use rvz)",
-    "nfs": "intentionally unsupported: nfs compression is not supported",
-    "tgc": "benchmark fixture limitation: tgc create requires a full GC disc image with readable DOL",
+    str(key): str(value)
+    for key, value in COMMAND_PATHS_DEFAULTS["expected_compress_skips"].items()
 }
 
 EXPECTED_PATCH_CREATE_SKIPS = {
-    "ninja1": "intentionally unsupported: NINJA1 patch creation is not supported",
-    "bsp": "intentionally unsupported: BSP patch creation is not implemented",
-    "hdiffpatch": "intentionally unsupported: HDiffPatch/HPatchZ patch creation is disabled",
+    str(key): str(value)
+    for key, value in COMMAND_PATHS_DEFAULTS["expected_patch_create_skips"].items()
 }
 
 SEVENZIP_COMPRESS_ONE_STEP = {
@@ -142,48 +116,21 @@ DOLPHIN_TOOL_COMPRESS_FORMATS = {"rvz"}
 DOLPHIN_TOOL_EXTRACT_FORMATS = {"rvz"}
 DOLPHIN_TOOL_CHECKSUM_AUTO_EXTRACT_FORMATS = {"rvz"}
 
-DISC_COMPRESS_INPUT_FORMATS = {"rvz", "wia", "wbfs", "tgc"}
+DISC_COMPRESS_INPUT_FORMATS = {
+    str(value) for value in COMMAND_PATHS_DEFAULTS["disc_compress_input_formats"]
+}
 
 ROM_WEAVER_COMPRESS_CODEC_BY_FORMAT = {
-    "zipx": "zstd",
+    str(key): str(value)
+    for key, value in COMMAND_PATHS_DEFAULTS["compress_codec_by_format"].items()
 }
 
 # Codec matrix for rom-weaver format/codec coverage.
 # Entry tuples are (codec_label, codec_cli_value).
 # zipx intentionally stays out of this matrix to avoid counting it in permutation totals.
 ROM_WEAVER_CODEC_MATRIX_BY_FORMAT = {
-    "zip": [("store", "store"), ("deflate", "deflate"), ("bzip2", "bzip2"), ("zstd", "zstd")],
-    "7z": [
-        ("lzma2", "lzma2"),
-        ("lzma", "lzma"),
-        ("store", "store"),
-        ("zstd", "zstd:7"),
-        ("deflate", "deflate"),
-        ("bzip2", "bzip2"),
-        ("ppmd", "ppmd"),
-    ],
-    "tar": [("store", "store")],
-    "tar.gz": [("deflate", "deflate")],
-    "tar.bz2": [("bzip2", "bzip2")],
-    "tar.xz": [("lzma2", "lzma2"), ("lzma", "lzma")],
-    "gz": [("deflate", "deflate")],
-    "bz2": [("bzip2", "bzip2")],
-    "xz": [("lzma2", "lzma2"), ("lzma", "lzma")],
-    "zst": [("zstd", "zstd")],
-    "cso": [("store", "store")],
-    "chd": [
-        ("zstd", "zstd"),
-        ("zlib", "zlib"),
-        ("lzma", "lzma"),
-        ("huffman", "huffman"),
-        ("flac", "flac"),
-        ("store", "store"),
-    ],
-    "wia": [("store", "store"), ("zstd", "zstd"), ("bzip2", "bzip2"), ("lzma", "lzma"), ("lzma2", "lzma2")],
-    "tgc": [("store", "store")],
-    "wbfs": [("store", "store")],
-    "rvz": [("store", "store"), ("zstd", "zstd"), ("bzip2", "bzip2"), ("lzma", "lzma"), ("lzma2", "lzma2")],
-    "z3ds": [("zstd", "zstd")],
+    str(format_name): [(str(label), str(codec) if codec is not None else None) for label, codec in cases]
+    for format_name, cases in COMMAND_PATHS_DEFAULTS["codec_matrix_by_format"].items()
 }
 
 DLDI_MAGIC = bytes([0xED, 0xA5, 0x8D, 0xBF, ord(" "), ord("C"), ord("h"), ord("i"), ord("s"), ord("h"), ord("m"), 0x00])
@@ -219,54 +166,15 @@ DLDI_PATCH_BASE_ADDRESS = 0xBF80_0000
 IPS_CREATE_MAX_INPUT_BYTES = 0x01000000  # IPS family patch-create uses 24-bit offsets.
 IPS_EBP_BENCH_MAX_BYTES = IPS_CREATE_MAX_INPUT_BYTES - 1
 
-CHECKSUM_ALGORITHMS = ["crc32", "md5", "sha1", "sha256", "blake3", "crc32c", "crc16", "adler32"]
-
-PATCH_FORMATS = [
-    "ips",
-    "ips32",
-    "solid",
-    "bps",
-    "ups",
-    "vcdiff",
-    "xdelta",
-    "gdiff",
-    "hdiffpatch",
-    "aps",
-    "apsgba",
-    "ninja1",
-    "rup",
-    "ppf",
-    "pat",
-    "ebp",
-    "bdf",
-    "bsp",
-    "mod",
-    "dldi",
-    "dps",
+CHECKSUM_ALGORITHMS = [
+    str(value) for value in COMMAND_PATHS_DEFAULTS["checksum_algorithms"]
 ]
 
+PATCH_FORMATS = [str(value) for value in COMMAND_PATHS_DEFAULTS["patch_formats"]]
+
 PATCH_EXTENSION = {
-    "ips": "ips",
-    "ips32": "ips32",
-    "solid": "solid",
-    "bps": "bps",
-    "ups": "ups",
-    "vcdiff": "vcdiff",
-    "xdelta": "xdelta",
-    "gdiff": "gdiff",
-    "hdiffpatch": "hpatchz",
-    "aps": "aps",
-    "apsgba": "apsgba",
-    "ninja1": "n1",
-    "rup": "rup",
-    "ppf": "ppf",
-    "pat": "pat",
-    "ebp": "ebp",
-    "bdf": "bsdiff",
-    "bsp": "bsp",
-    "mod": "mod",
-    "dldi": "dldi",
-    "dps": "dps",
+    str(key): str(value)
+    for key, value in COMMAND_PATHS_DEFAULTS["patch_extension"].items()
 }
 
 
@@ -395,6 +303,130 @@ def benchmark_row_from_cache_payload(payload: dict[str, Any]) -> BenchmarkRow:
     )
 
 
+class BrowserWasmJsonRunner:
+    def __init__(self, *, node_bin: Path, wasm_runner: Path, wasm_module: Path) -> None:
+        self._cmd_prefix = [
+            str(node_bin),
+            "--no-warnings",
+            str(wasm_runner),
+            "--stdin-json",
+            "--wasm-module",
+            str(wasm_module),
+        ]
+        self._proc = subprocess.Popen(
+            self._cmd_prefix,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1,
+        )
+        if self._proc.stdin is None or self._proc.stdout is None or self._proc.stderr is None:
+            raise RuntimeError("failed to open browser wasm runner stdio pipes")
+        self._wait_until_ready(timeout_sec=180)
+
+    def _wait_until_ready(self, timeout_sec: int) -> None:
+        line = self._readline_with_timeout(timeout_sec)
+        if line is None:
+            self.close()
+            raise RuntimeError(f"browser wasm runner failed to initialize within {timeout_sec}s")
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError as error:
+            self.close()
+            raise RuntimeError(f"browser wasm runner emitted invalid ready payload: {line}") from error
+        if payload.get("ready") is not True:
+            self.close()
+            raise RuntimeError(f"browser wasm runner did not emit ready=true: {payload}")
+
+    def _readline_with_timeout(self, timeout_sec: int) -> str | None:
+        assert self._proc.stdout is not None
+        if timeout_sec <= 0:
+            timeout_sec = 1
+        ready, _, _ = select.select([self._proc.stdout], [], [], timeout_sec)
+        if not ready:
+            return None
+        line = self._proc.stdout.readline()
+        if line == "":
+            return None
+        return line.rstrip("\n")
+
+    def command_example(self, args: list[str]) -> list[str]:
+        return [*self._cmd_prefix, "--", *args]
+
+    def run(self, *, args: list[str], timeout_sec: int) -> RunOutcome:
+        assert self._proc.stdin is not None
+        payload = {"args": args}
+        started = time.perf_counter()
+        try:
+            self._proc.stdin.write(json.dumps(payload) + "\n")
+            self._proc.stdin.flush()
+        except (BrokenPipeError, OSError) as error:
+            elapsed = time.perf_counter() - started
+            return RunOutcome(
+                elapsed_s=elapsed,
+                peak_rss_bytes=None,
+                exit_code=1,
+                stdout="",
+                stderr=f"browser wasm runner pipe write failed: {error}",
+            )
+
+        line = self._readline_with_timeout(timeout_sec)
+        elapsed = time.perf_counter() - started
+        if line is None:
+            self.close()
+            return RunOutcome(
+                elapsed_s=elapsed,
+                peak_rss_bytes=None,
+                exit_code=124,
+                stdout="",
+                stderr=f"timed out after {timeout_sec}s",
+            )
+
+        try:
+            response = json.loads(line)
+        except json.JSONDecodeError as error:
+            return RunOutcome(
+                elapsed_s=elapsed,
+                peak_rss_bytes=None,
+                exit_code=1,
+                stdout=line,
+                stderr=f"browser wasm runner returned invalid json: {error}",
+            )
+
+        response_elapsed = response.get("elapsedS")
+        if isinstance(response_elapsed, (int, float)) and response_elapsed >= 0:
+            elapsed = float(response_elapsed)
+        ok = bool(response.get("ok"))
+        exit_code_raw = response.get("exitCode", 0 if ok else 1)
+        exit_code = int(exit_code_raw) if isinstance(exit_code_raw, (int, float)) else (0 if ok else 1)
+        message = str(response.get("message") or "")
+        return RunOutcome(
+            elapsed_s=elapsed,
+            peak_rss_bytes=None,
+            exit_code=exit_code,
+            stdout=line,
+            stderr=message,
+        )
+
+    def close(self) -> None:
+        if self._proc.poll() is not None:
+            return
+        try:
+            if self._proc.stdin is not None and not self._proc.stdin.closed:
+                self._proc.stdin.close()
+        except OSError:
+            pass
+        try:
+            self._proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            self._proc.kill()
+            try:
+                self._proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                pass
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
@@ -420,7 +452,12 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Optional path to write detailed JSON results",
     )
-    parser.add_argument("--size-mib", type=int, default=64, help="Source fixture size in MiB (default: 64)")
+    parser.add_argument(
+        "--size-mib",
+        type=int,
+        default=DEFAULT_SIZE_MIB,
+        help=f"Source fixture size in MiB (default: {DEFAULT_SIZE_MIB})",
+    )
     parser.add_argument(
         "--patch-size-mib",
         type=int,
@@ -466,7 +503,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--checksum-modes",
-        default="raw",
+        default=str(COMMAND_PATHS_DEFAULTS["checksum_modes"]),
         help=(
             "Checksum paths to run: raw, auto-extract, archive-no-extract, or a comma-separated subset "
             "(default: raw)"
@@ -535,6 +572,15 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--fixture-cache-dir",
+        type=Path,
+        default=Path(f"target/bench-fixtures/command-paths-v{BENCH_DEFAULTS['fixture_cache_version']}"),
+        help=(
+            "Persistent generated fixture cache directory. Generated 128 MiB fixtures are hard-linked "
+            "or copied from here into the per-run work directory (default: target/bench-fixtures/command-paths-vN)"
+        ),
+    )
+    parser.add_argument(
         "--sevenzip-bin",
         type=Path,
         default=Path(shutil.which("7zz") or "7zz"),
@@ -550,13 +596,34 @@ def parse_args() -> argparse.Namespace:
         "--wasm-runner",
         type=Path,
         default=Path("scripts/wasm/run-wasi-cli.mjs"),
-        help="Path to wasm runner wrapper script used for rom-weaver-wasm archive tool",
+        help=(
+            "Path to wasm runner wrapper script used for rom-weaver-wasm archive tool "
+            "(Node WASI default: scripts/wasm/run-wasi-cli.mjs; browser wasm option: scripts/wasm/run-browser-cli.mjs)"
+        ),
     )
     parser.add_argument(
         "--wasm-module",
         type=Path,
         default=Path("packages/rom-weaver-wasm/rom-weaver-cli-threaded.wasm"),
         help="Path to rom-weaver CLI wasm module used for rom-weaver-wasm archive tool",
+    )
+    parser.add_argument(
+        "--wasm-singlethread-module",
+        type=Path,
+        default=Path("packages/rom-weaver-wasm/rom-weaver-cli.wasm"),
+        help=(
+            "Path to non-threaded rom-weaver CLI wasm module used for formats with unstable threaded "
+            "WASI timings (default: packages/rom-weaver-wasm/rom-weaver-cli.wasm)"
+        ),
+    )
+    parser.add_argument(
+        "--browser-wasm-persistent-session",
+        action="store_true",
+        help=(
+            "Experimental: keep scripts/wasm/run-browser-cli.mjs open as one browser session for "
+            "rom-weaver-wasm rows. Disabled by default because browser startup can hang in some "
+            "Playwright environments; Vitest browser benchmarks are the supported OPFS timing path."
+        ),
     )
     parser.add_argument(
         "--chdman-bin",
@@ -825,9 +892,9 @@ def stage_fixture_file(source_path: Path, destination_path: Path) -> None:
         shutil.copy2(source_resolved, destination_path)
 
 
-def write_test_gamecube_iso_fixture(path: Path, payload_bytes: int) -> None:
+def write_test_gamecube_iso_fixture(path: Path, total_bytes: int) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    total_len = max(0x440 + payload_bytes, 0x440)
+    total_len = max(total_bytes, 0x440)
     image = bytearray(total_len)
     image[:6] = b"RWTEST"
     image[0x1C:0x20] = bytes([0xC2, 0x33, 0x9F, 0x3D])
@@ -839,6 +906,7 @@ def write_test_gamecube_iso_fixture(path: Path, payload_bytes: int) -> None:
 
 
 def write_modified_fixture(original: Path, modified: Path) -> None:
+    modified.parent.mkdir(parents=True, exist_ok=True)
     data = bytearray(original.read_bytes())
     if not data:
         modified.write_bytes(data)
@@ -857,6 +925,46 @@ def write_modified_fixture(original: Path, modified: Path) -> None:
         for index in range(start, end):
             data[index] = (data[index] + delta) % 256
     modified.write_bytes(data)
+
+
+def cached_fixture_path(cache_dir: Path, label: str, size_bytes: int, seed: int | None = None, suffix: str = "bin") -> Path:
+    seed_part = f"-seed-{seed:x}" if seed is not None else ""
+    return cache_dir / f"{label}-{size_bytes}{seed_part}.{suffix}"
+
+
+def ensure_cached_random_fixture(cache_dir: Path, label: str, size_bytes: int, seed: int) -> Path:
+    cache_path = cached_fixture_path(cache_dir, label, size_bytes, seed)
+    if cache_path.exists() and cache_path.stat().st_size == size_bytes:
+        return cache_path
+    if cache_path.exists():
+        cache_path.unlink()
+    print(f"[bench] generating fixture cache {cache_path}", flush=True)
+    write_random_fixture(cache_path, size_bytes, seed)
+    return cache_path
+
+
+def ensure_cached_modified_fixture(cache_dir: Path, label: str, original: Path) -> Path:
+    size_bytes = original.stat().st_size
+    cache_path = cached_fixture_path(cache_dir, label, size_bytes, suffix="bin")
+    if cache_path.exists() and cache_path.stat().st_size == size_bytes:
+        return cache_path
+    if cache_path.exists():
+        cache_path.unlink()
+    print(f"[bench] generating fixture cache {cache_path}", flush=True)
+    write_modified_fixture(original, cache_path)
+    return cache_path
+
+
+def ensure_cached_gamecube_iso_fixture(cache_dir: Path, label: str, total_bytes: int) -> Path:
+    expected_size = max(total_bytes, 0x440)
+    cache_path = cached_fixture_path(cache_dir, label, expected_size, suffix="iso")
+    if cache_path.exists() and cache_path.stat().st_size == expected_size:
+        return cache_path
+    if cache_path.exists():
+        cache_path.unlink()
+    print(f"[bench] generating fixture cache {cache_path}", flush=True)
+    write_test_gamecube_iso_fixture(cache_path, total_bytes)
+    return cache_path
 
 
 def write_i32_le(buffer: bytearray, offset: int, value: int) -> None:
@@ -1004,16 +1112,34 @@ def wasm_rom_weaver_command(
     wasm_runner: Path,
     wasm_module: Path,
     args: list[str],
+    runner_args: list[str] | None = None,
 ) -> list[str]:
-    return [
+    cmd = [
         str(node_bin),
         "--no-warnings",
         str(wasm_runner),
-        "--wasm-module",
-        str(wasm_module),
-        "--",
-        *args,
     ]
+    if runner_args:
+        cmd.extend(runner_args)
+    cmd.extend(
+        [
+            "--wasm-module",
+            str(wasm_module),
+            "--",
+            *args,
+        ]
+    )
+    return cmd
+
+
+def wasm_module_for_container_format(
+    format_name: str,
+    wasm_module: Path,
+    wasm_singlethread_module: Path | None,
+) -> Path:
+    if format_name in WASM_SINGLETHREAD_FALLBACK_FORMATS and wasm_singlethread_module is not None:
+        return wasm_singlethread_module
+    return wasm_module
 
 
 def sevenzip_compress_command(
@@ -1456,6 +1582,105 @@ def run_benchmark_case(
     return row
 
 
+def run_benchmark_case_browser_runner(
+    *,
+    command: str,
+    path_id: str,
+    warmups: int,
+    iterations: int,
+    timeout_sec: int,
+    args_factory,
+    processed_bytes_factory,
+    runner: BrowserWasmJsonRunner,
+    tool: str = "rom-weaver-wasm",
+    cache: BenchmarkCache | None = None,
+) -> BenchmarkRow:
+    if cache is not None:
+        cached_row = cache.load_row(tool=tool, command=command, path_id=path_id)
+        if cached_row is not None:
+            print(f"[bench] cache hit {tool} {command} {path_id}", flush=True)
+            return cached_row
+
+    samples: list[TrialSample] = []
+    command_example: list[str] | None = None
+    print(f"[bench] start {tool} {command} {path_id}", flush=True)
+
+    for warmup_index in range(warmups):
+        command_args, context = args_factory(warmup_index, True)
+        command_example = runner.command_example(command_args)
+        outcome = runner.run(args=command_args, timeout_sec=timeout_sec)
+        if outcome.exit_code != 0:
+            reason = f"warmup failed (exit {outcome.exit_code})"
+            tail = outcome_tail_message(outcome)
+            if tail:
+                reason = f"{reason}: {tail}"
+            print(f"[bench] failed {command} {path_id}: {reason}", flush=True)
+            row = BenchmarkRow(
+                command=command,
+                path_id=path_id,
+                status="failed",
+                reason=reason,
+                command_example=command_example,
+                iterations=iterations,
+                warmups=warmups,
+                samples=samples,
+                tool=tool,
+            )
+            if cache is not None:
+                cache.store_row(row)
+            return row
+        _ = processed_bytes_factory(context)
+
+    for iteration in range(iterations):
+        command_args, context = args_factory(iteration, False)
+        command_example = runner.command_example(command_args)
+        outcome = runner.run(args=command_args, timeout_sec=timeout_sec)
+        if outcome.exit_code != 0:
+            reason = f"iteration {iteration + 1} failed (exit {outcome.exit_code})"
+            tail = outcome_tail_message(outcome)
+            if tail:
+                reason = f"{reason}: {tail}"
+            print(f"[bench] failed {command} {path_id}: {reason}", flush=True)
+            row = BenchmarkRow(
+                command=command,
+                path_id=path_id,
+                status="failed",
+                reason=reason,
+                command_example=command_example,
+                iterations=iterations,
+                warmups=warmups,
+                samples=samples,
+                tool=tool,
+            )
+            if cache is not None:
+                cache.store_row(row)
+            return row
+        processed_bytes = processed_bytes_factory(context)
+        samples.append(
+            TrialSample(
+                elapsed_s=outcome.elapsed_s,
+                peak_rss_bytes=outcome.peak_rss_bytes,
+                processed_bytes=processed_bytes,
+            )
+        )
+
+    print(f"[bench] done {tool} {command} {path_id}", flush=True)
+    row = BenchmarkRow(
+        command=command,
+        path_id=path_id,
+        status="succeeded",
+        reason=None,
+        command_example=command_example,
+        iterations=iterations,
+        warmups=warmups,
+        samples=samples,
+        tool=tool,
+    )
+    if cache is not None:
+        cache.store_row(row)
+    return row
+
+
 def skipped_row(
     command: str,
     path_id: str,
@@ -1545,16 +1770,25 @@ def main() -> None:
     node_bin: Path | None = None
     wasm_runner: Path | None = None
     wasm_module: Path | None = None
+    wasm_singlethread_module: Path | None = None
 
     if archive_tool_mode == "auto":
         selected_archive_tools = ["rom-weaver"]
         node_candidate = try_resolve_external_binary(args.node_bin)
         wasm_runner_candidate = args.wasm_runner.expanduser().resolve()
         wasm_module_candidate = args.wasm_module.expanduser().resolve()
+        wasm_singlethread_module_candidate = args.wasm_singlethread_module.expanduser().resolve()
         if node_candidate is not None and wasm_runner_candidate.exists() and wasm_module_candidate.exists():
             node_bin = node_candidate
             wasm_runner = wasm_runner_candidate
             wasm_module = wasm_module_candidate
+            if wasm_singlethread_module_candidate.exists():
+                wasm_singlethread_module = wasm_singlethread_module_candidate
+            else:
+                print(
+                    "[bench] wasm single-thread fallback disabled (module not found)",
+                    flush=True,
+                )
             selected_archive_tools.append("rom-weaver-wasm")
         else:
             print("[bench] auto skip rom-weaver-wasm (missing node, wasm runner, or wasm module)", flush=True)
@@ -1592,6 +1826,9 @@ def main() -> None:
             wasm_module = args.wasm_module.expanduser().resolve()
             if not wasm_module.exists():
                 raise SystemExit(f"--wasm-module file not found: {wasm_module}")
+            wasm_singlethread_module = args.wasm_singlethread_module.expanduser().resolve()
+            if not wasm_singlethread_module.exists():
+                raise SystemExit(f"--wasm-singlethread-module file not found: {wasm_singlethread_module}")
 
     print(f"[bench] archive tools: {', '.join(selected_archive_tools)}", flush=True)
 
@@ -1613,6 +1850,7 @@ def main() -> None:
                     "node_bin": file_fingerprint(node_bin),
                     "wasm_runner": file_fingerprint(wasm_runner),
                     "wasm_module": file_fingerprint(wasm_module),
+                    "wasm_singlethread_module": file_fingerprint(wasm_singlethread_module),
                 },
                 args=args,
                 checksum_combo_algorithms=checksum_combo_algorithms,
@@ -1647,6 +1885,8 @@ def main() -> None:
         print(f"[bench] cache mode={args.cache_mode} entries={len(cache_entries)} file={cache.path}", flush=True)
 
     work_dir = args.work_dir.resolve()
+    fixture_cache_dir = args.fixture_cache_dir.expanduser().resolve()
+    fixture_cache_dir.mkdir(parents=True, exist_ok=True)
     if work_dir.exists():
         shutil.rmtree(work_dir)
     fixtures_dir = work_dir / "fixtures"
@@ -1671,6 +1911,29 @@ def main() -> None:
     patch_pair_ready = False
     ips_ebp_ready = False
     dldi_ready = False
+    browser_wasm_json_runner: BrowserWasmJsonRunner | None = None
+    if (
+        args.browser_wasm_persistent_session
+        and
+        "rom-weaver-wasm" in selected_archive_tools
+        and wasm_runner is not None
+        and wasm_runner.name == "run-browser-cli.mjs"
+    ):
+        assert node_bin is not None
+        assert wasm_module is not None
+        browser_runner_wasm_module = wasm_module
+        if any(format_name in WASM_SINGLETHREAD_FALLBACK_FORMATS for format_name in selected_container_formats):
+            browser_runner_wasm_module = wasm_module_for_container_format(
+                "rvz",
+                wasm_module,
+                wasm_singlethread_module,
+            )
+        print("[bench] browser wasm runner: persistent json session enabled", flush=True)
+        browser_wasm_json_runner = BrowserWasmJsonRunner(
+            node_bin=node_bin,
+            wasm_runner=wasm_runner,
+            wasm_module=browser_runner_wasm_module,
+        )
 
     def ensure_source_fixture() -> None:
         nonlocal source_ready
@@ -1680,7 +1943,13 @@ def main() -> None:
             stage_fixture_file(args.source_bin_fixture, source_path)
             print(f"[bench] using source-bin fixture: {args.source_bin_fixture}", flush=True)
         else:
-            write_random_fixture(source_path, args.size_mib * MIB, seed=0xBADC0DE)
+            cached = ensure_cached_random_fixture(
+                fixture_cache_dir,
+                "source",
+                args.size_mib * MIB,
+                seed=0xBADC0DE,
+            )
+            stage_fixture_file(cached, source_path)
         source_ready = True
 
     def ensure_disc_source_fixture() -> None:
@@ -1691,15 +1960,31 @@ def main() -> None:
             stage_fixture_file(args.source_disc_fixture, disc_source_path)
             print(f"[bench] using source-disc fixture: {args.source_disc_fixture}", flush=True)
         else:
-            write_test_gamecube_iso_fixture(disc_source_path, args.size_mib * MIB)
+            cached = ensure_cached_gamecube_iso_fixture(
+                fixture_cache_dir,
+                "source-disc",
+                args.size_mib * MIB,
+            )
+            stage_fixture_file(cached, disc_source_path)
         disc_source_ready = True
 
     def ensure_patch_pair_fixtures() -> None:
         nonlocal patch_pair_ready
         if patch_pair_ready:
             return
-        write_random_fixture(original_path, args.patch_size_mib * MIB, seed=0xC0FFEE)
-        write_modified_fixture(original_path, modified_path)
+        cached_original = ensure_cached_random_fixture(
+            fixture_cache_dir,
+            "patch-original",
+            args.patch_size_mib * MIB,
+            seed=0xC0FFEE,
+        )
+        cached_modified = ensure_cached_modified_fixture(
+            fixture_cache_dir,
+            "patch-modified",
+            cached_original,
+        )
+        stage_fixture_file(cached_original, original_path)
+        stage_fixture_file(cached_modified, modified_path)
         patch_pair_ready = True
 
     def ensure_ips_ebp_fixtures() -> None:
@@ -1707,8 +1992,19 @@ def main() -> None:
         if ips_ebp_ready:
             return
         ips_ebp_size_bytes = min(args.patch_size_mib * MIB, IPS_EBP_BENCH_MAX_BYTES)
-        write_random_fixture(ips_ebp_original_path, ips_ebp_size_bytes, seed=0x1BADB002)
-        write_modified_fixture(ips_ebp_original_path, ips_ebp_modified_path)
+        cached_original = ensure_cached_random_fixture(
+            fixture_cache_dir,
+            "ips-ebp-original",
+            ips_ebp_size_bytes,
+            seed=0x1BADB002,
+        )
+        cached_modified = ensure_cached_modified_fixture(
+            fixture_cache_dir,
+            "ips-ebp-modified",
+            cached_original,
+        )
+        stage_fixture_file(cached_original, ips_ebp_original_path)
+        stage_fixture_file(cached_modified, ips_ebp_modified_path)
         ips_ebp_ready = True
 
     def ensure_dldi_fixtures() -> None:
@@ -1781,11 +2077,12 @@ def main() -> None:
             flush=True,
         )
 
-    if "patch-create" in selected_commands and {"ips", "ebp"} & set(selected_patch_formats):
+    large_limit_validation_formats = {"ips", "ebp"} - set(EXPECTED_PATCH_CREATE_SKIPS)
+    if "patch-create" in selected_commands and large_limit_validation_formats & set(selected_patch_formats):
         ensure_patch_pair_fixtures()
         if original_path.stat().st_size > IPS_CREATE_MAX_INPUT_BYTES:
             for format_name in ("ips", "ebp"):
-                if format_name in selected_patch_formats:
+                if format_name in large_limit_validation_formats and format_name in selected_patch_formats:
                     validate_large_ips_family_failure(format_name)
 
     def compress_input_for_format(format_name: str) -> Path:
@@ -1883,6 +2180,27 @@ def main() -> None:
                     )
 
     if "compress" in selected_commands:
+        use_browser_wasm_json_runner = browser_wasm_json_runner is not None
+        if use_browser_wasm_json_runner:
+            ensure_source_fixture()
+            assert browser_wasm_json_runner is not None
+            warmup = browser_wasm_json_runner.run(
+                args=[
+                    "checksum",
+                    str(source_path),
+                    "--algo",
+                    "crc32",
+                    "--no-extract",
+                    "--threads",
+                    str(args.threads),
+                ],
+                timeout_sec=args.timeout_sec,
+            )
+            if warmup.exit_code == 0:
+                print("[bench] browser wasm persistent session warmup complete", flush=True)
+            else:
+                tail = outcome_tail_message(warmup) or "warmup failed"
+                print(f"[bench] browser wasm warmup failed: {tail}", flush=True)
         for format_name in selected_container_formats:
             input_path = compress_input_for_format(format_name)
             suffix = container_suffix(format_name)
@@ -1953,6 +2271,11 @@ def main() -> None:
                 assert node_bin is not None
                 assert wasm_runner is not None
                 assert wasm_module is not None
+                wasm_module_for_case = wasm_module_for_container_format(
+                    format_name,
+                    wasm_module,
+                    wasm_singlethread_module,
+                )
                 if format_name in EXPECTED_COMPRESS_SKIPS:
                     for codec_label, _codec_value in rom_weaver_codec_cases_for_format(format_name):
                         rows.append(
@@ -1977,17 +2300,26 @@ def main() -> None:
                             codec_value_override: str | None = codec_value,
                             node_bin_value: Path = node_bin,
                             wasm_runner_value: Path = wasm_runner,
-                            wasm_module_value: Path = wasm_module,
+                            wasm_module_value: Path = wasm_module_for_case,
+                            use_browser_json_runner_value: bool = use_browser_wasm_json_runner,
                         ):
                             run_kind = "warmup" if warmup else "run"
-                            output_path = (
+                            host_output_path = (
                                 outputs_dir
                                 / "compress-wasm"
                                 / f"{token(format_value)}-{token(codec_label_value)}-{run_kind}-{iteration}.{suffix_value}"
                             )
-                            output_path.parent.mkdir(parents=True, exist_ok=True)
-                            if output_path.exists():
-                                output_path.unlink()
+                            output_arg_path: Path
+                            if use_browser_json_runner_value:
+                                # Browser runner writes directly inside OPFS guest paths.
+                                output_arg_path = Path(
+                                    f"/work/bench-command-paths/outputs/compress-wasm/{token(format_value)}-{token(codec_label_value)}-{run_kind}-{iteration}.{suffix_value}"
+                                )
+                            else:
+                                host_output_path.parent.mkdir(parents=True, exist_ok=True)
+                                if host_output_path.exists():
+                                    host_output_path.unlink()
+                                output_arg_path = host_output_path
                             cmd = wasm_rom_weaver_command(
                                 node_bin=node_bin_value,
                                 wasm_runner=wasm_runner_value,
@@ -1995,29 +2327,68 @@ def main() -> None:
                                 args=rom_weaver_compress_args(
                                     input_path=input_value,
                                     format_name=format_value,
-                                    output_path=output_path,
+                                    output_path=output_arg_path,
                                     threads=args.threads,
                                     codec_override=codec_value_override,
                                 ),
                             )
-                            return cmd, output_path
+                            return cmd, host_output_path
+
+                        def make_wasm_args(
+                            iteration: int,
+                            warmup: bool,
+                            format_value: str = format_name,
+                            suffix_value: str = suffix,
+                            input_value: Path = input_path,
+                            codec_label_value: str = codec_label,
+                            codec_value_override: str | None = codec_value,
+                        ):
+                            run_kind = "warmup" if warmup else "run"
+                            output_arg_path = Path(
+                                f"/work/bench-command-paths/outputs/compress-wasm/{token(format_value)}-{token(codec_label_value)}-{run_kind}-{iteration}.{suffix_value}"
+                            )
+                            command_args = rom_weaver_compress_args(
+                                input_path=input_value,
+                                format_name=format_value,
+                                output_path=output_arg_path,
+                                threads=args.threads,
+                                codec_override=codec_value_override,
+                            )
+                            return command_args, output_arg_path
 
                         def processed_bytes(_context: Path, input_value: Path = input_path) -> int:
                             return input_value.stat().st_size
 
-                        rows.append(
-                            run_benchmark_case(
-                                command="compress",
-                                path_id=format_codec_path_id(format_name, codec_label),
-                                warmups=args.warmups,
-                                iterations=args.iterations,
-                                timeout_sec=args.timeout_sec,
-                                command_factory=make_wasm_command,
-                                processed_bytes_factory=processed_bytes,
-                                tool="rom-weaver-wasm",
-                                cache=cache,
+                        if use_browser_wasm_json_runner:
+                            assert browser_wasm_json_runner is not None
+                            rows.append(
+                                run_benchmark_case_browser_runner(
+                                    command="compress",
+                                    path_id=format_codec_path_id(format_name, codec_label),
+                                    warmups=args.warmups,
+                                    iterations=args.iterations,
+                                    timeout_sec=args.timeout_sec,
+                                    args_factory=make_wasm_args,
+                                    processed_bytes_factory=processed_bytes,
+                                    runner=browser_wasm_json_runner,
+                                    tool="rom-weaver-wasm",
+                                    cache=cache,
+                                )
                             )
-                        )
+                        else:
+                            rows.append(
+                                run_benchmark_case(
+                                    command="compress",
+                                    path_id=format_codec_path_id(format_name, codec_label),
+                                    warmups=args.warmups,
+                                    iterations=args.iterations,
+                                    timeout_sec=args.timeout_sec,
+                                    command_factory=make_wasm_command,
+                                    processed_bytes_factory=processed_bytes,
+                                    tool="rom-weaver-wasm",
+                                    cache=cache,
+                                )
+                            )
 
             if "7zz" in selected_archive_tools:
                 assert sevenzip_bin is not None
@@ -2270,6 +2641,11 @@ def main() -> None:
                 assert node_bin is not None
                 assert wasm_runner is not None
                 assert wasm_module is not None
+                wasm_module_for_case = wasm_module_for_container_format(
+                    format_name,
+                    wasm_module,
+                    wasm_singlethread_module,
+                )
                 for codec_label, _codec_value in rom_weaver_codec_cases_for_format(format_name):
                     source = archive_sources.get((format_name, codec_label))
                     if source is None:
@@ -2293,7 +2669,7 @@ def main() -> None:
                         source_value: ArchiveSource = source,
                         node_bin_value: Path = node_bin,
                         wasm_runner_value: Path = wasm_runner,
-                        wasm_module_value: Path = wasm_module,
+                        wasm_module_value: Path = wasm_module_for_case,
                     ):
                         run_kind = "warmup" if warmup else "run"
                         out_dir = (
@@ -2823,6 +3199,11 @@ def main() -> None:
                     assert node_bin is not None
                     assert wasm_runner is not None
                     assert wasm_module is not None
+                    wasm_module_for_case = wasm_module_for_container_format(
+                        format_name,
+                        wasm_module,
+                        wasm_singlethread_module,
+                    )
                     for algorithm in selected_checksum_algorithms:
 
                         def make_wasm_command(
@@ -2832,7 +3213,7 @@ def main() -> None:
                             algo: str = algorithm,
                             node_bin_value: Path = node_bin,
                             wasm_runner_value: Path = wasm_runner,
-                            wasm_module_value: Path = wasm_module,
+                            wasm_module_value: Path = wasm_module_for_case,
                         ):
                             checksum_args = [
                                 "checksum",
@@ -3063,6 +3444,11 @@ def main() -> None:
                     assert node_bin is not None
                     assert wasm_runner is not None
                     assert wasm_module is not None
+                    wasm_module_for_case = wasm_module_for_container_format(
+                        format_name,
+                        wasm_module,
+                        wasm_singlethread_module,
+                    )
                     for algorithm in selected_checksum_algorithms:
 
                         def make_wasm_command(
@@ -3072,7 +3458,7 @@ def main() -> None:
                             algo: str = algorithm,
                             node_bin_value: Path = node_bin,
                             wasm_runner_value: Path = wasm_runner,
-                            wasm_module_value: Path = wasm_module,
+                            wasm_module_value: Path = wasm_module_for_case,
                         ):
                             checksum_args = [
                                 "checksum",
@@ -3218,6 +3604,58 @@ def main() -> None:
     def patch_artifact_path(format_name: str, patch_tool: str, extension: str) -> Path:
         return artifacts_dir / "patches" / f"{token(format_name)}-{token(patch_tool)}.{extension}"
 
+    def patch_fixture_paths_for_format(format_name: str) -> tuple[Path, Path]:
+        if format_name == "dldi":
+            ensure_dldi_fixtures()
+            return dldi_original_path, dldi_modified_path
+        if format_name in {"ips", "ebp"}:
+            ensure_ips_ebp_fixtures()
+            return ips_ebp_original_path, ips_ebp_modified_path
+        ensure_patch_pair_fixtures()
+        return original_path, modified_path
+
+    def materialize_patch_source(format_name: str, patch_tool: str) -> tuple[Path, Path] | None:
+        if format_name in EXPECTED_PATCH_CREATE_SKIPS:
+            return None
+        extension = PATCH_EXTENSION[format_name]
+        patch_path = patch_artifact_path(format_name, patch_tool, extension)
+        patch_original, patch_modified = patch_fixture_paths_for_format(format_name)
+        if patch_path.exists():
+            return patch_path, patch_original
+        patch_path.parent.mkdir(parents=True, exist_ok=True)
+        patch_args = [
+            "patch-create",
+            "--original",
+            str(patch_original),
+            "--modified",
+            str(patch_modified),
+            "--format",
+            format_name,
+            "--output",
+            str(patch_path),
+            "--threads",
+            str(args.threads),
+        ]
+        if patch_tool == "rom-weaver":
+            prep_cmd = base_command(args.bin, patch_args)
+        else:
+            assert node_bin is not None
+            assert wasm_runner is not None
+            assert wasm_module is not None
+            prep_cmd = wasm_rom_weaver_command(
+                node_bin=node_bin,
+                wasm_runner=wasm_runner,
+                wasm_module=wasm_module,
+                args=["--no-progress", *patch_args],
+            )
+        prep = run_timed_command(prep_cmd, Path.cwd(), args.timeout_sec)
+        if prep.exit_code == 0 and patch_path.exists():
+            print(f"[bench] materialized patch artifact {patch_tool} {format_name}", flush=True)
+            return patch_path, patch_original
+        tail = outcome_tail_message(prep) or "patch artifact was not produced"
+        print(f"[bench] failed to materialize patch artifact {patch_tool} {format_name}: {tail}", flush=True)
+        return None
+
     if "patch-create" in selected_commands:
         for format_name in selected_patch_formats:
             if format_name in EXPECTED_PATCH_CREATE_SKIPS:
@@ -3233,18 +3671,7 @@ def main() -> None:
                 continue
 
             extension = PATCH_EXTENSION[format_name]
-            if format_name == "dldi":
-                ensure_dldi_fixtures()
-                patch_original = dldi_original_path
-                patch_modified = dldi_modified_path
-            elif format_name in {"ips", "ebp"}:
-                ensure_ips_ebp_fixtures()
-                patch_original = ips_ebp_original_path
-                patch_modified = ips_ebp_modified_path
-            else:
-                ensure_patch_pair_fixtures()
-                patch_original = original_path
-                patch_modified = modified_path
+            patch_original, patch_modified = patch_fixture_paths_for_format(format_name)
 
             for patch_tool in patch_tools:
                 if patch_tool == "rom-weaver-wasm":
@@ -3380,6 +3807,10 @@ def main() -> None:
                     assert wasm_module is not None
 
                 created_patch = created_patch_sources.get((patch_tool, format_name))
+                if created_patch is None and format_name not in EXPECTED_PATCH_CREATE_SKIPS:
+                    created_patch = materialize_patch_source(format_name, patch_tool)
+                    if created_patch is not None:
+                        created_patch_sources[(patch_tool, format_name)] = created_patch
                 if created_patch is not None and created_patch[0].exists():
                     patch_path, input_path = created_patch
                     source_kind = "generated"
@@ -3473,6 +3904,9 @@ def main() -> None:
                 )
                 rows.append(row)
 
+    if browser_wasm_json_runner is not None:
+        browser_wasm_json_runner.close()
+
     payload_rows = [summarize_row(row) for row in rows]
     status_counts: dict[str, int] = {"succeeded": 0, "failed": 0, "skipped": 0}
     for row in payload_rows:
@@ -3485,6 +3919,7 @@ def main() -> None:
             "cwd": os.getcwd(),
             "binary": str(args.bin),
             "work_dir": str(work_dir),
+            "fixture_cache_dir": str(fixture_cache_dir),
             "archive_tools": selected_archive_tools,
             "sevenzip_bin": str(sevenzip_bin) if sevenzip_bin is not None else None,
             "chdman_bin": str(chdman_bin) if chdman_bin is not None else None,
@@ -3492,6 +3927,10 @@ def main() -> None:
             "node_bin": str(node_bin) if node_bin is not None else None,
             "wasm_runner": str(wasm_runner) if wasm_runner is not None else None,
             "wasm_module": str(wasm_module) if wasm_module is not None else None,
+            "wasm_singlethread_module": (
+                str(wasm_singlethread_module) if wasm_singlethread_module is not None else None
+            ),
+            "browser_wasm_persistent_session": args.browser_wasm_persistent_session,
             "commands": sorted(selected_commands),
             "container_formats": selected_container_formats,
             "patch_formats": selected_patch_formats,

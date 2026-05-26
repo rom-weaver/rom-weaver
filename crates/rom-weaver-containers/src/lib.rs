@@ -1562,7 +1562,6 @@ fn extract_regular_archive_with_libarchive(
     request: &ContainerExtractRequest,
     context: &OperationContext,
     format_name: &'static str,
-    limit_threads_to_task_count: bool,
 ) -> Result<OperationReport> {
     fs::create_dir_all(&request.out_dir)?;
     let tasks = build_libarchive_extract_tasks(
@@ -1627,11 +1626,7 @@ fn extract_regular_archive_with_libarchive(
         (execution, written)
     } else {
         let file_task_count = tasks.iter().filter(|task| !task.is_dir).count().max(1);
-        let capability = if limit_threads_to_task_count {
-            ThreadCapability::parallel(Some(file_task_count))
-        } else {
-            ThreadCapability::parallel(None)
-        };
+        let capability = ThreadCapability::parallel(Some(file_task_count));
         let (execution, pool) = context.build_pool(capability)?;
         let source = request.source.clone();
         let progress_context = context.clone();

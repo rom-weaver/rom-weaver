@@ -298,8 +298,10 @@ impl NodHandlerCore {
         F: FnMut(u64, u64),
     {
         let preloader_threads = self.negotiated_threads(execution);
-        let input_disc =
-            NodDiscReader::new(input, &self.read_options(preloader_threads)).map_err(|error| {
+        let read_options = self.read_options(preloader_threads);
+        let input_disc = self
+            .open_disc_from_path_or_stream(input, &read_options)
+            .map_err(|error| {
                 RomWeaverError::Validation(format!(
                     "failed to open input `{}` for {} create: {error}",
                     input.display(),
@@ -353,8 +355,10 @@ impl NodHandlerCore {
         F: FnMut(u64, u64),
     {
         let preloader_threads = self.negotiated_threads(execution);
-        let input_disc =
-            NodDiscReader::new(input, &self.read_options(preloader_threads)).map_err(|error| {
+        let read_options = self.read_options(preloader_threads);
+        let input_disc = self
+            .open_disc_from_path_or_stream(input, &read_options)
+            .map_err(|error| {
                 RomWeaverError::Validation(format!(
                     "failed to open input `{}` for {} create: {error}",
                     input.display(),

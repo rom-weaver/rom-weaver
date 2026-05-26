@@ -2860,11 +2860,9 @@ mod tests {
             .expect("extract seven-z");
 
         let extract_execution = extract_report.thread_execution.expect("thread execution");
-        assert_execution_parallel_when_available(
-            &extract_execution,
-            &capabilities.extract_threads,
-            8,
-        );
+        assert_execution_matches_capability(&extract_execution, &capabilities.extract_threads, 8);
+        assert_eq!(extract_execution.effective_threads, 1);
+        assert!(!extract_execution.used_parallelism);
 
         let extracted_bytes =
             fs::read(output_dir.join("payload.bin")).expect("read extracted file");
