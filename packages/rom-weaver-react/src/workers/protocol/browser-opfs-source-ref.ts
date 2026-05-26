@@ -83,26 +83,28 @@ const getOpfsPathSize = async (filePath: string): Promise<number | undefined> =>
 
 let stagingWorker: Worker | null = null;
 
-const resolveStagingWorkerUrl = () => {
-  const fallbackUrl = new URL("../storage/browser-opfs-staging.worker.ts", import.meta.url);
+const createStagingWorker = () => {
   const root = globalThis as WorkerAssetRoot;
   const baseUrl = typeof root.__romWeaverWorkerBaseUrl === "string" ? root.__romWeaverWorkerBaseUrl.trim() : "";
-  if (!baseUrl) return fallbackUrl;
-  try {
-    return new URL("browser-opfs-staging.worker.js", baseUrl);
-  } catch (_error) {
-    return fallbackUrl;
+  if (baseUrl) {
+    try {
+      return new Worker(new URL("browser-opfs-staging.worker.js", baseUrl), {
+        name: "rpjs-opfs-staging-worker",
+        type: "module",
+      });
+    } catch (_error) {
+      // Fall through to the bundled worker. Asset-base overrides are optional.
+    }
   }
+  return new Worker(new URL("../storage/browser-opfs-staging.worker.ts", import.meta.url), {
+    name: "rpjs-opfs-staging-worker",
+    type: "module",
+  });
 };
 
 const getStagingWorker = () => {
   if (typeof Worker !== "function") throw new Error("Browser OPFS source staging requires Worker support");
-  if (!stagingWorker) {
-    stagingWorker = new Worker(resolveStagingWorkerUrl(), {
-      name: "rpjs-opfs-staging-worker",
-      type: "module",
-    });
-  }
+  if (!stagingWorker) stagingWorker = createStagingWorker();
   return stagingWorker;
 };
 
