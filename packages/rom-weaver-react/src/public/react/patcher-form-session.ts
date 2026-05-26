@@ -74,8 +74,6 @@ type ApplyExecutionTimingTracker = {
 };
 
 const getPublicOutputSize = (output: { size?: number }) => output.size || 0;
-const INPUT_PROGRESS_HOLD_SOURCE_REGEX =
-  /\.(7z|zip|zipx|rar|tar|gz|bz2|xz|zst|lz4|lzma|chd|rvz|wia|gcz|z3ds|zcia|zcci|zcxi|z3dsx)$/i;
 
 const waitForNextUiPaint = () =>
   new Promise<void>((resolve) => {
@@ -85,12 +83,6 @@ const waitForNextUiPaint = () =>
     }
     globalThis.setTimeout(() => resolve(), 0);
   });
-const waitForMs = (durationMs: number) =>
-  new Promise<void>((resolve) => {
-    globalThis.setTimeout(() => resolve(), durationMs);
-  });
-const shouldHoldInputProgressForSource = (source: BinarySource) =>
-  INPUT_PROGRESS_HOLD_SOURCE_REGEX.test(getBinarySourceFileName(source, ""));
 
 const toError = (error: RuntimeValue): Error => (error instanceof Error ? error : new Error(String(error)));
 
@@ -209,9 +201,7 @@ const getProgressStagedInputInfo = (event: ProgressEvent): StagedInputInfo => {
 
 const getChecksumProgressInfoPatch = (
   details: Record<string, unknown>,
-): Omit<Partial<RomInputRowState>, "info"> & {
-  info?: Partial<RomInputRowState["info"]>;
-} => {
+): Omit<Partial<RomInputRowState>, "info"> & { info?: Partial<RomInputRowState["info"]> } => {
   const isChecksum = details.stage === "checksum";
   const info: Partial<RomInputRowState["info"]> = {
     crc32: isChecksum ? "" : undefined,
@@ -233,14 +223,6 @@ const archiveNameIncludesFileName = (archiveName: string, fileName: string) =>
     .filter(Boolean)
     .includes(fileName);
 
-const getArchiveLeafFileName = (archiveName: string) => {
-  const segments = archiveName
-    .split(" > ")
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-  return segments.length ? segments[segments.length - 1] : "";
-};
-
 const resolveMergedRomFileName = ({
   archiveName,
   existingFileName,
@@ -251,10 +233,13 @@ const resolveMergedRomFileName = ({
   nextFileName: string | undefined;
 }) => {
   if (!nextFileName) return existingFileName;
-  if (existingFileName && existingFileName !== nextFileName && archiveNameIncludesFileName(archiveName, nextFileName)) {
-    const archiveLeafFileName = getArchiveLeafFileName(archiveName);
-    if (archiveLeafFileName && existingFileName === archiveLeafFileName && nextFileName !== archiveLeafFileName)
-      return existingFileName;
+  if (
+    existingFileName &&
+    existingFileName !== nextFileName &&
+    archiveNameIncludesFileName(archiveName, nextFileName) &&
+    !archiveNameIncludesFileName(archiveName, existingFileName)
+  ) {
+    return existingFileName;
   }
   return nextFileName;
 };
@@ -291,20 +276,6 @@ const formatOperationTiming = (label: string, elapsedMs: number | null) => {
   return `${label}: ${formatTiming(createTiming(elapsedMs))}`;
 };
 
-const getPatchItemDetailText = (info: StagedInputInfo | undefined) => {
-  if (!info) return "";
-  const patchSizeText = createSectionSizeText({
-    patchCompressedBytes: info.sourceSize ?? info.size ?? null,
-    patchRawBytes: info.size ?? info.sourceSize ?? null,
-  }).patch;
-  const patchTimingText = combineSectionTimingText(
-    formatOperationTiming("extract", typeof info.decompressionTimeMs === "number" ? info.decompressionTimeMs : null),
-    patchSizeText,
-  );
-  if (patchTimingText && info.targetLabel) return `${patchTimingText} | ${info.targetLabel}`;
-  return patchTimingText || info.targetLabel || "";
-};
-
 const createInertState = (): PatcherUiState => createInertPatcherUiSessionState();
 const createStaticStoreController = <State>(state: State) => ({
   getState: () => state,
@@ -321,9 +292,7 @@ const getZ3dsOutputOptionLabel = (source: BinarySource | undefined) => {
   if (!source) return "Z3DS";
   try {
     const outputName = OutputCompressionManager.getCompressedFileName(source, "z3ds", {});
-    const extension = OutputCompressionManager.getExtension({
-      fileName: outputName,
-    });
+    const extension = OutputCompressionManager.getExtension({ fileName: outputName });
     return Z3DS_LABEL_BY_OUTPUT_EXTENSION[extension] || "Z3DS";
   } catch (_error) {
     return "Z3DS";
@@ -489,10 +458,7 @@ const useLocalApplyPatchFormSession = ({
   const disabledRef = useRef(disabled);
   const inputStageGenerationRef = useRef(0);
   const inputProgressGenerationRef = useRef(0);
-  const inputStageSyncRef = useRef<{
-    inputs: BinarySource[];
-    settingsKey: string;
-  }>({
+  const inputStageSyncRef = useRef<{ inputs: BinarySource[]; settingsKey: string }>({
     inputs: [],
     settingsKey: "",
   });
@@ -684,18 +650,11 @@ const useLocalApplyPatchFormSession = ({
   const localPatcherSectionTimings = useMemo(
     () => ({
       checksum: "",
-      input: combineSectionTimingText(inputOperationTimingText, localSectionTimingSizes.input),
+      input: inputOperationTimingText,
       output: combineSectionTimingText(outputOperationTimingText, localSectionTimingSizes.output),
-      patch: combineSectionTimingText(patchDecompressionTimingText, localSectionTimingSizes.patch),
+      patch: patchDecompressionTimingText,
     }),
-    [
-      inputOperationTimingText,
-      localSectionTimingSizes.input,
-      localSectionTimingSizes.output,
-      localSectionTimingSizes.patch,
-      outputOperationTimingText,
-      patchDecompressionTimingText,
-    ],
+    [inputOperationTimingText, localSectionTimingSizes.output, outputOperationTimingText, patchDecompressionTimingText],
   );
   const multiInputOutputError = getMultiInputOutputError(displayedCompression, romInputs.length);
   const effectiveOutputNoticeMessage = outputErrorMessage || multiInputOutputError;
@@ -807,7 +766,7 @@ const useLocalApplyPatchFormSession = ({
           canMoveDown: index < activePatches.length - 1 && !(busy || disabled),
           canMoveUp: index > 0 && !(busy || disabled),
           canRemove: !(busy || disabled),
-          detailText: getPatchItemDetailText(patchInfo),
+          detailText: patchInfo?.targetLabel || "",
           fileName: patchInfo?.fileName || getBinarySourceFileName(patch, `Patch ${index + 1}`),
           fileSize: patchInfo?.size ?? getBinarySourceSize(patch) ?? undefined,
           index: index + 1,
@@ -913,9 +872,7 @@ const useLocalApplyPatchFormSession = ({
   const mergeRomInput = useCallback(
     (
       info: StagedInputInfo,
-      patch: Omit<Partial<RomInputRowState>, "info"> & {
-        info?: Partial<RomInputRowState["info"]>;
-      } = {},
+      patch: Omit<Partial<RomInputRowState>, "info"> & { info?: Partial<RomInputRowState["info"]> } = {},
     ) => {
       const rowId = info.id || patch.id;
       if (!rowId) return;
@@ -1012,8 +969,7 @@ const useLocalApplyPatchFormSession = ({
     [disposeActiveOutput, getInputKey, inputs, onInputsChange, resetCompletedOutputState],
   );
   const syncPatchFiles = useCallback(
-    (snapshot: ApplyWorkflowStageSnapshot, options: { showProgress?: boolean } = {}) => {
-      const showProgress = options.showProgress !== false;
+    (snapshot: ApplyWorkflowStageSnapshot) => {
       const generation = ++patchStageGenerationRef.current;
       if (!(snapshot.patches.length && stagePatches)) {
         setPatchStaging(false);
@@ -1026,49 +982,35 @@ const useLocalApplyPatchFormSession = ({
         label: "Preparing patch...",
         message: "Preparing patch...",
       };
-      if (showProgress) {
-        setPatchStaging(true);
-        setPatchProgress(null);
-        setPatchProgressByKey(
-          Object.fromEntries(snapshot.patches.map((patch) => [getPatchKey(patch, snapshot.patches), initialProgress])),
-        );
-      } else {
-        setPatchStaging(false);
-        setPatchProgress(null);
-        setPatchProgressByKey({});
-      }
-      const runPatchStage = async () => {
-        if (showProgress) await waitForNextUiPaint();
-        if (patchStageGenerationRef.current !== generation) return [];
-        return stagePatches(snapshot, {
-          onProgress: (event) => {
-            if (patchStageGenerationRef.current !== generation) return;
-            if (!showProgress) return;
-            const details = getProgressDetails(event);
-            const order = typeof details.order === "number" ? details.order : -1;
-            const patch = (order >= 0 ? snapshot.patches[order] : undefined) || snapshot.patches[0] || null;
-            if (!patch) {
-              setPatchProgress(toInputProgress(event));
-              return;
-            }
-            const key = getPatchKey(patch, snapshot.patches);
-            setPatchProgressByKey((current) => ({
-              ...current,
-              [key]: toInputProgress(event),
-            }));
-          },
-        });
-      };
-      void runPatchStage()
+      setPatchStaging(true);
+      setPatchProgress(null);
+      setPatchProgressByKey(
+        Object.fromEntries(snapshot.patches.map((patch) => [getPatchKey(patch, snapshot.patches), initialProgress])),
+      );
+      void stagePatches(snapshot, {
+        onProgress: (event) => {
+          if (patchStageGenerationRef.current !== generation) return;
+          const details = getProgressDetails(event);
+          const order = typeof details.order === "number" ? details.order : -1;
+          const patch = (order >= 0 ? snapshot.patches[order] : undefined) || snapshot.patches[0] || null;
+          if (!patch) {
+            setPatchProgress(toInputProgress(event));
+            return;
+          }
+          const key = getPatchKey(patch, snapshot.patches);
+          setPatchProgressByKey((current) => ({
+            ...current,
+            [key]: toInputProgress(event),
+          }));
+        },
+      })
         .then((infos) => {
           if (patchStageGenerationRef.current !== generation) return;
           setPatchInfoByKey(
             Object.fromEntries(
               snapshot.patches.map((patch, index) => [
                 getPatchKey(patch, snapshot.patches),
-                infos[index] || {
-                  fileName: getBinarySourceFileName(patch, `Patch ${index + 1}`),
-                },
+                infos[index] || { fileName: getBinarySourceFileName(patch, `Patch ${index + 1}`) },
               ]),
             ),
           );
@@ -1086,7 +1028,6 @@ const useLocalApplyPatchFormSession = ({
         })
         .finally(() => {
           if (patchStageGenerationRef.current !== generation) return;
-          if (!showProgress) return;
           setPatchStaging(false);
           setPatchProgress(null);
           setPatchProgressByKey({});
@@ -1098,7 +1039,6 @@ const useLocalApplyPatchFormSession = ({
     (snapshot: ApplyWorkflowStageSnapshot, previousInputs: BinarySource[] = []) => {
       const generation = ++inputStageGenerationRef.current;
       const progressGeneration = ++inputProgressGenerationRef.current;
-      let holdDecompressedProgress = false;
       const retainedInputKeys = new Set(previousInputs.map((input) => getInputKey(input, previousInputs)));
       if (!(snapshot.inputs[0] && stageInput)) {
         setInputStaging(false);
@@ -1111,11 +1051,6 @@ const useLocalApplyPatchFormSession = ({
           snapshot.inputs.map((input, index) => {
             const existing = current[index];
             const existingProgress = existing?.progress || null;
-            const preparingInputProgress = {
-              indeterminate: true,
-              label: "Preparing input...",
-              message: "Preparing input...",
-            };
             return createRomInputRow({
               ...existing,
               disabled: true,
@@ -1127,73 +1062,61 @@ const useLocalApplyPatchFormSession = ({
               },
               loading: true,
               order: existing?.order ?? index,
-              progress: existingProgress || preparingInputProgress,
+              progress:
+                existingProgress ||
+                (existing
+                  ? null
+                  : {
+                      indeterminate: true,
+                      label: "Preparing input...",
+                      message: "Preparing input...",
+                    }),
               valid: false,
             });
           }),
         ),
       );
-      const runInputStage = async () => {
-        await waitForNextUiPaint();
-        if (inputStageGenerationRef.current !== generation) return [];
-        return stageInput(snapshot, {
-          onChecksum: (info) => {
-            if (inputStageGenerationRef.current !== generation) return;
-            mergeRomInput(getStableInputInfo(info, snapshot.inputs), {
-              disabled: true,
-              info: { validationPhase: "idle" },
-              loading: false,
-              valid: true,
-            });
-          },
-          onProgress: (event) => {
-            if (
-              inputStageGenerationRef.current !== generation ||
-              inputProgressGenerationRef.current !== progressGeneration
-            )
-              return;
-            const details = getProgressDetails(event);
-            let info = getProgressStagedInputInfo(event);
-            const fallbackOrder = typeof info.order === "number" ? info.order : 0;
-            const fallbackSource = snapshot.inputs[fallbackOrder] || snapshot.inputs[0];
-            if (fallbackSource) {
-              info = {
-                ...info,
-                fileName: info.fileName || getBinarySourceFileName(fallbackSource, `Input ${fallbackOrder + 1}`),
-                id: info.id || getInputKey(fallbackSource, snapshot.inputs),
-                order: typeof info.order === "number" ? info.order : fallbackOrder,
-              };
-            }
-            info = getStableInputInfo(info, snapshot.inputs);
-            const source = typeof info.order === "number" ? snapshot.inputs[info.order] : fallbackSource;
-            if (source && retainedInputKeys.has(getInputKey(source, snapshot.inputs))) return;
-            mergeRomInput(info, {
-              ...getChecksumProgressInfoPatch(details),
-              progress: toInputProgress(event),
-            });
-          },
-          onState: (info) => {
-            if (inputStageGenerationRef.current !== generation) return;
-            mergeRomInput(getStableInputInfo(info, snapshot.inputs), {
-              disabled: true,
-              info: { validationPhase: "idle" },
-              loading: false,
-              valid: !!info.fileName,
-            });
-          },
-        });
-      };
-      void runInputStage()
-        .then(async (infos) => {
+      void stageInput(snapshot, {
+        onChecksum: (info) => {
           if (inputStageGenerationRef.current !== generation) return;
-          inputProgressGenerationRef.current += 1;
-          holdDecompressedProgress =
-            infos.some(
-              (info) =>
-                !!info &&
-                (Boolean(info.wasDecompressed) ||
-                  Boolean(typeof info.archiveName === "string" && info.archiveName && info.archiveName !== "-")),
-            ) || snapshot.inputs.some((source) => shouldHoldInputProgressForSource(source));
+          mergeRomInput(getStableInputInfo(info, snapshot.inputs), {
+            disabled: true,
+            info: { validationPhase: "idle" },
+            loading: false,
+            progress: null,
+            valid: true,
+          });
+        },
+        onProgress: (event) => {
+          if (
+            inputStageGenerationRef.current !== generation ||
+            inputProgressGenerationRef.current !== progressGeneration
+          )
+            return;
+          const details = getProgressDetails(event);
+          const sourceId = typeof details.sourceId === "string" ? details.sourceId : "";
+          if (!sourceId) return;
+          const info = getStableInputInfo(getProgressStagedInputInfo(event), snapshot.inputs);
+          const source = typeof info.order === "number" ? snapshot.inputs[info.order] : undefined;
+          if (source && retainedInputKeys.has(getInputKey(source, snapshot.inputs))) return;
+          mergeRomInput(info, {
+            ...getChecksumProgressInfoPatch(details),
+            progress: toInputProgress(event),
+          });
+        },
+        onState: (info) => {
+          if (inputStageGenerationRef.current !== generation) return;
+          mergeRomInput(getStableInputInfo(info, snapshot.inputs), {
+            disabled: true,
+            info: { validationPhase: "idle" },
+            loading: false,
+            progress: null,
+            valid: !!info.fileName,
+          });
+        },
+      })
+        .then((infos) => {
+          if (inputStageGenerationRef.current !== generation) return;
           setRomInputs((current) => {
             const byId = new Map(current.map((entry) => [entry.id, entry]));
             return sortRomInputs(
@@ -1215,13 +1138,7 @@ const useLocalApplyPatchFormSession = ({
                   },
                   loading: false,
                   order: info.order ?? index,
-                  progress: holdDecompressedProgress
-                    ? byId.get(stableId)?.progress || {
-                        indeterminate: true,
-                        label: "Preparing input...",
-                        message: "Preparing input...",
-                      }
-                    : null,
+                  progress: null,
                   size: info.size,
                   sourceSize: info.sourceSize,
                   valid: true,
@@ -1242,14 +1159,9 @@ const useLocalApplyPatchFormSession = ({
           );
           onError?.(normalizedError);
         })
-        .finally(async () => {
+        .finally(() => {
           if (inputStageGenerationRef.current !== generation) return;
-          inputProgressGenerationRef.current += 1;
           setInputStaging(false);
-          if (holdDecompressedProgress) {
-            await waitForMs(250);
-            if (inputStageGenerationRef.current !== generation) return;
-          }
           setRomInputs((current) =>
             current.map((entry) =>
               createRomInputRow({
@@ -1281,15 +1193,7 @@ const useLocalApplyPatchFormSession = ({
       setRomInputs([]);
       return;
     }
-    if (!inputsChanged) {
-      if (settingsChanged) {
-        inputStageSyncRef.current = {
-          inputs: effectiveInputs.slice(),
-          settingsKey: stageSettingsKey,
-        };
-      }
-      return;
-    }
+    if (!(inputsChanged || settingsChanged)) return;
     const previousInputs = previousSync.inputs.slice();
     inputStageSyncRef.current = {
       inputs: effectiveInputs.slice(),
@@ -1321,9 +1225,7 @@ const useLocalApplyPatchFormSession = ({
       patches: activePatches.slice(),
       settingsKey: stageSettingsKey,
     };
-    syncPatchFiles(createStageSnapshot(), {
-      showProgress: patchesChanged || settingsChanged,
-    });
+    syncPatchFiles(createStageSnapshot());
   }, [activePatches, createStageSnapshot, effectiveInputs, stagePatches, stageSettingsKey, syncPatchFiles]);
 
   const localUiStoreController = useLiveStoreController(localUiState);
@@ -1373,10 +1275,7 @@ const useLocalApplyPatchFormSession = ({
             entry.id === id
               ? createRomInputRow({
                   ...entry,
-                  info: {
-                    ...entry.info,
-                    checksumsExpanded: !entry.info.checksumsExpanded,
-                  },
+                  info: { ...entry.info, checksumsExpanded: !entry.info.checksumsExpanded },
                 })
               : entry,
           ),

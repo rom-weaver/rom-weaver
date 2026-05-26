@@ -1,5 +1,4 @@
 import { type ReactNode, useSyncExternalStore } from "react";
-import { ProgressCircleIndicator } from "../../presentation/react/progress-circle-indicator.tsx";
 import { clampProgressPercent, normalizeProgressDisplayPercent } from "../../presentation/workflow-presentation.ts";
 import type { DialogController, NoticeController } from "./patcher-form.ts";
 import type { InputProgressState, InputUiState, NoticeState } from "./patcher-ui-state.ts";
@@ -25,24 +24,26 @@ const inertDialogState = (() => {
   return { entries, open, title };
 })();
 const TRAILING_PROGRESS_PERCENT_REGEX = /\s+\d+(?:\.\d+)?%$/;
+const TRAILING_ELLIPSIS_REGEX = /\s*\.\.\.$/;
 
 const createStaticStoreController = <State,>(state: State) => ({
   getState: () => state,
   subscribe: () => () => undefined,
 });
 
-const resolveNormalizedProgressPercent = (progress: NonNullable<InputProgressState>) => {
+const resolveProgressPercent = (progress: NonNullable<InputProgressState>) => {
   const percent =
     typeof progress.visualPercent === "number" && Number.isFinite(progress.visualPercent)
       ? Math.max(0, Math.min(100, progress.visualPercent))
       : clampProgressPercent(progress.percent);
-  return typeof percent === "number" ? percent : null;
+  return typeof percent === "number" ? `scaleX(${percent / 100})` : undefined;
 };
 
 const resolveProgressTextParts = (progress: NonNullable<InputProgressState>) => {
   const percent = normalizeProgressDisplayPercent(progress.percent);
   const baseText = String(progress.label || progress.message || "")
     .replace(TRAILING_PROGRESS_PERCENT_REGEX, "")
+    .replace(TRAILING_ELLIPSIS_REGEX, "")
     .trim();
   const timingText =
     typeof progress.label === "string" &&
@@ -110,39 +111,30 @@ export const patchUploadCellClassName = (inputState?: InputUiState) =>
 export function InputProgress({ id, progress }: { id: string; progress: InputProgressState }) {
   if (!progress) return null;
   const textParts = resolveProgressTextParts(progress);
-  const normalizedPercent = resolveNormalizedProgressPercent(progress);
-  const hasLinearProgress = typeof normalizedPercent === "number";
-  const linearScale = hasLinearProgress ? Math.max(0, Math.min(1, normalizedPercent / 100)) : 0;
+  const showProgressBar =
+    typeof progress.percent === "number" ||
+    (typeof progress.visualPercent === "number" && Number.isFinite(progress.visualPercent)) ||
+    progress.indeterminate === true;
   return (
     <div className={cx("rom-weaver-input-progress", progressClasses.container)} id={id}>
-      <div className="flex h-full min-w-0 items-center gap-2.5">
-        <div className="min-w-0 flex flex-1 flex-col justify-center gap-1">
-          <span className={cx("rom-weaver-input-progress-text", progressClasses.text)} title={progress.message}>
-            <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-left">
-              {textParts.taskText}
-            </span>
-          </span>
-          {hasLinearProgress ? (
-            <span aria-hidden="true" className="rom-weaver-input-progress-track sr-only">
-              <span
-                className="rom-weaver-input-progress-bar"
-                style={{ transform: `scaleX(${linearScale.toFixed(3)})` }}
-              />
-            </span>
-          ) : null}
+      <span className={cx("rom-weaver-input-progress-text", progressClasses.text)} title={progress.message}>
+        <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-left">{textParts.taskText}</span>
+        {textParts.percentText ? (
+          <span className="ml-2 flex-none text-right tabular-nums">{textParts.percentText}</span>
+        ) : null}
+      </span>
+      {showProgressBar ? (
+        <div className={cx("rom-weaver-input-progress-track", progressClasses.track)}>
+          <div
+            className={cx(
+              "rom-weaver-input-progress-bar",
+              progressClasses.bar,
+              progress.indeterminate && progressClasses.barIndeterminate,
+            )}
+            style={{ transform: progress.indeterminate ? undefined : resolveProgressPercent(progress) }}
+          />
         </div>
-        <ProgressCircleIndicator
-          animateWhenPercentMissing
-          containerClassName="h-[38px] w-[38px] shadow-[inset_0_1px_0_oklch(1_0_0_/_0.46)]"
-          indeterminate={progress.indeterminate}
-          normalizedPercent={normalizedPercent}
-          percentText={textParts.percentText || (progress.indeterminate ? "..." : "--")}
-          radius={15}
-          spinClassName="animate-[spin_1.2s_linear_infinite]"
-          svgClassName="h-[36px] w-[36px] -rotate-90"
-          textClassName="text-[10px]"
-        />
-      </div>
+      ) : null}
     </div>
   );
 }

@@ -63,10 +63,7 @@ const renderRuntimeNoticeIcon = (level: string, className: string) => (
 );
 const InputProgress = SharedInputProgress;
 const TRAILING_COLON_REGEX = /:\s*$/;
-const normalizeLabel = (value: string) => {
-  const normalized = value.replace(TRAILING_COLON_REGEX, "").trim();
-  return normalized ? `${normalized}:` : "";
-};
+const normalizeLabel = (value: string) => value.replace(TRAILING_COLON_REGEX, "").trim();
 const normalizeSecondsUnit = (value: string) =>
   value
     .replace(/\bseconds?\b/gi, "s")
@@ -371,7 +368,7 @@ function ApplyWorkflowFormView({
                 listId="rom-weaver-list-input-stack"
               >
                 {romInputs.map((romInput, index) => {
-                  const checksumProgressActive = romInput.info.validationPhase === "checksum";
+                  const checksumProgressActive = !!romInput.progress && romInput.info.validationPhase === "checksum";
                   const archiveName =
                     romInput.info.archiveName && romInput.info.archiveName !== "-" ? romInput.info.archiveName : "";
                   const checksumDetailsId =
@@ -400,11 +397,13 @@ function ApplyWorkflowFormView({
                       <div
                         className={cx(
                           "overflow-hidden transition-[max-height,opacity,margin] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)]",
-                          romInput.progress ? "mt-2 max-h-[52px] opacity-100" : "mt-0 max-h-0 opacity-0",
+                          romInput.progress && !checksumProgressActive
+                            ? "mt-2 max-h-[52px] opacity-100"
+                            : "mt-0 max-h-0 opacity-0",
                         )}
                       >
                         <div className="relative min-h-[calc(var(--rom-weaver-control-height)-2px)]">
-                          {romInput.progress ? (
+                          {romInput.progress && !checksumProgressActive ? (
                             <InputProgress
                               id={index === 0 ? "rom-weaver-progress-rom" : `rom-weaver-progress-rom-${index + 1}`}
                               progress={romInput.progress}

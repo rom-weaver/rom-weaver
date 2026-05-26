@@ -13,6 +13,12 @@ type PatchStackController = {
   removeItem: (index: number) => void;
 };
 
+const normalizeArchiveSegments = (archiveFileName: string) =>
+  archiveFileName
+    .split(">")
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+
 const formatArchiveStepDetail = (entry: ArchivePathEntry, fallbackSize?: number) => {
   const currentSize =
     formatByteSize(entry.sourceSize) || formatByteSize(entry.outputSize) || formatByteSize(fallbackSize);
@@ -69,36 +75,31 @@ const renderArchiveStepDetails = (
   );
 };
 
-const getArchiveLabel = (
+const renderPathWithFile = (
   archiveFileName: string | null | undefined,
   archivePathEntries: ArchivePathEntry[] | undefined,
-) => {
-  if (archiveFileName) return archiveFileName;
-  if (!archivePathEntries?.length) return "";
-  return archivePathEntries
-    .map((entry) => String(entry.fileName || "").trim())
-    .filter(Boolean)
-    .join(" > ");
-};
-
-const resolveDisplayFileName = (
   fileName: string,
-  archiveFileName: string | null | undefined,
-  archivePathEntries: ArchivePathEntry[] | undefined,
 ) => {
-  const normalizedFileName = String(fileName || "").trim();
-  const normalizedArchiveFileName = String(archiveFileName || "").trim();
-  const archiveSegments = archivePathEntries?.map((entry) => String(entry.fileName || "").trim()).filter(Boolean);
-  const archiveLeaf = archiveSegments?.length ? archiveSegments[archiveSegments.length - 1] : "";
-  if (
-    normalizedArchiveFileName &&
-    normalizedFileName === normalizedArchiveFileName &&
-    archiveLeaf &&
-    archiveLeaf !== normalizedArchiveFileName
-  ) {
-    return archiveLeaf;
-  }
-  return normalizedFileName;
+  const archiveSegments = archivePathEntries?.length
+    ? archivePathEntries.map((entry) => entry.fileName).filter(Boolean)
+    : archiveFileName
+      ? normalizeArchiveSegments(archiveFileName)
+      : [];
+  const segments = [...archiveSegments];
+  if (!segments.length || segments[segments.length - 1] !== fileName) segments.push(fileName);
+  if (!segments.length) return null;
+  if (segments.length === 1) return <code>{segments[0]}</code>;
+  const lastIndex = segments.length - 1;
+  return (
+    <>
+      {segments.map((segment, index) => (
+        <span key={`${segment}-${index}`}>
+          {index > 0 ? <span aria-hidden="true">{" > "}</span> : null}
+          {index === lastIndex ? <strong>{segment}</strong> : <span>{segment}</span>}
+        </span>
+      ))}
+    </>
+  );
 };
 
 function PatcherFileStack({
@@ -151,26 +152,26 @@ function PatcherFileStackRow({
   fileSize?: number;
   nameClassName?: string;
 }) {
-  const archiveLabel = getArchiveLabel(archiveFileName, archivePathEntries);
-  const displayFileName = resolveDisplayFileName(fileName, archiveFileName, archivePathEntries);
   const archiveStepDetails = renderArchiveStepDetails(archivePathEntries, fileName, fileSize);
+  const showDetailText = !!detailText;
+  const rowNameContent = archiveStepDetails || renderPathWithFile(archiveFileName, archivePathEntries, fileName);
   return (
     <tr className={className}>
       <td
         className={cx(patchStackClasses.cell, nameClassName, patchStackClasses.nameCell, "relative pr-9")}
         colSpan={2}
       >
-        <div className={cx(fileClassName, patchStackClasses.fileBlock)}>{displayFileName}</div>
-        {archiveLabel ? (
-          <div className={cx("rom-weaver-patch-stack-archive", patchStackClasses.details)}>{archiveLabel}</div>
-        ) : null}
-        {archiveStepDetails ? (
-          <div className={cx("rom-weaver-patch-stack-archive-steps", patchStackClasses.details)}>
-            {archiveStepDetails}
-          </div>
-        ) : null}
+        <div
+          className={cx(
+            fileClassName,
+            patchStackClasses.fileBlock,
+            (archiveFileName || !!archivePathEntries?.length) && "rom-weaver-patch-stack-archive",
+          )}
+        >
+          {rowNameContent}
+        </div>
         {controls ? <div className="absolute top-1.5 right-1.5">{controls}</div> : null}
-        {detailText ? (
+        {showDetailText ? (
           <div className={cx("rom-weaver-patch-stack-details", patchStackClasses.details)}>{detailText}</div>
         ) : null}
         {children}

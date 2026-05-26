@@ -178,11 +178,19 @@ const uploadClasses = {
 };
 
 const progressClasses = {
+  applyBar:
+    "bg-[linear-gradient(90deg,var(--rom-weaver-color-primary-active)_0%,var(--rom-weaver-color-primary)_56%,var(--rom-weaver-color-primary-hover)_100%)]",
   applyContainer: "items-stretch w-full px-3 py-[5px]",
   applyText: "font-bold tracking-[0.01em]",
+  applyTrack: "h-[9px] w-full",
+  bar: "relative h-full w-full origin-left overflow-hidden rounded-[999px] bg-[linear-gradient(90deg,var(--rom-weaver-color-primary-active)_0%,var(--rom-weaver-color-primary)_58%,var(--rom-weaver-color-primary-hover)_100%)] shadow-[0_0_0_1px_oklch(1_0_0_/_0.14),0_10px_16px_-12px_var(--rom-weaver-color-primary)] transition-transform duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform before:pointer-events-none before:absolute before:inset-y-0 before:left-[-42%] before:w-[54%] before:content-[''] before:bg-[linear-gradient(90deg,oklch(1_0_0_/_0)_0%,oklch(1_0_0_/_0.52)_52%,oklch(1_0_0_/_0)_100%)] before:mix-blend-screen before:animate-[rom-weaver-progress-thread_1.55s_linear_infinite]",
+  barIndeterminate:
+    "absolute inset-y-0 left-0 w-[44%] transition-none animate-[rom-weaver-progress-indeterminate_1.2s_cubic-bezier(0.24,1,0.35,1)_infinite]",
   container:
     'pointer-events-none absolute inset-0 z-[2] m-0 box-border flex h-full min-w-0 select-text flex-col justify-center gap-1 overflow-hidden rounded-[10px] border border-[var(--rom-weaver-color-border)] bg-[linear-gradient(180deg,var(--rom-weaver-color-surface-muted),var(--rom-weaver-color-surface))] px-[10px] py-1 font-["Inter_Tight","Segoe_UI",sans-serif] text-[length:var(--rom-weaver-control-font-size)] font-semibold leading-[var(--rom-weaver-control-line-height)] text-[var(--rom-weaver-color-text)] shadow-[inset_0_1px_0_oklch(1_0_0_/_0.5)]',
   text: "flex min-h-[calc(var(--rom-weaver-control-font-size)*var(--rom-weaver-control-line-height))] items-center justify-between gap-2 overflow-hidden whitespace-nowrap text-left font-semibold tracking-[0.01em]",
+  track:
+    "relative h-[7px] overflow-hidden rounded-[999px] border border-[oklch(0.64_0.058_302_/_0.65)] bg-[linear-gradient(180deg,oklch(0.9_0.045_301),oklch(0.83_0.048_299))] shadow-[inset_0_1px_0_oklch(1_0_0_/_0.46)]",
 };
 
 const patchStackClasses = {

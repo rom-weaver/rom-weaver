@@ -532,8 +532,7 @@ const serializeSettingsForStorage = (source?: SettingsState | null): string | nu
   };
   for (const fieldKey of SETTINGS_FIELD_ORDER) {
     if (fieldKey === "chdCreateCdCodecs" || fieldKey === "chdCreateDvdCodecs") {
-      if (canonicalSettings[fieldKey] !== canonicalDefaults[fieldKey])
-        storeSetting(fieldKey, canonicalSettings[fieldKey]);
+      if (canonicalSettings[fieldKey] !== canonicalDefaults[fieldKey]) storeSetting(fieldKey, settings[fieldKey]);
       continue;
     }
     if (settings[fieldKey] !== defaultSettings[fieldKey]) storeSetting(fieldKey, settings[fieldKey]);

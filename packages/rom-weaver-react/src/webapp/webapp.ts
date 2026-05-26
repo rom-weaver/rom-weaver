@@ -77,7 +77,6 @@ let suppressNextViteReloadTimer = false;
 let fileSelectionInProgress = false;
 let fileSelectionTrackerInstalled = false;
 const VITE_PAGE_RELOAD_TIMEOUT_MS = 20;
-const VITE_RELOAD_SUPPRESSION_WINDOW_MS = 500;
 const WORKFLOW_PROGRESS_SELECTOR = ".rom-weaver-input-progress";
 const VITE_RELOAD_PATTERN = /\blocation\.reload\s*\(/;
 const beforeUnloadGuard = createBeforeUnloadGuard({
@@ -162,16 +161,11 @@ const applySettingsToRuntime = (settings: RuntimeSettings) => {
     window.ROM_WEAVER_ERUDA_LOADER.setEnabled(settings.erudaDevTools);
 };
 
-const getWebappRootElement = () =>
-  typeof document === "undefined" ? null : document.querySelector<HTMLElement>("#webapp-root");
-
-const getElementByIdSelector = (id: string) => `#${CSS.escape(id)}`;
-
 const webappController = createWebappRootController({
   onApplySettings: applySettingsToRuntime,
   onCreatorViewRequested: () => true,
   onFocusField: (fieldId) => {
-    const field = getWebappRootElement()?.querySelector<HTMLElement>(getElementByIdSelector(fieldId));
+    const field = document.getElementById(fieldId);
     if (field) field.focus();
   },
   onLocalizationChange: () => undefined,
@@ -185,7 +179,8 @@ let appRoot: Root | null = null;
 const markBootstrapMounted = () => {
   const bootstrap = window.ROM_WEAVER_APP_BOOTSTRAP;
   if (bootstrap && typeof bootstrap.markMounted === "function") bootstrap.markMounted();
-  getWebappRootElement()?.removeAttribute("aria-busy");
+  const appRootElement = document.getElementById("webapp-root");
+  if (appRootElement) appRootElement.removeAttribute("aria-busy");
 };
 
 const patcherSessionHasFormChanges = (session: ReturnType<typeof webappController.getState>["patcherSession"]) =>
@@ -247,7 +242,7 @@ const getFileInputFromTarget = (target: EventTarget | null): HTMLInputElement | 
   if (nestedInput instanceof HTMLInputElement) return nestedInput;
   const label = target.closest("label");
   if (!(label instanceof HTMLLabelElement)) return null;
-  const labeledInput = label.control;
+  const labeledInput = label.control || (label.htmlFor ? document.getElementById(label.htmlFor) : null);
   if (labeledInput instanceof HTMLInputElement && labeledInput.type === "file") return labeledInput;
   return null;
 };
@@ -310,15 +305,15 @@ import.meta.hot?.on("rom-weaver:reload-available", (payload) => {
 import.meta.hot?.on("vite:beforeFullReload", (payload) => {
   if (!shouldDeferViteReload()) return;
   suppressNextViteReloadTimer = true;
-  window.setTimeout(() => {
+  queueMicrotask(() => {
     suppressNextViteReloadTimer = false;
-  }, VITE_RELOAD_SUPPRESSION_WINDOW_MS);
+  });
   deferViteReload({ label: payload?.path, source: "vite" });
 });
 
 const renderWebappRoot = (): undefined => {
   if (!appRoot) {
-    const appRootElement = getWebappRootElement();
+    const appRootElement = document.getElementById("webapp-root");
     if (appRootElement) appRoot = createRoot(appRootElement);
   }
   const root = appRoot;

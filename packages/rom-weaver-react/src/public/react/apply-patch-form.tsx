@@ -91,15 +91,10 @@ const getAutomaticApplyOutputName = (
 ) => {
   const inputFileName = input?.fileName || getReactBinarySourceFileName(snapshot.inputs[0], "patched.bin");
   const inputBase = getFileNameWithoutExtension(inputFileName) || "patched";
-  const patchFileNames =
-    patches.length > 0
-      ? patches.map(
-          (patch, index) =>
-            patch.fileName || getReactBinarySourceFileName(snapshot.patches[index], `patch ${index + 1}`),
-        )
-      : snapshot.patches.map((patch, index) => getReactBinarySourceFileName(patch, `patch ${index + 1}`));
-  const patchNames = patchFileNames
-    .map((patchFileName) => {
+  const patchNames = patches
+    .map((patch, index) => {
+      const patchFileName =
+        patch.fileName || getReactBinarySourceFileName(snapshot.patches[index], `patch ${index + 1}`);
       const outputLabel = patchFileName.match(PATCH_OUTPUT_LABEL_PATTERN)?.[1]?.trim();
       return getFileNameWithoutExtension(outputLabel || patchFileName);
     })
@@ -206,7 +201,7 @@ const createBaseApplyWorkflowSettings = (
       ...settingsInput,
       input: {
         ...settingsInput.input,
-        containerInputsEnabled: containerInputsEnabled ?? settingsInput.input?.containerInputsEnabled,
+        containerInputsEnabled,
       },
     },
     optionWorkerThreads || workerThreads,
@@ -258,36 +253,6 @@ const getResolvedInputArchiveName = (
 const formatElapsedMs = (elapsedMs: number | undefined) =>
   typeof elapsedMs === "number" && Number.isFinite(elapsedMs) ? formatTiming(createTiming(elapsedMs)) : "";
 
-const getSelectedInputCandidateFileName = (input: ApplyWorkflowInputState) => {
-  const candidateId = input.selectedCandidateId;
-  if (!candidateId) return "";
-  const selectedCandidate = input.candidates.find((candidate) => candidate.id === candidateId);
-  if (selectedCandidate?.type === "file" && selectedCandidate.fileName) return selectedCandidate.fileName;
-  if (!(selectedCandidate?.type === "group" && selectedCandidate.candidateIds.length)) return "";
-  const childCandidateIds = new Set(selectedCandidate.candidateIds);
-  const childCandidate = input.candidates.find(
-    (candidate) =>
-      candidate.type === "file" && candidate.selectable && childCandidateIds.has(candidate.id) && candidate.fileName,
-  );
-  return childCandidate && childCandidate.type === "file" ? childCandidate.fileName || "" : "";
-};
-
-const getSingleSelectableInputCandidateFileName = (input: ApplyWorkflowInputState) => {
-  const selectableGroupIds = new Set(
-    input.candidates
-      .filter((candidate) => candidate.type === "group" && candidate.selectable)
-      .map((candidate) => candidate.id),
-  );
-  const selectableFileCandidates = input.candidates.filter(
-    (candidate): candidate is Extract<(typeof input.candidates)[number], { type: "file" }> =>
-      candidate.type === "file" &&
-      candidate.selectable &&
-      !selectableGroupIds.has(candidate.parentCandidateId || "") &&
-      !!candidate.fileName,
-  );
-  return selectableFileCandidates.length === 1 ? selectableFileCandidates[0]?.fileName || "" : "";
-};
-
 const toStagedInputInfos = (input: ApplyWorkflowInputState | null, originals: BinarySource[]) => {
   if (!input) return [];
   const resolvedInputs = input.resolvedInputs?.length
@@ -314,8 +279,6 @@ const toStagedInputInfos = (input: ApplyWorkflowInputState | null, originals: Bi
     decompressionTimeMs: resolved.decompressionTimeMs,
     fileName:
       resolved.fileName ||
-      getSelectedInputCandidateFileName(input) ||
-      getSingleSelectableInputCandidateFileName(input) ||
       input.fileName ||
       getReactBinarySourceFileName(originals[resolved.order ?? index], `Input ${index + 1}`),
     groupId: resolved.groupId,
@@ -524,7 +487,8 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         if (patchesChanged) {
           await workflow.clearPatches();
         }
-        if (inputsChanged) {
+        const inputWork = (async () => {
+          if (!inputsChanged) return;
           if (snapshot.inputs.length) {
             await workflow.setInput(snapshot.inputs.map(toBrowserPublicBinarySource)).catch((error) => {
               if (getErrorCode(error) !== "WORKFLOW_SELECTION_SKIPPED") throw error;
@@ -533,15 +497,17 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
             await workflow.clearInput();
           }
           handlers.onInputState?.(workflow.getInput());
-        }
-        if (patchesChanged) {
+        })();
+        const patchWork = (async () => {
+          if (!patchesChanged) return;
           for (const patch of snapshot.patches) {
             await workflow.addPatch(toBrowserPublicBinarySource(patch)).catch((error) => {
               if (getErrorCode(error) !== "WORKFLOW_SELECTION_SKIPPED") throw error;
             });
             handlers.onPatchState?.(workflow.getPatches());
           }
-        }
+        })();
+        await Promise.all([inputWork, patchWork]);
 
         await resolveSelections(workflow, snapshot.patches, handlers.selection);
         await syncWorkflowOutputOverrides(workflow, snapshot, baseSettings, settingsChanged);

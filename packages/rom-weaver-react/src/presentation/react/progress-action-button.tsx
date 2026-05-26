@@ -2,7 +2,6 @@ import type { ReactNode } from "react";
 import { buttonClasses, cx, progressClasses } from "../tailwind-classes.ts";
 import type { createProgressViewModel } from "../workflow-presentation.ts";
 import { clampProgressPercent, normalizeProgressDisplayPercent } from "../workflow-presentation.ts";
-import { ProgressCircleIndicator } from "./progress-circle-indicator.tsx";
 
 const THREAD_LABEL_SEGMENTS_REGEX = /^(.*?)(?:\s+(?:with|-)\s+(\d+\s+threads?))(\.\.\.)?$/i;
 const TRAILING_ELLIPSIS_REGEX = /\s*\.\.\.$/;
@@ -41,14 +40,6 @@ const formatProgressLabelParts = (progress: ProgressViewModel) => {
   };
 };
 
-const resolveNormalizedProgressPercent = (progress: ProgressViewModel) => {
-  const percent =
-    typeof progress.visualPercent === "number" && Number.isFinite(progress.visualPercent)
-      ? Math.max(0, Math.min(100, progress.visualPercent))
-      : clampProgressPercent(progress.percent);
-  return typeof percent === "number" ? percent : null;
-};
-
 function ProgressActionButton({
   label,
   disabled,
@@ -61,7 +52,12 @@ function ProgressActionButton({
   progressId,
 }: ProgressActionButtonProps) {
   const progressLabelParts = progress ? formatProgressLabelParts(progress) : null;
-  const normalizedPercent = progress ? resolveNormalizedProgressPercent(progress) : null;
+  const progressScale =
+    progress && typeof progress.visualPercent === "number" && Number.isFinite(progress.visualPercent)
+      ? `scaleX(${Math.max(0, Math.min(100, progress.visualPercent)) / 100})`
+      : progress
+        ? `scaleX(${(clampProgressPercent(progress.percent) || 0) / 100})`
+        : null;
 
   return (
     <button
@@ -82,32 +78,28 @@ function ProgressActionButton({
           className={cx("rom-weaver-input-progress", progressClasses.container, progressClasses.applyContainer)}
           id={progressId}
         >
-          <div className="flex h-full min-w-0 items-center gap-2.5">
-            <div className="min-w-0 flex flex-1 flex-col justify-center gap-1">
-              <span
-                className={cx(
-                  "rom-weaver-input-progress-text",
-                  progressClasses.text,
-                  progressClasses.applyText,
-                  "gap-2",
-                )}
-                title={progress.message}
-              >
-                <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-left">
-                  {progressLabelParts?.taskText || progress.message}
-                </span>
-              </span>
-            </div>
-            <ProgressCircleIndicator
-              animateWhenPercentMissing
-              containerClassName="h-[40px] w-[40px] shadow-[inset_0_1px_0_oklch(1_0_0_/_0.45)]"
-              indeterminate={progress.indeterminate}
-              normalizedPercent={normalizedPercent}
-              percentText={progressLabelParts?.percentText || (progress.indeterminate ? "..." : "--")}
-              radius={16}
-              spinClassName="animate-[spin_1.15s_linear_infinite]"
-              svgClassName="h-[38px] w-[38px] -rotate-90"
-              textClassName="text-[10px]"
+          <span
+            className={cx("rom-weaver-input-progress-text", progressClasses.text, progressClasses.applyText, "gap-2")}
+            title={progress.message}
+          >
+            <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-left">
+              {progressLabelParts?.taskText || progress.message}
+            </span>
+            {progressLabelParts?.percentText ? (
+              <span className="ml-2 flex-none text-right tabular-nums">{progressLabelParts.percentText}</span>
+            ) : null}
+          </span>
+          <div className={cx("rom-weaver-input-progress-track", progressClasses.track, progressClasses.applyTrack)}>
+            <div
+              className={cx(
+                "rom-weaver-input-progress-bar",
+                progressClasses.bar,
+                progressClasses.applyBar,
+                progress.percent === null && progressClasses.barIndeterminate,
+              )}
+              style={{
+                transform: progress.percent === null ? undefined : progressScale || undefined,
+              }}
             />
           </div>
         </div>
