@@ -30,15 +30,24 @@ const emitRuntimeLog = (
   onLog: ((log: WorkflowRuntimeLog) => void) | undefined,
   level: WorkflowRuntimeLog["level"],
   message: string,
-  details: Record<string, unknown>,
+  details?: Record<string, unknown>,
 ) => {
-  onLog?.({
-    details,
-    level,
-    message,
-    namespace: "runtime:rom-weaver",
-    timestamp: nowIso(),
-  });
+  onLog?.(
+    details
+      ? {
+          details,
+          level,
+          message,
+          namespace: "runtime:rom-weaver",
+          timestamp: nowIso(),
+        }
+      : {
+          level,
+          message,
+          namespace: "runtime:rom-weaver",
+          timestamp: nowIso(),
+        },
+  );
 };
 
 const clampPercent = (value: unknown): number | null => {
@@ -81,13 +90,13 @@ const toRomWeaverOptions = (input: {
     ? (event) => {
         const message = getTraceMessage(event);
         if (!message) return;
-        emitRuntimeLog(input.onLog, "trace", message, { traceFormat: "json" });
+        emitRuntimeLog(input.onLog, "trace", message);
       }
     : undefined,
   onTraceNonJsonLine: (line) => {
     const message = String(line || "").trim();
     if (!message) return;
-    emitRuntimeLog(input.onLog, "trace", message, { traceFormat: "text" });
+    emitRuntimeLog(input.onLog, "trace", message);
   },
 });
 
