@@ -61,6 +61,16 @@ const toThreadArg = (value: unknown, fallback: string | null = null): string | n
 
 const isTraceEnabled = (logLevel: LogLevel | string | undefined) => String(logLevel || "").toLowerCase() === "trace";
 
+const getTraceMessage = (value: unknown): string => {
+  if (typeof value === "string") return value.trim();
+  try {
+    const serialized = JSON.stringify(value);
+    return typeof serialized === "string" ? serialized.trim() : String(value || "").trim();
+  } catch (_error) {
+    return String(value || "").trim();
+  }
+};
+
 const toRomWeaverOptions = (input: {
   logLevel?: LogLevel | string;
   onEvent?: (event: RomWeaverRunJsonEvent) => void;
@@ -68,12 +78,16 @@ const toRomWeaverOptions = (input: {
 }): RomWeaverRunJsonOptions => ({
   onEvent: input.onEvent,
   onTraceEvent: isTraceEnabled(input.logLevel)
-    ? (event) => emitRuntimeLog(input.onLog, "trace", "rom-weaver.trace", { event })
+    ? (event) => {
+        const message = getTraceMessage(event);
+        if (!message) return;
+        emitRuntimeLog(input.onLog, "trace", message, { traceFormat: "json" });
+      }
     : undefined,
   onTraceNonJsonLine: (line) => {
     const message = String(line || "").trim();
     if (!message) return;
-    emitRuntimeLog(input.onLog, "trace", "rom-weaver.stderr", { line: message });
+    emitRuntimeLog(input.onLog, "trace", message, { traceFormat: "text" });
   },
 });
 
