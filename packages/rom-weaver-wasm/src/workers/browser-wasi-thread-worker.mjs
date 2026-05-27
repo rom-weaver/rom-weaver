@@ -1,4 +1,7 @@
-import { __runRomWeaverBrowserWasiThread } from '../rom-weaver-browser-opfs-api.mjs';
+import {
+  __disposeRomWeaverBrowserThreadMountCache,
+  __runRomWeaverBrowserWasiThread,
+} from '../rom-weaver-browser-opfs-api.mjs';
 
 let shellBusy = false;
 
@@ -37,7 +40,11 @@ self.addEventListener('message', (event) => {
     return;
   }
   if (payload.mode === 'shutdown') {
-    self.close();
+    void __disposeRomWeaverBrowserThreadMountCache()
+      .catch(() => undefined)
+      .finally(() => {
+        self.close();
+      });
     return;
   }
   if (payload.mode === 'pool') {
@@ -47,7 +54,11 @@ self.addEventListener('message', (event) => {
         tid: null,
         error: serializeError(error),
       });
-      self.close();
+      void __disposeRomWeaverBrowserThreadMountCache()
+        .catch(() => undefined)
+        .finally(() => {
+          self.close();
+        });
     });
     return;
   }
@@ -57,7 +68,11 @@ self.addEventListener('message', (event) => {
       tid: payload?.tid ?? null,
       error: serializeError(error),
     });
-    self.close();
+    void __disposeRomWeaverBrowserThreadMountCache()
+      .catch(() => undefined)
+      .finally(() => {
+        self.close();
+      });
   });
 });
 
@@ -92,6 +107,7 @@ async function runSingleThread(payload) {
     });
   } finally {
     stream?.close();
+    await __disposeRomWeaverBrowserThreadMountCache().catch(() => undefined);
     self.close();
   }
 }
@@ -109,7 +125,10 @@ async function runPoolWorker(payload, { closeOnShutdown }) {
     }
     const state = Atomics.load(control, THREAD_SLOT_STATE_INDEX);
     if (state === THREAD_SLOT_STATE_SHUTDOWN) {
-      if (closeOnShutdown) self.close();
+      if (closeOnShutdown) {
+        await __disposeRomWeaverBrowserThreadMountCache().catch(() => undefined);
+        self.close();
+      }
       return;
     }
     if (state === THREAD_SLOT_STATE_FAILED) {

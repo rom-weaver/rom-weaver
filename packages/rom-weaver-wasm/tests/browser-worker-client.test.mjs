@@ -53,6 +53,22 @@ function delay(ms, value = null) {
   });
 }
 
+async function waitForCondition(
+  predicate,
+  {
+    timeoutMs = 10000,
+    pollMs = 20,
+    label = 'condition',
+  } = {},
+) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (predicate()) return;
+    await delay(pollMs);
+  }
+  throw new Error(`timed out waiting for ${label} after ${timeoutMs}ms`);
+}
+
 async function countScratchFiles(rootHandle) {
   try {
     const scratchHandle = await rootHandle.getDirectoryHandle(SCRATCH_DIRECTORY_NAME, { create: false });
@@ -266,6 +282,37 @@ describe('rom-weaver-wasm browser runner parity', () => {
 
       const terminal = assertRunJsonSucceeded(result, { command: 'checksum' });
       expect(terminal.label).toMatch(/crc32=/i);
+    });
+  });
+
+  it('runJson does not leak virtual files into later runs', async () => {
+    await withTempFixture(async ({ worker }) => {
+      const virtualPath = '/work/input/direct-file/input.bin';
+      const virtual = createVirtualFileProxy(virtualPath, 'direct virtual input');
+      try {
+        const first = await worker.runJson([
+          'checksum',
+          virtualPath,
+          '--algo',
+          'crc32',
+          '--no-extract',
+        ], {
+          virtualFiles: [virtual.virtualFile],
+        });
+        assertRunJsonSucceeded(first, { command: 'checksum' });
+      } finally {
+        virtual.close();
+      }
+
+      const second = await worker.runJson([
+        'checksum',
+        virtualPath,
+        '--algo',
+        'crc32',
+        '--no-extract',
+      ]);
+      expect(second.ok).toBe(false);
+      expect(second.exitCode).not.toBe(0);
     });
   });
 
@@ -577,6 +624,75 @@ describe('rom-weaver-wasm browser runner parity', () => {
     });
   });
 
+  it('threaded browser runner reuses thread-worker pool shells across repeated commands', async () => {
+    const probeChannelName = 'rom-weaver-thread-worker-probe-channel';
+    const probeWorkerUrl = new URL('./browser-wasi-thread-worker-probe.mjs', import.meta.url).href;
+    const probeChannel = new BroadcastChannel(probeChannelName);
+    const probeMessages = [];
+    const onProbeMessage = (event) => {
+      if (event?.data?.type === 'thread-worker-spawned') {
+        probeMessages.push(event.data);
+      }
+    };
+    probeChannel.addEventListener('message', onProbeMessage);
+
+    try {
+      await withTempFixture(async ({ dir, init, worker, opfsHandle }) => {
+        expect(init.threaded).toBe(true);
+        const sourcePath = joinGuestPath(dir, 'threaded-worker-pool-reuse-source.bin');
+        await writeGuestPatternFile(opfsHandle, sourcePath, 16 * 1024 * 1024);
+
+        await waitForCondition(() => probeMessages.length >= 2, {
+          label: 'thread-worker prewarm',
+        });
+        const countAfterInit = probeMessages.length;
+
+        const threadedChecksumArgs = [
+          'checksum',
+          sourcePath,
+          '--algo',
+          'crc32',
+          '--algo',
+          'sha1',
+          '--algo',
+          'sha256',
+          '--algo',
+          'blake3',
+          '--no-extract',
+          '--threads',
+          '4',
+        ];
+
+        const firstResult = await worker.runJson(threadedChecksumArgs);
+        assertRunJsonSucceeded(firstResult, {
+          command: 'checksum',
+        });
+
+        await waitForCondition(() => probeMessages.length > countAfterInit, {
+          label: 'thread-worker pool growth',
+        });
+        const countAfterFirstRun = probeMessages.length;
+
+        const secondResult = await worker.runJson(threadedChecksumArgs);
+        assertRunJsonSucceeded(secondResult, {
+          command: 'checksum',
+        });
+
+        await delay(150);
+        expect(probeMessages.length).toBe(countAfterFirstRun);
+      }, {
+        initOptions: {
+          defaultThreads: 2,
+          threadWorkerUrl: probeWorkerUrl,
+          wasmUrl: new URL('../rom-weaver-cli-threaded.wasm', import.meta.url).href,
+        },
+      });
+    } finally {
+      probeChannel.removeEventListener('message', onProbeMessage);
+      probeChannel.close();
+    }
+  });
+
   it('threaded browser runner keeps default nested-thread scratch setup below legacy 256-per-thread behavior', async () => {
     await withTempFixture(async ({ dir, init, worker, opfsHandle }) => {
       expect(init.threaded).toBe(true);
@@ -608,11 +724,31 @@ describe('rom-weaver-wasm browser runner parity', () => {
       });
       const result = await resultPromise;
       const terminal = assertRunJsonSucceeded(result, { command: 'checksum' });
+      const scratchCountAfterFirstRun = await countScratchFiles(opfsHandle);
 
       expect(terminal.effective_threads).toBeGreaterThan(1);
       expect(peakScratchFiles).toBeGreaterThan(256);
       expect(peakScratchFiles).toBeLessThan(512);
-      expect(await countScratchFiles(opfsHandle)).toBe(0);
+      expect(scratchCountAfterFirstRun).toBeGreaterThan(256);
+      expect(scratchCountAfterFirstRun).toBeLessThan(512);
+
+      const second = await worker.runJson([
+        'checksum',
+        sourcePath,
+        '--algo',
+        'crc32',
+        '--algo',
+        'sha1',
+        '--algo',
+        'sha256',
+        '--algo',
+        'blake3',
+        '--no-extract',
+        '--threads',
+        '4',
+      ]);
+      assertRunJsonSucceeded(second, { command: 'checksum' });
+      expect(await countScratchFiles(opfsHandle)).toBe(scratchCountAfterFirstRun);
     }, {
       initOptions: {
         wasmUrl: new URL('../rom-weaver-cli-threaded.wasm', import.meta.url).href,

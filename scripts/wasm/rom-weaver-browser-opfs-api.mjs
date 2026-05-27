@@ -16,6 +16,7 @@ const DEFAULT_BROWSER_THREADED_WASM_URLS = [
   new URL('./rom-weaver-cli-threaded.wasm', import.meta.url).href,
 ];
 const DEFAULT_SCRATCH_FILE_POOL_SIZE = 256;
+const DEFAULT_THREAD_SCRATCH_FILE_POOL_SIZE = 16;
 const DEFAULT_SHARED_MEMORY_INITIAL_PAGES = 256;
 const DEFAULT_SHARED_MEMORY_MAX_PAGES = 16384;
 const PATH_SEPARATOR_REGEX = /[/\\]+/;
@@ -51,6 +52,7 @@ const THREAD_SLOT_STATE_SHUTDOWN = 6;
 const THREAD_WORKER_READY_TIMEOUT_MS = 5000;
 const WASI_ERRNO_AGAIN = 6;
 const WASI_ERRNO_ENOSYS = 52;
+const THREAD_WORKER_MOUNT_CACHE = createBrowserOpfsMountCache();
 
 export async function createRomWeaverBrowserOpfs(options = {}) {
   assertDedicatedWorkerRuntime();
@@ -91,19 +93,19 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
   );
   const threadWorkerPool = threaded && importsWasiThreadSpawn
     ? createBrowserWasiThreadWorkerPool({
-        initialSize: options.prewarmThreadWorkers === true
-          ? resolveBrowserThreadPoolSize([
-              '--threads',
-              String(baseDefaultThreads),
-            ])
-          : 0,
+        initialSize: resolveBrowserThreadPoolSize([
+          '--threads',
+          String(baseDefaultThreads ?? resolveBrowserDefaultThreads()),
+        ]),
         threadWorkerUrl: options.threadWorkerUrl,
       })
     : null;
+  const mountCache = createBrowserOpfsMountCache();
   threadWorkerPool?.ready.catch(() => undefined);
 
   const runner = {
     async dispose() {
+      await mountCache.dispose();
       await threadWorkerPool?.dispose();
     },
 
@@ -139,6 +141,7 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
       });
 
       const closeables = [];
+      let runSucceeded = false;
       const resolvedSyncAccessMode = resolveRunSyncAccessMode({
         baseMode: options.syncAccessMode,
         runMode: runOptions.syncAccessMode,
@@ -153,6 +156,10 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
         writableDirectories: runOptions.writableDirectories,
         inherited: baseWritableRoots,
       });
+      const resolvedMainScratchFilePoolSize = runOptions.scratchFilePoolSize
+        ?? options.scratchFilePoolSize;
+      const resolvedThreadScratchFilePoolSize = resolvedMainScratchFilePoolSize
+        ?? DEFAULT_THREAD_SCRATCH_FILE_POOL_SIZE;
       const threadSpawner = createBrowserWasiThreadSpawner({
         streamBroadcastChannelName: runOptions.__streamBroadcastChannelName,
         streamRequestId: runOptions.__streamRequestId,
@@ -172,7 +179,8 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
           debugWasi: Boolean(runOptions.debugWasi ?? options.debugWasi ?? false),
           mountHandles,
           runtimeMounts,
-          scratchFilePoolSize: runOptions.scratchFilePoolSize ?? options.scratchFilePoolSize,
+          scratchFilePoolSize: resolvedMainScratchFilePoolSize,
+          threadScratchFilePoolSize: resolvedThreadScratchFilePoolSize,
           syncAccessMode: resolvedSyncAccessMode,
           virtualFiles,
           writableRoots,
@@ -186,6 +194,7 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
         stdoutChunks,
         stderrChunks,
       } = await buildBrowserOpfsWasiFds({
+        args: normalizedArgs,
         cwdMountPath: workGuestPath,
         stdin: runOptions.stdin,
         runtimeMounts,
@@ -193,10 +202,11 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
         stderrLineHandler: runOptions.onStderrLine,
         stdoutLineHandler: runOptions.onStdoutLine,
         virtualFiles,
-        scratchFilePoolSize: runOptions.scratchFilePoolSize ?? options.scratchFilePoolSize,
+        scratchFilePoolSize: resolvedMainScratchFilePoolSize,
         writableRoots,
         syncAccessMode: resolvedSyncAccessMode,
-        closeables,
+        mountCache,
+        runCloseables: closeables,
       });
 
       try {
@@ -222,6 +232,7 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
         }
         await threadSpawner.waitForWorkers();
         await flushBrowserOpfsMounts(mounts);
+        runSucceeded = true;
         stdoutCollector.flush();
         stderrCollector.flush();
         const stdout = decodeChunks(stdoutChunks);
@@ -251,6 +262,11 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
       } finally {
         closeSyncFiles(closeables);
         await cleanupBrowserOpfsMounts(mounts);
+        await cleanupScratchDirectoriesFromHandles({
+          mountHandles,
+          runtimeMounts,
+        });
+        if (!runSucceeded) await mountCache.invalidateMounts(mounts);
       }
     },
 
@@ -332,21 +348,25 @@ export async function __runRomWeaverBrowserWasiThread(payload = {}) {
   signalThreadStartState(startControl, THREAD_SLOT_STATE_STARTING);
   let startAcked = false;
   const closeables = [];
+  const normalizedRuntimeMounts = normalizeRuntimeMounts(runtime?.runtimeMounts);
+  const normalizedMountHandles = normalizeMountHandleMap({ mountHandles: runtime?.mountHandles });
+  let runSucceeded = false;
   let mounts = [];
 
   try {
     const built = await buildBrowserOpfsWasiFds({
       cwdMountPath: runtime?.cwdMountPath,
       stdin: undefined,
-      runtimeMounts: normalizeRuntimeMounts(runtime?.runtimeMounts),
-      mountHandles: normalizeMountHandleMap({ mountHandles: runtime?.mountHandles }),
+      runtimeMounts: normalizedRuntimeMounts,
+      mountHandles: normalizedMountHandles,
       stderrLineHandler,
       stdoutLineHandler,
-      scratchFilePoolSize: runtime?.scratchFilePoolSize,
+      scratchFilePoolSize: runtime?.threadScratchFilePoolSize ?? runtime?.scratchFilePoolSize,
       virtualFiles: normalizeVirtualFiles(runtime?.virtualFiles),
       writableRoots: Array.isArray(runtime?.writableRoots) ? runtime.writableRoots : [],
       syncAccessMode: runtime?.syncAccessMode,
-      closeables,
+      mountCache: THREAD_WORKER_MOUNT_CACHE,
+      runCloseables: closeables,
     });
     mounts = built.mounts;
     const threadWasi = new wasiShim.WASI(
@@ -384,13 +404,23 @@ export async function __runRomWeaverBrowserWasiThread(payload = {}) {
     instance.exports.wasi_thread_start(Number(tid) | 0, Number(startArg) | 0);
     await nestedThreadSpawner.waitForWorkers();
     await flushBrowserOpfsMounts(mounts);
+    runSucceeded = true;
   } catch (error) {
     if (!startAcked) signalThreadStartState(startControl, THREAD_SLOT_STATE_FAILED);
     throw error;
   } finally {
     closeSyncFiles(closeables);
     await cleanupBrowserOpfsMounts(mounts);
+    await cleanupScratchDirectoriesFromHandles({
+      mountHandles: normalizedMountHandles,
+      runtimeMounts: normalizedRuntimeMounts,
+    });
+    if (!runSucceeded) await THREAD_WORKER_MOUNT_CACHE.invalidateMounts(mounts);
   }
+}
+
+export async function __disposeRomWeaverBrowserThreadMountCache() {
+  await THREAD_WORKER_MOUNT_CACHE.dispose();
 }
 
 function createRunEnv({ baseEnv, runEnv }) {
@@ -400,7 +430,80 @@ function createRunEnv({ baseEnv, runEnv }) {
   };
 }
 
+function createBrowserOpfsMountCache() {
+  let disposed = false;
+  const mountsByPath = new Map();
+
+  return {
+    async acquire({ directoryHandle, mountPath, syncAccessMode, writableRoots }) {
+      if (disposed) throw new Error('browser OPFS mount cache is disposed');
+      const writableRootsKey = writableRoots.join('\0');
+      const current = mountsByPath.get(mountPath) ?? null;
+      if (
+        current
+        && current.syncAccessMode === syncAccessMode
+        && current.writableRootsKey === writableRootsKey
+        && await directoryHandlesMatch(current.directoryHandle, directoryHandle)
+      ) {
+        return current;
+      }
+      if (current) {
+        mountsByPath.delete(mountPath);
+        await current.dispose();
+      }
+      const mount = await BrowserOpfsMount.create({
+        directoryHandle,
+        mountPath,
+        syncAccessMode,
+        writableRoots,
+      });
+      mountsByPath.set(mountPath, mount);
+      return mount;
+    },
+
+    async invalidateMounts(mounts) {
+      const seen = new Set(mounts ?? []);
+      for (const mount of seen) {
+        if (!mount || typeof mount !== 'object') continue;
+        const current = mountsByPath.get(mount.mountPath);
+        if (current !== mount) continue;
+        mountsByPath.delete(mount.mountPath);
+        await mount.dispose();
+      }
+    },
+
+    async dispose() {
+      disposed = true;
+      const mounts = [...mountsByPath.values()];
+      mountsByPath.clear();
+      for (const mount of mounts) {
+        await mount.dispose();
+      }
+    },
+  };
+}
+
+async function directoryHandlesMatch(left, right) {
+  if (left === right) return true;
+  if (typeof left?.isSameEntry === 'function') {
+    try {
+      return await left.isSameEntry(right);
+    } catch {
+      // ignored
+    }
+  }
+  if (typeof right?.isSameEntry === 'function') {
+    try {
+      return await right.isSameEntry(left);
+    } catch {
+      // ignored
+    }
+  }
+  return false;
+}
+
 async function buildBrowserOpfsWasiFds({
+  args,
   cwdMountPath,
   stdin,
   runtimeMounts,
@@ -411,7 +514,8 @@ async function buildBrowserOpfsWasiFds({
   scratchFilePoolSize,
   writableRoots,
   syncAccessMode,
-  closeables,
+  mountCache,
+  runCloseables,
 }) {
   const stdinBytes = normalizeStdin(stdin);
   const stdoutCollector = createOutputCollector(wasiShim.ConsoleStdout, {
@@ -428,33 +532,46 @@ async function buildBrowserOpfsWasiFds({
   ];
   const mounts = [];
   let cwdMount = null;
+  try {
+    for (const mountPath of runtimeMounts) {
+      const handle = mountHandles[mountPath];
+      if (!handle) {
+        throw new Error(
+          `No directory handle provided for runtime mount ${mountPath}. `
+            + 'Provide options.mountHandles or runOptions.mountHandles.',
+        );
+      }
 
-  for (const mountPath of runtimeMounts) {
-    const handle = mountHandles[mountPath];
-    if (!handle) {
-      throw new Error(
-        `No directory handle provided for runtime mount ${mountPath}. `
-          + 'Provide options.mountHandles or runOptions.mountHandles.',
-      );
+      const mount = await mountCache.acquire({
+        directoryHandle: handle,
+        mountPath,
+        syncAccessMode,
+        writableRoots,
+      });
+      mounts.push(mount);
+      await mount.startRun({
+        runCloseables,
+        scratchFilePoolSize,
+        virtualFiles,
+      });
+      fds.push(new PreparedWasiPreopenDirectory(mount));
+      if (mountPath === cwdMountPath) cwdMount = mount;
     }
-
-    const mount = await BrowserOpfsMount.create({
-      closeables,
-      directoryHandle: handle,
-      mountPath,
-      scratchFilePoolSize,
-      syncAccessMode,
-      virtualFiles,
-      writableRoots,
-    });
-    mounts.push(mount);
-    fds.push(new PreparedWasiPreopenDirectory(mount));
-    if (mountPath === cwdMountPath) cwdMount = mount;
+  } catch (error) {
+    closeSyncFiles(runCloseables);
+    await cleanupBrowserOpfsMounts(mounts);
+    throw error;
   }
 
   if (cwdMount) {
     fds.push(new PreparedWasiPreopenDirectory(cwdMount, { preopenName: '.' }));
   }
+  await syncMountedInputPathsFromOpfs({
+    args,
+    mounts,
+    mountHandles,
+    runtimeMounts,
+  });
 
   return {
     fds,
@@ -468,39 +585,25 @@ async function buildBrowserOpfsWasiFds({
 
 class BrowserOpfsMount {
   static async create({
-    closeables,
     directoryHandle,
     mountPath,
-    scratchFilePoolSize,
     syncAccessMode,
-    virtualFiles,
     writableRoots,
   }) {
+    const ownedFiles = [];
     const contents = await buildOpfsInodeMap({
-      closeables,
+      closeables: ownedFiles,
       directoryHandle,
       guestPath: mountPath,
       syncAccessMode,
       writableRoots,
     });
-    addVirtualFilesToMount({
-      contents,
-      mountPath,
-      virtualFiles,
-    });
-    const scratch = await createScratchFilePool({
-      closeables,
-      directoryHandle,
-      scratchFilePoolSize,
-      syncAccessMode,
-    });
     return new BrowserOpfsMount({
       contents,
       directoryHandle,
       mountPath,
-      scratchDirectoryHandle: scratch.directoryHandle,
-      scratchFiles: scratch.files,
-      scratchPool: scratch.pool,
+      ownedFiles,
+      syncAccessMode,
       writableRoots,
     });
   }
@@ -509,18 +612,21 @@ class BrowserOpfsMount {
     contents,
     directoryHandle,
     mountPath,
-    scratchDirectoryHandle,
-    scratchFiles,
-    scratchPool,
+    ownedFiles,
+    syncAccessMode,
     writableRoots,
   }) {
     this.contents = contents;
     this.directoryHandle = directoryHandle;
     this.mountPath = mountPath;
-    this.scratchDirectoryHandle = scratchDirectoryHandle;
-    this.scratchFiles = scratchFiles;
-    this.scratchPool = scratchPool;
+    this.ownedFiles = ownedFiles;
+    this.syncAccessMode = syncAccessMode;
     this.writableRoots = writableRoots;
+    this.writableRootsKey = writableRoots.join('\0');
+    this.virtualRestores = null;
+    this.scratchDirectoryHandle = null;
+    this.scratchFiles = [];
+    this.scratchPool = [];
   }
 
   isWritablePath(guestPath) {
@@ -531,6 +637,48 @@ class BrowserOpfsMount {
     const file = this.scratchPool.pop() ?? null;
     if (file) file.truncate(0);
     return file;
+  }
+
+  async startRun({ runCloseables, scratchFilePoolSize, virtualFiles }) {
+    this.finishRun();
+    if (Array.isArray(virtualFiles) && virtualFiles.length > 0) {
+      this.virtualRestores = addVirtualFilesToMount({
+        contents: this.contents,
+        mountPath: this.mountPath,
+        virtualFiles,
+      });
+    } else {
+      this.virtualRestores = [];
+    }
+    const scratch = await createScratchFilePool({
+      closeables: runCloseables,
+      directoryHandle: this.directoryHandle,
+      scratchFilePoolSize,
+      syncAccessMode: this.syncAccessMode,
+    });
+    this.scratchDirectoryHandle = scratch.directoryHandle;
+    this.scratchFiles = scratch.files;
+    this.scratchPool = scratch.pool;
+  }
+
+  finishRun() {
+    if (Array.isArray(this.virtualRestores) && this.virtualRestores.length > 0) {
+      restoreVirtualFiles(this.virtualRestores);
+    }
+    this.virtualRestores = null;
+  }
+
+  trackOwnedFile(file) {
+    this.ownedFiles.push(file);
+  }
+
+  async dispose() {
+    this.finishRun();
+    closeSyncFiles(this.ownedFiles);
+    this.ownedFiles = [];
+    this.scratchPool = [];
+    this.scratchFiles = [];
+    this.scratchDirectoryHandle = null;
   }
 }
 
@@ -927,14 +1075,16 @@ async function buildOpfsInodeMap({
 }
 
 function addVirtualFilesToMount({ contents, mountPath, virtualFiles }) {
+  const restores = [];
   for (const entry of virtualFiles ?? []) {
     if (!isGuestPathWithinMount(entry.path, mountPath)) continue;
     const relativePath = entry.path === mountPath ? '' : entry.path.slice(mountPath.length + 1);
-    addVirtualFileEntry(contents, relativePath, entry.source);
+    addVirtualFileEntry(contents, relativePath, entry.source, restores);
   }
+  return restores;
 }
 
-function addVirtualFileEntry(contents, relativePath, source) {
+function addVirtualFileEntry(contents, relativePath, source, restores) {
   const parts = normalizeWasiRelativePathParts(relativePath);
   if (parts === null || parts.length === 0) {
     throw new TypeError(`virtual file path must be inside a mounted directory: ${relativePath}`);
@@ -954,12 +1104,89 @@ function addVirtualFileEntry(contents, relativePath, source) {
     entries = existing.contents;
   }
   const file = new BrowserVirtualRandomAccessFile(source);
-  entries.set(parts[parts.length - 1], new WasiRandomAccessFileInode(file, { readonly: true }));
+  const name = parts[parts.length - 1];
+  restores.push({
+    entries,
+    hadExisting: entries.has(name),
+    name,
+    value: entries.get(name) ?? null,
+  });
+  entries.set(name, new WasiRandomAccessFileInode(file, { readonly: true }));
+}
+
+function restoreVirtualFiles(restores) {
+  for (let index = restores.length - 1; index >= 0; index -= 1) {
+    const restore = restores[index];
+    const current = restore.entries.get(restore.name) ?? null;
+    if (current instanceof WasiRandomAccessFileInode && typeof current.file?.close === 'function') {
+      try {
+        current.file.close();
+      } catch {
+        // ignore best-effort virtual-file cleanup failures
+      }
+    }
+    if (restore.hadExisting) {
+      restore.entries.set(restore.name, restore.value);
+      continue;
+    }
+    restore.entries.delete(restore.name);
+  }
 }
 
 async function flushBrowserOpfsMounts(mounts) {
   for (const mount of mounts) {
     await flushInMemoryEntriesToOpfs(mount.directoryHandle, mount.contents);
+    await replaceScratchBackedEntriesWithOpfsHandles({
+      directoryHandle: mount.directoryHandle,
+      entries: mount.contents,
+      mount,
+    });
+    flushWritableInodeEntries(mount.contents);
+  }
+}
+
+async function replaceScratchBackedEntriesWithOpfsHandles({
+  directoryHandle,
+  entries,
+  mount,
+}) {
+  for (const [name, entry] of entries) {
+    if (entry instanceof WasiRandomAccessFileInode) {
+      if (!entry.scratchBacked) continue;
+      const fileHandle = await directoryHandle.getFileHandle(name, { create: true });
+      const syncHandle = await openSyncAccessHandle({
+        fileHandle,
+        mode: writableSyncAccessMode(mount.syncAccessMode),
+      });
+      const file = new BrowserOpfsRandomAccessFile(syncHandle);
+      mount.trackOwnedFile(file);
+      entry.file = file;
+      entry.scratchBacked = false;
+      continue;
+    }
+    if (entry instanceof wasiShim.Directory) {
+      const childHandle = await directoryHandle.getDirectoryHandle(name, { create: true });
+      await replaceScratchBackedEntriesWithOpfsHandles({
+        directoryHandle: childHandle,
+        entries: entry.contents,
+        mount,
+      });
+    }
+  }
+}
+
+function flushWritableInodeEntries(entries) {
+  for (const entry of entries.values()) {
+    if (entry instanceof wasiShim.Directory) {
+      flushWritableInodeEntries(entry.contents);
+      continue;
+    }
+    if (!(entry instanceof WasiRandomAccessFileInode) || entry.readonly) continue;
+    try {
+      entry.file.flush();
+    } catch {
+      // ignore best-effort flush failures
+    }
   }
 }
 
@@ -996,6 +1223,136 @@ async function prepareKnownCliPaths({ args, mountHandles, runtimeMounts }) {
       continue;
     }
     await ensureFilePath(resolved.handle, resolved.relativeParts, { truncate: entry.truncate });
+  }
+}
+
+async function syncMountedInputPathsFromOpfs({
+  args,
+  mounts,
+  mountHandles,
+  runtimeMounts,
+}) {
+  const inputPaths = collectCliInputPaths(args);
+  if (inputPaths.length === 0) return;
+  const mountsByPath = new Map(mounts.map((mount) => [mount.mountPath, mount]));
+  for (const path of inputPaths) {
+    const resolved = resolveMountedGuestPath(path, mountHandles, runtimeMounts);
+    if (!resolved) continue;
+    const mount = mountsByPath.get(resolved.mountPath);
+    if (!mount) continue;
+    const relativePath = resolved.relativeParts.join('/');
+    if (relativePath.length === 0 || pathExistsInDirectory(mount.contents, relativePath)) continue;
+    await hydrateMountedInputPathFromOpfs({
+      mount,
+      relativeParts: resolved.relativeParts,
+      rootHandle: resolved.handle,
+    });
+  }
+}
+
+function collectCliInputPaths(args) {
+  if (!Array.isArray(args) || args.length === 0) return [];
+  const commandIndex = findCommandIndex(args);
+  if (commandIndex === -1) return [];
+  const command = String(args[commandIndex] ?? '');
+  const values = [];
+  const positional = args[commandIndex + 1];
+
+  switch (command) {
+    case 'checksum':
+    case 'compress':
+    case 'extract':
+    case 'inspect':
+    case 'trim':
+      if (isCliPathArg(positional)) values.push(positional);
+      break;
+    case 'patch-create':
+      values.push(...collectCliOptionPathValues(args, commandIndex + 1, ['--original', '--modified']));
+      break;
+    case 'patch-apply':
+      values.push(...collectCliOptionPathValues(args, commandIndex + 1, ['--input', '--patch']));
+      break;
+    default:
+      break;
+  }
+
+  return [...new Set(values.map((value) => String(value)))];
+}
+
+function collectCliOptionPathValues(args, startIndex, names) {
+  const out = [];
+  const lookup = new Set(names);
+  for (let index = startIndex; index < args.length; index += 1) {
+    const arg = String(args[index] ?? '');
+    if (lookup.has(arg)) {
+      const value = args[index + 1];
+      if (isCliPathArg(value)) out.push(value);
+      index += 1;
+      continue;
+    }
+    for (const name of names) {
+      if (!arg.startsWith(`${name}=`)) continue;
+      const value = arg.slice(name.length + 1);
+      if (isCliPathArg(value)) out.push(value);
+      break;
+    }
+  }
+  return out;
+}
+
+function isCliPathArg(value) {
+  return typeof value === 'string' && value.trim().length > 0 && !value.startsWith('-');
+}
+
+async function hydrateMountedInputPathFromOpfs({ mount, relativeParts, rootHandle }) {
+  if (!Array.isArray(relativeParts) || relativeParts.length === 0) return;
+  let entries = mount.contents;
+  let directoryHandle = rootHandle;
+  for (const part of relativeParts.slice(0, -1)) {
+    let entry = entries.get(part) ?? null;
+    if (!entry) {
+      try {
+        directoryHandle = await directoryHandle.getDirectoryHandle(part, { create: false });
+      } catch {
+        return;
+      }
+      entry = new wasiShim.Directory(new Map());
+      entries.set(part, entry);
+    } else {
+      try {
+        directoryHandle = await directoryHandle.getDirectoryHandle(part, { create: false });
+      } catch {
+        return;
+      }
+    }
+    if (!(entry instanceof wasiShim.Directory)) return;
+    entries = entry.contents;
+  }
+
+  const name = relativeParts[relativeParts.length - 1];
+  if (entries.has(name)) return;
+
+  const guestPath = joinGuestPath(mount.mountPath, relativeParts.join('/'));
+  const writable = mount.isWritablePath(guestPath);
+  try {
+    const fileHandle = await directoryHandle.getFileHandle(name, { create: false });
+    const syncHandle = await openSyncAccessHandle({
+      fileHandle,
+      mode: writable ? mount.syncAccessMode : 'read-only',
+    });
+    const file = new BrowserOpfsRandomAccessFile(syncHandle);
+    mount.trackOwnedFile(file);
+    entries.set(name, new WasiRandomAccessFileInode(file, { readonly: !writable }));
+    return;
+  } catch {
+    // ignored
+  }
+
+  try {
+    await directoryHandle.getDirectoryHandle(name, { create: false });
+    entries.set(name, new wasiShim.Directory(new Map()));
+  } catch {
+    // ignored
   }
 }
 
@@ -1216,6 +1573,7 @@ function writableSyncAccessMode(mode) {
 
 async function cleanupBrowserOpfsMounts(mounts) {
   for (const mount of mounts) {
+    mount.finishRun();
     if (!mount.scratchDirectoryHandle) continue;
     for (const file of mount.scratchFiles) {
       if (!file.scratchName) continue;
@@ -1224,6 +1582,47 @@ async function cleanupBrowserOpfsMounts(mounts) {
       } catch {
         // ignore best-effort scratch cleanup failures
       }
+    }
+    try {
+      for await (const [name] of mount.scratchDirectoryHandle.entries()) {
+        try {
+          await mount.scratchDirectoryHandle.removeEntry(name);
+        } catch {
+          // ignore best-effort scratch cleanup failures
+        }
+      }
+    } catch {
+      // ignore best-effort scratch cleanup failures
+    }
+    mount.scratchDirectoryHandle = null;
+    mount.scratchFiles = [];
+    mount.scratchPool = [];
+  }
+}
+
+async function cleanupScratchDirectoriesFromHandles({
+  mountHandles,
+  runtimeMounts,
+}) {
+  for (const mountPath of runtimeMounts ?? []) {
+    const handle = mountHandles?.[mountPath];
+    if (!handle) continue;
+    let scratchDirectoryHandle = null;
+    try {
+      scratchDirectoryHandle = await handle.getDirectoryHandle(SCRATCH_DIRECTORY_NAME, { create: false });
+    } catch {
+      continue;
+    }
+    try {
+      for await (const [name] of scratchDirectoryHandle.entries()) {
+        try {
+          await scratchDirectoryHandle.removeEntry(name);
+        } catch {
+          // ignore best-effort scratch cleanup failures
+        }
+      }
+    } catch {
+      // ignore best-effort scratch cleanup failures
     }
   }
 }
@@ -1944,7 +2343,7 @@ function createBrowserWasiThreadSpawner({
   let firstThreadFailure = null;
   const resolvedThreadWorkerUrl = resolveThreadWorkerUrl(threadWorkerUrl);
   const poolSize = resolveBrowserThreadPoolSize(wasiArgs);
-  if (threadWorkerPool?.isReady?.(poolSize)) {
+  if (threadWorkerPool) {
     const command = threadWorkerPool.createCommand({
       poolSize,
       streamBroadcastChannelName,
