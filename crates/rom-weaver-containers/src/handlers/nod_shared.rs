@@ -118,6 +118,14 @@ impl NodHandlerCore {
         open_disc: impl FnOnce(&Path) -> Result<NodDiscReader>,
     ) -> Result<OperationReport> {
         let execution = context.plan_threads(ThreadCapability::single_threaded());
+        emit_container_indeterminate_progress(
+            context,
+            "inspect",
+            self.format_name(),
+            "inspect",
+            format!("opening {} metadata", self.format_name()),
+            Some(&execution),
+        );
         let disc = open_disc(&request.source)?;
         let meta = self.validate_meta(&request.source, &disc)?;
         let disc_size = meta.disc_size.unwrap_or_else(|| disc.disc_size());
@@ -182,7 +190,23 @@ impl NodHandlerCore {
 
         let execution = context.plan_threads(ThreadCapability::parallel(None));
         let preloader_threads = self.negotiated_threads(&execution);
+        emit_container_indeterminate_progress(
+            context,
+            "extract",
+            self.format_name(),
+            "prepare",
+            format!("opening {} for extraction", self.format_name()),
+            Some(&execution),
+        );
         let disc = open_disc(&request.source, preloader_threads)?;
+        emit_container_indeterminate_progress(
+            context,
+            "extract",
+            self.format_name(),
+            "prepare",
+            format!("preparing {} output", self.format_name()),
+            Some(&execution),
+        );
         let meta = self.validate_meta(&request.source, &disc)?;
         let disc_size = meta.disc_size.unwrap_or_else(|| disc.disc_size());
         let compression_label = normalize_codec_label(&meta.compression.to_string());

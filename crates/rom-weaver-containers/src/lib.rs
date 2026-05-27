@@ -1105,6 +1105,33 @@ fn emit_container_running_progress(
     });
 }
 
+fn emit_container_indeterminate_progress(
+    context: &OperationContext,
+    command: &str,
+    format: &str,
+    stage: &str,
+    label: impl Into<String>,
+    thread_execution: Option<&ThreadExecution>,
+) {
+    context.emit(ProgressEvent {
+        command: command.to_string(),
+        family: OperationFamily::Container,
+        format: Some(format.to_string()),
+        stage: stage.to_string(),
+        label: label.into(),
+        details: None,
+        percent: None,
+        requested_threads: thread_execution.map(|value| value.requested_threads),
+        effective_threads: thread_execution.map(|value| value.effective_threads),
+        thread_mode: thread_execution.map(|value| value.thread_mode),
+        used_parallelism: thread_execution.map(|value| value.used_parallelism),
+        thread_fallback: thread_execution.map(|value| value.thread_fallback),
+        thread_fallback_reason: thread_execution
+            .and_then(|value| value.thread_fallback_reason.clone()),
+        status: OperationStatus::Running,
+    });
+}
+
 fn emit_container_step_progress(
     context: &OperationContext,
     command: &str,
