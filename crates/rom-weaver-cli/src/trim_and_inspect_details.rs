@@ -11,7 +11,7 @@ impl CliApp {
             .join(",")
     }
 
-    fn trim_eligible_kind_for_path(&self, path: &Path) -> Option<TrimInputKind> {
+    fn trim_fix_eligible_kind_for_path(&self, path: &Path) -> Option<TrimInputKind> {
         if let Some(kind) = TrimInputKind::from_path(path) {
             return Some(kind);
         }
@@ -20,10 +20,21 @@ impl CliApp {
             .extension()
             .and_then(|value| value.to_str())
             .is_some_and(|extension| extension.eq_ignore_ascii_case("iso"))
-            && let Some(handler) = self.containers.probe(path)
-            && handler.descriptor().matches_name("xiso")
         {
-            return Some(TrimInputKind::Xiso);
+            if let Ok(source_file) = File::options().read(true).open(path) {
+                let source_reader = BufReader::new(source_file);
+                if XdvdfsOffsetWrapper::new(source_reader).is_ok() {
+                    return Some(TrimInputKind::Xiso);
+                }
+            }
+        }
+
+        None
+    }
+
+    fn trim_eligible_kind_for_path(&self, path: &Path) -> Option<TrimInputKind> {
+        if let Some(kind) = self.trim_fix_eligible_kind_for_path(path) {
+            return Some(kind);
         }
 
         if self.is_rvz_scrub_candidate(path) {
@@ -43,7 +54,7 @@ impl CliApp {
         source: &Path,
         data_start_offset: u64,
     ) -> Result<ChecksumTrimPlan> {
-        let Some(kind) = self.trim_eligible_kind_for_path(source) else {
+        let Some(kind) = self.trim_fix_eligible_kind_for_path(source) else {
             return Err(RomWeaverError::Validation(format!(
                 "trim-fix unavailable for non-trim-eligible input: `{}`",
                 source.display()
