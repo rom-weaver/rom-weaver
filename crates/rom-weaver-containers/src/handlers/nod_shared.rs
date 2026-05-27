@@ -14,6 +14,10 @@ struct NodExtractPlan {
 }
 
 impl NodHandlerCore {
+    const MAX_PRELOADER_THREADS: usize = 4;
+    #[cfg(target_family = "wasm")]
+    const MAX_WASM_PRELOADER_THREADS: usize = 1;
+
     const fn new(descriptor: &'static FormatDescriptor, nod_format: NodFormat) -> Self {
         Self {
             descriptor,
@@ -30,6 +34,22 @@ impl NodHandlerCore {
             execution.effective_threads
         } else {
             0
+        }
+    }
+
+    fn negotiated_preloader_threads(&self, execution: &ThreadExecution) -> usize {
+        // `nod` examples and tooling default this to 4; larger values add startup cost and
+        // provide diminishing returns for sequential extract/create reads.
+        let negotiated = self.negotiated_threads(execution).min(Self::MAX_PRELOADER_THREADS);
+        #[cfg(target_family = "wasm")]
+        {
+            // Browser WASI thread startup dominates RVZ open latency when preloader fanout is high.
+            // Keep one helper thread to reduce open stalls before extraction begins.
+            return negotiated.min(Self::MAX_WASM_PRELOADER_THREADS);
+        }
+        #[cfg(not(target_family = "wasm"))]
+        {
+            negotiated
         }
     }
 
@@ -73,12 +93,16 @@ impl NodHandlerCore {
         match NodDiscReader::new(source, options) {
             Ok(disc) => Ok(disc),
             Err(path_error) if self.nod_format != NodFormat::Nfs => {
+                let mut fallback_options = options.clone();
+                // Non-cloneable stream fallback is mutex-serialized, so preloader fanout only
+                // adds startup thread spawn overhead without improving throughput.
+                fallback_options.preloader_threads = 0;
                 let file = File::open(source).map_err(|stream_open_error| {
                     format!("{path_error}; stream fallback open failed: {stream_open_error}")
                 })?;
-                NodDiscReader::new_from_non_cloneable_read(file, options).map_err(|stream_error| {
-                    format!("{path_error}; stream fallback failed: {stream_error}")
-                })
+                NodDiscReader::new_from_non_cloneable_read(file, &fallback_options).map_err(
+                    |stream_error| format!("{path_error}; stream fallback failed: {stream_error}"),
+                )
             }
             Err(path_error) => Err(path_error.to_string()),
         }
@@ -86,6 +110,11 @@ impl NodHandlerCore {
 
     fn open_disc_for_inspect(&self, source: &Path) -> Result<NodDiscReader> {
         self.open_disc(source, 0)
+    }
+
+    fn detect_disc_format(&self, source: &Path) -> Option<NodFormat> {
+        let mut file = File::open(source).ok()?;
+        NodDiscReader::detect(&mut file).ok().flatten()
     }
 
     fn validate_meta(&self, source: &Path, disc: &NodDiscReader) -> Result<nod::read::DiscMeta> {
@@ -103,9 +132,7 @@ impl NodHandlerCore {
     }
 
     fn probe(&self, source: &Path) -> ProbeConfidence {
-        if let Ok(disc) = self.open_disc_for_inspect(source)
-            && disc.meta().format == self.nod_format
-        {
+        if self.detect_disc_format(source) == Some(self.nod_format) {
             return ProbeConfidence::Signature;
         }
         ProbeConfidence::Extension
@@ -189,7 +216,7 @@ impl NodHandlerCore {
         selections.ensure_all_matched()?;
 
         let execution = context.plan_threads(ThreadCapability::parallel(None));
-        let preloader_threads = self.negotiated_threads(&execution);
+        let preloader_threads = self.negotiated_preloader_threads(&execution);
         emit_container_indeterminate_progress(
             context,
             "extract",
@@ -321,7 +348,7 @@ impl NodHandlerCore {
     where
         F: FnMut(u64, u64),
     {
-        let preloader_threads = self.negotiated_threads(execution);
+        let preloader_threads = self.negotiated_preloader_threads(execution);
         let read_options = self.read_options(preloader_threads);
         let input_disc = self
             .open_disc_from_path_or_stream(input, &read_options)
@@ -378,7 +405,7 @@ impl NodHandlerCore {
     where
         F: FnMut(u64, u64),
     {
-        let preloader_threads = self.negotiated_threads(execution);
+        let preloader_threads = self.negotiated_preloader_threads(execution);
         let read_options = self.read_options(preloader_threads);
         let input_disc = self
             .open_disc_from_path_or_stream(input, &read_options)
