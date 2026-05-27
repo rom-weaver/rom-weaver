@@ -102,8 +102,9 @@ export AR_wasm32_wasip1="$WASI_AR"
 export RANLIB_wasm32_wasip1="$WASI_RANLIB"
 
 export WASI_CLANG
+export WASI_CLANGXX
 export CC_wasm32_wasip1_threads="$ROOT_DIR/scripts/wasm/wasm32-wasip1-threads-cc.sh"
-export CXX_wasm32_wasip1_threads="$WASI_CLANGXX --sysroot=$WASI_SYSROOT"
+export CXX_wasm32_wasip1_threads="$ROOT_DIR/scripts/wasm/wasm32-wasip1-threads-cxx.sh"
 export AR_wasm32_wasip1_threads="$WASI_AR"
 export RANLIB_wasm32_wasip1_threads="$WASI_RANLIB"
 export WASI_SYSROOT
@@ -112,9 +113,10 @@ export CFLAGS_wasm32_wasip1_threads="${CFLAGS_wasm32_wasip1_threads:-} ${WASI_TH
 export CXXFLAGS_wasm32_wasip1_threads="${CXXFLAGS_wasm32_wasip1_threads:-} ${WASI_THREADS_CFLAGS}"
 
 NON_THREADED_RUSTFLAGS="-C target-feature=+bulk-memory,+mutable-globals,+sign-ext,+reference-types,+simd128"
+NON_THREADED_RUSTFLAGS+=" -C linker-plugin-lto"
 THREADED_RUSTFLAGS="-C target-feature=+atomics,+bulk-memory,+mutable-globals,+sign-ext,+reference-types,+simd128"
+THREADED_RUSTFLAGS+=" -C linker-plugin-lto"
 THREADED_RUSTFLAGS+=" -C link-arg=--export=malloc -C link-arg=--export=free"
-THREADED_RUSTFLAGS+=" -C linker-plugin-lto=no"
 
 WASI_CXX_DIR="${WASI_CXX_DIR:-$WASI_SYSROOT/lib/wasm32-wasip1/noeh}"
 WASI_CXX_THREADS_DIR="${WASI_CXX_THREADS_DIR:-$WASI_SYSROOT/lib/wasm32-wasip1-threads/noeh}"

@@ -53,6 +53,7 @@ if [[ ! -d "$WASI_SYSROOT" ]]; then
 fi
 
 export WASI_CLANG
+export WASI_CLANGXX
 export WASI_SYSROOT
 
 export CC_wasm32_wasip1="$WASI_CLANG --sysroot=$WASI_SYSROOT"
@@ -61,7 +62,7 @@ export AR_wasm32_wasip1="$WASI_AR"
 export RANLIB_wasm32_wasip1="$WASI_RANLIB"
 
 export CC_wasm32_wasip1_threads="$ROOT_DIR/scripts/wasm/wasm32-wasip1-threads-cc.sh"
-export CXX_wasm32_wasip1_threads="$WASI_CLANGXX --sysroot=$WASI_SYSROOT"
+export CXX_wasm32_wasip1_threads="$ROOT_DIR/scripts/wasm/wasm32-wasip1-threads-cxx.sh"
 export AR_wasm32_wasip1_threads="$WASI_AR"
 export RANLIB_wasm32_wasip1_threads="$WASI_RANLIB"
 
