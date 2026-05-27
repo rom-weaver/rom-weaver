@@ -291,6 +291,7 @@ type WorkflowRuntimePreload = {
   preloadCapability?: (
     capability: WorkflowCapability,
     emit: (event: WorkflowRuntimePreloadEvent) => void,
+    options?: { workerThreads?: number | string | null },
   ) => Promise<void>;
 };
 

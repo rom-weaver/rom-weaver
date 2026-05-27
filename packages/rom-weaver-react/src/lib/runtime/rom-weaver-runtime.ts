@@ -624,7 +624,7 @@ const runRomWeaverChecksumWorker = async (
     : [];
   if (!algorithms.length) throw new Error("Checksum requires at least one algorithm");
 
-  const args = ["checksum", filePath, "--no-extract", "--threads", "1"];
+  const args = ["checksum", filePath, "--no-extract"];
   for (const algorithm of algorithms) args.push("--algo", algorithm);
 
   if (

@@ -63,7 +63,8 @@ const canUseThreadedWasm = (root?: NavigatorRoot | null): boolean => {
   return typeof SharedArrayBuffer === "function" && runtimeRoot?.crossOriginIsolated === true;
 };
 
-const MAX_BROWSER_WORKER_THREADS = 4;
+const DEFAULT_BROWSER_WORKER_THREADS = 4;
+const MAX_BROWSER_WORKER_THREADS = 64;
 
 const getHardwareConcurrency = (root?: NavigatorRoot | null): number => {
   const navigatorObject = root?.navigator
@@ -81,7 +82,7 @@ const getHardwareConcurrency = (root?: NavigatorRoot | null): number => {
 };
 
 const getDefaultThreadCount = (root?: NavigatorRoot | null): number =>
-  Math.max(1, Math.min(4, getHardwareConcurrency(root)));
+  Math.max(1, Math.min(DEFAULT_BROWSER_WORKER_THREADS, getHardwareConcurrency(root)));
 
 const getDefaultBrowserThreadCount = (root?: NavigatorRoot | null): number =>
   canUseThreadedWasm(root) ? getDefaultThreadCount(root) : 1;

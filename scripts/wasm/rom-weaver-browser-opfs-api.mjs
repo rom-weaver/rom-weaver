@@ -118,9 +118,11 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
     },
 
     async run(args = [], runOptions = {}) {
-      const normalizedArgs = withDefaultThreadArgs(
-        normalizeArgs(args),
-        resolveConfiguredDefaultThreads(runOptions, baseDefaultThreads),
+      const normalizedArgs = withBrowserThreadLimit(
+        withDefaultThreadArgs(
+          normalizeArgs(args),
+          resolveConfiguredDefaultThreads(runOptions, baseDefaultThreads),
+        ),
       );
       const env = createRunEnv({
         baseEnv: options.env,
@@ -2996,6 +2998,29 @@ function withDefaultThreadArgs(args, defaultThreads) {
   const commandIndex = findCommandIndex(args);
   if (commandIndex === -1 || !THREAD_AWARE_COMMANDS.has(args[commandIndex])) return args;
   return [...args, '--threads', String(defaultThreads)];
+}
+
+function withBrowserThreadLimit(args) {
+  const out = [...args];
+  for (let index = 0; index < out.length; index += 1) {
+    const arg = String(out[index] ?? '');
+    if (arg === '--threads') {
+      if (index + 1 < out.length) out[index + 1] = clampBrowserThreadArgValue(out[index + 1]);
+      index += 1;
+      continue;
+    }
+    if (arg.startsWith('--threads=')) {
+      out[index] = `--threads=${clampBrowserThreadArgValue(arg.slice('--threads='.length))}`;
+    }
+  }
+  return out;
+}
+
+function clampBrowserThreadArgValue(value) {
+  const raw = String(value ?? '').trim();
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isInteger(parsed) || parsed <= 0) return raw;
+  return String(Math.min(parsed, MAX_BROWSER_THREAD_POOL_SIZE));
 }
 
 function hasThreadArg(args) {

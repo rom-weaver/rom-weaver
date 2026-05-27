@@ -296,6 +296,9 @@ class CreateWorkflowController<TSource, TDestination> extends WorkflowController
       const sources = Array.isArray(source) ? [...source] : [source];
       if (!sources.length) throw new RomWeaverError("INVALID_INPUT", `No ${role} source was provided`);
       this.releaseRoleSession(role);
+      await this.runtime.preload?.preloadCapability?.("compression", () => undefined, {
+        workerThreads: this.settings.workers?.threads,
+      });
       const session = await this.stageSourceSession(role, sources);
       if (role === "original") this.originalSession = session;
       else this.modifiedSession = session;

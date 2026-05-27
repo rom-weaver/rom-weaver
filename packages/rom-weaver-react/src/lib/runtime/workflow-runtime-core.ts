@@ -562,7 +562,7 @@ const createSharedCompressionRuntime = (
 };
 
 const createRuntimePreload = (): WorkflowRuntimePreload => ({
-  preloadCapability: async (capability, emit) => {
+  preloadCapability: async (capability, emit, options) => {
     const workerKind = getPreloadWorkerKind(capability);
     const tool = getPreloadWasmTool(capability);
     try {
@@ -572,7 +572,7 @@ const createRuntimePreload = (): WorkflowRuntimePreload => ({
       emit({ data: { capability, status: "loading", tool }, kind: "wasm" });
       emit({ data: { capability, status: "busy", workerKind }, kind: "worker" });
       const { warmupRomWeaverRunner } = await import("../../workers/rom-weaver/rom-weaver-runner.ts");
-      await warmupRomWeaverRunner();
+      await warmupRomWeaverRunner(options?.workerThreads);
       emit({ data: { capability, status: "loaded", tool }, kind: "wasm" });
       emit({ data: { capability, status: "instantiated", tool }, kind: "wasm" });
       emit({ data: { capability, status: "ready", workerKind }, kind: "worker" });

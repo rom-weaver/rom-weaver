@@ -400,11 +400,11 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     kind: "number",
     label: getSettingsLabel("workerThreads"),
     labelDataLocalize: "Worker threads",
-    max: 4,
+    max: 64,
     min: 0,
     step: 1,
     suggestion: ({ uiState }) =>
-      uiState.workerThreadsEnabled ? "Valid values: 0-4. Use 0 to disable threaded bundles." : "Valid value: 1",
+      uiState.workerThreadsEnabled ? "Valid values: 0-64. Use 0 to disable threaded bundles." : "Valid value: 1",
     validationLabel: "Worker threads",
   },
   z3dsCompressionLevel: {

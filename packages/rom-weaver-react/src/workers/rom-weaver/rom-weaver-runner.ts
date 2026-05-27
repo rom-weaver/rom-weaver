@@ -56,12 +56,13 @@ type BrowserWasmAssetSelection = {
 };
 
 const DEFAULT_BROWSER_THREAD_COUNT = 4;
+const MAX_BROWSER_THREAD_COUNT = 64;
 const THREAD_WARMUP_VIRTUAL_FILE_PATH = `${WORKER_OPFS_MOUNTPOINT}/.rom-weaver-thread-warmup.bin`;
 const THREAD_WARMUP_VIRTUAL_FILE_BYTES = new Uint8Array([0x72, 0x77, 0x2d, 0x77, 0x61, 0x72, 0x6d]);
 
 let browserWasmAssetPromise: Promise<BrowserWasmAssetSelection> | null = null;
 let browserRunnerPromise: Promise<RomWeaverRunner> | null = null;
-let browserThreadWarmupPromise: Promise<void> | null = null;
+let browserThreadWarmupPromise: { promise: Promise<void>; threads: number } | null = null;
 
 const normalizeArgs = (args: string[]) => args.map((value) => String(value));
 
@@ -165,9 +166,9 @@ const runRomWeaverJson = async (args: string[], options?: RomWeaverRunJsonOption
   return runner.runJson(args, runOptions);
 };
 
-const warmupRomWeaverRunner = async () => {
+const warmupRomWeaverRunner = async (workerThreads?: RuntimeValue) => {
   const runner = await createRomWeaverRunner();
-  await prewarmThreadedRunner(runner);
+  await prewarmThreadedRunner(runner, workerThreads);
   return runner.ready;
 };
 
@@ -214,19 +215,24 @@ const resolveBrowserDefaultThreads = (root: typeof globalThis = globalThis) => {
   return DEFAULT_BROWSER_THREAD_COUNT;
 };
 
-const resolveWarmupThreadCount = () => {
-  const requested = resolveBrowserDefaultThreads();
-  return Math.max(1, Math.min(DEFAULT_BROWSER_THREAD_COUNT, requested));
+const resolveWarmupThreadCount = (workerThreads?: RuntimeValue) => {
+  if (workerThreads === false || workerThreads === 0 || workerThreads === "0" || workerThreads === "off") return 1;
+  if (workerThreads === undefined || workerThreads === null || workerThreads === "" || workerThreads === "auto")
+    return resolveBrowserDefaultThreads();
+  const requested =
+    typeof workerThreads === "number" ? Math.floor(workerThreads) : Number.parseInt(String(workerThreads).trim(), 10);
+  if (!Number.isFinite(requested) || requested <= 0) return resolveBrowserDefaultThreads();
+  return Math.max(1, Math.min(MAX_BROWSER_THREAD_COUNT, requested));
 };
 
-const prewarmThreadedRunner = async (runner: RomWeaverRunner) => {
+const prewarmThreadedRunner = async (runner: RomWeaverRunner, workerThreads?: RuntimeValue) => {
   if (!runner.ready.threaded) return;
-  if (browserThreadWarmupPromise) {
-    await browserThreadWarmupPromise;
+  const warmupThreads = resolveWarmupThreadCount(workerThreads);
+  if (browserThreadWarmupPromise && browserThreadWarmupPromise.threads >= warmupThreads) {
+    await browserThreadWarmupPromise.promise;
     return;
   }
-  browserThreadWarmupPromise = (async () => {
-    const warmupThreads = resolveWarmupThreadCount();
+  const promise = (async () => {
     const result = await runner.runJson(
       [
         "checksum",
@@ -250,15 +256,17 @@ const prewarmThreadedRunner = async (runner: RomWeaverRunner) => {
       throw new Error(`thread warmup command failed (exitCode=${result.exitCode})`);
     }
   })().catch((error) => {
-    browserThreadWarmupPromise = null;
+    if (browserThreadWarmupPromise?.promise === promise) browserThreadWarmupPromise = null;
     publishRomWeaverWasmDiagnostic({
       context: "rom-weaver thread warmup",
-      reason: `warmup skipped: ${error instanceof Error ? error.message : String(error)}`,
+      reason: `warmup failed: ${error instanceof Error ? error.message : String(error)}`,
       threaded: true,
       url: runner.ready.wasmUrl || "",
     });
+    throw error;
   });
-  await browserThreadWarmupPromise;
+  browserThreadWarmupPromise = { promise, threads: warmupThreads };
+  await promise;
 };
 
 const getErrorMessage = (value: unknown) => {

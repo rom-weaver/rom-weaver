@@ -439,6 +439,9 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
       }
       this.manualOutputName = typeof output.outputName === "string" && !!output.outputName.trim();
       this.outputName = this.manualOutputName ? output.outputName || "" : "";
+      await this.runtime.preload?.preloadCapability?.("compression", () => undefined, {
+        workerThreads: this.settings.workers?.threads,
+      });
       await this.refreshPatchReadiness();
       this.recomputeOutputState();
     });

@@ -455,7 +455,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
     });
   });
 
-  it('browser client caps explicit command thread args to the browser worker pool limit', async () => {
+  it('browser client accepts explicit command thread args above the default thread count', async () => {
     await withTempFixture(async ({ sourcePath, worker }) => {
       const result = await worker.runJson([
         'checksum',
@@ -468,8 +468,8 @@ describe('rom-weaver-wasm browser runner parity', () => {
       ]);
 
       const terminal = assertRunJsonSucceeded(result, { command: 'checksum' });
-      expect(result.args.slice(-2)).toEqual(['--threads', '4']);
-      expect(terminal.requested_threads).toBe(4);
+      expect(result.args.slice(-2)).toEqual(['--threads', '8']);
+      expect(terminal.requested_threads).toBe(8);
     }, {
       clientOptions: {
         defaultThreads: 3,
@@ -477,7 +477,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
     });
   });
 
-  it('browser client caps configured default threads to the browser worker pool limit', async () => {
+  it('browser client accepts configured default threads above the default thread count', async () => {
     await withTempFixture(async ({ sourcePath, worker }) => {
       const result = await worker.runJson([
         'checksum',
@@ -488,8 +488,8 @@ describe('rom-weaver-wasm browser runner parity', () => {
       ]);
 
       const terminal = assertRunJsonSucceeded(result, { command: 'checksum' });
-      expect(result.args.slice(-2)).toEqual(['--threads', '4']);
-      expect(terminal.requested_threads).toBe(4);
+      expect(result.args.slice(-2)).toEqual(['--threads', '8']);
+      expect(terminal.requested_threads).toBe(8);
     }, {
       clientOptions: {
         defaultThreads: 8,

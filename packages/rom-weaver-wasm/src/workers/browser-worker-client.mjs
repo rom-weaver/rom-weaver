@@ -4,6 +4,7 @@ import {
 } from './worker-client-core.mjs';
 
 const DEFAULT_BROWSER_THREAD_COUNT = 4;
+const MAX_BROWSER_THREAD_COUNT = 64;
 
 export function createBrowserWorkerClient(options = {}) {
   options = options ?? {};
@@ -92,5 +93,5 @@ function normalizeDefaultThreads(value) {
   if (!Number.isInteger(parsed) || parsed <= 0) {
     throw new TypeError(`defaultThreads must be a positive integer; received: ${value}`);
   }
-  return Math.max(1, Math.min(DEFAULT_BROWSER_THREAD_COUNT, parsed));
+  return Math.max(1, Math.min(MAX_BROWSER_THREAD_COUNT, parsed));
 }
