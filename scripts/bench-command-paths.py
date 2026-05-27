@@ -74,7 +74,8 @@ CONTAINER_SUFFIX = {
 }
 
 ARCHIVE_TOOLS = ["rom-weaver", "rom-weaver-wasm", "7zz", "chdman", "dolphin-tool"]
-WASM_SINGLETHREAD_FALLBACK_FORMATS = {"rvz", "wia", "wbfs", "z3ds"}
+WASM_SINGLETHREAD_ARCHIVE_CREATE_FORMATS = {"rvz", "wia", "wbfs"}
+WASM_SINGLETHREAD_PATCH_APPLY_FORMATS = {"solid", "aps", "dps"}
 
 EXPECTED_COMPRESS_SKIPS = {
     str(key): str(value)
@@ -1132,12 +1133,22 @@ def wasm_rom_weaver_command(
     return cmd
 
 
-def wasm_module_for_container_format(
+def wasm_module_for_archive_create_format(
     format_name: str,
     wasm_module: Path,
     wasm_singlethread_module: Path | None,
 ) -> Path:
-    if format_name in WASM_SINGLETHREAD_FALLBACK_FORMATS and wasm_singlethread_module is not None:
+    if format_name in WASM_SINGLETHREAD_ARCHIVE_CREATE_FORMATS and wasm_singlethread_module is not None:
+        return wasm_singlethread_module
+    return wasm_module
+
+
+def wasm_module_for_patch_apply_format(
+    format_name: str,
+    wasm_module: Path,
+    wasm_singlethread_module: Path | None,
+) -> Path:
+    if format_name in WASM_SINGLETHREAD_PATCH_APPLY_FORMATS and wasm_singlethread_module is not None:
         return wasm_singlethread_module
     return wasm_module
 
@@ -1911,29 +1922,56 @@ def main() -> None:
     patch_pair_ready = False
     ips_ebp_ready = False
     dldi_ready = False
-    browser_wasm_json_runner: BrowserWasmJsonRunner | None = None
-    if (
+    browser_wasm_json_runners: dict[Path, BrowserWasmJsonRunner] = {}
+    browser_wasm_persistent_enabled = (
         args.browser_wasm_persistent_session
         and
         "rom-weaver-wasm" in selected_archive_tools
         and wasm_runner is not None
         and wasm_runner.name == "run-browser-cli.mjs"
-    ):
+    )
+    if browser_wasm_persistent_enabled:
         assert node_bin is not None
-        assert wasm_module is not None
-        browser_runner_wasm_module = wasm_module
-        if any(format_name in WASM_SINGLETHREAD_FALLBACK_FORMATS for format_name in selected_container_formats):
-            browser_runner_wasm_module = wasm_module_for_container_format(
-                "rvz",
-                wasm_module,
-                wasm_singlethread_module,
-            )
+        assert wasm_runner is not None
         print("[bench] browser wasm runner: persistent json session enabled", flush=True)
-        browser_wasm_json_runner = BrowserWasmJsonRunner(
+
+    def browser_runner_for_wasm_module(wasm_module_for_case: Path) -> BrowserWasmJsonRunner:
+        assert node_bin is not None
+        assert wasm_runner is not None
+        runner = browser_wasm_json_runners.get(wasm_module_for_case)
+        if runner is not None:
+            return runner
+        runner = BrowserWasmJsonRunner(
             node_bin=node_bin,
             wasm_runner=wasm_runner,
-            wasm_module=browser_runner_wasm_module,
+            wasm_module=wasm_module_for_case,
         )
+        browser_wasm_json_runners[wasm_module_for_case] = runner
+        ensure_source_fixture()
+        warmup = runner.run(
+            args=[
+                "checksum",
+                str(source_path),
+                "--algo",
+                "crc32",
+                "--no-extract",
+                "--threads",
+                str(args.threads),
+            ],
+            timeout_sec=args.timeout_sec,
+        )
+        if warmup.exit_code == 0:
+            print(
+                f"[bench] browser wasm persistent session warmup complete ({wasm_module_for_case.name})",
+                flush=True,
+            )
+        else:
+            tail = outcome_tail_message(warmup) or "warmup failed"
+            print(
+                f"[bench] browser wasm warmup failed ({wasm_module_for_case.name}): {tail}",
+                flush=True,
+            )
+        return runner
 
     def ensure_source_fixture() -> None:
         nonlocal source_ready
@@ -2180,27 +2218,7 @@ def main() -> None:
                     )
 
     if "compress" in selected_commands:
-        use_browser_wasm_json_runner = browser_wasm_json_runner is not None
-        if use_browser_wasm_json_runner:
-            ensure_source_fixture()
-            assert browser_wasm_json_runner is not None
-            warmup = browser_wasm_json_runner.run(
-                args=[
-                    "checksum",
-                    str(source_path),
-                    "--algo",
-                    "crc32",
-                    "--no-extract",
-                    "--threads",
-                    str(args.threads),
-                ],
-                timeout_sec=args.timeout_sec,
-            )
-            if warmup.exit_code == 0:
-                print("[bench] browser wasm persistent session warmup complete", flush=True)
-            else:
-                tail = outcome_tail_message(warmup) or "warmup failed"
-                print(f"[bench] browser wasm warmup failed: {tail}", flush=True)
+        use_browser_wasm_json_runner = browser_wasm_persistent_enabled
         for format_name in selected_container_formats:
             input_path = compress_input_for_format(format_name)
             suffix = container_suffix(format_name)
@@ -2271,7 +2289,7 @@ def main() -> None:
                 assert node_bin is not None
                 assert wasm_runner is not None
                 assert wasm_module is not None
-                wasm_module_for_case = wasm_module_for_container_format(
+                wasm_module_for_case = wasm_module_for_archive_create_format(
                     format_name,
                     wasm_module,
                     wasm_singlethread_module,
@@ -2360,7 +2378,6 @@ def main() -> None:
                             return input_value.stat().st_size
 
                         if use_browser_wasm_json_runner:
-                            assert browser_wasm_json_runner is not None
                             rows.append(
                                 run_benchmark_case_browser_runner(
                                     command="compress",
@@ -2370,7 +2387,7 @@ def main() -> None:
                                     timeout_sec=args.timeout_sec,
                                     args_factory=make_wasm_args,
                                     processed_bytes_factory=processed_bytes,
-                                    runner=browser_wasm_json_runner,
+                                    runner=browser_runner_for_wasm_module(wasm_module_for_case),
                                     tool="rom-weaver-wasm",
                                     cache=cache,
                                 )
@@ -2641,11 +2658,7 @@ def main() -> None:
                 assert node_bin is not None
                 assert wasm_runner is not None
                 assert wasm_module is not None
-                wasm_module_for_case = wasm_module_for_container_format(
-                    format_name,
-                    wasm_module,
-                    wasm_singlethread_module,
-                )
+                wasm_module_for_case = wasm_module
                 for codec_label, _codec_value in rom_weaver_codec_cases_for_format(format_name):
                     source = archive_sources.get((format_name, codec_label))
                     if source is None:
@@ -3199,11 +3212,7 @@ def main() -> None:
                     assert node_bin is not None
                     assert wasm_runner is not None
                     assert wasm_module is not None
-                    wasm_module_for_case = wasm_module_for_container_format(
-                        format_name,
-                        wasm_module,
-                        wasm_singlethread_module,
-                    )
+                    wasm_module_for_case = wasm_module
                     for algorithm in selected_checksum_algorithms:
 
                         def make_wasm_command(
@@ -3444,11 +3453,7 @@ def main() -> None:
                     assert node_bin is not None
                     assert wasm_runner is not None
                     assert wasm_module is not None
-                    wasm_module_for_case = wasm_module_for_container_format(
-                        format_name,
-                        wasm_module,
-                        wasm_singlethread_module,
-                    )
+                    wasm_module_for_case = wasm_module
                     for algorithm in selected_checksum_algorithms:
 
                         def make_wasm_command(
@@ -3876,10 +3881,15 @@ def main() -> None:
                         assert node_bin_value is not None
                         assert wasm_runner_value is not None
                         assert wasm_module_value is not None
+                        wasm_apply_module = wasm_module_for_patch_apply_format(
+                            format_value,
+                            wasm_module_value,
+                            wasm_singlethread_module,
+                        )
                         cmd = wasm_rom_weaver_command(
                             node_bin=node_bin_value,
                             wasm_runner=wasm_runner_value,
-                            wasm_module=wasm_module_value,
+                            wasm_module=wasm_apply_module,
                             args=["--no-progress", *patch_apply_args],
                         )
                     return cmd, output_path
@@ -3904,8 +3914,8 @@ def main() -> None:
                 )
                 rows.append(row)
 
-    if browser_wasm_json_runner is not None:
-        browser_wasm_json_runner.close()
+    for runner in browser_wasm_json_runners.values():
+        runner.close()
 
     payload_rows = [summarize_row(row) for row in rows]
     status_counts: dict[str, int] = {"succeeded": 0, "failed": 0, "skipped": 0}

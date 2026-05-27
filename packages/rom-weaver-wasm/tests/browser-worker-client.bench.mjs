@@ -62,7 +62,9 @@ const WASM_PATCH_APPLY_SKIPS = {
   mod: 'wasm benchmark limitation: mod patch-apply currently fails in browser worker runtime',
   dps: 'wasm benchmark limitation: dps patch-apply currently fails in browser worker runtime',
 };
-const FORCE_NON_THREADED_WASM_FORMATS = new Set(['bz2', 'tar.bz2', 'cso', 'rvz', 'wia', 'wbfs']);
+const WASM_RUNTIME_THREADED = 'threaded';
+const WASM_RUNTIME_NON_THREADED = 'nonthreaded';
+const SINGLETHREAD_ARCHIVE_CREATE_FORMATS = new Set(['rvz', 'wia', 'wbfs']);
 const DISC_COMPRESS_INPUT_FORMATS = new Set(COMMAND_PATHS_DEFAULTS.disc_compress_input_formats);
 const ROM_WEAVER_COMPRESS_CODEC_BY_FORMAT = COMMAND_PATHS_DEFAULTS.compress_codec_by_format;
 const ROM_WEAVER_CODEC_MATRIX_BY_FORMAT = COMMAND_PATHS_DEFAULTS.codec_matrix_by_format;
@@ -114,8 +116,8 @@ const PATCH_SIZE_BYTES = readPositiveIntEnv(
 ) * MIB;
 const THREAD_COUNT = readPositiveIntEnv('ROM_WEAVER_WASM_BENCH_THREADS', 4);
 const REQUESTED_THREADED_WASM = readBooleanEnv('ROM_WEAVER_WASM_BENCH_THREADED', true);
-const USE_THREADED_WASM = REQUESTED_THREADED_WASM
-  && !SELECTED_CONTAINER_FORMATS.some((formatName) => FORCE_NON_THREADED_WASM_FORMATS.has(formatName));
+const USES_SINGLETHREAD_ARCHIVE_CREATE = REQUESTED_THREADED_WASM
+  && SELECTED_CONTAINER_FORMATS.some((formatName) => SINGLETHREAD_ARCHIVE_CREATE_FORMATS.has(formatName));
 const BENCH_OPTIONS = createBenchOptions();
 
 const NEEDS_ARCHIVE_SOURCES = SELECTED_COMMANDS.has('extract')
@@ -132,7 +134,7 @@ const NEEDS_PATCH_PAIR = (SELECTED_COMMANDS.has('patch-create') || SELECTED_COMM
 
 let fixtureRootHandle = null;
 let fixtureName = null;
-let worker = null;
+const workersByRuntime = new Map();
 let initializationPromise = null;
 const archiveSources = new Map();
 const archiveSourcesDefault = new Map();
@@ -146,11 +148,14 @@ describe('rom-weaver-wasm benchmark parity with python bench-command-paths', () 
   }, 600_000);
 
   afterAll(async () => {
-    try {
-      worker?.terminate();
-    } catch {
-      // best-effort cleanup only
+    for (const worker of workersByRuntime.values()) {
+      try {
+        worker.terminate();
+      } catch {
+        // best-effort cleanup only
+      }
     }
+    workersByRuntime.clear();
 
     fixtureName = null;
   });
@@ -178,7 +183,9 @@ describe('rom-weaver-wasm benchmark parity with python bench-command-paths', () 
               threads: THREAD_COUNT,
               codecOverride: codecValue,
             });
-            await runBenchmarkCommand(args, 'compress');
+            await runBenchmarkCommand(args, 'compress', {
+              wasmRuntime: wasmRuntimeForArchiveCreate(formatName),
+            });
             await markArchiveSourceReady(formatName, codecLabel);
           },
           benchOptions({
@@ -272,14 +279,7 @@ describe('rom-weaver-wasm benchmark parity with python bench-command-paths', () 
             'checksum',
           );
         },
-        benchOptions({
-          setup: () => prepareOutputFile(patchArtifactPathForBench('patch-create', formatName)),
-          teardown: () => removeGuestPath(
-            fixtureRootHandle,
-            patchArtifactPathForBench('patch-create', formatName),
-            { recursive: false },
-          ),
-        }),
+        BENCH_OPTIONS,
       );
     }
   }
@@ -535,7 +535,10 @@ async function ensureArchiveSource(formatName, codecLabel) {
       threads: THREAD_COUNT,
       codecOverride: codecValue,
     }),
-    { assumeReady: true },
+    {
+      assumeReady: true,
+      wasmRuntime: wasmRuntimeForArchiveCreate(formatName),
+    },
   );
   if (!result.ok) {
     const reason = terminalLabelFromResult(result)
@@ -689,7 +692,7 @@ function patchCreateSkipReason(formatName) {
 }
 
 function patchApplySkipReason(formatName) {
-  return WASM_PATCH_APPLY_SKIPS[formatName] ?? null;
+  return WASM_PATCH_APPLY_SKIPS[formatName] ?? patchCreateSkipReason(formatName);
 }
 
 function extractSkipReason(formatName) {
@@ -861,20 +864,43 @@ function romWeaverCompressArgs({
   return args;
 }
 
-async function runBenchmarkCommand(args, command) {
-  const result = await runBenchmarkCommandAllowFailure(args);
+async function runBenchmarkCommand(args, command, options = {}) {
+  const result = await runBenchmarkCommandAllowFailure(args, options);
   assertRunJsonSucceeded(result, { command });
   return result;
 }
 
-async function runBenchmarkCommandAllowFailure(args, { assumeReady = false } = {}) {
+async function runBenchmarkCommandAllowFailure(args, {
+  assumeReady = false,
+  wasmRuntime = defaultWasmRuntime(),
+} = {}) {
   if (!assumeReady) {
     await ensureRuntimeReady();
   }
+  const worker = workersByRuntime.get(wasmRuntime);
   if (!worker) {
-    throw new Error('benchmark worker is not initialized');
+    throw new Error(`benchmark ${wasmRuntime} worker is not initialized`);
   }
   return worker.runJson(['--no-progress', ...args]);
+}
+
+function defaultWasmRuntime() {
+  return REQUESTED_THREADED_WASM ? WASM_RUNTIME_THREADED : WASM_RUNTIME_NON_THREADED;
+}
+
+function wasmRuntimeForArchiveCreate(formatName) {
+  if (REQUESTED_THREADED_WASM && SINGLETHREAD_ARCHIVE_CREATE_FORMATS.has(formatName)) {
+    return WASM_RUNTIME_NON_THREADED;
+  }
+  return defaultWasmRuntime();
+}
+
+function neededWasmRuntimes() {
+  const runtimes = new Set([defaultWasmRuntime()]);
+  if (USES_SINGLETHREAD_ARCHIVE_CREATE) {
+    runtimes.add(WASM_RUNTIME_NON_THREADED);
+  }
+  return runtimes;
 }
 
 function terminalLabelFromResult(result) {
@@ -905,8 +931,8 @@ async function initializeRuntime() {
   fixtureName = opened.fixtureName;
   fixtureRootHandle = opened.fixtureRootHandle;
   benchLog(`fixture cache ${fixtureName}`);
-  if (REQUESTED_THREADED_WASM && !USE_THREADED_WASM) {
-    benchLog('using non-threaded wasm for selected container format stability');
+  if (USES_SINGLETHREAD_ARCHIVE_CREATE) {
+    benchLog('using non-threaded wasm for rvz/wia/wbfs archive creation only');
   }
 
   if (NEEDS_RAW_SOURCE || NEEDS_COMPRESS_SOURCE || NEEDS_ARCHIVE_SOURCES) {
@@ -919,20 +945,22 @@ async function initializeRuntime() {
     await ensurePatchPairFixtures();
   }
 
-  worker = createBrowserWorkerClient({
-    defaultThreads: THREAD_COUNT,
-  });
-
-  const wasmUrl = USE_THREADED_WASM
-    ? '/rom-weaver-cli-threaded.wasm'
-    : '/rom-weaver-cli.wasm';
-  await worker.init({
-    wasmUrl,
-    opfsHandle: fixtureRootHandle,
-    workGuestPath: WORK_GUEST_ROOT,
-    runtimeMounts: [WORK_GUEST_ROOT],
-    defaultThreads: THREAD_COUNT,
-  });
+  for (const wasmRuntime of neededWasmRuntimes()) {
+    const worker = createBrowserWorkerClient({
+      defaultThreads: THREAD_COUNT,
+    });
+    const wasmUrl = wasmRuntime === WASM_RUNTIME_THREADED
+      ? '/rom-weaver-cli-threaded.wasm'
+      : '/rom-weaver-cli.wasm';
+    await worker.init({
+      wasmUrl,
+      opfsHandle: fixtureRootHandle,
+      workGuestPath: WORK_GUEST_ROOT,
+      runtimeMounts: [WORK_GUEST_ROOT],
+      defaultThreads: THREAD_COUNT,
+    });
+    workersByRuntime.set(wasmRuntime, worker);
+  }
 
   if (NEEDS_CHECKSUM_ARCHIVE_SOURCES) {
     await prepareArchiveSources();
@@ -1055,6 +1083,13 @@ function benchmarkCacheProfileName() {
     `source-${SOURCE_SIZE_BYTES}`,
     `patch-size-${PATCH_SIZE_BYTES}`,
     `threads-${THREAD_COUNT}`,
-    `wasm-${USE_THREADED_WASM ? 'threaded' : 'nonthreaded'}`,
+    `wasm-${benchmarkWasmRuntimeProfile()}`,
   ].join('__')).slice(0, 160);
+}
+
+function benchmarkWasmRuntimeProfile() {
+  if (!REQUESTED_THREADED_WASM) {
+    return 'nonthreaded';
+  }
+  return USES_SINGLETHREAD_ARCHIVE_CREATE ? 'threaded-mixed' : 'threaded';
 }

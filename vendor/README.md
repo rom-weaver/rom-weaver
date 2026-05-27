@@ -24,6 +24,16 @@
   - Local patched copy of the `akv` crate.
   - Wired through root `Cargo.toml` `[patch.crates-io]`.
 
+- `vendor/chd-0.3.4`:
+  - Local patched copy of the `chd` crate.
+  - Manifest patch routes `flate2` through `libz-sys` instead of adding `zlib-rs`.
+  - Wired through root `Cargo.toml` `[patch.crates-io]`.
+
+- `vendor/qbsdiff-1.4.4`:
+  - Local patched copy of the `qbsdiff` crate.
+  - Manifest patch routes `bzip2` through `bzip2-sys` instead of adding `libbz2-rs-sys`.
+  - Wired through root `Cargo.toml` `[patch.crates-io]`.
+
 ## Validate after vendor updates
 
 ```bash

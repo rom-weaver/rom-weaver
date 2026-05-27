@@ -267,8 +267,8 @@ impl PatchHandler for DpsPatchHandler {
     }
 }
 
-fn dps_apply_thread_capability(_record_count: usize) -> ThreadCapability {
-    ThreadCapability::single_threaded()
+fn dps_apply_thread_capability(record_count: usize) -> ThreadCapability {
+    ThreadCapability::parallel(Some(record_count.max(1)))
 }
 
 fn dps_create_thread_capability(target_len: u64) -> ThreadCapability {

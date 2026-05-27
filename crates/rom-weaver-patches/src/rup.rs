@@ -2,7 +2,7 @@ use std::{
     cmp::min,
     fs::{self, File, OpenOptions},
     io::{self, BufReader, Read, Seek, SeekFrom, Write},
-    path::{Path, PathBuf},
+    path::Path,
 };
 
 use md5::{Digest, Md5};
@@ -135,9 +135,9 @@ impl PatchHandler for RupPatchHandler {
         let thread_capability = rup_apply_thread_capability(file.records.len());
         let planned_execution = context.plan_threads(thread_capability.clone());
         let execution = if planned_execution.used_parallelism {
-            let tasks = build_rup_prepared_tasks(file.records.len(), context);
+            let tasks = build_rup_prepared_tasks(file.records.len());
             let (execution, pool) = context.build_pool(thread_capability)?;
-            let prepare_result = pool.install(|| {
+            let prepared = pool.install(|| {
                 tasks
                     .par_iter()
                     .map(|task| {
@@ -151,14 +151,8 @@ impl PatchHandler for RupPatchHandler {
                         )
                     })
                     .collect::<Result<Vec<_>>>()
-            });
-            if let Err(error) = prepare_result {
-                cleanup_rup_prepared_tasks(&tasks);
-                return Err(error);
-            }
-            let apply_result = apply_rup_prepared_tasks(file, &tasks, &mut output, context);
-            cleanup_rup_prepared_tasks(&tasks);
-            apply_result?;
+            })?;
+            apply_rup_prepared_records(file, &prepared, &mut output, context)?;
             execution
         } else {
             let mut input = File::open(&request.input)?;
@@ -286,7 +280,12 @@ struct RupFile {
 #[derive(Debug)]
 struct RupPreparedTask {
     index: usize,
-    temp_path: PathBuf,
+}
+
+#[derive(Debug)]
+struct RupPreparedRecord {
+    index: usize,
+    bytes: Vec<u8>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -569,17 +568,9 @@ fn rup_create_chunk_count(shared_len: u64) -> usize {
     usize::try_from(chunk_count).unwrap_or(usize::MAX)
 }
 
-fn build_rup_prepared_tasks(
-    record_count: usize,
-    context: &OperationContext,
-) -> Vec<RupPreparedTask> {
+fn build_rup_prepared_tasks(record_count: usize) -> Vec<RupPreparedTask> {
     (0..record_count)
-        .map(|index| RupPreparedTask {
-            index,
-            temp_path: context
-                .temp_paths()
-                .next_path(&format!("rup-apply-record-{index}"), Some("bin")),
-        })
+        .map(|index| RupPreparedTask { index })
         .collect()
 }
 
@@ -590,7 +581,7 @@ fn prepare_rup_write_task(
     input_len: u64,
     output_len: usize,
     context: &OperationContext,
-) -> Result<()> {
+) -> Result<RupPreparedRecord> {
     context.cancel().check()?;
     let record = file.records.get(task.index).ok_or_else(|| {
         RomWeaverError::Validation("RUP apply record index was out of bounds".into())
@@ -606,11 +597,9 @@ fn prepare_rup_write_task(
         ));
     }
 
-    if let Some(parent) = task.temp_path.parent() {
-        fs::create_dir_all(parent)?;
-    }
     let mut input = File::open(input_path)?;
-    let mut writer = io::BufWriter::new(File::create(&task.temp_path)?);
+    let mut bytes = Vec::new();
+    let mut writer = io::BufWriter::new(&mut bytes);
     let mut buffer = vec![0u8; RUP_IO_BUFFER_SIZE];
     let mut remaining = record.xor.len();
     let mut xor_cursor = 0usize;
@@ -650,31 +639,28 @@ fn prepare_rup_write_task(
         remaining -= chunk_len;
     }
     writer.flush()?;
-    Ok(())
+    drop(writer);
+    Ok(RupPreparedRecord {
+        index: task.index,
+        bytes,
+    })
 }
 
-fn apply_rup_prepared_tasks(
+fn apply_rup_prepared_records(
     file: &RupFile,
-    tasks: &[RupPreparedTask],
+    records: &[RupPreparedRecord],
     output: &mut File,
     context: &OperationContext,
 ) -> Result<()> {
-    for task in tasks {
+    for prepared in records {
         context.cancel().check()?;
-        let record = file.records.get(task.index).ok_or_else(|| {
+        let record = file.records.get(prepared.index).ok_or_else(|| {
             RomWeaverError::Validation("RUP apply record index was out of bounds".into())
         })?;
         output.seek(SeekFrom::Start(record.offset))?;
-        let mut reader = BufReader::new(File::open(&task.temp_path)?);
-        io::copy(&mut reader, output)?;
+        output.write_all(&prepared.bytes)?;
     }
     Ok(())
-}
-
-fn cleanup_rup_prepared_tasks(tasks: &[RupPreparedTask]) {
-    for task in tasks {
-        let _ = fs::remove_file(&task.temp_path);
-    }
 }
 
 fn apply_xor_records_in_place(

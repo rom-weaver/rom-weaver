@@ -473,8 +473,8 @@ fn apply_changes_from_input(
     Ok(())
 }
 
-fn ups_apply_thread_capability(_change_count: usize) -> ThreadCapability {
-    ThreadCapability::single_threaded()
+fn ups_apply_thread_capability(change_count: usize) -> ThreadCapability {
+    ThreadCapability::parallel(Some(change_count.max(1)))
 }
 
 fn prepare_ups_writes_parallel(

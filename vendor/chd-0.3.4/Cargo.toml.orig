@@ -1,0 +1,72 @@
+[package]
+name = "chd"
+version = "0.3.4"
+authors = ["Ronny Chan <ronny@ronnychan.ca>"]
+edition = "2021"
+description = "Rust implementation of the CHD File Format"
+license = "BSD-3-Clause"
+repository = "https://github.com/SnowflakePowered/chd-rs"
+readme = "../README.md"
+categories = ["emulators", "compression", "encoding"]
+keywords = ["mame", "chd", "decompression"]
+
+[features]
+default = ["std", "cd_full", "fast_lzma"]
+cd_full = ["want_subcode", "want_raw_data_sector"]
+std = []
+
+# disabled by default for speed
+verify_block_crc = ["want_subcode", "want_raw_data_sector"]
+
+# currently unstable APIs
+huffman_api = []
+codec_api = []
+unstable_lending_iterators = [ "lending-iterator", "nougat" ]
+
+# if disabled results may be unwanted
+want_subcode = []
+want_raw_data_sector = []
+
+# performance tweaks
+max_perf = ["fast_lzma", "fast_zstd"]
+fast_lzma = ["std"]
+fast_zstd = ["std", "zstd-safe"]
+fast_zlib = ["std"] # this does nothing now, since zlib-rs is already enabled.
+
+# Revert to zlib-ng, since zlib-rs is faster now.
+c_zlib = ["std", "flate2/zlib-ng"]
+
+huff_write = []
+nonstandard_channel_count = []
+
+[dependencies]
+byteorder = "1"
+num-traits = "0.2"
+num-derive = "0.4"
+crc = "3"
+arrayvec = "0.7"
+text_io = "0.1"
+
+# codecs
+flate2 = { version = "1", default-features = false, features = ["zlib-rs"] } # zlib-rs is faster than zlib-ng.
+
+lzma-rs = { package = "lzma-rs-perf-exp", version = "0.2", features = ["raw_decoder"] }
+claxon = "0.4"
+bitreader = "0.3.6"
+ruzstd = "0.8.0"
+
+zstd-safe = { version = "7.2.0", optional = true }
+# lending-iterator
+lending-iterator = { version = "0.1", optional = true }
+nougat = { version = "0.2", optional = true }
+
+[dev-dependencies]
+bencher = "0.1.5"
+
+[[bench]]
+name = "bench"
+harness = false
+
+[package.metadata.docs.rs]
+features = ["default", "codec_api", "huffman_api", "unstable_lending_iterators"]
+rustdoc-args = ["--cfg", "docsrs"]
