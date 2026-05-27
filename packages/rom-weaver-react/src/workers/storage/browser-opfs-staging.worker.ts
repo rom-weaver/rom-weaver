@@ -7,8 +7,9 @@ import {
 } from "../shared/worker-storage/storage-layout.ts";
 
 type StageRequest = {
-  action: "cleanup" | "stage";
+  action: "cleanup" | "stage" | "truncate" | "write";
   bucket?: WorkerStorageBucket;
+  bytes?: Uint8Array;
   file?: File;
   fileHandle?: FileSystemFileHandle;
   fileName?: string;
@@ -16,11 +17,13 @@ type StageRequest = {
   filePaths?: string[];
   mountPoint?: string;
   pathPrefix?: string;
+  position?: number;
   requestId?: string;
+  size?: number;
 };
 
 type StageResponse = {
-  action: "cleanup-complete" | "stage-complete" | "stage-error";
+  action: "cleanup-complete" | "stage-complete" | "stage-error" | "truncate-complete" | "write-complete";
   error?: { message: string };
   fileName?: string;
   filePath?: string;
@@ -64,10 +67,71 @@ const createInputPath = (request: StageRequest, fileName: string) => {
   );
 };
 
+type SyncAccessMode = "readwrite" | "readwrite-unsafe";
+type SyncCapableFileHandle = FileSystemFileHandle & {
+  createSyncAccessHandle?: (options?: { mode?: SyncAccessMode }) => Promise<FileSystemSyncAccessHandle>;
+};
+
+const isNoModificationAllowedError = (error: unknown) =>
+  (typeof DOMException !== "undefined" &&
+    error instanceof DOMException &&
+    error.name === "NoModificationAllowedError") ||
+  String(error instanceof Error ? error.message : error || "")
+    .toLowerCase()
+    .includes("modifications are not allowed");
+
+const openSyncAccessHandle = async (fileHandle: FileSystemFileHandle): Promise<FileSystemSyncAccessHandle | null> => {
+  const syncCapableFileHandle = fileHandle as SyncCapableFileHandle;
+  if (typeof syncCapableFileHandle.createSyncAccessHandle !== "function") return null;
+  try {
+    return await syncCapableFileHandle.createSyncAccessHandle({ mode: "readwrite-unsafe" });
+  } catch (error) {
+    if (!isNoModificationAllowedError(error)) throw error;
+    return syncCapableFileHandle.createSyncAccessHandle({ mode: "readwrite" });
+  }
+};
+
+const writeBlobToSyncAccessHandle = async (file: Blob, accessHandle: FileSystemSyncAccessHandle) => {
+  let position = 0;
+  while (position < file.size) {
+    const nextPosition = Math.min(position + CHUNK_SIZE, file.size);
+    const chunkBytes = new Uint8Array(await file.slice(position, nextPosition).arrayBuffer());
+    accessHandle.write(chunkBytes, { at: position });
+    position = nextPosition;
+  }
+  accessHandle.truncate(file.size);
+  accessHandle.flush();
+};
+
+const closeWritable = async (writable: FileSystemWritableFileStream, writeError: unknown) => {
+  if (writeError && typeof writable.abort === "function") await writable.abort(writeError).catch(() => undefined);
+  else await writable.close();
+};
+
+const toArrayBufferBackedBytes = (bytes: Uint8Array): Uint8Array<ArrayBuffer> => {
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return copy;
+};
+
 const writeBlobToOpfsPath = async (filePath: string, file: Blob) => {
   const fileHandle = await getManagedOpfsFileHandle(filePath, { create: true, navigatorObject: navigator });
   if (!fileHandle) throw new Error("OPFS file handles are not available in this browser worker");
-  const writable = await fileHandle.createWritable();
+
+  const syncAccessHandle = await openSyncAccessHandle(fileHandle).catch((error) => {
+    if (isNoModificationAllowedError(error)) return null;
+    throw error;
+  });
+  if (syncAccessHandle) {
+    try {
+      await writeBlobToSyncAccessHandle(file, syncAccessHandle);
+      return;
+    } finally {
+      syncAccessHandle.close();
+    }
+  }
+
+  const writable = await fileHandle.createWritable({ keepExistingData: false });
   let writeError: unknown = null;
   try {
     let position = 0;
@@ -82,12 +146,86 @@ const writeBlobToOpfsPath = async (filePath: string, file: Blob) => {
     writeError = error;
     throw error;
   } finally {
-    if (writeError && typeof writable.abort === "function") {
-      await writable.abort(writeError).catch(() => undefined);
-    } else {
-      await writable.close();
+    await closeWritable(writable, writeError);
+  }
+};
+
+const truncateOpfsPath = async (request: StageRequest): Promise<StageResponse> => {
+  const filePath = String(request.filePath || "").trim();
+  if (!filePath) throw new Error("Browser OPFS truncate requires a file path");
+  const fileHandle = await getManagedOpfsFileHandle(filePath, { create: true, navigatorObject: navigator });
+  if (!fileHandle) throw new Error("OPFS file handles are not available in this browser worker");
+  const size = Math.max(0, Math.floor(request.size || 0));
+  const syncAccessHandle = await openSyncAccessHandle(fileHandle).catch((error) => {
+    if (isNoModificationAllowedError(error)) return null;
+    throw error;
+  });
+  if (syncAccessHandle) {
+    try {
+      syncAccessHandle.truncate(size);
+      syncAccessHandle.flush();
+    } finally {
+      syncAccessHandle.close();
+    }
+  } else {
+    const writable = await fileHandle.createWritable({ keepExistingData: true });
+    let writeError: unknown = null;
+    try {
+      await writable.truncate(size);
+    } catch (error) {
+      writeError = error;
+      throw error;
+    } finally {
+      await closeWritable(writable, writeError);
     }
   }
+  return {
+    action: "truncate-complete",
+    filePath,
+    requestId: request.requestId,
+    size,
+    success: true,
+  };
+};
+
+const writeBytesToOpfsPath = async (request: StageRequest): Promise<StageResponse> => {
+  const filePath = String(request.filePath || "").trim();
+  if (!filePath) throw new Error("Browser OPFS write requires a file path");
+  const bytes = request.bytes;
+  if (!(bytes instanceof Uint8Array)) throw new Error("Browser OPFS write requires Uint8Array bytes");
+  const fileHandle = await getManagedOpfsFileHandle(filePath, { create: true, navigatorObject: navigator });
+  if (!fileHandle) throw new Error("OPFS file handles are not available in this browser worker");
+  const position = Math.max(0, Math.floor(request.position || 0));
+  const syncAccessHandle = await openSyncAccessHandle(fileHandle).catch((error) => {
+    if (isNoModificationAllowedError(error)) return null;
+    throw error;
+  });
+  if (syncAccessHandle) {
+    try {
+      syncAccessHandle.write(bytes, { at: position });
+      syncAccessHandle.flush();
+    } finally {
+      syncAccessHandle.close();
+    }
+  } else {
+    const writable = await fileHandle.createWritable({ keepExistingData: true });
+    let writeError: unknown = null;
+    try {
+      await writable.write({ data: toArrayBufferBackedBytes(bytes), position, type: "write" });
+    } catch (error) {
+      writeError = error;
+      throw error;
+    } finally {
+      await closeWritable(writable, writeError);
+    }
+  }
+  return {
+    action: "write-complete",
+    filePath,
+    requestId: request.requestId,
+    size: bytes.byteLength,
+    success: true,
+  };
 };
 
 const stageSource = async (request: StageRequest): Promise<StageResponse> => {
@@ -117,7 +255,11 @@ const cleanupPaths = async (request: StageRequest): Promise<StageResponse> => {
 
 workerScope.onmessage = (event: MessageEvent<StageRequest>) => {
   const request = event.data || ({} as StageRequest);
-  const run = request.action === "cleanup" ? cleanupPaths(request) : stageSource(request);
+  let run: Promise<StageResponse>;
+  if (request.action === "cleanup") run = cleanupPaths(request);
+  else if (request.action === "truncate") run = truncateOpfsPath(request);
+  else if (request.action === "write") run = writeBytesToOpfsPath(request);
+  else run = stageSource(request);
   run
     .then((response) => postCloneSafeWorkerMessage(workerScope, response))
     .catch((error) => {

@@ -6,6 +6,7 @@ import {
 } from "../../storage/shared/binary/source-file-utils.ts";
 import type { WorkerStorageBucket } from "../shared/worker-storage/storage-layout.ts";
 import { getWorkerStorageBucketPath, WORKER_OPFS_MOUNTPOINT } from "../shared/worker-storage/storage-layout.ts";
+import { registerBrowserVirtualFile } from "./browser-virtual-files.ts";
 import { getManagedOpfsFileHandle } from "./opfs-path.ts";
 
 type BrowserOpfsSourceRef = {
@@ -15,7 +16,11 @@ type BrowserOpfsSourceRef = {
   kind: "path";
   size?: number;
   storageKind: "opfs";
+  virtual?: boolean;
 };
+
+const isFileLike = (source: unknown): source is File =>
+  typeof File !== "undefined" && source instanceof File && typeof source.slice === "function";
 
 const getRecordValue = (source: unknown, key: string) =>
   source && typeof source === "object" ? (source as Record<string, unknown>)[key] : undefined;
@@ -29,6 +34,18 @@ const getByteSource = (source: unknown): Uint8Array | null => {
   if (source instanceof Uint8Array) return source;
   const bytes = getRecordValue(source, "_u8array") || getRecordValue(source, "u8array");
   return bytes instanceof Uint8Array ? bytes : null;
+};
+
+const toFileLike = (source: Blob, fileName: string): File => {
+  if (isFileLike(source)) return source;
+  if (typeof File !== "function") throw new Error("Browser worker Blob inputs require File support");
+  return new File([source], fileName || "input.bin", {
+    lastModified:
+      typeof (source as Blob & { lastModified?: unknown }).lastModified === "number"
+        ? (source as Blob & { lastModified: number }).lastModified
+        : undefined,
+    type: source.type || "application/octet-stream",
+  });
 };
 
 const LEADING_DOTS_REGEX = /^\.+/;
@@ -103,20 +120,37 @@ const createBrowserOpfsSourceRef = async (
   const fileHandle = getBrowserSourceHandle(directSource) || getBrowserSourceHandle(source);
   const blob = getBrowserSourceBlob(directSource) || getBrowserSourceBlob(source);
   const bytes = getByteSource(directSource) || getByteSource(source);
-  const normalizedFileName = normalizeVirtualFileName(fileName || fallbackFileName, fallbackFileName || "input.bin");
-  const opfsPathHint = createVirtualInputPath(options, normalizedFileName);
-  const sourceKind = fileHandle
-    ? "file-handle"
-    : blob
-      ? "blob"
-      : bytes
-        ? "bytes"
-        : source && typeof source === "object"
-          ? "object"
-          : typeof source;
-  throw new Error(
-    `Browser runtime requires OPFS-backed input paths; got ${sourceKind} for \`${normalizedFileName}\` (expected OPFS path like \`${opfsPathHint}\`)`,
-  );
+  let virtualSource: Blob | Uint8Array | null = null;
+  let virtualSize = sizeHint ?? undefined;
+  if (fileHandle) {
+    const sourceFile = await fileHandle.getFile();
+    virtualSource = toFileLike(sourceFile, fileName || fallbackFileName);
+    virtualSize = sourceFile.size;
+  } else if (blob) {
+    virtualSource = toFileLike(blob, fileName || fallbackFileName);
+    virtualSize = blob.size;
+  } else if (bytes) {
+    virtualSource = bytes;
+    virtualSize = bytes.byteLength;
+  }
+  if (!virtualSource)
+    throw new Error("Browser worker inputs must be File, Blob, Uint8Array, FileSystemFileHandle, or OPFS path values");
+
+  const virtualFileName = normalizeVirtualFileName(fileName || fallbackFileName, fallbackFileName || "input.bin");
+  const virtualPath = createVirtualInputPath(options, virtualFileName);
+  const unregister = registerBrowserVirtualFile({
+    path: virtualPath,
+    source: virtualSource,
+  });
+  return {
+    cleanup: async () => unregister(),
+    fileName: virtualFileName,
+    filePath: virtualPath,
+    kind: "path",
+    size: virtualSize,
+    storageKind: "opfs",
+    virtual: true,
+  };
 };
 
 export type { BrowserOpfsSourceRef };

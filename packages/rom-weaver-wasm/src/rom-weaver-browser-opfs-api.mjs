@@ -24,7 +24,7 @@ const SCRATCH_DIRECTORY_NAME = '.rom-weaver-opfs-scratch';
 const OPFS_COPY_CHUNK_SIZE = 8 * 1024 * 1024;
 const DEFAULT_BROWSER_THREAD_COUNT = 4;
 const DEFAULT_BROWSER_THREAD_POOL_SIZE = 4;
-const MAX_BROWSER_THREAD_POOL_SIZE = 64;
+const MAX_BROWSER_THREAD_POOL_SIZE = DEFAULT_BROWSER_THREAD_POOL_SIZE;
 const ATOMICS_WAIT_SLICE_MS = 100;
 const ATOMICS_WAIT_TIMEOUT_MS = 8000;
 const VIRTUAL_FILE_PROXY_STATE_IDLE = 0;
@@ -118,9 +118,11 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
     },
 
     async run(args = [], runOptions = {}) {
-      const normalizedArgs = withDefaultThreadArgs(
-        normalizeArgs(args),
-        resolveConfiguredDefaultThreads(runOptions, baseDefaultThreads),
+      const normalizedArgs = withBrowserThreadLimit(
+        withDefaultThreadArgs(
+          normalizeArgs(args),
+          resolveConfiguredDefaultThreads(runOptions, baseDefaultThreads),
+        ),
       );
       const env = createRunEnv({
         baseEnv: options.env,
@@ -185,6 +187,7 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
         runtime: {
           cwdMountPath: workGuestPath,
           debugWasi: Boolean(runOptions.debugWasi ?? options.debugWasi ?? false),
+          invalidateMountCacheAfterRun: Boolean(runOptions.invalidateMountCacheAfterRun),
           mountHandles,
           runtimeMounts,
           scratchFilePoolSize: resolvedMainScratchFilePoolSize,
@@ -274,7 +277,7 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
           mountHandles,
           runtimeMounts,
         });
-        if (!runSucceeded) await mountCache.invalidateMounts(mounts);
+        if (!runSucceeded || runOptions.invalidateMountCacheAfterRun) await mountCache.invalidateMounts(mounts);
       }
     },
 
@@ -423,7 +426,7 @@ export async function __runRomWeaverBrowserWasiThread(payload = {}) {
       mountHandles: normalizedMountHandles,
       runtimeMounts: normalizedRuntimeMounts,
     });
-    if (!runSucceeded) await THREAD_WORKER_MOUNT_CACHE.invalidateMounts(mounts);
+    if (!runSucceeded || runtime?.invalidateMountCacheAfterRun) await THREAD_WORKER_MOUNT_CACHE.invalidateMounts(mounts);
   }
 }
 
@@ -1310,6 +1313,9 @@ function collectCliInputPaths(args) {
     case 'compress':
     case 'extract':
     case 'inspect':
+      if (isCliPathArg(positional)) values.push(positional);
+      values.push(...collectCliPositionalPathValues(args, commandIndex + 1));
+      break;
     case 'trim':
       if (isCliPathArg(positional)) values.push(positional);
       break;
@@ -1324,6 +1330,16 @@ function collectCliInputPaths(args) {
   }
 
   return [...new Set(values.map((value) => String(value)))];
+}
+
+function collectCliPositionalPathValues(args, startIndex) {
+  const out = [];
+  for (let index = startIndex; index < args.length; index += 1) {
+    const arg = String(args[index] ?? '');
+    if (!isCliPathArg(arg)) continue;
+    out.push(arg);
+  }
+  return out;
 }
 
 function collectCliOptionPathValues(args, startIndex, names) {
@@ -1405,13 +1421,6 @@ async function hydrateMountedInputPathFromOpfs({ mount, relativeParts, rootHandl
 
 function collectCliPreparedPaths(args) {
   const out = [];
-  let extractSourcePath = null;
-  let extractOutDirPath = null;
-  const commandIndex = findCommandIndex(args);
-  if (commandIndex !== -1 && args[commandIndex] === 'extract') {
-    const sourcePath = args[commandIndex + 1];
-    if (typeof sourcePath === 'string' && !sourcePath.startsWith('-')) extractSourcePath = sourcePath;
-  }
   for (let index = 0; index < args.length; index += 1) {
     const arg = String(args[index] ?? '');
     if (arg === '--output') {
@@ -1427,39 +1436,16 @@ function collectCliPreparedPaths(args) {
     if (arg === '--out-dir') {
       const value = args[index + 1];
       if (typeof value === 'string') {
-        extractOutDirPath = value;
         out.push({ path: value, type: 'dir' });
       }
       index += 1;
       continue;
     }
     if (arg.startsWith('--out-dir=')) {
-      extractOutDirPath = arg.slice('--out-dir='.length);
-      out.push({ path: extractOutDirPath, type: 'dir' });
+      out.push({ path: arg.slice('--out-dir='.length), type: 'dir' });
     }
   }
-  const directExtractOutputPath = predictDirectExtractOutputPath({
-    outDirPath: extractOutDirPath,
-    sourcePath: extractSourcePath,
-  });
-  if (directExtractOutputPath) out.push({ path: directExtractOutputPath, truncate: true, type: 'file' });
   return out;
-}
-
-function predictDirectExtractOutputPath({ outDirPath, sourcePath }) {
-  const outputName = predictNodExtractOutputName(sourcePath);
-  if (!(outputName && typeof outDirPath === 'string' && outDirPath.trim())) return null;
-  return joinGuestPath(outDirPath, outputName);
-}
-
-function predictNodExtractOutputName(sourcePath) {
-  if (typeof sourcePath !== 'string') return null;
-  const baseName = sourcePath.split(PATH_SEPARATOR_REGEX).filter(Boolean).pop() || '';
-  const extensionIndex = baseName.lastIndexOf('.');
-  if (extensionIndex <= 0) return null;
-  const extension = baseName.slice(extensionIndex + 1).toLowerCase();
-  if (!['gcz', 'nfs', 'rvz', 'tgc', 'wbfs', 'wia'].includes(extension)) return null;
-  return `${baseName.slice(0, extensionIndex)}.iso`;
 }
 
 function resolveMountedGuestPath(path, mountHandles, runtimeMounts) {
@@ -1693,6 +1679,28 @@ function copyRandomAccessFileSync(source, target) {
 
 async function copyRandomAccessFileToHandle(source, fileHandle) {
   const size = Number(source.size());
+  if (typeof fileHandle.createSyncAccessHandle === 'function') {
+    const accessHandle = await openSyncAccessHandle({ fileHandle, mode: 'readwrite' });
+    try {
+      const buffer = new Uint8Array(OPFS_COPY_CHUNK_SIZE);
+      accessHandle.truncate(size);
+      let offset = 0;
+      while (offset < size) {
+        const length = Math.min(buffer.byteLength, size - offset);
+        const view = buffer.subarray(0, length);
+        const read = source.readAt(offset, view);
+        if (read <= 0) break;
+        accessHandle.write(view.subarray(0, read), { at: offset });
+        offset += read;
+      }
+      accessHandle.truncate(offset);
+      accessHandle.flush();
+    } finally {
+      accessHandle.close();
+    }
+    return;
+  }
+
   const writable = await fileHandle.createWritable({ keepExistingData: false });
   let writeError = null;
   try {
@@ -2727,7 +2735,13 @@ function resolveBrowserThreadPoolSize(wasiArgs) {
 function parseRequestedThreadCount(wasiArgs) {
   if (!Array.isArray(wasiArgs)) return null;
   for (let index = wasiArgs.length - 1; index >= 0; index -= 1) {
-    if (wasiArgs[index] !== '--threads') continue;
+    const arg = String(wasiArgs[index] ?? '');
+    if (arg.startsWith('--threads=')) {
+      const parsed = Number.parseInt(arg.slice('--threads='.length), 10);
+      if (Number.isInteger(parsed) && parsed > 0) return Math.min(parsed, MAX_BROWSER_THREAD_POOL_SIZE);
+      break;
+    }
+    if (arg !== '--threads') continue;
     const parsed = Number.parseInt(String(wasiArgs[index + 1] ?? ''), 10);
     if (Number.isInteger(parsed) && parsed > 0) return Math.min(parsed, MAX_BROWSER_THREAD_POOL_SIZE);
     break;
@@ -2996,6 +3010,29 @@ function withDefaultThreadArgs(args, defaultThreads) {
   const commandIndex = findCommandIndex(args);
   if (commandIndex === -1 || !THREAD_AWARE_COMMANDS.has(args[commandIndex])) return args;
   return [...args, '--threads', String(defaultThreads)];
+}
+
+function withBrowserThreadLimit(args) {
+  const out = [...args];
+  for (let index = 0; index < out.length; index += 1) {
+    const arg = String(out[index] ?? '');
+    if (arg === '--threads') {
+      if (index + 1 < out.length) out[index + 1] = clampBrowserThreadArgValue(out[index + 1]);
+      index += 1;
+      continue;
+    }
+    if (arg.startsWith('--threads=')) {
+      out[index] = `--threads=${clampBrowserThreadArgValue(arg.slice('--threads='.length))}`;
+    }
+  }
+  return out;
+}
+
+function clampBrowserThreadArgValue(value) {
+  const raw = String(value ?? '').trim();
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isInteger(parsed) || parsed <= 0) return raw;
+  return String(Math.min(parsed, MAX_BROWSER_THREAD_POOL_SIZE));
 }
 
 function hasThreadArg(args) {

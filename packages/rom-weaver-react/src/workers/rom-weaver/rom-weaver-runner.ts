@@ -151,12 +151,16 @@ const runRomWeaverJson = async (args: string[], options?: RomWeaverRunJsonOption
     activeVirtualFiles.length > 0
       ? {
           ...(options ?? {}),
+          invalidateMountCacheAfterRun: true,
           virtualFiles: [
             ...activeVirtualFiles,
             ...(Array.isArray(configuredVirtualFiles) ? configuredVirtualFiles : []),
           ],
         }
-      : options;
+      : {
+          ...(options ?? {}),
+          invalidateMountCacheAfterRun: true,
+        };
   const runner = await createRomWeaverRunner();
   return runner.runJson(args, runOptions);
 };
@@ -212,7 +216,7 @@ const resolveBrowserDefaultThreads = (root: typeof globalThis = globalThis) => {
 
 const resolveWarmupThreadCount = () => {
   const requested = resolveBrowserDefaultThreads();
-  return Math.max(1, Math.min(64, requested));
+  return Math.max(1, Math.min(DEFAULT_BROWSER_THREAD_COUNT, requested));
 };
 
 const prewarmThreadedRunner = async (runner: RomWeaverRunner) => {

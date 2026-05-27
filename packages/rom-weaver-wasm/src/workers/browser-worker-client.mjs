@@ -92,5 +92,5 @@ function normalizeDefaultThreads(value) {
   if (!Number.isInteger(parsed) || parsed <= 0) {
     throw new TypeError(`defaultThreads must be a positive integer; received: ${value}`);
   }
-  return Math.max(1, Math.min(64, parsed));
+  return Math.max(1, Math.min(DEFAULT_BROWSER_THREAD_COUNT, parsed));
 }

@@ -13,7 +13,7 @@ const loadFixtureBytes = async (filePath) => {
   return new Uint8Array(await response.arrayBuffer());
 };
 
-test("rom-weaver runtime fails fast when RVZ OPFS extraction is not writable", async () => {
+test("rom-weaver runtime extracts an RVZ staged through browser OPFS", async () => {
   await resetRomWeaverRunner();
   await warmupRomWeaverRunner();
   const runId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -48,14 +48,17 @@ test("rom-weaver runtime fails fast when RVZ OPFS extraction is not writable", a
         checksumResult.nonJsonLines.join("\n") ||
         [checksumResult.error?.message, checksumResult.error?.stack].filter(Boolean).join("\n"),
     ).toBe(true);
-    await expect(
-      browserRuntime.compression.extract?.({
-        entries: ["game.iso"],
-        format: "rvz",
-        outputName: "game.iso",
-        source,
-      }),
-    ).rejects.toThrow(/createWritable|not writable/i);
+    const extractResult = await browserRuntime.compression.extract?.({
+      entries: ["game.iso"],
+      format: "rvz",
+      options: {
+        workerThreads: 8,
+      },
+      outputName: "game.iso",
+      source,
+    });
+    expect(extractResult?.output.fileName).toBe("game.iso");
+    expect(extractResult?.output.size).toBeGreaterThan(0);
   } finally {
     await staged.cleanup().catch(() => undefined);
     await browserRuntime.vfs.remove(checksumSource).catch(() => undefined);

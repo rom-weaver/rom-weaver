@@ -1,4 +1,5 @@
 import { triggerBrowserDownload } from "../../platform/browser/browser-download.ts";
+import { requestBrowserOpfsStorage } from "../../workers/protocol/browser-opfs-worker-client.ts";
 import { getVfsRelativePath, normalizeAbsoluteVfsPath, normalizeVfsRoot } from "../vfs/path.ts";
 import type { LargeFileVfs, VfsOutputRef, VfsStat } from "../vfs/types.ts";
 import { writeBlobToFileHandle } from "./file-handle-write.ts";
@@ -6,13 +7,6 @@ import { writeBlobToFileHandle } from "./file-handle-write.ts";
 type BrowserLargeFileVfsOptions = {
   navigatorObject?: Pick<Navigator, "storage"> | null;
   rootPath?: string;
-};
-
-type FileWritableHandle = {
-  abort?: (reason?: unknown) => Promise<void>;
-  close: () => Promise<void>;
-  truncate: (size: number) => Promise<void>;
-  write: (input: Blob | Uint8Array | { data?: Blob | Uint8Array; position?: number; type?: "write" }) => Promise<void>;
 };
 
 const toUint8Array = (source: ArrayBuffer | ArrayBufferView | Uint8Array) => {
@@ -55,31 +49,6 @@ const createBrowserLargeFileVfs = (options: BrowserLargeFileVfsOptions = {}): La
       }
       throw error;
     }
-  };
-
-  const createWritable = async (fileHandle: FileSystemFileHandle) => {
-    const writable = await fileHandle.createWritable({ keepExistingData: true } as FileSystemCreateWritableOptions);
-    return writable as FileWritableHandle;
-  };
-
-  const closeWritable = async (writable: FileWritableHandle, priorError: unknown) => {
-    if (priorError) {
-      if (typeof writable.abort === "function") {
-        try {
-          await writable.abort(priorError);
-        } catch {
-          // Preserve the write/truncate error that caused the stream to enter an errored state.
-        }
-      } else {
-        try {
-          await writable.close();
-        } catch {
-          // Preserve the write/truncate error that caused the stream to enter an errored state.
-        }
-      }
-      throw priorError;
-    }
-    await writable.close();
   };
 
   const createOutputRef = async (
@@ -175,36 +144,28 @@ const createBrowserLargeFileVfs = (options: BrowserLargeFileVfsOptions = {}): La
     },
     truncate: async (filePath, size) => {
       const normalizedPath = normalizeAbsoluteVfsPath(filePath, rootPath);
-      const fileHandle = await resolveFileHandle(normalizedPath, true);
-      if (!fileHandle) throw new Error(`Browser VFS file is not available: ${normalizedPath}`);
-      const writable = await createWritable(fileHandle);
-      let writeError: unknown = null;
-      try {
-        await writable.truncate(Math.max(0, Math.floor(size || 0)));
-      } catch (error) {
-        writeError = error;
-        throw error;
-      } finally {
-        await closeWritable(writable, writeError);
-      }
+      const response = await requestBrowserOpfsStorage({
+        action: "truncate",
+        filePath: normalizedPath,
+        size: Math.max(0, Math.floor(size || 0)),
+      });
+      if (!response.success)
+        throw new Error(response.error?.message || `Browser VFS truncate failed: ${normalizedPath}`);
     },
     write: async (filePath, bytes, options) => {
       const normalizedPath = normalizeAbsoluteVfsPath(filePath, rootPath);
-      const fileHandle = await resolveFileHandle(normalizedPath, true);
-      if (!fileHandle) throw new Error(`Browser VFS file is not available: ${normalizedPath}`);
-      const writable = await createWritable(fileHandle);
       const data = toUint8Array(bytes);
+      const payload = new Uint8Array(data.byteLength);
+      payload.set(data);
       const fileOffset =
         typeof options?.fileOffset === "number" && options.fileOffset > 0 ? Math.floor(options.fileOffset) : 0;
-      let writeError: unknown = null;
-      try {
-        await writable.write({ data, position: fileOffset, type: "write" });
-      } catch (error) {
-        writeError = error;
-        throw error;
-      } finally {
-        await closeWritable(writable, writeError);
-      }
+      const response = await requestBrowserOpfsStorage({
+        action: "write",
+        bytes: payload,
+        filePath: normalizedPath,
+        position: fileOffset,
+      });
+      if (!response.success) throw new Error(response.error?.message || `Browser VFS write failed: ${normalizedPath}`);
       return data.byteLength;
     },
   };

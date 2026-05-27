@@ -209,7 +209,7 @@ export default defineConfig(({ command }) => {
             "apple-touch-icon-precomposed.png",
             "assets/**/*.{css,js,mjs,json,png,svg,jpg,jpeg,webp,woff2,wasm}",
           ],
-          maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+          maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
         },
         injectRegister: null,
         integration: {

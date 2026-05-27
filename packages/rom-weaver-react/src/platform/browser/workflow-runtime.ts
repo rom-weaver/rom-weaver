@@ -403,30 +403,6 @@ const getBrowserExtractOutputPathCandidates = (outDirPath: string, entryName: st
     });
 };
 
-const getPathExtension = (value: string): string => {
-  const baseName = getPathBaseName(value, value);
-  const extensionIndex = baseName.lastIndexOf(".");
-  return extensionIndex === -1 ? "" : baseName.slice(extensionIndex + 1).toLowerCase();
-};
-
-const buildChdOutputPreseedPaths = (outDirPath: string, stagedSourcePath: string, entryNames: string[]) => {
-  const stagedBaseName = getPathBaseName(stagedSourcePath, "input.chd");
-  const stagedStem = getFileStem(stagedBaseName);
-  const outputPaths: string[] = [];
-  for (const entryName of entryNames) {
-    outputPaths.push(...getBrowserExtractOutputPathCandidates(outDirPath, entryName));
-    const extension = getPathExtension(entryName);
-    if (!extension) continue;
-    outputPaths.push(joinPath(outDirPath, `${stagedStem}.${extension}`));
-    if (extension === "cue") continue;
-    for (let trackIndex = 1; trackIndex <= 32; trackIndex += 1) {
-      const trackLabel = String(trackIndex).padStart(2, "0");
-      outputPaths.push(joinPath(outDirPath, `${stagedStem}.track${trackLabel}.${extension}`));
-    }
-  }
-  return outputPaths;
-};
-
 const isMissingBrowserVfsOutputError = (error: unknown) =>
   String(error instanceof Error ? error.message : error || "").includes("Browser VFS output is not available");
 
@@ -799,21 +775,6 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
     });
     try {
       const outDirPath = getPathDirectory(workerSource.filePath);
-      const listed = await runRomWeaverInspectListWorker(
-        {
-          logLevel,
-          sourcePath: workerSource.filePath,
-        },
-        undefined,
-        onLog,
-      ).catch(() => null);
-      const listedEntryNames =
-        listed?.entries
-          .map((entry) => String(entry?.fileName || entry?.filename || entry?.name || ""))
-          .filter((entry) => !!entry) || [];
-      const preseedPaths = buildChdOutputPreseedPaths(outDirPath, workerSource.filePath, listedEntryNames);
-      if (outputName) preseedPaths.push(...getBrowserExtractOutputPathCandidates(outDirPath, outputName));
-      await ensureBrowserVfsOutputPaths(filterOutputCandidatesAwayFromSource(preseedPaths, workerSource.filePath));
       const runExtract = () =>
         invokeRomWeaverExtractWorker(
           {
@@ -900,11 +861,6 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
       const baseOutDirPath = getPathDirectory(workerSource.filePath) || `${WORKER_OPFS_MOUNTPOINT}/input/`;
       const outDirPath = joinPath(baseOutDirPath, `.rom-weaver-rvz-extract-${++archiveExtractDirectoryId}`);
       await ensureRvzSourceExists();
-      const outputPathCandidates = filterOutputCandidatesAwayFromSource(
-        getBrowserExtractOutputPathCandidates(outDirPath, outputName || getRvzExtractedFileName({ fileName })),
-        workerSource.filePath,
-      );
-      await ensureBrowserVfsOutputPaths(outputPathCandidates);
       const extracted = await invokeRomWeaverExtractWorker(
         {
           logLevel,

@@ -142,11 +142,6 @@ const getErrorLogDetails = (error: Error): Record<string, unknown> => {
   const coded = error as Error & { cause?: unknown; code?: unknown; details?: unknown };
   const cause = coded.cause;
   return {
-    code: typeof coded.code === "string" ? coded.code : undefined,
-    details: coded.details,
-    message: error.message,
-    name: error.name,
-    stack: error.stack,
     cause:
       cause instanceof Error
         ? {
@@ -155,6 +150,11 @@ const getErrorLogDetails = (error: Error): Record<string, unknown> => {
             stack: cause.stack,
           }
         : cause,
+    code: typeof coded.code === "string" ? coded.code : undefined,
+    details: coded.details,
+    message: error.message,
+    name: error.name,
+    stack: error.stack,
   };
 };
 

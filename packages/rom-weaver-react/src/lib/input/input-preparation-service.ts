@@ -163,9 +163,7 @@ const createInputPreparationPatchFile = async (
     });
   }
 
-  throw new Error(
-    `${sourceFileName} must be OPFS/VFS path-backed in browser workflows`,
-  );
+  throw new Error(`${sourceFileName} must be OPFS/VFS path-backed in browser workflows`);
 };
 
 const reportInputCandidates = (options: InputPreparationOptions, request: CandidateSelectionRequest) => {

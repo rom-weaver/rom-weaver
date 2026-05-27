@@ -19,6 +19,7 @@ type ThreadCountOptions = {
   failureMessage?: string;
   fallback?: number | null;
   label?: string;
+  max?: number;
   requireExactString?: boolean;
 };
 
@@ -62,6 +63,8 @@ const canUseThreadedWasm = (root?: NavigatorRoot | null): boolean => {
   return typeof SharedArrayBuffer === "function" && runtimeRoot?.crossOriginIsolated === true;
 };
 
+const MAX_BROWSER_WORKER_THREADS = 4;
+
 const getHardwareConcurrency = (root?: NavigatorRoot | null): number => {
   const navigatorObject = root?.navigator
     ? root.navigator
@@ -91,7 +94,7 @@ const normalizeThreadCount = (value: ThreadCountInput, options?: ThreadCountOpti
   const parsed = parseInt(String(value), 10);
   if (!Number.isFinite(parsed) || parsed < 1 || (options.requireExactString && String(parsed) !== String(value).trim()))
     throw new Error(options.failureMessage || `Invalid ${options.label || "thread count"}: ${value}`);
-  return Math.max(1, Math.min(64, parsed));
+  return Math.max(1, Math.min(options.max ?? 64, parsed));
 };
 
 const normalizeCodecList = (codecs: CodecLevelInput, options?: CodecListOptions): string => {
@@ -199,6 +202,7 @@ const normalizeBrowserThreadCount = (
     normalizeThreadCount(value, {
       allowOff: true,
       fallback,
+      max: MAX_BROWSER_WORKER_THREADS,
     }) ?? fallback
   );
 };
