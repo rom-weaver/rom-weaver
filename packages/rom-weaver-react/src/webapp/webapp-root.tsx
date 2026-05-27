@@ -1,4 +1,5 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
+import { preloadBrowserRuntime } from "../platform/browser/browser-api.ts";
 import { ApplyPatchForm, CreatePatchForm, RomWeaverSettingsProvider } from "../public/react/index.tsx";
 import { getSettingsUiState } from "./settings/settings-state.ts";
 import {
@@ -25,6 +26,11 @@ function ToolPanelLayout({ children, onOpenSettings }: { children: ReactNode; on
 }
 
 function WebappRoot({ state, serviceWorkerCache, pageUpdate, confirmationDialog, actions }: WebappRootProps) {
+  const workerThreads = state.settings.workerThreads;
+  useEffect(() => {
+    void preloadBrowserRuntime({ workerThreads });
+  }, [workerThreads]);
+
   return (
     <RomWeaverSettingsProvider settings={state.settings}>
       <div className={layoutClasses.column} id="column">

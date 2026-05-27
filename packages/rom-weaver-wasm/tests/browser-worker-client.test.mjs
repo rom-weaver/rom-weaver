@@ -776,6 +776,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
           label: 'thread-worker prewarm',
         });
         const countAfterInit = probeMessages.length;
+        expect(countAfterInit).toBe(2);
 
         const threadedChecksumArgs = [
           'checksum',
@@ -801,7 +802,9 @@ describe('rom-weaver-wasm browser runner parity', () => {
         await waitForCondition(() => probeMessages.length > countAfterInit, {
           label: 'thread-worker pool growth',
         });
+        await delay(150);
         const countAfterFirstRun = probeMessages.length;
+        expect(countAfterFirstRun).toBe(4);
 
         const secondResult = await worker.runJson(threadedChecksumArgs);
         assertRunJsonSucceeded(secondResult, {

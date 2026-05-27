@@ -386,6 +386,7 @@ export async function __runRomWeaverBrowserWasiThread(payload = {}) {
       { debug: Boolean(debugWasi ?? runtime?.debugWasi ?? false) },
     );
     const nestedThreadSpawner = createBrowserWasiThreadSpawner({
+      allowWorkerPool: false,
       streamBroadcastChannelName: payload.__streamBroadcastChannelName,
       streamRequestId: payload.__streamRequestId,
       moduleImports,
@@ -2361,6 +2362,7 @@ function createBrowserWasiThreadWorkerPool({ initialSize, threadWorkerUrl }) {
 }
 
 function createBrowserWasiThreadSpawner({
+  allowWorkerPool = true,
   streamBroadcastChannelName,
   streamRequestId,
   moduleImports,
@@ -2391,7 +2393,7 @@ function createBrowserWasiThreadSpawner({
   const poolWorkers = [];
   let firstThreadFailure = null;
   const resolvedThreadWorkerUrl = resolveThreadWorkerUrl(threadWorkerUrl);
-  const poolSize = resolveBrowserThreadPoolSize(wasiArgs);
+  const poolSize = allowWorkerPool ? resolveBrowserThreadPoolSize(wasiArgs) : 0;
   if (threadWorkerPool) {
     const command = threadWorkerPool.createCommand({
       poolSize,

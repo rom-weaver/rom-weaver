@@ -5,7 +5,7 @@ import type { CreateWorkflowSourceState } from "../../types/create-workflow.ts";
 import type { BrowserSaveDestination } from "../../types/output.ts";
 import type { WorkflowProgress } from "../../types/progress.ts";
 import type { ApplyResult, CreateResult } from "../../types/public.ts";
-import type { ApplySettings, CompressionFormat, CreateSettings } from "../../types/settings.ts";
+import type { ApplySettings, CompressionFormat, CreateSettings, WorkerSettings } from "../../types/settings.ts";
 import type { BrowserSourceRef } from "../../types/source.ts";
 import type { WorkflowOptions } from "../../types/workflow-public.ts";
 import { createPublicSourcesValidator, createPublicSourceValidator } from "../shared/public-source-validation.ts";
@@ -15,13 +15,31 @@ import { browserRuntime } from "./workflow-runtime.ts";
 const assertPublicSources = createPublicSourcesValidator<BrowserSourceRef>(
   createPublicSourceValidator({ environmentLabel: "browser" }),
 );
-let runtimePreloadStarted = false;
+type BrowserRuntimePreloadOptions = {
+  workerThreads?: WorkerSettings["threads"] | null;
+};
 
-const startRuntimePreload = () => {
-  if (runtimePreloadStarted) return;
-  runtimePreloadStarted = true;
-  browserRuntime.preload?.preloadCapability?.("compression", () => undefined).catch(() => undefined);
-  browserRuntime.preload?.preloadCapability?.("checksum", () => undefined).catch(() => undefined);
+const runtimePreloadKeys = new Set<string>();
+
+const getRuntimePreloadKey = (workerThreads: BrowserRuntimePreloadOptions["workerThreads"]) => {
+  const normalized = String(workerThreads ?? "").trim();
+  if (normalized === "auto") return "default";
+  return normalized ? `threads:${normalized}` : "default";
+};
+
+const preloadBrowserRuntime = (options: BrowserRuntimePreloadOptions = {}) => {
+  const preloadKey = getRuntimePreloadKey(options.workerThreads);
+  if (runtimePreloadKeys.has(preloadKey)) return Promise.resolve();
+  runtimePreloadKeys.add(preloadKey);
+  const preloadOptions = preloadKey === "default" ? undefined : { workerThreads: options.workerThreads };
+  return Promise.all([
+    browserRuntime.preload?.preloadCapability?.("compression", () => undefined, preloadOptions),
+    browserRuntime.preload?.preloadCapability?.("checksum", () => undefined, preloadOptions),
+  ])
+    .catch(() => {
+      runtimePreloadKeys.delete(preloadKey);
+    })
+    .then(() => undefined);
 };
 
 class CreateWorkflow {
@@ -29,7 +47,7 @@ class CreateWorkflow {
 
   constructor(options: WorkflowOptions<CreateSettings> = {}) {
     configureBrowserAssetBaseUrl(options.assetBaseUrl);
-    startRuntimePreload();
+    void preloadBrowserRuntime({ workerThreads: options.settings?.workers?.threads });
     this.controller = new CreateWorkflowController(browserRuntime, options, assertPublicSources);
   }
 
@@ -113,7 +131,7 @@ class ApplyWorkflow {
 
   constructor(options: WorkflowOptions<ApplySettings> = {}) {
     configureBrowserAssetBaseUrl(options.assetBaseUrl);
-    startRuntimePreload();
+    void preloadBrowserRuntime({ workerThreads: options.settings?.workers?.threads });
     this.controller = new ApplyWorkflowController(browserRuntime, options, assertPublicSources);
   }
 
@@ -178,6 +196,4 @@ class ApplyWorkflow {
   }
 }
 
-startRuntimePreload();
-
-export { ApplyWorkflow, CreateWorkflow };
+export { ApplyWorkflow, CreateWorkflow, preloadBrowserRuntime };
