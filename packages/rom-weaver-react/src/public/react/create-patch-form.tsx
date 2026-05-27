@@ -241,7 +241,12 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   );
 
   return (
-    <div aria-labelledby="tab-creator" id="patch-builder-container" role="tabpanel">
+    <div
+      aria-labelledby="tab-creator"
+      className="font-['Inter_Tight','Segoe_UI',sans-serif]"
+      id="patch-builder-container"
+      role="tabpanel"
+    >
       <ToolFileInputStack
         ariaLabel="Selected original ROM"
         disabled={disabled}

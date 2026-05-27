@@ -1,3 +1,5 @@
+import "../../assets/fonts/inter-tight.css";
+
 export { ApplyPatchForm } from "./apply-patch-form.tsx";
 export { CreatePatchForm } from "./create-patch-form.tsx";
 export type {

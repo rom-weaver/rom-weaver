@@ -298,7 +298,7 @@ function ApplyWorkflowFormView({
   return (
     <div
       aria-labelledby="tab-patcher"
-      className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]"
+      className="grid items-start gap-4 font-['Inter_Tight','Segoe_UI',sans-serif] xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]"
       id="rom-weaver-container"
       role="tabpanel"
     >
