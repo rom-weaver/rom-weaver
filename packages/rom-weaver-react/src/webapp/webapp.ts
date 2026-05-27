@@ -7,7 +7,7 @@ import { configureLogger, createLogger } from "./logging.ts";
 import { createEmptyVitePageUpdateState, createVitePageUpdateState, getPageUpdateState } from "./page-update-state.ts";
 import { createPwaServiceWorkerClient } from "./pwa/pwa-service-worker-client.ts";
 import { LOCAL_STORAGE_SETTINGS_ID } from "./settings/settings-state.ts";
-import { clearOpfsOnPageReload } from "./site-data-cleanup.ts";
+import { clearOpfsOnPageLoad } from "./site-data-cleanup.ts";
 import {
   createBeforeUnloadGuard,
   getDiscardSettingsConfirmationMessage,
@@ -408,12 +408,12 @@ const initializeWebapp = () => {
   if (typeof configuredOnInitialize === "function") configuredOnInitialize();
 };
 
-const initializeWebappAfterReloadCleanup = () => {
-  void clearOpfsOnPageReload({ enabled: true }).then(initializeWebapp, initializeWebapp);
+const initializeWebappAfterOpfsCleanup = () => {
+  void clearOpfsOnPageLoad().then(initializeWebapp, initializeWebapp);
 };
 
 if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", initializeWebappAfterReloadCleanup, { once: true });
+  document.addEventListener("DOMContentLoaded", initializeWebappAfterOpfsCleanup, { once: true });
 } else {
-  initializeWebappAfterReloadCleanup();
+  initializeWebappAfterOpfsCleanup();
 }
