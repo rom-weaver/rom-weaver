@@ -897,8 +897,14 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
       throw new Error(`Browser VFS staged input is not available: ${workerSource.filePath}`);
     };
     try {
-      const outDirPath = getPathDirectory(workerSource.filePath);
+      const baseOutDirPath = getPathDirectory(workerSource.filePath) || `${WORKER_OPFS_MOUNTPOINT}/input/`;
+      const outDirPath = joinPath(baseOutDirPath, `.rom-weaver-rvz-extract-${++archiveExtractDirectoryId}`);
       await ensureRvzSourceExists();
+      const outputPathCandidates = filterOutputCandidatesAwayFromSource(
+        getBrowserExtractOutputPathCandidates(outDirPath, outputName || getRvzExtractedFileName({ fileName })),
+        workerSource.filePath,
+      );
+      await ensureBrowserVfsOutputPaths(outputPathCandidates);
       const extracted = await invokeRomWeaverExtractWorker(
         {
           logLevel,
@@ -909,7 +915,15 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
         },
         onProgress ? forwardDiscProgress(onProgress) : undefined,
         onLog,
-      );
+      ).catch((error) => {
+        const message = String(error instanceof Error ? error.message : error || "");
+        if (/createWritable|not writable/i.test(message)) {
+          throw new Error(
+            `RVZ OPFS extraction is not writable for ${workerSource.filePath}; failing fast (${message})`,
+          );
+        }
+        throw error;
+      });
       const primaryFile =
         (outputName ? findExtractedFile(extracted.emittedFiles, outputName) : null) || extracted.emittedFiles[0];
       if (!primaryFile) throw new Error("RVZ extraction did not emit any output files");

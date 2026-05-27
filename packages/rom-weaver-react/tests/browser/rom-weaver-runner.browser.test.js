@@ -65,13 +65,16 @@ test("rom-weaver runner reads and writes staged /work OPFS paths", async () => {
   await warmupRomWeaverRunner();
 
   const runId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const sourcePath = `${WORKER_OPFS_MOUNTPOINT}/input/browser-bench-model-${runId}.bin`;
   const outputPath = `${WORKER_OPFS_MOUNTPOINT}/output/browser-bench-model-${runId}.gz`;
-  const source = new File([encoder.encode("rom-weaver browser OPFS parity fixture\n")], "source.bin");
+  const source = encoder.encode("rom-weaver browser OPFS parity fixture\n");
+  await browserRuntime.vfs.truncate(sourcePath, 0);
+  await browserRuntime.vfs.write(sourcePath, source, { fileOffset: 0 });
   const staged = await browserRuntime.workerIo.stageSource({
-    fallbackFileName: source.name,
+    fallbackFileName: "source.bin",
     pathPrefix: "browser-bench-model",
     scope: "bench",
-    source,
+    source: sourcePath,
   });
 
   try {
@@ -92,6 +95,7 @@ test("rom-weaver runner reads and writes staged /work OPFS paths", async () => {
     expectRunSucceeded(checksumResult);
   } finally {
     await staged.cleanup().catch(() => undefined);
+    await browserRuntime.vfs.remove(sourcePath).catch(() => undefined);
     await browserRuntime.vfs.remove(outputPath).catch(() => undefined);
   }
 });

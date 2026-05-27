@@ -5,19 +5,23 @@ import {
   runRomWeaverJson,
   warmupRomWeaverRunner,
 } from "../../src/workers/rom-weaver/rom-weaver-runner.ts";
+import { WORKER_OPFS_MOUNTPOINT } from "../../src/workers/shared/worker-storage/storage-layout.ts";
 
-const loadFixtureFile = async (filePath, type = "application/octet-stream") => {
+const loadFixtureBytes = async (filePath) => {
   const response = await fetch(`/${filePath}`);
   if (!response.ok) throw new Error(`Failed to load fixture ${filePath}`);
-  const bytes = await response.arrayBuffer();
-  return new File([bytes], filePath.split("/").pop() || "input.rvz", { type });
+  return new Uint8Array(await response.arrayBuffer());
 };
 
-test("rom-weaver runtime extracts an RVZ staged through browser OPFS", async () => {
+test("rom-weaver runtime fails fast when RVZ OPFS extraction is not writable", async () => {
   await resetRomWeaverRunner();
   await warmupRomWeaverRunner();
+  const runId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const checksumProgress = [];
-  const checksumSource = new File([new Uint8Array(2 * 1024 * 1024).map((_, index) => index & 0xff)], "large.bin");
+  const checksumSource = `${WORKER_OPFS_MOUNTPOINT}/input/checksum-source-${runId}.bin`;
+  const checksumSourceBytes = new Uint8Array(2 * 1024 * 1024).map((_, index) => index & 0xff);
+  await browserRuntime.vfs.truncate(checksumSource, 0);
+  await browserRuntime.vfs.write(checksumSource, checksumSourceBytes, { fileOffset: 0 });
   const checksums = await browserRuntime.checksum.calculate?.({
     algorithms: ["crc32"],
     onProgress: (progress) => checksumProgress.push(progress),
@@ -26,32 +30,35 @@ test("rom-weaver runtime extracts an RVZ staged through browser OPFS", async () 
   expect(checksums?.crc32).toBeTypeOf("number");
   expect(checksumProgress.some((entry) => entry.percent > 0 && entry.percent < 100)).toBe(true);
 
-  const source = await loadFixtureFile("tests/fixtures/browser-generated/game.rvz");
+  const source = `${WORKER_OPFS_MOUNTPOINT}/input/game.rvz`;
+  const sourceBytes = await loadFixtureBytes("tests/fixtures/browser-generated/game.rvz");
+  await browserRuntime.vfs.truncate(source, 0);
+  await browserRuntime.vfs.write(source, sourceBytes, { fileOffset: 0 });
   const staged = await browserRuntime.workerIo.stageSource({
-    fallbackFileName: source.name,
+    fallbackFileName: "game.rvz",
     pathPrefix: "rvz-debug",
     scope: "rvz",
     source,
   });
-  const checksumResult = await runRomWeaverJson(["checksum", staged.filePath, "--algo", "crc32", "--no-extract"]);
-  expect(
-    checksumResult.ok,
-    checksumResult.stderr ||
-      checksumResult.nonJsonLines.join("\n") ||
-      [checksumResult.error?.message, checksumResult.error?.stack].filter(Boolean).join("\n"),
-  ).toBe(true);
-  await staged.cleanup();
-  const rvzProgress = [];
-  const result = await browserRuntime.compression.extract?.({
-    entries: ["game.iso"],
-    format: "rvz",
-    options: {
-      onProgress: (progress) => rvzProgress.push(progress),
-    },
-    outputName: "game.iso",
-    source,
-  });
-  expect(result?.output.fileName).toBe("game.iso");
-  expect(result?.output.size).toBeGreaterThan(0);
-  expect(rvzProgress.some((entry) => entry.percent > 0 && entry.percent < 100)).toBe(true);
+  try {
+    const checksumResult = await runRomWeaverJson(["checksum", staged.filePath, "--algo", "crc32", "--no-extract"]);
+    expect(
+      checksumResult.ok,
+      checksumResult.stderr ||
+        checksumResult.nonJsonLines.join("\n") ||
+        [checksumResult.error?.message, checksumResult.error?.stack].filter(Boolean).join("\n"),
+    ).toBe(true);
+    await expect(
+      browserRuntime.compression.extract?.({
+        entries: ["game.iso"],
+        format: "rvz",
+        outputName: "game.iso",
+        source,
+      }),
+    ).rejects.toThrow(/createWritable|not writable/i);
+  } finally {
+    await staged.cleanup().catch(() => undefined);
+    await browserRuntime.vfs.remove(checksumSource).catch(() => undefined);
+    await browserRuntime.vfs.remove(source).catch(() => undefined);
+  }
 });

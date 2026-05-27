@@ -164,7 +164,7 @@ const createInputPreparationPatchFile = async (
   }
 
   throw new Error(
-    `${sourceFileName} must be filesystem-backed (File, FileSystemFileHandle, or VFS/OPFS path) in browser workflows`,
+    `${sourceFileName} must be OPFS/VFS path-backed in browser workflows`,
   );
 };
 
