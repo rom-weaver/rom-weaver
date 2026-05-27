@@ -234,7 +234,7 @@ const resolveAutomaticFormat = (
   input: InputSession<unknown> | undefined,
   _settings: Partial<ApplySettings>,
 ): CompressionFormat => {
-  const parentKind = input?.view.parentCompressions[0]?.kind;
+  const parentKind = input?.view?.parentCompressions?.[0]?.kind;
   if (parentKind === "zip") return "zip";
   if (parentKind === "7z") return "7z";
   if (parentKind === "chd") return "chd";
@@ -350,23 +350,54 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
 
   async setInput(input: TSource | TSource[]): Promise<void> {
     return this.mutate("setInput", async () => {
-      this.releaseInputSession();
-      this.inputs = [];
-      this.validateSources?.(input);
-      this.inputs = Array.isArray(input) ? [...input] : [input];
-      if (!this.inputs.length) throw new RomWeaverError("INVALID_INPUT", "Input source is required");
-      const initial = this.createInitialInputView(this.inputs);
-      this.inputSession = {
-        sources: this.inputs,
-        stages: [],
-        synthetic: false,
-        view: initial,
-      };
-      this.inputSession = await this.stageInputSession(this.inputs);
-      await this.maybeResolveBlockingInputSelection();
-      await this.finalizeInputStableState();
-      await this.refreshPatchReadiness();
-      this.recomputeOutputState();
+      this.trace("input.set.start", {
+        inputCount: Array.isArray(input) ? input.length : input ? 1 : 0,
+      });
+      try {
+        this.releaseInputSession();
+        this.inputs = [];
+        this.validateSources?.(input);
+        this.inputs = Array.isArray(input) ? [...input] : [input];
+        if (!this.inputs.length) throw new RomWeaverError("INVALID_INPUT", "Input source is required");
+        const initial = this.createInitialInputView(this.inputs);
+        this.inputSession = {
+          sources: this.inputs,
+          stages: [],
+          synthetic: false,
+          view: initial,
+        };
+        this.trace("input.set.initialized", {
+          fileName: initial.state.fileName,
+          inputCount: this.inputs.length,
+        });
+        this.inputSession = await this.stageInputSession(this.inputs);
+        this.trace("input.set.staged", {
+          selectedCandidateId: this.inputSession.view.state.selectedCandidateId,
+          stageCount: this.inputSession.stages.length,
+          status: this.inputSession.view.state.status,
+          synthetic: this.inputSession.synthetic,
+        });
+        await this.maybeResolveBlockingInputSelection();
+        this.trace("input.set.selection-resolved", {
+          selectedCandidateId: this.inputSession.view.state.selectedCandidateId,
+          status: this.inputSession.view.state.status,
+        });
+        await this.finalizeInputStableState();
+        this.trace("input.set.finalized", {
+          hasChecksums: !!this.inputSession.view.state.checksums,
+          status: this.inputSession.view.state.status,
+        });
+        await this.refreshPatchReadiness();
+        this.recomputeOutputState();
+        this.trace("input.set.finish", {
+          status: this.inputSession.view.state.status,
+        });
+      } catch (error) {
+        this.trace("input.set.fail", {
+          error,
+        });
+        throw error;
+      }
     });
   }
 
@@ -413,14 +444,21 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
 
   async clearPatches(): Promise<void> {
     return this.mutate("clearPatches", async () => {
+      this.trace("patches.clear.start", {
+        patchCount: this.patches.length,
+      });
       for (const patch of this.patches) releasePreparedSource(patch);
       this.patches = [];
       this.recomputeOutputState();
+      this.trace("patches.clear.finish");
     });
   }
 
   async setSettings(settings: Partial<ApplySettings>): Promise<void> {
     return this.mutate("setSettings", async () => {
+      this.trace("settings.set.start", {
+        hasInputSession: !!this.inputSession,
+      });
       this.settings = cloneValue(settings || {});
       const output = this.settings.output || {};
       const initialCompression = output.compression;
@@ -439,11 +477,12 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
       }
       this.manualOutputName = typeof output.outputName === "string" && !!output.outputName.trim();
       this.outputName = this.manualOutputName ? output.outputName || "" : "";
-      await this.runtime.preload?.preloadCapability?.("compression", () => undefined, {
-        workerThreads: this.settings.workers?.threads,
-      });
+      this.preloadRuntimeCapability("compression");
       await this.refreshPatchReadiness();
       this.recomputeOutputState();
+      this.trace("settings.set.finish", {
+        outputFormat: this.outputFormat,
+      });
     });
   }
 
@@ -570,6 +609,42 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
     );
   }
 
+  private trace(message: string, details: Record<string, unknown> = {}): void {
+    traceWorkflowControllerEvent(
+      {
+        logLevel: this.settings.logging?.level,
+        onLog: this.settings.logging?.sink,
+        workflow: "apply",
+        workflowId: this.id,
+      },
+      message,
+      details,
+    );
+  }
+
+  private preloadRuntimeCapability(capability: "checksum" | "compression" | "patch"): void {
+    const preload = this.runtime.preload?.preloadCapability;
+    if (!preload) return;
+    this.trace("runtime.preload.start", {
+      capability,
+      workerThreads: this.settings.workers?.threads,
+    });
+    void preload(capability, () => undefined, {
+      workerThreads: this.settings.workers?.threads,
+    })
+      .then(() => {
+        this.trace("runtime.preload.finish", {
+          capability,
+        });
+      })
+      .catch((error) => {
+        this.trace("runtime.preload.fail", {
+          capability,
+          error,
+        });
+      });
+  }
+
   private emitProgress(event: {
     current?: number;
     details?: Record<string, unknown>;
@@ -647,12 +722,24 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
   }
 
   private async stageInputSession(sources: TSource[]): Promise<InputSession<TSource>> {
+    this.trace("input.session.stage.start", {
+      sourceCount: sources.length,
+    });
     if (sources.length === 1) {
+      this.trace("input.session.stage.single.start", {
+        fileName: getSourceFileName(sources[0] as never, "Input 1"),
+        size: getSourceSize(sources[0] as never),
+      });
       const view = await this.stageSource(
         this.createInitialSource("input", sources[0] as TSource, 0, {
           allowLazyBrowserRomSource: true,
         }),
       );
+      this.trace("input.session.stage.single.finish", {
+        candidateCount: view.state.candidates.length,
+        fileName: view.state.fileName,
+        status: view.state.status,
+      });
       return {
         sources,
         stages: [view],
@@ -668,6 +755,11 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
         onCandidatesFound: (request: CandidateSelectionRequest) => requests.push(request),
       } as never,
     );
+    this.trace("input.session.stage.multi.direct-assets", {
+      found: !!directAssets,
+      requestCount: requests.length,
+      sourceCount: sources.length,
+    });
     if (directAssets) {
       const view = this.createInitialSource("input", sources[0] as TSource, 0);
       view.preparedInputAssets = directAssets;
@@ -684,12 +776,24 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
       if (selectable.length === 1) view.state.selectedCandidateId = selectable[0]?.id;
       else view.state.status = "needsSelection";
       if (view.state.status === "ready") this.applyPreparedInputMetadata(view);
+      this.trace("input.session.stage.multi.direct-finish", {
+        assetCount: directAssets.length,
+        candidateCount: view.state.candidates.length,
+        status: view.state.status,
+      });
       return { sources, stages: [view], synthetic: false, view };
     }
     const stages: Array<StagedSource<TSource>> = [];
     for (let index = 0; index < sources.length; index += 1) {
+      this.trace("input.session.stage.multi.source", {
+        index,
+        sourceCount: sources.length,
+      });
       stages.push(await this.stageSource(this.createInitialSource("input", sources[index] as TSource, index)));
     }
+    this.trace("input.session.stage.multi.synthetic-finish", {
+      stageCount: stages.length,
+    });
     return this.buildSyntheticInputSession(sources, stages);
   }
 
@@ -722,6 +826,13 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
   }
 
   private async stageSource(stage: StagedSource<TSource>): Promise<StagedSource<TSource>> {
+    this.trace("source.stage.start", {
+      allowLazyBrowserRomSource: !!stage.allowLazyBrowserRomSource,
+      fileName: stage.state.fileName,
+      order: stage.state.order,
+      role: stage.state.role,
+      sourceSize: stage.state.sourceSize,
+    });
     const requests: CandidateSelectionRequest[] = [];
     const options = {
       ...this.createExecutionOptions(),
@@ -756,7 +867,11 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
       },
     } satisfies Partial<ApplyWorkflowOptions>;
     try {
-      if (stage.state.role === "input")
+      if (stage.state.role === "input") {
+        this.trace("source.stage.prepare-input-assets.start", {
+          fileName: stage.state.fileName,
+          order: stage.state.order,
+        });
         stage.preparedInputAssets = await prepareInputAssets(
           stage.source as never,
           options as never,
@@ -765,7 +880,16 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
           undefined,
           { allowLazyBrowserRomSource: !!stage.allowLazyBrowserRomSource },
         );
-      else {
+        this.trace("source.stage.prepare-input-assets.finish", {
+          assetCount: stage.preparedInputAssets.length,
+          fileName: stage.state.fileName,
+          order: stage.state.order,
+        });
+      } else {
+        this.trace("source.stage.prepare-patch.start", {
+          fileName: stage.state.fileName,
+          order: stage.state.order,
+        });
         const prepared = await prepareInputFile(
           stage.source as never,
           "patch",
@@ -776,8 +900,20 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
         );
         stage.preparedPatchFile = prepared.file;
         this.applyPreparedPatchMetadata(stage, prepared);
+        this.trace("source.stage.prepare-patch.finish", {
+          fileName: stage.state.fileName,
+          order: stage.state.order,
+          preparedFileName: prepared.file.fileName,
+        });
       }
     } catch (error) {
+      this.trace("source.stage.prepare.fail", {
+        error,
+        fileName: stage.state.fileName,
+        order: stage.state.order,
+        requestCount: requests.length,
+        role: stage.state.role,
+      });
       if (requests.length && !canRecoverWithCandidateSelection(error, requests)) throw error;
       if (!requests.length) this.pushWarning(stage, toRomWeaverError(error));
     }
@@ -795,17 +931,41 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
     if (selectable.length === 1) {
       stage.state.selectedCandidateId = selectable[0]?.id;
       stage.selectedArchiveEntry = stage.internalCandidates.get(selectable[0]?.id || "")?.archiveEntry;
+      this.trace("source.stage.prepare-selected.start", {
+        fileName: stage.state.fileName,
+        order: stage.state.order,
+        selectedCandidateId: stage.state.selectedCandidateId,
+      });
       await this.prepareSelectedSource(stage);
+      this.trace("source.stage.prepare-selected.finish", {
+        fileName: stage.state.fileName,
+        order: stage.state.order,
+        status: stage.state.status,
+      });
       if (stage.state.role === "patch") await this.parsePatch(stage);
     } else {
       stage.state.status = "needsSelection";
       if (stage.state.role === "input") await this.maybeResolveBlockingInputSelection();
       else await this.maybeResolveBlockingPatchSelection(stage);
     }
+    this.trace("source.stage.finish", {
+      candidateCount: stage.state.candidates.length,
+      fileName: stage.state.fileName,
+      order: stage.state.order,
+      role: stage.state.role,
+      status: stage.state.status,
+      warningCount: stage.state.warnings.length,
+    });
     return stage;
   }
 
   private async prepareSelectedSource(stage: StagedSource<TSource>): Promise<void> {
+    this.trace("source.prepare-selected.enter", {
+      candidateId: stage.state.selectedCandidateId,
+      fileName: stage.state.fileName,
+      order: stage.state.order,
+      role: stage.state.role,
+    });
     const requests: CandidateSelectionRequest[] = [];
     const options = {
       ...this.createExecutionOptions(),
@@ -842,6 +1002,12 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
     try {
       if (stage.state.role === "input") {
         const cachedFile = stage.preparedInputAssets?.[0]?.file;
+        this.trace("source.prepare-selected.input.start", {
+          cachedFile: !!cachedFile,
+          fileName: stage.state.fileName,
+          order: stage.state.order,
+          selectedArchiveEntry: stage.selectedArchiveEntry,
+        });
         const file =
           cachedFile ||
           (await (async () => {
@@ -858,6 +1024,12 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
         if (!file && requests.length) return this.handleSourceSelectionRequests(stage, requests);
         this.applyPreparedInputMetadata(stage);
         stage.state.status = "ready";
+        this.trace("source.prepare-selected.input.finish", {
+          fileName: stage.state.fileName,
+          order: stage.state.order,
+          preparedFileName: file?.fileName,
+          status: stage.state.status,
+        });
         return;
       }
       const prepared = stage.preparedPatchFile
@@ -1150,24 +1322,34 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
     progressId = state.id,
   ): Promise<ApplyWorkflowChecksums> {
     if (!this.runtime.checksum.calculate) return {};
+    const progressDetails = {
+      decompressionTimeMs: state.decompressionTimeMs,
+      fileName: state.fileName,
+      order: state.order,
+      parentCompressions: state.parentCompressions?.map((entry) => ({
+        ...entry,
+      })),
+      size: state.size,
+      sourceId: state.id,
+      sourceSize: state.sourceSize,
+      wasDecompressed: state.wasDecompressed,
+    };
+    this.emitProgress({
+      details: progressDetails,
+      id: `${this.id}:${progressId}:checksum`,
+      label: "Calculating checksums...",
+      percent: null,
+      role,
+      stage: "checksum",
+      workflow: "apply",
+    });
     const result = await this.runtime.checksum.calculate({
       algorithms: [...DEFAULT_CHECKSUMS],
       logLevel: this.settings.logging?.level,
       onLog: this.settings.logging?.sink,
       onProgress: (progress) =>
         this.emitProgress({
-          details: {
-            decompressionTimeMs: state.decompressionTimeMs,
-            fileName: state.fileName,
-            order: state.order,
-            parentCompressions: state.parentCompressions?.map((entry) => ({
-              ...entry,
-            })),
-            size: state.size,
-            sourceId: state.id,
-            sourceSize: state.sourceSize,
-            wasDecompressed: state.wasDecompressed,
-          },
+          details: progressDetails,
           id: `${this.id}:${progressId}:checksum`,
           label: String(progress.label || progress.message || "Calculating checksums..."),
           percent: typeof progress.percent === "number" && Number.isFinite(progress.percent) ? progress.percent : null,

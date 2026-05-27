@@ -106,6 +106,34 @@ const waitForNextUiPaint = () =>
     globalThis.setTimeout(() => resolve(), 0);
   });
 
+const isTraceLoggingEnabled = (settings: ApplyPatchFormSettings) =>
+  String(settings.logging?.level || "").toLowerCase() === "trace";
+
+const getTraceSourceKind = (source: unknown) => {
+  if (typeof File !== "undefined" && source instanceof File) return "file";
+  if (typeof Blob !== "undefined" && source instanceof Blob) return "blob";
+  if (source instanceof Uint8Array) return "uint8array";
+  if (source instanceof ArrayBuffer) return "arraybuffer";
+  if (
+    source &&
+    typeof source === "object" &&
+    "getFile" in source &&
+    typeof (source as { getFile?: unknown }).getFile === "function"
+  )
+    return "file-handle";
+  if (source && typeof source === "object") return "object";
+  return typeof source;
+};
+
+const getTraceSourceSummary = (source: unknown, fallback: string) => ({
+  fileName: getBinarySourceFileName(source as BinarySource, fallback),
+  kind: getTraceSourceKind(source),
+  size: getBinarySourceSize(source as BinarySource) ?? undefined,
+});
+
+const getTraceSourceSummaries = (sources: BinarySource[], fallbackPrefix: string) =>
+  sources.map((source, index) => getTraceSourceSummary(source, `${fallbackPrefix} ${index + 1}`));
+
 const createLocalPatcherSessionState = (): LocalPatcherSessionState => ({
   busy: false,
   completedApplyTimeMs: null,
@@ -682,6 +710,19 @@ const useLocalApplyPatchFormSession = ({
   const effectiveInputs = inputs === undefined ? internalInputs : inputs;
   const activePatches = patches === undefined ? internalPatches : patches;
   const activeSettings = settings === undefined ? internalSettings : settings;
+  const emitSessionTrace = useCallback(
+    (message: string, details?: Record<string, unknown>) => {
+      if (!isTraceLoggingEnabled(activeSettings)) return;
+      activeSettings.logging?.sink?.({
+        ...(details ? { details } : {}),
+        level: "trace",
+        message,
+        namespace: "ui:apply-session",
+        timestamp: new Date().toISOString(),
+      });
+    },
+    [activeSettings],
+  );
   const activeCompression = activeSettings.output?.compression || "auto";
   const autoResolvedCompression = OutputCompressionManager.resolveOutputCompression(effectiveInputs[0], {
     compressionFormat: "auto",
@@ -1132,6 +1173,13 @@ const useLocalApplyPatchFormSession = ({
       disposeActiveOutput();
       inputStageGenerationRef.current += 1;
       inputProgressGenerationRef.current += 1;
+      emitSessionTrace("input list updated", {
+        generation: inputStageGenerationRef.current,
+        nextCount: nextInputs.length,
+        previousCount: effectiveInputs.length,
+        progressGeneration: inputProgressGenerationRef.current,
+        sources: getTraceSourceSummaries(nextInputs, "Input"),
+      });
       if (inputs === undefined) setInternalInputs(nextInputs);
       onInputsChange?.(nextInputs);
       setErrorMessage("");
@@ -1167,7 +1215,15 @@ const useLocalApplyPatchFormSession = ({
       resetCompletedOutputState();
       return inputStageGenerationRef.current;
     },
-    [disposeActiveOutput, getInputKey, inputs, onInputsChange, resetCompletedOutputState],
+    [
+      disposeActiveOutput,
+      effectiveInputs.length,
+      emitSessionTrace,
+      getInputKey,
+      inputs,
+      onInputsChange,
+      resetCompletedOutputState,
+    ],
   );
   const syncPatchFiles = useCallback(
     (snapshot: ApplyWorkflowStageSnapshot) => {
@@ -1242,7 +1298,21 @@ const useLocalApplyPatchFormSession = ({
       const generation = ++inputStageGenerationRef.current;
       const progressGeneration = ++inputProgressGenerationRef.current;
       const retainedInputKeys = new Set(previousInputs.map((input) => getInputKey(input, previousInputs)));
+      emitSessionTrace("input staging sync started", {
+        generation,
+        hasStageInput: !!stageInput,
+        inputCount: snapshot.inputs.length,
+        previousCount: previousInputs.length,
+        progressGeneration,
+        retainedCount: retainedInputKeys.size,
+        sources: getTraceSourceSummaries(snapshot.inputs, "Input"),
+      });
       if (!(snapshot.inputs[0] && stageInput)) {
+        emitSessionTrace("input staging sync skipped", {
+          generation,
+          hasFirstInput: !!snapshot.inputs[0],
+          hasStageInput: !!stageInput,
+        });
         setInputStaging(false);
         setRomInputs([]);
         return;
@@ -1278,9 +1348,28 @@ const useLocalApplyPatchFormSession = ({
           }),
         ),
       );
+      emitSessionTrace("stageInput dispatched", {
+        generation,
+        inputCount: snapshot.inputs.length,
+        progressGeneration,
+      });
       void stageInput(snapshot, {
         onChecksum: (info) => {
-          if (inputStageGenerationRef.current !== generation) return;
+          if (inputStageGenerationRef.current !== generation) {
+            emitSessionTrace("stageInput checksum ignored", {
+              currentGeneration: inputStageGenerationRef.current,
+              generation,
+              reason: "stale-generation",
+            });
+            return;
+          }
+          emitSessionTrace("stageInput checksum", {
+            fileName: info.fileName,
+            hasChecksums: !!info.checksums,
+            order: info.order,
+            size: info.size,
+            sourceSize: info.sourceSize,
+          });
           mergeRomInput(getStableInputInfo(info, snapshot.inputs), {
             disabled: true,
             info: { validationPhase: "idle" },
@@ -1290,24 +1379,84 @@ const useLocalApplyPatchFormSession = ({
           });
         },
         onProgress: (event) => {
+          const details = getProgressDetails(event);
           if (
             inputStageGenerationRef.current !== generation ||
             inputProgressGenerationRef.current !== progressGeneration
-          )
+          ) {
+            emitSessionTrace("stageInput progress ignored", {
+              currentGeneration: inputStageGenerationRef.current,
+              currentProgressGeneration: inputProgressGenerationRef.current,
+              generation,
+              progress: {
+                fileName: details.fileName,
+                order: details.order,
+                percent: event.percent,
+                sourceId: details.sourceId,
+                stage: details.stage,
+              },
+              progressGeneration,
+              reason: "stale-generation",
+            });
             return;
-          const details = getProgressDetails(event);
+          }
           const sourceId = typeof details.sourceId === "string" ? details.sourceId : "";
-          if (!sourceId) return;
+          if (!sourceId) {
+            emitSessionTrace("stageInput progress ignored", {
+              generation,
+              progress: {
+                fileName: details.fileName,
+                order: details.order,
+                percent: event.percent,
+                stage: details.stage,
+              },
+              progressGeneration,
+              reason: "missing-sourceId",
+            });
+            return;
+          }
           const info = getStableInputInfo(getProgressStagedInputInfo(event), snapshot.inputs);
           const source = typeof info.order === "number" ? snapshot.inputs[info.order] : undefined;
-          if (source && retainedInputKeys.has(getInputKey(source, snapshot.inputs))) return;
+          if (source && retainedInputKeys.has(getInputKey(source, snapshot.inputs))) {
+            emitSessionTrace("stageInput progress ignored", {
+              generation,
+              order: info.order,
+              progressGeneration,
+              reason: "retained-input",
+              sourceId,
+            });
+            return;
+          }
+          emitSessionTrace("stageInput progress", {
+            fileName: info.fileName,
+            generation,
+            order: info.order,
+            percent: event.percent,
+            progressGeneration,
+            sourceId,
+            stage: details.stage,
+          });
           mergeRomInput(info, {
             ...getChecksumProgressInfoPatch(details),
             progress: toInputProgress(event),
           });
         },
         onState: (info) => {
-          if (inputStageGenerationRef.current !== generation) return;
+          if (inputStageGenerationRef.current !== generation) {
+            emitSessionTrace("stageInput state ignored", {
+              currentGeneration: inputStageGenerationRef.current,
+              generation,
+              reason: "stale-generation",
+            });
+            return;
+          }
+          emitSessionTrace("stageInput state", {
+            fileName: info.fileName,
+            generation,
+            order: info.order,
+            size: info.size,
+            sourceSize: info.sourceSize,
+          });
           mergeRomInput(getStableInputInfo(info, snapshot.inputs), {
             disabled: true,
             info: { validationPhase: "idle" },
@@ -1318,7 +1467,26 @@ const useLocalApplyPatchFormSession = ({
         },
       })
         .then((infos) => {
-          if (inputStageGenerationRef.current !== generation) return;
+          if (inputStageGenerationRef.current !== generation) {
+            emitSessionTrace("stageInput complete ignored", {
+              currentGeneration: inputStageGenerationRef.current,
+              generation,
+              infoCount: infos.length,
+              reason: "stale-generation",
+            });
+            return;
+          }
+          emitSessionTrace("stageInput complete", {
+            generation,
+            infoCount: infos.length,
+            infos: infos.map((info) => ({
+              fileName: info.fileName,
+              order: info.order,
+              size: info.size,
+              sourceSize: info.sourceSize,
+              wasDecompressed: info.wasDecompressed,
+            })),
+          });
           setRomInputs((current) => {
             const byId = new Map(current.map((entry) => [entry.id, entry]));
             return sortRomInputs(
@@ -1351,8 +1519,21 @@ const useLocalApplyPatchFormSession = ({
           });
         })
         .catch((error) => {
-          if (inputStageGenerationRef.current !== generation) return;
           const normalizedError = toError(error);
+          if (inputStageGenerationRef.current !== generation) {
+            emitSessionTrace("stageInput failure ignored", {
+              currentGeneration: inputStageGenerationRef.current,
+              generation,
+              message: normalizedError.message,
+              reason: "stale-generation",
+            });
+            return;
+          }
+          emitSessionTrace("stageInput failed", {
+            generation,
+            message: normalizedError.message,
+            name: normalizedError.name,
+          });
           logUiError("Input staging failed", normalizedError);
           setErrorMessage(
             formatCodedErrorForDisplay(
@@ -1363,7 +1544,17 @@ const useLocalApplyPatchFormSession = ({
           onError?.(normalizedError);
         })
         .finally(() => {
-          if (inputStageGenerationRef.current !== generation) return;
+          if (inputStageGenerationRef.current !== generation) {
+            emitSessionTrace("stageInput finalizer ignored", {
+              currentGeneration: inputStageGenerationRef.current,
+              generation,
+              reason: "stale-generation",
+            });
+            return;
+          }
+          emitSessionTrace("stageInput finalizer", {
+            generation,
+          });
           setInputStaging(false);
           setRomInputs((current) =>
             current.map((entry) =>
@@ -1378,7 +1569,7 @@ const useLocalApplyPatchFormSession = ({
           );
         });
     },
-    [activeSettings, getInputKey, getStableInputInfo, mergeRomInput, onError, stageInput],
+    [activeSettings, emitSessionTrace, getInputKey, getStableInputInfo, mergeRomInput, onError, stageInput],
   );
 
   useEffect(() => {
@@ -1439,6 +1630,9 @@ const useLocalApplyPatchFormSession = ({
   const localUiController = useMemo(
     () => ({
       clearRomInput: () => {
+        emitSessionTrace("clearRomInput requested", {
+          previousCount: effectiveInputs.length,
+        });
         updateInputs([]);
       },
       getState: localUiStoreController.getState,
@@ -1456,6 +1650,11 @@ const useLocalApplyPatchFormSession = ({
         updatePatches(nextPatches);
       },
       provideRomInputFile: (file: BinarySource | null) => {
+        emitSessionTrace("provideRomInputFile requested", {
+          existingCount: effectiveInputs.length,
+          hasFile: !!file,
+          source: file ? getTraceSourceSummary(file, "Input") : undefined,
+        });
         if (!file) {
           updateInputs([]);
           return;
@@ -1463,12 +1662,24 @@ const useLocalApplyPatchFormSession = ({
         updateInputs([...effectiveInputs, file]);
       },
       provideRomInputFiles: (fileList: FileList | BinarySource[] | null) => {
-        const nextInputs = [...effectiveInputs, ...(Array.from(fileList || []) as BinarySource[])];
+        const providedInputs = Array.from(fileList || []) as BinarySource[];
+        const nextInputs = [...effectiveInputs, ...providedInputs];
+        emitSessionTrace("provideRomInputFiles requested", {
+          existingCount: effectiveInputs.length,
+          nextCount: nextInputs.length,
+          providedCount: providedInputs.length,
+          providedSources: getTraceSourceSummaries(providedInputs, "Input"),
+        });
         updateInputs(nextInputs);
       },
       removeRomInput: (id: string) => {
         const index = romInputs.findIndex((entry) => entry.id === id);
         if (index === -1) return;
+        emitSessionTrace("removeRomInput requested", {
+          id,
+          index,
+          previousCount: effectiveInputs.length,
+        });
         updateInputs(effectiveInputs.filter((_input, inputIndex) => inputIndex !== index));
       },
       subscribe: localUiStoreController.subscribe,
@@ -1488,6 +1699,7 @@ const useLocalApplyPatchFormSession = ({
     [
       disposeActiveOutput,
       effectiveInputs,
+      emitSessionTrace,
       localUiStoreController,
       resetCompletedOutputState,
       romInputs,

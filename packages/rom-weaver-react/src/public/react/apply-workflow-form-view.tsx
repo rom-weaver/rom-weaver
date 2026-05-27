@@ -103,6 +103,29 @@ const isDroppedFileHandle = (source: unknown): source is FileSystemFileHandle =>
   (source as { kind?: unknown }).kind === "file" &&
   typeof (source as { getFile?: unknown }).getFile === "function";
 
+const getInputEventSourceKind = (source: unknown) => {
+  if (typeof File !== "undefined" && source instanceof File) return "file";
+  if (typeof Blob !== "undefined" && source instanceof Blob) return "blob";
+  if (isDroppedFileHandle(source)) return "file-handle";
+  if (source && typeof source === "object") return "object";
+  return typeof source;
+};
+
+const getInputEventSourceSummary = (source: BinarySource | null | undefined) => ({
+  kind: getInputEventSourceKind(source),
+  name:
+    source && "name" in source && typeof (source as { name?: unknown }).name === "string"
+      ? (source as { name: string }).name
+      : "",
+  size: source instanceof File ? source.size : undefined,
+});
+
+const emitInputEventTrace = (message: string, details?: Record<string, unknown>) => {
+  if (typeof console === "undefined") return;
+  const log = typeof console.debug === "function" ? console.debug : console.log;
+  log.call(console, `[rom-weaver trace] apply-form: ${message}`, details || {});
+};
+
 const getDroppedBinarySources = async (dataTransfer: DataTransfer): Promise<BinarySource[]> => {
   const itemSources = await Promise.all(
     Array.from(dataTransfer.items || []).map(async (item) => {
@@ -215,10 +238,31 @@ function ApplyWorkflowFormView({
     event.preventDefault();
     event.stopPropagation();
     setRomDragActive(false);
-    if (uiState.romInput.disabled) return;
-    void getDroppedBinarySources(event.dataTransfer).then((sources) => {
-      uiController.provideRomInputFile?.(sources[0] || null);
+    emitInputEventTrace("rom drop received", {
+      disabled: uiState.romInput.disabled,
+      fileCount: event.dataTransfer.files?.length || 0,
+      itemCount: event.dataTransfer.items?.length || 0,
+      types: Array.from(event.dataTransfer.types || []),
     });
+    if (uiState.romInput.disabled) {
+      emitInputEventTrace("rom drop ignored", {
+        reason: "disabled",
+      });
+      return;
+    }
+    void getDroppedBinarySources(event.dataTransfer)
+      .then((sources) => {
+        emitInputEventTrace("rom drop sources resolved", {
+          sourceCount: sources.length,
+          sources: sources.map((source) => getInputEventSourceSummary(source)),
+        });
+        uiController.provideRomInputFile?.(sources[0] || null);
+      })
+      .catch((error) => {
+        emitInputEventTrace("rom drop source resolution failed", {
+          message: error instanceof Error ? error.message : String(error),
+        });
+      });
   };
   const handlePatchDrop = (event: DragEvent<HTMLElement>) => {
     event.preventDefault();
@@ -230,7 +274,23 @@ function ApplyWorkflowFormView({
     });
   };
   const openRomInput = () => {
-    if (!uiState.romInput.disabled) romInputRef.current?.click();
+    emitInputEventTrace("rom input open requested", {
+      disabled: uiState.romInput.disabled,
+      hasInputElement: !!romInputRef.current,
+    });
+    if (uiState.romInput.disabled) {
+      emitInputEventTrace("rom input open ignored", {
+        reason: "disabled",
+      });
+      return;
+    }
+    if (!romInputRef.current) {
+      emitInputEventTrace("rom input open ignored", {
+        reason: "missing-input-element",
+      });
+      return;
+    }
+    romInputRef.current.click();
   };
   const openPatchInput = () => {
     if (!uiState.patchInput.disabled) patchInputRef.current?.click();
@@ -308,7 +368,13 @@ function ApplyWorkflowFormView({
             disabled={uiState.romInput.disabled}
             id="rom-weaver-input-file-rom"
             onChange={(event) => {
-              uiController.provideRomInputFile?.(event.currentTarget.files?.[0] || null);
+              const selectedFile = event.currentTarget.files?.[0] || null;
+              emitInputEventTrace("rom file input changed", {
+                disabled: uiState.romInput.disabled,
+                fileCount: event.currentTarget.files?.length || 0,
+                source: getInputEventSourceSummary(selectedFile),
+              });
+              uiController.provideRomInputFile?.(selectedFile);
               event.currentTarget.value = "";
             }}
             ref={romInputRef}

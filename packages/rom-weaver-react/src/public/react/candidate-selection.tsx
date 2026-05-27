@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { formatSelectionDialogMessage, getCandidateDisplayItems } from "../../presentation/formatting/candidates.ts";
 import { createBrowserLocalizer } from "../../presentation/localization/index.ts";
 import type { CandidateSelectionChoice, CandidateSelectionPrompt } from "./public-types.ts";
@@ -172,25 +172,29 @@ function CandidateSelectionDialog({
 
 const useCandidateSelection = ({ onCancelSelection }: UseCandidateSelectionOptions = {}) => {
   const [selectionState, setSelectionState] = useState<CandidateSelectionState | null>(null);
+  const selectionStateRef = useRef<CandidateSelectionState | null>(null);
   const selectFile = useCallback(
     (request: CandidateSelectionPrompt) =>
       new Promise<CandidateSelectionChoice>((resolve, reject) => {
-        setSelectionState({ reject, request, resolve });
+        const nextState = { reject, request, resolve };
+        selectionStateRef.current = nextState;
+        setSelectionState(nextState);
       }),
     [],
   );
   const cancelSelection = useCallback(() => {
-    setSelectionState((current) => {
-      if (current) onCancelSelection?.(current.request);
-      current?.reject(createSelectionSkippedError());
-      return null;
-    });
+    const current = selectionStateRef.current;
+    selectionStateRef.current = null;
+    setSelectionState(null);
+    if (!current) return;
+    onCancelSelection?.(current.request);
+    current.reject(createSelectionSkippedError());
   }, [onCancelSelection]);
   const chooseCandidate = useCallback((id: string) => {
-    setSelectionState((current) => {
-      current?.resolve({ id });
-      return null;
-    });
+    const current = selectionStateRef.current;
+    selectionStateRef.current = null;
+    setSelectionState(null);
+    current?.resolve({ id });
   }, []);
   return {
     cancelSelection,

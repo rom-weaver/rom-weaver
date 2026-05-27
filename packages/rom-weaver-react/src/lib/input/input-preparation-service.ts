@@ -69,6 +69,51 @@ type LazyBrowserSource = {
   fileName: string;
 };
 
+const getPreparationSourceKind = (source: unknown) => {
+  if (typeof File !== "undefined" && source instanceof File) return "file";
+  if (typeof Blob !== "undefined" && source instanceof Blob) return "blob";
+  if (
+    source &&
+    typeof source === "object" &&
+    "getFile" in source &&
+    typeof (source as { getFile?: unknown }).getFile === "function"
+  )
+    return "file-handle";
+  if (source instanceof Uint8Array) return "uint8array";
+  if (source instanceof ArrayBuffer) return "arraybuffer";
+  if (typeof source === "string") return "path-string";
+  if (source && typeof source === "object") return "object";
+  return typeof source;
+};
+
+const summarizePreparationSource = (source: SourceRef, fallbackFileName: string) => ({
+  fileName: getNamedSourceFileName(source, { fallback: fallbackFileName }) || fallbackFileName,
+  kind: getPreparationSourceKind(source),
+  path: getNamedSourcePath(source as Parameters<typeof getNamedSourcePath>[0]) || "",
+  size: getBinarySourceSize(source as Parameters<typeof getBinarySourceSize>[0]) ?? undefined,
+});
+
+const emitInputPreparationTrace = (
+  options: InputPreparationOptions,
+  message: string,
+  details: Record<string, unknown> = {},
+) => {
+  if (String(options?.logging?.level || "").toLowerCase() !== "trace") return;
+  options?.onLog?.({
+    details,
+    level: "trace",
+    message,
+    namespace: "workflow:input-preparation",
+    timestamp: new Date().toISOString(),
+  });
+};
+
+const emitInputPreparationConsoleTrace = (message: string, details?: Record<string, unknown>) => {
+  if (typeof console === "undefined") return;
+  const log = typeof console.debug === "function" ? console.debug : console.log;
+  log.call(console, `[rom-weaver trace] input-preparation: ${message}`, details || {});
+};
+
 const getFileExtension = (fileName: string | undefined) => {
   const normalized = String(fileName || "").replace(FILE_QUERY_OR_HASH_REGEX, "");
   const extensionIndex = normalized.lastIndexOf(".");
@@ -98,25 +143,94 @@ const getLazyBrowserSource = async (
   fallbackFileName: string,
   behavior: InputPreparationBehaviorOptions = {},
 ): Promise<LazyBrowserSource | null> => {
+  emitInputPreparationConsoleTrace("lazy browser source check start", {
+    behavior,
+    source: summarizePreparationSource(source, fallbackFileName),
+  });
   if (typeof Blob === "undefined") return null;
   const sourceAccess = createSourceAccessFromSource(source, fallbackFileName);
   const fileName = sourceAccess.fileName || fallbackFileName;
   const fileHandle = sourceAccess.getFileHandle();
   let blob = sourceAccess.getBlob();
+  emitInputPreparationConsoleTrace("lazy browser source access resolved", {
+    fileName,
+    hasBlob: !!blob,
+    hasFileHandle: !!fileHandle,
+    size: sourceAccess.size ?? undefined,
+  });
   if (!blob && fileHandle) blob = await fileHandle.getFile();
-  if (!blob) return null;
+  if (!blob) {
+    emitInputPreparationConsoleTrace("lazy browser source unavailable", {
+      fileName,
+      reason: "no-blob",
+    });
+    return null;
+  }
+  emitInputPreparationConsoleTrace("lazy browser source read disc header start", {
+    fileName,
+    prefixLength: MAX_DISC_MAGIC_PREFIX_LENGTH,
+    size: blob.size,
+  });
   const discHeader = await readBlobPrefix(blob, MAX_DISC_MAGIC_PREFIX_LENGTH);
-  if (DISC_DECOMPRESSION_EXTENSIONS.has(getFileExtension(fileName))) return { blob, fileHandle, fileName };
+  emitInputPreparationConsoleTrace("lazy browser source read disc header finish", {
+    fileName,
+    readBytes: discHeader.byteLength,
+  });
+  if (DISC_DECOMPRESSION_EXTENSIONS.has(getFileExtension(fileName))) {
+    emitInputPreparationConsoleTrace("lazy browser source accepted by extension", {
+      fileName,
+    });
+    return { blob, fileHandle, fileName };
+  }
   const magicExtension = getDiscMagicExtension(discHeader);
-  if (magicExtension) return { blob, fileHandle, fileName: replaceFileExtension(fileName, magicExtension) };
-  if (!behavior.allowLazyBrowserRomSource) return null;
-  if (isCueEntryFileName(fileName)) return null;
+  if (magicExtension) {
+    const magicFileName = replaceFileExtension(fileName, magicExtension);
+    emitInputPreparationConsoleTrace("lazy browser source accepted by magic", {
+      fileName,
+      magicExtension,
+      magicFileName,
+    });
+    return { blob, fileHandle, fileName: magicFileName };
+  }
+  if (!behavior.allowLazyBrowserRomSource) {
+    emitInputPreparationConsoleTrace("lazy browser source rejected", {
+      fileName,
+      reason: "lazy-rom-source-disabled",
+    });
+    return null;
+  }
+  if (isCueEntryFileName(fileName)) {
+    emitInputPreparationConsoleTrace("lazy browser source rejected", {
+      fileName,
+      reason: "cue-input",
+    });
+    return null;
+  }
+  emitInputPreparationConsoleTrace("lazy browser source read archive header start", {
+    fileName,
+    prefixLength: MAX_LAZY_BROWSER_PREFIX_LENGTH,
+  });
   const archiveHeader =
     MAX_LAZY_BROWSER_PREFIX_LENGTH > discHeader.byteLength
       ? await readBlobPrefix(blob, MAX_LAZY_BROWSER_PREFIX_LENGTH)
       : discHeader;
   const archiveMagicType = getArchiveMagicType(archiveHeader);
-  if (archiveMagicType && !getArchiveType({ fileName })) return null;
+  emitInputPreparationConsoleTrace("lazy browser source read archive header finish", {
+    archiveMagicType: archiveMagicType || "",
+    fileName,
+    readBytes: archiveHeader.byteLength,
+  });
+  if (archiveMagicType && !getArchiveType({ fileName })) {
+    emitInputPreparationConsoleTrace("lazy browser source rejected", {
+      archiveMagicType,
+      fileName,
+      reason: "archive-magic-without-extension",
+    });
+    return null;
+  }
+  emitInputPreparationConsoleTrace("lazy browser source accepted", {
+    fileName,
+  });
   return { blob, fileHandle, fileName };
 };
 
@@ -126,9 +240,19 @@ const createInputPreparationPatchFile = async (
   role: "patch" | "rom",
   behavior: InputPreparationBehaviorOptions = {},
 ): Promise<PatchFileInstance> => {
+  emitInputPreparationConsoleTrace("create patch file start", {
+    behavior,
+    fallbackFileName,
+    role,
+    source: summarizePreparationSource(source, fallbackFileName),
+  });
   if (role === "patch") {
     const lazyBrowserSource = await getLazyBrowserSource(source, fallbackFileName, behavior);
-    if (lazyBrowserSource)
+    if (lazyBrowserSource) {
+      emitInputPreparationConsoleTrace("create patch file lazy patch source", {
+        fileName: lazyBrowserSource.fileName,
+        size: lazyBrowserSource.blob.size,
+      });
       return createBlobBackedPatchFile(
         lazyBrowserSource.blob,
         lazyBrowserSource.fileName,
@@ -136,6 +260,10 @@ const createInputPreparationPatchFile = async (
         lazyBrowserSource.fileHandle,
         { materialize: false },
       );
+    }
+    emitInputPreparationConsoleTrace("create patch file materialized patch source", {
+      fallbackFileName,
+    });
     return createPatchFile(source, fallbackFileName);
   }
 
@@ -145,7 +273,11 @@ const createInputPreparationPatchFile = async (
     ...behavior,
     allowLazyBrowserRomSource: true,
   });
-  if (lazyBrowserSource)
+  if (lazyBrowserSource) {
+    emitInputPreparationConsoleTrace("create patch file lazy rom source", {
+      fileName: lazyBrowserSource.fileName,
+      size: lazyBrowserSource.blob.size,
+    });
     return createBlobBackedPatchFile(
       lazyBrowserSource.blob,
       lazyBrowserSource.fileName,
@@ -153,16 +285,26 @@ const createInputPreparationPatchFile = async (
       lazyBrowserSource.fileHandle,
       { materialize: false },
     );
+  }
 
   const sourcePath =
     getNamedSourcePath(source as Parameters<typeof getNamedSourcePath>[0]) || sourceAccess.getFilePath();
   if (sourcePath) {
+    emitInputPreparationConsoleTrace("create patch file lazy external rom source", {
+      fileName: sourceFileName,
+      size: sourceAccess.size ?? undefined,
+      sourcePath,
+    });
     return createLazyExternalPatchFile(sourceFileName, {
       filePath: sourcePath,
       size: sourceAccess.size ?? undefined,
     });
   }
 
+  emitInputPreparationConsoleTrace("create patch file failed", {
+    fileName: sourceFileName,
+    reason: "no-path-backed-source",
+  });
   throw new Error(`${sourceFileName} must be OPFS/VFS path-backed in browser workflows`);
 };
 
@@ -303,14 +445,39 @@ const prepareInputAssets = async (
   selectedEntryName?: string,
   behavior: InputPreparationBehaviorOptions = {},
 ): Promise<InputAsset[]> => {
+  emitInputPreparationTrace(options, "input.assets.prepare.start", {
+    behavior,
+    source: summarizePreparationSource(source, "input.bin"),
+    sourceIndex,
+  });
   const file = await createInputPreparationPatchFile(source, "input.bin", "rom", behavior);
+  emitInputPreparationTrace(options, "input.assets.patch-file.created", {
+    fileName: file.fileName,
+    filePath: file.filePath || "",
+    fileSize: file.fileSize,
+  });
   const sourcePath = getNamedSourcePath(source as Parameters<typeof getNamedSourcePath>[0]) || undefined;
-  if (isCueEntryFileName(file.fileName))
+  if (isCueEntryFileName(file.fileName)) {
+    emitInputPreparationTrace(options, "input.assets.cue.resolve.start", {
+      fileName: file.fileName,
+      sourcePath,
+    });
     return attachInputPreparationMetrics(await resolveCueInputAssets(file, options, sourceIndex, sourcePath, runtime), {
       sourceSize: file.fileSize,
       wasDecompressed: false,
     });
-  return resolveCompressedInputAssets(file, options, runtime, sourceIndex, selectedEntryName);
+  }
+  emitInputPreparationTrace(options, "input.assets.compression.resolve.start", {
+    fileName: file.fileName,
+    fileSize: file.fileSize,
+    selectedEntryName,
+  });
+  const assets = await resolveCompressedInputAssets(file, options, runtime, sourceIndex, selectedEntryName);
+  emitInputPreparationTrace(options, "input.assets.prepare.finish", {
+    assetCount: assets.length,
+    fileName: file.fileName,
+  });
+  return assets;
 };
 
 const prepareMultipleDirectInputAssets = async (
@@ -404,13 +571,25 @@ const prepareInputFile = async (
   sourceIndex = 0,
   behavior: InputPreparationBehaviorOptions = {},
 ): Promise<PreparedInputFileResult> => {
+  emitInputPreparationTrace(options, "input.file.prepare.start", {
+    behavior,
+    role,
+    source: summarizePreparationSource(source, role === "rom" ? "rom.bin" : "patch.bin"),
+    sourceIndex,
+  });
   const file = await createInputPreparationPatchFile(
     source,
     role === "rom" ? "rom.bin" : "patch.bin",
     role,
     role === "rom" ? behavior : {},
   );
-  return resolveCompressedInputFile(
+  emitInputPreparationTrace(options, "input.file.patch-file.created", {
+    fileName: file.fileName,
+    filePath: file.filePath || "",
+    fileSize: file.fileSize,
+    role,
+  });
+  const prepared = await resolveCompressedInputFile(
     file,
     role,
     options,
@@ -418,6 +597,12 @@ const prepareInputFile = async (
     selectedArchiveEntry,
     sourceIndex,
   );
+  emitInputPreparationTrace(options, "input.file.prepare.finish", {
+    fileName: prepared.file.fileName,
+    role,
+    wasDecompressed: prepared.wasDecompressed,
+  });
+  return prepared;
 };
 
 export type { InputAsset };

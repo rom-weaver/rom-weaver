@@ -25,12 +25,25 @@ const createTraceWorkflow = () => {
 
 test("apply workflow resolves RVZ inputs to extracted names during staging", async () => {
   const workflow = new ApplyWorkflow();
+  const progressEvents = [];
+  workflow.on("progress", (event) => progressEvents.push(event));
   try {
     await workflow.setInput(await loadFixtureFile("tests/fixtures/browser-generated/game.rvz"));
     const input = workflow.getInput();
     expect(input?.fileName).toBe("game.iso");
     expect(input?.wasDecompressed).toBe(true);
     expect(input?.parentCompressions?.map((entry) => entry.fileName) || []).toContain("game.rvz");
+    expect(
+      progressEvents.some(
+        (event) => event.role === "input" && event.stage === "decompress" && /^extracted\b/i.test(event.label || ""),
+      ),
+    ).toBe(false);
+    const lastExtractIndex = progressEvents.findLastIndex(
+      (event) => event.role === "input" && event.stage === "decompress",
+    );
+    const checksumIndex = progressEvents.findIndex((event) => event.role === "input" && event.stage === "checksum");
+    expect(lastExtractIndex).toBeGreaterThanOrEqual(0);
+    expect(checksumIndex).toBeGreaterThan(lastExtractIndex);
   } finally {
     await workflow.dispose();
   }
@@ -64,6 +77,7 @@ test("RVZ staging emits list then extract trace events", async () => {
     expect(extractIndex).toBeGreaterThan(listIndex);
     expect(workerTraceLines.length).toBeGreaterThan(0);
     expect(workerTraceLines.some((line) => line.includes('command="extract"'))).toBe(true);
+    expect(workerTraceLines.some((line) => line.includes("scratch=1"))).toBe(true);
   } finally {
     await workflow.dispose();
   }

@@ -7,7 +7,12 @@ import type { CompressionFormat } from "../../types/settings.ts";
 import type { ApplyWorkflowResult, ProgressEvent } from "../../types/workflow-runtime.ts";
 import { ApplyWorkflowFormView } from "./apply-workflow-form-view.tsx";
 import { useCandidateSelection } from "./candidate-selection.tsx";
-import { getBinarySourceListStableIds, sameBinarySourceLists } from "./input-session-helpers.ts";
+import {
+  getBinarySourceFileName,
+  getBinarySourceListStableIds,
+  getBinarySourceSize,
+  sameBinarySourceLists,
+} from "./input-session-helpers.ts";
 import type { BinarySource } from "./patcher-form.ts";
 import { inertDialogController, useLocalApplyPatchFormSession } from "./patcher-form-session.ts";
 import type {
@@ -230,6 +235,29 @@ const createWorkflowOutputOverridesKey = (snapshot: ApplyWorkflowSessionInput) =
     outputName:
       typeof snapshot.options.output?.outputName === "string" ? snapshot.options.output.outputName.trim() : "",
   });
+
+const emitApplyWorkflowTrace = (
+  options: ApplyWorkflowSessionInput["options"],
+  message: string,
+  details?: Record<string, unknown>,
+) => {
+  if (String(options.logging?.level || "").toLowerCase() !== "trace") return;
+  options.logging?.sink?.({
+    ...(details ? { details } : {}),
+    level: "trace",
+    message,
+    namespace: "react:apply-workflow",
+    timestamp: new Date().toISOString(),
+  });
+};
+
+const summarizeApplyWorkflowSource = (source: BinarySource, fallback: string) => ({
+  fileName: getBinarySourceFileName(source, fallback),
+  size: getBinarySourceSize(source) ?? undefined,
+});
+
+const summarizeApplyWorkflowSources = (sources: BinarySource[], fallbackPrefix: string) =>
+  sources.map((source, index) => summarizeApplyWorkflowSource(source, `${fallbackPrefix} ${index + 1}`));
 
 const getResolvedInputArchiveName = (
   resolved: NonNullable<ApplyWorkflowInputState["resolvedInputs"]>[number],
@@ -470,6 +498,11 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       }) => Promise<TValue>,
     ): Promise<TValue> => {
       syncSelectionRefs(snapshot);
+      emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow start", {
+        inputCount: snapshot.inputs.length,
+        inputs: summarizeApplyWorkflowSources(snapshot.inputs, "Input"),
+        patchCount: snapshot.patches.length,
+      });
       setResolvedOutputCompression(getApplyOutputCompression(snapshot, null));
       setResolvedOutputName(getAutomaticApplyOutputName(snapshot, null, []));
       const workflow = getWorkflow();
@@ -483,20 +516,51 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         const settingsChanged = previousSync.settingsKey !== settingsKey;
         const inputsChanged = settingsChanged || !sameBinarySourceLists(previousSync.inputs, snapshot.inputs);
         const patchesChanged = settingsChanged || !sameBinarySourceLists(previousSync.patches, snapshot.patches);
-        if (settingsChanged) await workflow.setSettings(baseSettings);
+        emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow diff", {
+          inputsChanged,
+          patchesChanged,
+          settingsChanged,
+        });
+        if (settingsChanged) {
+          emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow setSettings start");
+          await workflow.setSettings(baseSettings);
+          emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow setSettings finish");
+        }
         if (patchesChanged) {
+          emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow clearPatches start");
           await workflow.clearPatches();
+          emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow clearPatches finish");
         }
         const inputWork = (async () => {
-          if (!inputsChanged) return;
+          if (!inputsChanged) {
+            emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow input skipped", {
+              reason: "unchanged",
+            });
+            return;
+          }
           if (snapshot.inputs.length) {
+            emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow setInput start", {
+              inputCount: snapshot.inputs.length,
+            });
             await workflow.setInput(snapshot.inputs.map(toBrowserPublicBinarySource)).catch((error) => {
+              emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow setInput failed", {
+                code: getErrorCode(error),
+                message: error instanceof Error ? error.message : String(error),
+              });
               if (getErrorCode(error) !== "WORKFLOW_SELECTION_SKIPPED") throw error;
             });
+            emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow setInput finish", {
+              input: workflow.getInput(),
+            });
           } else {
+            emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow clearInput start");
             await workflow.clearInput();
+            emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow clearInput finish");
           }
           handlers.onInputState?.(workflow.getInput());
+          emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow input state emitted", {
+            input: workflow.getInput(),
+          });
         })();
         const patchWork = (async () => {
           if (!patchesChanged) return;
@@ -527,6 +591,11 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         handlers.onPatchState?.(patches);
         if (input?.checksums) handlers.onChecksumReady?.(input);
         setApplyReady(!getWorkflowReadinessError(input, patches) && patches.length === snapshot.patches.length);
+        emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow finish", {
+          hasChecksums: !!input?.checksums,
+          inputStatus: input?.status,
+          patchCount: patches.length,
+        });
 
         return await callback({
           checksums,
@@ -545,6 +614,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         }
         throw normalized;
       } finally {
+        emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow cleanup");
         prepareHandlersRef.current = null;
         workflow.off("progress", handleProgress);
       }
@@ -562,7 +632,13 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         patches: ApplyWorkflowPatchState[];
         workflow: ApplyWorkflow;
       }) => Promise<TValue>,
-    ): Promise<TValue> => queueMutation(() => prepareWorkflow(snapshot, handlers, callback)),
+    ): Promise<TValue> => {
+      emitApplyWorkflowTrace(snapshot.options, "withPreparedWorkflow queued", {
+        inputCount: snapshot.inputs.length,
+        patchCount: snapshot.patches.length,
+      });
+      return queueMutation(() => prepareWorkflow(snapshot, handlers, callback));
+    },
     [prepareWorkflow, queueMutation],
   );
 
@@ -684,6 +760,10 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         }) => void;
       },
     ) => {
+      emitApplyWorkflowTrace(input.options, "stageInput callback start", {
+        inputCount: input.inputs.length,
+        inputs: summarizeApplyWorkflowSources(input.inputs, "Input"),
+      });
       return withPreparedWorkflow(
         input,
         {
@@ -702,7 +782,15 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
             if (emitted.workflowProgress.role === "input") handlers.onProgress(emitted.progressEvent);
           },
         },
-        async ({ input: stagedInput }) => toStagedInputInfos(stagedInput, input.inputs),
+        async ({ input: stagedInput }) => {
+          const infos = toStagedInputInfos(stagedInput, input.inputs);
+          emitApplyWorkflowTrace(input.options, "stageInput callback finish", {
+            infoCount: infos.length,
+            infos,
+            inputStatus: stagedInput?.status,
+          });
+          return infos;
+        },
       );
     },
     [emitWorkflowProgress, withPreparedWorkflow],
