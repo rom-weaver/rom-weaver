@@ -111,8 +111,8 @@ WASI_THREADS_CFLAGS="-matomics -mbulk-memory"
 export CFLAGS_wasm32_wasip1_threads="${CFLAGS_wasm32_wasip1_threads:-} ${WASI_THREADS_CFLAGS}"
 export CXXFLAGS_wasm32_wasip1_threads="${CXXFLAGS_wasm32_wasip1_threads:-} ${WASI_THREADS_CFLAGS}"
 
-NON_THREADED_RUSTFLAGS="-C target-feature=+bulk-memory,+mutable-globals,+sign-ext,+reference-types"
-THREADED_RUSTFLAGS="-C target-feature=+atomics,+bulk-memory,+mutable-globals,+sign-ext,+reference-types"
+NON_THREADED_RUSTFLAGS="-C target-feature=+bulk-memory,+mutable-globals,+sign-ext,+reference-types,+simd128"
+THREADED_RUSTFLAGS="-C target-feature=+atomics,+bulk-memory,+mutable-globals,+sign-ext,+reference-types,+simd128"
 THREADED_RUSTFLAGS+=" -C link-arg=--export=malloc -C link-arg=--export=free"
 THREADED_RUSTFLAGS+=" -C linker-plugin-lto=no"
 
@@ -161,6 +161,7 @@ postprocess_artifact() {
       --enable-nontrapping-float-to-int
       --enable-sign-ext
       --enable-reference-types
+      --enable-simd
     )
     if [[ "$artifact_kind" == "threaded" ]]; then
       wasm_opt_flags+=(--enable-threads)

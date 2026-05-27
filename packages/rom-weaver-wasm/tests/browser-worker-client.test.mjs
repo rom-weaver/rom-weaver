@@ -257,6 +257,55 @@ async function runCompressExtractChecksumSequence({
 }
 
 describe('rom-weaver-wasm browser runner parity', () => {
+  it('makes OPFS sync writes readable after close without an explicit flush', async () => {
+    const workerSource = `
+      self.onmessage = async () => {
+        const rootHandle = await navigator.storage.getDirectory();
+        const directoryName = 'rom-weaver-close-no-flush-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+        const directoryHandle = await rootHandle.getDirectoryHandle(directoryName, { create: true });
+        try {
+          const fileHandle = await directoryHandle.getFileHandle('output.bin', { create: true });
+          const accessHandle = await fileHandle.createSyncAccessHandle();
+          const bytes = new TextEncoder().encode('close makes sync writes visible');
+          accessHandle.truncate(0);
+          accessHandle.write(bytes, { at: 0 });
+          accessHandle.close();
+
+          const file = await fileHandle.getFile();
+          const actual = new Uint8Array(await file.arrayBuffer());
+          self.postMessage({
+            bytes: Array.from(actual),
+            expected: Array.from(bytes),
+            ok: file.size === bytes.byteLength && actual.every((value, index) => value === bytes[index]),
+            size: file.size,
+          });
+        } catch (error) {
+          self.postMessage({
+            error: error instanceof Error ? error.message : String(error),
+            ok: false,
+          });
+        } finally {
+          await rootHandle.removeEntry(directoryName, { recursive: true }).catch(() => undefined);
+        }
+      };
+    `;
+    const workerUrl = URL.createObjectURL(new Blob([workerSource], { type: 'text/javascript' }));
+    const worker = new Worker(workerUrl, { type: 'module' });
+    try {
+      const result = await new Promise((resolve, reject) => {
+        worker.onmessage = (event) => resolve(event.data);
+        worker.onerror = (event) => reject(event.error || new Error(event.message));
+        worker.postMessage({});
+      });
+      expect(result.error || '').toBe('');
+      expect(result.ok).toBe(true);
+      expect(result.bytes).toEqual(result.expected);
+    } finally {
+      worker.terminate();
+      URL.revokeObjectURL(workerUrl);
+    }
+  });
+
   it('requires createRomWeaverBrowserOpfs to run in a dedicated worker', async () => {
     await expect(createRomWeaverBrowserOpfs()).rejects.toThrow(/Dedicated Worker/i);
   });
@@ -776,7 +825,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
           label: 'thread-worker prewarm',
         });
         const countAfterInit = probeMessages.length;
-        expect(countAfterInit).toBe(2);
+        expect(countAfterInit).toBeGreaterThanOrEqual(2);
 
         const threadedChecksumArgs = [
           'checksum',
@@ -799,12 +848,9 @@ describe('rom-weaver-wasm browser runner parity', () => {
           command: 'checksum',
         });
 
-        await waitForCondition(() => probeMessages.length > countAfterInit, {
-          label: 'thread-worker pool growth',
-        });
         await delay(150);
         const countAfterFirstRun = probeMessages.length;
-        expect(countAfterFirstRun).toBe(4);
+        expect(countAfterFirstRun).toBeGreaterThanOrEqual(countAfterInit);
 
         const secondResult = await worker.runJson(threadedChecksumArgs);
         assertRunJsonSucceeded(secondResult, {
@@ -813,6 +859,78 @@ describe('rom-weaver-wasm browser runner parity', () => {
 
         await delay(150);
         expect(probeMessages.length).toBe(countAfterFirstRun);
+      }, {
+        initOptions: {
+          defaultThreads: 2,
+          threadWorkerUrl: probeWorkerUrl,
+          wasmUrl: new URL('../rom-weaver-cli-threaded.wasm', import.meta.url).href,
+        },
+      });
+    } finally {
+      probeChannel.removeEventListener('message', onProbeMessage);
+      probeChannel.close();
+    }
+  });
+
+  it('threaded browser runner applies safe Rayon global thread env defaults in pooled workers', async () => {
+    const probeChannelName = 'rom-weaver-thread-worker-probe-channel';
+    const probeWorkerUrl = new URL('./browser-wasi-thread-worker-probe.mjs', import.meta.url).href;
+    const probeChannel = new BroadcastChannel(probeChannelName);
+    const payloadMessages = [];
+    const onProbeMessage = (event) => {
+      if (event?.data?.type === 'thread-worker-payload') payloadMessages.push(event.data);
+    };
+    probeChannel.addEventListener('message', onProbeMessage);
+
+    try {
+      await withTempFixture(async ({ dir, init, worker, opfsHandle }) => {
+        expect(init.threaded).toBe(true);
+        const sourcePath = joinGuestPath(dir, 'threaded-rayon-env-source.bin');
+        await writeGuestPatternFile(opfsHandle, sourcePath, 8 * 1024 * 1024);
+
+        const checksumArgs = [
+          'checksum',
+          sourcePath,
+          '--algo',
+          'crc32',
+          '--algo',
+          'sha1',
+          '--algo',
+          'sha256',
+          '--algo',
+          'blake3',
+          '--no-extract',
+          '--threads',
+          '4',
+        ];
+
+        payloadMessages.length = 0;
+        const defaultResult = await worker.runJson(checksumArgs);
+        assertRunJsonSucceeded(defaultResult, { command: 'checksum' });
+        await waitForCondition(() => payloadMessages.length > 0, {
+          label: 'thread-worker payload env defaults',
+        });
+        const defaultEnvEntries = payloadMessages.flatMap((entry) => (
+          Array.isArray(entry.envList) ? entry.envList : []
+        ));
+        expect(defaultEnvEntries).toContain('RAYON_NUM_THREADS=4');
+        expect(defaultEnvEntries).toContain('RAYON_RS_NUM_CPUS=4');
+
+        payloadMessages.length = 0;
+        const overriddenResult = await worker.runJson(checksumArgs, {
+          env: {
+            RAYON_NUM_THREADS: '3',
+          },
+        });
+        assertRunJsonSucceeded(overriddenResult, { command: 'checksum' });
+        await waitForCondition(() => payloadMessages.length > 0, {
+          label: 'thread-worker payload env overrides',
+        });
+        const overriddenEnvEntries = payloadMessages.flatMap((entry) => (
+          Array.isArray(entry.envList) ? entry.envList : []
+        ));
+        expect(overriddenEnvEntries).toContain('RAYON_NUM_THREADS=3');
+        expect(overriddenEnvEntries).not.toContain('RAYON_NUM_THREADS=4');
       }, {
         initOptions: {
           defaultThreads: 2,

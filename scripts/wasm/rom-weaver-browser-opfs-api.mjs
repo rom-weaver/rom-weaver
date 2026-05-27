@@ -25,12 +25,16 @@ const OPFS_COPY_CHUNK_SIZE = 8 * 1024 * 1024;
 const DEFAULT_BROWSER_THREAD_COUNT = 4;
 const DEFAULT_BROWSER_THREAD_POOL_SIZE = 4;
 const MAX_BROWSER_THREAD_POOL_SIZE = 64;
+const BROWSER_THREAD_POOL_HEADROOM = 4;
+const DEFAULT_BROWSER_RAYON_GLOBAL_THREADS = DEFAULT_BROWSER_THREAD_COUNT;
+const MAX_BROWSER_RAYON_GLOBAL_THREADS = 8;
 const ATOMICS_WAIT_SLICE_MS = 100;
 const ATOMICS_WAIT_TIMEOUT_MS = 8000;
 const VIRTUAL_FILE_PROXY_STATE_IDLE = 0;
 const VIRTUAL_FILE_PROXY_STATE_REQUESTED = 1;
 const VIRTUAL_FILE_PROXY_STATE_DONE = 2;
 const VIRTUAL_FILE_PROXY_STATE_LOCKED = 3;
+const VIRTUAL_FILE_PROXY_TRACE_READ_LIMIT = 12;
 const THREAD_AWARE_COMMANDS = new Set([
   'batch-header-fixer',
   'checksum',
@@ -124,9 +128,15 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
           resolveConfiguredDefaultThreads(runOptions, baseDefaultThreads),
         ),
       );
+      const trace = createRunTrace(runOptions);
+      trace(
+        `[browser-opfs] run start args=${formatArgsForTrace(normalizedArgs)} threaded=${threaded} wasm=${basenameForTrace(wasmUrl)}`,
+      );
       const env = createRunEnv({
         baseEnv: options.env,
         runEnv: runOptions.env,
+        requestedThreadCount: parseRequestedThreadCount(normalizedArgs),
+        threaded,
       });
       const envList = Object.entries(env).map(([key, value]) => `${key}=${String(value)}`);
       const wasmMemory = importsEnvMemory
@@ -144,11 +154,24 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
         ...(Array.isArray(options.virtualFiles) ? options.virtualFiles : []),
         ...(Array.isArray(runOptions.virtualFiles) ? runOptions.virtualFiles : []),
       ]);
-      await prepareKnownCliPaths({
-        args: normalizedArgs,
-        mountHandles,
-        runtimeMounts,
-      });
+      trace(`[browser-opfs] virtual files normalized ${summarizeNormalizedVirtualFiles(virtualFiles)}`);
+      if (runOptions.invalidateMountCacheBeforeRun) {
+        trace('[browser-opfs] invalidate mount cache before run start');
+        await mountCache.invalidateMountPaths(runtimeMounts);
+        trace('[browser-opfs] invalidate mount cache before run done');
+      }
+      trace(`[browser-opfs] prepareKnownCliPaths start args=${formatArgsForTrace(normalizedArgs)}`);
+      try {
+        await prepareKnownCliPaths({
+          args: normalizedArgs,
+          mountHandles,
+          runtimeMounts,
+        });
+        trace('[browser-opfs] prepareKnownCliPaths done');
+      } catch (error) {
+        trace(`[browser-opfs] prepareKnownCliPaths failed ${formatErrorForTrace(error)}`);
+        throw error;
+      }
 
       const closeables = [];
       let runSucceeded = false;
@@ -173,6 +196,7 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
       const threadSpawner = createBrowserWasiThreadSpawner({
         streamBroadcastChannelName: runOptions.__streamBroadcastChannelName,
         streamRequestId: runOptions.__streamRequestId,
+        trace,
         moduleImports,
         threadIdState,
         threadWorkerUrl: runOptions.threadWorkerUrl ?? options.threadWorkerUrl,
@@ -187,6 +211,7 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
         runtime: {
           cwdMountPath: workGuestPath,
           debugWasi: Boolean(runOptions.debugWasi ?? options.debugWasi ?? false),
+          invalidateMountCacheAfterRun: Boolean(runOptions.invalidateMountCacheAfterRun),
           mountHandles,
           runtimeMounts,
           scratchFilePoolSize: resolvedMainScratchFilePoolSize,
@@ -196,6 +221,9 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
           writableRoots,
         },
       });
+      trace(
+        `[browser-opfs] build wasi fds start mounts=${runtimeMounts.length} syncAccess=${resolvedSyncAccessMode} scratch=${resolvedMainScratchFilePoolSize ?? 'default'}`,
+      );
       const {
         fds,
         mounts,
@@ -217,31 +245,45 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
         syncAccessMode: resolvedSyncAccessMode,
         mountCache,
         runCloseables: closeables,
+        trace,
       });
+      trace(`[browser-opfs] build wasi fds done fds=${fds.length} mounts=${mounts.length}`);
 
       try {
+        trace('[browser-opfs] instantiate start');
         const wasi = new wasiShim.WASI(
           wasiArgs,
           envList,
           fds,
           { debug: Boolean(runOptions.debugWasi ?? options.debugWasi ?? false) },
         );
+        installDirectWasiFileReadImports(wasi);
 
         const instance = await WebAssembly.instantiate(module, {
           wasi_snapshot_preview1: wasi.wasiImport,
           env: createWasmEnvImports(wasmMemory),
           ...(importsWasiThreadSpawn ? { wasi: { 'thread-spawn': threadSpawner.spawn } } : {}),
         });
+        trace('[browser-opfs] instantiate done');
 
+        trace('[browser-opfs] thread spawner ready wait start');
         await threadSpawner.ready;
+        trace('[browser-opfs] thread spawner ready');
         let exitCode;
         try {
+          trace('[browser-opfs] wasi.start start');
           exitCode = wasi.start(instance);
+          trace(`[browser-opfs] wasi.start returned exitCode=${String(exitCode)}`);
         } catch (error) {
+          trace(`[browser-opfs] wasi.start threw ${formatErrorForTrace(error)}`);
           await throwWithThreadFailure(error, threadSpawner);
         }
+        trace('[browser-opfs] waitForWorkers start');
         await threadSpawner.waitForWorkers();
+        trace('[browser-opfs] waitForWorkers done');
+        trace('[browser-opfs] flush mounts start');
         await flushBrowserOpfsMounts(mounts);
+        trace('[browser-opfs] flush mounts done');
         runSucceeded = true;
         stdoutCollector.flush();
         stderrCollector.flush();
@@ -256,6 +298,7 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
           ok: exitCode === 0,
         };
       } catch (error) {
+        trace(`[browser-opfs] run failed ${formatErrorForTrace(error)}`);
         stdoutCollector.flush();
         stderrCollector.flush();
         const stdout = decodeChunks(stdoutChunks);
@@ -270,17 +313,21 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
           error,
         };
       } finally {
+        trace(`[browser-opfs] cleanup start succeeded=${runSucceeded}`);
         closeSyncFiles(closeables);
         await cleanupBrowserOpfsMounts(mounts);
         await cleanupScratchDirectoriesFromHandles({
           mountHandles,
           runtimeMounts,
         });
-        if (!runSucceeded) await mountCache.invalidateMounts(mounts);
+        if (!runSucceeded || runOptions.invalidateMountCacheAfterRun) await mountCache.invalidateMounts(mounts);
+        trace('[browser-opfs] cleanup done');
       }
     },
 
     async runJson(args = [], runOptions = {}) {
+      const trace = createRunTrace(runOptions);
+      trace(`[browser-opfs] runJson start args=${formatArgsForTrace(normalizeArgs(args))}`);
       const parsed = createJsonLineParser({
         onEvent: runOptions.onEvent,
         onNonJsonLine: runOptions.onNonJsonLine,
@@ -298,6 +345,9 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
           parsed.pushLine(line);
         },
       });
+      trace(
+        `[browser-opfs] runJson done ok=${Boolean(result.ok)} exitCode=${String(result.exitCode)} events=${parsed.events.length} traceEvents=${parsedTrace.traceEvents.length}`,
+      );
 
       return {
         ...result,
@@ -353,17 +403,31 @@ export async function __runRomWeaverBrowserWasiThread(payload = {}) {
     throw new Error('browser wasi thread payload memory is not shared');
   }
 
+  const trace = createLineTrace(stderrLineHandler);
+  trace(
+    `[browser-opfs-thread] start tid=${tid ?? 'unknown'} startArg=${startArg ?? 'unknown'} args=${formatArgsForTrace(Array.isArray(wasiArgs) ? wasiArgs : [])} virtualFiles=${summarizeRawVirtualFiles(runtime?.virtualFiles)}`,
+  );
   const moduleImports = WebAssembly.Module.imports(wasmModule);
   const startControl = threadStartControlFromBuffer(payload.startControlBuffer);
   signalThreadStartState(startControl, THREAD_SLOT_STATE_STARTING);
   let startAcked = false;
   const closeables = [];
   const normalizedRuntimeMounts = normalizeRuntimeMounts(runtime?.runtimeMounts);
-  const normalizedMountHandles = normalizeMountHandleMap({ mountHandles: runtime?.mountHandles });
+  const normalizedMountHandles = await resolveThreadRuntimeMountHandles({
+    runtime,
+    runtimeMounts: normalizedRuntimeMounts,
+    trace,
+  });
+  if (runtime?.invalidateMountCacheBeforeRun) {
+    trace(`[browser-opfs-thread] invalidate mount cache before run start tid=${tid ?? 'unknown'}`);
+    await THREAD_WORKER_MOUNT_CACHE.invalidateMountPaths(normalizedRuntimeMounts);
+    trace(`[browser-opfs-thread] invalidate mount cache before run done tid=${tid ?? 'unknown'}`);
+  }
   let runSucceeded = false;
   let mounts = [];
 
   try {
+    trace(`[browser-opfs-thread] build wasi fds start tid=${tid ?? 'unknown'}`);
     const built = await buildBrowserOpfsWasiFds({
       cwdMountPath: runtime?.cwdMountPath,
       stdin: undefined,
@@ -373,18 +437,22 @@ export async function __runRomWeaverBrowserWasiThread(payload = {}) {
       stdoutLineHandler,
       scratchFilePoolSize: runtime?.threadScratchFilePoolSize ?? runtime?.scratchFilePoolSize,
       virtualFiles: normalizeVirtualFiles(runtime?.virtualFiles),
+      virtualOnlyMounts: hasVirtualFiles(runtime?.virtualFiles),
       writableRoots: Array.isArray(runtime?.writableRoots) ? runtime.writableRoots : [],
       syncAccessMode: runtime?.syncAccessMode,
       mountCache: THREAD_WORKER_MOUNT_CACHE,
       runCloseables: closeables,
+      trace,
     });
     mounts = built.mounts;
+    trace(`[browser-opfs-thread] build wasi fds done tid=${tid ?? 'unknown'} mounts=${mounts.length}`);
     const threadWasi = new wasiShim.WASI(
       Array.isArray(wasiArgs) && wasiArgs.length > 0 ? wasiArgs.map((value) => String(value)) : ['rom-weaver'],
       Array.isArray(envList) ? envList.map((value) => String(value)) : [],
       built.fds,
       { debug: Boolean(debugWasi ?? runtime?.debugWasi ?? false) },
     );
+    installDirectWasiFileReadImports(threadWasi);
     const nestedThreadSpawner = createBrowserWasiThreadSpawner({
       allowWorkerPool: false,
       streamBroadcastChannelName: payload.__streamBroadcastChannelName,
@@ -397,7 +465,9 @@ export async function __runRomWeaverBrowserWasiThread(payload = {}) {
       wasiArgs,
       envList,
       runtime,
+      trace,
     });
+    trace(`[browser-opfs-thread] instantiate start tid=${tid ?? 'unknown'}`);
     const instance = await WebAssembly.instantiate(wasmModule, {
       wasi_snapshot_preview1: threadWasi.wasiImport,
       env: createWasmEnvImports(wasmMemory),
@@ -405,6 +475,7 @@ export async function __runRomWeaverBrowserWasiThread(payload = {}) {
         ? { wasi: { 'thread-spawn': nestedThreadSpawner.spawn } }
         : {}),
     });
+    trace(`[browser-opfs-thread] instantiate done tid=${tid ?? 'unknown'}`);
 
     threadWasi.inst = instance;
     if (typeof instance.exports.wasi_thread_start !== 'function') {
@@ -412,21 +483,28 @@ export async function __runRomWeaverBrowserWasiThread(payload = {}) {
     }
     signalThreadStartState(startControl, THREAD_SLOT_STATE_RUNNING);
     startAcked = true;
+    trace(`[browser-opfs-thread] wasi_thread_start start tid=${tid ?? 'unknown'}`);
     instance.exports.wasi_thread_start(Number(tid) | 0, Number(startArg) | 0);
+    trace(`[browser-opfs-thread] wasi_thread_start returned tid=${tid ?? 'unknown'}`);
+    trace(`[browser-opfs-thread] nested waitForWorkers start tid=${tid ?? 'unknown'}`);
     await nestedThreadSpawner.waitForWorkers();
+    trace(`[browser-opfs-thread] nested waitForWorkers done tid=${tid ?? 'unknown'}`);
     await flushBrowserOpfsMounts(mounts);
     runSucceeded = true;
   } catch (error) {
+    trace(`[browser-opfs-thread] failed tid=${tid ?? 'unknown'} ${formatErrorForTrace(error)}`);
     if (!startAcked) signalThreadStartState(startControl, THREAD_SLOT_STATE_FAILED);
     throw error;
   } finally {
+    trace(`[browser-opfs-thread] cleanup start tid=${tid ?? 'unknown'} succeeded=${runSucceeded}`);
     closeSyncFiles(closeables);
     await cleanupBrowserOpfsMounts(mounts);
     await cleanupScratchDirectoriesFromHandles({
       mountHandles: normalizedMountHandles,
       runtimeMounts: normalizedRuntimeMounts,
     });
-    if (!runSucceeded) await THREAD_WORKER_MOUNT_CACHE.invalidateMounts(mounts);
+    if (!runSucceeded || runtime?.invalidateMountCacheAfterRun) await THREAD_WORKER_MOUNT_CACHE.invalidateMounts(mounts);
+    trace(`[browser-opfs-thread] cleanup done tid=${tid ?? 'unknown'}`);
   }
 }
 
@@ -434,11 +512,126 @@ export async function __disposeRomWeaverBrowserThreadMountCache() {
   await THREAD_WORKER_MOUNT_CACHE.dispose();
 }
 
-function createRunEnv({ baseEnv, runEnv }) {
-  return {
+function createRunEnv({ baseEnv, runEnv, requestedThreadCount, threaded }) {
+  const merged = {
     ...(baseEnv ?? {}),
     ...(runEnv ?? {}),
   };
+  if (!threaded) return merged;
+  applyBrowserThreadedRayonEnvDefaults(merged, requestedThreadCount);
+  return merged;
+}
+
+function applyBrowserThreadedRayonEnvDefaults(env, requestedThreadCount) {
+  if (!env || typeof env !== 'object') return;
+  if (Object.hasOwn(env, 'RAYON_NUM_THREADS') || Object.hasOwn(env, 'RAYON_RS_NUM_CPUS')) return;
+  const resolved = resolveBrowserGlobalRayonThreads(requestedThreadCount);
+  env.RAYON_NUM_THREADS = String(resolved);
+  env.RAYON_RS_NUM_CPUS = String(resolved);
+}
+
+function resolveBrowserGlobalRayonThreads(requestedThreadCount) {
+  if (!Number.isInteger(requestedThreadCount) || requestedThreadCount <= 0) {
+    return DEFAULT_BROWSER_RAYON_GLOBAL_THREADS;
+  }
+  return Math.max(1, Math.min(MAX_BROWSER_RAYON_GLOBAL_THREADS, requestedThreadCount));
+}
+
+async function resolveThreadRuntimeMountHandles({ runtime, runtimeMounts, trace }) {
+  const mountHandles = normalizeMountHandleMap({ mountHandles: runtime?.mountHandles });
+  const missingMounts = runtimeMounts.filter((mountPath) => !mountHandles[mountPath]);
+  if (missingMounts.length === 0) {
+    trace?.(`[browser-opfs-thread] mount handles provided count=${Object.keys(mountHandles).length}`);
+    return mountHandles;
+  }
+
+  const opfsHandle = await navigator.storage.getDirectory();
+  assertDirectoryHandle(opfsHandle, 'thread opfsHandle');
+  for (const mountPath of missingMounts) mountHandles[mountPath] = opfsHandle;
+  trace?.(
+    `[browser-opfs-thread] mount handles resolved in worker missing=${missingMounts.length} total=${Object.keys(mountHandles).length}`,
+  );
+  return mountHandles;
+}
+
+function createThreadWorkerRuntimePayload(runtime) {
+  if (!runtime || typeof runtime !== 'object') return runtime;
+  const { mountHandles: _mountHandles, ...rest } = runtime;
+  return {
+    ...rest,
+    resolveMountHandlesInWorker: true,
+  };
+}
+
+function createRunTrace(runOptions) {
+  return createLineTrace(runOptions?.onTraceNonJsonLine);
+}
+
+function createLineTrace(onTraceNonJsonLine) {
+  const trace = typeof onTraceNonJsonLine === 'function' ? onTraceNonJsonLine : null;
+  return (line) => {
+    if (!trace) return;
+    try {
+      trace(String(line));
+    } catch {
+      // Trace callbacks are diagnostic only and must not affect runtime behavior.
+    }
+  };
+}
+
+function summarizeRawVirtualFiles(value) {
+  if (!Array.isArray(value) || value.length === 0) return 'count=0';
+  return summarizeVirtualFileEntries(value, (entry) => (
+    entry?.source ?? entry?.file ?? entry?.blob ?? entry?.bytes ?? entry?.data ?? entry?.proxy
+  ));
+}
+
+function summarizeNormalizedVirtualFiles(value) {
+  if (!Array.isArray(value) || value.length === 0) return 'count=0';
+  return summarizeVirtualFileEntries(value, (entry) => entry?.source);
+}
+
+function hasVirtualFiles(value) {
+  return Array.isArray(value) && value.length > 0;
+}
+
+function summarizeVirtualFileEntries(value, readSource) {
+  let proxyCount = 0;
+  let directCount = 0;
+  let totalBytes = 0;
+  for (const entry of value) {
+    const source = readSource(entry);
+    if (isVirtualFileProxy(source)) {
+      proxyCount += 1;
+      totalBytes += Number(source.size) || 0;
+      continue;
+    }
+    directCount += 1;
+    totalBytes += Number(source?.size ?? source?.byteLength ?? 0) || 0;
+  }
+  return `count=${value.length} proxy=${proxyCount} direct=${directCount} bytes=${totalBytes}`;
+}
+
+function formatArgsForTrace(args) {
+  if (!Array.isArray(args) || args.length === 0) return '[]';
+  return JSON.stringify(args.map((value) => basenameForTrace(value)));
+}
+
+function basenameForTrace(value) {
+  const text = String(value ?? '');
+  if (!text.includes('/')) return text;
+  return text.slice(text.lastIndexOf('/') + 1) || text;
+}
+
+function formatErrorForTrace(error) {
+  if (error instanceof Error) return `${error.name}:${truncateForTrace(error.message)}`;
+  return truncateForTrace(String(error));
+}
+
+function truncateForTrace(value, maxLength = 180) {
+  const text = String(value ?? '');
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength - 1)}...`;
 }
 
 function createBrowserOpfsMountCache() {
@@ -446,13 +639,14 @@ function createBrowserOpfsMountCache() {
   const mountsByPath = new Map();
 
   return {
-    async acquire({ directoryHandle, mountPath, syncAccessMode, writableRoots }) {
+    async acquire({ directoryHandle, mountPath, syncAccessMode, virtualOnly, writableRoots }) {
       if (disposed) throw new Error('browser OPFS mount cache is disposed');
       const writableRootsKey = writableRoots.join('\0');
       const current = mountsByPath.get(mountPath) ?? null;
       if (
         current
         && current.syncAccessMode === syncAccessMode
+        && current.virtualOnly === Boolean(virtualOnly)
         && current.writableRootsKey === writableRootsKey
         && await directoryHandlesMatch(current.directoryHandle, directoryHandle)
       ) {
@@ -466,6 +660,7 @@ function createBrowserOpfsMountCache() {
         directoryHandle,
         mountPath,
         syncAccessMode,
+        virtualOnly,
         writableRoots,
       });
       mountsByPath.set(mountPath, mount);
@@ -479,6 +674,15 @@ function createBrowserOpfsMountCache() {
         const current = mountsByPath.get(mount.mountPath);
         if (current !== mount) continue;
         mountsByPath.delete(mount.mountPath);
+        await mount.dispose();
+      }
+    },
+
+    async invalidateMountPaths(mountPaths) {
+      const lookup = new Set(mountPaths ?? []);
+      for (const [mountPath, mount] of mountsByPath) {
+        if (!lookup.has(mountPath)) continue;
+        mountsByPath.delete(mountPath);
         await mount.dispose();
       }
     },
@@ -527,7 +731,12 @@ async function buildBrowserOpfsWasiFds({
   syncAccessMode,
   mountCache,
   runCloseables,
+  trace,
+  virtualOnlyMounts = false,
 }) {
+  trace?.(
+    `[browser-opfs] build fds enter mounts=${Array.isArray(runtimeMounts) ? runtimeMounts.length : 0} virtualOnly=${Boolean(virtualOnlyMounts)} virtualFiles=${summarizeNormalizedVirtualFiles(virtualFiles)}`,
+  );
   const stdinBytes = normalizeStdin(stdin);
   const stdoutCollector = createOutputCollector(wasiShim.ConsoleStdout, {
     onLine: stdoutLineHandler,
@@ -545,6 +754,7 @@ async function buildBrowserOpfsWasiFds({
   let cwdMount = null;
   try {
     for (const mountPath of runtimeMounts) {
+      trace?.(`[browser-opfs] mount acquire start path=${mountPath}`);
       const handle = mountHandles[mountPath];
       if (!handle) {
         throw new Error(
@@ -557,18 +767,23 @@ async function buildBrowserOpfsWasiFds({
         directoryHandle: handle,
         mountPath,
         syncAccessMode,
+        virtualOnly: virtualOnlyMounts,
         writableRoots,
       });
       mounts.push(mount);
+      trace?.(`[browser-opfs] mount acquire done path=${mountPath}`);
       await mount.startRun({
         runCloseables,
         scratchFilePoolSize,
         virtualFiles,
+        trace,
       });
+      trace?.(`[browser-opfs] mount startRun done path=${mountPath}`);
       fds.push(new PreparedWasiPreopenDirectory(mount));
       if (mountPath === cwdMountPath) cwdMount = mount;
     }
   } catch (error) {
+    trace?.(`[browser-opfs] build fds failed ${formatErrorForTrace(error)}`);
     closeSyncFiles(runCloseables);
     await cleanupBrowserOpfsMounts(mounts);
     throw error;
@@ -577,12 +792,17 @@ async function buildBrowserOpfsWasiFds({
   if (cwdMount) {
     fds.push(new PreparedWasiPreopenDirectory(cwdMount, { preopenName: '.' }));
   }
-  await syncMountedInputPathsFromOpfs({
-    args,
-    mounts,
-    mountHandles,
-    runtimeMounts,
-  });
+  if (virtualOnlyMounts) {
+    trace?.('[browser-opfs] sync mounted input paths skipped for virtual-only mount');
+  } else {
+    await syncMountedInputPathsFromOpfs({
+      args,
+      mounts,
+      mountHandles,
+      runtimeMounts,
+    });
+  }
+  trace?.(`[browser-opfs] build fds leave fds=${fds.length} mounts=${mounts.length}`);
 
   return {
     fds,
@@ -594,27 +814,109 @@ async function buildBrowserOpfsWasiFds({
   };
 }
 
+function installDirectWasiFileReadImports(wasi) {
+  const imports = wasi?.wasiImport;
+  if (!imports || imports.__romWeaverDirectFileRead) return;
+  const originalFdRead = imports.fd_read;
+  const originalFdPread = imports.fd_pread;
+  imports.fd_read = (fd, iovsPtr, iovsLen, nreadPtr) => {
+    const fdObj = wasi.fds?.[fd];
+    if (!fdObj || typeof fdObj.fd_read_into !== 'function') {
+      return originalFdRead(fd, iovsPtr, iovsLen, nreadPtr);
+    }
+    return directWasiFileRead({
+      fdObj,
+      iovsLen,
+      iovsPtr,
+      nreadPtr,
+      original: () => originalFdRead(fd, iovsPtr, iovsLen, nreadPtr),
+      wasi,
+    });
+  };
+  imports.fd_pread = (fd, iovsPtr, iovsLen, offset, nreadPtr) => {
+    const fdObj = wasi.fds?.[fd];
+    if (!fdObj || typeof fdObj.fd_pread_into !== 'function') {
+      return originalFdPread(fd, iovsPtr, iovsLen, offset, nreadPtr);
+    }
+    return directWasiFileRead({
+      fdObj,
+      iovsLen,
+      iovsPtr,
+      nreadPtr,
+      offset,
+      original: () => originalFdPread(fd, iovsPtr, iovsLen, offset, nreadPtr),
+      wasi,
+    });
+  };
+  imports.__romWeaverDirectFileRead = true;
+}
+
+function directWasiFileRead({
+  fdObj,
+  iovsLen,
+  iovsPtr,
+  nreadPtr,
+  offset,
+  original,
+  wasi,
+}) {
+  const memory = wasi?.inst?.exports?.memory;
+  if (!(memory instanceof WebAssembly.Memory)) return original();
+
+  const buffer = new DataView(memory.buffer);
+  const buffer8 = new Uint8Array(memory.buffer);
+  const iovecs = wasiShim.wasi.Iovec.read_bytes_array(buffer, iovsPtr, iovsLen);
+  let nread = 0;
+  let currentOffset = offset === undefined ? null : BigInt(offset);
+  try {
+    for (const iovec of iovecs) {
+      const target = buffer8.subarray(iovec.buf, iovec.buf + iovec.buf_len);
+      const result = currentOffset === null
+        ? fdObj.fd_read_into(target)
+        : fdObj.fd_pread_into(target, currentOffset);
+      if (result.ret !== wasiShim.wasi.ERRNO_SUCCESS) {
+        if (nread === 0 && result.ret === wasiShim.wasi.ERRNO_NOTSUP) return original();
+        buffer.setUint32(nreadPtr, nread, true);
+        return result.ret;
+      }
+      const bytesRead = Math.max(0, Math.min(Number(result.nread) || 0, iovec.buf_len));
+      nread += bytesRead;
+      if (currentOffset !== null) currentOffset += BigInt(bytesRead);
+      if (bytesRead !== iovec.buf_len) break;
+    }
+    buffer.setUint32(nreadPtr, nread, true);
+    return wasiShim.wasi.ERRNO_SUCCESS;
+  } catch (error) {
+    if (nread === 0) return original();
+    throw error;
+  }
+}
+
 class BrowserOpfsMount {
   static async create({
     directoryHandle,
     mountPath,
     syncAccessMode,
+    virtualOnly,
     writableRoots,
   }) {
     const ownedFiles = [];
-    const contents = await buildOpfsInodeMap({
-      closeables: ownedFiles,
-      directoryHandle,
-      guestPath: mountPath,
-      syncAccessMode,
-      writableRoots,
-    });
+    const contents = virtualOnly
+      ? new Map()
+      : await buildOpfsInodeMap({
+          closeables: ownedFiles,
+          directoryHandle,
+          guestPath: mountPath,
+          syncAccessMode,
+          writableRoots,
+        });
     return new BrowserOpfsMount({
       contents,
       directoryHandle,
       mountPath,
       ownedFiles,
       syncAccessMode,
+      virtualOnly: Boolean(virtualOnly),
       writableRoots,
     });
   }
@@ -625,6 +927,7 @@ class BrowserOpfsMount {
     mountPath,
     ownedFiles,
     syncAccessMode,
+    virtualOnly,
     writableRoots,
   }) {
     this.contents = contents;
@@ -632,6 +935,7 @@ class BrowserOpfsMount {
     this.mountPath = mountPath;
     this.ownedFiles = ownedFiles;
     this.syncAccessMode = syncAccessMode;
+    this.virtualOnly = Boolean(virtualOnly);
     this.writableRoots = writableRoots;
     this.writableRootsKey = writableRoots.join('\0');
     this.virtualRestores = null;
@@ -650,23 +954,35 @@ class BrowserOpfsMount {
     return file;
   }
 
-  async startRun({ runCloseables, scratchFilePoolSize, virtualFiles }) {
+  async startRun({ runCloseables, scratchFilePoolSize, virtualFiles, trace }) {
     this.finishRun();
+    trace?.(
+      `[browser-opfs] mount virtual files start path=${this.mountPath} ${summarizeNormalizedVirtualFiles(virtualFiles)}`,
+    );
     if (Array.isArray(virtualFiles) && virtualFiles.length > 0) {
       this.virtualRestores = addVirtualFilesToMount({
         contents: this.contents,
         mountPath: this.mountPath,
+        trace,
         virtualFiles,
       });
     } else {
       this.virtualRestores = [];
     }
-    const scratch = await createScratchFilePool({
-      closeables: runCloseables,
-      directoryHandle: this.directoryHandle,
-      scratchFilePoolSize,
-      syncAccessMode: this.syncAccessMode,
-    });
+    trace?.(
+      `[browser-opfs] mount virtual files done path=${this.mountPath} mounted=${this.virtualRestores.length}`,
+    );
+    const scratch = this.virtualOnly
+      ? createMemoryScratchFilePool({
+          closeables: runCloseables,
+          scratchFilePoolSize,
+        })
+      : await createScratchFilePool({
+          closeables: runCloseables,
+          directoryHandle: this.directoryHandle,
+          scratchFilePoolSize,
+          syncAccessMode: this.syncAccessMode,
+        });
     this.scratchDirectoryHandle = scratch.directoryHandle;
     this.scratchFiles = scratch.files;
     this.scratchPool = scratch.pool;
@@ -802,6 +1118,8 @@ class BrowserOpfsRandomAccessFile {
   constructor(syncHandle, options = {}) {
     this.syncHandle = syncHandle;
     this.scratchName = options.scratchName ?? null;
+    this.dirty = false;
+    this.supportsDirectWasmRead = true;
     this.closed = false;
   }
 
@@ -810,7 +1128,9 @@ class BrowserOpfsRandomAccessFile {
   }
 
   writeAt(offset, src) {
-    return this.syncHandle.write(src, { at: Number(offset) });
+    const written = this.syncHandle.write(src, { at: Number(offset) });
+    if (written > 0) this.dirty = true;
+    return written;
   }
 
   size() {
@@ -818,40 +1138,110 @@ class BrowserOpfsRandomAccessFile {
   }
 
   truncate(size) {
-    this.syncHandle.truncate(Number(size));
+    const normalizedSize = Number(size);
+    if (this.syncHandle.getSize() === normalizedSize) return;
+    this.syncHandle.truncate(normalizedSize);
+    this.dirty = true;
   }
 
   flush() {
+    if (!this.dirty) return;
+    if (this.scratchName) {
+      this.dirty = false;
+      return;
+    }
     this.syncHandle.flush();
+    this.dirty = false;
   }
 
   close() {
     if (this.closed) return;
     try {
-      this.flush();
-    } finally {
       this.syncHandle.close();
+    } finally {
       this.closed = true;
+      this.dirty = false;
     }
   }
 }
 
-class BrowserVirtualRandomAccessFile {
-  constructor(source) {
-    this.source = source;
-    this.proxy = isVirtualFileProxy(source) ? source : null;
-    this.reader = isBlobLike(source) ? new FileReaderSync() : null;
-    this.slots = this.proxy ? normalizeVirtualFileProxySlots(this.proxy) : [];
+class BrowserMemoryRandomAccessFile {
+  constructor(initialCapacity = 0) {
+    this.bytes = new Uint8Array(Math.max(0, Number(initialCapacity) || 0));
+    this.length = 0;
+    this.supportsDirectWasmRead = true;
     this.closed = false;
   }
 
   readAt(offset, dst) {
     if (this.closed) return 0;
     const start = Number(offset);
+    if (!Number.isFinite(start) || start < 0 || start >= this.length) return 0;
+    const length = Math.min(dst.byteLength, this.length - start);
+    if (length <= 0) return 0;
+    dst.set(this.bytes.subarray(start, start + length));
+    return length;
+  }
+
+  writeAt(offset, src) {
+    if (this.closed) return 0;
+    const start = Number(offset);
+    if (!Number.isFinite(start) || start < 0) return 0;
+    const end = start + src.byteLength;
+    this.ensureCapacity(end);
+    this.bytes.set(src, start);
+    this.length = Math.max(this.length, end);
+    return src.byteLength;
+  }
+
+  size() {
+    return this.length;
+  }
+
+  truncate(size) {
+    const nextSize = Math.max(0, Number(size) || 0);
+    this.ensureCapacity(nextSize);
+    if (nextSize > this.length) this.bytes.fill(0, this.length, nextSize);
+    this.length = nextSize;
+  }
+
+  flush() {}
+
+  close() {
+    this.closed = true;
+  }
+
+  ensureCapacity(size) {
+    if (size <= this.bytes.byteLength) return;
+    let nextCapacity = Math.max(1024, this.bytes.byteLength);
+    while (nextCapacity < size) nextCapacity *= 2;
+    const next = new Uint8Array(nextCapacity);
+    next.set(this.bytes.subarray(0, this.length));
+    this.bytes = next;
+  }
+}
+
+class BrowserVirtualRandomAccessFile {
+  constructor(source, options = {}) {
+    this.source = source;
+    this.proxy = isVirtualFileProxy(source) ? source : null;
+    this.reader = isBlobLike(source) ? new FileReaderSync() : null;
+    this.slots = this.proxy ? normalizeVirtualFileProxySlots(this.proxy) : [];
+    this.trace = typeof options.trace === 'function' ? options.trace : null;
+    this.readCount = 0;
+    this.supportsDirectWasmRead = true;
+    this.closed = false;
+  }
+
+  readAt(offset, dst) {
+    if (this.closed) return 0;
+    this.readCount += 1;
+    const readIndex = this.readCount;
+    const start = Number(offset);
     if (!Number.isFinite(start) || start < 0 || start >= this.size()) return 0;
     const length = Math.min(dst.byteLength, this.size() - start);
     if (length <= 0) return 0;
-    if (this.proxy) return this.readProxyAt(start, dst, length);
+    if (this.proxy) return this.readProxyAt(start, dst, length, readIndex);
     if (this.source instanceof Uint8Array) {
       dst.set(this.source.subarray(start, start + length));
       return length;
@@ -865,11 +1255,28 @@ class BrowserVirtualRandomAccessFile {
     return bytes.byteLength;
   }
 
-  readProxyAt(offset, dst, requestedLength) {
-    const slot = this.acquireProxySlot();
+  readProxyAt(offset, dst, requestedLength, readIndex) {
+    const shouldTrace = this.shouldTraceRead(readIndex);
+    if (shouldTrace) {
+      this.trace?.(
+        `[browser-opfs] virtual proxy slot acquire start id=${this.proxy.id} read=${readIndex}`,
+      );
+    }
+    let slot = null;
     try {
+      slot = this.acquireProxySlot();
+      if (shouldTrace) {
+        this.trace?.(
+          `[browser-opfs] virtual proxy slot acquired id=${this.proxy.id} read=${readIndex}`,
+        );
+      }
       const length = Math.min(requestedLength, slot.data.byteLength);
       if (length <= 0) return 0;
+      if (shouldTrace) {
+        this.trace?.(
+          `[browser-opfs] virtual proxy read request id=${this.proxy.id} read=${readIndex} offset=${offset} length=${length}`,
+        );
+      }
       const low = offset >>> 0;
       const high = Math.floor(offset / 2 ** 32) >>> 0;
       Atomics.store(slot.control, 1, low);
@@ -893,10 +1300,24 @@ class BrowserVirtualRandomAccessFile {
       }
       const bytesRead = Math.max(0, Math.min(Atomics.load(slot.control, 4), length));
       if (bytesRead > 0) dst.set(slot.data.subarray(0, bytesRead));
+      if (shouldTrace) {
+        this.trace?.(
+          `[browser-opfs] virtual proxy read done id=${this.proxy.id} read=${readIndex} bytes=${bytesRead}`,
+        );
+      }
       return bytesRead;
+    } catch (error) {
+      this.trace?.(
+        `[browser-opfs] virtual proxy read failed id=${this.proxy.id} read=${readIndex} ${formatErrorForTrace(error)}`,
+      );
+      throw error;
     } finally {
-      this.releaseProxySlot(slot);
+      if (slot) this.releaseProxySlot(slot);
     }
+  }
+
+  shouldTraceRead(readIndex) {
+    return readIndex <= VIRTUAL_FILE_PROXY_TRACE_READ_LIMIT || readIndex % 128 === 0;
   }
 
   acquireProxySlot() {
@@ -1034,13 +1455,30 @@ class OpenWasiRandomAccessFile extends wasiShim.Fd {
     const buffer = new Uint8Array(size);
     const bytesRead = this.inode.file.readAt(this.position, buffer);
     this.position += BigInt(bytesRead);
-    return { ret: wasiShim.wasi.ERRNO_SUCCESS, data: buffer.slice(0, bytesRead) };
+    return { ret: wasiShim.wasi.ERRNO_SUCCESS, data: buffer.subarray(0, bytesRead) };
   }
 
   fd_pread(size, offset) {
     const buffer = new Uint8Array(size);
     const bytesRead = this.inode.file.readAt(offset, buffer);
-    return { ret: wasiShim.wasi.ERRNO_SUCCESS, data: buffer.slice(0, bytesRead) };
+    return { ret: wasiShim.wasi.ERRNO_SUCCESS, data: buffer.subarray(0, bytesRead) };
+  }
+
+  fd_read_into(target) {
+    if (!this.inode.file.supportsDirectWasmRead) {
+      return { ret: wasiShim.wasi.ERRNO_NOTSUP, nread: 0 };
+    }
+    const bytesRead = this.inode.file.readAt(this.position, target);
+    this.position += BigInt(bytesRead);
+    return { ret: wasiShim.wasi.ERRNO_SUCCESS, nread: bytesRead };
+  }
+
+  fd_pread_into(target, offset) {
+    if (!this.inode.file.supportsDirectWasmRead) {
+      return { ret: wasiShim.wasi.ERRNO_NOTSUP, nread: 0 };
+    }
+    const bytesRead = this.inode.file.readAt(offset, target);
+    return { ret: wasiShim.wasi.ERRNO_SUCCESS, nread: bytesRead };
   }
 
   fd_seek(offset, whence) {
@@ -1124,17 +1562,20 @@ async function buildOpfsInodeMap({
   return entries;
 }
 
-function addVirtualFilesToMount({ contents, mountPath, virtualFiles }) {
+function addVirtualFilesToMount({ contents, mountPath, trace, virtualFiles }) {
   const restores = [];
   for (const entry of virtualFiles ?? []) {
-    if (!isGuestPathWithinMount(entry.path, mountPath)) continue;
+    if (!isGuestPathWithinMount(entry.path, mountPath)) {
+      trace?.(`[browser-opfs] virtual file skipped outside mount path=${basenameForTrace(entry.path)} mount=${mountPath}`);
+      continue;
+    }
     const relativePath = entry.path === mountPath ? '' : entry.path.slice(mountPath.length + 1);
-    addVirtualFileEntry(contents, relativePath, entry.source, restores);
+    addVirtualFileEntry(contents, relativePath, entry.source, restores, trace);
   }
   return restores;
 }
 
-function addVirtualFileEntry(contents, relativePath, source, restores) {
+function addVirtualFileEntry(contents, relativePath, source, restores, trace) {
   const parts = normalizeWasiRelativePathParts(relativePath);
   if (parts === null || parts.length === 0) {
     throw new TypeError(`virtual file path must be inside a mounted directory: ${relativePath}`);
@@ -1153,8 +1594,11 @@ function addVirtualFileEntry(contents, relativePath, source, restores) {
     }
     entries = existing.contents;
   }
-  const file = new BrowserVirtualRandomAccessFile(source);
+  const file = new BrowserVirtualRandomAccessFile(source, { trace });
   const name = parts[parts.length - 1];
+  trace?.(
+    `[browser-opfs] virtual file mounted name=${name} proxy=${Boolean(file.proxy)} size=${file.size()}`,
+  );
   restores.push({
     entries,
     hadExisting: entries.has(name),
@@ -1185,13 +1629,13 @@ function restoreVirtualFiles(restores) {
 
 async function flushBrowserOpfsMounts(mounts) {
   for (const mount of mounts) {
+    if (mount.virtualOnly) continue;
     await flushInMemoryEntriesToOpfs(mount.directoryHandle, mount.contents);
     await replaceScratchBackedEntriesWithOpfsHandles({
       directoryHandle: mount.directoryHandle,
       entries: mount.contents,
       mount,
     });
-    flushWritableInodeEntries(mount.contents);
   }
 }
 
@@ -1221,21 +1665,6 @@ async function replaceScratchBackedEntriesWithOpfsHandles({
         entries: entry.contents,
         mount,
       });
-    }
-  }
-}
-
-function flushWritableInodeEntries(entries) {
-  for (const entry of entries.values()) {
-    if (entry instanceof wasiShim.Directory) {
-      flushWritableInodeEntries(entry.contents);
-      continue;
-    }
-    if (!(entry instanceof WasiRandomAccessFileInode) || entry.readonly) continue;
-    try {
-      entry.file.flush();
-    } catch {
-      // ignore best-effort flush failures
     }
   }
 }
@@ -1408,13 +1837,6 @@ async function hydrateMountedInputPathFromOpfs({ mount, relativeParts, rootHandl
 
 function collectCliPreparedPaths(args) {
   const out = [];
-  let extractSourcePath = null;
-  let extractOutDirPath = null;
-  const commandIndex = findCommandIndex(args);
-  if (commandIndex !== -1 && args[commandIndex] === 'extract') {
-    const sourcePath = args[commandIndex + 1];
-    if (typeof sourcePath === 'string' && !sourcePath.startsWith('-')) extractSourcePath = sourcePath;
-  }
   for (let index = 0; index < args.length; index += 1) {
     const arg = String(args[index] ?? '');
     if (arg === '--output') {
@@ -1430,39 +1852,16 @@ function collectCliPreparedPaths(args) {
     if (arg === '--out-dir') {
       const value = args[index + 1];
       if (typeof value === 'string') {
-        extractOutDirPath = value;
         out.push({ path: value, type: 'dir' });
       }
       index += 1;
       continue;
     }
     if (arg.startsWith('--out-dir=')) {
-      extractOutDirPath = arg.slice('--out-dir='.length);
-      out.push({ path: extractOutDirPath, type: 'dir' });
+      out.push({ path: arg.slice('--out-dir='.length), type: 'dir' });
     }
   }
-  const directExtractOutputPath = predictDirectExtractOutputPath({
-    outDirPath: extractOutDirPath,
-    sourcePath: extractSourcePath,
-  });
-  if (directExtractOutputPath) out.push({ path: directExtractOutputPath, truncate: true, type: 'file' });
   return out;
-}
-
-function predictDirectExtractOutputPath({ outDirPath, sourcePath }) {
-  const outputName = predictNodExtractOutputName(sourcePath);
-  if (!(outputName && typeof outDirPath === 'string' && outDirPath.trim())) return null;
-  return joinGuestPath(outDirPath, outputName);
-}
-
-function predictNodExtractOutputName(sourcePath) {
-  if (typeof sourcePath !== 'string') return null;
-  const baseName = sourcePath.split(PATH_SEPARATOR_REGEX).filter(Boolean).pop() || '';
-  const extensionIndex = baseName.lastIndexOf('.');
-  if (extensionIndex <= 0) return null;
-  const extension = baseName.slice(extensionIndex + 1).toLowerCase();
-  if (!['gcz', 'nfs', 'rvz', 'tgc', 'wbfs', 'wia'].includes(extension)) return null;
-  return `${baseName.slice(0, extensionIndex)}.iso`;
 }
 
 function resolveMountedGuestPath(path, mountHandles, runtimeMounts) {
@@ -1608,6 +2007,21 @@ async function createScratchFilePool({
   };
 }
 
+function createMemoryScratchFilePool({ closeables, scratchFilePoolSize }) {
+  const count = normalizeScratchFilePoolSize(scratchFilePoolSize);
+  const files = [];
+  for (let index = 0; index < count; index += 1) {
+    const file = new BrowserMemoryRandomAccessFile();
+    files.push(file);
+    closeables.push(file);
+  }
+  return {
+    directoryHandle: null,
+    files,
+    pool: [...files],
+  };
+}
+
 function normalizeScratchFilePoolSize(value) {
   if (value === undefined || value === null) return DEFAULT_SCRATCH_FILE_POOL_SIZE;
   const parsed = Number(value);
@@ -1696,6 +2110,28 @@ function copyRandomAccessFileSync(source, target) {
 
 async function copyRandomAccessFileToHandle(source, fileHandle) {
   const size = Number(source.size());
+  if (typeof fileHandle.createSyncAccessHandle === 'function') {
+    const accessHandle = await openSyncAccessHandle({ fileHandle, mode: 'readwrite' });
+    try {
+      const buffer = new Uint8Array(OPFS_COPY_CHUNK_SIZE);
+      accessHandle.truncate(size);
+      let offset = 0;
+      while (offset < size) {
+        const length = Math.min(buffer.byteLength, size - offset);
+        const view = buffer.subarray(0, length);
+        const read = source.readAt(offset, view);
+        if (read <= 0) break;
+        accessHandle.write(view.subarray(0, read), { at: offset });
+        offset += read;
+      }
+      accessHandle.truncate(offset);
+      accessHandle.flush();
+    } finally {
+      accessHandle.close();
+    }
+    return;
+  }
+
   const writable = await fileHandle.createWritable({ keepExistingData: false });
   let writeError = null;
   try {
@@ -2252,6 +2688,7 @@ function createBrowserWasiThreadWorkerPool({ initialSize, threadWorkerUrl }) {
     poolSize,
     streamBroadcastChannelName,
     streamRequestId,
+    trace,
     debugWasi,
     envList,
     runtime,
@@ -2263,17 +2700,44 @@ function createBrowserWasiThreadWorkerPool({ initialSize, threadWorkerUrl }) {
   }) => {
     const commandId = nextCommandId;
     nextCommandId += 1;
+    trace?.(`[browser-opfs] thread pool command create id=${commandId} poolSize=${poolSize}`);
     const command = {
       commandId,
+      debugWasi,
+      envList,
       ready: null,
+      runtime,
       slots: [],
+      streamBroadcastChannelName,
+      streamRequestId,
+      threadIdState,
+      threadWorkerUrl: resolvedThreadWorkerUrl,
+      wasiArgs,
+      wasmMemory,
+      wasmModule,
       shutdown: async () => {
+        trace?.(`[browser-opfs] thread pool command shutdown start id=${commandId}`);
         for (const slot of command.slots) {
           if (slot.shell.currentCommand !== slot) continue;
+          while (true) {
+            const state = Atomics.load(slot.control, THREAD_SLOT_STATE_INDEX);
+            if (
+              state === THREAD_SLOT_STATE_IDLE
+              || state === THREAD_SLOT_STATE_FAILED
+              || state === THREAD_SLOT_STATE_SHUTDOWN
+            ) {
+              break;
+            }
+            trace?.(
+              `[browser-opfs] thread pool command shutdown wait worker=${slot.index} state=${state} id=${commandId}`,
+            );
+            waitForAtomicsStateChange(slot.control, THREAD_SLOT_STATE_INDEX, state);
+          }
           Atomics.store(slot.control, THREAD_SLOT_STATE_INDEX, THREAD_SLOT_STATE_SHUTDOWN);
           Atomics.notify(slot.control, THREAD_SLOT_STATE_INDEX, 1);
         }
         await Promise.allSettled(command.slots.map((slot) => slot.done));
+        trace?.(`[browser-opfs] thread pool command shutdown done id=${commandId}`);
       },
     };
     command.ready = ensureSize(poolSize).then(async () => {
@@ -2317,7 +2781,7 @@ function createBrowserWasiThreadWorkerPool({ initialSize, threadWorkerUrl }) {
         });
         shell.currentCommand = commandSlot;
         command.slots.push(commandSlot);
-        shell.worker.postMessage({
+        const payload = {
           mode: 'pool-command',
           commandId,
           __streamBroadcastChannelName: streamBroadcastChannelName,
@@ -2325,15 +2789,30 @@ function createBrowserWasiThreadWorkerPool({ initialSize, threadWorkerUrl }) {
           controlBuffer: control.buffer,
           debugWasi,
           envList,
-          runtime,
+          runtime: createThreadWorkerRuntimePayload(runtime),
           threadIdState,
           threadWorkerUrl: resolvedThreadWorkerUrl,
           wasiArgs,
           wasmMemory,
           wasmModule,
-        });
+        };
+        trace?.(`[browser-opfs] thread pool command post worker=${shell.index} id=${commandId}`);
+        try {
+          shell.worker.postMessage(payload);
+          trace?.(`[browser-opfs] thread pool command post returned worker=${shell.index} id=${commandId}`);
+        } catch (error) {
+          trace?.(
+            `[browser-opfs] thread pool command post failed worker=${shell.index} id=${commandId} ${formatErrorForTrace(error)}`,
+          );
+          commandSlot.failure = error;
+          commandSlot.rejectReady?.(error);
+          commandSlot.resolveDone?.();
+          shell.currentCommand = null;
+          throw error;
+        }
       }
       await Promise.all(command.slots.map((slot) => slot.ready));
+      trace?.(`[browser-opfs] thread pool command ready id=${commandId} slots=${command.slots.length}`);
     });
     return command;
   };
@@ -2365,6 +2844,7 @@ function createBrowserWasiThreadSpawner({
   allowWorkerPool = true,
   streamBroadcastChannelName,
   streamRequestId,
+  trace,
   moduleImports,
   threadIdState,
   threadWorkerUrl,
@@ -2394,11 +2874,15 @@ function createBrowserWasiThreadSpawner({
   let firstThreadFailure = null;
   const resolvedThreadWorkerUrl = resolveThreadWorkerUrl(threadWorkerUrl);
   const poolSize = allowWorkerPool ? resolveBrowserThreadPoolSize(wasiArgs) : 0;
+  trace?.(
+    `[browser-opfs] thread spawner create poolSize=${poolSize} pooled=${Boolean(threadWorkerPool)} worker=${basenameForTrace(resolvedThreadWorkerUrl)}`,
+  );
   if (threadWorkerPool) {
     const command = threadWorkerPool.createCommand({
       poolSize,
       streamBroadcastChannelName,
       streamRequestId,
+      trace,
       debugWasi: Boolean(runtime?.debugWasi ?? false),
       envList,
       runtime,
@@ -2411,6 +2895,7 @@ function createBrowserWasiThreadSpawner({
     return createBrowserWasiThreadSpawnerForCommand({
       command,
       threadIdState,
+      trace,
       wasmMemory,
     });
   }
@@ -2418,9 +2903,13 @@ function createBrowserWasiThreadSpawner({
   const recordFailure = (tid, error) => {
     const wrapped = wrapThreadFailure(tid, error);
     if (!firstThreadFailure) firstThreadFailure = wrapped;
-    for (const [activeTid, worker] of activeWorkers.entries()) {
+    for (const [activeTid, slot] of activeWorkers.entries()) {
       if (activeTid === tid) continue;
-      worker.terminate();
+      try {
+        slot.worker?.terminate();
+      } catch {
+        // ignored
+      }
     }
     return wrapped;
   };
@@ -2518,25 +3007,34 @@ function createBrowserWasiThreadSpawner({
         ),
       );
     });
-    worker.postMessage({
+    const payload = {
       mode: 'pool',
       __streamBroadcastChannelName: streamBroadcastChannelName,
       __streamRequestId: streamRequestId,
       controlBuffer: control.buffer,
       debugWasi: Boolean(runtime?.debugWasi ?? false),
       envList,
-      runtime,
+      runtime: createThreadWorkerRuntimePayload(runtime),
       threadIdState,
       threadWorkerUrl: resolvedThreadWorkerUrl,
       wasiArgs,
       wasmMemory,
       wasmModule,
-    });
+    };
+    trace?.(`[browser-opfs] thread worker post startup worker=${index}`);
+    try {
+      worker.postMessage(payload);
+      trace?.(`[browser-opfs] thread worker post startup returned worker=${index}`);
+    } catch (error) {
+      trace?.(`[browser-opfs] thread worker post startup failed worker=${index} ${formatErrorForTrace(error)}`);
+      handleThreadWorkerFailure(slot, error);
+    }
     poolWorkers.push(slot);
   }
 
   const spawn = function spawn(startArg) {
     const errorOrTidPtr = arguments.length > 1 ? arguments[1] : undefined;
+    trace?.(`[browser-opfs] thread spawn requested startArg=${Number(startArg) | 0}`);
     for (const [activeTid, slot] of activeWorkers.entries()) {
       const state = Atomics.load(slot.control, THREAD_SLOT_STATE_INDEX);
       if (state === THREAD_SLOT_STATE_IDLE) {
@@ -2555,24 +3053,48 @@ function createBrowserWasiThreadSpawner({
 
     const tid = allocateThreadId(threadIdState);
     if (tid < 0) {
+      trace?.(`[browser-opfs] thread spawn allocation failed errno=${Math.abs(tid)}`);
       return finishThreadSpawn(wasmMemory, errorOrTidPtr, Math.abs(tid), true);
     }
 
-    const slot = poolWorkers.find((candidate) => candidate.online
+    let slot = poolWorkers.find((candidate) => candidate.online
       && !candidate.busy
       && Atomics.load(candidate.control, THREAD_SLOT_STATE_INDEX) === THREAD_SLOT_STATE_IDLE);
     if (!slot) {
-      return finishThreadSpawn(wasmMemory, errorOrTidPtr, WASI_ERRNO_AGAIN, true);
+      try {
+        slot = createStandaloneBrowserWasiThread({
+          debugWasi: Boolean(runtime?.debugWasi ?? false),
+          envList,
+          index: `overflow-${tid}`,
+          runtime,
+          startArg,
+          streamBroadcastChannelName,
+          streamRequestId,
+          threadIdState,
+          threadWorkerUrl: resolvedThreadWorkerUrl,
+          tid,
+          trace,
+          wasiArgs,
+          wasmMemory,
+          wasmModule,
+        });
+      } catch (error) {
+        trace?.(`[browser-opfs] thread spawn no idle worker tid=${tid} ${formatErrorForTrace(error)}`);
+        return finishThreadSpawn(wasmMemory, errorOrTidPtr, WASI_ERRNO_AGAIN, true);
+      }
+      activeWorkers.set(tid, slot);
+      trace?.(`[browser-opfs] thread spawn dispatched tid=${tid} worker=${slot.index}`);
+    } else {
+      slot.busy = true;
+      slot.tid = tid;
+      activeWorkers.set(tid, slot);
+      Atomics.store(slot.control, THREAD_SLOT_TID_INDEX, tid);
+      Atomics.store(slot.control, THREAD_SLOT_START_ARG_INDEX, Number(startArg) | 0);
+      Atomics.store(slot.control, THREAD_SLOT_ERROR_INDEX, 0);
+      Atomics.store(slot.control, THREAD_SLOT_STATE_INDEX, THREAD_SLOT_STATE_REQUESTED);
+      Atomics.notify(slot.control, THREAD_SLOT_STATE_INDEX, 1);
+      trace?.(`[browser-opfs] thread spawn dispatched tid=${tid} worker=${slot.index}`);
     }
-
-    slot.busy = true;
-    slot.tid = tid;
-    activeWorkers.set(tid, slot);
-    Atomics.store(slot.control, THREAD_SLOT_TID_INDEX, tid);
-    Atomics.store(slot.control, THREAD_SLOT_START_ARG_INDEX, Number(startArg) | 0);
-    Atomics.store(slot.control, THREAD_SLOT_ERROR_INDEX, 0);
-    Atomics.store(slot.control, THREAD_SLOT_STATE_INDEX, THREAD_SLOT_STATE_REQUESTED);
-    Atomics.notify(slot.control, THREAD_SLOT_STATE_INDEX, 1);
 
     const startAckError = waitForThreadStartAck(slot.control, tid);
     if (startAckError) {
@@ -2580,13 +3102,16 @@ function createBrowserWasiThreadSpawner({
       slot.busy = false;
       slot.tid = null;
       recordFailure(tid, startAckError);
+      trace?.(`[browser-opfs] thread spawn ack failed tid=${tid} ${formatErrorForTrace(startAckError)}`);
       return finishThreadSpawn(wasmMemory, errorOrTidPtr, WASI_ERRNO_AGAIN, true);
     }
 
+    trace?.(`[browser-opfs] thread spawn acked tid=${tid} worker=${slot.index}`);
     return finishThreadSpawn(wasmMemory, errorOrTidPtr, tid, false);
   };
 
   const waitForWorkers = async () => {
+    trace?.(`[browser-opfs] thread wait start active=${activeWorkers.size}`);
     while (activeWorkers.size > 0) {
       for (const [tid, slot] of activeWorkers.entries()) {
         while (true) {
@@ -2595,6 +3120,7 @@ function createBrowserWasiThreadSpawner({
             slot.busy = false;
             slot.tid = null;
             activeWorkers.delete(tid);
+            trace?.(`[browser-opfs] thread completed tid=${tid} worker=${slot.index}`);
             break;
           }
           if (state === THREAD_SLOT_STATE_FAILED) {
@@ -2618,6 +3144,7 @@ function createBrowserWasiThreadSpawner({
       slot.worker.terminate();
     }
     if (firstThreadFailure) throw firstThreadFailure;
+    trace?.('[browser-opfs] thread wait done');
   };
 
   return { spawn, ready: Promise.all(poolReadyPromises), waitForWorkers };
@@ -2626,6 +3153,7 @@ function createBrowserWasiThreadSpawner({
 function createBrowserWasiThreadSpawnerForCommand({
   command,
   threadIdState,
+  trace,
   wasmMemory,
 }) {
   const activeWorkers = new Map();
@@ -2639,6 +3167,7 @@ function createBrowserWasiThreadSpawnerForCommand({
 
   const spawn = function spawn(startArg) {
     const errorOrTidPtr = arguments.length > 1 ? arguments[1] : undefined;
+    trace?.(`[browser-opfs] thread spawn requested startArg=${Number(startArg) | 0} command=${command.commandId}`);
     for (const [activeTid, slot] of activeWorkers.entries()) {
       const state = Atomics.load(slot.control, THREAD_SLOT_STATE_INDEX);
       if (state === THREAD_SLOT_STATE_IDLE) {
@@ -2657,24 +3186,50 @@ function createBrowserWasiThreadSpawnerForCommand({
 
     const tid = allocateThreadId(threadIdState);
     if (tid < 0) {
+      trace?.(`[browser-opfs] thread spawn allocation failed errno=${Math.abs(tid)} command=${command.commandId}`);
       return finishThreadSpawn(wasmMemory, errorOrTidPtr, Math.abs(tid), true);
     }
 
-    const slot = command.slots.find((candidate) => candidate.online
+    let slot = command.slots.find((candidate) => candidate.online
       && !candidate.busy
       && Atomics.load(candidate.control, THREAD_SLOT_STATE_INDEX) === THREAD_SLOT_STATE_IDLE);
     if (!slot) {
-      return finishThreadSpawn(wasmMemory, errorOrTidPtr, WASI_ERRNO_AGAIN, true);
+      try {
+        slot = createStandaloneBrowserWasiThread({
+          debugWasi: command.debugWasi,
+          envList: command.envList,
+          index: `command-${command.commandId}-overflow-${tid}`,
+          runtime: command.runtime,
+          startArg,
+          streamBroadcastChannelName: command.streamBroadcastChannelName,
+          streamRequestId: command.streamRequestId,
+          threadIdState: command.threadIdState,
+          threadWorkerUrl: command.threadWorkerUrl,
+          tid,
+          trace,
+          wasiArgs: command.wasiArgs,
+          wasmMemory: command.wasmMemory,
+          wasmModule: command.wasmModule,
+        });
+      } catch (error) {
+        trace?.(
+          `[browser-opfs] thread spawn no idle pooled worker tid=${tid} command=${command.commandId} ${formatErrorForTrace(error)}`,
+        );
+        return finishThreadSpawn(wasmMemory, errorOrTidPtr, WASI_ERRNO_AGAIN, true);
+      }
+      activeWorkers.set(tid, slot);
+      trace?.(`[browser-opfs] thread spawn dispatched tid=${tid} worker=${slot.index} command=${command.commandId}`);
+    } else {
+      slot.busy = true;
+      slot.tid = tid;
+      activeWorkers.set(tid, slot);
+      Atomics.store(slot.control, THREAD_SLOT_TID_INDEX, tid);
+      Atomics.store(slot.control, THREAD_SLOT_START_ARG_INDEX, Number(startArg) | 0);
+      Atomics.store(slot.control, THREAD_SLOT_ERROR_INDEX, 0);
+      Atomics.store(slot.control, THREAD_SLOT_STATE_INDEX, THREAD_SLOT_STATE_REQUESTED);
+      Atomics.notify(slot.control, THREAD_SLOT_STATE_INDEX, 1);
+      trace?.(`[browser-opfs] thread spawn dispatched tid=${tid} worker=${slot.index} command=${command.commandId}`);
     }
-
-    slot.busy = true;
-    slot.tid = tid;
-    activeWorkers.set(tid, slot);
-    Atomics.store(slot.control, THREAD_SLOT_TID_INDEX, tid);
-    Atomics.store(slot.control, THREAD_SLOT_START_ARG_INDEX, Number(startArg) | 0);
-    Atomics.store(slot.control, THREAD_SLOT_ERROR_INDEX, 0);
-    Atomics.store(slot.control, THREAD_SLOT_STATE_INDEX, THREAD_SLOT_STATE_REQUESTED);
-    Atomics.notify(slot.control, THREAD_SLOT_STATE_INDEX, 1);
 
     const startAckError = waitForThreadStartAck(slot.control, tid);
     if (startAckError) {
@@ -2682,13 +3237,16 @@ function createBrowserWasiThreadSpawnerForCommand({
       slot.busy = false;
       slot.tid = null;
       recordFailure(tid, startAckError);
+      trace?.(`[browser-opfs] thread spawn ack failed tid=${tid} ${formatErrorForTrace(startAckError)}`);
       return finishThreadSpawn(wasmMemory, errorOrTidPtr, WASI_ERRNO_AGAIN, true);
     }
 
+    trace?.(`[browser-opfs] thread spawn acked tid=${tid} worker=${slot.index} command=${command.commandId}`);
     return finishThreadSpawn(wasmMemory, errorOrTidPtr, tid, false);
   };
 
   const waitForWorkers = async () => {
+    trace?.(`[browser-opfs] thread wait start active=${activeWorkers.size} command=${command.commandId}`);
     while (activeWorkers.size > 0) {
       for (const [tid, slot] of activeWorkers.entries()) {
         while (true) {
@@ -2697,6 +3255,7 @@ function createBrowserWasiThreadSpawnerForCommand({
             slot.busy = false;
             slot.tid = null;
             activeWorkers.delete(tid);
+            trace?.(`[browser-opfs] thread completed tid=${tid} worker=${slot.index} command=${command.commandId}`);
             break;
           }
           if (state === THREAD_SLOT_STATE_FAILED) {
@@ -2712,6 +3271,7 @@ function createBrowserWasiThreadSpawnerForCommand({
     }
     await command.shutdown();
     if (firstThreadFailure) throw firstThreadFailure;
+    trace?.(`[browser-opfs] thread wait done command=${command.commandId}`);
   };
 
   const ready = command.ready.catch(async (error) => {
@@ -2722,10 +3282,107 @@ function createBrowserWasiThreadSpawnerForCommand({
   return { spawn, ready, waitForWorkers };
 }
 
+function createStandaloneBrowserWasiThread({
+  debugWasi,
+  envList,
+  index,
+  runtime,
+  startArg,
+  streamBroadcastChannelName,
+  streamRequestId,
+  threadIdState,
+  threadWorkerUrl,
+  tid,
+  trace,
+  wasiArgs,
+  wasmMemory,
+  wasmModule,
+}) {
+  const resolvedThreadWorkerUrl = resolveThreadWorkerUrl(threadWorkerUrl);
+  const control = new Int32Array(
+    new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * THREAD_SLOT_LENGTH),
+  );
+  control[THREAD_SLOT_STATE_INDEX] = THREAD_SLOT_STATE_REQUESTED;
+  control[THREAD_SLOT_TID_INDEX] = tid;
+  control[THREAD_SLOT_START_ARG_INDEX] = Number(startArg) | 0;
+  control[THREAD_SLOT_ERROR_INDEX] = 0;
+  const slot = {
+    index,
+    worker: null,
+    control,
+    online: true,
+    busy: true,
+    tid,
+    failure: null,
+    standalone: true,
+  };
+  const worker = new Worker(resolvedThreadWorkerUrl, { type: 'module' });
+  slot.worker = worker;
+  worker.addEventListener('message', (event) => {
+    const message = event.data ?? {};
+    if (message.type === 'done') {
+      slot.busy = false;
+      slot.tid = null;
+      return;
+    }
+    if (message.type === 'error') {
+      const error = annotateThreadWorkerError(
+        deserializeThreadWorkerError(message.error),
+        slot,
+        resolvedThreadWorkerUrl,
+      );
+      slot.failure = error;
+      Atomics.store(slot.control, THREAD_SLOT_ERROR_INDEX, 1);
+      signalThreadStartState(slot.control, THREAD_SLOT_STATE_FAILED);
+    }
+  });
+  worker.addEventListener('error', (event) => {
+    event.preventDefault?.();
+    const error = createThreadWorkerLoadError(event, slot, resolvedThreadWorkerUrl);
+    slot.failure = error;
+    Atomics.store(slot.control, THREAD_SLOT_ERROR_INDEX, 1);
+    signalThreadStartState(slot.control, THREAD_SLOT_STATE_FAILED);
+  });
+  worker.addEventListener('messageerror', (event) => {
+    event.preventDefault?.();
+    slot.failure = new Error(
+      `browser wasi thread worker ${slot.index} could not receive its startup payload`
+      + ` (workerUrl=${resolvedThreadWorkerUrl}, tid=${slot.tid ?? 'ready'})`,
+    );
+    Atomics.store(slot.control, THREAD_SLOT_ERROR_INDEX, 1);
+    signalThreadStartState(slot.control, THREAD_SLOT_STATE_FAILED);
+  });
+  const payload = {
+    mode: 'thread',
+    __streamBroadcastChannelName: streamBroadcastChannelName,
+    __streamRequestId: streamRequestId,
+    debugWasi,
+    envList,
+    runtime: createThreadWorkerRuntimePayload(runtime),
+    startArg,
+    startControlBuffer: control.buffer,
+    threadIdState,
+    threadWorkerUrl: resolvedThreadWorkerUrl,
+    tid,
+    wasiArgs,
+    wasmMemory,
+    wasmModule,
+  };
+  trace?.(`[browser-opfs] thread spawn overflow worker post tid=${tid} worker=${index}`);
+  try {
+    worker.postMessage(payload);
+  } catch (error) {
+    worker.terminate();
+    throw error;
+  }
+  return slot;
+}
+
 function resolveBrowserThreadPoolSize(wasiArgs) {
   const requestedThreadCount = parseRequestedThreadCount(wasiArgs);
   if (requestedThreadCount === null || requestedThreadCount <= 1) return 0;
-  return Math.min(Math.max(1, requestedThreadCount), MAX_BROWSER_THREAD_POOL_SIZE);
+  const requested = Math.min(Math.max(1, requestedThreadCount), MAX_BROWSER_THREAD_POOL_SIZE);
+  return Math.min(requested + BROWSER_THREAD_POOL_HEADROOM, MAX_BROWSER_THREAD_POOL_SIZE);
 }
 
 function parseRequestedThreadCount(wasiArgs) {

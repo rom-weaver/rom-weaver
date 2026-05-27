@@ -55,6 +55,11 @@ const clampPercent = (value: unknown): number | null => {
   return Math.max(0, Math.min(100, value));
 };
 
+const isLiveProgressEvent = (event: RomWeaverRunJsonEvent): boolean => {
+  const status = typeof event.status === "string" ? event.status.toLowerCase() : "";
+  return !status || status === "running";
+};
+
 const toThreadArg = (value: unknown, fallback: string | null = null): string | null => {
   if (typeof value === "number" && Number.isFinite(value)) {
     const parsed = Math.floor(value);
@@ -70,6 +75,18 @@ const toThreadArg = (value: unknown, fallback: string | null = null): string | n
 
 const isTraceEnabled = (logLevel: LogLevel | string | undefined) => String(logLevel || "").toLowerCase() === "trace";
 
+const emitRuntimeTrace = (
+  input: {
+    logLevel?: LogLevel | string;
+    onLog?: (log: WorkflowRuntimeLog) => void;
+  },
+  message: string,
+  details?: Record<string, unknown>,
+) => {
+  if (!isTraceEnabled(input.logLevel)) return;
+  emitRuntimeLog(input.onLog, "trace", message, details);
+};
+
 const getTraceMessage = (value: unknown): string => {
   if (typeof value === "string") return value.trim();
   try {
@@ -81,24 +98,33 @@ const getTraceMessage = (value: unknown): string => {
 };
 
 const toRomWeaverOptions = (input: {
+  invalidateMountCacheBeforeRun?: boolean;
   logLevel?: LogLevel | string;
   onEvent?: (event: RomWeaverRunJsonEvent) => void;
   onLog?: (log: WorkflowRuntimeLog) => void;
-}): RomWeaverRunJsonOptions => ({
-  onEvent: input.onEvent,
-  onTraceEvent: isTraceEnabled(input.logLevel)
-    ? (event) => {
-        const message = getTraceMessage(event);
-        if (!message) return;
-        emitRuntimeLog(input.onLog, "trace", message);
-      }
-    : undefined,
-  onTraceNonJsonLine: (line) => {
-    const message = String(line || "").trim();
-    if (!message) return;
-    emitRuntimeLog(input.onLog, "trace", message);
-  },
-});
+  scratchFilePoolSize?: number | null;
+}): RomWeaverRunJsonOptions => {
+  const options: RomWeaverRunJsonOptions = {
+    onEvent: input.onEvent,
+    onTraceEvent: isTraceEnabled(input.logLevel)
+      ? (event) => {
+          const message = getTraceMessage(event);
+          if (!message) return;
+          emitRuntimeLog(input.onLog, "trace", message);
+        }
+      : undefined,
+    onTraceNonJsonLine: (line) => {
+      const message = String(line || "").trim();
+      if (!message) return;
+      emitRuntimeLog(input.onLog, "trace", message);
+    },
+  };
+  if (typeof input.scratchFilePoolSize === "number" && Number.isFinite(input.scratchFilePoolSize)) {
+    options.scratchFilePoolSize = Math.max(0, Math.floor(input.scratchFilePoolSize));
+  }
+  if (input.invalidateMountCacheBeforeRun) options.invalidateMountCacheBeforeRun = true;
+  return options;
+};
 
 const getPathBaseName = (value: string, fallback: string): string => {
   const text = String(value || "").trim();
@@ -226,11 +252,14 @@ const getContainerEntriesFromInspect = (result: RomWeaverRunJsonResult): string[
 
 const toSimpleProgress = (
   event: RomWeaverRunJsonEvent,
-): { label?: string; message?: string; percent?: number | null } => ({
-  label: typeof event.label === "string" && event.label ? event.label : undefined,
-  message: undefined,
-  percent: clampPercent(event.percent),
-});
+): { label?: string; message?: string; percent?: number | null } | null => {
+  if (!isLiveProgressEvent(event)) return null;
+  return {
+    label: typeof event.label === "string" && event.label ? event.label : undefined,
+    message: undefined,
+    percent: clampPercent(event.percent),
+  };
+};
 
 const normalizeCodecEntries = (value: unknown): string[] => {
   const out: string[] = [];
@@ -326,11 +355,14 @@ const getPatchApplyOutputFileName = (input: RuntimePatchApplyWorkerInput) => {
   return `${stem}${suffix}${normalizedOutputExtension || ".bin"}`;
 };
 
-const toPatchProgress = (event: RomWeaverRunJsonEvent): RuntimePatchWorkerProgress => ({
-  label: typeof event.label === "string" && event.label ? event.label : undefined,
-  message: undefined,
-  percent: clampPercent(event.percent),
-});
+const toPatchProgress = (event: RomWeaverRunJsonEvent): RuntimePatchWorkerProgress | null => {
+  if (!isLiveProgressEvent(event)) return null;
+  return {
+    label: typeof event.label === "string" && event.label ? event.label : undefined,
+    message: undefined,
+    percent: clampPercent(event.percent),
+  };
+};
 
 const invokeRomWeaverCompressionCreateWorker = async (
   input: {
@@ -362,12 +394,22 @@ const invokeRomWeaverCompressionCreateWorker = async (
   const threadArg = toThreadArg(input.workerThreads);
   if (threadArg) args.push("--threads", threadArg);
   if (isTraceEnabled(input.logLevel)) args.unshift("--trace");
+  emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson compress dispatch", {
+    args,
+    format,
+    inputCount: inputPaths.length,
+    outputPath,
+    threadArg,
+  });
 
   const result = await runRomWeaverJson(
     args,
     toRomWeaverOptions({
       logLevel: input.logLevel,
-      onEvent: (event) => onProgress?.(toSimpleProgress(event)),
+      onEvent: (event) => {
+        const progress = toSimpleProgress(event);
+        if (progress) onProgress?.(progress);
+      },
       onLog,
     }),
   );
@@ -383,8 +425,10 @@ const invokeRomWeaverCompressionCreateWorker = async (
 
 const invokeRomWeaverExtractWorker = async (
   input: {
+    invalidateMountCacheBeforeRun?: boolean;
     logLevel?: LogLevel | string;
     outDirPath: string;
+    scratchFilePoolSize?: number | null;
     select?: string[];
     sourcePath: string;
     splitBin?: boolean;
@@ -408,12 +452,24 @@ const invokeRomWeaverExtractWorker = async (
   const threadArg = toThreadArg(input.workerThreads);
   if (threadArg) args.push("--threads", threadArg);
   if (isTraceEnabled(input.logLevel)) args.unshift("--trace");
+  emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson extract dispatch", {
+    args,
+    outDirPath,
+    selectCount: Array.isArray(input.select) ? input.select.length : 0,
+    sourcePath,
+    threadArg,
+  });
   const result = await runRomWeaverJson(
     args,
     toRomWeaverOptions({
+      invalidateMountCacheBeforeRun: input.invalidateMountCacheBeforeRun,
       logLevel: input.logLevel,
-      onEvent: (event) => onProgress?.(toSimpleProgress(event)),
+      onEvent: (event) => {
+        const progress = toSimpleProgress(event);
+        if (progress) onProgress?.(progress);
+      },
       onLog,
+      scratchFilePoolSize: input.scratchFilePoolSize,
     }),
   );
   ensureRomWeaverSuccess(result, "Compression extract failed");
@@ -434,11 +490,18 @@ const runRomWeaverInspectListWorker = async (
   if (!sourcePath) throw new Error("Compression list source path is required");
   const args = ["inspect", "--list", sourcePath];
   if (isTraceEnabled(input.logLevel)) args.unshift("--trace");
+  emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson inspect-list dispatch", {
+    args,
+    sourcePath,
+  });
   const result = await runRomWeaverJson(
     args,
     toRomWeaverOptions({
       logLevel: input.logLevel,
-      onEvent: (event) => onProgress?.(toSimpleProgress(event)),
+      onEvent: (event) => {
+        const progress = toSimpleProgress(event);
+        if (progress) onProgress?.(progress);
+      },
       onLog,
     }),
   );
@@ -480,6 +543,13 @@ const invokeRomWeaverPatchApplyWorker = async (
   const threadArg = toThreadArg((input.options as { workerThreads?: unknown } | undefined)?.workerThreads);
   if (threadArg) args.push("--threads", threadArg);
   if (isTraceEnabled(input.logLevel)) args.unshift("--trace");
+  emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson patch-apply dispatch", {
+    args,
+    outputPath,
+    patchCount: input.patchFiles.length,
+    romFilePath: input.romFilePath,
+    threadArg,
+  });
   await onBeforeRun?.(outputPath);
 
   const result = await runRomWeaverJson(
@@ -487,7 +557,8 @@ const invokeRomWeaverPatchApplyWorker = async (
     toRomWeaverOptions({
       logLevel: input.logLevel,
       onEvent: (event) => {
-        onProgress?.(toPatchProgress(event));
+        const progress = toPatchProgress(event);
+        if (progress) onProgress?.(progress);
       },
       onLog,
     }),
@@ -540,6 +611,13 @@ const invokeRomWeaverCreatePatchWorker = async (
   const threadArg = toThreadArg(input.workerThreads);
   if (threadArg) args.push("--threads", threadArg);
   if (isTraceEnabled(input.logLevel)) args.unshift("--trace");
+  emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson patch-create dispatch", {
+    args,
+    modifiedFilePath: input.modifiedFilePath,
+    originalFilePath: input.originalFilePath,
+    outputPath,
+    threadArg,
+  });
   await onBeforeRun?.(outputPath);
 
   const result = await runRomWeaverJson(
@@ -547,7 +625,8 @@ const invokeRomWeaverCreatePatchWorker = async (
     toRomWeaverOptions({
       logLevel: input.logLevel,
       onEvent: (event) => {
-        onProgress?.(toPatchProgress(event));
+        const progress = toPatchProgress(event);
+        if (progress) onProgress?.(progress);
       },
       onLog,
     }),
@@ -635,11 +714,18 @@ const runRomWeaverChecksumWorker = async (
     args.push("--start", String(Math.floor(input.checksumStartOffset)));
 
   if (isTraceEnabled(input.logLevel)) args.unshift("--trace");
+  emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson checksum dispatch", {
+    algorithms,
+    args,
+    filePath,
+    startOffset: input.checksumStartOffset,
+  });
   const result = await runRomWeaverJson(
     args,
     toRomWeaverOptions({
       logLevel: input.logLevel,
       onEvent: (event) => {
+        if (!isLiveProgressEvent(event)) return;
         onProgress?.({
           label: typeof event.label === "string" && event.label ? event.label : undefined,
           message: undefined,

@@ -1,4 +1,4 @@
-import { getActiveBrowserVirtualFiles } from "../protocol/browser-virtual-files.ts";
+import { type BrowserVirtualFile, getActiveBrowserVirtualFiles } from "../protocol/browser-virtual-files.ts";
 import { isBrowserRuntime } from "../shared/runtime-env.ts";
 import { WORKER_OPFS_MOUNTPOINT } from "../shared/worker-storage/storage-layout.ts";
 
@@ -55,18 +55,32 @@ type BrowserWasmAssetSelection = {
   wasmUrl?: string;
 };
 
-const DEFAULT_BROWSER_THREAD_COUNT = 4;
-const MAX_BROWSER_THREAD_COUNT = 64;
-const THREAD_WARMUP_VIRTUAL_FILE_PATH = `${WORKER_OPFS_MOUNTPOINT}/.rom-weaver-thread-warmup.bin`;
-const THREAD_WARMUP_VIRTUAL_FILE_BYTES = new Uint8Array([0x72, 0x77, 0x2d, 0x77, 0x61, 0x72, 0x6d]);
-
 let browserSingleThreadedWasmUrlPromise: Promise<string> | null = null;
 let browserThreadedWasmUrlPromise: Promise<string> | null = null;
 let browserThreadWorkerUrlPromise: Promise<string> | null = null;
 let browserRunnerPromise: Promise<RomWeaverRunner> | null = null;
-let browserThreadWarmupPromise: { promise: Promise<void>; threads: number } | null = null;
 
 const normalizeArgs = (args: string[]) => args.map((value) => String(value));
+
+const describeVirtualFilesForTrace = (files: BrowserVirtualFile[]) => {
+  let proxyCount = 0;
+  let totalBytes = 0;
+  for (const file of files) {
+    if (file.proxy) {
+      proxyCount += 1;
+      totalBytes += file.proxy.size || 0;
+    }
+  }
+  return {
+    count: files.length,
+    proxyCount,
+    totalBytes,
+  };
+};
+
+const emitRunnerTraceLine = (options: RomWeaverRunJsonOptions | undefined, message: string) => {
+  options?.onTraceNonJsonLine?.(`[browser-runner] ${message}`);
+};
 
 const readWasmUrlModuleDefault = (module: { default?: unknown }, fallback: string) => {
   const candidate = module.default;
@@ -183,7 +197,6 @@ const createRomWeaverRunner = async () => {
 const resetRomWeaverRunner = async () => {
   const activeRunnerPromise = browserRunnerPromise;
   browserRunnerPromise = null;
-  browserThreadWarmupPromise = null;
   if (!activeRunnerPromise) return;
   const runner = await activeRunnerPromise.catch(() => null);
   await runner?.dispose?.().catch(() => undefined);
@@ -192,6 +205,12 @@ const resetRomWeaverRunner = async () => {
 const runRomWeaverJson = async (args: string[], options?: RomWeaverRunJsonOptions) => {
   const activeVirtualFiles = getActiveBrowserVirtualFiles();
   const configuredVirtualFiles = (options as { virtualFiles?: unknown[] } | undefined)?.virtualFiles;
+  emitRunnerTraceLine(
+    options,
+    `runJson preparing args=${JSON.stringify(normalizeArgs(args))} activeVirtualFiles=${JSON.stringify(
+      describeVirtualFilesForTrace(activeVirtualFiles),
+    )} configuredVirtualFiles=${Array.isArray(configuredVirtualFiles) ? configuredVirtualFiles.length : 0}`,
+  );
   const runOptions =
     activeVirtualFiles.length > 0
       ? {
@@ -207,12 +226,18 @@ const runRomWeaverJson = async (args: string[], options?: RomWeaverRunJsonOption
           invalidateMountCacheAfterRun: true,
         };
   const runner = await createRomWeaverRunner();
+  emitRunnerTraceLine(
+    options,
+    `runJson dispatch mode=${runner.ready.mode} threaded=${String(runner.ready.threaded)} fallbackReason=${
+      runner.ready.fallbackReason || ""
+    }`,
+  );
   return runner.runJson(args, runOptions);
 };
 
 const warmupRomWeaverRunner = async (workerThreads?: RuntimeValue) => {
+  void workerThreads;
   const runner = await createRomWeaverRunner();
-  await prewarmThreadedRunner(runner, workerThreads);
   return runner.ready;
 };
 
@@ -249,68 +274,6 @@ const getResourceName = (urlLike: string) => {
   } catch (_err) {
     return urlLike.split("/").filter(Boolean).pop() || "rom-weaver-cli.wasm";
   }
-};
-
-const resolveBrowserDefaultThreads = (root: typeof globalThis = globalThis) => {
-  const hardwareConcurrency = Number(root?.navigator?.hardwareConcurrency);
-  if (Number.isFinite(hardwareConcurrency) && hardwareConcurrency > 0) {
-    return Math.max(1, Math.min(DEFAULT_BROWSER_THREAD_COUNT, Math.floor(hardwareConcurrency)));
-  }
-  return DEFAULT_BROWSER_THREAD_COUNT;
-};
-
-const resolveWarmupThreadCount = (workerThreads?: RuntimeValue) => {
-  if (workerThreads === false || workerThreads === 0 || workerThreads === "0" || workerThreads === "off") return 1;
-  if (workerThreads === undefined || workerThreads === null || workerThreads === "" || workerThreads === "auto")
-    return resolveBrowserDefaultThreads();
-  const requested =
-    typeof workerThreads === "number" ? Math.floor(workerThreads) : Number.parseInt(String(workerThreads).trim(), 10);
-  if (!Number.isFinite(requested) || requested <= 0) return resolveBrowserDefaultThreads();
-  return Math.max(1, Math.min(MAX_BROWSER_THREAD_COUNT, requested));
-};
-
-const prewarmThreadedRunner = async (runner: RomWeaverRunner, workerThreads?: RuntimeValue) => {
-  if (!runner.ready.threaded) return;
-  const warmupThreads = resolveWarmupThreadCount(workerThreads);
-  if (browserThreadWarmupPromise && browserThreadWarmupPromise.threads >= warmupThreads) {
-    await browserThreadWarmupPromise.promise;
-    return;
-  }
-  const promise = (async () => {
-    const result = await runner.runJson(
-      [
-        "checksum",
-        THREAD_WARMUP_VIRTUAL_FILE_PATH,
-        "--algo",
-        "crc32",
-        "--no-extract",
-        "--threads",
-        String(warmupThreads),
-      ],
-      {
-        virtualFiles: [
-          {
-            path: THREAD_WARMUP_VIRTUAL_FILE_PATH,
-            source: THREAD_WARMUP_VIRTUAL_FILE_BYTES,
-          },
-        ],
-      },
-    );
-    if (!result.ok || result.exitCode !== 0) {
-      throw new Error(`thread warmup command failed (exitCode=${result.exitCode})`);
-    }
-  })().catch((error) => {
-    if (browserThreadWarmupPromise?.promise === promise) browserThreadWarmupPromise = null;
-    publishRomWeaverWasmDiagnostic({
-      context: "rom-weaver thread warmup",
-      reason: `warmup failed: ${error instanceof Error ? error.message : String(error)}`,
-      threaded: true,
-      url: runner.ready.wasmUrl || "",
-    });
-    throw error;
-  });
-  browserThreadWarmupPromise = { promise, threads: warmupThreads };
-  await promise;
 };
 
 const getErrorMessage = (value: unknown) => {

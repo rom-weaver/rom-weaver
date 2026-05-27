@@ -24,3 +24,16 @@ const workerMessages = createRunnerWorkerMessageQueue({
 self.addEventListener('message', (event) => {
   workerMessages.enqueue(event.data);
 });
+
+self.addEventListener('messageerror', () => {
+  self.postMessage({
+    type: 'error',
+    requestId: null,
+    error: {
+      name: 'DataCloneError',
+      message: 'browser runner worker could not deserialize a posted message',
+      kind: 'worker',
+      context: { stage: 'worker.messageerror' },
+    },
+  });
+});

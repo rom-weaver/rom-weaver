@@ -1,4 +1,9 @@
-import { getRvzExtractedFileName, replaceCuePatchFileName } from "../../lib/input/disc-file-utils.ts";
+import {
+  getChdExtractedFileName,
+  getRvzExtractedFileName,
+  getZ3dsExtractedFileName,
+  replaceCuePatchFileName,
+} from "../../lib/input/disc-file-utils.ts";
 import {
   invokeRomWeaverCompressionCreateWorker,
   invokeRomWeaverCreatePatchWorker,
@@ -78,6 +83,20 @@ const joinPath = (directory: string, fileName: string): string => {
     return `${normalizedDirectory}${fileName}`;
   return `${normalizedDirectory}${separator}${fileName}`;
 };
+
+const uniqueNonEmptyStrings = (values: string[]): string[] => {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const value of values) {
+    const normalized = String(value || "").trim();
+    if (!(normalized && !seen.has(normalized))) continue;
+    seen.add(normalized);
+    out.push(normalized);
+  }
+  return out;
+};
+
+const getPathDerivedFileName = (filePath: string, fallback: string): string => getPathBaseName(filePath, fallback);
 
 const toNumericLevel = (value: unknown): number | null => {
   if (typeof value === "number" && Number.isFinite(value)) return Math.max(0, Math.floor(value));
@@ -775,11 +794,33 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
     });
     try {
       const outDirPath = getPathDirectory(workerSource.filePath);
+      const actualOutputFileName =
+        mode === "cd" ? "" : getChdExtractedFileName({ _chdMode: mode || undefined, fileName });
+      const stagedOutputFileName =
+        mode === "cd"
+          ? ""
+          : getChdExtractedFileName({
+              _chdMode: mode || undefined,
+              fileName: getPathDerivedFileName(workerSource.filePath, workerSource.fileName || fileName),
+            });
+      const directOutputFileName = outputName || actualOutputFileName;
+      const directOutputPath = stagedOutputFileName ? joinPath(outDirPath, stagedOutputFileName) : "";
+      if (directOutputPath) {
+        await ensureBrowserVfsOutputPaths(
+          uniqueNonEmptyStrings([
+            directOutputPath,
+            actualOutputFileName ? joinPath(outDirPath, actualOutputFileName) : "",
+            outputName ? joinPath(outDirPath, outputName) : "",
+          ]),
+        );
+      }
       const runExtract = () =>
         invokeRomWeaverExtractWorker(
           {
+            invalidateMountCacheBeforeRun: !!directOutputPath,
             logLevel,
             outDirPath,
+            scratchFilePoolSize: directOutputPath ? 1 : undefined,
             select: [],
             sourcePath: workerSource.filePath,
             splitBin: mode === "cd",
@@ -794,6 +835,8 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
           value.emittedFiles.find((entry) => /\.cue$/i.test(entry.fileName));
         const primary =
           (outputName ? findExtractedFile(value.emittedFiles, outputName) : null) ||
+          (actualOutputFileName ? findExtractedFile(value.emittedFiles, actualOutputFileName) : null) ||
+          (stagedOutputFileName ? findExtractedFile(value.emittedFiles, stagedOutputFileName) : null) ||
           value.emittedFiles.find((entry) => entry !== cue) ||
           value.emittedFiles[0];
         return {
@@ -805,16 +848,16 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
         cueFile: ReturnType<typeof selectChdOutputs>["cueFile"],
         primaryFile: ReturnType<typeof selectChdOutputs>["primaryFile"],
       ) => {
-        if (!primaryFile) throw new Error("CHD extraction did not emit any output files");
+        if (!(primaryFile || directOutputPath)) throw new Error("CHD extraction did not emit any output files");
         const cueText = cueFile ? await readTextFromBrowserVfs(cueFile.path).catch(() => "") : undefined;
         return attachDiscOutputMetadata(
           await workerIo.createWorkerOutput(
             {
-              fileName: outputName || primaryFile.fileName,
-              filePath: primaryFile.path,
-              size: primaryFile.sizeBytes,
+              fileName: outputName || primaryFile?.fileName || directOutputFileName,
+              filePath: primaryFile?.path || directOutputPath,
+              size: primaryFile?.sizeBytes,
             },
-            outputName || fileName,
+            outputName || directOutputFileName || fileName,
             "CHD extraction worker did not return browser output",
           ),
           {
@@ -860,11 +903,26 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
     try {
       const baseOutDirPath = getPathDirectory(workerSource.filePath) || `${WORKER_OPFS_MOUNTPOINT}/input/`;
       const outDirPath = joinPath(baseOutDirPath, `.rom-weaver-rvz-extract-${++archiveExtractDirectoryId}`);
+      const actualOutputFileName = getRvzExtractedFileName({ fileName });
+      const stagedOutputFileName = getRvzExtractedFileName({
+        fileName: getPathDerivedFileName(workerSource.filePath, workerSource.fileName || fileName),
+      });
+      const outputFileName = outputName || actualOutputFileName;
+      const outputPath = joinPath(outDirPath, stagedOutputFileName);
       await ensureRvzSourceExists();
+      await ensureBrowserVfsOutputPaths(
+        uniqueNonEmptyStrings([
+          outputPath,
+          actualOutputFileName ? joinPath(outDirPath, actualOutputFileName) : "",
+          outputName ? joinPath(outDirPath, outputName) : "",
+        ]),
+      );
       const extracted = await invokeRomWeaverExtractWorker(
         {
+          invalidateMountCacheBeforeRun: true,
           logLevel,
           outDirPath,
+          scratchFilePoolSize: 1,
           select: [],
           sourcePath: workerSource.filePath,
           workerThreads: threads,
@@ -881,15 +939,18 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
         throw error;
       });
       const primaryFile =
-        (outputName ? findExtractedFile(extracted.emittedFiles, outputName) : null) || extracted.emittedFiles[0];
-      if (!primaryFile) throw new Error("RVZ extraction did not emit any output files");
+        findExtractedFile(extracted.emittedFiles, outputFileName) ||
+        findExtractedFile(extracted.emittedFiles, actualOutputFileName) ||
+        findExtractedFile(extracted.emittedFiles, stagedOutputFileName) ||
+        (outputName ? findExtractedFile(extracted.emittedFiles, outputName) : null) ||
+        extracted.emittedFiles[0];
       return await workerIo.createWorkerOutput(
         {
-          fileName: outputName || primaryFile.fileName,
-          filePath: primaryFile.path,
-          size: primaryFile.sizeBytes,
+          fileName: outputFileName,
+          filePath: primaryFile?.path || outputPath,
+          size: primaryFile?.sizeBytes,
         },
-        outputName || fileName,
+        outputFileName,
         "RVZ extraction worker did not return browser output",
       );
     } finally {
@@ -905,6 +966,11 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
     });
     try {
       const outDirPath = getPathDirectory(workerSource.filePath);
+      const actualOutputFileName = getZ3dsExtractedFileName({ fileName });
+      const stagedOutputFileName = getZ3dsExtractedFileName({
+        fileName: getPathDerivedFileName(workerSource.filePath, workerSource.fileName || fileName),
+      });
+      const outputFileName = outputName || actualOutputFileName;
       const listed = await runRomWeaverInspectListWorker(
         {
           logLevel,
@@ -922,12 +988,21 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
             ),
           )
           .filter((entry) => !!entry) || [];
+      const listedOutputFileName = getPathBaseName(
+        String(listed?.entries?.[0]?.fileName || listed?.entries?.[0]?.filename || listed?.entries?.[0]?.name || ""),
+      );
+      const outputPath = joinPath(outDirPath, listedOutputFileName || stagedOutputFileName || actualOutputFileName);
       if (outputName) preseedPaths.push(...getBrowserExtractOutputPathCandidates(outDirPath, outputName));
+      if (stagedOutputFileName) preseedPaths.push(...getBrowserExtractOutputPathCandidates(outDirPath, stagedOutputFileName));
+      preseedPaths.push(outputPath);
+      preseedPaths.push(joinPath(outDirPath, actualOutputFileName));
       await ensureBrowserVfsOutputPaths(filterOutputCandidatesAwayFromSource(preseedPaths, workerSource.filePath));
       const extracted = await invokeRomWeaverExtractWorker(
         {
+          invalidateMountCacheBeforeRun: true,
           logLevel,
           outDirPath,
+          scratchFilePoolSize: 1,
           select: [],
           sourcePath: workerSource.filePath,
           workerThreads: threads,
@@ -936,15 +1011,19 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
         onLog,
       );
       const primaryFile =
-        (outputName ? findExtractedFile(extracted.emittedFiles, outputName) : null) || extracted.emittedFiles[0];
-      if (!primaryFile) throw new Error("Z3DS extraction did not emit any output files");
+        findExtractedFile(extracted.emittedFiles, outputFileName) ||
+        findExtractedFile(extracted.emittedFiles, actualOutputFileName) ||
+        findExtractedFile(extracted.emittedFiles, stagedOutputFileName) ||
+        (listedOutputFileName ? findExtractedFile(extracted.emittedFiles, listedOutputFileName) : null) ||
+        (outputName ? findExtractedFile(extracted.emittedFiles, outputName) : null) ||
+        extracted.emittedFiles[0];
       return await workerIo.createWorkerOutput(
         {
-          fileName: outputName || primaryFile.fileName,
-          filePath: primaryFile.path,
-          size: primaryFile.sizeBytes,
+          fileName: outputFileName,
+          filePath: primaryFile?.path || outputPath,
+          size: primaryFile?.sizeBytes,
         },
-        outputName || fileName,
+        outputFileName,
         "Z3DS extraction worker did not return browser output",
       );
     } finally {

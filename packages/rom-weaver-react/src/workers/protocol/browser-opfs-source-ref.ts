@@ -55,6 +55,29 @@ const EDGE_UNDERSCORES_REGEX = /^_+|_+$/g;
 const TRAILING_SLASHES_REGEX = /\/+$/;
 let virtualSourceId = 0;
 
+const getBrowserSourceTraceKind = (source: unknown) => {
+  if (typeof File !== "undefined" && source instanceof File) return "file";
+  if (typeof Blob !== "undefined" && source instanceof Blob) return "blob";
+  if (source instanceof Uint8Array) return "uint8array";
+  if (source instanceof ArrayBuffer) return "arraybuffer";
+  if (
+    source &&
+    typeof source === "object" &&
+    "getFile" in source &&
+    typeof (source as { getFile?: unknown }).getFile === "function"
+  )
+    return "file-handle";
+  if (typeof source === "string") return "path-string";
+  if (source && typeof source === "object") return "object";
+  return typeof source;
+};
+
+const emitBrowserSourceRefTrace = (message: string, details?: Record<string, unknown>) => {
+  if (typeof console === "undefined") return;
+  const log = typeof console.debug === "function" ? console.debug : console.log;
+  log.call(console, `[rom-weaver trace] browser-opfs-source-ref: ${message}`, details || {});
+};
+
 const normalizeVirtualFileName = (fileName: string | null | undefined, fallback = "input.bin") =>
   String(fileName || fallback)
     .replace(PATH_SEPARATOR_REGEX, "_")
@@ -104,11 +127,24 @@ const createBrowserOpfsSourceRef = async (
     fallback: fallbackFileName,
   });
   const sizeHint = getNamedSourceSize(source as Parameters<typeof getNamedSourceSize>[0]);
+  emitBrowserSourceRefTrace("create source ref started", {
+    directSourceKind: getBrowserSourceTraceKind(directSource),
+    fallbackFileName,
+    fileName,
+    pathPrefix: options.pathPrefix,
+    sizeHint,
+    sourceKind: getBrowserSourceTraceKind(source),
+  });
   const filePath =
     (typeof directSource === "string" && directSource.trim() ? directSource : "") ||
     getStringRecordValue(directSource, "filePath") ||
     getStringRecordValue(source, "filePath");
-  if (filePath)
+  if (filePath) {
+    emitBrowserSourceRefTrace("using existing OPFS path source", {
+      fileName,
+      filePath,
+      sizeHint,
+    });
     return {
       cleanup: async () => undefined,
       fileName,
@@ -117,6 +153,7 @@ const createBrowserOpfsSourceRef = async (
       size: sizeHint ?? (await getOpfsPathSize(filePath)),
       storageKind: "opfs",
     };
+  }
   const fileHandle = getBrowserSourceHandle(directSource) || getBrowserSourceHandle(source);
   const blob = getBrowserSourceBlob(directSource) || getBrowserSourceBlob(source);
   const bytes = getByteSource(directSource) || getByteSource(source);
@@ -126,21 +163,52 @@ const createBrowserOpfsSourceRef = async (
     const sourceFile = await fileHandle.getFile();
     virtualSource = toFileLike(sourceFile, fileName || fallbackFileName);
     virtualSize = sourceFile.size;
+    emitBrowserSourceRefTrace("using FileSystemFileHandle source", {
+      fileName: sourceFile.name || fileName || fallbackFileName,
+      size: sourceFile.size,
+    });
   } else if (blob) {
     virtualSource = toFileLike(blob, fileName || fallbackFileName);
     virtualSize = blob.size;
+    emitBrowserSourceRefTrace("using Blob source", {
+      fileName: fileName || fallbackFileName,
+      size: blob.size,
+      sourceKind: getBrowserSourceTraceKind(blob),
+    });
   } else if (bytes) {
     virtualSource = bytes;
     virtualSize = bytes.byteLength;
+    emitBrowserSourceRefTrace("using byte source", {
+      fileName: fileName || fallbackFileName,
+      size: bytes.byteLength,
+    });
   }
-  if (!virtualSource)
+  if (!virtualSource) {
+    emitBrowserSourceRefTrace("source ref unsupported", {
+      directSourceKind: getBrowserSourceTraceKind(directSource),
+      fallbackFileName,
+      fileName,
+      sourceKind: getBrowserSourceTraceKind(source),
+    });
     throw new Error("Browser worker inputs must be File, Blob, Uint8Array, FileSystemFileHandle, or OPFS path values");
+  }
 
   const virtualFileName = normalizeVirtualFileName(fileName || fallbackFileName, fallbackFileName || "input.bin");
   const virtualPath = createVirtualInputPath(options, virtualFileName);
+  emitBrowserSourceRefTrace("registering virtual input", {
+    fileName: virtualFileName,
+    size: virtualSize,
+    sourceKind: getBrowserSourceTraceKind(virtualSource),
+    virtualPath,
+  });
   const unregister = registerBrowserVirtualFile({
     path: virtualPath,
     source: virtualSource,
+  });
+  emitBrowserSourceRefTrace("registered virtual input", {
+    fileName: virtualFileName,
+    size: virtualSize,
+    virtualPath,
   });
   return {
     cleanup: async () => unregister(),

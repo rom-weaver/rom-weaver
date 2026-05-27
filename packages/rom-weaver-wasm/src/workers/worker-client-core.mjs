@@ -12,10 +12,12 @@ export class RomWeaverWorkerClientCore {
 
     this._onMessage = this._onMessage.bind(this);
     this._onError = this._onError.bind(this);
+    this._onMessageError = this._onMessageError.bind(this);
     this._onExit = this._onExit.bind(this);
 
     this._transport.onMessage(this.worker, this._onMessage);
     this._transport.onError(this.worker, this._onError);
+    this._transport.onMessageError?.(this.worker, this._onMessageError);
     this._transport.onExit?.(this.worker, this._onExit);
   }
 
@@ -73,10 +75,22 @@ export class RomWeaverWorkerClientCore {
       });
 
       try {
+        emitClientTrace(
+          handlers,
+          `[worker-client] send requestId=${requestId} ${summarizeRequestPayload(payload)}`,
+        );
         this._transport.postMessage(this.worker, { ...payload, requestId });
+        emitClientTrace(
+          handlers,
+          `[worker-client] postMessage returned requestId=${requestId}`,
+        );
       } catch (error) {
         this._pending.delete(requestId);
         streamChannel?.close();
+        emitClientTrace(
+          handlers,
+          `[worker-client] postMessage failed requestId=${requestId} error=${formatErrorForTrace(error)}`,
+        );
         reject(toWorkerError(error, 'worker'));
       }
     });
@@ -106,6 +120,10 @@ export class RomWeaverWorkerClientCore {
         return;
       case 'ready':
         this._pending.delete(requestId);
+        emitPendingTrace(
+          pending,
+          `[worker-client] ready requestId=${requestId} mode=${message.mode ?? ''} threaded=${Boolean(message.threaded)}`,
+        );
         pending?.resolve({
           mode: message.mode,
           threaded: Boolean(message.threaded),
@@ -114,14 +132,27 @@ export class RomWeaverWorkerClientCore {
         return;
       case 'disposed':
         this._pending.delete(requestId);
+        emitPendingTrace(pending, `[worker-client] disposed requestId=${requestId}`);
         pending?.resolve({ disposed: true });
         return;
       case 'result':
         this._pending.delete(requestId);
+        emitPendingTrace(
+          pending,
+          `[worker-client] result requestId=${requestId} operation=${message.operation ?? ''} ${summarizeWorkerResult(message.result)}`,
+        );
         pending?.resolve(message.result);
         return;
       case 'error':
         this._pending.delete(requestId);
+        if (!pending && (requestId === null || requestId === undefined)) {
+          this._rejectAllPending(deserializeError(message.error), 'worker unscoped error');
+          return;
+        }
+        emitPendingTrace(
+          pending,
+          `[worker-client] error requestId=${requestId} ${summarizeSerializedError(message.error)}`,
+        );
         pending?.reject(deserializeError(message.error));
         return;
       default:
@@ -130,7 +161,13 @@ export class RomWeaverWorkerClientCore {
   }
 
   _onError(rawError) {
-    this._rejectAllPending(this._transport.toError(rawError));
+    this._rejectAllPending(this._transport.toError(rawError), 'worker error');
+  }
+
+  _onMessageError(rawError) {
+    const error = this._transport.toMessageError?.(rawError)
+      ?? new Error('worker messageerror');
+    this._rejectAllPending(error, 'worker messageerror');
   }
 
   _onExit(code) {
@@ -140,13 +177,17 @@ export class RomWeaverWorkerClientCore {
 
     const error = this._transport.toExitError?.(code);
     if (error) {
-      this._rejectAllPending(error);
+      this._rejectAllPending(error, 'worker exit');
     }
   }
 
-  _rejectAllPending(error) {
+  _rejectAllPending(error, reason = 'worker rejected pending requests') {
     const normalizedError = toWorkerError(error, 'worker');
     for (const pending of this._pending.values()) {
+      emitPendingTrace(
+        pending,
+        `[worker-client] ${reason} ${formatErrorForTrace(normalizedError)}`,
+      );
       pending.reject(normalizedError);
     }
     this._pending.clear();
@@ -160,6 +201,7 @@ export class RomWeaverWorkerClientCore {
   _detachListeners() {
     this._transport.offMessage(this.worker, this._onMessage);
     this._transport.offError(this.worker, this._onError);
+    this._transport.offMessageError?.(this.worker, this._onMessageError);
     this._transport.offExit?.(this.worker, this._onExit);
   }
 
@@ -185,6 +227,12 @@ export function createBrowserWorkerTransport() {
     offError(worker, listener) {
       worker.removeEventListener('error', listener);
     },
+    onMessageError(worker, listener) {
+      worker.addEventListener('messageerror', listener);
+    },
+    offMessageError(worker, listener) {
+      worker.removeEventListener('messageerror', listener);
+    },
     readMessage(event) {
       return event.data;
     },
@@ -209,6 +257,12 @@ export function createBrowserWorkerTransport() {
         }
       }
       return new Error(messageParts.join(' ') || 'worker error');
+    },
+    toMessageError(event) {
+      const message = typeof event?.message === 'string' && event.message.trim().length > 0
+        ? event.message.trim()
+        : 'worker messageerror';
+      return new Error(message);
     },
     terminate(worker) {
       worker.terminate();
@@ -271,6 +325,118 @@ function dispatchStreamMessage(handlers, message) {
     default:
       return;
   }
+}
+
+function emitClientTrace(handlers, line) {
+  const onTraceNonJsonLine = typeof handlers?.onTraceNonJsonLine === 'function'
+    ? handlers.onTraceNonJsonLine
+    : null;
+  if (!onTraceNonJsonLine) return;
+  try {
+    onTraceNonJsonLine(line);
+  } catch {
+    // Trace callbacks are diagnostic only and must not affect worker execution.
+  }
+}
+
+function emitPendingTrace(pending, line) {
+  const onTraceNonJsonLine = typeof pending?.onTraceNonJsonLine === 'function'
+    ? pending.onTraceNonJsonLine
+    : null;
+  if (!onTraceNonJsonLine) return;
+  try {
+    onTraceNonJsonLine(line);
+  } catch {
+    // Trace callbacks are diagnostic only and must not affect worker execution.
+  }
+}
+
+function summarizeRequestPayload(payload) {
+  const type = String(payload?.type ?? 'unknown');
+  const args = Array.isArray(payload?.args) ? payload.args.map((value) => String(value)) : [];
+  const options = payload?.options && typeof payload.options === 'object' ? payload.options : {};
+  const stream = typeof options.__streamBroadcastChannelName === 'string';
+  const virtualFiles = summarizeVirtualFiles(options.virtualFiles);
+  return [
+    `type=${type}`,
+    `args=${formatArgsForTrace(args)}`,
+    `stream=${stream}`,
+    `virtualFiles=${virtualFiles}`,
+  ].join(' ');
+}
+
+function summarizeWorkerResult(result) {
+  if (!result || typeof result !== 'object') return 'result=unknown';
+  const parts = [];
+  if (Object.hasOwn(result, 'ok')) parts.push(`ok=${Boolean(result.ok)}`);
+  if (Object.hasOwn(result, 'exitCode')) parts.push(`exitCode=${String(result.exitCode)}`);
+  if (Array.isArray(result.events)) parts.push(`events=${result.events.length}`);
+  if (Array.isArray(result.nonJsonLines)) parts.push(`nonJsonLines=${result.nonJsonLines.length}`);
+  if (Array.isArray(result.traceEvents)) parts.push(`traceEvents=${result.traceEvents.length}`);
+  if (Array.isArray(result.traceNonJsonLines)) {
+    parts.push(`traceNonJsonLines=${result.traceNonJsonLines.length}`);
+  }
+  return parts.length > 0 ? parts.join(' ') : 'result=object';
+}
+
+function summarizeSerializedError(error) {
+  if (!error || typeof error !== 'object') return `error=${String(error)}`;
+  return [
+    `name=${String(error.name ?? 'Error')}`,
+    `kind=${String(error.kind ?? '')}`,
+    `message=${truncateForTrace(error.message ?? '')}`,
+  ].join(' ');
+}
+
+function summarizeVirtualFiles(value) {
+  if (!Array.isArray(value) || value.length === 0) return 'count=0';
+  let proxyCount = 0;
+  let directCount = 0;
+  let totalBytes = 0;
+  for (const entry of value) {
+    const source = entry?.source ?? entry?.file ?? entry?.blob ?? entry?.bytes ?? entry?.data ?? entry?.proxy;
+    const proxy = entry?.proxy ?? (isTraceVirtualFileProxy(source) ? source : null);
+    if (isTraceVirtualFileProxy(proxy)) {
+      proxyCount += 1;
+      totalBytes += Number(proxy.size) || 0;
+      continue;
+    }
+    directCount += 1;
+    totalBytes += Number(source?.size ?? source?.byteLength ?? 0) || 0;
+  }
+  return `count=${value.length},proxy=${proxyCount},direct=${directCount},bytes=${totalBytes}`;
+}
+
+function isTraceVirtualFileProxy(value) {
+  return Boolean(
+    value
+      && typeof value === 'object'
+      && typeof value.id === 'string'
+      && Array.isArray(value.slots)
+      && Number.isFinite(Number(value.size)),
+  );
+}
+
+function formatArgsForTrace(args) {
+  if (!Array.isArray(args) || args.length === 0) return '[]';
+  return JSON.stringify(args.map((value) => basenameForTrace(value)));
+}
+
+function basenameForTrace(value) {
+  const text = String(value ?? '');
+  if (!text.includes('/')) return text;
+  return text.slice(text.lastIndexOf('/') + 1) || text;
+}
+
+function formatErrorForTrace(error) {
+  if (error instanceof Error) return `${error.name}:${truncateForTrace(error.message)}`;
+  return truncateForTrace(String(error));
+}
+
+function truncateForTrace(value, maxLength = 180) {
+  const text = String(value ?? '');
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength - 1)}...`;
 }
 
 function deserializeError(error) {

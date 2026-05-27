@@ -47,6 +47,20 @@ let virtualFileId = 0;
 const getVirtualSourceSize = (source: BrowserVirtualFileSource) =>
   source instanceof Uint8Array || source instanceof ArrayBuffer ? source.byteLength : source.size;
 
+const getVirtualSourceKind = (source: BrowserVirtualFileSource) => {
+  if (typeof File !== "undefined" && source instanceof File) return "file";
+  if (typeof Blob !== "undefined" && source instanceof Blob) return "blob";
+  if (source instanceof Uint8Array) return "uint8array";
+  if (source instanceof ArrayBuffer) return "arraybuffer";
+  return typeof source;
+};
+
+const emitVirtualFileTrace = (message: string, details?: Record<string, unknown>) => {
+  if (typeof console === "undefined") return;
+  const log = typeof console.debug === "function" ? console.debug : console.log;
+  log.call(console, `[rom-weaver trace] browser-virtual-files: ${message}`, details || {});
+};
+
 const clampInteger = (value: number, minimum: number, maximum: number) =>
   Math.max(minimum, Math.min(maximum, Math.trunc(value)));
 
@@ -81,11 +95,37 @@ const registerBrowserVirtualFile = ({
   path: string;
   source: BrowserVirtualFileSource;
 }): (() => void) => {
+  const sourceSize = getVirtualSourceSize(source);
+  const sourceKind = getVirtualSourceKind(source);
+  emitVirtualFileTrace("register requested", {
+    crossOriginIsolated: globalThis.crossOriginIsolated === true,
+    hasAtomicsWaitAsync: typeof (Atomics as AtomicsWithWaitAsync).waitAsync === "function",
+    hasSharedArrayBuffer: typeof SharedArrayBuffer === "function",
+    path,
+    sourceKind,
+    sourceSize,
+  });
   if (typeof SharedArrayBuffer !== "function") {
+    emitVirtualFileTrace("virtual input registration failed", {
+      path,
+      reason: "missing-sharedarraybuffer",
+      sourceKind,
+      sourceSize,
+    });
     throw new Error("Direct browser file inputs require SharedArrayBuffer support");
   }
-  const waitAsync = getAtomicsWaitAsync();
-  const sourceSize = getVirtualSourceSize(source);
+  let waitAsync: AtomicsWaitAsync;
+  try {
+    waitAsync = getAtomicsWaitAsync();
+  } catch (error) {
+    emitVirtualFileTrace("virtual input registration failed", {
+      path,
+      reason: "missing-atomics-waitasync",
+      sourceKind,
+      sourceSize,
+    });
+    throw error;
+  }
   const { chunkSize, slotCount } = resolveVirtualFileLayout(sourceSize);
   const id = `virtual-file-${++virtualFileId}-${Math.random().toString(16).slice(2)}`;
   const slots = Array.from({ length: slotCount }, () => ({
@@ -101,6 +141,14 @@ const registerBrowserVirtualFile = ({
       slots,
     },
   };
+  emitVirtualFileTrace("registering shared proxy virtual file", {
+    chunkSize,
+    id,
+    path,
+    slotCount,
+    sourceKind,
+    sourceSize,
+  });
   let closed = false;
   for (const slot of slots)
     void runVirtualFileSlotPump(source, slot, waitAsync, () => closed).catch(() => {
@@ -113,6 +161,12 @@ const registerBrowserVirtualFile = ({
       const control = new Int32Array(slot.controlBuffer);
       Atomics.notify(control, CONTROL_STATE_INDEX, 1);
     }
+    emitVirtualFileTrace("unregistered shared proxy virtual file", {
+      id,
+      path,
+      sourceKind,
+      sourceSize,
+    });
     if (activeVirtualFiles.get(path) === file) activeVirtualFiles.delete(path);
   };
 };

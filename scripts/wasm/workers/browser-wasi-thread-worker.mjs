@@ -12,7 +12,9 @@ self.addEventListener('message', (event) => {
     return;
   }
   if (payload.mode === 'pool-command') {
+    tracePayload(payload, null, `[wasi-thread-worker] pool command received command=${payload.commandId ?? 'unknown'}`);
     if (shellBusy) {
+      tracePayload(payload, null, `[wasi-thread-worker] pool command rejected busy command=${payload.commandId ?? 'unknown'}`);
       self.postMessage({
         type: 'error',
         commandId: payload.commandId,
@@ -91,6 +93,8 @@ const ATOMICS_WAIT_SLICE_MS = 100;
 async function runSingleThread(payload) {
   const tid = payload?.tid ?? null;
   const stream = createStreamPublisher(payload, tid);
+  const startControl = threadStartControlFromBuffer(payload?.startControlBuffer);
+  stream?.traceLine(`[wasi-thread-worker] single thread start tid=${tid ?? 'unknown'}`);
   try {
     await __runRomWeaverBrowserWasiThread(stream
       ? {
@@ -99,8 +103,18 @@ async function runSingleThread(payload) {
         stdoutLineHandler: stream.stdoutLine,
       }
       : payload);
+    stream?.traceLine(`[wasi-thread-worker] single thread done tid=${tid ?? 'unknown'}`);
+    if (startControl) {
+      Atomics.store(startControl, THREAD_SLOT_ERROR_INDEX, 0);
+      signalThreadState(startControl, THREAD_SLOT_STATE_IDLE);
+    }
     self.postMessage({ type: 'done', tid });
   } catch (error) {
+    stream?.traceLine(`[wasi-thread-worker] single thread failed tid=${tid ?? 'unknown'} ${formatErrorForTrace(error)}`);
+    if (startControl) {
+      Atomics.store(startControl, THREAD_SLOT_ERROR_INDEX, 1);
+      signalThreadState(startControl, THREAD_SLOT_STATE_FAILED);
+    }
     self.postMessage({
       type: 'error',
       tid,
@@ -113,64 +127,81 @@ async function runSingleThread(payload) {
   }
 }
 
+function threadStartControlFromBuffer(controlBuffer) {
+  if (!(controlBuffer instanceof SharedArrayBuffer)) return null;
+  const control = new Int32Array(controlBuffer);
+  if (control.length < THREAD_SLOT_LENGTH) return null;
+  return control;
+}
+
 async function runPoolWorker(payload, { closeOnShutdown }) {
   const control = new Int32Array(payload.controlBuffer);
   if (!(control.buffer instanceof SharedArrayBuffer) || control.length < THREAD_SLOT_LENGTH) {
     throw new Error('browser wasi thread pool worker missing shared control buffer');
   }
+  const poolStream = createStreamPublisher(payload, null);
+  poolStream?.traceLine(`[wasi-thread-worker] pool worker ready command=${payload.commandId ?? 'standalone'}`);
   self.postMessage({ type: 'ready', commandId: payload.commandId });
 
-  while (true) {
-    while (Atomics.load(control, THREAD_SLOT_STATE_INDEX) === THREAD_SLOT_STATE_IDLE) {
-      waitForThreadStateChange(control, THREAD_SLOT_STATE_IDLE);
-    }
-    const state = Atomics.load(control, THREAD_SLOT_STATE_INDEX);
-    if (state === THREAD_SLOT_STATE_SHUTDOWN) {
-      if (closeOnShutdown) {
-        await __disposeRomWeaverBrowserThreadMountCache().catch(() => undefined);
-        self.close();
+  try {
+    while (true) {
+      while (Atomics.load(control, THREAD_SLOT_STATE_INDEX) === THREAD_SLOT_STATE_IDLE) {
+        waitForThreadStateChange(control, THREAD_SLOT_STATE_IDLE);
       }
-      return;
-    }
-    if (state === THREAD_SLOT_STATE_FAILED) {
-      waitForThreadStateChange(control, THREAD_SLOT_STATE_FAILED);
-      continue;
-    }
-    if (state !== THREAD_SLOT_STATE_REQUESTED) continue;
-
-    const tid = Atomics.load(control, THREAD_SLOT_TID_INDEX) | 0;
-    const startArg = Atomics.load(control, THREAD_SLOT_START_ARG_INDEX) | 0;
-    const stream = createStreamPublisher(payload, tid);
-    Atomics.store(control, THREAD_SLOT_ERROR_INDEX, 0);
-    signalThreadState(control, THREAD_SLOT_STATE_STARTING);
-    try {
-      const threadPayload = {
-        ...payload,
-        startArg,
-        startControlBuffer: control.buffer,
-        tid,
-      };
-      await __runRomWeaverBrowserWasiThread(stream
-        ? {
-          ...threadPayload,
-          stderrLineHandler: stream.stderrLine,
-          stdoutLineHandler: stream.stdoutLine,
+      const state = Atomics.load(control, THREAD_SLOT_STATE_INDEX);
+      if (state === THREAD_SLOT_STATE_SHUTDOWN) {
+        poolStream?.traceLine(`[wasi-thread-worker] pool worker shutdown command=${payload.commandId ?? 'standalone'}`);
+        if (closeOnShutdown) {
+          await __disposeRomWeaverBrowserThreadMountCache().catch(() => undefined);
+          self.close();
         }
-        : threadPayload);
+        return;
+      }
+      if (state === THREAD_SLOT_STATE_FAILED) {
+        waitForThreadStateChange(control, THREAD_SLOT_STATE_FAILED);
+        continue;
+      }
+      if (state !== THREAD_SLOT_STATE_REQUESTED) continue;
+
+      const tid = Atomics.load(control, THREAD_SLOT_TID_INDEX) | 0;
+      const startArg = Atomics.load(control, THREAD_SLOT_START_ARG_INDEX) | 0;
+      const stream = createStreamPublisher(payload, tid);
+      stream?.traceLine(`[wasi-thread-worker] pool thread start tid=${tid} startArg=${startArg}`);
       Atomics.store(control, THREAD_SLOT_ERROR_INDEX, 0);
-      signalThreadState(control, THREAD_SLOT_STATE_IDLE);
-    } catch (error) {
-      Atomics.store(control, THREAD_SLOT_ERROR_INDEX, 1);
-      signalThreadState(control, THREAD_SLOT_STATE_FAILED);
-      self.postMessage({
-        type: 'error',
-        commandId: payload.commandId,
-        tid,
-        error: serializeError(error),
-      });
-    } finally {
-      stream?.close();
+      signalThreadState(control, THREAD_SLOT_STATE_STARTING);
+      try {
+        const threadPayload = {
+          ...payload,
+          startArg,
+          startControlBuffer: control.buffer,
+          tid,
+        };
+        await __runRomWeaverBrowserWasiThread(stream
+          ? {
+            ...threadPayload,
+            stderrLineHandler: stream.stderrLine,
+            stdoutLineHandler: stream.stdoutLine,
+          }
+          : threadPayload);
+        stream?.traceLine(`[wasi-thread-worker] pool thread done tid=${tid}`);
+        Atomics.store(control, THREAD_SLOT_ERROR_INDEX, 0);
+        signalThreadState(control, THREAD_SLOT_STATE_IDLE);
+      } catch (error) {
+        stream?.traceLine(`[wasi-thread-worker] pool thread failed tid=${tid} ${formatErrorForTrace(error)}`);
+        Atomics.store(control, THREAD_SLOT_ERROR_INDEX, 1);
+        signalThreadState(control, THREAD_SLOT_STATE_FAILED);
+        self.postMessage({
+          type: 'error',
+          commandId: payload.commandId,
+          tid,
+          error: serializeError(error),
+        });
+      } finally {
+        stream?.close();
+      }
     }
+  } finally {
+    poolStream?.close();
   }
 }
 
@@ -192,7 +223,16 @@ function createStreamPublisher(payload, tid) {
     stdoutLine(line) {
       publishLine(channel, requestId, tid, line, false);
     },
+    traceLine(line) {
+      publishLine(channel, requestId, tid, line, true);
+    },
   };
+}
+
+function tracePayload(payload, tid, line) {
+  const stream = createStreamPublisher(payload, tid);
+  stream?.traceLine(line);
+  stream?.close();
 }
 
 function publishLine(channel, requestId, tid, line, trace) {
@@ -232,4 +272,15 @@ function serializeError(error) {
     message: error && typeof error.message === 'string' ? error.message : String(error),
     stack: error && typeof error.stack === 'string' ? error.stack : undefined,
   };
+}
+
+function formatErrorForTrace(error) {
+  if (error instanceof Error) return `${error.name}:${truncateForTrace(error.message)}`;
+  return truncateForTrace(String(error));
+}
+
+function truncateForTrace(value, maxLength = 180) {
+  const text = String(value ?? '');
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength - 1)}...`;
 }

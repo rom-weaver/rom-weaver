@@ -6,11 +6,32 @@ import {
 export function createRunnerWorkerMessageQueue({ postMessage, initRunner }) {
   let runner = null;
   let queue = Promise.resolve();
+  let activeMessage = null;
+  let queuedCount = 0;
 
   return {
     enqueue(message) {
+      const queuedMessage = summarizeQueueMessage(message);
+      queuedCount += 1;
+      postTraceLine(
+        readRequestId(message),
+        `[runner-worker] message enqueued ${queuedMessage} queued=${queuedCount} active=${activeMessage ?? 'none'}`,
+      );
       queue = queue
-        .then(() => handleMessage(message))
+        .then(async () => {
+          queuedCount = Math.max(0, queuedCount - 1);
+          activeMessage = queuedMessage;
+          postTraceLine(
+            readRequestId(message),
+            `[runner-worker] message handling ${queuedMessage} queued=${queuedCount}`,
+          );
+          try {
+            await handleMessage(message);
+            postTraceLine(readRequestId(message), `[runner-worker] message handled ${queuedMessage}`);
+          } finally {
+            activeMessage = null;
+          }
+        })
         .catch((error) => {
           postMessage({
             type: 'error',
@@ -55,6 +76,10 @@ export function createRunnerWorkerMessageQueue({ postMessage, initRunner }) {
       }
 
       case 'runJson': {
+        postTraceLine(
+          requestId,
+          `[runner-worker] runJson received ${summarizeRunRequest(message)}`,
+        );
         assertRunnerInitialized();
         const runOptions = {
           ...(message.options ?? {}),
@@ -71,7 +96,22 @@ export function createRunnerWorkerMessageQueue({ postMessage, initRunner }) {
             postMessage({ type: 'traceNonJsonLine', requestId, line: String(line) });
           },
         };
-        const result = await runner.runJson(normalizeArgs(message.args), runOptions);
+        const args = normalizeArgs(message.args);
+        traceRunOptionLine(runOptions, `[runner-worker] runJson invoking runner args=${formatArgsForTrace(args)}`);
+        let result;
+        try {
+          result = await runner.runJson(args, runOptions);
+        } catch (error) {
+          traceRunOptionLine(
+            runOptions,
+            `[runner-worker] runJson threw ${formatErrorForTrace(error)}`,
+          );
+          throw error;
+        }
+        traceRunOptionLine(
+          runOptions,
+          `[runner-worker] runJson runner returned ${summarizeRunResult(result)}`,
+        );
         postMessage({
           type: 'result',
           requestId,
@@ -82,6 +122,7 @@ export function createRunnerWorkerMessageQueue({ postMessage, initRunner }) {
       }
 
       case 'dispose': {
+        postTraceLine(requestId, '[runner-worker] dispose received');
         await runner?.dispose?.();
         runner = null;
         postMessage({ type: 'disposed', requestId });
@@ -97,6 +138,11 @@ export function createRunnerWorkerMessageQueue({ postMessage, initRunner }) {
     if (!runner) {
       throw new Error('worker is not initialized. Send an init message first.');
     }
+  }
+
+  function postTraceLine(requestId, line) {
+    if (requestId === null || requestId === undefined) return;
+    postMessage({ type: 'traceNonJsonLine', requestId, line: String(line) });
   }
 }
 
@@ -120,6 +166,106 @@ function normalizeArgs(args) {
     return [];
   }
   return args.map((value) => String(value));
+}
+
+function summarizeQueueMessage(message) {
+  const type = safeReadType(message);
+  const requestId = readRequestId(message);
+  return `requestId=${requestId ?? 'none'} type=${type}`;
+}
+
+function safeReadType(message) {
+  try {
+    return String(readType(message) ?? 'unknown');
+  } catch {
+    return 'invalid';
+  }
+}
+
+function traceRunOptionLine(runOptions, line) {
+  const onTraceNonJsonLine = typeof runOptions?.onTraceNonJsonLine === 'function'
+    ? runOptions.onTraceNonJsonLine
+    : null;
+  if (!onTraceNonJsonLine) return;
+  try {
+    onTraceNonJsonLine(line);
+  } catch {
+    // Trace callbacks are diagnostic only and must not affect worker execution.
+  }
+}
+
+function summarizeRunRequest(message) {
+  const options = message?.options && typeof message.options === 'object' ? message.options : {};
+  return [
+    `args=${formatArgsForTrace(normalizeArgs(message?.args))}`,
+    `stream=${typeof options.__streamBroadcastChannelName === 'string'}`,
+    `virtualFiles=${summarizeVirtualFiles(options.virtualFiles)}`,
+  ].join(' ');
+}
+
+function summarizeRunResult(result) {
+  if (!result || typeof result !== 'object') return 'result=unknown';
+  const parts = [];
+  if (Object.hasOwn(result, 'ok')) parts.push(`ok=${Boolean(result.ok)}`);
+  if (Object.hasOwn(result, 'exitCode')) parts.push(`exitCode=${String(result.exitCode)}`);
+  if (Array.isArray(result.events)) parts.push(`events=${result.events.length}`);
+  if (Array.isArray(result.nonJsonLines)) parts.push(`nonJsonLines=${result.nonJsonLines.length}`);
+  if (Array.isArray(result.traceEvents)) parts.push(`traceEvents=${result.traceEvents.length}`);
+  if (Array.isArray(result.traceNonJsonLines)) {
+    parts.push(`traceNonJsonLines=${result.traceNonJsonLines.length}`);
+  }
+  return parts.length > 0 ? parts.join(' ') : 'result=object';
+}
+
+function summarizeVirtualFiles(value) {
+  if (!Array.isArray(value) || value.length === 0) return 'count=0';
+  let proxyCount = 0;
+  let directCount = 0;
+  let totalBytes = 0;
+  for (const entry of value) {
+    const source = entry?.source ?? entry?.file ?? entry?.blob ?? entry?.bytes ?? entry?.data ?? entry?.proxy;
+    const proxy = entry?.proxy ?? (isTraceVirtualFileProxy(source) ? source : null);
+    if (isTraceVirtualFileProxy(proxy)) {
+      proxyCount += 1;
+      totalBytes += Number(proxy.size) || 0;
+      continue;
+    }
+    directCount += 1;
+    totalBytes += Number(source?.size ?? source?.byteLength ?? 0) || 0;
+  }
+  return `count=${value.length},proxy=${proxyCount},direct=${directCount},bytes=${totalBytes}`;
+}
+
+function isTraceVirtualFileProxy(value) {
+  return Boolean(
+    value
+      && typeof value === 'object'
+      && typeof value.id === 'string'
+      && Array.isArray(value.slots)
+      && Number.isFinite(Number(value.size)),
+  );
+}
+
+function formatArgsForTrace(args) {
+  if (!Array.isArray(args) || args.length === 0) return '[]';
+  return JSON.stringify(args.map((value) => basenameForTrace(value)));
+}
+
+function basenameForTrace(value) {
+  const text = String(value ?? '');
+  if (!text.includes('/')) return text;
+  return text.slice(text.lastIndexOf('/') + 1) || text;
+}
+
+function formatErrorForTrace(error) {
+  if (error instanceof Error) return `${error.name}:${truncateForTrace(error.message)}`;
+  return truncateForTrace(String(error));
+}
+
+function truncateForTrace(value, maxLength = 180) {
+  const text = String(value ?? '');
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength - 1)}...`;
 }
 
 function serializeError(error, requestMessage) {
