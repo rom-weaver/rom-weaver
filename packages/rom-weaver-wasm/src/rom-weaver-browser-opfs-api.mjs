@@ -3087,13 +3087,21 @@ async function resolveBrowserModule({
   const shouldUseThreadedWasm = requestedThreadedWasm && runtimeSupportsThreadedWasm;
 
   const hasExplicitWasmUrl = hasConfiguredWasmUrl(wasmUrl);
+  const hasExplicitThreadedWasmUrl = hasConfiguredWasmUrl(threadedWasmUrl);
   const resolvedWasmUrls = normalizeConfiguredWasmUrls(wasmUrl, DEFAULT_BROWSER_WASM_URLS);
   const resolvedThreadedWasmUrls = normalizeConfiguredWasmUrls(
     threadedWasmUrl,
-    hasExplicitWasmUrl ? [] : DEFAULT_BROWSER_THREADED_WASM_URLS,
+    hasExplicitWasmUrl
+      ? resolveThreadedWasmUrlFallbacks(wasmUrl)
+      : DEFAULT_BROWSER_THREADED_WASM_URLS,
   );
   const useThreadedCandidate = shouldUseThreadedWasm && resolvedThreadedWasmUrls.length > 0;
-  const primaryUrls = useThreadedCandidate ? resolvedThreadedWasmUrls : resolvedWasmUrls;
+  const primaryUrls = useThreadedCandidate
+    ? uniqueUrls([
+        ...resolvedThreadedWasmUrls,
+        ...(hasExplicitThreadedWasmUrl ? [] : resolvedWasmUrls),
+      ])
+    : resolvedWasmUrls;
   return compileBrowserModuleFromUrls(primaryUrls);
 }
 
@@ -3109,6 +3117,47 @@ function normalizeConfiguredWasmUrls(url, fallbacks) {
   if (url instanceof URL) return [url.href];
   if (typeof url === 'string' && url.trim().length > 0) return [url];
   return fallbacks;
+}
+
+function resolveThreadedWasmUrlFallbacks(wasmUrl) {
+  const candidates = normalizeConfiguredWasmUrls(wasmUrl, []);
+  return uniqueUrls(
+    candidates
+      .map((candidate) => deriveThreadedWasmUrl(candidate))
+      .filter(Boolean),
+  );
+}
+
+function deriveThreadedWasmUrl(urlLike) {
+  if (typeof urlLike !== 'string' || urlLike.trim().length === 0) return null;
+  const absoluteUrl = toAbsoluteUrl(urlLike);
+  const parsed = new URL(absoluteUrl);
+  const replacedPathname = parsed.pathname.replace(
+    /rom-weaver-cli\.wasm$/,
+    'rom-weaver-cli-threaded.wasm',
+  );
+  if (replacedPathname === parsed.pathname) return null;
+  parsed.pathname = replacedPathname;
+  return parsed.href;
+}
+
+function toAbsoluteUrl(urlLike) {
+  if (typeof URL.canParse === 'function' && URL.canParse(urlLike)) {
+    return urlLike;
+  }
+  const base = globalThis.location?.href ?? 'http://localhost/';
+  return new URL(urlLike, base).href;
+}
+
+function uniqueUrls(urls) {
+  const seen = new Set();
+  const out = [];
+  for (const url of urls) {
+    if (typeof url !== 'string' || url.length === 0 || seen.has(url)) continue;
+    seen.add(url);
+    out.push(url);
+  }
+  return out;
 }
 
 async function compileBrowserModuleFromUrls(urls) {

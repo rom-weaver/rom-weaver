@@ -565,6 +565,29 @@ describe('rom-weaver-wasm browser runner parity', () => {
 
   it('runner supports explicit wasm module URL paths', async () => {
     await withTempFixture(async ({ init, sourcePath, worker }) => {
+      const canUseThreadedWasm = typeof SharedArrayBuffer === 'function' && globalThis.crossOriginIsolated === true;
+      expect(init.threaded).toBe(canUseThreadedWasm);
+      expect(init.wasmUrl).toContain(canUseThreadedWasm ? 'rom-weaver-cli-threaded.wasm' : 'rom-weaver-cli.wasm');
+      const result = await worker.runJson([
+        'checksum',
+        sourcePath,
+        '--algo',
+        'crc32',
+        '--no-extract',
+      ]);
+
+      assertRunJsonSucceeded(result, {
+        command: 'checksum',
+      });
+    }, {
+      initOptions: {
+        wasmUrl: new URL('../rom-weaver-cli.wasm', import.meta.url).href,
+      },
+    });
+  });
+
+  it('runner honors preferThreadedWasm=false with explicit wasm URL paths', async () => {
+    await withTempFixture(async ({ init, sourcePath, worker }) => {
       expect(init.threaded).toBe(false);
       expect(init.wasmUrl).toContain('rom-weaver-cli.wasm');
       const result = await worker.runJson([
@@ -580,6 +603,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
       });
     }, {
       initOptions: {
+        preferThreadedWasm: false,
         wasmUrl: new URL('../rom-weaver-cli.wasm', import.meta.url).href,
       },
     });
