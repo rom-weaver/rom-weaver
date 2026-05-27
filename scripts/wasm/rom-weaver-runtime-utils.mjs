@@ -36,7 +36,7 @@ export function normalizeGuestPath(pathLike, options = {}) {
   return normalized;
 }
 
-export function parseJsonLines(text, options = {}) {
+export function createJsonLineParser(options = {}) {
   const events = [];
   const nonJsonLines = [];
   const onEvent = typeof options.onEvent === 'function' ? options.onEvent : null;
@@ -44,25 +44,40 @@ export function parseJsonLines(text, options = {}) {
     ? options.onNonJsonLine
     : null;
 
-  for (const line of text.split(/\r?\n/)) {
-    if (line.length === 0) {
-      continue;
-    }
+  return {
+    events,
+    nonJsonLines,
+    pushLine(line) {
+      if (line.length === 0) {
+        return;
+      }
 
-    try {
-      const event = JSON.parse(line);
-      events.push(event);
-      onEvent?.(event);
-    } catch {
-      nonJsonLines.push(line);
-      onNonJsonLine?.(line);
-    }
-  }
-
-  return { events, nonJsonLines };
+      try {
+        const event = JSON.parse(line);
+        events.push(event);
+        onEvent?.(event);
+      } catch {
+        nonJsonLines.push(line);
+        onNonJsonLine?.(line);
+      }
+    },
+  };
 }
 
-export function parseTraceJsonLines(text, options = {}) {
+export function parseJsonLines(text, options = {}) {
+  const parser = createJsonLineParser(options);
+
+  for (const line of text.split(/\r?\n/)) {
+    parser.pushLine(line);
+  }
+
+  return {
+    events: parser.events,
+    nonJsonLines: parser.nonJsonLines,
+  };
+}
+
+export function createTraceJsonLineParser(options = {}) {
   const traceEvents = [];
   const traceNonJsonLines = [];
   const onTraceEvent = typeof options.onTraceEvent === 'function' ? options.onTraceEvent : null;
@@ -70,20 +85,35 @@ export function parseTraceJsonLines(text, options = {}) {
     ? options.onTraceNonJsonLine
     : null;
 
-  for (const line of text.split(/\r?\n/)) {
-    if (line.length === 0) {
-      continue;
-    }
+  return {
+    traceEvents,
+    traceNonJsonLines,
+    pushLine(line) {
+      if (line.length === 0) {
+        return;
+      }
 
-    try {
-      const event = JSON.parse(line);
-      traceEvents.push(event);
-      onTraceEvent?.(event);
-    } catch {
-      traceNonJsonLines.push(line);
-      onTraceNonJsonLine?.(line);
-    }
+      try {
+        const event = JSON.parse(line);
+        traceEvents.push(event);
+        onTraceEvent?.(event);
+      } catch {
+        traceNonJsonLines.push(line);
+        onTraceNonJsonLine?.(line);
+      }
+    },
+  };
+}
+
+export function parseTraceJsonLines(text, options = {}) {
+  const parser = createTraceJsonLineParser(options);
+
+  for (const line of text.split(/\r?\n/)) {
+    parser.pushLine(line);
   }
 
-  return { traceEvents, traceNonJsonLines };
+  return {
+    traceEvents: parser.traceEvents,
+    traceNonJsonLines: parser.traceNonJsonLines,
+  };
 }

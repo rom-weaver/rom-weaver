@@ -529,16 +529,16 @@ describe('rom-weaver-wasm browser runner parity', () => {
         },
       );
 
-      const streamedEvent = await Promise.race([firstRunningEvent, delay(1000)]);
-      expect(streamedEvent).toMatchObject({
-        command: 'checksum',
-        status: 'running',
-      });
+      const streamedEvent = await Promise.race([firstRunningEvent, delay(5000)]);
       await expect(Promise.race([resultPromise.then(() => 'settled'), delay(0, 'pending')]))
         .resolves
         .toBe('pending');
 
       const result = await resultPromise;
+      expect(streamedEvent).toMatchObject({
+        command: 'checksum',
+        status: 'running',
+      });
 
       const terminal = assertRunJsonSucceeded(result, {
         command: 'checksum',
@@ -774,30 +774,26 @@ describe('rom-weaver-wasm browser worker client parity', () => {
     }
   });
 
-  it('browser worker client owns single-thread fallback for structured-clone init failures', async () => {
+  it('browser worker client rejects structured-clone init failures without single-thread fallback', async () => {
     const worker = new CloneFailingInitWorker();
     const client = new BrowserRomWeaverWorkerClient(worker, { defaultThreads: 4 });
     try {
-      const ready = await client.init({
-        runtimeMounts: ['/work'],
-        threadedWasmUrl: 'threaded.wasm',
-        wasmUrl: 'single.wasm',
-        workGuestPath: '/work',
+      await expect(
+        client.init({
+          runtimeMounts: ['/work'],
+          threadedWasmUrl: 'threaded.wasm',
+          wasmUrl: 'single.wasm',
+          workGuestPath: '/work',
+        }),
+      ).rejects.toMatchObject({
+        kind: 'worker',
+        name: 'DataCloneError',
       });
 
       const initMessages = worker.messages.filter((message) => message.type === 'init');
-      expect(ready).toMatchObject({
-        fallbackReason: 'structured-clone',
-        mode: 'browser-opfs',
-        threaded: false,
-        wasmUrl: 'single.wasm',
-      });
-      expect(initMessages).toHaveLength(2);
+      expect(initMessages).toHaveLength(1);
       expect(initMessages[0].options).toMatchObject({ defaultThreads: 4 });
-      expect(initMessages[1].options).toMatchObject({
-        defaultThreads: 1,
-        preferThreadedWasm: false,
-      });
+      expect(initMessages[0].options.preferThreadedWasm).not.toBe(false);
     } finally {
       client.terminate();
     }

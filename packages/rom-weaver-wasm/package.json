@@ -41,6 +41,9 @@
       "types": "./src/workers/browser-runner-worker.d.ts",
       "import": "./src/workers/browser-runner-worker.mjs"
     },
+    "./workers/browser-wasi-thread-worker": {
+      "import": "./src/workers/browser-wasi-thread-worker.mjs"
+    },
     "./rom-weaver-cli.wasm": "./rom-weaver-cli.wasm",
     "./rom-weaver-cli.wasm.br": "./rom-weaver-cli.wasm.br",
     "./rom-weaver-cli-threaded.wasm": "./rom-weaver-cli-threaded.wasm",

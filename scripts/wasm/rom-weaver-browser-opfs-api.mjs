@@ -1,9 +1,9 @@
 import * as wasiShim from '@bjorn3/browser_wasi_shim';
 import {
+  createJsonLineParser,
+  createTraceJsonLineParser,
   createWasmEnvImports,
   normalizeGuestPath,
-  parseJsonLines,
-  parseTraceJsonLines,
 } from './rom-weaver-runtime-utils.mjs';
 
 const DEFAULT_WORK_GUEST_PATH = '/work';
@@ -48,6 +48,7 @@ const THREAD_SLOT_STATE_STARTING = 2;
 const THREAD_SLOT_STATE_RUNNING = 3;
 const THREAD_SLOT_STATE_FAILED = 5;
 const THREAD_SLOT_STATE_SHUTDOWN = 6;
+const THREAD_WORKER_READY_TIMEOUT_MS = 5000;
 const WASI_ERRNO_AGAIN = 6;
 const WASI_ERRNO_ENOSYS = 52;
 
@@ -88,8 +89,24 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
     options,
     resolveBrowserDefaultThreads(),
   );
+  const threadWorkerPool = threaded && importsWasiThreadSpawn
+    ? createBrowserWasiThreadWorkerPool({
+        initialSize: options.prewarmThreadWorkers === true
+          ? resolveBrowserThreadPoolSize([
+              '--threads',
+              String(baseDefaultThreads),
+            ])
+          : 0,
+        threadWorkerUrl: options.threadWorkerUrl,
+      })
+    : null;
+  threadWorkerPool?.ready.catch(() => undefined);
 
   const runner = {
+    async dispose() {
+      await threadWorkerPool?.dispose();
+    },
+
     async run(args = [], runOptions = {}) {
       const normalizedArgs = withDefaultThreadArgs(
         normalizeArgs(args),
@@ -111,6 +128,10 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
         ...baseMountHandles,
         ...normalizeMountHandleMap({ mountHandles: runOptions.mountHandles }),
       };
+      const virtualFiles = normalizeVirtualFiles([
+        ...(Array.isArray(options.virtualFiles) ? options.virtualFiles : []),
+        ...(Array.isArray(runOptions.virtualFiles) ? runOptions.virtualFiles : []),
+      ]);
       await prepareKnownCliPaths({
         args: normalizedArgs,
         mountHandles,
@@ -133,9 +154,15 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
         inherited: baseWritableRoots,
       });
       const threadSpawner = createBrowserWasiThreadSpawner({
+        streamBroadcastChannelName: runOptions.__streamBroadcastChannelName,
+        streamRequestId: runOptions.__streamRequestId,
         moduleImports,
         threadIdState,
         threadWorkerUrl: runOptions.threadWorkerUrl ?? options.threadWorkerUrl,
+        threadWorkerPool:
+          runOptions.threadWorkerUrl && runOptions.threadWorkerUrl !== options.threadWorkerUrl
+            ? null
+            : threadWorkerPool,
         wasmMemory,
         wasmModule: module,
         wasiArgs,
@@ -147,12 +174,15 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
           runtimeMounts,
           scratchFilePoolSize: runOptions.scratchFilePoolSize ?? options.scratchFilePoolSize,
           syncAccessMode: resolvedSyncAccessMode,
+          virtualFiles,
           writableRoots,
         },
       });
       const {
         fds,
         mounts,
+        stdoutCollector,
+        stderrCollector,
         stdoutChunks,
         stderrChunks,
       } = await buildBrowserOpfsWasiFds({
@@ -160,6 +190,9 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
         stdin: runOptions.stdin,
         runtimeMounts,
         mountHandles,
+        stderrLineHandler: runOptions.onStderrLine,
+        stdoutLineHandler: runOptions.onStdoutLine,
+        virtualFiles,
         scratchFilePoolSize: runOptions.scratchFilePoolSize ?? options.scratchFilePoolSize,
         writableRoots,
         syncAccessMode: resolvedSyncAccessMode,
@@ -189,6 +222,8 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
         }
         await threadSpawner.waitForWorkers();
         await flushBrowserOpfsMounts(mounts);
+        stdoutCollector.flush();
+        stderrCollector.flush();
         const stdout = decodeChunks(stdoutChunks);
         const stderr = decodeChunks(stderrChunks);
 
@@ -200,6 +235,8 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
           ok: exitCode === 0,
         };
       } catch (error) {
+        stdoutCollector.flush();
+        stderrCollector.flush();
         const stdout = decodeChunks(stdoutChunks);
         const stderr = decodeChunks(stderrChunks);
 
@@ -218,14 +255,22 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
     },
 
     async runJson(args = [], runOptions = {}) {
-      const result = await this.run(['--json', ...normalizeArgs(args)], runOptions);
-      const parsed = parseJsonLines(result.stdout, {
+      const parsed = createJsonLineParser({
         onEvent: runOptions.onEvent,
         onNonJsonLine: runOptions.onNonJsonLine,
       });
-      const parsedTrace = parseTraceJsonLines(result.stderr, {
+      const parsedTrace = createTraceJsonLineParser({
         onTraceEvent: runOptions.onTraceEvent,
         onTraceNonJsonLine: runOptions.onTraceNonJsonLine,
+      });
+      const result = await this.run(['--json', ...normalizeArgs(args)], {
+        ...runOptions,
+        onStderrLine(line) {
+          parsedTrace.pushLine(line);
+        },
+        onStdoutLine(line) {
+          parsed.pushLine(line);
+        },
       });
 
       return {
@@ -239,6 +284,7 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
   };
 
   return {
+    dispose: () => runner.dispose(),
     mode: 'browser-opfs',
     fs: null,
     opfsHandle,
@@ -260,6 +306,8 @@ export async function __runRomWeaverBrowserWasiThread(payload = {}) {
     debugWasi,
     envList,
     runtime,
+    stderrLineHandler,
+    stdoutLineHandler,
     startArg,
     threadIdState,
     threadWorkerUrl,
@@ -292,7 +340,10 @@ export async function __runRomWeaverBrowserWasiThread(payload = {}) {
       stdin: undefined,
       runtimeMounts: normalizeRuntimeMounts(runtime?.runtimeMounts),
       mountHandles: normalizeMountHandleMap({ mountHandles: runtime?.mountHandles }),
+      stderrLineHandler,
+      stdoutLineHandler,
       scratchFilePoolSize: runtime?.scratchFilePoolSize,
+      virtualFiles: normalizeVirtualFiles(runtime?.virtualFiles),
       writableRoots: Array.isArray(runtime?.writableRoots) ? runtime.writableRoots : [],
       syncAccessMode: runtime?.syncAccessMode,
       closeables,
@@ -305,6 +356,8 @@ export async function __runRomWeaverBrowserWasiThread(payload = {}) {
       { debug: Boolean(debugWasi ?? runtime?.debugWasi ?? false) },
     );
     const nestedThreadSpawner = createBrowserWasiThreadSpawner({
+      streamBroadcastChannelName: payload.__streamBroadcastChannelName,
+      streamRequestId: payload.__streamRequestId,
       moduleImports,
       threadIdState,
       threadWorkerUrl,
@@ -352,14 +405,21 @@ async function buildBrowserOpfsWasiFds({
   stdin,
   runtimeMounts,
   mountHandles,
+  stderrLineHandler,
+  stdoutLineHandler,
+  virtualFiles,
   scratchFilePoolSize,
   writableRoots,
   syncAccessMode,
   closeables,
 }) {
   const stdinBytes = normalizeStdin(stdin);
-  const stdoutCollector = createOutputCollector(wasiShim.ConsoleStdout);
-  const stderrCollector = createOutputCollector(wasiShim.ConsoleStdout);
+  const stdoutCollector = createOutputCollector(wasiShim.ConsoleStdout, {
+    onLine: stdoutLineHandler,
+  });
+  const stderrCollector = createOutputCollector(wasiShim.ConsoleStdout, {
+    onLine: stderrLineHandler,
+  });
 
   const fds = [
     new wasiShim.OpenFile(new wasiShim.File(stdinBytes)),
@@ -384,6 +444,7 @@ async function buildBrowserOpfsWasiFds({
       mountPath,
       scratchFilePoolSize,
       syncAccessMode,
+      virtualFiles,
       writableRoots,
     });
     mounts.push(mount);
@@ -398,6 +459,8 @@ async function buildBrowserOpfsWasiFds({
   return {
     fds,
     mounts,
+    stdoutCollector,
+    stderrCollector,
     stdoutChunks: stdoutCollector.chunks,
     stderrChunks: stderrCollector.chunks,
   };
@@ -410,6 +473,7 @@ class BrowserOpfsMount {
     mountPath,
     scratchFilePoolSize,
     syncAccessMode,
+    virtualFiles,
     writableRoots,
   }) {
     const contents = await buildOpfsInodeMap({
@@ -418,6 +482,11 @@ class BrowserOpfsMount {
       guestPath: mountPath,
       syncAccessMode,
       writableRoots,
+    });
+    addVirtualFilesToMount({
+      contents,
+      mountPath,
+      virtualFiles,
     });
     const scratch = await createScratchFilePool({
       closeables,
@@ -608,6 +677,99 @@ class BrowserOpfsRandomAccessFile {
   }
 }
 
+class BrowserVirtualRandomAccessFile {
+  constructor(source) {
+    this.source = source;
+    this.proxy = isVirtualFileProxy(source) ? source : null;
+    this.reader = isBlobLike(source) ? new FileReaderSync() : null;
+    this.slots = this.proxy ? normalizeVirtualFileProxySlots(this.proxy) : [];
+    this.closed = false;
+  }
+
+  readAt(offset, dst) {
+    if (this.closed) return 0;
+    const start = Number(offset);
+    if (!Number.isFinite(start) || start < 0 || start >= this.size()) return 0;
+    const length = Math.min(dst.byteLength, this.size() - start);
+    if (length <= 0) return 0;
+    if (this.proxy) return this.readProxyAt(start, dst, length);
+    if (this.source instanceof Uint8Array) {
+      dst.set(this.source.subarray(start, start + length));
+      return length;
+    }
+    if (this.source instanceof ArrayBuffer) {
+      dst.set(new Uint8Array(this.source, start, length));
+      return length;
+    }
+    const bytes = new Uint8Array(this.reader.readAsArrayBuffer(this.source.slice(start, start + length)));
+    dst.set(bytes);
+    return bytes.byteLength;
+  }
+
+  readProxyAt(offset, dst, requestedLength) {
+    const slot = this.acquireProxySlot();
+    const length = Math.min(requestedLength, slot.data.byteLength);
+    if (length <= 0) return 0;
+    const low = offset >>> 0;
+    const high = Math.floor(offset / 2 ** 32) >>> 0;
+    Atomics.store(slot.control, 1, low);
+    Atomics.store(slot.control, 2, high);
+    Atomics.store(slot.control, 3, length);
+    Atomics.store(slot.control, 4, 0);
+    Atomics.store(slot.control, 5, 0);
+    Atomics.store(slot.control, 0, 1);
+    Atomics.notify(slot.control, 0, 1);
+    while (Atomics.load(slot.control, 0) !== 2) {
+      const state = Atomics.load(slot.control, 0);
+      const result = Atomics.wait(slot.control, 0, state, 30000);
+      if (result === 'timed-out') {
+        throw new Error(`virtual file read timed out for ${this.proxy.id}`);
+      }
+    }
+    if (Atomics.load(slot.control, 5) !== 0) {
+      Atomics.store(slot.control, 0, 0);
+      throw new Error(`virtual file read failed for ${this.proxy.id}`);
+    }
+    const bytesRead = Math.max(0, Math.min(Atomics.load(slot.control, 4), length));
+    if (bytesRead > 0) dst.set(slot.data.subarray(0, bytesRead));
+    Atomics.store(slot.control, 0, 0);
+    Atomics.notify(slot.control, 0, 1);
+    return bytesRead;
+  }
+
+  acquireProxySlot() {
+    while (true) {
+      for (const slot of this.slots) {
+        if (Atomics.compareExchange(slot.control, 0, 0, 3) === 0) return slot;
+      }
+      const first = this.slots[0];
+      if (!first) throw new Error(`virtual file proxy has no read slots for ${this.proxy.id}`);
+      const state = Atomics.load(first.control, 0);
+      Atomics.wait(first.control, 0, state, 10);
+    }
+  }
+
+  writeAt() {
+    return 0;
+  }
+
+  size() {
+    if (this.proxy) return Number(this.proxy.size || 0);
+    if (this.source instanceof Uint8Array || this.source instanceof ArrayBuffer) {
+      return this.source.byteLength;
+    }
+    return Number(this.source.size || 0);
+  }
+
+  truncate() {}
+
+  flush() {}
+
+  close() {
+    this.closed = true;
+  }
+}
+
 class WasiRandomAccessFileInode extends wasiShim.Inode {
   constructor(file, options = {}) {
     super();
@@ -764,6 +926,37 @@ async function buildOpfsInodeMap({
   return entries;
 }
 
+function addVirtualFilesToMount({ contents, mountPath, virtualFiles }) {
+  for (const entry of virtualFiles ?? []) {
+    if (!isGuestPathWithinMount(entry.path, mountPath)) continue;
+    const relativePath = entry.path === mountPath ? '' : entry.path.slice(mountPath.length + 1);
+    addVirtualFileEntry(contents, relativePath, entry.source);
+  }
+}
+
+function addVirtualFileEntry(contents, relativePath, source) {
+  const parts = normalizeWasiRelativePathParts(relativePath);
+  if (parts === null || parts.length === 0) {
+    throw new TypeError(`virtual file path must be inside a mounted directory: ${relativePath}`);
+  }
+  let entries = contents;
+  for (const part of parts.slice(0, -1)) {
+    const existing = entries.get(part) ?? null;
+    if (!existing) {
+      const directory = new wasiShim.Directory(new Map());
+      entries.set(part, directory);
+      entries = directory.contents;
+      continue;
+    }
+    if (!(existing.contents instanceof Map)) {
+      throw new Error(`virtual file parent path is not a directory: ${relativePath}`);
+    }
+    entries = existing.contents;
+  }
+  const file = new BrowserVirtualRandomAccessFile(source);
+  entries.set(parts[parts.length - 1], new WasiRandomAccessFileInode(file, { readonly: true }));
+}
+
 async function flushBrowserOpfsMounts(mounts) {
   for (const mount of mounts) {
     await flushInMemoryEntriesToOpfs(mount.directoryHandle, mount.contents);
@@ -808,6 +1001,13 @@ async function prepareKnownCliPaths({ args, mountHandles, runtimeMounts }) {
 
 function collectCliPreparedPaths(args) {
   const out = [];
+  let extractSourcePath = null;
+  let extractOutDirPath = null;
+  const commandIndex = findCommandIndex(args);
+  if (commandIndex !== -1 && args[commandIndex] === 'extract') {
+    const sourcePath = args[commandIndex + 1];
+    if (typeof sourcePath === 'string' && !sourcePath.startsWith('-')) extractSourcePath = sourcePath;
+  }
   for (let index = 0; index < args.length; index += 1) {
     const arg = String(args[index] ?? '');
     if (arg === '--output') {
@@ -822,15 +1022,40 @@ function collectCliPreparedPaths(args) {
     }
     if (arg === '--out-dir') {
       const value = args[index + 1];
-      if (typeof value === 'string') out.push({ path: value, type: 'dir' });
+      if (typeof value === 'string') {
+        extractOutDirPath = value;
+        out.push({ path: value, type: 'dir' });
+      }
       index += 1;
       continue;
     }
     if (arg.startsWith('--out-dir=')) {
-      out.push({ path: arg.slice('--out-dir='.length), type: 'dir' });
+      extractOutDirPath = arg.slice('--out-dir='.length);
+      out.push({ path: extractOutDirPath, type: 'dir' });
     }
   }
+  const directExtractOutputPath = predictDirectExtractOutputPath({
+    outDirPath: extractOutDirPath,
+    sourcePath: extractSourcePath,
+  });
+  if (directExtractOutputPath) out.push({ path: directExtractOutputPath, truncate: true, type: 'file' });
   return out;
+}
+
+function predictDirectExtractOutputPath({ outDirPath, sourcePath }) {
+  const outputName = predictNodExtractOutputName(sourcePath);
+  if (!(outputName && typeof outDirPath === 'string' && outDirPath.trim())) return null;
+  return joinGuestPath(outDirPath, outputName);
+}
+
+function predictNodExtractOutputName(sourcePath) {
+  if (typeof sourcePath !== 'string') return null;
+  const baseName = sourcePath.split(PATH_SEPARATOR_REGEX).filter(Boolean).pop() || '';
+  const extensionIndex = baseName.lastIndexOf('.');
+  if (extensionIndex <= 0) return null;
+  const extension = baseName.slice(extensionIndex + 1).toLowerCase();
+  if (!['gcz', 'nfs', 'rvz', 'tgc', 'wbfs', 'wia'].includes(extension)) return null;
+  return `${baseName.slice(0, extensionIndex)}.iso`;
 }
 
 function resolveMountedGuestPath(path, mountHandles, runtimeMounts) {
@@ -1023,6 +1248,7 @@ function copyRandomAccessFileSync(source, target) {
 async function copyRandomAccessFileToHandle(source, fileHandle) {
   const size = Number(source.size());
   const writable = await fileHandle.createWritable({ keepExistingData: false });
+  let writeError = null;
   try {
     const buffer = new Uint8Array(OPFS_COPY_CHUNK_SIZE);
     let offset = 0;
@@ -1039,8 +1265,11 @@ async function copyRandomAccessFileToHandle(source, fileHandle) {
       offset += read;
     }
     await writable.truncate(size);
+  } catch (error) {
+    writeError = error;
+    throw error;
   } finally {
-    await writable.close();
+    await closeWritableStream(writable, writeError);
   }
 }
 
@@ -1109,14 +1338,53 @@ function pathRequiresDirectory(pathStr, oflags) {
     || String(pathStr).endsWith('/');
 }
 
-function createOutputCollector(ConsoleStdout) {
+function createOutputCollector(ConsoleStdout, options = {}) {
   const chunks = [];
+  const lineStream = createTextLineStream(options.onLine);
   return {
     chunks,
+    flush() {
+      lineStream?.flush();
+    },
     fd: new ConsoleStdout((bytes) => {
-      chunks.push(copyUint8Array(bytes));
+      const chunk = copyUint8Array(bytes);
+      chunks.push(chunk);
+      lineStream?.push(chunk);
     }),
   };
+}
+
+function createTextLineStream(onLine) {
+  if (typeof onLine !== 'function') return null;
+  const decoder = new TextDecoder();
+  let pending = '';
+
+  return {
+    push(bytes) {
+      pending += decoder.decode(bytes, { stream: true });
+      emitCompleteLines();
+    },
+    flush() {
+      pending += decoder.decode();
+      if (pending.length > 0) {
+        emitLine(pending);
+        pending = '';
+      }
+    },
+  };
+
+  function emitCompleteLines() {
+    let lineEnd = pending.indexOf('\n');
+    while (lineEnd !== -1) {
+      emitLine(pending.slice(0, lineEnd));
+      pending = pending.slice(lineEnd + 1);
+      lineEnd = pending.indexOf('\n');
+    }
+  }
+
+  function emitLine(line) {
+    onLine(line.endsWith('\r') ? line.slice(0, -1) : line);
+  }
 }
 
 function decodeChunks(chunks) {
@@ -1206,10 +1474,14 @@ async function truncateFileHandle(fileHandle, size) {
     return;
   }
   const writable = await fileHandle.createWritable({ keepExistingData: true });
+  let writeError = null;
   try {
     await writable.truncate(size);
+  } catch (error) {
+    writeError = error;
+    throw error;
   } finally {
-    await writable.close();
+    await closeWritableStream(writable, writeError);
   }
 }
 
@@ -1229,11 +1501,35 @@ async function writeFileHandle(fileHandle, data) {
   }
 
   const writable = await fileHandle.createWritable({ keepExistingData: false });
+  let writeError = null;
   try {
     await writable.write(bytes);
+  } catch (error) {
+    writeError = error;
+    throw error;
   } finally {
-    await writable.close();
+    await closeWritableStream(writable, writeError);
   }
+}
+
+async function closeWritableStream(writable, priorError) {
+  if (priorError) {
+    if (typeof writable.abort === 'function') {
+      try {
+        await writable.abort(priorError);
+      } catch {
+        // Preserve the write/truncate error that caused the stream to enter an errored state.
+      }
+    } else {
+      try {
+        await writable.close();
+      } catch {
+        // Preserve the write/truncate error that caused the stream to enter an errored state.
+      }
+    }
+    throw priorError;
+  }
+  await writable.close();
 }
 
 function normalizeMountHandleMap({ mountHandles }) {
@@ -1249,6 +1545,72 @@ function normalizeMountHandleMap({ mountHandles }) {
   }
 
   return normalized;
+}
+
+function normalizeVirtualFiles(value) {
+  if (value == null) return [];
+  if (!Array.isArray(value)) throw new TypeError('virtualFiles must be an array');
+  return value.map((entry, index) => normalizeVirtualFile(entry, index));
+}
+
+function normalizeVirtualFile(entry, index) {
+  if (!entry || typeof entry !== 'object') {
+    throw new TypeError(`virtualFiles[${index}] must be an object`);
+  }
+  const path = normalizeGuestPath(entry.path, { label: `virtualFiles[${index}].path` });
+  const source = entry.source ?? entry.file ?? entry.blob ?? entry.bytes ?? entry.data;
+  const proxy = entry.proxy;
+  if (isVirtualFileProxy(proxy)) return { path, source: proxy };
+  if (isVirtualFileProxy(source)) return { path, source };
+  if (isBlobLike(source)) {
+    if (typeof FileReaderSync !== 'function') {
+      throw new Error('Blob virtual files require FileReaderSync in a dedicated worker');
+    }
+    return { path, source };
+  }
+  if (source instanceof Uint8Array || source instanceof ArrayBuffer) return { path, source };
+  throw new TypeError(`virtualFiles[${index}].source must be a Blob, File, Uint8Array, or ArrayBuffer`);
+}
+
+function isVirtualFileProxy(value) {
+  return Boolean(
+    value
+      && typeof value === 'object'
+      && typeof value.id === 'string'
+      && Array.isArray(value.slots)
+      && Number.isFinite(Number(value.size))
+      && Number(value.size) >= 0,
+  );
+}
+
+function normalizeVirtualFileProxySlots(proxy) {
+  const slots = [];
+  for (const slot of proxy.slots) {
+    if (!isSharedArrayBufferLike(slot?.controlBuffer) || !isSharedArrayBufferLike(slot?.dataBuffer)) continue;
+    const control = new Int32Array(slot.controlBuffer);
+    if (control.length < 6) continue;
+    slots.push({
+      control,
+      data: new Uint8Array(slot.dataBuffer),
+    });
+  }
+  if (slots.length === 0) {
+    throw new TypeError(`virtual file proxy has no usable shared read slots: ${proxy.id}`);
+  }
+  return slots;
+}
+
+function isSharedArrayBufferLike(value) {
+  return Boolean(
+    typeof SharedArrayBuffer === 'function'
+      && value
+      && typeof value === 'object'
+      && Object.prototype.toString.call(value) === '[object SharedArrayBuffer]',
+  );
+}
+
+function isBlobLike(value) {
+  return typeof Blob !== 'undefined' && value instanceof Blob;
 }
 
 function normalizeWritableRoots({
@@ -1273,6 +1635,10 @@ function isGuestPathWithinRoots(path, roots) {
     if (normalizedPath === root || normalizedPath.startsWith(`${root}/`)) return true;
   }
   return false;
+}
+
+function isGuestPathWithinMount(path, mountPath) {
+  return path === mountPath || path.startsWith(`${mountPath}/`);
 }
 
 function joinGuestPath(...parts) {
@@ -1300,10 +1666,259 @@ function normalizeRelativePathParts(value, { label = 'relative path' } = {}) {
   return parts;
 }
 
+function createBrowserWasiThreadWorkerPool({ initialSize, threadWorkerUrl }) {
+  const resolvedThreadWorkerUrl = resolveThreadWorkerUrl(threadWorkerUrl);
+  const workers = [];
+  let disposed = false;
+  let nextCommandId = 1;
+
+  const rejectShell = (slot, error) => {
+    slot.rejectReady?.(error);
+    slot.resolveReady = null;
+    slot.rejectReady = null;
+  };
+
+  const failShell = (shell, error) => {
+    shell.terminated = true;
+    try {
+      shell.worker?.terminate();
+    } catch {
+      // ignored
+    }
+    rejectShell(shell, error);
+    const command = shell.currentCommand;
+    if (!command) return;
+    command.failure = error;
+    Atomics.store(command.control, THREAD_SLOT_ERROR_INDEX, 1);
+    signalThreadStartState(command.control, THREAD_SLOT_STATE_FAILED);
+    command.rejectReady?.(error);
+    command.resolveDone?.();
+    shell.currentCommand = null;
+  };
+
+  const handleShellMessage = (shell, message) => {
+    if (message.type === 'shell-ready') {
+      shell.online = true;
+      shell.resolveReady?.();
+      shell.resolveReady = null;
+      shell.rejectReady = null;
+      return;
+    }
+    const command = shell.currentCommand;
+    if (!command || message.commandId !== command.commandId) return;
+    if (message.type === 'ready') {
+      command.readyResolved = true;
+      command.resolveReady?.();
+      command.resolveReady = null;
+      command.rejectReady = null;
+      return;
+    }
+    if (message.type === 'command-done') {
+      shell.currentCommand = null;
+      command.resolveDone?.();
+      return;
+    }
+    if (message.type === 'error') {
+      const error = annotateThreadWorkerError(
+        deserializeThreadWorkerError(message.error),
+        command,
+        resolvedThreadWorkerUrl,
+      );
+      command.failure = error;
+      Atomics.store(command.control, THREAD_SLOT_ERROR_INDEX, 1);
+      signalThreadStartState(command.control, THREAD_SLOT_STATE_FAILED);
+      if (Number.isInteger(message.tid)) {
+        command.tid = message.tid;
+        return;
+      }
+      command.resolveDone?.();
+      shell.currentCommand = null;
+      command.rejectReady?.(error);
+    }
+  };
+
+  const createShell = (index) => {
+    const slot = {
+      index,
+      worker: null,
+      online: false,
+      currentCommand: null,
+      readyTimer: null,
+      ready: null,
+      resolveReady: null,
+      rejectReady: null,
+      terminated: false,
+    };
+    slot.ready = new Promise((resolveReady, rejectReady) => {
+      slot.resolveReady = resolveReady;
+      slot.rejectReady = rejectReady;
+    }).finally(() => {
+      if (slot.readyTimer) clearTimeout(slot.readyTimer);
+      slot.readyTimer = null;
+    });
+    slot.readyTimer = setTimeout(() => {
+      failShell(slot, new Error(
+        `browser wasi thread worker ${slot.index} did not become ready within ${THREAD_WORKER_READY_TIMEOUT_MS}ms`
+        + ` (workerUrl=${resolvedThreadWorkerUrl})`,
+      ));
+    }, THREAD_WORKER_READY_TIMEOUT_MS);
+
+    const worker = new Worker(resolvedThreadWorkerUrl, { type: 'module' });
+    slot.worker = worker;
+    worker.addEventListener('message', (event) => handleShellMessage(slot, event.data ?? {}));
+    worker.addEventListener('error', (event) => {
+      event.preventDefault?.();
+      const error = createThreadWorkerLoadError(event, slot.currentCommand ?? slot, resolvedThreadWorkerUrl);
+      failShell(slot, error);
+    });
+    worker.addEventListener('messageerror', (event) => {
+      event.preventDefault?.();
+      failShell(slot, new Error(
+        `browser wasi thread worker ${slot.index} could not receive its message`
+        + ` (workerUrl=${resolvedThreadWorkerUrl})`,
+      ));
+    });
+    worker.postMessage({ mode: 'pool-shell' });
+    return slot;
+  };
+
+  const ensureSize = async (size) => {
+    if (disposed) throw new Error('browser wasi thread worker pool is disposed');
+    const targetSize = Math.min(Math.max(0, size), MAX_BROWSER_THREAD_POOL_SIZE);
+    while (workers.length < targetSize) workers.push(createShell(workers.length));
+    await Promise.all(workers.slice(0, targetSize).map((slot) => slot.ready));
+  };
+
+  const isReady = (size) => {
+    if (disposed) return false;
+    const targetSize = Math.min(Math.max(0, size), MAX_BROWSER_THREAD_POOL_SIZE);
+    if (targetSize === 0) return true;
+    if (workers.length < targetSize) return false;
+    return workers.slice(0, targetSize).every((slot) => slot.online
+      && !slot.terminated
+      && !slot.currentCommand);
+  };
+
+  const createCommand = ({
+    poolSize,
+    streamBroadcastChannelName,
+    streamRequestId,
+    debugWasi,
+    envList,
+    runtime,
+    threadIdState,
+    threadWorkerUrl,
+    wasiArgs,
+    wasmMemory,
+    wasmModule,
+  }) => {
+    const commandId = nextCommandId;
+    nextCommandId += 1;
+    const command = {
+      commandId,
+      ready: null,
+      slots: [],
+      shutdown: async () => {
+        for (const slot of command.slots) {
+          if (slot.shell.currentCommand !== slot) continue;
+          Atomics.store(slot.control, THREAD_SLOT_STATE_INDEX, THREAD_SLOT_STATE_SHUTDOWN);
+          Atomics.notify(slot.control, THREAD_SLOT_STATE_INDEX, 1);
+        }
+        await Promise.allSettled(command.slots.map((slot) => slot.done));
+      },
+    };
+    command.ready = ensureSize(poolSize).then(async () => {
+      if (threadWorkerUrl && resolveThreadWorkerUrl(threadWorkerUrl) !== resolvedThreadWorkerUrl) {
+        throw new Error(
+          `browser wasi thread worker pool URL mismatch: ${resolvedThreadWorkerUrl} !== ${threadWorkerUrl}`,
+        );
+      }
+      const shells = workers.slice(0, poolSize);
+      for (const shell of shells) {
+        if (shell.terminated) throw new Error(`browser wasi thread worker ${shell.index} is not available`);
+        if (shell.currentCommand) throw new Error(`browser wasi thread worker ${shell.index} is already busy`);
+        const control = new Int32Array(
+          new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * THREAD_SLOT_LENGTH),
+        );
+        control[THREAD_SLOT_STATE_INDEX] = THREAD_SLOT_STATE_IDLE;
+        control[THREAD_SLOT_TID_INDEX] = 0;
+        control[THREAD_SLOT_START_ARG_INDEX] = 0;
+        control[THREAD_SLOT_ERROR_INDEX] = 0;
+        const commandSlot = {
+          commandId,
+          index: shell.index,
+          worker: shell.worker,
+          shell,
+          control,
+          online: true,
+          busy: false,
+          tid: null,
+          failure: null,
+          readyResolved: false,
+          resolveReady: null,
+          rejectReady: null,
+          resolveDone: null,
+        };
+        commandSlot.ready = new Promise((resolveReady, rejectReady) => {
+          commandSlot.resolveReady = resolveReady;
+          commandSlot.rejectReady = rejectReady;
+        });
+        commandSlot.done = new Promise((resolveDone) => {
+          commandSlot.resolveDone = resolveDone;
+        });
+        shell.currentCommand = commandSlot;
+        command.slots.push(commandSlot);
+        shell.worker.postMessage({
+          mode: 'pool-command',
+          commandId,
+          __streamBroadcastChannelName: streamBroadcastChannelName,
+          __streamRequestId: streamRequestId,
+          controlBuffer: control.buffer,
+          debugWasi,
+          envList,
+          runtime,
+          threadIdState,
+          threadWorkerUrl: resolvedThreadWorkerUrl,
+          wasiArgs,
+          wasmMemory,
+          wasmModule,
+        });
+      }
+      await Promise.all(command.slots.map((slot) => slot.ready));
+    });
+    return command;
+  };
+
+  const dispose = async () => {
+    disposed = true;
+    for (const slot of workers) {
+      try {
+        slot.worker?.postMessage({ mode: 'shutdown' });
+      } catch {
+        // ignored
+      }
+      slot.worker?.terminate();
+      slot.terminated = true;
+    }
+    workers.length = 0;
+  };
+
+  return {
+    createCommand,
+    dispose,
+    isReady,
+    ready: ensureSize(initialSize),
+    resolvedThreadWorkerUrl,
+  };
+}
+
 function createBrowserWasiThreadSpawner({
+  streamBroadcastChannelName,
+  streamRequestId,
   moduleImports,
   threadIdState,
   threadWorkerUrl,
+  threadWorkerPool,
   wasmMemory,
   wasmModule,
   wasiArgs,
@@ -1328,6 +1943,27 @@ function createBrowserWasiThreadSpawner({
   const poolWorkers = [];
   let firstThreadFailure = null;
   const resolvedThreadWorkerUrl = resolveThreadWorkerUrl(threadWorkerUrl);
+  const poolSize = resolveBrowserThreadPoolSize(wasiArgs);
+  if (threadWorkerPool?.isReady?.(poolSize)) {
+    const command = threadWorkerPool.createCommand({
+      poolSize,
+      streamBroadcastChannelName,
+      streamRequestId,
+      debugWasi: Boolean(runtime?.debugWasi ?? false),
+      envList,
+      runtime,
+      threadIdState,
+      threadWorkerUrl,
+      wasiArgs,
+      wasmMemory,
+      wasmModule,
+    });
+    return createBrowserWasiThreadSpawnerForCommand({
+      command,
+      threadIdState,
+      wasmMemory,
+    });
+  }
 
   const recordFailure = (tid, error) => {
     const wrapped = wrapThreadFailure(tid, error);
@@ -1340,7 +1976,6 @@ function createBrowserWasiThreadSpawner({
   };
 
   const poolReadyPromises = [];
-  const poolSize = resolveBrowserThreadPoolSize(wasiArgs);
   for (let index = 0; index < poolSize; index += 1) {
     const control = new Int32Array(
       new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * THREAD_SLOT_LENGTH),
@@ -1358,11 +1993,36 @@ function createBrowserWasiThreadSpawner({
       tid: null,
       resolveReady: null,
       rejectReady: null,
+      readyTimer: null,
+    };
+    const handleThreadWorkerFailure = (slot, error) => {
+      if (slot.tid != null) {
+        activeWorkers.delete(slot.tid);
+        Atomics.store(slot.control, THREAD_SLOT_ERROR_INDEX, 1);
+        signalThreadStartState(slot.control, THREAD_SLOT_STATE_FAILED);
+        recordFailure(slot.tid, error);
+        slot.busy = false;
+        slot.tid = null;
+        return;
+      }
+      slot.rejectReady?.(error);
     };
     const ready = new Promise((resolveReady, rejectReady) => {
       slot.resolveReady = resolveReady;
       slot.rejectReady = rejectReady;
+    }).finally(() => {
+      if (slot.readyTimer) clearTimeout(slot.readyTimer);
+      slot.readyTimer = null;
     });
+    slot.readyTimer = setTimeout(() => {
+      handleThreadWorkerFailure(
+        slot,
+        new Error(
+          `browser wasi thread worker ${slot.index} did not become ready within ${THREAD_WORKER_READY_TIMEOUT_MS}ms`
+          + ` (workerUrl=${resolvedThreadWorkerUrl})`,
+        ),
+      );
+    }, THREAD_WORKER_READY_TIMEOUT_MS);
     poolReadyPromises.push(ready);
     const worker = new Worker(resolvedThreadWorkerUrl, { type: 'module' });
     slot.worker = worker;
@@ -1377,7 +2037,11 @@ function createBrowserWasiThreadSpawner({
       }
       if (message.type === 'error') {
         const tid = Number.isInteger(message.tid) ? message.tid : slot.tid;
-        const error = deserializeThreadWorkerError(message.error);
+        const error = annotateThreadWorkerError(
+          deserializeThreadWorkerError(message.error),
+          slot,
+          resolvedThreadWorkerUrl,
+        );
         if (tid != null) {
           activeWorkers.delete(tid);
           slot.busy = false;
@@ -1391,22 +2055,23 @@ function createBrowserWasiThreadSpawner({
       }
     });
     worker.addEventListener('error', (event) => {
-      const error = event?.error instanceof Error
-        ? event.error
-        : new Error(event?.message || 'browser wasi thread worker error');
-      if (slot.tid != null) {
-        activeWorkers.delete(slot.tid);
-        Atomics.store(slot.control, THREAD_SLOT_ERROR_INDEX, 1);
-        signalThreadStartState(slot.control, THREAD_SLOT_STATE_FAILED);
-        recordFailure(slot.tid, error);
-        slot.busy = false;
-        slot.tid = null;
-        return;
-      }
-      slot.rejectReady?.(error);
+      event.preventDefault?.();
+      handleThreadWorkerFailure(slot, createThreadWorkerLoadError(event, slot, resolvedThreadWorkerUrl));
+    });
+    worker.addEventListener('messageerror', (event) => {
+      event.preventDefault?.();
+      handleThreadWorkerFailure(
+        slot,
+        new Error(
+          `browser wasi thread worker ${slot.index} could not receive its startup payload`
+          + ` (workerUrl=${resolvedThreadWorkerUrl}, tid=${slot.tid ?? 'ready'})`,
+        ),
+      );
     });
     worker.postMessage({
       mode: 'pool',
+      __streamBroadcastChannelName: streamBroadcastChannelName,
+      __streamRequestId: streamRequestId,
       controlBuffer: control.buffer,
       debugWasi: Boolean(runtime?.debugWasi ?? false),
       envList,
@@ -1508,27 +2173,120 @@ function createBrowserWasiThreadSpawner({
   return { spawn, ready: Promise.all(poolReadyPromises), waitForWorkers };
 }
 
+function createBrowserWasiThreadSpawnerForCommand({
+  command,
+  threadIdState,
+  wasmMemory,
+}) {
+  const activeWorkers = new Map();
+  let firstThreadFailure = null;
+
+  const recordFailure = (tid, error) => {
+    const wrapped = wrapThreadFailure(tid, error);
+    if (!firstThreadFailure) firstThreadFailure = wrapped;
+    return wrapped;
+  };
+
+  const spawn = function spawn(startArg) {
+    const errorOrTidPtr = arguments.length > 1 ? arguments[1] : undefined;
+    for (const [activeTid, slot] of activeWorkers.entries()) {
+      const state = Atomics.load(slot.control, THREAD_SLOT_STATE_INDEX);
+      if (state === THREAD_SLOT_STATE_IDLE) {
+        slot.busy = false;
+        slot.tid = null;
+        activeWorkers.delete(activeTid);
+        continue;
+      }
+      if (state === THREAD_SLOT_STATE_FAILED) {
+        slot.busy = false;
+        slot.tid = null;
+        activeWorkers.delete(activeTid);
+        recordFailure(activeTid, slot.failure || new Error(`wasi thread ${activeTid} failed in browser worker ${slot.index}`));
+      }
+    }
+
+    const tid = allocateThreadId(threadIdState);
+    if (tid < 0) {
+      return finishThreadSpawn(wasmMemory, errorOrTidPtr, Math.abs(tid), true);
+    }
+
+    const slot = command.slots.find((candidate) => candidate.online
+      && !candidate.busy
+      && Atomics.load(candidate.control, THREAD_SLOT_STATE_INDEX) === THREAD_SLOT_STATE_IDLE);
+    if (!slot) {
+      return finishThreadSpawn(wasmMemory, errorOrTidPtr, WASI_ERRNO_AGAIN, true);
+    }
+
+    slot.busy = true;
+    slot.tid = tid;
+    activeWorkers.set(tid, slot);
+    Atomics.store(slot.control, THREAD_SLOT_TID_INDEX, tid);
+    Atomics.store(slot.control, THREAD_SLOT_START_ARG_INDEX, Number(startArg) | 0);
+    Atomics.store(slot.control, THREAD_SLOT_ERROR_INDEX, 0);
+    Atomics.store(slot.control, THREAD_SLOT_STATE_INDEX, THREAD_SLOT_STATE_REQUESTED);
+    Atomics.notify(slot.control, THREAD_SLOT_STATE_INDEX, 1);
+
+    const startAckError = waitForThreadStartAck(slot.control, tid);
+    if (startAckError) {
+      activeWorkers.delete(tid);
+      slot.busy = false;
+      slot.tid = null;
+      recordFailure(tid, startAckError);
+      return finishThreadSpawn(wasmMemory, errorOrTidPtr, WASI_ERRNO_AGAIN, true);
+    }
+
+    return finishThreadSpawn(wasmMemory, errorOrTidPtr, tid, false);
+  };
+
+  const waitForWorkers = async () => {
+    while (activeWorkers.size > 0) {
+      for (const [tid, slot] of activeWorkers.entries()) {
+        while (true) {
+          const state = Atomics.load(slot.control, THREAD_SLOT_STATE_INDEX);
+          if (state === THREAD_SLOT_STATE_IDLE) {
+            slot.busy = false;
+            slot.tid = null;
+            activeWorkers.delete(tid);
+            break;
+          }
+          if (state === THREAD_SLOT_STATE_FAILED) {
+            recordFailure(tid, slot.failure || new Error(`wasi thread ${tid} failed in browser worker ${slot.index}`));
+            slot.busy = false;
+            slot.tid = null;
+            activeWorkers.delete(tid);
+            break;
+          }
+          Atomics.wait(slot.control, THREAD_SLOT_STATE_INDEX, state, 100);
+        }
+      }
+    }
+    await command.shutdown();
+    if (firstThreadFailure) throw firstThreadFailure;
+  };
+
+  const ready = command.ready.catch(async (error) => {
+    await command.shutdown();
+    throw error;
+  });
+
+  return { spawn, ready, waitForWorkers };
+}
+
 function resolveBrowserThreadPoolSize(wasiArgs) {
   const requestedThreadCount = parseRequestedThreadCount(wasiArgs);
-  // Codec libraries can spawn pthreads internally in addition to the CLI's
-  // requested worker count; keep spare slots so those nested spawns do not
-  // fail with EAGAIN in browsers.
-  const nestedCodecThreadSlots = requestedThreadCount * 4;
-  return Math.min(
-    Math.max(DEFAULT_BROWSER_THREAD_POOL_SIZE, nestedCodecThreadSlots),
-    MAX_BROWSER_THREAD_POOL_SIZE,
-  );
+  if (requestedThreadCount === null || requestedThreadCount <= 1) return 0;
+  return Math.min(Math.max(1, requestedThreadCount), MAX_BROWSER_THREAD_POOL_SIZE);
 }
 
 function parseRequestedThreadCount(wasiArgs) {
-  if (!Array.isArray(wasiArgs)) return DEFAULT_BROWSER_THREAD_POOL_SIZE;
+  if (!Array.isArray(wasiArgs)) return null;
   for (let index = wasiArgs.length - 1; index >= 0; index -= 1) {
     if (wasiArgs[index] !== '--threads') continue;
     const parsed = Number.parseInt(String(wasiArgs[index + 1] ?? ''), 10);
     if (Number.isInteger(parsed) && parsed > 0) return Math.min(parsed, MAX_BROWSER_THREAD_POOL_SIZE);
     break;
   }
-  return DEFAULT_BROWSER_THREAD_POOL_SIZE;
+  return null;
 }
 
 function wrapThreadFailure(tid, error) {
@@ -1538,10 +2296,45 @@ function wrapThreadFailure(tid, error) {
   return out;
 }
 
+function createThreadWorkerLoadError(event, slot, workerUrl) {
+  const originalError = event?.error instanceof Error ? event.error : null;
+  const parts = [
+    `browser wasi thread worker ${slot.index} failed`,
+    `workerUrl=${workerUrl}`,
+    `tid=${slot.tid ?? 'ready'}`,
+  ];
+  const message = typeof event?.message === 'string' && event.message.trim() ? event.message.trim() : '';
+  if (message) parts.push(`message=${message}`);
+  if (typeof event?.filename === 'string' && event.filename.trim()) parts.push(`filename=${event.filename.trim()}`);
+  if (Number.isFinite(event?.lineno)) parts.push(`line=${event.lineno}`);
+  if (Number.isFinite(event?.colno)) parts.push(`column=${event.colno}`);
+  const out = new Error(parts.join('; '));
+  if (originalError) {
+    out.cause = originalError;
+    if (typeof originalError.stack === 'string') out.stack = originalError.stack;
+  }
+  return out;
+}
+
+function annotateThreadWorkerError(error, slot, workerUrl) {
+  const message = error instanceof Error ? error.message : String(error);
+  const out = new Error(
+    `browser wasi thread worker ${slot.index} failed`
+    + ` (workerUrl=${workerUrl}, tid=${slot.tid ?? 'ready'}): ${message}`,
+  );
+  if (error instanceof Error) {
+    out.name = error.name;
+    out.cause = error;
+    if (typeof error.stack === 'string') out.stack = error.stack;
+  }
+  return out;
+}
+
 function deserializeThreadWorkerError(error) {
   const out = new Error(error && typeof error.message === 'string' ? error.message : 'browser wasi thread worker failed');
   if (error && typeof error.name === 'string') out.name = error.name;
   if (error && typeof error.stack === 'string') out.stack = error.stack;
+  if (error && error.cause) out.cause = deserializeThreadWorkerError(error.cause);
   return out;
 }
 
@@ -1821,8 +2614,7 @@ async function resolveBrowserModule({
   );
   const useThreadedCandidate = shouldUseThreadedWasm && resolvedThreadedWasmUrls.length > 0;
   const primaryUrls = useThreadedCandidate ? resolvedThreadedWasmUrls : resolvedWasmUrls;
-  const fallbackUrls = useThreadedCandidate ? resolvedWasmUrls : [];
-  return compileBrowserModuleFromUrls([...primaryUrls, ...fallbackUrls]);
+  return compileBrowserModuleFromUrls(primaryUrls);
 }
 
 function canUseThreadedWasmRuntime() {

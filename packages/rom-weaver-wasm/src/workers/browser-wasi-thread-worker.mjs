@@ -1,13 +1,65 @@
 import { __runRomWeaverBrowserWasiThread } from '../rom-weaver-browser-opfs-api.mjs';
 
+let shellBusy = false;
+
 self.addEventListener('message', (event) => {
   const payload = event.data ?? {};
-  if (payload.mode === 'pool') {
-    void runPoolWorker(payload);
+  if (payload.mode === 'pool-shell') {
+    self.postMessage({ type: 'shell-ready' });
     return;
   }
-  void runSingleThread(payload);
-}, { once: true });
+  if (payload.mode === 'pool-command') {
+    if (shellBusy) {
+      self.postMessage({
+        type: 'error',
+        commandId: payload.commandId,
+        tid: null,
+        error: serializeError(new Error('browser wasi thread worker received a command while busy')),
+      });
+      return;
+    }
+    shellBusy = true;
+    void runPoolWorker(payload, { closeOnShutdown: false })
+      .then(() => {
+        self.postMessage({ type: 'command-done', commandId: payload.commandId });
+      })
+      .catch((error) => {
+        self.postMessage({
+          type: 'error',
+          commandId: payload.commandId,
+          tid: null,
+          error: serializeError(error),
+        });
+      })
+      .finally(() => {
+        shellBusy = false;
+      });
+    return;
+  }
+  if (payload.mode === 'shutdown') {
+    self.close();
+    return;
+  }
+  if (payload.mode === 'pool') {
+    void runPoolWorker(payload, { closeOnShutdown: true }).catch((error) => {
+      self.postMessage({
+        type: 'error',
+        tid: null,
+        error: serializeError(error),
+      });
+      self.close();
+    });
+    return;
+  }
+  void runSingleThread(payload).catch((error) => {
+    self.postMessage({
+      type: 'error',
+      tid: payload?.tid ?? null,
+      error: serializeError(error),
+    });
+    self.close();
+  });
+});
 
 const THREAD_SLOT_STATE_INDEX = 0;
 const THREAD_SLOT_TID_INDEX = 1;
@@ -44,12 +96,12 @@ async function runSingleThread(payload) {
   }
 }
 
-async function runPoolWorker(payload) {
+async function runPoolWorker(payload, { closeOnShutdown }) {
   const control = new Int32Array(payload.controlBuffer);
   if (!(control.buffer instanceof SharedArrayBuffer) || control.length < THREAD_SLOT_LENGTH) {
     throw new Error('browser wasi thread pool worker missing shared control buffer');
   }
-  self.postMessage({ type: 'ready' });
+  self.postMessage({ type: 'ready', commandId: payload.commandId });
 
   while (true) {
     while (Atomics.load(control, THREAD_SLOT_STATE_INDEX) === THREAD_SLOT_STATE_IDLE) {
@@ -57,7 +109,7 @@ async function runPoolWorker(payload) {
     }
     const state = Atomics.load(control, THREAD_SLOT_STATE_INDEX);
     if (state === THREAD_SLOT_STATE_SHUTDOWN) {
-      self.close();
+      if (closeOnShutdown) self.close();
       return;
     }
     if (state === THREAD_SLOT_STATE_FAILED) {
@@ -92,6 +144,7 @@ async function runPoolWorker(payload) {
       signalThreadState(control, THREAD_SLOT_STATE_FAILED);
       self.postMessage({
         type: 'error',
+        commandId: payload.commandId,
         tid,
         error: serializeError(error),
       });
@@ -150,6 +203,7 @@ function signalThreadState(control, state) {
 
 function serializeError(error) {
   return {
+    cause: error && error.cause ? serializeError(error.cause) : undefined,
     name: error && typeof error.name === 'string' ? error.name : 'Error',
     message: error && typeof error.message === 'string' ? error.message : String(error),
     stack: error && typeof error.stack === 'string' ? error.stack : undefined,

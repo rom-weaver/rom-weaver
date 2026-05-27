@@ -82,6 +82,7 @@ export function createRunnerWorkerMessageQueue({ postMessage, initRunner }) {
       }
 
       case 'dispose': {
+        await runner?.dispose?.();
         runner = null;
         postMessage({ type: 'disposed', requestId });
         return;
