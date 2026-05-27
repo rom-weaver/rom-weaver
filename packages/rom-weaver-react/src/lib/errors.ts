@@ -36,6 +36,8 @@ const MODULE_IMPORT_FAILURE_MESSAGE_REGEX =
   /\b(importing a module script failed|failed to load module script|failed to fetch dynamically imported module|module script failed to load)\b/i;
 const OUT_OF_MEMORY_MESSAGE_REGEX =
   /\b(out of memory|cannot enlarge memory|memory allocation|not enough memory|bad alloc|ENOMEM|OOM)\b/i;
+const OUTPUT_WRITE_FAILURE_MESSAGE_REGEX =
+  /\b(createwritable|writable|read\/write access|read\/write permission|destination file|output could not be written|modifications are not allowed)\b/i;
 const WORKFLOW_ERROR_CODES = new Set<RomWeaverErrorCode>([
   "AMBIGUOUS_SELECTION",
   "ARCHIVE_DEPTH_EXCEEDED",
@@ -107,6 +109,8 @@ const toRomWeaverError = (error: unknown): RomWeaverError => {
       message,
       { cause: error },
     );
+  if (OUTPUT_WRITE_FAILURE_MESSAGE_REGEX.test(message))
+    return new RomWeaverError("OUTPUT_WRITE_FAILED", message, { cause: error });
   if (COMPRESSION_FAILURE_MESSAGE_REGEX.test(message))
     return new RomWeaverError("COMPRESSION_FAILED", message, { cause: error });
   if (lower.includes("no input") || lower.includes("no patch"))
