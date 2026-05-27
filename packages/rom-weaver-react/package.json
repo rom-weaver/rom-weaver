@@ -24,7 +24,8 @@
     "dev": "node scripts/dev-server.mjs",
     "build": "vite build",
     "preview": "node scripts/dev-server.mjs preview",
-    "lint": "npm run lint:code && npm run lint:types",
+    "lint": "npm run lint:code && npm run lint:types && npm run lint:browser-compat",
+    "lint:browser-compat": "node scripts/check-browser-compat.mjs",
     "lint:code": "biome check package.json index.html vite.config.mjs vitest.config.base.mjs vitest.browser.config.mjs tsconfig.base.json tsconfig.json src tests --diagnostic-level=error",
     "lint:types": "tsc -p tsconfig.json --noEmit",
     "test": "npm run test:browser",
@@ -42,6 +43,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.13",
+    "@mdn/browser-compat-data": "8.0.0",
     "@tailwindcss/vite": "4.2.4",
     "@types/node": "25.6.0",
     "@types/react": "19.2.14",
@@ -49,6 +51,7 @@
     "@vitejs/plugin-react": "6.0.1",
     "@vitest/browser": "4.1.7",
     "@vitest/browser-playwright": "4.1.7",
+    "browserslist": "4.28.2",
     "playwright": "1.60.0",
     "tailwindcss": "4.2.4",
     "typescript": "^6.0.3",
@@ -58,5 +61,12 @@
     "workbox-core": "7.4.0",
     "workbox-precaching": "7.4.0",
     "workbox-routing": "7.4.0"
-  }
+  },
+  "browserslist": [
+    "last 2 Chrome major versions",
+    "last 2 Edge major versions",
+    "last 2 Firefox major versions",
+    "last 2 Safari major versions",
+    "last 2 iOS major versions"
+  ]
 }
