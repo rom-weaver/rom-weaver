@@ -228,7 +228,7 @@ function SettingsDialog({
   if (!open) return null;
   return (
     <>
-      <div aria-hidden="true" className={dialogClasses.backdrop} />
+      <div aria-hidden="true" className={dialogClasses.backdrop} onClick={onClose} />
       <dialog
         aria-labelledby="rom-weaver-settings-title"
         className={cx(dialogClasses.largePanel, "z-50")}
