@@ -21,17 +21,15 @@ type AtomicsWaitAsyncResult = {
   value: "not-equal" | "timed-out" | Promise<"ok" | "not-equal" | "timed-out">;
 };
 type AtomicsWithWaitAsync = typeof Atomics & {
-  waitAsync?: (
-    typedArray: Int32Array,
-    index: number,
-    value: number,
-    timeout?: number,
-  ) => AtomicsWaitAsyncResult;
+  waitAsync?: (typedArray: Int32Array, index: number, value: number, timeout?: number) => AtomicsWaitAsyncResult;
 };
+type AtomicsWaitAsync = NonNullable<AtomicsWithWaitAsync["waitAsync"]>;
 
 const activeVirtualFiles = new Map<string, BrowserVirtualFile>();
-const VIRTUAL_FILE_CHUNK_SIZE = 2 * 1024 * 1024;
-const VIRTUAL_FILE_SLOT_COUNT = 8;
+const VIRTUAL_FILE_MIN_CHUNK_SIZE = 256 * 1024;
+const VIRTUAL_FILE_MAX_CHUNK_SIZE = 2 * 1024 * 1024;
+const VIRTUAL_FILE_MAX_SLOT_COUNT = 4;
+const VIRTUAL_FILE_MAX_TOTAL_SAB_BYTES_PER_FILE = 4 * 1024 * 1024;
 const CONTROL_STATE_INDEX = 0;
 const CONTROL_OFFSET_LOW_INDEX = 1;
 const CONTROL_OFFSET_HIGH_INDEX = 2;
@@ -49,6 +47,33 @@ let virtualFileId = 0;
 const getVirtualSourceSize = (source: BrowserVirtualFileSource) =>
   source instanceof Uint8Array || source instanceof ArrayBuffer ? source.byteLength : source.size;
 
+const clampInteger = (value: number, minimum: number, maximum: number) =>
+  Math.max(minimum, Math.min(maximum, Math.trunc(value)));
+
+const resolveVirtualFileLayout = (sourceSize: number) => {
+  const normalizedSize = Number.isFinite(sourceSize) && sourceSize > 0 ? Math.floor(sourceSize) : 1;
+  const chunkSize = clampInteger(
+    Math.ceil(normalizedSize / VIRTUAL_FILE_MAX_SLOT_COUNT),
+    VIRTUAL_FILE_MIN_CHUNK_SIZE,
+    VIRTUAL_FILE_MAX_CHUNK_SIZE,
+  );
+  const maxSlotsByBudget = Math.max(1, Math.floor(VIRTUAL_FILE_MAX_TOTAL_SAB_BYTES_PER_FILE / chunkSize));
+  const slotCount = clampInteger(
+    Math.ceil(normalizedSize / chunkSize),
+    1,
+    Math.min(VIRTUAL_FILE_MAX_SLOT_COUNT, maxSlotsByBudget),
+  );
+  return { chunkSize, slotCount };
+};
+
+const getAtomicsWaitAsync = (): AtomicsWaitAsync => {
+  const waitAsync = (Atomics as AtomicsWithWaitAsync).waitAsync;
+  if (typeof waitAsync !== "function") {
+    throw new Error("Direct browser file inputs require Atomics.waitAsync support");
+  }
+  return waitAsync;
+};
+
 const registerBrowserVirtualFile = ({
   path,
   source,
@@ -59,23 +84,26 @@ const registerBrowserVirtualFile = ({
   if (typeof SharedArrayBuffer !== "function") {
     throw new Error("Direct browser file inputs require SharedArrayBuffer support");
   }
+  const waitAsync = getAtomicsWaitAsync();
+  const sourceSize = getVirtualSourceSize(source);
+  const { chunkSize, slotCount } = resolveVirtualFileLayout(sourceSize);
   const id = `virtual-file-${++virtualFileId}-${Math.random().toString(16).slice(2)}`;
-  const slots = Array.from({ length: VIRTUAL_FILE_SLOT_COUNT }, () => ({
+  const slots = Array.from({ length: slotCount }, () => ({
     controlBuffer: new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * CONTROL_LENGTH),
-    dataBuffer: new SharedArrayBuffer(VIRTUAL_FILE_CHUNK_SIZE),
+    dataBuffer: new SharedArrayBuffer(chunkSize),
   }));
   const file: BrowserVirtualFile = {
     path,
     proxy: {
       id,
-      maxChunkSize: VIRTUAL_FILE_CHUNK_SIZE,
-      size: getVirtualSourceSize(source),
+      maxChunkSize: chunkSize,
+      size: sourceSize,
       slots,
     },
   };
   let closed = false;
   for (const slot of slots)
-    void runVirtualFileSlotPump(source, slot, () => closed).catch(() => {
+    void runVirtualFileSlotPump(source, slot, waitAsync, () => closed).catch(() => {
       failVirtualFileSlot(slot);
     });
   activeVirtualFiles.set(path, file);
@@ -95,6 +123,7 @@ const getActiveBrowserVirtualFiles = (): BrowserVirtualFile[] =>
 const runVirtualFileSlotPump = async (
   source: BrowserVirtualFileSource,
   slot: BrowserVirtualFileSlot,
+  waitAsync: AtomicsWaitAsync,
   isClosed: () => boolean,
 ): Promise<void> => {
   const control = new Int32Array(slot.controlBuffer);
@@ -102,7 +131,7 @@ const runVirtualFileSlotPump = async (
   while (!isClosed()) {
     const state = Atomics.load(control, CONTROL_STATE_INDEX);
     if (state !== CONTROL_STATE_REQUESTED) {
-      await waitForVirtualFileSlotChange(control, state);
+      await waitForVirtualFileSlotChange(control, state, waitAsync);
       continue;
     }
     if (
@@ -114,14 +143,13 @@ const runVirtualFileSlotPump = async (
   }
 };
 
-const waitForVirtualFileSlotChange = async (control: Int32Array, state: number): Promise<void> => {
-  const waitAsync = (Atomics as AtomicsWithWaitAsync).waitAsync;
-  if (typeof waitAsync === "function") {
-    const result = waitAsync(control, CONTROL_STATE_INDEX, state, 1000);
-    if (result.async) await result.value;
-    return;
-  }
-  await new Promise((resolve) => setTimeout(resolve, 0));
+const waitForVirtualFileSlotChange = async (
+  control: Int32Array,
+  state: number,
+  waitAsync: AtomicsWaitAsync,
+): Promise<void> => {
+  const result = waitAsync(control, CONTROL_STATE_INDEX, state, 1000);
+  if (result.async) await result.value;
 };
 
 const failVirtualFileSlot = (slot: BrowserVirtualFileSlot) => {
