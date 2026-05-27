@@ -34,12 +34,24 @@ afterEach(async () => {
 
 test("rom-weaver runner ready metadata exposes the loaded browser wasm runtime", async () => {
   const canUseSharedMemory = typeof SharedArrayBuffer === "function" && globalThis.crossOriginIsolated === true;
+  performance.clearResourceTimings?.();
   const ready = await warmupRomWeaverRunner();
   const metadata = await getRomWeaverRunnerMetadata();
+  const wasmResourceNames = performance
+    .getEntriesByType("resource")
+    .map((entry) => entry.name)
+    .filter((name) => name.includes("rom-weaver-cli") && name.includes(".wasm"));
+  const observedSingleThreadedWasmImports = wasmResourceNames.filter(
+    (name) => name.includes("rom-weaver-cli.wasm") && !name.includes("threaded"),
+  );
 
   expect(ready).toEqual(metadata);
   expect(ready.threaded).toBe(canUseSharedMemory);
   expect(ready.wasmUrl).toContain(canUseSharedMemory ? "rom-weaver-cli-threaded" : "rom-weaver-cli.wasm");
+  expect(ready.wasmUrl).not.toContain("?import&url");
+  if (canUseSharedMemory) {
+    expect(observedSingleThreadedWasmImports).toEqual([]);
+  }
 });
 
 test("rom-weaver failure messages ignore trace-only stderr", () => {

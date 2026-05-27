@@ -50,9 +50,9 @@ type RomWeaverRunner = {
 };
 
 type BrowserWasmAssetSelection = {
-  threadWorkerUrl: string;
-  threadedWasmUrl: string;
-  wasmUrl: string;
+  threadWorkerUrl?: string;
+  threadedWasmUrl?: string;
+  wasmUrl?: string;
 };
 
 const DEFAULT_BROWSER_THREAD_COUNT = 4;
@@ -60,7 +60,9 @@ const MAX_BROWSER_THREAD_COUNT = 64;
 const THREAD_WARMUP_VIRTUAL_FILE_PATH = `${WORKER_OPFS_MOUNTPOINT}/.rom-weaver-thread-warmup.bin`;
 const THREAD_WARMUP_VIRTUAL_FILE_BYTES = new Uint8Array([0x72, 0x77, 0x2d, 0x77, 0x61, 0x72, 0x6d]);
 
-let browserWasmAssetPromise: Promise<BrowserWasmAssetSelection> | null = null;
+let browserSingleThreadedWasmUrlPromise: Promise<string> | null = null;
+let browserThreadedWasmUrlPromise: Promise<string> | null = null;
+let browserThreadWorkerUrlPromise: Promise<string> | null = null;
 let browserRunnerPromise: Promise<RomWeaverRunner> | null = null;
 let browserThreadWarmupPromise: { promise: Promise<void>; threads: number } | null = null;
 
@@ -72,56 +74,98 @@ const readWasmUrlModuleDefault = (module: { default?: unknown }, fallback: strin
   return fallback;
 };
 
-const resolveBrowserWasmAsset = async () => {
-  if (!browserWasmAssetPromise) {
-    browserWasmAssetPromise = Promise.all([
-      import("rom-weaver-wasm/rom-weaver-cli.wasm?url")
-        .then((module) => readWasmUrlModuleDefault(module, "rom-weaver-wasm/rom-weaver-cli.wasm"))
-        .catch(() => "rom-weaver-wasm/rom-weaver-cli.wasm"),
-      import("rom-weaver-wasm/rom-weaver-cli-threaded.wasm?url")
-        .then((module) => readWasmUrlModuleDefault(module, "rom-weaver-wasm/rom-weaver-cli-threaded.wasm"))
-        .catch(() => "rom-weaver-wasm/rom-weaver-cli-threaded.wasm"),
-      import("rom-weaver-wasm/workers/browser-wasi-thread-worker?worker&url")
-        .then((module) => readWasmUrlModuleDefault(module, "rom-weaver-wasm/workers/browser-wasi-thread-worker"))
-        .catch(() => "rom-weaver-wasm/workers/browser-wasi-thread-worker"),
-    ])
-      .then((module) => {
-        const [wasmUrl, threadedWasmUrl, threadWorkerUrl] = module;
-        return { threadedWasmUrl, threadWorkerUrl, wasmUrl };
-      })
-      .catch(() => ({
-        threadedWasmUrl: "rom-weaver-wasm/rom-weaver-cli-threaded.wasm",
-        threadWorkerUrl: "rom-weaver-wasm/workers/browser-wasi-thread-worker",
-        wasmUrl: "rom-weaver-wasm/rom-weaver-cli.wasm",
-      }));
+const resolveBrowserSingleThreadedWasmUrl = async () => {
+  if (!browserSingleThreadedWasmUrlPromise) {
+    browserSingleThreadedWasmUrlPromise = import("rom-weaver-wasm/rom-weaver-cli.wasm?url")
+      .then((module) => readWasmUrlModuleDefault(module, "rom-weaver-wasm/rom-weaver-cli.wasm"))
+      .catch(() => "rom-weaver-wasm/rom-weaver-cli.wasm");
   }
-  return browserWasmAssetPromise;
+  return browserSingleThreadedWasmUrlPromise;
+};
+
+const resolveBrowserThreadedWasmUrl = async () => {
+  if (!browserThreadedWasmUrlPromise) {
+    browserThreadedWasmUrlPromise = import("rom-weaver-wasm/rom-weaver-cli-threaded.wasm?url")
+      .then((module) => readWasmUrlModuleDefault(module, "rom-weaver-wasm/rom-weaver-cli-threaded.wasm"))
+      .catch(() => "rom-weaver-wasm/rom-weaver-cli-threaded.wasm");
+  }
+  return browserThreadedWasmUrlPromise;
+};
+
+const resolveBrowserThreadWorkerUrl = async () => {
+  if (!browserThreadWorkerUrlPromise) {
+    browserThreadWorkerUrlPromise = import("rom-weaver-wasm/workers/browser-wasi-thread-worker?worker&url")
+      .then((module) => readWasmUrlModuleDefault(module, "rom-weaver-wasm/workers/browser-wasi-thread-worker"))
+      .catch(() => "rom-weaver-wasm/workers/browser-wasi-thread-worker");
+  }
+  return browserThreadWorkerUrlPromise;
+};
+
+const canUseThreadedBrowserWasm = (root: typeof globalThis = globalThis) => {
+  return typeof root.SharedArrayBuffer === "function" && root.crossOriginIsolated === true;
+};
+
+const resolveBrowserWasmAsset = async (): Promise<BrowserWasmAssetSelection> => {
+  if (!canUseThreadedBrowserWasm()) {
+    return { wasmUrl: await resolveBrowserSingleThreadedWasmUrl() };
+  }
+  const [threadedWasmUrl, threadWorkerUrl] = await Promise.all([
+    resolveBrowserThreadedWasmUrl(),
+    resolveBrowserThreadWorkerUrl(),
+  ]);
+  return { threadedWasmUrl, threadWorkerUrl };
+};
+
+const createBrowserRunnerInitOptions = (wasmAsset: BrowserWasmAssetSelection) => {
+  return {
+    runtimeMounts: [WORKER_OPFS_MOUNTPOINT],
+    ...(wasmAsset.threadedWasmUrl ? { threadedWasmUrl: wasmAsset.threadedWasmUrl } : {}),
+    ...(wasmAsset.threadWorkerUrl ? { threadWorkerUrl: wasmAsset.threadWorkerUrl } : {}),
+    ...(wasmAsset.wasmUrl ? { wasmUrl: wasmAsset.wasmUrl } : {}),
+    workGuestPath: WORKER_OPFS_MOUNTPOINT,
+  };
+};
+
+const getThreadedFallbackReason = (error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error);
+  return `threaded wasm fallback: ${message}`;
 };
 
 const createBrowserRunner = async (): Promise<RomWeaverRunner> => {
   const { createBrowserWorkerClient } = await import("rom-weaver-wasm/workers/browser-client");
-  const client = createBrowserWorkerClient() as unknown as RomWeaverWorkerClient;
-  const wasmAsset = await resolveBrowserWasmAsset();
-  const ready = await client.init({
-    runtimeMounts: [WORKER_OPFS_MOUNTPOINT],
-    threadedWasmUrl: wasmAsset.threadedWasmUrl,
-    threadWorkerUrl: wasmAsset.threadWorkerUrl,
-    wasmUrl: wasmAsset.wasmUrl,
-    workGuestPath: WORKER_OPFS_MOUNTPOINT,
-  });
-  const selectedWasmUrl = ready.threaded ? wasmAsset.threadedWasmUrl : wasmAsset.wasmUrl;
+  let client = createBrowserWorkerClient() as unknown as RomWeaverWorkerClient;
+  let wasmAsset = await resolveBrowserWasmAsset();
+  let ready: RomWeaverRunnerReadyMetadata;
+  let fallbackReason: string | undefined;
+  try {
+    ready = await client.init(createBrowserRunnerInitOptions(wasmAsset));
+  } catch (error) {
+    if (!wasmAsset.threadedWasmUrl) throw error;
+    await client.dispose?.().catch(() => undefined);
+    fallbackReason = getThreadedFallbackReason(error);
+    client = createBrowserWorkerClient() as unknown as RomWeaverWorkerClient;
+    wasmAsset = { wasmUrl: await resolveBrowserSingleThreadedWasmUrl() };
+    ready = await client.init({
+      ...createBrowserRunnerInitOptions(wasmAsset),
+      preferThreadedWasm: false,
+    });
+  }
+  const selectedWasmUrl = ready.threaded
+    ? (wasmAsset.threadedWasmUrl ?? ready.wasmUrl ?? "")
+    : (wasmAsset.wasmUrl ?? ready.wasmUrl ?? "");
+  const runnerReady = fallbackReason ? { ...ready, fallbackReason } : ready;
   publishRomWeaverWasmDiagnostic({
     context: "rom-weaver browser runner",
     contextUrl: selectedWasmUrl,
-    reason: ready.threaded ? "cross-origin isolated" : "single-thread runtime",
-    threaded: ready.threaded,
+    reason: ready.threaded ? "cross-origin isolated" : (fallbackReason ?? "single-thread runtime"),
+    threaded: runnerReady.threaded,
     url: ready.wasmUrl || selectedWasmUrl,
   });
   return {
     dispose: async () => {
       await client.dispose?.().catch(() => undefined);
     },
-    ready,
+    ready: runnerReady,
     runJson: (args, options) => client.runJson(normalizeArgs(args), options),
   };
 };
