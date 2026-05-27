@@ -92,15 +92,37 @@ async function observeScratchPeak(rootHandle, { isDone, timeoutMs = 20000, pollM
   return peak;
 }
 
-function createVirtualFileProxy(path, sourceBytes) {
+function createVirtualFileProxy(path, sourceBytes, options = {}) {
   const bytes = sourceBytes instanceof Uint8Array ? sourceBytes : toBytes(sourceBytes);
+  const firstReadDelayMs = Math.max(0, Number(options.firstReadDelayMs) || 0);
   const id = `test-virtual-file-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const slots = Array.from({ length: 2 }, () => ({
     controlBuffer: new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * 6),
     dataBuffer: new SharedArrayBuffer(1024),
   }));
   let closed = false;
+  let requestCount = 0;
   let timer = null;
+  const pendingCompletions = new Set();
+  const completeProxyRead = (control, data, chunk, delayMs) => {
+    const finalize = () => {
+      if (closed) return;
+      data.set(chunk);
+      Atomics.store(control, 4, chunk.byteLength);
+      Atomics.store(control, 5, 0);
+      Atomics.store(control, 0, 2);
+      Atomics.notify(control, 0, 1);
+    };
+    if (delayMs <= 0) {
+      finalize();
+      return;
+    }
+    const completion = setTimeout(() => {
+      pendingCompletions.delete(completion);
+      finalize();
+    }, delayMs);
+    pendingCompletions.add(completion);
+  };
   const pump = () => {
     if (closed) return;
     for (const slot of slots) {
@@ -110,11 +132,9 @@ function createVirtualFileProxy(path, sourceBytes) {
       const offset = (Atomics.load(control, 1) >>> 0) + (Atomics.load(control, 2) >>> 0) * 2 ** 32;
       const length = Math.max(0, Math.min(Atomics.load(control, 3), data.byteLength));
       const chunk = bytes.subarray(offset, offset + length);
-      data.set(chunk);
-      Atomics.store(control, 4, chunk.byteLength);
-      Atomics.store(control, 5, 0);
-      Atomics.store(control, 0, 2);
-      Atomics.notify(control, 0, 1);
+      const delayMs = requestCount === 0 ? firstReadDelayMs : 0;
+      requestCount += 1;
+      completeProxyRead(control, data, chunk, delayMs);
     }
     timer = setTimeout(pump, 0);
   };
@@ -123,6 +143,8 @@ function createVirtualFileProxy(path, sourceBytes) {
     close() {
       closed = true;
       if (timer) clearTimeout(timer);
+      for (const completion of pendingCompletions) clearTimeout(completion);
+      pendingCompletions.clear();
     },
     virtualFile: {
       path,
@@ -313,6 +335,48 @@ describe('rom-weaver-wasm browser runner parity', () => {
       ]);
       expect(second.ok).toBe(false);
       expect(second.exitCode).not.toBe(0);
+    });
+  });
+
+  it('runJson fails stalled virtual proxy reads quickly and recovers from stale slot completions', async () => {
+    await withTempFixture(async ({ worker }) => {
+      const virtualPath = '/work/input/direct-file/input.bin';
+      const virtual = createVirtualFileProxy(virtualPath, 'direct virtual input', {
+        firstReadDelayMs: 9000,
+      });
+      try {
+        const startMs = Date.now();
+        const first = await worker.runJson([
+          'checksum',
+          virtualPath,
+          '--algo',
+          'crc32',
+          '--no-extract',
+        ], {
+          virtualFiles: [virtual.virtualFile],
+        });
+        const elapsedMs = Date.now() - startMs;
+
+        expect(first.ok).toBe(false);
+        expect(first.exitCode).not.toBe(0);
+        expect(elapsedMs).toBeLessThan(10_000);
+
+        await delay(1500);
+        const second = await worker.runJson([
+          'checksum',
+          virtualPath,
+          '--algo',
+          'crc32',
+          '--no-extract',
+        ], {
+          virtualFiles: [virtual.virtualFile],
+        });
+
+        const terminal = assertRunJsonSucceeded(second, { command: 'checksum' });
+        expect(terminal.label).toMatch(/crc32=/i);
+      } finally {
+        virtual.close();
+      }
     });
   });
 

@@ -25,6 +25,12 @@ const OPFS_COPY_CHUNK_SIZE = 8 * 1024 * 1024;
 const DEFAULT_BROWSER_THREAD_COUNT = 4;
 const DEFAULT_BROWSER_THREAD_POOL_SIZE = 4;
 const MAX_BROWSER_THREAD_POOL_SIZE = 64;
+const ATOMICS_WAIT_SLICE_MS = 100;
+const ATOMICS_WAIT_TIMEOUT_MS = 8000;
+const VIRTUAL_FILE_PROXY_STATE_IDLE = 0;
+const VIRTUAL_FILE_PROXY_STATE_REQUESTED = 1;
+const VIRTUAL_FILE_PROXY_STATE_DONE = 2;
+const VIRTUAL_FILE_PROXY_STATE_LOCKED = 3;
 const THREAD_AWARE_COMMANDS = new Set([
   'batch-header-fixer',
   'checksum',
@@ -37,7 +43,9 @@ const THREAD_AWARE_COMMANDS = new Set([
 const MAX_WASI_THREAD_ID = 0x1fffffff;
 const THREAD_ID_COUNTER_INDEX = 0;
 const THREAD_ID_COUNTER_INITIAL = 43;
-const THREAD_START_ACK_TIMEOUT_MS = 30000;
+const THREAD_START_ACK_TIMEOUT_MS = ATOMICS_WAIT_TIMEOUT_MS;
+const VIRTUAL_FILE_PROXY_READ_TIMEOUT_MS = ATOMICS_WAIT_TIMEOUT_MS;
+const VIRTUAL_FILE_PROXY_SLOT_ACQUIRE_TIMEOUT_MS = ATOMICS_WAIT_TIMEOUT_MS;
 const THREAD_SLOT_STATE_INDEX = 0;
 const THREAD_SLOT_TID_INDEX = 1;
 const THREAD_SLOT_START_ARG_INDEX = 2;
@@ -856,45 +864,84 @@ class BrowserVirtualRandomAccessFile {
 
   readProxyAt(offset, dst, requestedLength) {
     const slot = this.acquireProxySlot();
-    const length = Math.min(requestedLength, slot.data.byteLength);
-    if (length <= 0) return 0;
-    const low = offset >>> 0;
-    const high = Math.floor(offset / 2 ** 32) >>> 0;
-    Atomics.store(slot.control, 1, low);
-    Atomics.store(slot.control, 2, high);
-    Atomics.store(slot.control, 3, length);
-    Atomics.store(slot.control, 4, 0);
-    Atomics.store(slot.control, 5, 0);
-    Atomics.store(slot.control, 0, 1);
-    Atomics.notify(slot.control, 0, 1);
-    while (Atomics.load(slot.control, 0) !== 2) {
-      const state = Atomics.load(slot.control, 0);
-      const result = Atomics.wait(slot.control, 0, state, 30000);
-      if (result === 'timed-out') {
-        throw new Error(`virtual file read timed out for ${this.proxy.id}`);
+    try {
+      const length = Math.min(requestedLength, slot.data.byteLength);
+      if (length <= 0) return 0;
+      const low = offset >>> 0;
+      const high = Math.floor(offset / 2 ** 32) >>> 0;
+      Atomics.store(slot.control, 1, low);
+      Atomics.store(slot.control, 2, high);
+      Atomics.store(slot.control, 3, length);
+      Atomics.store(slot.control, 4, 0);
+      Atomics.store(slot.control, 5, 0);
+      Atomics.store(slot.control, 0, VIRTUAL_FILE_PROXY_STATE_REQUESTED);
+      Atomics.notify(slot.control, 0, 1);
+      const deadline = createWaitDeadline(VIRTUAL_FILE_PROXY_READ_TIMEOUT_MS);
+      while (true) {
+        const state = Atomics.load(slot.control, 0);
+        if (state === VIRTUAL_FILE_PROXY_STATE_DONE) break;
+        const result = waitForAtomicsStateChange(slot.control, 0, state, { deadline });
+        if (result === 'timed-out') {
+          throw new Error(`virtual file read timed out for ${this.proxy.id}`);
+        }
       }
+      if (Atomics.load(slot.control, 5) !== 0) {
+        throw new Error(`virtual file read failed for ${this.proxy.id}`);
+      }
+      const bytesRead = Math.max(0, Math.min(Atomics.load(slot.control, 4), length));
+      if (bytesRead > 0) dst.set(slot.data.subarray(0, bytesRead));
+      return bytesRead;
+    } finally {
+      this.releaseProxySlot(slot);
     }
-    if (Atomics.load(slot.control, 5) !== 0) {
-      Atomics.store(slot.control, 0, 0);
-      throw new Error(`virtual file read failed for ${this.proxy.id}`);
-    }
-    const bytesRead = Math.max(0, Math.min(Atomics.load(slot.control, 4), length));
-    if (bytesRead > 0) dst.set(slot.data.subarray(0, bytesRead));
-    Atomics.store(slot.control, 0, 0);
-    Atomics.notify(slot.control, 0, 1);
-    return bytesRead;
   }
 
   acquireProxySlot() {
+    const deadline = createWaitDeadline(VIRTUAL_FILE_PROXY_SLOT_ACQUIRE_TIMEOUT_MS);
     while (true) {
       for (const slot of this.slots) {
-        if (Atomics.compareExchange(slot.control, 0, 0, 3) === 0) return slot;
+        const state = Atomics.load(slot.control, 0);
+        if (state === VIRTUAL_FILE_PROXY_STATE_DONE) {
+          this.reclaimStaleDoneProxySlot(slot);
+          continue;
+        }
+        if (Atomics.compareExchange(
+          slot.control,
+          0,
+          VIRTUAL_FILE_PROXY_STATE_IDLE,
+          VIRTUAL_FILE_PROXY_STATE_LOCKED,
+        ) === VIRTUAL_FILE_PROXY_STATE_IDLE) {
+          return slot;
+        }
       }
       const first = this.slots[0];
       if (!first) throw new Error(`virtual file proxy has no read slots for ${this.proxy.id}`);
       const state = Atomics.load(first.control, 0);
-      Atomics.wait(first.control, 0, state, 10);
+      if (state === VIRTUAL_FILE_PROXY_STATE_DONE) {
+        this.reclaimStaleDoneProxySlot(first);
+        continue;
+      }
+      const waitResult = waitForAtomicsStateChange(first.control, 0, state, { deadline });
+      if (waitResult === 'timed-out') {
+        throw new Error(`virtual file read slot acquisition timed out for ${this.proxy.id}`);
+      }
     }
+  }
+
+  reclaimStaleDoneProxySlot(slot) {
+    if (Atomics.compareExchange(
+      slot.control,
+      0,
+      VIRTUAL_FILE_PROXY_STATE_DONE,
+      VIRTUAL_FILE_PROXY_STATE_IDLE,
+    ) === VIRTUAL_FILE_PROXY_STATE_DONE) {
+      Atomics.notify(slot.control, 0, 1);
+    }
+  }
+
+  releaseProxySlot(slot) {
+    Atomics.store(slot.control, 0, VIRTUAL_FILE_PROXY_STATE_IDLE);
+    Atomics.notify(slot.control, 0, 1);
   }
 
   writeAt() {
@@ -2553,7 +2600,7 @@ function createBrowserWasiThreadSpawner({
             activeWorkers.delete(tid);
             break;
           }
-          Atomics.wait(slot.control, THREAD_SLOT_STATE_INDEX, state, 100);
+          waitForAtomicsStateChange(slot.control, THREAD_SLOT_STATE_INDEX, state);
         }
       }
     }
@@ -2655,7 +2702,7 @@ function createBrowserWasiThreadSpawnerForCommand({
             activeWorkers.delete(tid);
             break;
           }
-          Atomics.wait(slot.control, THREAD_SLOT_STATE_INDEX, state, 100);
+          waitForAtomicsStateChange(slot.control, THREAD_SLOT_STATE_INDEX, state);
         }
       }
     }
@@ -2809,8 +2856,30 @@ function signalThreadStartState(control, state) {
   Atomics.notify(control, THREAD_SLOT_STATE_INDEX, 1);
 }
 
+function createWaitDeadline(timeoutMs) {
+  return Date.now() + Math.max(0, Number(timeoutMs) || 0);
+}
+
+function waitForAtomicsStateChange(control, index, expectedState, options = {}) {
+  const {
+    deadline,
+    sliceMs = ATOMICS_WAIT_SLICE_MS,
+  } = options;
+  const slice = Math.max(1, Number(sliceMs) || ATOMICS_WAIT_SLICE_MS);
+  if (typeof deadline === 'number') {
+    while (true) {
+      const remainingMs = deadline - Date.now();
+      if (remainingMs <= 0) return 'timed-out';
+      const result = Atomics.wait(control, index, expectedState, Math.min(remainingMs, slice));
+      if (result !== 'timed-out') return result;
+      if (remainingMs <= slice) return 'timed-out';
+    }
+  }
+  return Atomics.wait(control, index, expectedState, slice);
+}
+
 function waitForThreadStartAck(control, tid) {
-  const deadline = Date.now() + THREAD_START_ACK_TIMEOUT_MS;
+  const deadline = createWaitDeadline(THREAD_START_ACK_TIMEOUT_MS);
   while (true) {
     const state = Atomics.load(control, THREAD_SLOT_STATE_INDEX);
     if (state === THREAD_SLOT_STATE_RUNNING || state === THREAD_SLOT_STATE_IDLE) return null;
@@ -2820,18 +2889,30 @@ function waitForThreadStartAck(control, tid) {
     if (state === THREAD_SLOT_STATE_SHUTDOWN) {
       return new Error(`wasi thread ${tid} was shut down before start acknowledgement`);
     }
-    const remainingMs = deadline - Date.now();
-    if (remainingMs <= 0) {
-      return new Error(`wasi thread ${tid} start acknowledgement timed out`);
-    }
     if (state === THREAD_SLOT_STATE_STARTING) {
-      Atomics.wait(control, THREAD_SLOT_STATE_INDEX, THREAD_SLOT_STATE_STARTING, Math.min(remainingMs, 100));
+      const waitResult = waitForAtomicsStateChange(
+        control,
+        THREAD_SLOT_STATE_INDEX,
+        THREAD_SLOT_STATE_STARTING,
+        { deadline },
+      );
+      if (waitResult === 'timed-out') {
+        return new Error(`wasi thread ${tid} start acknowledgement timed out`);
+      }
       continue;
     }
     if (state !== THREAD_SLOT_STATE_REQUESTED) {
       return new Error(`wasi thread ${tid} entered unexpected start state ${state}`);
     }
-    Atomics.wait(control, THREAD_SLOT_STATE_INDEX, THREAD_SLOT_STATE_REQUESTED, Math.min(remainingMs, 100));
+    const waitResult = waitForAtomicsStateChange(
+      control,
+      THREAD_SLOT_STATE_INDEX,
+      THREAD_SLOT_STATE_REQUESTED,
+      { deadline },
+    );
+    if (waitResult === 'timed-out') {
+      return new Error(`wasi thread ${tid} start acknowledgement timed out`);
+    }
   }
 }
 

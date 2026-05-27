@@ -86,6 +86,7 @@ const THREAD_SLOT_STATE_REQUESTED = 1;
 const THREAD_SLOT_STATE_STARTING = 2;
 const THREAD_SLOT_STATE_FAILED = 5;
 const THREAD_SLOT_STATE_SHUTDOWN = 6;
+const ATOMICS_WAIT_SLICE_MS = 100;
 
 async function runSingleThread(payload) {
   const tid = payload?.tid ?? null;
@@ -121,7 +122,7 @@ async function runPoolWorker(payload, { closeOnShutdown }) {
 
   while (true) {
     while (Atomics.load(control, THREAD_SLOT_STATE_INDEX) === THREAD_SLOT_STATE_IDLE) {
-      Atomics.wait(control, THREAD_SLOT_STATE_INDEX, THREAD_SLOT_STATE_IDLE);
+      waitForThreadStateChange(control, THREAD_SLOT_STATE_IDLE);
     }
     const state = Atomics.load(control, THREAD_SLOT_STATE_INDEX);
     if (state === THREAD_SLOT_STATE_SHUTDOWN) {
@@ -132,7 +133,7 @@ async function runPoolWorker(payload, { closeOnShutdown }) {
       return;
     }
     if (state === THREAD_SLOT_STATE_FAILED) {
-      Atomics.wait(control, THREAD_SLOT_STATE_INDEX, THREAD_SLOT_STATE_FAILED, 100);
+      waitForThreadStateChange(control, THREAD_SLOT_STATE_FAILED);
       continue;
     }
     if (state !== THREAD_SLOT_STATE_REQUESTED) continue;
@@ -218,6 +219,10 @@ function publishLine(channel, requestId, tid, line, trace) {
 function signalThreadState(control, state) {
   Atomics.store(control, THREAD_SLOT_STATE_INDEX, state);
   Atomics.notify(control, THREAD_SLOT_STATE_INDEX, 1);
+}
+
+function waitForThreadStateChange(control, expectedState) {
+  Atomics.wait(control, THREAD_SLOT_STATE_INDEX, expectedState, ATOMICS_WAIT_SLICE_MS);
 }
 
 function serializeError(error) {
