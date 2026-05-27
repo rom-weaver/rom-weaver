@@ -187,7 +187,7 @@ const progressClasses = {
   barIndeterminate:
     "absolute inset-y-0 left-0 w-[44%] transition-none animate-[rom-weaver-progress-indeterminate_1.2s_cubic-bezier(0.24,1,0.35,1)_infinite]",
   container:
-    'pointer-events-none absolute inset-0 z-[2] m-0 box-border flex h-full min-w-0 select-text flex-col justify-center gap-1 overflow-hidden rounded-[10px] border border-[var(--rom-weaver-color-border)] bg-[linear-gradient(180deg,var(--rom-weaver-color-surface-muted),var(--rom-weaver-color-surface))] px-[10px] py-1 font-["Inter_Tight","Segoe_UI",sans-serif] text-[length:var(--rom-weaver-control-font-size)] font-semibold leading-[var(--rom-weaver-control-line-height)] text-[var(--rom-weaver-color-text)] shadow-[inset_0_1px_0_oklch(1_0_0_/_0.5)]',
+    'pointer-events-auto absolute inset-0 z-[2] m-0 box-border flex h-full min-w-0 cursor-text select-text flex-col justify-center gap-1 overflow-hidden rounded-[10px] border border-[var(--rom-weaver-color-border)] bg-[linear-gradient(180deg,var(--rom-weaver-color-surface-muted),var(--rom-weaver-color-surface))] px-[10px] py-1 font-["Inter_Tight","Segoe_UI",sans-serif] text-[length:var(--rom-weaver-control-font-size)] font-semibold leading-[var(--rom-weaver-control-line-height)] text-[var(--rom-weaver-color-text)] shadow-[inset_0_1px_0_oklch(1_0_0_/_0.5)]',
   text: "flex min-h-[calc(var(--rom-weaver-control-font-size)*var(--rom-weaver-control-line-height))] items-center justify-between gap-2 overflow-hidden whitespace-nowrap text-left font-semibold tracking-[0.01em]",
   track:
     "relative h-[7px] overflow-hidden rounded-[999px] border border-[oklch(0.64_0.058_302_/_0.65)] bg-[linear-gradient(180deg,oklch(0.9_0.045_301),oklch(0.83_0.048_299))] shadow-[inset_0_1px_0_oklch(1_0_0_/_0.46)]",

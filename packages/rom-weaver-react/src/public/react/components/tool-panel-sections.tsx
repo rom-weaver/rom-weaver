@@ -149,6 +149,7 @@ function ToolFileInputStack({
                   className={patchUploadRowClassName(inputState)}
                   onClick={(event) => {
                     const target = event.target as HTMLElement | null;
+                    if (progressBlocksInput || disabled) return;
                     if (target?.closest("input,label,button,select,a,summary")) return;
                     event.preventDefault();
                     event.stopPropagation();
