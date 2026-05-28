@@ -279,8 +279,20 @@ const isCompressionEntryFileName = (fileName: string) => classifyPatcherInput({ 
 const filterNestedContainerEntries = (entries: ArchiveEntryLike[]) =>
   entries.filter((entry) => typeof entry.filename === "string" && isCompressionEntryFileName(entry.filename));
 
+const isMacMetadataArchiveEntryName = (entryName: string) => {
+  const normalizedEntryName = normalizeArchiveEntryName(entryName);
+  if (!normalizedEntryName) return false;
+  const pathSegments = normalizedEntryName.split("/").filter(Boolean);
+  if (!pathSegments.length) return false;
+  return pathSegments.some((segment) => segment.toLowerCase() === "__macosx" || segment.startsWith("._"));
+};
+
 const filterPatchLikeEntries = (entries: ArchiveEntryLike[]) =>
-  entries.filter((entry) => typeof entry.filename === "string" && PATCH_ENTRY_REGEX.test(entry.filename));
+  entries.filter((entry) => {
+    if (typeof entry.filename !== "string") return false;
+    if (isMacMetadataArchiveEntryName(entry.filename)) return false;
+    return PATCH_ENTRY_REGEX.test(entry.filename);
+  });
 
 const mergeUniqueArchiveEntries = (...groups: ArchiveEntryLike[][]) => {
   const merged: ArchiveEntryLike[] = [];
@@ -413,6 +425,23 @@ const prependCompressionStepMetrics = (assets: InputAsset[], step: InputParentCo
         : nestedMetrics?.sourceSize,
     wasDecompressed: true,
   });
+};
+
+const cleanupIntermediateVfsFile = async (
+  file: PatchFileInstance,
+  options: InputPreparationOptions,
+  reason: string,
+) => {
+  const externalSource = getPatchFileExternalSource(file, file.fileName || "input.bin");
+  if (!isVfsFileRef(externalSource?.source)) return false;
+  const source = externalSource.source;
+  await source.vfs.remove(source.path).catch(() => undefined);
+  traceArchivePreparation(options, "input.archive.cleanup.intermediate-vfs-file", {
+    file: describeArchiveFileForTrace(file),
+    path: source.path,
+    reason,
+  });
+  return true;
 };
 
 const getCompressionRuntimeSource = (file: PatchFileInstance): SourceRef => {
@@ -658,25 +687,26 @@ const filterValidPatchArchiveEntriesForSource = async (
 ) => {
   const patchEntries = filterPatchLikeEntries(entries);
   const cache = getValidatedPatchArchiveEntryCache(archiveFile);
-  const validEntries = await Promise.all(
-    patchEntries.map(async (entry) => {
-      if (cache.has(entry.filename)) return entry;
-      const patchFile = await extractArchiveEntry(archiveFile, entry.filename, undefined, options, runtime).catch(
-        () => null,
-      );
-      if (!patchFile) return null;
-      try {
-        if (!(await isValidPatchPatchFile(patchFile))) return null;
-        ensureValidatedPatchArchiveEntryCleanup(archiveFile);
-        cache.set(entry.filename, patchFile);
-        return entry;
-      } finally {
-        if (!cache.has(entry.filename))
-          await Promise.resolve(getPatchFileCleanup(patchFile)?.()).catch(() => undefined);
-      }
-    }),
-  );
-  return validEntries.filter((entry): entry is ArchiveEntryLike => !!entry);
+  const validEntries: ArchiveEntryLike[] = [];
+  for (const entry of patchEntries) {
+    if (cache.has(entry.filename)) {
+      validEntries.push(entry);
+      continue;
+    }
+    const patchFile = await extractArchiveEntry(archiveFile, entry.filename, undefined, options, runtime).catch(
+      () => null,
+    );
+    if (!patchFile) continue;
+    try {
+      if (!(await isValidPatchPatchFile(patchFile))) continue;
+      ensureValidatedPatchArchiveEntryCleanup(archiveFile);
+      cache.set(entry.filename, patchFile);
+      validEntries.push(entry);
+    } finally {
+      if (!cache.has(entry.filename)) await Promise.resolve(getPatchFileCleanup(patchFile)?.()).catch(() => undefined);
+    }
+  }
+  return validEntries;
 };
 
 const inspectCompressionRomEntriesForSource = async (
@@ -1417,6 +1447,7 @@ const resolveArchiveInputAssets = async (
         breadcrumbs: getDisplayBreadcrumbs({ breadcrumbs: inspection.breadcrumbs }, entryName),
         depth: inspection.archivePath.length + 1,
       });
+      await cleanupIntermediateVfsFile(extracted, options, "nested-compression-consumed");
       return prependCompressionStepMetrics(
         nestedAssets,
         createParentCompressionStep(inspectedArchiveFile, extracted, durationMs),

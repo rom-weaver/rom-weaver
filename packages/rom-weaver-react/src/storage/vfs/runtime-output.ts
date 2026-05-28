@@ -43,6 +43,7 @@ const createRuntimeOutputFromVfs = async (
   filePath: string,
   fileName: string,
   options: {
+    checksums?: Record<string, string>;
     cleanup?: () => Promise<void> | void;
     mediaType?: string;
     size?: number;

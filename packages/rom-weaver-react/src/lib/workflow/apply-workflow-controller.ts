@@ -98,6 +98,17 @@ type InputSession<TSource> = {
   view: StagedSource<TSource>;
   synthetic: boolean;
 };
+const getPatchFilePrecomputedChecksums = (file: PatchFileInstance | undefined): ApplyWorkflowChecksums | undefined => {
+  const checksums = (file as (PatchFileInstance & { checksums?: unknown }) | undefined)?.checksums;
+  if (!isRecord(checksums)) return undefined;
+  const out: ApplyWorkflowChecksums = {};
+  for (const algorithm of DEFAULT_CHECKSUMS) {
+    const value = checksums[algorithm];
+    if (typeof value !== "string" || !value.trim()) return undefined;
+    out[algorithm] = value.trim().toLowerCase();
+  }
+  return out;
+};
 const PATCH_OUTPUT_LABEL_PATTERN = /\[([^\]]+)\](?:\.[^.]+)?\d*$/;
 const FILE_EXTENSION_REGEX = /\.([^./\\\s]+)$/;
 const APPLY_FORMATS = new Set<CompressionFormat>(["7z", "chd", "none", "rvz", "z3ds", "zip"]);
@@ -1149,6 +1160,13 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
         ? preparation.decompressionTimeMs
         : undefined;
     stage.state.wasDecompressed = preparation?.wasDecompressed === true;
+    if (assets.length === 1 && !stage.state.checksums) {
+      const precomputed = getPatchFilePrecomputedChecksums(assets[0]?.file);
+      if (precomputed) {
+        stage.state.checksums = precomputed;
+        stage.state.checksumTimeMs = 0;
+      }
+    }
   }
 
   private applyPreparedPatchMetadata(
@@ -1290,6 +1308,12 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
       const stage = checksumStages[index];
       if (!(stage && stage.state.status === "ready" && stage.preparedInputAssets?.[0]?.file)) continue;
       if (!stage.state.checksums) {
+        const precomputed = getPatchFilePrecomputedChecksums(stage.preparedInputAssets[0].file);
+        if (precomputed) {
+          stage.state.checksums = precomputed;
+          stage.state.checksumTimeMs = 0;
+          continue;
+        }
         const checksumFileName = getPreparedAssetFileName(stage.preparedInputAssets[0], stage.state.fileName);
         const checksumStartedAt = Date.now();
         stage.state.checksums = await this.calculateChecksumsForFile(
