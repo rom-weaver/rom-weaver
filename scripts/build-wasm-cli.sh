@@ -106,7 +106,7 @@ export CC_wasm32_wasip1="$WASI_CLANG --sysroot=$WASI_SYSROOT"
 export CXX_wasm32_wasip1="$WASI_CLANGXX --sysroot=$WASI_SYSROOT"
 export AR_wasm32_wasip1="$WASI_AR"
 export RANLIB_wasm32_wasip1="$WASI_RANLIB"
-WASI_SIMD_CFLAGS="-msimd128 -O3 -flto=thin"
+WASI_SIMD_CFLAGS="-msimd128 -O3 -flto"
 export CFLAGS_wasm32_wasip1="${CFLAGS_wasm32_wasip1:-} ${WASI_SIMD_CFLAGS}"
 export CXXFLAGS_wasm32_wasip1="${CXXFLAGS_wasm32_wasip1:-} ${WASI_SIMD_CFLAGS}"
 
@@ -178,7 +178,7 @@ postprocess_artifact() {
       wasm_opt_flags+=(--enable-threads)
     fi
     wasm-opt \
-      -O3 \
+      -O4 \
       --strip-debug \
       --strip-dwarf \
       "${wasm_opt_flags[@]}" \

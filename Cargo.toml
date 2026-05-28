@@ -60,7 +60,7 @@ rom-weaver-libarchive-sys = { path = "crates/rom-weaver-libarchive-sys" }
 rom-weaver-libarchive = { path = "crates/rom-weaver-libarchive" }
 
 [profile.release]
-lto = "thin"
+lto = "fat"
 strip = true
 opt-level = 3
 panic = "abort"
