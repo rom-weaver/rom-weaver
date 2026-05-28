@@ -55,6 +55,7 @@ const createBrowserLargeFileVfs = (options: BrowserLargeFileVfsOptions = {}): La
     filePath: string,
     fileName: string,
     input: {
+      checksums?: Record<string, string>;
       cleanup?: () => Promise<void> | void;
       mediaType?: string;
       size?: number;
@@ -72,6 +73,7 @@ const createBrowserLargeFileVfs = (options: BrowserLargeFileVfsOptions = {}): La
     if (!fileHandle) throw new Error(`Browser VFS output is not available: ${fileName}`);
     const file = await fileHandle.getFile();
     return {
+      checksums: input.checksums,
       dispose: async () => undefined,
       fileName,
       mediaType: input.mediaType || file.type || undefined,
@@ -123,7 +125,7 @@ const createBrowserLargeFileVfs = (options: BrowserLargeFileVfsOptions = {}): La
       try {
         for (const segment of segments)
           currentDirectory = await currentDirectory.getDirectoryHandle(segment, { create: false });
-        await currentDirectory.removeEntry(fileName, { recursive: false });
+        await currentDirectory.removeEntry(fileName, { recursive: true });
       } catch (_error) {
         /* ignore cleanup errors */
       }

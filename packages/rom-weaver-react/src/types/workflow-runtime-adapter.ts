@@ -60,6 +60,7 @@ type RuntimeWorkerSourceRequest = {
 type RuntimeWorkerOutput = {
   applySummary?: JsonObject;
   blob?: Blob;
+  checksums?: Record<string, string>;
   cleanup?: () => Promise<void> | void;
   file?: Blob;
   fileName?: string;

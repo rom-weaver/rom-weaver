@@ -40,6 +40,7 @@ import type {
   RuntimePublicOutputAdapter,
   RuntimeWorkerIo,
   WorkflowRuntime,
+  WorkflowRuntimeLog,
 } from "../../types/workflow-runtime-adapter.ts";
 import { WORKER_OPFS_MOUNTPOINT } from "../../workers/shared/worker-storage/storage-layout.ts";
 import { forwardArchiveProgress, forwardDiscProgress } from "../shared/workflow-runtime-progress.ts";
@@ -51,6 +52,7 @@ const FILE_EXTENSION_REGEX = /\.[^./\\\s]+$/;
 const LEVEL_PROFILE_REGEX = /^(min|very-low|low|medium|high|very-high|max)$/i;
 const ARCHIVE_STAGE_COPY_CHUNK_SIZE = 8 * 1024 * 1024;
 const BROWSER_VFS_PATH_RETRY_ATTEMPTS = 6;
+const EXTRACT_CHECKSUM_ALGORITHMS = ["crc32", "md5", "sha1"] as const;
 const ZIP_LIKE_EXTENSION_REGEX = /\.(zip|jar|apk|cbz|epub|xpi)$/i;
 
 const toFileBlobPart = (source: ArrayBufferLike | Uint8Array): BlobPart => {
@@ -196,15 +198,15 @@ const annotateChdListEntries = <
     };
   });
 
-const findExtractedFile = (
-  emittedFiles: Array<{
-    fileName: string;
-    kind?: string;
-    path: string;
-    sizeBytes?: number;
-  }>,
-  entryName: string,
-) => {
+type ExtractedFileEntry = {
+  checksums?: Record<string, string>;
+  fileName: string;
+  kind?: string;
+  path: string;
+  sizeBytes?: number;
+};
+
+const findExtractedFile = (emittedFiles: ExtractedFileEntry[], entryName: string) => {
   const normalizedEntry = normalizeEntryPath(entryName);
   const normalizedBase = getPathBaseName(normalizedEntry, normalizedEntry);
   for (const emitted of emittedFiles) {
@@ -277,6 +279,13 @@ const copyBrowserVfsPath = async (sourcePath: string, targetPath: string) => {
 
 let archiveStageBatchId = 0;
 let archiveExtractDirectoryId = 0;
+
+const createRuntimePathNonce = () => {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID().slice(0, 8);
+  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+};
+
+const archiveExtractDirectoryNonce = createRuntimePathNonce();
 
 const stageCompressionEntryForRomWeaver = async (
   workerIo: RuntimeWorkerIo,
@@ -381,6 +390,99 @@ const waitForBrowserVfsPath = async (filePath: string) => {
     if (stat) return stat;
   }
   return null;
+};
+
+const toSizeByteCount = (value: unknown): number | null => {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return Math.max(0, Math.floor(value));
+};
+
+const withExtractedFileSize = async (entry: ExtractedFileEntry): Promise<ExtractedFileEntry> => {
+  const knownSize = toSizeByteCount(entry.sizeBytes);
+  if (knownSize !== null) return { ...entry, sizeBytes: knownSize };
+  const stat = await waitForBrowserVfsPath(entry.path).catch(() => null);
+  const statSize = toSizeByteCount(stat?.size);
+  return statSize === null ? entry : { ...entry, sizeBytes: statSize };
+};
+
+const isTraceLogLevel = (value: unknown) =>
+  String(value || "")
+    .trim()
+    .toLowerCase() === "trace";
+
+const emitBrowserWorkflowTrace = (
+  input: { logLevel?: unknown; onLog?: (log: WorkflowRuntimeLog) => void },
+  message: string,
+  details?: Record<string, unknown>,
+) => {
+  if (!isTraceLogLevel(input.logLevel)) return;
+  input.onLog?.({
+    details: details || {},
+    level: "trace",
+    message,
+    namespace: "runtime:browser-workflow",
+    timestamp: new Date().toISOString(),
+  });
+};
+
+const selectPreferredExtractedFile = async (input: {
+  emittedFiles: ExtractedFileEntry[];
+  logLevel?: unknown;
+  onLog?: (log: WorkflowRuntimeLog) => void;
+  preferredEntryNames: Array<string | null | undefined>;
+  traceLabel: string;
+}): Promise<ExtractedFileEntry | null> => {
+  const preferred: ExtractedFileEntry[] = [];
+  const seenPreferredPaths = new Set<string>();
+  for (const name of input.preferredEntryNames) {
+    const normalizedName = String(name || "").trim();
+    if (!normalizedName) continue;
+    const matched = findExtractedFile(input.emittedFiles, normalizedName);
+    if (!matched) continue;
+    const pathKey = normalizeEntryPath(matched.path);
+    if (pathKey && seenPreferredPaths.has(pathKey)) continue;
+    if (pathKey) seenPreferredPaths.add(pathKey);
+    preferred.push(matched);
+  }
+  const hasPreferred = (entry: ExtractedFileEntry) => seenPreferredPaths.has(normalizeEntryPath(entry.path));
+  const nonPreferred = input.emittedFiles.filter((entry) => !hasPreferred(entry));
+  const preferredWithSizes = await Promise.all(preferred.map((entry) => withExtractedFileSize(entry)));
+  const nonPreferredWithSizes = await Promise.all(nonPreferred.map((entry) => withExtractedFileSize(entry)));
+  const firstPreferredNonEmpty = preferredWithSizes.find((entry) => (entry.sizeBytes || 0) > 0) || null;
+  const firstAnyNonEmpty =
+    firstPreferredNonEmpty || nonPreferredWithSizes.find((entry) => (entry.sizeBytes || 0) > 0) || null;
+  const fallback =
+    preferredWithSizes[0] ||
+    nonPreferredWithSizes[0] ||
+    (input.emittedFiles[0] ? await withExtractedFileSize(input.emittedFiles[0]) : null);
+  const selected = firstAnyNonEmpty || fallback;
+  emitBrowserWorkflowTrace(
+    {
+      logLevel: input.logLevel,
+      onLog: input.onLog,
+    },
+    `extract selection ${input.traceLabel}`,
+    {
+      emitted: input.emittedFiles.map((entry) => ({
+        fileName: entry.fileName,
+        path: entry.path,
+        sizeBytes: entry.sizeBytes,
+      })),
+      preferredCandidates: preferredWithSizes.map((entry) => ({
+        fileName: entry.fileName,
+        path: entry.path,
+        sizeBytes: entry.sizeBytes,
+      })),
+      selected: selected
+        ? {
+            fileName: selected.fileName,
+            path: selected.path,
+            sizeBytes: selected.sizeBytes,
+          }
+        : null,
+    },
+  );
+  return selected;
 };
 
 const ensureBrowserVfsOutputPath = async (filePath: string) => {
@@ -534,67 +636,87 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
       const baseOutDirPath = getPathDirectory(archive.filePath) || `${WORKER_OPFS_MOUNTPOINT}/input/`;
       const outputs = [];
       for (const entryName of workflowInput.entries) {
-        const outDirPath = joinPath(baseOutDirPath, `.rom-weaver-extract-${++archiveExtractDirectoryId}`);
-        const outputPathCandidates = filterOutputCandidatesAwayFromSource(
-          getBrowserExtractOutputPathCandidates(outDirPath, entryName),
-          archive.filePath,
+        const outDirPath = joinPath(
+          baseOutDirPath,
+          `.rom-weaver-extract-${archiveExtractDirectoryNonce}-${++archiveExtractDirectoryId}`,
         );
-        await ensureBrowserVfsOutputPaths(outputPathCandidates);
-        const runExtract = () =>
-          invokeRomWeaverExtractWorker(
-            {
-              logLevel: workflowInput.options?.logLevel,
-              outDirPath,
-              select: [entryName],
-              sourcePath: archive.filePath,
-              workerThreads: workflowInput.options?.workerThreads,
-            },
-            forwardArchiveProgress("input", workflowInput.options?.onProgress),
-            workflowInput.options?.onLog,
-          );
-        const selectMatchedOutput = async (extracted: Awaited<ReturnType<typeof runExtract>>) => {
-          let matched = findExtractedFile(extracted.emittedFiles, entryName);
-          if (!matched) {
-            for (const fallbackPath of outputPathCandidates) {
-              const fallbackStat = await browserVfs.stat(fallbackPath);
-              if (!fallbackStat) continue;
-              matched = {
-                fileName: getPathBaseName(fallbackPath, entryName),
-                path: fallbackPath,
-                sizeBytes: fallbackStat.size,
-              };
-              break;
-            }
-          }
-          if (matched) return matched;
-          const emittedNames = extracted.emittedFiles.map(
-            (entry) => entry.fileName || getPathBaseName(entry.path, entry.path),
-          );
-          throw new Error(
-            `Archive entry was not extracted: ${entryName} (emitted: ${emittedNames.join(", ") || "none"})`,
-          );
+        const cleanupExtractDirectory = async () => {
+          await browserVfs.remove(outDirPath).catch(() => undefined);
         };
-        const createOutput = (matched: { fileName: string; path: string; sizeBytes?: number }) =>
-          workerIo.createWorkerOutput(
-            {
-              fileName: entryName,
-              filePath: matched.path,
-              size: matched.sizeBytes,
-            },
-            entryName,
-            "archive extract worker did not return browser output",
-          );
-
-        let extracted = await runExtract();
-        let matched = await selectMatchedOutput(extracted);
         try {
-          outputs.push(await createOutput(matched));
+          const outputPathCandidates = filterOutputCandidatesAwayFromSource(
+            getBrowserExtractOutputPathCandidates(outDirPath, entryName),
+            archive.filePath,
+          );
+          await cleanupExtractDirectory();
+          await ensureBrowserVfsOutputPaths(outputPathCandidates);
+          const runExtract = () =>
+            invokeRomWeaverExtractWorker(
+              {
+                checksumAlgorithms: [...EXTRACT_CHECKSUM_ALGORITHMS],
+                logLevel: workflowInput.options?.logLevel,
+                outDirPath,
+                select: [entryName],
+                sourcePath: archive.filePath,
+                workerThreads: workflowInput.options?.workerThreads,
+              },
+              forwardArchiveProgress("input", workflowInput.options?.onProgress),
+              workflowInput.options?.onLog,
+            );
+          const selectMatchedOutput = async (extracted: Awaited<ReturnType<typeof runExtract>>) => {
+            let matched = findExtractedFile(extracted.emittedFiles, entryName);
+            if (!matched) {
+              for (const fallbackPath of outputPathCandidates) {
+                const fallbackStat = await browserVfs.stat(fallbackPath);
+                if (!fallbackStat) continue;
+                matched = {
+                  fileName: getPathBaseName(fallbackPath, entryName),
+                  path: fallbackPath,
+                  sizeBytes: fallbackStat.size,
+                };
+                break;
+              }
+            }
+            if (matched) return matched;
+            const emittedNames = extracted.emittedFiles.map(
+              (entry) => entry.fileName || getPathBaseName(entry.path, entry.path),
+            );
+            throw new Error(
+              `Archive entry was not extracted: ${entryName} (emitted: ${emittedNames.join(", ") || "none"})`,
+            );
+          };
+          const createOutput = (matched: {
+            checksums?: Record<string, string>;
+            fileName: string;
+            path: string;
+            sizeBytes?: number;
+          }) =>
+            workerIo.createWorkerOutput(
+              {
+                checksums: matched.checksums,
+                cleanup: cleanupExtractDirectory,
+                fileName: entryName,
+                filePath: matched.path,
+                size: matched.sizeBytes,
+              },
+              entryName,
+              "archive extract worker did not return browser output",
+            );
+
+          let extracted = await runExtract();
+          let matched = await selectMatchedOutput(extracted);
+          try {
+            outputs.push(await createOutput(matched));
+          } catch (error) {
+            if (!isMissingBrowserVfsOutputError(error)) throw error;
+            await ensureBrowserVfsOutputPaths(extracted.emittedFiles.map((entry) => entry.path));
+            extracted = await runExtract();
+            matched = await selectMatchedOutput(extracted);
+            outputs.push(await createOutput(matched));
+          }
         } catch (error) {
-          if (!isMissingBrowserVfsOutputError(error)) throw error;
-          await ensureBrowserVfsOutputPaths(extracted.emittedFiles.map((entry) => entry.path));
-          extracted = await runExtract();
-          matched = await selectMatchedOutput(extracted);
-          outputs.push(await createOutput(matched));
+          await cleanupExtractDirectory();
+          throw error;
         }
       }
       return createCompressionExtractResult(outputs);
@@ -663,7 +785,8 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
     };
 
     try {
-      const inputPaths = [workerInput.filePath, ...stagedImageSources.map((entry) => entry.filePath)];
+      const stagedInputPaths = [workerInput.filePath, ...stagedImageSources.map((entry) => entry.filePath)];
+      let chdInputPath = workerInput.filePath;
       const requestedMode = String(chdSourceMode || mode || "")
         .trim()
         .toLowerCase();
@@ -672,7 +795,7 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
         const cueFileName =
           cueInputFileName ||
           `${getPathBaseName(workerInput.fileName || "disc.bin", "disc").replace(/\.[^./\\]*$/, "")}.cue`;
-        const cuePath = selectRomWeaverOutputPath(workerInput.filePath, cueFileName, inputPaths);
+        const cuePath = selectRomWeaverOutputPath(workerInput.filePath, cueFileName, stagedInputPaths);
         const cueTarget = workerInput.fileName || fileName || "disc.bin";
         let normalizedCueText = cueText
           ? String(cueText)
@@ -686,18 +809,21 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
         }
         await writeTextToBrowserVfs(cuePath, normalizedCueText);
         transientPaths.push(cuePath);
-        inputPaths.unshift(cuePath);
+        chdInputPath = cuePath;
       }
 
       const outputFileName = outputName || "output.chd";
-      const outputPath = selectRomWeaverOutputPath(workerInput.filePath, outputFileName, inputPaths);
+      const outputPath = selectRomWeaverOutputPath(workerInput.filePath, outputFileName, [
+        ...stagedInputPaths,
+        ...(chdInputPath === workerInput.filePath ? [] : [chdInputPath]),
+      ]);
       await ensureBrowserVfsOutputPath(outputPath);
       const codecs = normalizeCodecEntries(compressionCodecs);
       const result = await invokeRomWeaverCompressionCreateWorker(
         {
           codecs,
           format: "chd",
-          inputPaths,
+          inputPaths: [chdInputPath],
           logLevel,
           outputFileName,
           outputPath,
@@ -817,6 +943,7 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
       const runExtract = () =>
         invokeRomWeaverExtractWorker(
           {
+            checksumAlgorithms: [...EXTRACT_CHECKSUM_ALGORITHMS],
             invalidateMountCacheBeforeRun: !!directOutputPath,
             logLevel,
             outDirPath,
@@ -853,6 +980,7 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
         return attachDiscOutputMetadata(
           await workerIo.createWorkerOutput(
             {
+              checksums: primaryFile?.checksums,
               fileName: outputName || primaryFile?.fileName || directOutputFileName,
               filePath: primaryFile?.path || directOutputPath,
               size: primaryFile?.sizeBytes,
@@ -919,6 +1047,7 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
       );
       const extracted = await invokeRomWeaverExtractWorker(
         {
+          checksumAlgorithms: [...EXTRACT_CHECKSUM_ALGORITHMS],
           invalidateMountCacheBeforeRun: true,
           logLevel,
           outDirPath,
@@ -938,14 +1067,16 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
         }
         throw error;
       });
-      const primaryFile =
-        findExtractedFile(extracted.emittedFiles, outputFileName) ||
-        findExtractedFile(extracted.emittedFiles, actualOutputFileName) ||
-        findExtractedFile(extracted.emittedFiles, stagedOutputFileName) ||
-        (outputName ? findExtractedFile(extracted.emittedFiles, outputName) : null) ||
-        extracted.emittedFiles[0];
+      const primaryFile = await selectPreferredExtractedFile({
+        emittedFiles: extracted.emittedFiles,
+        logLevel,
+        onLog,
+        preferredEntryNames: [outputFileName, actualOutputFileName, stagedOutputFileName, outputName],
+        traceLabel: "rvz",
+      });
       return await workerIo.createWorkerOutput(
         {
+          checksums: primaryFile?.checksums,
           fileName: outputFileName,
           filePath: primaryFile?.path || outputPath,
           size: primaryFile?.sizeBytes,
@@ -993,12 +1124,14 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
       );
       const outputPath = joinPath(outDirPath, listedOutputFileName || stagedOutputFileName || actualOutputFileName);
       if (outputName) preseedPaths.push(...getBrowserExtractOutputPathCandidates(outDirPath, outputName));
-      if (stagedOutputFileName) preseedPaths.push(...getBrowserExtractOutputPathCandidates(outDirPath, stagedOutputFileName));
+      if (stagedOutputFileName)
+        preseedPaths.push(...getBrowserExtractOutputPathCandidates(outDirPath, stagedOutputFileName));
       preseedPaths.push(outputPath);
       preseedPaths.push(joinPath(outDirPath, actualOutputFileName));
       await ensureBrowserVfsOutputPaths(filterOutputCandidatesAwayFromSource(preseedPaths, workerSource.filePath));
       const extracted = await invokeRomWeaverExtractWorker(
         {
+          checksumAlgorithms: [...EXTRACT_CHECKSUM_ALGORITHMS],
           invalidateMountCacheBeforeRun: true,
           logLevel,
           outDirPath,
@@ -1010,15 +1143,22 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
         onProgress ? forwardDiscProgress(onProgress) : undefined,
         onLog,
       );
-      const primaryFile =
-        findExtractedFile(extracted.emittedFiles, outputFileName) ||
-        findExtractedFile(extracted.emittedFiles, actualOutputFileName) ||
-        findExtractedFile(extracted.emittedFiles, stagedOutputFileName) ||
-        (listedOutputFileName ? findExtractedFile(extracted.emittedFiles, listedOutputFileName) : null) ||
-        (outputName ? findExtractedFile(extracted.emittedFiles, outputName) : null) ||
-        extracted.emittedFiles[0];
+      const primaryFile = await selectPreferredExtractedFile({
+        emittedFiles: extracted.emittedFiles,
+        logLevel,
+        onLog,
+        preferredEntryNames: [
+          outputFileName,
+          actualOutputFileName,
+          stagedOutputFileName,
+          listedOutputFileName,
+          outputName,
+        ],
+        traceLabel: "z3ds",
+      });
       return await workerIo.createWorkerOutput(
         {
+          checksums: primaryFile?.checksums,
           fileName: outputFileName,
           filePath: primaryFile?.path || outputPath,
           size: primaryFile?.sizeBytes,

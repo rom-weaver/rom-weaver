@@ -55,15 +55,21 @@ const createPatchFileFromPublicOutput = async (
         }),
       }
     : null;
+  const attachChecksums = <TFile extends PatchFileInstance>(file: TFile): TFile => {
+    if (output.checksums) (file as TFile & { checksums?: Record<string, string> }).checksums = output.checksums;
+    return file;
+  };
   if (canUseExternalFilePath && (options.materializeBlob === false || options.preferExternalFilePath === true)) {
-    return attachPatchFileSourceRef(
-      createLazyExternalPatchFile(fileName, {
-        cleanup: output.cleanup,
-        filePath: output.path,
-        fileType: output.mediaType,
-        size: outputSize,
-      }),
-      sourceRef,
+    return attachChecksums(
+      attachPatchFileSourceRef(
+        createLazyExternalPatchFile(fileName, {
+          cleanup: output.cleanup,
+          filePath: output.path,
+          fileType: output.mediaType,
+          size: outputSize,
+        }),
+        sourceRef,
+      ),
     );
   }
   const file = canUseExternalFilePath
@@ -85,7 +91,7 @@ const createPatchFileFromPublicOutput = async (
     (file as { filePath?: string }).filePath = output.path;
     (file as { _file?: Blob })._file = await readRuntimeOutputBlob(output);
   }
-  return attachPatchFileSourceRef(file, sourceRef);
+  return attachChecksums(attachPatchFileSourceRef(file, sourceRef));
 };
 
 export { createPatchFileFromPublicOutput };

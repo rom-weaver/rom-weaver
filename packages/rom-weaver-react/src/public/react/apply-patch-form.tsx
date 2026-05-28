@@ -531,47 +531,45 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           await workflow.clearPatches();
           emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow clearPatches finish");
         }
-        const inputWork = (async () => {
-          if (!inputsChanged) {
-            emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow input skipped", {
-              reason: "unchanged",
+        if (!inputsChanged) {
+          emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow input skipped", {
+            reason: "unchanged",
+          });
+        } else if (snapshot.inputs.length) {
+          emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow setInput start", {
+            inputCount: snapshot.inputs.length,
+          });
+          await workflow.setInput(snapshot.inputs.map(toBrowserPublicBinarySource)).catch((error) => {
+            emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow setInput failed", {
+              code: getErrorCode(error),
+              message: error instanceof Error ? error.message : String(error),
             });
-            return;
-          }
-          if (snapshot.inputs.length) {
-            emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow setInput start", {
-              inputCount: snapshot.inputs.length,
-            });
-            await workflow.setInput(snapshot.inputs.map(toBrowserPublicBinarySource)).catch((error) => {
-              emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow setInput failed", {
-                code: getErrorCode(error),
-                message: error instanceof Error ? error.message : String(error),
-              });
-              if (getErrorCode(error) !== "WORKFLOW_SELECTION_SKIPPED") throw error;
-            });
-            emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow setInput finish", {
-              input: workflow.getInput(),
-            });
-          } else {
-            emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow clearInput start");
-            await workflow.clearInput();
-            emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow clearInput finish");
-          }
+            if (getErrorCode(error) !== "WORKFLOW_SELECTION_SKIPPED") throw error;
+          });
+          emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow setInput finish", {
+            input: workflow.getInput(),
+          });
           handlers.onInputState?.(workflow.getInput());
           emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow input state emitted", {
             input: workflow.getInput(),
           });
-        })();
-        const patchWork = (async () => {
-          if (!patchesChanged) return;
+        } else {
+          emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow clearInput start");
+          await workflow.clearInput();
+          emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow clearInput finish");
+          handlers.onInputState?.(workflow.getInput());
+          emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow input state emitted", {
+            input: workflow.getInput(),
+          });
+        }
+        if (patchesChanged) {
           for (const patch of snapshot.patches) {
             await workflow.addPatch(toBrowserPublicBinarySource(patch)).catch((error) => {
               if (getErrorCode(error) !== "WORKFLOW_SELECTION_SKIPPED") throw error;
             });
             handlers.onPatchState?.(workflow.getPatches());
           }
-        })();
-        await Promise.all([inputWork, patchWork]);
+        }
 
         await resolveSelections(workflow, snapshot.patches, handlers.selection);
         await syncWorkflowOutputOverrides(workflow, snapshot, baseSettings, settingsChanged);
