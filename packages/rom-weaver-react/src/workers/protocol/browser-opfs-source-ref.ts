@@ -53,8 +53,6 @@ const PATH_SEPARATOR_REGEX = /[\\/]+/g;
 const UNSAFE_FILE_CHARS_REGEX = /[^A-Za-z0-9._-]+/g;
 const EDGE_UNDERSCORES_REGEX = /^_+|_+$/g;
 const TRAILING_SLASHES_REGEX = /\/+$/;
-const EAGER_MEMORY_VIRTUAL_SOURCE_EXTENSIONS = new Set([".7z", ".rvz"]);
-const EAGER_MEMORY_VIRTUAL_SOURCE_MAX_BYTES = 512 * 1024 * 1024;
 let virtualSourceId = 0;
 
 const getBrowserSourceTraceKind = (source: unknown) => {
@@ -86,18 +84,6 @@ const normalizeVirtualFileName = (fileName: string | null | undefined, fallback 
     .replace(UNSAFE_FILE_CHARS_REGEX, "_")
     .replace(EDGE_UNDERSCORES_REGEX, "")
     .replace(LEADING_DOTS_REGEX, "") || fallback;
-
-const lowerFileExtension = (fileName: string) => {
-  const normalized = String(fileName || "").toLowerCase();
-  const index = normalized.lastIndexOf(".");
-  return index >= 0 ? normalized.slice(index) : "";
-};
-
-const shouldUseEagerMemoryVirtualSource = (fileName: string, size: number | undefined) =>
-  typeof size === "number" &&
-  size > 0 &&
-  size <= EAGER_MEMORY_VIRTUAL_SOURCE_MAX_BYTES &&
-  EAGER_MEMORY_VIRTUAL_SOURCE_EXTENSIONS.has(lowerFileExtension(fileName));
 
 const createVirtualPathNonce = () => {
   const sequence = ++virtualSourceId;
@@ -182,24 +168,13 @@ const createBrowserOpfsSourceRef = async (
       size: sourceFile.size,
     });
   } else if (blob) {
-    const resolvedFileName = fileName || fallbackFileName;
-    if (shouldUseEagerMemoryVirtualSource(resolvedFileName, blob.size)) {
-      virtualSource = new Uint8Array(await blob.arrayBuffer());
-      virtualSize = virtualSource.byteLength;
-      emitBrowserSourceRefTrace("using eager memory Blob source", {
-        fileName: resolvedFileName,
-        size: virtualSize,
-        sourceKind: getBrowserSourceTraceKind(blob),
-      });
-    } else {
-      virtualSource = toFileLike(blob, resolvedFileName);
-      virtualSize = blob.size;
-      emitBrowserSourceRefTrace("using Blob source", {
-        fileName: resolvedFileName,
-        size: blob.size,
-        sourceKind: getBrowserSourceTraceKind(blob),
-      });
-    }
+    virtualSource = toFileLike(blob, fileName || fallbackFileName);
+    virtualSize = blob.size;
+    emitBrowserSourceRefTrace("using Blob source", {
+      fileName: fileName || fallbackFileName,
+      size: blob.size,
+      sourceKind: getBrowserSourceTraceKind(blob),
+    });
   } else if (bytes) {
     virtualSource = bytes;
     virtualSize = bytes.byteLength;

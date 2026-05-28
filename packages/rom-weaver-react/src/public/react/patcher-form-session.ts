@@ -199,12 +199,6 @@ const getRequestedOutputName = (outputName: string): string | undefined => {
   return normalizedOutputName || undefined;
 };
 
-const getLegacyCompressionWorkerThreads = (settings: ApplyPatchFormSettings): number | string | undefined => {
-  const legacyThreads = (settings as { compression?: { workerThreads?: unknown } }).compression?.workerThreads;
-  if (typeof legacyThreads === "number" || typeof legacyThreads === "string") return legacyThreads;
-  return undefined;
-};
-
 const createStageSettingsKey = ({
   containerInputsEnabled,
   settings,
@@ -812,8 +806,6 @@ const useLocalApplyPatchFormSession = ({
   );
   const generatedOutputName = getGeneratedOutputName(effectiveInputs[0], activePatches, activeSettings.output || {});
   const requestedOutputName = outputNameEdited ? getRequestedOutputName(outputName) : undefined;
-  const resolvedWorkerThreads =
-    activeSettings.workers?.threads ?? getLegacyCompressionWorkerThreads(activeSettings) ?? workerThreads;
   const effectiveResolvedOutputName =
     requestedOutputName || (effectiveInputs.length ? resolvedOutputName || generatedOutputName : generatedOutputName);
   const stageSettingsKey = useMemo(
@@ -821,9 +813,9 @@ const useLocalApplyPatchFormSession = ({
       createStageSettingsKey({
         containerInputsEnabled,
         settings: activeSettings,
-        workerThreads: resolvedWorkerThreads,
+        workerThreads,
       }),
-    [activeSettings, containerInputsEnabled, resolvedWorkerThreads],
+    [activeSettings, containerInputsEnabled, workerThreads],
   );
   const createStageSnapshot = useCallback(
     (): ApplyWorkflowStageSnapshot => ({
@@ -839,7 +831,7 @@ const useLocalApplyPatchFormSession = ({
           compression: activeCompression,
           outputName: requestedOutputName,
         },
-        workerThreads: resolvedWorkerThreads,
+        workerThreads,
       },
       patches: activePatches,
     }),
@@ -850,7 +842,7 @@ const useLocalApplyPatchFormSession = ({
       containerInputsEnabled,
       effectiveInputs,
       requestedOutputName,
-      resolvedWorkerThreads,
+      workerThreads,
     ],
   );
   const fallbackInputCompressedBytes =
@@ -909,7 +901,7 @@ const useLocalApplyPatchFormSession = ({
   const multiInputOutputError = getMultiInputOutputError(displayedCompression, romInputs.length);
   const effectiveOutputNoticeMessage = outputErrorMessage || multiInputOutputError;
   const canQueueApply =
-    !!effectiveInputs.length && !multiInputOutputError && applyReady && !(inputStaging || patchStaging);
+    !!effectiveInputs.length && !multiInputOutputError && (applyReady || inputStaging || patchStaging);
   const disposeActiveOutput = useCallback(() => {
     const cleanup = activeOutputCleanupRef.current;
     activeOutputCleanupRef.current = null;
@@ -1305,16 +1297,11 @@ const useLocalApplyPatchFormSession = ({
     (snapshot: ApplyWorkflowStageSnapshot, previousInputs: BinarySource[] = []) => {
       const generation = ++inputStageGenerationRef.current;
       const progressGeneration = ++inputProgressGenerationRef.current;
-      const inputOnlySnapshot = {
-        ...snapshot,
-        patches: [],
-      };
       const retainedInputKeys = new Set(previousInputs.map((input) => getInputKey(input, previousInputs)));
       emitSessionTrace("input staging sync started", {
         generation,
         hasStageInput: !!stageInput,
         inputCount: snapshot.inputs.length,
-        patchCountIgnored: snapshot.patches.length,
         previousCount: previousInputs.length,
         progressGeneration,
         retainedCount: retainedInputKeys.size,
@@ -1366,7 +1353,7 @@ const useLocalApplyPatchFormSession = ({
         inputCount: snapshot.inputs.length,
         progressGeneration,
       });
-      void stageInput(inputOnlySnapshot, {
+      void stageInput(snapshot, {
         onChecksum: (info) => {
           if (inputStageGenerationRef.current !== generation) {
             emitSessionTrace("stageInput checksum ignored", {
@@ -1591,7 +1578,6 @@ const useLocalApplyPatchFormSession = ({
     const inputsChanged = !sameBinarySourceLists(previousSync.inputs, effectiveInputs);
     const settingsChanged = previousSync.settingsKey !== stageSettingsKey;
     if (!effectiveInputs.length) {
-      const shouldClearStagedInput = previousSync.inputs.length > 0;
       inputStageSyncRef.current = {
         inputs: [],
         settingsKey: stageSettingsKey,
@@ -1599,27 +1585,6 @@ const useLocalApplyPatchFormSession = ({
       inputStageGenerationRef.current += 1;
       setInputStaging(false);
       setRomInputs([]);
-      if (!shouldClearStagedInput) return;
-      emitSessionTrace("input staging clear dispatched", {
-        previousCount: previousSync.inputs.length,
-      });
-      const clearSnapshot = {
-        ...createStageSnapshot(),
-        patches: [],
-      };
-      void stageInput(clearSnapshot, {
-        onChecksum: () => undefined,
-        onProgress: () => undefined,
-        onState: () => undefined,
-      }).catch((error) => {
-        const normalizedError = toError(error);
-        emitSessionTrace("input staging clear failed", {
-          message: normalizedError.message,
-          name: normalizedError.name,
-        });
-        logUiError("Input staging clear failed", normalizedError);
-        onError?.(normalizedError);
-      });
       return;
     }
     if (!(inputsChanged || settingsChanged)) return;
@@ -1629,7 +1594,7 @@ const useLocalApplyPatchFormSession = ({
       settingsKey: stageSettingsKey,
     };
     syncRomInput(createStageSnapshot(), previousInputs);
-  }, [createStageSnapshot, effectiveInputs, emitSessionTrace, onError, stageInput, stageSettingsKey, syncRomInput]);
+  }, [createStageSnapshot, effectiveInputs, stageInput, stageSettingsKey, syncRomInput]);
 
   useEffect(() => {
     if (!stagePatches) return;
@@ -1851,7 +1816,7 @@ const useLocalApplyPatchFormSession = ({
               signal: abortController.signal,
               workers: {
                 ...activeSettings.workers,
-                threads: resolvedWorkerThreads,
+                threads: activeSettings.workers?.threads || workerThreads,
               },
             },
             patches: activePatches,
@@ -1972,7 +1937,7 @@ const useLocalApplyPatchFormSession = ({
       onError,
       onProgress,
       updateSettings,
-      resolvedWorkerThreads,
+      workerThreads,
       requestedOutputName,
       activeCompression,
       canQueueApply,

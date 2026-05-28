@@ -81,18 +81,6 @@ const hasMissingPreparedInputPaths = async (assets: InputAsset[], runtime: Workf
   return false;
 };
 
-const getMissingPreparedPatchPaths = async (patchFiles: PatchFileInstance[], runtime: WorkflowRuntime) => {
-  const missingPaths: string[] = [];
-  for (const patchFile of patchFiles) {
-    const sourceRef = getPatchFileExternalSource(patchFile, patchFile.fileName || "patch.bin");
-    const externalPath = getRuntimeExternalPath(sourceRef, runtime);
-    if (!externalPath) continue;
-    if (await runtime.vfs.stat(externalPath)) continue;
-    missingPaths.push(externalPath);
-  }
-  return missingPaths;
-};
-
 const toWorkerSourceRef = (file: PatchFileInstance, fallbackFileName: string): SourceRef => {
   const sourceRef = getPatchFileExternalSource(file, fallbackFileName);
   if (sourceRef) return sourceRef;
@@ -160,6 +148,7 @@ const runApplyWorkflow = async (
     (total, source) => total + (deps.getBinarySourceSize(source) || 0),
     0,
   );
+  const preparationWork: Promise<void>[] = [];
   const inputAssets = input.preparedInputAssets ? [...input.preparedInputAssets] : [];
   const shouldReprepareInputs =
     !!input.preparedInputAssets?.length &&
@@ -172,87 +161,76 @@ const runApplyWorkflow = async (
     });
   } else {
     inputAssets.length = 0;
-    await traceWorkflowStageBlock(
-      options,
-      "input.prepare",
-      "input",
-      async () => {
-        const directAssets =
-          inputSources.length > 1 ? await deps.prepareMultipleDirectInputAssets(inputSources, options) : null;
-        inputAssets.push(...(directAssets || []));
-        if (!directAssets) {
-          for (let index = 0; index < inputSources.length; index++) {
-            const inputSource = inputSources[index];
-            if (!inputSource) throw new Error(`Input ${index + 1} was not provided`);
-            inputAssets.push(
-              ...(await deps.prepareInputAssets(inputSource, options, index, runtime, input.selectedInputEntryName, {
-                allowLazyBrowserRomSource: inputSources.length === 1,
-              })),
-            );
+    preparationWork.push(
+      traceWorkflowStageBlock(
+        options,
+        "input.prepare",
+        "input",
+        async () => {
+          const directAssets =
+            inputSources.length > 1 ? await deps.prepareMultipleDirectInputAssets(inputSources, options) : null;
+          inputAssets.push(...(directAssets || []));
+          if (!directAssets) {
+            for (let index = 0; index < inputSources.length; index++) {
+              const inputSource = inputSources[index];
+              if (!inputSource) throw new Error(`Input ${index + 1} was not provided`);
+              inputAssets.push(
+                ...(await deps.prepareInputAssets(inputSource, options, index, runtime, input.selectedInputEntryName, {
+                  allowLazyBrowserRomSource: inputSources.length === 1,
+                })),
+              );
+            }
           }
-        }
-      },
-      () => ({
-        inputCount: inputSources.length,
-        preparedAssetCount: inputAssets.length,
-        reprepare: shouldReprepareInputs,
-        selectedEntryName: input.selectedInputEntryName,
-      }),
+        },
+        () => ({
+          inputCount: inputSources.length,
+          preparedAssetCount: inputAssets.length,
+          reprepare: shouldReprepareInputs,
+          selectedEntryName: input.selectedInputEntryName,
+        }),
+      ),
     );
   }
 
   let patchFiles: PatchFileInstance[] = input.preparedPatchFiles ? [...input.preparedPatchFiles] : [];
-  const hasPatchSources = patchSources.some((source) => !!source);
-  const missingPreparedPatchPaths = input.preparedPatchFiles
-    ? await getMissingPreparedPatchPaths(patchFiles, runtime)
-    : [];
-  const shouldRepreparePatches = missingPreparedPatchPaths.length > 0 && hasPatchSources;
-  if (input.preparedPatchFiles && !shouldRepreparePatches) {
+  if (input.preparedPatchFiles) {
     traceWorkflowStage(options, "stage.skip", "patch.prepare", "patch", {
-      missingPreparedPatchPathCount: missingPreparedPatchPaths.length,
-      missingPreparedPatchPaths,
       patchCount: patchFiles.length,
       reason: "prepared patch files supplied",
     });
   } else {
-    if (input.preparedPatchFiles && missingPreparedPatchPaths.length && !hasPatchSources) {
-      throw new Error(
-        `Prepared patch source path is not available and patch source cannot be re-prepared: ${missingPreparedPatchPaths[0]}`,
-      );
-    }
-    patchFiles = [];
-    await traceWorkflowStageBlock(
-      options,
-      "patch.prepare",
-      "patch",
-      async () => {
-        const preparedPatchFiles = await Promise.all(
-          patchSources.map(async (patchSource, index) => {
-            if (!patchSource) throw new Error(`Patch ${index + 1} was not provided`);
-            const patchFile = await deps.prepareInput(
-              patchSource,
-              "patch",
-              options,
-              runtime,
-              input.selectedPatchEntryNames?.[index],
-              index,
-            );
-            applySidecarPatchOutputLabel(patchFile, options.sidecarPatchOutputLabels?.[index]);
-            return patchFile;
-          }),
-        );
-        patchFiles.push(...preparedPatchFiles);
-      },
-      () => ({
-        missingPreparedPatchPathCount: missingPreparedPatchPaths.length,
-        missingPreparedPatchPaths,
-        patchCount: patchFiles.length,
-        patchSourceCount: patchSources.length,
-        reprepare: shouldRepreparePatches,
-        selectedEntryNames: input.selectedPatchEntryNames,
-      }),
+    preparationWork.push(
+      traceWorkflowStageBlock(
+        options,
+        "patch.prepare",
+        "patch",
+        async () => {
+          const preparedPatchFiles = await Promise.all(
+            patchSources.map(async (patchSource, index) => {
+              if (!patchSource) throw new Error(`Patch ${index + 1} was not provided`);
+              const patchFile = await deps.prepareInput(
+                patchSource,
+                "patch",
+                options,
+                runtime,
+                input.selectedPatchEntryNames?.[index],
+                index,
+              );
+              applySidecarPatchOutputLabel(patchFile, options.sidecarPatchOutputLabels?.[index]);
+              return patchFile;
+            }),
+          );
+          patchFiles.push(...preparedPatchFiles);
+        },
+        () => ({
+          patchCount: patchFiles.length,
+          patchSourceCount: patchSources.length,
+          selectedEntryNames: input.selectedPatchEntryNames,
+        }),
+      ),
     );
   }
+  await Promise.all(preparationWork);
 
   const shouldDiscoverImplicitPatches =
     input.patches === undefined && input.preparedPatchFiles === undefined && input.parsedPatches === undefined;

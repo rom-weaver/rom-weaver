@@ -88,7 +88,6 @@ type CreatePatchInput = {
 };
 
 type PublicOutput = VfsOutputRef & {
-  checksums?: Record<string, string>;
   cleanup?: () => Promise<void> | void;
 };
 

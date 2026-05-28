@@ -20,10 +20,7 @@ const CHECKSUM_PAIR_REGEX = /([a-z0-9_-]+)=([0-9a-f]+)/gi;
 const PATH_PART_SPLIT_REGEX = /[/\\]+/;
 const PATH_FILE_CAPTURE_REGEX = /^(.+[/\\])?([^/\\]+)$/;
 const FILE_EXTENSION_CAPTURE_REGEX = /^(.+?)(\.[^./\\]*)?$/;
-const CODEC_LEVEL_ENTRY_REGEX = /^([a-z0-9_+-]+)(?::(\d+))?$/i;
 const COMPRESSION_LEVEL_PROFILE_REGEX = /^(min|very-low|low|medium|high|very-high|max)$/i;
-const WASI_THREAD_FAILURE_REGEX = /(wasi thread\s+\d+\s+failed|thread\s+\d+\s+failed before completion)/i;
-const THREAD_RUNTIME_TRAP_REGEX = /table index is out of bounds/i;
 const WORK_ROOT_PATH = "/work";
 const WORK_OUTPUT_PATH = "/work/output";
 
@@ -76,63 +73,6 @@ const toThreadArg = (value: unknown, fallback: string | null = null): string | n
   return Number.isFinite(parsed) && parsed >= 1 ? String(parsed) : fallback;
 };
 
-const XDELTA_PATCH_FILE_EXTENSION_REGEX = /\.(?:xdelta|vcdiff)$/i;
-const BPS_PATCH_FILE_EXTENSION_REGEX = /\.bps$/i;
-
-const isXdeltaPatchPath = (value: unknown) => {
-  if (typeof value !== "string") return false;
-  const trimmed = value.trim();
-  if (!trimmed) return false;
-  return XDELTA_PATCH_FILE_EXTENSION_REGEX.test(trimmed);
-};
-
-const isBpsPatchPath = (value: unknown) => {
-  if (typeof value !== "string") return false;
-  const trimmed = value.trim();
-  if (!trimmed) return false;
-  return BPS_PATCH_FILE_EXTENSION_REGEX.test(trimmed);
-};
-
-const resolvePatchApplyThreadArg = (
-  requestedThreadArg: string | null,
-  patchFiles: Array<{ patchFileName?: string; patchFilePath?: string }>,
-) => {
-  const hasXdeltaPatch = patchFiles.some((patch) => {
-    return isXdeltaPatchPath(patch.patchFilePath) || isXdeltaPatchPath(patch.patchFileName);
-  });
-  const hasBpsPatch = patchFiles.some((patch) => {
-    return isBpsPatchPath(patch.patchFilePath) || isBpsPatchPath(patch.patchFileName);
-  });
-  if (hasXdeltaPatch) {
-    return {
-      forcedSingleThread: requestedThreadArg !== "1",
-      forceSingleThreadReason: "xdelta",
-      hasBpsPatch,
-      hasXdeltaPatch,
-      preferThreadedWasm: false,
-      threadArg: "1",
-    };
-  }
-  if (hasBpsPatch) {
-    return {
-      forcedSingleThread: false,
-      forceSingleThreadReason: "bps",
-      hasBpsPatch,
-      hasXdeltaPatch,
-      preferThreadedWasm: false,
-      threadArg: null,
-    };
-  }
-  return {
-    forcedSingleThread: false,
-    forceSingleThreadReason: "",
-    hasBpsPatch,
-    hasXdeltaPatch,
-    preferThreadedWasm: true,
-    threadArg: requestedThreadArg || null,
-  };
-};
-
 const isTraceEnabled = (logLevel: LogLevel | string | undefined) => String(logLevel || "").toLowerCase() === "trace";
 
 const emitRuntimeTrace = (
@@ -158,20 +98,15 @@ const getTraceMessage = (value: unknown): string => {
 };
 
 const toRomWeaverOptions = (input: {
-  defaultThreads?: number | null;
   invalidateMountCacheBeforeRun?: boolean;
   logLevel?: LogLevel | string;
   onEvent?: (event: RomWeaverRunJsonEvent) => void;
   onLog?: (log: WorkflowRuntimeLog) => void;
-  preferThreadedWasm?: boolean;
   scratchFilePoolSize?: number | null;
-  syncAccessMode?: string;
-  virtualOnlyMounts?: boolean;
 }): RomWeaverRunJsonOptions => {
-  const traceEnabled = isTraceEnabled(input.logLevel);
   const options: RomWeaverRunJsonOptions = {
     onEvent: input.onEvent,
-    onTraceEvent: traceEnabled
+    onTraceEvent: isTraceEnabled(input.logLevel)
       ? (event) => {
           const message = getTraceMessage(event);
           if (!message) return;
@@ -184,23 +119,10 @@ const toRomWeaverOptions = (input: {
       emitRuntimeLog(input.onLog, "trace", message);
     },
   };
-  if (traceEnabled) {
-    options.env = {
-      RUST_BACKTRACE: "full",
-    };
-  }
   if (typeof input.scratchFilePoolSize === "number" && Number.isFinite(input.scratchFilePoolSize)) {
     options.scratchFilePoolSize = Math.max(0, Math.floor(input.scratchFilePoolSize));
   }
-  if (typeof input.defaultThreads === "number" && Number.isFinite(input.defaultThreads)) {
-    options.defaultThreads = Math.floor(input.defaultThreads);
-  }
-  if (typeof input.syncAccessMode === "string" && input.syncAccessMode.trim()) {
-    options.syncAccessMode = input.syncAccessMode.trim();
-  }
   if (input.invalidateMountCacheBeforeRun) options.invalidateMountCacheBeforeRun = true;
-  if (typeof input.preferThreadedWasm === "boolean") options.preferThreadedWasm = input.preferThreadedWasm;
-  if (typeof input.virtualOnlyMounts === "boolean") options.virtualOnlyMounts = input.virtualOnlyMounts;
   return options;
 };
 
@@ -291,23 +213,10 @@ const getEmittedFileDetails = (
 };
 
 type RomWeaverEmittedFile = {
-  checksums?: Record<string, string>;
   fileName: string;
   kind?: string;
   path: string;
   sizeBytes?: number;
-};
-
-const normalizeEmittedFileChecksums = (value: unknown): Record<string, string> | undefined => {
-  const record = asRecord(value);
-  if (!record) return undefined;
-  const checksums: Record<string, string> = {};
-  for (const [algorithm, checksum] of Object.entries(record)) {
-    const key = algorithm.trim().toLowerCase();
-    const normalized = typeof checksum === "string" ? checksum.trim().toLowerCase() : "";
-    if (key && normalized) checksums[key] = normalized;
-  }
-  return Object.keys(checksums).length ? checksums : undefined;
 };
 
 const getEmittedFiles = (result: RomWeaverRunJsonResult): RomWeaverEmittedFile[] => {
@@ -323,7 +232,6 @@ const getEmittedFiles = (result: RomWeaverRunJsonResult): RomWeaverEmittedFile[]
     const fileName =
       typeof entry.file_name === "string" && entry.file_name ? entry.file_name : getPathBaseName(path, "output.bin");
     output.push({
-      checksums: normalizeEmittedFileChecksums(entry.checksums),
       fileName,
       kind: typeof entry.kind === "string" && entry.kind ? entry.kind : undefined,
       path,
@@ -420,38 +328,6 @@ const ensureRomWeaverSuccess = (result: RomWeaverRunJsonResult, fallbackMessage:
   throw new Error(getRomWeaverFailureMessage(result, fallbackMessage));
 };
 
-const isThreadedWorkerFailure = (message: string) =>
-  WASI_THREAD_FAILURE_REGEX.test(message) || THREAD_RUNTIME_TRAP_REGEX.test(message);
-
-const normalizeChdCodecArgs = (codecs: string[]) => {
-  const explicitLevels = new Set<string>();
-  const strippedCodecs: string[] = [];
-  const strippedSeen = new Set<string>();
-  for (const codecEntry of codecs) {
-    const trimmed = String(codecEntry || "").trim();
-    if (!trimmed) continue;
-    const match = trimmed.match(CODEC_LEVEL_ENTRY_REGEX);
-    if (!match) {
-      if (!strippedSeen.has(trimmed)) {
-        strippedSeen.add(trimmed);
-        strippedCodecs.push(trimmed);
-      }
-      continue;
-    }
-    const codecName = match[1] || trimmed;
-    const level = match[2];
-    if (level !== undefined) explicitLevels.add(level);
-    if (!strippedSeen.has(codecName)) {
-      strippedSeen.add(codecName);
-      strippedCodecs.push(codecName);
-    }
-  }
-
-  // CHD codec sets cannot mix per-codec levels; keep user codec order but remove level suffixes on conflicts.
-  if (explicitLevels.size <= 1) return { codecs, stripped: false };
-  return { codecs: strippedCodecs, stripped: true };
-};
-
 const getFileNameParts = (fileName: string) => {
   const match = getPathBaseName(fileName, "input.bin").match(FILE_EXTENSION_CAPTURE_REGEX);
   return {
@@ -509,33 +385,15 @@ const invokeRomWeaverCompressionCreateWorker = async (
   const outputPath = String(input.outputPath || "").trim();
   if (!outputPath) throw new Error("Compression create output path is required");
 
+  const args = ["compress", ...inputPaths, "--output", outputPath];
   const format = String(input.format || "").trim();
-  const normalizedFormat = format.toLowerCase();
-  const configuredCodecs = normalizeCodecEntries(input.codecs);
-  const normalizedChdCodecs =
-    normalizedFormat === "chd"
-      ? normalizeChdCodecArgs(configuredCodecs)
-      : { codecs: configuredCodecs, stripped: false };
-  if (normalizedChdCodecs.stripped) {
-    emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson compress normalized chd codec levels", {
-      configuredCodecs,
-      normalizedCodecs: normalizedChdCodecs.codecs,
-    });
-  }
-  const codecs = normalizedChdCodecs.codecs;
+  if (format) args.push("--format", format);
+  for (const codec of normalizeCodecEntries(input.codecs)) args.push("--codec", codec);
   const levelProfile = normalizeCompressionLevelProfile(input.levelProfile);
-  const traceEnabled = isTraceEnabled(input.logLevel);
-  const buildArgs = (threadArg: string | null) => {
-    const args = ["compress", ...inputPaths, "--output", outputPath];
-    if (format) args.push("--format", format);
-    for (const codec of codecs) args.push("--codec", codec);
-    if (levelProfile) args.push("--level", levelProfile);
-    if (threadArg) args.push("--threads", threadArg);
-    if (traceEnabled) args.unshift("--trace");
-    return args;
-  };
+  if (levelProfile) args.push("--level", levelProfile);
   const threadArg = toThreadArg(input.workerThreads);
-  const args = buildArgs(threadArg);
+  if (threadArg) args.push("--threads", threadArg);
+  if (isTraceEnabled(input.logLevel)) args.unshift("--trace");
   emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson compress dispatch", {
     args,
     format,
@@ -555,35 +413,7 @@ const invokeRomWeaverCompressionCreateWorker = async (
       onLog,
     }),
   );
-  if (!(result.ok && result.exitCode === 0)) {
-    const failureMessage = getRomWeaverFailureMessage(result, "Compression create failed");
-    if (threadArg && threadArg !== "1" && isThreadedWorkerFailure(failureMessage)) {
-      const fallbackArgs = buildArgs("1");
-      emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson compress retry single-thread", {
-        failureMessage,
-        fallbackArgs,
-      });
-      const fallbackResult = await runRomWeaverJson(
-        fallbackArgs,
-        toRomWeaverOptions({
-          logLevel: input.logLevel,
-          onEvent: (event) => {
-            const progress = toSimpleProgress(event);
-            if (progress) onProgress?.(progress);
-          },
-          onLog,
-        }),
-      );
-      ensureRomWeaverSuccess(fallbackResult, "Compression create failed after single-thread retry");
-      const fallbackEmitted = getEmittedFiles(fallbackResult)[0];
-      return {
-        fileName: input.outputFileName,
-        filePath: fallbackEmitted?.path || outputPath,
-        size: fallbackEmitted?.sizeBytes,
-      };
-    }
-    throw new Error(failureMessage);
-  }
+  ensureRomWeaverSuccess(result, "Compression create failed");
 
   const emitted = getEmittedFiles(result)[0];
   return {
@@ -600,7 +430,6 @@ const invokeRomWeaverExtractWorker = async (
     outDirPath: string;
     scratchFilePoolSize?: number | null;
     select?: string[];
-    checksumAlgorithms?: string[];
     sourcePath: string;
     splitBin?: boolean;
     workerThreads?: number | string | null;
@@ -619,11 +448,6 @@ const invokeRomWeaverExtractWorker = async (
     if (!value) continue;
     args.push("--select", value);
   }
-  for (const algorithm of Array.isArray(input.checksumAlgorithms) ? input.checksumAlgorithms : []) {
-    const value = String(algorithm || "").trim();
-    if (value) args.push("--checksum", value);
-  }
-  args.push("--no-nested-extract");
   if (input.splitBin) args.push("--split-bin");
   const threadArg = toThreadArg(input.workerThreads);
   if (threadArg) args.push("--threads", threadArg);
@@ -716,71 +540,30 @@ const invokeRomWeaverPatchApplyWorker = async (
   if ((input.options as { requireInputChecksumMatch?: unknown } | undefined)?.requireInputChecksumMatch !== true)
     args.push("--ignore-checksum-validation");
 
-  const requestedThreadArg = toThreadArg((input.options as { workerThreads?: unknown } | undefined)?.workerThreads);
-  const { forceSingleThreadReason, forcedSingleThread, hasBpsPatch, hasXdeltaPatch, preferThreadedWasm, threadArg } =
-    resolvePatchApplyThreadArg(requestedThreadArg, input.patchFiles);
-  const disableDefaultThreadArgInjection = hasBpsPatch && !threadArg;
-  const virtualOnlyMounts = hasBpsPatch;
-  const scratchFilePoolSize = hasBpsPatch ? 8 : 1;
-  const syncAccessMode = hasBpsPatch ? "readwrite-unsafe" : undefined;
+  const threadArg = toThreadArg((input.options as { workerThreads?: unknown } | undefined)?.workerThreads);
   if (threadArg) args.push("--threads", threadArg);
   if (isTraceEnabled(input.logLevel)) args.unshift("--trace");
   emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson patch-apply dispatch", {
     args,
-    disableDefaultThreadArgInjection,
-    forcedSingleThread,
-    forceSingleThreadReason,
-    hasBpsPatch,
-    hasXdeltaPatch,
     outputPath,
     patchCount: input.patchFiles.length,
-    preferThreadedWasm,
-    requestedThreadArg,
     romFilePath: input.romFilePath,
-    scratchFilePoolSize,
-    syncAccessMode: syncAccessMode || "",
     threadArg,
-    virtualOnlyMounts,
   });
   await onBeforeRun?.(outputPath);
 
   const result = await runRomWeaverJson(
     args,
     toRomWeaverOptions({
-      defaultThreads: disableDefaultThreadArgInjection ? 0 : undefined,
       logLevel: input.logLevel,
       onEvent: (event) => {
         const progress = toPatchProgress(event);
         if (progress) onProgress?.(progress);
       },
       onLog,
-      preferThreadedWasm,
-      scratchFilePoolSize,
-      syncAccessMode,
-      virtualOnlyMounts,
     }),
   );
-  if (!(result.ok && result.exitCode === 0)) {
-    const failureMessage = getRomWeaverFailureMessage(result, "Patch apply failed");
-    const traceContext = isTraceEnabled(input.logLevel)
-      ? ` [context: hasBpsPatch=${String(hasBpsPatch)} hasXdeltaPatch=${String(
-          hasXdeltaPatch,
-        )} forcedSingleThread=${String(forcedSingleThread)} reason=${forceSingleThreadReason || "none"} threadArg=${
-          threadArg || "none"
-        } preferThreadedWasm=${String(preferThreadedWasm)}]`
-      : "";
-    if (isTraceEnabled(input.logLevel)) {
-      const traceTail = Array.isArray(result.traceNonJsonLines)
-        ? result.traceNonJsonLines
-            .map((line) => String(line || "").trim())
-            .filter((line) => !!line)
-            .slice(-8)
-            .join(" | ")
-        : "";
-      if (traceTail) throw new Error(`${failureMessage}${traceContext} [trace: ${traceTail}]`);
-    }
-    throw new Error(`${failureMessage}${traceContext}`);
-  }
+  ensureRomWeaverSuccess(result, "Patch apply failed");
 
   const emitted = getEmittedFileDetails(result);
   return {
@@ -971,9 +754,7 @@ export {
   invokeRomWeaverCreatePatchWorker,
   invokeRomWeaverExtractWorker,
   invokeRomWeaverPatchApplyWorker,
-  normalizeChdCodecArgs,
   normalizeCodecEntries,
-  resolvePatchApplyThreadArg,
   runRomWeaverChecksumWorker,
   runRomWeaverInspectListWorker,
   selectRomWeaverOutputPath,

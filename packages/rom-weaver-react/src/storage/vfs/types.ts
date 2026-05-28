@@ -8,7 +8,6 @@ type VfsFileRef = {
 };
 
 type VfsOutputRef = {
-  checksums?: Record<string, string>;
   dispose: () => Promise<void>;
   fileName: string;
   mediaType?: string;
@@ -30,7 +29,6 @@ type LargeFileVfs = {
     path: string,
     fileName: string,
     options?: {
-      checksums?: Record<string, string>;
       cleanup?: () => Promise<void> | void;
       mediaType?: string;
       size?: number;

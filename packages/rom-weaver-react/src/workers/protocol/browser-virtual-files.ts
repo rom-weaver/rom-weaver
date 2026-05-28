@@ -14,8 +14,7 @@ type BrowserVirtualFileProxy = {
 
 type BrowserVirtualFile = {
   path: string;
-  proxy?: BrowserVirtualFileProxy;
-  source?: BrowserVirtualFileSource;
+  proxy: BrowserVirtualFileProxy;
 };
 type AtomicsWaitAsyncResult = {
   async: boolean;
@@ -55,9 +54,6 @@ const getVirtualSourceKind = (source: BrowserVirtualFileSource) => {
   if (source instanceof ArrayBuffer) return "arraybuffer";
   return typeof source;
 };
-
-const canUseDirectVirtualFileSource = (source: BrowserVirtualFileSource) =>
-  typeof Blob !== "undefined" && source instanceof Blob;
 
 const emitVirtualFileTrace = (message: string, details?: Record<string, unknown>) => {
   if (typeof console === "undefined") return;
@@ -109,26 +105,6 @@ const registerBrowserVirtualFile = ({
     sourceKind,
     sourceSize,
   });
-  if (canUseDirectVirtualFileSource(source)) {
-    const file: BrowserVirtualFile = {
-      path,
-      source,
-    };
-    activeVirtualFiles.set(path, file);
-    emitVirtualFileTrace("registered direct virtual file", {
-      path,
-      sourceKind,
-      sourceSize,
-    });
-    return () => {
-      emitVirtualFileTrace("unregistered direct virtual file", {
-        path,
-        sourceKind,
-        sourceSize,
-      });
-      if (activeVirtualFiles.get(path) === file) activeVirtualFiles.delete(path);
-    };
-  }
   if (typeof SharedArrayBuffer !== "function") {
     emitVirtualFileTrace("virtual input registration failed", {
       path,

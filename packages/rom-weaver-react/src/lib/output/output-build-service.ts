@@ -15,13 +15,7 @@ import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import { resolveCompressionLevels } from "../compression/compression-settings.ts";
 import OutputCompressionManager from "../compression/output-compression-manager.ts";
 import type { PatchFileInstance } from "../input/binary-service.ts";
-import {
-  clonePatchFile,
-  decodeUtf8,
-  getPatchFileBytes,
-  getPatchFileCleanup,
-  getPatchFileExternalSource,
-} from "../input/binary-service.ts";
+import { clonePatchFile, decodeUtf8, getPatchFileBytes, getPatchFileExternalSource } from "../input/binary-service.ts";
 import { getChdAutoCreateMode, replaceCuePatchFileName } from "../input/disc-file-utils.ts";
 import type { InputAsset } from "../input/input-assets.ts";
 import { getFileNameWithoutExtension } from "../input/path-utils.ts";
@@ -97,24 +91,6 @@ const createPatchFileFromRuntimeOutput = async (output: PublicOutput, fallbackFi
         }
       : undefined,
   );
-
-const collectPatchFileCleanups = (files: PatchFileInstance[]): Array<() => Promise<void> | void> => {
-  const seen = new Set<() => Promise<void> | void>();
-  const output: Array<() => Promise<void> | void> = [];
-  for (const file of files) {
-    const cleanup = getPatchFileCleanup(file);
-    if (!(cleanup && !seen.has(cleanup))) continue;
-    seen.add(cleanup);
-    output.push(cleanup);
-  }
-  return output;
-};
-
-const runPatchFileCleanups = async (cleanups: Array<() => Promise<void> | void>) => {
-  for (const cleanup of cleanups) {
-    await Promise.resolve(cleanup()).catch(() => undefined);
-  }
-};
 
 const createArchiveEntryInputFromPatchFile = (
   file: PatchFileInstance,
@@ -263,7 +239,6 @@ const buildOutputFiles = async (
   options: ApplyWorkflowOptions | undefined,
   runtime?: WorkflowRuntime,
 ): Promise<PatchFileInstance[]> => {
-  const patchedCleanup = getPatchFileCleanup(patchedRom);
   const compression = OutputCompressionManager.resolveOutputCompression(romFile, {
     compressionFormat: getOutputCompression(options, romFile),
   });
@@ -307,21 +282,18 @@ const buildOutputFiles = async (
         size: data.byteLength,
       });
     }
-    const compressed = await createCompressedArchive(
-      entries.map((entry) => entry.entry),
-      compression,
-      outputPlan.finalOutputFileName,
-      options,
-      runtime,
-    );
-    await Promise.resolve(patchedCleanup?.()).catch(() => undefined);
-    return [compressed];
+    return [
+      await createCompressedArchive(
+        entries.map((entry) => entry.entry),
+        compression,
+        outputPlan.finalOutputFileName,
+        options,
+        runtime,
+      ),
+    ];
   }
   const runtimeDiscOutputs = await createRuntimeDiscOutputFiles(compression, patchedRom, outputPlan, options, runtime);
-  if (runtimeDiscOutputs) {
-    await Promise.resolve(patchedCleanup?.()).catch(() => undefined);
-    return runtimeDiscOutputs;
-  }
+  if (runtimeDiscOutputs) return runtimeDiscOutputs;
   throw new Error("Runtime disc compression create capability is unavailable");
 };
 
@@ -435,16 +407,14 @@ const buildSessionOutputFiles = async (
   const compression = OutputCompressionManager.resolveOutputCompression(compressionSource, {
     compressionFormat: getOutputCompression(options, compressionSource),
   });
-  const outputAssetCleanups = collectPatchFileCleanups(outputAssets.map(({ file }) => file));
   if (outputAssets.length === 1) {
     const onlyOutput = outputAssets[0];
     if (!onlyOutput) throw new Error("No output file was produced");
     const onlyFile = onlyOutput.file;
     assertOutputSizeLimit(onlyFile.fileSize, options);
     if (compression === "none") return { files: [onlyFile], rawOutputSize: onlyFile.fileSize };
-    const builtFiles = await buildOutputFiles(onlyOutput.asset.file, onlyFile, options, runtime);
     return {
-      files: builtFiles,
+      files: await buildOutputFiles(onlyOutput.asset.file, onlyFile, options, runtime),
       rawOutputSize: onlyFile.fileSize,
     };
   }
@@ -462,38 +432,32 @@ const buildSessionOutputFiles = async (
   if (compression === "z3ds") throw new Error("Z3DS output is not supported for CD disc groups");
 
   const baseName = getOutputBaseName(assets);
-  if (compression === "zip") {
-    const files = [
-      await createCompressedArchive(
-        entries.map((entry) => entry.entry),
-        "zip",
-        `${baseName}.zip`,
-        options,
-        runtime,
-      ),
-    ];
-    await runPatchFileCleanups(outputAssetCleanups);
+  if (compression === "zip")
     return {
-      files,
+      files: [
+        await createCompressedArchive(
+          entries.map((entry) => entry.entry),
+          "zip",
+          `${baseName}.zip`,
+          options,
+          runtime,
+        ),
+      ],
       rawOutputSize,
     };
-  }
-  if (compression === "7z") {
-    const files = [
-      await createCompressedArchive(
-        entries.map((entry) => entry.entry),
-        "7z",
-        `${baseName}.7z`,
-        options,
-        runtime,
-      ),
-    ];
-    await runPatchFileCleanups(outputAssetCleanups);
+  if (compression === "7z")
     return {
-      files,
+      files: [
+        await createCompressedArchive(
+          entries.map((entry) => entry.entry),
+          "7z",
+          `${baseName}.7z`,
+          options,
+          runtime,
+        ),
+      ],
       rawOutputSize,
     };
-  }
   if (compression === "chd") {
     const cueAsset = assets.find((asset) => asset.kind === "cue");
     const trackAssets = outputAssets.filter(({ asset }) => asset.kind === "track");
@@ -534,24 +498,21 @@ const buildSessionOutputFiles = async (
       source,
     });
     const output = "output" in result ? result.output : result;
-    await runPatchFileCleanups(outputAssetCleanups);
     return {
       files: [await createPatchFileFromRuntimeOutput(output, `${baseName}.chd`)],
       rawOutputSize,
     };
   }
-  const files = [
-    await createCompressedArchive(
-      entries.map((entry) => entry.entry),
-      "7z",
-      `${baseName}.7z`,
-      options,
-      runtime,
-    ),
-  ];
-  await runPatchFileCleanups(outputAssetCleanups);
   return {
-    files,
+    files: [
+      await createCompressedArchive(
+        entries.map((entry) => entry.entry),
+        "7z",
+        `${baseName}.7z`,
+        options,
+        runtime,
+      ),
+    ],
     rawOutputSize,
   };
 };

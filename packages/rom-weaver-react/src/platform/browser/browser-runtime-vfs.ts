@@ -11,15 +11,6 @@ type CreateBrowserRuntimeVfsIoOptions = {
   vfs: LargeFileVfs;
 };
 
-type StagedBrowserSource = Awaited<ReturnType<typeof createBrowserOpfsSourceRef>>;
-type CachedVirtualSource = {
-  cleanupTimer?: ReturnType<typeof setTimeout>;
-  refCount: number;
-  staged: StagedBrowserSource;
-};
-
-const VIRTUAL_SOURCE_CACHE_GRACE_MS = 5000;
-
 const emitBrowserRuntimeVfsTrace = (message: string, details?: Record<string, unknown>) => {
   if (typeof console === "undefined") return;
   const log = typeof console.debug === "function" ? console.debug : console.log;
@@ -30,35 +21,7 @@ const createBrowserRuntimeVfsIo = ({
   mountPoint = WORKER_OPFS_MOUNTPOINT,
   vfs,
 }: CreateBrowserRuntimeVfsIoOptions): RuntimeWorkerIo => {
-  const virtualSourceCache = new WeakMap<object, CachedVirtualSource>();
   const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-  const getVirtualSourceCacheKey = (source: unknown) => {
-    const directSource = getNamedSource(source as Parameters<typeof getNamedSource>[0]);
-    const candidate = directSource || source;
-    if (!(candidate && typeof candidate === "object")) return null;
-    if (isVfsFileRef(candidate)) return null;
-    return candidate;
-  };
-  const releaseCachedVirtualSource = (key: object, cached: CachedVirtualSource) => {
-    cached.refCount = Math.max(0, cached.refCount - 1);
-    if (cached.refCount > 0 || cached.cleanupTimer) return;
-    cached.cleanupTimer = setTimeout(() => {
-      if (cached.refCount > 0) return;
-      virtualSourceCache.delete(key);
-      cached.staged.cleanup().catch(() => undefined);
-    }, VIRTUAL_SOURCE_CACHE_GRACE_MS);
-  };
-  const wrapCachedVirtualSource = (key: object, cached: CachedVirtualSource): StagedBrowserSource => {
-    let released = false;
-    return {
-      ...cached.staged,
-      cleanup: async () => {
-        if (released) return;
-        released = true;
-        releaseCachedVirtualSource(key, cached);
-      },
-    };
-  };
   const statWithRetries = async (filePath: string) => {
     let stat = await vfs.stat(filePath);
     if (stat) return stat;
@@ -115,22 +78,6 @@ const createBrowserRuntimeVfsIo = ({
       pathPrefix: pathPrefix || scope,
       scope,
     });
-    const cacheKey = getVirtualSourceCacheKey(source);
-    const cached = cacheKey ? virtualSourceCache.get(cacheKey) : undefined;
-    if (cached) {
-      if (cached.cleanupTimer) {
-        clearTimeout(cached.cleanupTimer);
-        cached.cleanupTimer = undefined;
-      }
-      cached.refCount += 1;
-      emitBrowserRuntimeVfsTrace("stageSource using cached virtual source ref", {
-        fileName: cached.staged.fileName,
-        filePath: cached.staged.filePath,
-        scope,
-        size: cached.staged.size,
-      });
-      return wrapCachedVirtualSource(cacheKey, cached);
-    }
     let staged = await stageFromSource();
     emitBrowserRuntimeVfsTrace("stageSource source ref created", {
       fileName: staged.fileName,
@@ -138,15 +85,7 @@ const createBrowserRuntimeVfsIo = ({
       size: staged.size,
       virtual: !!staged.virtual,
     });
-    if (staged.virtual) {
-      if (!cacheKey) return staged;
-      const cached: CachedVirtualSource = {
-        refCount: 1,
-        staged,
-      };
-      virtualSourceCache.set(cacheKey, cached);
-      return wrapCachedVirtualSource(cacheKey, cached);
-    }
+    if (staged.virtual) return staged;
     try {
       const stat = await assertStagedPath(staged.filePath);
       emitBrowserRuntimeVfsTrace("stageSource path verified", {
@@ -190,13 +129,8 @@ const createBrowserRuntimeVfsIo = ({
       const fileName = result.fileName || result.outputRef?.fileName || result.patchFileName || fallbackFileName;
       const filePath = result.outputRef?.filePath || result.filePath || result.patchFilePath;
       if (filePath) {
-        const cleanup = async () => {
-          await Promise.resolve(result.cleanup?.()).catch(() => undefined);
-          await vfs.remove(filePath).catch(() => undefined);
-        };
         return createRuntimeOutputFromVfs(vfs, filePath, fileName, {
-          checksums: result.checksums,
-          cleanup,
+          cleanup: result.cleanup,
           size: result.outputRef?.size || result.size,
         });
       }
