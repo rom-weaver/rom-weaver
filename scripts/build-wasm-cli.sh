@@ -65,6 +65,8 @@ else
 fi
 BROTLI_QUALITY="${BROTLI_QUALITY:-11}"
 SKIP_WASM_OPT="${SKIP_WASM_OPT:-0}"
+SKIP_BROTLI="${SKIP_BROTLI:-0}"
+SKIP_WASI_STRIP="${SKIP_WASI_STRIP:-0}"
 
 require_executable() {
   local path="$1"
@@ -83,12 +85,16 @@ require_command() {
 }
 
 require_command cargo
-require_command brotli
+if [[ "$SKIP_BROTLI" != "1" ]]; then
+  require_command brotli
+fi
 require_executable "$WASI_CLANG"
 require_executable "$WASI_CLANGXX"
 require_executable "$WASI_AR"
 require_executable "$WASI_RANLIB"
-require_executable "$WASI_STRIP"
+if [[ "$SKIP_WASI_STRIP" != "1" ]]; then
+  require_executable "$WASI_STRIP"
+fi
 if [[ ! -d "$WASI_SYSROOT" ]]; then
   echo "missing WASI sysroot: $WASI_SYSROOT" >&2
   exit 1
@@ -181,8 +187,12 @@ postprocess_artifact() {
     mv "$optimized" "$artifact"
   fi
 
-  "$WASI_STRIP" "$artifact"
-  brotli --force --quality="$BROTLI_QUALITY" --output="${artifact}.br" "$artifact"
+  if [[ "$SKIP_WASI_STRIP" != "1" ]]; then
+    "$WASI_STRIP" "$artifact"
+  fi
+  if [[ "$SKIP_BROTLI" != "1" ]]; then
+    brotli --force --quality="$BROTLI_QUALITY" --output="${artifact}.br" "$artifact"
+  fi
 }
 
 build_target "wasm32-wasip1" "rom-weaver-cli.wasm" "$NON_THREADED_RUSTFLAGS"
@@ -236,7 +246,11 @@ if [[ "$SYNC_WASM_PACKAGE" == "1" ]]; then
 fi
 
 echo "artifacts written to ${OUT_DIR}"
-echo "compressed artifacts: rom-weaver-cli.wasm.br rom-weaver-cli-threaded.wasm.br"
+if [[ "$SKIP_BROTLI" != "1" ]]; then
+  echo "compressed artifacts: rom-weaver-cli.wasm.br rom-weaver-cli-threaded.wasm.br"
+else
+  echo "compressed artifacts: skipped (set SKIP_BROTLI=0 to enable)"
+fi
 echo "threaded cli args file: threaded.args"
 echo "auto threads: fixed default 4"
 echo "force thread count: pass --threads ${PTHREAD_COUNT}"
