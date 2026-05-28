@@ -420,6 +420,52 @@ test("patch row shows extraction progress and extracted patch naming", async () 
   ).toContain("change.ips");
 });
 
+test("adding an input after a staged patch does not reshow preparing patch progress", async () => {
+  const progressEvents = [];
+  mount(
+    createElement(ApplyPatchForm, {
+      onProgress: (event) => {
+        progressEvents.push(event);
+      },
+    }),
+  );
+
+  await expect.poll(() => document.getElementById("rom-weaver-input-file-rom")).not.toBeNull();
+  await expect.poll(() => document.getElementById("rom-weaver-input-file-patch")).not.toBeNull();
+
+  selectFileInput(
+    document.getElementById("rom-weaver-input-file-patch"),
+    await loadFixtureFile(ONE_PATCH_7Z, "application/x-7z-compressed"),
+  );
+  await clickPatchCandidateSelectionOption("change.ips");
+
+  await expect
+    .poll(
+      () =>
+        document.querySelector("#rom-weaver-list-patch-stack .rom-weaver-patch-stack-file strong")?.textContent || "",
+      { timeout: 30000 },
+    )
+    .toContain("change.ips");
+
+  progressEvents.length = 0;
+
+  selectFileInput(document.getElementById("rom-weaver-input-file-rom"), await loadFixtureFile(RAW_ROM));
+  await waitForApplyButtonEnabled();
+
+  const patchPreparingEvents = progressEvents.filter((event) => {
+    const role = String((event?.details || {}).role || "");
+    const label = String(event?.label || "");
+    return role === "patch" && /preparing patch/i.test(label);
+  });
+  expect(patchPreparingEvents).toHaveLength(0);
+
+  const patchExtractEvents = progressEvents.filter((event) => {
+    const details = event?.details || {};
+    return String(details.role || "") === "patch" && String(details.stage || "") === "extract";
+  });
+  expect(patchExtractEvents).toHaveLength(0);
+});
+
 test("cancelling patch candidate selection does not trigger render-phase React warnings", async () => {
   const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
   try {

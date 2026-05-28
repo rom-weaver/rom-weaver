@@ -3,6 +3,7 @@ import { ApplyWorkflow } from "../../src/platform/browser/browser-api.ts";
 
 const RAW_ROM = "tests/fixtures/archive_sources/game.bin";
 const ONE_PATCH_7Z = "tests/fixtures/archives/one-patch.7z";
+const MULTI_PATCH_ZIP = "tests/fixtures/archives/multi-patch.zip";
 
 const loadFixtureFile = async (filePath, type = "application/octet-stream") => {
   const response = await fetch(`/${filePath}`);
@@ -92,6 +93,20 @@ test("patch archive staging extract dispatch omits checksum args in browser", as
     const args = Array.isArray(extractDispatch?.details?.args) ? extractDispatch.details.args.map(String) : [];
     expect(args).toContain("extract");
     expect(args).not.toContain("--checksum");
+  } finally {
+    await workflow.dispose();
+  }
+});
+
+test("patch archive candidate discovery does not extract every candidate", async () => {
+  const { workflow, logs } = createTraceWorkflow();
+  try {
+    await workflow.setInput(await loadFixtureFile(RAW_ROM));
+    await workflow.addPatch(await loadFixtureFile(MULTI_PATCH_ZIP, "application/zip"));
+    const patch = workflow.getPatches()[0];
+    expect(patch?.status).toBe("needsSelection");
+    const extractDispatches = logs.filter((entry) => String(entry?.message || "") === "runJson extract dispatch");
+    expect(extractDispatches).toHaveLength(0);
   } finally {
     await workflow.dispose();
   }

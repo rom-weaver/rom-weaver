@@ -878,9 +878,9 @@ const resolveArchiveInput = async (
   const nestedContainerCandidates = romInspection?.nestedCompressionEntries || filterNestedContainerEntries(entries);
   const candidates =
     role === "patch"
-      ? await filterValidPatchArchiveEntriesForSource(file, entries, options, runtime)
+      ? filterPatchLikeEntries(entries)
       : romInspection?.romEntries || nestedContainerCandidates;
-  const patchFallbackCandidates = role === "patch" && !candidates.length ? filterPatchLikeEntries(entries) : [];
+  const patchFallbackCandidates: ArchiveEntryLike[] = [];
   const selectableCandidates = candidates.length ? candidates : nestedContainerCandidates;
   const selectionCandidates = selectableCandidates.length ? selectableCandidates : patchFallbackCandidates;
   trackArchiveCandidates(options, nested, selectionCandidates);

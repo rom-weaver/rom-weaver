@@ -1234,7 +1234,12 @@ const useLocalApplyPatchFormSession = ({
     ],
   );
   const syncPatchFiles = useCallback(
-    (snapshot: ApplyWorkflowStageSnapshot) => {
+    (
+      snapshot: ApplyWorkflowStageSnapshot,
+      options: {
+        silent?: boolean;
+      } = {},
+    ) => {
       const generation = ++patchStageGenerationRef.current;
       if (!(snapshot.patches.length && stagePatches)) {
         setPatchStaging(false);
@@ -1242,18 +1247,22 @@ const useLocalApplyPatchFormSession = ({
         setPatchProgressByKey({});
         return;
       }
+      const silent = options.silent === true;
       const initialProgress = {
         indeterminate: true,
         label: "Preparing patch...",
         message: "Preparing patch...",
       };
-      setPatchStaging(true);
-      setPatchProgress(null);
-      setPatchProgressByKey(
-        Object.fromEntries(snapshot.patches.map((patch) => [getPatchKey(patch, snapshot.patches), initialProgress])),
-      );
+      if (!silent) {
+        setPatchStaging(true);
+        setPatchProgress(null);
+        setPatchProgressByKey(
+          Object.fromEntries(snapshot.patches.map((patch) => [getPatchKey(patch, snapshot.patches), initialProgress])),
+        );
+      }
       void stagePatches(snapshot, {
         onProgress: (event) => {
+          if (silent) return;
           if (patchStageGenerationRef.current !== generation) return;
           const details = getProgressDetails(event);
           const order = typeof details.order === "number" ? details.order : -1;
@@ -1294,9 +1303,11 @@ const useLocalApplyPatchFormSession = ({
         })
         .finally(() => {
           if (patchStageGenerationRef.current !== generation) return;
-          setPatchStaging(false);
-          setPatchProgress(null);
-          setPatchProgressByKey({});
+          if (!silent) {
+            setPatchStaging(false);
+            setPatchProgress(null);
+            setPatchProgressByKey({});
+          }
         });
     },
     [activeSettings, getPatchKey, onError, stagePatches],
@@ -1305,16 +1316,12 @@ const useLocalApplyPatchFormSession = ({
     (snapshot: ApplyWorkflowStageSnapshot, previousInputs: BinarySource[] = []) => {
       const generation = ++inputStageGenerationRef.current;
       const progressGeneration = ++inputProgressGenerationRef.current;
-      const inputOnlySnapshot = {
-        ...snapshot,
-        patches: [],
-      };
       const retainedInputKeys = new Set(previousInputs.map((input) => getInputKey(input, previousInputs)));
       emitSessionTrace("input staging sync started", {
         generation,
         hasStageInput: !!stageInput,
         inputCount: snapshot.inputs.length,
-        patchCountIgnored: snapshot.patches.length,
+        patchCount: snapshot.patches.length,
         previousCount: previousInputs.length,
         progressGeneration,
         retainedCount: retainedInputKeys.size,
@@ -1366,7 +1373,7 @@ const useLocalApplyPatchFormSession = ({
         inputCount: snapshot.inputs.length,
         progressGeneration,
       });
-      void stageInput(inputOnlySnapshot, {
+      void stageInput(snapshot, {
         onChecksum: (info) => {
           if (inputStageGenerationRef.current !== generation) {
             emitSessionTrace("stageInput checksum ignored", {
@@ -1603,11 +1610,7 @@ const useLocalApplyPatchFormSession = ({
       emitSessionTrace("input staging clear dispatched", {
         previousCount: previousSync.inputs.length,
       });
-      const clearSnapshot = {
-        ...createStageSnapshot(),
-        patches: [],
-      };
-      void stageInput(clearSnapshot, {
+      void stageInput(createStageSnapshot(), {
         onChecksum: () => undefined,
         onProgress: () => undefined,
         onState: () => undefined,
@@ -1654,7 +1657,8 @@ const useLocalApplyPatchFormSession = ({
       patches: activePatches.slice(),
       settingsKey: stageSettingsKey,
     };
-    syncPatchFiles(createStageSnapshot());
+    const silentPatchRefresh = inputsChanged && !patchesChanged && !settingsChanged;
+    syncPatchFiles(createStageSnapshot(), { silent: silentPatchRefresh });
   }, [activePatches, createStageSnapshot, effectiveInputs, stagePatches, stageSettingsKey, syncPatchFiles]);
 
   const localUiStoreController = useLiveStoreController(localUiState);
