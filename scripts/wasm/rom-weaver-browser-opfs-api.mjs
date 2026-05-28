@@ -4267,6 +4267,16 @@ async function compileBrowserModuleFromUrl(url) {
   if (!response.ok) {
     throw new Error(`failed to fetch wasm module from ${url}: ${response.status} ${response.statusText}`);
   }
+  if (typeof WebAssembly.compileStreaming === 'function') {
+    try {
+      return {
+        module: await WebAssembly.compileStreaming(response.clone()),
+        wasmUrl: String(url),
+      };
+    } catch (_streamingError) {
+      // Fallback for runtimes/servers that do not satisfy streaming compile constraints.
+    }
+  }
   const bytes = await response.arrayBuffer();
   return {
     module: await WebAssembly.compile(bytes),
