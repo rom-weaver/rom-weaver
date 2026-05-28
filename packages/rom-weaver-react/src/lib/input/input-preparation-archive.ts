@@ -72,6 +72,9 @@ type CompressionRomInspection = {
 };
 type InputPreparationOptions = ApplyWorkflowOptions | CreateWorkflowOptions | undefined;
 type InputPreparationRuntimeLike = InputPreparationRuntime | Pick<WorkflowRuntime, "name">;
+type CompressionExtractOverrides = {
+  checksumAlgorithms?: string[];
+};
 type ArchiveFileBackedSource = Blob | FileSystemFileHandle | string;
 type ArchiveFileBackedPatchFile = PatchFileInstance & {
   _archiveFileBackedSource?: ArchiveFileBackedSource | null;
@@ -455,7 +458,13 @@ const getCompressionRuntimeSource = (file: PatchFileInstance): SourceRef => {
   return runtimeSource;
 };
 
-const getCompressionRuntimeOptions = (options: InputPreparationOptions) => ({
+const getCompressionRuntimeOptions = (
+  options: InputPreparationOptions,
+  overrides: CompressionExtractOverrides = {},
+) => ({
+  ...(Array.isArray(overrides.checksumAlgorithms)
+    ? { extractChecksumAlgorithms: [...overrides.checksumAlgorithms] }
+    : {}),
   logLevel: options?.logging?.level,
   onLog: options?.onLog,
   onProgress: options?.onProgress,
@@ -497,6 +506,7 @@ const extractCompressionEntries = async (
   options: InputPreparationOptions,
   runtime: InputPreparationRuntimeLike = DEFAULT_INPUT_PREPARATION_RUNTIME,
   outputName?: string,
+  checksumAlgorithms?: string[],
 ) => {
   const resolvedRuntime = await resolveInputPreparationRuntime(runtime);
   if (!resolvedRuntime.compression.extract) throw new Error("Compression extraction is unavailable");
@@ -511,7 +521,7 @@ const extractCompressionEntries = async (
   const result = await resolvedRuntime.compression.extract({
     entries: entryNames,
     format: compressionFormat,
-    options: getCompressionRuntimeOptions(options),
+    options: getCompressionRuntimeOptions(options, { checksumAlgorithms }),
     outputName,
     source: getCompressionRuntimeSource(file),
   });
@@ -569,6 +579,7 @@ const extractArchiveEntryBytes = async (
   entryName: string,
   options: InputPreparationOptions,
   runtime: InputPreparationRuntimeLike = DEFAULT_INPUT_PREPARATION_RUNTIME,
+  checksumAlgorithms?: string[],
 ) => {
   const [entryFile] = await extractCompressionEntries(
     archiveFile,
@@ -576,6 +587,7 @@ const extractArchiveEntryBytes = async (
     options,
     runtime,
     getBaseFileName(entryName),
+    checksumAlgorithms,
   );
   if (!entryFile) throw new Error(`Archive entry data is not available: ${entryName}`);
   try {
@@ -606,6 +618,7 @@ const extractArchiveEntry = async (
   fileName?: string,
   options: InputPreparationOptions = undefined,
   runtime: InputPreparationRuntimeLike = DEFAULT_INPUT_PREPARATION_RUNTIME,
+  checksumAlgorithms?: string[],
 ): Promise<PatchFileInstance> => {
   const [entryFile] = await extractCompressionEntries(
     archiveFile,
@@ -613,6 +626,7 @@ const extractArchiveEntry = async (
     options,
     runtime,
     fileName || getBaseFileName(entryName),
+    checksumAlgorithms,
   );
   if (!entryFile) throw new Error(`Archive entry data is not available: ${entryName}`);
   entryFile.fileName = fileName || entryFile.fileName || getBaseFileName(entryName);
@@ -693,7 +707,7 @@ const filterValidPatchArchiveEntriesForSource = async (
       validEntries.push(entry);
       continue;
     }
-    const patchFile = await extractArchiveEntry(archiveFile, entry.filename, undefined, options, runtime).catch(
+    const patchFile = await extractArchiveEntry(archiveFile, entry.filename, undefined, options, runtime, []).catch(
       () => null,
     );
     if (!patchFile) continue;
@@ -858,6 +872,7 @@ const resolveArchiveInput = async (
   trackArchiveEntries(options, nested, entries);
   const selectedPath = selectedArchiveEntry ? parseNestedArchiveSelectionPath(selectedArchiveEntry) : null;
   const selectedEntryName = selectedPath?.[0] || selectedArchiveEntry || "";
+  const extractChecksumAlgorithms = role === "patch" ? [] : undefined;
   const romInspection =
     role === "rom" ? await inspectCompressionRomEntriesForSource(file, entries, options, runtime) : null;
   const nestedContainerCandidates = romInspection?.nestedCompressionEntries || filterNestedContainerEntries(entries);
@@ -891,7 +906,14 @@ const resolveArchiveInput = async (
       const cachedPatch = await takeValidatedPatchArchiveEntry(file, selectedEntryName);
       if (cachedPatch) return cachedPatch;
     }
-    const selected = await extractArchiveEntry(file, selectedEntryName, undefined, options, runtime);
+    const selected = await extractArchiveEntry(
+      file,
+      selectedEntryName,
+      undefined,
+      options,
+      runtime,
+      extractChecksumAlgorithms,
+    );
     traceArchivePreparation(options, "input.archive.resolve.selected", {
       depth,
       extracted: describeArchiveFileForTrace(selected),
@@ -1053,7 +1075,14 @@ const resolveArchiveInput = async (
     const cachedPatch = await takeValidatedPatchArchiveEntry(file, candidate.filename);
     if (cachedPatch) return cachedPatch;
   }
-  const extracted = await extractArchiveEntry(file, candidate.filename, undefined, options, runtime);
+  const extracted = await extractArchiveEntry(
+    file,
+    candidate.filename,
+    undefined,
+    options,
+    runtime,
+    extractChecksumAlgorithms,
+  );
   traceArchivePreparation(options, "input.archive.resolve.default", {
     candidateEntryName: candidate.filename,
     depth,
@@ -1494,7 +1523,7 @@ const prepareAutoPatchInputs = async (
   for (const sidecarPatch of sidecarPatches) {
     const entryName = sidecarPatch.entry.filename;
     if (!entryName) continue;
-    const patchFile = await extractArchiveEntry(archiveFile, entryName, undefined, options, runtime);
+    const patchFile = await extractArchiveEntry(archiveFile, entryName, undefined, options, runtime, []);
     applySidecarPatchOutputLabel(patchFile, sidecarPatch.outputLabel);
     patchFiles.push(patchFile);
   }

@@ -107,6 +107,7 @@ type CompressionEntryInput = RuntimeCompressionEntryInput;
 type CompressionWorkflowOptions = {
   workerThreads?: number | string;
   logLevel?: LogLevel;
+  extractChecksumAlgorithms?: string[];
   onLog?: (record: Pick<LogRecord, "details" | "level" | "message" | "namespace" | "timestamp">) => void;
   onProgress?: (event: ProgressEvent) => void;
 };

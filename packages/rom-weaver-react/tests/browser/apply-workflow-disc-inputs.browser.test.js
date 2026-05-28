@@ -1,6 +1,9 @@
 import { expect, test } from "vitest";
 import { ApplyWorkflow } from "../../src/platform/browser/browser-api.ts";
 
+const RAW_ROM = "tests/fixtures/archive_sources/game.bin";
+const ONE_PATCH_7Z = "tests/fixtures/archives/one-patch.7z";
+
 const loadFixtureFile = async (filePath, type = "application/octet-stream") => {
   const response = await fetch(`/${filePath}`);
   if (!response.ok) throw new Error(`Failed to load fixture ${filePath}`);
@@ -60,6 +63,35 @@ test("apply workflow resolves CHD inputs to extracted names during staging", asy
     expect(input?.wasDecompressed).toBe(true);
     const checksumIndex = progressEvents.findIndex((event) => event.role === "input" && event.stage === "checksum");
     expect(checksumIndex).toBe(-1);
+  } finally {
+    await workflow.dispose();
+  }
+});
+
+test("patch archive staging extract dispatch omits checksum args in browser", async () => {
+  const { workflow, logs } = createTraceWorkflow();
+  try {
+    await workflow.setInput(await loadFixtureFile(RAW_ROM));
+    await workflow.addPatch(await loadFixtureFile(ONE_PATCH_7Z, "application/x-7z-compressed"));
+    await expect
+      .poll(
+        () =>
+          workflow
+            .getPatches()
+            .map((patch) => patch.fileName)
+            .join(","),
+        { timeout: 30000 },
+      )
+      .toMatch(/change\.ips/i);
+    await expect
+      .poll(() => logs.find((entry) => String(entry?.message || "") === "runJson extract dispatch") || null, {
+        timeout: 30000,
+      })
+      .not.toBeNull();
+    const extractDispatch = logs.find((entry) => String(entry?.message || "") === "runJson extract dispatch");
+    const args = Array.isArray(extractDispatch?.details?.args) ? extractDispatch.details.args.map(String) : [];
+    expect(args).toContain("extract");
+    expect(args).not.toContain("--checksum");
   } finally {
     await workflow.dispose();
   }

@@ -659,10 +659,19 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
           );
           await cleanupExtractDirectory();
           await ensureBrowserVfsOutputPaths(outputPathCandidates);
+          const extractChecksumAlgorithms = Array.isArray(workflowInput.options?.extractChecksumAlgorithms)
+            ? workflowInput.options.extractChecksumAlgorithms
+                .map((algorithm) =>
+                  String(algorithm || "")
+                    .trim()
+                    .toLowerCase(),
+                )
+                .filter((algorithm) => !!algorithm)
+            : [...EXTRACT_CHECKSUM_ALGORITHMS];
           const runExtract = () =>
             invokeRomWeaverExtractWorker(
               {
-                checksumAlgorithms: [...EXTRACT_CHECKSUM_ALGORITHMS],
+                ...(extractChecksumAlgorithms.length ? { checksumAlgorithms: extractChecksumAlgorithms } : {}),
                 logLevel: workflowInput.options?.logLevel,
                 outDirPath,
                 select: [entryName],
