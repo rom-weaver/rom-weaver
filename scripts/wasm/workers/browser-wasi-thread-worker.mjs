@@ -24,7 +24,7 @@ self.addEventListener('message', (event) => {
       return;
     }
     shellBusy = true;
-    void runPoolWorker(payload, { closeOnShutdown: false })
+    void runPoolWorker(payload)
       .then(() => {
         self.postMessage({ type: 'command-done', commandId: payload.commandId });
       })
@@ -49,18 +49,11 @@ self.addEventListener('message', (event) => {
       });
     return;
   }
-  if (payload.mode === 'pool') {
-    void runPoolWorker(payload, { closeOnShutdown: true }).catch((error) => {
-      self.postMessage({
-        type: 'error',
-        tid: null,
-        error: serializeError(error),
-      });
-      void __disposeRomWeaverBrowserThreadMountCache()
-        .catch(() => undefined)
-        .finally(() => {
-          self.close();
-        });
+  if (payload.mode !== 'thread') {
+    self.postMessage({
+      type: 'error',
+      tid: null,
+      error: serializeError(new Error(`unsupported browser wasi thread worker mode: ${String(payload.mode ?? 'unknown')}`)),
     });
     return;
   }
@@ -134,7 +127,7 @@ function threadStartControlFromBuffer(controlBuffer) {
   return control;
 }
 
-async function runPoolWorker(payload, { closeOnShutdown }) {
+async function runPoolWorker(payload) {
   const control = new Int32Array(payload.controlBuffer);
   if (!(control.buffer instanceof SharedArrayBuffer) || control.length < THREAD_SLOT_LENGTH) {
     throw new Error('browser wasi thread pool worker missing shared control buffer');
@@ -150,11 +143,7 @@ async function runPoolWorker(payload, { closeOnShutdown }) {
       }
       const state = Atomics.load(control, THREAD_SLOT_STATE_INDEX);
       if (state === THREAD_SLOT_STATE_SHUTDOWN) {
-        poolStream?.traceLine(`[wasi-thread-worker] pool worker shutdown command=${payload.commandId ?? 'standalone'}`);
-        if (closeOnShutdown) {
-          await __disposeRomWeaverBrowserThreadMountCache().catch(() => undefined);
-          self.close();
-        }
+        poolStream?.traceLine(`[wasi-thread-worker] pool worker shutdown command=${payload.commandId ?? 'unknown'}`);
         return;
       }
       if (state === THREAD_SLOT_STATE_FAILED) {

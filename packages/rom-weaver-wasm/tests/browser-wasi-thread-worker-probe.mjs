@@ -5,7 +5,7 @@ let payloadEventCount = 0;
 self.addEventListener('message', (event) => {
   if (typeof BroadcastChannel !== 'function') return;
   const payload = event?.data ?? {};
-  if (payload.mode !== 'pool' && payload.mode !== 'pool-command') return;
+  if (payload.mode !== 'pool-command') return;
   if (payloadEventCount >= MAX_PROBE_PAYLOAD_EVENTS) return;
   payloadEventCount += 1;
   const channel = new BroadcastChannel(PROBE_CHANNEL_NAME);

@@ -3268,14 +3268,13 @@ function createBrowserWasiThreadSpawner({
   }
 
   const activeWorkers = new Map();
-  const poolWorkers = [];
   let firstThreadFailure = null;
   const resolvedThreadWorkerUrl = resolveThreadWorkerUrl(threadWorkerUrl);
-  const poolSize = allowWorkerPool ? resolveBrowserThreadPoolSize(wasiArgs) : 0;
   trace?.(
-    `[browser-opfs] thread spawner create poolSize=${poolSize} pooled=${Boolean(threadWorkerPool)} worker=${basenameForTrace(resolvedThreadWorkerUrl)}`,
+    `[browser-opfs] thread spawner create pooled=${Boolean(allowWorkerPool && threadWorkerPool)} worker=${basenameForTrace(resolvedThreadWorkerUrl)}`,
   );
-  if (threadWorkerPool) {
+  if (allowWorkerPool && threadWorkerPool) {
+    const poolSize = resolveBrowserThreadPoolSize(wasiArgs);
     const command = threadWorkerPool.createCommand({
       poolSize,
       streamBroadcastChannelName,
@@ -3312,124 +3311,6 @@ function createBrowserWasiThreadSpawner({
     return wrapped;
   };
 
-  const poolReadyPromises = [];
-  for (let index = 0; index < poolSize; index += 1) {
-    const control = new Int32Array(
-      new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * THREAD_SLOT_LENGTH),
-    );
-    control[THREAD_SLOT_STATE_INDEX] = THREAD_SLOT_STATE_IDLE;
-    control[THREAD_SLOT_TID_INDEX] = 0;
-    control[THREAD_SLOT_START_ARG_INDEX] = 0;
-    control[THREAD_SLOT_ERROR_INDEX] = 0;
-    const slot = {
-      index,
-      worker: null,
-      control,
-      online: false,
-      busy: false,
-      tid: null,
-      resolveReady: null,
-      rejectReady: null,
-      readyTimer: null,
-    };
-    const handleThreadWorkerFailure = (slot, error) => {
-      if (slot.tid != null) {
-        activeWorkers.delete(slot.tid);
-        Atomics.store(slot.control, THREAD_SLOT_ERROR_INDEX, 1);
-        signalThreadStartState(slot.control, THREAD_SLOT_STATE_FAILED);
-        recordFailure(slot.tid, error);
-        slot.busy = false;
-        slot.tid = null;
-        return;
-      }
-      slot.rejectReady?.(error);
-    };
-    const ready = new Promise((resolveReady, rejectReady) => {
-      slot.resolveReady = resolveReady;
-      slot.rejectReady = rejectReady;
-    }).finally(() => {
-      if (slot.readyTimer) clearTimeout(slot.readyTimer);
-      slot.readyTimer = null;
-    });
-    slot.readyTimer = setTimeout(() => {
-      handleThreadWorkerFailure(
-        slot,
-        new Error(
-          `browser wasi thread worker ${slot.index} did not become ready within ${THREAD_WORKER_READY_TIMEOUT_MS}ms`
-          + ` (workerUrl=${resolvedThreadWorkerUrl})`,
-        ),
-      );
-    }, THREAD_WORKER_READY_TIMEOUT_MS);
-    poolReadyPromises.push(ready);
-    const worker = new Worker(resolvedThreadWorkerUrl, { type: 'module' });
-    slot.worker = worker;
-    worker.addEventListener('message', (event) => {
-      const message = event.data ?? {};
-      if (message.type === 'ready') {
-        slot.online = true;
-        slot.resolveReady?.();
-        slot.resolveReady = null;
-        slot.rejectReady = null;
-        return;
-      }
-      if (message.type === 'error') {
-        const tid = Number.isInteger(message.tid) ? message.tid : slot.tid;
-        const error = annotateThreadWorkerError(
-          deserializeThreadWorkerError(message.error),
-          slot,
-          resolvedThreadWorkerUrl,
-        );
-        if (tid != null) {
-          activeWorkers.delete(tid);
-          slot.busy = false;
-          slot.tid = null;
-          Atomics.store(slot.control, THREAD_SLOT_ERROR_INDEX, 1);
-          signalThreadStartState(slot.control, THREAD_SLOT_STATE_FAILED);
-          recordFailure(tid, error);
-          return;
-        }
-        slot.rejectReady?.(error);
-      }
-    });
-    worker.addEventListener('error', (event) => {
-      event.preventDefault?.();
-      handleThreadWorkerFailure(slot, createThreadWorkerLoadError(event, slot, resolvedThreadWorkerUrl));
-    });
-    worker.addEventListener('messageerror', (event) => {
-      event.preventDefault?.();
-      handleThreadWorkerFailure(
-        slot,
-        new Error(
-          `browser wasi thread worker ${slot.index} could not receive its startup payload`
-          + ` (workerUrl=${resolvedThreadWorkerUrl}, tid=${slot.tid ?? 'ready'})`,
-        ),
-      );
-    });
-    const payload = {
-      mode: 'pool',
-      __streamBroadcastChannelName: streamBroadcastChannelName,
-      __streamRequestId: streamRequestId,
-      controlBuffer: control.buffer,
-      debugWasi: Boolean(runtime?.debugWasi ?? false),
-      envList,
-      runtime: createThreadWorkerRuntimePayload(runtime),
-      threadIdState,
-      threadWorkerUrl: resolvedThreadWorkerUrl,
-      wasiArgs,
-      wasmMemory,
-      wasmModule,
-    };
-    trace?.(`[browser-opfs] thread worker post startup worker=${index}`);
-    try {
-      worker.postMessage(payload);
-      trace?.(`[browser-opfs] thread worker post startup returned worker=${index}`);
-    } catch (error) {
-      trace?.(`[browser-opfs] thread worker post startup failed worker=${index} ${formatErrorForTrace(error)}`);
-      handleThreadWorkerFailure(slot, error);
-    }
-    poolWorkers.push(slot);
-  }
-
   const spawn = function spawn(startArg) {
     const errorOrTidPtr = arguments.length > 1 ? arguments[1] : undefined;
     trace?.(`[browser-opfs] thread spawn requested startArg=${Number(startArg) | 0}`);
@@ -3455,44 +3336,30 @@ function createBrowserWasiThreadSpawner({
       return finishThreadSpawn(wasmMemory, errorOrTidPtr, Math.abs(tid), true);
     }
 
-    let slot = poolWorkers.find((candidate) => candidate.online
-      && !candidate.busy
-      && Atomics.load(candidate.control, THREAD_SLOT_STATE_INDEX) === THREAD_SLOT_STATE_IDLE);
-    if (!slot) {
-      try {
-        slot = createStandaloneBrowserWasiThread({
-          debugWasi: Boolean(runtime?.debugWasi ?? false),
-          envList,
-          index: `overflow-${tid}`,
-          runtime,
-          startArg,
-          streamBroadcastChannelName,
-          streamRequestId,
-          threadIdState,
-          threadWorkerUrl: resolvedThreadWorkerUrl,
-          tid,
-          trace,
-          wasiArgs,
-          wasmMemory,
-          wasmModule,
-        });
-      } catch (error) {
-        trace?.(`[browser-opfs] thread spawn no idle worker tid=${tid} ${formatErrorForTrace(error)}`);
-        return finishThreadSpawn(wasmMemory, errorOrTidPtr, WASI_ERRNO_AGAIN, true);
-      }
-      activeWorkers.set(tid, slot);
-      trace?.(`[browser-opfs] thread spawn dispatched tid=${tid} worker=${slot.index}`);
-    } else {
-      slot.busy = true;
-      slot.tid = tid;
-      activeWorkers.set(tid, slot);
-      Atomics.store(slot.control, THREAD_SLOT_TID_INDEX, tid);
-      Atomics.store(slot.control, THREAD_SLOT_START_ARG_INDEX, Number(startArg) | 0);
-      Atomics.store(slot.control, THREAD_SLOT_ERROR_INDEX, 0);
-      Atomics.store(slot.control, THREAD_SLOT_STATE_INDEX, THREAD_SLOT_STATE_REQUESTED);
-      Atomics.notify(slot.control, THREAD_SLOT_STATE_INDEX, 1);
-      trace?.(`[browser-opfs] thread spawn dispatched tid=${tid} worker=${slot.index}`);
+    let slot;
+    try {
+      slot = createStandaloneBrowserWasiThread({
+        debugWasi: Boolean(runtime?.debugWasi ?? false),
+        envList,
+        index: `standalone-${tid}`,
+        runtime,
+        startArg,
+        streamBroadcastChannelName,
+        streamRequestId,
+        threadIdState,
+        threadWorkerUrl: resolvedThreadWorkerUrl,
+        tid,
+        trace,
+        wasiArgs,
+        wasmMemory,
+        wasmModule,
+      });
+    } catch (error) {
+      trace?.(`[browser-opfs] thread spawn worker create failed tid=${tid} ${formatErrorForTrace(error)}`);
+      return finishThreadSpawn(wasmMemory, errorOrTidPtr, WASI_ERRNO_AGAIN, true);
     }
+    activeWorkers.set(tid, slot);
+    trace?.(`[browser-opfs] thread spawn dispatched tid=${tid} worker=${slot.index}`);
 
     const startAckError = waitForThreadStartAck(slot.control, tid);
     if (startAckError) {
@@ -3522,7 +3389,7 @@ function createBrowserWasiThreadSpawner({
             break;
           }
           if (state === THREAD_SLOT_STATE_FAILED) {
-            recordFailure(tid, new Error(`wasi thread ${tid} failed in browser worker ${slot.index}`));
+            recordFailure(tid, slot.failure || new Error(`wasi thread ${tid} failed in browser worker ${slot.index}`));
             slot.busy = false;
             slot.tid = null;
             activeWorkers.delete(tid);
@@ -3532,20 +3399,11 @@ function createBrowserWasiThreadSpawner({
         }
       }
     }
-    for (const slot of poolWorkers) {
-      try {
-        Atomics.store(slot.control, THREAD_SLOT_STATE_INDEX, THREAD_SLOT_STATE_SHUTDOWN);
-        Atomics.notify(slot.control, THREAD_SLOT_STATE_INDEX, 1);
-      } catch {
-        // ignored
-      }
-      slot.worker.terminate();
-    }
     if (firstThreadFailure) throw firstThreadFailure;
     trace?.('[browser-opfs] thread wait done');
   };
 
-  return { spawn, ready: Promise.all(poolReadyPromises), waitForWorkers };
+  return { spawn, ready: Promise.resolve(), waitForWorkers };
 }
 
 function createBrowserWasiThreadSpawnerForCommand({
