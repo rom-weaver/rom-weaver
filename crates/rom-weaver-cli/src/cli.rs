@@ -192,6 +192,23 @@ pub struct ExtractCommand {
         )
     )]
     pub no_ignore: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "no-nested-extract",
+            help = "Do not recursively extract nested containers emitted by this extraction"
+        )
+    )]
+    pub no_nested_extract: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "checksum",
+            value_name = "ALGO",
+            help = "Compute an output checksum while extracting; repeat for multiple algorithms"
+        )
+    )]
+    pub checksum: Vec<String>,
     #[cfg_attr(not(target_arch = "wasm32"), arg(long, default_value = "auto"))]
     pub threads: ThreadBudget,
 }

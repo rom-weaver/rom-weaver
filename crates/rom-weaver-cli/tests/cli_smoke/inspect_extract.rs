@@ -411,6 +411,64 @@ fn extract_reports_thread_fallback_in_json() {
 }
 
 #[test]
+fn extract_checksum_emits_requested_output_digests() {
+    let temp = setup_temp_dir();
+    let expected = b"zip payload for extract checksum test".to_vec();
+    fs::write(temp.child("disc.iso").path(), &expected).expect("fixture");
+    let archive = temp.child("sample.zip");
+
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("disc.iso").path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            archive.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let out_dir = temp.child("out");
+    let events = run_json_events(
+        &[
+            "extract",
+            archive.path().to_str().expect("path"),
+            "--select",
+            "disc.iso",
+            "--out-dir",
+            out_dir.path().to_str().expect("path"),
+            "--checksum",
+            "crc32",
+            "--checksum",
+            "md5",
+            "--checksum",
+            "sha1",
+            "--json",
+        ],
+        0,
+    );
+    let json = events.last().expect("extract terminal event");
+    assert_eq!(json["command"], "extract");
+    assert_eq!(json["format"], "zip");
+    assert_eq!(json["status"], "succeeded");
+    assert_eq!(
+        fs::read(out_dir.child("disc.iso").path()).expect("extract"),
+        expected
+    );
+
+    let emitted = emitted_file_entry(json, "disc.iso");
+    assert_eq!(emitted["checksums"]["crc32"], "7464f267");
+    assert_eq!(emitted["checksums"]["md5"], "47144f4d72878e5b7802e5f736afab21");
+    assert_eq!(
+        emitted["checksums"]["sha1"],
+        "5ac04f8f0d78f0a446e07ced19af260a36bf3a28"
+    );
+}
+
+#[test]
 fn extract_select_supports_glob_patterns() {
     let temp = setup_temp_dir();
     fs::create_dir_all(temp.child("content").path()).expect("content dir");

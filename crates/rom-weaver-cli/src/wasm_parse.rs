@@ -185,6 +185,8 @@ fn parse_wasm_extract(args: Vec<String>) -> WasmCliParseResult<ExtractCommand> {
     let mut out_dir: Option<PathBuf> = None;
     let mut split_bin = false;
     let mut no_ignore = false;
+    let mut no_nested_extract = false;
+    let mut checksum = Vec::new();
     let mut threads = ThreadBudget::Auto;
     let mut index = 0usize;
     while index < args.len() {
@@ -219,6 +221,20 @@ fn parse_wasm_extract(args: Vec<String>) -> WasmCliParseResult<ExtractCommand> {
         if arg == "--no-ignore" {
             no_ignore = true;
             index += 1;
+            continue;
+        }
+        if arg == "--no-nested-extract" {
+            no_nested_extract = true;
+            index += 1;
+            continue;
+        }
+        if let Some(value) = arg.strip_prefix("--checksum=") {
+            checksum.push(value.to_string());
+            index += 1;
+            continue;
+        }
+        if arg == "--checksum" {
+            checksum.push(parse_wasm_required_value(&args, &mut index, "--checksum")?);
             continue;
         }
         if let Some(value) = arg.strip_prefix("--threads=") {
@@ -259,6 +275,8 @@ fn parse_wasm_extract(args: Vec<String>) -> WasmCliParseResult<ExtractCommand> {
         out_dir,
         split_bin,
         no_ignore,
+        no_nested_extract,
+        checksum,
         threads,
     })
 }

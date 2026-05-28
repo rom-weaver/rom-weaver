@@ -60,6 +60,7 @@ pub struct OperationContext {
     temp_paths: Arc<TempPathAllocator>,
     progress: Arc<dyn ProgressSink>,
     cancel: CancellationToken,
+    extract_checksum_algorithms: Vec<String>,
     patch_checksum_validation: PatchChecksumValidation,
     xdelta_secondary_mode: XdeltaSecondaryMode,
 }
@@ -81,6 +82,7 @@ impl OperationContext {
             temp_paths: Arc::new(TempPathAllocator::new(temp_root)),
             progress,
             cancel,
+            extract_checksum_algorithms: Vec::new(),
             patch_checksum_validation: PatchChecksumValidation::Strict,
             xdelta_secondary_mode: XdeltaSecondaryMode::default(),
         }
@@ -100,6 +102,17 @@ impl OperationContext {
 
     pub fn cancel(&self) -> &CancellationToken {
         &self.cancel
+    }
+
+    pub fn extract_checksum_algorithms(&self) -> &[String] {
+        &self.extract_checksum_algorithms
+    }
+
+    pub fn with_extract_checksum_algorithms(self, algorithms: Vec<String>) -> Self {
+        Self {
+            extract_checksum_algorithms: algorithms,
+            ..self
+        }
     }
 
     pub fn patch_checksum_validation(&self) -> PatchChecksumValidation {

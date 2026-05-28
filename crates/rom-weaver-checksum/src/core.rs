@@ -4,6 +4,8 @@ use std::{
     fs::{self, File},
     io::{self, BufReader, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
+    sync::{Arc, mpsc},
+    thread,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -62,6 +64,187 @@ pub struct ChecksumValues {
     pub execution: ThreadExecution,
     pub cached_count: usize,
     pub values: BTreeMap<String, String>,
+}
+
+pub struct StreamingChecksum {
+    inner: StreamingChecksumInner,
+}
+
+enum StreamingChecksumInner {
+    Async(Vec<AsyncStreamingChecksumWorker>),
+    Sync(Vec<(Algorithm, HasherState)>),
+}
+
+struct AsyncStreamingChecksumWorker {
+    handle: thread::JoinHandle<BTreeMap<String, String>>,
+    sender: Option<mpsc::SyncSender<Arc<[u8]>>>,
+}
+
+impl StreamingChecksum {
+    pub fn new(algorithms: &[String]) -> Result<Option<Self>> {
+        let algorithms = resolve_algorithms(algorithms)?;
+        if algorithms.is_empty() {
+            return Ok(None);
+        }
+        Ok(Some(Self::from_algorithms_sync(algorithms)))
+    }
+
+    pub fn new_with_context(
+        algorithms: &[String],
+        context: &OperationContext,
+    ) -> Result<Option<Self>> {
+        let algorithms = resolve_algorithms(algorithms)?;
+        if algorithms.is_empty() {
+            return Ok(None);
+        }
+        let execution = context.plan_threads(ThreadCapability::parallel(Some(algorithms.len())));
+        if execution.used_parallelism
+            && execution.effective_threads > 1
+            && let Some(checksum) =
+                Self::try_from_algorithms_async(algorithms.clone(), execution.effective_threads)
+        {
+            return Ok(Some(checksum));
+        }
+        Ok(Some(Self::from_algorithms_sync(algorithms)))
+    }
+
+    fn from_algorithms_sync(algorithms: Vec<Algorithm>) -> Self {
+        Self {
+            inner: StreamingChecksumInner::Sync(
+                algorithms
+                    .into_iter()
+                    .map(|algorithm| (algorithm, HasherState::new(algorithm)))
+                    .collect(),
+            ),
+        }
+    }
+
+    fn try_from_algorithms_async(algorithms: Vec<Algorithm>, worker_count: usize) -> Option<Self> {
+        let worker_algorithms = partition_streaming_algorithms(&algorithms, worker_count);
+        let mut workers: Vec<AsyncStreamingChecksumWorker> = Vec::new();
+        for algorithms in worker_algorithms {
+            let (sender, receiver) = mpsc::sync_channel::<Arc<[u8]>>(2);
+            let handle = match thread::Builder::new()
+                .name("rom-weaver-streaming-checksum".to_string())
+                .spawn(move || {
+                    let mut states = algorithms
+                        .into_iter()
+                        .map(|algorithm| (algorithm, HasherState::new(algorithm)))
+                        .collect::<Vec<_>>();
+                    while let Ok(bytes) = receiver.recv() {
+                        for (_, state) in &mut states {
+                            state.update(&bytes);
+                        }
+                    }
+                    states
+                        .into_iter()
+                        .map(|(algorithm, state)| (algorithm.name().to_string(), state.finalize()))
+                        .collect()
+                }) {
+                Ok(handle) => handle,
+                Err(_) => {
+                    for mut worker in workers {
+                        drop(worker.sender.take());
+                        let _ = worker.handle.join();
+                    }
+                    return None;
+                }
+            };
+            workers.push(AsyncStreamingChecksumWorker {
+                handle,
+                sender: Some(sender),
+            });
+        }
+        Some(Self {
+            inner: StreamingChecksumInner::Async(workers),
+        })
+    }
+
+    pub fn update(&mut self, bytes: &[u8]) -> Result<()> {
+        match &mut self.inner {
+            StreamingChecksumInner::Async(workers) => {
+                let chunk = Arc::<[u8]>::from(bytes.to_vec());
+                send_streaming_checksum_chunk(workers, chunk)
+            }
+            StreamingChecksumInner::Sync(states) => {
+                for (_, state) in states {
+                    state.update(bytes);
+                }
+                Ok(())
+            }
+        }
+    }
+
+    pub fn update_owned(&mut self, bytes: Vec<u8>) -> Result<()> {
+        match &mut self.inner {
+            StreamingChecksumInner::Async(workers) => {
+                let chunk = Arc::<[u8]>::from(bytes.into_boxed_slice());
+                send_streaming_checksum_chunk(workers, chunk)
+            }
+            StreamingChecksumInner::Sync(states) => {
+                for (_, state) in states {
+                    state.update(&bytes);
+                }
+                Ok(())
+            }
+        }
+    }
+
+    pub fn finalize(self) -> Result<BTreeMap<String, String>> {
+        match self.inner {
+            StreamingChecksumInner::Async(mut workers) => {
+                for worker in &mut workers {
+                    drop(worker.sender.take());
+                }
+                let mut results = BTreeMap::new();
+                for worker in workers {
+                    let worker_results = worker.handle.join().map_err(|_| {
+                        RomWeaverError::Validation("streaming checksum worker panicked".to_string())
+                    })?;
+                    results.extend(worker_results);
+                }
+                Ok(results)
+            }
+            StreamingChecksumInner::Sync(states) => Ok(states
+                .into_iter()
+                .map(|(algorithm, state)| (algorithm.name().to_string(), state.finalize()))
+                .collect()),
+        }
+    }
+}
+
+fn send_streaming_checksum_chunk(
+    workers: &mut [AsyncStreamingChecksumWorker],
+    chunk: Arc<[u8]>,
+) -> Result<()> {
+    for worker in workers {
+        let sender = worker.sender.as_ref().ok_or_else(|| {
+            RomWeaverError::Validation(
+                "streaming checksum worker closed before extraction finished".to_string(),
+            )
+        })?;
+        sender.send(Arc::clone(&chunk)).map_err(|_| {
+            RomWeaverError::Validation(
+                "streaming checksum worker stopped before extraction finished".to_string(),
+            )
+        })?;
+    }
+    Ok(())
+}
+
+fn partition_streaming_algorithms(
+    algorithms: &[Algorithm],
+    worker_count: usize,
+) -> Vec<Vec<Algorithm>> {
+    let worker_count = worker_count.min(algorithms.len()).max(1);
+    let mut workers = vec![Vec::new(); worker_count];
+    for (index, algorithm) in algorithms.iter().copied().enumerate() {
+        workers[index % worker_count].push(algorithm);
+    }
+    workers
+        .into_iter()
+        .filter(|algorithms| !algorithms.is_empty())
+        .collect()
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

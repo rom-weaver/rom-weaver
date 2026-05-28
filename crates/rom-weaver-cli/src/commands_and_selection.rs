@@ -247,6 +247,7 @@ impl CliApp {
             out_dir = %args.out_dir.display(),
             split_bin = args.split_bin,
             no_ignore = args.no_ignore,
+            no_nested_extract = args.no_nested_extract,
             threads = %args.threads,
             "starting extract command"
         );
@@ -256,10 +257,12 @@ impl CliApp {
             out_dir,
             split_bin,
             no_ignore,
+            no_nested_extract,
+            checksum,
             threads,
         } = args;
         let out_dir_before = Self::snapshot_file_tree(&out_dir).unwrap_or_default();
-        let context = self.context(threads);
+        let context = self.context(threads).with_extract_checksum_algorithms(checksum);
         let probe_threads = Some(context.plan_threads(ThreadCapability::single_threaded()));
         if let Some(report) = self.require_existing_path(
             "extract",
@@ -348,7 +351,7 @@ impl CliApp {
         if !warnings.is_empty() {
             report.label = format!("{}; warning={}", report.label, warnings.join("; "));
         }
-        if report.status == OperationStatus::Succeeded {
+        if report.status == OperationStatus::Succeeded && !no_nested_extract {
             let progress_execution = report.thread_execution.clone();
             self.emit_running(
                 "extract",
@@ -1687,13 +1690,53 @@ impl CliApp {
             Some(Value::Object(map)) => map,
             _ => Map::new(),
         };
+        let existing = match details.remove("emitted_files") {
+            Some(Value::Array(entries)) => entries
+                .into_iter()
+                .filter_map(|entry| match entry {
+                    Value::Object(map) => {
+                        let key = Self::emitted_file_detail_key(&map)?;
+                        Some((key, map))
+                    }
+                    _ => None,
+                })
+                .collect::<BTreeMap<_, _>>(),
+            _ => BTreeMap::new(),
+        };
         let emitted = emitted_files
             .into_iter()
-            .filter_map(|path| Self::build_emitted_file_detail(&path, default_kind))
+            .filter_map(|path| {
+                let mut detail = match Self::build_emitted_file_detail(&path, default_kind)? {
+                    Value::Object(map) => map,
+                    _ => return None,
+                };
+                if let Some(extra) = existing.get(&Self::normalized_emitted_path_key(&path)) {
+                    for (key, value) in extra {
+                        detail.entry(key.clone()).or_insert_with(|| value.clone());
+                    }
+                }
+                Some(Value::Object(detail))
+            })
             .collect::<Vec<_>>();
         details.insert("emitted_files".to_string(), Value::Array(emitted));
         report.details = Some(Value::Object(details));
         report
+    }
+
+    fn emitted_file_detail_key(entry: &Map<String, Value>) -> Option<String> {
+        entry
+            .get("path")
+            .and_then(Value::as_str)
+            .map(Self::normalize_emitted_path_string)
+    }
+
+    fn normalized_emitted_path_key(path: &Path) -> String {
+        let canonical = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+        Self::normalize_emitted_path_string(&canonical.to_string_lossy())
+    }
+
+    fn normalize_emitted_path_string(path: &str) -> String {
+        path.replace('\\', "/")
     }
 
     fn build_emitted_file_detail(path: &Path, default_kind: Option<&str>) -> Option<Value> {

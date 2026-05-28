@@ -29,6 +29,7 @@ use rayon::prelude::*;
 #[cfg(test)]
 use rom_weaver_chd::ChdCodec;
 use rom_weaver_chd::ChdContainerHandler;
+use rom_weaver_checksum::StreamingChecksum;
 use rom_weaver_codecs::{
     CanonicalCodec, RequestedCodec, decode_deflate_into_buffer, normalize_codec_label,
     parse_requested_codec,
@@ -48,6 +49,7 @@ use rom_weaver_libarchive::{
     list_regular_archive_entries, probe_regular_archive_format,
     visit_selected_regular_archive_entries,
 };
+use serde_json::{Map, Value, json};
 use xdvdfs::{
     blockdev::OffsetWrapper as XdvdfsOffsetWrapper, write::fs::XDVDFSFilesystem as XdvdfsFilesystem,
 };
@@ -688,7 +690,8 @@ fn archive_path_to_name(path: &Path) -> Result<String> {
 
 const LIBARCHIVE_CREATE_IO_BUFFER_BYTES: usize = 128 * 1024;
 const LIBARCHIVE_CREATE_ZSTD_IO_BUFFER_BYTES: usize = 1024 * 1024;
-const LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES: usize = 128 * 1024;
+const LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES: usize = 8 * 1024 * 1024;
+const COPY_WITH_PROGRESS_MAX_BUFFER_BYTES: u64 = 4 * 1024 * 1024;
 
 #[derive(Clone, Copy, Debug)]
 struct LibarchiveCreateConfig {
@@ -1225,7 +1228,9 @@ fn copy_reader_with_progress<R: Read, W: Write>(
     let buffer_size = if total_bytes == 0 {
         64 * 1024
     } else {
-        ((total_bytes / 100).max(16 * 1024).min(1024 * 1024)) as usize
+        ((total_bytes / 100)
+            .max(16 * 1024)
+            .min(COPY_WITH_PROGRESS_MAX_BUFFER_BYTES)) as usize
     };
     let mut buffer = vec![0_u8; buffer_size];
     let mut bytes_written = 0_u64;
@@ -1254,6 +1259,63 @@ fn copy_reader_with_progress<R: Read, W: Write>(
     }
 
     Ok(bytes_written)
+}
+
+#[derive(Clone, Debug)]
+struct ExtractedFileChecksum {
+    path: PathBuf,
+    values: BTreeMap<String, String>,
+}
+
+fn create_extract_checksum(context: &OperationContext) -> Result<Option<StreamingChecksum>> {
+    StreamingChecksum::new_with_context(context.extract_checksum_algorithms(), context)
+}
+
+fn attach_extract_checksum_details(
+    mut report: OperationReport,
+    checksums: Vec<ExtractedFileChecksum>,
+) -> OperationReport {
+    if checksums.is_empty() || report.status != OperationStatus::Succeeded {
+        return report;
+    }
+
+    let mut details = match report.details.take() {
+        Some(Value::Object(map)) => map,
+        _ => Map::new(),
+    };
+    let emitted = checksums
+        .into_iter()
+        .filter_map(|entry| build_extract_checksum_emitted_file_detail(&entry.path, entry.values))
+        .collect::<Vec<_>>();
+    if !emitted.is_empty() {
+        details.insert("emitted_files".to_string(), Value::Array(emitted));
+    }
+    report.details = Some(Value::Object(details));
+    report
+}
+
+fn build_extract_checksum_emitted_file_detail(
+    path: &Path,
+    checksums: BTreeMap<String, String>,
+) -> Option<Value> {
+    if checksums.is_empty() {
+        return None;
+    }
+    let metadata = fs::metadata(path).ok()?;
+    if !metadata.is_file() {
+        return None;
+    }
+    let canonical = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let file_name = canonical.file_name()?.to_string_lossy().into_owned();
+    let mut entry = Map::new();
+    entry.insert(
+        "path".to_string(),
+        json!(canonical.to_string_lossy().replace('\\', "/")),
+    );
+    entry.insert("file_name".to_string(), json!(file_name));
+    entry.insert("size_bytes".to_string(), json!(metadata.len()));
+    entry.insert("checksums".to_string(), json!(checksums));
+    Some(Value::Object(entry))
 }
 
 #[derive(Clone, Debug)]
@@ -1288,6 +1350,8 @@ enum LibarchiveExtractOutput {
 
 struct LibarchiveOpenExtractOutput {
     archive_name: String,
+    checksum: Option<StreamingChecksum>,
+    output_path: PathBuf,
     writer: BufWriter<File>,
 }
 
@@ -1380,15 +1444,16 @@ fn extract_libarchive_task_chunk<F, G>(
     source: &Path,
     chunk: &[LibarchiveExtractTask],
     format_name: &str,
+    context: &OperationContext,
     mut on_bytes_written: F,
     mut on_task_complete: G,
-) -> Result<u64>
+) -> Result<(u64, Vec<ExtractedFileChecksum>)>
 where
     F: FnMut(u64),
     G: FnMut(),
 {
     if chunk.is_empty() {
-        return Ok(0);
+        return Ok((0, Vec::new()));
     }
 
     let mut tasks_by_index = BTreeMap::new();
@@ -1397,6 +1462,7 @@ where
     }
     let selected_indices = tasks_by_index.keys().copied().collect::<BTreeSet<_>>();
     let mut written_bytes = 0u64;
+    let mut output_checksums = Vec::new();
     let matched_tasks = visit_selected_regular_archive_entries(
         source,
         format_name,
@@ -1426,30 +1492,65 @@ where
                             fs::create_dir_all(parent)?;
                         }
                         let mut output = BufWriter::new(File::create(&task.output_path)?);
+                        let mut checksum = create_extract_checksum(context)?;
                         let mut copied = 0u64;
-                        let mut buffer = vec![0u8; LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES];
-                        loop {
-                            let read = reader.read(&mut buffer).map_err(|error| {
-                                RomWeaverError::Validation(format!(
-                                    "{format_name} extract failed while reading entry {} (`{}`): {error}",
-                                    task.index, task.archive_name
-                                ))
-                            })?;
-                            if read == 0 {
-                                break;
+                        if checksum.is_some() {
+                            loop {
+                                let mut buffer = vec![0u8; LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES];
+                                let read = reader.read(&mut buffer).map_err(|error| {
+                                    RomWeaverError::Validation(format!(
+                                        "{format_name} extract failed while reading entry {} (`{}`): {error}",
+                                        task.index, task.archive_name
+                                    ))
+                                })?;
+                                if read == 0 {
+                                    break;
+                                }
+                                output.write_all(&buffer[..read]).map_err(|error| {
+                                    RomWeaverError::Validation(format!(
+                                        "{format_name} extract failed while writing entry {} (`{}`): {error}",
+                                        task.index, task.archive_name
+                                    ))
+                                })?;
+                                buffer.truncate(read);
+                                if let Some(checksum) = checksum.as_mut() {
+                                    checksum.update_owned(buffer)?;
+                                }
+                                let read_u64 = read as u64;
+                                copied = copied.saturating_add(read_u64);
+                                on_bytes_written(read_u64);
                             }
-                            output.write_all(&buffer[..read]).map_err(|error| {
-                                RomWeaverError::Validation(format!(
-                                    "{format_name} extract failed while writing entry {} (`{}`): {error}",
-                                    task.index, task.archive_name
-                                ))
-                            })?;
-                            let read_u64 = read as u64;
-                            copied = copied.saturating_add(read_u64);
-                            on_bytes_written(read_u64);
+                        } else {
+                            let mut buffer = vec![0u8; LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES];
+                            loop {
+                                let read = reader.read(&mut buffer).map_err(|error| {
+                                    RomWeaverError::Validation(format!(
+                                        "{format_name} extract failed while reading entry {} (`{}`): {error}",
+                                        task.index, task.archive_name
+                                    ))
+                                })?;
+                                if read == 0 {
+                                    break;
+                                }
+                                output.write_all(&buffer[..read]).map_err(|error| {
+                                    RomWeaverError::Validation(format!(
+                                        "{format_name} extract failed while writing entry {} (`{}`): {error}",
+                                        task.index, task.archive_name
+                                    ))
+                                })?;
+                                let read_u64 = read as u64;
+                                copied = copied.saturating_add(read_u64);
+                                on_bytes_written(read_u64);
+                            }
                         }
                         output.flush()?;
                         written_bytes = written_bytes.saturating_add(copied);
+                        if let Some(checksum) = checksum {
+                            output_checksums.push(ExtractedFileChecksum {
+                                path: task.output_path.clone(),
+                                values: checksum.finalize()?,
+                            });
+                        }
                     }
                 }
             }
@@ -1464,7 +1565,7 @@ where
         )));
     }
 
-    Ok(written_bytes)
+    Ok((written_bytes, output_checksums))
 }
 
 fn send_libarchive_extract_output(
@@ -1624,15 +1725,17 @@ fn extract_regular_archive_with_libarchive(
         duplicate_output_paths |= !output_paths.insert(task.output_path.clone());
     }
 
-    let (execution, written_bytes) = if tasks.is_empty() || duplicate_output_paths {
+    let (execution, written_bytes, output_checksums) = if tasks.is_empty() || duplicate_output_paths
+    {
         let execution = context.plan_threads(ThreadCapability::single_threaded());
         let emitted_progress_bucket = AtomicU8::new(0);
         let mut copied_bytes = 0u64;
         let mut completed = 0usize;
-        let written = extract_libarchive_task_chunk(
+        let (written, output_checksums) = extract_libarchive_task_chunk(
             &request.source,
             &tasks,
             format_name,
+            context,
             |delta| {
                 if let Some(total_bytes) = total_file_bytes {
                     copied_bytes = copied_bytes.saturating_add(delta).min(total_bytes);
@@ -1665,7 +1768,7 @@ fn extract_regular_archive_with_libarchive(
                 }
             },
         )?;
-        (execution, written)
+        (execution, written, output_checksums)
     } else {
         let file_task_count = tasks.iter().filter(|task| !task.is_dir).count().max(1);
         let capability = ThreadCapability::parallel(Some(file_task_count));
@@ -1674,6 +1777,7 @@ fn extract_regular_archive_with_libarchive(
         let progress_context = context.clone();
         let progress_execution = execution.clone();
 
+        let mut output_checksums = Vec::new();
         let written_bytes = if execution.used_parallelism {
             let worker_count = execution.effective_threads.max(1);
             let chunk_size = tasks.len().div_ceil(worker_count).max(1);
@@ -1755,6 +1859,8 @@ fn extract_regular_archive_with_libarchive(
                                     index,
                                     LibarchiveOpenExtractOutput {
                                         archive_name,
+                                        checksum: create_extract_checksum(context)?,
+                                        output_path,
                                         writer,
                                     },
                                 );
@@ -1777,6 +1883,9 @@ fn extract_regular_archive_with_libarchive(
                                 ))
                             })?;
                             let delta = bytes.len() as u64;
+                            if let Some(checksum) = output.checksum.as_mut() {
+                                checksum.update_owned(bytes)?;
+                            }
                             written_bytes = written_bytes.saturating_add(delta);
                             if let Some(total_bytes) = total_file_bytes {
                                 copied_bytes = copied_bytes.saturating_add(delta).min(total_bytes);
@@ -1809,6 +1918,12 @@ fn extract_regular_archive_with_libarchive(
                                     output.archive_name
                                 ))
                             })?;
+                            if let Some(checksum) = output.checksum {
+                                output_checksums.push(ExtractedFileChecksum {
+                                    path: output.output_path,
+                                    values: checksum.finalize()?,
+                                });
+                            }
                             if total_file_bytes.is_none() {
                                 completed = completed.saturating_add(1);
                                 emit_container_step_progress(
@@ -1855,10 +1970,11 @@ fn extract_regular_archive_with_libarchive(
             let emitted_progress_bucket = AtomicU8::new(0);
             let mut copied_bytes = 0u64;
             let mut completed = 0usize;
-            extract_libarchive_task_chunk(
+            let (written_bytes, checksums) = extract_libarchive_task_chunk(
                 &source,
                 &tasks,
                 format_name,
+                context,
                 |delta| {
                     if let Some(total_bytes) = total_file_bytes {
                         copied_bytes = copied_bytes.saturating_add(delta).min(total_bytes);
@@ -1890,12 +2006,14 @@ fn extract_regular_archive_with_libarchive(
                         );
                     }
                 },
-            )?
+            )?;
+            output_checksums = checksums;
+            written_bytes
         };
-        (execution, written_bytes)
+        (execution, written_bytes, output_checksums)
     };
 
-    Ok(OperationReport::succeeded(
+    let report = OperationReport::succeeded(
         OperationFamily::Container,
         Some(format_name.to_string()),
         "extract",
@@ -1908,7 +2026,8 @@ fn extract_regular_archive_with_libarchive(
         ),
         Some(100.0),
         Some(execution),
-    ))
+    );
+    Ok(attach_extract_checksum_details(report, output_checksums))
 }
 
 fn write_decoded_chunks_from_workers<TTask, TChunk, Decode, WriteChunk>(

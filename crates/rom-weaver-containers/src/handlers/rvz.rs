@@ -1,5 +1,6 @@
 /* jscpd:ignore-start */
 const RVZ_NOD_CORE: NodHandlerCore = NodHandlerCore::new(&RVZ, NodFormat::Rvz);
+const RVZ_EXTRACT_MAX_BUFFER_BYTES: u64 = 4 * 1024 * 1024;
 
 struct RvzContainerHandler;
 
@@ -35,16 +36,18 @@ impl RvzContainerHandler {
         total_bytes: u64,
         context: &OperationContext,
         execution: &ThreadExecution,
-    ) -> Result<u64> {
+    ) -> Result<(u64, Option<BTreeMap<String, String>>)> {
         let buffer_size = if total_bytes == 0 {
             64 * 1024
         } else {
-            ((total_bytes / 100).max(16 * 1024).min(1024 * 1024)) as usize
+            ((total_bytes / 100)
+                .max(16 * 1024)
+                .min(RVZ_EXTRACT_MAX_BUFFER_BYTES)) as usize
         };
 
-        let mut buffer = vec![0_u8; buffer_size];
         let mut bytes_written = 0_u64;
         let mut last_emitted_percent = -1.0_f32;
+        let mut checksum = create_extract_checksum(context)?;
 
         emit_container_running_progress(
             context,
@@ -56,35 +59,76 @@ impl RvzContainerHandler {
             Some(execution),
         );
 
-        loop {
-            let bytes_read = reader.read(&mut buffer)?;
-            if bytes_read == 0 {
-                break;
-            }
-            writer.write_all(&buffer[..bytes_read])?;
-            bytes_written = bytes_written.saturating_add(bytes_read as u64);
+        if checksum.is_some() {
+            loop {
+                let mut buffer = vec![0_u8; buffer_size];
+                let bytes_read = reader.read(&mut buffer)?;
+                if bytes_read == 0 {
+                    break;
+                }
+                writer.write_all(&buffer[..bytes_read])?;
+                if let Some(checksum) = checksum.as_mut() {
+                    buffer.truncate(bytes_read);
+                    checksum.update_owned(buffer)?;
+                }
+                bytes_written = bytes_written.saturating_add(bytes_read as u64);
 
-            if total_bytes == 0 {
-                continue;
-            }
+                if total_bytes == 0 {
+                    continue;
+                }
 
-            let percent = ((bytes_written.min(total_bytes) as f32 / total_bytes as f32) * 100.0)
-                .clamp(0.0, 100.0);
-            if percent < 100.0 && percent - last_emitted_percent >= 1.0 {
-                last_emitted_percent = percent;
-                emit_container_running_progress(
-                    context,
-                    "extract",
-                    RVZ.name,
-                    "extract",
-                    format!("extracting rvz ({percent:.0}%)"),
-                    percent,
-                    Some(execution),
-                );
+                let percent =
+                    ((bytes_written.min(total_bytes) as f32 / total_bytes as f32) * 100.0)
+                        .clamp(0.0, 100.0);
+                if percent < 100.0 && percent - last_emitted_percent >= 1.0 {
+                    last_emitted_percent = percent;
+                    emit_container_running_progress(
+                        context,
+                        "extract",
+                        RVZ.name,
+                        "extract",
+                        format!("extracting rvz ({percent:.0}%)"),
+                        percent,
+                        Some(execution),
+                    );
+                }
+            }
+        } else {
+            let mut buffer = vec![0_u8; buffer_size];
+            loop {
+                let bytes_read = reader.read(&mut buffer)?;
+                if bytes_read == 0 {
+                    break;
+                }
+                writer.write_all(&buffer[..bytes_read])?;
+                bytes_written = bytes_written.saturating_add(bytes_read as u64);
+
+                if total_bytes == 0 {
+                    continue;
+                }
+
+                let percent =
+                    ((bytes_written.min(total_bytes) as f32 / total_bytes as f32) * 100.0)
+                        .clamp(0.0, 100.0);
+                if percent < 100.0 && percent - last_emitted_percent >= 1.0 {
+                    last_emitted_percent = percent;
+                    emit_container_running_progress(
+                        context,
+                        "extract",
+                        RVZ.name,
+                        "extract",
+                        format!("extracting rvz ({percent:.0}%)"),
+                        percent,
+                        Some(execution),
+                    );
+                }
             }
         }
 
-        Ok(bytes_written)
+        Ok(match checksum {
+            Some(checksum) => (bytes_written, Some(checksum.finalize()?)),
+            None => (bytes_written, None),
+        })
     }
 
     fn resolve_create_compression(
@@ -171,7 +215,7 @@ impl ContainerHandler for RvzContainerHandler {
                 self.open_disc_with_threads(source, preloader_threads)
             })?;
         let mut output = BufWriter::new(self.create_extract_output(&plan.output_path)?);
-        let bytes_written = self.copy_extract_with_progress(
+        let (bytes_written, checksums) = self.copy_extract_with_progress(
             &mut plan.disc,
             &mut output,
             plan.disc_size,
@@ -180,14 +224,24 @@ impl ContainerHandler for RvzContainerHandler {
         )?;
         output.flush()?;
 
-        Ok(RVZ_NOD_CORE.extracted_report(
+        let report = RVZ_NOD_CORE.extracted_report(
             &request.source,
             &plan.output_path,
             bytes_written,
             plan.disc_size,
             &plan.compression_label,
             plan.execution,
-        ))
+        );
+        Ok(match checksums {
+            Some(values) => attach_extract_checksum_details(
+                report,
+                vec![ExtractedFileChecksum {
+                    path: plan.output_path,
+                    values,
+                }],
+            ),
+            None => report,
+        })
     }
 
     fn create(
