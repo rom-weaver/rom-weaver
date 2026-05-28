@@ -10,12 +10,14 @@ use std::{
     sync::{
         Arc,
         atomic::{AtomicU8, AtomicU64, Ordering},
+        mpsc,
     },
 };
 
 use flacenc::{component::BitRepr as _, error::Verify as _};
 use flate2::{Compression as GzipCompression, write::DeflateEncoder};
 use rayon::prelude::*;
+use rom_weaver_checksum::StreamingChecksum;
 use rom_weaver_codecs::{CanonicalCodec, RequestedCodec, parse_requested_codec};
 use rom_weaver_core::{
     ContainerCapabilities, ContainerCreateRequest, ContainerExtractRequest, ContainerHandler,
@@ -24,6 +26,7 @@ use rom_weaver_core::{
     ThreadExecution,
 };
 use rom_weaver_libarchive_sys::liblzma_sys as lzma_sys;
+use serde_json::{Map, Value, json};
 use sha1::{Digest, Sha1};
 use zstd::bulk::compress as zstd_compress;
 
@@ -471,6 +474,139 @@ fn normalize_archive_name(name: &str) -> String {
         .trim_start_matches("./")
         .trim_matches('/')
         .to_string()
+}
+
+#[allow(dead_code)]
+fn run_parallel_chunk_ranges<T, F>(
+    pool: &rayon::ThreadPool,
+    item_count: usize,
+    worker_count: usize,
+    worker: &F,
+) -> std::result::Result<Vec<T>, String>
+where
+    T: Send,
+    F: Fn(std::ops::Range<usize>) -> std::result::Result<T, String> + Sync,
+{
+    if item_count == 0 {
+        return Ok(Vec::new());
+    }
+
+    let chunk_size = item_count.div_ceil(worker_count.max(1)).max(1);
+    let ranges = (0..item_count)
+        .step_by(chunk_size)
+        .map(|start| (start, (start + chunk_size).min(item_count)))
+        .collect::<Vec<_>>();
+    let (sender, receiver) = mpsc::channel();
+
+    pool.install(|| {
+        rayon::scope(|scope| {
+            for (order, &(start, end)) in ranges.iter().enumerate() {
+                let sender = sender.clone();
+                scope.spawn(move |_| {
+                    let result = worker(start..end);
+                    let _ = sender.send((order, result));
+                });
+            }
+        });
+    });
+    drop(sender);
+
+    let mut ordered = std::iter::repeat_with(|| None)
+        .take(ranges.len())
+        .collect::<Vec<Option<T>>>();
+    let mut first_error = None;
+    for _ in 0..ranges.len() {
+        let (order, result) = receiver
+            .recv()
+            .map_err(|_| "parallel CHD workers stopped before all chunks completed".to_string())?;
+        match result {
+            Ok(value) => ordered[order] = Some(value),
+            Err(error) => {
+                if first_error.is_none() {
+                    first_error = Some(error);
+                }
+            }
+        }
+    }
+
+    if let Some(error) = first_error {
+        return Err(error);
+    }
+
+    ordered
+        .into_iter()
+        .map(|item| item.ok_or_else(|| "parallel CHD chunk result missing".to_string()))
+        .collect()
+}
+
+#[derive(Clone, Debug)]
+struct ExtractedFileChecksum {
+    path: PathBuf,
+    values: BTreeMap<String, String>,
+}
+
+fn create_extract_checksum(context: &OperationContext) -> Result<Option<StreamingChecksum>> {
+    StreamingChecksum::new_with_context(context.extract_checksum_algorithms(), context)
+}
+
+fn build_extract_checksum_emitted_file_detail(
+    path: &Path,
+    checksums: BTreeMap<String, String>,
+) -> Option<Value> {
+    if checksums.is_empty() {
+        return None;
+    }
+    let metadata = fs::metadata(path).ok()?;
+    if !metadata.is_file() {
+        return None;
+    }
+    let canonical = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+    let file_name = canonical.file_name()?.to_string_lossy().into_owned();
+    let mut entry = Map::new();
+    entry.insert(
+        "path".to_string(),
+        json!(canonical.to_string_lossy().replace('\\', "/")),
+    );
+    entry.insert("file_name".to_string(), json!(file_name));
+    entry.insert("size_bytes".to_string(), json!(metadata.len()));
+    entry.insert("checksums".to_string(), json!(checksums));
+    Some(Value::Object(entry))
+}
+
+fn attach_extract_checksum_details(
+    mut report: OperationReport,
+    checksums: Vec<ExtractedFileChecksum>,
+) -> OperationReport {
+    if checksums.is_empty() || report.status != OperationStatus::Succeeded {
+        return report;
+    }
+    let mut details = match report.details.take() {
+        Some(Value::Object(map)) => map,
+        _ => Map::new(),
+    };
+    let emitted = checksums
+        .into_iter()
+        .filter_map(|entry| build_extract_checksum_emitted_file_detail(&entry.path, entry.values))
+        .collect::<Vec<_>>();
+    if !emitted.is_empty() {
+        details.insert("emitted_files".to_string(), Value::Array(emitted));
+    }
+    report.details = Some(Value::Object(details));
+    report
+}
+
+fn push_finalized_extract_checksum(
+    output_checksums: &mut Vec<ExtractedFileChecksum>,
+    path: PathBuf,
+    checksum: Option<StreamingChecksum>,
+) -> Result<()> {
+    if let Some(checksum) = checksum {
+        output_checksums.push(ExtractedFileChecksum {
+            path,
+            values: checksum.finalize()?,
+        });
+    }
+    Ok(())
 }
 
 mod handler;

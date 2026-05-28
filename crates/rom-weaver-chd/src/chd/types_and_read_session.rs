@@ -545,6 +545,7 @@
                 .map_err(|error| format!("failed to parse `{}`: {error}", source.display()))
         }
 
+        #[allow(dead_code)]
         fn extract_to_file_with_progress(
             &self,
             output_path: &Path,
@@ -777,6 +778,7 @@
             Ok(())
         }
 
+        #[allow(dead_code)]
         fn extract_to_file_with_rust(
             source: &Path,
             parent_source: Option<&Path>,
@@ -861,6 +863,7 @@
         }
 
         #[cfg(all(target_family = "wasm", rom_weaver_wasi_threads))]
+        #[allow(dead_code)]
         fn extract_to_file_with_rust_parallel_portable(
             source: &Path,
             parent_source: Option<&Path>,

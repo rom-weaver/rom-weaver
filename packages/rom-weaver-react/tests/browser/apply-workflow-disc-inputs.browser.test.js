@@ -43,7 +43,7 @@ test("apply workflow resolves RVZ inputs to extracted names during staging", asy
     );
     const checksumIndex = progressEvents.findIndex((event) => event.role === "input" && event.stage === "checksum");
     expect(lastExtractIndex).toBeGreaterThanOrEqual(0);
-    expect(checksumIndex).toBeGreaterThan(lastExtractIndex);
+    expect(checksumIndex).toBe(-1);
   } finally {
     await workflow.dispose();
   }
@@ -51,11 +51,15 @@ test("apply workflow resolves RVZ inputs to extracted names during staging", asy
 
 test("apply workflow resolves CHD inputs to extracted names during staging", async () => {
   const workflow = new ApplyWorkflow();
+  const progressEvents = [];
+  workflow.on("progress", (event) => progressEvents.push(event));
   try {
     await workflow.setInput(await loadFixtureFile("tests/fixtures/browser-generated/game-cd.chd"));
     const input = workflow.getInput();
     expect(input?.fileName).not.toMatch(/\.chd$/i);
     expect(input?.wasDecompressed).toBe(true);
+    const checksumIndex = progressEvents.findIndex((event) => event.role === "input" && event.stage === "checksum");
+    expect(checksumIndex).toBe(-1);
   } finally {
     await workflow.dispose();
   }
@@ -94,11 +98,19 @@ test("CHD staging emits list then extract trace events", async () => {
       .filter((line) => !!line);
     const listIndex = messages.findIndex((message) => message === "input.archive.list.finish");
     const extractIndex = messages.findIndex((message) => message === "input.archive.extract.start");
+    const extractDispatch = logs.find((entry) => String(entry?.message || "") === "runJson extract dispatch");
+    const checksumDispatch = logs.find((entry) => String(entry?.message || "") === "runJson checksum dispatch");
     expect(listIndex).toBeGreaterThanOrEqual(0);
     expect(extractIndex).toBeGreaterThanOrEqual(0);
     expect(extractIndex).toBeGreaterThan(listIndex);
     expect(workerTraceLines.length).toBeGreaterThan(0);
     expect(workerTraceLines.some((line) => line.includes('command="extract"'))).toBe(true);
+    const args = Array.isArray(extractDispatch?.details?.args) ? extractDispatch.details.args.map(String) : [];
+    expect(args.filter((value) => value === "--checksum").length).toBeGreaterThanOrEqual(3);
+    expect(args).toContain("crc32");
+    expect(args).toContain("md5");
+    expect(args).toContain("sha1");
+    expect(checksumDispatch).toBeUndefined();
   } finally {
     await workflow.dispose();
   }
