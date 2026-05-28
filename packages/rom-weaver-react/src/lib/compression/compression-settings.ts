@@ -28,20 +28,13 @@ const getCompressionProfileFromIndex = (
 
 const getCompressionProfileLabel = (profile: string | null | undefined): string => {
   const normalized = compressionManager.normalizeCompressionProfile(profile, "high");
-  return normalized === "min"
-    ? "Min"
-    : (() => {
-        if (normalized === "low") {
-          return "Low";
-        }
-        if (normalized === "medium") {
-          return "Medium";
-        }
-        if (normalized === "high") {
-          return "High";
-        }
-        return "Max";
-      })();
+  if (normalized === "min") return "Min";
+  if (normalized === "very-low") return "Very Low";
+  if (normalized === "low") return "Low";
+  if (normalized === "medium") return "Medium";
+  if (normalized === "high") return "High";
+  if (normalized === "very-high") return "Very High";
+  return "Max";
 };
 
 const getOptionalCompressionLevel = (

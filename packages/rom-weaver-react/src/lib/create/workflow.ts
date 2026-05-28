@@ -155,7 +155,7 @@ const runCreateWorkflow = async (
     patchFile.fileName = patchEntryName;
     const archiveSettings = getCreateContainerSettings(options);
     const compressionSettings = resolveCompressionLevels({
-      compressionProfile: archiveSettings.profile || "max",
+      compressionProfile: archiveSettings.profile || "high",
       sevenZipCodec: archiveSettings.sevenZipCodec,
       sevenZipLevel: archiveSettings.sevenZipLevel,
       zipCodec: archiveSettings.zipCodec,

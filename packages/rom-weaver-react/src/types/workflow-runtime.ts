@@ -129,7 +129,7 @@ type CompressionExtractInput = {
 type SevenZipZstdCompressionOptions = CompressionWorkflowOptions & {
   compression?: "zip" | "7z";
   outputName?: string;
-  compressionProfile?: "min" | "low" | "medium" | "high" | "max";
+  compressionProfile?: "min" | "very-low" | "low" | "medium" | "high" | "very-high" | "max";
   zipCodec?: "deflate" | "store" | "zstd";
   zipLevel?: number | string;
   sevenZipCodec?: "lzma2" | "zstd";

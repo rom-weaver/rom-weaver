@@ -2,7 +2,7 @@ type PatchFormat = "aps" | "bdf" | "bps" | "ebp" | "ips" | "pmsr" | "ppf" | "rup
 
 type CompressionFormat = "7z" | "chd" | "none" | "rvz" | "z3ds" | "zip";
 
-type CompressionProfile = "high" | "low" | "max" | "medium" | "min";
+type CompressionProfile = "high" | "low" | "max" | "medium" | "min" | "very-high" | "very-low";
 
 type ZipCodec = "deflate" | "store" | "zstd";
 

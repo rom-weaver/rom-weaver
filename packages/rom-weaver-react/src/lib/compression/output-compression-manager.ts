@@ -31,7 +31,7 @@ import {
 } from "./disc-format-support.ts";
 
 type OutputCompressionValue = "auto" | "chd" | "rvz" | "z3ds" | "7z" | "zip" | "none";
-type CompressionProfile = "min" | "low" | "medium" | "high" | "max";
+type CompressionProfile = "min" | "very-low" | "low" | "medium" | "high" | "very-high" | "max";
 type ArchiveCodec = "lzma2" | "zstd" | "deflate" | "store";
 type Z3dsUnderlyingMagic = "CIA\u0000" | "NCSD" | "NCCH" | "3DSX";
 type CompressionSourceInput =
@@ -156,21 +156,25 @@ const OutputCompressionManager = (() => {
   const SEVEN_ZIP_COMPRESSION_METHODS = ["lzma2", "zstd"];
   const ZIP_COMPRESSION_METHODS = ["deflate", "store", "zstd"];
   const RVZ_COMPRESSION_METHODS = ["none", "zstd", "bzip2", "lzma", "lzma2"];
-  const COMPRESSION_PROFILES = ["min", "low", "medium", "high", "max"];
+  const COMPRESSION_PROFILES = ["min", "very-low", "low", "medium", "high", "very-high", "max"];
   const COMPRESSION_PROFILE_LEVELS = {
     standard: {
       high: 7,
+      "very-high": 8,
       low: 3,
       max: 9,
       medium: 5,
       min: 0,
+      "very-low": 2,
     },
     zstd: {
       high: 19,
+      "very-high": 21,
       low: 5,
       max: 22,
       medium: 12,
       min: 0,
+      "very-low": 3,
     },
   };
 
