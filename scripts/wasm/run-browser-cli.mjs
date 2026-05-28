@@ -1,6 +1,16 @@
 #!/usr/bin/env node
 
-import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
+import {
+  closeSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  readSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+  mkdirSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -11,6 +21,7 @@ const REPO_ROOT = resolve(SCRIPT_DIR, '..', '..');
 const WASM_PACKAGE_DIR = resolve(REPO_ROOT, 'packages/rom-weaver-wasm');
 const DEFAULT_WASM_MODULE = resolve(WASM_PACKAGE_DIR, 'rom-weaver-cli-threaded.wasm');
 const WORK_GUEST_PATH = '/work';
+const STAGE_INPUT_CHUNK_BYTES = 2 * 1024 * 1024;
 
 const SUPPORTED_COMMANDS = new Set(['compress', 'extract', 'checksum', 'patch-create', 'patch-apply']);
 
@@ -385,6 +396,20 @@ async function bootBrowserHarness({ origin, wasmUrl, benchShellPath }) {
           await writable.write(bytes);
           await writable.close();
         },
+        async writeGuestFileChunk(path, bytes, offset, totalBytes) {
+          const { dir, name } = await getParentDirectoryForPath(path, true);
+          const fileHandle = await dir.getFileHandle(name, { create: true });
+          const writable = await fileHandle.createWritable({ keepExistingData: offset > 0 });
+          await writable.write({
+            type: 'write',
+            position: offset,
+            data: bytes,
+          });
+          if (offset + bytes.length >= totalBytes) {
+            await writable.truncate(totalBytes);
+          }
+          await writable.close();
+        },
         async readGuestFile(path) {
           const { dir, name } = await getParentDirectoryForPath(path, false);
           const fileHandle = await dir.getFileHandle(name, { create: false });
@@ -437,18 +462,34 @@ async function bootBrowserHarness({ origin, wasmUrl, benchShellPath }) {
 
 async function stageInputs(page, inputMappings) {
   for (const mapping of inputMappings) {
-    const bytes = readFileSync(mapping.hostPath);
-    await page.evaluate(
-      async ({ guestPath, bytesValue }) => {
-        const harness = globalThis.__rwBrowserBench;
-        if (!harness) throw new Error('browser benchmark harness is not initialized');
-        await harness.writeGuestFile(guestPath, bytesValue);
-      },
-      {
-        guestPath: mapping.guestPath,
-        bytesValue: new Uint8Array(bytes),
-      },
-    );
+    const totalBytes = statSync(mapping.hostPath).size;
+    const fd = openSync(mapping.hostPath, 'r');
+    try {
+      const buffer = Buffer.allocUnsafe(STAGE_INPUT_CHUNK_BYTES);
+      let offset = 0;
+      while (offset < totalBytes) {
+        const chunkLength = Math.min(buffer.byteLength, totalBytes - offset);
+        const bytesRead = readSync(fd, buffer, 0, chunkLength, offset);
+        if (bytesRead <= 0) break;
+        const bytesValue = new Uint8Array(buffer.buffer, buffer.byteOffset, bytesRead);
+        await page.evaluate(
+          async ({ guestPath, offsetValue, totalValue, chunk }) => {
+            const harness = globalThis.__rwBrowserBench;
+            if (!harness) throw new Error('browser benchmark harness is not initialized');
+            await harness.writeGuestFileChunk(guestPath, chunk, offsetValue, totalValue);
+          },
+          {
+            guestPath: mapping.guestPath,
+            offsetValue: offset,
+            totalValue: totalBytes,
+            chunk: bytesValue,
+          },
+        );
+        offset += bytesRead;
+      }
+    } finally {
+      closeSync(fd);
+    }
   }
 }
 
