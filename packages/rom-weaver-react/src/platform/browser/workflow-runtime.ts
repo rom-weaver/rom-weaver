@@ -174,6 +174,15 @@ const normalizeDiscListEntries = <TEntry extends { fileName?: string; filename?:
   });
 };
 
+const normalizeDiscEntryNameForSource = (entryName: string, stagedFileName: string, sourceFileName: string): string => {
+  const normalized = normalizeDiscListEntries(
+    [{ fileName: entryName, filename: entryName, name: entryName }],
+    stagedFileName,
+    sourceFileName,
+  )[0];
+  return String(normalized?.fileName || entryName || "");
+};
+
 const annotateChdListEntries = <
   TEntry extends {
     archiveEntryType?: string;
@@ -920,6 +929,7 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
     });
     try {
       const outDirPath = getPathDirectory(workerSource.filePath);
+      const stagedSourceFileName = getPathDerivedFileName(workerSource.filePath, workerSource.fileName || fileName);
       const actualOutputFileName =
         mode === "cd" ? "" : getChdExtractedFileName({ _chdMode: mode || undefined, fileName });
       const stagedOutputFileName =
@@ -927,7 +937,7 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
           ? ""
           : getChdExtractedFileName({
               _chdMode: mode || undefined,
-              fileName: getPathDerivedFileName(workerSource.filePath, workerSource.fileName || fileName),
+              fileName: stagedSourceFileName,
             });
       const directOutputFileName = outputName || actualOutputFileName;
       const directOutputPath = stagedOutputFileName ? joinPath(outDirPath, stagedOutputFileName) : "";
@@ -976,20 +986,26 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
         primaryFile: ReturnType<typeof selectChdOutputs>["primaryFile"],
       ) => {
         if (!(primaryFile || directOutputPath)) throw new Error("CHD extraction did not emit any output files");
+        const normalizedCueFileName = cueFile
+          ? normalizeDiscEntryNameForSource(cueFile.fileName, stagedSourceFileName, fileName)
+          : undefined;
+        const normalizedPrimaryFileName = primaryFile
+          ? normalizeDiscEntryNameForSource(primaryFile.fileName, stagedSourceFileName, fileName)
+          : undefined;
         const cueText = cueFile ? await readTextFromBrowserVfs(cueFile.path).catch(() => "") : undefined;
         return attachDiscOutputMetadata(
           await workerIo.createWorkerOutput(
             {
               checksums: primaryFile?.checksums,
-              fileName: outputName || primaryFile?.fileName || directOutputFileName,
+              fileName: outputName || normalizedPrimaryFileName || primaryFile?.fileName || directOutputFileName,
               filePath: primaryFile?.path || directOutputPath,
               size: primaryFile?.sizeBytes,
             },
-            outputName || directOutputFileName || fileName,
+            outputName || normalizedPrimaryFileName || directOutputFileName || fileName,
             "CHD extraction worker did not return browser output",
           ),
           {
-            chdCueFileName: cueFile?.fileName,
+            chdCueFileName: normalizedCueFileName || cueFile?.fileName,
             chdCueText: cueText,
           },
         );
@@ -1186,7 +1202,13 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
         onProgress ? forwardDiscProgress(onProgress) : undefined,
         onLog,
       );
-      return annotateChdListEntries(normalizeDiscListEntries(result.entries, workerSource.fileName, fileName));
+      return annotateChdListEntries(
+        normalizeDiscListEntries(
+          result.entries,
+          getPathDerivedFileName(workerSource.filePath, workerSource.fileName || fileName),
+          fileName,
+        ),
+      );
     } finally {
       await workerSource.cleanup().catch(() => undefined);
     }

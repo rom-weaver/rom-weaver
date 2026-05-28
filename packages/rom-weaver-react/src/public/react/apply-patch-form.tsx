@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { getBaseFileName } from "../../lib/input/path-utils.ts";
 import { createTiming, formatTiming } from "../../lib/progress/timing.ts";
 import { ApplyWorkflow, type BrowserApplyResult, type WorkflowProgress } from "../../platform/browser/browser-api.ts";
 import { getErrorCode } from "../../presentation/errors.ts";
@@ -115,7 +116,13 @@ const toPatchStageInfo = (
   targetLabel: string,
 ) => {
   if (!patch) return null;
-  const fileName = patch.fileName || originalName;
+  const selectedCandidatePath =
+    patch.selectedCandidateId &&
+    patch.candidates.find(
+      (candidate): candidate is Extract<(typeof patch.candidates)[number], { type: "file" }> =>
+        candidate.type === "file" && candidate.id === patch.selectedCandidateId && !!candidate.fileName,
+    )?.fileName;
+  const fileName = selectedCandidatePath || patch.fileName || originalName;
   let archiveName = "-";
   if (patch.parentCompressions?.length) {
     archiveName = [...patch.parentCompressions]
@@ -259,6 +266,23 @@ const summarizeApplyWorkflowSource = (source: BinarySource, fallback: string) =>
 const summarizeApplyWorkflowSources = (sources: BinarySource[], fallbackPrefix: string) =>
   sources.map((source, index) => summarizeApplyWorkflowSource(source, `${fallbackPrefix} ${index + 1}`));
 
+const getSelectedFileCandidatePath = (
+  candidates: ApplyWorkflowInputState["candidates"],
+  selectedCandidateId: string | undefined,
+) =>
+  selectedCandidateId
+    ? candidates.find(
+        (candidate): candidate is Extract<ApplyWorkflowInputState["candidates"][number], { type: "file" }> =>
+          candidate.type === "file" && candidate.id === selectedCandidateId && !!candidate.fileName,
+      )?.fileName || ""
+    : "";
+
+const shouldPreferSelectedCandidatePath = (selectedCandidatePath: string, resolvedFileName: string | undefined) => {
+  if (!selectedCandidatePath) return false;
+  if (!resolvedFileName) return true;
+  return getBaseFileName(selectedCandidatePath).toLowerCase() === getBaseFileName(resolvedFileName).toLowerCase();
+};
+
 const getResolvedInputArchiveName = (
   resolved: NonNullable<ApplyWorkflowInputState["resolvedInputs"]>[number],
   input: ApplyWorkflowInputState,
@@ -274,7 +298,11 @@ const getResolvedInputArchiveName = (
   }
 
   const originalName = getReactBinarySourceFileName(originals[resolved.order ?? index], "");
-  const resolvedName = resolved.fileName || input.fileName;
+  const selectedCandidatePath = getSelectedFileCandidatePath(input.candidates, resolved.selectedCandidateId);
+  const resolvedFileName = resolved.fileName || input.fileName;
+  const resolvedName = shouldPreferSelectedCandidatePath(selectedCandidatePath, resolvedFileName)
+    ? selectedCandidatePath
+    : resolvedFileName;
   return originalName && resolvedName && originalName !== resolvedName ? originalName : "-";
 };
 
@@ -283,40 +311,45 @@ const formatElapsedMs = (elapsedMs: number | undefined) =>
 
 const toStagedInputInfos = (input: ApplyWorkflowInputState | null, originals: BinarySource[]) => {
   if (!input) return [];
-  const resolvedInputs = input.resolvedInputs?.length
-    ? input.resolvedInputs
-    : [
-        {
-          checksums: input.checksums,
-          checksumTimeMs: input.checksumTimeMs,
-          decompressionTimeMs: input.decompressionTimeMs,
-          fileName: input.fileName,
-          id: input.id,
-          order: 0,
-          parentCompressions: input.parentCompressions,
-          selected: true,
-          size: input.size,
-          sourceSize: input.sourceSize,
-          wasDecompressed: input.wasDecompressed,
-        },
-      ];
-  return resolvedInputs.map((resolved, index) => ({
-    archiveName: getResolvedInputArchiveName(resolved, input, originals, index),
-    checksums: resolved.checksums || undefined,
-    checksumTiming: formatElapsedMs(resolved.checksumTimeMs ?? input.checksumTimeMs),
-    decompressionTimeMs: resolved.decompressionTimeMs,
-    fileName:
+  const fallbackResolvedInput: NonNullable<ApplyWorkflowInputState["resolvedInputs"]>[number] = {
+    checksums: input.checksums,
+    checksumTimeMs: input.checksumTimeMs,
+    decompressionTimeMs: input.decompressionTimeMs,
+    fileName: input.fileName,
+    id: input.id,
+    order: 0,
+    parentCompressions: input.parentCompressions,
+    selected: true,
+    selectedCandidateId: input.selectedCandidateId,
+    size: input.size,
+    sourceSize: input.sourceSize,
+    wasDecompressed: input.wasDecompressed,
+  };
+  const resolvedInputs = input.resolvedInputs?.length ? input.resolvedInputs : [fallbackResolvedInput];
+  return resolvedInputs.map((resolved, index) => {
+    const selectedCandidatePath = getSelectedFileCandidatePath(input.candidates, resolved.selectedCandidateId);
+    const resolvedFileName =
       resolved.fileName ||
       input.fileName ||
-      getReactBinarySourceFileName(originals[resolved.order ?? index], `Input ${index + 1}`),
-    groupId: resolved.groupId,
-    id: resolved.id,
-    order: resolved.order ?? index,
-    parentCompressions: resolved.parentCompressions,
-    size: resolved.size,
-    sourceSize: resolved.sourceSize,
-    wasDecompressed: resolved.wasDecompressed,
-  }));
+      getReactBinarySourceFileName(originals[resolved.order ?? index], `Input ${index + 1}`);
+    const stagedFileName = shouldPreferSelectedCandidatePath(selectedCandidatePath, resolvedFileName)
+      ? selectedCandidatePath
+      : resolvedFileName;
+    return {
+      archiveName: getResolvedInputArchiveName(resolved, input, originals, index),
+      checksums: resolved.checksums || undefined,
+      checksumTiming: formatElapsedMs(resolved.checksumTimeMs ?? input.checksumTimeMs),
+      decompressionTimeMs: resolved.decompressionTimeMs,
+      fileName: stagedFileName,
+      groupId: resolved.groupId,
+      id: resolved.id,
+      order: resolved.order ?? index,
+      parentCompressions: resolved.parentCompressions,
+      size: resolved.size,
+      sourceSize: resolved.sourceSize,
+      wasDecompressed: resolved.wasDecompressed,
+    };
+  });
 };
 
 function ApplyPatchForm(props: ApplyPatchFormProps) {

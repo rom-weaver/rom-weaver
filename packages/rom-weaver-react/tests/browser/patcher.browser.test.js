@@ -362,6 +362,21 @@ test("clearing ROM input releases extracted OPFS files", async () => {
   await expect.poll(async () => (await listOpfsExtractedInputFiles()).length, { timeout: 30000 }).toBe(0);
 });
 
+test("input stack shows resolved extracted disc filename after staging", async () => {
+  mount(createElement(ApplyPatchForm));
+
+  await expect.poll(() => document.getElementById("rom-weaver-input-file-rom")).not.toBeNull();
+
+  selectFileInput(document.getElementById("rom-weaver-input-file-rom"), await loadFixtureFile(RVZ_INPUT));
+  const rvzDisplayedName = await waitForInputStackFileName();
+  expect(rvzDisplayedName).toContain("game.iso");
+
+  selectFileInput(document.getElementById("rom-weaver-input-file-rom"), await loadFixtureFile(CHD_INPUT));
+  const chdDisplayedName = await waitForInputStackFileName();
+  expect(chdDisplayedName).not.toMatch(/\.chd$/i);
+  expect(chdDisplayedName).toMatch(/\.(bin|iso)\b/i);
+});
+
 test("patch row shows extraction progress and extracted patch naming", async () => {
   mount(createElement(ApplyPatchForm));
 
