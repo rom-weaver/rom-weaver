@@ -14,7 +14,7 @@ use rayon::prelude::*;
 use rom_weaver_core::{
     BoundedIoPolicy, ChunkPlanner, CodecBackend, CodecCapabilities, CodecDescriptor,
     CodecOperationRequest, FileChunk, FormatDescriptor, OperationContext, OperationFamily,
-    OperationReport, OrderedChunkWriter, Result, RomWeaverError, ThreadCapability,
+    OperationReport, OrderedChunkWriter, Result, RomWeaverError, SharedThreadPool, ThreadCapability,
     ThreadExecution,
 };
 use rom_weaver_libarchive::{

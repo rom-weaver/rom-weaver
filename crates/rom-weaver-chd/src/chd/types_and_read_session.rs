@@ -1065,15 +1065,7 @@
 
             #[cfg(not(all(target_family = "wasm", rom_weaver_wasi_threads)))]
             let result = {
-                let pool = rayon::ThreadPoolBuilder::new()
-                    .num_threads(effective_threads)
-                    .build()
-                    .map_err(|error| {
-                        format!(
-                            "failed to build CHD rust stream pool (threads={}): {error}",
-                            effective_threads
-                        )
-                    })?;
+                let pool = build_chd_thread_pool("stream", effective_threads)?;
                 let hunk_indices: Vec<u32> = (0..hunk_count).collect();
                 let hunk_bytes_usize = usize::try_from(hunk_bytes)
                     .ok()
@@ -1378,15 +1370,7 @@
                 );
             }
 
-            let pool = rayon::ThreadPoolBuilder::new()
-                .num_threads(effective_threads)
-                .build()
-                .map_err(|error| {
-                    format!(
-                        "failed to build CHD rust extraction pool (threads={}): {error}",
-                        effective_threads
-                    )
-                })?;
+            let pool = build_chd_thread_pool("extraction", effective_threads)?;
 
             let source = source.to_path_buf();
             let parent_source = parent_source.map(Path::to_path_buf);

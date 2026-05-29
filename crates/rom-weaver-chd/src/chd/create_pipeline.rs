@@ -425,17 +425,7 @@
 
             let effective_threads = thread_count.max(1).min(hunk_count_usize.max(1));
             let pool = if effective_threads > 1 {
-                Some(
-                    rayon::ThreadPoolBuilder::new()
-                        .num_threads(effective_threads)
-                        .build()
-                        .map_err(|error| {
-                            RomWeaverError::Validation(format!(
-                                "failed to build CHD rust create pool (threads={}): {error}",
-                                effective_threads
-                            ))
-                        })?,
-                )
+                Some(build_chd_thread_pool_result("create", effective_threads)?)
             } else {
                 None
             };

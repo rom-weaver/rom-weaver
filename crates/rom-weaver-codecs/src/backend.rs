@@ -229,34 +229,29 @@ impl NativeCodecBackend {
                     "store codec payload too small for threaded copy ({input_len} bytes)"
                 ));
             } else {
-                match rayon::ThreadPoolBuilder::new()
-                    .num_threads(execution.effective_threads.max(1))
-                    .build()
-                {
-                    Ok(pool) => {
-                        let mut source = BufReader::new(File::open(&request.input)?);
-                        let output =
-                            BufWriter::new(NonVectoredWriter::new(File::create(&request.output)?));
-                        let mut ordered =
-                            OrderedChunkWriter::new(output, policy.max_reorder_items.max(1))?;
-                        for batch in chunks.chunks(policy.max_in_flight_items.max(1)) {
-                            let batch_bytes = Self::read_chunk_batch(&mut source, batch)?;
-                            let copied_batch = pool.install(|| {
-                                batch_bytes
-                                    .into_par_iter()
-                                    .map(|(chunk_index, chunk)| Ok((chunk_index, chunk)))
-                                    .collect::<Result<Vec<_>>>()
-                            })?;
-                            for (chunk_index, chunk) in copied_batch {
-                                ordered.write_chunk(chunk_index, chunk)?;
-                            }
+                let (pool_execution, pool) =
+                    SharedThreadPool::with_execution_fallback(execution.clone())?;
+                *execution = pool_execution;
+                if execution.used_parallelism {
+                    let mut source = BufReader::new(File::open(&request.input)?);
+                    let output =
+                        BufWriter::new(NonVectoredWriter::new(File::create(&request.output)?));
+                    let mut ordered =
+                        OrderedChunkWriter::new(output, policy.max_reorder_items.max(1))?;
+                    for batch in chunks.chunks(policy.max_in_flight_items.max(1)) {
+                        let batch_bytes = Self::read_chunk_batch(&mut source, batch)?;
+                        let copied_batch = pool.install(|| {
+                            batch_bytes
+                                .into_par_iter()
+                                .map(|(chunk_index, chunk)| Ok((chunk_index, chunk)))
+                                .collect::<Result<Vec<_>>>()
+                        })?;
+                        for (chunk_index, chunk) in copied_batch {
+                            ordered.write_chunk(chunk_index, chunk)?;
                         }
-                        let _ = ordered.finish()?;
-                        return Ok(input_len_u64);
                     }
-                    Err(error) => execution.apply_pool_fallback(format!(
-                        "store codec thread pool build failed: {error}"
-                    )),
+                    let _ = ordered.finish()?;
+                    return Ok(input_len_u64);
                 }
             }
         }

@@ -23,8 +23,8 @@ use rom_weaver_codecs::{CanonicalCodec, RequestedCodec, parse_requested_codec};
 use rom_weaver_core::{
     ContainerCapabilities, ContainerCreateRequest, ContainerExtractRequest, ContainerHandler,
     ContainerInspectRequest, FormatDescriptor, OperationContext, OperationFamily, OperationReport,
-    OperationStatus, ProbeConfidence, ProgressEvent, Result, RomWeaverError, ThreadCapability,
-    ThreadExecution,
+    OperationStatus, ProbeConfidence, ProgressEvent, Result, RomWeaverError, SharedThreadPool,
+    ThreadCapability, ThreadExecution,
 };
 use rom_weaver_libarchive_sys::liblzma_sys as lzma_sys;
 use serde_json::{Map, Value, json};
@@ -497,7 +497,7 @@ fn normalize_archive_name(name: &str) -> String {
 
 #[allow(dead_code)]
 fn run_parallel_chunk_ranges<T, F>(
-    pool: &rayon::ThreadPool,
+    pool: &SharedThreadPool,
     item_count: usize,
     worker_count: usize,
     worker: &F,
@@ -566,6 +566,23 @@ struct ExtractedFileChecksum {
 
 fn create_extract_checksum(context: &OperationContext) -> Result<Option<StreamingChecksum>> {
     StreamingChecksum::new_with_context(context.extract_checksum_algorithms(), context)
+}
+
+fn build_chd_thread_pool(
+    label: &str,
+    threads: usize,
+) -> std::result::Result<SharedThreadPool, String> {
+    SharedThreadPool::with_size(threads).map_err(|error| {
+        let reason = match error {
+            RomWeaverError::ThreadPoolBuild(reason) => reason,
+            other => other.to_string(),
+        };
+        format!("failed to build CHD rust {label} pool (threads={threads}): {reason}")
+    })
+}
+
+fn build_chd_thread_pool_result(label: &str, threads: usize) -> Result<SharedThreadPool> {
+    build_chd_thread_pool(label, threads).map_err(RomWeaverError::Validation)
 }
 
 fn build_extract_checksum_emitted_file_detail(
