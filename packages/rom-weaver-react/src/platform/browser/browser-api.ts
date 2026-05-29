@@ -10,6 +10,7 @@ import type { BrowserSourceRef } from "../../types/source.ts";
 import type { WorkflowOptions } from "../../types/workflow-public.ts";
 import { createPublicSourcesValidator, createPublicSourceValidator } from "../shared/public-source-validation.ts";
 import { configureBrowserAssetBaseUrl } from "./browser-asset-base.ts";
+import { scheduleBrowserRuntimeWarmupExtraction } from "./browser-runtime-warmup.ts";
 import { browserRuntime } from "./workflow-runtime.ts";
 
 const assertPublicSources = createPublicSourcesValidator<BrowserSourceRef>(
@@ -36,6 +37,12 @@ const preloadBrowserRuntime = (options: BrowserRuntimePreloadOptions = {}) => {
     browserRuntime.preload?.preloadCapability?.("compression", () => undefined, preloadOptions),
     browserRuntime.preload?.preloadCapability?.("checksum", () => undefined, preloadOptions),
   ])
+    .then(() => {
+      // Runner init (above) warms the WASM module, worker pool, and scratch pool. Schedule one silent
+      // dummy extraction at idle so the decode-path JIT and first OPFS input/output handle opens are
+      // warm too, so the user's first real extraction starts at steady state.
+      scheduleBrowserRuntimeWarmupExtraction();
+    })
     .catch(() => {
       runtimePreloadKeys.delete(preloadKey);
     })
