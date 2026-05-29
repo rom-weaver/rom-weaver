@@ -2,7 +2,7 @@ pre-commit:
   parallel: false
   commands:
     rust-format:
-      run: cargo fmt --all --check
+      run: cargo fmt --check
     rust-clippy:
       run: cargo clippy --workspace --all-targets -- -D warnings -A clippy::style -A clippy::complexity -A clippy::perf
     wasm-threaded-check:
