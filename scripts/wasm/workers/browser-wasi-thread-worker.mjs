@@ -1,5 +1,6 @@
 import {
   __disposeRomWeaverBrowserThreadMountCache,
+  __primeRomWeaverBrowserThreadRuntime,
   __runRomWeaverBrowserWasiThread,
 } from '../rom-weaver-browser-opfs-api.mjs';
 
@@ -133,6 +134,7 @@ async function runPoolWorker(payload) {
     throw new Error('browser wasi thread pool worker missing shared control buffer');
   }
   const poolStream = createStreamPublisher(payload, null);
+  await __primeRomWeaverBrowserThreadRuntime(payload.runtime, poolStream?.traceLine);
   poolStream?.traceLine(`[wasi-thread-worker] pool worker ready command=${payload.commandId ?? 'standalone'}`);
   self.postMessage({ type: 'ready', commandId: payload.commandId });
 

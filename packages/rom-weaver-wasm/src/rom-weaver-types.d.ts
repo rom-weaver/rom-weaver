@@ -184,7 +184,7 @@ export interface RomWeaverBrowserOpfsOptions {
   /** Writable guest roots. Defaults to the work mount itself. */
   writableDirectories?: string[];
   syncAccessMode?: RomWeaverBrowserSyncAccessMode;
-  /** Number of preopened OPFS scratch files available for dynamically created WASI files. */
+  /** @deprecated Ignored. Browser OPFS runtime uses a fixed large scratch pool size. */
   scratchFilePoolSize?: number;
   /**
    * Default browser thread count applied for typed threaded commands when no
@@ -206,6 +206,7 @@ export interface RomWeaverBrowserOpfsRunOptions extends RomWeaverRunOptions {
   virtualOnlyMounts?: boolean;
   writableDirectories?: string[];
   syncAccessMode?: RomWeaverBrowserSyncAccessMode;
+  /** @deprecated Ignored. Browser OPFS runtime uses a fixed large scratch pool size. */
   scratchFilePoolSize?: number;
   threadWorkerUrl?: string | URL;
   /**

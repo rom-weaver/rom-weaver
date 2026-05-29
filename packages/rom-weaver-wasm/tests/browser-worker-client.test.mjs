@@ -993,7 +993,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
     }
   });
 
-  it('threaded browser runner keeps default nested-thread scratch setup below legacy 256-per-thread behavior', async () => {
+  it('threaded browser runner keeps a stable large nested-thread scratch pool across runs', async () => {
     await withTempFixture(async ({ dir, init, worker, opfsHandle }) => {
       expect(init.threaded).toBe(true);
       const sourcePath = joinGuestPath(dir, 'threaded-scratch-default-source.bin');
@@ -1027,10 +1027,8 @@ describe('rom-weaver-wasm browser runner parity', () => {
       const scratchCountAfterFirstRun = await countScratchFiles(opfsHandle);
 
       expect(terminal.effective_threads).toBeGreaterThan(1);
-      expect(peakScratchFiles).toBeGreaterThanOrEqual(256);
-      expect(peakScratchFiles).toBeLessThan(512);
-      expect(scratchCountAfterFirstRun).toBeGreaterThanOrEqual(256);
-      expect(scratchCountAfterFirstRun).toBeLessThan(512);
+      expect(peakScratchFiles).toBeGreaterThanOrEqual(16);
+      expect(scratchCountAfterFirstRun).toBeGreaterThanOrEqual(16);
 
       const second = await worker.runJson([
         'checksum',
@@ -1056,7 +1054,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
     });
   });
 
-  it('threaded browser runner applies explicit scratchFilePoolSize overrides to nested thread mounts', async () => {
+  it('threaded browser runner ignores explicit scratchFilePoolSize overrides for nested thread mounts', async () => {
     await withTempFixture(async ({ dir, init, worker, opfsHandle }) => {
       expect(init.threaded).toBe(true);
       const sourcePath = joinGuestPath(dir, 'threaded-scratch-override-source.bin');
@@ -1092,8 +1090,8 @@ describe('rom-weaver-wasm browser runner parity', () => {
       const terminal = assertRunJsonSucceeded(result, { command: 'checksum' });
 
       expect(terminal.effective_threads).toBeGreaterThan(1);
-      expect(peakScratchFiles).toBe(0);
-      expect(await countScratchFiles(opfsHandle)).toBe(0);
+      expect(peakScratchFiles).toBeGreaterThanOrEqual(16);
+      expect(await countScratchFiles(opfsHandle)).toBeGreaterThanOrEqual(16);
     }, {
       initOptions: {
         wasmUrl: new URL('../rom-weaver-app-threaded.wasm', import.meta.url).href,

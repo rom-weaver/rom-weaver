@@ -837,6 +837,7 @@ const invokeRomWeaverPatchApplyWorker = async (
     command,
     toRomWeaverOptions({
       defaultThreads: disableDefaultThreadArgInjection ? 0 : undefined,
+      invalidateMountCacheBeforeRun: true,
       logLevel: input.logLevel,
       onEvent: (event) => {
         const progress = toPatchProgress(event);
