@@ -547,6 +547,47 @@
                 .map_err(|error| format!("failed to parse `{}`: {error}", source.display()))
         }
 
+        // Browser worker threads cannot open OPFS-backed files (only the main runner
+        // thread holds the filesystem access handles), so the WASM parallel decode paths
+        // read the compressed CHD bytes once on the calling thread and let each worker
+        // decode from a shared in-memory copy. The shared `Arc<[u8]>` lives in the shared
+        // linear memory, so there is a single copy regardless of thread count.
+        #[cfg(all(target_family = "wasm", rom_weaver_wasi_threads))]
+        fn read_source_bytes(source: &Path) -> std::result::Result<Arc<[u8]>, String> {
+            std::fs::read(source)
+                .map(|bytes| Arc::from(bytes.into_boxed_slice()))
+                .map_err(|error| format!("failed to read `{}`: {error}", source.display()))
+        }
+
+        // The in-memory parallel decode path holds one shared copy of the compressed CHD in
+        // linear memory. Browser shared memory is bounded, so for very large inputs fall back
+        // to the single-thread streaming path (correct, just not parallel) instead of risking
+        // an allocation failure.
+        #[cfg(all(target_family = "wasm", rom_weaver_wasi_threads))]
+        fn wasm_parallel_decode_source_too_large(source: &Path) -> bool {
+            const MAX_SOURCE_BYTES: u64 = 1536 * 1024 * 1024;
+            std::fs::metadata(source)
+                .map(|metadata| metadata.len() > MAX_SOURCE_BYTES)
+                .unwrap_or(false)
+        }
+
+        #[cfg(all(target_family = "wasm", rom_weaver_wasi_threads))]
+        fn open_rust_chd_from_bytes(
+            bytes: Arc<[u8]>,
+            parent_bytes: Option<Arc<[u8]>>,
+        ) -> std::result::Result<chd::Chd<std::io::Cursor<Arc<[u8]>>>, String> {
+            let parent = match parent_bytes {
+                Some(parent_bytes) => {
+                    let parent_chd = chd::Chd::open(std::io::Cursor::new(parent_bytes), None)
+                        .map_err(|error| format!("failed to parse parent chd from memory: {error}"))?;
+                    Some(Box::new(parent_chd))
+                }
+                None => None,
+            };
+            chd::Chd::open(std::io::Cursor::new(bytes), parent)
+                .map_err(|error| format!("failed to parse chd from memory: {error}"))
+        }
+
         #[allow(dead_code)]
         fn extract_to_file_with_progress(
             &self,
@@ -673,7 +714,11 @@
                 return Ok(());
             }
             let effective_threads = thread_count.max(1).min(hunk_count_usize);
-            if effective_threads <= 1 {
+            #[cfg(all(target_family = "wasm", rom_weaver_wasi_threads))]
+            let source_too_large = Self::wasm_parallel_decode_source_too_large(source);
+            #[cfg(not(all(target_family = "wasm", rom_weaver_wasi_threads)))]
+            let source_too_large = false;
+            if effective_threads <= 1 || source_too_large {
                 return Self::stream_with_rust(
                     source,
                     parent_source,
@@ -696,6 +741,13 @@
 
             let source = source.to_path_buf();
             let parent_source = parent_source.map(Path::to_path_buf);
+            #[cfg(all(target_family = "wasm", rom_weaver_wasi_threads))]
+            let source_bytes = Self::read_source_bytes(&source)?;
+            #[cfg(all(target_family = "wasm", rom_weaver_wasi_threads))]
+            let parent_bytes = match parent_source.as_deref() {
+                Some(parent_source) => Some(Self::read_source_bytes(parent_source)?),
+                None => None,
+            };
             let hunk_indices: Vec<u32> = (0..hunk_count).collect();
             let hunk_bytes_usize = usize::try_from(hunk_bytes)
                 .ok()
@@ -716,6 +768,15 @@
                     batch
                         .par_chunks(chunk_size)
                         .map(|chunk| {
+                            #[cfg(all(target_family = "wasm", rom_weaver_wasi_threads))]
+                            let mut chd = Self::open_rust_chd_from_bytes(
+                                source_bytes.clone(),
+                                parent_bytes.clone(),
+                            )
+                            .map_err(|error| {
+                                format!("failed to decode `{}`: {error}", source.display())
+                            })?;
+                            #[cfg(not(all(target_family = "wasm", rom_weaver_wasi_threads)))]
                             let mut chd = Self::open_rust_chd(&source, parent_source.as_deref())
                                 .map_err(|error| {
                                     format!("failed to decode `{}`: {error}", source.display())
@@ -881,6 +942,8 @@
             thread_count: usize,
             on_progress: Option<&Arc<dyn Fn(u64) + Send + Sync>>,
         ) -> std::result::Result<(), String> {
+            // Read the header cheaply from the file on the calling (main) thread; the full
+            // in-memory copy is only loaded below once we commit to the parallel path.
             let chd = Self::open_rust_chd(source, parent_source)
                 .map_err(|error| format!("failed to decode `{}`: {error}", source.display()))?;
             let hunk_count = chd.header().hunk_count();
@@ -904,7 +967,7 @@
                 return Ok(());
             }
             let effective_threads = thread_count.max(1).min(hunk_count_usize);
-            if effective_threads <= 1 {
+            if effective_threads <= 1 || Self::wasm_parallel_decode_source_too_large(source) {
                 return Self::extract_to_file_with_rust(
                     source,
                     parent_source,
@@ -914,6 +977,14 @@
                     on_progress,
                 );
             }
+
+            // Commit to the parallel path: load the compressed CHD once so worker threads can
+            // decode from shared memory without opening the (OPFS-backed) file themselves.
+            let source_bytes = Self::read_source_bytes(source)?;
+            let parent_bytes = match parent_source {
+                Some(parent_source) => Some(Self::read_source_bytes(parent_source)?),
+                None => None,
+            };
 
             let pool = rayon::ThreadPoolBuilder::new()
                 .num_threads(effective_threads)
@@ -926,7 +997,6 @@
                 })?;
 
             let source = source.to_path_buf();
-            let parent_source = parent_source.map(Path::to_path_buf);
             let on_progress = on_progress.cloned();
             let hunk_indices: Vec<u32> = (0..hunk_count).collect();
             let batch_hunks = effective_threads.saturating_mul(16).max(effective_threads);
@@ -937,10 +1007,13 @@
                     batch
                         .par_chunks(chunk_size)
                         .map(|chunk| {
-                            let mut chd = Self::open_rust_chd(&source, parent_source.as_deref())
-                                .map_err(|error| {
-                                    format!("failed to decode `{}`: {error}", source.display())
-                                })?;
+                            let mut chd = Self::open_rust_chd_from_bytes(
+                                source_bytes.clone(),
+                                parent_bytes.clone(),
+                            )
+                            .map_err(|error| {
+                                format!("failed to decode `{}`: {error}", source.display())
+                            })?;
                             let mut hunk_buffer = chd.get_hunksized_buffer();
                             let mut compressed_buffer = Vec::new();
                             let mut decoded = Vec::with_capacity(chunk.len());
