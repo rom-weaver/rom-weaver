@@ -545,6 +545,28 @@
             }
         }
 
+        fn header_sha1_hex(&self, header: ChdHeader) -> Option<String> {
+            self.sha1_hex_from_optional(header.sha1)
+        }
+
+        fn header_raw_sha1_hex(&self, header: ChdHeader) -> Option<String> {
+            self.sha1_hex_from_optional(header.raw_sha1)
+        }
+
+        fn sha1_hex_from_optional(&self, sha1: Option<[u8; 20]>) -> Option<String> {
+            let sha1 = sha1?;
+            if sha1.iter().all(|byte| *byte == 0) {
+                return None;
+            }
+            Some(self.sha1_hex(sha1))
+        }
+
+        fn sha1_hex(&self, sha1: [u8; 20]) -> String {
+            sha1.iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>()
+        }
+
         fn extract_extension(&self, media_kind: ChdMediaKind) -> Result<&'static str> {
             match media_kind {
                 ChdMediaKind::Raw => Ok(".bin"),

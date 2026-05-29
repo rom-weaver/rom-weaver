@@ -195,6 +195,8 @@
                 unit_count: logical_bytes.div_ceil(u64::from(unit_bytes)),
                 compressed: false,
                 compression: [ChdCodec::NONE; CHD_MAX_COMPRESSORS],
+                sha1: None,
+                raw_sha1: None,
             })
         }
 
@@ -688,6 +690,8 @@
                 unit_count: logical_bytes.div_ceil(u64::from(unit_bytes)),
                 compressed: true,
                 compression: codecs,
+                sha1: None,
+                raw_sha1: None,
             })
         }
 

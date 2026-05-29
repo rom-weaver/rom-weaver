@@ -496,6 +496,8 @@
                 unit_count: header.unit_count(),
                 compressed: header.is_compressed(),
                 compression: compression.map(Self::codec_from_raw),
+                sha1: header.sha1(),
+                raw_sha1: header.raw_sha1(),
             }
         }
 

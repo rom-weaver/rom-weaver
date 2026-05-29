@@ -494,6 +494,34 @@ impl CliApp {
             );
         }
 
+        match self.try_run_checksum_chd_raw_sha1_fast_path(
+            &source,
+            &algo,
+            &select,
+            no_extract,
+            strip_header,
+            no_trim_fix,
+            start,
+            length,
+            &context,
+            thread_execution.clone(),
+        ) {
+            Ok(Some(report)) => return self.finish("checksum", report),
+            Ok(None) => {}
+            Err(error) => {
+                return self.finish(
+                    "checksum",
+                    OperationReport::failed(
+                        OperationFamily::Checksum,
+                        Some(self.checksum.name().to_string()),
+                        "checksum",
+                        error.to_string(),
+                        thread_execution.clone(),
+                    ),
+                );
+            }
+        }
+
         match self.try_run_checksum_tar_stream_auto_extract(
             &source,
             &algo,
@@ -754,6 +782,97 @@ impl CliApp {
         }
         Self::cleanup_temp_paths(temp_paths);
         self.finish("checksum", report)
+    }
+
+    fn try_run_checksum_chd_raw_sha1_fast_path(
+        &self,
+        source: &Path,
+        algo: &[String],
+        select: &[String],
+        no_extract: bool,
+        strip_header: bool,
+        no_trim_fix: bool,
+        start: Option<u64>,
+        length: Option<u64>,
+        context: &OperationContext,
+        thread_execution: Option<ThreadExecution>,
+    ) -> Result<Option<OperationReport>> {
+        if self.interactive_selection_enabled
+            || no_extract
+            || strip_header
+            || !no_trim_fix
+            || !select.is_empty()
+            || start.is_some()
+            || length.is_some()
+        {
+            return Ok(None);
+        }
+        if algo.len() != 1 || !algo[0].eq_ignore_ascii_case("sha1") {
+            return Ok(None);
+        }
+
+        let Some(handler) = self.containers.probe(source) else {
+            return Ok(None);
+        };
+        if !handler.descriptor().matches_name("chd") {
+            return Ok(None);
+        }
+
+        let request = ContainerInspectRequest {
+            source: source.to_path_buf(),
+        };
+        let entries = handler.list_entries(&request, context)?;
+        if !Self::chd_raw_sha1_fast_path_entries_supported(&entries) {
+            return Ok(None);
+        }
+
+        let report = handler.inspect(&request, context)?;
+        if report.status != OperationStatus::Succeeded {
+            return Ok(None);
+        }
+        let Some(raw_sha1) = Self::extract_chd_raw_sha1_from_inspect_details(report.details.as_ref())
+        else {
+            return Ok(None);
+        };
+        if !Self::is_valid_sha1_hex(&raw_sha1) {
+            return Ok(None);
+        }
+
+        Ok(Some(OperationReport::succeeded(
+            OperationFamily::Checksum,
+            Some(self.checksum.name().to_string()),
+            "checksum",
+            format!("sha1={raw_sha1}; checksum source resolved via chd raw_sha1 fast path"),
+            Some(100.0),
+            thread_execution,
+        )))
+    }
+
+    fn chd_raw_sha1_fast_path_entries_supported(entries: &[String]) -> bool {
+        if entries.len() != 1 {
+            return false;
+        }
+        let entry = entries[0].to_ascii_lowercase();
+        entry.ends_with(".bin") || entry.ends_with(".iso") || entry.ends_with(".img")
+    }
+
+    fn extract_chd_raw_sha1_from_inspect_details(details: Option<&Value>) -> Option<String> {
+        let details = details?;
+        let Value::Object(map) = details else {
+            return None;
+        };
+        let Value::Object(chd) = map.get("chd")? else {
+            return None;
+        };
+        let value = chd.get("raw_sha1")?.as_str()?.trim().to_ascii_lowercase();
+        if value.is_empty() {
+            return None;
+        }
+        Some(value)
+    }
+
+    fn is_valid_sha1_hex(value: &str) -> bool {
+        value.len() == 40 && value.chars().all(|ch| ch.is_ascii_hexdigit())
     }
 
     fn try_run_checksum_tar_stream_auto_extract(

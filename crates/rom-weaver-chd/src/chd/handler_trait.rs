@@ -20,21 +20,43 @@ impl ContainerHandler for ChdContainerHandler {
         let chd = ChdReadSession::open(&request.source, None)?;
         let header = chd.header();
         let media_kind = chd.media_kind();
-        Ok(OperationReport::succeeded(
+        let sha1 = self.header_sha1_hex(header);
+        let raw_sha1 = self.header_raw_sha1_hex(header);
+        let digest_suffix = match (&sha1, &raw_sha1) {
+            (Some(sha1), Some(raw_sha1)) => format!(", sha1={sha1}, raw_sha1={raw_sha1}"),
+            (Some(sha1), None) => format!(", sha1={sha1}"),
+            (None, Some(raw_sha1)) => format!(", raw_sha1={raw_sha1}"),
+            (None, None) => String::new(),
+        };
+        let mut report = OperationReport::succeeded(
             OperationFamily::Container,
             Some(CHD.name.to_string()),
             "inspect",
             format!(
-                "{} chd v{}: {} bytes, {}-byte hunks, codec={}",
+                "{} chd v{}: {} bytes, {}-byte hunks, codec={}{}",
                 self.media_label(media_kind),
                 header.version,
                 header.logical_bytes,
                 header.hunk_bytes,
-                self.header_codec_label(header)
+                self.header_codec_label(header),
+                digest_suffix
             ),
             Some(100.0),
             Some(execution),
-        ))
+        );
+        if sha1.is_some() || raw_sha1.is_some() {
+            let mut details = Map::new();
+            let mut chd_details = Map::new();
+            if let Some(sha1) = sha1 {
+                chd_details.insert("sha1".to_string(), json!(sha1));
+            }
+            if let Some(raw_sha1) = raw_sha1 {
+                chd_details.insert("raw_sha1".to_string(), json!(raw_sha1));
+            }
+            details.insert("chd".to_string(), Value::Object(chd_details));
+            report.details = Some(Value::Object(details));
+        }
+        Ok(report)
     }
 
     fn list_entries(

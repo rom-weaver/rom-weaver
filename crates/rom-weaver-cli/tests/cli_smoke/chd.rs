@@ -32,6 +32,113 @@ fn chd_compress_and_extract_flac_round_trip() {
 }
 
 #[test]
+fn checksum_chd_uses_raw_sha1_fast_path_for_single_payload() {
+    let temp = setup_temp_dir();
+    let source = (0..32_768)
+        .map(|index| (index % 211) as u8)
+        .collect::<Vec<_>>();
+    fs::write(temp.child("disc.bin").path(), &source).expect("fixture");
+
+    let chd_path = temp.child("disc.chd");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("disc.bin").path().to_str().expect("path"),
+            "--format",
+            "chd",
+            "--output",
+            chd_path.path().to_str().expect("path"),
+            "--codec",
+            "zstd",
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let expected_sha1 = checksum_value(temp.child("disc.bin").path(), "sha1");
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "checksum",
+            chd_path.path().to_str().expect("path"),
+            "--algo",
+            "sha1",
+            "--no-trim-fix",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "checksum");
+    assert_eq!(json["status"], "succeeded");
+    let label = json["label"].as_str().expect("label");
+    let actual_sha1 = label_digest_value(label, "sha1").expect("sha1 digest");
+    assert_eq!(actual_sha1, expected_sha1);
+    assert!(label.contains("chd raw_sha1 fast path"));
+}
+
+#[test]
+fn checksum_chd_cd_does_not_use_raw_sha1_fast_path() {
+    let temp = setup_temp_dir();
+    let source = (0..(8 * 2352))
+        .map(|index| (index % 211) as u8)
+        .collect::<Vec<_>>();
+    fs::write(temp.child("disc.bin").path(), &source).expect("fixture");
+    temp.child("disc.cue")
+        .write_str("FILE \"disc.bin\" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n")
+        .expect("cue fixture");
+
+    let chd_path = temp.child("disc.chd");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("disc.cue").path().to_str().expect("path"),
+            "--format",
+            "chd",
+            "--output",
+            chd_path.path().to_str().expect("path"),
+            "--codec",
+            "cdlz",
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let expected_sha1 = checksum_value(temp.child("disc.bin").path(), "sha1");
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "checksum",
+            chd_path.path().to_str().expect("path"),
+            "--algo",
+            "sha1",
+            "--select",
+            "disc.bin",
+            "--no-trim-fix",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "checksum");
+    assert_eq!(json["status"], "succeeded");
+    let label = json["label"].as_str().expect("label");
+    let actual_sha1 = label_digest_value(label, "sha1").expect("sha1 digest");
+    assert_eq!(actual_sha1, expected_sha1);
+    assert!(!label.contains("chd raw_sha1 fast path"));
+}
+
+#[test]
 fn chd_compress_and_extract_avhuff_round_trip() {
     let temp = setup_temp_dir();
     let source = build_test_chav_stream(4, 32, 16);
@@ -97,6 +204,32 @@ fn chd_compress_and_extract_avhuff_round_trip() {
             .as_str()
             .expect("label")
             .contains("codec=avhuff")
+    );
+    assert!(
+        inspect_json["label"]
+            .as_str()
+            .expect("label")
+            .contains("sha1=")
+    );
+    assert!(
+        inspect_json["label"]
+            .as_str()
+            .expect("label")
+            .contains("raw_sha1=")
+    );
+    assert!(
+        inspect_json["details"]["chd"]["sha1"]
+            .as_str()
+            .expect("sha1 detail")
+            .len()
+            == 40
+    );
+    assert!(
+        inspect_json["details"]["chd"]["raw_sha1"]
+            .as_str()
+            .expect("raw sha1 detail")
+            .len()
+            == 40
     );
 
     let alias_chd_path = temp.child("disc-alias.chd");

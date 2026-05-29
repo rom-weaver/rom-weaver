@@ -92,6 +92,8 @@ pub struct ChdHeader {
     unit_count: u64,
     compressed: bool,
     compression: [ChdCodec; CHD_MAX_COMPRESSORS],
+    sha1: Option<[u8; 20]>,
+    raw_sha1: Option<[u8; 20]>,
 }
 
 fn file_starts_with(source: &Path, signature: &[u8]) -> bool {
