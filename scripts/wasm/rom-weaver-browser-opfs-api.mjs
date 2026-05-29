@@ -1541,9 +1541,14 @@ class BrowserOpfsRandomAccessFile {
   }
 
   writeAt(offset, src) {
-    this.clearReadCache();
-    const written = this.syncHandle.write(src, { at: Number(offset) });
-    if (written > 0) this.dirty = true;
+    const start = Number(offset);
+    const written = this.syncHandle.write(src, { at: start });
+    if (written > 0) {
+      this.dirty = true;
+      // Only drop cache blocks that overlap the bytes just written, so an interleaved
+      // read/modify/write workload keeps unrelated cached blocks instead of refetching them all.
+      this.invalidateReadCacheRange(start, start + written);
+    }
     return written;
   }
 
@@ -1554,7 +1559,9 @@ class BrowserOpfsRandomAccessFile {
   truncate(size) {
     const normalizedSize = Number(size);
     if (this.syncHandle.getSize() === normalizedSize) return;
-    this.clearReadCache();
+    // A shrink drops cached bytes at/after the new end; a grow only zero-fills past the old end.
+    // Either way, invalidating [newSize, ∞) is sufficient and leaves earlier cached bytes valid.
+    this.invalidateReadCacheRange(normalizedSize, Number.POSITIVE_INFINITY);
     this.syncHandle.truncate(normalizedSize);
     this.dirty = true;
   }
@@ -1616,6 +1623,21 @@ class BrowserOpfsRandomAccessFile {
     this.readCacheBlocks.length = 0;
   }
 
+  // Empties any cache block whose [start, start+length) overlaps [start, end). A block is reset to
+  // empty (length 0) rather than removed so its backing buffer can be reused by acquireReadCacheBlock.
+  invalidateReadCacheRange(start, end) {
+    if (this.readCacheBlocks.length === 0) return;
+    for (const block of this.readCacheBlocks) {
+      if (block.length <= 0) continue;
+      const blockEnd = block.start + block.length;
+      if (start < blockEnd && end > block.start) {
+        block.start = 0;
+        block.length = 0;
+        block.lastUsed = 0;
+      }
+    }
+  }
+
   flush() {
     if (!this.dirty) return;
     if (this.scratchName) {
@@ -1636,6 +1658,12 @@ class BrowserOpfsRandomAccessFile {
       this.dirty = false;
     }
   }
+}
+
+// Test-only: lets benches/tests drive the OPFS random-access read/write path (read cache +
+// sync access handle) directly without standing up a full WASI mount. Unused in production.
+export function __createBrowserOpfsRandomAccessFileForTest(syncHandle, options = {}) {
+  return new BrowserOpfsRandomAccessFile(syncHandle, options);
 }
 
 function readFitsWithinCacheBlock(offset, byteLength) {
