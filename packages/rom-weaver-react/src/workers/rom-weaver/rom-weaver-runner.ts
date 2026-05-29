@@ -1,7 +1,7 @@
+import type { RomWeaverCommand, RomWeaverProgressEvent, RomWeaverRunRequest } from "rom-weaver-wasm";
 import { type BrowserVirtualFile, getActiveBrowserVirtualFiles } from "../protocol/browser-virtual-files.ts";
 import { isBrowserRuntime } from "../shared/runtime-env.ts";
 import { WORKER_OPFS_MOUNTPOINT } from "../shared/worker-storage/storage-layout.ts";
-import type { RomWeaverCommand, RomWeaverProgressEvent, RomWeaverRunRequest } from "rom-weaver-wasm";
 
 type RomWeaverRunJsonEvent = RomWeaverProgressEvent;
 type RomWeaverRunJsonInput = RomWeaverCommand | RomWeaverRunRequest;
@@ -31,11 +31,13 @@ type RomWeaverRunJsonResult = {
 type RomWeaverWorkerClient = {
   init: (...args: unknown[]) => Promise<RomWeaverRunnerReadyMetadata>;
   dispose?: () => Promise<void>;
-  runJson: (commandOrRequest: RomWeaverRunJsonInput, options?: RomWeaverRunJsonOptions) => Promise<RomWeaverRunJsonResult>;
+  runJson: (
+    commandOrRequest: RomWeaverRunJsonInput,
+    options?: RomWeaverRunJsonOptions,
+  ) => Promise<RomWeaverRunJsonResult>;
 };
 
 type RomWeaverRunnerReadyMetadata = {
-  fallbackReason?: string;
   mode: string;
   threaded: boolean;
   wasmUrl: string | null;
@@ -44,7 +46,10 @@ type RomWeaverRunnerReadyMetadata = {
 type RomWeaverRunner = {
   dispose?: () => Promise<void>;
   ready: RomWeaverRunnerReadyMetadata;
-  runJson: (commandOrRequest: RomWeaverRunJsonInput, options?: RomWeaverRunJsonOptions) => Promise<RomWeaverRunJsonResult>;
+  runJson: (
+    commandOrRequest: RomWeaverRunJsonInput,
+    options?: RomWeaverRunJsonOptions,
+  ) => Promise<RomWeaverRunJsonResult>;
 };
 
 type BrowserWasmAssetSelection = {
@@ -71,7 +76,8 @@ const describeVirtualFilesForTrace = (files: BrowserVirtualFile[]) => {
     if (file.source) {
       directCount += 1;
       const source = file.source as Blob | Uint8Array | ArrayBuffer;
-      totalBytes += source instanceof Uint8Array || source instanceof ArrayBuffer ? source.byteLength : source.size || 0;
+      totalBytes +=
+        source instanceof Uint8Array || source instanceof ArrayBuffer ? source.byteLength : source.size || 0;
     }
   }
   return {
@@ -158,58 +164,34 @@ const createBrowserRunnerInitOptions = (
   };
 };
 
-const getThreadedFallbackReason = (error: unknown) => {
-  const message = error instanceof Error ? error.message : String(error);
-  return `threaded wasm fallback: ${message}`;
-};
-
 const createBrowserRunner = async (
   preferThreadedWasm = true,
   options?: { workerThreads?: RuntimeValue },
 ): Promise<RomWeaverRunner> => {
   const { createBrowserWorkerClient } = await import("rom-weaver-wasm/workers/browser-client");
-  let client = createBrowserWorkerClient() as unknown as RomWeaverWorkerClient;
-  let wasmAsset: BrowserWasmAssetSelection = preferThreadedWasm
+  const client = createBrowserWorkerClient() as unknown as RomWeaverWorkerClient;
+  const wasmAsset: BrowserWasmAssetSelection = preferThreadedWasm
     ? await resolveBrowserWasmAsset()
     : { wasmUrl: await resolveBrowserSingleThreadedWasmUrl() };
-  let ready: RomWeaverRunnerReadyMetadata;
-  let fallbackReason: string | undefined;
-  if (preferThreadedWasm) {
-    try {
-      ready = await client.init(createBrowserRunnerInitOptions(wasmAsset, options));
-    } catch (error) {
-      if (!wasmAsset.threadedWasmUrl) throw error;
-      await client.dispose?.().catch(() => undefined);
-      fallbackReason = getThreadedFallbackReason(error);
-      client = createBrowserWorkerClient() as unknown as RomWeaverWorkerClient;
-      wasmAsset = { wasmUrl: await resolveBrowserSingleThreadedWasmUrl() };
-      ready = await client.init({
-        ...createBrowserRunnerInitOptions(wasmAsset, options),
-        preferThreadedWasm: false,
-      });
-    }
-  } else {
-    ready = await client.init({
-      ...createBrowserRunnerInitOptions(wasmAsset, options),
-      preferThreadedWasm: false,
-    });
-  }
+  const ready = await client.init({
+    ...createBrowserRunnerInitOptions(wasmAsset, options),
+    ...(preferThreadedWasm ? {} : { preferThreadedWasm: false }),
+  });
   const selectedWasmUrl = ready.threaded
     ? (wasmAsset.threadedWasmUrl ?? ready.wasmUrl ?? "")
     : (wasmAsset.wasmUrl ?? ready.wasmUrl ?? "");
-  const runnerReady = fallbackReason ? { ...ready, fallbackReason } : ready;
   publishRomWeaverWasmDiagnostic({
     context: "rom-weaver browser runner",
     contextUrl: selectedWasmUrl,
-    reason: ready.threaded ? "cross-origin isolated" : (fallbackReason ?? "single-thread runtime"),
-    threaded: runnerReady.threaded,
+    reason: ready.threaded ? "cross-origin isolated" : "single-thread runtime",
+    threaded: ready.threaded,
     url: ready.wasmUrl || selectedWasmUrl,
   });
   return {
     dispose: async () => {
       await client.dispose?.().catch(() => undefined);
     },
-    ready: runnerReady,
+    ready,
     runJson: (commandOrRequest, options) => client.runJson(commandOrRequest, options),
   };
 };
@@ -269,7 +251,7 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunJsonInput, options
       : {
           ...runOptionOverrides,
         };
-  if (!Object.prototype.hasOwnProperty.call(runOptions, "invalidateMountCacheAfterRun")) {
+  if (!Object.hasOwn(runOptions, "invalidateMountCacheAfterRun")) {
     runOptions.invalidateMountCacheAfterRun = defaultInvalidateMountCacheAfterRun;
   }
   emitRunnerTraceLine(
@@ -279,12 +261,7 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunJsonInput, options
     )} configuredVirtualFiles=${Array.isArray(configuredVirtualFiles) ? configuredVirtualFiles.length : 0} preferThreadedWasm=${String(preferThreadedWasm)} invalidateMountCacheAfterRun=${String(runOptions.invalidateMountCacheAfterRun)}`,
   );
   const runner = await createRomWeaverRunner({ preferThreadedWasm });
-  emitRunnerTraceLine(
-    options,
-    `runJson dispatch mode=${runner.ready.mode} threaded=${String(runner.ready.threaded)} fallbackReason=${
-      runner.ready.fallbackReason || ""
-    }`,
-  );
+  emitRunnerTraceLine(options, `runJson dispatch mode=${runner.ready.mode} threaded=${String(runner.ready.threaded)}`);
   return runner.runJson(commandOrRequest, runOptions);
 };
 
@@ -329,10 +306,9 @@ const getResourceName = (urlLike: string) => {
 };
 
 const formatCommandForTrace = (commandOrRequest: RomWeaverRunJsonInput) => {
-  const command: RomWeaverCommand =
-    isRomWeaverRunRequest(commandOrRequest)
-      ? commandOrRequest.command
-      : commandOrRequest;
+  const command: RomWeaverCommand = isRomWeaverRunRequest(commandOrRequest)
+    ? commandOrRequest.command
+    : commandOrRequest;
   try {
     return JSON.stringify(command);
   } catch (_err) {

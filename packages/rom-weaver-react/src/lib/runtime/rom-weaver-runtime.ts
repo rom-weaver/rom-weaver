@@ -1,3 +1,8 @@
+import type { CompressionLevelProfile, RomWeaverCommand, ThreadBudget } from "rom-weaver-wasm";
+import {
+  formatBrowserStorageEstimateState,
+  getBrowserStorageEstimateState,
+} from "../../storage/browser/browser-storage-estimate.ts";
 import type { ChecksumResult } from "../../types/checksum.ts";
 import type { LogLevel } from "../../types/logging.ts";
 import type { CompressionListResult } from "../../types/workflow-runtime.ts";
@@ -8,11 +13,6 @@ import type {
   RuntimeWorkerIo,
   WorkflowRuntimeLog,
 } from "../../types/workflow-runtime-adapter.ts";
-import type { CompressionLevelProfile, RomWeaverCommand, ThreadBudget } from "rom-weaver-wasm";
-import {
-  formatBrowserStorageEstimateState,
-  getBrowserStorageEstimateState,
-} from "../../storage/browser/browser-storage-estimate.ts";
 import {
   getRomWeaverFailureMessage,
   type RomWeaverRunJsonEvent,
@@ -28,10 +28,6 @@ const PATH_FILE_CAPTURE_REGEX = /^(.+[/\\])?([^/\\]+)$/;
 const FILE_EXTENSION_CAPTURE_REGEX = /^(.+?)(\.[^./\\]*)?$/;
 const CODEC_LEVEL_ENTRY_REGEX = /^([a-z0-9_+-]+)(?::(\d+))?$/i;
 const COMPRESSION_LEVEL_PROFILE_REGEX = /^(min|very-low|low|medium|high|very-high|max)$/i;
-const WASI_THREAD_FAILURE_REGEX = /(wasi thread\s+\d+\s+failed|thread\s+\d+\s+failed before completion)/i;
-const BROWSER_THREAD_WORKER_FAILURE_REGEX = /(browser wasi thread worker\s+\d+\s+failed|thread pool build failed)/i;
-const RVZ_BLOCK_PROCESSING_FAILURE_REGEX = /rvz create failed:\s*Failed to process block\s+\d+/i;
-const THREAD_RUNTIME_TRAP_REGEX = /table index is out of bounds/i;
 const OUT_OF_MEMORY_FAILURE_REGEX = /\bout of memory\b|\bmemory allocation\b|\bcannot allocate memory\b/i;
 const WORK_ROOT_PATH = "/work";
 const WORK_OUTPUT_PATH = "/work/output";
@@ -474,23 +470,6 @@ const runRomWeaverJsonWithRetryOnOutOfMemory = async (
   }
 };
 
-const isThreadedWorkerFailure = (message: string) =>
-  WASI_THREAD_FAILURE_REGEX.test(message) ||
-  BROWSER_THREAD_WORKER_FAILURE_REGEX.test(message) ||
-  THREAD_RUNTIME_TRAP_REGEX.test(message);
-
-const isRvzBlockProcessingFailure = (message: string) => RVZ_BLOCK_PROCESSING_FAILURE_REGEX.test(message);
-
-const hasThreadedWorkerFailureInResult = (result: RomWeaverRunJsonResult) => {
-  const lines = [
-    typeof result.stderr === "string" ? result.stderr : "",
-    ...((Array.isArray(result.nonJsonLines) ? result.nonJsonLines : []).map((line) => String(line || ""))),
-    ...((Array.isArray(result.traceNonJsonLines) ? result.traceNonJsonLines : []).map((line) => String(line || ""))),
-    getTraceMessage((result as { error?: unknown }).error),
-  ];
-  return lines.some((line) => isThreadedWorkerFailure(line));
-};
-
 const normalizeChdCodecArgs = (codecs: string[]) => {
   const explicitLevels = new Set<string>();
   const strippedCodecs: string[] = [];
@@ -592,21 +571,18 @@ const invokeRomWeaverCompressionCreateWorker = async (
   }
   const codecs = normalizedChdCodecs.codecs;
   const levelProfile = normalizeCompressionLevelProfile(input.levelProfile);
-  const buildCommand = (threadArg: ThreadBudget | null): RomWeaverCommand => {
-    return {
-      type: "compress",
-      args: {
-        codec: codecs,
-        format: format || undefined,
-        input: inputPaths,
-        level: (levelProfile || "high") as CompressionLevelProfile,
-        output: outputPath,
-        ...(threadArg ? { threads: threadArg } : {}),
-      },
-    };
-  };
   const threadArg = toThreadBudget(input.workerThreads);
-  const command = buildCommand(threadArg);
+  const command: RomWeaverCommand = {
+    args: {
+      codec: codecs,
+      format: format || undefined,
+      input: inputPaths,
+      level: (levelProfile || "high") as CompressionLevelProfile,
+      output: outputPath,
+      ...(threadArg ? { threads: threadArg } : {}),
+    },
+    type: "compress",
+  };
   emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson compress dispatch", {
     command,
     format,
@@ -634,42 +610,6 @@ const invokeRomWeaverCompressionCreateWorker = async (
   );
   if (!(result.ok && result.exitCode === 0)) {
     const failureMessage = getRomWeaverFailureMessage(result, "Compression create failed");
-    const shouldRetrySingleThread =
-      threadArg !== 1 &&
-      (isThreadedWorkerFailure(failureMessage) ||
-        hasThreadedWorkerFailureInResult(result) ||
-        (normalizedFormat === "rvz" && isRvzBlockProcessingFailure(failureMessage)));
-    if (shouldRetrySingleThread) {
-      const fallbackCommand = buildCommand(1);
-      emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson compress retry single-thread", {
-        failureMessage,
-        fallbackCommand,
-      });
-      const fallbackResult = await runRomWeaverJsonWithRetryOnOutOfMemory(
-        fallbackCommand,
-        toRomWeaverOptions({
-          logLevel: input.logLevel,
-          onEvent: (event) => {
-            const progress = toSimpleProgress(event);
-            if (progress) onProgress?.(progress);
-          },
-          onLog,
-        }),
-        "Compression create failed after single-thread retry",
-        {
-          commandLabel: "compress",
-          logLevel: input.logLevel,
-          onLog,
-        },
-      );
-      ensureRomWeaverSuccess(fallbackResult, "Compression create failed after single-thread retry");
-      const fallbackEmitted = getEmittedFiles(fallbackResult)[0];
-      return {
-        fileName: input.outputFileName,
-        filePath: fallbackEmitted?.path || outputPath,
-        size: fallbackEmitted?.sizeBytes,
-      };
-    }
     throw new Error(failureMessage);
   }
 
@@ -714,7 +654,6 @@ const invokeRomWeaverExtractWorker = async (
   }
   const threadArg = toThreadBudget(input.workerThreads);
   const command: RomWeaverCommand = {
-    type: "extract",
     args: {
       checksum,
       no_nested_extract: true,
@@ -724,6 +663,7 @@ const invokeRomWeaverExtractWorker = async (
       ...(input.splitBin ? { split_bin: true } : {}),
       ...(threadArg ? { threads: threadArg } : {}),
     },
+    type: "extract",
   };
   emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson extract dispatch", {
     command,
@@ -751,7 +691,10 @@ const invokeRomWeaverExtractWorker = async (
       onLog,
     },
   );
-  ensureRomWeaverSuccess(result, "Compression extract failed");
+  if (!(result.ok && result.exitCode === 0)) {
+    const failureMessage = getRomWeaverFailureMessage(result, "Compression extract failed");
+    throw new Error(failureMessage);
+  }
   return {
     emittedFiles: getEmittedFiles(result),
   };
@@ -768,17 +711,17 @@ const runRomWeaverInspectListWorker = async (
   const sourcePath = String(input.sourcePath || "").trim();
   if (!sourcePath) throw new Error("Compression list source path is required");
   const command: RomWeaverCommand = {
-    type: "inspect",
     args: {
       list: true,
       source: sourcePath,
     },
+    type: "inspect",
   };
   emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson inspect-list dispatch", {
     command,
     sourcePath,
   });
-  const runInspectList = (preferThreadedWasm?: boolean) =>
+  const runInspectList = () =>
     runRomWeaverJsonWithRetryOnOutOfMemory(
       command,
       toRomWeaverOptions({
@@ -788,7 +731,6 @@ const runRomWeaverInspectListWorker = async (
           if (progress) onProgress?.(progress);
         },
         onLog,
-        ...(typeof preferThreadedWasm === "boolean" ? { preferThreadedWasm } : {}),
       }),
       "Compression listing failed",
       {
@@ -797,19 +739,10 @@ const runRomWeaverInspectListWorker = async (
         onLog,
       },
     );
-  let result = await runInspectList();
+  const result = await runInspectList();
   if (!(result.ok && result.exitCode === 0)) {
     const failureMessage = getRomWeaverFailureMessage(result, "Compression listing failed");
-    if (isThreadedWorkerFailure(failureMessage) || hasThreadedWorkerFailureInResult(result)) {
-      emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson inspect-list retry single-thread", {
-        failureMessage,
-      });
-      await resetRomWeaverRunner().catch(() => undefined);
-      result = await runInspectList(false);
-      ensureRomWeaverSuccess(result, "Compression listing failed after single-thread retry");
-    } else {
-      throw new Error(failureMessage);
-    }
+    throw new Error(failureMessage);
   }
   const entries = getContainerEntriesFromInspect(result);
   return {
@@ -846,7 +779,6 @@ const invokeRomWeaverPatchApplyWorker = async (
   const scratchFilePoolSize = hasBpsPatch ? 8 : 64;
   const syncAccessMode = hasBpsPatch ? "readwrite-unsafe" : undefined;
   const command: RomWeaverCommand = {
-    type: "patch-apply",
     args: {
       add_header: addHeader,
       ignore_checksum_validation: ignoreChecksumValidation,
@@ -858,6 +790,7 @@ const invokeRomWeaverPatchApplyWorker = async (
       strip_header: removeHeader,
       ...(threadArg ? { threads: threadArg } : {}),
     },
+    type: "patch-apply",
   };
   emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson patch-apply dispatch", {
     command,
@@ -962,7 +895,6 @@ const invokeRomWeaverCreatePatchWorker = async (
   ]);
   const threadArg = toThreadBudget(input.workerThreads);
   const command: RomWeaverCommand = {
-    type: "patch-create",
     args: {
       format: input.format,
       modified: input.modifiedFilePath,
@@ -970,6 +902,7 @@ const invokeRomWeaverCreatePatchWorker = async (
       output: outputPath,
       ...(threadArg ? { threads: threadArg } : {}),
     },
+    type: "patch-create",
   };
   emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson patch-create dispatch", {
     command,
@@ -1076,13 +1009,13 @@ const runRomWeaverChecksumWorker = async (
       ? BigInt(Math.floor(input.checksumStartOffset))
       : undefined;
   const command: RomWeaverCommand = {
-    type: "checksum",
     args: {
       algo: algorithms,
       no_extract: true,
       source: filePath,
-      ...(checksumStart !== undefined ? { start: checksumStart } : {}),
+      ...(checksumStart === undefined ? {} : { start: checksumStart }),
     },
+    type: "checksum",
   };
   emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson checksum dispatch", {
     algorithms,

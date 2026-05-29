@@ -4171,7 +4171,6 @@ async function resolveBrowserModule({
   const shouldUseThreadedWasm = requestedThreadedWasm && runtimeSupportsThreadedWasm;
 
   const hasExplicitWasmUrl = hasConfiguredWasmUrl(wasmUrl);
-  const hasExplicitThreadedWasmUrl = hasConfiguredWasmUrl(threadedWasmUrl);
   const resolvedWasmUrls = normalizeConfiguredWasmUrls(wasmUrl, DEFAULT_BROWSER_WASM_URLS);
   const resolvedThreadedWasmUrls = normalizeConfiguredWasmUrls(
     threadedWasmUrl,
@@ -4181,10 +4180,7 @@ async function resolveBrowserModule({
   );
   const useThreadedCandidate = shouldUseThreadedWasm && resolvedThreadedWasmUrls.length > 0;
   const primaryUrls = useThreadedCandidate
-    ? uniqueUrls([
-        ...resolvedThreadedWasmUrls,
-        ...(hasExplicitThreadedWasmUrl ? [] : resolvedWasmUrls),
-      ])
+    ? resolvedThreadedWasmUrls
     : resolvedWasmUrls;
   return compileBrowserModuleFromUrls(primaryUrls);
 }
