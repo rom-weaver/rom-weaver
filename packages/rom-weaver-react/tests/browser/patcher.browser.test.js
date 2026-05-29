@@ -285,6 +285,41 @@ test("ApplyPatchForm runs a complete patch flow and downloads output", async () 
   expect(document.getElementById("rom-weaver-error-message")?.textContent || "").toBe("");
 });
 
+test("manual output name is used for patchless apply download", async () => {
+  const downloadNames = [];
+  const originalAnchorClick = HTMLAnchorElement.prototype.click;
+  HTMLAnchorElement.prototype.click = function (...args) {
+    downloadNames.push(this.download || "");
+    return originalAnchorClick.apply(this, args);
+  };
+  try {
+    mount(
+      createElement(ApplyPatchForm, {
+        defaultSettings: {
+          output: {
+            compression: "none",
+          },
+        },
+      }),
+    );
+
+    await expect.poll(() => document.getElementById("rom-weaver-input-file-rom")).not.toBeNull();
+
+    selectFileInput(document.getElementById("rom-weaver-input-file-rom"), await loadFixtureFile(RAW_ROM));
+    setFormControlValue(document.getElementById("rom-weaver-input-output-file-name"), "custom-output.bin");
+
+    await waitForApplyButtonEnabled();
+    await clickApplyButton();
+
+    const applyState = await waitForApplyOutcome();
+    expect(applyState).not.toBeNull();
+    expect(applyState?.kind, applyState && "errorText" in applyState ? applyState.errorText : "").toBe("download");
+    expect(downloadNames.at(-1)).toBe("custom-output.bin");
+  } finally {
+    HTMLAnchorElement.prototype.click = originalAnchorClick;
+  }
+});
+
 test("compressed outputs clean up intermediate raw OPFS files", async () => {
   await clearOpfsOutputDirectory();
   mount(

@@ -52,6 +52,10 @@ const getCompressionProfile = (options: ApplyWorkflowOptions | undefined) =>
 const getWorkerThreads = (options: ApplyWorkflowOptions | undefined) => options?.workers?.threads;
 const getLogLevel = (options: ApplyWorkflowOptions | undefined) => options?.logging?.level;
 const getContainerSettings = (options: ApplyWorkflowOptions | undefined) => options?.output?.container || {};
+const getRequestedOutputName = (options: ApplyWorkflowOptions | undefined) => {
+  const outputName = options?.output?.outputName;
+  return typeof outputName === "string" ? outputName.trim() : "";
+};
 
 const getDefaultChdCompressionCodecs = (mode: string | null | undefined, compressionProfile: string) =>
   OutputCompressionManager.getChdCodecsForMode(mode, {
@@ -435,11 +439,13 @@ const buildSessionOutputFiles = async (
   const compression = OutputCompressionManager.resolveOutputCompression(compressionSource, {
     compressionFormat: getOutputCompression(options, compressionSource),
   });
+  const requestedOutputName = getRequestedOutputName(options);
   const outputAssetCleanups = collectPatchFileCleanups(outputAssets.map(({ file }) => file));
   if (outputAssets.length === 1) {
     const onlyOutput = outputAssets[0];
     if (!onlyOutput) throw new Error("No output file was produced");
     const onlyFile = onlyOutput.file;
+    if (requestedOutputName) onlyFile.fileName = requestedOutputName;
     assertOutputSizeLimit(onlyFile.fileSize, options);
     if (compression === "none") return { files: [onlyFile], rawOutputSize: onlyFile.fileSize };
     const builtFiles = await buildOutputFiles(onlyOutput.asset.file, onlyFile, options, runtime);
@@ -461,7 +467,7 @@ const buildSessionOutputFiles = async (
   if (compression === "rvz") throw new Error("RVZ output is not supported for CD disc groups");
   if (compression === "z3ds") throw new Error("Z3DS output is not supported for CD disc groups");
 
-  const baseName = getOutputBaseName(assets);
+  const baseName = requestedOutputName || getOutputBaseName(assets);
   if (compression === "zip") {
     const files = [
       await createCompressedArchive(
