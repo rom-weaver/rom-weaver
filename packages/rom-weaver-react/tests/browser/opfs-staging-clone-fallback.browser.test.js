@@ -119,3 +119,23 @@ test("browser OPFS source refs stage CHD blobs and keep byte-array inputs virtua
   await stagedBytes.cleanup();
   expect(getActiveBrowserVirtualFiles()).toEqual([]);
 });
+
+test("browser OPFS virtual RVZ staging preserves the original filename leaf", async () => {
+  const sourceName = "Luigi's Mansion (USA).rvz";
+  const sourceFile = new File([new Uint8Array([1, 2, 3, 4])], sourceName, {
+    type: "application/octet-stream",
+  });
+  const { createBrowserOpfsSourceRef } = await import("../../src/workers/protocol/browser-opfs-source-ref.ts");
+  const staged = await createBrowserOpfsSourceRef(sourceFile, sourceName, {
+    bucket: "input",
+    mountPoint: "/work",
+    pathPrefix: "rvz-input",
+  });
+  try {
+    expect(staged.virtual).toBe(true);
+    expect(staged.fileName).toBe(sourceName);
+    expect(staged.filePath).toMatch(/^\/work\/input\/rvz-input-[^/]+\/Luigi's Mansion \(USA\)\.rvz$/);
+  } finally {
+    await staged.cleanup();
+  }
+});

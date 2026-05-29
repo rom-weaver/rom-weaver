@@ -51,8 +51,10 @@ const toFileLike = (source: Blob, fileName: string): File => {
 
 const LEADING_DOTS_REGEX = /^\.+/;
 const PATH_SEPARATOR_REGEX = /[\\/]+/g;
-const UNSAFE_FILE_CHARS_REGEX = /[^A-Za-z0-9._-]+/g;
-const EDGE_UNDERSCORES_REGEX = /^_+|_+$/g;
+const CONTROL_FILE_CHARS_REGEX = /[\u0000-\u001f\u007f]+/g;
+const NON_ASCII_CHARS_REGEX = /[^\x20-\x7e]+/g;
+const RESERVED_FILE_CHARS_REGEX = /[:*?"<>|]+/g;
+const EDGE_WHITESPACE_OR_UNDERSCORES_REGEX = /^[_\s]+|[_\s]+$/g;
 const TRAILING_SLASHES_REGEX = /\/+$/;
 const EAGER_MEMORY_VIRTUAL_SOURCE_EXTENSIONS = new Set([".7z", ".rvz"]);
 const EAGER_MEMORY_VIRTUAL_SOURCE_MAX_BYTES = 512 * 1024 * 1024;
@@ -85,9 +87,11 @@ const emitBrowserSourceRefTrace = (message: string, details?: Record<string, unk
 const normalizeVirtualFileName = (fileName: string | null | undefined, fallback = "input.bin") =>
   String(fileName || fallback)
     .replace(PATH_SEPARATOR_REGEX, "_")
-    .replace(UNSAFE_FILE_CHARS_REGEX, "_")
-    .replace(EDGE_UNDERSCORES_REGEX, "")
-    .replace(LEADING_DOTS_REGEX, "") || fallback;
+    .replace(CONTROL_FILE_CHARS_REGEX, "_")
+    .replace(NON_ASCII_CHARS_REGEX, "_")
+    .replace(RESERVED_FILE_CHARS_REGEX, "_")
+    .replace(LEADING_DOTS_REGEX, "")
+    .replace(EDGE_WHITESPACE_OR_UNDERSCORES_REGEX, "") || fallback;
 
 const lowerFileExtension = (fileName: string) => {
   const normalized = String(fileName || "").toLowerCase();
@@ -120,11 +124,12 @@ const createVirtualInputPath = (
   const mountPoint = String(options.mountPoint || WORKER_OPFS_MOUNTPOINT).replace(TRAILING_SLASHES_REGEX, "");
   const bucket = options.bucket || "input";
   const pathPrefix = normalizeVirtualFileName(options.pathPrefix || "input", "input");
+  const normalizedFileName = normalizeVirtualFileName(fileName);
   return getWorkerStorageBucketPath(
     mountPoint,
     bucket,
-    `${pathPrefix}-${createVirtualPathNonce()}-${normalizeVirtualFileName(fileName)}`,
-    normalizeVirtualFileName(fileName),
+    `${pathPrefix}-${createVirtualPathNonce()}/${normalizedFileName}`,
+    normalizedFileName,
   );
 };
 
