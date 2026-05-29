@@ -278,16 +278,6 @@ const releasePreparedSource = (source?: StagedSource<unknown>) => {
   source.parsedPatch = undefined;
 };
 
-const getSelectableCandidateCount = (request: CandidateSelectionRequest) => {
-  const selectableGroups = request.candidates.filter((candidate) => candidate.type === "group" && candidate.selectable);
-  const selectableGroupIds = new Set(selectableGroups.map((candidate) => candidate.id));
-  const selectableFiles = request.candidates.filter(
-    (candidate) =>
-      candidate.type === "file" && candidate.selectable && !selectableGroupIds.has(candidate.parentCandidateId || ""),
-  );
-  return selectableGroups.length + selectableFiles.length;
-};
-
 const getPreparedAssetFileName = (asset: InputAsset | undefined, fallback?: string) =>
   getBaseFileName(asset?.file.fileName || asset?.fileName || fallback || "input.bin");
 
@@ -295,7 +285,7 @@ const canRecoverWithCandidateSelection = (error: unknown, requests: CandidateSel
   if (!requests.length) return false;
   const normalized = toRomWeaverError(error);
   if (normalized.code === "AMBIGUOUS_SELECTION") return true;
-  return requests.some((request) => getSelectableCandidateCount(request) !== 1);
+  return false;
 };
 
 class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<{ progress: WorkflowProgress }> {
@@ -1140,7 +1130,15 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
       owner.selectedArchiveEntry ||
       owner.state.fileName ||
       owner.state.id;
-    const selectionRetryKey = `${owner.state.id}:${retryIdentity}`;
+    const candidateRetryIdentity = String(internalCandidate.candidate.id || "")
+      .trim()
+      .toLowerCase();
+    const normalizedRetryIdentity = (
+      candidateRetryIdentity ||
+      getBaseFileName(retryIdentity) ||
+      String(retryIdentity || owner.state.id)
+    ).toLowerCase();
+    const selectionRetryKey = `${owner.state.id}:${normalizedRetryIdentity}`;
     if (attemptedSelectionKeys.has(selectionRetryKey))
       throw new RomWeaverError(
         "INVALID_INPUT",

@@ -107,21 +107,11 @@ const releasePreparedSource = (source?: StagedSource<unknown>) => {
   source.preparedInputAssets = undefined;
 };
 
-const getSelectableCandidateCount = (request: CandidateSelectionRequest) => {
-  const selectableGroups = request.candidates.filter((candidate) => candidate.type === "group" && candidate.selectable);
-  const selectableGroupIds = new Set(selectableGroups.map((candidate) => candidate.id));
-  const selectableFiles = request.candidates.filter(
-    (candidate) =>
-      candidate.type === "file" && candidate.selectable && !selectableGroupIds.has(candidate.parentCandidateId || ""),
-  );
-  return selectableGroups.length + selectableFiles.length;
-};
-
 const canRecoverWithCandidateSelection = (error: unknown, requests: CandidateSelectionRequest[]) => {
   if (!requests.length) return false;
   const normalized = toRomWeaverError(error);
   if (normalized.code === "AMBIGUOUS_SELECTION") return true;
-  return requests.some((request) => getSelectableCandidateCount(request) !== 1);
+  return false;
 };
 
 class CreateWorkflowController<TSource, TDestination> extends WorkflowController<{ progress: WorkflowProgress }> {
