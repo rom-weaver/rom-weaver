@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getBaseFileName } from "../../lib/input/path-utils.ts";
+import { buildPatchedOutputBaseName } from "../../lib/output/output-name-composition.ts";
 import { createTiming, formatTiming } from "../../lib/progress/timing.ts";
 import { ApplyWorkflow, type BrowserApplyResult, type WorkflowProgress } from "../../platform/browser/browser-api.ts";
 import { getErrorCode } from "../../presentation/errors.ts";
@@ -105,8 +106,7 @@ const getAutomaticApplyOutputName = (
       return getFileNameWithoutExtension(outputLabel || patchFileName);
     })
     .filter(Boolean);
-  const outputBase = patchNames.length ? `${inputBase} - ${patchNames.join(" + ")}` : inputBase;
-  return outputBase;
+  return buildPatchedOutputBaseName(inputBase, patchNames);
 };
 
 const toPatchStageInfo = (

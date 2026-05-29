@@ -36,6 +36,7 @@ import {
 } from "../input/path-utils.ts";
 import { selectionToArchiveEntry } from "../input/selection.ts";
 import { wrapPublicOutput } from "../output/index.ts";
+import { buildPatchedOutputBaseName } from "../output/output-name-composition.ts";
 import {
   cloneCandidate,
   cloneValue,
@@ -1531,12 +1532,10 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
     const patchNames = this.patches
       .map((patch, index) => getFileNameWithoutExtension(this.resolvePatchOutputName(patch, index)))
       .filter(Boolean);
-    const outputBase = patchNames.length ? `${inputBase} - ${patchNames.join(" + ")}` : inputBase;
-    return outputBase;
+    return buildPatchedOutputBaseName(inputBase, patchNames);
   }
 
   private resolvePatchOutputName(patch: StagedSource<TSource>, index: number): string {
-    if (patch.outputLabel) return patch.outputLabel;
     if (patch.state.selectedCandidateId) {
       const selectedCandidate = patch.state.candidates.find(
         (candidate) => candidate.id === patch.state.selectedCandidateId,
@@ -1557,7 +1556,7 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
       );
       if (selectablePatches.length === 1 && selectablePatches[0]?.fileName) return selectablePatches[0].fileName;
     }
-    return patch.state.fileName || `patch ${index + 1}`;
+    return patch.state.fileName || patch.outputLabel || `patch ${index + 1}`;
   }
 
   private getExecutionOutputName() {

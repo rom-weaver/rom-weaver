@@ -1,4 +1,5 @@
 import { classifyPatcherInput } from "../../lib/input/input-classification.ts";
+import { buildPatchedOutputBaseName } from "../../lib/output/output-name-composition.ts";
 import { formatByteSize, formatPercentFixed } from "../../presentation/workflow-presentation.ts";
 import type { ApplySettings } from "../../types/settings.ts";
 
@@ -77,18 +78,18 @@ const normalizePatchSourceForGeneratedFileName = (
   if (typeof patchSource === "string" && patchSource) return { fileName: patchSource };
   if (patchSource && typeof patchSource === "object") {
     const source = patchSource as GeneratedPatchNameSource;
+    const providedFileName = source._originalPatchFile?.fileName || source.fileName || source.name;
+    if (providedFileName) {
+      return {
+        _generatedPatchName: source._generatedPatchName || undefined,
+        fileName: providedFileName,
+      };
+    }
     if (source._generatedPatchName) {
       return {
         _generatedPatchName: source._generatedPatchName,
-        fileName: source.fileName || undefined,
       };
     }
-    if (source._originalPatchFile?.fileName || source.fileName) {
-      return {
-        fileName: source._originalPatchFile?.fileName || source.fileName || undefined,
-      };
-    }
-    if (source.name) return { fileName: source.name };
   }
   return { fileName: fallback };
 };
@@ -113,8 +114,7 @@ const generatePatchedFileName = (
       ),
     )
     .filter(Boolean);
-  const outputName = patchNames.length ? `${romName} - ${patchNames.join(" + ")}` : romName;
-  return outputName;
+  return buildPatchedOutputBaseName(romName, patchNames);
 };
 
 const getGeneratedOutputName = (
