@@ -16,14 +16,13 @@ if (!ARTIFACTS_DIR_INPUT) {
 const DIST_WASM_DIR = resolve(process.cwd(), ARTIFACTS_DIR_INPUT);
 
 const REQUIRED_DIST_COPIES = [
-  { src: 'rom-weaver-cli.wasm', dst: 'rom-weaver-cli.wasm' },
-  { src: 'rom-weaver-cli.wasm.br', dst: 'rom-weaver-cli.wasm.br' },
-  { src: 'rom-weaver-cli-threaded.wasm', dst: 'rom-weaver-cli-threaded.wasm' },
-  { src: 'rom-weaver-cli-threaded.wasm.br', dst: 'rom-weaver-cli-threaded.wasm.br' },
+  { src: 'rom-weaver-app.wasm', dst: 'rom-weaver-app.wasm' },
+  { src: 'rom-weaver-app.wasm.br', dst: 'rom-weaver-app.wasm.br' },
+  { src: 'rom-weaver-app-threaded.wasm', dst: 'rom-weaver-app-threaded.wasm' },
+  { src: 'rom-weaver-app-threaded.wasm.br', dst: 'rom-weaver-app-threaded.wasm.br' },
   { src: 'rom-weaver-runtime-utils.mjs', dst: 'src/rom-weaver-runtime-utils.mjs' },
   { src: 'rom-weaver-browser-opfs-api.mjs', dst: 'src/rom-weaver-browser-opfs-api.mjs' },
   { src: 'workers/browser-wasi-thread-worker.mjs', dst: 'src/workers/browser-wasi-thread-worker.mjs' },
-  { src: 'threaded.args', dst: 'threaded.args' },
 ];
 
 const OPTIONAL_ROOT_FILES = [
@@ -36,7 +35,7 @@ function main() {
 
   if (!existsSync(DIST_WASM_DIR)) {
     fail(
-      `Missing artifacts directory: ${DIST_WASM_DIR}. Run scripts/build-wasm-cli.sh and pass that output directory here.`,
+      `Missing artifacts directory: ${DIST_WASM_DIR}. Run scripts/build-wasm-app.sh and pass that output directory here.`,
     );
   }
 
@@ -45,7 +44,7 @@ function main() {
     const dst = resolve(PACKAGE_DIR, dstName);
 
     if (!existsSync(src)) {
-      fail(`Missing artifact: ${src}. Run scripts/build-wasm-cli.sh first.`);
+      fail(`Missing artifact: ${src}. Run scripts/build-wasm-app.sh first.`);
     }
 
     mkdirSync(dirname(dst), { recursive: true });

@@ -5,7 +5,7 @@ JavaScript wrappers and WASM artifacts for browser `rom-weaver` execution.
 ## What You Get
 
 - Browser OPFS runner (`createRomWeaverBrowserOpfs`) for Dedicated Workers
-- Browser WASI thread support for `rom-weaver-cli-threaded.wasm` when cross-origin isolation enables `SharedArrayBuffer`
+- Browser WASI thread support for `rom-weaver-app-threaded.wasm` when cross-origin isolation enables `SharedArrayBuffer`
 - Dedicated browser worker client (`createBrowserWorkerClient`)
 - First-party TypeScript declarations
 
@@ -28,13 +28,20 @@ It is not a main-thread API and will throw when called from `window`.
 import { createRomWeaverBrowserOpfs } from 'rom-weaver-wasm/browser-opfs';
 
 const runner = await createRomWeaverBrowserOpfs({
-  wasmUrl: '/wasm/rom-weaver-cli.wasm',
+  wasmUrl: '/wasm/rom-weaver-app.wasm',
   opfsHandle: await navigator.storage.getDirectory(),
   workGuestPath: '/work',
 });
 
 const result = await runner.runJson(
-  ['checksum', '/work/game.bin', '--algo', 'crc32', '--no-extract'],
+  {
+    type: 'checksum',
+    args: {
+      source: '/work/game.bin',
+      algo: ['crc32'],
+      no_extract: true,
+    },
+  },
   {
     onEvent(event) {
       console.log(event);
@@ -51,7 +58,7 @@ Runtime behavior:
 - When both `wasmUrl` and `threadedWasmUrl` are available, the runner auto-selects threaded wasm only when `SharedArrayBuffer` and `crossOriginIsolated` are available; otherwise it falls back to non-threaded wasm.
 - `runner.threaded` and `runner.wasmUrl` report the loaded runtime.
 - Browser picker handles/files should be staged into OPFS before `run()`.
-- Known CLI output paths are created in OPFS before `_start()` because WASI Preview 1 filesystem calls are synchronous.
+- Known typed-command output paths are created in OPFS before `_start()` because WASI Preview 1 filesystem calls are synchronous.
 - Dynamic files created during a run are flushed back to OPFS after `_start()` returns.
 
 ## Dedicated Browser Worker Client Example
@@ -61,12 +68,18 @@ import { createBrowserWorkerClient } from 'rom-weaver-wasm/workers/browser-clien
 
 const worker = createBrowserWorkerClient();
 await worker.init({
-  wasmUrl: '/wasm/rom-weaver-cli.wasm',
+  wasmUrl: '/wasm/rom-weaver-app.wasm',
   opfsHandle: await navigator.storage.getDirectory(),
   workGuestPath: '/work',
 });
 
-const result = await worker.runJson(['checksum', '/work/game.bin', '--algo', 'crc32'], {
+const result = await worker.runJson({
+  type: 'checksum',
+  args: {
+    source: '/work/game.bin',
+    algo: ['crc32'],
+  },
+}, {
   onEvent(event) {
     console.log(event);
   },
@@ -81,7 +94,7 @@ worker.terminate();
 Build artifacts are written to this package by default:
 
 ```bash
-scripts/build-wasm-cli.sh
+scripts/build-wasm-app.sh
 ```
 
 If you built artifacts to a custom directory, syncing into this package is explicit:

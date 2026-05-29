@@ -11,6 +11,7 @@ import {
   runFullFormatMatrix,
   runPatchMatrix,
   runProgressMatrix,
+  toTypedRunInput,
   toBytes,
   withTempFixture,
   writeGuestPatternFile,
@@ -44,7 +45,7 @@ const STREAMING_WASI_MODULE_BYTES = new Uint8Array([
 ]);
 
 function runJsonFromWorker(worker) {
-  return (args, options) => worker.runJson(args, options);
+  return (args, options) => worker.runJson(toTypedRunInput(args), options);
 }
 
 function delay(ms, value = null) {
@@ -322,7 +323,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
 
       expect(result.exitCode).toBe(0);
       expect(result.ok).toBe(true);
-      expect(result.args[0]).toBe('--json');
+      expect(result.request.output.json).toBe(true);
       expect(Array.isArray(result.events)).toBe(true);
       expect(result.events.length).toBeGreaterThan(0);
 
@@ -429,7 +430,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
     }, {
       initOptions: {
         preferThreadedWasm: false,
-        wasmUrl: new URL('../rom-weaver-cli.wasm', import.meta.url).href,
+        wasmUrl: new URL('../rom-weaver-app.wasm', import.meta.url).href,
       },
     });
   });
@@ -478,7 +479,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
       ]);
 
       const terminal = assertRunJsonSucceeded(result, { command: 'checksum' });
-      expect(result.args.slice(-2)).toEqual(['--threads', '3']);
+      expect(result.command.args.threads).toBe(3);
       expect(terminal.requested_threads).toBe(3);
     }, {
       clientOptions: {
@@ -500,7 +501,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
       ]);
 
       const terminal = assertRunJsonSucceeded(result, { command: 'checksum' });
-      expect(result.args.slice(-2)).toEqual(['--threads', '2']);
+      expect(result.command.args.threads).toBe(2);
       expect(terminal.requested_threads).toBe(2);
     }, {
       clientOptions: {
@@ -522,7 +523,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
       ]);
 
       const terminal = assertRunJsonSucceeded(result, { command: 'checksum' });
-      expect(result.args.slice(-2)).toEqual(['--threads', '3']);
+      expect(result.command.args.threads).toBe(3);
       expect(terminal.requested_threads).toBe(3);
     }, {
       clientOptions: {
@@ -543,7 +544,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
       ]);
 
       const terminal = assertRunJsonSucceeded(result, { command: 'checksum' });
-      expect(result.args.slice(-1)).toEqual(['--threads=3']);
+      expect(result.command.args.threads).toBe(3);
       expect(terminal.requested_threads).toBe(3);
     }, {
       clientOptions: {
@@ -565,7 +566,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
       ]);
 
       const terminal = assertRunJsonSucceeded(result, { command: 'checksum' });
-      expect(result.args.slice(-2)).toEqual(['--threads', '8']);
+      expect(result.command.args.threads).toBe(8);
       expect(terminal.requested_threads).toBe(8);
     }, {
       clientOptions: {
@@ -585,7 +586,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
       ]);
 
       const terminal = assertRunJsonSucceeded(result, { command: 'checksum' });
-      expect(result.args.slice(-2)).toEqual(['--threads', '8']);
+      expect(result.command.args.threads).toBe(8);
       expect(terminal.requested_threads).toBe(8);
     }, {
       clientOptions: {
@@ -612,12 +613,12 @@ describe('rom-weaver-wasm browser runner parity', () => {
     });
   });
 
-  it('run reports parser errors for unknown commands', async () => {
+  it('run reports typed request errors for unknown commands', async () => {
     await withTempFixture(async ({ worker }) => {
       const result = await worker.run(['definitely-not-a-command']);
       expect(result.exitCode).not.toBe(0);
       expect(result.ok).toBe(false);
-      expect(result.stderr).toMatch(/unknown command/i);
+      expect(result.stderr).toMatch(/unknown variant `definitely-not-a-command`/i);
     });
   });
 
@@ -706,7 +707,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
     await withTempFixture(async ({ init, sourcePath, worker }) => {
       const canUseThreadedWasm = typeof SharedArrayBuffer === 'function' && globalThis.crossOriginIsolated === true;
       expect(init.threaded).toBe(canUseThreadedWasm);
-      expect(init.wasmUrl).toContain(canUseThreadedWasm ? 'rom-weaver-cli-threaded.wasm' : 'rom-weaver-cli.wasm');
+      expect(init.wasmUrl).toContain(canUseThreadedWasm ? 'rom-weaver-app-threaded.wasm' : 'rom-weaver-app.wasm');
       const result = await worker.runJson([
         'checksum',
         sourcePath,
@@ -720,7 +721,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
       });
     }, {
       initOptions: {
-        wasmUrl: new URL('../rom-weaver-cli.wasm', import.meta.url).href,
+        wasmUrl: new URL('../rom-weaver-app.wasm', import.meta.url).href,
       },
     });
   });
@@ -728,7 +729,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
   it('runner honors preferThreadedWasm=false with explicit wasm URL paths', async () => {
     await withTempFixture(async ({ init, sourcePath, worker }) => {
       expect(init.threaded).toBe(false);
-      expect(init.wasmUrl).toContain('rom-weaver-cli.wasm');
+      expect(init.wasmUrl).toContain('rom-weaver-app.wasm');
       const result = await worker.runJson([
         'checksum',
         sourcePath,
@@ -743,7 +744,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
     }, {
       initOptions: {
         preferThreadedWasm: false,
-        wasmUrl: new URL('../rom-weaver-cli.wasm', import.meta.url).href,
+        wasmUrl: new URL('../rom-weaver-app.wasm', import.meta.url).href,
       },
     });
   });
@@ -752,11 +753,11 @@ describe('rom-weaver-wasm browser runner parity', () => {
     await withTempFixture(async ({ init }) => {
       const canUseThreadedWasm = typeof SharedArrayBuffer === 'function' && globalThis.crossOriginIsolated === true;
       expect(init.threaded).toBe(canUseThreadedWasm);
-      expect(init.wasmUrl).toContain(canUseThreadedWasm ? 'rom-weaver-cli-threaded.wasm' : 'rom-weaver-cli.wasm');
+      expect(init.wasmUrl).toContain(canUseThreadedWasm ? 'rom-weaver-app-threaded.wasm' : 'rom-weaver-app.wasm');
     }, {
       initOptions: {
-        wasmUrl: new URL('../rom-weaver-cli.wasm', import.meta.url).href,
-        threadedWasmUrl: new URL('../rom-weaver-cli-threaded.wasm', import.meta.url).href,
+        wasmUrl: new URL('../rom-weaver-app.wasm', import.meta.url).href,
+        threadedWasmUrl: new URL('../rom-weaver-app-threaded.wasm', import.meta.url).href,
       },
     });
   });
@@ -764,7 +765,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
   it('runner initializes the threaded wasm module when selected', async () => {
     await withTempFixture(async ({ init, sourcePath, worker }) => {
       expect(init.threaded).toBe(true);
-      expect(init.wasmUrl).toContain('rom-weaver-cli-threaded.wasm');
+      expect(init.wasmUrl).toContain('rom-weaver-app-threaded.wasm');
 
       const result = await worker.runJson([
         'checksum',
@@ -781,7 +782,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
       });
     }, {
       initOptions: {
-        wasmUrl: new URL('../rom-weaver-cli-threaded.wasm', import.meta.url).href,
+        wasmUrl: new URL('../rom-weaver-app-threaded.wasm', import.meta.url).href,
       },
     });
   });
@@ -846,7 +847,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
       expect(terminal.used_parallelism).toBe(true);
     }, {
       initOptions: {
-        wasmUrl: new URL('../rom-weaver-cli-threaded.wasm', import.meta.url).href,
+        wasmUrl: new URL('../rom-weaver-app-threaded.wasm', import.meta.url).href,
       },
     });
   });
@@ -911,7 +912,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
         initOptions: {
           defaultThreads: 2,
           threadWorkerUrl: probeWorkerUrl,
-          wasmUrl: new URL('../rom-weaver-cli-threaded.wasm', import.meta.url).href,
+          wasmUrl: new URL('../rom-weaver-app-threaded.wasm', import.meta.url).href,
         },
       });
     } finally {
@@ -983,7 +984,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
         initOptions: {
           defaultThreads: 2,
           threadWorkerUrl: probeWorkerUrl,
-          wasmUrl: new URL('../rom-weaver-cli-threaded.wasm', import.meta.url).href,
+          wasmUrl: new URL('../rom-weaver-app-threaded.wasm', import.meta.url).href,
         },
       });
     } finally {
@@ -1050,7 +1051,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
       expect(await countScratchFiles(opfsHandle)).toBe(scratchCountAfterFirstRun);
     }, {
       initOptions: {
-        wasmUrl: new URL('../rom-weaver-cli-threaded.wasm', import.meta.url).href,
+        wasmUrl: new URL('../rom-weaver-app-threaded.wasm', import.meta.url).href,
       },
     });
   });
@@ -1095,7 +1096,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
       expect(await countScratchFiles(opfsHandle)).toBe(0);
     }, {
       initOptions: {
-        wasmUrl: new URL('../rom-weaver-cli-threaded.wasm', import.meta.url).href,
+        wasmUrl: new URL('../rom-weaver-app-threaded.wasm', import.meta.url).href,
       },
     });
   });
@@ -1104,30 +1105,21 @@ describe('rom-weaver-wasm browser runner parity', () => {
     await expect(
       withTempFixture(async () => {}, {
         initOptions: {
-          wasmUrl: new URL('../missing-rom-weaver-cli.wasm', import.meta.url).href,
+          wasmUrl: new URL('../missing-rom-weaver-app.wasm', import.meta.url).href,
         },
       }),
     ).rejects.toThrow(/failed to fetch wasm module/i);
   });
 
-  it('runner stdin normalization accepts supported types and rejects invalid input', async () => {
+  it('runner typed input normalization rejects invalid command objects', async () => {
     await withTempFixture(async ({ worker }) => {
-      const unknownCommand = ['definitely-not-a-command'];
-      const validStdinValues = [
-        'stdin text',
-        new Uint8Array([1, 2, 3]),
-        new Uint8Array([4, 5, 6]).buffer,
-      ];
-
-      for (const stdin of validStdinValues) {
-        const result = await worker.run(unknownCommand, { stdin });
-        expect(result.exitCode).not.toBe(0);
-        expect(result.ok).toBe(false);
-      }
+      const result = await worker.run({ type: 'definitely-not-a-command', args: {} });
+      expect(result.exitCode).not.toBe(0);
+      expect(result.ok).toBe(false);
 
       await expect(
-        worker.run(unknownCommand, { stdin: 123 }),
-      ).rejects.toThrow(/stdin must be a string, Uint8Array, ArrayBuffer, or undefined/i);
+        worker.run({ args: {} }),
+      ).rejects.toThrow(/typed command requires a string `type` field/i);
     });
   });
 
@@ -1270,7 +1262,7 @@ describe('rom-weaver-wasm browser worker client parity', () => {
     await withTempFixture(async ({ init, sourcePath, worker }) => {
       const canUseThreadedWasm = typeof SharedArrayBuffer === 'function' && globalThis.crossOriginIsolated === true;
       expect(init.threaded).toBe(canUseThreadedWasm);
-      expect(init.wasmUrl).toContain(canUseThreadedWasm ? 'rom-weaver-cli-threaded.wasm' : 'rom-weaver-cli.wasm');
+      expect(init.wasmUrl).toContain(canUseThreadedWasm ? 'rom-weaver-app-threaded.wasm' : 'rom-weaver-app.wasm');
       let streamedEvents = 0;
       const result = await worker.runJson(
         ['checksum', sourcePath, '--algo', 'crc32', '--no-extract'],

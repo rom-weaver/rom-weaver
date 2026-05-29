@@ -7,8 +7,34 @@ export type OperationStatus = "pending" | "running" | "succeeded" | "unsupported
 
 export type ThreadMode = "auto" | "fixed";
 
+export type ThreadBudget = "auto" | number;
+
 export type ThreadExecution = { requested_threads: number, effective_threads: number, thread_mode: ThreadMode, used_parallelism: boolean, thread_fallback: boolean, thread_fallback_reason: string | null, };
 
 export type JsonValue = number | string | boolean | Array<JsonValue> | { [key in string]: JsonValue } | null;
 
 export type ProgressEvent = { command: string, family: OperationFamily, format: string | null, stage: string, label: string, details: JsonValue | null, percent: number | null, requested_threads: number | null, effective_threads: number | null, thread_mode: ThreadMode | null, used_parallelism: boolean | null, thread_fallback: boolean | null, thread_fallback_reason?: string | null, status: OperationStatus, };
+
+export type CompressionLevelProfile = "min" | "very-low" | "low" | "medium" | "high" | "very-high" | "max";
+
+export type InspectCommand = { source: string, list?: boolean, };
+
+export type ExtractCommand = { source: string, select?: Array<string>, out_dir: string, split_bin?: boolean, no_ignore?: boolean, no_nested_extract?: boolean, no_overwrite?: boolean, checksum?: Array<string>, threads?: ThreadBudget, };
+
+export type ChecksumCommand = { source: string, algo: Array<string>, select?: Array<string>, no_extract?: boolean, no_ignore?: boolean, strip_header?: boolean, no_trim_fix?: boolean, start?: bigint, length?: bigint, threads?: ThreadBudget, };
+
+export type CompressCommand = { input: Array<string>, format?: string, output: string, codec?: Array<string>, level?: CompressionLevelProfile, threads?: ThreadBudget, };
+
+export type TrimCommand = { source: Array<string>, output?: string, extension?: string, in_place?: boolean, dry_run?: boolean, revert?: boolean, recursive?: boolean, threads?: ThreadBudget, };
+
+export type BatchHeaderFixerCommand = { source: Array<string>, output?: string, extension?: string, in_place?: boolean, dry_run?: boolean, recursive?: boolean, threads?: ThreadBudget, };
+
+export type PatchApplyCommand = { input: string, select?: Array<string>, no_extract?: boolean, no_ignore?: boolean, patches: Array<string>, output: string, no_compress?: boolean, compress_format?: string, compress_codec?: Array<string>, compress_level?: CompressionLevelProfile, checksum_cache?: Array<string>, validate_with_checksums?: Array<string>, strip_header?: boolean, add_header?: boolean, repair_checksum?: boolean, ignore_checksum_validation?: boolean, threads?: ThreadBudget, };
+
+export type PatchCreateCommand = { original: string, modified: string, format: string, output: string, ignore_checksum_validation?: boolean, threads?: ThreadBudget, xdelta_secondary?: string, };
+
+export type Commands = { "type": "inspect", "args": InspectCommand } | { "type": "extract", "args": ExtractCommand } | { "type": "checksum", "args": ChecksumCommand } | { "type": "compress", "args": CompressCommand } | { "type": "trim", "args": TrimCommand } | { "type": "batch-header-fixer", "args": BatchHeaderFixerCommand } | { "type": "patch-apply", "args": PatchApplyCommand } | { "type": "patch-create", "args": PatchCreateCommand };
+
+export type RomWeaverRunOutputOptions = { json?: boolean, progress?: boolean, trace?: boolean, interactive_selection_enabled?: boolean, };
+
+export type RomWeaverRunRequest = { command: Commands, output?: RomWeaverRunOutputOptions, };

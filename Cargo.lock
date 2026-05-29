@@ -1609,8 +1609,11 @@ dependencies = [
  "rom-weaver-core",
  "rom-weaver-libarchive",
  "rom-weaver-patches",
+ "serde",
  "serde_json",
  "tracing",
+ "tracing-subscriber",
+ "ts-rs",
  "xdvdfs",
 ]
 
@@ -1661,10 +1664,7 @@ dependencies = [
  "flate2",
  "nod",
  "rom-weaver-app",
- "rom-weaver-core",
  "serde_json",
- "tracing",
- "tracing-subscriber",
  "xdvdfs",
 ]
 
@@ -1762,6 +1762,7 @@ dependencies = [
 name = "rom-weaver-typegen"
 version = "0.1.0"
 dependencies = [
+ "rom-weaver-app",
  "rom-weaver-core",
  "serde_json",
  "ts-rs",

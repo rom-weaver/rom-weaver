@@ -39,7 +39,7 @@ MIB = 1024 * 1024
 TIME_BIN = Path("/usr/bin/time")
 SCRIPT_PATH = Path(__file__).resolve()
 REPO_ROOT = SCRIPT_PATH.parent.parent
-WASM_BUILD_SCRIPT = REPO_ROOT / "scripts" / "build-wasm-cli.sh"
+WASM_BUILD_SCRIPT = REPO_ROOT / "scripts" / "build-wasm-app.sh"
 BENCH_DEFAULTS_PATH = REPO_ROOT / "scripts" / "bench-defaults.json"
 CACHE_SCHEMA_VERSION = 1
 
@@ -605,16 +605,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--wasm-module",
         type=Path,
-        default=Path("packages/rom-weaver-wasm/rom-weaver-cli-threaded.wasm"),
-        help="Path to rom-weaver CLI wasm module used for rom-weaver-wasm archive tool",
+        default=Path("packages/rom-weaver-wasm/rom-weaver-app-threaded.wasm"),
+        help="Path to rom-weaver app wasm module used for rom-weaver-wasm archive tool",
     )
     parser.add_argument(
         "--wasm-singlethread-module",
         type=Path,
-        default=Path("packages/rom-weaver-wasm/rom-weaver-cli.wasm"),
+        default=Path("packages/rom-weaver-wasm/rom-weaver-app.wasm"),
         help=(
-            "Path to non-threaded rom-weaver CLI wasm module used for formats with unstable threaded "
-            "WASI timings (default: packages/rom-weaver-wasm/rom-weaver-cli.wasm)"
+            "Path to non-threaded rom-weaver app wasm module used for formats with unstable threaded "
+            "WASI timings (default: packages/rom-weaver-wasm/rom-weaver-app.wasm)"
         ),
     )
     parser.add_argument(

@@ -1,6 +1,7 @@
 import type {
   RomWeaverProgressEvent,
   RomWeaverDefaultThreads,
+  RomWeaverRunInput,
   RomWeaverRunJsonResult,
   RomWeaverRunOptions,
   RomWeaverRunResult,
@@ -34,9 +35,9 @@ export function createBrowserWorkerClient(
 export class BrowserRomWeaverWorkerClient {
   constructor(worker: Worker, options?: { defaultThreads?: RomWeaverDefaultThreads });
   init(options?: Record<string, unknown>): Promise<BrowserWorkerReady>;
-  run(args?: unknown[], options?: RomWeaverRunOptions & Record<string, unknown>): Promise<RomWeaverRunResult>;
+  run(commandOrRequest: RomWeaverRunInput, options?: RomWeaverRunOptions & Record<string, unknown>): Promise<RomWeaverRunResult>;
   runJson<TEvent = RomWeaverProgressEvent, TTraceEvent = unknown>(
-    args?: unknown[],
+    commandOrRequest: RomWeaverRunInput,
     options?: BrowserWorkerRunJsonOptions<TEvent, TTraceEvent>,
   ): Promise<RomWeaverRunJsonResult<TEvent, TTraceEvent>>;
   dispose(): Promise<{ disposed: true }>;

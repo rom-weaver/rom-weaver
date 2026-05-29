@@ -40,12 +40,12 @@ export class BrowserRomWeaverWorkerClient extends RomWeaverWorkerClientCore {
     return this._sendInit(initOptions);
   }
 
-  async run(args = [], options = {}) {
-    return super.run(args, options);
+  async run(commandOrRequest, options = {}) {
+    return super.run(commandOrRequest, options);
   }
 
-  async runJson(args = [], options = {}) {
-    return super.runJson(args, options);
+  async runJson(commandOrRequest, options = {}) {
+    return super.runJson(commandOrRequest, options);
   }
 
   _createInitOptions(options) {

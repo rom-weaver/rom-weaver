@@ -4,7 +4,8 @@ use std::{
     fs::File,
     io::{self, BufReader, BufWriter, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
-    sync::Arc,
+    process::ExitCode,
+    sync::{Arc, OnceLock},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -32,14 +33,25 @@ use rom_weaver_patches::{
     PatchRegistry, explicitly_unsupported_patch_reason_for_name,
     explicitly_unsupported_patch_reason_for_path,
 };
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use tracing::trace;
+#[cfg(not(target_arch = "wasm32"))]
+use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
+#[cfg(feature = "typescript-types")]
+use ts_rs::TS;
 use xdvdfs::{
     blockdev::{BlockDeviceWrite as XdvdfsBlockDeviceWrite, OffsetWrapper as XdvdfsOffsetWrapper},
     write::{fs::XDVDFSFilesystem as XdvdfsFilesystem, img::create_xdvdfs_image},
 };
-#[derive(Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(not(target_arch = "wasm32"), derive(Subcommand))]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+#[serde(rename_all = "kebab-case", tag = "type", content = "args")]
+#[cfg_attr(
+    feature = "typescript-types",
+    ts(rename_all = "kebab-case", tag = "type", content = "args")
+)]
 pub enum Commands {
     Inspect(InspectCommand),
     Extract(ExtractCommand),
@@ -51,14 +63,18 @@ pub enum Commands {
     PatchCreate(PatchCreateCommand),
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(not(target_arch = "wasm32"), derive(ValueEnum))]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+#[serde(rename_all = "kebab-case")]
+#[cfg_attr(feature = "typescript-types", ts(rename_all = "kebab-case"))]
 pub enum CompressionLevelProfile {
     Min,
     #[cfg_attr(not(target_arch = "wasm32"), value(name = "very-low"))]
     VeryLow,
     Low,
     Medium,
+    #[default]
     High,
     #[cfg_attr(not(target_arch = "wasm32"), value(name = "very-high"))]
     VeryHigh,
@@ -91,8 +107,21 @@ impl CompressionLevelProfile {
     }
 }
 
-#[derive(Debug)]
+const fn default_true() -> bool {
+    true
+}
+
+const fn default_high_compression_level() -> CompressionLevelProfile {
+    CompressionLevelProfile::High
+}
+
+fn default_xdelta_secondary() -> String {
+    XdeltaSecondaryMode::Lzma.to_string()
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
 pub struct InspectCommand {
     pub source: PathBuf,
     #[cfg_attr(
@@ -102,11 +131,14 @@ pub struct InspectCommand {
             help = "List selectable archive entries in the inspect label when supported"
         )
     )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub list: bool,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
 pub struct ExtractCommand {
     pub source: PathBuf,
     #[cfg_attr(
@@ -116,6 +148,8 @@ pub struct ExtractCommand {
             help = "Select extracted entries by exact name, prefix, or glob (repeatable). Examples: --select game.disc02.cue --select 'game.disc0?.bin'"
         )
     )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub select: Vec<String>,
     #[cfg_attr(not(target_arch = "wasm32"), arg(long))]
     pub out_dir: PathBuf,
@@ -126,6 +160,8 @@ pub struct ExtractCommand {
             help = "For CHD CD extraction, force split CUE + per-track BIN output (`*.trackNN.bin`) instead of a single BIN when possible"
         )
     )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub split_bin: bool,
     #[cfg_attr(
         not(target_arch = "wasm32"),
@@ -134,6 +170,8 @@ pub struct ExtractCommand {
             help = "Disable default common-file ignore filtering during container extraction"
         )
     )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub no_ignore: bool,
     #[cfg_attr(
         not(target_arch = "wasm32"),
@@ -142,6 +180,8 @@ pub struct ExtractCommand {
             help = "Do not recursively extract nested containers emitted by this extraction"
         )
     )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub no_nested_extract: bool,
     #[cfg_attr(
         not(target_arch = "wasm32"),
@@ -150,6 +190,8 @@ pub struct ExtractCommand {
             help = "Fail extraction if any destination output file already exists"
         )
     )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub no_overwrite: bool,
     #[cfg_attr(
         not(target_arch = "wasm32"),
@@ -159,18 +201,25 @@ pub struct ExtractCommand {
             help = "Compute an output checksum while extracting; repeat for multiple algorithms"
         )
     )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub checksum: Vec<String>,
     #[cfg_attr(not(target_arch = "wasm32"), arg(long, default_value = "auto"))]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub threads: ThreadBudget,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
 pub struct ChecksumCommand {
     pub source: PathBuf,
     #[cfg_attr(not(target_arch = "wasm32"), arg(long = "algo", required = true))]
     pub algo: Vec<String>,
     #[cfg_attr(not(target_arch = "wasm32"), arg(long = "select"))]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub select: Vec<String>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
@@ -179,6 +228,8 @@ pub struct ChecksumCommand {
             help = "Disable container auto-extract and checksum the source bytes directly"
         )
     )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub no_extract: bool,
     #[cfg_attr(
         not(target_arch = "wasm32"),
@@ -187,6 +238,8 @@ pub struct ChecksumCommand {
             help = "Disable default ignore filtering during checksum container payload resolution"
         )
     )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub no_ignore: bool,
     #[cfg_attr(
         not(target_arch = "wasm32"),
@@ -195,6 +248,8 @@ pub struct ChecksumCommand {
             help = "Remove a detected ROM header before checksum (A78/LNX/NES/FDS/SMC signatures; SNES/PCE copier-size rules)"
         )
     )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub strip_header: bool,
     #[cfg_attr(
         not(target_arch = "wasm32"),
@@ -203,21 +258,29 @@ pub struct ChecksumCommand {
             help = "Disable automatic trim-boundary checksum fixes for trim-eligible ROMs"
         )
     )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub no_trim_fix: bool,
     #[cfg_attr(not(target_arch = "wasm32"), arg(long))]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub start: Option<u64>,
     #[cfg_attr(not(target_arch = "wasm32"), arg(long))]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub length: Option<u64>,
     #[cfg_attr(not(target_arch = "wasm32"), arg(long, default_value = "auto"))]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub threads: ThreadBudget,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
 pub struct CompressCommand {
     #[cfg_attr(not(target_arch = "wasm32"), arg(required = true))]
     pub input: Vec<PathBuf>,
     #[cfg_attr(not(target_arch = "wasm32"), arg(long))]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub format: Option<String>,
     #[cfg_attr(not(target_arch = "wasm32"), arg(long))]
     pub output: PathBuf,
@@ -229,6 +292,8 @@ pub struct CompressCommand {
             help = "Compression codec override; supports codec[:level]. Repeat --codec for multiple codecs (for example CHD: --codec cdzs[:19] --codec cdzl --codec cdfl). If :level is omitted, falls back to --level profile."
         )
     )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub codec: Vec<String>,
     #[cfg_attr(not(target_arch = "wasm32"), arg(
         long,
@@ -236,13 +301,18 @@ pub struct CompressCommand {
         default_value_t = CompressionLevelProfile::High,
         help = "Global compression level profile (min|very-low|low|medium|high|very-high|max)"
     ))]
+    #[serde(default = "default_high_compression_level")]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub level: CompressionLevelProfile,
     #[cfg_attr(not(target_arch = "wasm32"), arg(long, default_value = "auto"))]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub threads: ThreadBudget,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
 pub struct TrimCommand {
     #[cfg_attr(not(target_arch = "wasm32"), arg(required = true))]
     pub source: Vec<PathBuf>,
@@ -254,6 +324,7 @@ pub struct TrimCommand {
             help = "Destination file for trimmed output (single trim-eligible source only)"
         )
     )]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub output: Option<PathBuf>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
@@ -263,6 +334,7 @@ pub struct TrimCommand {
             help = "Output extension for side-by-side output (supports `{ext}` placeholder, for example `trim.{ext}`)"
         )
     )]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub extension: Option<String>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
@@ -273,6 +345,8 @@ pub struct TrimCommand {
             help = "Trim the source file in place instead of writing a new file"
         )
     )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub in_place: bool,
     #[cfg_attr(
         not(target_arch = "wasm32"),
@@ -283,6 +357,8 @@ pub struct TrimCommand {
             help = "Simulate trim operations without writing output files"
         )
     )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub dry_run: bool,
     #[cfg_attr(
         not(target_arch = "wasm32"),
@@ -293,6 +369,8 @@ pub struct TrimCommand {
             help = "Revert trimmed files by padding back to the nearest power-of-two size (not supported for xiso or rvz-scrub)"
         )
     )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub revert: bool,
     #[cfg_attr(not(target_arch = "wasm32"), arg(
         long = "no-recursive",
@@ -300,13 +378,18 @@ pub struct TrimCommand {
         default_value_t = true,
         help = "Do not recursively scan subdirectories when input sources include folders"
     ))]
+    #[serde(default = "default_true")]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub recursive: bool,
     #[cfg_attr(not(target_arch = "wasm32"), arg(long, default_value = "auto"))]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub threads: ThreadBudget,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
 pub struct BatchHeaderFixerCommand {
     #[cfg_attr(not(target_arch = "wasm32"), arg(required = true))]
     pub source: Vec<PathBuf>,
@@ -318,6 +401,7 @@ pub struct BatchHeaderFixerCommand {
             help = "Destination file for fixed output (single header-fix source only)"
         )
     )]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub output: Option<PathBuf>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
@@ -327,6 +411,7 @@ pub struct BatchHeaderFixerCommand {
             help = "Output extension for side-by-side output (supports `{ext}` placeholder, for example `fixed.{ext}`)"
         )
     )]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub extension: Option<String>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
@@ -337,6 +422,8 @@ pub struct BatchHeaderFixerCommand {
             help = "Fix headers in place instead of writing a new file"
         )
     )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub in_place: bool,
     #[cfg_attr(
         not(target_arch = "wasm32"),
@@ -347,6 +434,8 @@ pub struct BatchHeaderFixerCommand {
             help = "Simulate header fixing without writing output files"
         )
     )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub dry_run: bool,
     #[cfg_attr(not(target_arch = "wasm32"), arg(
         long = "no-recursive",
@@ -354,13 +443,18 @@ pub struct BatchHeaderFixerCommand {
         default_value_t = true,
         help = "Do not recursively scan subdirectories when input sources include folders"
     ))]
+    #[serde(default = "default_true")]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub recursive: bool,
     #[cfg_attr(not(target_arch = "wasm32"), arg(long, default_value = "auto"))]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub threads: ThreadBudget,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
 pub struct PatchApplyCommand {
     #[cfg_attr(not(target_arch = "wasm32"), arg(long))]
     pub input: PathBuf,
@@ -371,6 +465,8 @@ pub struct PatchApplyCommand {
             help = "Container payload selection pattern(s) used while auto-extracting patch-apply input and patch files"
         )
     )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub select: Vec<String>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
@@ -379,6 +475,8 @@ pub struct PatchApplyCommand {
             help = "Disable container auto-extract and patch the raw input and patch bytes directly"
         )
     )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub no_extract: bool,
     #[cfg_attr(
         not(target_arch = "wasm32"),
@@ -387,6 +485,8 @@ pub struct PatchApplyCommand {
             help = "Disable default ignore filtering during patch-apply container payload resolution"
         )
     )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub no_ignore: bool,
     #[cfg_attr(
         not(target_arch = "wasm32"),
@@ -406,6 +506,8 @@ pub struct PatchApplyCommand {
             help = "Write raw patched bytes without the default patch-output compression step"
         )
     )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub no_compress: bool,
     #[cfg_attr(
         not(target_arch = "wasm32"),
@@ -414,6 +516,7 @@ pub struct PatchApplyCommand {
             help = "Patch-output compression container format (default: auto). Use `auto` to force auto selection."
         )
     )]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub compress_format: Option<String>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
@@ -423,6 +526,8 @@ pub struct PatchApplyCommand {
             help = "Patch-output compression codec override; supports codec[:level]. Repeat --compress-codec for multiple codecs (for example CHD: --compress-codec cdzs[:19] --compress-codec cdzl --compress-codec cdfl). If :level is omitted, falls back to --compress-level profile."
         )
     )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub compress_codec: Vec<String>,
     #[cfg_attr(not(target_arch = "wasm32"), arg(
         long = "compress-level",
@@ -430,6 +535,8 @@ pub struct PatchApplyCommand {
         default_value_t = CompressionLevelProfile::High,
         help = "Global patch-output compression level profile (min|very-low|low|medium|high|very-high|max)"
     ))]
+    #[serde(default = "default_high_compression_level")]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub compress_level: CompressionLevelProfile,
     #[cfg_attr(
         not(target_arch = "wasm32"),
@@ -439,6 +546,8 @@ pub struct PatchApplyCommand {
             help = "Seed effective patch input checksum cache before apply; repeat for multiple algorithms (for example: --checksum-cache crc32=1234abcd)"
         )
     )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub checksum_cache: Vec<String>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
@@ -448,6 +557,8 @@ pub struct PatchApplyCommand {
             help = "Validate effective patch input checksum before apply; repeat for multiple algorithms (for example: --validate-with-checksum crc32=1234abcd)"
         )
     )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub validate_with_checksums: Vec<String>,
     #[cfg_attr(
         not(target_arch = "wasm32"),
@@ -456,6 +567,8 @@ pub struct PatchApplyCommand {
             help = "Remove a detected ROM header before patch apply (A78/LNX/NES/FDS/SMC signatures; SNES/PCE copier-size rules)"
         )
     )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub strip_header: bool,
     #[cfg_attr(
         not(target_arch = "wasm32"),
@@ -464,6 +577,8 @@ pub struct PatchApplyCommand {
             help = "Add header bytes after patch apply (reuses stripped header bytes when available; defaults to 512-byte copier header)"
         )
     )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub add_header: bool,
     #[cfg_attr(
         not(target_arch = "wasm32"),
@@ -472,6 +587,8 @@ pub struct PatchApplyCommand {
             help = "Repair supported ROM headers/checksums after patch apply (SNES/NES/GB/GBA/MD/SMS/N64/NDS and related profiles; auto-detect)"
         )
     )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub repair_checksum: bool,
     #[cfg_attr(
         not(target_arch = "wasm32"),
@@ -480,13 +597,18 @@ pub struct PatchApplyCommand {
             help = "Skip patch-provided checksum validation during patch apply (source, target, and patch-level checks when supported)"
         )
     )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub ignore_checksum_validation: bool,
     #[cfg_attr(not(target_arch = "wasm32"), arg(long, default_value = "auto"))]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub threads: ThreadBudget,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
 pub struct PatchCreateCommand {
     #[cfg_attr(not(target_arch = "wasm32"), arg(long))]
     pub original: PathBuf,
@@ -503,8 +625,12 @@ pub struct PatchCreateCommand {
             help = "Skip patch checksum emission during patch create when supported (for example xdelta or VCDIFF window checksums)"
         )
     )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub ignore_checksum_validation: bool,
     #[cfg_attr(not(target_arch = "wasm32"), arg(long, default_value = "auto"))]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub threads: ThreadBudget,
     #[cfg_attr(
         not(target_arch = "wasm32"),
@@ -515,7 +641,41 @@ pub struct PatchCreateCommand {
             help = "xdelta secondary compression mode during patch create (default lzma matches upstream xdelta when LZMA is available; auto compares djw/lzma/fgk; auto-fast prefers speed via lzma-only plus incompressible-data skip; none disables secondary recoding)"
         )
     )]
+    #[serde(default = "default_xdelta_secondary")]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub xdelta_secondary: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+pub struct RomWeaverRunRequest {
+    pub command: Commands,
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub output: RomWeaverRunOutputOptions,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+pub struct RomWeaverRunOutputOptions {
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub json: bool,
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub progress: Option<bool>,
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub trace: bool,
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub interactive_selection_enabled: bool,
+}
+
+impl RomWeaverRunOutputOptions {
+    pub fn emit_progress_events(self, stdout_is_tty: bool) -> bool {
+        self.progress.unwrap_or(self.json || stdout_is_tty)
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -544,6 +704,212 @@ impl RomWeaverApp {
             options.interactive_selection_enabled,
         );
         app.run(command)
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct RunCommandOptions {
+    pub json: bool,
+    pub trace: bool,
+    pub emit_progress_events: bool,
+    pub interactive_selection_enabled: bool,
+}
+
+impl RunCommandOptions {
+    pub fn from_output(output: RomWeaverRunOutputOptions, stdout_is_tty: bool) -> Self {
+        Self {
+            json: output.json,
+            trace: output.trace,
+            emit_progress_events: output.emit_progress_events(stdout_is_tty),
+            interactive_selection_enabled: output.interactive_selection_enabled,
+        }
+    }
+}
+
+pub fn run_request(request: RomWeaverRunRequest, stdout_is_tty: bool) -> ExitCode {
+    let output = request.output;
+    run_command(
+        request.command,
+        RunCommandOptions::from_output(output, stdout_is_tty),
+    )
+}
+
+pub fn run_command(command: Commands, options: RunCommandOptions) -> ExitCode {
+    init_trace_logging(options.trace, options.json);
+    trace!(
+        json = options.json,
+        emit_progress_events = options.emit_progress_events,
+        trace_requested = options.trace,
+        command = ?command,
+        "running rom-weaver command"
+    );
+    let reporter: Arc<dyn ProgressSink> = if options.json {
+        Arc::new(StdoutReporter::json())
+    } else {
+        Arc::new(StdoutReporter::text())
+    };
+    let outcome = RomWeaverApp::run(
+        command,
+        AppRunOptions {
+            emit_progress_events: options.emit_progress_events,
+            interactive_selection_enabled: options.interactive_selection_enabled,
+        },
+        reporter,
+    );
+    ExitCode::from(outcome.exit_code)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn init_trace_logging(trace_flag: bool, json_mode: bool) {
+    static TRACE_LOGGING_INIT: OnceLock<()> = OnceLock::new();
+    TRACE_LOGGING_INIT.get_or_init(|| {
+        let filter_spec = std::env::var("ROM_WEAVER_LOG")
+            .ok()
+            .and_then(trim_non_empty)
+            .or_else(|| std::env::var("RUST_LOG").ok().and_then(trim_non_empty))
+            .or_else(|| {
+                if trace_flag {
+                    Some(
+                        "rom_weaver_app=trace,rom_weaver_core=trace,rom_weaver_containers=trace,rom_weaver_patches=trace,rom_weaver_checksum=trace,rom_weaver_codecs=trace"
+                            .to_string(),
+                    )
+                } else {
+                    None
+                }
+            });
+
+        let Some(filter_spec) = filter_spec else {
+            return;
+        };
+
+        let env_filter = match EnvFilter::try_new(filter_spec.clone()) {
+            Ok(filter) => filter,
+            Err(error) => {
+                eprintln!("warning: invalid trace filter `{filter_spec}` ({error}); using `off`");
+                EnvFilter::new("off")
+            }
+        };
+
+        if json_mode {
+            let _ = tracing_subscriber::registry()
+                .with(env_filter)
+                .with(fmt::layer().json().with_ansi(false).with_writer(io::stderr))
+                .try_init();
+        } else {
+            let _ = tracing_subscriber::registry()
+                .with(env_filter)
+                .with(
+                    fmt::layer()
+                        .with_ansi(false)
+                        .with_writer(io::stderr)
+                        .compact(),
+                )
+                .try_init();
+        }
+    });
+}
+
+#[cfg(target_arch = "wasm32")]
+fn init_trace_logging(trace_flag: bool, _json_mode: bool) {
+    static TRACE_LOGGING_INIT: OnceLock<()> = OnceLock::new();
+    TRACE_LOGGING_INIT.get_or_init(|| {
+        let trace_requested = trace_flag
+            || std::env::var("ROM_WEAVER_LOG")
+                .ok()
+                .and_then(trim_non_empty)
+                .is_some()
+            || std::env::var("RUST_LOG")
+                .ok()
+                .and_then(trim_non_empty)
+                .is_some();
+        if !trace_requested {
+            return;
+        }
+
+        let _ = tracing_subscriber::fmt()
+            .with_ansi(false)
+            .with_writer(io::stderr)
+            .with_max_level(tracing::level_filters::LevelFilter::TRACE)
+            .compact()
+            .try_init();
+    });
+}
+
+fn trim_non_empty(value: String) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+enum OutputMode {
+    Json,
+    Text,
+}
+
+struct StdoutReporter {
+    mode: OutputMode,
+}
+
+impl StdoutReporter {
+    fn json() -> Self {
+        Self {
+            mode: OutputMode::Json,
+        }
+    }
+
+    fn text() -> Self {
+        Self {
+            mode: OutputMode::Text,
+        }
+    }
+}
+
+impl ProgressSink for StdoutReporter {
+    fn emit(&self, event: ProgressEvent) {
+        match self.mode {
+            OutputMode::Json => match serde_json::to_string(&event) {
+                Ok(serialized) => {
+                    println!("{serialized}");
+                    let _ = io::Write::flush(&mut io::stdout());
+                }
+                Err(error) => eprintln!("failed to serialize progress event: {error}"),
+            },
+            OutputMode::Text => {
+                let format = event.format.as_deref().unwrap_or("-");
+                let threads = match (
+                    event.requested_threads,
+                    event.effective_threads,
+                    event.used_parallelism,
+                    event.thread_mode,
+                ) {
+                    (
+                        Some(requested),
+                        Some(effective),
+                        Some(used_parallelism),
+                        Some(thread_mode),
+                    ) => {
+                        format!(
+                            " requested_threads={requested} effective_threads={effective} thread_mode={thread_mode:?} used_parallelism={used_parallelism}"
+                        )
+                    }
+                    _ => String::new(),
+                };
+                println!(
+                    "[{}] family={:?} format={} stage={} status={:?} label={}{}",
+                    event.command,
+                    event.family,
+                    format,
+                    event.stage,
+                    event.status,
+                    event.label,
+                    threads,
+                );
+                let _ = io::Write::flush(&mut io::stdout());
+            }
+        }
     }
 }
 

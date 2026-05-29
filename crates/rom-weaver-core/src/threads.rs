@@ -1,10 +1,10 @@
 use std::{fmt, str::FromStr, sync::Arc};
 
 use rayon::ThreadPool;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use tracing::trace;
 #[cfg(feature = "typescript-types")]
-use ts_rs::TS;
+use ts_rs::{Config, TS};
 
 use crate::{Result, RomWeaverError};
 
@@ -70,6 +70,86 @@ impl FromStr for ThreadBudget {
             ));
         }
         Ok(Self::Fixed(parsed))
+    }
+}
+
+impl Serialize for ThreadBudget {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            Self::Auto => serializer.serialize_str("auto"),
+            Self::Fixed(count) => serializer.serialize_u64((*count).max(1) as u64),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for ThreadBudget {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct ThreadBudgetVisitor;
+
+        impl<'de> de::Visitor<'de> for ThreadBudgetVisitor {
+            type Value = ThreadBudget;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                formatter.write_str("`auto` or a positive integer")
+            }
+
+            fn visit_str<E>(self, value: &str) -> std::result::Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                value.parse::<ThreadBudget>().map_err(E::custom)
+            }
+
+            fn visit_u64<E>(self, value: u64) -> std::result::Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                usize::try_from(value)
+                    .ok()
+                    .filter(|count| *count > 0)
+                    .map(ThreadBudget::Fixed)
+                    .ok_or_else(|| E::custom("thread budget must be greater than zero"))
+            }
+
+            fn visit_i64<E>(self, value: i64) -> std::result::Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                u64::try_from(value)
+                    .map_err(|_| E::custom("thread budget must be greater than zero"))
+                    .and_then(|value| self.visit_u64(value))
+            }
+        }
+
+        deserializer.deserialize_any(ThreadBudgetVisitor)
+    }
+}
+
+#[cfg(feature = "typescript-types")]
+impl TS for ThreadBudget {
+    type WithoutGenerics = Self;
+    type OptionInnerType = Self;
+
+    fn name(_: &Config) -> String {
+        "ThreadBudget".to_string()
+    }
+
+    fn inline(_: &Config) -> String {
+        "\"auto\" | number".to_string()
+    }
+
+    fn decl(cfg: &Config) -> String {
+        format!("type {} = {};", Self::name(cfg), Self::inline(cfg))
+    }
+
+    fn decl_concrete(cfg: &Config) -> String {
+        Self::decl(cfg)
     }
 }
 

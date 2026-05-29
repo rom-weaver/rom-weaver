@@ -950,8 +950,8 @@ async function initializeRuntime() {
       defaultThreads: THREAD_COUNT,
     });
     const wasmUrl = wasmRuntime === WASM_RUNTIME_THREADED
-      ? '/rom-weaver-cli-threaded.wasm'
-      : '/rom-weaver-cli.wasm';
+      ? '/rom-weaver-app-threaded.wasm'
+      : '/rom-weaver-app.wasm';
     await worker.init({
       wasmUrl,
       opfsHandle: fixtureRootHandle,

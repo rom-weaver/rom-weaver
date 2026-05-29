@@ -1,7 +1,12 @@
 use std::{env, fs, path::Path};
 
+use rom_weaver_app::{
+    BatchHeaderFixerCommand, ChecksumCommand, Commands, CompressCommand, CompressionLevelProfile,
+    ExtractCommand, InspectCommand, PatchApplyCommand, PatchCreateCommand,
+    RomWeaverRunOutputOptions, RomWeaverRunRequest, TrimCommand,
+};
 use rom_weaver_core::{
-    OperationFamily, OperationStatus, ProgressEvent, ThreadExecution, ThreadMode,
+    OperationFamily, OperationStatus, ProgressEvent, ThreadBudget, ThreadExecution, ThreadMode,
 };
 use ts_rs::TS;
 
@@ -71,9 +76,22 @@ fn render_types() -> String {
         export_decl::<OperationFamily>(&config),
         export_decl::<OperationStatus>(&config),
         export_decl::<ThreadMode>(&config),
+        export_decl::<ThreadBudget>(&config),
         export_decl::<ThreadExecution>(&config),
         export_decl::<serde_json::Value>(&config),
         export_decl::<ProgressEvent>(&config),
+        export_decl::<CompressionLevelProfile>(&config),
+        export_decl::<InspectCommand>(&config),
+        export_decl::<ExtractCommand>(&config),
+        export_decl::<ChecksumCommand>(&config),
+        export_decl::<CompressCommand>(&config),
+        export_decl::<TrimCommand>(&config),
+        export_decl::<BatchHeaderFixerCommand>(&config),
+        export_decl::<PatchApplyCommand>(&config),
+        export_decl::<PatchCreateCommand>(&config),
+        export_decl::<Commands>(&config),
+        export_decl::<RomWeaverRunOutputOptions>(&config),
+        export_decl::<RomWeaverRunRequest>(&config),
     ];
 
     format!("{HEADER}{}\n", declarations.join("\n\n"))

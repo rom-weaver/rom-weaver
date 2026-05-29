@@ -1,6 +1,7 @@
 import type {
   RomWeaverBrowserOpfsOptions,
   RomWeaverBrowserOpfsRunOptions,
+  RomWeaverRunInput,
   RomWeaverProgressEvent,
   RomWeaverRunJsonOptions,
   RomWeaverRunJsonResult,
@@ -8,9 +9,9 @@ import type {
 } from './rom-weaver-types.d.ts';
 
 interface RomWeaverBrowserOpfsRunnerBase {
-  run(args?: unknown[], options?: RomWeaverBrowserOpfsRunOptions): Promise<RomWeaverRunResult>;
+  run(commandOrRequest: RomWeaverRunInput, options?: RomWeaverBrowserOpfsRunOptions): Promise<RomWeaverRunResult>;
   runJson<TEvent = RomWeaverProgressEvent, TTraceEvent = unknown>(
-    args?: unknown[],
+    commandOrRequest: RomWeaverRunInput,
     options?: RomWeaverRunJsonOptions<TEvent, TTraceEvent> & RomWeaverBrowserOpfsRunOptions,
   ): Promise<RomWeaverRunJsonResult<TEvent, TTraceEvent>>;
 }

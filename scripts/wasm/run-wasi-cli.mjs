@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
-import { appendFileSync, readFileSync } from 'node:fs';
+import { appendFileSync, closeSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
@@ -9,7 +10,7 @@ import { createWasmEnvImports } from './rom-weaver-runtime-utils.mjs';
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(SCRIPT_DIR, '..', '..');
-const DEFAULT_WASM_MODULE = resolve(REPO_ROOT, 'packages/rom-weaver-wasm/rom-weaver-cli-threaded.wasm');
+const DEFAULT_WASM_MODULE = resolve(REPO_ROOT, 'packages/rom-weaver-wasm/rom-weaver-app-threaded.wasm');
 const DEFAULT_SHARED_MEMORY_INITIAL_PAGES = 256;
 const DEFAULT_SHARED_MEMORY_MAX_PAGES = 16384;
 const MAX_WASI_THREAD_ID = 0x1fffffff;
@@ -68,14 +69,15 @@ function parseArgs(argv) {
   }
 
   if (commandArgs.length === 0) {
-    throw new Error('missing command args; pass wasm CLI args after `--`');
+    throw new Error('missing command args; pass rom-weaver command args after `--`');
   }
 
-  return { wasmModule, commandArgs };
+  return { wasmModule, request: commandArgsToRunRequest(commandArgs) };
 }
 
 async function main() {
-  const { wasmModule, commandArgs } = parseArgs(process.argv.slice(2));
+  const { wasmModule, request } = parseArgs(process.argv.slice(2));
+  const requestStdin = createRequestStdin(request);
   const wasmBytes = readFileSync(wasmModule);
   const compiledModule = await WebAssembly.compile(wasmBytes);
   const moduleImports = WebAssembly.Module.imports(compiledModule);
@@ -83,29 +85,33 @@ async function main() {
   const threadedMemory = needsEnvMemoryImport(moduleImports)
     ? createSharedThreadMemory()
     : undefined;
-  const wasiArgs = ['rom-weaver', ...commandArgs];
-  const wasi = createWasiRuntime(wasiArgs);
-  const requestedThreadCount = parseRequestedThreadCount(commandArgs);
-  const threadSpawner = createThreadSpawner({
-    moduleImports,
-    wasmModule: compiledModule,
-    wasmMemory: threadedMemory,
-    wasiArgs,
-    threadIdState,
-    spawnPoolSize: requestedThreadCount,
-    allowPrewarmedPool: shouldPrewarmThreadPool(),
-  });
-  await threadSpawner.ready;
-  const importObject = createImportObject({
-    moduleImports,
-    wasi,
-    memory: threadedMemory,
-    threadSpawner,
-  });
-  const instance = await WebAssembly.instantiate(compiledModule, importObject);
-  const exitCode = wasi.start(instance);
-  await threadSpawner.waitForWorkers();
-  process.exitCode = Number.isInteger(exitCode) ? exitCode : 1;
+  const wasiArgs = ['rom-weaver-app'];
+  try {
+    const wasi = createWasiRuntime(wasiArgs, requestStdin.fd);
+    const requestedThreadCount = readRequestThreadCount(request);
+    const threadSpawner = createThreadSpawner({
+      moduleImports,
+      wasmModule: compiledModule,
+      wasmMemory: threadedMemory,
+      wasiArgs,
+      threadIdState,
+      spawnPoolSize: requestedThreadCount,
+      allowPrewarmedPool: shouldPrewarmThreadPool(),
+    });
+    await threadSpawner.ready;
+    const importObject = createImportObject({
+      moduleImports,
+      wasi,
+      memory: threadedMemory,
+      threadSpawner,
+    });
+    const instance = await WebAssembly.instantiate(compiledModule, importObject);
+    const exitCode = wasi.start(instance);
+    await threadSpawner.waitForWorkers();
+    process.exitCode = Number.isInteger(exitCode) ? exitCode : 1;
+  } finally {
+    requestStdin.cleanup();
+  }
 }
 
 function isThreadDebugEnabled() {
@@ -135,25 +141,227 @@ function threadDebugLog(message) {
   console.error(line);
 }
 
-function parseRequestedThreadCount(commandArgs) {
-  if (!Array.isArray(commandArgs) || commandArgs.length === 0) {
-    return DEFAULT_THREAD_POOL_SIZE;
+function createRequestStdin(request) {
+  const tempDir = mkdtempSync(resolve(tmpdir(), 'rom-weaver-wasi-'));
+  const requestPath = resolve(tempDir, 'request.json');
+  writeFileSync(requestPath, `${JSON.stringify(normalizeRunRequest(request))}\n`);
+  const fd = openSync(requestPath, 'r');
+  let cleanedUp = false;
+  return {
+    fd,
+    cleanup() {
+      if (cleanedUp) return;
+      cleanedUp = true;
+      try {
+        closeSync(fd);
+      } catch {
+        // best-effort cleanup
+      }
+      rmSync(tempDir, { recursive: true, force: true });
+    },
+  };
+}
+
+function normalizeRunRequest(request) {
+  if (request && typeof request === 'object' && request.command) {
+    return {
+      command: request.command,
+      output: request.output ?? {},
+    };
   }
-  for (let index = commandArgs.length - 1; index >= 0; index -= 1) {
-    if (commandArgs[index] !== '--threads') {
-      continue;
-    }
-    const rawValue = commandArgs[index + 1];
-    if (rawValue == null) {
-      break;
-    }
-    const parsedValue = Number.parseInt(rawValue, 10);
-    if (Number.isInteger(parsedValue) && parsedValue > 0) {
-      return parsedValue;
-    }
-    break;
+  return {
+    command: request,
+    output: {},
+  };
+}
+
+function readRequestThreadCount(request) {
+  const normalized = normalizeRunRequest(request);
+  const threads = normalized.command?.args?.threads;
+  if (Number.isInteger(threads) && threads > 0) {
+    return threads;
   }
   return DEFAULT_THREAD_POOL_SIZE;
+}
+
+function commandArgsToRunRequest(args) {
+  const { command, index: commandIndex } = locateCommand(args);
+  const parsed = parseCommandTokens(args, commandIndex);
+  const output = {};
+  if (parsed.flags.has('json')) output.json = true;
+  if (parsed.flags.has('trace')) output.trace = true;
+  if (parsed.flags.has('progress')) output.progress = true;
+  if (parsed.flags.has('no-progress')) output.progress = false;
+
+  const commandRequest = { type: command, args: {} };
+  switch (command) {
+    case 'compress':
+      commandRequest.args = {
+        input: parsed.positionals,
+        output: requireOptionValue(parsed, 'output'),
+        ...(readOptionalValue(parsed, 'format') ? { format: readOptionalValue(parsed, 'format') } : {}),
+        ...(readOptionValues(parsed, 'codec').length ? { codec: readOptionValues(parsed, 'codec') } : {}),
+        ...(readOptionalValue(parsed, 'level') ? { level: readOptionalValue(parsed, 'level') } : {}),
+      };
+      break;
+    case 'extract':
+      commandRequest.args = {
+        source: requirePositional(parsed, 0, 'extract source'),
+        out_dir: requireOptionValue(parsed, 'out-dir'),
+        ...(readOptionValues(parsed, 'select').length ? { select: readOptionValues(parsed, 'select') } : {}),
+        ...(readOptionValues(parsed, 'checksum').length ? { checksum: readOptionValues(parsed, 'checksum') } : {}),
+        ...(parsed.flags.has('split-bin') ? { split_bin: true } : {}),
+        ...(parsed.flags.has('no-ignore') ? { no_ignore: true } : {}),
+        ...(parsed.flags.has('no-nested-extract') ? { no_nested_extract: true } : {}),
+        ...(parsed.flags.has('no-overwrite') ? { no_overwrite: true } : {}),
+      };
+      break;
+    case 'checksum':
+      commandRequest.args = {
+        source: requirePositional(parsed, 0, 'checksum source'),
+        algo: readOptionValues(parsed, 'algo'),
+        ...(readOptionValues(parsed, 'select').length ? { select: readOptionValues(parsed, 'select') } : {}),
+        ...(parsed.flags.has('no-extract') ? { no_extract: true } : {}),
+        ...(parsed.flags.has('no-ignore') ? { no_ignore: true } : {}),
+        ...(parsed.flags.has('strip-header') ? { strip_header: true } : {}),
+        ...(parsed.flags.has('no-trim-fix') ? { no_trim_fix: true } : {}),
+        ...(readOptionalNumber(parsed, 'start') !== null ? { start: readOptionalNumber(parsed, 'start') } : {}),
+        ...(readOptionalNumber(parsed, 'length') !== null ? { length: readOptionalNumber(parsed, 'length') } : {}),
+      };
+      break;
+    case 'patch-create':
+      commandRequest.args = {
+        original: requireOptionValue(parsed, 'original'),
+        modified: requireOptionValue(parsed, 'modified'),
+        format: requireOptionValue(parsed, 'format'),
+        output: requireOptionValue(parsed, 'output'),
+        ...(parsed.flags.has('ignore-checksum-validation') ? { ignore_checksum_validation: true } : {}),
+        ...(readOptionalValue(parsed, 'xdelta-secondary') ? { xdelta_secondary: readOptionalValue(parsed, 'xdelta-secondary') } : {}),
+      };
+      break;
+    case 'patch-apply':
+      commandRequest.args = {
+        input: requireOptionValue(parsed, 'input'),
+        patches: readOptionValues(parsed, 'patch'),
+        output: requireOptionValue(parsed, 'output'),
+        ...(readOptionValues(parsed, 'select').length ? { select: readOptionValues(parsed, 'select') } : {}),
+        ...(parsed.flags.has('no-extract') ? { no_extract: true } : {}),
+        ...(parsed.flags.has('no-ignore') ? { no_ignore: true } : {}),
+        ...(parsed.flags.has('no-compress') ? { no_compress: true } : {}),
+        ...(readOptionalValue(parsed, 'compress-format') ? { compress_format: readOptionalValue(parsed, 'compress-format') } : {}),
+        ...(readOptionValues(parsed, 'compress-codec').length ? { compress_codec: readOptionValues(parsed, 'compress-codec') } : {}),
+        ...(readOptionalValue(parsed, 'compress-level') ? { compress_level: readOptionalValue(parsed, 'compress-level') } : {}),
+        ...(readOptionValues(parsed, 'checksum-cache').length ? { checksum_cache: readOptionValues(parsed, 'checksum-cache') } : {}),
+        ...(readOptionValues(parsed, 'validate-with-checksum').length
+          ? { validate_with_checksums: readOptionValues(parsed, 'validate-with-checksum') }
+          : {}),
+        ...(parsed.flags.has('strip-header') ? { strip_header: true } : {}),
+        ...(parsed.flags.has('add-header') ? { add_header: true } : {}),
+        ...(parsed.flags.has('repair-checksum') ? { repair_checksum: true } : {}),
+        ...(parsed.flags.has('ignore-checksum-validation') ? { ignore_checksum_validation: true } : {}),
+      };
+      break;
+    default:
+      throw new Error(`unsupported command: ${command}`);
+  }
+
+  const threads = readOptionalThreadBudget(parsed);
+  if (threads !== null) commandRequest.args.threads = threads;
+
+  return Object.keys(output).length > 0
+    ? { command: commandRequest, output }
+    : commandRequest;
+}
+
+function locateCommand(args) {
+  const supportedCommands = new Set(['compress', 'extract', 'checksum', 'patch-create', 'patch-apply']);
+  for (let index = 0; index < args.length; index += 1) {
+    const token = String(args[index] ?? '').trim().toLowerCase();
+    if (supportedCommands.has(token)) {
+      return { command: token, index };
+    }
+  }
+  throw new Error(`unable to locate supported command in args: ${args.join(' ')}`);
+}
+
+function parseCommandTokens(args, commandIndex) {
+  const flags = new Set();
+  const options = new Map();
+  const positionals = [];
+
+  for (let index = 0; index < args.length; index += 1) {
+    if (index === commandIndex) continue;
+    const raw = String(args[index] ?? '');
+    if (!raw.startsWith('--')) {
+      if (index > commandIndex) positionals.push(raw);
+      continue;
+    }
+
+    const withoutPrefix = raw.slice(2);
+    const equalsIndex = withoutPrefix.indexOf('=');
+    const name = equalsIndex >= 0 ? withoutPrefix.slice(0, equalsIndex) : withoutPrefix;
+    let value = equalsIndex >= 0 ? withoutPrefix.slice(equalsIndex + 1) : null;
+    if (
+      value === null
+      && index > commandIndex
+      && index + 1 < args.length
+      && !String(args[index + 1] ?? '').startsWith('--')
+    ) {
+      value = String(args[index + 1]);
+      index += 1;
+    }
+    if (value === null) {
+      flags.add(name);
+      continue;
+    }
+    const values = options.get(name) ?? [];
+    values.push(value);
+    options.set(name, values);
+  }
+
+  return { flags, options, positionals };
+}
+
+function readOptionValues(parsed, name) {
+  return parsed.options.get(name) ?? [];
+}
+
+function readOptionalValue(parsed, name) {
+  return readOptionValues(parsed, name)[0] ?? null;
+}
+
+function readOptionalNumber(parsed, name) {
+  const value = readOptionalValue(parsed, name);
+  if (value === null) return null;
+  const parsedNumber = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsedNumber) || parsedNumber < 0) {
+    throw new Error(`${name} must be a non-negative integer`);
+  }
+  return parsedNumber;
+}
+
+function readOptionalThreadBudget(parsed) {
+  const value = readOptionalValue(parsed, 'threads');
+  if (value === null) return null;
+  const normalized = String(value).trim().toLowerCase();
+  if (normalized === 'auto') return 'auto';
+  const parsedNumber = Number.parseInt(normalized, 10);
+  if (!Number.isInteger(parsedNumber) || parsedNumber <= 0) {
+    throw new Error('threads must be auto or a positive integer');
+  }
+  return parsedNumber;
+}
+
+function requireOptionValue(parsed, name) {
+  const value = readOptionalValue(parsed, name);
+  if (!value) throw new Error(`missing required --${name}`);
+  return value;
+}
+
+function requirePositional(parsed, index, label) {
+  const value = parsed.positionals[index];
+  if (!value) throw new Error(`missing ${label}`);
+  return value;
 }
 
 function parseThreadPoolSize(defaultValue) {
@@ -189,11 +397,12 @@ function clampThreadPoolSize(value) {
   return Math.max(1, Math.min(MAX_THREAD_POOL_SIZE, Number(value) || DEFAULT_THREAD_POOL_SIZE));
 }
 
-function createWasiRuntime(args) {
+function createWasiRuntime(args, stdinFd = undefined) {
   return new WASI({
     version: 'preview1',
     args,
     env: process.env,
+    ...(stdinFd == null ? {} : { stdin: stdinFd }),
     preopens: {
       '.': process.cwd(),
       '/': '/',

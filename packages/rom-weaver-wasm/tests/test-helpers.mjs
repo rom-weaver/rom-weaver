@@ -10,6 +10,25 @@ const VCDIFF_TARGET_FIXTURE_URL = new URL('../../../tests/fixtures/vcdiff/second
 
 let fixtureBytesPromise = null;
 
+export function toTypedRunInput(input) {
+  return Array.isArray(input) ? commandArgsToRunRequest(input) : input;
+}
+
+export function wrapTypedTestWorker(worker) {
+  return new Proxy(worker, {
+    get(target, property, receiver) {
+      if (property === 'run') {
+        return (input, options) => target.run(toTypedRunInput(input), options);
+      }
+      if (property === 'runJson') {
+        return (input, options) => target.runJson(toTypedRunInput(input), options);
+      }
+      const value = Reflect.get(target, property, receiver);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+}
+
 export async function withTempFixture(run, options = {}) {
   const {
     prefix = 'rom-weaver-wasm-test-',
@@ -30,11 +49,11 @@ export async function withTempFixture(run, options = {}) {
   const root = await navigator.storage.getDirectory();
   const fixtureName = `${prefix}${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const fixtureHandle = await root.getDirectoryHandle(fixtureName, { create: true });
-  const worker = createBrowserWorkerClient(clientOptions);
+  const worker = wrapTypedTestWorker(createBrowserWorkerClient(clientOptions));
 
   try {
     const init = await worker.init({
-      wasmUrl: new URL('../rom-weaver-cli.wasm', import.meta.url).href,
+      wasmUrl: new URL('../rom-weaver-app.wasm', import.meta.url).href,
       opfsHandle: fixtureHandle,
       workGuestPath: OPFS_GUEST_ROOT,
       runtimeMounts: [OPFS_GUEST_ROOT],
@@ -102,6 +121,204 @@ export function assertRunJsonSucceeded(result, options = {}) {
     expect(terminal.command).toBe(command);
   }
   return terminal;
+}
+
+function commandArgsToRunRequest(args) {
+  if (args.length === 0) {
+    return { type: 'stream-test', args: {} };
+  }
+
+  const { command, index: commandIndex } = locateCommand(args);
+  const parsed = parseCommandTokens(args, commandIndex);
+  const output = {};
+  if (parsed.flags.has('json')) output.json = true;
+  if (parsed.flags.has('trace')) output.trace = true;
+  if (parsed.flags.has('progress')) output.progress = true;
+  if (parsed.flags.has('no-progress')) output.progress = false;
+
+  const commandRequest = { type: command, args: {} };
+  switch (command) {
+    case 'inspect':
+      commandRequest.args = {
+        source: requirePositional(parsed, 0, 'inspect source'),
+        ...(parsed.flags.has('list') ? { list: true } : {}),
+      };
+      break;
+    case 'compress':
+      commandRequest.args = {
+        input: parsed.positionals,
+        output: requireOptionValue(parsed, 'output'),
+        ...(readOptionalValue(parsed, 'format') ? { format: readOptionalValue(parsed, 'format') } : {}),
+        ...(readOptionValues(parsed, 'codec').length ? { codec: readOptionValues(parsed, 'codec') } : {}),
+        ...(readOptionalValue(parsed, 'level') ? { level: readOptionalValue(parsed, 'level') } : {}),
+      };
+      break;
+    case 'extract':
+      commandRequest.args = {
+        source: requirePositional(parsed, 0, 'extract source'),
+        out_dir: requireOptionValue(parsed, 'out-dir'),
+        ...(readOptionValues(parsed, 'select').length ? { select: readOptionValues(parsed, 'select') } : {}),
+        ...(readOptionValues(parsed, 'checksum').length ? { checksum: readOptionValues(parsed, 'checksum') } : {}),
+        ...(parsed.flags.has('split-bin') ? { split_bin: true } : {}),
+        ...(parsed.flags.has('no-ignore') ? { no_ignore: true } : {}),
+        ...(parsed.flags.has('no-nested-extract') ? { no_nested_extract: true } : {}),
+        ...(parsed.flags.has('no-overwrite') ? { no_overwrite: true } : {}),
+      };
+      break;
+    case 'checksum':
+      commandRequest.args = {
+        source: requirePositional(parsed, 0, 'checksum source'),
+        algo: readOptionValues(parsed, 'algo'),
+        ...(readOptionValues(parsed, 'select').length ? { select: readOptionValues(parsed, 'select') } : {}),
+        ...(parsed.flags.has('no-extract') ? { no_extract: true } : {}),
+        ...(parsed.flags.has('no-ignore') ? { no_ignore: true } : {}),
+        ...(parsed.flags.has('strip-header') ? { strip_header: true } : {}),
+        ...(parsed.flags.has('no-trim-fix') ? { no_trim_fix: true } : {}),
+        ...(readOptionalNumber(parsed, 'start') !== null ? { start: readOptionalNumber(parsed, 'start') } : {}),
+        ...(readOptionalNumber(parsed, 'length') !== null ? { length: readOptionalNumber(parsed, 'length') } : {}),
+      };
+      break;
+    case 'patch-create':
+      commandRequest.args = {
+        original: requireOptionValue(parsed, 'original'),
+        modified: requireOptionValue(parsed, 'modified'),
+        format: requireOptionValue(parsed, 'format'),
+        output: requireOptionValue(parsed, 'output'),
+        ...(parsed.flags.has('ignore-checksum-validation') ? { ignore_checksum_validation: true } : {}),
+        ...(readOptionalValue(parsed, 'xdelta-secondary') ? { xdelta_secondary: readOptionalValue(parsed, 'xdelta-secondary') } : {}),
+      };
+      break;
+    case 'patch-apply':
+      commandRequest.args = {
+        input: requireOptionValue(parsed, 'input'),
+        patches: readOptionValues(parsed, 'patch'),
+        output: requireOptionValue(parsed, 'output'),
+        ...(readOptionValues(parsed, 'select').length ? { select: readOptionValues(parsed, 'select') } : {}),
+        ...(parsed.flags.has('no-extract') ? { no_extract: true } : {}),
+        ...(parsed.flags.has('no-ignore') ? { no_ignore: true } : {}),
+        ...(parsed.flags.has('no-compress') ? { no_compress: true } : {}),
+        ...(readOptionalValue(parsed, 'compress-format') ? { compress_format: readOptionalValue(parsed, 'compress-format') } : {}),
+        ...(readOptionValues(parsed, 'compress-codec').length ? { compress_codec: readOptionValues(parsed, 'compress-codec') } : {}),
+        ...(readOptionalValue(parsed, 'compress-level') ? { compress_level: readOptionalValue(parsed, 'compress-level') } : {}),
+        ...(readOptionValues(parsed, 'checksum-cache').length ? { checksum_cache: readOptionValues(parsed, 'checksum-cache') } : {}),
+        ...(readOptionValues(parsed, 'validate-with-checksum').length
+          ? { validate_with_checksums: readOptionValues(parsed, 'validate-with-checksum') }
+          : {}),
+        ...(parsed.flags.has('strip-header') ? { strip_header: true } : {}),
+        ...(parsed.flags.has('add-header') ? { add_header: true } : {}),
+        ...(parsed.flags.has('repair-checksum') ? { repair_checksum: true } : {}),
+        ...(parsed.flags.has('ignore-checksum-validation') ? { ignore_checksum_validation: true } : {}),
+      };
+      break;
+    default:
+      commandRequest.args = {};
+      break;
+  }
+
+  const threads = readOptionalThreadBudget(parsed);
+  if (threads !== null) commandRequest.args.threads = threads;
+
+  return Object.keys(output).length > 0
+    ? { command: commandRequest, output }
+    : commandRequest;
+}
+
+function locateCommand(args) {
+  const supportedCommands = new Set([
+    'inspect',
+    'compress',
+    'extract',
+    'checksum',
+    'patch-create',
+    'patch-apply',
+  ]);
+  for (let index = 0; index < args.length; index += 1) {
+    const token = String(args[index] ?? '').trim().toLowerCase();
+    if (supportedCommands.has(token)) {
+      return { command: token, index };
+    }
+  }
+  return { command: String(args[0] ?? '').trim(), index: 0 };
+}
+
+function parseCommandTokens(args, commandIndex) {
+  const flags = new Set();
+  const options = new Map();
+  const positionals = [];
+
+  for (let index = 0; index < args.length; index += 1) {
+    if (index === commandIndex) continue;
+    const raw = String(args[index] ?? '');
+    if (!raw.startsWith('--')) {
+      if (index > commandIndex) positionals.push(raw);
+      continue;
+    }
+
+    const withoutPrefix = raw.slice(2);
+    const equalsIndex = withoutPrefix.indexOf('=');
+    const name = equalsIndex >= 0 ? withoutPrefix.slice(0, equalsIndex) : withoutPrefix;
+    let value = equalsIndex >= 0 ? withoutPrefix.slice(equalsIndex + 1) : null;
+    if (
+      value === null
+      && index > commandIndex
+      && index + 1 < args.length
+      && !String(args[index + 1] ?? '').startsWith('--')
+    ) {
+      value = String(args[index + 1]);
+      index += 1;
+    }
+    if (value === null) {
+      flags.add(name);
+      continue;
+    }
+    const values = options.get(name) ?? [];
+    values.push(value);
+    options.set(name, values);
+  }
+
+  return { flags, options, positionals };
+}
+
+function readOptionValues(parsed, name) {
+  return parsed.options.get(name) ?? [];
+}
+
+function readOptionalValue(parsed, name) {
+  return readOptionValues(parsed, name)[0] ?? null;
+}
+
+function readOptionalNumber(parsed, name) {
+  const value = readOptionalValue(parsed, name);
+  if (value === null) return null;
+  const parsedNumber = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsedNumber) || parsedNumber < 0) {
+    throw new Error(`${name} must be a non-negative integer`);
+  }
+  return parsedNumber;
+}
+
+function readOptionalThreadBudget(parsed) {
+  const value = readOptionalValue(parsed, 'threads');
+  if (value === null) return null;
+  const normalized = String(value).trim().toLowerCase();
+  if (normalized === 'auto') return 'auto';
+  const parsedNumber = Number.parseInt(normalized, 10);
+  if (!Number.isInteger(parsedNumber) || parsedNumber <= 0) {
+    throw new Error('threads must be auto or a positive integer');
+  }
+  return parsedNumber;
+}
+
+function requireOptionValue(parsed, name) {
+  const value = readOptionalValue(parsed, name);
+  if (!value) throw new Error(`missing required --${name}`);
+  return value;
+}
+
+function requirePositional(parsed, index, label) {
+  const value = parsed.positionals[index];
+  if (!value) throw new Error(`missing ${label}`);
+  return value;
 }
 
 function errorMessage(error) {

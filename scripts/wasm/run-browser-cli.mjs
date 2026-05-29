@@ -19,7 +19,7 @@ import { createInterface } from 'node:readline';
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(SCRIPT_DIR, '..', '..');
 const WASM_PACKAGE_DIR = resolve(REPO_ROOT, 'packages/rom-weaver-wasm');
-const DEFAULT_WASM_MODULE = resolve(WASM_PACKAGE_DIR, 'rom-weaver-cli-threaded.wasm');
+const DEFAULT_WASM_MODULE = resolve(WASM_PACKAGE_DIR, 'rom-weaver-app-threaded.wasm');
 const WORK_GUEST_PATH = '/work';
 const STAGE_INPUT_CHUNK_BYTES = 2 * 1024 * 1024;
 
@@ -51,7 +51,7 @@ function parseArgs(argv) {
   }
 
   if (!stdinJson && commandArgs.length === 0) {
-    throw new Error('missing command args; pass wasm CLI args after `--`');
+    throw new Error('missing command args; pass rom-weaver command args after `--`');
   }
 
   return {
@@ -221,6 +221,174 @@ function collectPathBindings(commandArgs) {
     inputs,
     outputs,
   };
+}
+
+function commandArgsToRunRequest(args) {
+  const { command, index: commandIndex } = locateCommand(args);
+  const parsed = parseCommandTokens(args, commandIndex);
+  const output = {};
+  if (parsed.flags.has('trace')) output.trace = true;
+  if (parsed.flags.has('progress')) output.progress = true;
+  if (parsed.flags.has('no-progress')) output.progress = false;
+
+  const commandRequest = { type: command, args: {} };
+  switch (command) {
+    case 'compress':
+      commandRequest.args = {
+        input: parsed.positionals,
+        output: requireOptionValue(parsed, 'output'),
+        ...(readOptionalValue(parsed, 'format') ? { format: readOptionalValue(parsed, 'format') } : {}),
+        ...(readOptionValues(parsed, 'codec').length ? { codec: readOptionValues(parsed, 'codec') } : {}),
+        ...(readOptionalValue(parsed, 'level') ? { level: readOptionalValue(parsed, 'level') } : {}),
+      };
+      break;
+    case 'extract':
+      commandRequest.args = {
+        source: requirePositional(parsed, 0, 'extract source'),
+        out_dir: requireOptionValue(parsed, 'out-dir'),
+        ...(readOptionValues(parsed, 'select').length ? { select: readOptionValues(parsed, 'select') } : {}),
+        ...(readOptionValues(parsed, 'checksum').length ? { checksum: readOptionValues(parsed, 'checksum') } : {}),
+        ...(parsed.flags.has('split-bin') ? { split_bin: true } : {}),
+        ...(parsed.flags.has('no-ignore') ? { no_ignore: true } : {}),
+        ...(parsed.flags.has('no-nested-extract') ? { no_nested_extract: true } : {}),
+        ...(parsed.flags.has('no-overwrite') ? { no_overwrite: true } : {}),
+      };
+      break;
+    case 'checksum':
+      commandRequest.args = {
+        source: requirePositional(parsed, 0, 'checksum source'),
+        algo: readOptionValues(parsed, 'algo'),
+        ...(readOptionValues(parsed, 'select').length ? { select: readOptionValues(parsed, 'select') } : {}),
+        ...(parsed.flags.has('no-extract') ? { no_extract: true } : {}),
+        ...(parsed.flags.has('no-ignore') ? { no_ignore: true } : {}),
+        ...(parsed.flags.has('strip-header') ? { strip_header: true } : {}),
+        ...(parsed.flags.has('no-trim-fix') ? { no_trim_fix: true } : {}),
+        ...(readOptionalNumber(parsed, 'start') !== null ? { start: readOptionalNumber(parsed, 'start') } : {}),
+        ...(readOptionalNumber(parsed, 'length') !== null ? { length: readOptionalNumber(parsed, 'length') } : {}),
+      };
+      break;
+    case 'patch-create':
+      commandRequest.args = {
+        original: requireOptionValue(parsed, 'original'),
+        modified: requireOptionValue(parsed, 'modified'),
+        format: requireOptionValue(parsed, 'format'),
+        output: requireOptionValue(parsed, 'output'),
+        ...(parsed.flags.has('ignore-checksum-validation') ? { ignore_checksum_validation: true } : {}),
+        ...(readOptionalValue(parsed, 'xdelta-secondary') ? { xdelta_secondary: readOptionalValue(parsed, 'xdelta-secondary') } : {}),
+      };
+      break;
+    case 'patch-apply':
+      commandRequest.args = {
+        input: requireOptionValue(parsed, 'input'),
+        patches: readOptionValues(parsed, 'patch'),
+        output: requireOptionValue(parsed, 'output'),
+        ...(readOptionValues(parsed, 'select').length ? { select: readOptionValues(parsed, 'select') } : {}),
+        ...(parsed.flags.has('no-extract') ? { no_extract: true } : {}),
+        ...(parsed.flags.has('no-ignore') ? { no_ignore: true } : {}),
+        ...(parsed.flags.has('no-compress') ? { no_compress: true } : {}),
+        ...(readOptionalValue(parsed, 'compress-format') ? { compress_format: readOptionalValue(parsed, 'compress-format') } : {}),
+        ...(readOptionValues(parsed, 'compress-codec').length ? { compress_codec: readOptionValues(parsed, 'compress-codec') } : {}),
+        ...(readOptionalValue(parsed, 'compress-level') ? { compress_level: readOptionalValue(parsed, 'compress-level') } : {}),
+        ...(readOptionValues(parsed, 'checksum-cache').length ? { checksum_cache: readOptionValues(parsed, 'checksum-cache') } : {}),
+        ...(readOptionValues(parsed, 'validate-with-checksum').length
+          ? { validate_with_checksums: readOptionValues(parsed, 'validate-with-checksum') }
+          : {}),
+        ...(parsed.flags.has('strip-header') ? { strip_header: true } : {}),
+        ...(parsed.flags.has('add-header') ? { add_header: true } : {}),
+        ...(parsed.flags.has('repair-checksum') ? { repair_checksum: true } : {}),
+        ...(parsed.flags.has('ignore-checksum-validation') ? { ignore_checksum_validation: true } : {}),
+      };
+      break;
+    default:
+      throw new Error(`unsupported command: ${command}`);
+  }
+
+  const threads = readOptionalThreadBudget(parsed);
+  if (threads !== null) commandRequest.args.threads = threads;
+
+  return Object.keys(output).length > 0
+    ? { command: commandRequest, output }
+    : commandRequest;
+}
+
+function parseCommandTokens(args, commandIndex) {
+  const flags = new Set();
+  const options = new Map();
+  const positionals = [];
+
+  for (let index = 0; index < args.length; index += 1) {
+    if (index === commandIndex) continue;
+    const raw = String(args[index] ?? '');
+    if (!raw.startsWith('--')) {
+      if (index > commandIndex) positionals.push(raw);
+      continue;
+    }
+
+    const withoutPrefix = raw.slice(2);
+    const equalsIndex = withoutPrefix.indexOf('=');
+    const name = equalsIndex >= 0 ? withoutPrefix.slice(0, equalsIndex) : withoutPrefix;
+    let value = equalsIndex >= 0 ? withoutPrefix.slice(equalsIndex + 1) : null;
+    if (
+      value === null
+      && index > commandIndex
+      && index + 1 < args.length
+      && !String(args[index + 1] ?? '').startsWith('--')
+    ) {
+      value = String(args[index + 1]);
+      index += 1;
+    }
+    if (value === null) {
+      flags.add(name);
+      continue;
+    }
+    const values = options.get(name) ?? [];
+    values.push(value);
+    options.set(name, values);
+  }
+
+  return { flags, options, positionals };
+}
+
+function readOptionValues(parsed, name) {
+  return parsed.options.get(name) ?? [];
+}
+
+function readOptionalValue(parsed, name) {
+  return readOptionValues(parsed, name)[0] ?? null;
+}
+
+function readOptionalNumber(parsed, name) {
+  const value = readOptionalValue(parsed, name);
+  if (value === null) return null;
+  const parsedNumber = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsedNumber) || parsedNumber < 0) {
+    throw new Error(`${name} must be a non-negative integer`);
+  }
+  return parsedNumber;
+}
+
+function readOptionalThreadBudget(parsed) {
+  const value = readOptionalValue(parsed, 'threads');
+  if (value === null) return null;
+  const normalized = String(value).trim().toLowerCase();
+  if (normalized === 'auto') return 'auto';
+  const parsedNumber = Number.parseInt(normalized, 10);
+  if (!Number.isInteger(parsedNumber) || parsedNumber <= 0) {
+    throw new Error('threads must be auto or a positive integer');
+  }
+  return parsedNumber;
+}
+
+function requireOptionValue(parsed, name) {
+  const value = readOptionalValue(parsed, name);
+  if (!value) throw new Error(`missing required --${name}`);
+  return value;
+}
+
+function requirePositional(parsed, index, label) {
+  const value = parsed.positionals[index];
+  if (!value) throw new Error(`missing ${label}`);
+  return value;
 }
 
 function sanitizeName(name) {
@@ -420,8 +588,8 @@ async function bootBrowserHarness({ origin, wasmUrl, benchShellPath }) {
         async listGuestFiles(directoryPath) {
           return listGuestFiles(directoryPath);
         },
-        async run(args) {
-          const result = await worker.runJson(args);
+        async run(request) {
+          const result = await worker.runJson(request);
           const terminal = Array.isArray(result.events) && result.events.length > 0
             ? result.events[result.events.length - 1]
             : null;
@@ -567,13 +735,14 @@ async function runSingleCommandInBrowser({
     browserHarness = booted;
 
     await stageInputs(booted.page, inputMappings);
+    const request = commandArgsToRunRequest(mappedArgs);
     const result = await booted.page.evaluate(
-      async ({ args }) => {
+      async ({ request }) => {
         const harness = globalThis.__rwBrowserBench;
         if (!harness) throw new Error('browser benchmark harness is not initialized');
-        return harness.run(args);
+        return harness.run(request);
       },
-      { args: mappedArgs },
+      { request },
     );
 
     if (result.ok && Number(result.exitCode) === 0) {
@@ -680,14 +849,15 @@ async function runJsonSession({ wasmModule }) {
       const started = Date.now();
       try {
         const { mappedArgs, inputs, outputs } = collectPathBindings(args);
+        const request = commandArgsToRunRequest(mappedArgs);
         await stageInputs(booted.page, inputs);
         const result = await booted.page.evaluate(
-          async ({ args: mapped }) => {
+          async ({ request: mappedRequest }) => {
             const harness = globalThis.__rwBrowserBench;
             if (!harness) throw new Error('browser benchmark harness is not initialized');
-            return harness.run(mapped);
+            return harness.run(mappedRequest);
           },
-          { args: mappedArgs },
+          { request },
         );
         const elapsedS = (Date.now() - started) / 1000;
         if (result.ok && Number(result.exitCode) === 0) {

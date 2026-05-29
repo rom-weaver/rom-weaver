@@ -7,5 +7,6 @@ version.workspace = true
 
 [dependencies]
 rom-weaver-core = { path = "../../crates/rom-weaver-core", features = ["typescript-types"] }
+rom-weaver-app = { path = "../../crates/rom-weaver-app", features = ["typescript-types"] }
 serde_json.workspace = true
 ts-rs.workspace = true

@@ -124,8 +124,8 @@ async function initializeRuntime() {
   });
 
   const wasmUrl = USE_THREADED_WASM
-    ? '/rom-weaver-cli-threaded.wasm'
-    : '/rom-weaver-cli.wasm';
+    ? '/rom-weaver-app-threaded.wasm'
+    : '/rom-weaver-app.wasm';
   await worker.init({
     wasmUrl,
     opfsHandle: fixtureRootHandle,

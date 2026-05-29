@@ -6,10 +6,9 @@
 
 # Generated wasm artifacts
 /dist/wasm/
-/packages/rom-weaver-wasm/rom-weaver-cli.wasm
-/packages/rom-weaver-wasm/rom-weaver-cli.wasm.br
-/packages/rom-weaver-wasm/rom-weaver-cli-threaded.wasm
-/packages/rom-weaver-wasm/rom-weaver-cli-threaded.wasm.br
-/packages/rom-weaver-wasm/threaded.args
+/packages/rom-weaver-wasm/rom-weaver-app.wasm
+/packages/rom-weaver-wasm/rom-weaver-app.wasm.br
+/packages/rom-weaver-wasm/rom-weaver-app-threaded.wasm
+/packages/rom-weaver-wasm/rom-weaver-app-threaded.wasm.br
 /packages/rom-weaver-wasm/.vitest-attachments/
 /packages/rom-weaver-wasm/tests/__screenshots__/

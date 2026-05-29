@@ -21,11 +21,11 @@ export class RomWeaverWorkerClientCore {
     this._transport.onExit?.(this.worker, this._onExit);
   }
 
-  run(args = [], options = {}) {
-    return this._send({ type: 'run', args, options });
+  run(request, options = {}) {
+    return this._send({ type: 'run', request, options });
   }
 
-  runJson(args = [], options = {}) {
+  runJson(request, options = {}) {
     const {
       onEvent,
       onNonJsonLine,
@@ -34,7 +34,7 @@ export class RomWeaverWorkerClientCore {
       ...runOptions
     } = options ?? {};
     return this._send(
-      { type: 'runJson', args, options: runOptions },
+      { type: 'runJson', request, options: runOptions },
       { onEvent, onNonJsonLine, onTraceEvent, onTraceNonJsonLine },
     );
   }
@@ -353,16 +353,21 @@ function emitPendingTrace(pending, line) {
 
 function summarizeRequestPayload(payload) {
   const type = String(payload?.type ?? 'unknown');
-  const args = Array.isArray(payload?.args) ? payload.args.map((value) => String(value)) : [];
   const options = payload?.options && typeof payload.options === 'object' ? payload.options : {};
   const stream = typeof options.__streamBroadcastChannelName === 'string';
   const virtualFiles = summarizeVirtualFiles(options.virtualFiles);
   return [
     `type=${type}`,
-    `args=${formatArgsForTrace(args)}`,
+    `command=${formatCommandForTrace(readPayloadCommand(payload))}`,
     `stream=${stream}`,
     `virtualFiles=${virtualFiles}`,
   ].join(' ');
+}
+
+function readPayloadCommand(payload) {
+  const request = payload?.request;
+  if (!request || typeof request !== 'object') return null;
+  return request.command && typeof request.command === 'object' ? request.command : request;
 }
 
 function summarizeWorkerResult(result) {
@@ -417,9 +422,22 @@ function isTraceVirtualFileProxy(value) {
   );
 }
 
-function formatArgsForTrace(args) {
-  if (!Array.isArray(args) || args.length === 0) return '[]';
-  return JSON.stringify(args.map((value) => basenameForTrace(value)));
+function formatCommandForTrace(command) {
+  if (!command || typeof command !== 'object') return 'unknown';
+  try {
+    return truncateForTrace(JSON.stringify(toTraceValue(command)));
+  } catch {
+    return String(command?.type ?? 'unknown');
+  }
+}
+
+function toTraceValue(value) {
+  if (typeof value === 'string') return basenameForTrace(value);
+  if (Array.isArray(value)) return value.map((entry) => toTraceValue(entry));
+  if (!value || typeof value !== 'object') return value;
+  const out = {};
+  for (const [key, entry] of Object.entries(value)) out[key] = toTraceValue(entry);
+  return out;
 }
 
 function basenameForTrace(value) {

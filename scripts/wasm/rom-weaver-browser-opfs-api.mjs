@@ -8,12 +8,12 @@ import {
 
 const DEFAULT_WORK_GUEST_PATH = '/work';
 const DEFAULT_BROWSER_WASM_URLS = [
-  new URL('../rom-weaver-cli.wasm', import.meta.url).href,
-  new URL('./rom-weaver-cli.wasm', import.meta.url).href,
+  new URL('../rom-weaver-app.wasm', import.meta.url).href,
+  new URL('./rom-weaver-app.wasm', import.meta.url).href,
 ];
 const DEFAULT_BROWSER_THREADED_WASM_URLS = [
-  new URL('../rom-weaver-cli-threaded.wasm', import.meta.url).href,
-  new URL('./rom-weaver-cli-threaded.wasm', import.meta.url).href,
+  new URL('../rom-weaver-app-threaded.wasm', import.meta.url).href,
+  new URL('./rom-weaver-app-threaded.wasm', import.meta.url).href,
 ];
 const DEFAULT_SCRATCH_FILE_POOL_SIZE = 256;
 const DEFAULT_THREAD_SCRATCH_FILE_POOL_SIZE = 16;
@@ -112,10 +112,9 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
   );
   const threadWorkerPool = threaded && importsWasiThreadSpawn
     ? createBrowserWasiThreadWorkerPool({
-        initialSize: resolveBrowserThreadPoolSize([
-          '--threads',
-          String(baseDefaultThreads ?? resolveBrowserDefaultThreads()),
-        ]),
+        initialSize: resolveBrowserThreadPoolSizeFromCount(
+          baseDefaultThreads ?? resolveBrowserDefaultThreads(),
+        ),
         threadWorkerUrl: options.threadWorkerUrl,
       })
     : null;
@@ -128,23 +127,24 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
       await threadWorkerPool?.dispose();
     },
 
-    async run(args = [], runOptions = {}) {
+    async run(commandOrRequest, runOptions = {}) {
       const runDefaultThreads = resolveConfiguredDefaultThreads(runOptions, baseDefaultThreads);
-      const normalizedArgs = withBrowserThreadLimit(
-        withDefaultThreadArgs(
-          normalizeArgs(args),
+      const request = withBrowserThreadLimit(
+        withDefaultThreadRequest(
+          normalizeRunRequest(commandOrRequest, readRunOutputOverrides(runOptions)),
           runDefaultThreads,
         ),
         runDefaultThreads ?? resolveBrowserDefaultThreads(),
       );
+      const command = readRunRequestCommand(request);
       const trace = createRunTrace(runOptions);
       trace(
-        `[browser-opfs] run start args=${formatArgsForTrace(normalizedArgs)} threaded=${threaded} wasm=${basenameForTrace(wasmUrl)}`,
+        `[browser-opfs] run start command=${formatCommandForTrace(command)} threaded=${threaded} wasm=${basenameForTrace(wasmUrl)}`,
       );
       const env = createRunEnv({
         baseEnv: options.env,
         runEnv: runOptions.env,
-        requestedThreadCount: parseRequestedThreadCount(normalizedArgs),
+        requestedThreadCount: parseRequestedThreadCount(request),
         threaded,
       });
       const envList = Object.entries(env).map(([key, value]) => `${key}=${String(value)}`);
@@ -169,16 +169,16 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
         await mountCache.invalidateMountPaths(runtimeMounts);
         trace('[browser-opfs] invalidate mount cache before run done');
       }
-      trace(`[browser-opfs] prepareKnownCliPaths start args=${formatArgsForTrace(normalizedArgs)}`);
+      trace(`[browser-opfs] prepareKnownRequestPaths start command=${formatCommandForTrace(command)}`);
       try {
-        await prepareKnownCliPaths({
-          args: normalizedArgs,
+        await prepareKnownRequestPaths({
           mountHandles,
+          request,
           runtimeMounts,
         });
-        trace('[browser-opfs] prepareKnownCliPaths done');
+        trace('[browser-opfs] prepareKnownRequestPaths done');
       } catch (error) {
-        trace(`[browser-opfs] prepareKnownCliPaths failed ${formatErrorForTrace(error)}`);
+        trace(`[browser-opfs] prepareKnownRequestPaths failed ${formatErrorForTrace(error)}`);
         throw error;
       }
 
@@ -191,8 +191,8 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
       });
       const wasiArgs = [
         runOptions.program ?? options.program ?? options.argv0 ?? 'rom-weaver',
-        ...normalizedArgs,
       ];
+      const requestStdin = serializeRunRequestForStdin(request);
       const writableRoots = normalizeWritableRoots({
         workGuestPath,
         writableDirectories: runOptions.writableDirectories,
@@ -224,6 +224,7 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
           debugWasi: Boolean(runOptions.debugWasi ?? options.debugWasi ?? false),
           invalidateMountCacheAfterRun: Boolean(runOptions.invalidateMountCacheAfterRun),
           mountHandles,
+          request,
           runtimeMounts,
           scratchFilePoolSize: resolvedMainScratchFilePoolSize,
           threadScratchFilePoolSize: resolvedThreadScratchFilePoolSize,
@@ -243,9 +244,9 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
         stdoutChunks,
         stderrChunks,
       } = await buildBrowserOpfsWasiFds({
-        args: normalizedArgs,
         cwdMountPath: workGuestPath,
-        stdin: runOptions.stdin,
+        request,
+        stdin: requestStdin,
         runtimeMounts,
         mountHandles,
         stderrLineHandler: runOptions.onStderrLine,
@@ -305,8 +306,9 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
         const stderr = decodeChunks(stderrChunks);
 
         return {
-          args: normalizedArgs,
+          command,
           exitCode,
+          request,
           stdout,
           stderr,
           ok: exitCode === 0,
@@ -319,8 +321,9 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
         const stderr = decodeChunks(stderrChunks);
 
         return {
-          args: normalizedArgs,
+          command,
           exitCode: 1,
+          request,
           stdout,
           stderr,
           ok: false,
@@ -339,9 +342,13 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
       }
     },
 
-    async runJson(args = [], runOptions = {}) {
+    async runJson(commandOrRequest, runOptions = {}) {
       const trace = createRunTrace(runOptions);
-      trace(`[browser-opfs] runJson start args=${formatArgsForTrace(normalizeArgs(args))}`);
+      const request = normalizeRunRequest(commandOrRequest, {
+        ...readRunOutputOverrides(runOptions),
+        json: true,
+      });
+      trace(`[browser-opfs] runJson start command=${formatCommandForTrace(readRunRequestCommand(request))}`);
       const parsed = createJsonLineParser({
         onEvent: runOptions.onEvent,
         onNonJsonLine: runOptions.onNonJsonLine,
@@ -350,7 +357,7 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
         onTraceEvent: runOptions.onTraceEvent,
         onTraceNonJsonLine: runOptions.onTraceNonJsonLine,
       });
-      const result = await this.run(['--json', ...normalizeArgs(args)], {
+      const result = await this.run(request, {
         ...runOptions,
         onStderrLine(line) {
           parsedTrace.pushLine(line);
@@ -384,8 +391,8 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
     threaded,
     wasmUrl,
     writableRoots: baseWritableRoots,
-    run: (args, runOptions) => runner.run(args, runOptions),
-    runJson: (args, runOptions) => runner.runJson(args, runOptions),
+    run: (commandOrRequest, runOptions) => runner.run(commandOrRequest, runOptions),
+    runJson: (commandOrRequest, runOptions) => runner.runJson(commandOrRequest, runOptions),
   };
 }
 
@@ -445,6 +452,7 @@ export async function __runRomWeaverBrowserWasiThread(payload = {}) {
     const built = await buildBrowserOpfsWasiFds({
       cwdMountPath: runtime?.cwdMountPath,
       stdin: undefined,
+      request: runtime?.request,
       runtimeMounts: normalizedRuntimeMounts,
       mountHandles: normalizedMountHandles,
       stderrLineHandler,
@@ -553,6 +561,84 @@ function resolveBrowserGlobalRayonThreads(requestedThreadCount) {
   return Math.max(1, Math.min(MAX_BROWSER_RAYON_GLOBAL_THREADS, requestedThreadCount));
 }
 
+function normalizeRunRequest(commandOrRequest, outputOverrides = {}) {
+  if (!commandOrRequest || typeof commandOrRequest !== 'object') {
+    throw new TypeError('rom-weaver run requires a typed command or run request object');
+  }
+  const hasRequestShape = Object.hasOwn(commandOrRequest, 'command');
+  const command = normalizeRunCommand(hasRequestShape ? commandOrRequest.command : commandOrRequest);
+  const baseOutput = hasRequestShape && commandOrRequest.output && typeof commandOrRequest.output === 'object'
+    ? commandOrRequest.output
+    : {};
+  const output = normalizeRunOutputOptions({
+    ...baseOutput,
+    ...outputOverrides,
+  });
+  return { command, output };
+}
+
+function normalizeRunCommand(command) {
+  if (!command || typeof command !== 'object') {
+    throw new TypeError('rom-weaver typed command must be an object');
+  }
+  const type = typeof command.type === 'string' ? command.type.trim() : '';
+  if (!type) {
+    throw new TypeError('rom-weaver typed command requires a string `type` field');
+  }
+  const args = command.args && typeof command.args === 'object' && !Array.isArray(command.args)
+    ? { ...command.args }
+    : {};
+  return { type, args };
+}
+
+function normalizeRunOutputOptions(output) {
+  const normalized = {};
+  if (output?.json !== undefined) normalized.json = Boolean(output.json);
+  if (output?.trace !== undefined) normalized.trace = Boolean(output.trace);
+  if (typeof output?.progress === 'boolean') normalized.progress = output.progress;
+  if (output?.interactive_selection_enabled !== undefined) {
+    normalized.interactive_selection_enabled = Boolean(output.interactive_selection_enabled);
+  }
+  return normalized;
+}
+
+function readRunOutputOverrides(runOptions) {
+  const output = {};
+  if (typeof runOptions?.json === 'boolean') output.json = runOptions.json;
+  if (typeof runOptions?.trace === 'boolean') output.trace = runOptions.trace;
+  if (typeof runOptions?.progress === 'boolean') output.progress = runOptions.progress;
+  if (typeof runOptions?.interactiveSelectionEnabled === 'boolean') {
+    output.interactive_selection_enabled = runOptions.interactiveSelectionEnabled;
+  }
+  if (typeof runOptions?.interactive_selection_enabled === 'boolean') {
+    output.interactive_selection_enabled = runOptions.interactive_selection_enabled;
+  }
+  return output;
+}
+
+function readRunRequestCommand(request) {
+  return request?.command ?? null;
+}
+
+function readCommandArgs(command) {
+  return command?.args && typeof command.args === 'object' ? command.args : {};
+}
+
+function serializeRunRequestForStdin(request) {
+  return `${JSON.stringify(request, runRequestJsonReplacer)}\n`;
+}
+
+function runRequestJsonReplacer(_key, value) {
+  if (typeof value !== 'bigint') return value;
+  if (
+    value > BigInt(Number.MAX_SAFE_INTEGER)
+    || value < BigInt(Number.MIN_SAFE_INTEGER)
+  ) {
+    throw new TypeError('rom-weaver run request bigint values must fit in a JSON-safe number');
+  }
+  return Number(value);
+}
+
 async function resolveThreadRuntimeMountHandles({ runtime, runtimeMounts, trace }) {
   const mountHandles = normalizeMountHandleMap({ mountHandles: runtime?.mountHandles });
   const missingMounts = runtimeMounts.filter((mountPath) => !mountHandles[mountPath]);
@@ -631,6 +717,24 @@ function summarizeVirtualFileEntries(value, readSource) {
 function formatArgsForTrace(args) {
   if (!Array.isArray(args) || args.length === 0) return '[]';
   return JSON.stringify(args.map((value) => basenameForTrace(value)));
+}
+
+function formatCommandForTrace(command) {
+  if (!command || typeof command !== 'object') return 'unknown';
+  try {
+    return truncateForTrace(JSON.stringify(toTraceValue(command)));
+  } catch {
+    return String(command?.type ?? 'unknown');
+  }
+}
+
+function toTraceValue(value) {
+  if (typeof value === 'string') return basenameForTrace(value);
+  if (Array.isArray(value)) return value.map((entry) => toTraceValue(entry));
+  if (!value || typeof value !== 'object') return value;
+  const out = {};
+  for (const [key, entry] of Object.entries(value)) out[key] = toTraceValue(entry);
+  return out;
 }
 
 function basenameForTrace(value) {
@@ -734,8 +838,8 @@ async function directoryHandlesMatch(left, right) {
 }
 
 async function buildBrowserOpfsWasiFds({
-  args,
   cwdMountPath,
+  request,
   stdin,
   runtimeMounts,
   mountHandles,
@@ -812,9 +916,9 @@ async function buildBrowserOpfsWasiFds({
     trace?.('[browser-opfs] sync mounted input paths start for virtual-only mount');
   }
   await syncMountedInputPathsFromOpfs({
-    args,
     mounts,
     mountHandles,
+    request,
     runtimeMounts,
   });
   if (virtualOnlyMounts) {
@@ -2094,8 +2198,8 @@ async function flushInMemoryEntriesToOpfs(directoryHandle, entries) {
   }
 }
 
-async function prepareKnownCliPaths({ args, mountHandles, runtimeMounts }) {
-  const prepared = collectCliPreparedPaths(args);
+async function prepareKnownRequestPaths({ mountHandles, request, runtimeMounts }) {
+  const prepared = collectRequestPreparedPaths(request);
   for (const entry of prepared) {
     const resolved = resolveMountedGuestPath(entry.path, mountHandles, runtimeMounts);
     if (!resolved) continue;
@@ -2108,12 +2212,12 @@ async function prepareKnownCliPaths({ args, mountHandles, runtimeMounts }) {
 }
 
 async function syncMountedInputPathsFromOpfs({
-  args,
   mounts,
   mountHandles,
+  request,
   runtimeMounts,
 }) {
-  const inputPaths = collectCliInputPaths(args);
+  const inputPaths = collectRequestInputPaths(request);
   if (inputPaths.length === 0) return;
   const mountsByPath = new Map(mounts.map((mount) => [mount.mountPath, mount]));
   for (const path of inputPaths) {
@@ -2131,27 +2235,32 @@ async function syncMountedInputPathsFromOpfs({
   }
 }
 
-function collectCliInputPaths(args) {
-  if (!Array.isArray(args) || args.length === 0) return [];
-  const commandIndex = findCommandIndex(args);
-  if (commandIndex === -1) return [];
-  const command = String(args[commandIndex] ?? '');
+function collectRequestInputPaths(request) {
+  const command = readRunRequestCommand(request);
+  const commandType = command?.type;
+  const args = readCommandArgs(command);
   const values = [];
-  const positional = args[commandIndex + 1];
 
-  switch (command) {
+  switch (commandType) {
     case 'checksum':
-    case 'compress':
     case 'extract':
     case 'inspect':
+      pushPathValue(values, args.source);
+      break;
+    case 'compress':
+      pushPathValues(values, args.input);
+      break;
     case 'trim':
-      if (isCliPathArg(positional)) values.push(positional);
+    case 'batch-header-fixer':
+      pushPathValues(values, args.source);
       break;
     case 'patch-create':
-      values.push(...collectCliOptionPathValues(args, commandIndex + 1, ['--original', '--modified']));
+      pushPathValue(values, args.original);
+      pushPathValue(values, args.modified);
       break;
     case 'patch-apply':
-      values.push(...collectCliOptionPathValues(args, commandIndex + 1, ['--input', '--patch']));
+      pushPathValue(values, args.input);
+      pushPathValues(values, args.patches);
       break;
     default:
       break;
@@ -2160,29 +2269,19 @@ function collectCliInputPaths(args) {
   return [...new Set(values.map((value) => String(value)))];
 }
 
-function collectCliOptionPathValues(args, startIndex, names) {
-  const out = [];
-  const lookup = new Set(names);
-  for (let index = startIndex; index < args.length; index += 1) {
-    const arg = String(args[index] ?? '');
-    if (lookup.has(arg)) {
-      const value = args[index + 1];
-      if (isCliPathArg(value)) out.push(value);
-      index += 1;
-      continue;
-    }
-    for (const name of names) {
-      if (!arg.startsWith(`${name}=`)) continue;
-      const value = arg.slice(name.length + 1);
-      if (isCliPathArg(value)) out.push(value);
-      break;
-    }
+function pushPathValues(out, value) {
+  if (Array.isArray(value)) {
+    for (const entry of value) pushPathValue(out, entry);
+    return;
   }
-  return out;
+  pushPathValue(out, value);
 }
 
-function isCliPathArg(value) {
-  return typeof value === 'string' && value.trim().length > 0 && !value.startsWith('-');
+function pushPathValue(out, value) {
+  if (typeof value !== 'string') return;
+  const path = value.trim();
+  if (path.length === 0 || path.startsWith('-')) return;
+  out.push(path);
 }
 
 async function hydrateMountedInputPathFromOpfs({ mount, relativeParts, rootHandle }) {
@@ -2237,37 +2336,40 @@ async function hydrateMountedInputPathFromOpfs({ mount, relativeParts, rootHandl
   }
 }
 
-function collectCliPreparedPaths(args) {
+function collectRequestPreparedPaths(request) {
+  const command = readRunRequestCommand(request);
+  const commandType = command?.type;
+  const args = readCommandArgs(command);
   const out = [];
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = String(args[index] ?? '');
-    if (arg === '--output') {
-      const value = args[index + 1];
-      if (typeof value === 'string') out.push({ path: value, truncate: true, type: 'file' });
-      index += 1;
-      continue;
-    }
-    if (arg.startsWith('--output=')) {
-      out.push({ path: arg.slice('--output='.length), truncate: true, type: 'file' });
-      continue;
-    }
-    if (arg === '--out-dir') {
-      const value = args[index + 1];
-      if (typeof value === 'string') {
-        out.push({ path: value, type: 'dir' });
-      }
-      index += 1;
-      continue;
-    }
-    if (arg.startsWith('--out-dir=')) {
-      out.push({ path: arg.slice('--out-dir='.length), type: 'dir' });
-    }
+
+  if (commandType === 'extract') {
+    pushPreparedPath(out, args.out_dir, { type: 'dir' });
   }
+
+  switch (commandType) {
+    case 'batch-header-fixer':
+    case 'compress':
+    case 'patch-apply':
+    case 'patch-create':
+    case 'trim':
+      pushPreparedPath(out, args.output, { truncate: true, type: 'file' });
+      break;
+    default:
+      break;
+  }
+
   return out;
 }
 
+function pushPreparedPath(out, value, entry) {
+  if (typeof value !== 'string') return;
+  const path = value.trim();
+  if (path.length === 0 || path.startsWith('-')) return;
+  out.push({ ...entry, path });
+}
+
 function resolveMountedGuestPath(path, mountHandles, runtimeMounts) {
-  const normalizedPath = normalizeGuestPath(path, { label: 'prepared CLI path' });
+  const normalizedPath = normalizeGuestPath(path, { label: 'prepared request path' });
   const sortedMounts = [...runtimeMounts].sort((a, b) => b.length - a.length);
   for (const mountPath of sortedMounts) {
     if (normalizedPath !== mountPath && !normalizedPath.startsWith(`${mountPath}/`)) continue;
@@ -3294,7 +3396,7 @@ function createBrowserWasiThreadSpawner({
     `[browser-opfs] thread spawner create pooled=${Boolean(allowWorkerPool && threadWorkerPool)} worker=${basenameForTrace(resolvedThreadWorkerUrl)}`,
   );
   if (allowWorkerPool && threadWorkerPool) {
-    const poolSize = resolveBrowserThreadPoolSize(wasiArgs);
+    const poolSize = resolveBrowserThreadPoolSizeFromRequest(runtime?.request);
     const command = threadWorkerPool.createCommand({
       poolSize,
       streamBroadcastChannelName,
@@ -3654,22 +3756,40 @@ function createStandaloneBrowserWasiThread({
   return slot;
 }
 
-function resolveBrowserThreadPoolSize(wasiArgs) {
-  const requestedThreadCount = parseRequestedThreadCount(wasiArgs);
+function resolveBrowserThreadPoolSizeFromRequest(request) {
+  return resolveBrowserThreadPoolSizeFromCount(parseRequestedThreadCount(request));
+}
+
+function resolveBrowserThreadPoolSizeFromCount(requestedThreadCount) {
   if (requestedThreadCount === null || requestedThreadCount <= 1) return 0;
   const requested = Math.min(Math.max(1, requestedThreadCount), MAX_BROWSER_THREAD_POOL_SIZE);
   return Math.min(requested + BROWSER_THREAD_POOL_HEADROOM, MAX_BROWSER_THREAD_POOL_SIZE);
 }
 
-function parseRequestedThreadCount(wasiArgs) {
-  if (!Array.isArray(wasiArgs)) return null;
-  for (let index = wasiArgs.length - 1; index >= 0; index -= 1) {
-    if (wasiArgs[index] !== '--threads') continue;
-    const parsed = Number.parseInt(String(wasiArgs[index + 1] ?? ''), 10);
-    if (Number.isInteger(parsed) && parsed > 0) return Math.min(parsed, MAX_BROWSER_THREAD_POOL_SIZE);
-    break;
+function parseRequestedThreadCount(request) {
+  const command = readRunRequestCommand(request);
+  const args = readCommandArgs(command);
+  return parseThreadBudgetCount(args.threads);
+}
+
+function parseThreadBudgetCount(value) {
+  if (value === undefined || value === null) return null;
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const parsed = Math.floor(value);
+    return parsed > 0 ? Math.min(parsed, MAX_BROWSER_THREAD_POOL_SIZE) : null;
   }
-  return null;
+  if (typeof value === 'bigint') {
+    if (value <= 0n) return null;
+    const max = BigInt(MAX_BROWSER_THREAD_POOL_SIZE);
+    return Number(value > max ? max : value);
+  }
+  if (typeof value !== 'string') return null;
+  const raw = value.trim();
+  if (!raw) return null;
+  if (raw.toLowerCase() === 'auto') return DEFAULT_BROWSER_THREAD_COUNT;
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isInteger(parsed) || parsed <= 0) return null;
+  return Math.min(parsed, MAX_BROWSER_THREAD_POOL_SIZE);
 }
 
 function wrapThreadFailure(tid, error) {
@@ -3928,54 +4048,67 @@ function normalizeDefaultThreads(value) {
   return Math.max(1, Math.min(MAX_BROWSER_THREAD_POOL_SIZE, parsed));
 }
 
-function withDefaultThreadArgs(args, defaultThreads) {
-  if (!defaultThreads || hasThreadArg(args)) return args;
-  const commandIndex = findCommandIndex(args);
-  if (commandIndex === -1 || !THREAD_AWARE_COMMANDS.has(args[commandIndex])) return args;
-  return [...args, '--threads', String(defaultThreads)];
-}
-
-function withBrowserThreadLimit(args, defaultThreads = DEFAULT_BROWSER_THREAD_COUNT) {
-  const out = [...args];
-  for (let index = 0; index < out.length; index += 1) {
-    const arg = String(out[index] ?? '');
-    if (arg === '--threads') {
-      if (index + 1 < out.length) out[index + 1] = clampBrowserThreadArgValue(out[index + 1], defaultThreads);
-      index += 1;
-      continue;
-    }
-    if (arg.startsWith('--threads=')) {
-      out[index] = `--threads=${clampBrowserThreadArgValue(arg.slice('--threads='.length), defaultThreads)}`;
-    }
+function withDefaultThreadRequest(request, defaultThreads) {
+  if (!defaultThreads) return request;
+  const command = readRunRequestCommand(request);
+  if (!command || !THREAD_AWARE_COMMANDS.has(command.type)) return request;
+  const args = readCommandArgs(command);
+  if (Object.hasOwn(args, 'threads') && args.threads !== undefined && args.threads !== null) {
+    return request;
   }
-  return out;
+  return replaceRunRequestCommandArgs(request, {
+    ...args,
+    threads: defaultThreads,
+  });
 }
 
-function clampBrowserThreadArgValue(value, defaultThreads = DEFAULT_BROWSER_THREAD_COUNT) {
+function withBrowserThreadLimit(request, defaultThreads = DEFAULT_BROWSER_THREAD_COUNT) {
+  const command = readRunRequestCommand(request);
+  if (!command || !THREAD_AWARE_COMMANDS.has(command.type)) return request;
+  const args = readCommandArgs(command);
+  if (!Object.hasOwn(args, 'threads') || args.threads === undefined || args.threads === null) {
+    return request;
+  }
+  const clamped = clampBrowserThreadBudgetValue(args.threads, defaultThreads);
+  if (Object.is(clamped, args.threads)) return request;
+  return replaceRunRequestCommandArgs(request, {
+    ...args,
+    threads: clamped,
+  });
+}
+
+function replaceRunRequestCommandArgs(request, args) {
+  const command = readRunRequestCommand(request);
+  return {
+    ...request,
+    command: {
+      ...command,
+      args,
+    },
+  };
+}
+
+function clampBrowserThreadBudgetValue(value, defaultThreads = DEFAULT_BROWSER_THREAD_COUNT) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const parsed = Math.floor(value);
+    return parsed > 0 ? Math.min(parsed, MAX_BROWSER_THREAD_POOL_SIZE) : value;
+  }
+  if (typeof value === 'bigint') {
+    if (value <= 0n) return value;
+    const max = BigInt(MAX_BROWSER_THREAD_POOL_SIZE);
+    return Number(value > max ? max : value);
+  }
   const raw = String(value ?? '').trim();
   if (raw.toLowerCase() === 'auto') {
     const parsedDefault = Number.parseInt(String(defaultThreads), 10);
     if (Number.isInteger(parsedDefault) && parsedDefault > 0) {
-      return String(Math.min(parsedDefault, MAX_BROWSER_THREAD_POOL_SIZE));
+      return Math.min(parsedDefault, MAX_BROWSER_THREAD_POOL_SIZE);
     }
-    return String(DEFAULT_BROWSER_THREAD_COUNT);
+    return DEFAULT_BROWSER_THREAD_COUNT;
   }
   const parsed = Number.parseInt(raw, 10);
-  if (!Number.isInteger(parsed) || parsed <= 0) return raw;
-  return String(Math.min(parsed, MAX_BROWSER_THREAD_POOL_SIZE));
-}
-
-function hasThreadArg(args) {
-  return args.some((arg) => arg === '--threads' || arg.startsWith('--threads='));
-}
-
-function findCommandIndex(args) {
-  for (let index = 0; index < args.length; index += 1) {
-    const arg = args[index];
-    if (arg === '--json' || arg === '--progress' || arg === '--no-progress' || arg === '--trace') continue;
-    return index;
-  }
-  return -1;
+  if (!Number.isInteger(parsed) || parsed <= 0) return value;
+  return Math.min(parsed, MAX_BROWSER_THREAD_POOL_SIZE);
 }
 
 function assertThreadedWasmRuntimeSupported({ wasmUrl }) {
@@ -4100,8 +4233,8 @@ function deriveThreadedWasmUrl(urlLike) {
   const absoluteUrl = toAbsoluteUrl(urlLike);
   const parsed = new URL(absoluteUrl);
   const replacedPathname = parsed.pathname.replace(
-    /rom-weaver-cli\.wasm$/,
-    'rom-weaver-cli-threaded.wasm',
+    /rom-weaver-app\.wasm$/,
+    'rom-weaver-app-threaded.wasm',
   );
   if (replacedPathname === parsed.pathname) return null;
   parsed.pathname = replacedPathname;
@@ -4169,11 +4302,6 @@ function normalizeRuntimeMounts(mounts) {
   return mounts.map((mountPath) => normalizeGuestPath(String(mountPath), {
     label: 'runtime mount guest path',
   }));
-}
-
-function normalizeArgs(args) {
-  if (!Array.isArray(args)) throw new TypeError('args must be an array of strings');
-  return args.map((value) => String(value));
 }
 
 function normalizeStdin(stdin) {

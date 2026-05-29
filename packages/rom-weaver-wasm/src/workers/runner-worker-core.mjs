@@ -65,7 +65,7 @@ export function createRunnerWorkerMessageQueue({ postMessage, initRunner }) {
 
       case 'run': {
         assertRunnerInitialized();
-        const result = await runner.run(normalizeArgs(message.args), message.options ?? {});
+        const result = await runner.run(readRunPayload(message), message.options ?? {});
         postMessage({
           type: 'result',
           requestId,
@@ -96,11 +96,14 @@ export function createRunnerWorkerMessageQueue({ postMessage, initRunner }) {
             postMessage({ type: 'traceNonJsonLine', requestId, line: String(line) });
           },
         };
-        const args = normalizeArgs(message.args);
-        traceRunOptionLine(runOptions, `[runner-worker] runJson invoking runner args=${formatArgsForTrace(args)}`);
+        const request = readRunPayload(message);
+        traceRunOptionLine(
+          runOptions,
+          `[runner-worker] runJson invoking runner command=${formatCommandForTrace(readPayloadCommand(request))}`,
+        );
         let result;
         try {
-          result = await runner.runJson(args, runOptions);
+          result = await runner.runJson(request, runOptions);
         } catch (error) {
           traceRunOptionLine(
             runOptions,
@@ -161,11 +164,9 @@ function readRequestId(message) {
   return message.requestId ?? null;
 }
 
-function normalizeArgs(args) {
-  if (!Array.isArray(args)) {
-    return [];
-  }
-  return args.map((value) => String(value));
+function readRunPayload(message) {
+  if (!message || typeof message !== 'object') return undefined;
+  return message.request;
 }
 
 function summarizeQueueMessage(message) {
@@ -197,7 +198,7 @@ function traceRunOptionLine(runOptions, line) {
 function summarizeRunRequest(message) {
   const options = message?.options && typeof message.options === 'object' ? message.options : {};
   return [
-    `args=${formatArgsForTrace(normalizeArgs(message?.args))}`,
+    `command=${formatCommandForTrace(readPayloadCommand(message?.request))}`,
     `stream=${typeof options.__streamBroadcastChannelName === 'string'}`,
     `virtualFiles=${summarizeVirtualFiles(options.virtualFiles)}`,
   ].join(' ');
@@ -246,9 +247,27 @@ function isTraceVirtualFileProxy(value) {
   );
 }
 
-function formatArgsForTrace(args) {
-  if (!Array.isArray(args) || args.length === 0) return '[]';
-  return JSON.stringify(args.map((value) => basenameForTrace(value)));
+function formatCommandForTrace(command) {
+  if (!command || typeof command !== 'object') return 'unknown';
+  try {
+    return truncateForTrace(JSON.stringify(toTraceValue(command)));
+  } catch {
+    return String(command?.type ?? 'unknown');
+  }
+}
+
+function readPayloadCommand(payload) {
+  if (!payload || typeof payload !== 'object') return null;
+  return payload.command && typeof payload.command === 'object' ? payload.command : payload;
+}
+
+function toTraceValue(value) {
+  if (typeof value === 'string') return basenameForTrace(value);
+  if (Array.isArray(value)) return value.map((entry) => toTraceValue(entry));
+  if (!value || typeof value !== 'object') return value;
+  const out = {};
+  for (const [key, entry] of Object.entries(value)) out[key] = toTraceValue(entry);
+  return out;
 }
 
 function basenameForTrace(value) {
@@ -327,13 +346,11 @@ function readRequestContext(message) {
     context.stage = `worker.${message.type}`;
   }
 
-  if (
-    (message.type === 'run' || message.type === 'runJson')
-    && Array.isArray(message.args)
-    && typeof message.args[0] === 'string'
-    && message.args[0].length > 0
-  ) {
-    context.command = message.args[0];
+  if (message.type === 'run' || message.type === 'runJson') {
+    const command = readPayloadCommand(message.request);
+    if (typeof command?.type === 'string' && command.type.length > 0) {
+      context.command = command.type;
+    }
   }
 
   return context;

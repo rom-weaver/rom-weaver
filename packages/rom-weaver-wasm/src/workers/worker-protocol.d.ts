@@ -1,5 +1,6 @@
 import type {
   RomWeaverProgressEvent,
+  RomWeaverRunInput,
   RomWeaverRunJsonOptions,
   RomWeaverRunJsonResult,
   RomWeaverRunOptions,
@@ -20,14 +21,14 @@ export interface RomWeaverWorkerInitRequest {
 export interface RomWeaverWorkerRunRequest {
   type: 'run';
   requestId: number;
-  args?: unknown[];
+  request: RomWeaverRunInput;
   options?: RomWeaverRunOptions & Record<string, unknown>;
 }
 
 export interface RomWeaverWorkerRunJsonRequest {
   type: 'runJson';
   requestId: number;
-  args?: unknown[];
+  request: RomWeaverRunInput;
   options?: Omit<RomWeaverRunJsonOptions<unknown, unknown>, 'onEvent' | 'onNonJsonLine' | 'onTraceEvent' | 'onTraceNonJsonLine'> & Record<string, unknown>;
 }
 

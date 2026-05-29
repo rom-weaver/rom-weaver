@@ -1,20 +1,44 @@
-export type RomWeaverArg = string | number | boolean | bigint;
-export type RomWeaverDefaultThreads = number | string | false | null | undefined;
-export type RomWeaverEnv = Record<string, string>;
-export type RomWeaverPreopens = Record<string, string>;
 import type {
+  Commands,
+  CompressionLevelProfile,
   JsonValue,
   OperationFamily,
   OperationStatus,
   ProgressEvent,
+  RomWeaverRunOutputOptions,
+  RomWeaverRunRequest,
+  ThreadBudget,
   ThreadExecution,
   ThreadMode,
 } from './generated/rom-weaver-rust-types.d.ts';
 
-export type RomWeaverStdinInput = string | Uint8Array | ArrayBuffer | null | undefined;
+export type RomWeaverDefaultThreads = number | string | false | null | undefined;
+export type RomWeaverEnv = Record<string, string>;
+export type {
+  BatchHeaderFixerCommand,
+  ChecksumCommand,
+  Commands,
+  CompressCommand,
+  CompressionLevelProfile,
+  ExtractCommand,
+  InspectCommand,
+  PatchApplyCommand,
+  PatchCreateCommand,
+  RomWeaverRunOutputOptions,
+  RomWeaverRunRequest,
+  ThreadBudget,
+  TrimCommand,
+} from './generated/rom-weaver-rust-types.d.ts';
+
+export type RomWeaverCommand = Commands;
+export type RomWeaverRunInput = RomWeaverCommand | RomWeaverRunRequest;
+export type RomWeaverCompressionLevelProfile = CompressionLevelProfile;
+export type RomWeaverThreadBudget = ThreadBudget;
+export type RomWeaverRunOutput = RomWeaverRunOutputOptions;
 
 export interface RomWeaverRunResult {
-  args: string[];
+  command: RomWeaverCommand;
+  request: RomWeaverRunRequest;
   exitCode: number;
   stdout: string;
   stderr: string;
@@ -23,14 +47,21 @@ export interface RomWeaverRunResult {
 }
 
 export interface RomWeaverRunOptions {
-  stdin?: RomWeaverStdinInput;
   /**
    * Process environment variables forwarded to the wasm runtime.
    * Browser runners may set safety defaults.
    */
   env?: RomWeaverEnv;
-  preopens?: RomWeaverPreopens;
-  argv0?: string;
+  /** Emit JSON progress events to stdout. runJson sets this automatically. */
+  json?: boolean;
+  /** Override progress event emission. Defaults to JSON mode or terminal stdout. */
+  progress?: boolean;
+  /** Emit trace events to stderr. */
+  trace?: boolean;
+  /** Enable interactive selection if a command can ask for one. */
+  interactiveSelectionEnabled?: boolean;
+  /** Rust-wire spelling for interactiveSelectionEnabled. */
+  interactive_selection_enabled?: boolean;
 }
 
 export interface RomWeaverInspectContainerDetails {
@@ -156,8 +187,9 @@ export interface RomWeaverBrowserOpfsOptions {
   /** Number of preopened OPFS scratch files available for dynamically created WASI files. */
   scratchFilePoolSize?: number;
   /**
-   * Default CLI thread count appended for threaded commands when args omit --threads.
-   * Use null, false, 0, or "off" to leave args unchanged.
+   * Default browser thread count applied for typed threaded commands when no
+   * command-level thread budget is provided. Use null, false, 0, or "off" to
+   * leave the request unchanged.
    */
   defaultThreads?: RomWeaverDefaultThreads;
   program?: string;
@@ -177,8 +209,9 @@ export interface RomWeaverBrowserOpfsRunOptions extends RomWeaverRunOptions {
   scratchFilePoolSize?: number;
   threadWorkerUrl?: string | URL;
   /**
-   * Per-run default CLI thread count appended for threaded commands when args omit --threads.
-   * Use null, false, 0, or "off" to leave args unchanged.
+   * Per-run default browser thread count applied for typed threaded commands
+   * when no command-level thread budget is provided. Use null, false, 0, or
+   * "off" to leave the request unchanged.
    */
   defaultThreads?: RomWeaverDefaultThreads;
   program?: string;
