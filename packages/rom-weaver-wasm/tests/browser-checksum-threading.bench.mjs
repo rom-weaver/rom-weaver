@@ -107,14 +107,6 @@ async function ensureRuntimeReady() {
 }
 
 async function initializeRuntime() {
-  if (typeof navigator.storage?.persist === 'function') {
-    try {
-      await navigator.storage.persist();
-    } catch {
-      // best-effort only
-    }
-  }
-
   const opened = await openPersistentBenchRoot('bench-checksum-threading');
   fixtureName = opened.fixtureName;
   fixtureRootHandle = opened.fixtureRootHandle;

@@ -3,6 +3,7 @@
 import { createElement } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
+import { getBrowserStorageEstimateState } from "../storage/browser/browser-storage-estimate.ts";
 import { configureLogger, createLogger } from "./logging.ts";
 import { createEmptyVitePageUpdateState, createVitePageUpdateState, getPageUpdateState } from "./page-update-state.ts";
 import { createPwaServiceWorkerClient } from "./pwa/pwa-service-worker-client.ts";
@@ -411,7 +412,20 @@ const initializeWebapp = () => {
 };
 
 const initializeWebappAfterOpfsCleanup = () => {
-  void clearOpfsOnPageLoad().then(initializeWebapp, initializeWebapp);
+  void clearOpfsOnPageLoad()
+    .then(() => getBrowserStorageEstimateState())
+    .then(
+      (storage) => {
+        logger.debug("Browser storage initialized", { storage });
+        initializeWebapp();
+      },
+      (error) => {
+        logger.debug("Browser storage initialization skipped", {
+          message: error instanceof Error ? error.message : String(error || ""),
+        });
+        initializeWebapp();
+      },
+    );
 };
 
 if (document.readyState === "loading") {

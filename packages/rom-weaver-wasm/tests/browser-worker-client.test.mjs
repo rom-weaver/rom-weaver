@@ -81,6 +81,20 @@ async function countScratchFiles(rootHandle) {
   }
 }
 
+async function getScratchStorageBytes(rootHandle) {
+  try {
+    const scratchHandle = await rootHandle.getDirectoryHandle(SCRATCH_DIRECTORY_NAME, { create: false });
+    let total = 0;
+    for await (const [, entryHandle] of scratchHandle.entries()) {
+      if (entryHandle.kind !== 'file') continue;
+      total += (await entryHandle.getFile()).size;
+    }
+    return total;
+  } catch {
+    return 0;
+  }
+}
+
 async function observeScratchPeak(rootHandle, { isDone, timeoutMs = 20000, pollMs = 10 } = {}) {
   const done = typeof isDone === 'function' ? isDone : () => false;
   const deadline = Date.now() + timeoutMs;
@@ -993,6 +1007,39 @@ describe('rom-weaver-wasm browser runner parity', () => {
     }
   });
 
+  it('browser runner truncates scratch-backed extracted outputs after flushing', async () => {
+    await withTempFixture(async ({ dir, worker, opfsHandle }) => {
+      const sourcePath = joinGuestPath(dir, 'scratch-backed-extract-source.bin');
+      const archivePath = joinGuestPath(dir, 'scratch-backed-extract.gz');
+      const extractDir = joinGuestPath(dir, 'scratch-backed-extract-out');
+
+      await writeGuestPatternFile(opfsHandle, sourcePath, 4 * 1024 * 1024);
+      assertRunJsonSucceeded(await worker.runJson([
+        'compress',
+        sourcePath,
+        '--format',
+        'gz',
+        '--output',
+        archivePath,
+        '--threads',
+        '1',
+      ]), { command: 'compress' });
+
+      const extractResult = await worker.runJson([
+        'extract',
+        archivePath,
+        '--out-dir',
+        extractDir,
+        '--threads',
+        '1',
+      ]);
+
+      assertRunJsonSucceeded(extractResult, { command: 'extract' });
+      expect(await countScratchFiles(opfsHandle)).toBeGreaterThan(0);
+      expect(await getScratchStorageBytes(opfsHandle)).toBe(0);
+    });
+  });
+
   it('threaded browser runner keeps a stable large nested-thread scratch pool across runs', async () => {
     await withTempFixture(async ({ dir, init, worker, opfsHandle }) => {
       expect(init.threaded).toBe(true);
@@ -1054,7 +1101,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
     });
   });
 
-  it('threaded browser runner ignores explicit scratchFilePoolSize overrides for nested thread mounts', async () => {
+  it('threaded browser runner grows the scratch pool for explicit scratchFilePoolSize overrides', async () => {
     await withTempFixture(async ({ dir, init, worker, opfsHandle }) => {
       expect(init.threaded).toBe(true);
       const sourcePath = joinGuestPath(dir, 'threaded-scratch-override-source.bin');
@@ -1078,7 +1125,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
           '4',
         ],
         {
-          scratchFilePoolSize: 0,
+          scratchFilePoolSize: 32,
         },
       ).finally(() => {
         runSettled = true;
@@ -1090,8 +1137,8 @@ describe('rom-weaver-wasm browser runner parity', () => {
       const terminal = assertRunJsonSucceeded(result, { command: 'checksum' });
 
       expect(terminal.effective_threads).toBeGreaterThan(1);
-      expect(peakScratchFiles).toBeGreaterThanOrEqual(16);
-      expect(await countScratchFiles(opfsHandle)).toBeGreaterThanOrEqual(16);
+      expect(peakScratchFiles).toBeGreaterThanOrEqual(32);
+      expect(await countScratchFiles(opfsHandle)).toBeGreaterThanOrEqual(32);
     }, {
       initOptions: {
         wasmUrl: new URL('../rom-weaver-app-threaded.wasm', import.meta.url).href,

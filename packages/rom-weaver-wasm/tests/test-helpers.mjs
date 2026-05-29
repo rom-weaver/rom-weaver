@@ -38,14 +38,6 @@ export async function withTempFixture(run, options = {}) {
     initOptions = {},
   } = options;
 
-  if (typeof navigator.storage?.persist === 'function') {
-    try {
-      await navigator.storage.persist();
-    } catch {
-      // best-effort only
-    }
-  }
-
   const root = await navigator.storage.getDirectory();
   const fixtureName = `${prefix}${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const fixtureHandle = await root.getDirectoryHandle(fixtureName, { create: true });

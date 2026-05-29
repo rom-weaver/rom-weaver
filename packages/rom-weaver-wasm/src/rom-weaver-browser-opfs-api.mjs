@@ -215,8 +215,16 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
       });
       const resolvedVirtualOnlyMounts =
         Boolean(runOptions.virtualOnlyMounts ?? options.virtualOnlyMounts ?? false);
-      const resolvedMainScratchFilePoolSize = normalizeScratchFilePoolSize();
-      const resolvedThreadScratchFilePoolSize = DEFAULT_THREAD_SCRATCH_FILE_POOL_SIZE;
+      const resolvedMainScratchFilePoolSize = normalizeScratchFilePoolSize(
+        runOptions.scratchFilePoolSize ?? options.scratchFilePoolSize,
+      );
+      const resolvedThreadScratchFilePoolSize = normalizeScratchFilePoolSize(
+        runOptions.threadScratchFilePoolSize
+          ?? options.threadScratchFilePoolSize
+          ?? runOptions.scratchFilePoolSize
+          ?? options.scratchFilePoolSize
+          ?? DEFAULT_THREAD_SCRATCH_FILE_POOL_SIZE,
+      );
       const threadSpawner = createBrowserWasiThreadSpawner({
         streamBroadcastChannelName: runOptions.__streamBroadcastChannelName,
         streamRequestId: runOptions.__streamRequestId,
@@ -310,7 +318,7 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
         traceFlushOpenWasiFileDescriptors(trace, fds, '[browser-opfs] flush fd write buffers');
         traceDirectWasiFileIoStats(trace, wasi, '[browser-opfs] direct file io');
         trace('[browser-opfs] flush mounts start');
-        await flushBrowserOpfsMounts(mounts);
+        await flushBrowserOpfsMounts(mounts, trace);
         trace('[browser-opfs] flush mounts done');
         runSucceeded = true;
         stdoutCollector.flush();
@@ -522,7 +530,7 @@ export async function __runRomWeaverBrowserWasiThread(payload = {}) {
     trace(`[browser-opfs-thread] nested waitForWorkers done tid=${tid ?? 'unknown'}`);
     traceFlushOpenWasiFileDescriptors(trace, built.fds, `[browser-opfs-thread] flush fd write buffers tid=${tid ?? 'unknown'}`);
     traceDirectWasiFileIoStats(trace, threadWasi, `[browser-opfs-thread] direct file io tid=${tid ?? 'unknown'}`);
-    await flushBrowserOpfsMounts(mounts);
+    await flushBrowserOpfsMounts(mounts, trace);
     runSucceeded = true;
   } catch (error) {
     trace(`[browser-opfs-thread] failed tid=${tid ?? 'unknown'} ${formatErrorForTrace(error)}`);
@@ -1273,25 +1281,51 @@ class BrowserOpfsMount {
     return file;
   }
 
+  resetScratchPool({ trace } = {}) {
+    let truncatedFiles = 0;
+    let reclaimedBytes = 0;
+    for (const file of this.scratchFiles) {
+      let size = 0;
+      try {
+        size = Math.max(0, Number(file.size()) || 0);
+      } catch {
+        size = 0;
+      }
+      if (size > 0) {
+        file.truncate(0);
+        truncatedFiles += 1;
+        reclaimedBytes += size;
+      }
+    }
+    this.scratchPool = [...this.scratchFiles];
+    if (truncatedFiles > 0) {
+      trace?.(
+        `[browser-opfs] mount scratch reset path=${this.mountPath} files=${truncatedFiles} bytes=${reclaimedBytes}`,
+      );
+    }
+  }
+
   async ensureScratchPool({ scratchFilePoolSize, trace } = {}) {
-    if (this.scratchFiles.length > 0) return;
+    const desiredSize = normalizeScratchFilePoolSize(scratchFilePoolSize);
+    if (this.scratchFiles.length >= desiredSize) return;
+    const additionalFileCount = desiredSize - this.scratchFiles.length;
     trace?.(
-      `[browser-opfs] mount scratch seed start path=${this.mountPath} size=${normalizeScratchFilePoolSize(scratchFilePoolSize)}`,
+      `[browser-opfs] mount scratch seed start path=${this.mountPath} size=${desiredSize} add=${additionalFileCount}`,
     );
     const scratch = this.virtualOnly
       ? createMemoryScratchFilePool({
           closeables: this.ownedFiles,
-          scratchFilePoolSize,
+          scratchFilePoolSize: additionalFileCount,
         })
       : await createScratchFilePool({
           closeables: this.ownedFiles,
           directoryHandle: this.directoryHandle,
-          scratchFilePoolSize,
+          scratchFilePoolSize: additionalFileCount,
           syncAccessMode: this.syncAccessMode,
         });
     this.scratchDirectoryHandle = scratch.directoryHandle;
-    this.scratchFiles = scratch.files;
-    this.scratchPool = [...scratch.files];
+    this.scratchFiles.push(...scratch.files);
+    this.scratchPool = [...this.scratchFiles];
     trace?.(
       `[browser-opfs] mount scratch seed done path=${this.mountPath} files=${this.scratchFiles.length}`,
     );
@@ -2222,7 +2256,7 @@ function restoreVirtualFiles(restores) {
   }
 }
 
-async function flushBrowserOpfsMounts(mounts) {
+async function flushBrowserOpfsMounts(mounts, trace) {
   for (const mount of mounts) {
     await flushInMemoryEntriesToOpfs(mount.directoryHandle, mount.contents);
     await replaceScratchBackedEntriesWithOpfsHandles({
@@ -2230,6 +2264,7 @@ async function flushBrowserOpfsMounts(mounts) {
       entries: mount.contents,
       mount,
     });
+    mount.resetScratchPool?.({ trace });
   }
 }
 

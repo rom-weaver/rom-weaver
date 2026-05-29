@@ -10,6 +10,10 @@ import type {
 } from "../../types/workflow-runtime-adapter.ts";
 import type { CompressionLevelProfile, RomWeaverCommand, ThreadBudget } from "rom-weaver-wasm";
 import {
+  formatBrowserStorageEstimateState,
+  getBrowserStorageEstimateState,
+} from "../../storage/browser/browser-storage-estimate.ts";
+import {
   getRomWeaverFailureMessage,
   type RomWeaverRunJsonEvent,
   type RomWeaverRunJsonOptions,
@@ -25,6 +29,8 @@ const FILE_EXTENSION_CAPTURE_REGEX = /^(.+?)(\.[^./\\]*)?$/;
 const CODEC_LEVEL_ENTRY_REGEX = /^([a-z0-9_+-]+)(?::(\d+))?$/i;
 const COMPRESSION_LEVEL_PROFILE_REGEX = /^(min|very-low|low|medium|high|very-high|max)$/i;
 const WASI_THREAD_FAILURE_REGEX = /(wasi thread\s+\d+\s+failed|thread\s+\d+\s+failed before completion)/i;
+const BROWSER_THREAD_WORKER_FAILURE_REGEX = /(browser wasi thread worker\s+\d+\s+failed|thread pool build failed)/i;
+const RVZ_BLOCK_PROCESSING_FAILURE_REGEX = /rvz create failed:\s*Failed to process block\s+\d+/i;
 const THREAD_RUNTIME_TRAP_REGEX = /table index is out of bounds/i;
 const OUT_OF_MEMORY_FAILURE_REGEX = /\bout of memory\b|\bmemory allocation\b|\bcannot allocate memory\b/i;
 const WORK_ROOT_PATH = "/work";
@@ -158,6 +164,11 @@ const getTraceMessage = (value: unknown): string => {
   } catch (_error) {
     return String(value || "").trim();
   }
+};
+
+const appendBrowserStorageContext = async (message: string) => {
+  const state = await getBrowserStorageEstimateState();
+  return `${message} [storage: ${formatBrowserStorageEstimateState(state)}]`;
 };
 
 const toRomWeaverOptions = (input: {
@@ -464,7 +475,21 @@ const runRomWeaverJsonWithRetryOnOutOfMemory = async (
 };
 
 const isThreadedWorkerFailure = (message: string) =>
-  WASI_THREAD_FAILURE_REGEX.test(message) || THREAD_RUNTIME_TRAP_REGEX.test(message);
+  WASI_THREAD_FAILURE_REGEX.test(message) ||
+  BROWSER_THREAD_WORKER_FAILURE_REGEX.test(message) ||
+  THREAD_RUNTIME_TRAP_REGEX.test(message);
+
+const isRvzBlockProcessingFailure = (message: string) => RVZ_BLOCK_PROCESSING_FAILURE_REGEX.test(message);
+
+const hasThreadedWorkerFailureInResult = (result: RomWeaverRunJsonResult) => {
+  const lines = [
+    typeof result.stderr === "string" ? result.stderr : "",
+    ...((Array.isArray(result.nonJsonLines) ? result.nonJsonLines : []).map((line) => String(line || ""))),
+    ...((Array.isArray(result.traceNonJsonLines) ? result.traceNonJsonLines : []).map((line) => String(line || ""))),
+    getTraceMessage((result as { error?: unknown }).error),
+  ];
+  return lines.some((line) => isThreadedWorkerFailure(line));
+};
 
 const normalizeChdCodecArgs = (codecs: string[]) => {
   const explicitLevels = new Set<string>();
@@ -609,7 +634,12 @@ const invokeRomWeaverCompressionCreateWorker = async (
   );
   if (!(result.ok && result.exitCode === 0)) {
     const failureMessage = getRomWeaverFailureMessage(result, "Compression create failed");
-    if (threadArg && threadArg !== 1 && isThreadedWorkerFailure(failureMessage)) {
+    const shouldRetrySingleThread =
+      threadArg !== 1 &&
+      (isThreadedWorkerFailure(failureMessage) ||
+        hasThreadedWorkerFailureInResult(result) ||
+        (normalizedFormat === "rvz" && isRvzBlockProcessingFailure(failureMessage)));
+    if (shouldRetrySingleThread) {
       const fallbackCommand = buildCommand(1);
       emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson compress retry single-thread", {
         failureMessage,
@@ -770,7 +800,7 @@ const runRomWeaverInspectListWorker = async (
   let result = await runInspectList();
   if (!(result.ok && result.exitCode === 0)) {
     const failureMessage = getRomWeaverFailureMessage(result, "Compression listing failed");
-    if (isThreadedWorkerFailure(failureMessage)) {
+    if (isThreadedWorkerFailure(failureMessage) || hasThreadedWorkerFailureInResult(result)) {
       emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson inspect-list retry single-thread", {
         failureMessage,
       });
@@ -813,7 +843,7 @@ const invokeRomWeaverPatchApplyWorker = async (
     resolvePatchApplyThreadArg(requestedThreadArg, input.patchFiles);
   const disableDefaultThreadArgInjection = hasBpsPatch && !threadArg;
   const virtualOnlyMounts = hasBpsPatch;
-  const scratchFilePoolSize = hasBpsPatch ? 8 : 1;
+  const scratchFilePoolSize = hasBpsPatch ? 8 : 64;
   const syncAccessMode = hasBpsPatch ? "readwrite-unsafe" : undefined;
   const command: RomWeaverCommand = {
     type: "patch-apply",
@@ -846,6 +876,11 @@ const invokeRomWeaverPatchApplyWorker = async (
     threadArg,
     virtualOnlyMounts,
   });
+  if (isTraceEnabled(input.logLevel)) {
+    emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "browser storage before patch-apply", {
+      storage: await getBrowserStorageEstimateState(),
+    });
+  }
   await onBeforeRun?.(outputPath);
 
   const result = await runRomWeaverJsonWithRetryOnOutOfMemory(
@@ -872,7 +907,7 @@ const invokeRomWeaverPatchApplyWorker = async (
     },
   );
   if (!(result.ok && result.exitCode === 0)) {
-    const failureMessage = getRomWeaverFailureMessage(result, "Patch apply failed");
+    const failureMessage = await appendBrowserStorageContext(getRomWeaverFailureMessage(result, "Patch apply failed"));
     const traceContext = isTraceEnabled(input.logLevel)
       ? ` [context: hasBpsPatch=${String(hasBpsPatch)} hasXdeltaPatch=${String(
           hasXdeltaPatch,

@@ -37,7 +37,7 @@ const MODULE_IMPORT_FAILURE_MESSAGE_REGEX =
 const OUT_OF_MEMORY_MESSAGE_REGEX =
   /\b(out of memory|cannot enlarge memory|memory allocation|not enough memory|bad alloc|ENOMEM|OOM)\b/i;
 const OUTPUT_WRITE_FAILURE_MESSAGE_REGEX =
-  /\b(createwritable|writable|read\/write access|read\/write permission|destination file|output could not be written|modifications are not allowed)\b/i;
+  /\b(createwritable|writable|read\/write access|read\/write permission|destination file|output could not be written|modifications are not allowed|no space left|quota|nospc|enospc)\b/i;
 const WORKFLOW_ERROR_CODES = new Set<RomWeaverErrorCode>([
   "AMBIGUOUS_SELECTION",
   "ARCHIVE_DEPTH_EXCEEDED",
