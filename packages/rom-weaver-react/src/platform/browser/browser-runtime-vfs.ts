@@ -12,13 +12,13 @@ type CreateBrowserRuntimeVfsIoOptions = {
 };
 
 type StagedBrowserSource = Awaited<ReturnType<typeof createBrowserOpfsSourceRef>>;
-type CachedVirtualSource = {
+type CachedStagedSource = {
   cleanupTimer?: ReturnType<typeof setTimeout>;
   refCount: number;
   staged: StagedBrowserSource;
 };
 
-const VIRTUAL_SOURCE_CACHE_GRACE_MS = 5000;
+const STAGED_SOURCE_CACHE_GRACE_MS = 5000;
 
 const emitBrowserRuntimeVfsTrace = (message: string, details?: Record<string, unknown>) => {
   if (typeof console === "undefined") return;
@@ -30,32 +30,32 @@ const createBrowserRuntimeVfsIo = ({
   mountPoint = WORKER_OPFS_MOUNTPOINT,
   vfs,
 }: CreateBrowserRuntimeVfsIoOptions): RuntimeWorkerIo => {
-  const virtualSourceCache = new WeakMap<object, CachedVirtualSource>();
+  const stagedSourceCache = new WeakMap<object, CachedStagedSource>();
   const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-  const getVirtualSourceCacheKey = (source: unknown) => {
+  const getStagedSourceCacheKey = (source: unknown) => {
     const directSource = getNamedSource(source as Parameters<typeof getNamedSource>[0]);
     const candidate = directSource || source;
     if (!(candidate && typeof candidate === "object")) return null;
     if (isVfsFileRef(candidate)) return null;
     return candidate;
   };
-  const releaseCachedVirtualSource = (key: object, cached: CachedVirtualSource) => {
+  const releaseCachedStagedSource = (key: object, cached: CachedStagedSource) => {
     cached.refCount = Math.max(0, cached.refCount - 1);
     if (cached.refCount > 0 || cached.cleanupTimer) return;
     cached.cleanupTimer = setTimeout(() => {
       if (cached.refCount > 0) return;
-      virtualSourceCache.delete(key);
+      stagedSourceCache.delete(key);
       cached.staged.cleanup().catch(() => undefined);
-    }, VIRTUAL_SOURCE_CACHE_GRACE_MS);
+    }, STAGED_SOURCE_CACHE_GRACE_MS);
   };
-  const wrapCachedVirtualSource = (key: object, cached: CachedVirtualSource): StagedBrowserSource => {
+  const wrapCachedStagedSource = (key: object, cached: CachedStagedSource): StagedBrowserSource => {
     let released = false;
     return {
       ...cached.staged,
       cleanup: async () => {
         if (released) return;
         released = true;
-        releaseCachedVirtualSource(key, cached);
+        releaseCachedStagedSource(key, cached);
       },
     };
   };
@@ -115,22 +115,42 @@ const createBrowserRuntimeVfsIo = ({
       pathPrefix: pathPrefix || scope,
       scope,
     });
-    const cacheKey = getVirtualSourceCacheKey(source);
-    const cached = cacheKey ? virtualSourceCache.get(cacheKey) : undefined;
+    const cacheKey = getStagedSourceCacheKey(source);
+    const cached = cacheKey ? stagedSourceCache.get(cacheKey) : undefined;
     if (cached) {
       if (cached.cleanupTimer) {
         clearTimeout(cached.cleanupTimer);
         cached.cleanupTimer = undefined;
       }
       cached.refCount += 1;
-      emitBrowserRuntimeVfsTrace("stageSource using cached virtual source ref", {
+      emitBrowserRuntimeVfsTrace("stageSource reusing cached staged source ref", {
         fileName: cached.staged.fileName,
         filePath: cached.staged.filePath,
         scope,
         size: cached.staged.size,
+        virtual: !!cached.staged.virtual,
       });
-      return wrapCachedVirtualSource(cacheKey, cached);
+      return wrapCachedStagedSource(cacheKey, cached);
     }
+    // Cache every staged source (in-memory virtual *and* real OPFS-staged path copies) keyed on the
+    // underlying File/handle, so the list/inspect/extract passes of a single input reuse one staged copy
+    // instead of re-copying the whole compressed file into OPFS for each pass.
+    const cacheStagedSource = (resolved: StagedBrowserSource): StagedBrowserSource => {
+      if (!cacheKey) return resolved;
+      const entry: CachedStagedSource = {
+        refCount: 1,
+        staged: resolved,
+      };
+      stagedSourceCache.set(cacheKey, entry);
+      emitBrowserRuntimeVfsTrace("stageSource cached staged source ref", {
+        fileName: resolved.fileName,
+        filePath: resolved.filePath,
+        scope,
+        size: resolved.size,
+        virtual: !!resolved.virtual,
+      });
+      return wrapCachedStagedSource(cacheKey, entry);
+    };
     let staged = await stageFromSource();
     emitBrowserRuntimeVfsTrace("stageSource source ref created", {
       fileName: staged.fileName,
@@ -139,13 +159,7 @@ const createBrowserRuntimeVfsIo = ({
       virtual: !!staged.virtual,
     });
     if (staged.virtual) {
-      if (!cacheKey) return staged;
-      const cached: CachedVirtualSource = {
-        refCount: 1,
-        staged,
-      };
-      virtualSourceCache.set(cacheKey, cached);
-      return wrapCachedVirtualSource(cacheKey, cached);
+      return cacheStagedSource(staged);
     }
     try {
       const stat = await assertStagedPath(staged.filePath);
@@ -153,10 +167,10 @@ const createBrowserRuntimeVfsIo = ({
         filePath: staged.filePath,
         size: staged.size ?? stat.size,
       });
-      return {
+      return cacheStagedSource({
         ...staged,
         size: staged.size ?? stat.size,
-      };
+      });
     } catch (error) {
       emitBrowserRuntimeVfsTrace("stageSource path verify failed, retrying", {
         filePath: staged.filePath,
@@ -170,10 +184,10 @@ const createBrowserRuntimeVfsIo = ({
           filePath: staged.filePath,
           size: staged.size ?? stat.size,
         });
-        return {
+        return cacheStagedSource({
           ...staged,
           size: staged.size ?? stat.size,
-        };
+        });
       } catch (retryError) {
         emitBrowserRuntimeVfsTrace("stageSource retry failed", {
           filePath: staged.filePath,
