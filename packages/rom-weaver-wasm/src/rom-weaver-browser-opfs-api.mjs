@@ -476,7 +476,7 @@ export async function __runRomWeaverBrowserWasiThread(payload = {}) {
       stdoutLineHandler,
       scratchFilePoolSize: runtime?.threadScratchFilePoolSize ?? runtime?.scratchFilePoolSize,
       virtualFiles: normalizeVirtualFiles(runtime?.virtualFiles),
-      virtualOnlyMounts: hasVirtualFiles(runtime?.virtualFiles),
+      virtualOnlyMounts: resolveThreadVirtualOnlyMounts(runtime),
       writableRoots: Array.isArray(runtime?.writableRoots) ? runtime.writableRoots : [],
       syncAccessMode: runtime?.syncAccessMode,
       mountCache: THREAD_WORKER_MOUNT_CACHE,
@@ -566,7 +566,7 @@ export async function __primeRomWeaverBrowserThreadRuntime(runtime = {}, onTrace
     runtimeMounts: normalizedRuntimeMounts,
     scratchFilePoolSize: runtime?.threadScratchFilePoolSize ?? runtime?.scratchFilePoolSize,
     syncAccessMode: runtime?.syncAccessMode,
-    virtualOnlyMounts: hasVirtualFiles(runtime?.virtualFiles),
+    virtualOnlyMounts: resolveThreadVirtualOnlyMounts(runtime),
     writableRoots: Array.isArray(runtime?.writableRoots) ? runtime.writableRoots : [],
   });
   trace('[browser-opfs-thread] prewarm scratch done');
@@ -698,6 +698,7 @@ function createThreadWorkerRuntimePayload(runtime) {
   return {
     ...rest,
     resolveMountHandlesInWorker: true,
+    virtualOnlyMounts: true,
   };
 }
 
@@ -731,6 +732,10 @@ function summarizeNormalizedVirtualFiles(value) {
 
 function hasVirtualFiles(value) {
   return Array.isArray(value) && value.length > 0;
+}
+
+function resolveThreadVirtualOnlyMounts(runtime) {
+  return Boolean(runtime?.virtualOnlyMounts ?? true);
 }
 
 function summarizeVirtualFileEntries(value, readSource) {
@@ -975,6 +980,7 @@ async function buildBrowserOpfsWasiFds({
     trace?.('[browser-opfs] sync mounted input paths start for virtual-only mount');
   }
   await syncMountedInputPathsFromOpfs({
+    cwdMountPath,
     mounts,
     mountHandles,
     request,
@@ -2335,6 +2341,7 @@ async function prepareKnownRequestPaths({ mountHandles, request, runtimeMounts }
 }
 
 async function syncMountedInputPathsFromOpfs({
+  cwdMountPath,
   mounts,
   mountHandles,
   request,
@@ -2344,7 +2351,7 @@ async function syncMountedInputPathsFromOpfs({
   if (inputPaths.length === 0) return;
   const mountsByPath = new Map(mounts.map((mount) => [mount.mountPath, mount]));
   for (const path of inputPaths) {
-    const resolved = resolveMountedGuestPath(path, mountHandles, runtimeMounts);
+    const resolved = resolveMountedGuestPath(path, mountHandles, runtimeMounts, { cwdMountPath });
     if (!resolved) continue;
     const mount = mountsByPath.get(resolved.mountPath);
     if (!mount) continue;
@@ -2491,19 +2498,25 @@ function pushPreparedPath(out, value, entry) {
   out.push({ ...entry, path });
 }
 
-function resolveMountedGuestPath(path, mountHandles, runtimeMounts) {
-  const normalizedPath = normalizeGuestPath(path, { label: 'prepared request path' });
+function resolveMountedGuestPath(path, mountHandles, runtimeMounts, { cwdMountPath } = {}) {
+  const rawPath = String(path ?? '').trim();
+  const candidatePaths = [normalizeGuestPath(rawPath, { label: 'prepared request path' })];
+  if (rawPath && !rawPath.startsWith('/') && cwdMountPath) {
+    candidatePaths.push(joinGuestPath(cwdMountPath, rawPath));
+  }
   const sortedMounts = [...runtimeMounts].sort((a, b) => b.length - a.length);
-  for (const mountPath of sortedMounts) {
-    if (normalizedPath !== mountPath && !normalizedPath.startsWith(`${mountPath}/`)) continue;
-    const handle = mountHandles[mountPath];
-    if (!handle) return null;
-    const relative = normalizedPath === mountPath ? '' : normalizedPath.slice(mountPath.length + 1);
-    return {
-      handle,
-      mountPath,
-      relativeParts: relative ? normalizeRelativePathParts(relative, { label: normalizedPath }) : [],
-    };
+  for (const normalizedPath of candidatePaths) {
+    for (const mountPath of sortedMounts) {
+      if (normalizedPath !== mountPath && !normalizedPath.startsWith(`${mountPath}/`)) continue;
+      const handle = mountHandles[mountPath];
+      if (!handle) return null;
+      const relative = normalizedPath === mountPath ? '' : normalizedPath.slice(mountPath.length + 1);
+      return {
+        handle,
+        mountPath,
+        relativeParts: relative ? normalizeRelativePathParts(relative, { label: normalizedPath }) : [],
+      };
+    }
   }
   return null;
 }

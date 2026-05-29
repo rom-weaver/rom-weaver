@@ -21,6 +21,7 @@ import {
   getPatchFileBytes,
   getPatchFileCleanup,
   getPatchFileExternalSource,
+  isLazyExternalPatchFile,
 } from "../input/binary-service.ts";
 import { getChdAutoCreateMode, replaceCuePatchFileName } from "../input/disc-file-utils.ts";
 import type { InputAsset } from "../input/input-assets.ts";
@@ -160,7 +161,7 @@ const toBlobPart = (bytes: Uint8Array): ArrayBuffer => {
 };
 
 const createRuntimeSourceFromPatchFile = (file: PatchFileInstance, fallbackFileName: string) => {
-  const sourceRef = getPatchFileExternalSource(file, fallbackFileName);
+  const sourceRef = isLazyExternalPatchFile(file) ? getPatchFileExternalSource(file, fallbackFileName) : null;
   if (sourceRef) {
     if (typeof sourceRef.source === "string" && sourceRef.source.trim()) return sourceRef.source;
     if (isVfsFileRef(sourceRef.source)) return sourceRef.source;
