@@ -91,11 +91,20 @@ const openSyncAccessHandle = async (fileHandle: FileSystemFileHandle): Promise<F
   }
 };
 
+const readBlobChunk = async (file: Blob, position: number) => {
+  const nextPosition = Math.min(position + CHUNK_SIZE, file.size);
+  return new Uint8Array(await file.slice(position, nextPosition).arrayBuffer());
+};
+
 const writeBlobToSyncAccessHandle = async (file: Blob, accessHandle: FileSystemSyncAccessHandle) => {
+  // Prefetch the next chunk's (async) blob read while the current chunk's (synchronous) OPFS write
+  // runs, so disk reads and OPFS writes overlap instead of strictly alternating.
   let position = 0;
-  while (position < file.size) {
-    const nextPosition = Math.min(position + CHUNK_SIZE, file.size);
-    const chunkBytes = new Uint8Array(await file.slice(position, nextPosition).arrayBuffer());
+  let pendingChunk = position < file.size ? readBlobChunk(file, position) : null;
+  while (pendingChunk) {
+    const chunkBytes = await pendingChunk;
+    const nextPosition = position + chunkBytes.byteLength;
+    pendingChunk = nextPosition < file.size ? readBlobChunk(file, nextPosition) : null;
     accessHandle.write(chunkBytes, { at: position });
     position = nextPosition;
   }

@@ -4,6 +4,20 @@ const LEADING_SLASHES_REGEX = /^\/+/;
 const NOT_FOUND_ERROR_REGEX = /not\s+found|object\s+can\s+not\s+be\s+found/i;
 const PATH_SEPARATOR_REGEX = /[\\/]+/;
 
+// OPFS handle resolution used to re-fetch navigator.storage.getDirectory() and re-walk the full
+// bucket hierarchy on every stage/write/truncate/cleanup. The OPFS root is a per-origin singleton
+// and intermediate directories are long-lived, so we memoize both. Leaf FILE handles are never
+// cached (files are created/removed under per-op nonces). Invalidation: removeManagedOpfsPath drops
+// the removed subtree, and a NotFoundError from a cached handle triggers one retry from a fresh root.
+const STORAGE_ROOT_CACHE = new WeakMap<object, Promise<FileSystemDirectoryHandle>>();
+const DIRECTORY_HANDLE_CACHE = new Map<string, Promise<FileSystemDirectoryHandle>>();
+
+const emitOpfsPathTrace = (message: string, details?: Record<string, unknown>) => {
+  if (typeof console === "undefined") return;
+  const log = typeof console.debug === "function" ? console.debug : console.log;
+  log.call(console, `[rom-weaver trace] opfs-path: ${message}`, details || {});
+};
+
 const normalizeOpfsPathParts = (filePath: string): string[] => {
   const rawParts = String(filePath || "")
     .replace(LEADING_SLASHES_REGEX, "")
@@ -16,12 +30,68 @@ const normalizeOpfsPathParts = (filePath: string): string[] => {
 const getManagedOpfsStorageName = (filePath: string): string =>
   normalizeOpfsPathParts(filePath).join("/") || "output.bin";
 
+const getStorage = (navigatorObject?: Pick<Navigator, "storage"> | null) =>
+  navigatorObject?.storage || globalThis.navigator?.storage;
+
 const getManagedOpfsDirectory = async (
   navigatorObject?: Pick<Navigator, "storage"> | null,
 ): Promise<FileSystemDirectoryHandle | null> => {
-  const storage = navigatorObject?.storage || globalThis.navigator?.storage;
+  const storage = getStorage(navigatorObject);
   if (!storage || typeof storage.getDirectory !== "function") return null;
-  return storage.getDirectory();
+  const cached = STORAGE_ROOT_CACHE.get(storage);
+  if (cached) return cached;
+  // Cache the in-flight promise so concurrent callers share one getDirectory() call; on failure
+  // drop it so a later call can retry instead of inheriting a permanently rejected promise.
+  const pending = storage.getDirectory().catch((error) => {
+    STORAGE_ROOT_CACHE.delete(storage);
+    throw error;
+  });
+  STORAGE_ROOT_CACHE.set(storage, pending);
+  return pending;
+};
+
+const resetOpfsHandleCaches = (navigatorObject?: Pick<Navigator, "storage"> | null) => {
+  DIRECTORY_HANDLE_CACHE.clear();
+  const storage = getStorage(navigatorObject);
+  if (storage) STORAGE_ROOT_CACHE.delete(storage);
+};
+
+const invalidateDirectoryCacheSubtree = (filePath: string) => {
+  const key = normalizeOpfsPathParts(filePath).join("/");
+  if (!key) {
+    DIRECTORY_HANDLE_CACHE.clear();
+    return;
+  }
+  const childPrefix = `${key}/`;
+  for (const cachedKey of DIRECTORY_HANDLE_CACHE.keys()) {
+    if (cachedKey === key || cachedKey.startsWith(childPrefix)) DIRECTORY_HANDLE_CACHE.delete(cachedKey);
+  }
+};
+
+const resolveParentDirectory = async (
+  root: FileSystemDirectoryHandle,
+  parts: string[],
+  create: boolean,
+): Promise<FileSystemDirectoryHandle> => {
+  let current = root;
+  let prefix = "";
+  for (const part of parts) {
+    prefix = prefix ? `${prefix}/${part}` : part;
+    const cached = DIRECTORY_HANDLE_CACHE.get(prefix);
+    if (cached) {
+      current = await cached;
+      continue;
+    }
+    const pending = current.getDirectoryHandle(part, { create });
+    DIRECTORY_HANDLE_CACHE.set(prefix, pending);
+    try {
+      current = await pending;
+    } catch (error) {
+      DIRECTORY_HANDLE_CACHE.delete(prefix);
+      throw error;
+    }
+  }
+  return current;
 };
 
 const isNotFoundError = (error: unknown) =>
@@ -33,19 +103,33 @@ const getManagedOpfsFileHandle = async (
   filePath: string,
   options: { create?: boolean; navigatorObject?: Pick<Navigator, "storage"> | null } = {},
 ): Promise<FileSystemFileHandle | null> => {
-  const directory = await getManagedOpfsDirectory(options.navigatorObject);
-  if (!directory) return null;
+  const create = options.create === true;
   const parts = normalizeOpfsPathParts(filePath);
   const fileName = parts.pop();
   if (!fileName) return null;
-  let parentDirectory = directory;
+
+  const locate = async (): Promise<FileSystemFileHandle | null> => {
+    const directory = await getManagedOpfsDirectory(options.navigatorObject);
+    if (!directory) return null;
+    const parent = await resolveParentDirectory(directory, parts, create);
+    return parent.getFileHandle(fileName, { create });
+  };
+
   try {
-    for (const part of parts) {
-      parentDirectory = await parentDirectory.getDirectoryHandle(part, { create: options.create === true });
-    }
-    return await parentDirectory.getFileHandle(fileName, { create: options.create === true });
+    return await locate();
   } catch (error) {
-    if (options.create !== true && isNotFoundError(error)) return null;
+    if (isNotFoundError(error)) {
+      // A cached directory handle may point at a tree that was removed and recreated. Drop the
+      // caches and retry once from a fresh root before treating this as a genuine miss.
+      emitOpfsPathTrace("not-found, retrying from fresh root", { create, filePath });
+      resetOpfsHandleCaches(options.navigatorObject);
+      try {
+        return await locate();
+      } catch (retryError) {
+        if (!create && isNotFoundError(retryError)) return null;
+        throw retryError;
+      }
+    }
     throw error;
   }
 };
@@ -59,6 +143,9 @@ const removeManagedOpfsPath = async (
   const parts = normalizeOpfsPathParts(filePath);
   const fileName = parts.pop();
   if (!fileName) return;
+  // Drop any cached directory handles under the path being removed before deleting it, so a later
+  // create of the same path resolves fresh handles instead of a detached, stale subtree.
+  invalidateDirectoryCacheSubtree(filePath);
   let parentDirectory = directory;
   try {
     for (const part of parts) parentDirectory = await parentDirectory.getDirectoryHandle(part, { create: false });
