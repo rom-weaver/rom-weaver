@@ -12,6 +12,9 @@ const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(SCRIPT_DIR, '..', '..');
 const DEFAULT_WASM_MODULE = resolve(REPO_ROOT, 'packages/rom-weaver-wasm/rom-weaver-app-threaded.wasm');
 const DEFAULT_SHARED_MEMORY_INITIAL_PAGES = 256;
+// 16384 pages * 64 KiB = 1 GiB. Must be <= the threaded wasm's imported memory maximum
+// (--max-memory in scripts/build-wasm-app.sh, also 1 GiB). The producer/consumer CHD decode path
+// bounds peak memory to the in-flight batch, so 1 GiB is ample.
 const DEFAULT_SHARED_MEMORY_MAX_PAGES = 16384;
 const MAX_WASI_THREAD_ID = 0x1fffffff;
 const THREAD_ID_COUNTER_INDEX = 0;

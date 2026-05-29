@@ -500,7 +500,13 @@ impl Header {
         }
     }
 
-    pub(crate) fn create_compression_codecs(&self) -> Result<Codecs> {
+    /// Builds a fresh [`Codecs`](crate::Codecs) set for this header's declared compressors.
+    ///
+    /// Each call allocates independent codec state, so callers decoding hunks across threads should
+    /// build one set per worker and pair it with raw compressed hunk bytes (read via
+    /// [`Chd::map`](crate::Chd::map) + [`Chd::inner`](crate::Chd::inner)) to decode off the main
+    /// thread without holding the whole file in memory.
+    pub fn create_compression_codecs(&self) -> Result<Codecs> {
         match self {
             Header::V1Header(c) => CodecType::from_u32(c.compression)
                 .map(|e| (e.init(self.hunk_size())))

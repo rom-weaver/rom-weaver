@@ -18,11 +18,12 @@ const DEFAULT_BROWSER_THREADED_WASM_URLS = [
 const DEFAULT_SCRATCH_FILE_POOL_SIZE = 16;
 const DEFAULT_THREAD_SCRATCH_FILE_POOL_SIZE = DEFAULT_SCRATCH_FILE_POOL_SIZE;
 const DEFAULT_SHARED_MEMORY_INITIAL_PAGES = 256;
-// 32768 pages * 64 KiB = 2 GiB. Must match the threaded wasm's imported memory maximum (set via
-// --max-memory in scripts/build-wasm-app.sh); a mismatch fails WebAssembly instantiation. A
-// shared memory's maximum only reserves address space and commits lazily on memory.grow, so this
-// stays cheap for small operations while letting large CHD parallel decode fit in linear memory.
-const DEFAULT_SHARED_MEMORY_MAX_PAGES = 32768;
+// 16384 pages * 64 KiB = 1 GiB. Must match the threaded wasm's imported memory maximum (set via
+// --max-memory in scripts/build-wasm-app.sh); a mismatch fails WebAssembly instantiation. Threaded
+// wasm needs shared memory, which must declare a fixed maximum, so the cap cannot be omitted. The
+// producer/consumer CHD decode path bounds peak memory to the in-flight batch, so 1 GiB is ample,
+// and a shared memory's maximum only reserves address space and commits lazily on memory.grow.
+const DEFAULT_SHARED_MEMORY_MAX_PAGES = 16384;
 const PATH_SEPARATOR_REGEX = /[/\\]+/;
 const SCRATCH_DIRECTORY_NAME = '.rom-weaver-opfs-scratch';
 const SCRATCH_FILE_CREATE_CONCURRENCY = 16;

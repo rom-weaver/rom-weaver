@@ -1622,6 +1622,7 @@ name = "rom-weaver-chd"
 version = "0.1.0"
 dependencies = [
  "chd",
+ "crc",
  "flacenc",
  "flate2",
  "rayon",

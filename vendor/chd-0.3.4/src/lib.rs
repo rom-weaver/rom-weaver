@@ -138,7 +138,7 @@ macro_rules! const_assert {
 
 pub(crate) use const_assert;
 
-pub use chdfile::{Chd, Hunk};
+pub use chdfile::{Chd, Codecs, Hunk};
 pub use error::{Error, Result};
 pub mod header;
 pub mod map;

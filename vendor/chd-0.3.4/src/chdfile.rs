@@ -431,12 +431,19 @@ impl<'a, F: Read + Seek> Hunk<'a, F> {
     }
 }
 
-pub(crate) enum Codecs {
+/// A set of decompression codecs for a CHD file, indexed by the per-hunk compression-type slot
+/// (`0..=3` for a v5 CHD, `0` for legacy CHDs). Built from a [`Header`](crate::header::Header) via
+/// [`create_compression_codecs`](crate::header::Header::create_compression_codecs). Each instance
+/// owns its own codec state, so callers that decode hunks in parallel must build one set per worker.
+pub enum Codecs {
+    /// A single codec, used by legacy (v1-4) CHD files.
     Single(Box<dyn CompressionCodec>),
+    /// Up to four codecs, used by v5 CHD files where each hunk selects one by index.
     Four([Box<dyn CompressionCodec>; 4]),
 }
 
 impl Codecs {
+    /// Returns the codec in slot `0` (the first declared compressor).
     pub fn first_mut(&mut self) -> &mut Box<dyn CompressionCodec> {
         match self {
             Codecs::Single(c) => c,
@@ -444,6 +451,7 @@ impl Codecs {
         }
     }
 
+    /// Returns the codec in slot `index` (`0..=3`), or `None` if no codec occupies that slot.
     pub fn get_mut(&mut self, index: usize) -> Option<&mut Box<dyn CompressionCodec>> {
         if index == 0 {
             match self {

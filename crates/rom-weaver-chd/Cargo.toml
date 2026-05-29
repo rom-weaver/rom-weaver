@@ -11,6 +11,7 @@ test-utils = []
 
 [dependencies]
 chd.workspace = true
+crc.workspace = true
 flacenc.workspace = true
 flate2.workspace = true
 rayon.workspace = true
