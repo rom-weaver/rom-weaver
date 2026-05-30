@@ -394,6 +394,8 @@ impl CliApp {
                     );
                 };
                 applied_formats.push(handler.descriptor().name);
+                let patch_start_percent = patch_progress_segment_start(index, patch_count);
+                let patch_completion_percent = patch_progress_completion_percent(index, patch_count);
 
                 let is_last = index + 1 == patch_count;
                 let apply_output = if is_last {
@@ -437,7 +439,7 @@ impl CliApp {
                             patch_path.display()
                         )
                     },
-                    Some(0.0),
+                    Some(patch_start_percent),
                     None,
                 );
 
@@ -446,7 +448,16 @@ impl CliApp {
                     patches: vec![resolved_patch_path.clone()],
                     output: apply_output.clone(),
                 };
-                report = match handler.apply(&request, &context) {
+                let progress_tracker = Arc::new(PatchApplyProgressTracker::default());
+                let patch_context = context.clone().with_progress_sink(Arc::new(
+                    PatchApplyProgressSink::new(
+                        context.progress_sink(),
+                        index,
+                        patch_count,
+                        progress_tracker.clone(),
+                    ),
+                ));
+                report = match handler.apply(&request, &patch_context) {
                     Ok(report) => report,
                     Err(RomWeaverError::Unsupported(label)) => OperationReport::unsupported(
                         OperationFamily::Patch,
@@ -474,6 +485,27 @@ impl CliApp {
                         );
                     }
                     return report;
+                }
+                if !progress_tracker.saw_meaningful_running_progress() {
+                    self.emit_running(
+                        "patch-apply",
+                        OperationFamily::Patch,
+                        Some(handler.descriptor().name),
+                        "apply",
+                        if patch_count == 1 {
+                            format!("applied patch using {}", handler.descriptor().name)
+                        } else {
+                            format!(
+                                "applied patch {}/{} using {} (`{}`)",
+                                index + 1,
+                                patch_count,
+                                handler.descriptor().name,
+                                patch_path.display()
+                            )
+                        },
+                        Some(patch_completion_percent),
+                        report.thread_execution.clone(),
+                    );
                 }
 
                 current_input = apply_output;
@@ -925,6 +957,103 @@ impl CliApp {
             "sha256" | "blake3" => Some(64),
             _ => None,
         }
+    }
+}
+
+#[derive(Debug, Default)]
+struct PatchApplyProgressTracker {
+    saw_meaningful_running_progress: std::sync::atomic::AtomicBool,
+}
+
+impl PatchApplyProgressTracker {
+    fn mark_meaningful_running_progress(&self) {
+        self.saw_meaningful_running_progress
+            .store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    fn saw_meaningful_running_progress(&self) -> bool {
+        self.saw_meaningful_running_progress
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+}
+
+struct PatchApplyProgressSink {
+    inner: Arc<dyn ProgressSink>,
+    segment_start_percent: f32,
+    segment_end_percent: f32,
+    tracker: Arc<PatchApplyProgressTracker>,
+}
+
+impl PatchApplyProgressSink {
+    fn new(
+        inner: Arc<dyn ProgressSink>,
+        patch_index: usize,
+        patch_count: usize,
+        tracker: Arc<PatchApplyProgressTracker>,
+    ) -> Self {
+        Self {
+            inner,
+            segment_start_percent: patch_progress_segment_start(patch_index, patch_count),
+            segment_end_percent: patch_progress_segment_end(patch_index, patch_count),
+            tracker,
+        }
+    }
+}
+
+impl ProgressSink for PatchApplyProgressSink {
+    fn emit(&self, mut event: ProgressEvent) {
+        if event.command == "patch-apply" && event.status == OperationStatus::Running && event.stage == "apply" {
+            if let Some(percent) = event.percent
+                && percent.is_finite()
+            {
+                let clamped = percent.clamp(0.0, 100.0);
+                let scaled = if self.segment_end_percent > self.segment_start_percent {
+                    self.segment_start_percent
+                        + (clamped / 100.0) * (self.segment_end_percent - self.segment_start_percent)
+                } else {
+                    self.segment_end_percent
+                };
+                if scaled > self.segment_start_percent {
+                    self.tracker.mark_meaningful_running_progress();
+                }
+                event.percent = Some(scaled);
+            } else {
+                self.tracker.mark_meaningful_running_progress();
+            }
+        }
+        self.inner.emit(event);
+    }
+}
+
+fn patch_progress_segment_start(index: usize, patch_count: usize) -> f32 {
+    if patch_count <= 1 {
+        0.0
+    } else {
+        ((index as f32) * 100.0) / (patch_count as f32)
+    }
+}
+
+fn patch_progress_segment_end(index: usize, patch_count: usize) -> f32 {
+    if patch_count <= 1 {
+        100.0
+    } else {
+        (((index + 1) as f32) * 100.0) / (patch_count as f32)
+    }
+}
+
+fn patch_progress_completion_percent(index: usize, patch_count: usize) -> f32 {
+    let start = patch_progress_segment_start(index, patch_count);
+    let end = patch_progress_segment_end(index, patch_count);
+    let span = (end - start).max(0.0);
+    if span <= f32::EPSILON {
+        return end.min(99.9);
+    }
+
+    let completion = (start + span * 0.99).min(end);
+    if completion > start {
+        completion
+    } else {
+        (start + span * 0.5).min(end)
     }
 }
 /* jscpd:ignore-end */

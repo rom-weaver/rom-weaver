@@ -149,6 +149,14 @@ impl OperationContext {
         self.progress.emit(event);
     }
 
+    pub fn progress_sink(&self) -> Arc<dyn ProgressSink> {
+        self.progress.clone()
+    }
+
+    pub fn with_progress_sink(self, progress: Arc<dyn ProgressSink>) -> Self {
+        Self { progress, ..self }
+    }
+
     pub fn plan_threads(&self, capability: ThreadCapability) -> ThreadExecution {
         trace!(capability = ?capability, budget = %self.thread_budget, "planning thread usage");
         capability.negotiate(self.thread_budget)

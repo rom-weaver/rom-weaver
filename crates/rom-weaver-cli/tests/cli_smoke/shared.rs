@@ -38,10 +38,10 @@ fn parse_json_lines(output: &[u8]) -> Vec<Value> {
 }
 
 fn parse_single_json_line(output: &[u8]) -> Value {
-    parse_json_lines(output)
-        .into_iter()
-        .last()
-        .expect("json line")
+    let events = parse_json_lines(output);
+    let terminal = events.last().expect("json line").clone();
+    assert_patch_apply_running_progress(&events, &terminal);
+    terminal
 }
 
 fn command_stdout(args: &[&str], expected_code: i32) -> Vec<u8> {
@@ -61,6 +61,26 @@ fn run_json_events(args: &[&str], expected_code: i32) -> Vec<Value> {
 
 fn run_single_json_event(args: &[&str], expected_code: i32) -> Value {
     parse_single_json_line(&command_stdout(args, expected_code))
+}
+
+fn assert_patch_apply_running_progress(events: &[Value], terminal: &Value) {
+    if terminal["command"] != "patch-apply" || terminal["status"] != "succeeded" {
+        return;
+    }
+
+    let has_running_apply_progress = events.iter().any(|event| {
+        event["command"] == "patch-apply"
+            && event["status"] == "running"
+            && event["stage"] == "apply"
+            && event["percent"]
+                .as_f64()
+                .map(|percent| percent > 0.0 && percent < 100.0)
+                .unwrap_or(false)
+    });
+    assert!(
+        has_running_apply_progress,
+        "expected successful patch-apply to emit running apply progress with percent in (0, 100)"
+    );
 }
 
 fn assert_running_percent_event(events: &[Value], command: &str, format: &str) {

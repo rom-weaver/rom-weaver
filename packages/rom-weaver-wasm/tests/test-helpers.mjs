@@ -861,14 +861,34 @@ export async function runFullFormatMatrix({ runJson, opfsHandle, dir, fixtures }
   }
 
   const xdeltaApplyPath = joinGuestPath(OPFS_GUEST_ROOT, 'fixture-applied-xdelta.bin');
-  assertRunJsonSucceeded(
-    await runPatchApplyNoCompress(runJson, {
+  const xdeltaApplyEvents = [];
+  const xdeltaApplyResult = await runPatchApplyNoCompress(
+    runJson,
+    {
       inputPath: fixtures.vcdiffSourcePath,
       patchPath: fixtures.vcdiffPatchPath,
       outputPath: xdeltaApplyPath,
-    }),
-    { command: 'patch-apply' },
+    },
+    {
+      onEvent(event) {
+        xdeltaApplyEvents.push(event);
+      },
+    },
   );
+  assertRunJsonSucceeded(xdeltaApplyResult, { command: 'patch-apply' });
+  expect(
+    xdeltaApplyEvents.some((event) => {
+      const format = String(event?.format || '').toLowerCase();
+      const percent = typeof event?.percent === 'number' ? event.percent : null;
+      return event.command === 'patch-apply'
+        && event.status === 'running'
+        && event.stage === 'apply'
+        && format === 'xdelta'
+        && percent !== null
+        && percent > 0
+        && percent < 100;
+    }),
+  ).toBe(true);
 
   const vcdiffPatchPath = joinGuestPath(OPFS_GUEST_ROOT, 'fixture-secondary.vcdiff');
   await runJson([
@@ -895,7 +915,7 @@ export async function runFullFormatMatrix({ runJson, opfsHandle, dir, fixtures }
   );
 }
 
-async function runPatchApplyNoCompress(runJson, { inputPath, patchPath, outputPath }) {
+async function runPatchApplyNoCompress(runJson, { inputPath, patchPath, outputPath }, runOptions = undefined) {
   return runJson([
     'patch-apply',
     '--input',
@@ -907,7 +927,7 @@ async function runPatchApplyNoCompress(runJson, { inputPath, patchPath, outputPa
     '--threads',
     '1',
     '--no-compress',
-  ]);
+  ], runOptions);
 }
 
 async function runCreatedPatchApply(runJson, { format, createResult, originalPath, patchPath }) {

@@ -91,12 +91,10 @@ fn patch_apply_reports_pds_as_explicitly_unsupported() {
     assert_eq!(json["family"], "patch");
     assert_eq!(json["format"], "PDS");
     assert_eq!(json["status"], "failed");
-    assert!(
-        json["label"]
-            .as_str()
-            .expect("label")
-            .contains("explicitly not supported")
-    );
+    assert!(json["label"]
+        .as_str()
+        .expect("label")
+        .contains("explicitly not supported"));
 }
 
 #[test]
@@ -460,12 +458,10 @@ fn patch_apply_rejects_no_compress_with_compress_flags() {
     let apply_json = parse_single_json_line(&apply_output);
     assert_eq!(apply_json["command"], "patch-apply");
     assert_eq!(apply_json["status"], "failed");
-    assert!(
-        apply_json["label"]
-            .as_str()
-            .expect("label")
-            .contains("--no-compress cannot be combined with --compress-format")
-    );
+    assert!(apply_json["label"]
+        .as_str()
+        .expect("label")
+        .contains("--no-compress cannot be combined with --compress-format"));
 }
 
 #[test]
@@ -523,17 +519,18 @@ fn patch_apply_applies_multiple_patches_in_order() {
         .stdout
         .clone();
 
-    let json = parse_single_json_line(&apply_output);
+    let events = parse_json_lines(&apply_output);
+    assert_running_percent_event_in_range(&events, "patch-apply", "BPS", 0.0, 50.1);
+    assert_running_percent_event_in_range(&events, "patch-apply", "IPS", 50.0, 100.0);
+    let json = events.last().expect("json line");
     assert_eq!(json["command"], "patch-apply");
     assert_eq!(json["family"], "patch");
     assert_eq!(json["format"], "IPS");
     assert_eq!(json["status"], "succeeded");
-    assert!(
-        json["label"]
-            .as_str()
-            .expect("label")
-            .contains("applied 2 patches sequentially")
-    );
+    assert!(json["label"]
+        .as_str()
+        .expect("label")
+        .contains("applied 2 patches sequentially"));
     assert_eq!(
         fs::read(output.path()).expect("output"),
         fs::read(expected.path()).expect("expected")
@@ -750,12 +747,10 @@ fn patch_create_reports_pds_as_explicitly_unsupported() {
     assert_eq!(json["family"], "patch");
     assert_eq!(json["format"], "pds");
     assert_eq!(json["status"], "failed");
-    assert!(
-        json["label"]
-            .as_str()
-            .expect("label")
-            .contains("explicitly not supported")
-    );
+    assert!(json["label"]
+        .as_str()
+        .expect("label")
+        .contains("explicitly not supported"));
 }
 
 #[test]
@@ -1099,12 +1094,10 @@ fn patch_apply_supports_nes_header_strip_and_add_flags() {
     assert_eq!(stripped_json["command"], "patch-apply");
     assert_eq!(stripped_json["family"], "patch");
     assert_eq!(stripped_json["status"], "succeeded");
-    assert!(
-        stripped_json["label"]
-            .as_str()
-            .expect("label")
-            .contains("input header stripped (16 bytes, No-Intro_NES.xml)")
-    );
+    assert!(stripped_json["label"]
+        .as_str()
+        .expect("label")
+        .contains("input header stripped (16 bytes, No-Intro_NES.xml)"));
     assert_eq!(
         fs::read(temp.child("output-stripped.nes").path()).expect("output"),
         b"Zbcdefgh".to_vec()
@@ -1186,12 +1179,10 @@ fn patch_apply_repair_checksum_repairs_genesis_header() {
     assert_eq!(json["command"], "patch-apply");
     assert_eq!(json["family"], "patch");
     assert_eq!(json["status"], "succeeded");
-    assert!(
-        json["label"]
-            .as_str()
-            .expect("label")
-            .contains("repaired checksum (sega-genesis)")
-    );
+    assert!(json["label"]
+        .as_str()
+        .expect("label")
+        .contains("repaired checksum (sega-genesis)"));
 
     let output_bytes = fs::read(temp.child("output.bin").path()).expect("output");
     let expected = sega_genesis_checksum(&output_bytes);
@@ -1241,12 +1232,10 @@ fn patch_apply_repair_checksum_repairs_gba_header() {
     assert_eq!(json["command"], "patch-apply");
     assert_eq!(json["family"], "patch");
     assert_eq!(json["status"], "succeeded");
-    assert!(
-        json["label"]
-            .as_str()
-            .expect("label")
-            .contains("repaired checksum (gba)")
-    );
+    assert!(json["label"]
+        .as_str()
+        .expect("label")
+        .contains("repaired checksum (gba)"));
 
     let output_bytes = fs::read(temp.child("output.gba").path()).expect("output");
     assert_eq!(output_bytes[0x1BD], gba_header_checksum(&output_bytes));
@@ -1351,12 +1340,10 @@ fn patch_apply_repair_checksum_warns_for_unsupported_targets() {
     assert_eq!(json["command"], "patch-apply");
     assert_eq!(json["family"], "patch");
     assert_eq!(json["status"], "succeeded");
-    assert!(
-        json["label"]
-            .as_str()
-            .expect("label")
-            .contains("warning=no supported header repair profile matched; output left unchanged")
-    );
+    assert!(json["label"]
+        .as_str()
+        .expect("label")
+        .contains("warning=no supported header repair profile matched; output left unchanged"));
 }
 
 #[test]
@@ -1699,12 +1686,10 @@ fn patch_apply_auto_extracts_single_payload_by_default() {
     assert_eq!(apply_json["family"], "patch");
     assert_eq!(apply_json["format"], "BPS");
     assert_eq!(apply_json["status"], "succeeded");
-    assert!(
-        apply_json["label"]
-            .as_str()
-            .expect("label")
-            .contains("patch apply input source resolved via 1 container extract step(s)")
-    );
+    assert!(apply_json["label"]
+        .as_str()
+        .expect("label")
+        .contains("patch apply input source resolved via 1 container extract step(s)"));
     assert_eq!(
         fs::read(output.path()).expect("output"),
         fs::read(modified.path()).expect("modified")
@@ -1778,12 +1763,10 @@ fn patch_apply_no_extract_uses_raw_container_bytes() {
     assert_eq!(apply_json["family"], "patch");
     assert_eq!(apply_json["format"], "BPS");
     assert_eq!(apply_json["status"], "failed");
-    assert!(
-        !apply_json["label"]
-            .as_str()
-            .expect("label")
-            .contains("patch apply input source resolved via")
-    );
+    assert!(!apply_json["label"]
+        .as_str()
+        .expect("label")
+        .contains("patch apply input source resolved via"));
 }
 
 #[test]
@@ -1995,12 +1978,10 @@ fn patch_apply_auto_extract_select_resolves_ambiguity() {
     assert_eq!(apply_json["family"], "patch");
     assert_eq!(apply_json["format"], "BPS");
     assert_eq!(apply_json["status"], "succeeded");
-    assert!(
-        apply_json["label"]
-            .as_str()
-            .expect("label")
-            .contains("patch apply input source resolved via 1 container extract step(s)")
-    );
+    assert!(apply_json["label"]
+        .as_str()
+        .expect("label")
+        .contains("patch apply input source resolved via 1 container extract step(s)"));
     assert_eq!(
         fs::read(output.path()).expect("output"),
         fs::read(alpha_modified.path()).expect("alpha modified")
@@ -2189,12 +2170,10 @@ fn patch_apply_auto_extract_patch_archive_select_resolves_ambiguity() {
     assert_eq!(apply_json["family"], "patch");
     assert_eq!(apply_json["format"], "BPS");
     assert_eq!(apply_json["status"], "succeeded");
-    assert!(
-        apply_json["label"]
-            .as_str()
-            .expect("label")
-            .contains("patch apply patch source resolved via 1 container extract step(s)")
-    );
+    assert!(apply_json["label"]
+        .as_str()
+        .expect("label")
+        .contains("patch apply patch source resolved via 1 container extract step(s)"));
     assert_eq!(
         fs::read(output.path()).expect("output"),
         fs::read(modified_a.path()).expect("modified")
@@ -2355,12 +2334,10 @@ fn patch_apply_can_ignore_checksum_validation_for_bps() {
     assert_eq!(strict_json["family"], "patch");
     assert_eq!(strict_json["format"], "BPS");
     assert_eq!(strict_json["status"], "failed");
-    assert!(
-        strict_json["label"]
-            .as_str()
-            .expect("label")
-            .contains("Input checksum invalid")
-    );
+    assert!(strict_json["label"]
+        .as_str()
+        .expect("label")
+        .contains("Input checksum invalid"));
 
     let ignored_output = Command::cargo_bin("rom-weaver")
         .expect("binary")
@@ -2387,12 +2364,10 @@ fn patch_apply_can_ignore_checksum_validation_for_bps() {
     assert_eq!(ignored_json["family"], "patch");
     assert_eq!(ignored_json["format"], "BPS");
     assert_eq!(ignored_json["status"], "succeeded");
-    assert!(
-        ignored_json["label"]
-            .as_str()
-            .expect("label")
-            .contains("checksum validation skipped")
-    );
+    assert!(ignored_json["label"]
+        .as_str()
+        .expect("label")
+        .contains("checksum validation skipped"));
 }
 
 #[test]
@@ -2515,12 +2490,10 @@ fn patch_apply_fails_on_mismatched_validate_with_checksum_value() {
     assert_eq!(apply_json["command"], "patch-apply");
     assert_eq!(apply_json["family"], "patch");
     assert_eq!(apply_json["status"], "failed");
-    assert!(
-        apply_json["label"]
-            .as_str()
-            .expect("label")
-            .contains("input checksum mismatch for crc32")
-    );
+    assert!(apply_json["label"]
+        .as_str()
+        .expect("label")
+        .contains("input checksum mismatch for crc32"));
 }
 
 #[test]
@@ -3540,12 +3513,10 @@ fn patch_apply_can_ignore_checksum_validation_for_dps() {
     assert_eq!(strict_json["family"], "patch");
     assert_eq!(strict_json["format"], "DPS");
     assert_eq!(strict_json["status"], "failed");
-    assert!(
-        strict_json["label"]
-            .as_str()
-            .expect("label")
-            .contains("source size mismatch")
-    );
+    assert!(strict_json["label"]
+        .as_str()
+        .expect("label")
+        .contains("source size mismatch"));
 
     let ignored_output = Command::cargo_bin("rom-weaver")
         .expect("binary")
@@ -3571,12 +3542,10 @@ fn patch_apply_can_ignore_checksum_validation_for_dps() {
     assert_eq!(ignored_json["family"], "patch");
     assert_eq!(ignored_json["format"], "DPS");
     assert_eq!(ignored_json["status"], "succeeded");
-    assert!(
-        ignored_json["label"]
-            .as_str()
-            .expect("label")
-            .contains("checksum validation skipped")
-    );
+    assert!(ignored_json["label"]
+        .as_str()
+        .expect("label")
+        .contains("checksum validation skipped"));
     assert_eq!(
         fs::read(output.path()).expect("output"),
         fs::read(modified.path()).expect("modified")
@@ -3699,12 +3668,10 @@ fn patch_create_reports_unsupported_for_hdiffpatch() {
     assert_eq!(create_json["family"], "patch");
     assert_eq!(create_json["format"], "HDiffPatch/HPatchZ");
     assert_eq!(create_json["status"], "unsupported");
-    assert!(
-        create_json["label"]
-            .as_str()
-            .unwrap_or_default()
-            .contains("patch creation is disabled")
-    );
+    assert!(create_json["label"]
+        .as_str()
+        .unwrap_or_default()
+        .contains("patch creation is disabled"));
 }
 
 #[test]
@@ -3848,12 +3815,10 @@ fn patch_apply_hpatchz_sf20_reports_parallel_fallback_for_single_step_payload() 
     assert_eq!(apply_json["effective_threads"], 1);
     assert_eq!(apply_json["used_parallelism"], false);
     assert_eq!(apply_json["thread_fallback"], true);
-    assert!(
-        apply_json["thread_fallback_reason"]
-            .as_str()
-            .expect("thread fallback reason")
-            .contains("no independent step-level parallel work")
-    );
+    assert!(apply_json["thread_fallback_reason"]
+        .as_str()
+        .expect("thread fallback reason")
+        .contains("no independent step-level parallel work"));
     assert_eq!(apply_json["status"], "succeeded");
     assert_eq!(fs::read(output.path()).expect("output"), source);
 }
@@ -3893,12 +3858,10 @@ fn patch_apply_hdiff19_directory_patch_reports_unsupported() {
     assert_eq!(apply_json["family"], "patch");
     assert_eq!(apply_json["format"], "HDiffPatch/HPatchZ");
     assert_eq!(apply_json["status"], "unsupported");
-    assert!(
-        apply_json["label"]
-            .as_str()
-            .expect("label")
-            .contains("directory patches (HDIFF19) are not supported")
-    );
+    assert!(apply_json["label"]
+        .as_str()
+        .expect("label")
+        .contains("directory patches (HDIFF19) are not supported"));
 }
 
 #[test]
@@ -4589,12 +4552,10 @@ fn patch_apply_can_ignore_checksum_validation_for_xdelta() {
     assert_eq!(strict_json["family"], "patch");
     assert_eq!(strict_json["format"], "xdelta");
     assert_eq!(strict_json["status"], "failed");
-    assert!(
-        strict_json["label"]
-            .as_str()
-            .expect("label")
-            .contains("checksum mismatch")
-    );
+    assert!(strict_json["label"]
+        .as_str()
+        .expect("label")
+        .contains("checksum mismatch"));
 
     let ignored_output = Command::cargo_bin("rom-weaver")
         .expect("binary")
@@ -4621,12 +4582,10 @@ fn patch_apply_can_ignore_checksum_validation_for_xdelta() {
     assert_eq!(ignored_json["family"], "patch");
     assert_eq!(ignored_json["format"], "xdelta");
     assert_eq!(ignored_json["status"], "succeeded");
-    assert!(
-        ignored_json["label"]
-            .as_str()
-            .expect("label")
-            .contains("checksum validation skipped")
-    );
+    assert!(ignored_json["label"]
+        .as_str()
+        .expect("label")
+        .contains("checksum validation skipped"));
     assert_eq!(
         fs::read(temp.child("output.bin").path()).expect("output"),
         expected
@@ -4944,12 +4903,10 @@ fn patch_apply_falls_back_to_single_thread_when_pool_build_fails() {
     assert_eq!(json["thread_mode"], "fixed");
     assert_eq!(json["used_parallelism"], false);
     assert_eq!(json["thread_fallback"], true);
-    assert!(
-        json["thread_fallback_reason"]
-            .as_str()
-            .expect("thread fallback reason")
-            .contains("forced thread pool build failure (multi)")
-    );
+    assert!(json["thread_fallback_reason"]
+        .as_str()
+        .expect("thread fallback reason")
+        .contains("forced thread pool build failure (multi)"));
     assert_eq!(json["status"], "succeeded");
 
     let output_bytes = fs::read(temp.child("output.bin").path()).expect("output");
@@ -5158,10 +5115,8 @@ fn inspect_reports_pds_as_explicitly_unsupported() {
     assert_eq!(json["family"], "patch");
     assert_eq!(json["format"], "PDS");
     assert_eq!(json["status"], "failed");
-    assert!(
-        json["label"]
-            .as_str()
-            .expect("label")
-            .contains("explicitly not supported")
-    );
+    assert!(json["label"]
+        .as_str()
+        .expect("label")
+        .contains("explicitly not supported"));
 }

@@ -12,9 +12,10 @@ use rom_weaver_checksum::checksum_file_values;
 use rom_weaver_checksum::crc32_bytes;
 use rom_weaver_core::{
     DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES, FormatDescriptor,
-    OperationContext, OperationFamily, OperationReport, PatchApplyRequest, PatchCapabilities,
-    PatchChecksumValidation, PatchCreateRequest, PatchHandler, ProbeConfidence, Result,
-    RomWeaverError, SharedBlockCacheReader, SharedThreadPool, ThreadCapability,
+    OperationContext, OperationFamily, OperationReport, OperationStatus, PatchApplyRequest,
+    PatchCapabilities, PatchChecksumValidation, PatchCreateRequest, PatchHandler, ProbeConfidence,
+    ProgressEvent, Result, RomWeaverError, SharedBlockCacheReader, SharedThreadPool,
+    ThreadCapability,
 };
 use serde_json::json;
 
@@ -125,7 +126,13 @@ impl PatchHandler for BpsPatchHandler {
                         .to_string(),
                 );
             }
-            apply_patch_actions(&patch, &mut source, &mut output)?;
+            apply_patch_actions(
+                &patch,
+                &mut source,
+                &mut output,
+                context,
+                self.descriptor.name,
+            )?;
             execution
         };
         validate_output_file(
@@ -470,12 +477,75 @@ fn parse_bps_bytes_with_checksum_validation(
     })
 }
 
-fn apply_patch_actions(patch: &ParsedBpsPatch, source: &mut File, output: &mut File) -> Result<()> {
+/// Throttled progress reporter for sequential BPS apply.
+///
+/// Emits at most one `Running` progress event per whole-percent bucket of the
+/// target output produced so far, mirroring the byte-progress pattern used by
+/// the container and CHD handlers so the UI can render a moving apply bar.
+struct BpsApplyProgress<'a> {
+    context: &'a OperationContext,
+    format_name: &'a str,
+    target_size: u64,
+    last_bucket: u8,
+}
+
+impl<'a> BpsApplyProgress<'a> {
+    fn new(context: &'a OperationContext, format_name: &'a str, target_size: u64) -> Self {
+        Self {
+            context,
+            format_name,
+            target_size,
+            last_bucket: 0,
+        }
+    }
+
+    fn report(&mut self, output_offset: u64) {
+        if self.target_size == 0 {
+            return;
+        }
+        let completed = output_offset.min(self.target_size);
+        let bucket = completed
+            .saturating_mul(100)
+            .checked_div(self.target_size)
+            .unwrap_or(100)
+            .min(100) as u8;
+        if bucket <= self.last_bucket {
+            return;
+        }
+        self.last_bucket = bucket;
+        self.context.emit(ProgressEvent {
+            command: "patch-apply".to_string(),
+            family: OperationFamily::Patch,
+            format: Some(self.format_name.to_string()),
+            stage: "apply".to_string(),
+            label: format!("applying patch using {}", self.format_name),
+            details: None,
+            percent: Some(bucket as f32),
+            requested_threads: None,
+            effective_threads: None,
+            thread_mode: None,
+            used_parallelism: None,
+            thread_fallback: None,
+            thread_fallback_reason: None,
+            status: OperationStatus::Running,
+        });
+    }
+}
+
+fn apply_patch_actions(
+    patch: &ParsedBpsPatch,
+    source: &mut File,
+    output: &mut File,
+    context: &OperationContext,
+    format_name: &str,
+) -> Result<()> {
     let mut output_offset = 0u64;
     let mut source_relative_offset = 0i128;
     let mut target_relative_offset = 0i128;
+    let mut progress = BpsApplyProgress::new(context, format_name, patch.target_size);
 
     for action in &patch.actions {
+        context.cancel().check()?;
         match action {
             BpsAction::SourceRead { length } => {
                 let end = output_offset.checked_add(*length).ok_or_else(|| {
@@ -486,10 +556,18 @@ fn apply_patch_actions(patch: &ParsedBpsPatch, source: &mut File, output: &mut F
                         "SourceRead exceeded input size at output offset {output_offset}"
                     )));
                 }
-                copy_source_range(source, output, output_offset, &mut output_offset, *length)?;
+                copy_source_range(
+                    source,
+                    output,
+                    output_offset,
+                    &mut output_offset,
+                    *length,
+                    &mut progress,
+                )?;
             }
             BpsAction::TargetRead { data } => {
                 append_bytes(output, &mut output_offset, data)?;
+                progress.report(output_offset);
             }
             BpsAction::SourceCopy {
                 length,
@@ -509,7 +587,14 @@ fn apply_patch_actions(patch: &ParsedBpsPatch, source: &mut File, output: &mut F
                         "SourceCopy exceeded input size at source offset {start}"
                     )));
                 }
-                copy_source_range(source, output, start, &mut output_offset, *length)?;
+                copy_source_range(
+                    source,
+                    output,
+                    start,
+                    &mut output_offset,
+                    *length,
+                    &mut progress,
+                )?;
                 source_relative_offset = i128::from(end);
             }
             BpsAction::TargetCopy {
@@ -527,7 +612,7 @@ fn apply_patch_actions(patch: &ParsedBpsPatch, source: &mut File, output: &mut F
                         "TargetCopy started beyond produced output at offset {start}"
                     )));
                 }
-                copy_target_range(output, &mut output_offset, start, *length)?;
+                copy_target_range(output, &mut output_offset, start, *length, &mut progress)?;
                 target_relative_offset =
                     i128::from(start.checked_add(*length).ok_or_else(|| {
                         RomWeaverError::Validation("BPS target-copy length overflowed".into())
@@ -1368,6 +1453,7 @@ fn copy_source_range(
     source_offset: u64,
     output_offset: &mut u64,
     length: u64,
+    progress: &mut BpsApplyProgress<'_>,
 ) -> Result<()> {
     let mut buffer = [0u8; COPY_BUFFER_SIZE];
     let mut remaining = length;
@@ -1380,6 +1466,7 @@ fn copy_source_range(
         output.write_all(&buffer[..chunk])?;
         remaining -= chunk as u64;
         *output_offset += chunk as u64;
+        progress.report(*output_offset);
     }
 
     Ok(())
@@ -1399,6 +1486,7 @@ fn copy_target_range(
     output_offset: &mut u64,
     start: u64,
     length: u64,
+    progress: &mut BpsApplyProgress<'_>,
 ) -> Result<()> {
     let mut buffer = [0u8; COPY_BUFFER_SIZE];
     let mut remaining = length;
@@ -1421,6 +1509,7 @@ fn copy_target_range(
         remaining -= chunk as u64;
         read_offset += chunk as u64;
         *output_offset += chunk as u64;
+        progress.report(*output_offset);
     }
 
     Ok(())
