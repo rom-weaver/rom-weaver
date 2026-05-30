@@ -8,8 +8,25 @@ use ts_rs::{Config, TS};
 
 use crate::{Result, RomWeaverError};
 
+/// Fallback parallelism when the host CPU count is unavailable (notably wasm, where
+/// `available_parallelism` is not meaningful) or cannot be queried.
 const DEFAULT_THREAD_COUNT: usize = 4;
 const DEFAULT_RAYON_STACK_SIZE_BYTES: usize = 8 * 1024 * 1024;
+
+/// Resolves the thread count for `ThreadBudget::Auto`: the host's available parallelism on
+/// native targets, falling back to [`DEFAULT_THREAD_COUNT`] on wasm or when the query fails.
+fn auto_thread_count() -> usize {
+    #[cfg(target_family = "wasm")]
+    {
+        DEFAULT_THREAD_COUNT
+    }
+    #[cfg(not(target_family = "wasm"))]
+    {
+        std::thread::available_parallelism()
+            .map(usize::from)
+            .unwrap_or(DEFAULT_THREAD_COUNT)
+    }
+}
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[cfg_attr(feature = "typescript-types", derive(TS))]
@@ -36,7 +53,7 @@ impl ThreadBudget {
 
     pub fn requested_threads(self) -> usize {
         match self {
-            Self::Auto => DEFAULT_THREAD_COUNT,
+            Self::Auto => auto_thread_count(),
             Self::Fixed(count) => count.max(1),
         }
     }
