@@ -692,6 +692,19 @@
             }
         }
 
+        /// Returns true only when every sector in the hunk begins with the CD data-sector sync
+        /// header. CDDA audio sectors are headerless raw PCM, so an all-sync-header hunk is
+        /// positively data (not audio) and the FLAC trial cannot win on it; a mixed/audio hunk
+        /// returns false and keeps FLAC in play, preserving chdman parity on audio tracks.
+        fn cd_hunk_is_all_data_sectors(hunk: &[u8]) -> bool {
+            let frame_bytes = Self::CD_SECTOR_DATA_BYTES + Self::CD_SUBCODE_BYTES;
+            if hunk.is_empty() || !hunk.len().is_multiple_of(frame_bytes) {
+                return false;
+            }
+            hunk.chunks_exact(frame_bytes)
+                .all(|frame| frame.starts_with(&CD_SYNC_HEADER))
+        }
+
         fn compress_best_rust_hunk(
             &self,
             create_kind: &ChdCreateKind,
@@ -707,12 +720,18 @@
 
             let mut best: Option<(u8, Vec<u8>)> = None;
             if matches!(create_kind, ChdCreateKind::Disc(_)) {
-                let needs_raw_sectors = encodable_codecs
+                let has_flac = encodable_codecs
                     .iter()
                     .any(|(_, codec)| *codec == ChdCodec::CD_FLAC);
-                let normalize_ecc = encodable_codecs
+                let has_non_flac = encodable_codecs
                     .iter()
                     .any(|(_, codec)| *codec != ChdCodec::CD_FLAC);
+                // FLAC only ever wins on CDDA audio; skip its trial when the hunk is provably all
+                // data sectors and at least one other codec remains to carry the result.
+                let skip_flac =
+                    has_flac && has_non_flac && Self::cd_hunk_is_all_data_sectors(&hunk);
+                let needs_raw_sectors = has_flac && !skip_flac;
+                let normalize_ecc = has_non_flac;
                 let prepared = self.prepare_cd_hunk_streams(
                     &hunk,
                     needs_raw_sectors,
@@ -721,6 +740,9 @@
                 )?;
                 let mut shared_streams = CdSharedCompressedStreams::default();
                 for (codec_slot, codec) in encodable_codecs {
+                    if skip_flac && *codec == ChdCodec::CD_FLAC {
+                        continue;
+                    }
                     let compressed = self.compress_prepared_cd_hunk(
                         *codec,
                         compression_level,
