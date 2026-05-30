@@ -128,7 +128,7 @@ const toPatchStageInfo = (
         candidate.type === "file" && candidate.id === patch.selectedCandidateId && !!candidate.fileName,
     )?.fileName;
   const fileName = selectedCandidatePath || patch.fileName || originalName;
-  let archiveName = "-";
+  let archiveName = "";
   if (patch.parentCompressions?.length) {
     archiveName = [...patch.parentCompressions]
       .sort((left, right) => left.depth - right.depth)

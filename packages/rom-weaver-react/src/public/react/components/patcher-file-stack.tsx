@@ -79,6 +79,7 @@ const renderPathWithFile = (
   archiveFileName: string | null | undefined,
   archivePathEntries: ArchivePathEntry[] | undefined,
   fileName: string,
+  fileSize?: number,
 ) => {
   const archiveSegments = archivePathEntries?.length
     ? archivePathEntries.map((entry) => entry.fileName).filter(Boolean)
@@ -88,7 +89,11 @@ const renderPathWithFile = (
   const segments = [...archiveSegments];
   if (!segments.length || segments[segments.length - 1] !== fileName) segments.push(fileName);
   if (!segments.length) return null;
-  if (segments.length === 1) return <code>{segments[0]}</code>;
+  if (segments.length === 1) {
+    const sizeLabel = formatByteSize(fileSize);
+    const text = sizeLabel ? `${segments[0]} (${sizeLabel})` : segments[0];
+    return <strong>{text}</strong>;
+  }
   const lastIndex = segments.length - 1;
   return (
     <>
@@ -152,9 +157,11 @@ function PatcherFileStackRow({
   fileSize?: number;
   nameClassName?: string;
 }) {
+  const normalizedArchiveFileName = archiveFileName && archiveFileName !== "-" ? archiveFileName : "";
   const archiveStepDetails = renderArchiveStepDetails(archivePathEntries, fileName, fileSize);
   const showDetailText = !!detailText;
-  const rowNameContent = archiveStepDetails || renderPathWithFile(archiveFileName, archivePathEntries, fileName);
+  const rowNameContent =
+    archiveStepDetails || renderPathWithFile(normalizedArchiveFileName, archivePathEntries, fileName, fileSize);
   return (
     <tr className={className}>
       <td
@@ -165,7 +172,7 @@ function PatcherFileStackRow({
           className={cx(
             fileClassName,
             patchStackClasses.fileBlock,
-            (archiveFileName || !!archivePathEntries?.length) && "rom-weaver-patch-stack-archive",
+            (normalizedArchiveFileName || !!archivePathEntries?.length) && "rom-weaver-patch-stack-archive",
           )}
         >
           {rowNameContent}
