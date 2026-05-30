@@ -10,7 +10,6 @@ import { createPwaServiceWorkerClient } from "./pwa/pwa-service-worker-client.ts
 import { LOCAL_STORAGE_SETTINGS_ID } from "./settings/settings-state.ts";
 import { clearOpfsOnPageLoad } from "./site-data-cleanup.ts";
 import {
-  createBeforeUnloadGuard,
   getDiscardSettingsConfirmationMessage,
   getUnloadConfirmationMessage,
   shouldConfirmDiscardSettings,
@@ -77,12 +76,11 @@ let vitePageUpdateState = createEmptyVitePageUpdateState();
 let suppressNextViteReloadTimer = false;
 let fileSelectionInProgress = false;
 let fileSelectionTrackerInstalled = false;
+let formInteractionDetected = false;
+let formInteractionTrackerInstalled = false;
 const VITE_PAGE_RELOAD_TIMEOUT_MS = 20;
 const WORKFLOW_PROGRESS_SELECTOR = ".rom-weaver-input-progress";
 const VITE_RELOAD_PATTERN = /\blocation\.reload\s*\(/;
-const beforeUnloadGuard = createBeforeUnloadGuard({
-  target: typeof window === "undefined" ? null : window,
-});
 
 const deferViteReload = (payload?: { label?: string; source?: string }) => {
   vitePageUpdateState = createVitePageUpdateState(payload || { source: "vite" });
@@ -132,9 +130,6 @@ const serviceWorkerClient = createPwaServiceWorkerClient({
   document: typeof document === "undefined" ? undefined : document,
   enabled: SERVICE_WORKER_ENABLED,
   navigator: typeof navigator === "undefined" ? undefined : navigator,
-  onBeforeReload: () => {
-    beforeUnloadGuard.bypassNextBeforeUnload();
-  },
   onConfirmReload: confirmReloadUpdate,
   onStateChange: () => {
     renderWebappRootIfReady();
@@ -208,11 +203,6 @@ const getNavigationGuardState = () => {
   };
 };
 
-const syncBeforeUnloadGuard = (): undefined => {
-  beforeUnloadGuard.update(shouldWarnBeforeUnload(getNavigationGuardState()));
-  return undefined;
-};
-
 const isLikelyViteReloadTimer = (handler: TimerHandler, timeout?: number) => {
   if (timeout !== VITE_PAGE_RELOAD_TIMEOUT_MS) return false;
   if (typeof handler === "function") return VITE_RELOAD_PATTERN.test(Function.prototype.toString.call(handler));
@@ -231,6 +221,7 @@ const isDocumentHidden = () => {
 };
 
 const shouldDeferViteReload = () =>
+  formInteractionDetected ||
   fileSelectionInProgress ||
   hasVisibleWorkflowProgress() ||
   isDocumentHidden() ||
@@ -269,6 +260,33 @@ const installFileSelectionTracker = () => {
   window.addEventListener("focus", () => endSelection());
 };
 
+const getFormControlFromTarget = (target: EventTarget | null): Element | null => {
+  if (!(target instanceof Element)) return null;
+  if (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLSelectElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLButtonElement
+  )
+    return target;
+  return target.closest("input, select, textarea, button");
+};
+
+const installFormInteractionTracker = () => {
+  if (formInteractionTrackerInstalled || typeof document === "undefined") return;
+  formInteractionTrackerInstalled = true;
+  const markInteracted = (event: Event) => {
+    if (formInteractionDetected || !event.isTrusted) return;
+    if (!getFormControlFromTarget(event.target)) return;
+    formInteractionDetected = true;
+  };
+  document.addEventListener("focusin", markInteracted, true);
+  document.addEventListener("click", markInteracted, true);
+  document.addEventListener("input", markInteracted, true);
+  document.addEventListener("change", markInteracted, true);
+  document.addEventListener("keydown", markInteracted, true);
+};
+
 const installViteDirtyReloadGuard = () => {
   if (!(import.meta.hot && typeof window !== "undefined")) return;
   const guardedSetTimeout = window.setTimeout as typeof window.setTimeout & { __romPatcherDirtyGuard?: boolean };
@@ -292,7 +310,6 @@ const reloadPendingUpdate = async (): Promise<boolean> => {
   if (pageUpdate.source === "service-worker") return serviceWorkerClient.reloadPendingUpdate();
   if (pageUpdate.source === "vite") {
     if (!(await confirmReloadUpdate())) return false;
-    beforeUnloadGuard.bypassNextBeforeUnload();
     window.location.reload();
     return true;
   }
@@ -304,9 +321,8 @@ import.meta.hot?.on("rom-weaver:reload-available", (payload) => {
   renderWebappRootIfReady();
 });
 import.meta.hot?.on("vite:beforeFullReload", (payload) => {
-  // Keep Vite full reload banner-only in dev to avoid focus-stealing unload prompts.
-  // Users can still apply the update explicitly from the top banner action.
-  shouldDeferViteReload();
+  // Defer full reload to the in-app update guard whenever user work may be at risk.
+  if (!shouldDeferViteReload()) return;
   suppressNextViteReloadTimer = true;
   queueMicrotask(() => {
     suppressNextViteReloadTimer = false;
@@ -383,9 +399,9 @@ const renderWebappRoot = (): undefined => {
 renderWebappRootIfReady = renderWebappRoot;
 
 webappController.subscribe(renderWebappRoot);
-webappController.subscribe(syncBeforeUnloadGuard);
 installViteDirtyReloadGuard();
 installFileSelectionTracker();
+installFormInteractionTracker();
 
 if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
   window.addEventListener("storage", (event) => {
@@ -402,7 +418,6 @@ const initializeWebapp = () => {
   serviceWorkerClient.refreshCacheVersion();
   webappController.setStartupState("loading");
   renderWebappRoot();
-  syncBeforeUnloadGuard();
 
   const initialMode = getConfiguredInitialMode() || "patcher";
   webappController.setStartupState("ready");
