@@ -782,6 +782,46 @@
                 .max(effective_threads.saturating_mul(16))
                 .max(effective_threads);
 
+            // Browser wasi-threads guard against a V8 shared-memory growth race.
+            //
+            // V8 propagates a shared `memory.grow` to already-running thread instances without
+            // synchronizing it against their in-flight bounds checks, so a `memory.grow` triggered
+            // while sibling decode threads are running can make one of them read a stale (smaller)
+            // size and trap with "memory access out of bounds"; the trapped thread never signals its
+            // join and the main thread wedges forever. wasmtime uses guard-page bounds checks and is
+            // immune, so the same module decodes fine natively.
+            //
+            // dlmalloc starts its heap at the initial `memory.size` and only ever grows above it, so
+            // a large shared-memory maximum (or a larger initial size) does not help — every batch's
+            // first allocations still call `memory.grow`. The observed pattern matches exactly: only
+            // the first batch traps (its stacks/buffers grow the heap while threads run), while later
+            // batches reuse the now-large freed heap and never grow. Make the first batch behave like
+            // the later ones by growing the heap once here, on the main thread, to cover a full
+            // batch's concurrent working set (per-thread stacks + the batch's decoded output). The
+            // parallel decode below then reuses committed memory and performs no `memory.grow`.
+            {
+                const STACK_RESERVE_PER_THREAD: usize = 4 * 1024 * 1024;
+                const HEAP_RESERVE_MARGIN: usize = 32 * 1024 * 1024;
+                const HEAP_RESERVE_MAX: usize = 768 * 1024 * 1024;
+                // During the parallel scope the live set is the batch's decoded output plus the
+                // already-read compressed jobs (held until the batch finishes) plus the per-thread
+                // stacks. Reserve ~2x the batch's logical size to cover decoded + compressed, plus
+                // stacks and a margin for allocator overhead.
+                let batch_bytes = batch_hunks.saturating_mul(hunk_bytes_usize);
+                let reserve = batch_bytes
+                    .saturating_mul(2)
+                    .saturating_add(effective_threads.saturating_mul(STACK_RESERVE_PER_THREAD))
+                    .saturating_add(HEAP_RESERVE_MARGIN)
+                    .min(HEAP_RESERVE_MAX);
+                // Touch the allocation so the compiler cannot elide the grow, then drop it; wasm
+                // memory never shrinks, so the committed pages stay in dlmalloc's free list for the
+                // decode threads to reuse without growing.
+                let mut heap_warm: Vec<u8> = Vec::with_capacity(reserve);
+                heap_warm.push(0);
+                std::hint::black_box(heap_warm.as_ptr());
+                drop(heap_warm);
+            }
+
             let hunk_indices: Vec<u32> = (0..hunk_count).collect();
             for batch in hunk_indices.chunks(batch_hunks) {
                 // Read this batch's compressed bytes on the main thread (worker threads cannot open
