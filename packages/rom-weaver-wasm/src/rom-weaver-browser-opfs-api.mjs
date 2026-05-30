@@ -2355,6 +2355,8 @@ async function flushInMemoryEntriesToOpfs(directoryHandle, entries) {
       if (entry.scratchBacked) {
         const fileHandle = await directoryHandle.getFileHandle(name, { create: true });
         await copyRandomAccessFileToHandle(entry.file, fileHandle);
+      } else if (typeof entry.file?.flush === 'function') {
+        entry.file.flush();
       }
       continue;
     }

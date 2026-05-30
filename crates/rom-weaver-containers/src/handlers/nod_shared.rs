@@ -13,6 +13,55 @@ struct NodExtractPlan {
     output_path: PathBuf,
 }
 
+#[cfg(target_family = "wasm")]
+#[derive(Debug)]
+struct ReopenablePathDiscStream {
+    path: PathBuf,
+    file: Option<File>,
+}
+
+#[cfg(target_family = "wasm")]
+impl ReopenablePathDiscStream {
+    fn new(path: &Path) -> Self {
+        Self {
+            path: path.to_path_buf(),
+            file: None,
+        }
+    }
+
+    fn file(&mut self) -> io::Result<&mut File> {
+        if self.file.is_none() {
+            self.file = Some(File::open(&self.path)?);
+        }
+        self.file
+            .as_mut()
+            .ok_or_else(|| io::Error::other("failed to reopen disc stream"))
+    }
+}
+
+#[cfg(target_family = "wasm")]
+impl Clone for ReopenablePathDiscStream {
+    fn clone(&self) -> Self {
+        Self {
+            path: self.path.clone(),
+            file: None,
+        }
+    }
+}
+
+#[cfg(target_family = "wasm")]
+impl nod::read::DiscStream for ReopenablePathDiscStream {
+    fn read_exact_at(&mut self, buf: &mut [u8], offset: u64) -> io::Result<()> {
+        let file = self.file()?;
+        file.seek(SeekFrom::Start(offset))?;
+        file.read_exact(buf)
+    }
+
+    fn stream_len(&mut self) -> io::Result<u64> {
+        self.file()?.seek(SeekFrom::End(0))
+    }
+}
+
 impl NodHandlerCore {
     const MAX_PRELOADER_THREADS: usize = 4;
     #[cfg(target_family = "wasm")]
@@ -92,6 +141,23 @@ impl NodHandlerCore {
         source: &Path,
         options: &NodDiscOptions,
     ) -> std::result::Result<NodDiscReader, String> {
+        #[cfg(target_family = "wasm")]
+        if self.nod_format != NodFormat::Nfs {
+            // Browser WASI thread workers have their own fd tables, so cloned NOD readers must
+            // reopen the path inside the worker instead of carrying a parent-opened fd number.
+            match NodDiscReader::new_stream(
+                Box::new(ReopenablePathDiscStream::new(source)),
+                options,
+            ) {
+                Ok(disc) => return Ok(disc),
+                Err(stream_error) => {
+                    return NodDiscReader::new(source, options).map_err(|path_error| {
+                        format!("{stream_error}; path fallback failed: {path_error}")
+                    });
+                }
+            }
+        }
+
         match NodDiscReader::new(source, options) {
             Ok(disc) => Ok(disc),
             Err(path_error) if self.nod_format != NodFormat::Nfs => {

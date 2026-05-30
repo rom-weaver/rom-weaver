@@ -238,7 +238,8 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunJsonInput, options
   const configuredVirtualFiles = options?.virtualFiles;
   const runOptionOverrides = { ...(options || {}) };
   delete runOptionOverrides.preferThreadedWasm;
-  const defaultInvalidateMountCacheAfterRun = activeVirtualFiles.length > 0;
+  // Cached OPFS mounts hold sync access handles; release them before UI-side VFS writes/downloads.
+  const defaultInvalidateMountCacheAfterRun = true;
   const runOptions: RomWeaverRunJsonOptions =
     activeVirtualFiles.length > 0
       ? {

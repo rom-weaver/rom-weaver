@@ -68,3 +68,48 @@ test("rom-weaver runtime extracts an RVZ staged through browser OPFS", async () 
     await browserRuntime.vfs.remove(source).catch(() => undefined);
   }
 });
+
+test("rom-weaver runtime creates an RVZ from a prior browser OPFS output", async () => {
+  await resetRomWeaverRunner();
+  await warmupRomWeaverRunner();
+  const runId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const source = `${WORKER_OPFS_MOUNTPOINT}/input/create-from-output-${runId}.rvz`;
+  const sourceBytes = await loadFixtureBytes("tests/fixtures/browser-generated/game.rvz");
+  await browserRuntime.vfs.truncate(source, 0);
+  await browserRuntime.vfs.write(source, sourceBytes, { fileOffset: 0 });
+  let extractedOutput = null;
+  let createdOutput = null;
+  try {
+    const extractResult = await browserRuntime.compression.extract?.({
+      entries: ["game.iso"],
+      format: "rvz",
+      options: {
+        workerThreads: 1,
+      },
+      outputName: "game.iso",
+      source,
+    });
+    extractedOutput = extractResult?.output || null;
+    expect(extractedOutput?.size).toBeGreaterThan(0);
+
+    const createResult = await browserRuntime.compression.create?.({
+      fileName: "game.iso",
+      format: "rvz",
+      options: {
+        workerThreads: 8,
+      },
+      outputName: "created-from-output.rvz",
+      rvzCompression: "zstd",
+      rvzCompressionLevel: 19,
+      source: extractedOutput,
+    });
+    createdOutput = createResult?.output || null;
+    expect(createdOutput?.fileName).toBe("created-from-output.rvz");
+    expect(createdOutput?.size).toBeGreaterThan(0);
+    await browserRuntime.vfs.truncate(createdOutput.path, createdOutput.size);
+  } finally {
+    await createdOutput?.cleanup?.().catch(() => undefined);
+    await extractedOutput?.cleanup?.().catch(() => undefined);
+    await browserRuntime.vfs.remove(source).catch(() => undefined);
+  }
+});
