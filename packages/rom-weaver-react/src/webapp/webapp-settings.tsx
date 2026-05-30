@@ -1,7 +1,7 @@
 import RotateCcw from "lucide-react/dist/esm/icons/rotate-ccw.js";
 import Save from "lucide-react/dist/esm/icons/save.js";
 import X from "lucide-react/dist/esm/icons/x.js";
-import { type CSSProperties, type ReactNode, useEffect, useState } from "react";
+import { type CSSProperties, type ReactNode } from "react";
 import { APP_BUILD_VERSION } from "./build-version.ts";
 import { InfoToggle } from "./components/info-toggle.tsx";
 import type { SettingsDraftState, SettingsFieldKey, SettingsUiState } from "./settings/settings-state.ts";
@@ -84,215 +84,6 @@ const tabClassName = (currentView: WorkflowView, tabMode: WorkflowView) =>
 const settingsSelectClassName = cx(formClasses.select, formClasses.invalid, settingsClasses.control);
 const settingsTextClassName = cx(formClasses.base, formClasses.disabled, formClasses.invalid, settingsClasses.control);
 const settingsRangeClassName = cx(settingsClasses.compressionRange, formClasses.invalid);
-
-type RuntimeDiagnostics = {
-  serviceWorkers: Array<{ scope: string; active: string; waiting: string; installing: string }>;
-  workers: string[];
-  wasm: Array<{ id: string; label: string; url: string }>;
-};
-
-type RuntimeDiagnosticMessage = {
-  context?: string;
-  contextUrl?: string;
-  failureMessage?: string;
-  id?: string;
-  kind?: string;
-  name?: string;
-  reason?: string;
-  threaded?: boolean;
-  url?: string;
-};
-
-const emptyRuntimeDiagnostics = (): RuntimeDiagnostics => ({
-  serviceWorkers: [],
-  wasm: [],
-  workers: [],
-});
-
-const formatResourceName = (name: string): string => {
-  try {
-    const url = new URL(name, window.location.href);
-    return `${url.pathname.split("/").pop() || url.pathname}${url.search}`;
-  } catch (_err) {
-    return name;
-  }
-};
-
-const getWorkerScriptUrl = (worker?: ServiceWorker | null): string => worker?.scriptURL || "none";
-
-const getWasmDiagnosticLabel = (source: {
-  context?: string;
-  contextUrl?: string;
-  failureMessage?: string;
-  name?: string;
-  reason?: string;
-  threaded?: boolean;
-  url?: string;
-}) => {
-  const name = source.name || (source.url ? formatResourceName(source.url) : "unknown.wasm");
-  let threading = "observed";
-  if (source.threaded === true) threading = "threaded";
-  else if (source.threaded === false) threading = "single-threaded";
-  const reason = source.reason ? `, ${source.reason}` : "";
-  const context = source.context ? ` - ${source.context}` : "";
-  const contextUrl = source.contextUrl ? ` - ${formatResourceName(source.contextUrl)}` : "";
-  const failureMessage = source.failureMessage ? ` - ${source.failureMessage}` : "";
-  return `${name} (${threading}${reason}${context}${contextUrl}${failureMessage})`;
-};
-
-const mergeWasmDiagnostics = (
-  current: RuntimeDiagnostics["wasm"],
-  nextItems: RuntimeDiagnostics["wasm"],
-): RuntimeDiagnostics["wasm"] => {
-  const byKey = new Map<string, { id: string; label: string; url: string }>();
-  for (const item of current.concat(nextItems)) byKey.set(item.id || item.url || item.label, item);
-  return Array.from(byKey.values()).sort((a, b) => a.label.localeCompare(b.label));
-};
-
-const runtimeDiagnosticMessages: RuntimeDiagnosticMessage[] = [];
-let runtimeDiagnosticChannel: BroadcastChannel | null = null;
-let runtimeDiagnosticListenerInstalled = false;
-
-const readBufferedWasmDiagnostics = (): RuntimeDiagnostics["wasm"] => {
-  return runtimeDiagnosticMessages
-    .filter((message) => message.kind === "wasm")
-    .map((message) => {
-      const url = typeof message.url === "string" ? message.url : String(message.name || "unknown.wasm");
-      return {
-        id: typeof message.id === "string" ? message.id : url,
-        label: getWasmDiagnosticLabel({
-          context: typeof message.context === "string" ? message.context : undefined,
-          contextUrl: typeof message.contextUrl === "string" ? message.contextUrl : undefined,
-          failureMessage: typeof message.failureMessage === "string" ? message.failureMessage : undefined,
-          name: typeof message.name === "string" ? message.name : undefined,
-          reason: typeof message.reason === "string" ? message.reason : undefined,
-          threaded: typeof message.threaded === "boolean" ? message.threaded : undefined,
-          url,
-        }),
-        url,
-      };
-    });
-};
-
-const installRuntimeDiagnosticBuffer = () => {
-  if (runtimeDiagnosticListenerInstalled) return;
-  runtimeDiagnosticListenerInstalled = true;
-  if (runtimeDiagnosticChannel) return;
-  if (typeof BroadcastChannel !== "function") return;
-  try {
-    const channel = new BroadcastChannel("rom-weaver-runtime-diagnostics");
-    channel.addEventListener("message", (event) => {
-      const data = event.data || {};
-      if (data.kind !== "wasm") return;
-      runtimeDiagnosticMessages.push(data);
-      if (runtimeDiagnosticMessages.length > 100) runtimeDiagnosticMessages.shift();
-    });
-    runtimeDiagnosticChannel = channel;
-  } catch (_err) {
-    runtimeDiagnosticChannel = null;
-  }
-};
-
-installRuntimeDiagnosticBuffer();
-
-const useRuntimeDiagnostics = (): RuntimeDiagnostics => {
-  const [diagnostics, setDiagnostics] = useState<RuntimeDiagnostics>(() => ({
-    ...emptyRuntimeDiagnostics(),
-    wasm: readBufferedWasmDiagnostics(),
-  }));
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const refreshDiagnostics = async () => {
-      const next = emptyRuntimeDiagnostics();
-      next.wasm = readBufferedWasmDiagnostics();
-      if (typeof performance !== "undefined" && typeof performance.getEntriesByType === "function") {
-        const resources = performance.getEntriesByType("resource") as PerformanceResourceTiming[];
-        const observedWasm = Array.from(
-          new Set(
-            resources
-              .filter((entry) => entry.name.includes(".wasm"))
-              .map((entry) => entry.name)
-              .sort(),
-          ),
-        ).map((url) => ({
-          id: url,
-          label: getWasmDiagnosticLabel({ url }),
-          url,
-        }));
-        next.wasm = mergeWasmDiagnostics(next.wasm, observedWasm);
-        next.workers = Array.from(
-          new Set(
-            resources
-              .filter(
-                (entry) =>
-                  entry.initiatorType === "worker" ||
-                  entry.name.includes(".worker.") ||
-                  entry.name.includes("cache-service-worker") ||
-                  entry.name.includes("_cache_service_worker") ||
-                  entry.name.includes("dev-sw.js"),
-              )
-              .map((entry) => formatResourceName(entry.name))
-              .sort(),
-          ),
-        );
-      }
-
-      if (typeof navigator !== "undefined" && navigator.serviceWorker?.getRegistrations) {
-        try {
-          const registrations = await navigator.serviceWorker.getRegistrations();
-          next.serviceWorkers = registrations.map((registration) => ({
-            active: formatResourceName(getWorkerScriptUrl(registration.active)),
-            installing: formatResourceName(getWorkerScriptUrl(registration.installing)),
-            scope: registration.scope,
-            waiting: formatResourceName(getWorkerScriptUrl(registration.waiting)),
-          }));
-        } catch (_err) {
-          next.serviceWorkers = [];
-        }
-      }
-
-      if (!cancelled) setDiagnostics((current) => ({ ...next, wasm: mergeWasmDiagnostics(current.wasm, next.wasm) }));
-    };
-
-    const handleRuntimeDiagnostic = (event: MessageEvent) => {
-      const data = event.data || {};
-      if (data.kind !== "wasm") return;
-      runtimeDiagnosticMessages.push(data);
-      if (runtimeDiagnosticMessages.length > 100) runtimeDiagnosticMessages.shift();
-      const url = typeof data.url === "string" ? data.url : String(data.name || "unknown.wasm");
-      const item = {
-        id: typeof data.id === "string" ? data.id : url,
-        label: getWasmDiagnosticLabel({
-          context: typeof data.context === "string" ? data.context : undefined,
-          contextUrl: typeof data.contextUrl === "string" ? data.contextUrl : undefined,
-          failureMessage: typeof data.failureMessage === "string" ? data.failureMessage : undefined,
-          name: typeof data.name === "string" ? data.name : undefined,
-          reason: typeof data.reason === "string" ? data.reason : undefined,
-          threaded: typeof data.threaded === "boolean" ? data.threaded : undefined,
-          url,
-        }),
-        url,
-      };
-      setDiagnostics((current) => ({ ...current, wasm: mergeWasmDiagnostics(current.wasm, [item]) }));
-    };
-
-    void refreshDiagnostics();
-    const channel =
-      typeof BroadcastChannel === "function" ? new BroadcastChannel("rom-weaver-runtime-diagnostics") : null;
-    channel?.addEventListener("message", handleRuntimeDiagnostic);
-    const interval = window.setInterval(refreshDiagnostics, 3000);
-    return () => {
-      cancelled = true;
-      channel?.removeEventListener("message", handleRuntimeDiagnostic);
-      channel?.close();
-      window.clearInterval(interval);
-    };
-  }, []);
-
-  return diagnostics;
-};
 
 function WorkflowTabs({ currentView, onSelectView }: TabProps) {
   return (
@@ -644,38 +435,7 @@ function SettingsFieldRow({ fieldKey, draftSettings, uiState, validation, onDraf
   return null;
 }
 
-function RuntimeDiagnosticsList({
-  items,
-  emptyLabel,
-}: {
-  items: Array<string | { key: string; label: string }>;
-  emptyLabel: string;
-}) {
-  if (!items.length) return <span>{emptyLabel}</span>;
-  return (
-    <ul className="m-0 list-none space-y-0.5 p-0">
-      {items.map((item) => {
-        const key = typeof item === "string" ? item : item.key;
-        const label = typeof item === "string" ? item : item.label;
-        return (
-          <li className="break-all font-mono text-[11px] leading-[1.25]" key={key}>
-            {label}
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
 function RuntimeDiagnosticsPanel() {
-  const diagnostics = useRuntimeDiagnostics();
-  const serviceWorkerItems = diagnostics.serviceWorkers.flatMap((registration, index) => [
-    `scope ${index + 1}: ${registration.scope}`,
-    `active: ${registration.active}`,
-    `waiting: ${registration.waiting}`,
-    `installing: ${registration.installing}`,
-  ]);
-
   return (
     <section className={settingsClasses.section}>
       <h3 className={settingsClasses.sectionTitle}>Version / Runtime</h3>
@@ -683,21 +443,6 @@ function RuntimeDiagnosticsPanel() {
         <div>
           <div className="font-bold text-[#243232]">Version</div>
           <div className="break-all font-mono text-[11px]">{APP_BUILD_VERSION}</div>
-        </div>
-        <div>
-          <div className="font-bold text-[#243232]">Service workers</div>
-          <RuntimeDiagnosticsList emptyLabel="No service worker registrations" items={serviceWorkerItems} />
-        </div>
-        <div>
-          <div className="font-bold text-[#243232]">Loaded workers</div>
-          <RuntimeDiagnosticsList emptyLabel="No worker resources observed yet" items={diagnostics.workers} />
-        </div>
-        <div>
-          <div className="font-bold text-[#243232]">Loaded WASM</div>
-          <RuntimeDiagnosticsList
-            emptyLabel="No WASM resources observed yet"
-            items={diagnostics.wasm.map((item) => ({ key: item.id, label: item.label }))}
-          />
         </div>
       </div>
     </section>
