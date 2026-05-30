@@ -267,7 +267,7 @@ impl CliApp {
                 requested_format: None,
                 codec: None,
                 level: None,
-                profile: CompressionLevelProfile::High,
+                profile: CompressionLevelProfile::Max,
             });
         }
 

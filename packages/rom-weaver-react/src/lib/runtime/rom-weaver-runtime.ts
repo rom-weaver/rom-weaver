@@ -615,7 +615,7 @@ const invokeRomWeaverCompressionCreateWorker = async (
       codec: codecs,
       format: format || undefined,
       input: inputPaths,
-      level: (levelProfile || "high") as CompressionLevelProfile,
+      level: (levelProfile || "max") as CompressionLevelProfile,
       output: outputPath,
       ...(threadArg ? { threads: threadArg } : {}),
     },

@@ -860,7 +860,7 @@ fn compress_accepts_global_level_profiles() {
 }
 
 #[test]
-fn compress_defaults_to_high_global_level_profile() {
+fn compress_defaults_to_max_global_level_profile() {
     let temp = setup_temp_dir();
     let payload = vec![0x5A; 64 * 1024];
     fs::write(temp.child("payload.bin").path(), &payload).expect("fixture");
@@ -880,7 +880,7 @@ fn compress_defaults_to_high_global_level_profile() {
         .assert()
         .code(0);
 
-    let explicit_output = temp.child("explicit-high.zst");
+    let explicit_output = temp.child("explicit-max.zst");
     Command::cargo_bin("rom-weaver")
         .expect("binary")
         .args([
@@ -891,7 +891,7 @@ fn compress_defaults_to_high_global_level_profile() {
             "--output",
             explicit_output.path().to_str().expect("path"),
             "--level",
-            "high",
+            "max",
             "--json",
         ])
         .assert()

@@ -206,7 +206,7 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     validValues: ["auto", "chd", "rvz", "z3ds", "7z", "zip", "none"],
   },
   compressionProfile: {
-    defaultValue: "high",
+    defaultValue: "max",
     id: "settings-compression-profile",
     key: "compressionProfile",
     kind: "range",
@@ -216,9 +216,9 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     min: 0,
     scaleLabels: ["Min", "Very Low", "Low", "Medium", "High", "Very High", "Max"],
     step: 1,
-    suggestion: "Default: High. RVZ/7z zstd levels: 0, 3, 5, 12, 19, 21, 22. ZIP/other levels: 0, 2, 3, 5, 7, 8, 9.",
+    suggestion: "Default: Max. RVZ/7z zstd levels: 0, 3, 5, 12, 19, 21, 22. ZIP/other levels: 0, 2, 3, 5, 7, 8, 9.",
     suggestionDataLocalize:
-      "Default: High. RVZ/7z zstd levels: 0, 3, 5, 12, 19, 21, 22. ZIP/other levels: 0, 2, 3, 5, 7, 8, 9.",
+      "Default: Max. RVZ/7z zstd levels: 0, 3, 5, 12, 19, 21, 22. ZIP/other levels: 0, 2, 3, 5, 7, 8, 9.",
     validationLabel: "Level",
     validValues: [...COMPRESSION_PROFILES],
   },

@@ -74,10 +74,10 @@ pub enum CompressionLevelProfile {
     VeryLow,
     Low,
     Medium,
-    #[default]
     High,
     #[cfg_attr(not(target_arch = "wasm32"), value(name = "very-high"))]
     VeryHigh,
+    #[default]
     Max,
 }
 
@@ -111,8 +111,8 @@ const fn default_true() -> bool {
     true
 }
 
-const fn default_high_compression_level() -> CompressionLevelProfile {
-    CompressionLevelProfile::High
+const fn default_max_compression_level() -> CompressionLevelProfile {
+    CompressionLevelProfile::Max
 }
 
 fn default_xdelta_secondary() -> String {
@@ -298,10 +298,10 @@ pub struct CompressCommand {
     #[cfg_attr(not(target_arch = "wasm32"), arg(
         long,
         value_enum,
-        default_value_t = CompressionLevelProfile::High,
+        default_value_t = CompressionLevelProfile::Max,
         help = "Global compression level profile (min|very-low|low|medium|high|very-high|max)"
     ))]
-    #[serde(default = "default_high_compression_level")]
+    #[serde(default = "default_max_compression_level")]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub level: CompressionLevelProfile,
     #[cfg_attr(not(target_arch = "wasm32"), arg(long, default_value = "auto"))]
@@ -532,10 +532,10 @@ pub struct PatchApplyCommand {
     #[cfg_attr(not(target_arch = "wasm32"), arg(
         long = "compress-level",
         value_enum,
-        default_value_t = CompressionLevelProfile::High,
+        default_value_t = CompressionLevelProfile::Max,
         help = "Global patch-output compression level profile (min|very-low|low|medium|high|very-high|max)"
     ))]
-    #[serde(default = "default_high_compression_level")]
+    #[serde(default = "default_max_compression_level")]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub compress_level: CompressionLevelProfile,
     #[cfg_attr(

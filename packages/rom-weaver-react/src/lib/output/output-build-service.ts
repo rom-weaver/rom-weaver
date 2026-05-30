@@ -49,7 +49,7 @@ const getOutputCompression = (options: ApplyWorkflowOptions | undefined, source?
   return hasDiscCompressionMetadata(source) ? "auto" : "7z";
 };
 const getCompressionProfile = (options: ApplyWorkflowOptions | undefined) =>
-  options?.output?.container?.profile || "high";
+  options?.output?.container?.profile || "max";
 const getWorkerThreads = (options: ApplyWorkflowOptions | undefined) => options?.workers?.threads;
 const getLogLevel = (options: ApplyWorkflowOptions | undefined) => options?.logging?.level;
 const getContainerSettings = (options: ApplyWorkflowOptions | undefined) => options?.output?.container || {};
