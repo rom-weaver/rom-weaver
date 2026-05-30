@@ -105,6 +105,9 @@ test("patch archive candidate discovery does not extract every candidate", async
     await workflow.addPatch(await loadFixtureFile(MULTI_PATCH_ZIP, "application/zip"));
     const patch = workflow.getPatches()[0];
     expect(patch?.status).toBe("needsSelection");
+    const fileCandidates = (patch?.candidates || []).filter((candidate) => candidate.type === "file");
+    expect(fileCandidates.length).toBeGreaterThan(0);
+    expect(fileCandidates.every((candidate) => typeof candidate.size === "number" && candidate.size > 0)).toBe(true);
     const extractDispatches = logs.filter((entry) => String(entry?.message || "") === "runJson extract dispatch");
     expect(extractDispatches).toHaveLength(0);
   } finally {

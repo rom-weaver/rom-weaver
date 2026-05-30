@@ -81,23 +81,6 @@ const toThreadBudget = (value: unknown, fallback: ThreadBudget | null = null): T
   return Number.isFinite(parsed) && parsed >= 1 ? parsed : fallback;
 };
 
-// The browser wasi-threads decode pool intermittently traps ("memory access out of bounds") and
-// wedges its sibling shells once more than a few decode threads run concurrently. This is a race in
-// the browser worker-pool shim, not the decoder: the same threaded wasm decodes a 657 MB CD CHD
-// flawlessly under wasmtime at 8 threads, and the hang rate here scales with the decode thread count
-// (stable at <=4, intermittent at >=6). Clamp browser extract decode concurrency to the empirically
-// stable ceiling so a configured or `auto` (= hardwareConcurrency) thread count cannot reach the
-// unstable regime. The default browser thread count is already 4, so typical runs are unaffected.
-const BROWSER_EXTRACT_MAX_DECODE_THREADS = 4;
-
-const clampBrowserExtractThreadBudget = (budget: ThreadBudget | null): ThreadBudget | null => {
-  if (budget === "auto") return BROWSER_EXTRACT_MAX_DECODE_THREADS;
-  if (typeof budget === "number" && budget > BROWSER_EXTRACT_MAX_DECODE_THREADS) {
-    return BROWSER_EXTRACT_MAX_DECODE_THREADS;
-  }
-  return budget;
-};
-
 const XDELTA_PATCH_FILE_EXTENSION_REGEX = /\.(?:xdelta|vcdiff)$/i;
 const BPS_PATCH_FILE_EXTENSION_REGEX = /\.bps$/i;
 
@@ -371,12 +354,38 @@ const getEmittedFiles = (result: RomWeaverRunJsonResult): RomWeaverEmittedFile[]
   return output;
 };
 
-const getContainerEntriesFromInspect = (result: RomWeaverRunJsonResult): string[] => {
+const getContainerEntriesFromInspect = (result: RomWeaverRunJsonResult): CompressionListResult["entries"] => {
   const terminal = getTerminalEvent(result);
   const details = asRecord(terminal?.details);
   const container = asRecord(details?.container);
-  const entries = Array.isArray(container?.entries) ? container.entries : [];
-  return entries.map((entry) => (typeof entry === "string" ? entry.trim() : "")).filter((entry) => !!entry);
+  const entryRecords = Array.isArray(container?.entry_records) ? container.entry_records : [];
+  const entries = entryRecords.length ? entryRecords : Array.isArray(container?.entries) ? container.entries : [];
+  const output: CompressionListResult["entries"] = [];
+  for (const entry of entries) {
+    if (typeof entry === "string") {
+      const normalized = entry.trim();
+      if (!normalized) continue;
+      output.push({
+        fileName: normalized,
+        filename: normalized,
+        name: getPathBaseName(normalized, normalized),
+      });
+      continue;
+    }
+    const record = asRecord(entry);
+    if (!record) continue;
+    const fileName = String(record.file_name || record.fileName || record.filename || record.name || "").trim();
+    if (!fileName) continue;
+    const sizeValue = record.size_bytes ?? record.size;
+    const size = typeof sizeValue === "number" && Number.isFinite(sizeValue) ? sizeValue : undefined;
+    output.push({
+      fileName,
+      filename: fileName,
+      name: getPathBaseName(fileName, fileName),
+      size,
+    });
+  }
+  return output;
 };
 
 const toSimpleProgress = (
@@ -684,7 +693,7 @@ const invokeRomWeaverExtractWorker = async (
     const value = String(algorithm || "").trim();
     if (value) checksum.push(value);
   }
-  const threadArg = clampBrowserExtractThreadBudget(toThreadBudget(input.workerThreads));
+  const threadArg = toThreadBudget(input.workerThreads);
   const command: RomWeaverCommand = {
     args: {
       checksum,
@@ -777,13 +786,7 @@ const runRomWeaverInspectListWorker = async (
     throw new Error(failureMessage);
   }
   const entries = getContainerEntriesFromInspect(result);
-  return {
-    entries: entries.map((entryName) => ({
-      fileName: entryName,
-      filename: entryName,
-      name: getPathBaseName(entryName, entryName),
-    })),
-  };
+  return { entries };
 };
 
 const invokeRomWeaverPatchApplyWorker = async (
