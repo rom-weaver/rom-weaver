@@ -97,6 +97,7 @@ fn parse_and_apply_round_trip_for_bps() {
     assert!(handler.capabilities().threaded_output);
     let execution = report.thread_execution.expect("thread execution");
     assert_eq!(execution.requested_threads, 4);
+    // in-memory path uses a single thread (no per-action file I/O needed)
     assert_eq!(execution.effective_threads, 1);
     assert!(!execution.used_parallelism);
     assert!(!execution.thread_fallback);

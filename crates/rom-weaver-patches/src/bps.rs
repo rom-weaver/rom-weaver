@@ -104,10 +104,30 @@ impl PatchHandler for BpsPatchHandler {
             .read(true)
             .write(true)
             .open(&request.output)?;
-        let thread_capability = bps_apply_thread_capability(patch.actions.len());
+        output.set_len(patch.target_size)?;
+        let thread_capability = bps_apply_thread_capability(&patch.actions);
         let planned_execution = context.plan_threads(thread_capability.clone());
         let has_target_copy = patch_contains_target_copy(&patch.actions);
-        let execution = if planned_execution.used_parallelism && !has_target_copy {
+        let wants_parallel = planned_execution.used_parallelism && !has_target_copy;
+        let execution = if crate::can_apply_in_memory(patch.source_size, patch.target_size) {
+            let target_size = patch.target_size as usize;
+            let mut source_bytes = Vec::with_capacity(patch.source_size as usize);
+            source.read_to_end(&mut source_bytes)?;
+            let mut output_bytes = vec![0u8; target_size];
+            apply_patch_actions_in_memory(
+                &patch,
+                &source_bytes,
+                &mut output_bytes,
+                context,
+                self.descriptor.name,
+            )?;
+            output.seek(SeekFrom::Start(0))?;
+            output.write_all(&output_bytes)?;
+            let mut execution = planned_execution;
+            execution.effective_threads = 1;
+            execution.used_parallelism = false;
+            execution
+        } else if wants_parallel {
             let (execution, pool) = context.build_pool(thread_capability)?;
             let prepared = prepare_bps_writes_parallel(
                 &patch,
@@ -126,9 +146,10 @@ impl PatchHandler for BpsPatchHandler {
                         .to_string(),
                 );
             }
+            let mut buffered_source = BufReader::new(source);
             apply_patch_actions(
                 &patch,
-                &mut source,
+                &mut buffered_source,
                 &mut output,
                 context,
                 self.descriptor.name,
@@ -534,7 +555,7 @@ impl<'a> BpsApplyProgress<'a> {
 
 fn apply_patch_actions(
     patch: &ParsedBpsPatch,
-    source: &mut File,
+    source: &mut (impl Read + Seek),
     output: &mut File,
     context: &OperationContext,
     format_name: &str,
@@ -543,6 +564,9 @@ fn apply_patch_actions(
     let mut source_relative_offset = 0i128;
     let mut target_relative_offset = 0i128;
     let mut progress = BpsApplyProgress::new(context, format_name, patch.target_size);
+    let mut source_pos = 0u64;
+    let mut output_pos = 0u64;
+    let mut copy_buffer = [0u8; COPY_BUFFER_SIZE];
 
     for action in &patch.actions {
         context.cancel().check()?;
@@ -556,17 +580,36 @@ fn apply_patch_actions(
                         "SourceRead exceeded input size at output offset {output_offset}"
                     )));
                 }
-                copy_source_range(
-                    source,
-                    output,
-                    output_offset,
-                    &mut output_offset,
-                    *length,
-                    &mut progress,
-                )?;
+                if source_pos != output_offset {
+                    source.seek(SeekFrom::Start(output_offset))?;
+                    source_pos = output_offset;
+                }
+                if output_pos != output_offset {
+                    output.seek(SeekFrom::Start(output_offset))?;
+                    output_pos = output_offset;
+                }
+                let mut remaining = *length;
+                while remaining > 0 {
+                    let chunk = remaining.min(copy_buffer.len() as u64) as usize;
+                    source.read_exact(&mut copy_buffer[..chunk])?;
+                    output.write_all(&copy_buffer[..chunk])?;
+                    remaining -= chunk as u64;
+                    output_offset += chunk as u64;
+                    source_pos += chunk as u64;
+                    output_pos += chunk as u64;
+                    progress.report(output_offset);
+                }
             }
             BpsAction::TargetRead { data } => {
-                append_bytes(output, &mut output_offset, data)?;
+                if output_pos != output_offset {
+                    output.seek(SeekFrom::Start(output_offset))?;
+                }
+                output.write_all(data)?;
+                let len = data.len() as u64;
+                output_offset = output_offset.checked_add(len).ok_or_else(|| {
+                    RomWeaverError::Validation("BPS output offset overflowed".into())
+                })?;
+                output_pos = output_offset;
                 progress.report(output_offset);
             }
             BpsAction::SourceCopy {
@@ -587,14 +630,25 @@ fn apply_patch_actions(
                         "SourceCopy exceeded input size at source offset {start}"
                     )));
                 }
-                copy_source_range(
-                    source,
-                    output,
-                    start,
-                    &mut output_offset,
-                    *length,
-                    &mut progress,
-                )?;
+                if source_pos != start {
+                    source.seek(SeekFrom::Start(start))?;
+                    source_pos = start;
+                }
+                if output_pos != output_offset {
+                    output.seek(SeekFrom::Start(output_offset))?;
+                    output_pos = output_offset;
+                }
+                let mut remaining = *length;
+                while remaining > 0 {
+                    let chunk = remaining.min(copy_buffer.len() as u64) as usize;
+                    source.read_exact(&mut copy_buffer[..chunk])?;
+                    output.write_all(&copy_buffer[..chunk])?;
+                    remaining -= chunk as u64;
+                    output_offset += chunk as u64;
+                    source_pos += chunk as u64;
+                    output_pos += chunk as u64;
+                    progress.report(output_offset);
+                }
                 source_relative_offset = i128::from(end);
             }
             BpsAction::TargetCopy {
@@ -613,6 +667,7 @@ fn apply_patch_actions(
                     )));
                 }
                 copy_target_range(output, &mut output_offset, start, *length, &mut progress)?;
+                output_pos = output_offset;
                 target_relative_offset =
                     i128::from(start.checked_add(*length).ok_or_else(|| {
                         RomWeaverError::Validation("BPS target-copy length overflowed".into())
@@ -632,6 +687,117 @@ fn apply_patch_actions(
         return Err(RomWeaverError::Validation(format!(
             "Output size invalid; Expected: {}, Actual: {output_offset}",
             patch.target_size
+        )));
+    }
+
+    Ok(())
+}
+
+fn apply_patch_actions_in_memory(
+    patch: &ParsedBpsPatch,
+    source: &[u8],
+    output: &mut [u8],
+    context: &OperationContext,
+    format_name: &str,
+) -> Result<()> {
+    let target_size = output.len();
+    let mut output_offset = 0usize;
+    let mut source_relative_offset = 0i128;
+    let mut target_relative_offset = 0i128;
+    let mut progress = BpsApplyProgress::new(context, format_name, patch.target_size);
+
+    for action in &patch.actions {
+        context.cancel().check()?;
+        match action {
+            BpsAction::SourceRead { length } => {
+                let len = *length as usize;
+                let end = output_offset + len;
+                if end > source.len() {
+                    return Err(RomWeaverError::Validation(format!(
+                        "SourceRead exceeded input size at output offset {output_offset}"
+                    )));
+                }
+                output[output_offset..end].copy_from_slice(&source[output_offset..end]);
+                output_offset = end;
+                progress.report(output_offset as u64);
+            }
+            BpsAction::TargetRead { data } => {
+                let end = output_offset + data.len();
+                output[output_offset..end].copy_from_slice(data);
+                output_offset = end;
+                progress.report(output_offset as u64);
+            }
+            BpsAction::SourceCopy {
+                length,
+                relative_offset,
+            } => {
+                let source_start = adjust_relative_offset(
+                    source_relative_offset,
+                    *relative_offset,
+                    patch.source_size,
+                    "source",
+                )?;
+                let len = *length as usize;
+                let src_start = source_start as usize;
+                let src_end = src_start + len;
+                if src_end > source.len() {
+                    return Err(RomWeaverError::Validation(format!(
+                        "SourceCopy exceeded input size at source offset {src_start}"
+                    )));
+                }
+                let dst_end = output_offset + len;
+                output[output_offset..dst_end].copy_from_slice(&source[src_start..src_end]);
+                source_relative_offset = i128::from(source_start + *length);
+                output_offset = dst_end;
+                progress.report(output_offset as u64);
+            }
+            BpsAction::TargetCopy {
+                length,
+                relative_offset,
+            } => {
+                let start = adjust_relative_offset(
+                    target_relative_offset,
+                    *relative_offset,
+                    output_offset as u64,
+                    "target",
+                )?;
+                let start_usize = start as usize;
+                if start_usize >= output_offset {
+                    return Err(RomWeaverError::Validation(format!(
+                        "TargetCopy started beyond produced output at offset {start_usize}"
+                    )));
+                }
+                let len = *length as usize;
+                let mut remaining = len;
+                let mut read_offset = start_usize;
+                // Bounded by available bytes so src and dst never truly overlap: safe to use
+                // copy_within which handles the run-length-encoding case correctly.
+                while remaining > 0 {
+                    let available = output_offset - read_offset;
+                    let chunk = remaining.min(available).min(COPY_BUFFER_SIZE);
+                    output.copy_within(read_offset..read_offset + chunk, output_offset);
+                    remaining -= chunk;
+                    read_offset += chunk;
+                    output_offset += chunk;
+                }
+                target_relative_offset =
+                    i128::from(start.checked_add(*length).ok_or_else(|| {
+                        RomWeaverError::Validation("BPS target-copy length overflowed".into())
+                    })?);
+                progress.report(output_offset as u64);
+            }
+        }
+
+        if output_offset > target_size {
+            return Err(RomWeaverError::Validation(format!(
+                "Output size invalid; Expected: {target_size}, Actual: {output_offset}"
+            )));
+        }
+    }
+
+    if output_offset != target_size {
+        return Err(RomWeaverError::Validation(format!(
+            "Output size invalid; Expected: {target_size}, Actual: {output_offset}"
         )));
     }
 
@@ -752,8 +918,12 @@ fn create_bps_patch_streaming(
     Ok(created)
 }
 
-fn bps_apply_thread_capability(_action_count: usize) -> ThreadCapability {
-    ThreadCapability::single_threaded()
+fn bps_apply_thread_capability(actions: &[BpsAction]) -> ThreadCapability {
+    if patch_contains_target_copy(actions) {
+        ThreadCapability::single_threaded()
+    } else {
+        ThreadCapability::parallel(None)
+    }
 }
 
 fn patch_contains_target_copy(actions: &[BpsAction]) -> bool {
@@ -921,13 +1091,22 @@ fn read_parallel_bps_source_range(
 }
 
 fn apply_prepared_bps_writes(output: &mut File, writes: &[PreparedBpsWrite]) -> Result<()> {
+    // Writes are in ascending, contiguous output_offset order (no gaps) so seeks are only
+    // needed when a write's offset diverges from the current file position (defensive).
+    let mut writer = BufWriter::with_capacity(COPY_BUFFER_SIZE, output);
+    let mut current_pos = 0u64;
     for write in writes {
         if write.data.is_empty() {
             continue;
         }
-        output.seek(SeekFrom::Start(write.output_offset))?;
-        output.write_all(&write.data)?;
+        if write.output_offset != current_pos {
+            writer.seek(SeekFrom::Start(write.output_offset))?;
+            current_pos = write.output_offset;
+        }
+        writer.write_all(&write.data)?;
+        current_pos += write.data.len() as u64;
     }
+    writer.flush()?;
     Ok(())
 }
 
@@ -1444,40 +1623,6 @@ fn flush_target_read(
     writer.write_target_read(target_read)?;
     created.action_count += 1;
     target_read.clear();
-    Ok(())
-}
-
-fn copy_source_range(
-    source: &mut File,
-    output: &mut File,
-    source_offset: u64,
-    output_offset: &mut u64,
-    length: u64,
-    progress: &mut BpsApplyProgress<'_>,
-) -> Result<()> {
-    let mut buffer = [0u8; COPY_BUFFER_SIZE];
-    let mut remaining = length;
-    source.seek(SeekFrom::Start(source_offset))?;
-    output.seek(SeekFrom::Start(*output_offset))?;
-
-    while remaining > 0 {
-        let chunk = remaining.min(buffer.len() as u64) as usize;
-        source.read_exact(&mut buffer[..chunk])?;
-        output.write_all(&buffer[..chunk])?;
-        remaining -= chunk as u64;
-        *output_offset += chunk as u64;
-        progress.report(*output_offset);
-    }
-
-    Ok(())
-}
-
-fn append_bytes(output: &mut File, output_offset: &mut u64, data: &[u8]) -> Result<()> {
-    output.seek(SeekFrom::Start(*output_offset))?;
-    output.write_all(data)?;
-    *output_offset = output_offset
-        .checked_add(data.len() as u64)
-        .ok_or_else(|| RomWeaverError::Validation("BPS output offset overflowed".into()))?;
     Ok(())
 }
 
