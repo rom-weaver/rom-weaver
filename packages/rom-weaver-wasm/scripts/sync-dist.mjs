@@ -18,8 +18,6 @@ const DIST_WASM_DIR = resolve(process.cwd(), ARTIFACTS_DIR_INPUT);
 const REQUIRED_DIST_COPIES = [
   { src: 'rom-weaver-app.wasm', dst: 'rom-weaver-app.wasm' },
   { src: 'rom-weaver-app.wasm.br', dst: 'rom-weaver-app.wasm.br' },
-  { src: 'rom-weaver-app-threaded.wasm', dst: 'rom-weaver-app-threaded.wasm' },
-  { src: 'rom-weaver-app-threaded.wasm.br', dst: 'rom-weaver-app-threaded.wasm.br' },
   { src: 'rom-weaver-runtime-utils.mjs', dst: 'src/rom-weaver-runtime-utils.mjs' },
   { src: 'rom-weaver-browser-opfs-api.mjs', dst: 'src/rom-weaver-browser-opfs-api.mjs' },
   { src: 'workers/browser-wasi-thread-worker.mjs', dst: 'src/workers/browser-wasi-thread-worker.mjs' },

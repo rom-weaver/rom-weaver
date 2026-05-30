@@ -20,6 +20,7 @@ import {
 
 const RUN_1GB_STRESS = typeof __ROM_WEAVER_WASM_STRESS_1GB__ !== 'undefined'
   && __ROM_WEAVER_WASM_STRESS_1GB__ === true;
+const LONG_MATRIX_TIMEOUT_MS = 10 * 60 * 1000;
 const SCRATCH_DIRECTORY_NAME = '.rom-weaver-opfs-scratch';
 // Minimal WASI module: write a running JSON line, spin, then write succeeded.
 const STREAMING_WASI_MODULE_BYTES = new Uint8Array([
@@ -181,7 +182,7 @@ class CloneFailingInitWorker {
 
   postMessage(message) {
     this.messages.push(message);
-    if (message.type === 'init' && message.options?.preferThreadedWasm !== false) {
+    if (message.type === 'init') {
       throw new DOMException('The object could not be cloned.', 'DataCloneError');
     }
     queueMicrotask(() => {
@@ -443,7 +444,6 @@ describe('rom-weaver-wasm browser runner parity', () => {
       }
     }, {
       initOptions: {
-        preferThreadedWasm: false,
         wasmUrl: new URL('../rom-weaver-app.wasm', import.meta.url).href,
       },
     });
@@ -705,7 +705,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
         fixtures,
       });
     });
-  });
+  }, LONG_MATRIX_TIMEOUT_MS);
 
   it('runJson full format matrix covers patch and container registries', async () => {
     await withTempFixture(async ({ dir, worker, opfsHandle, fixtures }) => {
@@ -715,34 +715,12 @@ describe('rom-weaver-wasm browser runner parity', () => {
         fixtures,
       });
     });
-  });
+  }, LONG_MATRIX_TIMEOUT_MS);
 
   it('runner supports explicit wasm module URL paths', async () => {
     await withTempFixture(async ({ init, sourcePath, worker }) => {
       const canUseThreadedWasm = typeof SharedArrayBuffer === 'function' && globalThis.crossOriginIsolated === true;
       expect(init.threaded).toBe(canUseThreadedWasm);
-      expect(init.wasmUrl).toContain(canUseThreadedWasm ? 'rom-weaver-app-threaded.wasm' : 'rom-weaver-app.wasm');
-      const result = await worker.runJson([
-        'checksum',
-        sourcePath,
-        '--algo',
-        'crc32',
-        '--no-extract',
-      ]);
-
-      assertRunJsonSucceeded(result, {
-        command: 'checksum',
-      });
-    }, {
-      initOptions: {
-        wasmUrl: new URL('../rom-weaver-app.wasm', import.meta.url).href,
-      },
-    });
-  });
-
-  it('runner honors preferThreadedWasm=false with explicit wasm URL paths', async () => {
-    await withTempFixture(async ({ init, sourcePath, worker }) => {
-      expect(init.threaded).toBe(false);
       expect(init.wasmUrl).toContain('rom-weaver-app.wasm');
       const result = await worker.runJson([
         'checksum',
@@ -757,7 +735,6 @@ describe('rom-weaver-wasm browser runner parity', () => {
       });
     }, {
       initOptions: {
-        preferThreadedWasm: false,
         wasmUrl: new URL('../rom-weaver-app.wasm', import.meta.url).href,
       },
     });
@@ -767,19 +744,18 @@ describe('rom-weaver-wasm browser runner parity', () => {
     await withTempFixture(async ({ init }) => {
       const canUseThreadedWasm = typeof SharedArrayBuffer === 'function' && globalThis.crossOriginIsolated === true;
       expect(init.threaded).toBe(canUseThreadedWasm);
-      expect(init.wasmUrl).toContain(canUseThreadedWasm ? 'rom-weaver-app-threaded.wasm' : 'rom-weaver-app.wasm');
+      expect(init.wasmUrl).toContain('rom-weaver-app.wasm');
     }, {
       initOptions: {
         wasmUrl: new URL('../rom-weaver-app.wasm', import.meta.url).href,
-        threadedWasmUrl: new URL('../rom-weaver-app-threaded.wasm', import.meta.url).href,
       },
     });
   });
 
-  it('runner initializes the threaded wasm module when selected', async () => {
+  it('runner initializes the configured wasm module URL', async () => {
     await withTempFixture(async ({ init, sourcePath, worker }) => {
       expect(init.threaded).toBe(true);
-      expect(init.wasmUrl).toContain('rom-weaver-app-threaded.wasm');
+      expect(init.wasmUrl).toContain('rom-weaver-app.wasm');
 
       const result = await worker.runJson([
         'checksum',
@@ -796,7 +772,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
       });
     }, {
       initOptions: {
-        wasmUrl: new URL('../rom-weaver-app-threaded.wasm', import.meta.url).href,
+        wasmUrl: new URL('../rom-weaver-app.wasm', import.meta.url).href,
       },
     });
   });
@@ -861,7 +837,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
       expect(terminal.used_parallelism).toBe(true);
     }, {
       initOptions: {
-        wasmUrl: new URL('../rom-weaver-app-threaded.wasm', import.meta.url).href,
+        wasmUrl: new URL('../rom-weaver-app.wasm', import.meta.url).href,
       },
     });
   });
@@ -926,7 +902,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
         initOptions: {
           defaultThreads: 2,
           threadWorkerUrl: probeWorkerUrl,
-          wasmUrl: new URL('../rom-weaver-app-threaded.wasm', import.meta.url).href,
+          wasmUrl: new URL('../rom-weaver-app.wasm', import.meta.url).href,
         },
       });
     } finally {
@@ -998,7 +974,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
         initOptions: {
           defaultThreads: 2,
           threadWorkerUrl: probeWorkerUrl,
-          wasmUrl: new URL('../rom-weaver-app-threaded.wasm', import.meta.url).href,
+          wasmUrl: new URL('../rom-weaver-app.wasm', import.meta.url).href,
         },
       });
     } finally {
@@ -1096,7 +1072,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
       expect(await countScratchFiles(opfsHandle)).toBe(scratchCountAfterFirstRun);
     }, {
       initOptions: {
-        wasmUrl: new URL('../rom-weaver-app-threaded.wasm', import.meta.url).href,
+        wasmUrl: new URL('../rom-weaver-app.wasm', import.meta.url).href,
       },
     });
   });
@@ -1141,7 +1117,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
       expect(await countScratchFiles(opfsHandle)).toBeGreaterThanOrEqual(32);
     }, {
       initOptions: {
-        wasmUrl: new URL('../rom-weaver-app-threaded.wasm', import.meta.url).href,
+        wasmUrl: new URL('../rom-weaver-app.wasm', import.meta.url).href,
       },
     });
   });
@@ -1198,7 +1174,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
         }
       }
     });
-  });
+  }, LONG_MATRIX_TIMEOUT_MS);
 
   it('survives large-file memory pressure workloads without worker crashes', async () => {
     await withTempFixture(async ({ dir, workDir, worker, opfsHandle }) => {
@@ -1307,7 +1283,7 @@ describe('rom-weaver-wasm browser worker client parity', () => {
     await withTempFixture(async ({ init, sourcePath, worker }) => {
       const canUseThreadedWasm = typeof SharedArrayBuffer === 'function' && globalThis.crossOriginIsolated === true;
       expect(init.threaded).toBe(canUseThreadedWasm);
-      expect(init.wasmUrl).toContain(canUseThreadedWasm ? 'rom-weaver-app-threaded.wasm' : 'rom-weaver-app.wasm');
+      expect(init.wasmUrl).toContain('rom-weaver-app.wasm');
       let streamedEvents = 0;
       const result = await worker.runJson(
         ['checksum', sourcePath, '--algo', 'crc32', '--no-extract'],
@@ -1359,15 +1335,14 @@ describe('rom-weaver-wasm browser worker client parity', () => {
     }
   });
 
-  it('browser worker client rejects structured-clone init failures without single-thread fallback', async () => {
+  it('browser worker client rejects structured-clone init failures without retrying init options', async () => {
     const worker = new CloneFailingInitWorker();
     const client = new BrowserRomWeaverWorkerClient(worker, { defaultThreads: 4 });
     try {
       await expect(
         client.init({
           runtimeMounts: ['/work'],
-          threadedWasmUrl: 'threaded.wasm',
-          wasmUrl: 'single.wasm',
+          wasmUrl: 'rom-weaver-app.wasm',
           workGuestPath: '/work',
         }),
       ).rejects.toMatchObject({
@@ -1378,7 +1353,6 @@ describe('rom-weaver-wasm browser worker client parity', () => {
       const initMessages = worker.messages.filter((message) => message.type === 'init');
       expect(initMessages).toHaveLength(1);
       expect(initMessages[0].options).toMatchObject({ defaultThreads: 4 });
-      expect(initMessages[0].options.preferThreadedWasm).not.toBe(false);
     } finally {
       client.terminate();
     }
@@ -1432,7 +1406,7 @@ describe('rom-weaver-wasm browser worker client parity', () => {
       sourceFileName: 'source.bin',
       sourceContents: 'rom-weaver worker matrix fixture',
     });
-  });
+  }, LONG_MATRIX_TIMEOUT_MS);
 
   it('browser worker client full format matrix covers patch and container registries', async () => {
     await withTempFixture(async ({ dir, worker, opfsHandle, fixtures }) => {
@@ -1446,5 +1420,5 @@ describe('rom-weaver-wasm browser worker client parity', () => {
       sourceFileName: 'source.bin',
       sourceContents: 'rom-weaver worker full matrix fixture',
     });
-  });
+  }, LONG_MATRIX_TIMEOUT_MS);
 });

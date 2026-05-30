@@ -121,8 +121,6 @@ WASI_THREADS_CFLAGS="-matomics -mbulk-memory ${WASI_SIMD_CFLAGS}"
 export CFLAGS_wasm32_wasip1_threads="${CFLAGS_wasm32_wasip1_threads:-} ${WASI_THREADS_CFLAGS}"
 export CXXFLAGS_wasm32_wasip1_threads="${CXXFLAGS_wasm32_wasip1_threads:-} ${WASI_THREADS_CFLAGS}"
 
-NON_THREADED_RUSTFLAGS="-C target-feature=+bulk-memory,+mutable-globals,+sign-ext,+reference-types,+simd128"
-NON_THREADED_RUSTFLAGS+=" -C linker-plugin-lto"
 THREADED_RUSTFLAGS="-C target-feature=+atomics,+bulk-memory,+mutable-globals,+sign-ext,+reference-types,+simd128"
 THREADED_RUSTFLAGS+=" -C linker-plugin-lto"
 THREADED_RUSTFLAGS+=" -C link-arg=--export=malloc -C link-arg=--export=free"
@@ -134,11 +132,7 @@ THREADED_RUSTFLAGS+=" -C link-arg=--export=malloc -C link-arg=--export=free"
 # WebAssembly instantiation fail. 1073741824 = 1 GiB = 16384 * 64 KiB pages.
 THREADED_RUSTFLAGS+=" -C link-arg=--max-memory=1073741824"
 
-WASI_CXX_DIR="${WASI_CXX_DIR:-$WASI_SYSROOT/lib/wasm32-wasip1/noeh}"
 WASI_CXX_THREADS_DIR="${WASI_CXX_THREADS_DIR:-$WASI_SYSROOT/lib/wasm32-wasip1-threads/noeh}"
-if [[ -d "$WASI_CXX_DIR" ]]; then
-  NON_THREADED_RUSTFLAGS+=" -L native=$WASI_CXX_DIR"
-fi
 if [[ -d "$WASI_CXX_THREADS_DIR" ]]; then
   THREADED_RUSTFLAGS+=" -L native=$WASI_CXX_THREADS_DIR"
 fi
@@ -168,7 +162,7 @@ build_target() {
 
 postprocess_artifact() {
   local artifact="$1"
-  local artifact_kind="${2:-non-threaded}"
+  local artifact_kind="${2:-threaded}"
 
   if [[ "$SKIP_WASM_OPT" != "1" ]] && command -v wasm-opt >/dev/null 2>&1; then
     local optimized="${artifact}.opt"
@@ -202,11 +196,9 @@ postprocess_artifact() {
   fi
 }
 
-build_target "wasm32-wasip1" "rom-weaver-app.wasm" "$NON_THREADED_RUSTFLAGS"
-build_target "wasm32-wasip1-threads" "rom-weaver-app-threaded.wasm" "$THREADED_RUSTFLAGS"
+build_target "wasm32-wasip1-threads" "rom-weaver-app.wasm" "$THREADED_RUSTFLAGS"
 
-postprocess_artifact "$OUT_DIR/rom-weaver-app.wasm" "non-threaded"
-postprocess_artifact "$OUT_DIR/rom-weaver-app-threaded.wasm" "threaded"
+postprocess_artifact "$OUT_DIR/rom-weaver-app.wasm" "threaded"
 
 if [[ "$OUT_DIR" == "$WASM_PACKAGE_DIR" ]]; then
   mkdir -p "$OUT_DIR/src/workers"
@@ -250,7 +242,7 @@ fi
 
 echo "artifacts written to ${OUT_DIR}"
 if [[ "$SKIP_BROTLI" != "1" ]]; then
-  echo "compressed artifacts: rom-weaver-app.wasm.br rom-weaver-app-threaded.wasm.br"
+  echo "compressed artifacts: rom-weaver-app.wasm.br"
 else
   echo "compressed artifacts: skipped (set SKIP_BROTLI=0 to enable)"
 fi

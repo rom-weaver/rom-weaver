@@ -525,7 +525,7 @@
 
             let raw_sha1_bytes: [u8; Self::CHD_SHA1_BYTES] = if effective_threads <= 1 {
                 // Sequential path: no worker threads are spawned, so this also serves targets
-                // without thread support (for example the non-threaded wasm build). Hunks are read,
+                // without thread support. Hunks are read,
                 // hashed, compressed, and appended in order on the calling thread.
                 let mut raw_sha1 = Sha1::new();
                 let mut remaining = logical_bytes;

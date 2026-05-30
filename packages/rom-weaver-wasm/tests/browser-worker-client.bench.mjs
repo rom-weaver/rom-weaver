@@ -63,9 +63,7 @@ const WASM_PATCH_APPLY_SKIPS = {
   mod: 'wasm benchmark limitation: mod patch-apply currently fails in browser worker runtime',
   dps: 'wasm benchmark limitation: dps patch-apply currently fails in browser worker runtime',
 };
-const WASM_RUNTIME_THREADED = 'threaded';
-const WASM_RUNTIME_NON_THREADED = 'nonthreaded';
-const SINGLETHREAD_ARCHIVE_CREATE_FORMATS = new Set(['rvz', 'wia', 'wbfs']);
+const WASM_RUNTIME_DEFAULT = 'default';
 const DISC_COMPRESS_INPUT_FORMATS = new Set(COMMAND_PATHS_DEFAULTS.disc_compress_input_formats);
 const ROM_WEAVER_COMPRESS_CODEC_BY_FORMAT = COMMAND_PATHS_DEFAULTS.compress_codec_by_format;
 const ROM_WEAVER_CODEC_MATRIX_BY_FORMAT = COMMAND_PATHS_DEFAULTS.codec_matrix_by_format;
@@ -116,9 +114,6 @@ const PATCH_SIZE_BYTES = readPositiveIntEnv(
   DEFAULT_PATCH_SIZE_MIB,
 ) * MIB;
 const THREAD_COUNT = readPositiveIntEnv('ROM_WEAVER_WASM_BENCH_THREADS', 4);
-const REQUESTED_THREADED_WASM = readBooleanEnv('ROM_WEAVER_WASM_BENCH_THREADED', true);
-const USES_SINGLETHREAD_ARCHIVE_CREATE = REQUESTED_THREADED_WASM
-  && SELECTED_CONTAINER_FORMATS.some((formatName) => SINGLETHREAD_ARCHIVE_CREATE_FORMATS.has(formatName));
 const BENCH_OPTIONS = createBenchOptions();
 
 const NEEDS_ARCHIVE_SOURCES = SELECTED_COMMANDS.has('extract')
@@ -185,7 +180,7 @@ describe('rom-weaver-wasm benchmark parity with python bench-command-paths', () 
               codecOverride: codecValue,
             });
             await runBenchmarkCommand(args, 'compress', {
-              wasmRuntime: wasmRuntimeForArchiveCreate(formatName),
+              wasmRuntime: defaultWasmRuntime(),
             });
             await markArchiveSourceReady(formatName, codecLabel);
           },
@@ -538,7 +533,7 @@ async function ensureArchiveSource(formatName, codecLabel) {
     }),
     {
       assumeReady: true,
-      wasmRuntime: wasmRuntimeForArchiveCreate(formatName),
+      wasmRuntime: defaultWasmRuntime(),
     },
   );
   if (!result.ok) {
@@ -888,22 +883,11 @@ async function runBenchmarkCommandAllowFailure(args, {
 }
 
 function defaultWasmRuntime() {
-  return REQUESTED_THREADED_WASM ? WASM_RUNTIME_THREADED : WASM_RUNTIME_NON_THREADED;
-}
-
-function wasmRuntimeForArchiveCreate(formatName) {
-  if (REQUESTED_THREADED_WASM && SINGLETHREAD_ARCHIVE_CREATE_FORMATS.has(formatName)) {
-    return WASM_RUNTIME_NON_THREADED;
-  }
-  return defaultWasmRuntime();
+  return WASM_RUNTIME_DEFAULT;
 }
 
 function neededWasmRuntimes() {
-  const runtimes = new Set([defaultWasmRuntime()]);
-  if (USES_SINGLETHREAD_ARCHIVE_CREATE) {
-    runtimes.add(WASM_RUNTIME_NON_THREADED);
-  }
-  return runtimes;
+  return new Set([defaultWasmRuntime()]);
 }
 
 function terminalLabelFromResult(result) {
@@ -926,9 +910,6 @@ async function initializeRuntime() {
   fixtureName = opened.fixtureName;
   fixtureRootHandle = opened.fixtureRootHandle;
   benchLog(`fixture cache ${fixtureName}`);
-  if (USES_SINGLETHREAD_ARCHIVE_CREATE) {
-    benchLog('using non-threaded wasm for rvz/wia/wbfs archive creation only');
-  }
 
   if (NEEDS_RAW_SOURCE || NEEDS_COMPRESS_SOURCE || NEEDS_ARCHIVE_SOURCES) {
     await ensureSourceFixture();
@@ -944,11 +925,8 @@ async function initializeRuntime() {
     const worker = createBrowserWorkerClient({
       defaultThreads: THREAD_COUNT,
     });
-    const wasmUrl = wasmRuntime === WASM_RUNTIME_THREADED
-      ? '/rom-weaver-app-threaded.wasm'
-      : '/rom-weaver-app.wasm';
     await worker.init({
-      wasmUrl,
+      wasmUrl: '/rom-weaver-app.wasm',
       opfsHandle: fixtureRootHandle,
       workGuestPath: WORK_GUEST_ROOT,
       runtimeMounts: [WORK_GUEST_ROOT],
@@ -1083,8 +1061,5 @@ function benchmarkCacheProfileName() {
 }
 
 function benchmarkWasmRuntimeProfile() {
-  if (!REQUESTED_THREADED_WASM) {
-    return 'nonthreaded';
-  }
-  return USES_SINGLETHREAD_ARCHIVE_CREATE ? 'threaded-mixed' : 'threaded';
+  return 'threaded';
 }

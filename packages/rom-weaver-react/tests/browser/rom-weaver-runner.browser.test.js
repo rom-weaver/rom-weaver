@@ -34,6 +34,10 @@ afterEach(async () => {
 
 test("rom-weaver runner ready metadata exposes the loaded browser wasm runtime", async () => {
   const canUseSharedMemory = typeof SharedArrayBuffer === "function" && globalThis.crossOriginIsolated === true;
+  if (!canUseSharedMemory) {
+    await expect(warmupRomWeaverRunner()).rejects.toThrow(/cross-origin isolation|SharedArrayBuffer|COOP\/COEP/i);
+    return;
+  }
   performance.clearResourceTimings?.();
   const ready = await warmupRomWeaverRunner();
   const metadata = await getRomWeaverRunnerMetadata();
@@ -41,24 +45,12 @@ test("rom-weaver runner ready metadata exposes the loaded browser wasm runtime",
     .getEntriesByType("resource")
     .map((entry) => entry.name)
     .filter((name) => name.includes("rom-weaver-app") && name.includes(".wasm"));
-  const observedSingleThreadedWasmImports = wasmResourceNames.filter(
-    (name) => name.includes("rom-weaver-app.wasm") && !name.includes("threaded"),
-  );
 
   expect(ready).toEqual(metadata);
-  expect(ready.threaded).toBe(canUseSharedMemory);
-  expect(ready.wasmUrl).toContain(canUseSharedMemory ? "rom-weaver-app-threaded" : "rom-weaver-app.wasm");
+  expect(ready.threaded).toBe(true);
+  expect(ready.wasmUrl).toContain("rom-weaver-app.wasm");
   expect(ready.wasmUrl).not.toContain("?import&url");
-  if (canUseSharedMemory) {
-    expect(observedSingleThreadedWasmImports).toEqual([]);
-  }
-});
-
-test("rom-weaver runner can initialize a forced single-thread wasm runtime", async () => {
-  const metadata = await getRomWeaverRunnerMetadata({ preferThreadedWasm: false });
-  expect(metadata.threaded).toBe(false);
-  expect(metadata.wasmUrl).toContain("rom-weaver-app.wasm");
-  expect(metadata.wasmUrl).not.toContain("threaded");
+  expect(wasmResourceNames.some((name) => name.includes("rom-weaver-app.wasm"))).toBe(true);
 });
 
 test("rom-weaver failure messages ignore trace-only stderr", () => {

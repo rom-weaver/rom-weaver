@@ -9,7 +9,6 @@ import {
   openPersistentBenchRoot,
   parseIntegerList,
   parseStringList,
-  readBooleanEnv,
   readEnvValue,
   readPositiveIntEnv,
   WORK_GUEST_ROOT,
@@ -43,7 +42,6 @@ const STRIDE_MIB = readPositiveIntEnv(
   'ROM_WEAVER_WASM_BENCH_THREADING_STRIDE_MIB',
   CHECKSUM_THREADING_DEFAULTS.stride_mib,
 );
-const USE_THREADED_WASM = readBooleanEnv('ROM_WEAVER_WASM_BENCH_THREADED', true);
 const BENCH_OPTIONS = createBenchOptions();
 
 let fixtureRootHandle = null;
@@ -116,11 +114,8 @@ async function initializeRuntime() {
     defaultThreads: PARALLEL_THREADS,
   });
 
-  const wasmUrl = USE_THREADED_WASM
-    ? '/rom-weaver-app-threaded.wasm'
-    : '/rom-weaver-app.wasm';
   await worker.init({
-    wasmUrl,
+    wasmUrl: '/rom-weaver-app.wasm',
     opfsHandle: fixtureRootHandle,
     workGuestPath: WORK_GUEST_ROOT,
     runtimeMounts: [WORK_GUEST_ROOT],

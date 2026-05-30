@@ -13,8 +13,6 @@
     "src/",
     "rom-weaver-app.wasm",
     "rom-weaver-app.wasm.br",
-    "rom-weaver-app-threaded.wasm",
-    "rom-weaver-app-threaded.wasm.br",
     "README.md",
     "NOTICE",
     "THIRD_PARTY_LICENSES.md"
@@ -44,9 +42,7 @@
       "import": "./src/workers/browser-wasi-thread-worker.mjs"
     },
     "./rom-weaver-app.wasm": "./rom-weaver-app.wasm",
-    "./rom-weaver-app.wasm.br": "./rom-weaver-app.wasm.br",
-    "./rom-weaver-app-threaded.wasm": "./rom-weaver-app-threaded.wasm",
-    "./rom-weaver-app-threaded.wasm.br": "./rom-weaver-app-threaded.wasm.br"
+    "./rom-weaver-app.wasm.br": "./rom-weaver-app.wasm.br"
   },
   "scripts": {
     "prepare:dist": "node ./scripts/sync-dist.mjs",

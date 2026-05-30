@@ -5,7 +5,7 @@ JavaScript wrappers and WASM artifacts for browser `rom-weaver` execution.
 ## What You Get
 
 - Browser OPFS runner (`createRomWeaverBrowserOpfs`) for Dedicated Workers
-- Browser WASI thread support for `rom-weaver-app-threaded.wasm` when cross-origin isolation enables `SharedArrayBuffer`
+- Browser WASI thread support for `rom-weaver-app.wasm` when cross-origin isolation enables `SharedArrayBuffer`
 - Dedicated browser worker client (`createBrowserWorkerClient`)
 - First-party TypeScript declarations
 
@@ -55,7 +55,7 @@ console.log(result.exitCode, result.ok);
 Runtime behavior:
 
 - WASI sees a single mounted directory: `/work`.
-- When both `wasmUrl` and `threadedWasmUrl` are available, the runner auto-selects threaded wasm only when `SharedArrayBuffer` and `crossOriginIsolated` are available; otherwise it falls back to non-threaded wasm.
+- The browser worker runtime requires `SharedArrayBuffer` plus `crossOriginIsolated` and loads `rom-weaver-app.wasm`.
 - `runner.threaded` and `runner.wasmUrl` report the loaded runtime.
 - Browser picker handles/files should be staged into OPFS before `run()`.
 - Known typed-command output paths are created in OPFS before `_start()` because WASI Preview 1 filesystem calls are synchronous.
@@ -128,7 +128,6 @@ Optional environment knobs:
   - `ROM_WEAVER_WASM_BENCH_ITERATIONS` (default `1`)
   - `ROM_WEAVER_WASM_BENCH_WARMUP_TIME_MS` (default `0`)
   - `ROM_WEAVER_WASM_BENCH_WARMUP_ITERATIONS` (default `0`)
-  - `ROM_WEAVER_WASM_BENCH_THREADED` (`1`/`0`, default `1`)
   - `ROM_WEAVER_WASM_BENCH_OUTPUT_JSON` (optional output JSON path)
   - `ROM_WEAVER_WASM_BENCH_CLEAR_FIXTURE_CACHE` (`1` clears the persistent OPFS fixture cache before setup)
 - `bench-command-paths.py` parity suite (`tests/browser-worker-client.bench.mjs`):

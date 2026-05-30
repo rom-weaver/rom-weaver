@@ -114,7 +114,6 @@ const resolvePatchApplyThreadArg = (
       forceSingleThreadReason: "xdelta",
       hasBpsPatch,
       hasXdeltaPatch,
-      preferThreadedWasm: false,
       threadArg: 1,
     };
   }
@@ -124,7 +123,6 @@ const resolvePatchApplyThreadArg = (
       forceSingleThreadReason: "bps",
       hasBpsPatch,
       hasXdeltaPatch,
-      preferThreadedWasm: false,
       threadArg: null,
     };
   }
@@ -133,7 +131,6 @@ const resolvePatchApplyThreadArg = (
     forceSingleThreadReason: "",
     hasBpsPatch,
     hasXdeltaPatch,
-    preferThreadedWasm: true,
     threadArg: requestedThreadArg || null,
   };
 };
@@ -174,7 +171,6 @@ const toRomWeaverOptions = (input: {
   logLevel?: LogLevel | string;
   onEvent?: (event: RomWeaverRunJsonEvent) => void;
   onLog?: (log: WorkflowRuntimeLog) => void;
-  preferThreadedWasm?: boolean;
   scratchFilePoolSize?: number | null;
   syncAccessMode?: string;
   virtualFiles?: RuntimeValue[];
@@ -218,7 +214,6 @@ const toRomWeaverOptions = (input: {
       .filter((pathValue) => !!pathValue);
     if (knownInputPaths.length) options.knownInputPaths = knownInputPaths;
   }
-  if (typeof input.preferThreadedWasm === "boolean") options.preferThreadedWasm = input.preferThreadedWasm;
   if (Array.isArray(input.virtualFiles)) options.virtualFiles = input.virtualFiles;
   if (typeof input.virtualOnlyMounts === "boolean") options.virtualOnlyMounts = input.virtualOnlyMounts;
   return options;
@@ -807,7 +802,7 @@ const invokeRomWeaverPatchApplyWorker = async (
   const ignoreChecksumValidation =
     (input.options as { requireInputChecksumMatch?: unknown } | undefined)?.requireInputChecksumMatch !== true;
   const requestedThreadArg = toThreadBudget((input.options as { workerThreads?: unknown } | undefined)?.workerThreads);
-  const { forceSingleThreadReason, forcedSingleThread, hasBpsPatch, hasXdeltaPatch, preferThreadedWasm, threadArg } =
+  const { forceSingleThreadReason, forcedSingleThread, hasBpsPatch, hasXdeltaPatch, threadArg } =
     resolvePatchApplyThreadArg(requestedThreadArg, input.patchFiles);
   const disableDefaultThreadArgInjection = hasBpsPatch && !threadArg;
   const virtualOnlyMounts = hasBpsPatch;
@@ -836,7 +831,6 @@ const invokeRomWeaverPatchApplyWorker = async (
     hasXdeltaPatch,
     outputPath,
     patchCount: input.patchFiles.length,
-    preferThreadedWasm,
     requestedThreadArg,
     romFilePath: input.romFilePath,
     scratchFilePoolSize,
@@ -862,7 +856,6 @@ const invokeRomWeaverPatchApplyWorker = async (
         if (progress) onProgress?.(progress);
       },
       onLog,
-      preferThreadedWasm,
       scratchFilePoolSize,
       syncAccessMode,
       virtualOnlyMounts,
@@ -881,7 +874,7 @@ const invokeRomWeaverPatchApplyWorker = async (
           hasXdeltaPatch,
         )} forcedSingleThread=${String(forcedSingleThread)} reason=${forceSingleThreadReason || "none"} threadArg=${
           threadArg || "none"
-        } preferThreadedWasm=${String(preferThreadedWasm)}]`
+        }]`
       : "";
     if (isTraceEnabled(input.logLevel)) {
       const traceTail = Array.isArray(result.traceNonJsonLines)

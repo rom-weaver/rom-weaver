@@ -19,7 +19,7 @@ import { createInterface } from 'node:readline';
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(SCRIPT_DIR, '..', '..');
 const WASM_PACKAGE_DIR = resolve(REPO_ROOT, 'packages/rom-weaver-wasm');
-const DEFAULT_WASM_MODULE = resolve(WASM_PACKAGE_DIR, 'rom-weaver-app-threaded.wasm');
+const DEFAULT_WASM_MODULE = resolve(WASM_PACKAGE_DIR, 'rom-weaver-app.wasm');
 const WORK_GUEST_PATH = '/work';
 const STAGE_INPUT_CHUNK_BYTES = 2 * 1024 * 1024;
 

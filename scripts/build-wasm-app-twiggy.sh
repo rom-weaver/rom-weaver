@@ -22,4 +22,4 @@ env \
 
 echo "twiggy-ready artifacts written to ${OUT_DIR}"
 echo "run: twiggy top -n 80 ${OUT_DIR}/rom-weaver-app.wasm"
-echo "run: twiggy monos -n 80 ${OUT_DIR}/rom-weaver-app-threaded.wasm"
+echo "run: twiggy monos -n 80 ${OUT_DIR}/rom-weaver-app.wasm"

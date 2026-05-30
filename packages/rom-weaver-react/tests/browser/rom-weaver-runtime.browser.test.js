@@ -22,7 +22,6 @@ test("resolvePatchApplyThreadArg forces single-thread for xdelta patches", () =>
   expect(result).toMatchObject({
     forcedSingleThread: true,
     hasXdeltaPatch: true,
-    preferThreadedWasm: false,
     threadArg: "1",
   });
 });
@@ -32,7 +31,6 @@ test("resolvePatchApplyThreadArg preserves configured thread count for non-xdelt
   expect(result).toMatchObject({
     forcedSingleThread: false,
     hasXdeltaPatch: false,
-    preferThreadedWasm: true,
     threadArg: "4",
   });
 });

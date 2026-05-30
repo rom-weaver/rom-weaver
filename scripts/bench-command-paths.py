@@ -74,8 +74,6 @@ CONTAINER_SUFFIX = {
 }
 
 ARCHIVE_TOOLS = ["rom-weaver", "rom-weaver-wasm", "7zz", "chdman", "dolphin-tool"]
-WASM_SINGLETHREAD_ARCHIVE_CREATE_FORMATS = {"rvz", "wia", "wbfs"}
-WASM_SINGLETHREAD_PATCH_APPLY_FORMATS = {"solid", "aps", "dps"}
 
 EXPECTED_COMPRESS_SKIPS = {
     str(key): str(value)
@@ -605,17 +603,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--wasm-module",
         type=Path,
-        default=Path("packages/rom-weaver-wasm/rom-weaver-app-threaded.wasm"),
-        help="Path to rom-weaver app wasm module used for rom-weaver-wasm archive tool",
-    )
-    parser.add_argument(
-        "--wasm-singlethread-module",
-        type=Path,
         default=Path("packages/rom-weaver-wasm/rom-weaver-app.wasm"),
-        help=(
-            "Path to non-threaded rom-weaver app wasm module used for formats with unstable threaded "
-            "WASI timings (default: packages/rom-weaver-wasm/rom-weaver-app.wasm)"
-        ),
+        help="Path to rom-weaver app wasm module used for rom-weaver-wasm archive tool",
     )
     parser.add_argument(
         "--browser-wasm-persistent-session",
@@ -1131,26 +1120,6 @@ def wasm_rom_weaver_command(
         ]
     )
     return cmd
-
-
-def wasm_module_for_archive_create_format(
-    format_name: str,
-    wasm_module: Path,
-    wasm_singlethread_module: Path | None,
-) -> Path:
-    if format_name in WASM_SINGLETHREAD_ARCHIVE_CREATE_FORMATS and wasm_singlethread_module is not None:
-        return wasm_singlethread_module
-    return wasm_module
-
-
-def wasm_module_for_patch_apply_format(
-    format_name: str,
-    wasm_module: Path,
-    wasm_singlethread_module: Path | None,
-) -> Path:
-    if format_name in WASM_SINGLETHREAD_PATCH_APPLY_FORMATS and wasm_singlethread_module is not None:
-        return wasm_singlethread_module
-    return wasm_module
 
 
 def sevenzip_compress_command(
@@ -1781,25 +1750,16 @@ def main() -> None:
     node_bin: Path | None = None
     wasm_runner: Path | None = None
     wasm_module: Path | None = None
-    wasm_singlethread_module: Path | None = None
 
     if archive_tool_mode == "auto":
         selected_archive_tools = ["rom-weaver"]
         node_candidate = try_resolve_external_binary(args.node_bin)
         wasm_runner_candidate = args.wasm_runner.expanduser().resolve()
         wasm_module_candidate = args.wasm_module.expanduser().resolve()
-        wasm_singlethread_module_candidate = args.wasm_singlethread_module.expanduser().resolve()
         if node_candidate is not None and wasm_runner_candidate.exists() and wasm_module_candidate.exists():
             node_bin = node_candidate
             wasm_runner = wasm_runner_candidate
             wasm_module = wasm_module_candidate
-            if wasm_singlethread_module_candidate.exists():
-                wasm_singlethread_module = wasm_singlethread_module_candidate
-            else:
-                print(
-                    "[bench] wasm single-thread fallback disabled (module not found)",
-                    flush=True,
-                )
             selected_archive_tools.append("rom-weaver-wasm")
         else:
             print("[bench] auto skip rom-weaver-wasm (missing node, wasm runner, or wasm module)", flush=True)
@@ -1837,9 +1797,6 @@ def main() -> None:
             wasm_module = args.wasm_module.expanduser().resolve()
             if not wasm_module.exists():
                 raise SystemExit(f"--wasm-module file not found: {wasm_module}")
-            wasm_singlethread_module = args.wasm_singlethread_module.expanduser().resolve()
-            if not wasm_singlethread_module.exists():
-                raise SystemExit(f"--wasm-singlethread-module file not found: {wasm_singlethread_module}")
 
     print(f"[bench] archive tools: {', '.join(selected_archive_tools)}", flush=True)
 
@@ -1861,7 +1818,6 @@ def main() -> None:
                     "node_bin": file_fingerprint(node_bin),
                     "wasm_runner": file_fingerprint(wasm_runner),
                     "wasm_module": file_fingerprint(wasm_module),
-                    "wasm_singlethread_module": file_fingerprint(wasm_singlethread_module),
                 },
                 args=args,
                 checksum_combo_algorithms=checksum_combo_algorithms,
@@ -2289,11 +2245,6 @@ def main() -> None:
                 assert node_bin is not None
                 assert wasm_runner is not None
                 assert wasm_module is not None
-                wasm_module_for_case = wasm_module_for_archive_create_format(
-                    format_name,
-                    wasm_module,
-                    wasm_singlethread_module,
-                )
                 if format_name in EXPECTED_COMPRESS_SKIPS:
                     for codec_label, _codec_value in rom_weaver_codec_cases_for_format(format_name):
                         rows.append(
@@ -2318,7 +2269,7 @@ def main() -> None:
                             codec_value_override: str | None = codec_value,
                             node_bin_value: Path = node_bin,
                             wasm_runner_value: Path = wasm_runner,
-                            wasm_module_value: Path = wasm_module_for_case,
+                            wasm_module_value: Path = wasm_module,
                             use_browser_json_runner_value: bool = use_browser_wasm_json_runner,
                         ):
                             run_kind = "warmup" if warmup else "run"
@@ -3881,15 +3832,10 @@ def main() -> None:
                         assert node_bin_value is not None
                         assert wasm_runner_value is not None
                         assert wasm_module_value is not None
-                        wasm_apply_module = wasm_module_for_patch_apply_format(
-                            format_value,
-                            wasm_module_value,
-                            wasm_singlethread_module,
-                        )
                         cmd = wasm_rom_weaver_command(
                             node_bin=node_bin_value,
                             wasm_runner=wasm_runner_value,
-                            wasm_module=wasm_apply_module,
+                            wasm_module=wasm_module_value,
                             args=["--no-progress", *patch_apply_args],
                         )
                     return cmd, output_path
@@ -3937,9 +3883,6 @@ def main() -> None:
             "node_bin": str(node_bin) if node_bin is not None else None,
             "wasm_runner": str(wasm_runner) if wasm_runner is not None else None,
             "wasm_module": str(wasm_module) if wasm_module is not None else None,
-            "wasm_singlethread_module": (
-                str(wasm_singlethread_module) if wasm_singlethread_module is not None else None
-            ),
             "browser_wasm_persistent_session": args.browser_wasm_persistent_session,
             "commands": sorted(selected_commands),
             "container_formats": selected_container_formats,

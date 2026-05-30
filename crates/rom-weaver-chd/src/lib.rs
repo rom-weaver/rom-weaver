@@ -13,7 +13,7 @@ use std::{
 
 use flacenc::{component::BitRepr as _, error::Verify as _};
 use flate2::{Compression as GzipCompression, write::DeflateEncoder};
-// The rayon parallel-iterator prelude is only needed by the native/non-threaded-wasm decode
+// The rayon parallel-iterator prelude is only needed by decode paths that do not use wasi threads
 // paths (`par_chunks`); the wasi-threads build parallelises with scoped threads instead.
 #[cfg(not(all(target_family = "wasm", rom_weaver_wasi_threads)))]
 use rayon::prelude::*;
