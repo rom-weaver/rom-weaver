@@ -34,6 +34,11 @@ const readDownloadStream = (stream, maxBytes) =>
 
 export default mergeConfig(baseConfig, {
   optimizeDeps: {
+    // Serve rom-weaver-wasm from source instead of pre-bundling it. Vite keys its dep-optimize cache
+    // on the lockfile/config, not this symlinked workspace dep's source, so after editing the wasm
+    // worker protocol the pre-bundled main-thread client goes stale against the freshly loaded worker
+    // and drops the runJson command (normalizeRunRequest throws). Excluding it keeps both in sync.
+    exclude: ["rom-weaver-wasm"],
     include: ["@bjorn3/browser_wasi_shim"],
   },
   resolve: {
