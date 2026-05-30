@@ -30,7 +30,7 @@
         #[allow(clippy::too_many_arguments)]
         fn record_pipeline_hunk(
             &self,
-            output_file: &mut File,
+            output_file: &mut dyn Write,
             output: &Path,
             entries: &mut Vec<RustCompressedHunkEntry>,
             current_offset: &mut u64,
@@ -517,6 +517,12 @@
                 HashMap::<HunkHashKey, u64>::with_capacity(hunk_count_usize);
             let parent_hunks_by_hash = parent_reuse.as_ref().map(|value| &value.by_hash);
 
+            // Buffer the sequential per-hunk payload appends: with small hunks (e.g. the 4 KiB
+            // DVD hunk) a large image can be hundreds of thousands of hunks, and one write
+            // syscall per hunk dominates the single writer thread. The map/metadata/header-patch
+            // phase below uses seeks, so we flush and reclaim the raw File before that starts.
+            let mut buffered = BufWriter::with_capacity(8 * 1024 * 1024, output_file);
+
             let raw_sha1_bytes: [u8; Self::CHD_SHA1_BYTES] = if effective_threads <= 1 {
                 // Sequential path: no worker threads are spawned, so this also serves targets
                 // without thread support (for example the non-threaded wasm build). Hunks are read,
@@ -551,7 +557,7 @@
                         &mut scratch,
                     )?;
                     self.record_pipeline_hunk(
-                        &mut output_file,
+                        &mut buffered,
                         output,
                         &mut entries,
                         &mut current_offset,
@@ -694,7 +700,7 @@
                                 }
                             };
                         if let Err(error) = self.record_pipeline_hunk(
-                            &mut output_file,
+                            &mut buffered,
                             output,
                             &mut entries,
                             &mut current_offset,
@@ -729,6 +735,15 @@
                     })
                 })?
             };
+
+            // Flush buffered hunk payloads and reclaim the raw File for the seek-based map,
+            // metadata, and header-patch writes below.
+            let mut output_file = buffered.into_inner().map_err(|error| {
+                RomWeaverError::Validation(format!(
+                    "failed to flush CHD data to `{}`: {error}",
+                    output.display()
+                ))
+            })?;
 
             let map_offset = current_offset;
             let (map_payload, map_crc, length_bits, self_bits, parent_bits, first_offset) =
