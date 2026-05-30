@@ -372,7 +372,10 @@ impl NodHandlerCore {
             ))
         })?;
 
-        let mut output = File::create(output_path)?;
+        // Wrap the output in a BufWriter: in the parallel create pipeline every compressed
+        // block funnels through this single callback on the main thread, so coalescing the
+        // per-block writes into larger syscalls keeps the worker threads from stalling on I/O.
+        let mut output = BufWriter::new(File::create(output_path)?);
         let mut process_options = NodProcessOptions::default();
         process_options.processor_threads = self.negotiated_threads(execution);
         let finalization = writer
