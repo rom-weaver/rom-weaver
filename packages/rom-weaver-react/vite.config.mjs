@@ -22,6 +22,7 @@ const rootStaticAssetSources = {
   ),
   "/apple-touch-icon.png": path.join(rootDir, "src", "assets", "app", "root", "apple-touch-icon.png"),
   "/favicon.ico": path.join(rootDir, "src", "assets", "app", "root", "favicon.ico"),
+  "/rw-logo.svg": path.join(rootDir, "src", "assets", "app", "rw-logo.svg"),
   "/manifest.json": rootManifestSourcePath,
 };
 const staticAppAssetSourceDir = path.join(rootDir, "src", "assets", "app");
@@ -80,6 +81,7 @@ const serveRootStaticAssets = () => ({
         res.statusCode = 200;
         if (requestPath.endsWith(".json")) res.setHeader("Content-Type", "application/json; charset=utf-8");
         else if (requestPath.endsWith(".png")) res.setHeader("Content-Type", "image/png");
+        else if (requestPath.endsWith(".svg")) res.setHeader("Content-Type", "image/svg+xml");
         else if (requestPath.endsWith(".ico")) res.setHeader("Content-Type", "image/x-icon");
         res.setHeader("Cache-Control", "no-cache");
         res.end(source);
@@ -211,6 +213,7 @@ export default defineConfig(({ command }) => {
           globPatterns: [
             "index.html",
             "manifest.json",
+            "rw-logo.svg",
             "favicon.ico",
             "apple-touch-icon.png",
             "apple-touch-icon-precomposed.png",

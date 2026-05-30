@@ -76,8 +76,12 @@ const layoutClasses = {
   tabPanelHidden: "hidden",
   tabPanelVisible: "block",
   title:
-    "m-0 block text-[28px] font-bold leading-[1.06] tracking-[0.01em] text-[var(--rom-weaver-color-outer-btn)] [text-shadow:0_10px_22px_rgba(7,15,22,.45)] max-[641px]:text-[22px]",
+    "m-0 inline-flex items-center gap-[9px] text-[28px] font-bold leading-[1.06] tracking-[0.01em] text-[var(--rom-weaver-color-outer-btn)] [text-shadow:0_10px_22px_rgba(7,15,22,.45)] max-[641px]:gap-[7px] max-[641px]:text-[22px]",
   titleAccent: "text-[var(--rom-weaver-color-primary-hover)] [text-shadow:0_8px_18px_oklch(0.59_0.15_301_/_0.45)]",
+  titleIcon: "h-[52px] w-[52px] flex-none max-[641px]:h-[42px] max-[641px]:w-[42px]",
+  titleIconFrame:
+    "inline-flex h-[52px] w-[52px] flex-none items-center justify-center rounded-[11px] max-[641px]:h-[42px] max-[641px]:w-[42px] max-[641px]:rounded-[9px]",
+  titleWordmark: "inline-flex items-baseline whitespace-nowrap",
   toolHeader: "pointer-events-none relative z-10 h-0 flex justify-end",
   toolPanel: "relative",
   updateBanner:

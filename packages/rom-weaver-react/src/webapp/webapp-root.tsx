@@ -36,8 +36,13 @@ function WebappRoot({ state, serviceWorkerCache, pageUpdate, confirmationDialog,
       <div className={layoutClasses.column} id="column">
         <header className={layoutClasses.header}>
           <h1 className={layoutClasses.title}>
-            <span className={layoutClasses.titleAccent}>ROM</span>
-            <span>Weaver</span>
+            <span aria-hidden="true" className={layoutClasses.titleIconFrame}>
+              <img alt="" className={layoutClasses.titleIcon} src="./rw-logo.svg" />
+            </span>
+            <span className={layoutClasses.titleWordmark}>
+              <span className={layoutClasses.titleAccent}>ROM</span>
+              <span>Weaver</span>
+            </span>
           </h1>
         </header>
         <div className={layoutClasses.wrapper} id="wrapper">
