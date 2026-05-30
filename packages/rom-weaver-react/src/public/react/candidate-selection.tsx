@@ -1,8 +1,9 @@
+import X from "lucide-react/dist/esm/icons/x.js";
 import { useCallback, useRef, useState } from "react";
-import { formatSelectionDialogMessage, getCandidateDisplayItems } from "../../presentation/formatting/candidates.ts";
+import { getCandidateDisplayItems } from "../../presentation/formatting/candidates.ts";
 import { createBrowserLocalizer } from "../../presentation/localization/index.ts";
 import type { CandidateSelectionChoice, CandidateSelectionPrompt } from "./public-types.ts";
-import { buttonClasses, cx, dialogClasses } from "./tailwind-classes";
+import { buttonClasses, cx, dialogClasses, settingsClasses } from "./tailwind-classes";
 
 type CandidateSelectionState = {
   request: CandidateSelectionPrompt;
@@ -41,10 +42,7 @@ function CandidateSelectionDialog({
       <div className="fixed inset-0 z-50 grid place-items-center p-0">
         <dialog
           aria-labelledby="rom-weaver-candidate-selection-message"
-          className={cx(
-            dialogClasses.panel,
-            "static top-auto left-auto m-0 w-[min(1040px,100vw)] max-w-none max-h-[100vh] translate-x-0 translate-y-0 transform-none overflow-hidden rounded-[14px] p-0 text-left",
-          )}
+          className="static m-0 box-border min-w-0 w-fit max-w-[min(1040px,calc(100vw-8px))] max-h-[calc(100vh-8px)] overflow-hidden rounded-[14px] border border-[var(--rom-weaver-color-border)] bg-[var(--rom-weaver-color-surface)] p-0 align-middle text-left text-[var(--rom-weaver-color-text-soft)] shadow-[0_24px_44px_-22px_rgba(0,0,0,.65)]"
           data-testid="candidate-selection-dialog"
           id="rom-weaver-candidate-selection-dialog"
           onCancel={(event) => {
@@ -53,53 +51,81 @@ function CandidateSelectionDialog({
           }}
           open
         >
-          <div className="px-2.5 pt-2 pb-1.5">
-            <div className={cx(dialogClasses.title, "mb-0")} id="rom-weaver-candidate-selection-message">
-              {formatSelectionDialogMessage(request, localizer)}
+          <div className="relative px-3 pt-2.5 pb-1.5 pr-[3rem]">
+            <button
+              aria-label="Close selection dialog"
+              className={cx(
+                buttonClasses.primary,
+                settingsClasses.actionButton,
+                settingsClasses.actionDanger,
+                "absolute right-2.5 top-2.5",
+              )}
+              onClick={onCancel}
+              title="Close"
+              type="button"
+            >
+              <X aria-hidden="true" className={settingsClasses.actionIcon} />
+            </button>
+            <div
+              className="m-0 text-left text-[18px] font-bold leading-[1.25] text-[var(--rom-weaver-color-text)]"
+              id="rom-weaver-candidate-selection-message"
+            >
+              {request.sourceName}
             </div>
-            <div className="text-[11px] leading-[1.2] text-[var(--rom-weaver-color-muted)]">
+            <div className="mt-px text-[11px] leading-[1.15] text-[var(--rom-weaver-color-muted)]">
               {selectableCount
-                ? "Select one candidate from the table below."
-                : "No selectable candidates are available in this source."}
+                ? "Select one file from the table below."
+                : "No selectable files are available in this source."}
             </div>
           </div>
-          <div className="max-h-[min(580px,calc(100vh-116px))] overflow-y-auto px-0 py-0.5">
+          <div className="max-h-[min(580px,calc(100vh-120px))] overflow-y-auto px-3 pt-1.5 pb-2">
             <table
               aria-label="Candidate selection table"
-              className="w-full table-fixed [border-collapse:separate] [border-spacing:0_2px]"
+              className="max-w-full table-auto border-separate border-spacing-x-0 border-spacing-y-0"
               id="rom-weaver-candidate-selection-table"
             >
               <colgroup>
-                <col className="w-[74%]" />
-                <col className="w-[10%]" />
-                <col className="w-[16%]" />
+                <col />
+                <col className="w-[8.25rem]" />
               </colgroup>
               <thead>
                 <tr className="text-[10px] font-bold uppercase tracking-[0.04em] text-[var(--rom-weaver-color-muted)]">
                   <th className="px-2 pb-0.5 text-left" scope="col">
-                    Candidate
+                    File
                   </th>
-                  <th className="px-2 pb-0.5 text-right" scope="col">
+                  <th className="px-1 pb-0.5 text-left" scope="col">
                     Size
-                  </th>
-                  <th className="px-2 pb-0.5 text-right" scope="col">
-                    Action
                   </th>
                 </tr>
               </thead>
               <tbody id="rom-weaver-candidate-selection-list">
-                {displayItems.map(({ candidate, metadata, warningLabel }) => {
+                {displayItems.map(({ candidate, sizeLabel, warningLabel }) => {
                   const primaryLabel = candidate.type === "file" ? candidate.fileName : candidate.label;
                   const breadcrumbLabel = candidate.breadcrumbs?.join(" > ") || "";
                   const uniqueBreadcrumbLabel =
                     breadcrumbLabel.trim() && breadcrumbLabel.trim() !== primaryLabel.trim() ? breadcrumbLabel : "";
                   const detailLabel = [uniqueBreadcrumbLabel, warningLabel].filter(Boolean).join(" • ");
-                  const buttonLabel = candidate.selectable ? "Select" : "Unavailable";
                   const rowToneClass = candidate.selectable
-                    ? "bg-[var(--rom-weaver-color-surface)] hover:bg-[var(--rom-weaver-color-surface-muted)] hover:border-[var(--rom-weaver-color-border-strong)]"
+                    ? "bg-[var(--rom-weaver-color-surface)] group-hover:bg-[var(--rom-weaver-color-surface-muted)] group-hover:border-[var(--rom-weaver-color-border-strong)] group-focus-within:bg-[var(--rom-weaver-color-surface-muted)] group-focus-within:border-[var(--rom-weaver-color-border-strong)]"
                     : "bg-[var(--rom-weaver-color-surface)] opacity-[.62]";
                   return (
-                    <tr className={candidate.selectable ? "group" : undefined} key={candidate.id}>
+                    <tr
+                      className={candidate.selectable ? "group cursor-pointer" : "group"}
+                      key={candidate.id}
+                      onKeyDown={
+                        candidate.selectable
+                          ? (event) => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                onSelect(candidate.id);
+                              }
+                            }
+                          : undefined
+                      }
+                      onClick={candidate.selectable ? () => onSelect(candidate.id) : undefined}
+                      role={candidate.selectable ? "button" : undefined}
+                      tabIndex={candidate.selectable ? 0 : undefined}
+                    >
                       <td
                         className={cx(
                           "rounded-l-[10px] border border-r-0 border-[var(--rom-weaver-color-border)] px-2 py-1 align-top transition-[background-color,border-color] duration-100",
@@ -107,8 +133,8 @@ function CandidateSelectionDialog({
                         )}
                       >
                         <div className="min-w-0">
-                          <div className="text-[12px] font-semibold leading-[1.3] text-[var(--rom-weaver-color-text)] [overflow-wrap:anywhere] break-words">
-                            {primaryLabel}
+                          <div className="min-w-0 text-[12px] font-semibold leading-[1.3] text-[var(--rom-weaver-color-text)]">
+                            <span className="[overflow-wrap:anywhere] break-words">{primaryLabel}</span>
                           </div>
                           {detailLabel ? (
                             <div className="text-[10px] leading-[1.2] text-[var(--rom-weaver-color-muted)] [overflow-wrap:anywhere] break-words">
@@ -119,50 +145,19 @@ function CandidateSelectionDialog({
                       </td>
                       <td
                         className={cx(
-                          "border border-x-0 border-[var(--rom-weaver-color-border)] px-2 py-1 text-right align-middle transition-[background-color,border-color] duration-100",
+                          "rounded-r-[10px] border border-l-0 border-[var(--rom-weaver-color-border)] px-1 py-1 align-middle text-left transition-[background-color,border-color] duration-100",
                           rowToneClass,
                         )}
                       >
-                        <span className="whitespace-nowrap text-[11px] font-semibold tabular-nums text-[var(--rom-weaver-color-text-soft)]">
-                          {metadata || "\u2014"}
+                        <span className="block whitespace-nowrap text-[11px] leading-[1.2] font-semibold tabular-nums text-[var(--rom-weaver-color-text-soft)]">
+                          {sizeLabel || "—"}
                         </span>
-                      </td>
-                      <td
-                        className={cx(
-                          "rounded-r-[10px] border border-l-0 border-[var(--rom-weaver-color-border)] px-2 py-1 text-right align-middle transition-[background-color,border-color] duration-100",
-                          rowToneClass,
-                        )}
-                      >
-                        <button
-                          className={cx(
-                            "inline-flex h-[26px] min-w-[84px] items-center justify-center rounded-[999px] border px-2.5 text-[10px] font-bold uppercase tracking-[0.03em] transition-[background-color,border-color,color,box-shadow] duration-100",
-                            candidate.selectable
-                              ? "cursor-pointer border-[rgba(63,166,108,.45)] bg-[rgba(63,166,108,.18)] text-[oklch(0.43_0.09_160)] hover:border-[rgba(63,166,108,.7)] hover:bg-[rgba(63,166,108,.26)] focus-visible:shadow-[0_0_0_2px_var(--rom-weaver-color-primary-focus)]"
-                              : "cursor-not-allowed border-[rgba(198,56,77,.35)] bg-[rgba(198,56,77,.14)] text-[var(--rom-weaver-color-danger)]",
-                          )}
-                          disabled={!candidate.selectable}
-                          onClick={() => onSelect(candidate.id)}
-                          title={primaryLabel}
-                          type="button"
-                        >
-                          {buttonLabel}
-                          <span className="sr-only"> {primaryLabel}</span>
-                        </button>
                       </td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
-          </div>
-          <div className={cx(dialogClasses.actions, "!mt-0 px-2 py-1")}>
-            <button
-              className={cx(buttonClasses.primary, buttonClasses.secondary, "!mt-0 !h-9 !w-auto !px-3")}
-              onClick={onCancel}
-              type="button"
-            >
-              Cancel
-            </button>
           </div>
         </dialog>
       </div>

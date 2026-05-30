@@ -513,11 +513,11 @@ test("cancelling patch candidate selection does not trigger render-phase React w
 
     await expect.poll(() => document.querySelector("#rom-weaver-candidate-selection-list")).not.toBeNull();
 
-    const cancelButton = Array.from(document.querySelectorAll("#rom-weaver-candidate-selection-dialog button")).find(
-      (entry) => (entry.textContent || "").trim().toLowerCase() === "cancel",
+    const closeButton = document.querySelector(
+      "#rom-weaver-candidate-selection-dialog button[aria-label='Close selection dialog']",
     );
-    if (!cancelButton) throw new Error("Missing candidate selection cancel button");
-    cancelButton.click();
+    if (!(closeButton instanceof HTMLButtonElement)) throw new Error("Missing candidate selection close button");
+    closeButton.click();
 
     await expect
       .poll(
