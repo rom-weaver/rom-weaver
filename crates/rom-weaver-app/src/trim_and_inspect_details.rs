@@ -1038,14 +1038,18 @@ impl CliApp {
         Ok(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
     }
 
-    fn append_entry_list_label(base: &str, entries: &[String]) -> String {
+    fn append_entry_list_label(base: &str, entries: &[ContainerListEntry]) -> String {
         if entries.is_empty() {
             return format!("{base}; selectable entries: (none)");
         }
+        let labels = entries
+            .iter()
+            .map(|entry| entry.path.clone())
+            .collect::<Vec<_>>();
         format!(
             "{base}; selectable entries ({}): {}",
-            entries.len(),
-            entries.join(", ")
+            labels.len(),
+            labels.join(", ")
         )
     }
 
@@ -1073,7 +1077,7 @@ impl CliApp {
 
     fn attach_container_inspect_details(
         mut report: OperationReport,
-        listed_entries: Option<Vec<String>>,
+        listed_entries: Option<Vec<ContainerListEntry>>,
         recommendation: Option<&CompressFormatRecommendation>,
     ) -> OperationReport {
         if report.status != OperationStatus::Succeeded {
@@ -1095,7 +1099,32 @@ impl CliApp {
             entry_count.map_or(Value::Null, |value| json!(value)),
         );
         if let Some(entries) = listed_entries {
-            container.insert("entries".to_string(), json!(entries));
+            container.insert(
+                "entries".to_string(),
+                json!(
+                    entries
+                        .iter()
+                        .map(|entry| entry.path.clone())
+                        .collect::<Vec<_>>()
+                ),
+            );
+            container.insert(
+                "entry_records".to_string(),
+                json!(
+                    entries
+                        .iter()
+                        .map(|entry| {
+                            let mut record = Map::new();
+                            record.insert("file_name".to_string(), json!(entry.path));
+                            record.insert(
+                                "size_bytes".to_string(),
+                                entry.size.map_or(Value::Null, |value| json!(value)),
+                            );
+                            Value::Object(record)
+                        })
+                        .collect::<Vec<_>>()
+                ),
+            );
         }
         if let Some(recommendation) = recommendation {
             container.insert(

@@ -36,10 +36,10 @@ use rom_weaver_codecs::{
 };
 use rom_weaver_core::{
     ContainerCapabilities, ContainerCreateRequest, ContainerExtractRequest, ContainerHandler,
-    ContainerInspectRequest, FormatDescriptor, OperationContext, OperationFamily, OperationReport,
-    OperationStatus, OrderedChunkWriter, ProbeConfidence, ProgressEvent, Result, RomWeaverError,
-    SharedThreadPool, ThreadCapability, ThreadExecution, bounded_items_for_threads,
-    should_ignore_common_container_file,
+    ContainerInspectRequest, ContainerListEntry, FormatDescriptor, OperationContext,
+    OperationFamily, OperationReport, OperationStatus, OrderedChunkWriter, ProbeConfidence,
+    ProgressEvent, Result, RomWeaverError, SharedThreadPool, ThreadCapability, ThreadExecution,
+    bounded_items_for_threads, should_ignore_common_container_file,
 };
 use rom_weaver_libarchive::{
     EntryFileType, EntrySpec, ReadArchive, ReadFilter as LibarchiveReadFilter,
@@ -1414,6 +1414,25 @@ fn list_regular_archive_entries_with_libarchive(
         .into_iter()
         .map(|entry| normalize_archive_name(&entry.path))
         .filter(|entry| !entry.is_empty())
+        .collect())
+}
+
+fn list_regular_archive_entry_records_with_libarchive(
+    source: &Path,
+    format_name: &str,
+) -> Result<Vec<ContainerListEntry>> {
+    Ok(list_regular_archive_entries(source, format_name)?
+        .into_iter()
+        .filter_map(|entry| {
+            let path = normalize_archive_name(&entry.path);
+            if path.is_empty() {
+                return None;
+            }
+            Some(ContainerListEntry {
+                path,
+                size: if entry.is_dir { None } else { entry.size },
+            })
+        })
         .collect())
 }
 

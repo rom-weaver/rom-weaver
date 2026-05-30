@@ -160,6 +160,12 @@ pub struct ContainerInspectRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ContainerListEntry {
+    pub path: String,
+    pub size: Option<u64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ContainerExtractRequest {
     pub source: PathBuf,
     pub selections: Vec<String>,
@@ -279,6 +285,17 @@ pub trait ContainerHandler: Send + Sync {
             "{} does not support listing entries",
             self.descriptor().name
         )))
+    }
+    fn list_entry_records(
+        &self,
+        request: &ContainerInspectRequest,
+        context: &OperationContext,
+    ) -> Result<Vec<ContainerListEntry>> {
+        Ok(self
+            .list_entries(request, context)?
+            .into_iter()
+            .map(|path| ContainerListEntry { path, size: None })
+            .collect())
     }
     fn extract(
         &self,
@@ -428,6 +445,40 @@ impl ContainerHandler for TracingContainerHandler {
                     format = descriptor.name,
                     error = %error,
                     "container list failed"
+                );
+            }
+        }
+        result
+    }
+
+    fn list_entry_records(
+        &self,
+        request: &ContainerInspectRequest,
+        context: &OperationContext,
+    ) -> Result<Vec<ContainerListEntry>> {
+        let descriptor = self.inner.descriptor();
+        trace!(
+            family = ?descriptor.family,
+            format = descriptor.name,
+            source = %request.source.display(),
+            "container list records start"
+        );
+        let result = self.inner.list_entry_records(request, context);
+        match &result {
+            Ok(entries) => {
+                trace!(
+                    family = ?descriptor.family,
+                    format = descriptor.name,
+                    entry_count = entries.len(),
+                    "container list records complete"
+                );
+            }
+            Err(error) => {
+                trace!(
+                    family = ?descriptor.family,
+                    format = descriptor.name,
+                    error = %error,
+                    "container list records failed"
                 );
             }
         }

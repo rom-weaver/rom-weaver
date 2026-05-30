@@ -19,10 +19,10 @@ use rom_weaver_codecs::{CanonicalCodec, RequestedCodec, parse_requested_codec};
 use rom_weaver_containers::{CompressFormatRecommendation, ContainerRegistry};
 use rom_weaver_core::{
     CancellationToken, ChecksumEngine, ChecksumRequest, ContainerCreateRequest,
-    ContainerExtractRequest, ContainerHandler, ContainerInspectRequest, OperationContext,
-    OperationFamily, OperationReport, OperationStatus, PatchApplyRequest, PatchChecksumValidation,
-    PatchCreateRequest, ProbeConfidence, ProgressEvent, ProgressSink, Result, RomWeaverError,
-    ThreadBudget, ThreadCapability, ThreadExecution, XdeltaSecondaryMode,
+    ContainerExtractRequest, ContainerHandler, ContainerInspectRequest, ContainerListEntry,
+    OperationContext, OperationFamily, OperationReport, OperationStatus, PatchApplyRequest,
+    PatchChecksumValidation, PatchCreateRequest, ProbeConfidence, ProgressEvent, ProgressSink,
+    Result, RomWeaverError, ThreadBudget, ThreadCapability, ThreadExecution, XdeltaSecondaryMode,
     should_ignore_common_container_file,
 };
 use rom_weaver_libarchive::{

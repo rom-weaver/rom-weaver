@@ -246,6 +246,14 @@ impl ContainerHandler for SevenZContainerHandler {
         list_regular_archive_entries_with_libarchive(&request.source, self.descriptor.name)
     }
 
+    fn list_entry_records(
+        &self,
+        request: &ContainerInspectRequest,
+        _context: &OperationContext,
+    ) -> Result<Vec<ContainerListEntry>> {
+        list_regular_archive_entry_records_with_libarchive(&request.source, self.descriptor.name)
+    }
+
     fn extract(
         &self,
         request: &ContainerExtractRequest,

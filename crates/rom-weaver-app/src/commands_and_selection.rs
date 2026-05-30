@@ -85,7 +85,7 @@ impl CliApp {
                     None,
                 )
             });
-            let mut listed_entries: Option<Vec<String>> = None;
+            let mut listed_entries: Option<Vec<ContainerListEntry>> = None;
             if report.status == OperationStatus::Succeeded && args.list {
                 self.emit_running(
                     "inspect",
@@ -96,7 +96,9 @@ impl CliApp {
                     None,
                     Some(context.plan_threads(ThreadCapability::single_threaded())),
                 );
-                let listed = handler.list_entries(&request, &context).map_err(|error| {
+                let listed = handler
+                    .list_entry_records(&request, &context)
+                    .map_err(|error| {
                     OperationReport::failed(
                         OperationFamily::Container,
                         Some(handler.descriptor().name.to_string()),
