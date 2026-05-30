@@ -126,7 +126,7 @@ const createPwaServiceWorkerClient = ({
   };
   let pendingReloadReason = takeReloadReason();
   const syncCrossOriginIsolationMode = ({ allowReload }: { allowReload: boolean }) => {
-    if (!navigator?.serviceWorker?.controller || !isCrossOriginIsolationKnown()) return;
+    if (!(navigator?.serviceWorker?.controller && isCrossOriginIsolationKnown())) return;
     if (!isCrossOriginIsolated()) setSessionStorageItem(COI_COEP_HAS_FAILED_KEY, "true");
     const coepHasFailed = getSessionStorageItem(COI_COEP_HAS_FAILED_KEY) === "true";
     const reloadedBySelf = pendingReloadReason;
@@ -180,6 +180,17 @@ const createPwaServiceWorkerClient = ({
       if (complete) return;
       complete = true;
       clearTimeout(timeout);
+      channel.port1.onmessage = null;
+      try {
+        channel.port1.close();
+      } catch (_err) {
+        // best-effort cleanup
+      }
+      try {
+        channel.port2.close();
+      } catch (_err) {
+        // best-effort cleanup
+      }
       setVersion(version || "unknown", title);
     };
     const timeout = setTimeout(() => {

@@ -76,8 +76,8 @@ const getCrossOriginIsolationHeaders = (sourceHeaders: HeadersInit = {}) => {
   const headers = new Headers(sourceHeaders);
   headers.set(COI_HEADER_COOP, "same-origin");
   headers.set(COI_HEADER_COEP, coepCredentialless ? "credentialless" : "require-corp");
-  if (!coepCredentialless) headers.set(COI_HEADER_CORP, "cross-origin");
-  else headers.delete(COI_HEADER_CORP);
+  if (coepCredentialless) headers.delete(COI_HEADER_CORP);
+  else headers.set(COI_HEADER_CORP, "cross-origin");
   return headers;
 };
 

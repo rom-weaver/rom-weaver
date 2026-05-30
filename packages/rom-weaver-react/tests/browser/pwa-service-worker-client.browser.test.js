@@ -35,11 +35,7 @@ const createController = () => {
   };
 };
 
-const createHarness = ({
-  controller = null,
-  crossOriginIsolated = false,
-  sessionStorageSeed = {},
-} = {}) => {
+const createHarness = ({ controller = null, crossOriginIsolated = false, sessionStorageSeed = {} } = {}) => {
   const sessionStorage = createSessionStorage(sessionStorageSeed);
   const location = {
     href: "https://example.com/webapp/index.html",
