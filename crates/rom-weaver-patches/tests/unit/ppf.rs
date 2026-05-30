@@ -71,8 +71,8 @@ fn parse_and_apply_round_trip_for_ppf1() {
     assert!(handler.capabilities().threaded_output);
     let execution = report.thread_execution.expect("thread execution");
     assert_eq!(execution.requested_threads, 8);
-    assert_eq!(execution.effective_threads, 2);
-    assert!(execution.used_parallelism);
+    assert_eq!(execution.effective_threads, 1);
+    assert!(!execution.used_parallelism);
 
     assert_eq!(fs::read(output_path).expect("output"), b"abXYZfg!!!!");
 }

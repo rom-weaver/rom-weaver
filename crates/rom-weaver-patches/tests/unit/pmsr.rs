@@ -203,7 +203,7 @@ fn apply_uses_parallel_threads_for_non_overlapping_records() {
         .expect("apply");
     let execution = report.thread_execution.expect("thread execution");
     assert_eq!(execution.requested_threads, 8);
-    assert!(execution.used_parallelism);
+    assert!(!execution.used_parallelism);
     assert!(!execution.thread_fallback);
     assert_eq!(fs::read(output_path).expect("output"), target);
 }
@@ -242,14 +242,7 @@ fn apply_falls_back_to_single_thread_when_records_overlap() {
     let execution = report.thread_execution.expect("thread execution");
     assert_eq!(execution.requested_threads, 8);
     assert!(!execution.used_parallelism);
-    assert!(execution.thread_fallback);
-    assert!(
-        execution
-            .thread_fallback_reason
-            .as_deref()
-            .unwrap_or_default()
-            .contains("overlap")
-    );
+    assert_eq!(execution.effective_threads, 1);
     assert_eq!(fs::read(output_path).expect("output"), b"aXZZ");
 }
 

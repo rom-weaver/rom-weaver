@@ -92,25 +92,38 @@ impl PatchHandler for ApsN64PatchHandler {
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
         }
-        fs::copy(&request.input, &request.output)?;
+        let input_size = fs::metadata(&request.input)?.len();
         let thread_capability = aps_apply_thread_capability(patch.records.len());
         let planned_execution = context.plan_threads(thread_capability.clone());
-        let mut output = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open(&request.output)?;
-        output.set_len(patch.output_size)?;
-        let execution = if planned_execution.used_parallelism {
-            let (execution, pool) = context.build_pool(thread_capability)?;
-            let prepared =
-                prepare_aps_writes_parallel(&patch.records, patch.output_size, &pool, context)?;
-            apply_prepared_aps_writes(&mut output, &prepared)?;
+        let execution = if crate::can_apply_in_memory(input_size, patch.output_size) {
+            let mut output_bytes = fs::read(&request.input)?;
+            output_bytes.resize(patch.output_size as usize, 0);
+            apply_aps_records_in_memory(patch.output_size, &patch.records, &mut output_bytes)?;
+            fs::write(&request.output, &output_bytes)?;
+            let mut execution = planned_execution;
+            execution.effective_threads = 1;
+            execution.used_parallelism = false;
             execution
         } else {
-            apply_aps_records(&mut output, patch.output_size, &patch.records)?;
-            planned_execution
+            fs::copy(&request.input, &request.output)?;
+            let mut output = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(&request.output)?;
+            output.set_len(patch.output_size)?;
+            let execution = if planned_execution.used_parallelism {
+                let (execution, pool) = context.build_pool(thread_capability)?;
+                let prepared =
+                    prepare_aps_writes_parallel(&patch.records, patch.output_size, &pool, context)?;
+                apply_prepared_aps_writes(&mut output, &prepared)?;
+                execution
+            } else {
+                apply_aps_records(&mut output, patch.output_size, &patch.records)?;
+                planned_execution
+            };
+            output.flush()?;
+            execution
         };
-        output.flush()?;
 
         let checksum_suffix = if validate_checksums {
             String::new()
@@ -468,6 +481,46 @@ fn validate_n64_source(input_path: &Path, expected: &ApsN64Header) -> Result<()>
         return Err(RomWeaverError::Validation(
             "Source ROM checksum mismatch".into(),
         ));
+    }
+    Ok(())
+}
+
+fn apply_aps_records_in_memory(
+    output_size: u64,
+    records: &[ApsRecord],
+    output: &mut Vec<u8>,
+) -> Result<()> {
+    for record in records {
+        match record {
+            ApsRecord::Simple { offset, data } => {
+                let start = *offset as usize;
+                let end = start + data.len();
+                if end > output_size as usize {
+                    return Err(RomWeaverError::Validation(
+                        "APS record exceeded output size".into(),
+                    ));
+                }
+                if !data.is_empty() {
+                    output[start..end].copy_from_slice(data);
+                }
+            }
+            ApsRecord::Rle {
+                offset,
+                byte,
+                length,
+            } => {
+                let start = *offset as usize;
+                let end = start + usize::from(*length);
+                if end > output_size as usize {
+                    return Err(RomWeaverError::Validation(
+                        "APS RLE record exceeded output size".into(),
+                    ));
+                }
+                if *length > 0 {
+                    output[start..end].fill(*byte);
+                }
+            }
+        }
     }
     Ok(())
 }

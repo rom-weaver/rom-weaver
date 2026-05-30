@@ -99,26 +99,39 @@ impl PatchHandler for PpfPatchHandler {
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
         }
-        fs::copy(&request.input, &request.output)?;
-
-        let mut output = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open(&request.output)?;
-        let use_undo_data = should_apply_undo_data(&mut output, &parsed.records)?;
         let thread_capability = ppf_apply_thread_capability(parsed.records.len());
         let planned_execution = context.plan_threads(thread_capability.clone());
-        let execution = if planned_execution.used_parallelism {
-            let (execution, pool) = context.build_pool(thread_capability)?;
-            let prepared =
-                prepare_ppf_writes_parallel(&parsed.records, use_undo_data, &pool, context)?;
-            apply_prepared_ppf_writes(&mut output, &prepared)?;
+        let ppf_output_len = ppf_required_output_len(input_len, &parsed.records);
+        let execution = if crate::can_apply_in_memory(input_len, ppf_output_len) {
+            let mut output_bytes = fs::read(&request.input)?;
+            output_bytes.resize(ppf_output_len as usize, 0);
+            let use_undo = should_apply_undo_data_in_memory(&output_bytes, &parsed.records);
+            apply_records_in_memory(&parsed.records, use_undo, &mut output_bytes)?;
+            fs::write(&request.output, &output_bytes)?;
+            let mut execution = planned_execution;
+            execution.effective_threads = 1;
+            execution.used_parallelism = false;
             execution
         } else {
-            apply_records(&mut output, &parsed.records, use_undo_data)?;
-            planned_execution
+            fs::copy(&request.input, &request.output)?;
+            let mut output = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(&request.output)?;
+            let use_undo_data = should_apply_undo_data(&mut output, &parsed.records)?;
+            let execution = if planned_execution.used_parallelism {
+                let (execution, pool) = context.build_pool(thread_capability)?;
+                let prepared =
+                    prepare_ppf_writes_parallel(&parsed.records, use_undo_data, &pool, context)?;
+                apply_prepared_ppf_writes(&mut output, &prepared)?;
+                execution
+            } else {
+                apply_records(&mut output, &parsed.records, use_undo_data)?;
+                planned_execution
+            };
+            output.flush()?;
+            execution
         };
-        output.flush()?;
 
         let checksum_suffix = if validate_checksums {
             String::new()
@@ -1416,6 +1429,48 @@ fn validate_blockcheck(input_path: &Path, blockcheck: &PpfBlockcheck) -> Result<
         ));
     }
 
+    Ok(())
+}
+
+fn ppf_required_output_len(input_len: u64, records: &[PpfRecord]) -> u64 {
+    records.iter().fold(input_len, |max_len, record| {
+        let end = record.offset.saturating_add(record.data.len() as u64);
+        max_len.max(end)
+    })
+}
+
+fn should_apply_undo_data_in_memory(bytes: &[u8], records: &[PpfRecord]) -> bool {
+    let Some(first) = records.first() else {
+        return false;
+    };
+    if first.undo_data.is_none() {
+        return false;
+    }
+    let start = first.offset as usize;
+    let end = start + first.data.len();
+    bytes.get(start..end) == Some(first.data.as_slice())
+}
+
+fn apply_records_in_memory(
+    records: &[PpfRecord],
+    use_undo_data: bool,
+    output: &mut Vec<u8>,
+) -> Result<()> {
+    for record in records {
+        let payload = if use_undo_data {
+            record.undo_data.as_deref().unwrap_or(record.data.as_ref())
+        } else {
+            record.data.as_ref()
+        };
+        let start = record.offset as usize;
+        let end = start + payload.len();
+        if end > output.len() {
+            return Err(RomWeaverError::Validation(
+                "PPF record exceeded output size".into(),
+            ));
+        }
+        output[start..end].copy_from_slice(payload);
+    }
     Ok(())
 }
 

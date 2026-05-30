@@ -78,32 +78,52 @@ impl PatchHandler for ApsGbaPatchHandler {
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
         }
-        fs::copy(&request.input, &request.output)?;
+        let target_size_u64 = u64::from(patch.target_size);
         let thread_capability = apsgba_apply_thread_capability(patch.records.len());
         let planned_execution = context.plan_threads(thread_capability.clone());
-        let mut output = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open(&request.output)?;
-        output.set_len(u64::from(patch.target_size))?;
-        let execution = if planned_execution.used_parallelism {
-            let (execution, pool) = context.build_pool(thread_capability)?;
-            let prepared = prepare_apsgba_writes_parallel(
+        let execution = if crate::can_apply_in_memory(actual_input_size, target_size_u64) {
+            let source_bytes = fs::read(&request.input)?;
+            let mut output_bytes = vec![0u8; patch.target_size as usize];
+            let copy_len = source_bytes.len().min(output_bytes.len());
+            output_bytes[..copy_len].copy_from_slice(&source_bytes[..copy_len]);
+            apply_apsgba_patch_in_memory(
                 &patch,
-                &request.input,
-                actual_input_size,
+                &source_bytes,
+                &mut output_bytes,
                 validate_checksums,
-                &pool,
-                context,
             )?;
-            apply_prepared_apsgba_writes(&mut output, &prepared)?;
+            fs::write(&request.output, &output_bytes)?;
+            let mut execution = planned_execution;
+            execution.effective_threads = 1;
+            execution.used_parallelism = false;
             execution
         } else {
-            let mut source = File::open(&request.input)?;
-            apply_apsgba_patch_in_place(&patch, &mut source, &mut output, validate_checksums)?;
-            planned_execution
+            fs::copy(&request.input, &request.output)?;
+            let mut output = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(&request.output)?;
+            output.set_len(target_size_u64)?;
+            let execution = if planned_execution.used_parallelism {
+                let (execution, pool) = context.build_pool(thread_capability)?;
+                let prepared = prepare_apsgba_writes_parallel(
+                    &patch,
+                    &request.input,
+                    actual_input_size,
+                    validate_checksums,
+                    &pool,
+                    context,
+                )?;
+                apply_prepared_apsgba_writes(&mut output, &prepared)?;
+                execution
+            } else {
+                let mut source = File::open(&request.input)?;
+                apply_apsgba_patch_in_place(&patch, &mut source, &mut output, validate_checksums)?;
+                planned_execution
+            };
+            output.flush()?;
+            execution
         };
-        output.flush()?;
 
         let checksum_suffix = if validate_checksums {
             String::new()
@@ -404,6 +424,50 @@ fn create_apsgba_patch_bytes(source: &[u8], target: &[u8]) -> Result<CreatedApsG
         target_size,
         records,
     ))
+}
+
+fn apply_apsgba_patch_in_memory(
+    patch: &ParsedApsGbaPatch,
+    source: &[u8],
+    output: &mut Vec<u8>,
+    validate_checksums: bool,
+) -> Result<()> {
+    let output_len = output.len();
+    for record in &patch.records {
+        let offset = record.offset as usize;
+        let source_len = source.len().saturating_sub(offset).min(APS_GBA_BLOCK_SIZE);
+        let write_len = output_len.saturating_sub(offset).min(APS_GBA_BLOCK_SIZE);
+
+        if validate_checksums {
+            let actual = crc16_bytes(&source[offset..offset + source_len]);
+            if actual != record.source_crc16 {
+                return Err(RomWeaverError::Validation(format!(
+                    "Source checksum invalid at offset {offset}; expected: {:04x}, Actual: {:04x}",
+                    record.source_crc16, actual
+                )));
+            }
+        }
+
+        for index in 0..write_len {
+            let source_byte = if index < source_len {
+                source[offset + index]
+            } else {
+                0
+            };
+            output[offset + index] = source_byte ^ record.xor_bytes[index];
+        }
+
+        if validate_checksums {
+            let actual = crc16_bytes(&output[offset..offset + write_len]);
+            if actual != record.target_crc16 {
+                return Err(RomWeaverError::Validation(format!(
+                    "Target checksum invalid at offset {offset}; expected: {:04x}, Actual: {:04x}",
+                    record.target_crc16, actual
+                )));
+            }
+        }
+    }
+    Ok(())
 }
 
 fn apply_apsgba_patch_in_place(

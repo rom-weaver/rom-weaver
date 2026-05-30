@@ -99,12 +99,9 @@ fn apply_supports_simple_and_rle_records() {
             &test_context_with_threads(&temp, 4),
         )
         .expect("apply");
-    assert!(
-        report
-            .thread_execution
-            .expect("thread execution")
-            .used_parallelism
-    );
+    let execution = report.thread_execution.expect("thread execution");
+    assert_eq!(execution.effective_threads, 1);
+    assert!(!execution.used_parallelism);
 
     assert_eq!(fs::read(output_path).expect("output"), b"aXYdZZZhij");
 }
@@ -214,12 +211,9 @@ fn create_and_apply_round_trip_for_n64_source() {
                 .with_patch_checksum_validation(PatchChecksumValidation::Strict),
         )
         .expect("apply");
-    assert!(
-        report
-            .thread_execution
-            .expect("thread execution")
-            .used_parallelism
-    );
+    let execution = report.thread_execution.expect("thread execution");
+    assert_eq!(execution.effective_threads, 1);
+    assert!(!execution.used_parallelism);
 
     assert_eq!(fs::read(output_path).expect("output"), modified);
 }
@@ -284,7 +278,7 @@ fn apply_with_overlapping_records_is_deterministic_across_thread_budgets() {
             .used_parallelism
     );
     assert!(
-        parallel_report
+        !parallel_report
             .thread_execution
             .expect("parallel execution")
             .used_parallelism

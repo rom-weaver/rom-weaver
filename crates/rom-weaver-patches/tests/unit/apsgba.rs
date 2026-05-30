@@ -62,12 +62,9 @@ fn create_and_apply_round_trip() {
             &test_context_with_threads(&temp, 4),
         )
         .expect("apply");
-    assert!(
-        apply_report
-            .thread_execution
-            .expect("thread execution")
-            .used_parallelism
-    );
+    let apply_execution = apply_report.thread_execution.expect("thread execution");
+    assert_eq!(apply_execution.effective_threads, 1);
+    assert!(!apply_execution.used_parallelism);
 
     assert_eq!(fs::read(output_path).expect("output"), target);
 }
@@ -119,7 +116,7 @@ fn apply_is_deterministic_across_thread_budgets() {
             .used_parallelism
     );
     assert!(
-        parallel_report
+        !parallel_report
             .thread_execution
             .expect("parallel execution")
             .used_parallelism

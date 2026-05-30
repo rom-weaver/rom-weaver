@@ -51,6 +51,12 @@ use solid::SolidPatchHandler;
 use tracing::trace;
 use ups::UpsPatchHandler;
 
+pub(crate) const IN_MEMORY_APPLY_LIMIT_BYTES: u64 = 256 * 1024 * 1024;
+
+pub(crate) fn can_apply_in_memory(a: u64, b: u64) -> bool {
+    a <= IN_MEMORY_APPLY_LIMIT_BYTES && b <= IN_MEMORY_APPLY_LIMIT_BYTES
+}
+
 const IPS: FormatDescriptor = FormatDescriptor {
     family: OperationFamily::Patch,
     name: "IPS",

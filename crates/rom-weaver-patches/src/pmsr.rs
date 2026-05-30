@@ -75,43 +75,54 @@ impl PatchHandler for PmsrPatchHandler {
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
         }
-        fs::copy(&request.input, &request.output)?;
-        let output = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open(&request.output)?;
-        output.set_len(output_len)?;
-        drop(output);
-
         let thread_capability = pmsr_apply_thread_capability(patch.records.len());
         let planned_execution = context.plan_threads(thread_capability.clone());
         let records_non_overlapping = pmsr_records_are_non_overlapping(&patch, output_len)?;
-        let execution = if planned_execution.used_parallelism && records_non_overlapping {
-            let (execution, pool) = context.build_pool(thread_capability)?;
-            apply_pmsr_patch_parallel_in_place(
-                &patch,
-                &request.output,
-                output_len,
-                execution.effective_threads,
-                &pool,
-                context,
-            )?;
+        let execution = if crate::can_apply_in_memory(source_len, output_len) {
+            let mut output_bytes = fs::read(&request.input)?;
+            output_bytes.resize(output_len as usize, 0);
+            apply_pmsr_records_in_memory(output_len, &patch.records, &mut output_bytes)?;
+            fs::write(&request.output, &output_bytes)?;
+            let mut execution = planned_execution;
+            execution.effective_threads = 1;
+            execution.used_parallelism = false;
             execution
         } else {
-            let mut output = OpenOptions::new()
+            fs::copy(&request.input, &request.output)?;
+            let output = OpenOptions::new()
                 .read(true)
                 .write(true)
                 .open(&request.output)?;
-            apply_pmsr_patch_in_place(&patch, output_len, &mut output)?;
-            output.flush()?;
-            if planned_execution.used_parallelism && !records_non_overlapping {
-                let mut fallback = planned_execution;
-                fallback.apply_pool_fallback(
-                    "MOD apply records overlap; preserving patch order with single-thread writes",
-                );
-                fallback
+            output.set_len(output_len)?;
+            drop(output);
+
+            if planned_execution.used_parallelism && records_non_overlapping {
+                let (execution, pool) = context.build_pool(thread_capability)?;
+                apply_pmsr_patch_parallel_in_place(
+                    &patch,
+                    &request.output,
+                    output_len,
+                    execution.effective_threads,
+                    &pool,
+                    context,
+                )?;
+                execution
             } else {
-                planned_execution
+                let mut output = OpenOptions::new()
+                    .read(true)
+                    .write(true)
+                    .open(&request.output)?;
+                apply_pmsr_patch_in_place(&patch, output_len, &mut output)?;
+                output.flush()?;
+                if planned_execution.used_parallelism && !records_non_overlapping {
+                    let mut fallback = planned_execution;
+                    fallback.apply_pool_fallback(
+                        "MOD apply records overlap; preserving patch order with single-thread writes",
+                    );
+                    fallback
+                } else {
+                    planned_execution
+                }
             }
         };
         let checksum_suffix = if validate_source {
@@ -354,6 +365,31 @@ fn create_pmsr_patch_bytes(original: &[u8], modified: &[u8]) -> Result<CreatedPm
     let modified_len_u64 = u64::try_from(modified.len())
         .map_err(|_| RomWeaverError::Validation("MOD target length exceeded u64".into()))?;
     finalize_created_pmsr_patch(records, modified_len_u64)
+}
+
+fn apply_pmsr_records_in_memory(
+    output_len: u64,
+    records: &[PmsrRecord],
+    output: &mut Vec<u8>,
+) -> Result<()> {
+    for record in records {
+        let end = checked_add(
+            record.offset,
+            u64::try_from(record.data.len())
+                .map_err(|_| RomWeaverError::Validation("MOD record length exceeded u64".into()))?,
+            "MOD record end",
+        )?;
+        if end > output_len {
+            return Err(RomWeaverError::Validation(
+                "MOD record exceeded declared output size".into(),
+            ));
+        }
+        if !record.data.is_empty() {
+            let start = record.offset as usize;
+            output[start..end as usize].copy_from_slice(&record.data);
+        }
+    }
+    Ok(())
 }
 
 fn apply_pmsr_patch_in_place(

@@ -145,7 +145,7 @@ fn apply_is_deterministic_across_thread_budgets() {
         .expect("parallel execution");
     assert!(capabilities.threaded_output);
     assert!(!single_execution.used_parallelism);
-    assert!(parallel_execution.used_parallelism);
+    assert!(!parallel_execution.used_parallelism);
 
     assert_eq!(
         fs::read(output_single).expect("single"),

@@ -44,46 +44,75 @@ impl PatPatchHandler {
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
         }
-        fs::copy(&request.input, &request.output)?;
-        let output_len = fs::metadata(&request.output)?.len();
+        let output_len = fs::metadata(&request.input)?.len();
         validate_pat_record_offsets(&grouped_records, output_len)?;
-        let input_bytes = read_pat_group_input_bytes(&grouped_records, &request.input, context)?;
         let thread_capability = pat_apply_thread_capability(grouped_records.len());
         let planned_execution = context.plan_threads(thread_capability.clone());
 
-        let (execution, mut writes) = if planned_execution.used_parallelism {
-            let (execution, pool) = context.build_pool(thread_capability)?;
-            let writes = pool.install(|| {
-                grouped_records
-                    .par_iter()
+        let (execution, writes) = if crate::can_apply_in_memory(output_len, output_len) {
+            let mut output_bytes = fs::read(&request.input)?;
+            let current_bytes: Vec<u8> = grouped_records
+                .iter()
+                .map(|g| output_bytes[g.offset as usize])
+                .collect();
+            let writes = grouped_records
+                .iter()
+                .enumerate()
+                .map(|(index, group)| {
+                    prepare_pat_offset_write(group, current_bytes[index], context)
+                })
+                .collect::<Result<Vec<_>>>()?;
+            for write in &writes {
+                output_bytes[write.offset as usize] = write.byte;
+            }
+            fs::write(&request.output, &output_bytes)?;
+            let mut execution = planned_execution;
+            execution.effective_threads = 1;
+            execution.used_parallelism = false;
+            (execution, writes)
+        } else {
+            fs::copy(&request.input, &request.output)?;
+            let input_bytes =
+                read_pat_group_input_bytes(&grouped_records, &request.input, context)?;
+            let (execution, mut writes) = if planned_execution.used_parallelism {
+                let (execution, pool) = context.build_pool(thread_capability)?;
+                let writes = pool.install(|| {
+                    grouped_records
+                        .par_iter()
+                        .enumerate()
+                        .map(|(index, group)| {
+                            prepare_pat_offset_write(group, input_bytes[index], context)
+                        })
+                        .collect::<Result<Vec<_>>>()
+                })?;
+                (execution, writes)
+            } else {
+                let writes = grouped_records
+                    .iter()
                     .enumerate()
                     .map(|(index, group)| {
                         prepare_pat_offset_write(group, input_bytes[index], context)
                     })
-                    .collect::<Result<Vec<_>>>()
-            })?;
+                    .collect::<Result<Vec<_>>>()?;
+                (planned_execution, writes)
+            };
+            writes.sort_by_key(|write| write.offset);
+            let mut output = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(&request.output)?;
+            for write in &writes {
+                output.seek(SeekFrom::Start(write.offset))?;
+                output.write_all(&[write.byte])?;
+            }
+            output.flush()?;
             (execution, writes)
-        } else {
-            let writes = grouped_records
-                .iter()
-                .enumerate()
-                .map(|(index, group)| prepare_pat_offset_write(group, input_bytes[index], context))
-                .collect::<Result<Vec<_>>>()?;
-            (planned_execution, writes)
         };
-
-        writes.sort_by_key(|write| write.offset);
-        let mut output = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open(&request.output)?;
 
         let mut forward_applied = 0usize;
         let mut reverse_applied = 0usize;
         let mut skipped = 0usize;
         for write in &writes {
-            output.seek(SeekFrom::Start(write.offset))?;
-            output.write_all(&[write.byte])?;
             forward_applied = forward_applied
                 .checked_add(write.forward_applied)
                 .ok_or_else(|| RomWeaverError::Validation("PAT apply count overflowed".into()))?;
@@ -94,7 +123,6 @@ impl PatPatchHandler {
                 .checked_add(write.skipped)
                 .ok_or_else(|| RomWeaverError::Validation("PAT apply count overflowed".into()))?;
         }
-        output.flush()?;
 
         let ignored_suffix = if parsed.ignored_lines > 0 {
             format!("; ignored {} non-record line(s)", parsed.ignored_lines)
