@@ -30,6 +30,10 @@ type WorkflowCreatePatchProgress = WorkflowRuntimeProgress & {
 };
 
 type WorkflowRuntimeLog = Pick<LogRecord, "details" | "level" | "message" | "namespace" | "timestamp">;
+type RuntimeWorkerTraceContext = {
+  logLevel?: string;
+  onLog?: (log: WorkflowRuntimeLog) => void;
+};
 
 type RuntimeWorkerPathSource = {
   cleanup: () => Promise<void>;
@@ -55,6 +59,7 @@ type RuntimeWorkerSourceRequest = {
   pathPrefix?: string;
   scope: RuntimeWorkerSourceScope;
   source: unknown;
+  trace?: RuntimeWorkerTraceContext;
 };
 
 type RuntimeWorkerOutput = {
@@ -87,6 +92,7 @@ type RuntimeWorkerIo = {
     run: (workerSource: RuntimeWorkerPathSource) => Promise<RuntimeWorkerOutput>;
     scope: RuntimeWorkerSourceScope;
     source: unknown;
+    trace?: RuntimeWorkerTraceContext;
   }) => Promise<PublicOutput>;
   stageSource: (request: RuntimeWorkerSourceRequest) => Promise<RuntimeWorkerPathSource>;
   stageSources: (requests: RuntimeWorkerSourceRequest[]) => Promise<RuntimeWorkerPathSource[]>;

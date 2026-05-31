@@ -167,6 +167,7 @@ const createSharedPatchRuntime = (adapter: PatchRuntimeAdapter): WorkflowRuntime
           pathPrefix: "apply-input",
           scope: "apply",
           source: input,
+          trace: traceContext,
         },
         ...patches.map((patch, index) => ({
           fallbackFileName: patch.patchFileName || `patch-${index + 1}.bin`,
@@ -174,6 +175,7 @@ const createSharedPatchRuntime = (adapter: PatchRuntimeAdapter): WorkflowRuntime
           pathPrefix: `apply-patch-${index + 1}`,
           scope: "apply" as const,
           source: patch.patchFile,
+          trace: traceContext,
         })),
       ]);
       const [inputSource, ...patchSources] = workerSources;
@@ -254,6 +256,7 @@ const createSharedPatchRuntime = (adapter: PatchRuntimeAdapter): WorkflowRuntime
     onLog,
     onProgress,
   }) => {
+    const traceContext = { logLevel, onLog };
     const workerSources = await adapter.workerIo.stageSources([
       {
         fallbackFileName: "original.bin",
@@ -261,6 +264,7 @@ const createSharedPatchRuntime = (adapter: PatchRuntimeAdapter): WorkflowRuntime
         pathPrefix: "create-patch-original",
         scope: "create-patch",
         source: original,
+        trace: traceContext,
       },
       {
         fallbackFileName: "modified.bin",
@@ -268,6 +272,7 @@ const createSharedPatchRuntime = (adapter: PatchRuntimeAdapter): WorkflowRuntime
         pathPrefix: "create-patch-modified",
         scope: "create-patch",
         source: modified,
+        trace: traceContext,
       },
     ]);
     try {
@@ -308,6 +313,7 @@ const createWorkerChecksumRuntime = (
       pathPrefix: "checksum-input",
       scope: "checksum",
       source,
+      trace: { logLevel, onLog },
     });
     try {
       const result = await runChecksumWorker(

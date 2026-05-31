@@ -4,6 +4,8 @@ import {
   getNamedSourceFileName,
   getNamedSourceSize,
 } from "../../storage/shared/binary/source-file-utils.ts";
+import { emitTraceLog } from "../../lib/logging.ts";
+import type { LogRecord } from "../../types/logging.ts";
 import type { WorkerStorageBucket } from "../shared/worker-storage/storage-layout.ts";
 import { getWorkerStorageBucketPath, WORKER_OPFS_MOUNTPOINT } from "../shared/worker-storage/storage-layout.ts";
 import { registerBrowserVirtualFile } from "./browser-virtual-files.ts";
@@ -17,6 +19,16 @@ type BrowserOpfsSourceRef = {
   size?: number;
   storageKind: "opfs";
   virtual?: boolean;
+};
+type BrowserOpfsSourceTraceContext = {
+  logLevel?: string;
+  onLog?: (record: Pick<LogRecord, "details" | "level" | "message" | "namespace" | "timestamp">) => void;
+};
+type BrowserOpfsSourceRefOptions = {
+  bucket?: WorkerStorageBucket;
+  mountPoint: string;
+  pathPrefix: string;
+  trace?: BrowserOpfsSourceTraceContext;
 };
 
 const isFileLike = (source: unknown): source is File =>
@@ -82,11 +94,20 @@ const getBrowserSourceTraceKind = (source: unknown) => {
   return typeof source;
 };
 
-const emitBrowserSourceRefTrace = (message: string, details?: Record<string, unknown>) => {
-  if (typeof console === "undefined") return;
-  const log = typeof console.debug === "function" ? console.debug : console.log;
-  log.call(console, `[rom-weaver trace] browser-opfs-source-ref: ${message}`, details || {});
-};
+const emitBrowserSourceRefTrace = (
+  trace: BrowserOpfsSourceTraceContext | undefined,
+  message: string,
+  details?: Record<string, unknown>,
+) =>
+  emitTraceLog(
+    {
+      logLevel: trace?.logLevel,
+      namespace: "runtime:browser-opfs-source-ref",
+      onLog: trace?.onLog,
+    },
+    message,
+    details || {},
+  );
 
 const normalizeVirtualFileName = (fileName: string | null | undefined, fallback = "input.bin") =>
   String(fileName || fallback)
@@ -141,7 +162,7 @@ const releaseVirtualInputPath = (filePath: string) => {
 };
 
 const createVirtualInputPath = (
-  options: { bucket?: WorkerStorageBucket; mountPoint: string; pathPrefix: string },
+  options: BrowserOpfsSourceRefOptions,
   fileName: string,
 ) => {
   const mountPoint = String(options.mountPoint || WORKER_OPFS_MOUNTPOINT).replace(TRAILING_SLASHES_REGEX, "");
@@ -162,14 +183,14 @@ const getOpfsPathSize = async (filePath: string): Promise<number | undefined> =>
 const createBrowserOpfsSourceRef = async (
   source: unknown,
   fallbackFileName: string,
-  options: { bucket?: WorkerStorageBucket; mountPoint: string; pathPrefix: string },
+  options: BrowserOpfsSourceRefOptions,
 ): Promise<BrowserOpfsSourceRef> => {
   const directSource = getNamedSource(source as Parameters<typeof getNamedSource>[0]);
   const fileName = getNamedSourceFileName(source as Parameters<typeof getNamedSource>[0], {
     fallback: fallbackFileName,
   });
   const sizeHint = getNamedSourceSize(source as Parameters<typeof getNamedSourceSize>[0]);
-  emitBrowserSourceRefTrace("create source ref started", {
+  emitBrowserSourceRefTrace(options.trace, "create source ref started", {
     directSourceKind: getBrowserSourceTraceKind(directSource),
     fallbackFileName,
     fileName,
@@ -182,7 +203,7 @@ const createBrowserOpfsSourceRef = async (
     getStringRecordValue(directSource, "filePath") ||
     getStringRecordValue(source, "filePath");
   if (filePath) {
-    emitBrowserSourceRefTrace("using existing OPFS path source", {
+    emitBrowserSourceRefTrace(options.trace, "using existing OPFS path source", {
       fileName,
       filePath,
       sizeHint,
@@ -205,7 +226,7 @@ const createBrowserOpfsSourceRef = async (
     const sourceFile = await fileHandle.getFile();
     virtualSource = toFileLike(sourceFile, fileName || fallbackFileName);
     virtualSize = sourceFile.size;
-    emitBrowserSourceRefTrace("using FileSystemFileHandle source", {
+    emitBrowserSourceRefTrace(options.trace, "using FileSystemFileHandle source", {
       fileName: sourceFile.name || fileName || fallbackFileName,
       size: sourceFile.size,
     });
@@ -214,7 +235,7 @@ const createBrowserOpfsSourceRef = async (
     if (shouldUseEagerMemoryVirtualSource(resolvedFileName, blob.size)) {
       virtualSource = new Uint8Array(await blob.arrayBuffer());
       virtualSize = virtualSource.byteLength;
-      emitBrowserSourceRefTrace("using eager memory Blob source", {
+      emitBrowserSourceRefTrace(options.trace, "using eager memory Blob source", {
         fileName: resolvedFileName,
         size: virtualSize,
         sourceKind: getBrowserSourceTraceKind(blob),
@@ -222,7 +243,7 @@ const createBrowserOpfsSourceRef = async (
     } else {
       virtualSource = toFileLike(blob, resolvedFileName);
       virtualSize = blob.size;
-      emitBrowserSourceRefTrace("using Blob source", {
+      emitBrowserSourceRefTrace(options.trace, "using Blob source", {
         fileName: resolvedFileName,
         size: blob.size,
         sourceKind: getBrowserSourceTraceKind(blob),
@@ -231,13 +252,13 @@ const createBrowserOpfsSourceRef = async (
   } else if (bytes) {
     virtualSource = bytes;
     virtualSize = bytes.byteLength;
-    emitBrowserSourceRefTrace("using byte source", {
+    emitBrowserSourceRefTrace(options.trace, "using byte source", {
       fileName: fileName || fallbackFileName,
       size: bytes.byteLength,
     });
   }
   if (!virtualSource) {
-    emitBrowserSourceRefTrace("source ref unsupported", {
+    emitBrowserSourceRefTrace(options.trace, "source ref unsupported", {
       directSourceKind: getBrowserSourceTraceKind(directSource),
       fallbackFileName,
       fileName,
@@ -248,7 +269,7 @@ const createBrowserOpfsSourceRef = async (
 
   const virtualFileName = normalizeVirtualFileName(fileName || fallbackFileName, fallbackFileName || "input.bin");
   const virtualPath = createVirtualInputPath(options, virtualFileName);
-  emitBrowserSourceRefTrace("registering virtual input", {
+  emitBrowserSourceRefTrace(options.trace, "registering virtual input", {
     fileName: virtualFileName,
     size: virtualSize,
     sourceKind: getBrowserSourceTraceKind(virtualSource),
@@ -264,7 +285,7 @@ const createBrowserOpfsSourceRef = async (
     releaseVirtualInputPath(virtualPath);
     throw error;
   }
-  emitBrowserSourceRefTrace("registered virtual input", {
+  emitBrowserSourceRefTrace(options.trace, "registered virtual input", {
     fileName: virtualFileName,
     size: virtualSize,
     virtualPath,

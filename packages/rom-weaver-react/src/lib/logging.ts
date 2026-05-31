@@ -4,6 +4,11 @@ type LogSink = (record: LogRecord) => void;
 type LogOptions = {
   level?: LogLevel | string | null;
 };
+type TraceLogContext = {
+  logLevel?: LogLevel | string | null;
+  namespace: string;
+  onLog?: (record: Pick<LogRecord, "details" | "level" | "message" | "namespace" | "timestamp">) => void;
+};
 
 type Logger = {
   debug: (message: string, details?: LogDetails, options?: LogOptions) => void;
@@ -49,6 +54,8 @@ const normalizeLogLevel = (value: unknown, fallback: LogLevel = "warn"): LogLeve
   const normalized = value.trim().toLowerCase();
   return isLogLevel(normalized) ? normalized : fallback;
 };
+
+const isTraceLogEnabled = (value: unknown): boolean => normalizeLogLevel(value, "off") === "trace";
 
 const assertLogLevel = (value: unknown): LogLevel => {
   const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
@@ -169,6 +176,17 @@ const emitLogRecord = (
   (globalLogSink || getDefaultConsoleSink())(record);
 };
 
+const emitTraceLog = (context: TraceLogContext, message: string, details: LogDetails = {}) => {
+  if (!isTraceLogEnabled(context.logLevel)) return;
+  context.onLog?.({
+    details,
+    level: "trace",
+    message,
+    namespace: context.namespace,
+    timestamp: new Date().toISOString(),
+  });
+};
+
 const createLogger = (namespace: string, defaults?: LogOptions): Logger => {
   const logWithLevel = (level: LogRecord["level"], message: string, details?: LogDetails, options?: LogOptions) =>
     emitLogRecord(namespace, level, message, details, options || defaults);
@@ -191,5 +209,15 @@ const getLoggerLevel = (): LogLevel => globalLogLevel;
 const formatLogRecord = (record: LogRecord): string =>
   `${record.timestamp} ${record.level.toUpperCase()} ${record.namespace}: ${record.message}`;
 
-export type { Logger, LogOptions, LogSink };
-export { assertLogLevel, configureLogger, createLogger, formatLogRecord, getLoggerLevel, normalizeLogLevel, shouldLog };
+export type { Logger, LogOptions, LogSink, TraceLogContext };
+export {
+  assertLogLevel,
+  configureLogger,
+  createLogger,
+  emitTraceLog,
+  formatLogRecord,
+  getLoggerLevel,
+  isTraceLogEnabled,
+  normalizeLogLevel,
+  shouldLog,
+};

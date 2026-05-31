@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getBaseFileName } from "../../lib/input/path-utils.ts";
+import { emitTraceLog } from "../../lib/logging.ts";
 import { buildPatchedOutputBaseName } from "../../lib/output/output-name-composition.ts";
 import { createTiming, formatTiming } from "../../lib/progress/timing.ts";
 import { ApplyWorkflow, type BrowserApplyResult, type WorkflowProgress } from "../../platform/browser/browser-api.ts";
@@ -394,6 +395,21 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     defaultSettings: props.defaultSettings || providerSettings,
     settings: props.settings,
   };
+  const traceSettings = props.settings || props.defaultSettings || providerSettings;
+  const emitApplyFormInputTrace = useCallback(
+    (message: string, details?: Record<string, unknown>) => {
+      emitTraceLog(
+        {
+          logLevel: traceSettings.logging?.level,
+          namespace: "react:apply-form",
+          onLog: traceSettings.logging?.sink,
+        },
+        message,
+        details || {},
+      );
+    },
+    [traceSettings],
+  );
 
   const syncInputSelectionRefs = useCallback((inputs: BinarySource[]) => {
     if (!sameBinarySourceLists(lastInputsRef.current, inputs)) {
@@ -974,6 +990,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           patchStack: resolvedStackController,
           ui: resolvedUiController,
         }}
+        onTrace={emitApplyFormInputTrace}
         startup={startup}
       />
       {candidateSelectionDialog}

@@ -653,6 +653,7 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
       pathPrefix: "archive-input",
       scope: "archive",
       source: normalizeZipLikeArchiveSource(workflowInput.source),
+      trace: { logLevel: workflowInput.options?.logLevel, onLog: workflowInput.options?.onLog },
     });
     try {
       const outputs = [];
@@ -759,6 +760,7 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
       pathPrefix: "archive-input",
       scope: "archive",
       source: normalizeZipLikeArchiveSource(workflowInput.source),
+      trace: { logLevel: workflowInput.options?.logLevel, onLog: workflowInput.options?.onLog },
     });
     try {
       return await runRomWeaverInspectListWorker(
@@ -795,6 +797,7 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
       pathPrefix: "chd-image",
       scope: "chd",
       source,
+      trace: { logLevel, onLog },
     });
     const stagedImageSources = imageFiles?.length
       ? await workerIo.stageSources(
@@ -803,6 +806,7 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
             pathPrefix: `chd-track-${index + 1}`,
             scope: "chd" as const,
             source: entry.source,
+            trace: { logLevel, onLog },
           })),
         )
       : [];
@@ -907,6 +911,7 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
       },
       scope: "rvz",
       source,
+      trace: { logLevel, onLog },
     }),
   createZ3ds: async ({ source, fileName, outputName, threads, z3dsCompressionLevel, logLevel, onLog, onProgress }) =>
     workerIo.runPathWorkerToOutput({
@@ -938,6 +943,7 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
       },
       scope: "z3ds",
       source,
+      trace: { logLevel, onLog },
     }),
   extractChd: async ({ source, fileName, outputName, mode, threads, logLevel, onLog, onProgress }) => {
     const workerSource = await workerIo.stageSource({
@@ -945,6 +951,7 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
       pathPrefix: "chd-input",
       scope: "chd",
       source,
+      trace: { logLevel, onLog },
     });
     try {
       const outDirPath = getPathDirectory(workerSource.filePath);
@@ -1063,6 +1070,7 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
         pathPrefix: "rvz-input",
         scope: "rvz",
         source,
+        trace: { logLevel, onLog },
       });
     let workerSource = await stageRvzSource();
     const ensureRvzSourceExists = async () => {
@@ -1140,6 +1148,7 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
       pathPrefix: "z3ds-input",
       scope: "z3ds",
       source,
+      trace: { logLevel, onLog },
     });
     try {
       const outDirPath = getPathDirectory(workerSource.filePath);
@@ -1224,6 +1233,7 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
       pathPrefix: "chd-input",
       scope: "chd",
       source,
+      trace: { logLevel, onLog },
     });
     try {
       const result = await runRomWeaverInspectListWorker(
@@ -1258,6 +1268,7 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
       pathPrefix: "z3ds-input",
       scope: "z3ds",
       source,
+      trace: { logLevel, onLog },
     });
     try {
       const result = await runRomWeaverInspectListWorker(

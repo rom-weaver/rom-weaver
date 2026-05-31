@@ -120,11 +120,12 @@ const getInputEventSourceSummary = (source: BinarySource | null | undefined) => 
   size: source instanceof File ? source.size : undefined,
 });
 
-const emitInputEventTrace = (message: string, details?: Record<string, unknown>) => {
-  if (typeof console === "undefined") return;
-  const log = typeof console.debug === "function" ? console.debug : console.log;
-  log.call(console, `[rom-weaver trace] apply-form: ${message}`, details || {});
-};
+type InputEventTraceEmitter = (message: string, details?: Record<string, unknown>) => void;
+const emitInputEventTrace = (
+  emitTrace: InputEventTraceEmitter | undefined,
+  message: string,
+  details?: Record<string, unknown>,
+) => emitTrace?.(message, details);
 
 const getDroppedBinarySources = async (dataTransfer: DataTransfer): Promise<BinarySource[]> => {
   const itemSources = await Promise.all(
@@ -184,6 +185,7 @@ function RomInfoMetaRow({
 
 function ApplyWorkflowFormView({
   controllers,
+  onTrace,
   startup = { message: "", status: "ready" },
 }: {
   controllers: {
@@ -193,6 +195,7 @@ function ApplyWorkflowFormView({
     notice?: NoticeController;
     dialog?: DialogController;
   };
+  onTrace?: InputEventTraceEmitter;
   startup?: StartupState;
 }) {
   const uiController = controllers.ui || inertUiController;
@@ -238,28 +241,28 @@ function ApplyWorkflowFormView({
     event.preventDefault();
     event.stopPropagation();
     setRomDragActive(false);
-    emitInputEventTrace("rom drop received", {
+    emitInputEventTrace(onTrace, "rom drop received", {
       disabled: uiState.romInput.disabled,
       fileCount: event.dataTransfer.files?.length || 0,
       itemCount: event.dataTransfer.items?.length || 0,
       types: Array.from(event.dataTransfer.types || []),
     });
     if (uiState.romInput.disabled) {
-      emitInputEventTrace("rom drop ignored", {
+      emitInputEventTrace(onTrace, "rom drop ignored", {
         reason: "disabled",
       });
       return;
     }
     void getDroppedBinarySources(event.dataTransfer)
       .then((sources) => {
-        emitInputEventTrace("rom drop sources resolved", {
+        emitInputEventTrace(onTrace, "rom drop sources resolved", {
           sourceCount: sources.length,
           sources: sources.map((source) => getInputEventSourceSummary(source)),
         });
         uiController.provideRomInputFile?.(sources[0] || null);
       })
       .catch((error) => {
-        emitInputEventTrace("rom drop source resolution failed", {
+        emitInputEventTrace(onTrace, "rom drop source resolution failed", {
           message: error instanceof Error ? error.message : String(error),
         });
       });
@@ -274,18 +277,18 @@ function ApplyWorkflowFormView({
     });
   };
   const openRomInput = () => {
-    emitInputEventTrace("rom input open requested", {
+    emitInputEventTrace(onTrace, "rom input open requested", {
       disabled: uiState.romInput.disabled,
       hasInputElement: !!romInputRef.current,
     });
     if (uiState.romInput.disabled) {
-      emitInputEventTrace("rom input open ignored", {
+      emitInputEventTrace(onTrace, "rom input open ignored", {
         reason: "disabled",
       });
       return;
     }
     if (!romInputRef.current) {
-      emitInputEventTrace("rom input open ignored", {
+      emitInputEventTrace(onTrace, "rom input open ignored", {
         reason: "missing-input-element",
       });
       return;
@@ -369,7 +372,7 @@ function ApplyWorkflowFormView({
             id="rom-weaver-input-file-rom"
             onChange={(event) => {
               const selectedFile = event.currentTarget.files?.[0] || null;
-              emitInputEventTrace("rom file input changed", {
+              emitInputEventTrace(onTrace, "rom file input changed", {
                 disabled: uiState.romInput.disabled,
                 fileCount: event.currentTarget.files?.length || 0,
                 source: getInputEventSourceSummary(selectedFile),

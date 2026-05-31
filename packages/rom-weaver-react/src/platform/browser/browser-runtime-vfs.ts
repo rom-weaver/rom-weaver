@@ -2,7 +2,8 @@ import { getNamedSource } from "../../storage/shared/binary/source-file-utils.ts
 import { createRuntimeOutputFromVfs } from "../../storage/vfs/runtime-output.ts";
 import { isVfsFileRef } from "../../storage/vfs/source-ref.ts";
 import type { LargeFileVfs } from "../../storage/vfs/types.ts";
-import type { RuntimeWorkerIo } from "../../types/workflow-runtime-adapter.ts";
+import { emitTraceLog } from "../../lib/logging.ts";
+import type { RuntimeWorkerIo, RuntimeWorkerSourceRequest } from "../../types/workflow-runtime-adapter.ts";
 import { createBrowserOpfsSourceRef } from "../../workers/protocol/browser-opfs-source-ref.ts";
 import { WORKER_OPFS_MOUNTPOINT } from "../../workers/shared/worker-storage/storage-layout.ts";
 
@@ -21,11 +22,20 @@ type CachedStagedSource = {
 
 const STAGED_SOURCE_CACHE_GRACE_MS = 5000;
 
-const emitBrowserRuntimeVfsTrace = (message: string, details?: Record<string, unknown>) => {
-  if (typeof console === "undefined") return;
-  const log = typeof console.debug === "function" ? console.debug : console.log;
-  log.call(console, `[rom-weaver trace] browser-runtime-vfs: ${message}`, details || {});
-};
+const emitBrowserRuntimeVfsTrace = (
+  trace: RuntimeWorkerSourceRequest["trace"],
+  message: string,
+  details: Record<string, unknown> = {},
+) =>
+  emitTraceLog(
+    {
+      logLevel: trace?.logLevel,
+      namespace: "runtime:browser-runtime-vfs",
+      onLog: trace?.onLog,
+    },
+    message,
+    details,
+  );
 
 const createBrowserRuntimeVfsIo = ({
   mountPoint = WORKER_OPFS_MOUNTPOINT,
@@ -111,8 +121,9 @@ const createBrowserRuntimeVfsIo = ({
     pathPrefix,
     scope,
     source,
+    trace,
   }) => {
-    emitBrowserRuntimeVfsTrace("stageSource start", {
+    emitBrowserRuntimeVfsTrace(trace, "stageSource start", {
       fallbackFileName,
       pathBucket,
       pathPrefix,
@@ -121,7 +132,7 @@ const createBrowserRuntimeVfsIo = ({
     const directSource = getNamedSource(source as Parameters<typeof getNamedSource>[0]);
     const directVfsSource = isVfsFileRef(directSource) ? directSource : isVfsFileRef(source) ? source : null;
     if (directVfsSource && directVfsSource.vfs === vfs) {
-      emitBrowserRuntimeVfsTrace("stageSource using direct vfs source", {
+      emitBrowserRuntimeVfsTrace(trace, "stageSource using direct vfs source", {
         fileName: directVfsSource.fileName || fallbackFileName,
         filePath: directVfsSource.path,
         scope,
@@ -139,8 +150,9 @@ const createBrowserRuntimeVfsIo = ({
         bucket: pathBucket,
         mountPoint,
         pathPrefix: pathPrefix || scope,
+        trace,
       });
-    emitBrowserRuntimeVfsTrace("stageSource creating source ref", {
+    emitBrowserRuntimeVfsTrace(trace, "stageSource creating source ref", {
       fallbackFileName,
       pathBucket,
       pathPrefix: pathPrefix || scope,
@@ -154,7 +166,7 @@ const createBrowserRuntimeVfsIo = ({
         cached.cleanupTimer = undefined;
       }
       cached.refCount += 1;
-      emitBrowserRuntimeVfsTrace("stageSource reusing cached staged source ref", {
+      emitBrowserRuntimeVfsTrace(trace, "stageSource reusing cached staged source ref", {
         fileName: cached.staged.fileName,
         filePath: cached.staged.filePath,
         scope,
@@ -173,7 +185,7 @@ const createBrowserRuntimeVfsIo = ({
         staged: resolved,
       };
       stagedSourceCache.set(cacheKey, entry);
-      emitBrowserRuntimeVfsTrace("stageSource cached staged source ref", {
+      emitBrowserRuntimeVfsTrace(trace, "stageSource cached staged source ref", {
         fileName: resolved.fileName,
         filePath: resolved.filePath,
         scope,
@@ -183,7 +195,7 @@ const createBrowserRuntimeVfsIo = ({
       return wrapCachedStagedSource(cacheKey, entry);
     };
     let staged = await stageFromSource();
-    emitBrowserRuntimeVfsTrace("stageSource source ref created", {
+    emitBrowserRuntimeVfsTrace(trace, "stageSource source ref created", {
       fileName: staged.fileName,
       filePath: staged.filePath,
       size: staged.size,
@@ -194,7 +206,7 @@ const createBrowserRuntimeVfsIo = ({
     }
     try {
       const stat = await assertStagedPath(staged.filePath);
-      emitBrowserRuntimeVfsTrace("stageSource path verified", {
+      emitBrowserRuntimeVfsTrace(trace, "stageSource path verified", {
         filePath: staged.filePath,
         size: staged.size ?? stat.size,
       });
@@ -203,7 +215,7 @@ const createBrowserRuntimeVfsIo = ({
         size: staged.size ?? stat.size,
       });
     } catch (error) {
-      emitBrowserRuntimeVfsTrace("stageSource path verify failed, retrying", {
+      emitBrowserRuntimeVfsTrace(trace, "stageSource path verify failed, retrying", {
         filePath: staged.filePath,
         message: error instanceof Error ? error.message : String(error),
       });
@@ -211,7 +223,7 @@ const createBrowserRuntimeVfsIo = ({
       staged = await stageFromSource();
       try {
         const stat = await assertStagedPath(staged.filePath);
-        emitBrowserRuntimeVfsTrace("stageSource retry path verified", {
+        emitBrowserRuntimeVfsTrace(trace, "stageSource retry path verified", {
           filePath: staged.filePath,
           size: staged.size ?? stat.size,
         });
@@ -220,7 +232,7 @@ const createBrowserRuntimeVfsIo = ({
           size: staged.size ?? stat.size,
         });
       } catch (retryError) {
-        emitBrowserRuntimeVfsTrace("stageSource retry failed", {
+        emitBrowserRuntimeVfsTrace(trace, "stageSource retry failed", {
           filePath: staged.filePath,
           message: retryError instanceof Error ? retryError.message : String(retryError),
         });
@@ -248,8 +260,17 @@ const createBrowserRuntimeVfsIo = ({
       throw new Error(failureMessage || "Worker did not return browser output");
     },
     releaseSources,
-    runPathWorkerToOutput: async ({ failureMessage, fallbackFileName, outputName, pathPrefix, run, scope, source }) => {
-      const workerSource = await stageSource({ fallbackFileName, pathPrefix, scope, source });
+    runPathWorkerToOutput: async ({
+      failureMessage,
+      fallbackFileName,
+      outputName,
+      pathPrefix,
+      run,
+      scope,
+      source,
+      trace,
+    }) => {
+      const workerSource = await stageSource({ fallbackFileName, pathPrefix, scope, source, trace });
       try {
         return await workerIo.createWorkerOutput(await run(workerSource), outputName, failureMessage);
       } finally {

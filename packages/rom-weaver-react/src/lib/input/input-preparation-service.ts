@@ -8,6 +8,7 @@ import type { SourceRef } from "../../types/source.ts";
 import type { ApplyWorkflowOptions, CreateWorkflowOptions } from "../../types/workflow-runtime.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import type { PatchFileInstance } from "../../workers/protocol/patch-engine.ts";
+import { emitTraceLog } from "../logging.ts";
 import { isCueEntryFileName, parseCueFileReferences } from "./archive.ts";
 import { getArchiveType } from "./archive-type-utils.ts";
 import { getArchiveMagicType, MAGIC_SIGNATURES } from "./archive-utils.ts";
@@ -98,20 +99,15 @@ const emitInputPreparationTrace = (
   message: string,
   details: Record<string, unknown> = {},
 ) => {
-  if (String(options?.logging?.level || "").toLowerCase() !== "trace") return;
-  options?.onLog?.({
-    details,
-    level: "trace",
+  emitTraceLog(
+    {
+      logLevel: options?.logging?.level,
+      namespace: "workflow:input-preparation",
+      onLog: options?.onLog,
+    },
     message,
-    namespace: "workflow:input-preparation",
-    timestamp: new Date().toISOString(),
-  });
-};
-
-const emitInputPreparationConsoleTrace = (message: string, details?: Record<string, unknown>) => {
-  if (typeof console === "undefined") return;
-  const log = typeof console.debug === "function" ? console.debug : console.log;
-  log.call(console, `[rom-weaver trace] input-preparation: ${message}`, details || {});
+    details,
+  );
 };
 
 const getFileExtension = (fileName: string | undefined) => {
@@ -141,9 +137,10 @@ const readBlobPrefix = async (blob: Blob, length: number) => {
 const getLazyBrowserSource = async (
   source: SourceRef,
   fallbackFileName: string,
+  options: InputPreparationOptions,
   behavior: InputPreparationBehaviorOptions = {},
 ): Promise<LazyBrowserSource | null> => {
-  emitInputPreparationConsoleTrace("lazy browser source check start", {
+  emitInputPreparationTrace(options, "lazy browser source check start", {
     behavior,
     source: summarizePreparationSource(source, fallbackFileName),
   });
@@ -152,7 +149,7 @@ const getLazyBrowserSource = async (
   const fileName = sourceAccess.fileName || fallbackFileName;
   const fileHandle = sourceAccess.getFileHandle();
   let blob = sourceAccess.getBlob();
-  emitInputPreparationConsoleTrace("lazy browser source access resolved", {
+  emitInputPreparationTrace(options, "lazy browser source access resolved", {
     fileName,
     hasBlob: !!blob,
     hasFileHandle: !!fileHandle,
@@ -160,24 +157,24 @@ const getLazyBrowserSource = async (
   });
   if (!blob && fileHandle) blob = await fileHandle.getFile();
   if (!blob) {
-    emitInputPreparationConsoleTrace("lazy browser source unavailable", {
+    emitInputPreparationTrace(options, "lazy browser source unavailable", {
       fileName,
       reason: "no-blob",
     });
     return null;
   }
-  emitInputPreparationConsoleTrace("lazy browser source read disc header start", {
+  emitInputPreparationTrace(options, "lazy browser source read disc header start", {
     fileName,
     prefixLength: MAX_DISC_MAGIC_PREFIX_LENGTH,
     size: blob.size,
   });
   const discHeader = await readBlobPrefix(blob, MAX_DISC_MAGIC_PREFIX_LENGTH);
-  emitInputPreparationConsoleTrace("lazy browser source read disc header finish", {
+  emitInputPreparationTrace(options, "lazy browser source read disc header finish", {
     fileName,
     readBytes: discHeader.byteLength,
   });
   if (DISC_DECOMPRESSION_EXTENSIONS.has(getFileExtension(fileName))) {
-    emitInputPreparationConsoleTrace("lazy browser source accepted by extension", {
+    emitInputPreparationTrace(options, "lazy browser source accepted by extension", {
       fileName,
     });
     return { blob, fileHandle, fileName };
@@ -185,7 +182,7 @@ const getLazyBrowserSource = async (
   const magicExtension = getDiscMagicExtension(discHeader);
   if (magicExtension) {
     const magicFileName = replaceFileExtension(fileName, magicExtension);
-    emitInputPreparationConsoleTrace("lazy browser source accepted by magic", {
+    emitInputPreparationTrace(options, "lazy browser source accepted by magic", {
       fileName,
       magicExtension,
       magicFileName,
@@ -193,20 +190,20 @@ const getLazyBrowserSource = async (
     return { blob, fileHandle, fileName: magicFileName };
   }
   if (!behavior.allowLazyBrowserRomSource) {
-    emitInputPreparationConsoleTrace("lazy browser source rejected", {
+    emitInputPreparationTrace(options, "lazy browser source rejected", {
       fileName,
       reason: "lazy-rom-source-disabled",
     });
     return null;
   }
   if (isCueEntryFileName(fileName)) {
-    emitInputPreparationConsoleTrace("lazy browser source rejected", {
+    emitInputPreparationTrace(options, "lazy browser source rejected", {
       fileName,
       reason: "cue-input",
     });
     return null;
   }
-  emitInputPreparationConsoleTrace("lazy browser source read archive header start", {
+  emitInputPreparationTrace(options, "lazy browser source read archive header start", {
     fileName,
     prefixLength: MAX_LAZY_BROWSER_PREFIX_LENGTH,
   });
@@ -215,20 +212,20 @@ const getLazyBrowserSource = async (
       ? await readBlobPrefix(blob, MAX_LAZY_BROWSER_PREFIX_LENGTH)
       : discHeader;
   const archiveMagicType = getArchiveMagicType(archiveHeader);
-  emitInputPreparationConsoleTrace("lazy browser source read archive header finish", {
+  emitInputPreparationTrace(options, "lazy browser source read archive header finish", {
     archiveMagicType: archiveMagicType || "",
     fileName,
     readBytes: archiveHeader.byteLength,
   });
   if (archiveMagicType && !getArchiveType({ fileName })) {
-    emitInputPreparationConsoleTrace("lazy browser source rejected", {
+    emitInputPreparationTrace(options, "lazy browser source rejected", {
       archiveMagicType,
       fileName,
       reason: "archive-magic-without-extension",
     });
     return null;
   }
-  emitInputPreparationConsoleTrace("lazy browser source accepted", {
+  emitInputPreparationTrace(options, "lazy browser source accepted", {
     fileName,
   });
   return { blob, fileHandle, fileName };
@@ -238,18 +235,19 @@ const createInputPreparationPatchFile = async (
   source: SourceRef,
   fallbackFileName: string,
   role: "patch" | "rom",
+  options: InputPreparationOptions,
   behavior: InputPreparationBehaviorOptions = {},
 ): Promise<PatchFileInstance> => {
-  emitInputPreparationConsoleTrace("create patch file start", {
+  emitInputPreparationTrace(options, "create patch file start", {
     behavior,
     fallbackFileName,
     role,
     source: summarizePreparationSource(source, fallbackFileName),
   });
   if (role === "patch") {
-    const lazyBrowserSource = await getLazyBrowserSource(source, fallbackFileName, behavior);
+    const lazyBrowserSource = await getLazyBrowserSource(source, fallbackFileName, options, behavior);
     if (lazyBrowserSource) {
-      emitInputPreparationConsoleTrace("create patch file lazy patch source", {
+      emitInputPreparationTrace(options, "create patch file lazy patch source", {
         fileName: lazyBrowserSource.fileName,
         size: lazyBrowserSource.blob.size,
       });
@@ -261,7 +259,7 @@ const createInputPreparationPatchFile = async (
         { materialize: false },
       );
     }
-    emitInputPreparationConsoleTrace("create patch file materialized patch source", {
+    emitInputPreparationTrace(options, "create patch file materialized patch source", {
       fallbackFileName,
     });
     return createPatchFile(source, fallbackFileName);
@@ -269,12 +267,12 @@ const createInputPreparationPatchFile = async (
 
   const sourceAccess = createSourceAccessFromSource(source, fallbackFileName);
   const sourceFileName = sourceAccess.fileName || fallbackFileName;
-  const lazyBrowserSource = await getLazyBrowserSource(source, fallbackFileName, {
+  const lazyBrowserSource = await getLazyBrowserSource(source, fallbackFileName, options, {
     ...behavior,
     allowLazyBrowserRomSource: true,
   });
   if (lazyBrowserSource) {
-    emitInputPreparationConsoleTrace("create patch file lazy rom source", {
+    emitInputPreparationTrace(options, "create patch file lazy rom source", {
       fileName: lazyBrowserSource.fileName,
       size: lazyBrowserSource.blob.size,
     });
@@ -290,7 +288,7 @@ const createInputPreparationPatchFile = async (
   const sourcePath =
     getNamedSourcePath(source as Parameters<typeof getNamedSourcePath>[0]) || sourceAccess.getFilePath();
   if (sourcePath) {
-    emitInputPreparationConsoleTrace("create patch file lazy external rom source", {
+    emitInputPreparationTrace(options, "create patch file lazy external rom source", {
       fileName: sourceFileName,
       size: sourceAccess.size ?? undefined,
       sourcePath,
@@ -301,7 +299,7 @@ const createInputPreparationPatchFile = async (
     });
   }
 
-  emitInputPreparationConsoleTrace("create patch file failed", {
+  emitInputPreparationTrace(options, "create patch file failed", {
     fileName: sourceFileName,
     reason: "no-path-backed-source",
   });
@@ -450,7 +448,7 @@ const prepareInputAssets = async (
     source: summarizePreparationSource(source, "input.bin"),
     sourceIndex,
   });
-  const file = await createInputPreparationPatchFile(source, "input.bin", "rom", behavior);
+  const file = await createInputPreparationPatchFile(source, "input.bin", "rom", options, behavior);
   emitInputPreparationTrace(options, "input.assets.patch-file.created", {
     fileName: file.fileName,
     filePath: file.filePath || "",
@@ -581,6 +579,7 @@ const prepareInputFile = async (
     source,
     role === "rom" ? "rom.bin" : "patch.bin",
     role,
+    options,
     role === "rom" ? behavior : {},
   );
   emitInputPreparationTrace(options, "input.file.patch-file.created", {
