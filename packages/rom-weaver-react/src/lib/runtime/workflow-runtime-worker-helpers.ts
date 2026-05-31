@@ -35,13 +35,15 @@ const normalizeCompressionWorkerEntries = (entries: SevenZipZstdCreateRequest["e
     u8array: entry.u8array || getArchiveEntryUint8Array(entry.data),
   }));
 
+const isCueOutput = (output: PublicOutput) => /\.cue$/i.test(output.fileName || output.path || "");
+
 const createCompressionExtractResult = (outputs: CompressionExtractResult["outputs"]): CompressionExtractResult => ({
   entries: outputs.map((output) => ({
     fileName: output.fileName,
     filename: output.fileName,
     size: output.size,
   })),
-  output: outputs[0] as CompressionExtractResult["output"],
+  output: (outputs.find((output) => !isCueOutput(output)) || outputs[0]) as CompressionExtractResult["output"],
   outputs,
 });
 

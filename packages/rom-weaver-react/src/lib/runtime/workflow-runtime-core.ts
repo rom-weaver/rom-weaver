@@ -1,7 +1,6 @@
 import { forwardCreatePatchProgress } from "../../platform/shared/workflow-runtime-progress.ts";
-import { createRuntimeOutputFromVfs } from "../../storage/vfs/runtime-output.ts";
 import type { ChecksumResult } from "../../types/checksum.ts";
-import type { PublicOutput } from "../../types/workflow-runtime.ts";
+import type { CompressionExtractResult, PublicOutput } from "../../types/workflow-runtime.ts";
 import type {
   RuntimeDiscCreateChdInput,
   RuntimeDiscCreateRvzInput,
@@ -34,6 +33,11 @@ const getPathBaseName = (value: string, fallback: string): string => {
   return parts[parts.length - 1] || fallback;
 };
 
+const isCueOutput = (output: PublicOutput) => CUE_FILE_REGEX.test(output.fileName || output.path || "");
+
+const withOutputFileName = (output: PublicOutput, fileName: string): PublicOutput =>
+  output.fileName === fileName ? output : { ...output, fileName };
+
 type DiscRuntimeAdapter = {
   createChd?: (input: RuntimeDiscCreateChdInput) => Promise<Awaited<ReturnType<RuntimeWorkerIo["createWorkerOutput"]>>>;
   createRvz?: (input: RuntimeDiscCreateRvzInput) => Promise<Awaited<ReturnType<RuntimeWorkerIo["createWorkerOutput"]>>>;
@@ -49,9 +53,7 @@ type DiscRuntimeAdapter = {
   listZ3ds?: (
     input: RuntimeDiscExtractZ3dsInput,
   ) => Promise<Awaited<ReturnType<NonNullable<WorkflowRuntime["compression"]["list"]>>>["entries"]>;
-  extractChd?: (
-    input: RuntimeDiscExtractChdInput,
-  ) => Promise<Awaited<ReturnType<RuntimeWorkerIo["createWorkerOutput"]>>>;
+  extractChd?: (input: RuntimeDiscExtractChdInput) => Promise<CompressionExtractResult>;
   extractRvz?: (
     input: RuntimeDiscExtractRvzInput,
   ) => Promise<Awaited<ReturnType<RuntimeWorkerIo["createWorkerOutput"]>>>;
@@ -345,14 +347,6 @@ const createSharedCompressionRuntime = (
   };
   const getSourceFileName = (source: RuntimeDiscExtractChdInput["source"], fallbackFileName: string) =>
     getNamedSourceFileName(source, { fallback: fallbackFileName }) || fallbackFileName;
-  const createCueOutput = async (
-    extractedOutput: PublicOutput & { chdCuePath?: string },
-    cueFileName: string,
-    cleanup?: () => Promise<void> | void,
-  ): Promise<PublicOutput> => {
-    if (!extractedOutput.chdCuePath) throw new Error("CHD extraction did not return a cue output path");
-    return createRuntimeOutputFromVfs(extractedOutput.vfs, extractedOutput.chdCuePath, cueFileName, { cleanup });
-  };
   const toDiscProgressCallback = (
     stage: "input" | "output",
     onProgress: CompressionProgressHandler,
@@ -447,7 +441,7 @@ const createSharedCompressionRuntime = (
       const selectedEntries = request.entries.filter((entryName) => typeof entryName === "string" && entryName);
       const cueEntryName = selectedEntries.find((entryName) => CUE_FILE_REGEX.test(entryName));
       const trackEntryName = selectedEntries.find((entryName) => !CUE_FILE_REGEX.test(entryName));
-      const extractedOutput = requireOutput(
+      const extracted = requireOutput(
         await discRuntime.extractChd?.({
           fileName: getSourceFileName(request.source, "input.chd"),
           logLevel: request.options?.logLevel,
@@ -456,24 +450,40 @@ const createSharedCompressionRuntime = (
           onProgress: toDiscProgressCallback("input", request.options?.onProgress),
           outputName: trackEntryName || request.outputName,
           source: request.source,
+          splitBin: typeof request.options?.chdSplitBin === "boolean" ? request.options.chdSplitBin : undefined,
           threads: request.options?.workerThreads,
         }),
         "CHD compression extraction is unavailable",
-      ) as PublicOutput & { chdCuePath?: string };
-      if (!cueEntryName) return createCompressionExtractResult([extractedOutput]);
-      const cueOutput = await createCueOutput(
-        extractedOutput,
-        cueEntryName || getPathBaseName(extractedOutput.chdCuePath || "", "disc.cue"),
-        trackEntryName ? undefined : extractedOutput.cleanup,
       );
+      if (!cueEntryName) return extracted;
+      const cueOutput = extracted.outputs.find(isCueOutput) || null;
+      const dataOutputs = extracted.outputs.filter((output) => !isCueOutput(output));
+      if (dataOutputs.length > 1) {
+        return createCompressionExtractResult([
+          ...(cueOutput && cueEntryName
+            ? [withOutputFileName(cueOutput, getPathBaseName(cueEntryName, cueEntryName))]
+            : []),
+          ...dataOutputs,
+        ]);
+      }
       const outputs = request.entries
         .map((entryName) => {
-          if (entryName === cueEntryName) return cueOutput;
-          if (entryName === trackEntryName) return extractedOutput;
-          return null;
+          const normalizedEntryName = getPathBaseName(entryName, entryName).toLowerCase();
+          const exactOutput =
+            extracted.outputs.find((output) => {
+              const outputName = getPathBaseName(output.fileName || output.path || "", "").toLowerCase();
+              return outputName === normalizedEntryName;
+            }) || null;
+          const fallbackOutput = CUE_FILE_REGEX.test(entryName)
+            ? cueOutput
+            : dataOutputs.length === 1
+              ? dataOutputs[0]
+              : null;
+          const output = exactOutput || fallbackOutput;
+          return output ? withOutputFileName(output, getPathBaseName(entryName, entryName)) : null;
         })
         .filter((output): output is PublicOutput => !!output);
-      return createCompressionExtractResult(outputs.length ? outputs : [cueOutput, extractedOutput]);
+      return createCompressionExtractResult(outputs.length ? outputs : extracted.outputs);
     }
     if (request.format === "rvz") {
       if (request.entries.length !== 1)

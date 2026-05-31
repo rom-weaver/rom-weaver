@@ -348,10 +348,12 @@ const toStagedInputInfos = (input: ApplyWorkflowInputState | null, originals: Bi
       fileName: stagedFileName,
       groupId: resolved.groupId,
       id: resolved.id,
+      kind: resolved.kind,
       order: resolved.order ?? index,
       parentCompressions: resolved.parentCompressions,
       size: resolved.size,
       sourceSize: resolved.sourceSize,
+      splitBinAvailable: resolved.splitBinAvailable,
       wasDecompressed: resolved.wasDecompressed,
     };
   });

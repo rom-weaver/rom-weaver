@@ -33,6 +33,78 @@ beforeEach(async () => {
   await clearOpfsRuntimeBuckets();
 });
 
+const createMultiTrackChdOutput = async (runId) => {
+  const stem = `multi-track-${runId}`;
+  const firstBinName = `${stem}-track1.bin`;
+  const secondBinName = `${stem}-track2.bin`;
+  const cueName = `${stem}.cue`;
+  const sectorBytes = 2352;
+  const sectorCount = 40;
+  const firstBinBytes = new Uint8Array(sectorBytes * sectorCount);
+  const secondBinBytes = new Uint8Array(sectorBytes * sectorCount);
+  for (let index = 0; index < firstBinBytes.length; index += 1) {
+    firstBinBytes[index] = (index * 19) & 0xff;
+    secondBinBytes[index] = (index * 29) & 0xff;
+  }
+  const cueText =
+    `FILE "${firstBinName}" BINARY\n` +
+    "  TRACK 01 MODE1/2352\n" +
+    "    INDEX 01 00:00:00\n" +
+    `FILE "${secondBinName}" BINARY\n` +
+    "  TRACK 02 MODE1/2352\n" +
+    "    INDEX 01 00:00:00\n";
+  let output = null;
+  try {
+    const result = await browserRuntime.compression.create?.({
+      chdSourceMode: "cd",
+      format: "chd",
+      imageFiles: [
+        {
+          fileName: firstBinName,
+          source: new File([firstBinBytes], firstBinName, { type: "application/octet-stream" }),
+        },
+        {
+          fileName: secondBinName,
+          source: new File([secondBinBytes], secondBinName, { type: "application/octet-stream" }),
+        },
+      ],
+      mode: "cd",
+      options: {
+        workerThreads: 2,
+      },
+      outputName: `${stem}.chd`,
+      source: new File([new TextEncoder().encode(cueText)], cueName, { type: "application/x-cue" }),
+    });
+    output = result?.output || null;
+    if (!output) throw new Error("Failed to create multi-track CHD test input");
+    const sourcePath = `${WORKER_OPFS_MOUNTPOINT}/chd-runtime-${runId}-${stem}.chd`;
+    const blob = await browserRuntime.publicOutput.getBlob(output);
+    await browserRuntime.vfs.truncate(sourcePath, 0);
+    await browserRuntime.vfs.write(sourcePath, new Uint8Array(await blob.arrayBuffer()), { fileOffset: 0 });
+    return {
+      source: {
+        fileName: `${stem}.chd`,
+        filePath: sourcePath,
+      },
+      sourcePath,
+      stem,
+    };
+  } finally {
+    await output?.cleanup?.().catch(() => undefined);
+  }
+};
+
+const expectCueWithoutChecksumsAndBinsWithChecksums = (outputs) => {
+  const cueOutput = outputs.find((entry) => /\.cue$/i.test(entry.fileName || ""));
+  const binOutputs = outputs.filter((entry) => /\.bin$/i.test(entry.fileName || ""));
+  expect(cueOutput?.checksums).toBeUndefined();
+  for (const binOutput of binOutputs) {
+    expect(binOutput.checksums?.crc32).toMatch(/^[0-9a-f]{8}$/i);
+    expect(binOutput.checksums?.md5).toMatch(/^[0-9a-f]{32}$/i);
+    expect(binOutput.checksums?.sha1).toMatch(/^[0-9a-f]{40}$/i);
+  }
+};
+
 test("rom-weaver runtime extracts a CHD staged through browser OPFS", async () => {
   await resetRomWeaverRunner();
   await warmupRomWeaverRunner();
@@ -43,7 +115,7 @@ test("rom-weaver runtime extracts a CHD staged through browser OPFS", async () =
   await browserRuntime.vfs.truncate(source, 0);
   await browserRuntime.vfs.write(source, bytes, { fileOffset: 0 });
   const progressEvents = [];
-  let output = null;
+  let outputs = [];
   try {
     const result = await browserRuntime.compression.extract?.({
       entries: ["game.bin", "game.cue"],
@@ -55,13 +127,81 @@ test("rom-weaver runtime extracts a CHD staged through browser OPFS", async () =
       source,
     });
 
-    output = result?.output || null;
+    outputs = result?.outputs || [];
+    const output = result?.output || null;
+    const cueOutput = outputs.find((entry) => /\.cue$/i.test(entry.fileName || ""));
+    const binOutputs = outputs.filter((entry) => /\.bin$/i.test(entry.fileName || ""));
     expect(output?.fileName).toMatch(/\.(bin|iso)$/i);
     expect(output?.size).toBeGreaterThan(0);
+    expect(cueOutput?.fileName).toBe("game.cue");
+    expect(cueOutput?.checksums).toBeUndefined();
+    expect(cueOutput?.chdCuePath).toBeUndefined();
+    expect(binOutputs.length).toBeGreaterThanOrEqual(1);
+    expect(output).toBe(binOutputs[0]);
+    for (const binOutput of binOutputs) {
+      expect(binOutput.chdCuePath).toBe(cueOutput?.path);
+      expect(binOutput.checksums?.crc32).toMatch(/^[0-9a-f]{8}$/i);
+      expect(binOutput.checksums?.md5).toMatch(/^[0-9a-f]{32}$/i);
+      expect(binOutput.checksums?.sha1).toMatch(/^[0-9a-f]{40}$/i);
+    }
     expect(progressEvents.length).toBeGreaterThan(0);
   } finally {
-    await output?.cleanup?.().catch(() => undefined);
+    await Promise.all(outputs.map((output) => output?.cleanup?.().catch(() => undefined)));
     await browserRuntime.vfs.remove(source).catch(() => undefined);
+  }
+});
+
+test("rom-weaver runtime honors split-bin extraction for multi-track CD CHDs", async () => {
+  await resetRomWeaverRunner();
+  await warmupRomWeaverRunner();
+
+  const runId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const { source: chdSource, sourcePath, stem } = await createMultiTrackChdOutput(runId);
+  let singleOutputs = [];
+  let splitOutputs = [];
+  try {
+    expect(chdSource.fileName).toBe(`${stem}.chd`);
+
+    const singleResult = await browserRuntime.compression.extract?.({
+      entries: [`${stem}.cue`, `${stem}.bin`],
+      format: "chd",
+      options: {
+        chdSplitBin: false,
+        workerThreads: 2,
+      },
+      source: chdSource,
+    });
+    singleOutputs = singleResult?.outputs || [];
+    expect(singleResult?.output?.fileName).toBe(`${stem}.bin`);
+    expect(
+      singleOutputs.filter((entry) => /\.cue$/i.test(entry.fileName || "")).map((entry) => entry.fileName),
+    ).toEqual([`${stem}.cue`]);
+    expect(
+      singleOutputs.filter((entry) => /\.bin$/i.test(entry.fileName || "")).map((entry) => entry.fileName),
+    ).toEqual([`${stem}.bin`]);
+    expectCueWithoutChecksumsAndBinsWithChecksums(singleOutputs);
+
+    const splitResult = await browserRuntime.compression.extract?.({
+      entries: [`${stem}.cue`, `${stem}.bin`],
+      format: "chd",
+      options: {
+        chdSplitBin: true,
+        workerThreads: 2,
+      },
+      source: chdSource,
+    });
+    splitOutputs = splitResult?.outputs || [];
+    expect(splitResult?.output?.fileName).toBe(`${stem}.track01.bin`);
+    expect(splitOutputs.filter((entry) => /\.cue$/i.test(entry.fileName || "")).map((entry) => entry.fileName)).toEqual(
+      [`${stem}.cue`],
+    );
+    expect(splitOutputs.filter((entry) => /\.bin$/i.test(entry.fileName || "")).map((entry) => entry.fileName)).toEqual(
+      [`${stem}.track01.bin`, `${stem}.track02.bin`],
+    );
+    expectCueWithoutChecksumsAndBinsWithChecksums(splitOutputs);
+  } finally {
+    await Promise.all([...singleOutputs, ...splitOutputs].map((output) => output?.cleanup?.().catch(() => undefined)));
+    await browserRuntime.vfs.remove(sourcePath).catch(() => undefined);
   }
 });
 
@@ -290,8 +430,6 @@ test("rom-weaver runtime creates a CD CHD from a cue source that references a si
   const runId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const binName = `chd-cue-${runId}-Crash Bandicoot (USA) - Quality of Life.bin`;
   const cueName = `chd-cue-${runId}-Crash Bandicoot (USA) - Quality of Life.cue`;
-  const binPath = `${WORKER_OPFS_MOUNTPOINT}/${binName}`;
-  const cuePath = `${WORKER_OPFS_MOUNTPOINT}/${cueName}`;
 
   const sectorBytes = 2352;
   const sectorCount = 32;
@@ -299,29 +437,28 @@ test("rom-weaver runtime creates a CD CHD from a cue source that references a si
   for (let index = 0; index < binBytes.length; index += 1) {
     binBytes[index] = (index * 17) & 0xff;
   }
-  await browserRuntime.vfs.truncate(binPath, 0);
-  await browserRuntime.vfs.write(binPath, binBytes, { fileOffset: 0 });
 
   // Cue references the sibling bin by basename, exactly like a patched disc output on disk.
   const cueText = `FILE "${binName}" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n`;
   const cueBytes = new TextEncoder().encode(cueText);
-  await browserRuntime.vfs.truncate(cuePath, 0);
-  await browserRuntime.vfs.write(cuePath, cueBytes, { fileOffset: 0 });
 
   let output = null;
   try {
     const result = await browserRuntime.compression.create?.({
       chdSourceMode: "cd",
       format: "chd",
+      imageFiles: [
+        {
+          fileName: binName,
+          source: new File([binBytes], binName, { type: "application/octet-stream" }),
+        },
+      ],
       mode: "cd",
       options: {
         workerThreads: 2,
       },
       outputName: "Crash Bandicoot (USA) - Quality of Life.chd",
-      source: {
-        fileName: cueName,
-        filePath: cuePath,
-      },
+      source: new File([cueBytes], cueName, { type: "application/x-cue" }),
     });
 
     output = result?.output || null;
@@ -332,7 +469,5 @@ test("rom-weaver runtime creates a CD CHD from a cue source that references a si
     expect(header).toBe("MComprHD");
   } finally {
     await output?.cleanup?.().catch(() => undefined);
-    await browserRuntime.vfs.remove(binPath).catch(() => undefined);
-    await browserRuntime.vfs.remove(cuePath).catch(() => undefined);
   }
 });

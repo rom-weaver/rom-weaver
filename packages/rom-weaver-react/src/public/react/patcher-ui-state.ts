@@ -72,10 +72,12 @@ type RomInputRowState = InputUiState & {
   id: string;
   order: number;
   groupId: string;
+  kind: string;
   info: RomInputInfoState;
   archivePathEntries?: ArchivePathEntryState[];
   size?: number;
   sourceSize?: number;
+  splitBinAvailable?: boolean;
   decompressionTimeMs?: number;
   wasDecompressed?: boolean;
 };
@@ -143,6 +145,12 @@ type PatcherUiState = {
     disabled: boolean;
     label: string;
   };
+  chdSplitBin: {
+    visible: boolean;
+    checked: boolean;
+    disabled: boolean;
+    label: string;
+  };
   outputChecksumWarning: {
     visible: boolean;
     message: string;
@@ -194,6 +202,12 @@ const createEmptyPatcherSectionNotices = () => ({
 
 const createEmptyPatcherUiState = (): PatcherUiState => ({
   ...createEmptyPatcherSectionNotices(),
+  chdSplitBin: {
+    checked: false,
+    disabled: true,
+    label: "Split BIN tracks",
+    visible: false,
+  },
   checksumOverride: {
     checked: false,
     disabled: true,
@@ -372,6 +386,7 @@ const normalizePatcherUiState = (
   const romInfo = isRecord(nextState.romInfo) ? nextState.romInfo : {};
   const patchDetails = isRecord(nextState.patchDetails) ? nextState.patchDetails : {};
   const checksumOverride = isRecord(nextState.checksumOverride) ? nextState.checksumOverride : {};
+  const chdSplitBin = isRecord(nextState.chdSplitBin) ? nextState.chdSplitBin : {};
   const outputChecksumWarning = isRecord(nextState.outputChecksumWarning) ? nextState.outputChecksumWarning : {};
   const cueDownload = isRecord(nextState.cueDownload) ? nextState.cueDownload : {};
   const sectionTimings = isRecord(nextState.sectionTimings) ? nextState.sectionTimings : {};
@@ -419,11 +434,13 @@ const normalizePatcherUiState = (
       id: typeof rowInput.id === "string" ? rowInput.id : `rom-input-${index + 1}`,
       info,
       invalid: !!rowInput.invalid,
+      kind: typeof rowInput.kind === "string" ? rowInput.kind : "",
       loading: !!rowInput.loading,
       order: typeof rowInput.order === "number" ? rowInput.order : index,
       progress: normalizeInputProgress(rowInput.progress),
       size: typeof rowInput.size === "number" ? rowInput.size : undefined,
       sourceSize: typeof rowInput.sourceSize === "number" ? rowInput.sourceSize : undefined,
+      splitBinAvailable: rowInput.splitBinAvailable === true,
       valid: !!rowInput.valid,
       wasDecompressed: rowInput.wasDecompressed === true,
     };
@@ -438,6 +455,12 @@ const normalizePatcherUiState = (
       !!romInfo.fileName);
   const embeddedPatchModeSource = typeof patchInput.embeddedPatchMode === "string" ? patchInput.embeddedPatchMode : "";
   return {
+    chdSplitBin: {
+      checked: !!chdSplitBin.checked,
+      disabled: !!chdSplitBin.disabled,
+      label: typeof chdSplitBin.label === "string" ? chdSplitBin.label : "Split BIN tracks",
+      visible: !!chdSplitBin.visible,
+    },
     checksumNotice: normalizeNoticeState(isRecord(nextState.checksumNotice) ? nextState.checksumNotice : null),
     checksumOverride: {
       checked: !!checksumOverride.checked,
@@ -543,6 +566,10 @@ const clonePatcherUiState = ({
   pendingCueDownload: PendingCueDownload;
   translate: (value: string) => string;
 }) => ({
+  chdSplitBin: {
+    ...patcherUiState.chdSplitBin,
+    label: translate("Split BIN tracks"),
+  },
   checksumNotice: { ...patcherUiState.checksumNotice },
   checksumOverride: {
     ...patcherUiState.checksumOverride,

@@ -939,7 +939,7 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
       scope: "z3ds",
       source,
     }),
-  extractChd: async ({ source, fileName, outputName, mode, threads, logLevel, onLog, onProgress }) => {
+  extractChd: async ({ source, fileName, outputName, mode, splitBin, threads, logLevel, onLog, onProgress }) => {
     const workerSource = await workerIo.stageSource({
       fallbackFileName: fileName,
       pathPrefix: "chd-input",
@@ -968,6 +968,7 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
       const stagedCueOutputFileName = shouldPreseedSingleBinCdOutputs
         ? getChdCdOutputFileName(stagedSourceFileName, "cue")
         : "";
+      const shouldSplitBin = mode === "cd" && splitBin !== false;
       const directOutputFileName = outputName || actualOutputFileName;
       const directOutputPath = stagedOutputFileName ? joinPath(outDirPath, stagedOutputFileName) : "";
       if (directOutputPath) {
@@ -984,73 +985,107 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
         invokeRomWeaverExtractWorker(
           {
             checksumAlgorithms: [...EXTRACT_CHECKSUM_ALGORITHMS],
-            invalidateMountCacheBeforeRun: !!directOutputPath,
+            invalidateMountCacheBeforeRun: !!directOutputPath || !!workerSource.virtual,
             logLevel,
             outDirPath,
             scratchFilePoolSize: directOutputPath ? (shouldPreseedSingleBinCdOutputs ? 2 : 1) : undefined,
             select: [],
             sourcePath: workerSource.filePath,
-            splitBin: mode === "cd",
+            splitBin: shouldSplitBin,
             workerThreads: threads,
           },
           onProgress ? forwardDiscProgress(onProgress) : undefined,
           onLog,
         );
+      const isChdCueOutput = (entry: ExtractedFileEntry | null | undefined) =>
+        !!entry &&
+        (String(entry.kind || "").toLowerCase() === "cue" || /\.cue$/i.test(entry.fileName || entry.path || ""));
+      const sameExtractedFile = (
+        left: ExtractedFileEntry | null | undefined,
+        right: ExtractedFileEntry | null | undefined,
+      ) =>
+        !!(left && right) &&
+        normalizeEntryPath(left.path || left.fileName) === normalizeEntryPath(right.path || right.fileName);
+      const pushUniqueExtractedFile = (entries: ExtractedFileEntry[], entry: ExtractedFileEntry | null | undefined) => {
+        if (!entry) return;
+        if (entries.some((candidate) => sameExtractedFile(candidate, entry))) return;
+        entries.push(entry);
+      };
       const selectChdOutputs = (value: Awaited<ReturnType<typeof runExtract>>) => {
         const cue =
           value.emittedFiles.find((entry) => entry.kind === "cue") ||
           value.emittedFiles.find((entry) => /\.cue$/i.test(entry.fileName));
+        const dataFiles = value.emittedFiles.filter((entry) => !isChdCueOutput(entry));
         const primary =
           (outputName ? findExtractedFile(value.emittedFiles, outputName) : null) ||
           (actualOutputFileName ? findExtractedFile(value.emittedFiles, actualOutputFileName) : null) ||
           (stagedOutputFileName ? findExtractedFile(value.emittedFiles, stagedOutputFileName) : null) ||
-          value.emittedFiles.find((entry) => entry !== cue) ||
+          dataFiles[0] ||
+          (directOutputPath
+            ? {
+                fileName: directOutputFileName || stagedOutputFileName || actualOutputFileName || fileName,
+                path: directOutputPath,
+              }
+            : null) ||
           value.emittedFiles[0];
+        const outputFiles: ExtractedFileEntry[] = [];
+        pushUniqueExtractedFile(outputFiles, cue);
+        if (!isChdCueOutput(primary)) pushUniqueExtractedFile(outputFiles, primary);
+        for (const entry of dataFiles) pushUniqueExtractedFile(outputFiles, entry);
         return {
           cueFile: cue,
+          outputFiles,
           primaryFile: primary,
         };
       };
-      const createChdOutput = async (
+      const createChdOutputs = async (
         cueFile: ReturnType<typeof selectChdOutputs>["cueFile"],
+        outputFiles: ReturnType<typeof selectChdOutputs>["outputFiles"],
         primaryFile: ReturnType<typeof selectChdOutputs>["primaryFile"],
       ) => {
-        if (!(primaryFile || directOutputPath)) throw new Error("CHD extraction did not emit any output files");
-        const normalizedPrimaryFileName = primaryFile
-          ? normalizeDiscEntryNameForSource(primaryFile.fileName, stagedSourceFileName, fileName)
-          : undefined;
-        const primaryPath = primaryFile?.path || directOutputPath;
-        const sidecarCleanupPaths = uniqueNonEmptyStrings([
-          cueFile?.path && cueFile.path !== primaryPath ? cueFile.path : "",
-        ]);
-        return attachDiscOutputMetadata(
-          await workerIo.createWorkerOutput(
-            {
-              checksums: primaryFile?.checksums,
-              cleanup: async () => {
-                await Promise.all(sidecarCleanupPaths.map((path) => browserVfs.remove(path).catch(() => undefined)));
+        if (!outputFiles.length) throw new Error("CHD extraction did not emit any output files");
+        const cleanupPaths = uniqueNonEmptyStrings(outputFiles.map((entry) => entry.path));
+        let cleanupDone = false;
+        const cleanupAllOutputs = async () => {
+          if (cleanupDone) return;
+          cleanupDone = true;
+          await Promise.all(cleanupPaths.map((path) => browserVfs.remove(path).catch(() => undefined)));
+        };
+        const outputs = await Promise.all(
+          outputFiles.map(async (entry) => {
+            const isCue = isChdCueOutput(entry);
+            const normalizedFileName = normalizeDiscEntryNameForSource(entry.fileName, stagedSourceFileName, fileName);
+            const fileNameForOutput =
+              !(isCue || shouldSplitBin) && sameExtractedFile(entry, primaryFile) && outputName
+                ? outputName
+                : normalizedFileName || entry.fileName || directOutputFileName || fileName;
+            const output = await workerIo.createWorkerOutput(
+              {
+                checksums: isCue ? undefined : entry.checksums,
+                cleanup: cleanupAllOutputs,
+                fileName: fileNameForOutput,
+                filePath: entry.path,
+                size: entry.sizeBytes,
               },
-              fileName: outputName || normalizedPrimaryFileName || primaryFile?.fileName || directOutputFileName,
-              filePath: primaryPath,
-              size: primaryFile?.sizeBytes,
-            },
-            outputName || normalizedPrimaryFileName || directOutputFileName || fileName,
-            "CHD extraction worker did not return browser output",
-          ),
-          { chdCuePath: cueFile?.path },
+              fileNameForOutput,
+              "CHD extraction worker did not return browser output",
+            );
+            return isCue ? output : attachDiscOutputMetadata(output, { chdCuePath: cueFile?.path });
+          }),
         );
+        return createCompressionExtractResult(outputs);
       };
 
       let extracted = await runExtract();
       let selected = selectChdOutputs(extracted);
       try {
-        return await createChdOutput(selected.cueFile, selected.primaryFile);
+        return await createChdOutputs(selected.cueFile, selected.outputFiles, selected.primaryFile);
       } catch (error) {
         if (!isMissingBrowserVfsOutputError(error)) throw error;
         await ensureBrowserVfsOutputPaths(extracted.emittedFiles.map((entry) => entry.path));
         extracted = await runExtract();
         selected = selectChdOutputs(extracted);
-        return createChdOutput(selected.cueFile, selected.primaryFile);
+        return createChdOutputs(selected.cueFile, selected.outputFiles, selected.primaryFile);
       }
     } finally {
       await workerSource.cleanup().catch(() => undefined);

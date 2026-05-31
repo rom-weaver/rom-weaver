@@ -1,7 +1,14 @@
 import { createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { ApplyWorkflowFormView } from "../../src/public/react/apply-workflow-form-view.tsx";
 import { ApplyPatchForm } from "../../src/public/react/index.tsx";
+import {
+  inertDialogController,
+  inertOutputController,
+  inertStackController,
+} from "../../src/public/react/patcher-form-session.ts";
+import { createEmptyPatcherUiState } from "../../src/public/react/patcher-ui-state.ts";
 import { resetRomWeaverRunner, warmupRomWeaverRunner } from "../../src/workers/rom-weaver/rom-weaver-runner.ts";
 
 const POSIX_DIRECTORY_PREFIX_REGEX = /^.*\//;
@@ -34,6 +41,12 @@ const mount = (element) => {
   return root;
 };
 
+const createStaticController = (state, methods = {}) => ({
+  getState: () => state,
+  subscribe: () => () => undefined,
+  ...methods,
+});
+
 const fileNameFromPath = (filePath) => filePath.replace(POSIX_DIRECTORY_PREFIX_REGEX, "");
 
 const loadFixtureFile = async (filePath, type = "application/octet-stream") => {
@@ -43,15 +56,17 @@ const loadFixtureFile = async (filePath, type = "application/octet-stream") => {
   return new File([bytes], fileNameFromPath(filePath), { type });
 };
 
-const selectFileInput = (input, file) => {
+const selectFileInputs = (input, files) => {
   const dataTransfer = new DataTransfer();
-  dataTransfer.items.add(file);
+  for (const file of files) dataTransfer.items.add(file);
   Object.defineProperty(input, "files", {
     configurable: true,
     value: dataTransfer.files,
   });
   input.dispatchEvent(new Event("change", { bubbles: true }));
 };
+
+const selectFileInput = (input, file) => selectFileInputs(input, [file]);
 
 const setFormControlValue = (element, value) => {
   const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(element), "value");
@@ -170,6 +185,10 @@ const getInputStackFileName = () =>
   document.querySelector("#rom-weaver-list-input-stack .rom-weaver-input-stack-file strong")?.textContent?.trim() ||
   document.querySelector("#rom-weaver-list-input-stack .rom-weaver-input-stack-file")?.textContent?.trim() ||
   "";
+const getInputStackFileNames = () =>
+  Array.from(document.querySelectorAll("#rom-weaver-list-input-stack .rom-weaver-input-stack-file strong"))
+    .map((entry) => entry.textContent?.trim() || "")
+    .filter(Boolean);
 const getOutputFileNameValue = () => document.getElementById("rom-weaver-input-output-file-name")?.value || "";
 
 const waitForInputStackFileName = async () => {
@@ -545,8 +564,8 @@ test("clearing ROM input releases extracted OPFS files", async () => {
   await clickCandidateSelectionOption("game.bin");
   await waitForInputStackFileName();
 
-  const clearButton = document.querySelector("button[title='Clear ROM input']");
-  if (!(clearButton instanceof HTMLButtonElement)) throw new Error("Missing clear ROM input button");
+  const clearButton = document.querySelector("button[title='Clear ROM input'], button[title='Remove ROM input']");
+  if (!(clearButton instanceof HTMLButtonElement)) throw new Error("Missing clear or remove ROM input button");
   clearButton.click();
 
   await expect
@@ -568,8 +587,8 @@ test("clearing CHD ROM input does not leave staged OPFS source files", async () 
 
   expect(await listOpfsStagedInputSourceFiles("game-cd.chd")).toEqual([]);
 
-  const clearButton = document.querySelector("button[title='Clear ROM input']");
-  if (!(clearButton instanceof HTMLButtonElement)) throw new Error("Missing clear ROM input button");
+  const clearButton = document.querySelector("button[title='Clear ROM input'], button[title='Remove ROM input']");
+  if (!(clearButton instanceof HTMLButtonElement)) throw new Error("Missing clear or remove ROM input button");
   clearButton.click();
 
   await expect
@@ -580,6 +599,145 @@ test("clearing CHD ROM input does not leave staged OPFS source files", async () 
   await expect
     .poll(async () => (await listOpfsStagedInputSourceFiles("game-cd")).length, { interval: 50, timeout: 3000 })
     .toBe(0);
+});
+
+test("direct CUE plus BIN upload hides CUE row checksums", async () => {
+  mount(createElement(ApplyPatchForm));
+
+  await expect.poll(() => document.getElementById("rom-weaver-input-file-rom")).not.toBeNull();
+  expect(document.getElementById("rom-weaver-input-file-rom")?.multiple).toBe(false);
+
+  const rawInput = await loadFixtureFile(RAW_ROM);
+  const binFile = new File([await rawInput.arrayBuffer()], "direct-disc.bin", { type: "application/octet-stream" });
+  const cueFile = new File(
+    ['FILE "direct-disc.bin" BINARY\n  TRACK 01 MODE1/2048\n    INDEX 01 00:00:00\n'],
+    "direct-disc.cue",
+    { type: "application/x-cue" },
+  );
+
+  selectFileInputs(document.getElementById("rom-weaver-input-file-rom"), [cueFile, binFile]);
+
+  const getRows = () => Array.from(document.querySelectorAll("#rom-weaver-list-input-stack tr"));
+  const getRow = (fileName) => getRows().find((row) => row.textContent?.includes(fileName));
+  const getChecksums = (row) => ({
+    crc32: row?.querySelector("[id^='rom-weaver-span-crc32']")?.textContent?.trim() || "",
+    md5: row?.querySelector("[id^='rom-weaver-span-md5']")?.textContent?.trim() || "",
+    sha1: row?.querySelector("[id^='rom-weaver-span-sha1']")?.textContent?.trim() || "",
+  });
+
+  await expect
+    .poll(() => getRows().filter((row) => row.textContent?.includes("direct-disc.")).length, {
+      timeout: 30000,
+    })
+    .toBe(2);
+  await expect.poll(() => getChecksums(getRow("direct-disc.bin")).crc32, { timeout: 30000 }).toMatch(/^[0-9a-f]{8}$/i);
+
+  expect(getRow("direct-disc.cue")?.querySelector(".rom-weaver-checksum-section")).toBeNull();
+  expect(getChecksums(getRow("direct-disc.cue"))).toEqual({ crc32: "", md5: "", sha1: "" });
+  expect(getChecksums(getRow("direct-disc.bin")).md5).toMatch(/^[0-9a-f]{32}$/i);
+  expect(getChecksums(getRow("direct-disc.bin")).sha1).toMatch(/^[0-9a-f]{40}$/i);
+});
+
+test("direct CUE plus BIN upload can output CHD from the CUE source", async () => {
+  const downloadNames = [];
+  const originalAnchorClick = HTMLAnchorElement.prototype.click;
+  HTMLAnchorElement.prototype.click = function (...args) {
+    downloadNames.push(this.download || "");
+    return originalAnchorClick.apply(this, args);
+  };
+  try {
+    mount(
+      createElement(ApplyPatchForm, {
+        defaultSettings: {
+          output: {
+            compression: "chd",
+          },
+          workers: {
+            threads: 2,
+          },
+        },
+      }),
+    );
+
+    await expect.poll(() => document.getElementById("rom-weaver-input-file-rom")).not.toBeNull();
+
+    const sectorBytes = 2352;
+    const sectorCount = 32;
+    const binBytes = new Uint8Array(sectorBytes * sectorCount);
+    for (let index = 0; index < binBytes.length; index += 1) {
+      binBytes[index] = (index * 17) & 0xff;
+    }
+    const binFile = new File([binBytes], "direct-disc.bin", { type: "application/octet-stream" });
+    const cueFile = new File(
+      ['FILE "direct-disc.bin" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n'],
+      "direct-disc.cue",
+      { type: "application/x-cue" },
+    );
+
+    selectFileInputs(document.getElementById("rom-weaver-input-file-rom"), [cueFile, binFile]);
+
+    await expect
+      .poll(
+        () =>
+          Array.from(document.querySelectorAll("#rom-weaver-list-input-stack tr")).filter((row) =>
+            row.textContent?.includes("direct-disc."),
+          ).length,
+        { timeout: 30000 },
+      )
+      .toBe(2);
+    await waitForApplyButtonEnabled();
+    await clickApplyButton();
+
+    const applyState = await waitForApplyOutcome();
+    expect(applyState).not.toBeNull();
+    expect(applyState?.kind, applyState && "errorText" in applyState ? applyState.errorText : "").toBe("download");
+    expect(downloadNames.at(-1)).toBe("direct-disc.chd");
+  } finally {
+    HTMLAnchorElement.prototype.click = originalAnchorClick;
+  }
+});
+
+test("split-bin checkbox renders only when CHD split-bin is available", async () => {
+  const hiddenState = createEmptyPatcherUiState();
+  mount(
+    createElement(ApplyWorkflowFormView, {
+      controllers: {
+        dialog: inertDialogController,
+        output: inertOutputController,
+        patchStack: inertStackController,
+        ui: createStaticController(hiddenState),
+      },
+    }),
+  );
+  expect(document.getElementById("rom-weaver-checkbox-chd-split-bin")).toBeNull();
+
+  const visibleState = createEmptyPatcherUiState();
+  visibleState.chdSplitBin = {
+    checked: true,
+    disabled: false,
+    label: "Split BIN tracks",
+    visible: true,
+  };
+  const setChdSplitBin = vi.fn();
+  mount(
+    createElement(ApplyWorkflowFormView, {
+      controllers: {
+        dialog: inertDialogController,
+        output: inertOutputController,
+        patchStack: inertStackController,
+        ui: createStaticController(visibleState, { setChdSplitBin }),
+      },
+    }),
+  );
+
+  await expect
+    .poll(() => document.getElementById("rom-weaver-checkbox-chd-split-bin") instanceof HTMLInputElement)
+    .toBe(true);
+  const splitBinCheckbox = document.getElementById("rom-weaver-checkbox-chd-split-bin");
+  expect(splitBinCheckbox).toBeInstanceOf(HTMLInputElement);
+  expect(splitBinCheckbox.checked).toBe(true);
+  splitBinCheckbox.click();
+  expect(setChdSplitBin).toHaveBeenCalledWith(false);
 });
 
 test("clearing a selected archive input requires selection again when re-added", async () => {
@@ -689,6 +847,7 @@ test("input stack shows resolved extracted disc filename after staging", async (
   const chdDisplayedName = await waitForInputStackFileName();
   expect(chdDisplayedName).not.toMatch(/\.chd$/i);
   expect(chdDisplayedName).toMatch(/\.(bin|iso)\b/i);
+  expect(document.getElementById("rom-weaver-checkbox-chd-split-bin")).toBeNull();
 });
 
 test("patch row shows extraction progress and extracted patch naming", async () => {

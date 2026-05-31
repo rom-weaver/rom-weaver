@@ -232,7 +232,7 @@ const resolveSingleCompressionInput = async (
       outputName,
       source,
     });
-    const output = result.outputs[0];
+    const output = result.output || result.outputs[0];
     if (!output) throw new Error(`Compression extraction did not return output: ${format}`);
     const extracted = await createPatchFileFromPublicOutput(output, output.fileName || outputName, {
       materializeBlob: false,

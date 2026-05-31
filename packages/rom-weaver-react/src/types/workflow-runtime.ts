@@ -107,6 +107,7 @@ type CompressionEntryInput = RuntimeCompressionEntryInput;
 
 type CompressionWorkflowOptions = {
   workerThreads?: number | string;
+  chdSplitBin?: boolean;
   logLevel?: LogLevel;
   extractChecksumAlgorithms?: string[];
   onLog?: (record: Pick<LogRecord, "details" | "level" | "message" | "namespace" | "timestamp">) => void;
