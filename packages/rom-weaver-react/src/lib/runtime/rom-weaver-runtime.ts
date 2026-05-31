@@ -1,9 +1,9 @@
 import type { CompressionLevelProfile, RomWeaverCommand, ThreadBudget } from "rom-weaver-wasm";
+import { withBrowserOutputStorageFailureContext } from "../../storage/browser/browser-output-storage-guard.ts";
 import {
   formatBrowserStorageEstimateState,
   getBrowserStorageEstimateState,
 } from "../../storage/browser/browser-storage-estimate.ts";
-import { withBrowserOutputStorageFailureContext } from "../../storage/browser/browser-output-storage-guard.ts";
 import type { ChecksumResult } from "../../types/checksum.ts";
 import type { LogLevel } from "../../types/logging.ts";
 import type { CompressionListResult } from "../../types/workflow-runtime.ts";

@@ -22,8 +22,8 @@ const rootStaticAssetSources = {
   ),
   "/apple-touch-icon.png": path.join(rootDir, "src", "assets", "app", "root", "apple-touch-icon.png"),
   "/favicon.ico": path.join(rootDir, "src", "assets", "app", "root", "favicon.ico"),
-  "/manifest.json": rootManifestSourcePath,
   "/logo.svg": path.join(rootDir, "src", "assets", "app", "logo.svg"),
+  "/manifest.json": rootManifestSourcePath,
 };
 const staticAppAssetSourceDir = path.join(rootDir, "src", "assets", "app");
 const securityHeaders = {

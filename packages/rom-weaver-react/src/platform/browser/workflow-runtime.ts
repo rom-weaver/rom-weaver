@@ -83,9 +83,10 @@ const getChdCdOutputFileName = (fileName: string, extension: "bin" | "cue"): str
   `${getFileStem(getPathBaseName(fileName, "input.chd")) || "input"}.${extension}`;
 
 const getChdCreateFormat = (requestedMode: string): string => {
-  if (requestedMode === "dvd") return "chd-dvd";
-  if (requestedMode === "raw") return "chd-raw";
-  if (requestedMode === "hd") return "chd-hd";
+  if (requestedMode === "cd" || requestedMode === "chd-cd") return "chd-cd";
+  if (requestedMode === "dvd" || requestedMode === "chd-dvd") return "chd-dvd";
+  if (requestedMode === "raw" || requestedMode === "chd-raw") return "chd-raw";
+  if (requestedMode === "hd" || requestedMode === "chd-hd") return "chd-hd";
   return "chd";
 };
 

@@ -277,6 +277,7 @@ beforeEach(async () => {
   mountedRoot?.unmount?.();
   mountedRoot = null;
   await new Promise((resolve) => globalThis.setTimeout(resolve, 40));
+  await clearOpfsInputDirectory();
   await resetRomWeaverRunner();
   await warmupRomWeaverRunner();
   await new Promise((resolve) => globalThis.setTimeout(resolve, 20));

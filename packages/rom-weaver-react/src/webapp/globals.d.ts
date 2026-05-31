@@ -18,6 +18,8 @@ declare global {
       syncFromStoredSettings: () => void;
       isEnabled: () => boolean;
     };
+    ROM_WEAVER_BROWSER_DIAGNOSTICS?: import("./browser-runtime-diagnostics.ts").BrowserRuntimeDiagnosticsApi;
+    ROM_WEAVER_MOBILE_SAFARI_DIAGNOSTICS?: import("./browser-runtime-diagnostics.ts").BrowserRuntimeDiagnosticsApi;
     __ROM_WEAVER_ERUDA_INITIALIZED__?: boolean;
     eruda?: {
       init: () => void;

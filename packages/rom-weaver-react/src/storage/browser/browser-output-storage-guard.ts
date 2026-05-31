@@ -1,10 +1,10 @@
 import {
+  type BrowserStorageEstimateState,
+  type BrowserStorageManagerLike,
   formatBrowserStorageEstimateState,
   formatByteCount,
   getBrowserStorageEstimateState,
   requestBrowserStoragePersistence,
-  type BrowserStorageEstimateState,
-  type BrowserStorageManagerLike,
 } from "./browser-storage-estimate.ts";
 
 type BrowserOutputStorageGuardOptions = {
@@ -89,7 +89,13 @@ const ensureBrowserStorageAvailableForOutput = async ({
   }
 
   throw createOutputStorageError(
-    formatStorageShortfallMessage(operationLabel, requiredByteCount, estimate, persistenceRequested, persistenceGranted),
+    formatStorageShortfallMessage(
+      operationLabel,
+      requiredByteCount,
+      estimate,
+      persistenceRequested,
+      persistenceGranted,
+    ),
     getStorageDetails(estimate, {
       operationLabel,
       persistenceGranted,
@@ -101,11 +107,7 @@ const ensureBrowserStorageAvailableForOutput = async ({
 
 const withBrowserOutputStorageFailureContext = async (
   error: unknown,
-  {
-    operationLabel,
-    requiredBytes,
-    storage,
-  }: BrowserOutputStorageGuardOptions,
+  { operationLabel, requiredBytes, storage }: BrowserOutputStorageGuardOptions,
 ): Promise<unknown> => {
   const message = error instanceof Error ? error.message : String(error || "");
   if (BROWSER_OUTPUT_STORAGE_CONTEXT_REGEX.test(message)) return error;

@@ -1,10 +1,10 @@
+import { emitTraceLog } from "../../lib/logging.ts";
 import { getBrowserSourceBlob, getBrowserSourceHandle } from "../../storage/browser/browser-source-primitives.ts";
 import {
   getNamedSource,
   getNamedSourceFileName,
   getNamedSourceSize,
 } from "../../storage/shared/binary/source-file-utils.ts";
-import { emitTraceLog } from "../../lib/logging.ts";
 import type { LogRecord } from "../../types/logging.ts";
 import type { WorkerStorageBucket } from "../shared/worker-storage/storage-layout.ts";
 import { getWorkerStorageBucketPath, WORKER_OPFS_MOUNTPOINT } from "../shared/worker-storage/storage-layout.ts";
@@ -141,10 +141,7 @@ const releaseVirtualInputPath = (filePath: string) => {
   allocatedVirtualInputPaths.delete(filePath);
 };
 
-const createVirtualInputPath = (
-  options: BrowserOpfsSourceRefOptions,
-  fileName: string,
-) => {
+const createVirtualInputPath = (options: BrowserOpfsSourceRefOptions, fileName: string) => {
   const mountPoint = String(options.mountPoint || WORKER_OPFS_MOUNTPOINT).replace(TRAILING_SLASHES_REGEX, "");
   const normalizedFileName = normalizeVirtualFileName(fileName);
   return allocateVirtualInputPath(mountPoint, normalizedFileName);

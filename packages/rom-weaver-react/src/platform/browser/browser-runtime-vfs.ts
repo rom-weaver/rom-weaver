@@ -1,8 +1,8 @@
+import { emitTraceLog } from "../../lib/logging.ts";
 import { getNamedSource } from "../../storage/shared/binary/source-file-utils.ts";
 import { createRuntimeOutputFromVfs } from "../../storage/vfs/runtime-output.ts";
 import { isVfsFileRef } from "../../storage/vfs/source-ref.ts";
 import type { LargeFileVfs } from "../../storage/vfs/types.ts";
-import { emitTraceLog } from "../../lib/logging.ts";
 import type { RuntimeWorkerIo, RuntimeWorkerSourceRequest } from "../../types/workflow-runtime-adapter.ts";
 import { createBrowserOpfsSourceRef } from "../../workers/protocol/browser-opfs-source-ref.ts";
 import { WORKER_OPFS_MOUNTPOINT } from "../../workers/shared/worker-storage/storage-layout.ts";

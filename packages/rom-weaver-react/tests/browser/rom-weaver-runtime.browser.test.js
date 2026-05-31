@@ -48,6 +48,8 @@ test("selectRomWeaverOutputPath writes flat work outputs and rejects active inpu
 test("browser public source validation rejects path sources", () => {
   const assertPublicSource = createPublicSourceValidator({ environmentLabel: "browser" });
   expect(() => assertPublicSource("/work/input.bin")).toThrow(/Path strings/);
-  expect(() => assertPublicSource({ fileName: "input.bin", source: "/work/input.bin" })).toThrow(/Path source wrappers/);
+  expect(() => assertPublicSource({ fileName: "input.bin", source: "/work/input.bin" })).toThrow(
+    /Path source wrappers/,
+  );
   expect(() => assertPublicSource(new File([new Uint8Array([1])], "input.bin"))).not.toThrow();
 });

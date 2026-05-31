@@ -8,6 +8,31 @@ const REPO_ROOT = fileURLToPath(new URL("../..", import.meta.url));
 const VIRTUAL_PWA_REGISTER_STUB = fileURLToPath(
   new URL("./tests/browser/stubs/virtual-pwa-register.js", import.meta.url),
 );
+const BROWSER_INSTANCES_BY_NAME = {
+  chromium: { browser: "chromium" },
+  webkit: { browser: "webkit" },
+};
+
+const createBrowserInstances = () => {
+  const rawSelection = process.env.ROM_WEAVER_BROWSER || "chromium";
+  const selectedNames =
+    rawSelection.trim().toLowerCase() === "all"
+      ? Object.keys(BROWSER_INSTANCES_BY_NAME)
+      : rawSelection
+          .split(",")
+          .map((name) => name.trim().toLowerCase())
+          .filter(Boolean);
+
+  if (selectedNames.length === 0) return [BROWSER_INSTANCES_BY_NAME.chromium];
+
+  return selectedNames.map((name) => {
+    const instance = BROWSER_INSTANCES_BY_NAME[name];
+    if (!instance) {
+      throw new Error(`Unsupported ROM_WEAVER_BROWSER value "${name}". Expected chromium, webkit, or all.`);
+    }
+    return instance;
+  });
+};
 
 const readDownloadStream = (stream, maxBytes) =>
   new Promise((resolve, reject) => {
@@ -91,7 +116,7 @@ export default mergeConfig(baseConfig, {
       },
       enabled: true,
       headless: true,
-      instances: [{ browser: "chromium" }],
+      instances: createBrowserInstances(),
       provider: playwright(),
       screenshotFailures: false,
       viewport: {

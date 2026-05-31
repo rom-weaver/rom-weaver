@@ -51,9 +51,13 @@ const createPublicSourceValidator =
         details: { received: getReceivedType(source) },
       });
     if (isSourceWrapper(source) && isVfsFileRef(getWrappedSource(source)))
-      throw new RomWeaverError("SOURCE_UNSUPPORTED", `VFS path ref wrappers are not public ${environmentLabel} inputs`, {
-        details: { received: getReceivedType(getWrappedSource(source)) },
-      });
+      throw new RomWeaverError(
+        "SOURCE_UNSUPPORTED",
+        `VFS path ref wrappers are not public ${environmentLabel} inputs`,
+        {
+          details: { received: getReceivedType(getWrappedSource(source)) },
+        },
+      );
     if (
       source &&
       typeof source === "object" &&

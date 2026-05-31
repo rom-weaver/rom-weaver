@@ -100,7 +100,11 @@ test("browser OPFS source refs use visible suffixes for duplicate flat work path
   try {
     expect(first.filePath).toBe("/work/game.bin");
     expect(second.filePath).toBe("/work/game-2.bin");
-    expect(getActiveBrowserVirtualFiles().map((entry) => entry.path).sort()).toEqual(["/work/game-2.bin", "/work/game.bin"]);
+    expect(
+      getActiveBrowserVirtualFiles()
+        .map((entry) => entry.path)
+        .sort(),
+    ).toEqual(["/work/game-2.bin", "/work/game.bin"]);
   } finally {
     await first.cleanup();
     await second.cleanup();

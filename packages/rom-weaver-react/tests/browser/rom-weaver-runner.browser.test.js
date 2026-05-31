@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from "vitest";
 import { browserRuntime } from "../../src/platform/browser/workflow-runtime.ts";
+import { getActiveBrowserVirtualFiles } from "../../src/workers/protocol/browser-virtual-files.ts";
 import {
   getRomWeaverFailureMessage,
   getRomWeaverRunnerMetadata,
@@ -7,7 +8,6 @@ import {
   runRomWeaverJson,
   warmupRomWeaverRunner,
 } from "../../src/workers/rom-weaver/rom-weaver-runner.ts";
-import { getActiveBrowserVirtualFiles } from "../../src/workers/protocol/browser-virtual-files.ts";
 import { WORKER_OPFS_MOUNTPOINT } from "../../src/workers/shared/worker-storage/storage-layout.ts";
 
 const encoder = new TextEncoder();

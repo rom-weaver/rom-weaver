@@ -45,6 +45,18 @@ SYNC_WASM_PACKAGE=1 scripts/build-wasm-cli.sh /path/to/wasm-artifacts
 
 See [`packages/rom-weaver-wasm/README.md`](packages/rom-weaver-wasm/README.md) for browser OPFS usage.
 
+Browser compatibility checks:
+
+```bash
+cd packages/rom-weaver-react
+npm run lint:browser-compat
+npm run test:browser
+npm run test:browser:webkit:smoke
+```
+
+See [`docs/mobile-safari-verification.md`](docs/mobile-safari-verification.md) for real iOS Safari,
+Xcode Simulator Safari, and WebKit verification steps.
+
 ## WASM Package Surface
 
 `packages/rom-weaver-wasm` exposes:
