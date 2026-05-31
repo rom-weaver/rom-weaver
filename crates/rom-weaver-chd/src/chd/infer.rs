@@ -1,10 +1,399 @@
     impl ChdContainerHandler {
+        const CD_ISO_MAX_FRAMES: u64 = 450_000;
+        const MBR_PARTITION_TABLE_OFFSET: usize = 446;
+        const MBR_PARTITION_ENTRY_BYTES: usize = 16;
+        const MBR_PARTITION_ENTRY_COUNT: usize = 4;
+        const GPT_HEADER_LBA: u64 = 1;
+
+        fn infer_single_track_cd_layout(
+            &self,
+            input: &Path,
+            logical_bytes: u64,
+        ) -> Result<DiscLayout> {
+            let prefer_mode1 = Self::is_extension(input, "iso");
+            let mode1_bytes = u64::try_from(DiscTrackMode::Mode1.data_bytes()).unwrap_or(2048);
+            let mode1_raw_bytes =
+                u64::try_from(DiscTrackMode::Mode1Raw.data_bytes()).unwrap_or(2352);
+            let (mode, sector_bytes) = if prefer_mode1
+                && logical_bytes.is_multiple_of(mode1_bytes)
+            {
+                (DiscTrackMode::Mode1, DiscTrackMode::Mode1.data_bytes())
+            } else if logical_bytes.is_multiple_of(mode1_raw_bytes) {
+                (
+                    DiscTrackMode::Mode1Raw,
+                    DiscTrackMode::Mode1Raw.data_bytes(),
+                )
+            } else if logical_bytes.is_multiple_of(mode1_bytes) {
+                (DiscTrackMode::Mode1, DiscTrackMode::Mode1.data_bytes())
+            } else {
+                return Err(RomWeaverError::Validation(format!(
+                    "cd input `{}` size must be a multiple of 2352 or 2048 bytes unless a cue file is provided",
+                    input.display()
+                )));
+            };
+            let frames = logical_bytes / u64::try_from(sector_bytes).unwrap_or(1);
+            let frames = u32::try_from(frames).map_err(|_| {
+                RomWeaverError::Validation(format!(
+                    "cd input `{}` is too large for current track metadata limits",
+                    input.display()
+                ))
+            })?;
+            Ok(DiscLayout {
+                kind: DiscKind::CdRom,
+                tracks: vec![DiscTrack {
+                    number: 1,
+                    mode,
+                    file_path: input.to_path_buf(),
+                    file_offset_bytes: 0,
+                    frames,
+                    pregap_frames: 0,
+                    postgap_frames: 0,
+                    pregap_has_data: false,
+                    has_subcode: false,
+                    pad_frames: 0,
+                    swap_audio_on_read: false,
+                }],
+            })
+        }
+
+        fn is_extension(input: &Path, extension: &str) -> bool {
+            input
+                .extension()
+                .and_then(|value| value.to_str())
+                .is_some_and(|value| value.eq_ignore_ascii_case(extension))
+        }
+
+        fn should_auto_infer_single_track_cd(&self, input: &Path) -> bool {
+            match input
+                .extension()
+                .and_then(|value| value.to_str())
+                .map(|value| value.to_ascii_lowercase())
+                .as_deref()
+            {
+                Some("bin") | Some("iso") | None => true,
+                _ => false,
+            }
+        }
+
+        fn is_single_track_cd_sector_sized(&self, logical_bytes: u64) -> bool {
+            let mode1_bytes = u64::try_from(DiscTrackMode::Mode1.data_bytes()).unwrap_or(2048);
+            let mode1_raw_bytes =
+                u64::try_from(DiscTrackMode::Mode1Raw.data_bytes()).unwrap_or(2352);
+            logical_bytes > 0
+                && (logical_bytes.is_multiple_of(mode1_raw_bytes)
+                    || logical_bytes.is_multiple_of(mode1_bytes))
+        }
+
+        fn is_cd_sized_iso(&self, input: &Path, logical_bytes: u64) -> bool {
+            let max_iso_bytes = Self::CD_ISO_MAX_FRAMES
+                * u64::try_from(DiscTrackMode::Mode1.data_bytes()).unwrap_or(2048);
+            !Self::is_extension(input, "iso") || logical_bytes <= max_iso_bytes
+        }
+
+        fn has_sector_signature(sector: &[u8]) -> bool {
+            sector.len() >= Self::HD_SECTOR_BYTES as usize
+                && sector[510] == 0x55
+                && sector[511] == 0xAA
+        }
+
+        fn read_le_u16(bytes: &[u8], offset: usize) -> Option<u16> {
+            bytes
+                .get(offset..offset + 2)
+                .map(|value| u16::from_le_bytes([value[0], value[1]]))
+        }
+
+        fn read_le_u32(bytes: &[u8], offset: usize) -> Option<u32> {
+            bytes.get(offset..offset + 4).map(|value| {
+                u32::from_le_bytes([value[0], value[1], value[2], value[3]])
+            })
+        }
+
+        fn read_le_u64(bytes: &[u8], offset: usize) -> Option<u64> {
+            bytes.get(offset..offset + 8).map(|value| {
+                u64::from_le_bytes([
+                    value[0], value[1], value[2], value[3], value[4], value[5], value[6],
+                    value[7],
+                ])
+            })
+        }
+
+        fn is_valid_volume_sector_size(bytes_per_sector: u16) -> bool {
+            matches!(bytes_per_sector, 512 | 1024 | 2048 | 4096)
+        }
+
+        fn has_valid_mbr_partition_table(&self, sector: &[u8], logical_bytes: u64) -> bool {
+            if !Self::has_sector_signature(sector) {
+                return false;
+            }
+
+            let total_sectors = logical_bytes / u64::from(Self::HD_SECTOR_BYTES);
+            let mut populated_entries = 0_usize;
+            for entry_index in 0..Self::MBR_PARTITION_ENTRY_COUNT {
+                let offset = Self::MBR_PARTITION_TABLE_OFFSET
+                    + entry_index * Self::MBR_PARTITION_ENTRY_BYTES;
+                let Some(entry) = sector.get(offset..offset + Self::MBR_PARTITION_ENTRY_BYTES)
+                else {
+                    return false;
+                };
+                let boot_flag = entry[0];
+                let partition_type = entry[4];
+                let Some(start_lba) = Self::read_le_u32(entry, 8).map(u64::from) else {
+                    return false;
+                };
+                let Some(sector_count) = Self::read_le_u32(entry, 12).map(u64::from) else {
+                    return false;
+                };
+
+                if partition_type == 0 && start_lba == 0 && sector_count == 0 {
+                    continue;
+                }
+                if boot_flag != 0 && boot_flag != 0x80 {
+                    return false;
+                }
+                if partition_type == 0 || start_lba == 0 || sector_count == 0 {
+                    return false;
+                }
+                if start_lba >= total_sectors {
+                    return false;
+                }
+                if partition_type != 0xEE
+                    && start_lba
+                        .checked_add(sector_count)
+                        .is_none_or(|end_lba| end_lba > total_sectors)
+                {
+                    return false;
+                }
+                populated_entries += 1;
+            }
+
+            populated_entries > 0
+        }
+
+        fn has_valid_gpt_header(&self, sector: &[u8], logical_bytes: u64) -> bool {
+            if sector.len() < Self::HD_SECTOR_BYTES as usize || sector.get(..8) != Some(b"EFI PART")
+            {
+                return false;
+            }
+
+            let total_sectors = logical_bytes / u64::from(Self::HD_SECTOR_BYTES);
+            let Some(header_bytes) = Self::read_le_u32(sector, 12) else {
+                return false;
+            };
+            let Some(current_lba) = Self::read_le_u64(sector, 24) else {
+                return false;
+            };
+            let Some(backup_lba) = Self::read_le_u64(sector, 32) else {
+                return false;
+            };
+            let Some(first_usable_lba) = Self::read_le_u64(sector, 40) else {
+                return false;
+            };
+            let Some(last_usable_lba) = Self::read_le_u64(sector, 48) else {
+                return false;
+            };
+            let Some(partition_entry_lba) = Self::read_le_u64(sector, 72) else {
+                return false;
+            };
+            let Some(partition_entry_count) = Self::read_le_u32(sector, 80) else {
+                return false;
+            };
+            let Some(partition_entry_bytes) = Self::read_le_u32(sector, 84) else {
+                return false;
+            };
+
+            (92..=Self::HD_SECTOR_BYTES).contains(&header_bytes)
+                && current_lba == Self::GPT_HEADER_LBA
+                && backup_lba < total_sectors
+                && first_usable_lba <= last_usable_lba
+                && last_usable_lba < total_sectors
+                && partition_entry_lba < total_sectors
+                && partition_entry_count > 0
+                && partition_entry_bytes >= 128
+                && partition_entry_bytes.is_multiple_of(8)
+        }
+
+        fn boot_sector_declares_matching_size(
+            sector_bytes: u16,
+            declared_sectors: u64,
+            logical_bytes: u64,
+        ) -> bool {
+            declared_sectors > 0
+                && Self::is_valid_volume_sector_size(sector_bytes)
+                && declared_sectors
+                    .checked_mul(u64::from(sector_bytes))
+                    .is_some_and(|declared_bytes| declared_bytes <= logical_bytes)
+        }
+
+        fn has_valid_fat_boot_sector(&self, sector: &[u8], logical_bytes: u64) -> bool {
+            if !Self::has_sector_signature(sector) {
+                return false;
+            }
+            let Some(bytes_per_sector) = Self::read_le_u16(sector, 11) else {
+                return false;
+            };
+            let sectors_per_cluster = sector.get(13).copied().unwrap_or(0);
+            let Some(reserved_sectors) = Self::read_le_u16(sector, 14) else {
+                return false;
+            };
+            let fat_count = sector.get(16).copied().unwrap_or(0);
+            let Some(total_sectors_16) = Self::read_le_u16(sector, 19) else {
+                return false;
+            };
+            let Some(total_sectors_32) = Self::read_le_u32(sector, 32) else {
+                return false;
+            };
+            let Some(sectors_per_fat_16) = Self::read_le_u16(sector, 22) else {
+                return false;
+            };
+            let Some(sectors_per_fat_32) = Self::read_le_u32(sector, 36) else {
+                return false;
+            };
+            let declared_sectors = if total_sectors_16 > 0 {
+                u64::from(total_sectors_16)
+            } else {
+                u64::from(total_sectors_32)
+            };
+
+            Self::is_valid_volume_sector_size(bytes_per_sector)
+                && sectors_per_cluster.is_power_of_two()
+                && sectors_per_cluster <= 128
+                && reserved_sectors > 0
+                && matches!(fat_count, 1 | 2)
+                && (sectors_per_fat_16 > 0 || sectors_per_fat_32 > 0)
+                && Self::boot_sector_declares_matching_size(
+                    bytes_per_sector,
+                    declared_sectors,
+                    logical_bytes,
+                )
+        }
+
+        fn has_valid_ntfs_boot_sector(&self, sector: &[u8], logical_bytes: u64) -> bool {
+            if !Self::has_sector_signature(sector) || sector.get(3..11) != Some(b"NTFS    ") {
+                return false;
+            }
+            let Some(bytes_per_sector) = Self::read_le_u16(sector, 11) else {
+                return false;
+            };
+            let sectors_per_cluster = sector.get(13).copied().unwrap_or(0);
+            let Some(total_sectors) = Self::read_le_u64(sector, 40) else {
+                return false;
+            };
+            let Some(mft_cluster) = Self::read_le_u64(sector, 48) else {
+                return false;
+            };
+
+            Self::is_valid_volume_sector_size(bytes_per_sector)
+                && sectors_per_cluster.is_power_of_two()
+                && sectors_per_cluster > 0
+                && mft_cluster > 0
+                && Self::boot_sector_declares_matching_size(
+                    bytes_per_sector,
+                    total_sectors,
+                    logical_bytes,
+                )
+        }
+
+        fn has_valid_exfat_boot_sector(&self, sector: &[u8], logical_bytes: u64) -> bool {
+            if !Self::has_sector_signature(sector) || sector.get(3..11) != Some(b"EXFAT   ") {
+                return false;
+            }
+            if sector.get(11..64).is_none_or(|reserved| {
+                reserved.iter().any(|byte| *byte != 0)
+            }) {
+                return false;
+            }
+
+            let Some(volume_length) = Self::read_le_u64(sector, 72) else {
+                return false;
+            };
+            let Some(fat_offset) = Self::read_le_u32(sector, 80).map(u64::from) else {
+                return false;
+            };
+            let Some(fat_length) = Self::read_le_u32(sector, 84).map(u64::from) else {
+                return false;
+            };
+            let Some(cluster_heap_offset) = Self::read_le_u32(sector, 88).map(u64::from) else {
+                return false;
+            };
+            let Some(cluster_count) = Self::read_le_u32(sector, 92) else {
+                return false;
+            };
+            let bytes_per_sector_shift = sector.get(108).copied().unwrap_or(0);
+            let sectors_per_cluster_shift = sector.get(109).copied().unwrap_or(0);
+            let sector_bytes = 1_u64.checked_shl(u32::from(bytes_per_sector_shift));
+            let Some(sector_bytes) = sector_bytes else {
+                return false;
+            };
+
+            (512..=4096).contains(&sector_bytes)
+                && sector_bytes.is_power_of_two()
+                && sectors_per_cluster_shift <= 25
+                && volume_length > 0
+                && volume_length
+                    .checked_mul(sector_bytes)
+                    .is_some_and(|declared_bytes| declared_bytes <= logical_bytes)
+                && fat_offset > 0
+                && fat_length > 0
+                && fat_offset
+                    .checked_add(fat_length)
+                    .is_some_and(|fat_end| fat_end <= volume_length)
+                && cluster_heap_offset < volume_length
+                && cluster_count > 0
+        }
+
+        fn has_known_volume_boot_sector(&self, sector: &[u8], logical_bytes: u64) -> bool {
+            self.has_valid_fat_boot_sector(sector, logical_bytes)
+                || self.has_valid_ntfs_boot_sector(sector, logical_bytes)
+                || self.has_valid_exfat_boot_sector(sector, logical_bytes)
+        }
+
+        fn should_auto_infer_hard_disk(&self, input: &Path, logical_bytes: u64) -> bool {
+            if logical_bytes < u64::from(Self::HD_SECTOR_BYTES)
+                || !logical_bytes.is_multiple_of(u64::from(Self::HD_SECTOR_BYTES))
+            {
+                return false;
+            }
+
+            let mut file = match File::open(input) {
+                Ok(file) => BufReader::new(file),
+                Err(_) => return false,
+            };
+            let mut sector = [0_u8; Self::HD_SECTOR_BYTES as usize];
+            if file.read_exact(&mut sector).is_err() {
+                return false;
+            }
+
+            if self.has_valid_mbr_partition_table(&sector, logical_bytes)
+                || self.has_known_volume_boot_sector(&sector, logical_bytes)
+            {
+                return true;
+            }
+
+            if logical_bytes < u64::from(Self::HD_SECTOR_BYTES) * 2 {
+                return false;
+            }
+            if file.read_exact(&mut sector).is_err() {
+                return false;
+            }
+            self.has_valid_gpt_header(&sector, logical_bytes)
+        }
+
         fn infer_create_kind(&self, input: &Path, logical_bytes: u64) -> Result<ChdCreateKind> {
             let extension = input
                 .extension()
                 .and_then(|value| value.to_str())
                 .map(|value| value.to_ascii_lowercase());
             match extension.as_deref() {
+                Some("cue") => Ok(ChdCreateKind::Disc(self.parse_cue_file(input)?)),
+                Some("gdi") => Ok(ChdCreateKind::Disc(self.parse_gdi_file(input)?)),
+                Some("iso")
+                    if self.is_cd_sized_iso(input, logical_bytes)
+                        && self.is_single_track_cd_sector_sized(logical_bytes) =>
+                {
+                    Ok(ChdCreateKind::Disc(
+                        self.infer_single_track_cd_layout(input, logical_bytes)?,
+                    ))
+                }
                 Some("iso") => {
                     self.ensure_multiple_of(logical_bytes, Self::DVD_SECTOR_BYTES, "dvd image")?;
                     Ok(ChdCreateKind::Dvd)
@@ -12,8 +401,16 @@
                 Some("img") | Some("ima") => Ok(ChdCreateKind::HardDisk(
                     self.infer_hd_geometry(logical_bytes)?,
                 )),
-                Some("cue") => Ok(ChdCreateKind::Disc(self.parse_cue_file(input)?)),
-                Some("gdi") => Ok(ChdCreateKind::Disc(self.parse_gdi_file(input)?)),
+                _ if self.should_auto_infer_hard_disk(input, logical_bytes) => Ok(
+                    ChdCreateKind::HardDisk(self.infer_hd_geometry(logical_bytes)?),
+                ),
+                _ if self.should_auto_infer_single_track_cd(input)
+                    && self.is_single_track_cd_sector_sized(logical_bytes) =>
+                {
+                    Ok(ChdCreateKind::Disc(
+                        self.infer_single_track_cd_layout(input, logical_bytes)?,
+                    ))
+                }
                 _ => Ok(ChdCreateKind::Raw),
             }
         }
@@ -64,51 +461,7 @@
                                 input.display()
                             )));
                         }
-                        _ => {
-                            let (mode, sector_bytes) = if logical_bytes.is_multiple_of(
-                                u64::try_from(DiscTrackMode::Mode1Raw.data_bytes())
-                                    .unwrap_or(2352),
-                            )
-                            {
-                                (
-                                    DiscTrackMode::Mode1Raw,
-                                    DiscTrackMode::Mode1Raw.data_bytes(),
-                                )
-                            } else if logical_bytes.is_multiple_of(
-                                u64::try_from(DiscTrackMode::Mode1.data_bytes()).unwrap_or(2048),
-                            )
-                            {
-                                (DiscTrackMode::Mode1, DiscTrackMode::Mode1.data_bytes())
-                            } else {
-                                return Err(RomWeaverError::Validation(format!(
-                                    "chd-cd input `{}` size must be a multiple of 2352 or 2048 bytes unless a cue file is provided",
-                                    input.display()
-                                )));
-                            };
-                            let frames = logical_bytes / u64::try_from(sector_bytes).unwrap_or(1);
-                            let frames = u32::try_from(frames).map_err(|_| {
-                                RomWeaverError::Validation(format!(
-                                    "chd-cd input `{}` is too large for current track metadata limits",
-                                    input.display()
-                                ))
-                            })?;
-                            DiscLayout {
-                                kind: DiscKind::CdRom,
-                                tracks: vec![DiscTrack {
-                                    number: 1,
-                                    mode,
-                                    file_path: input.to_path_buf(),
-                                    file_offset_bytes: 0,
-                                    frames,
-                                    pregap_frames: 0,
-                                    postgap_frames: 0,
-                                    pregap_has_data: false,
-                                    has_subcode: false,
-                                    pad_frames: 0,
-                                    swap_audio_on_read: false,
-                                }],
-                            }
-                        }
+                        _ => self.infer_single_track_cd_layout(input, logical_bytes)?,
                     };
                     if layout.kind != DiscKind::CdRom {
                         return Err(RomWeaverError::Validation(format!(

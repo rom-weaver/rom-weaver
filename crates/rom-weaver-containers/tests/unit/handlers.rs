@@ -3217,6 +3217,12 @@ mod tests {
             handler
                 .infer_create_kind_label_for_tests("chd", input, 2048 * 8)
                 .expect("auto kind"),
+            "cd"
+        );
+        assert_eq!(
+            handler
+                .infer_create_kind_label_for_tests("chd", input, 2048 * 450_001)
+                .expect("large iso auto kind"),
             "dvd"
         );
         assert_eq!(
@@ -3237,6 +3243,145 @@ mod tests {
                 .expect("hd override"),
             "hd"
         );
+    }
+
+    #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
+    #[test]
+    fn chd_create_auto_infers_sector_sized_cd_inputs() {
+        let handler = super::ChdContainerHandler;
+        assert_eq!(
+            handler
+                .infer_create_kind_label_for_tests("chd", Path::new("disc.bin"), 2352 * 8)
+                .expect("bin cd kind"),
+            "cd"
+        );
+        assert_eq!(
+            handler
+                .infer_create_kind_label_for_tests("chd", Path::new("Quality of life"), 2048 * 8)
+                .expect("extensionless cd kind"),
+            "cd"
+        );
+        assert_eq!(
+            handler
+                .infer_create_kind_label_for_tests("chd", Path::new("disc.iso"), 2048 * 8)
+                .expect("iso cd kind"),
+            "cd"
+        );
+        assert_eq!(
+            handler
+                .infer_create_kind_label_for_tests("chd", Path::new("disc.raw"), 2048 * 8)
+                .expect("raw kind"),
+            "raw"
+        );
+    }
+
+    #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
+    #[test]
+    fn chd_create_auto_infers_hd_only_from_disk_signatures() {
+        fn write_mbr_disk(path: &Path, sectors: usize) -> Vec<u8> {
+            let mut bytes = vec![0_u8; sectors * 512];
+            bytes[510] = 0x55;
+            bytes[511] = 0xAA;
+            let entry_offset = 446;
+            bytes[entry_offset + 4] = 0x83;
+            bytes[entry_offset + 8..entry_offset + 12]
+                .copy_from_slice(&1_u32.to_le_bytes());
+            bytes[entry_offset + 12..entry_offset + 16]
+                .copy_from_slice(&u32::try_from(sectors - 1).expect("sectors").to_le_bytes());
+            fs::write(path, &bytes).expect("write mbr disk");
+            bytes
+        }
+
+        fn write_gpt_disk(path: &Path, sectors: usize) -> Vec<u8> {
+            let mut bytes = vec![0_u8; sectors * 512];
+            let gpt_offset = 512;
+            bytes[gpt_offset..gpt_offset + 8].copy_from_slice(b"EFI PART");
+            bytes[gpt_offset + 8..gpt_offset + 12].copy_from_slice(&0x0001_0000_u32.to_le_bytes());
+            bytes[gpt_offset + 12..gpt_offset + 16].copy_from_slice(&92_u32.to_le_bytes());
+            bytes[gpt_offset + 24..gpt_offset + 32].copy_from_slice(&1_u64.to_le_bytes());
+            bytes[gpt_offset + 32..gpt_offset + 40]
+                .copy_from_slice(&u64::try_from(sectors - 1).expect("sectors").to_le_bytes());
+            bytes[gpt_offset + 40..gpt_offset + 48].copy_from_slice(&34_u64.to_le_bytes());
+            bytes[gpt_offset + 48..gpt_offset + 56]
+                .copy_from_slice(&u64::try_from(sectors - 34).expect("sectors").to_le_bytes());
+            bytes[gpt_offset + 72..gpt_offset + 80].copy_from_slice(&2_u64.to_le_bytes());
+            bytes[gpt_offset + 80..gpt_offset + 84].copy_from_slice(&128_u32.to_le_bytes());
+            bytes[gpt_offset + 84..gpt_offset + 88].copy_from_slice(&128_u32.to_le_bytes());
+            fs::write(path, &bytes).expect("write gpt disk");
+            bytes
+        }
+
+        fn write_ntfs_volume(path: &Path, sectors: usize) -> Vec<u8> {
+            let mut bytes = vec![0_u8; sectors * 512];
+            bytes[3..11].copy_from_slice(b"NTFS    ");
+            bytes[11..13].copy_from_slice(&512_u16.to_le_bytes());
+            bytes[13] = 8;
+            bytes[40..48].copy_from_slice(&u64::try_from(sectors).expect("sectors").to_le_bytes());
+            bytes[48..56].copy_from_slice(&4_u64.to_le_bytes());
+            bytes[510] = 0x55;
+            bytes[511] = 0xAA;
+            fs::write(path, &bytes).expect("write ntfs volume");
+            bytes
+        }
+
+        let temp_dir = temp_dir_path("chd-hd-auto-infer");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let handler = super::ChdContainerHandler;
+
+        let mbr_path = temp_dir.join("mbr-disk");
+        let mbr_bytes = write_mbr_disk(&mbr_path, 64);
+        assert_eq!(
+            handler
+                .infer_create_kind_label_for_tests(
+                    "chd",
+                    &mbr_path,
+                    u64::try_from(mbr_bytes.len()).expect("size"),
+                )
+                .expect("mbr disk kind"),
+            "hd"
+        );
+
+        let gpt_path = temp_dir.join("gpt-disk.dat");
+        let gpt_bytes = write_gpt_disk(&gpt_path, 128);
+        assert_eq!(
+            handler
+                .infer_create_kind_label_for_tests(
+                    "chd",
+                    &gpt_path,
+                    u64::try_from(gpt_bytes.len()).expect("size"),
+                )
+                .expect("gpt disk kind"),
+            "hd"
+        );
+
+        let ntfs_path = temp_dir.join("ntfs-volume.dat");
+        let ntfs_bytes = write_ntfs_volume(&ntfs_path, 256);
+        assert_eq!(
+            handler
+                .infer_create_kind_label_for_tests(
+                    "chd",
+                    &ntfs_path,
+                    u64::try_from(ntfs_bytes.len()).expect("size"),
+                )
+                .expect("ntfs volume kind"),
+            "hd"
+        );
+
+        let raw_path = temp_dir.join("blob.dat");
+        let raw_bytes = vec![0xA5_u8; 63 * 512];
+        fs::write(&raw_path, &raw_bytes).expect("write raw blob");
+        assert_eq!(
+            handler
+                .infer_create_kind_label_for_tests(
+                    "chd",
+                    &raw_path,
+                    u64::try_from(raw_bytes.len()).expect("size"),
+                )
+                .expect("raw blob kind"),
+            "raw"
+        );
+
+        let _ = fs::remove_dir_all(temp_dir);
     }
 
     #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
@@ -4038,7 +4183,7 @@ mod tests {
                     &ContainerCreateRequest {
                         inputs: vec![input.clone()],
                         output: archive_path.clone(),
-                        format: "chd".to_string(),
+                        format: (if label == "dvd" { "chd-dvd" } else { "chd" }).to_string(),
                         codec: Some(codec.to_string()),
                         level: None,
                         parent: None,
@@ -4214,7 +4359,7 @@ mod tests {
                 &ContainerCreateRequest {
                     inputs: vec![source_iso.clone()],
                     output: archive_path.clone(),
-                    format: "chd".to_string(),
+                    format: "chd-dvd".to_string(),
                     codec: None,
                     level: None,
                     parent: None,
@@ -4237,6 +4382,57 @@ mod tests {
             )
             .expect("extract rust-only dvd chd");
         let extracted = fs::read(output_dir.join("movie.iso")).expect("read extracted payload");
+        assert_eq!(extracted, source_payload);
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
+    #[test]
+    fn chd_rust_only_create_auto_infers_cd_iso_round_trip() {
+        let temp_dir = temp_dir_path("chd-rust-cd-iso-auto-create");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let source_iso = temp_dir.join("disc.iso");
+        let archive_path = temp_dir.join("disc.chd");
+        let output_dir = temp_dir.join("out");
+        let source_payload = (0..(2048 * 208))
+            .map(|index| (index as u8).wrapping_mul(19))
+            .collect::<Vec<_>>();
+        fs::write(&source_iso, &source_payload).expect("write iso fixture");
+
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("chd").expect("chd handler");
+        handler
+            .create(
+                &ContainerCreateRequest {
+                    inputs: vec![source_iso.clone()],
+                    output: archive_path.clone(),
+                    format: "chd".to_string(),
+                    codec: None,
+                    level: None,
+                    parent: None,
+                },
+                &test_context(&temp_dir, 6),
+            )
+            .expect("create rust-only cd chd from iso");
+        handler
+            .extract(
+                &rom_weaver_core::ContainerExtractRequest {
+                    source: archive_path,
+                    out_dir: output_dir.clone(),
+                    selections: Vec::new(),
+                    split_bin: false,
+                    ignore_common_files: false,
+                    overwrite: true,
+                    parent: None,
+                },
+                &test_context(&temp_dir, 6),
+            )
+            .expect("extract rust-only cd chd");
+
+        let cue = fs::read_to_string(output_dir.join("disc.cue")).expect("read cue");
+        assert!(cue.contains("TRACK 01 MODE1/2048"));
+        let extracted = fs::read(output_dir.join("disc.bin")).expect("read extracted payload");
         assert_eq!(extracted, source_payload);
 
         let _ = fs::remove_dir_all(temp_dir);
