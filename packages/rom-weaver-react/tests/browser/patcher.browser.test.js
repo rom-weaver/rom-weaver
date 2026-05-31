@@ -192,32 +192,38 @@ const waitForInputStackFileName = async () => {
 const clearOpfsInputDirectory = async () => {
   if (!navigator.storage?.getDirectory) return;
   const root = await navigator.storage.getDirectory();
-  await root.removeEntry("input", { recursive: true }).catch(() => undefined);
+  for await (const [name] of root.entries()) {
+    if (name === ".rom-weaver-opfs-scratch") continue;
+    await root.removeEntry(name, { recursive: true }).catch(() => undefined);
+  }
 };
 
 const clearOpfsOutputDirectory = async () => {
   if (!navigator.storage?.getDirectory) return;
   const root = await navigator.storage.getDirectory();
   for (let attempt = 0; attempt < 10; attempt += 1) {
-    await root.removeEntry("output", { recursive: true }).catch(() => undefined);
+    for await (const [name] of root.entries()) {
+      if (name === ".rom-weaver-opfs-scratch") continue;
+      await root.removeEntry(name, { recursive: true }).catch(() => undefined);
+    }
     if (!(await listOpfsOutputFiles().catch(() => [])).length) return;
     await new Promise((resolve) => globalThis.setTimeout(resolve, 50));
   }
 };
 
-const listOpfsInputFiles = async () => {
+const listOpfsWorkFiles = async () => {
   if (!navigator.storage?.getDirectory) return [];
   const root = await navigator.storage.getDirectory();
-  const inputHandle = await root.getDirectoryHandle("input").catch(() => null);
-  if (!inputHandle) return [];
   const files = [];
   const walk = async (dirHandle, prefix) => {
     for await (const [name, handle] of dirHandle.entries()) {
+      if (name === ".rom-weaver-opfs-scratch") continue;
       const nextPath = `${prefix}/${name}`;
       if (handle.kind === "file") {
         const file = await handle.getFile().catch(() => null);
         if (file) {
           files.push({
+            name,
             path: nextPath,
             size: file.size,
           });
@@ -227,14 +233,11 @@ const listOpfsInputFiles = async () => {
       await walk(handle, nextPath).catch(() => undefined);
     }
   };
-  await walk(inputHandle, "input");
+  await walk(root, "work");
   return files;
 };
 
-const listOpfsExtractedInputFiles = async () => {
-  const files = await listOpfsInputFiles();
-  return files.filter((entry) => entry.path.includes("/.rom-weaver-extract-"));
-};
+const listOpfsInputFiles = listOpfsWorkFiles;
 
 const listOpfsInputFilesMatching = async (fragment) => {
   const files = await listOpfsInputFiles();
@@ -243,34 +246,12 @@ const listOpfsInputFilesMatching = async (fragment) => {
 
 const listOpfsStagedInputSourceFiles = async (fragment = "") => {
   const files = await listOpfsInputFiles();
-  return files.filter(
-    (entry) => /\/(?:chd-input|direct-input|rvz-input|z3ds-input)-/.test(entry.path) && entry.path.includes(fragment),
-  );
+  return files.filter((entry) => entry.path.includes(fragment));
 };
 
 const listOpfsOutputFiles = async () => {
-  if (!navigator.storage?.getDirectory) return [];
-  const root = await navigator.storage.getDirectory();
-  const outputHandle = await root.getDirectoryHandle("output").catch(() => null);
-  if (!outputHandle) return [];
-  const files = [];
-  const walk = async (dirHandle, prefix) => {
-    for await (const [name, handle] of dirHandle.entries()) {
-      const nextPath = `${prefix}/${name}`;
-      if (handle.kind === "file") {
-        const file = await handle.getFile();
-        files.push({
-          name,
-          path: nextPath,
-          size: file.size,
-        });
-        continue;
-      }
-      await walk(handle, nextPath);
-    }
-  };
-  await walk(outputHandle, "output");
-  return files;
+  const files = await listOpfsWorkFiles();
+  return files.filter((entry) => entry.name === "game - change" || /^game - change\.(?:7z|bin|zip)$/i.test(entry.name));
 };
 
 beforeEach(async () => {
@@ -576,7 +557,7 @@ test("clearing ROM input releases extracted OPFS files", async () => {
   await expect.poll(async () => (await listOpfsInputFilesMatching("multi-rom")).length, { timeout: 30000 }).toBe(0);
 });
 
-test("clearing CHD ROM input releases staged OPFS source files", async () => {
+test("clearing CHD ROM input does not leave staged OPFS source files", async () => {
   await clearOpfsInputDirectory();
   mount(createElement(ApplyPatchForm));
 
@@ -585,9 +566,7 @@ test("clearing CHD ROM input releases staged OPFS source files", async () => {
   selectFileInput(document.getElementById("rom-weaver-input-file-rom"), await loadFixtureFile(CHD_INPUT));
   await waitForInputStackFileName();
 
-  await expect
-    .poll(async () => (await listOpfsStagedInputSourceFiles("game-cd")).length, { timeout: 30000 })
-    .toBeGreaterThan(0);
+  expect(await listOpfsStagedInputSourceFiles("game-cd.chd")).toEqual([]);
 
   const clearButton = document.querySelector("button[title='Clear ROM input']");
   if (!(clearButton instanceof HTMLButtonElement)) throw new Error("Missing clear ROM input button");

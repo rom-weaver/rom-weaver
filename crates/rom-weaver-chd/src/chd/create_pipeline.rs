@@ -412,6 +412,26 @@
             )
         }
 
+        /// Whether the threaded CHD-create pipeline must read the source on the calling
+        /// (main) thread instead of a dedicated reader thread.
+        ///
+        /// In the browser/wasm runtime only the main runner thread can open OPFS files; spawned
+        /// worker threads cannot `path_open` the OPFS-backed disc layout (the open fails with
+        /// `No such file or directory (os error 44)`). Reading on the main thread keeps the
+        /// CPU-bound hunk compression parallel while avoiding worker-thread OPFS access — the same
+        /// shape the working extract/checksum paths already use (main does I/O, workers compute).
+        #[cfg(target_arch = "wasm32")]
+        fn chd_create_reads_source_on_main_thread() -> bool {
+            true
+        }
+
+        #[cfg(not(target_arch = "wasm32"))]
+        fn chd_create_reads_source_on_main_thread() -> bool {
+            // Native uses the dedicated reader thread for read/write I/O overlap; this escape
+            // hatch exercises the main-thread reader path in tests.
+            std::env::var("ROM_WEAVER_CHD_MAIN_THREAD_READER").as_deref() == Ok("1")
+        }
+
         #[allow(clippy::too_many_arguments)]
         fn create_compressed_rust_stream(
             &self,
@@ -572,6 +592,178 @@
                 let mut digest = [0_u8; Self::CHD_SHA1_BYTES];
                 digest.copy_from_slice(&raw_sha1.finalize());
                 digest
+            } else if Self::chd_create_reads_source_on_main_thread() {
+                // Read-on-main pipeline (browser/wasm): OPFS file handles are owned by the main
+                // runner thread, so both the source read and the output append run here — spawned
+                // worker threads cannot `path_open` the OPFS-backed disc layout (`os error 44`).
+                // Worker threads still hash + compress hunks in parallel; the main thread reads
+                // ahead up to `inflight` hunks, then drains compressed results in hunk order to
+                // dedup and append payloads.
+                type PipelineHunkResult = Result<(usize, HunkHashKey, u8, Vec<u8>)>;
+                let inflight = effective_threads.saturating_mul(4).max(2);
+                let (work_tx, work_rx) =
+                    std::sync::mpsc::sync_channel::<(usize, Vec<u8>)>(inflight);
+                let work_rx = std::sync::Mutex::new(work_rx);
+                let (result_tx, result_rx) =
+                    std::sync::mpsc::sync_channel::<PipelineHunkResult>(inflight);
+                std::thread::scope(|scope| -> Result<[u8; Self::CHD_SHA1_BYTES]> {
+                    for _ in 0..effective_threads {
+                        let work_rx = &work_rx;
+                        let encodable_codecs = &encodable_codecs;
+                        let result_tx = result_tx.clone();
+                        scope.spawn(move || {
+                            let mut scratch = ChdCompressionScratch::default();
+                            loop {
+                                let received = {
+                                    let guard =
+                                        work_rx.lock().unwrap_or_else(|err| err.into_inner());
+                                    guard.recv()
+                                };
+                                let Ok((hunk_index, hunk)) = received else {
+                                    break;
+                                };
+                                let outcome = self
+                                    .compress_pipeline_hunk(
+                                        create_kind,
+                                        primary_codec,
+                                        encodable_codecs,
+                                        compression_level,
+                                        hunk,
+                                        &mut scratch,
+                                    )
+                                    .map(|(hash_key, compression_type, payload)| {
+                                        (hunk_index, hash_key, compression_type, payload)
+                                    });
+                                if result_tx.send(outcome).is_err() {
+                                    break;
+                                }
+                            }
+                        });
+                    }
+                    drop(result_tx);
+
+                    let mut raw_sha1 = Sha1::new();
+                    let mut remaining = logical_bytes;
+                    let mut next_to_read = 0usize;
+                    let mut next_hunk = 0usize;
+                    // Hunks dispatched to workers but not yet appended; bounded so the main thread
+                    // never blocks on `work_tx.send` (capacity `inflight`) nor lets workers block
+                    // on `result_tx.send` (also `inflight`).
+                    let mut outstanding = 0usize;
+                    let mut pending: HashMap<usize, (HunkHashKey, u8, Vec<u8>)> = HashMap::new();
+                    let mut writer_error: Option<RomWeaverError> = None;
+
+                    while next_hunk < hunk_count_usize {
+                        while writer_error.is_none()
+                            && outstanding < inflight
+                            && next_to_read < hunk_count_usize
+                        {
+                            let read_len = usize::try_from(remaining.min(u64::from(hunk_bytes)))
+                                .map_err(|_| {
+                                    RomWeaverError::Validation(
+                                        "decoded CHD chunk exceeded addressable memory".to_string(),
+                                    )
+                                })?;
+                            let mut hunk = vec![0_u8; hunk_bytes_usize];
+                            if let Err(error) = source.read_exact(&mut hunk[..read_len]) {
+                                writer_error = Some(RomWeaverError::Validation(format!(
+                                    "failed to read source `{source_label}`: {error}",
+                                )));
+                                break;
+                            }
+                            raw_sha1.update(&hunk[..read_len]);
+                            remaining = remaining.saturating_sub(read_len as u64);
+                            if let Some(on_progress) = on_progress {
+                                on_progress(read_len as u64);
+                            }
+                            if work_tx.send((next_to_read, hunk)).is_err() {
+                                writer_error = Some(RomWeaverError::Validation(
+                                    "chd compression workers ended before all hunks were consumed"
+                                        .to_string(),
+                                ));
+                                break;
+                            }
+                            next_to_read += 1;
+                            outstanding += 1;
+                        }
+
+                        if writer_error.is_some() || outstanding == 0 {
+                            break;
+                        }
+
+                        let entry = match pending.remove(&next_hunk) {
+                            Some(value) => Some(value),
+                            None => {
+                                let mut found = None;
+                                loop {
+                                    match result_rx.recv() {
+                                        Ok(Ok((
+                                            hunk_index,
+                                            hash_key,
+                                            compression_type,
+                                            payload,
+                                        ))) => {
+                                            if hunk_index == next_hunk {
+                                                found =
+                                                    Some((hash_key, compression_type, payload));
+                                                break;
+                                            }
+                                            pending.insert(
+                                                hunk_index,
+                                                (hash_key, compression_type, payload),
+                                            );
+                                        }
+                                        Ok(Err(error)) => {
+                                            writer_error = Some(error);
+                                            break;
+                                        }
+                                        Err(_) => {
+                                            writer_error = Some(RomWeaverError::Validation(
+                                                "chd compression pipeline ended before all hunks were produced"
+                                                    .to_string(),
+                                            ));
+                                            break;
+                                        }
+                                    }
+                                }
+                                found
+                            }
+                        };
+                        let Some((hash_key, compression_type, payload)) = entry else {
+                            break;
+                        };
+                        if let Err(error) = self.record_pipeline_hunk(
+                            &mut buffered,
+                            output,
+                            &mut entries,
+                            &mut current_offset,
+                            &mut self_hunks_by_hash,
+                            parent_hunks_by_hash,
+                            next_hunk,
+                            hash_key,
+                            compression_type,
+                            payload,
+                        ) {
+                            writer_error = Some(error);
+                            break;
+                        }
+                        next_hunk += 1;
+                        outstanding -= 1;
+                    }
+
+                    // Stop feeding and drain in-flight results so workers unblock and exit cleanly.
+                    drop(work_tx);
+                    while result_rx.recv().is_ok() {}
+
+                    match writer_error {
+                        Some(error) => Err(error),
+                        None => {
+                            let mut digest = [0_u8; Self::CHD_SHA1_BYTES];
+                            digest.copy_from_slice(&raw_sha1.finalize());
+                            Ok(digest)
+                        }
+                    }
+                })?
             } else {
                 // Streaming compression pipeline: a reader thread feeds hunks (and the running raw
                 // SHA-1) into a bounded queue, worker threads hash + compress in parallel, and the

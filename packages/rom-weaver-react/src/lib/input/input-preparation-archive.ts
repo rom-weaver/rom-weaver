@@ -1000,7 +1000,6 @@ const resolveArchiveInput = async (
       (binFile as { _archiveCueEntryName?: string })._archiveCueEntryName = cueEntryName;
       (binFile as { _chdMode?: string })._chdMode = "cd";
       (binFile as { _chdCueText?: string })._chdCueText = cueFile ? decodeUtf8(getPatchFileBytes(cueFile)) : "";
-      (binFile as { _chdCueFileName?: string })._chdCueFileName = getBaseFileName(cueEntryName);
       return binFile;
     }
     const cueText =
@@ -1026,7 +1025,6 @@ const resolveArchiveInput = async (
     (binFile as { _archiveCueEntryName?: string })._archiveCueEntryName = cueEntryName;
     (binFile as { _chdMode?: string })._chdMode = "cd";
     (binFile as { _chdCueText?: string })._chdCueText = cueInfo.cueText;
-    (binFile as { _chdCueFileName?: string })._chdCueFileName = getBaseFileName(cueEntryName);
     return binFile;
   }
   if (role === "rom" && !selectedEntryName && autoPickedRomEntryName) {

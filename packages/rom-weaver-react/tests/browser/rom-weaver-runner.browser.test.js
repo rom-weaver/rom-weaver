@@ -76,8 +76,8 @@ test("rom-weaver runner reads and writes staged /work OPFS paths", async () => {
   await warmupRomWeaverRunner();
 
   const runId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  const sourcePath = `${WORKER_OPFS_MOUNTPOINT}/input/browser-bench-model-${runId}.bin`;
-  const outputPath = `${WORKER_OPFS_MOUNTPOINT}/output/browser-bench-model-${runId}.gz`;
+  const sourcePath = `${WORKER_OPFS_MOUNTPOINT}/browser-bench-model-${runId}.bin`;
+  const outputPath = `${WORKER_OPFS_MOUNTPOINT}/browser-bench-model-${runId}.gz`;
   const source = encoder.encode("rom-weaver browser OPFS parity fixture\n");
   await browserRuntime.vfs.truncate(sourcePath, 0);
   await browserRuntime.vfs.write(sourcePath, source, { fileOffset: 0 });

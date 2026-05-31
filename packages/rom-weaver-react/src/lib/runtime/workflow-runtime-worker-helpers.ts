@@ -18,8 +18,7 @@ const getWorkerOutputFilePath = (result: RuntimeWorkerOutput) =>
 const attachDiscOutputMetadata = <TOutput extends PublicOutput>(
   output: TOutput,
   metadata: {
-    chdCueFileName?: string;
-    chdCueText?: string;
+    chdCuePath?: string;
   },
 ) => Object.assign(output, metadata);
 

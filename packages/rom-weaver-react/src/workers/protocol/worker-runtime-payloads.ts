@@ -28,12 +28,10 @@ type WorkerRequestData = WorkerRuntimeRecord & {
   chdFileName?: string;
   chdFilePath?: string;
   chdCreateMode?: string;
-  chdCueText?: string;
   chdInputFileName?: string;
   chdMode?: string;
   chdOutputFileName?: string;
   compressionCodecs?: string | string[] | Record<string, string | number> | null;
-  cueInputFileName?: string;
   fileName?: string;
   filePaths?: string[];
   imageFile?: BrowserWorkerFile;
@@ -86,7 +84,7 @@ type WorkerResultFile = WorkerRuntimeRecord & {
   _archiveEntryName?: string;
   _archiveEntryType?: string;
   _archiveFileName?: string;
-  _chdCueFileName?: string;
+  _chdCuePath?: string;
   _chdCueText?: string;
   _chdMode?: string;
   _file?: File | Blob;

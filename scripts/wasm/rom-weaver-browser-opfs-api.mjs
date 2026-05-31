@@ -11,10 +11,9 @@ const DEFAULT_BROWSER_WASM_URLS = [
   new URL('../rom-weaver-app.wasm', import.meta.url).href,
   new URL('./rom-weaver-app.wasm', import.meta.url).href,
 ];
-const DEFAULT_BROWSER_THREADED_WASM_URLS = [
-  new URL('../rom-weaver-app-threaded.wasm', import.meta.url).href,
-  new URL('./rom-weaver-app-threaded.wasm', import.meta.url).href,
-];
+// The threaded build is the only shipped bundle (rom-weaver-app.wasm); there is no separate
+// `-threaded.wasm` artifact, so the threaded runtime uses the same bundle.
+const DEFAULT_BROWSER_THREADED_WASM_URLS = DEFAULT_BROWSER_WASM_URLS;
 const DEFAULT_SCRATCH_FILE_POOL_SIZE = 16;
 const DEFAULT_THREAD_SCRATCH_FILE_POOL_SIZE = DEFAULT_SCRATCH_FILE_POOL_SIZE;
 const DEFAULT_SHARED_MEMORY_INITIAL_PAGES = 256;
@@ -31,8 +30,11 @@ const OPFS_COPY_CHUNK_SIZE = 8 * 1024 * 1024;
 const RANDOM_ACCESS_READ_CACHE_BLOCK_BYTES = 1024 * 1024;
 const RANDOM_ACCESS_READ_CACHE_BLOCK_COUNT = 4;
 const RANDOM_ACCESS_READ_CACHE_MAX_REQUEST_BYTES = 256 * 1024;
-const OPFS_SEQUENTIAL_WRITE_BUFFER_BYTES = 4 * 1024 * 1024;
-const OPFS_SEQUENTIAL_DIRECT_WRITE_MIN_BYTES = 1024 * 1024;
+const VIRTUAL_BLOB_READ_CACHE_BLOCK_BYTES = 2 * 1024 * 1024;
+const VIRTUAL_BLOB_READ_CACHE_BLOCK_COUNT = 8;
+const VIRTUAL_BLOB_READ_CACHE_MAX_REQUEST_BYTES = 512 * 1024;
+const OPFS_SEQUENTIAL_WRITE_BUFFER_BYTES = 8 * 1024 * 1024;
+const OPFS_SEQUENTIAL_DIRECT_WRITE_MIN_BYTES = 2 * 1024 * 1024;
 const DEFAULT_BROWSER_THREAD_COUNT = 4;
 const DEFAULT_BROWSER_THREAD_POOL_SIZE = 4;
 const MAX_BROWSER_THREAD_POOL_SIZE = 64;
@@ -328,6 +330,7 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
         trace('[browser-opfs] waitForWorkers done');
         traceFlushOpenWasiFileDescriptors(trace, fds, '[browser-opfs] flush fd write buffers');
         traceDirectWasiFileIoStats(trace, wasi, '[browser-opfs] direct file io');
+        traceRandomAccessFileIoStats(trace, fds, '[browser-opfs] random access file io');
         trace('[browser-opfs] flush mounts start');
         await flushBrowserOpfsMounts(mounts, trace);
         trace('[browser-opfs] flush mounts done');
@@ -542,6 +545,7 @@ export async function __runRomWeaverBrowserWasiThread(payload = {}) {
     trace(`[browser-opfs-thread] nested waitForWorkers done tid=${tid ?? 'unknown'}`);
     traceFlushOpenWasiFileDescriptors(trace, built.fds, `[browser-opfs-thread] flush fd write buffers tid=${tid ?? 'unknown'}`);
     traceDirectWasiFileIoStats(trace, threadWasi, `[browser-opfs-thread] direct file io tid=${tid ?? 'unknown'}`);
+    traceRandomAccessFileIoStats(trace, built.fds, `[browser-opfs-thread] random access file io tid=${tid ?? 'unknown'}`);
     await flushBrowserOpfsMounts(mounts, trace);
     runSucceeded = true;
   } catch (error) {
@@ -1113,6 +1117,79 @@ function traceDirectWasiFileIoStats(trace, wasi, label) {
   );
 }
 
+function traceRandomAccessFileIoStats(trace, fds, label) {
+  if (typeof trace !== 'function') return;
+  const stats = collectRandomAccessFileIoStats(fds);
+  if (!randomAccessFileIoStatsHaveData(stats)) return;
+  trace(
+    `${label}`
+    + ` blobReadCalls=${stats.blobReadCalls} blobReadBytes=${stats.blobReadBytes} blobReadMs=${stats.blobReadMs.toFixed(1)} blobReadMiBps=${formatIoMiBps(stats.blobReadBytes, stats.blobReadMs)}`
+    + ` blobCacheHits=${stats.blobCacheHits} blobCacheMisses=${stats.blobCacheMisses} blobCacheHitBytes=${stats.blobCacheHitBytes} blobCacheFillBytes=${stats.blobCacheFillBytes}`
+    + ` opfsReadCalls=${stats.opfsReadCalls} opfsReadBytes=${stats.opfsReadBytes} opfsReadMs=${stats.opfsReadMs.toFixed(1)} opfsReadMiBps=${formatIoMiBps(stats.opfsReadBytes, stats.opfsReadMs)}`
+    + ` opfsCacheHits=${stats.opfsCacheHits} opfsCacheMisses=${stats.opfsCacheMisses} opfsCacheHitBytes=${stats.opfsCacheHitBytes} opfsCacheFillBytes=${stats.opfsCacheFillBytes}`
+    + ` opfsWriteCalls=${stats.opfsWriteCalls} opfsWriteBytes=${stats.opfsWriteBytes} opfsWriteMs=${stats.opfsWriteMs.toFixed(1)} opfsWriteMiBps=${formatIoMiBps(stats.opfsWriteBytes, stats.opfsWriteMs)}`,
+  );
+}
+
+function collectRandomAccessFileIoStats(fds) {
+  const stats = createRandomAccessFileIoStats();
+  const seenFiles = new Set();
+  const seenEntries = new Set();
+
+  const addFile = (file) => {
+    if (!file || seenFiles.has(file) || typeof file.snapshotIoStats !== 'function') return;
+    seenFiles.add(file);
+    addRandomAccessFileIoStats(stats, file.snapshotIoStats());
+  };
+
+  const visitEntry = (entry) => {
+    if (!entry || typeof entry !== 'object' || seenEntries.has(entry)) return;
+    seenEntries.add(entry);
+    addFile(entry.file);
+    addFile(entry.inode?.file);
+    if (entry.mount?.contents instanceof Map) visitEntries(entry.mount.contents);
+    if (entry.contents instanceof Map) visitEntries(entry.contents);
+  };
+
+  const visitEntries = (entries) => {
+    for (const entry of entries.values()) visitEntry(entry);
+  };
+
+  for (const fd of fds ?? []) visitEntry(fd);
+  return stats;
+}
+
+function createRandomAccessFileIoStats() {
+  return {
+    blobCacheFillBytes: 0,
+    blobCacheHitBytes: 0,
+    blobCacheHits: 0,
+    blobCacheMisses: 0,
+    blobReadBytes: 0,
+    blobReadCalls: 0,
+    blobReadMs: 0,
+    opfsCacheFillBytes: 0,
+    opfsCacheHitBytes: 0,
+    opfsCacheHits: 0,
+    opfsCacheMisses: 0,
+    opfsReadBytes: 0,
+    opfsReadCalls: 0,
+    opfsReadMs: 0,
+    opfsWriteBytes: 0,
+    opfsWriteCalls: 0,
+    opfsWriteMs: 0,
+  };
+}
+
+function addRandomAccessFileIoStats(target, source) {
+  if (!source || typeof source !== 'object') return;
+  for (const key of Object.keys(target)) target[key] += Number(source[key]) || 0;
+}
+
+function randomAccessFileIoStatsHaveData(stats) {
+  return Object.values(stats).some((value) => value > 0);
+}
+
 function formatIoMiBps(bytes, elapsedMs) {
   if (!(elapsedMs > 0) || !(bytes > 0)) return '0.0';
   return ((bytes / 1048576) / (elapsedMs / 1000)).toFixed(1);
@@ -1292,6 +1369,7 @@ class BrowserOpfsMount {
     this.scratchDirectoryHandle = null;
     this.scratchFiles = [];
     this.scratchPool = [];
+    this.trace = null;
   }
 
   isWritablePath(guestPath) {
@@ -1357,6 +1435,7 @@ class BrowserOpfsMount {
   async startRun({ runCloseables, scratchFilePoolSize, virtualFiles, trace }) {
     void runCloseables;
     this.finishRun();
+    this.trace = typeof trace === 'function' ? trace : null;
     trace?.(
       `[browser-opfs] mount virtual files start path=${this.mountPath} ${summarizeNormalizedVirtualFiles(virtualFiles)}`,
     );
@@ -1382,6 +1461,7 @@ class BrowserOpfsMount {
       restoreVirtualFiles(this.virtualRestores);
     }
     this.virtualRestores = null;
+    this.trace = null;
   }
 
   trackOwnedFile(file) {
@@ -1446,6 +1526,9 @@ class PreparedWasiPreopenDirectory extends wasiShim.PreopenDirectory {
         mount: this.mount,
       });
       if (created !== wasiShim.wasi.ERRNO_SUCCESS) {
+        this.mount.trace?.(
+          `[browser-opfs] path create failed path=${basenameForTrace(pathStr)} errno=${created}`,
+        );
         return { ret: created, fd_obj: null };
       }
       entry = findEntryInDirectory(this.mount.contents, pathStr);
@@ -1536,6 +1619,8 @@ class BrowserOpfsRandomAccessFile {
     this.supportsBufferedSequentialWrite = true;
     this.readCacheBlocks = [];
     this.readCacheTick = 0;
+    this.ioStats = createRandomAccessFileIoStats();
+    this.logicalSize = null;
     this.closed = false;
   }
 
@@ -1550,14 +1635,19 @@ class BrowserOpfsRandomAccessFile {
       const cachedRead = this.readFromCache(start, dst);
       if (cachedRead !== null) return cachedRead;
     }
-    return readSyncAccessHandleFully(this.syncHandle, dst, start);
+    return this.readSyncAccessHandleAt(start, dst);
   }
 
   writeAt(offset, src) {
     const start = Number(offset);
+    const callStartMs = monotonicNowMs();
     const written = this.syncHandle.write(src, { at: start });
+    this.ioStats.opfsWriteCalls += 1;
+    this.ioStats.opfsWriteMs += monotonicNowMs() - callStartMs;
+    this.ioStats.opfsWriteBytes += Math.max(0, Math.min(Number(written) || 0, src.byteLength));
     if (written > 0) {
       this.dirty = true;
+      this.logicalSize = Math.max(this.logicalSize ?? 0, start + written);
       // Only drop cache blocks that overlap the bytes just written, so an interleaved
       // read/modify/write workload keeps unrelated cached blocks instead of refetching them all.
       this.invalidateReadCacheRange(start, start + written);
@@ -1566,32 +1656,68 @@ class BrowserOpfsRandomAccessFile {
   }
 
   size() {
-    return this.syncHandle.getSize();
+    return Math.max(this.syncHandle.getSize(), this.logicalSize ?? 0);
+  }
+
+  allocateAtLeast(size) {
+    const normalizedSize = Math.max(0, Number(size) || 0);
+    if (normalizedSize <= this.size()) return;
+    this.logicalSize = normalizedSize;
   }
 
   truncate(size) {
     const normalizedSize = Number(size);
-    if (this.syncHandle.getSize() === normalizedSize) return;
+    if (this.syncHandle.getSize() === normalizedSize && this.logicalSize === normalizedSize) return;
     // A shrink drops cached bytes at/after the new end; a grow only zero-fills past the old end.
     // Either way, invalidating [newSize, ∞) is sufficient and leaves earlier cached bytes valid.
     this.invalidateReadCacheRange(normalizedSize, Number.POSITIVE_INFINITY);
     this.syncHandle.truncate(normalizedSize);
+    this.logicalSize = normalizedSize;
     this.dirty = true;
   }
 
   readFromCache(offset, dst) {
     const cached = this.findReadCacheBlock(offset);
-    if (cached) return this.copyReadCacheBlock(cached, offset, dst);
+    if (cached) {
+      const bytesRead = this.copyReadCacheBlock(cached, offset, dst);
+      this.ioStats.opfsCacheHits += 1;
+      this.ioStats.opfsCacheHitBytes += bytesRead;
+      return bytesRead;
+    }
 
     const blockStart =
       Math.floor(offset / RANDOM_ACCESS_READ_CACHE_BLOCK_BYTES) * RANDOM_ACCESS_READ_CACHE_BLOCK_BYTES;
     const block = this.acquireReadCacheBlock();
-    const bytesRead = readSyncAccessHandleFully(this.syncHandle, block.bytes, blockStart);
+    this.ioStats.opfsCacheMisses += 1;
+    const bytesRead = this.readSyncAccessHandleAt(
+      blockStart,
+      block.bytes,
+      Math.min(block.bytes.byteLength, this.size() - blockStart),
+    );
     if (bytesRead <= 0) return bytesRead;
+    this.ioStats.opfsCacheFillBytes += bytesRead;
     block.start = blockStart;
     block.length = Math.min(bytesRead, block.bytes.byteLength);
     block.lastUsed = ++this.readCacheTick;
     return this.copyReadCacheBlock(block, offset, dst);
+  }
+
+  readSyncAccessHandleAt(offset, dst, requestedLength = dst.byteLength) {
+    const logicalSize = this.size();
+    const length = Math.max(0, Math.min(requestedLength, dst.byteLength, logicalSize - offset));
+    if (length <= 0) return 0;
+    const physicalSize = this.syncHandle.getSize();
+    const physicalLength = offset < physicalSize ? Math.min(length, physicalSize - offset) : 0;
+    const callStartMs = monotonicNowMs();
+    const bytesRead = physicalLength > 0
+      ? readSyncAccessHandleFully(this.syncHandle, dst.subarray(0, physicalLength), offset)
+      : 0;
+    const totalRead = bytesRead < length ? length : bytesRead;
+    if (bytesRead < length) dst.fill(0, bytesRead, length);
+    this.ioStats.opfsReadCalls += 1;
+    this.ioStats.opfsReadMs += monotonicNowMs() - callStartMs;
+    this.ioStats.opfsReadBytes += Math.max(0, Math.min(Number(totalRead) || 0, dst.byteLength));
+    return totalRead;
   }
 
   findReadCacheBlock(offset) {
@@ -1671,6 +1797,10 @@ class BrowserOpfsRandomAccessFile {
       this.dirty = false;
     }
   }
+
+  snapshotIoStats() {
+    return { ...this.ioStats };
+  }
 }
 
 // Test-only: lets benches/tests drive the OPFS random-access read/write path (read cache +
@@ -1679,10 +1809,10 @@ export function __createBrowserOpfsRandomAccessFileForTest(syncHandle, options =
   return new BrowserOpfsRandomAccessFile(syncHandle, options);
 }
 
-function readFitsWithinCacheBlock(offset, byteLength) {
+function readFitsWithinCacheBlock(offset, byteLength, blockBytes = RANDOM_ACCESS_READ_CACHE_BLOCK_BYTES) {
   const blockStart =
-    Math.floor(offset / RANDOM_ACCESS_READ_CACHE_BLOCK_BYTES) * RANDOM_ACCESS_READ_CACHE_BLOCK_BYTES;
-  return offset + byteLength <= blockStart + RANDOM_ACCESS_READ_CACHE_BLOCK_BYTES;
+    Math.floor(offset / blockBytes) * blockBytes;
+  return offset + byteLength <= blockStart + blockBytes;
 }
 
 function readSyncAccessHandleFully(syncHandle, dst, offset) {
@@ -1760,6 +1890,9 @@ class BrowserVirtualRandomAccessFile {
     this.slots = this.proxy ? normalizeVirtualFileProxySlots(this.proxy) : [];
     this.trace = typeof options.trace === 'function' ? options.trace : null;
     this.readCount = 0;
+    this.readCacheBlocks = [];
+    this.readCacheTick = 0;
+    this.ioStats = createRandomAccessFileIoStats();
     this.supportsDirectWasmRead = true;
     this.closed = false;
   }
@@ -1781,9 +1914,94 @@ class BrowserVirtualRandomAccessFile {
       dst.set(new Uint8Array(this.source, start, length));
       return length;
     }
-    const bytes = new Uint8Array(this.reader.readAsArrayBuffer(this.source.slice(start, start + length)));
+    if (
+      dst.byteLength <= VIRTUAL_BLOB_READ_CACHE_MAX_REQUEST_BYTES
+      && readFitsWithinCacheBlock(start, dst.byteLength, VIRTUAL_BLOB_READ_CACHE_BLOCK_BYTES)
+    ) {
+      const cachedRead = this.readBlobFromCache(start, dst);
+      if (cachedRead !== null) return cachedRead;
+    }
+    return this.readBlobAt(start, dst, length);
+  }
+
+  readBlobAt(offset, dst, requestedLength = dst.byteLength) {
+    const length = Math.max(0, Math.min(requestedLength, dst.byteLength, this.size() - offset));
+    if (length <= 0) return 0;
+    const callStartMs = monotonicNowMs();
+    const bytes = new Uint8Array(this.reader.readAsArrayBuffer(this.source.slice(offset, offset + length)));
+    this.ioStats.blobReadCalls += 1;
+    this.ioStats.blobReadMs += monotonicNowMs() - callStartMs;
+    this.ioStats.blobReadBytes += bytes.byteLength;
     dst.set(bytes);
     return bytes.byteLength;
+  }
+
+  readBlobFromCache(offset, dst) {
+    const cached = this.findReadCacheBlock(offset);
+    if (cached) {
+      const bytesRead = this.copyReadCacheBlock(cached, offset, dst);
+      this.ioStats.blobCacheHits += 1;
+      this.ioStats.blobCacheHitBytes += bytesRead;
+      return bytesRead;
+    }
+
+    const blockStart =
+      Math.floor(offset / VIRTUAL_BLOB_READ_CACHE_BLOCK_BYTES) * VIRTUAL_BLOB_READ_CACHE_BLOCK_BYTES;
+    const block = this.acquireReadCacheBlock();
+    this.ioStats.blobCacheMisses += 1;
+    const bytesRead = this.readBlobAt(
+      blockStart,
+      block.bytes,
+      Math.min(block.bytes.byteLength, this.size() - blockStart),
+    );
+    if (bytesRead <= 0) return bytesRead;
+    this.ioStats.blobCacheFillBytes += bytesRead;
+    block.start = blockStart;
+    block.length = Math.min(bytesRead, block.bytes.byteLength);
+    block.lastUsed = ++this.readCacheTick;
+    return this.copyReadCacheBlock(block, offset, dst);
+  }
+
+  findReadCacheBlock(offset) {
+    for (const block of this.readCacheBlocks) {
+      if (offset >= block.start && offset < block.start + block.length) {
+        block.lastUsed = ++this.readCacheTick;
+        return block;
+      }
+    }
+    return null;
+  }
+
+  acquireReadCacheBlock() {
+    if (this.readCacheBlocks.length < VIRTUAL_BLOB_READ_CACHE_BLOCK_COUNT) {
+      const block = {
+        bytes: new Uint8Array(VIRTUAL_BLOB_READ_CACHE_BLOCK_BYTES),
+        lastUsed: 0,
+        length: 0,
+        start: 0,
+      };
+      this.readCacheBlocks.push(block);
+      return block;
+    }
+    let oldest = this.readCacheBlocks[0];
+    for (const block of this.readCacheBlocks) {
+      if (block.lastUsed < oldest.lastUsed) oldest = block;
+    }
+    return oldest;
+  }
+
+  copyReadCacheBlock(block, offset, dst) {
+    const relativeOffset = offset - block.start;
+    if (relativeOffset < 0 || relativeOffset >= block.length) return 0;
+    const available = block.length - relativeOffset;
+    const length = Math.min(dst.byteLength, available);
+    if (length <= 0) return 0;
+    dst.set(block.bytes.subarray(relativeOffset, relativeOffset + length));
+    return length;
+  }
+
+  clearReadCache() {
+    this.readCacheBlocks.length = 0;
   }
 
   readProxyAt(offset, dst, requestedLength, readIndex) {
@@ -1916,8 +2134,19 @@ class BrowserVirtualRandomAccessFile {
   flush() {}
 
   close() {
+    if (this.closed) return;
+    this.clearReadCache();
     this.closed = true;
   }
+
+  snapshotIoStats() {
+    return { ...this.ioStats };
+  }
+}
+
+// Test-only: lets benches/tests drive the virtual Blob/proxy read path directly.
+export function __createBrowserVirtualRandomAccessFileForTest(source, options = {}) {
+  return new BrowserVirtualRandomAccessFile(source, options);
 }
 
 class WasiRandomAccessFileInode extends wasiShim.Inode {
@@ -1983,7 +2212,10 @@ class OpenWasiRandomAccessFile extends wasiShim.Fd {
     const flushRet = this.flushPendingWrite();
     if (flushRet !== wasiShim.wasi.ERRNO_SUCCESS) return flushRet;
     const requested = BigInt(offset) + BigInt(len);
-    if (BigInt(this.inode.file.size()) < requested) {
+    if (BigInt(this.inode.file.size()) >= requested) return wasiShim.wasi.ERRNO_SUCCESS;
+    if (typeof this.inode.file.allocateAtLeast === 'function') {
+      this.inode.file.allocateAtLeast(Number(requested));
+    } else {
       this.inode.file.truncate(Number(requested));
     }
     return wasiShim.wasi.ERRNO_SUCCESS;
@@ -2006,7 +2238,12 @@ class OpenWasiRandomAccessFile extends wasiShim.Fd {
     if (this.inode.readonly) return wasiShim.wasi.ERRNO_BADF;
     const flushRet = this.flushPendingWrite();
     if (flushRet !== wasiShim.wasi.ERRNO_SUCCESS) return flushRet;
-    this.inode.file.truncate(Number(size));
+    const nextSize = Number(size);
+    if (nextSize > this.inode.file.size() && typeof this.inode.file.allocateAtLeast === 'function') {
+      this.inode.file.allocateAtLeast(nextSize);
+    } else {
+      this.inode.file.truncate(nextSize);
+    }
     return wasiShim.wasi.ERRNO_SUCCESS;
   }
 
@@ -2797,7 +3034,7 @@ async function copyRandomAccessFileToHandle(source, fileHandle) {
     const accessHandle = await openSyncAccessHandle({ fileHandle, mode: 'readwrite' });
     try {
       const buffer = new Uint8Array(OPFS_COPY_CHUNK_SIZE);
-      accessHandle.truncate(size);
+      accessHandle.truncate(0);
       let offset = 0;
       while (offset < size) {
         const length = Math.min(buffer.byteLength, size - offset);
@@ -3401,6 +3638,7 @@ function createBrowserWasiThreadWorkerPool({ initialSize, threadWorkerUrl }) {
   }) => {
     const commandId = nextCommandId;
     nextCommandId += 1;
+    const commandStartMs = monotonicNowMs();
     trace?.(`[browser-opfs] thread pool command create id=${commandId} poolSize=${poolSize}`);
     const command = {
       commandId,
@@ -3417,6 +3655,7 @@ function createBrowserWasiThreadWorkerPool({ initialSize, threadWorkerUrl }) {
       wasmMemory,
       wasmModule,
       shutdown: async () => {
+        const shutdownStartMs = monotonicNowMs();
         trace?.(`[browser-opfs] thread pool command shutdown start id=${commandId}`);
         for (const slot of command.slots) {
           if (slot.shell.currentCommand !== slot) continue;
@@ -3438,19 +3677,23 @@ function createBrowserWasiThreadWorkerPool({ initialSize, threadWorkerUrl }) {
           Atomics.notify(slot.control, THREAD_SLOT_STATE_INDEX, 1);
         }
         await Promise.allSettled(command.slots.map((slot) => slot.done));
-        trace?.(`[browser-opfs] thread pool command shutdown done id=${commandId}`);
+        trace?.(`[browser-opfs] thread pool command shutdown done id=${commandId} ms=${(monotonicNowMs() - shutdownStartMs).toFixed(1)}`);
       },
     };
     command.ready = ensureSize(poolSize).then(async () => {
+      const ensureMs = monotonicNowMs() - commandStartMs;
       if (threadWorkerUrl && resolveThreadWorkerUrl(threadWorkerUrl) !== resolvedThreadWorkerUrl) {
         throw new Error(
           `browser wasi thread worker pool URL mismatch: ${resolvedThreadWorkerUrl} !== ${threadWorkerUrl}`,
         );
       }
+      const selectStartMs = monotonicNowMs();
       const shells = await selectAvailableShells(poolSize, trace, commandId);
+      const selectMs = monotonicNowMs() - selectStartMs;
       trace?.(
         `[browser-opfs] thread pool command selected workers id=${commandId} workers=${shells.map((shell) => shell.index).join(',')}`,
       );
+      const postStartMs = monotonicNowMs();
       for (const shell of shells) {
         if (shell.terminated) throw new Error(`browser wasi thread worker ${shell.index} is not available`);
         const control = new Int32Array(
@@ -3514,8 +3757,13 @@ function createBrowserWasiThreadWorkerPool({ initialSize, threadWorkerUrl }) {
           throw error;
         }
       }
+      const postMs = monotonicNowMs() - postStartMs;
       await Promise.all(command.slots.map((slot) => slot.ready));
-      trace?.(`[browser-opfs] thread pool command ready id=${commandId} slots=${command.slots.length}`);
+      trace?.(
+        `[browser-opfs] thread pool command ready id=${commandId} slots=${command.slots.length}`
+        + ` ensureMs=${ensureMs.toFixed(1)} selectMs=${selectMs.toFixed(1)} postMs=${postMs.toFixed(1)}`
+        + ` readyMs=${(monotonicNowMs() - commandStartMs).toFixed(1)}`,
+      );
     });
     return command;
   };
@@ -4292,15 +4540,9 @@ function resolveThreadedWasmUrlFallbacks(wasmUrl) {
 
 function deriveThreadedWasmUrl(urlLike) {
   if (typeof urlLike !== 'string' || urlLike.trim().length === 0) return null;
-  const absoluteUrl = toAbsoluteUrl(urlLike);
-  const parsed = new URL(absoluteUrl);
-  const replacedPathname = parsed.pathname.replace(
-    /rom-weaver-app\.wasm$/,
-    'rom-weaver-app-threaded.wasm',
-  );
-  if (replacedPathname === parsed.pathname) return null;
-  parsed.pathname = replacedPathname;
-  return parsed.href;
+  // The single shipped bundle (rom-weaver-app.wasm) is already the threaded build; there is no
+  // separate `-threaded.wasm` artifact, so the threaded runtime loads the configured URL as-is.
+  return toAbsoluteUrl(urlLike);
 }
 
 function toAbsoluteUrl(urlLike) {

@@ -39,7 +39,6 @@ const PATH_SEPARATOR_REGEX = /[\\/]+/g;
 const UNSAFE_FILE_CHARS_REGEX = /[^A-Za-z0-9._-]+/g;
 const EDGE_UNDERSCORES_REGEX = /^_+|_+$/g;
 const TRAILING_SLASHES_REGEX = /\/+$/;
-let stagedSourceId = 0;
 
 const normalizeFileName = (fileName: string | null | undefined, fallback = "input.bin") =>
   String(fileName || fallback)
@@ -48,23 +47,11 @@ const normalizeFileName = (fileName: string | null | undefined, fallback = "inpu
     .replace(EDGE_UNDERSCORES_REGEX, "")
     .replace(LEADING_DOTS_REGEX, "") || fallback;
 
-const createStagePathNonce = () => {
-  const sequence = ++stagedSourceId;
-  const timeToken = Date.now().toString(36);
-  const randomToken = Math.random().toString(16).slice(2, 10);
-  return `${timeToken}-${sequence}-${randomToken}`;
-};
-
 const createInputPath = (request: StageRequest, fileName: string) => {
   const mountPoint = String(request.mountPoint || WORKER_OPFS_MOUNTPOINT).replace(TRAILING_SLASHES_REGEX, "");
   const bucket = request.bucket || "input";
-  const pathPrefix = normalizeFileName(request.pathPrefix || "input", "input");
-  return getWorkerStorageBucketPath(
-    mountPoint,
-    bucket,
-    `${pathPrefix}-${createStagePathNonce()}-${normalizeFileName(fileName)}`,
-    normalizeFileName(fileName),
-  );
+  const normalizedFileName = normalizeFileName(fileName);
+  return getWorkerStorageBucketPath(mountPoint, bucket, normalizedFileName, normalizedFileName);
 };
 
 type SyncAccessMode = "readwrite" | "readwrite-unsafe";

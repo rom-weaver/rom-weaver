@@ -80,8 +80,10 @@ const isZ3dsFile = (source: unknown): boolean =>
   ) ||
   hasAsciiMagic(source, "Z3DS");
 
-const getChdAutoCreateMode = (source: ByteInspectableSource & { _chdCueText?: string; _chdMode?: string }): string => {
-  if (source._chdMode === "cd" || source._chdCueText) return "cd";
+const getChdAutoCreateMode = (
+  source: ByteInspectableSource & { _chdCuePath?: string; _chdCueText?: string; _chdMode?: string },
+): string => {
+  if (source._chdMode === "cd" || source._chdCuePath || source._chdCueText) return "cd";
   if (source._chdMode === "dvd") return "dvd";
   const fileName = String(source.fileName || "");
   return CUE_EXTENSION_REGEX.test(fileName) || BIN_EXTENSION_REGEX.test(fileName) ? "cd" : "dvd";

@@ -18,6 +18,7 @@ type WorkflowExtensionFileLike = {
 
 type WorkflowChdSourceMetadata = {
   _chdMode?: "cd" | "dvd" | string;
+  _chdCuePath?: string;
   _chdCueText?: string;
 };
 

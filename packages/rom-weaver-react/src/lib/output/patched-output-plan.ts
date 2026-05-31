@@ -37,7 +37,7 @@ type PatchedOutputPlan = {
   archiveEntries?: ArchiveEntrySaveInfo[];
   inputFileName?: string;
   chdSourceMode?: string | null;
-  chdCueText?: string | null;
+  chdCuePath?: string | null;
   chdCreateMode?: string | null;
   chdCompressionCodecs?: ChdCompressionCodecs | null;
   rvzSourceFileName?: string;
@@ -110,7 +110,7 @@ const createPatchedOutputPlan = ({
       chdCompressionCodecs:
         typeof resolveChdCompressionCodecs === "function" ? resolveChdCompressionCodecs(codecMode) : null,
       chdCreateMode: createMode,
-      chdCueText: romFile?._chdCueText,
+      chdCuePath: romFile?._chdCuePath,
       chdSourceMode: romFile?._chdMode,
       inputFileName: inputFileName,
     });

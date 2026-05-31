@@ -36,6 +36,7 @@ const DEFAULT_CHD_CREATE_DVD_CODECS = "lzma,zlib,huff,flac";
 const hasDiscCompressionMetadata = (source: PatchFileInstance | null | undefined) =>
   !!(
     source?._chdSourceFileName ||
+    source?._chdCuePath ||
     source?._chdCueText ||
     source?._chdMode === "cd" ||
     source?._chdMode === "dvd" ||
@@ -222,7 +223,7 @@ const createRuntimeDiscOutputFiles = async (
     request = {
       chdSourceMode: outputPlan.chdSourceMode,
       compressionCodecs: outputPlan.chdCompressionCodecs,
-      cueText: outputPlan.chdCueText,
+      cueFilePath: outputPlan.chdCuePath,
       fileName: inputFileName,
       format: "chd",
       mode: outputPlan.chdCreateMode,
@@ -524,7 +525,6 @@ const buildSessionOutputFiles = async (
     const source = createRuntimeSourceFromPatchFile(inputFile, inputFile.fileName);
     const result = await runtime.compression.create({
       compressionCodecs: getDefaultChdCompressionCodecs("cd", getCompressionProfile(options)),
-      cueText: cueAsset.disc?.cueText,
       fileName: inputFile.fileName,
       format: "chd",
       mode: "cd",

@@ -1,4 +1,5 @@
 import { forwardCreatePatchProgress } from "../../platform/shared/workflow-runtime-progress.ts";
+import { createRuntimeOutputFromVfs } from "../../storage/vfs/runtime-output.ts";
 import type { ChecksumResult } from "../../types/checksum.ts";
 import type { PublicOutput } from "../../types/workflow-runtime.ts";
 import type {
@@ -24,6 +25,14 @@ import { getNamedSourceFileName, toWorkerMetadata } from "./source-normalization
 import { createCompressionExtractResult } from "./workflow-runtime-worker-helpers.ts";
 
 const CUE_FILE_REGEX = /\.cue$/i;
+const PATH_PART_SPLIT_REGEX = /[/\\]+/;
+
+const getPathBaseName = (value: string, fallback: string): string => {
+  const parts = String(value || "")
+    .split(PATH_PART_SPLIT_REGEX)
+    .filter((part) => !!part);
+  return parts[parts.length - 1] || fallback;
+};
 
 type DiscRuntimeAdapter = {
   createChd?: (input: RuntimeDiscCreateChdInput) => Promise<Awaited<ReturnType<RuntimeWorkerIo["createWorkerOutput"]>>>;
@@ -324,7 +333,6 @@ const createSharedCompressionRuntime = (
   archiveRuntime: Partial<WorkflowRuntime["compression"]>,
   discRuntime: DiscRuntimeAdapter,
   input: {
-    createBytes?: (bytes: Uint8Array, fileName: string) => Promise<PublicOutput>;
     archiveRuntimeOptional?: boolean;
   } = {},
 ): WorkflowRuntime["compression"] => {
@@ -338,14 +346,12 @@ const createSharedCompressionRuntime = (
   const getSourceFileName = (source: RuntimeDiscExtractChdInput["source"], fallbackFileName: string) =>
     getNamedSourceFileName(source, { fallback: fallbackFileName }) || fallbackFileName;
   const createCueOutput = async (
-    cueText: string,
+    extractedOutput: PublicOutput & { chdCuePath?: string },
     cueFileName: string,
     cleanup?: () => Promise<void> | void,
   ): Promise<PublicOutput> => {
-    if (!input.createBytes) throw new Error("Compression runtime cannot synthesize cue outputs in this environment");
-    const cueOutput = await input.createBytes(new TextEncoder().encode(cueText), cueFileName);
-    if (cleanup) cueOutput.cleanup = cleanup;
-    return cueOutput;
+    if (!extractedOutput.chdCuePath) throw new Error("CHD extraction did not return a cue output path");
+    return createRuntimeOutputFromVfs(extractedOutput.vfs, extractedOutput.chdCuePath, cueFileName, { cleanup });
   };
   const toDiscProgressCallback = (
     stage: "input" | "output",
@@ -374,8 +380,7 @@ const createSharedCompressionRuntime = (
             await discRuntime.createChd?.({
               chdSourceMode: request.chdSourceMode,
               compressionCodecs: request.compressionCodecs,
-              cueInputFileName: request.cueInputFileName,
-              cueText: request.cueText,
+              cueFilePath: request.cueFilePath,
               fileName: request.fileName,
               imageFiles: request.imageFiles,
               logLevel: request.options?.logLevel,
@@ -454,11 +459,11 @@ const createSharedCompressionRuntime = (
           threads: request.options?.workerThreads,
         }),
         "CHD compression extraction is unavailable",
-      ) as PublicOutput & { chdCueFileName?: string; chdCueText?: string };
+      ) as PublicOutput & { chdCuePath?: string };
       if (!cueEntryName) return createCompressionExtractResult([extractedOutput]);
       const cueOutput = await createCueOutput(
-        extractedOutput.chdCueText || "",
-        cueEntryName || extractedOutput.chdCueFileName || "disc.cue",
+        extractedOutput,
+        cueEntryName || getPathBaseName(extractedOutput.chdCuePath || "", "disc.cue"),
         trackEntryName ? undefined : extractedOutput.cleanup,
       );
       const outputs = request.entries

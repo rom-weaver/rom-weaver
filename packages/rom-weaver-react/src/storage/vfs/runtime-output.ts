@@ -8,7 +8,7 @@ import { isVfsFileRef } from "./source-ref.ts";
 
 const OUTPUT_CHUNK_SIZE = 8 * 1024 * 1024;
 
-let runtimeOutputId = 0;
+const PATH_PART_SPLIT_REGEX = /[/\\]+/;
 
 const attachRuntimeCleanup = (
   output: Omit<PublicOutput, "cleanup">,
@@ -25,9 +25,16 @@ const attachRuntimeCleanup = (
   });
 };
 
-const createRuntimeOutputPath = (rootPath: string, fileName: string, pathPrefix = "runtime-output") => {
-  runtimeOutputId++;
-  return joinVfsPath(rootPath, "output", `${pathPrefix}-${runtimeOutputId}`, fileName);
+const getOutputFileName = (fileName: string, fallback = "output.bin") => {
+  const parts = String(fileName || "")
+    .trim()
+    .split(PATH_PART_SPLIT_REGEX)
+    .filter((part) => !!part);
+  return parts[parts.length - 1] || fallback;
+};
+
+const createRuntimeOutputPath = (rootPath: string, fileName: string, _pathPrefix = "runtime-output") => {
+  return joinVfsPath(rootPath, getOutputFileName(fileName));
 };
 
 const createOutputPathCleanup =

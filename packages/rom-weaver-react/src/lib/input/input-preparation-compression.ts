@@ -155,8 +155,7 @@ const looksLikeChdFile = (binFile: PatchFileInstance) => {
 const decorateCompressionPatchFile = (
   file: PatchFileInstance,
   result: Partial<{
-    chdCueFileName?: string;
-    chdCueText?: string;
+    chdCuePath?: string;
     chdMode?: string;
     chdSourceFileName?: string;
     rvzMode?: string;
@@ -167,8 +166,7 @@ const decorateCompressionPatchFile = (
   }>,
 ) => {
   if (result.chdMode) file._chdMode = result.chdMode;
-  if (result.chdCueText) file._chdCueText = result.chdCueText;
-  if (result.chdCueFileName) file._chdCueFileName = result.chdCueFileName;
+  if (result.chdCuePath) file._chdCuePath = result.chdCuePath;
   if (result.chdSourceFileName) file._chdSourceFileName = result.chdSourceFileName;
   if (result.rvzMode) file._rvzMode = result.rvzMode;
   if (result.rvzSourceFileName) file._rvzSourceFileName = result.rvzSourceFileName;

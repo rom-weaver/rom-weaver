@@ -13,15 +13,8 @@ const normalizeWorkerStorageMountPoint = (mountPoint: string, fallback = WORKER_
   return normalized.replace(TRAILING_SLASHES_REGEX, "") || fallback;
 };
 
-const normalizeWorkerStorageBucket = (bucket: WorkerStorageBucket) => {
-  if (bucket === "inputs") return "input";
-  if (bucket === "outputs") return "output";
-  if (bucket === "temps") return "temp";
-  return bucket;
-};
-
-const getWorkerStorageBucketRoot = (mountPoint: string, bucket: WorkerStorageBucket) =>
-  `${normalizeWorkerStorageMountPoint(mountPoint)}/${normalizeWorkerStorageBucket(bucket)}`;
+const getWorkerStorageBucketRoot = (mountPoint: string, _bucket: WorkerStorageBucket) =>
+  normalizeWorkerStorageMountPoint(mountPoint);
 
 const getWorkerStorageBucketPath = (
   mountPoint: string,

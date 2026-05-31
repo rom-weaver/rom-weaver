@@ -131,7 +131,7 @@ export type CoreRomPatchFileLike = PatchFileLike & {
   _archiveEntryType?: string;
   _archiveFileName?: string;
   _browserFileBacked?: boolean;
-  _chdCueFileName?: string;
+  _chdCuePath?: string;
   _chdCueText?: string;
   _chdMode?: string;
   _chdOutputPath?: string;
@@ -158,7 +158,7 @@ export type WorkerPatchFile = WorkerRuntimeRecord & {
   _archiveEntryName?: string;
   _archiveEntryType?: string;
   _archiveFileName?: string;
-  _chdCueFileName?: string;
+  _chdCuePath?: string;
   _chdCueText?: string;
   _chdMode?: string;
   _chdOutputPath?: string;

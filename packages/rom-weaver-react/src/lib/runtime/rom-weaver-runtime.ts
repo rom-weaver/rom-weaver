@@ -24,13 +24,11 @@ import {
 
 const CHECKSUM_PAIR_REGEX = /([a-z0-9_-]+)=([0-9a-f]+)/gi;
 const PATH_PART_SPLIT_REGEX = /[/\\]+/;
-const PATH_FILE_CAPTURE_REGEX = /^(.+[/\\])?([^/\\]+)$/;
 const FILE_EXTENSION_CAPTURE_REGEX = /^(.+?)(\.[^./\\]*)?$/;
 const CODEC_LEVEL_ENTRY_REGEX = /^([a-z0-9_+-]+)(?::(\d+))?$/i;
 const COMPRESSION_LEVEL_PROFILE_REGEX = /^(min|very-low|low|medium|high|very-high|max)$/i;
 const OUT_OF_MEMORY_FAILURE_REGEX = /\bout of memory\b|\bmemory allocation\b|\bcannot allocate memory\b/i;
 const WORK_ROOT_PATH = "/work";
-const WORK_OUTPUT_PATH = "/work/output";
 
 const nowIso = () => new Date().toISOString();
 
@@ -227,11 +225,6 @@ const getPathBaseName = (value: string, fallback: string): string => {
   return parts[parts.length - 1] || fallback;
 };
 
-const getPathDirectory = (filePath: string): string => {
-  const match = String(filePath || "").match(PATH_FILE_CAPTURE_REGEX);
-  return match?.[1] || "";
-};
-
 const joinPath = (directory: string, fileName: string): string => {
   const normalizedDirectory = String(directory || "").trim();
   if (!normalizedDirectory) return fileName;
@@ -250,25 +243,19 @@ const normalizeAbsolutePosixPath = (pathValue: string): string => {
   return normalized.length > 1 ? normalized.replace(/\/+$/, "") : normalized;
 };
 
-const getPreferredOutputDirectory = (sourcePath: string): string => {
-  const normalizedSourcePath = normalizeAbsolutePosixPath(sourcePath);
-  if (normalizedSourcePath === WORK_ROOT_PATH || normalizedSourcePath.startsWith(`${WORK_ROOT_PATH}/`)) {
-    return WORK_OUTPUT_PATH;
-  }
-  return getPathDirectory(sourcePath);
-};
-
-let romWeaverOutputPathId = 0;
-
 const selectRomWeaverOutputPath = (sourcePath: string, outputFileName: string, blockedPaths: string[] = []) => {
-  const directory = getPreferredOutputDirectory(sourcePath);
-  const preferredPath = joinPath(directory, outputFileName);
+  const outputBaseName = getPathBaseName(outputFileName, "output.bin");
+  const preferredPath = joinPath(WORK_ROOT_PATH, outputBaseName);
+  const normalizedPreferredPath = normalizeAbsolutePosixPath(preferredPath);
   const normalizedBlocked = new Set(
-    [sourcePath, ...blockedPaths].map((pathValue) => String(pathValue || "").trim()).filter((pathValue) => !!pathValue),
+    [sourcePath, ...blockedPaths]
+      .map((pathValue) => normalizeAbsolutePosixPath(pathValue))
+      .filter((pathValue) => !!pathValue),
   );
-  if (!normalizedBlocked.has(preferredPath)) return preferredPath;
-  romWeaverOutputPathId++;
-  return joinPath(directory, `.rom-weaver-output-${romWeaverOutputPathId}-${outputFileName}`);
+  if (normalizedBlocked.has(normalizedPreferredPath)) {
+    throw new Error(`Browser output path conflicts with an active input or patch: ${preferredPath}`);
+  }
+  return preferredPath;
 };
 
 const getLastEvent = (result: RomWeaverRunJsonResult): RomWeaverRunJsonEvent | null => {
@@ -529,6 +516,11 @@ const normalizeChdCodecArgs = (codecs: string[]) => {
   return { codecs: strippedCodecs, stripped: true };
 };
 
+const isChdCompressionFormat = (format: string): boolean => {
+  const normalized = format.trim().toLowerCase();
+  return normalized === "chd" || normalized.startsWith("chd-");
+};
+
 const getFileNameParts = (fileName: string) => {
   const match = getPathBaseName(fileName, "input.bin").match(FILE_EXTENSION_CAPTURE_REGEX);
   return {
@@ -592,10 +584,9 @@ const invokeRomWeaverCompressionCreateWorker = async (
   const format = String(input.format || "").trim();
   const normalizedFormat = format.toLowerCase();
   const configuredCodecs = normalizeCodecEntries(input.codecs);
-  const normalizedChdCodecs =
-    normalizedFormat === "chd"
-      ? normalizeChdCodecArgs(configuredCodecs)
-      : { codecs: configuredCodecs, stripped: false };
+  const normalizedChdCodecs = isChdCompressionFormat(normalizedFormat)
+    ? normalizeChdCodecArgs(configuredCodecs)
+    : { codecs: configuredCodecs, stripped: false };
   if (normalizedChdCodecs.stripped) {
     emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson compress normalized chd codec levels", {
       configuredCodecs,

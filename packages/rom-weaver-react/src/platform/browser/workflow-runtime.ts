@@ -42,6 +42,7 @@ import type {
   WorkflowRuntime,
   WorkflowRuntimeLog,
 } from "../../types/workflow-runtime-adapter.ts";
+import { parseCueFile } from "../../workers/protocol/cue-file-utils.ts";
 import { WORKER_OPFS_MOUNTPOINT } from "../../workers/shared/worker-storage/storage-layout.ts";
 import { forwardArchiveProgress, forwardDiscProgress } from "../shared/workflow-runtime-progress.ts";
 import { triggerBrowserDownload } from "./browser-download.ts";
@@ -49,8 +50,8 @@ import { createBrowserRuntimeVfsIo } from "./browser-runtime-vfs.ts";
 
 const FILE_CAPTURE_REGEX = /^(.+[/\\])?([^/\\]+)$/;
 const FILE_EXTENSION_REGEX = /\.[^./\\\s]+$/;
+const CHD_SINGLE_BIN_OUTPUT_REGEX = /\.bin$/i;
 const LEVEL_PROFILE_REGEX = /^(min|very-low|low|medium|high|very-high|max)$/i;
-const ARCHIVE_STAGE_COPY_CHUNK_SIZE = 8 * 1024 * 1024;
 const BROWSER_VFS_PATH_RETRY_ATTEMPTS = 6;
 const EXTRACT_CHECKSUM_ALGORITHMS = ["crc32", "md5", "sha1"] as const;
 const ZIP_LIKE_EXTENSION_REGEX = /\.(zip|jar|apk|cbz|epub|xpi)$/i;
@@ -71,6 +72,16 @@ const getPathBaseName = (filePath: string, fallback = ""): string => {
 };
 
 const getFileStem = (fileName: string) => String(fileName || "").replace(FILE_EXTENSION_REGEX, "");
+
+const getChdCdOutputFileName = (fileName: string, extension: "bin" | "cue"): string =>
+  `${getFileStem(getPathBaseName(fileName, "input.chd")) || "input"}.${extension}`;
+
+const getChdCreateFormat = (requestedMode: string): string => {
+  if (requestedMode === "dvd") return "chd-dvd";
+  if (requestedMode === "raw") return "chd-raw";
+  if (requestedMode === "hd") return "chd-hd";
+  return "chd";
+};
 
 const getPathDirectory = (filePath: string): string => {
   const match = String(filePath || "").match(FILE_CAPTURE_REGEX);
@@ -265,37 +276,6 @@ const normalizeZipLikeArchiveSource = (source: unknown): unknown => {
   };
 };
 
-const copyBrowserVfsPath = async (sourcePath: string, targetPath: string) => {
-  const sourceStat = await browserVfs.stat(sourcePath);
-  const sourceSize = Math.max(0, Math.floor(sourceStat?.size || 0));
-  await browserVfs.truncate(targetPath, 0);
-  if (sourceSize === 0) return;
-  const buffer = new Uint8Array(ARCHIVE_STAGE_COPY_CHUNK_SIZE);
-  let offset = 0;
-  while (offset < sourceSize) {
-    const nextLength = Math.min(buffer.byteLength, sourceSize - offset);
-    const bytesRead = await browserVfs.read(sourcePath, buffer, {
-      fileOffset: offset,
-      length: nextLength,
-    });
-    if (!bytesRead) break;
-    await browserVfs.write(targetPath, buffer.subarray(0, bytesRead), {
-      fileOffset: offset,
-    });
-    offset += bytesRead;
-  }
-};
-
-let archiveStageBatchId = 0;
-let archiveExtractDirectoryId = 0;
-
-const createRuntimePathNonce = () => {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID().slice(0, 8);
-  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
-};
-
-const archiveExtractDirectoryNonce = createRuntimePathNonce();
-
 const stageCompressionEntryForRomWeaver = async (
   workerIo: RuntimeWorkerIo,
   entry: ReturnType<typeof normalizeCompressionWorkerEntries>[number],
@@ -311,21 +291,11 @@ const stageCompressionEntryForRomWeaver = async (
     source,
   });
 
-  const batchDirectory = joinPath(
-    getPathDirectory(staged.filePath) || `${WORKER_OPFS_MOUNTPOINT}/input/`,
-    `.rom-weaver-entry-batch-${++archiveStageBatchId}`,
-  );
-  const canonicalPath = joinPath(batchDirectory, fileName);
-  await copyBrowserVfsPath(staged.filePath, canonicalPath);
-  const canonicalStat = await waitForBrowserVfsPath(canonicalPath);
-  if (!canonicalStat) throw new Error(`Browser VFS staged input is not available: ${canonicalPath}`);
-
   return {
     cleanup: async () => {
       await staged.cleanup().catch(() => undefined);
-      await browserVfs.remove(canonicalPath).catch(() => undefined);
     },
-    filePath: canonicalPath,
+    filePath: staged.filePath,
   };
 };
 
@@ -507,11 +477,17 @@ const ensureBrowserVfsOutputPath = async (filePath: string) => {
   await browserVfs.truncate(normalizedPath, 0);
 };
 
-const ensureBrowserVfsOutputPaths = async (filePaths: string[]) => {
+const ensureBrowserVfsOutputPaths = async (filePaths: string[], blockedPaths: string[] = []) => {
   const seen = new Set<string>();
+  const blocked = new Set(
+    blockedPaths.map((filePath) => String(filePath || "").trim()).filter((filePath) => !!filePath),
+  );
   for (const filePath of filePaths) {
     const normalizedPath = String(filePath || "").trim();
     if (!normalizedPath || seen.has(normalizedPath)) continue;
+    if (blocked.has(normalizedPath)) {
+      throw new Error(`Browser output path conflicts with an active input or patch: ${normalizedPath}`);
+    }
     seen.add(normalizedPath);
     await ensureBrowserVfsOutputPath(normalizedPath);
   }
@@ -559,6 +535,46 @@ const readTextFromBrowserVfs = async (filePath: string): Promise<string> => {
   return new TextDecoder().decode(bytes);
 };
 
+const writeTextToBrowserVfs = async (filePath: string, text: string) => {
+  const bytes = new TextEncoder().encode(text);
+  await browserVfs.truncate(filePath, 0);
+  if (bytes.byteLength > 0) await browserVfs.write(filePath, bytes, { fileOffset: 0 });
+};
+
+const rewriteCueFileBinaryReference = async (cuePath: string, targetPath: string) => {
+  const contents = await readTextFromBrowserVfs(cuePath);
+  const updatedContents = replaceCuePatchFileName(contents, targetPath);
+  if (updatedContents !== contents) await writeTextToBrowserVfs(cuePath, updatedContents);
+};
+
+const resolveCueSidecarPath = (cuePath: string, referencedName: string): string => {
+  const normalizedName = String(referencedName || "").trim();
+  if (!normalizedName) return "";
+  // Absolute references already point at the staged file.
+  if (normalizedName.startsWith("/") || normalizedName.startsWith("\\")) return normalizedName;
+  return joinPath(getPathDirectory(cuePath), getPathBaseName(normalizedName, normalizedName));
+};
+
+// A cue describes a disc layout that references sibling track files (.bin) by name. The browser WASI
+// runtime only hydrates OPFS files it is told about up front (command inputs + knownInputPaths); worker
+// threads cannot open OPFS handles on demand. Enumerate the cue's referenced tracks so they are hydrated
+// alongside the cue, otherwise the disc-layout read fails with "No such file or directory (os error 44)".
+const collectCueSidecarPaths = async (cuePath: string): Promise<string[]> => {
+  const normalizedCuePath = String(cuePath || "").trim();
+  if (!(normalizedCuePath && /\.cue$/i.test(normalizedCuePath))) return [];
+  const contents = await readTextFromBrowserVfs(normalizedCuePath).catch(() => "");
+  if (!contents) return [];
+  const parsed = parseCueFile(contents);
+  const sidecarPaths: string[] = [];
+  for (const file of parsed.files) {
+    const sidecarPath = resolveCueSidecarPath(normalizedCuePath, file.name);
+    if (!sidecarPath || sidecarPath === normalizedCuePath) continue;
+    const stat = await browserVfs.stat(sidecarPath).catch(() => null);
+    if (stat) sidecarPaths.push(sidecarPath);
+  }
+  return uniqueNonEmptyStrings(sidecarPaths);
+};
+
 const stageBrowserCompressionEntries = async (
   entries: RuntimeArchiveCreateInput["entries"],
   workerIo: RuntimeWorkerIo,
@@ -602,8 +618,7 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
       const level = format === "zip" ? workflowInput.options?.zipLevel : workflowInput.options?.sevenZipLevel;
       const levelProfile = toLevelProfile(level);
       const codecEntries = withCodecLevel(codec, level);
-      const fallbackOutputPathSource =
-        staged.stagedEntries[0]?.filePath || `${WORKER_OPFS_MOUNTPOINT}/input/archive.bin`;
+      const fallbackOutputPathSource = staged.stagedEntries[0]?.filePath || `${WORKER_OPFS_MOUNTPOINT}/archive.bin`;
       const outputFileName = workflowInput.options?.outputName || (format === "zip" ? "archive.zip" : "archive.7z");
       const outputPath = selectRomWeaverOutputPath(fallbackOutputPathSource, outputFileName, staged.inputPaths);
       await ensureBrowserVfsOutputPath(outputPath);
@@ -640,23 +655,21 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
       source: normalizeZipLikeArchiveSource(workflowInput.source),
     });
     try {
-      const baseOutDirPath = getPathDirectory(archive.filePath) || `${WORKER_OPFS_MOUNTPOINT}/input/`;
       const outputs = [];
       for (const entryName of workflowInput.entries) {
-        const outDirPath = joinPath(
-          baseOutDirPath,
-          `.rom-weaver-extract-${archiveExtractDirectoryNonce}-${++archiveExtractDirectoryId}`,
-        );
-        const cleanupExtractDirectory = async () => {
-          await browserVfs.remove(outDirPath).catch(() => undefined);
+        const outDirPath = WORKER_OPFS_MOUNTPOINT;
+        const cleanupExtractedFiles = async (filePaths: string[]) => {
+          await Promise.all(filePaths.map((filePath) => browserVfs.remove(filePath).catch(() => undefined)));
         };
+        const outputPathCandidates = filterOutputCandidatesAwayFromSource(
+          getBrowserExtractOutputPathCandidates(outDirPath, entryName),
+          archive.filePath,
+        );
+        if (!outputPathCandidates.length) {
+          throw new Error(`Browser extract output path conflicts with the active input: ${entryName}`);
+        }
         try {
-          const outputPathCandidates = filterOutputCandidatesAwayFromSource(
-            getBrowserExtractOutputPathCandidates(outDirPath, entryName),
-            archive.filePath,
-          );
-          await cleanupExtractDirectory();
-          await ensureBrowserVfsOutputPaths(outputPathCandidates);
+          await ensureBrowserVfsOutputPaths(outputPathCandidates, [archive.filePath]);
           const extractChecksumAlgorithms = Array.isArray(workflowInput.options?.extractChecksumAlgorithms)
             ? workflowInput.options.extractChecksumAlgorithms
                 .map((algorithm) =>
@@ -710,7 +723,7 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
             workerIo.createWorkerOutput(
               {
                 checksums: matched.checksums,
-                cleanup: cleanupExtractDirectory,
+                cleanup: () => cleanupExtractedFiles([matched.path]),
                 fileName: entryName,
                 filePath: matched.path,
                 size: matched.sizeBytes,
@@ -731,7 +744,7 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
             outputs.push(await createOutput(matched));
           }
         } catch (error) {
-          await cleanupExtractDirectory();
+          await cleanupExtractedFiles(outputPathCandidates).catch(() => undefined);
           throw error;
         }
       }
@@ -770,8 +783,7 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
     imageFiles,
     mode,
     chdSourceMode,
-    cueText,
-    cueInputFileName,
+    cueFilePath,
     threads,
     compressionCodecs,
     logLevel,
@@ -798,32 +810,29 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
     try {
       const stagedInputPaths = [workerInput.filePath, ...stagedImageSources.map((entry) => entry.filePath)];
       let chdInputPath = workerInput.filePath;
-      const virtualFiles: RuntimeValue[] = [];
       const requestedMode = String(chdSourceMode || mode || "")
         .trim()
         .toLowerCase();
-      const shouldCreateCue = !!cueText || requestedMode === "cd";
-      if (shouldCreateCue) {
-        const cueFileName =
-          cueInputFileName ||
-          `${getPathBaseName(workerInput.fileName || "disc.bin", "disc").replace(/\.[^./\\]*$/, "")}.cue`;
-        const cuePath = joinPath(getPathDirectory(workerInput.filePath), cueFileName);
-        const cueTarget = workerInput.filePath;
-        let normalizedCueText = cueText
-          ? String(cueText)
-          : `FILE "${cueTarget}" BINARY\n  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n`;
-        if (cueText) {
-          try {
-            normalizedCueText = replaceCuePatchFileName(normalizedCueText, cueTarget);
-          } catch (_error) {
-            // Preserve multi-track cue sheets that do not match single-track replacement assumptions.
-          }
+      const normalizedCueFilePath = String(cueFilePath || "").trim();
+      if (normalizedCueFilePath) {
+        if (!stagedInputPaths.includes(normalizedCueFilePath)) stagedInputPaths.push(normalizedCueFilePath);
+        chdInputPath = normalizedCueFilePath;
+        if (workerInput.filePath !== normalizedCueFilePath) {
+          await rewriteCueFileBinaryReference(normalizedCueFilePath, workerInput.filePath);
         }
-        virtualFiles.push({
-          path: cuePath,
-          source: new TextEncoder().encode(normalizedCueText),
+      }
+
+      // When the CHD input is a cue, hydrate every sibling track file it references so worker
+      // threads can read the full disc layout from OPFS.
+      if (/\.cue$/i.test(chdInputPath)) {
+        const cueSidecarPaths = await collectCueSidecarPaths(chdInputPath);
+        for (const sidecarPath of cueSidecarPaths) {
+          if (!stagedInputPaths.includes(sidecarPath)) stagedInputPaths.push(sidecarPath);
+        }
+        emitBrowserWorkflowTrace({ logLevel, onLog }, "chd cue sidecars hydrated", {
+          cuePath: chdInputPath,
+          sidecarPaths: cueSidecarPaths,
         });
-        chdInputPath = cuePath;
       }
 
       const outputFileName = outputName || "output.chd";
@@ -836,14 +845,13 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
       const result = await invokeRomWeaverCompressionCreateWorker(
         {
           codecs,
-          format: "chd",
+          format: getChdCreateFormat(requestedMode),
           inputPaths: [chdInputPath],
           invalidateMountCacheBeforeRun: true,
           knownInputPaths: stagedInputPaths,
           logLevel,
           outputFileName,
           outputPath,
-          virtualFiles,
           workerThreads: threads,
         },
         onProgress ? forwardDiscProgress(onProgress) : undefined,
@@ -941,25 +949,36 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
     try {
       const outDirPath = getPathDirectory(workerSource.filePath);
       const stagedSourceFileName = getPathDerivedFileName(workerSource.filePath, workerSource.fileName || fileName);
+      const shouldPreseedSingleBinCdOutputs = mode !== "cd" && CHD_SINGLE_BIN_OUTPUT_REGEX.test(outputName || "");
       const actualOutputFileName =
-        mode === "cd" ? "" : getChdExtractedFileName({ _chdMode: mode || undefined, fileName });
+        mode === "cd"
+          ? ""
+          : shouldPreseedSingleBinCdOutputs
+            ? getChdCdOutputFileName(fileName, "bin")
+            : getChdExtractedFileName({ _chdMode: mode || undefined, fileName });
       const stagedOutputFileName =
         mode === "cd"
           ? ""
-          : getChdExtractedFileName({
-              _chdMode: mode || undefined,
-              fileName: stagedSourceFileName,
-            });
+          : shouldPreseedSingleBinCdOutputs
+            ? getChdCdOutputFileName(stagedSourceFileName, "bin")
+            : getChdExtractedFileName({
+                _chdMode: mode || undefined,
+                fileName: stagedSourceFileName,
+              });
+      const stagedCueOutputFileName = shouldPreseedSingleBinCdOutputs
+        ? getChdCdOutputFileName(stagedSourceFileName, "cue")
+        : "";
       const directOutputFileName = outputName || actualOutputFileName;
       const directOutputPath = stagedOutputFileName ? joinPath(outDirPath, stagedOutputFileName) : "";
       if (directOutputPath) {
-        await ensureBrowserVfsOutputPaths(
-          uniqueNonEmptyStrings([
-            directOutputPath,
-            actualOutputFileName ? joinPath(outDirPath, actualOutputFileName) : "",
-            outputName ? joinPath(outDirPath, outputName) : "",
-          ]),
-        );
+        const outputPathCandidates = shouldPreseedSingleBinCdOutputs
+          ? [directOutputPath, stagedCueOutputFileName ? joinPath(outDirPath, stagedCueOutputFileName) : ""]
+          : [
+              directOutputPath,
+              actualOutputFileName ? joinPath(outDirPath, actualOutputFileName) : "",
+              outputName ? joinPath(outDirPath, outputName) : "",
+            ];
+        await ensureBrowserVfsOutputPaths(uniqueNonEmptyStrings(outputPathCandidates), [workerSource.filePath]);
       }
       const runExtract = () =>
         invokeRomWeaverExtractWorker(
@@ -968,7 +987,7 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
             invalidateMountCacheBeforeRun: !!directOutputPath,
             logLevel,
             outDirPath,
-            scratchFilePoolSize: directOutputPath ? 1 : undefined,
+            scratchFilePoolSize: directOutputPath ? (shouldPreseedSingleBinCdOutputs ? 2 : 1) : undefined,
             select: [],
             sourcePath: workerSource.filePath,
             splitBin: mode === "cd",
@@ -997,13 +1016,9 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
         primaryFile: ReturnType<typeof selectChdOutputs>["primaryFile"],
       ) => {
         if (!(primaryFile || directOutputPath)) throw new Error("CHD extraction did not emit any output files");
-        const normalizedCueFileName = cueFile
-          ? normalizeDiscEntryNameForSource(cueFile.fileName, stagedSourceFileName, fileName)
-          : undefined;
         const normalizedPrimaryFileName = primaryFile
           ? normalizeDiscEntryNameForSource(primaryFile.fileName, stagedSourceFileName, fileName)
           : undefined;
-        const cueText = cueFile ? await readTextFromBrowserVfs(cueFile.path).catch(() => "") : undefined;
         const primaryPath = primaryFile?.path || directOutputPath;
         const sidecarCleanupPaths = uniqueNonEmptyStrings([
           cueFile?.path && cueFile.path !== primaryPath ? cueFile.path : "",
@@ -1022,10 +1037,7 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
             outputName || normalizedPrimaryFileName || directOutputFileName || fileName,
             "CHD extraction worker did not return browser output",
           ),
-          {
-            chdCueFileName: normalizedCueFileName || cueFile?.fileName,
-            chdCueText: cueText,
-          },
+          { chdCuePath: cueFile?.path },
         );
       };
 
@@ -1063,8 +1075,7 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
       throw new Error(`Browser VFS staged input is not available: ${workerSource.filePath}`);
     };
     try {
-      const baseOutDirPath = getPathDirectory(workerSource.filePath) || `${WORKER_OPFS_MOUNTPOINT}/input/`;
-      const outDirPath = joinPath(baseOutDirPath, `.rom-weaver-rvz-extract-${++archiveExtractDirectoryId}`);
+      const outDirPath = WORKER_OPFS_MOUNTPOINT;
       const actualOutputFileName = getRvzExtractedFileName({ fileName });
       const stagedOutputFileName = getRvzExtractedFileName({
         fileName: getPathDerivedFileName(workerSource.filePath, workerSource.fileName || fileName),
@@ -1078,6 +1089,7 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
           actualOutputFileName ? joinPath(outDirPath, actualOutputFileName) : "",
           outputName ? joinPath(outDirPath, outputName) : "",
         ]),
+        [workerSource.filePath],
       );
       const extracted = await invokeRomWeaverExtractWorker(
         {
@@ -1162,7 +1174,9 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
         preseedPaths.push(...getBrowserExtractOutputPathCandidates(outDirPath, stagedOutputFileName));
       preseedPaths.push(outputPath);
       preseedPaths.push(joinPath(outDirPath, actualOutputFileName));
-      await ensureBrowserVfsOutputPaths(filterOutputCandidatesAwayFromSource(preseedPaths, workerSource.filePath));
+      await ensureBrowserVfsOutputPaths(filterOutputCandidatesAwayFromSource(preseedPaths, workerSource.filePath), [
+        workerSource.filePath,
+      ]);
       const extracted = await invokeRomWeaverExtractWorker(
         {
           checksumAlgorithms: [...EXTRACT_CHECKSUM_ALGORITHMS],
@@ -1264,12 +1278,7 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
 const createBrowserCompressionRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime["compression"] => {
   const archiveRuntime = createBrowserArchiveRuntime(workerIo);
   const discRuntime = createBrowserDiscRuntime(workerIo);
-  return createSharedCompressionRuntime(archiveRuntime, discRuntime, {
-    createBytes: (bytes, fileName) =>
-      createRuntimeOutputFromBytes(browserVfs, bytes, fileName, {
-        pathPrefix: "compression-bytes",
-      }),
-  });
+  return createSharedCompressionRuntime(archiveRuntime, discRuntime);
 };
 
 const createBrowserPatchRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime["patch"] =>

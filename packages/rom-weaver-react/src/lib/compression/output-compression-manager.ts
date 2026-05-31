@@ -58,6 +58,7 @@ type CompressionSource = {
   _rvzSourceFileName?: string;
   _z3dsSourceFileName?: string;
   _chdCueText?: string;
+  _chdCuePath?: string;
   _chdMode?: "cd" | "dvd" | string;
   _rvzMode?: "iso" | "rvz" | string;
   _z3dsUnderlyingMagic?: Z3dsUnderlyingMagic | string;
@@ -215,6 +216,7 @@ const OutputCompressionManager = (() => {
     if (
       source &&
       (source._chdSourceFileName ||
+        source._chdCuePath ||
         source._chdCueText ||
         source._chdMode === "cd" ||
         source._chdMode === "dvd" ||
@@ -229,7 +231,11 @@ const OutputCompressionManager = (() => {
   const _hasChdSourceMetadata = (source: CompressionSource | null | undefined) =>
     !!(
       source &&
-      (source._chdSourceFileName || source._chdCueText || source._chdMode === "cd" || source._chdMode === "dvd")
+      (source._chdSourceFileName ||
+        source._chdCuePath ||
+        source._chdCueText ||
+        source._chdMode === "cd" ||
+        source._chdMode === "dvd")
     );
   const _hasRvzSourceMetadata = (source: CompressionSource | null | undefined) => !!source?._rvzSourceFileName;
   const _hasZ3dsSourceMetadata = (source: CompressionSource | null | undefined) => !!source?._z3dsSourceFileName;

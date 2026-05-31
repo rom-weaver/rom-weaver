@@ -55,12 +55,13 @@ const createPatchFileFromPublicOutput = async (
         }),
       }
     : null;
-  const attachChecksums = <TFile extends PatchFileInstance>(file: TFile): TFile => {
+  const attachOutputMetadata = <TFile extends PatchFileInstance>(file: TFile): TFile => {
     if (output.checksums) (file as TFile & { checksums?: Record<string, string> }).checksums = output.checksums;
+    if (output.chdCuePath) file._chdCuePath = output.chdCuePath;
     return file;
   };
   if (canUseExternalFilePath && (options.materializeBlob === false || options.preferExternalFilePath === true)) {
-    return attachChecksums(
+    return attachOutputMetadata(
       attachPatchFileSourceRef(
         createLazyExternalPatchFile(fileName, {
           cleanup: output.cleanup,
@@ -91,7 +92,7 @@ const createPatchFileFromPublicOutput = async (
     (file as { filePath?: string }).filePath = output.path;
     (file as { _file?: Blob })._file = await readRuntimeOutputBlob(output);
   }
-  return attachChecksums(attachPatchFileSourceRef(file, sourceRef));
+  return attachOutputMetadata(attachPatchFileSourceRef(file, sourceRef));
 };
 
 export { createPatchFileFromPublicOutput };

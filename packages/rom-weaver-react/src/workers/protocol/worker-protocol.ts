@@ -278,7 +278,6 @@ type CompressionWorkerRequest = {
   archiveEntryName?: string;
   archiveFileName?: string;
   arrayBuffer?: ArrayBuffer;
-  chdCueText?: string;
   chdFile?: BrowserWorkerFile;
   chdFileName?: string;
   chdFilePath?: string;
@@ -286,7 +285,6 @@ type CompressionWorkerRequest = {
   codec?: string;
   compression?: string;
   compressionCodecs?: string | string[] | Record<string, string | number> | null;
-  cueInputFileName?: string;
   entries?: ArchiveEntryInput[];
   entryName?: string;
   file?: Blob;
@@ -328,8 +326,6 @@ type CompressionWorkerResult = {
   archiveEntryName?: string;
   archiveEntryType?: string;
   archiveFileName?: string;
-  chdCueFileName?: string;
-  chdCueText?: string;
   chdMode?: string;
   chdSourceFileName?: string;
   cleanup?: CleanupCallback;

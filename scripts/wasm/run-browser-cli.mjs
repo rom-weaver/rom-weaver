@@ -196,7 +196,7 @@ function collectPathBindings(commandArgs) {
   }
   for (let index = 0; index < inputs.length; index += 1) {
     const entry = inputs[index];
-    const guestPath = `${WORK_GUEST_PATH}/input/${index}-${sanitizeName(entry.hintName)}`;
+    const guestPath = `${WORK_GUEST_PATH}/${index}-${sanitizeName(entry.hintName)}`;
     pathIds.add(guestPath);
     resolvedArgs[entry.argIndex] = guestPath;
     entry.guestPath = guestPath;
@@ -206,7 +206,7 @@ function collectPathBindings(commandArgs) {
     const prefix = entry.hostType === 'dir' ? 'out-dir' : 'output';
     const fallback = entry.hostType === 'dir' ? `dir-${index}` : `file-${index}.bin`;
     const label = sanitizeName(entry.hintName) || fallback;
-    const guestPath = `${WORK_GUEST_PATH}/${prefix}/${index}-${label}`;
+    const guestPath = `${WORK_GUEST_PATH}/${prefix}-${index}-${label}`;
     if (pathIds.has(guestPath)) {
       throw new Error(`guest path collision for ${guestPath}`);
     }

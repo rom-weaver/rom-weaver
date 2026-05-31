@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   __createBrowserOpfsRandomAccessFileForTest,
+  __createBrowserVirtualRandomAccessFileForTest,
 } from '../src/rom-weaver-browser-opfs-api.mjs';
 import { createMockSyncAccessHandle } from './opfs-mock-sync-handle.mjs';
 
@@ -13,8 +14,12 @@ import { createMockSyncAccessHandle } from './opfs-mock-sync-handle.mjs';
 const MIB = 1024 * 1024;
 const FILE_BYTES = 4 * MIB;
 const BLOCK_BYTES = 1 * MIB;
+const LARGE_VIRTUAL_READ_BYTES = 768 * 1024;
 
 let file = null;
+let fileReaderSyncReadCount = 0;
+let fileReaderSyncInstalled = false;
+let originalFileReaderSync = null;
 
 function patternByte(offset) {
   return (offset * 31 + 7) & 0xff;
@@ -33,6 +38,17 @@ function fillConstant(length, value) {
 beforeEach(() => {
   const syncHandle = createMockSyncAccessHandle({ size: FILE_BYTES, fill: patternByte });
   file = __createBrowserOpfsRandomAccessFileForTest(syncHandle);
+});
+
+afterEach(() => {
+  if (!fileReaderSyncInstalled) return;
+  if (originalFileReaderSync) {
+    globalThis.FileReaderSync = originalFileReaderSync;
+  } else {
+    delete globalThis.FileReaderSync;
+  }
+  fileReaderSyncInstalled = false;
+  originalFileReaderSync = null;
 });
 
 describe('BrowserOpfsRandomAccessFile read cache correctness', () => {
@@ -119,5 +135,105 @@ describe('BrowserOpfsRandomAccessFile read cache correctness', () => {
 
     const past = new Uint8Array(4096);
     expect(file.readAt(newSize, past)).toBe(0);
+  });
+
+  it('tracks lazy allocation without physically growing the OPFS handle', () => {
+    const syncHandle = createMockSyncAccessHandle({ size: 1024, fill: patternByte });
+    const lazyFile = __createBrowserOpfsRandomAccessFileForTest(syncHandle);
+    lazyFile.allocateAtLeast(4 * MIB);
+
+    expect(lazyFile.size()).toBe(4 * MIB);
+    expect(syncHandle.__snapshot().byteLength).toBe(1024);
+
+    const sparse = new Uint8Array(4096);
+    expect(lazyFile.readAt(2 * MIB, sparse)).toBe(sparse.byteLength);
+    expect(Array.from(sparse)).toEqual(Array.from(new Uint8Array(sparse.byteLength)));
+  });
+});
+
+class TestBlob extends Blob {
+  constructor(bytes) {
+    super([]);
+    this.bytes = bytes;
+  }
+
+  get size() {
+    return this.bytes.byteLength;
+  }
+
+  slice(start = 0, end = this.size) {
+    return new TestBlob(this.bytes.subarray(start, end));
+  }
+}
+
+class TestFileReaderSync {
+  readAsArrayBuffer(blob) {
+    fileReaderSyncReadCount += 1;
+    return blob.bytes.buffer.slice(blob.bytes.byteOffset, blob.bytes.byteOffset + blob.bytes.byteLength);
+  }
+}
+
+function installTestFileReaderSync() {
+  originalFileReaderSync = globalThis.FileReaderSync;
+  globalThis.FileReaderSync = TestFileReaderSync;
+  fileReaderSyncReadCount = 0;
+  fileReaderSyncInstalled = true;
+}
+
+describe('BrowserVirtualRandomAccessFile Blob read cache correctness', () => {
+  it('returns exact bytes for direct Blob reads', () => {
+    installTestFileReaderSync();
+    const source = new TestBlob(patternBytes(0, FILE_BYTES));
+    const virtualFile = __createBrowserVirtualRandomAccessFileForTest(source);
+    const offset = 3000;
+    const dst = new Uint8Array(64 * 1024);
+
+    const read = virtualFile.readAt(offset, dst);
+
+    expect(read).toBe(dst.byteLength);
+    expect(Array.from(dst)).toEqual(Array.from(patternBytes(offset, dst.byteLength)));
+  });
+
+  it('serves repeated small Blob reads from the virtual read cache', () => {
+    installTestFileReaderSync();
+    const source = new TestBlob(patternBytes(0, FILE_BYTES));
+    const virtualFile = __createBrowserVirtualRandomAccessFileForTest(source);
+    const offset = 5 * 1024;
+    const first = new Uint8Array(32 * 1024);
+    const second = new Uint8Array(32 * 1024);
+
+    virtualFile.readAt(offset, first);
+    virtualFile.readAt(offset, second);
+
+    expect(fileReaderSyncReadCount).toBe(1);
+    expect(virtualFile.snapshotIoStats()).toMatchObject({
+      blobCacheHitBytes: second.byteLength,
+      blobCacheHits: 1,
+      blobCacheMisses: 1,
+      blobReadCalls: 1,
+    });
+    expect(Array.from(second)).toEqual(Array.from(first));
+    expect(Array.from(second)).toEqual(Array.from(patternBytes(offset, second.byteLength)));
+  });
+
+  it('bypasses the virtual read cache for large Blob reads', () => {
+    installTestFileReaderSync();
+    const source = new TestBlob(patternBytes(0, FILE_BYTES));
+    const virtualFile = __createBrowserVirtualRandomAccessFileForTest(source);
+    const offset = BLOCK_BYTES + 1234;
+    const first = new Uint8Array(LARGE_VIRTUAL_READ_BYTES);
+    const second = new Uint8Array(LARGE_VIRTUAL_READ_BYTES);
+
+    virtualFile.readAt(offset, first);
+    virtualFile.readAt(offset, second);
+
+    expect(fileReaderSyncReadCount).toBe(2);
+    expect(virtualFile.snapshotIoStats()).toMatchObject({
+      blobCacheHits: 0,
+      blobCacheMisses: 0,
+      blobReadCalls: 2,
+    });
+    expect(Array.from(second)).toEqual(Array.from(first));
+    expect(Array.from(second)).toEqual(Array.from(patternBytes(offset, second.byteLength)));
   });
 });

@@ -18,7 +18,7 @@ test("rom-weaver runtime extracts an RVZ staged through browser OPFS", async () 
   await warmupRomWeaverRunner();
   const runId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const checksumProgress = [];
-  const checksumSource = `${WORKER_OPFS_MOUNTPOINT}/input/checksum-source-${runId}.bin`;
+  const checksumSource = `${WORKER_OPFS_MOUNTPOINT}/checksum-source-${runId}.bin`;
   const checksumSourceBytes = new Uint8Array(2 * 1024 * 1024).map((_, index) => index & 0xff);
   await browserRuntime.vfs.truncate(checksumSource, 0);
   await browserRuntime.vfs.write(checksumSource, checksumSourceBytes, { fileOffset: 0 });
@@ -30,7 +30,7 @@ test("rom-weaver runtime extracts an RVZ staged through browser OPFS", async () 
   expect(checksums?.crc32).toBeTypeOf("number");
   expect(checksumProgress.some((entry) => entry.percent > 0 && entry.percent < 100)).toBe(true);
 
-  const source = `${WORKER_OPFS_MOUNTPOINT}/input/game.rvz`;
+  const source = `${WORKER_OPFS_MOUNTPOINT}/game-${runId}.rvz`;
   const sourceBytes = await loadFixtureBytes("tests/fixtures/browser-generated/game.rvz");
   await browserRuntime.vfs.truncate(source, 0);
   await browserRuntime.vfs.write(source, sourceBytes, { fileOffset: 0 });
@@ -73,7 +73,7 @@ test("rom-weaver runtime creates an RVZ from a prior browser OPFS output", async
   await resetRomWeaverRunner();
   await warmupRomWeaverRunner();
   const runId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  const source = `${WORKER_OPFS_MOUNTPOINT}/input/create-from-output-${runId}.rvz`;
+  const source = `${WORKER_OPFS_MOUNTPOINT}/create-from-output-${runId}.rvz`;
   const sourceBytes = await loadFixtureBytes("tests/fixtures/browser-generated/game.rvz");
   await browserRuntime.vfs.truncate(source, 0);
   await browserRuntime.vfs.write(source, sourceBytes, { fileOffset: 0 });

@@ -6,7 +6,6 @@ import {
 } from "../../storage/shared/binary/source-file-utils.ts";
 import type { WorkerStorageBucket } from "../shared/worker-storage/storage-layout.ts";
 import { getWorkerStorageBucketPath, WORKER_OPFS_MOUNTPOINT } from "../shared/worker-storage/storage-layout.ts";
-import { requestBrowserOpfsStorage } from "./browser-opfs-worker-client.ts";
 import { registerBrowserVirtualFile } from "./browser-virtual-files.ts";
 import { getManagedOpfsFileHandle } from "./opfs-path.ts";
 
@@ -64,8 +63,7 @@ const EDGE_WHITESPACE_OR_UNDERSCORES_REGEX = /^[_\s]+|[_\s]+$/g;
 const TRAILING_SLASHES_REGEX = /\/+$/;
 const EAGER_MEMORY_VIRTUAL_SOURCE_EXTENSIONS = new Set([".7z", ".rvz"]);
 const EAGER_MEMORY_VIRTUAL_SOURCE_MAX_BYTES = 512 * 1024 * 1024;
-const OPFS_STAGED_SOURCE_EXTENSIONS = new Set([".chd"]);
-let virtualSourceId = 0;
+const allocatedVirtualInputPaths = new Set<string>();
 
 const getBrowserSourceTraceKind = (source: unknown) => {
   if (typeof File !== "undefined" && source instanceof File) return "file";
@@ -111,16 +109,35 @@ const shouldUseEagerMemoryVirtualSource = (fileName: string, size: number | unde
   size <= EAGER_MEMORY_VIRTUAL_SOURCE_MAX_BYTES &&
   EAGER_MEMORY_VIRTUAL_SOURCE_EXTENSIONS.has(lowerFileExtension(fileName));
 
-const shouldUseOpfsStagedSource = (fileName: string, source: Blob | Uint8Array | null) =>
-  typeof Blob !== "undefined" &&
-  source instanceof Blob &&
-  OPFS_STAGED_SOURCE_EXTENSIONS.has(lowerFileExtension(fileName));
+const splitVisibleFileName = (fileName: string) => {
+  const dotIndex = fileName.lastIndexOf(".");
+  if (dotIndex <= 0) return { extension: "", stem: fileName };
+  return {
+    extension: fileName.slice(dotIndex),
+    stem: fileName.slice(0, dotIndex),
+  };
+};
 
-const createVirtualPathNonce = () => {
-  const sequence = ++virtualSourceId;
-  const timeToken = Date.now().toString(36);
-  const randomToken = Math.random().toString(16).slice(2, 10);
-  return `${timeToken}-${sequence}-${randomToken}`;
+const createVisibleCollisionFileName = (fileName: string, suffixIndex: number) => {
+  if (suffixIndex <= 1) return fileName;
+  const { extension, stem } = splitVisibleFileName(fileName);
+  return `${stem}-${suffixIndex}${extension}`;
+};
+
+const allocateVirtualInputPath = (mountPoint: string, fileName: string) => {
+  const normalizedMountPoint = String(mountPoint || WORKER_OPFS_MOUNTPOINT).replace(TRAILING_SLASHES_REGEX, "");
+  for (let suffixIndex = 1; suffixIndex < Number.MAX_SAFE_INTEGER; suffixIndex += 1) {
+    const candidateName = createVisibleCollisionFileName(fileName, suffixIndex);
+    const candidatePath = getWorkerStorageBucketPath(normalizedMountPoint, "input", candidateName, candidateName);
+    if (allocatedVirtualInputPaths.has(candidatePath)) continue;
+    allocatedVirtualInputPaths.add(candidatePath);
+    return candidatePath;
+  }
+  throw new Error(`Unable to allocate browser input path for ${fileName}`);
+};
+
+const releaseVirtualInputPath = (filePath: string) => {
+  allocatedVirtualInputPaths.delete(filePath);
 };
 
 const createVirtualInputPath = (
@@ -128,15 +145,8 @@ const createVirtualInputPath = (
   fileName: string,
 ) => {
   const mountPoint = String(options.mountPoint || WORKER_OPFS_MOUNTPOINT).replace(TRAILING_SLASHES_REGEX, "");
-  const bucket = options.bucket || "input";
-  const pathPrefix = normalizeVirtualFileName(options.pathPrefix || "input", "input");
   const normalizedFileName = normalizeVirtualFileName(fileName);
-  return getWorkerStorageBucketPath(
-    mountPoint,
-    bucket,
-    `${pathPrefix}-${createVirtualPathNonce()}/${normalizedFileName}`,
-    normalizedFileName,
-  );
+  return allocateVirtualInputPath(mountPoint, normalizedFileName);
 };
 
 const getOpfsPathSize = async (filePath: string): Promise<number | undefined> => {
@@ -147,39 +157,6 @@ const getOpfsPathSize = async (filePath: string): Promise<number | undefined> =>
   } catch (_error) {
     return undefined;
   }
-};
-
-const stageBrowserOpfsSource = async (
-  source: Blob,
-  fileName: string,
-  size: number | undefined,
-  options: { bucket?: WorkerStorageBucket; mountPoint: string; pathPrefix: string },
-): Promise<BrowserOpfsSourceRef> => {
-  const response = await requestBrowserOpfsStorage({
-    action: "stage",
-    bucket: options.bucket,
-    file: source,
-    fileName,
-    mountPoint: options.mountPoint,
-    pathPrefix: options.pathPrefix,
-  });
-  if (!(response.success && response.filePath)) {
-    throw new Error(response.error?.message || "Browser OPFS input staging failed");
-  }
-  const stagedPath = response.filePath;
-  return {
-    cleanup: async () => {
-      await requestBrowserOpfsStorage({
-        action: "cleanup",
-        filePaths: [stagedPath],
-      }).catch(() => undefined);
-    },
-    fileName: response.fileName || fileName,
-    filePath: stagedPath,
-    kind: "path",
-    size: response.size ?? size,
-    storageKind: "opfs",
-  };
 };
 
 const createBrowserOpfsSourceRef = async (
@@ -270,23 +247,6 @@ const createBrowserOpfsSourceRef = async (
   }
 
   const virtualFileName = normalizeVirtualFileName(fileName || fallbackFileName, fallbackFileName || "input.bin");
-  if (shouldUseOpfsStagedSource(virtualFileName, virtualSource)) {
-    try {
-      const staged = await stageBrowserOpfsSource(virtualSource as Blob, virtualFileName, virtualSize, options);
-      emitBrowserSourceRefTrace("using staged OPFS input", {
-        fileName: staged.fileName,
-        filePath: staged.filePath,
-        size: staged.size,
-        sourceKind: getBrowserSourceTraceKind(virtualSource),
-      });
-      return staged;
-    } catch (error) {
-      emitBrowserSourceRefTrace("staged OPFS input failed, falling back to virtual input", {
-        fileName: virtualFileName,
-        message: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
   const virtualPath = createVirtualInputPath(options, virtualFileName);
   emitBrowserSourceRefTrace("registering virtual input", {
     fileName: virtualFileName,
@@ -294,17 +254,26 @@ const createBrowserOpfsSourceRef = async (
     sourceKind: getBrowserSourceTraceKind(virtualSource),
     virtualPath,
   });
-  const unregister = registerBrowserVirtualFile({
-    path: virtualPath,
-    source: virtualSource,
-  });
+  let unregister: (() => void) | null = null;
+  try {
+    unregister = registerBrowserVirtualFile({
+      path: virtualPath,
+      source: virtualSource,
+    });
+  } catch (error) {
+    releaseVirtualInputPath(virtualPath);
+    throw error;
+  }
   emitBrowserSourceRefTrace("registered virtual input", {
     fileName: virtualFileName,
     size: virtualSize,
     virtualPath,
   });
   return {
-    cleanup: async () => unregister(),
+    cleanup: async () => {
+      unregister?.();
+      releaseVirtualInputPath(virtualPath);
+    },
     fileName: virtualFileName,
     filePath: virtualPath,
     kind: "path",

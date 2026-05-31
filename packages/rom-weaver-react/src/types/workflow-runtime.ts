@@ -89,6 +89,7 @@ type CreatePatchInput = {
 
 type PublicOutput = VfsOutputRef & {
   checksums?: Record<string, string>;
+  chdCuePath?: string;
   cleanup?: () => Promise<void> | void;
 };
 
@@ -153,8 +154,7 @@ type CompressionCreateInput =
       }>;
       mode?: string | null;
       chdSourceMode?: string | null;
-      cueText?: string | null;
-      cueInputFileName?: string | null;
+      cueFilePath?: string | null;
       compressionCodecs?: ChdCompressionCodecs | null;
       rvzBlockSize?: string | number | null;
       rvzCompression?: string | null;

@@ -120,8 +120,7 @@ type RuntimeDiscHooks = {
 type RuntimeDiscCreateChdInput = RuntimeDiscHooks & {
   chdSourceMode?: RuntimeDiscCreateInputBase["chdSourceMode"];
   compressionCodecs?: RuntimeDiscCreateInputBase["compressionCodecs"];
-  cueInputFileName?: RuntimeDiscCreateInputBase["cueInputFileName"];
-  cueText?: RuntimeDiscCreateInputBase["cueText"];
+  cueFilePath?: RuntimeDiscCreateInputBase["cueFilePath"];
   fileName?: RuntimeDiscCreateInputBase["fileName"];
   imageFiles?: RuntimeDiscCreateInputBase["imageFiles"];
   mode?: RuntimeDiscCreateInputBase["mode"];
