@@ -6,6 +6,8 @@ use std::{
     path::Path,
 };
 
+use tracing::info;
+
 use rayon::prelude::*;
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
@@ -73,7 +75,9 @@ impl PatchHandler for GdiffPatchHandler {
         let thread_capability = gdiff_apply_thread_capability(commands.len());
         let planned_execution = context.plan_threads(thread_capability.clone());
 
-        let execution = if planned_execution.used_parallelism {
+        let execution = if planned_execution.used_parallelism
+            && !crate::patches_reads_source_on_main_thread()
+        {
             let tasks = build_gdiff_apply_tasks(&commands);
             let (execution, pool) = context.build_pool(thread_capability)?;
             let prepared = pool.install(|| {
@@ -487,6 +491,16 @@ fn create_gdiff_patch(
     output: &mut dyn Write,
 ) -> Result<(usize, u64)> {
     if use_parallel_scan {
+        if crate::patches_reads_source_on_main_thread() {
+            let modified_len = fs::metadata(modified_path)?.len();
+            if modified_len > crate::IN_MEMORY_APPLY_LIMIT_BYTES {
+                info!(
+                    modified_len,
+                    "GDIFF create: modified size exceeds in-memory limit; falling back to serial path"
+                );
+                return create_gdiff_patch_streaming(modified_path, output);
+            }
+        }
         create_gdiff_patch_parallel(modified_path, pool, output)
     } else {
         create_gdiff_patch_streaming(modified_path, output)
@@ -548,12 +562,33 @@ fn create_gdiff_patch_parallel(
         .collect::<Result<Vec<_>>>()?;
 
     let command_count = chunk_ranges.len();
-    let command_bytes = pool.install(|| {
-        chunk_ranges
-            .into_par_iter()
-            .map(|(offset, len)| encode_data_command_bytes_for_chunk(modified_path, offset, len))
-            .collect::<Result<Vec<_>>>()
-    })?;
+    let command_bytes = if crate::patches_reads_source_on_main_thread() {
+        let buffered = chunk_ranges
+            .iter()
+            .map(|&(offset, len)| {
+                let mut f = File::open(modified_path)?;
+                f.seek(SeekFrom::Start(offset))?;
+                let mut chunk = vec![0u8; len];
+                f.read_exact(&mut chunk)?;
+                Ok(chunk)
+            })
+            .collect::<Result<Vec<_>>>()?;
+        pool.install(|| {
+            buffered
+                .into_par_iter()
+                .map(|chunk| encode_data_command_bytes(&chunk))
+                .collect::<Result<Vec<_>>>()
+        })?
+    } else {
+        pool.install(|| {
+            chunk_ranges
+                .into_par_iter()
+                .map(|(offset, len)| {
+                    encode_data_command_bytes_for_chunk(modified_path, offset, len)
+                })
+                .collect::<Result<Vec<_>>>()
+        })?
+    };
 
     for command in command_bytes {
         output.write_all(&command)?;

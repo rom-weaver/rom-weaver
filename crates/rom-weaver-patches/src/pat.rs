@@ -5,6 +5,8 @@ use std::{
     path::Path,
 };
 
+use tracing::info;
+
 use rayon::prelude::*;
 use rom_weaver_core::{
     BlockCacheReader, DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES,
@@ -554,21 +556,62 @@ fn create_pat_patch_parallel(
         });
     }
 
+    if crate::patches_reads_source_on_main_thread() {
+        let combined = original_len.saturating_add(modified_len);
+        if combined > crate::IN_MEMORY_APPLY_LIMIT_BYTES {
+            info!(
+                original_len,
+                modified_len,
+                "PAT create: combined size exceeds in-memory limit; falling back to serial path"
+            );
+            return create_pat_patch_streaming(original_path, modified_path);
+        }
+    }
+
     let chunk_count = pat_create_chunk_count(original_len);
-    let per_chunk_records = pool.install(|| {
-        (0..chunk_count)
-            .into_par_iter()
-            .map(|chunk_index| {
-                collect_pat_chunk_records_for_chunk(
-                    chunk_index,
+    let per_chunk_records = if crate::patches_reads_source_on_main_thread() {
+        let chunk_size = CREATE_THREAD_SCAN_CHUNK_BYTES as u64;
+        let chunk_starts: Vec<u64> = (0..chunk_count as u64)
+            .map(|i| i * chunk_size)
+            .filter(|&s| s < original_len)
+            .collect();
+        let buffered = chunk_starts
+            .iter()
+            .map(|&start| {
+                let end = start.saturating_add(chunk_size).min(original_len);
+                crate::read_original_modified_chunk(
                     original_path,
-                    modified_path,
                     original_len,
+                    modified_path,
+                    start,
+                    end,
                 )
             })
-            .collect::<Result<Vec<_>>>()
-    });
-    let per_chunk_records = per_chunk_records?;
+            .collect::<Result<Vec<_>>>()?;
+        pool.install(|| {
+            buffered
+                .into_par_iter()
+                .zip(chunk_starts.into_par_iter())
+                .map(|((original_bytes, modified_bytes), start)| {
+                    collect_pat_chunk_records_from_bytes(start, &original_bytes, &modified_bytes)
+                })
+                .collect::<Result<Vec<_>>>()
+        })?
+    } else {
+        pool.install(|| {
+            (0..chunk_count)
+                .into_par_iter()
+                .map(|chunk_index| {
+                    collect_pat_chunk_records_for_chunk(
+                        chunk_index,
+                        original_path,
+                        modified_path,
+                        original_len,
+                    )
+                })
+                .collect::<Result<Vec<_>>>()
+        })?
+    };
 
     let mut records = Vec::new();
     for mut chunk_records in per_chunk_records {
@@ -629,6 +672,29 @@ fn collect_pat_chunk_records_for_chunk(
         cursor = cursor.saturating_add(chunk_len as u64);
     }
 
+    Ok(records)
+}
+
+fn collect_pat_chunk_records_from_bytes(
+    start: u64,
+    original_bytes: &[u8],
+    modified_bytes: &[u8],
+) -> Result<Vec<PatRecord>> {
+    let mut records = Vec::new();
+    for (index, (&source_byte, &modified_byte)) in
+        original_bytes.iter().zip(modified_bytes.iter()).enumerate()
+    {
+        if source_byte != modified_byte {
+            let offset = start
+                .checked_add(index as u64)
+                .ok_or_else(|| RomWeaverError::Validation("PAT create offset overflowed".into()))?;
+            records.push(PatRecord {
+                offset,
+                source_byte,
+                modified_byte,
+            });
+        }
+    }
     Ok(records)
 }
 

@@ -4,6 +4,8 @@ use std::{
     path::Path,
 };
 
+use tracing::info;
+
 use rayon::prelude::*;
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
@@ -287,6 +289,23 @@ fn create_ppf3_patch(
     output: &mut impl Write,
 ) -> Result<CreatedPpfPatch> {
     if use_parallel_scan {
+        if crate::patches_reads_source_on_main_thread() {
+            let combined = original_len.saturating_add(modified_len);
+            if combined > crate::IN_MEMORY_APPLY_LIMIT_BYTES {
+                info!(
+                    original_len,
+                    modified_len,
+                    "PPF create: combined size exceeds in-memory limit; falling back to serial path"
+                );
+                return create_ppf3_patch_streaming(
+                    original_path,
+                    original_len,
+                    modified_path,
+                    modified_len,
+                    output,
+                );
+            }
+        }
         create_ppf3_patch_parallel(
             original_path,
             original_len,
@@ -611,11 +630,11 @@ fn collect_ppf_diff_runs_parallel(
         })
         .collect::<Vec<_>>();
 
-    let per_chunk_runs = pool.install(|| {
-        chunk_ranges
-            .into_par_iter()
+    let per_chunk_runs = if crate::patches_reads_source_on_main_thread() {
+        let buffered = chunk_ranges
+            .iter()
             .map(|range| {
-                collect_ppf_chunk_diff_runs(
+                crate::read_original_modified_chunk(
                     original_path,
                     original_len,
                     modified_path,
@@ -623,8 +642,36 @@ fn collect_ppf_diff_runs_parallel(
                     range.end,
                 )
             })
-            .collect::<Vec<_>>()
-    });
+            .collect::<Result<Vec<_>>>()?;
+        pool.install(|| {
+            buffered
+                .into_par_iter()
+                .zip(chunk_ranges.into_par_iter())
+                .map(|((original_bytes, modified_bytes), range)| {
+                    collect_ppf_chunk_diff_runs_from_bytes(
+                        range.start,
+                        &original_bytes,
+                        &modified_bytes,
+                    )
+                })
+                .collect::<Vec<_>>()
+        })
+    } else {
+        pool.install(|| {
+            chunk_ranges
+                .into_par_iter()
+                .map(|range| {
+                    collect_ppf_chunk_diff_runs(
+                        original_path,
+                        original_len,
+                        modified_path,
+                        range.start,
+                        range.end,
+                    )
+                })
+                .collect::<Vec<_>>()
+        })
+    };
 
     let mut merged: Vec<PpfDiffRun> = Vec::new();
     for runs in per_chunk_runs {
@@ -731,6 +778,72 @@ fn collect_ppf_chunk_diff_runs(
                 .checked_add(1)
                 .ok_or_else(|| RomWeaverError::Validation("PPF create offset overflowed".into()))?;
         }
+    }
+
+    if pending_len > 0 {
+        let run_start = pending_start.ok_or_else(|| {
+            RomWeaverError::Validation(
+                "internal PPF state error: trailing pending run missing start offset".into(),
+            )
+        })?;
+        runs.push(PpfDiffRun {
+            offset: run_start,
+            len: pending_len as u8,
+        });
+    }
+    Ok(runs)
+}
+
+fn collect_ppf_chunk_diff_runs_from_bytes(
+    start: u64,
+    original_bytes: &[u8],
+    modified_bytes: &[u8],
+) -> Result<Vec<PpfDiffRun>> {
+    let mut runs = Vec::new();
+    let mut pending_start: Option<u64> = None;
+    let mut pending_len = 0usize;
+    let mut absolute = start;
+
+    for index in 0..modified_bytes.len() {
+        let differs = original_bytes
+            .get(index)
+            .is_none_or(|o| *o != modified_bytes[index]);
+        if differs {
+            if pending_start.is_none() {
+                pending_start = Some(absolute);
+            }
+            pending_len = pending_len.checked_add(1).ok_or_else(|| {
+                RomWeaverError::Validation("PPF diff run length overflowed".into())
+            })?;
+            if pending_len == usize::from(u8::MAX) {
+                let run_start = pending_start.ok_or_else(|| {
+                    RomWeaverError::Validation(
+                        "internal PPF state error: pending run missing start offset".into(),
+                    )
+                })?;
+                runs.push(PpfDiffRun {
+                    offset: run_start,
+                    len: u8::MAX,
+                });
+                pending_start = None;
+                pending_len = 0;
+            }
+        } else if pending_len > 0 {
+            let run_start = pending_start.ok_or_else(|| {
+                RomWeaverError::Validation(
+                    "internal PPF state error: pending run missing start offset".into(),
+                )
+            })?;
+            runs.push(PpfDiffRun {
+                offset: run_start,
+                len: pending_len as u8,
+            });
+            pending_start = None;
+            pending_len = 0;
+        }
+        absolute = absolute
+            .checked_add(1)
+            .ok_or_else(|| RomWeaverError::Validation("PPF create offset overflowed".into()))?;
     }
 
     if pending_len > 0 {

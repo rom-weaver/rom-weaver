@@ -946,7 +946,8 @@ fn build_created_primitives_with_threads_from_paths(
     use_parallel_scan: bool,
     context: &OperationContext,
 ) -> Result<Vec<CreatedPrimitive>> {
-    let chunks = if use_parallel_scan {
+    let effective_parallel = use_parallel_scan && !crate::patches_reads_source_on_main_thread();
+    let chunks = if effective_parallel {
         collect_created_chunks_parallel_from_paths(
             original_path,
             original_len,

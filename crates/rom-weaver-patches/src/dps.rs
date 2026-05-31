@@ -5,6 +5,8 @@ use std::{
     sync::Arc,
 };
 
+use tracing::info;
+
 use rayon::prelude::*;
 use rom_weaver_core::{
     DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES, FormatDescriptor,
@@ -869,11 +871,21 @@ fn collect_dps_records_parallel(
         })
         .collect::<Vec<_>>();
 
-    let per_chunk = pool.install(|| {
-        chunk_ranges
-            .into_par_iter()
+    let per_chunk = if crate::patches_reads_source_on_main_thread() {
+        let combined = source_len.saturating_add(target_len);
+        if combined > crate::IN_MEMORY_APPLY_LIMIT_BYTES {
+            info!(
+                source_len,
+                target_len,
+                "DPS create: combined size exceeds in-memory limit; falling back to serial path"
+            );
+            let records = create_dps_records_streaming(source_path, target_path)?;
+            return Ok(records);
+        }
+        let buffered = chunk_ranges
+            .iter()
             .map(|range| {
-                collect_dps_chunk_records(
+                crate::read_original_modified_chunk(
                     source_path,
                     source_len,
                     target_path,
@@ -881,8 +893,32 @@ fn collect_dps_records_parallel(
                     range.end,
                 )
             })
-            .collect::<Vec<_>>()
-    });
+            .collect::<Result<Vec<_>>>()?;
+        pool.install(|| {
+            buffered
+                .into_par_iter()
+                .zip(chunk_ranges.into_par_iter())
+                .map(|((source_bytes, target_bytes), range)| {
+                    collect_dps_chunk_records_from_bytes(range.start, &source_bytes, &target_bytes)
+                })
+                .collect::<Vec<_>>()
+        })
+    } else {
+        pool.install(|| {
+            chunk_ranges
+                .into_par_iter()
+                .map(|range| {
+                    collect_dps_chunk_records(
+                        source_path,
+                        source_len,
+                        target_path,
+                        range.start,
+                        range.end,
+                    )
+                })
+                .collect::<Vec<_>>()
+        })
+    };
 
     let mut merged = Vec::<DpsRecord>::new();
     for records in per_chunk {
@@ -1004,6 +1040,95 @@ fn collect_dps_chunk_records(
         })?;
         records.push(DpsRecord::EmbeddedData {
             output_offset: start,
+            data: pending_data,
+        });
+    }
+    Ok(records)
+}
+
+fn collect_dps_chunk_records_from_bytes(
+    start: u64,
+    source_bytes: &[u8],
+    target_bytes: &[u8],
+) -> Result<Vec<DpsRecord>> {
+    let mut records = Vec::<DpsRecord>::new();
+    let mut pending_copy_start: Option<u32> = None;
+    let mut pending_copy_len = 0u32;
+    let mut pending_data_start: Option<u32> = None;
+    let mut pending_data = Vec::<u8>::new();
+    let mut absolute = start;
+
+    for index in 0..target_bytes.len() {
+        let equal = source_bytes
+            .get(index)
+            .is_some_and(|s| *s == target_bytes[index]);
+        let current_offset = u32::try_from(absolute).map_err(|_| {
+            RomWeaverError::Validation("DPS create offset exceeded 32-bit range".into())
+        })?;
+        if equal {
+            if !pending_data.is_empty() {
+                let chunk_start = pending_data_start.ok_or_else(|| {
+                    RomWeaverError::Validation(
+                        "internal DPS state error: pending data missing start offset".into(),
+                    )
+                })?;
+                records.push(DpsRecord::EmbeddedData {
+                    output_offset: chunk_start,
+                    data: std::mem::take(&mut pending_data),
+                });
+                pending_data_start = None;
+            }
+            if pending_copy_start.is_none() {
+                pending_copy_start = Some(current_offset);
+            }
+            pending_copy_len = pending_copy_len.checked_add(1).ok_or_else(|| {
+                RomWeaverError::Validation("DPS copy record length overflowed".into())
+            })?;
+        } else {
+            if pending_copy_len > 0 {
+                let chunk_start = pending_copy_start.ok_or_else(|| {
+                    RomWeaverError::Validation(
+                        "internal DPS state error: pending copy missing start offset".into(),
+                    )
+                })?;
+                records.push(DpsRecord::CopyFromSource {
+                    output_offset: chunk_start,
+                    source_offset: chunk_start,
+                    length: pending_copy_len,
+                });
+                pending_copy_start = None;
+                pending_copy_len = 0;
+            }
+            if pending_data_start.is_none() {
+                pending_data_start = Some(current_offset);
+            }
+            pending_data.push(target_bytes[index]);
+        }
+        absolute = absolute
+            .checked_add(1)
+            .ok_or_else(|| RomWeaverError::Validation("DPS output offset overflowed".into()))?;
+    }
+
+    if pending_copy_len > 0 {
+        let chunk_start = pending_copy_start.ok_or_else(|| {
+            RomWeaverError::Validation(
+                "internal DPS state error: trailing pending copy missing start offset".into(),
+            )
+        })?;
+        records.push(DpsRecord::CopyFromSource {
+            output_offset: chunk_start,
+            source_offset: chunk_start,
+            length: pending_copy_len,
+        });
+    }
+    if !pending_data.is_empty() {
+        let chunk_start = pending_data_start.ok_or_else(|| {
+            RomWeaverError::Validation(
+                "internal DPS state error: trailing pending data missing start offset".into(),
+            )
+        })?;
+        records.push(DpsRecord::EmbeddedData {
+            output_offset: chunk_start,
             data: pending_data,
         });
     }

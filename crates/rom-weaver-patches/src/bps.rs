@@ -18,6 +18,7 @@ use rom_weaver_core::{
     ThreadCapability,
 };
 use serde_json::json;
+use tracing;
 
 const BPS_MAGIC: &[u8; 4] = b"BPS1";
 const BPS_FOOTER_SIZE: usize = 12;
@@ -1194,6 +1195,76 @@ fn create_bps_patch_parallel(
     Ok(created)
 }
 
+fn merge_bps_diff_run_chunks(
+    per_chunk: impl IntoIterator<Item = Result<Vec<BpsDiffRun>>>,
+) -> Result<Vec<BpsDiffRun>> {
+    let mut merged: Vec<BpsDiffRun> = Vec::new();
+    for runs in per_chunk {
+        let runs = runs?;
+        for run in runs {
+            if let Some(last) = merged.last_mut() {
+                let contiguous = last
+                    .offset
+                    .checked_add(last.len)
+                    .is_some_and(|end| end == run.offset);
+                if contiguous && last.kind == run.kind {
+                    last.len = last.len.saturating_add(run.len);
+                    continue;
+                }
+            }
+            merged.push(run);
+        }
+    }
+    Ok(merged)
+}
+
+fn collect_bps_diff_runs_from_bytes(
+    original_bytes: &[u8],
+    modified_bytes: &[u8],
+    start: u64,
+) -> Result<Vec<BpsDiffRun>> {
+    let mut runs = Vec::new();
+    let mut current_kind: Option<BpsDiffKind> = None;
+    let mut run_start = start;
+    let mut run_len = 0u64;
+    let mut absolute = start;
+
+    for index in 0..modified_bytes.len() {
+        let kind = if original_bytes[index] == modified_bytes[index] {
+            BpsDiffKind::Shared
+        } else {
+            BpsDiffKind::Different
+        };
+
+        if current_kind == Some(kind) {
+            run_len = run_len.saturating_add(1);
+            absolute = checked_add(absolute, 1, "BPS chunk scan offset")?;
+            continue;
+        }
+
+        if let Some(previous) = current_kind {
+            runs.push(BpsDiffRun {
+                kind: previous,
+                offset: run_start,
+                len: run_len,
+            });
+        }
+        current_kind = Some(kind);
+        run_start = absolute;
+        run_len = 1;
+        absolute = checked_add(absolute, 1, "BPS chunk scan offset")?;
+    }
+
+    if let Some(kind) = current_kind {
+        runs.push(BpsDiffRun {
+            kind,
+            offset: run_start,
+            len: run_len,
+        });
+    }
+    Ok(runs)
+}
+
 fn collect_bps_diff_runs_parallel(
     original_path: &Path,
     original_len: u64,
@@ -1214,6 +1285,48 @@ fn collect_bps_diff_runs_parallel(
         })
         .collect::<Vec<_>>();
 
+    if crate::patches_reads_source_on_main_thread() {
+        let combined = original_len.saturating_add(modified_len);
+        if combined > crate::IN_MEMORY_APPLY_LIMIT_BYTES {
+            tracing::info!(
+                combined_bytes = combined,
+                cap = crate::IN_MEMORY_APPLY_LIMIT_BYTES,
+                "BPS parallel create: combined size exceeds cap, falling back to serial scan"
+            );
+            return merge_bps_diff_run_chunks(ranges.into_iter().map(|range| {
+                collect_bps_diff_runs_for_range(
+                    original_path,
+                    original_len,
+                    modified_path,
+                    range.start,
+                    range.end,
+                )
+            }));
+        }
+        let chunk_pairs = ranges
+            .iter()
+            .map(|range| {
+                crate::read_original_modified_chunk(
+                    original_path,
+                    original_len,
+                    modified_path,
+                    range.start,
+                    range.end,
+                )
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let per_chunk = pool.install(|| {
+            chunk_pairs
+                .into_par_iter()
+                .zip(ranges.into_par_iter())
+                .map(|((original_bytes, modified_bytes), range)| {
+                    collect_bps_diff_runs_from_bytes(&original_bytes, &modified_bytes, range.start)
+                })
+                .collect::<Vec<_>>()
+        });
+        return merge_bps_diff_run_chunks(per_chunk);
+    }
+
     let per_chunk = pool.install(|| {
         ranges
             .into_par_iter()
@@ -1230,24 +1343,7 @@ fn collect_bps_diff_runs_parallel(
             .collect::<Vec<Result<Vec<BpsDiffRun>>>>()
     });
 
-    let mut merged: Vec<BpsDiffRun> = Vec::new();
-    for runs in per_chunk {
-        let runs = runs?;
-        for run in runs {
-            if let Some(last) = merged.last_mut() {
-                let contiguous = last
-                    .offset
-                    .checked_add(last.len)
-                    .is_some_and(|end| end == run.offset);
-                if contiguous && last.kind == run.kind {
-                    last.len = last.len.saturating_add(run.len);
-                    continue;
-                }
-            }
-            merged.push(run);
-        }
-    }
-    Ok(merged)
+    merge_bps_diff_run_chunks(per_chunk)
 }
 
 fn collect_bps_diff_runs_for_range(

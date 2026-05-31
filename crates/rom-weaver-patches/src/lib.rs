@@ -22,7 +22,7 @@ mod ups;
 
 use std::{
     fs,
-    io::Read,
+    io::{Read, Seek, SeekFrom},
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -55,6 +55,55 @@ pub(crate) const IN_MEMORY_APPLY_LIMIT_BYTES: u64 = 256 * 1024 * 1024;
 
 pub(crate) fn can_apply_in_memory(a: u64, b: u64) -> bool {
     a <= IN_MEMORY_APPLY_LIMIT_BYTES && b <= IN_MEMORY_APPLY_LIMIT_BYTES
+}
+
+/// On wasm32, spawned worker threads cannot open OPFS-backed files (Safari iOS
+/// returns os error 44). I/O must happen on the main runner thread; workers receive
+/// in-memory byte slices. Native: the same path is exercised via the env var for tests.
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn patches_reads_source_on_main_thread() -> bool {
+    true
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn patches_reads_source_on_main_thread() -> bool {
+    std::env::var("ROM_WEAVER_PATCH_MAIN_THREAD_READER").as_deref() == Ok("1")
+}
+
+/// Reads a chunk of bytes from both `original_path` and `modified_path` on the calling
+/// (main) thread. `original_bytes` is zero-filled past `original_len`. Caller must
+/// ensure `end <= modified_len`.
+pub(crate) fn read_original_modified_chunk(
+    original_path: &Path,
+    original_len: u64,
+    modified_path: &Path,
+    start: u64,
+    end: u64,
+) -> Result<(Vec<u8>, Vec<u8>)> {
+    let chunk_len = usize::try_from(end - start).map_err(|_| {
+        RomWeaverError::Validation("create chunk length exceeded addressable memory".into())
+    })?;
+
+    let mut original_bytes = vec![0u8; chunk_len];
+    if start < original_len {
+        let readable = usize::try_from((original_len - start).min(end - start)).map_err(|_| {
+            RomWeaverError::Validation(
+                "create chunk original readable length exceeded usize".into(),
+            )
+        })?;
+        if readable > 0 {
+            let mut f = fs::File::open(original_path)?;
+            f.seek(SeekFrom::Start(start))?;
+            f.read_exact(&mut original_bytes[..readable])?;
+        }
+    }
+
+    let mut modified_bytes = vec![0u8; chunk_len];
+    let mut f = fs::File::open(modified_path)?;
+    f.seek(SeekFrom::Start(start))?;
+    f.read_exact(&mut modified_bytes)?;
+
+    Ok((original_bytes, modified_bytes))
 }
 
 const IPS: FormatDescriptor = FormatDescriptor {

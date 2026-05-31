@@ -121,7 +121,9 @@ impl PatchHandler for IpsPatchHandler {
         let planned_execution = context.plan_threads(thread_capability.clone());
         let tasks = build_chunk_tasks(&patch, output_size, context)?;
 
-        let (execution, render_result) = if planned_execution.used_parallelism {
+        let (execution, render_result) = if planned_execution.used_parallelism
+            && !crate::patches_reads_source_on_main_thread()
+        {
             let (execution, pool) = context.build_pool(thread_capability)?;
             let render_result = pool.install(|| {
                 tasks
@@ -664,6 +666,54 @@ fn create_ips_patch_parallel(
     context: &OperationContext,
     flavor: IpsFlavor,
 ) -> Result<IpsCreateResult> {
+    if crate::patches_reads_source_on_main_thread() {
+        let combined = original_len.saturating_add(modified_len);
+        if combined > crate::IN_MEMORY_APPLY_LIMIT_BYTES {
+            tracing::info!(
+                combined_bytes = combined,
+                cap = crate::IN_MEMORY_APPLY_LIMIT_BYTES,
+                "IPS parallel create: combined size exceeds cap, falling back to streaming"
+            );
+            return create_ips_patch_streaming(
+                original_path,
+                original_len,
+                modified_path,
+                modified_len,
+                output,
+                context,
+                flavor,
+            );
+        }
+        let chunk_count = ips_create_chunk_count(modified_len)?;
+        let chunk_pairs = (0..chunk_count)
+            .map(|chunk_index| {
+                let start = (chunk_index as u64) * (CREATE_SCAN_CHUNK_BYTES as u64);
+                let end = start
+                    .saturating_add(CREATE_SCAN_CHUNK_BYTES as u64)
+                    .min(modified_len);
+                crate::read_original_modified_chunk(
+                    original_path,
+                    original_len,
+                    modified_path,
+                    start,
+                    end,
+                )
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let chunk_runs = pool.install(|| {
+            chunk_pairs
+                .into_par_iter()
+                .enumerate()
+                .map(|(chunk_index, (original_bytes, modified_bytes))| {
+                    let start = (chunk_index as u64) * (CREATE_SCAN_CHUNK_BYTES as u64);
+                    collect_ips_diff_runs_from_bytes(start, &original_bytes, &modified_bytes)
+                })
+                .collect::<Result<Vec<_>>>()
+        })?;
+        let runs = merge_ips_diff_runs(chunk_runs)?;
+        return write_ips_runs_to_output(runs, original_len, modified_len, output, flavor);
+    }
+
     let chunk_count = ips_create_chunk_count(modified_len)?;
     let chunk_runs = pool.install(|| {
         (0..chunk_count)
@@ -681,7 +731,16 @@ fn create_ips_patch_parallel(
             .collect::<Result<Vec<_>>>()
     })?;
     let runs = merge_ips_diff_runs(chunk_runs)?;
+    write_ips_runs_to_output(runs, original_len, modified_len, output, flavor)
+}
 
+fn write_ips_runs_to_output(
+    runs: Vec<IpsDiffRun>,
+    original_len: u64,
+    modified_len: u64,
+    output: &mut impl Write,
+    flavor: IpsFlavor,
+) -> Result<IpsCreateResult> {
     let mut created = IpsCreateResult::default();
     output.write_all(flavor.header())?;
     for run in &runs {
@@ -774,6 +833,45 @@ fn collect_ips_diff_runs_for_chunk(
                 pending_bytes.push(target);
             }
             cursor = checked_add(cursor, 1, "IPS create scan offset")?;
+        }
+    }
+
+    if !pending_bytes.is_empty() {
+        runs.push(IpsDiffRun {
+            offset: pending_start.expect("pending start exists"),
+            bytes: pending_bytes,
+        });
+    }
+
+    Ok(runs)
+}
+
+fn collect_ips_diff_runs_from_bytes(
+    start: u64,
+    original_bytes: &[u8],
+    modified_bytes: &[u8],
+) -> Result<Vec<IpsDiffRun>> {
+    let mut runs = Vec::new();
+    let mut pending_start: Option<u64> = None;
+    let mut pending_bytes = Vec::<u8>::new();
+
+    for index in 0..modified_bytes.len() {
+        let cursor = checked_add(start, index as u64, "IPS create scan offset")?;
+        let source = original_bytes[index];
+        let target = modified_bytes[index];
+        if source == target {
+            if !pending_bytes.is_empty() {
+                runs.push(IpsDiffRun {
+                    offset: pending_start.expect("pending start exists"),
+                    bytes: std::mem::take(&mut pending_bytes),
+                });
+                pending_start = None;
+            }
+        } else {
+            if pending_start.is_none() {
+                pending_start = Some(cursor);
+            }
+            pending_bytes.push(target);
         }
     }
 

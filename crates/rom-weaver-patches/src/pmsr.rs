@@ -5,6 +5,8 @@ use std::{
     path::Path,
 };
 
+use tracing::info;
+
 use crc32fast::Hasher;
 use rayon::prelude::*;
 use rom_weaver_core::{
@@ -96,7 +98,10 @@ impl PatchHandler for PmsrPatchHandler {
             output.set_len(output_len)?;
             drop(output);
 
-            if planned_execution.used_parallelism && records_non_overlapping {
+            if planned_execution.used_parallelism
+                && records_non_overlapping
+                && !crate::patches_reads_source_on_main_thread()
+            {
                 let (execution, pool) = context.build_pool(thread_capability)?;
                 apply_pmsr_patch_parallel_in_place(
                     &patch,
@@ -639,22 +644,65 @@ fn create_pmsr_patch_parallel(
         )));
     }
 
+    if crate::patches_reads_source_on_main_thread() {
+        let combined = original_len.saturating_add(modified_len);
+        if combined > crate::IN_MEMORY_APPLY_LIMIT_BYTES {
+            info!(
+                original_len,
+                modified_len,
+                "PMSR create: combined size exceeds in-memory limit; falling back to serial path"
+            );
+            return create_pmsr_patch_streaming(original_path, modified_path);
+        }
+    }
+
     let chunk_count = pmsr_create_chunk_count(modified_len)?;
-    let chunk_records = pool.install(|| {
-        (0..chunk_count)
-            .into_par_iter()
-            .map(|chunk_index| {
-                context.cancel().check()?;
-                collect_pmsr_records_for_chunk(
-                    chunk_index,
+    let chunk_size = CREATE_SCAN_CHUNK_BYTES as u64;
+    let chunk_records = if crate::patches_reads_source_on_main_thread() {
+        let chunk_starts: Vec<u64> = (0..chunk_count as u64)
+            .map(|i| i * chunk_size)
+            .filter(|&s| s < modified_len)
+            .collect();
+        let buffered = chunk_starts
+            .iter()
+            .map(|&start| {
+                let end = start.saturating_add(chunk_size).min(modified_len);
+                crate::read_original_modified_chunk(
                     original_path,
                     original_len,
                     modified_path,
-                    modified_len,
+                    start,
+                    end,
                 )
             })
-            .collect::<Result<Vec<_>>>()
-    })?;
+            .collect::<Result<Vec<_>>>()?;
+        pool.install(|| {
+            buffered
+                .into_par_iter()
+                .zip(chunk_starts.into_par_iter())
+                .map(|((original_bytes, modified_bytes), start)| {
+                    context.cancel().check()?;
+                    collect_pmsr_records_from_bytes(start, &original_bytes, &modified_bytes)
+                })
+                .collect::<Result<Vec<_>>>()
+        })?
+    } else {
+        pool.install(|| {
+            (0..chunk_count)
+                .into_par_iter()
+                .map(|chunk_index| {
+                    context.cancel().check()?;
+                    collect_pmsr_records_for_chunk(
+                        chunk_index,
+                        original_path,
+                        original_len,
+                        modified_path,
+                        modified_len,
+                    )
+                })
+                .collect::<Result<Vec<_>>>()
+        })?
+    };
     let records = merge_pmsr_records(chunk_records)?;
     finalize_created_pmsr_patch(records, modified_len)
 }
@@ -729,6 +777,46 @@ fn collect_pmsr_records_for_chunk(
             }
             cursor = checked_add(cursor, 1, "MOD scan offset")?;
         }
+    }
+
+    if !pending_data.is_empty() {
+        records.push(PmsrRecord {
+            offset: pending_start.expect("pending start exists"),
+            data: pending_data,
+        });
+    }
+
+    Ok(records)
+}
+
+fn collect_pmsr_records_from_bytes(
+    start: u64,
+    original_bytes: &[u8],
+    modified_bytes: &[u8],
+) -> Result<Vec<PmsrRecord>> {
+    let mut records = Vec::new();
+    let mut pending_start: Option<u64> = None;
+    let mut pending_data = Vec::new();
+    let mut cursor = start;
+
+    for index in 0..modified_bytes.len() {
+        let source = original_bytes.get(index).copied().unwrap_or(0);
+        let target = modified_bytes[index];
+        if source == target {
+            if !pending_data.is_empty() {
+                records.push(PmsrRecord {
+                    offset: pending_start.expect("pending start exists"),
+                    data: std::mem::take(&mut pending_data),
+                });
+                pending_start = None;
+            }
+        } else {
+            if pending_start.is_none() {
+                pending_start = Some(cursor);
+            }
+            pending_data.push(target);
+        }
+        cursor = checked_add(cursor, 1, "MOD scan offset")?;
     }
 
     if !pending_data.is_empty() {

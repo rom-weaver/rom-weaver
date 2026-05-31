@@ -6,6 +6,8 @@ use std::{
     sync::Arc,
 };
 
+use tracing::info;
+
 use crc32fast::Hasher;
 use rayon::prelude::*;
 use rom_weaver_checksum::{checksum_file_values, crc32_bytes};
@@ -585,6 +587,19 @@ fn create_ups_patch_parallel(
 ) -> Result<CreatedUpsPatch> {
     let source_size = fs::metadata(source_path)?.len();
     let target_size = fs::metadata(target_path)?.len();
+
+    if crate::patches_reads_source_on_main_thread() {
+        let combined = source_size.saturating_add(target_size);
+        if combined > crate::IN_MEMORY_APPLY_LIMIT_BYTES {
+            info!(
+                source_size,
+                target_size,
+                "UPS create: combined size exceeds in-memory limit; falling back to serial path"
+            );
+            return create_ups_patch_streaming(source_path, target_path);
+        }
+    }
+
     let source_checksum = crc32_path_cached(source_path, context)?;
     let target_checksum = crc32_path_cached(target_path, context)?;
     let changes =
@@ -619,11 +634,11 @@ fn collect_ups_changes_parallel(
         })
         .collect::<Vec<_>>();
 
-    let per_chunk_changes = pool.install(|| {
-        chunk_ranges
-            .into_par_iter()
+    let per_chunk_changes = if crate::patches_reads_source_on_main_thread() {
+        let buffered = chunk_ranges
+            .iter()
             .map(|range| {
-                collect_ups_chunk_changes(
+                crate::read_original_modified_chunk(
                     source_path,
                     source_size,
                     target_path,
@@ -631,8 +646,32 @@ fn collect_ups_changes_parallel(
                     range.end,
                 )
             })
-            .collect::<Vec<_>>()
-    });
+            .collect::<Result<Vec<_>>>()?;
+        pool.install(|| {
+            buffered
+                .into_par_iter()
+                .zip(chunk_ranges.into_par_iter())
+                .map(|((source_bytes, target_bytes), range)| {
+                    collect_ups_chunk_changes_from_bytes(range.start, &source_bytes, &target_bytes)
+                })
+                .collect::<Vec<_>>()
+        })
+    } else {
+        pool.install(|| {
+            chunk_ranges
+                .into_par_iter()
+                .map(|range| {
+                    collect_ups_chunk_changes(
+                        source_path,
+                        source_size,
+                        target_path,
+                        range.start,
+                        range.end,
+                    )
+                })
+                .collect::<Vec<_>>()
+        })
+    };
 
     let mut merged: Vec<UpsChange> = Vec::new();
     for changes in per_chunk_changes {
@@ -714,6 +753,46 @@ fn collect_ups_chunk_changes(
             }
             absolute = checked_add(absolute, 1, "UPS chunk scan offset")?;
         }
+    }
+
+    if !pending_xor.is_empty() {
+        let offset = pending_start.expect("pending start exists");
+        changes.push(UpsChange {
+            offset,
+            xor_bytes: pending_xor,
+        });
+    }
+
+    Ok(changes)
+}
+
+fn collect_ups_chunk_changes_from_bytes(
+    start: u64,
+    source_bytes: &[u8],
+    target_bytes: &[u8],
+) -> Result<Vec<UpsChange>> {
+    let mut changes = Vec::new();
+    let mut pending_start: Option<u64> = None;
+    let mut pending_xor = Vec::<u8>::new();
+    let mut absolute = start;
+
+    for index in 0..target_bytes.len() {
+        let source_byte = source_bytes.get(index).copied().unwrap_or(0);
+        let target_byte = target_bytes[index];
+        if source_byte != target_byte {
+            if pending_start.is_none() {
+                pending_start = Some(absolute);
+            }
+            pending_xor.push(source_byte ^ target_byte);
+        } else if !pending_xor.is_empty() {
+            let offset = pending_start.expect("pending start exists");
+            changes.push(UpsChange {
+                offset,
+                xor_bytes: std::mem::take(&mut pending_xor),
+            });
+            pending_start = None;
+        }
+        absolute = checked_add(absolute, 1, "UPS chunk scan offset")?;
     }
 
     if !pending_xor.is_empty() {

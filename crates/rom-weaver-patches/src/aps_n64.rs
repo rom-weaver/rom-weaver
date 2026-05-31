@@ -4,6 +4,8 @@ use std::{
     path::Path,
 };
 
+use tracing::info;
+
 use rayon::prelude::*;
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
@@ -885,21 +887,70 @@ fn create_aps_patch_parallel(
     })?;
     let chunk_count = aps_create_chunk_count(modified_len_usize)?;
 
-    let chunk_runs = pool.install(|| {
-        (0..chunk_count)
-            .into_par_iter()
-            .map(|chunk_index| {
-                context.cancel().check()?;
-                collect_diff_runs_for_chunk(
-                    chunk_index,
+    if crate::patches_reads_source_on_main_thread() {
+        let combined = original_len.saturating_add(modified_len);
+        if combined > crate::IN_MEMORY_APPLY_LIMIT_BYTES {
+            info!(
+                original_len,
+                modified_len,
+                "APS create: combined size exceeds in-memory limit; falling back to serial path"
+            );
+            return create_aps_patch_from_files(
+                original_path,
+                original_len,
+                modified_path,
+                modified_len,
+                context,
+            );
+        }
+    }
+
+    let chunk_size = APS_CREATE_CHUNK_BYTES as u64;
+    let chunk_runs = if crate::patches_reads_source_on_main_thread() {
+        let chunk_starts: Vec<u64> = (0..chunk_count as u64)
+            .map(|i| i * chunk_size)
+            .filter(|&s| s < modified_len)
+            .collect();
+        let buffered = chunk_starts
+            .iter()
+            .map(|&start| {
+                let end = start.saturating_add(chunk_size).min(modified_len);
+                crate::read_original_modified_chunk(
                     original_path,
                     original_len,
                     modified_path,
-                    modified_len,
+                    start,
+                    end,
                 )
             })
-            .collect::<Result<Vec<_>>>()
-    })?;
+            .collect::<Result<Vec<_>>>()?;
+        pool.install(|| {
+            buffered
+                .into_par_iter()
+                .zip(chunk_starts.into_par_iter())
+                .map(|((original_bytes, modified_bytes), start)| {
+                    context.cancel().check()?;
+                    collect_diff_runs_from_bytes(start, &original_bytes, &modified_bytes)
+                })
+                .collect::<Result<Vec<_>>>()
+        })?
+    } else {
+        pool.install(|| {
+            (0..chunk_count)
+                .into_par_iter()
+                .map(|chunk_index| {
+                    context.cancel().check()?;
+                    collect_diff_runs_for_chunk(
+                        chunk_index,
+                        original_path,
+                        original_len,
+                        modified_path,
+                        modified_len,
+                    )
+                })
+                .collect::<Result<Vec<_>>>()
+        })?
+    };
     let runs = merge_diff_runs(chunk_runs)?;
     let records = encode_runs_as_aps_records(runs)?;
     create_aps_patch_with_records(n64_header, modified_len, records)
@@ -975,6 +1026,44 @@ fn collect_diff_runs_for_chunk(
         cursor = cursor
             .checked_add(chunk_len as u64)
             .ok_or_else(|| RomWeaverError::Validation("APS compare cursor overflowed".into()))?;
+    }
+
+    if !pending_bytes.is_empty() {
+        runs.push(ApsDiffRun {
+            offset: pending_start.expect("pending start exists"),
+            bytes: pending_bytes,
+        });
+    }
+
+    Ok(runs)
+}
+
+fn collect_diff_runs_from_bytes(
+    start: u64,
+    original_bytes: &[u8],
+    modified_bytes: &[u8],
+) -> Result<Vec<ApsDiffRun>> {
+    let mut runs = Vec::new();
+    let mut pending_start: Option<u64> = None;
+    let mut pending_bytes = Vec::<u8>::new();
+
+    for index in 0..modified_bytes.len() {
+        let source = original_bytes.get(index).copied().unwrap_or(0);
+        let target = modified_bytes[index];
+        if source == target {
+            if !pending_bytes.is_empty() {
+                runs.push(ApsDiffRun {
+                    offset: pending_start.expect("pending start exists"),
+                    bytes: std::mem::take(&mut pending_bytes),
+                });
+                pending_start = None;
+            }
+        } else {
+            if pending_start.is_none() {
+                pending_start = Some(start + index as u64);
+            }
+            pending_bytes.push(target);
+        }
     }
 
     if !pending_bytes.is_empty() {
