@@ -207,6 +207,79 @@ const cloneResolvedInputState = (
   wasDecompressed: state.wasDecompressed,
 });
 
+const isChecksummableInputAsset = (asset: InputAsset) => asset.kind !== "cue";
+
+const getInputAssetChecksums = (asset: InputAsset | undefined): ApplyWorkflowChecksums | undefined => {
+  if (!asset) return undefined;
+  return asset.checksums || getPatchFilePrecomputedChecksums(asset.file);
+};
+
+const getAssetParentCompressions = (
+  asset: InputAsset,
+  fallback: ApplyWorkflowParentCompression[],
+): ApplyWorkflowParentCompression[] =>
+  (asset.preparation?.parentCompressions || fallback).map((entry) => ({
+    ...entry,
+  }));
+
+const getAssetDecompressionTimeMs = (asset: InputAsset, fallback?: number) =>
+  typeof asset.preparation?.decompressionTimeMs === "number" && Number.isFinite(asset.preparation.decompressionTimeMs)
+    ? asset.preparation.decompressionTimeMs
+    : fallback;
+
+const getAssetSourceSize = (asset: InputAsset, fallback?: number) =>
+  typeof asset.preparation?.sourceSize === "number" && Number.isFinite(asset.preparation.sourceSize)
+    ? asset.preparation.sourceSize
+    : fallback;
+
+const getPrimaryInputAsset = (assets: InputAsset[]) =>
+  assets.find((asset) => asset.patchable) || assets.find(isChecksummableInputAsset) || assets[0];
+
+const cloneResolvedInputAssetState = (
+  asset: InputAsset,
+  order: number,
+  parentCompressions: ApplyWorkflowParentCompression[],
+  selected: boolean,
+  selectedCandidateId?: string,
+): ApplyWorkflowResolvedInput => {
+  const checksums = getInputAssetChecksums(asset);
+  return {
+    checksums: checksums ? cloneValue(checksums) : undefined,
+    checksumTimeMs: asset.checksumTimeMs,
+    decompressionTimeMs: getAssetDecompressionTimeMs(asset),
+    fileName: asset.fileName,
+    groupId: asset.groupId,
+    id: asset.id,
+    kind: asset.kind,
+    order,
+    parentCompressions: getAssetParentCompressions(asset, parentCompressions),
+    selected,
+    selectedCandidateId,
+    size: asset.size,
+    sourceSize: getAssetSourceSize(asset),
+    splitBinAvailable: asset.disc?.splitBinAvailable,
+    wasDecompressed: asset.preparation?.wasDecompressed,
+  };
+};
+
+const cloneResolvedInputStatesForStage = <TSource>(
+  stage: StagedSource<TSource>,
+  selectedStage: boolean,
+): ApplyWorkflowResolvedInput[] => {
+  const assets = stage.preparedInputAssets || [];
+  if (!assets.length) return [cloneResolvedInputState(stage.state, stage.parentCompressions, selectedStage)];
+  const primaryAsset = getPrimaryInputAsset(assets);
+  return assets.map((asset, index) =>
+    cloneResolvedInputAssetState(
+      asset,
+      index,
+      stage.parentCompressions,
+      selectedStage && asset.id === primaryAsset?.id,
+      stage.state.selectedCandidateId,
+    ),
+  );
+};
+
 const createPatchOutputLabel = (fileName: string | undefined) => {
   const label = String(fileName || "")
     .match(PATCH_OUTPUT_LABEL_PATTERN)?.[1]
@@ -357,8 +430,8 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
     const resolvedInputs = session.synthetic
       ? session.stages
           .filter((stage) => stage.state.status === "ready")
-          .map((stage) => cloneResolvedInputState(stage.state, stage.parentCompressions, stage === selectedOwner))
-      : [cloneResolvedInputState(session.view.state, session.view.parentCompressions, true)];
+          .flatMap((stage) => cloneResolvedInputStatesForStage(stage, stage === selectedOwner))
+      : cloneResolvedInputStatesForStage(session.view, true);
     return cloneInputState(session.view.state, session.view.parentCompressions || [], resolvedInputs);
   }
 
@@ -791,6 +864,7 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
       view.state.sourceSize = sources.reduce((total, source) => total + (getBinarySourceSize(source as never) || 0), 0);
       const metrics = getInputPreparationMetrics(directAssets);
       view.parentCompressions = this.normalizeParentCompressions(metrics?.parentCompressions);
+      if (directAssets.filter((asset) => asset.patchable).length === 1) requests.length = 0;
       for (const request of requests) this.addCandidateRequest(view, request);
       if (!view.state.candidates.length) this.addDirectCandidate(view, "input", 0, view.state.id);
       const selectable = view.state.candidates.filter((candidate) => candidate.selectable);
@@ -1162,7 +1236,7 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
         `${owner.state.fileName || "Input"} could not be prepared after repeated archive selection attempts`,
       );
     attemptedSelectionKeys.add(selectionRetryKey);
-    releasePreparedSource(owner);
+    if (!owner.preparedInputAssets?.length) releasePreparedSource(owner);
     owner.state.selectedCandidateId = selection.id;
     owner.selectedArchiveEntry = internalCandidate.archiveEntry;
     owner.state.checksums = undefined;
@@ -1203,8 +1277,8 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
         ? preparation.decompressionTimeMs
         : undefined;
     stage.state.wasDecompressed = preparation?.wasDecompressed === true;
-    if (assets.length === 1 && !stage.state.checksums) {
-      const precomputed = getPatchFilePrecomputedChecksums(assets[0]?.file);
+    if (!stage.state.checksums) {
+      const precomputed = getInputAssetChecksums(getPrimaryInputAsset(assets));
       if (precomputed) {
         stage.state.checksums = precomputed;
         stage.state.checksumTimeMs = 0;
@@ -1350,26 +1424,41 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
     for (let index = 0; index < checksumStages.length; index += 1) {
       const stage = checksumStages[index];
       if (!(stage && stage.state.status === "ready" && stage.preparedInputAssets?.[0]?.file)) continue;
-      if (!stage.state.checksums) {
-        const precomputed = getPatchFilePrecomputedChecksums(stage.preparedInputAssets[0].file);
+      const assets = stage.preparedInputAssets || [];
+      for (let assetIndex = 0; assetIndex < assets.length; assetIndex += 1) {
+        const asset = assets[assetIndex];
+        if (!(asset?.file && isChecksummableInputAsset(asset))) continue;
+        if (asset.checksums) continue;
+        const precomputed = getPatchFilePrecomputedChecksums(asset.file);
         if (precomputed) {
-          stage.state.checksums = precomputed;
-          stage.state.checksumTimeMs = 0;
+          asset.checksums = precomputed;
+          asset.checksumTimeMs = 0;
           continue;
         }
-        const checksumFileName = getPreparedAssetFileName(stage.preparedInputAssets[0], stage.state.fileName);
+        const checksumFileName = getPreparedAssetFileName(asset, stage.state.fileName);
         const checksumStartedAt = Date.now();
-        stage.state.checksums = await this.calculateChecksumsForFile(
-          stage.preparedInputAssets[0].file,
+        asset.checksums = await this.calculateChecksumsForFile(
+          asset.file,
           {
             ...stage.state,
+            decompressionTimeMs: getAssetDecompressionTimeMs(asset, stage.state.decompressionTimeMs),
             fileName: checksumFileName,
-            parentCompressions: stage.parentCompressions,
+            order: assetIndex,
+            parentCompressions: getAssetParentCompressions(asset, stage.parentCompressions),
+            size: asset.size,
+            sourceSize: getAssetSourceSize(asset, stage.state.sourceSize),
+            wasDecompressed: asset.preparation?.wasDecompressed ?? stage.state.wasDecompressed,
           },
           "input",
-          session.synthetic ? `${stage.state.id}:${index}` : stage.state.id,
+          session.synthetic ? `${stage.state.id}:${index}:${assetIndex}` : `${stage.state.id}:${assetIndex}`,
         );
-        stage.state.checksumTimeMs = Date.now() - checksumStartedAt;
+        asset.checksumTimeMs = Date.now() - checksumStartedAt;
+      }
+      const primaryAsset = getPrimaryInputAsset(assets);
+      const primaryChecksums = getInputAssetChecksums(primaryAsset);
+      if (primaryChecksums) {
+        stage.state.checksums = primaryChecksums;
+        stage.state.checksumTimeMs = primaryAsset?.checksumTimeMs;
       }
     }
     if (session.synthetic) this.syncInputSessionView();

@@ -34,6 +34,7 @@ import {
   InputProgress as SharedInputProgress,
   RuntimeNotice as SharedRuntimeNotice,
 } from "./patcher-react-shared.tsx";
+import type { RomInputRowState } from "./patcher-ui-state.ts";
 import {
   buttonClasses,
   cx,
@@ -207,7 +208,7 @@ function ApplyWorkflowFormView({
   const romInputRef = useRef<HTMLInputElement>(null);
   const patchInputRef = useRef<HTMLInputElement>(null);
   const fileInputAccept = getFileInputAcceptAttributes();
-  const romInputs = uiState.romInputs.length
+  const romInputs: RomInputRowState[] = uiState.romInputs.length
     ? uiState.romInputs
     : uiState.romInfo.fileName
       ? [
@@ -226,6 +227,7 @@ function ApplyWorkflowFormView({
               sha1: uiState.romInfo.sha1,
               validationPhase: uiState.romInfo.validationPhase,
             },
+            kind: "",
             order: 0,
           },
         ]
@@ -259,7 +261,7 @@ function ApplyWorkflowFormView({
           sourceCount: sources.length,
           sources: sources.map((source) => getInputEventSourceSummary(source)),
         });
-        uiController.provideRomInputFile?.(sources[0] || null);
+        uiController.provideRomInputFiles?.(sources.length ? sources : null);
       })
       .catch((error) => {
         emitInputEventTrace(onTrace, "rom drop source resolution failed", {
@@ -371,13 +373,14 @@ function ApplyWorkflowFormView({
             disabled={uiState.romInput.disabled}
             id="rom-weaver-input-file-rom"
             onChange={(event) => {
-              const selectedFile = event.currentTarget.files?.[0] || null;
+              const selectedFiles = event.currentTarget.files ? Array.from(event.currentTarget.files) : [];
+              const selectedFile = selectedFiles[0] || null;
               emitInputEventTrace(onTrace, "rom file input changed", {
                 disabled: uiState.romInput.disabled,
                 fileCount: event.currentTarget.files?.length || 0,
                 source: getInputEventSourceSummary(selectedFile),
               });
-              uiController.provideRomInputFile?.(selectedFile);
+              uiController.provideRomInputFiles?.(selectedFiles.length ? selectedFiles : null);
               event.currentTarget.value = "";
             }}
             ref={romInputRef}
@@ -437,7 +440,9 @@ function ApplyWorkflowFormView({
                 listId="rom-weaver-list-input-stack"
               >
                 {romInputs.map((romInput, index) => {
-                  const checksumProgressActive = !!romInput.progress && romInput.info.validationPhase === "checksum";
+                  const showChecksumSection = romInput.kind !== "cue";
+                  const checksumProgressActive =
+                    showChecksumSection && !!romInput.progress && romInput.info.validationPhase === "checksum";
                   const archiveName =
                     romInput.info.archiveName && romInput.info.archiveName !== "-" ? romInput.info.archiveName : "";
                   const checksumDetailsId =
@@ -480,103 +485,107 @@ function ApplyWorkflowFormView({
                           ) : null}
                         </div>
                       </div>
-                      <div
-                        aria-busy={checksumProgressActive || undefined}
-                        className="rom-weaver-checksum-section mt-2 border-t border-[var(--rom-weaver-color-border)] pt-2 font-['Inter_Tight','Segoe_UI',sans-serif] text-[11px] leading-[1.32] tracking-[0.01em] text-[var(--rom-weaver-color-muted)]"
-                        id={index === 0 ? "rom-weaver-rom-info" : `rom-weaver-rom-info-${index + 1}`}
-                      >
-                        <div className="mb-1 flex items-center gap-3">
-                          <button
-                            aria-controls={checksumDetailsId}
-                            aria-expanded={romInput.info.checksumsExpanded ? "true" : "false"}
-                            className="inline-flex items-center gap-1.5 rounded-[8px] pl-0 pr-1 py-1 text-left text-[10px] font-semibold tracking-[0.045em] text-[var(--rom-weaver-color-text-soft)] uppercase transition-colors hover:bg-[var(--rom-weaver-color-surface-muted)]"
-                            onClick={() => uiController.toggleRomInputChecksums?.(romInput.id)}
-                            type="button"
-                          >
-                            {romInput.info.checksumsExpanded ? (
-                              <ChevronDown aria-hidden="true" className="h-3.5 w-3.5" />
-                            ) : (
-                              <ChevronRight aria-hidden="true" className="h-3.5 w-3.5" />
-                            )}
-                            <span>Checksums</span>
-                            <SectionTiming
-                              className={cx(textClasses.mono, "!flex-none")}
-                              id={
-                                index === 0
-                                  ? "rom-weaver-section-timing-checksum"
-                                  : `rom-weaver-section-timing-checksum-${index + 1}`
-                              }
-                              value={normalizeSecondsUnit(romInput.info.checksumTiming)}
-                            />
-                          </button>
-                        </div>
+                      {showChecksumSection ? (
                         <div
-                          className={cx(
-                            "overflow-hidden transition-[max-height,opacity] duration-250 ease-[cubic-bezier(0.22,1,0.36,1)]",
-                            romInput.info.checksumsExpanded ? "max-h-[440px] opacity-100" : "max-h-0 opacity-0",
-                          )}
-                          id={checksumDetailsId}
+                          aria-busy={checksumProgressActive || undefined}
+                          className="rom-weaver-checksum-section mt-2 border-t border-[var(--rom-weaver-color-border)] pt-2 font-['Inter_Tight','Segoe_UI',sans-serif] text-[11px] leading-[1.32] tracking-[0.01em] text-[var(--rom-weaver-color-muted)]"
+                          id={index === 0 ? "rom-weaver-rom-info" : `rom-weaver-rom-info-${index + 1}`}
                         >
-                          <div className="pt-1 space-y-1">
-                            <div
-                              className={cx(
-                                "grid max-w-full items-start gap-3",
-                                checksumProgressActive ? "grid-cols-[max-content_minmax(0,1fr)]" : "grid-cols-1",
-                              )}
+                          <div className="mb-1 flex items-center gap-3">
+                            <button
+                              aria-controls={checksumDetailsId}
+                              aria-expanded={romInput.info.checksumsExpanded ? "true" : "false"}
+                              className="inline-flex items-center gap-1.5 rounded-[8px] pl-0 pr-1 py-1 text-left text-[10px] font-semibold tracking-[0.045em] text-[var(--rom-weaver-color-text-soft)] uppercase transition-colors hover:bg-[var(--rom-weaver-color-surface-muted)]"
+                              onClick={() => uiController.toggleRomInputChecksums?.(romInput.id)}
+                              type="button"
                             >
-                              <div className={cx("min-w-0", checksumProgressActive && "w-fit max-w-[272px]")}>
-                                <RomInfoMetaRow
-                                  label="CRC32"
-                                  rowClassName="mb-[3px] grid grid-cols-[52px_minmax(0,1fr)] items-baseline gap-x-[6px] last:mb-0"
-                                  spanId={index === 0 ? "rom-weaver-span-crc32" : `rom-weaver-span-crc32-${index + 1}`}
-                                  value={romInput.info.crc32}
-                                  valueClassName="font-semibold tabular-nums text-[var(--rom-weaver-color-text)]"
-                                  valueContainerClassName={textClasses.checksumValue}
-                                />
-                                <RomInfoMetaRow
-                                  label="MD5"
-                                  rowClassName="mb-[3px] grid grid-cols-[52px_minmax(0,1fr)] items-baseline gap-x-[6px] last:mb-0"
-                                  spanId={index === 0 ? "rom-weaver-span-md5" : `rom-weaver-span-md5-${index + 1}`}
-                                  value={romInput.info.md5}
-                                  valueClassName="font-semibold tabular-nums text-[var(--rom-weaver-color-text)]"
-                                  valueContainerClassName={textClasses.checksumValue}
-                                />
-                                <RomInfoMetaRow
-                                  label="SHA-1"
-                                  rowClassName="mb-[3px] grid grid-cols-[52px_minmax(0,1fr)] items-baseline gap-x-[6px] last:mb-0"
-                                  spanId={index === 0 ? "rom-weaver-span-sha1" : `rom-weaver-span-sha1-${index + 1}`}
-                                  value={romInput.info.sha1}
-                                  valueClassName="font-semibold tabular-nums text-[var(--rom-weaver-color-text)]"
-                                  valueContainerClassName={textClasses.checksumValue}
-                                />
-                              </div>
-                              {checksumProgressActive ? (
-                                <div className="min-w-0 pt-[2px]">
-                                  <div className="relative min-h-[calc(var(--rom-weaver-control-height)-2px)]">
-                                    <InputProgress
-                                      id={
-                                        index === 0
-                                          ? "rom-weaver-progress-checksum"
-                                          : `rom-weaver-progress-checksum-${index + 1}`
-                                      }
-                                      progress={romInput.progress}
-                                    />
-                                  </div>
+                              {romInput.info.checksumsExpanded ? (
+                                <ChevronDown aria-hidden="true" className="h-3.5 w-3.5" />
+                              ) : (
+                                <ChevronRight aria-hidden="true" className="h-3.5 w-3.5" />
+                              )}
+                              <span>Checksums</span>
+                              <SectionTiming
+                                className={cx(textClasses.mono, "!flex-none")}
+                                id={
+                                  index === 0
+                                    ? "rom-weaver-section-timing-checksum"
+                                    : `rom-weaver-section-timing-checksum-${index + 1}`
+                                }
+                                value={normalizeSecondsUnit(romInput.info.checksumTiming)}
+                              />
+                            </button>
+                          </div>
+                          <div
+                            className={cx(
+                              "overflow-hidden transition-[max-height,opacity] duration-250 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                              romInput.info.checksumsExpanded ? "max-h-[440px] opacity-100" : "max-h-0 opacity-0",
+                            )}
+                            id={checksumDetailsId}
+                          >
+                            <div className="pt-1 space-y-1">
+                              <div
+                                className={cx(
+                                  "grid max-w-full items-start gap-3",
+                                  checksumProgressActive ? "grid-cols-[max-content_minmax(0,1fr)]" : "grid-cols-1",
+                                )}
+                              >
+                                <div className={cx("min-w-0", checksumProgressActive && "w-fit max-w-[272px]")}>
+                                  <RomInfoMetaRow
+                                    label="CRC32"
+                                    rowClassName="mb-[3px] grid grid-cols-[52px_minmax(0,1fr)] items-baseline gap-x-[6px] last:mb-0"
+                                    spanId={
+                                      index === 0 ? "rom-weaver-span-crc32" : `rom-weaver-span-crc32-${index + 1}`
+                                    }
+                                    value={romInput.info.crc32}
+                                    valueClassName="font-semibold tabular-nums text-[var(--rom-weaver-color-text)]"
+                                    valueContainerClassName={textClasses.checksumValue}
+                                  />
+                                  <RomInfoMetaRow
+                                    label="MD5"
+                                    rowClassName="mb-[3px] grid grid-cols-[52px_minmax(0,1fr)] items-baseline gap-x-[6px] last:mb-0"
+                                    spanId={index === 0 ? "rom-weaver-span-md5" : `rom-weaver-span-md5-${index + 1}`}
+                                    value={romInput.info.md5}
+                                    valueClassName="font-semibold tabular-nums text-[var(--rom-weaver-color-text)]"
+                                    valueContainerClassName={textClasses.checksumValue}
+                                  />
+                                  <RomInfoMetaRow
+                                    label="SHA-1"
+                                    rowClassName="mb-[3px] grid grid-cols-[52px_minmax(0,1fr)] items-baseline gap-x-[6px] last:mb-0"
+                                    spanId={index === 0 ? "rom-weaver-span-sha1" : `rom-weaver-span-sha1-${index + 1}`}
+                                    value={romInput.info.sha1}
+                                    valueClassName="font-semibold tabular-nums text-[var(--rom-weaver-color-text)]"
+                                    valueContainerClassName={textClasses.checksumValue}
+                                  />
                                 </div>
-                              ) : null}
+                                {checksumProgressActive ? (
+                                  <div className="min-w-0 pt-[2px]">
+                                    <div className="relative min-h-[calc(var(--rom-weaver-control-height)-2px)]">
+                                      <InputProgress
+                                        id={
+                                          index === 0
+                                            ? "rom-weaver-progress-checksum"
+                                            : `rom-weaver-progress-checksum-${index + 1}`
+                                        }
+                                        progress={romInput.progress}
+                                      />
+                                    </div>
+                                  </div>
+                                ) : null}
+                              </div>
+                              <RomInfoMetaRow
+                                id={index === 0 ? "rom-weaver-row-info-rom" : `rom-weaver-row-info-rom-${index + 1}`}
+                                label="ROM"
+                                spanId={
+                                  index === 0 ? "rom-weaver-span-rom-info" : `rom-weaver-span-rom-info-${index + 1}`
+                                }
+                                value={romInput.info.romInfo}
+                                visible={!!romInput.info.romInfo}
+                              />
                             </div>
-                            <RomInfoMetaRow
-                              id={index === 0 ? "rom-weaver-row-info-rom" : `rom-weaver-row-info-rom-${index + 1}`}
-                              label="ROM"
-                              spanId={
-                                index === 0 ? "rom-weaver-span-rom-info" : `rom-weaver-span-rom-info-${index + 1}`
-                              }
-                              value={romInput.info.romInfo}
-                              visible={!!romInput.info.romInfo}
-                            />
                           </div>
                         </div>
-                      </div>
+                      ) : null}
                     </PatcherFileStackRow>
                   );
                 })}
@@ -595,6 +604,24 @@ function ApplyWorkflowFormView({
                 renderIcon={renderRuntimeNoticeIcon}
                 state={uiState.checksumNotice}
               />
+              {uiState.chdSplitBin.visible ? (
+                <div
+                  className="show rom-weaver-chd-split-bin mt-2 block text-[13px] text-[var(--rom-weaver-color-text)]"
+                  id="rom-weaver-row-chd-split-bin"
+                >
+                  <label>
+                    <input
+                      checked={uiState.chdSplitBin.checked}
+                      className={formClasses.checkbox}
+                      disabled={uiState.chdSplitBin.disabled}
+                      id="rom-weaver-checkbox-chd-split-bin"
+                      onChange={(event) => uiController.setChdSplitBin?.(event.currentTarget.checked)}
+                      type="checkbox"
+                    />{" "}
+                    <span data-localize="yes">{uiState.chdSplitBin.label}</span>
+                  </label>
+                </div>
+              ) : null}
             </div>
           </div>
         </div>

@@ -44,6 +44,7 @@ type CommonSettings = {
 };
 
 type InputSettings = {
+  chdSplitBin?: boolean;
   containerInputsEnabled?: boolean;
 };
 

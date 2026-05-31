@@ -18,6 +18,7 @@ type ApplyWorkflowParentCompression = {
 type ApplyWorkflowResolvedInput = {
   id: string;
   fileName?: string;
+  kind?: "rom" | "cue" | "track";
   checksums?: ApplyWorkflowChecksums;
   checksumTimeMs?: number;
   parentCompressions: ApplyWorkflowParentCompression[];
@@ -27,6 +28,7 @@ type ApplyWorkflowResolvedInput = {
   groupId?: string;
   size?: number;
   sourceSize?: number;
+  splitBinAvailable?: boolean;
   decompressionTimeMs?: number;
   wasDecompressed?: boolean;
 };

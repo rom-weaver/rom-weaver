@@ -22,6 +22,8 @@ type InputAsset = {
   fileName: string;
   kind: "rom" | "cue" | "track";
   size: number;
+  checksums?: Record<string, string>;
+  checksumTimeMs?: number;
   preparation?: InputPreparationMetrics;
   file: PatchFileInstance;
   groupId?: string;
@@ -30,6 +32,7 @@ type InputAsset = {
     cueText?: string;
     trackNumber?: number;
     mode?: string;
+    splitBinAvailable?: boolean;
   };
 };
 type CueCandidateGroup = SelectionGroupCandidate & {
@@ -89,6 +92,9 @@ const makeTrackAsset = (
 });
 
 const makeRomAsset = (id: string, file: PatchFileInstance): InputAsset => ({
+  ...((file as PatchFileInstance & { _chdSplitBinAvailable?: boolean })._chdSplitBinAvailable
+    ? { disc: { splitBinAvailable: true } }
+    : {}),
   file,
   fileName: file.fileName,
   id,

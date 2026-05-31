@@ -47,6 +47,7 @@ type StagedInputInfo = {
   id?: string;
   order?: number;
   groupId?: string;
+  kind?: string;
   archiveName?: string;
   parentCompressions?: ArchivePathEntry[];
   targetLabel?: string;
@@ -56,6 +57,7 @@ type StagedInputInfo = {
   fileName?: string;
   size?: number;
   sourceSize?: number;
+  splitBinAvailable?: boolean;
   wasDecompressed?: boolean;
 };
 type ApplyWorkflowStageSnapshot = {
@@ -285,11 +287,23 @@ const createRomInputRow = (
     validationPhase: "idle",
     ...(partial.info || {}),
   },
+  kind: partial.kind || "",
   order: partial.order ?? 0,
 });
 
 const sortRomInputs = (rows: RomInputRowState[]) =>
   rows.toSorted((left, right) => left.order - right.order || left.id.localeCompare(right.id));
+
+const getLogicalRomInputCount = (rows: RomInputRowState[]) => {
+  const groupIds = new Set<string>();
+  let ungroupedCount = 0;
+  for (const row of rows) {
+    const groupId = String(row.groupId || "").trim();
+    if (groupId) groupIds.add(groupId);
+    else ungroupedCount += 1;
+  }
+  return groupIds.size + ungroupedCount;
+};
 
 const getMultiInputOutputError = (compression: string, logicalInputCount: number) => {
   if (logicalInputCount <= 1) return "";
@@ -963,7 +977,9 @@ const useLocalApplyPatchFormSession = ({
     }),
     [inputOperationTimingText, localSectionTimingSizes.output, outputOperationTimingText, patchDecompressionTimingText],
   );
-  const multiInputOutputError = getMultiInputOutputError(displayedCompression, romInputs.length);
+  const chdSplitBinVisible = romInputs.some((entry) => entry.splitBinAvailable);
+  const chdSplitBinChecked = activeSettings.input?.chdSplitBin !== false;
+  const multiInputOutputError = getMultiInputOutputError(displayedCompression, getLogicalRomInputCount(romInputs));
   const effectiveOutputNoticeMessage = outputErrorMessage || multiInputOutputError;
   const canQueueApply =
     !!effectiveInputs.length && !multiInputOutputError && applyReady && !(inputStaging || patchStaging);
@@ -1033,6 +1049,12 @@ const useLocalApplyPatchFormSession = ({
   const localUiState = useMemo(
     () => ({
       ...createInertState(),
+      chdSplitBin: {
+        checked: chdSplitBinChecked,
+        disabled: disabled || busy || inputStaging,
+        label: "Split BIN tracks",
+        visible: chdSplitBinVisible,
+      },
       outputNotice: {
         level: "error" as const,
         message: effectiveOutputNoticeMessage,
@@ -1069,6 +1091,8 @@ const useLocalApplyPatchFormSession = ({
     [
       activePatches.length,
       busy,
+      chdSplitBinChecked,
+      chdSplitBinVisible,
       disabled,
       effectiveInputs,
       inputStaging,
@@ -1246,9 +1270,11 @@ const useLocalApplyPatchFormSession = ({
             sha1: info.checksums?.sha1 ?? patch.info?.sha1 ?? existing.info.sha1,
             validationPhase: patch.info?.validationPhase ?? existing.info.validationPhase,
           },
+          kind: info.kind ?? patch.kind ?? existing.kind,
           order: info.order ?? patch.order ?? existing.order,
           size: info.size ?? patch.size ?? existing.size,
           sourceSize: info.sourceSize ?? patch.sourceSize ?? existing.sourceSize,
+          splitBinAvailable: info.splitBinAvailable ?? patch.splitBinAvailable ?? existing.splitBinAvailable,
           wasDecompressed: info.wasDecompressed ?? patch.wasDecompressed ?? existing.wasDecompressed,
         });
         const remaining = current.filter((entry) => entry.id !== rowId && entry.id !== existing.id);
@@ -1598,11 +1624,13 @@ const useLocalApplyPatchFormSession = ({
                     sha1: info.checksums?.sha1 || "",
                     validationPhase: "idle",
                   },
+                  kind: info.kind,
                   loading: false,
                   order: info.order ?? index,
                   progress: null,
                   size: info.size,
                   sourceSize: info.sourceSize,
+                  splitBinAvailable: info.splitBinAvailable,
                   valid: true,
                   wasDecompressed: info.wasDecompressed,
                 });
@@ -1789,7 +1817,17 @@ const useLocalApplyPatchFormSession = ({
           index,
           previousCount: effectiveInputs.length,
         });
-        updateInputs(effectiveInputs.filter((_input, inputIndex) => inputIndex !== index));
+        if (effectiveInputs.length === 1) updateInputs([]);
+        else updateInputs(effectiveInputs.filter((_input, inputIndex) => inputIndex !== index));
+      },
+      setChdSplitBin: (checked: boolean) => {
+        updateSettings({
+          ...activeSettings,
+          input: {
+            ...activeSettings.input,
+            chdSplitBin: checked,
+          },
+        });
       },
       subscribe: localUiStoreController.subscribe,
       toggleRomInputChecksums: (id: string) => {
@@ -1805,7 +1843,16 @@ const useLocalApplyPatchFormSession = ({
         );
       },
     }),
-    [effectiveInputs, emitSessionTrace, localUiStoreController, romInputs, updateInputs, updatePatches],
+    [
+      activeSettings,
+      effectiveInputs,
+      emitSessionTrace,
+      localUiStoreController,
+      romInputs,
+      updateInputs,
+      updatePatches,
+      updateSettings,
+    ],
   );
   const localStackController = useMemo(
     () => ({

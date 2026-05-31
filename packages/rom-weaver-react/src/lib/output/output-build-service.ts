@@ -513,20 +513,24 @@ const buildSessionOutputFiles = async (
     };
   }
   if (compression === "chd") {
-    const cueAsset = assets.find((asset) => asset.kind === "cue");
-    const trackAssets = outputAssets.filter(({ asset }) => asset.kind === "track");
-    if (!cueAsset || trackAssets.length !== 1)
-      throw new Error("CHD output currently requires a single-track CUE disc group");
-    const trackAsset = trackAssets[0];
-    if (!trackAsset) throw new Error("CHD output currently requires a single-track CUE disc group");
+    const cueOutput = outputAssets.find(({ asset }) => asset.kind === "cue");
+    const trackOutputs = outputAssets.filter(({ asset }) => asset.kind === "track");
+    if (!cueOutput || trackOutputs.length < 1) throw new Error("CHD output requires a CUE disc group with tracks");
     if (!runtime?.compression.create) throw new Error("Runtime CHD compression capability is unavailable");
-    const inputFile = clonePatchFile(trackAsset.file);
-    inputFile.fileName = trackAsset.asset.fileName;
-    const source = createRuntimeSourceFromPatchFile(inputFile, inputFile.fileName);
+    const cueFile = clonePatchFile(cueOutput.file, cueOutput.asset.fileName);
+    const source = createRuntimeSourceFromPatchFile(cueFile, cueOutput.asset.fileName);
+    const imageFiles = trackOutputs.map(({ asset, file }) => {
+      const imageFile = clonePatchFile(file, asset.fileName);
+      return {
+        fileName: asset.fileName,
+        source: createRuntimeSourceFromPatchFile(imageFile, asset.fileName),
+      };
+    });
     const result = await runtime.compression.create({
       compressionCodecs: getDefaultChdCompressionCodecs("cd", getCompressionProfile(options)),
-      fileName: inputFile.fileName,
+      fileName: cueOutput.asset.fileName,
       format: "chd",
+      imageFiles,
       mode: "cd",
       options: {
         logLevel: getLogLevel(options),

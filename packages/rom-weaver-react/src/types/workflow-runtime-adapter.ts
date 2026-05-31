@@ -161,6 +161,7 @@ type RuntimeDiscExtractChdInput = RuntimeDiscHooks & {
   mode?: RuntimeDiscCreateInputBase["mode"];
   outputName?: CompressionExtractInput["outputName"];
   source: CompressionExtractInput["source"];
+  splitBin?: boolean;
 };
 
 type RuntimeDiscExtractRvzInput = RuntimeDiscHooks & {

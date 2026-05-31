@@ -23,6 +23,7 @@ import {
   normalizeArchiveEntryBytes,
   PatchFile,
 } from "./binary-service.ts";
+import { parseCueFile } from "./disc-file-utils.ts";
 import {
   attachInputPreparationMetrics,
   type CueCandidateGroup,
@@ -465,11 +466,29 @@ const getCompressionRuntimeOptions = (
   ...(Array.isArray(overrides.checksumAlgorithms)
     ? { extractChecksumAlgorithms: [...overrides.checksumAlgorithms] }
     : {}),
+  ...(typeof options?.input?.chdSplitBin === "boolean" ? { chdSplitBin: options.input.chdSplitBin } : {}),
   logLevel: options?.logging?.level,
   onLog: options?.onLog,
   onProgress: options?.onProgress,
   workerThreads: options?.workers?.threads,
 });
+
+const markChdCueSplitBinAvailability = (
+  asset: InputAsset,
+  archiveFile: PatchFileInstance,
+  cueText: string,
+): InputAsset => {
+  if (getCompressionFormat(archiveFile) !== "chd") return asset;
+  const cue = parseCueFile(cueText);
+  if (cue.tracks.length <= 1) return asset;
+  return {
+    ...asset,
+    disc: {
+      ...asset.disc,
+      splitBinAvailable: true,
+    },
+  };
+};
 
 const listCompressionEntries = async (
   file: PatchFileInstance,
@@ -999,7 +1018,11 @@ const resolveArchiveInput = async (
       if (!binFile) throw new Error(`Archive entry data is not available: ${trackEntryName}`);
       (binFile as { _archiveCueEntryName?: string })._archiveCueEntryName = cueEntryName;
       (binFile as { _chdMode?: string })._chdMode = "cd";
-      (binFile as { _chdCueText?: string })._chdCueText = cueFile ? decodeUtf8(getPatchFileBytes(cueFile)) : "";
+      const cueText = cueFile ? decodeUtf8(getPatchFileBytes(cueFile)) : "";
+      (binFile as { _chdCueText?: string })._chdCueText = cueText;
+      if (parseCueFile(cueText).tracks.length > 1) {
+        (binFile as { _chdSplitBinAvailable?: boolean })._chdSplitBinAvailable = true;
+      }
       return binFile;
     }
     const cueText =
@@ -1025,6 +1048,9 @@ const resolveArchiveInput = async (
     (binFile as { _archiveCueEntryName?: string })._archiveCueEntryName = cueEntryName;
     (binFile as { _chdMode?: string })._chdMode = "cd";
     (binFile as { _chdCueText?: string })._chdCueText = cueInfo.cueText;
+    if (parseCueFile(cueInfo.cueText).tracks.length > 1) {
+      (binFile as { _chdSplitBinAvailable?: boolean })._chdSplitBinAvailable = true;
+    }
     return binFile;
   }
   if (role === "rom" && !selectedEntryName && autoPickedRomEntryName) {
@@ -1361,7 +1387,11 @@ const resolveArchiveInputAssets = async (
       cueFile.fileName = getBaseFileName(cueEntryName);
       const cueText = decodeUtf8(getPatchFileBytes(cueFile));
       const groupId = makeInputId(sourceIndex, cueEntryName, normalizeArchiveEntryName, "-group");
-      const cueAsset = makeCueAsset(`${groupId}-cue`, cueFile.fileName, cueFile, groupId, cueText);
+      const cueAsset = markChdCueSplitBinAvailability(
+        makeCueAsset(`${groupId}-cue`, cueFile.fileName, cueFile, groupId, cueText),
+        inspectedArchiveFile,
+        cueText,
+      );
       const assets: InputAsset[] = [];
       trackEntries.forEach((trackEntry, index) => {
         const trackFile = extractedFiles[index + 1];
@@ -1403,7 +1433,11 @@ const resolveArchiveInputAssets = async (
     const references = selectedGroup.references || parseCueFileReferences(cueText);
     const trackEntries = resolveTrackEntries(references);
     const groupId = makeInputId(sourceIndex, cueEntryName, normalizeArchiveEntryName, "-group");
-    const cueAsset = makeCueAsset(`${groupId}-cue`, cueFile.fileName, cueFile, groupId, cueText);
+    const cueAsset = markChdCueSplitBinAvailability(
+      makeCueAsset(`${groupId}-cue`, cueFile.fileName, cueFile, groupId, cueText),
+      inspectedArchiveFile,
+      cueText,
+    );
     const assets: InputAsset[] = [];
     for (const [index, reference] of references.entries()) {
       const trackEntry = trackEntries[index];
