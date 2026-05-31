@@ -1,4 +1,5 @@
 import { expect } from 'vitest';
+import { runBrowserFullFormatMatrixCore } from '../src/browser-format-matrix.mjs';
 import { createBrowserWorkerClient } from '../src/workers/browser-worker-client.mjs';
 
 const OPFS_GUEST_ROOT = '/work';
@@ -7,6 +8,18 @@ const TEXT_ENCODER = new TextEncoder();
 const VCDIFF_SOURCE_FIXTURE_URL = new URL('../../../tests/fixtures/vcdiff/secondary-source.bin', import.meta.url);
 const VCDIFF_PATCH_FIXTURE_URL = new URL('../../../tests/fixtures/vcdiff/secondary-djw.xdelta', import.meta.url);
 const VCDIFF_TARGET_FIXTURE_URL = new URL('../../../tests/fixtures/vcdiff/secondary-target.bin', import.meta.url);
+const HDIFF_SOURCE_FIXTURE_URL = new URL(
+  '../../../crates/rom-weaver-patches/tests/fixtures/hdiffpatch/source.bin',
+  import.meta.url,
+);
+const HDIFF_PATCH_FIXTURE_URL = new URL(
+  '../../../crates/rom-weaver-patches/tests/fixtures/hdiffpatch/upstream-hdiff13-zstd.hdiff',
+  import.meta.url,
+);
+const HDIFF_TARGET_FIXTURE_URL = new URL(
+  '../../../crates/rom-weaver-patches/tests/fixtures/hdiffpatch/target.bin',
+  import.meta.url,
+);
 
 let fixtureBytesPromise = null;
 
@@ -56,13 +69,19 @@ export async function withTempFixture(run, options = {}) {
     const sourcePath = joinGuestPath(OPFS_GUEST_ROOT, sourceFileName);
     await writeGuestFile(fixtureHandle, sourcePath, toBytes(sourceContents));
 
-    const fixtures = await loadVcdiffFixtures();
+    const fixtures = await loadMatrixFixtures();
     const vcdiffSourcePath = joinGuestPath(OPFS_GUEST_ROOT, 'fixtures', 'secondary-source.bin');
     const vcdiffPatchPath = joinGuestPath(OPFS_GUEST_ROOT, 'fixtures', 'secondary-djw.xdelta');
     const vcdiffTargetPath = joinGuestPath(OPFS_GUEST_ROOT, 'fixtures', 'secondary-target.bin');
-    await writeGuestFile(fixtureHandle, vcdiffSourcePath, fixtures.source);
-    await writeGuestFile(fixtureHandle, vcdiffPatchPath, fixtures.patch);
-    await writeGuestFile(fixtureHandle, vcdiffTargetPath, fixtures.target);
+    const hdiffSourcePath = joinGuestPath(OPFS_GUEST_ROOT, 'fixtures', 'hdiff-source.bin');
+    const hdiffPatchPath = joinGuestPath(OPFS_GUEST_ROOT, 'fixtures', 'upstream-hdiff13-zstd.hdiff');
+    const hdiffTargetPath = joinGuestPath(OPFS_GUEST_ROOT, 'fixtures', 'hdiff-target.bin');
+    await writeGuestFile(fixtureHandle, vcdiffSourcePath, fixtures.vcdiff.source);
+    await writeGuestFile(fixtureHandle, vcdiffPatchPath, fixtures.vcdiff.patch);
+    await writeGuestFile(fixtureHandle, vcdiffTargetPath, fixtures.vcdiff.target);
+    await writeGuestFile(fixtureHandle, hdiffSourcePath, fixtures.hdiff.source);
+    await writeGuestFile(fixtureHandle, hdiffPatchPath, fixtures.hdiff.patch);
+    await writeGuestFile(fixtureHandle, hdiffTargetPath, fixtures.hdiff.target);
 
     await run({
       dir: OPFS_GUEST_ROOT,
@@ -75,6 +94,9 @@ export async function withTempFixture(run, options = {}) {
         vcdiffSourcePath,
         vcdiffPatchPath,
         vcdiffTargetPath,
+        hdiffSourcePath,
+        hdiffPatchPath,
+        hdiffTargetPath,
       },
     });
   } finally {
@@ -630,289 +652,7 @@ export async function runPatchMatrix({ runJson, opfsHandle, dir, sourcePath, fix
 }
 
 export async function runFullFormatMatrix({ runJson, opfsHandle, dir, fixtures }) {
-  const archiveSourcePath = joinGuestPath(dir, 'all-format-source.bin');
-  const archiveSource = new Uint8Array(8192);
-  for (let index = 0; index < archiveSource.length; index += 1) {
-    archiveSource[index] = index % 251;
-  }
-  archiveSource[archiveSource.length - 1] = 0;
-  await writeGuestFile(opfsHandle, archiveSourcePath, archiveSource);
-
-  const containerRoundTripFormats = [
-    'zip',
-    'zipx',
-    '7z',
-    'tar',
-    'tar.gz',
-    'tar.bz2',
-    'tar.xz',
-    'gz',
-    'bz2',
-    'xz',
-    'zst',
-    'cso',
-    'chd',
-    'z3ds',
-  ];
-  for (const format of containerRoundTripFormats) {
-    const archivePath = joinGuestPath(OPFS_GUEST_ROOT, `roundtrip-${formatToken(format)}.${containerSuffix(format)}`);
-    assertRunJsonSucceeded(
-      await runJson([
-        'compress',
-        archiveSourcePath,
-        '--format',
-        format,
-        '--output',
-        archivePath,
-        '--threads',
-        '1',
-      ]),
-      { command: 'compress' },
-    );
-
-    const extractDir = joinGuestPath(OPFS_GUEST_ROOT, `roundtrip-${formatToken(format)}-extract`);
-    assertRunJsonSucceeded(
-      await runJson([
-        'extract',
-        archivePath,
-        '--out-dir',
-        extractDir,
-        '--threads',
-        '1',
-      ]),
-      { command: 'extract' },
-    );
-  }
-
-  const containerCompressFailureExpectations = new Map([
-    ['rar', /rar create is not supported/i],
-    ['pbp', /pbp create is not supported/i],
-    ['gcz', /gcz compression is not supported/i],
-    ['wbfs', /failed to open input/i],
-    ['wia', /failed to open input/i],
-    ['tgc', /failed to open input/i],
-    ['nfs', /nfs compression is not supported/i],
-    ['rvz', /failed to open input/i],
-    ['xiso', /create is not supported|trim-only/i],
-  ]);
-  for (const [format, pattern] of containerCompressFailureExpectations.entries()) {
-    const archivePath = joinGuestPath(OPFS_GUEST_ROOT, `compress-${formatToken(format)}.${containerSuffix(format)}`);
-    const compressResult = await runJson([
-      'compress',
-      archiveSourcePath,
-      '--format',
-      format,
-      '--output',
-      archivePath,
-      '--threads',
-      '1',
-    ]);
-    assertFailedByPattern(compressResult, pattern, `compress ${format}`);
-  }
-
-  const containerExtractFailureExpectations = new Map([
-    ['rar', /archive is invalid|unsupported archive signature/i],
-    ['tar', /failed to read entire block|unrecognized archive format|archive is invalid/i],
-    ['tar.gz', /invalid gzip header|unrecognized archive format|archive is invalid/i],
-    ['tar.bz2', /bz2 header missing|unrecognized archive format|archive is invalid/i],
-    ['tar.xz', /invalid xz magic bytes|unrecognized archive format|archive is invalid/i],
-    ['pbp', /too small to be a pbp container/i],
-    ['gcz', /failed to open gcz source/i],
-    ['wbfs', /failed to open wbfs source/i],
-    ['wia', /failed to open wia source/i],
-    ['tgc', /failed to open tgc source/i],
-    ['nfs', /failed to open nfs source/i],
-    ['rvz', /failed to open rvz source/i],
-    ['xiso', /xiso extract is not supported yet|not an Xbox XDVDFS image|not an XDVDFS volume/i],
-  ]);
-  for (const [format, pattern] of containerExtractFailureExpectations.entries()) {
-    const sourcePath = joinGuestPath(dir, `extract-${formatToken(format)}.${containerSuffix(format)}`);
-    await writeGuestFile(opfsHandle, sourcePath, toBytes('not-a-real-container'));
-    const outDir = joinGuestPath(OPFS_GUEST_ROOT, `extract-${formatToken(format)}-out`);
-    const extractResult = await runJson([
-      'extract',
-      sourcePath,
-      '--out-dir',
-      outDir,
-      '--threads',
-      '1',
-    ]);
-    assertFailedByPattern(extractResult, pattern, `extract ${format}`);
-  }
-
-  const originalPath = joinGuestPath(dir, 'all-format-original.bin');
-  const modifiedPath = joinGuestPath(dir, 'all-format-modified.bin');
-  const original = new Uint8Array(4096);
-  for (let index = 0; index < original.length; index += 1) {
-    original[index] = index % 251;
-  }
-  const modified = new Uint8Array(original);
-  for (let index = 0; index < 300; index += 1) {
-    modified[100 + index] = (modified[100 + index] + 17) % 256;
-  }
-  await writeGuestFile(opfsHandle, originalPath, original);
-  await writeGuestFile(opfsHandle, modifiedPath, modified);
-
-  const patchFormats = [
-    'ips',
-    'ips32',
-    'solid',
-    'bps',
-    'ups',
-    'vcdiff',
-    'xdelta',
-    'gdiff',
-    'hdiffpatch',
-    'aps',
-    'apsgba',
-    'ninja1',
-    'rup',
-    'ppf',
-    'pat',
-    'ebp',
-    'bdf',
-    'bsp',
-    'mod',
-    'dldi',
-    'dps',
-  ];
-
-  const applyFailureExpectations = new Map([
-    ['apsgba', /i\/o error: unsupported|source rom checksum mismatch|validation failed/i],
-    ['ppf', /i\/o error: unsupported|source rom checksum mismatch|validation failed/i],
-    ['pat', /i\/o error: unsupported|source rom checksum mismatch|validation failed/i],
-    ['mod', /i\/o error: unsupported|source rom checksum mismatch|validation failed/i],
-    ['dps', /i\/o error: unsupported|source rom checksum mismatch|validation failed/i],
-  ]);
-  const createUnsupportedExpectations = new Map([
-    ['hdiffpatch', /creation is disabled/i],
-    ['ninja1', /not currently supported/i],
-    ['bsp', /creation is not implemented/i],
-  ]);
-  const createFailureExpectations = new Map([
-    ['aps', /i\/o error: unsupported|validation failed/i],
-    ['bdf', /i\/o error: unsupported|validation failed/i],
-    ['dldi', /i\/o error: unsupported|validation failed/i],
-  ]);
-
-  for (const format of patchFormats) {
-    const extension = patchExtension(format);
-    expect(typeof extension).toBe('string');
-    const patchPath = joinGuestPath(OPFS_GUEST_ROOT, `patch-${format}.${extension}`);
-    const createResult = await runJson([
-      'patch-create',
-      '--original',
-      originalPath,
-      '--modified',
-      modifiedPath,
-      '--format',
-      format,
-      '--output',
-      patchPath,
-      '--threads',
-      '1',
-    ]);
-
-    if (createResult.ok) {
-      const { applyResult } = await runCreatedPatchApply(runJson, {
-        format,
-        createResult,
-        originalPath,
-        patchPath,
-      });
-      if (applyResult.ok) {
-        assertRunJsonSucceeded(applyResult, { command: 'patch-apply' });
-        continue;
-      }
-
-      if (applyFailureExpectations.has(format)) {
-        assertFailedByPattern(
-          applyResult,
-          applyFailureExpectations.get(format),
-          `patch-apply ${format}`,
-        );
-        continue;
-      }
-
-      throw new Error(
-        `patch-apply ${format} unexpectedly failed: ${String(getTerminalEvent(applyResult).label || applyResult.stderr || '')}`,
-      );
-    }
-
-    if (createUnsupportedExpectations.has(format)) {
-      assertFailedByPattern(
-        createResult,
-        createUnsupportedExpectations.get(format),
-        `patch-create ${format}`,
-      );
-      expect(getTerminalEvent(createResult).status).toBe('unsupported');
-      continue;
-    }
-
-    const createFailurePattern = createFailureExpectations.get(format) ?? applyFailureExpectations.get(format);
-    if (createFailurePattern) {
-      assertFailedByPattern(createResult, createFailurePattern, `patch-create ${format}`);
-      continue;
-    }
-
-    throw new Error(
-      `patch-create ${format} unexpectedly failed: ${String(getTerminalEvent(createResult).label || createResult.stderr || '')}`,
-    );
-  }
-
-  const xdeltaApplyPath = joinGuestPath(OPFS_GUEST_ROOT, 'fixture-applied-xdelta.bin');
-  const xdeltaApplyEvents = [];
-  const xdeltaApplyResult = await runPatchApplyNoCompress(
-    runJson,
-    {
-      inputPath: fixtures.vcdiffSourcePath,
-      patchPath: fixtures.vcdiffPatchPath,
-      outputPath: xdeltaApplyPath,
-    },
-    {
-      onEvent(event) {
-        xdeltaApplyEvents.push(event);
-      },
-    },
-  );
-  assertRunJsonSucceeded(xdeltaApplyResult, { command: 'patch-apply' });
-  expect(
-    xdeltaApplyEvents.some((event) => {
-      const format = String(event?.format || '').toLowerCase();
-      const percent = typeof event?.percent === 'number' ? event.percent : null;
-      return event.command === 'patch-apply'
-        && event.status === 'running'
-        && event.stage === 'apply'
-        && format === 'xdelta'
-        && percent !== null
-        && percent > 0
-        && percent < 100;
-    }),
-  ).toBe(true);
-
-  const vcdiffPatchPath = joinGuestPath(OPFS_GUEST_ROOT, 'fixture-secondary.vcdiff');
-  await runJson([
-    'patch-create',
-    '--original',
-    fixtures.vcdiffSourcePath,
-    '--modified',
-    fixtures.vcdiffTargetPath,
-    '--format',
-    'gdiff',
-    '--output',
-    vcdiffPatchPath,
-    '--threads',
-    '1',
-  ]);
-  const vcdiffApplyPath = joinGuestPath(OPFS_GUEST_ROOT, 'fixture-applied-vcdiff.bin');
-  assertRunJsonSucceeded(
-    await runPatchApplyNoCompress(runJson, {
-      inputPath: fixtures.vcdiffSourcePath,
-      patchPath: fixtures.vcdiffPatchPath,
-      outputPath: vcdiffApplyPath,
-    }),
-    { command: 'patch-apply' },
-  );
+  return runBrowserFullFormatMatrixCore({ dir, fixtures, opfsHandle, runJson });
 }
 
 async function runPatchApplyNoCompress(runJson, { inputPath, patchPath, outputPath }, runOptions = undefined) {
@@ -930,79 +670,27 @@ async function runPatchApplyNoCompress(runJson, { inputPath, patchPath, outputPa
   ], runOptions);
 }
 
-async function runCreatedPatchApply(runJson, { format, createResult, originalPath, patchPath }) {
-  expect(createResult.ok, `patch-create ${format} should succeed`).toBe(true);
-  expect(getTerminalEvent(createResult).status).toBe('succeeded');
-  const applyPath = joinGuestPath(OPFS_GUEST_ROOT, `patch-applied-${format}.bin`);
-  const applyResult = await runPatchApplyNoCompress(runJson, {
-    inputPath: originalPath,
-    patchPath,
-    outputPath: applyPath,
-  });
-  return { applyPath, applyResult };
-}
-
-function assertFailedByPattern(result, pattern, context) {
-  expect(result.ok, `${context} should fail in the current wasm matrix`).toBe(false);
-  expect(result.exitCode, `${context} should not exit with code 0`).not.toBe(0);
-  const terminal = getTerminalEvent(result);
-  const label = String(terminal.label || '');
-  const stderr = String(result.stderr || '');
-  const matches = pattern.test(label) || pattern.test(stderr);
-  expect(matches, `${context} should match ${pattern}; label=${JSON.stringify(label)} stderr=${JSON.stringify(stderr)}`).toBe(true);
-}
-
-function formatToken(value) {
-  return value.replace(/[^a-z0-9]+/gi, '-');
-}
-
-function containerSuffix(format) {
-  switch (format) {
-    case 'tar.gz':
-      return 'tar.gz';
-    case 'tar.bz2':
-      return 'tar.bz2';
-    case 'tar.xz':
-      return 'tar.xz';
-    default:
-      return format;
-  }
-}
-
-function patchExtension(format) {
-  const map = {
-    ips: 'ips',
-    ips32: 'ips32',
-    solid: 'solid',
-    bps: 'bps',
-    ups: 'ups',
-    vcdiff: 'vcdiff',
-    xdelta: 'xdelta',
-    gdiff: 'gdiff',
-    hdiffpatch: 'hpatchz',
-    aps: 'aps',
-    apsgba: 'apsgba',
-    ninja1: 'n1',
-    rup: 'rup',
-    ppf: 'ppf',
-    pat: 'pat',
-    ebp: 'ebp',
-    bdf: 'bsdiff',
-    bsp: 'bsp',
-    mod: 'mod',
-    dldi: 'dldi',
-    dps: 'dps',
-  };
-  return map[format];
-}
-
-async function loadVcdiffFixtures() {
+async function loadMatrixFixtures() {
   if (fixtureBytesPromise === null) {
     fixtureBytesPromise = Promise.all([
       fetchBytes(VCDIFF_SOURCE_FIXTURE_URL),
       fetchBytes(VCDIFF_PATCH_FIXTURE_URL),
       fetchBytes(VCDIFF_TARGET_FIXTURE_URL),
-    ]).then(([source, patch, target]) => ({ source, patch, target }));
+      fetchBytes(HDIFF_SOURCE_FIXTURE_URL),
+      fetchBytes(HDIFF_PATCH_FIXTURE_URL),
+      fetchBytes(HDIFF_TARGET_FIXTURE_URL),
+    ]).then(([vcdiffSource, vcdiffPatch, vcdiffTarget, hdiffSource, hdiffPatch, hdiffTarget]) => ({
+      hdiff: {
+        patch: hdiffPatch,
+        source: hdiffSource,
+        target: hdiffTarget,
+      },
+      vcdiff: {
+        patch: vcdiffPatch,
+        source: vcdiffSource,
+        target: vcdiffTarget,
+      },
+    }));
   }
 
   return fixtureBytesPromise;
