@@ -6,13 +6,18 @@ type BrowserStorageEstimateState = {
   usageBytes?: number;
 };
 
-const getStorageManager = (): StorageManager | null => {
+type BrowserStorageManagerLike = Pick<StorageManager, "estimate" | "persist" | "persisted">;
+
+const getStorageManager = (storageOverride?: BrowserStorageManagerLike | null): BrowserStorageManagerLike | null => {
+  if (storageOverride !== undefined) return storageOverride;
   const storage = typeof navigator === "undefined" ? undefined : navigator.storage;
   return storage && typeof storage === "object" ? storage : null;
 };
 
-const getBrowserStorageEstimateState = async (): Promise<BrowserStorageEstimateState> => {
-  const storage = getStorageManager();
+const getBrowserStorageEstimateState = async (
+  storageOverride?: BrowserStorageManagerLike | null,
+): Promise<BrowserStorageEstimateState> => {
+  const storage = getStorageManager(storageOverride);
   if (!storage) return {};
 
   let persisted: boolean | undefined;
@@ -66,5 +71,22 @@ const formatBrowserStorageEstimateState = (state: BrowserStorageEstimateState): 
   return parts.join(" ");
 };
 
-export type { BrowserStorageEstimateState };
-export { formatBrowserStorageEstimateState, getBrowserStorageEstimateState };
+const requestBrowserStoragePersistence = async (
+  storageOverride?: BrowserStorageManagerLike | null,
+): Promise<boolean | undefined> => {
+  const storage = getStorageManager(storageOverride);
+  if (!storage || typeof storage.persist !== "function") return undefined;
+  try {
+    return await storage.persist();
+  } catch (_error) {
+    return undefined;
+  }
+};
+
+export type { BrowserStorageEstimateState, BrowserStorageManagerLike };
+export {
+  formatBrowserStorageEstimateState,
+  formatByteCount,
+  getBrowserStorageEstimateState,
+  requestBrowserStoragePersistence,
+};

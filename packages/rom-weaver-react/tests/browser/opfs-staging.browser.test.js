@@ -40,7 +40,7 @@ test("browser OPFS source refs use selected file handles as virtual WASI inputs"
   expect(getActiveBrowserVirtualFiles()).toEqual([]);
 });
 
-test("browser OPFS source refs use Blob and byte-array inputs as virtual WASI inputs", async () => {
+test("browser OPFS source refs use Blob inputs as virtual WASI inputs", async () => {
   const requestFile = new File([new Uint8Array([9, 8, 7, 6])], "input.chd", {
     type: "application/octet-stream",
   });
@@ -63,26 +63,25 @@ test("browser OPFS source refs use Blob and byte-array inputs as virtual WASI in
     await stagedBlob.cleanup();
   }
   expect(getActiveBrowserVirtualFiles()).toEqual([]);
+});
 
-  const stagedBytes = await createBrowserOpfsSourceRef(new Uint8Array([1, 2, 3]), "input.bin", {
-    bucket: "input",
-    mountPoint: "/work",
-    pathPrefix: "direct-input",
-  });
-  try {
-    expect(stagedBytes.storageKind).toBe("opfs");
-    expect(stagedBytes.size).toBe(3);
-    expect(stagedBytes.virtual).toBe(true);
-    expect(stagedBytes.filePath).toBe("/work/input.bin");
-    expect(getActiveBrowserVirtualFiles()).toEqual([
-      expect.objectContaining({
-        path: stagedBytes.filePath,
-        proxy: expect.objectContaining({ size: 3 }),
-      }),
-    ]);
-  } finally {
-    await stagedBytes.cleanup();
-  }
+test("browser OPFS source refs reject raw byte-array inputs", async () => {
+  await expect(
+    createBrowserOpfsSourceRef(new Uint8Array([1, 2, 3]), "input.bin", {
+      bucket: "input",
+      mountPoint: "/work",
+      pathPrefix: "direct-input",
+    }),
+  ).rejects.toThrow(/File, Blob, FileSystemFileHandle, or OPFS path/);
+
+  await expect(
+    createBrowserOpfsSourceRef({ fileName: "input.bin", source: new Uint8Array([1, 2, 3]) }, "input.bin", {
+      bucket: "input",
+      mountPoint: "/work",
+      pathPrefix: "direct-input",
+    }),
+  ).rejects.toThrow(/File, Blob, FileSystemFileHandle, or OPFS path/);
+
   expect(getActiveBrowserVirtualFiles()).toEqual([]);
 });
 

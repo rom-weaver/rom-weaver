@@ -28,6 +28,10 @@ import {
   normalizeCompressionWorkerEntries,
 } from "../../lib/runtime/workflow-runtime-worker-helpers.ts";
 import { createBrowserLargeFileVfs } from "../../storage/browser/browser-large-file-vfs.ts";
+import {
+  ensureBrowserStorageAvailableForOutput,
+  withBrowserOutputStorageFailureContext,
+} from "../../storage/browser/browser-output-storage-guard.ts";
 import { configureBrowserSourcePrimitives } from "../../storage/browser/browser-source-primitives.ts";
 import {
   createRuntimeOutputFromBytes,
@@ -51,6 +55,8 @@ import { createBrowserRuntimeVfsIo } from "./browser-runtime-vfs.ts";
 const FILE_CAPTURE_REGEX = /^(.+[/\\])?([^/\\]+)$/;
 const FILE_EXTENSION_REGEX = /\.[^./\\\s]+$/;
 const CHD_SINGLE_BIN_OUTPUT_REGEX = /\.bin$/i;
+const CHD_CD_SPLIT_BIN_SCRATCH_FILE_POOL_SIZE = 100;
+const CHD_CD_OUTPUT_SCRATCH_FILE_POOL_SIZE = 2;
 const LEVEL_PROFILE_REGEX = /^(min|very-low|low|medium|high|very-high|max)$/i;
 const BROWSER_VFS_PATH_RETRY_ATTEMPTS = 6;
 const EXTRACT_CHECKSUM_ALGORITHMS = ["crc32", "md5", "sha1"] as const;
@@ -519,6 +525,71 @@ const getBrowserExtractOutputPathCandidates = (outDirPath: string, entryName: st
 const isMissingBrowserVfsOutputError = (error: unknown) =>
   String(error instanceof Error ? error.message : error || "").includes("Browser VFS output is not available");
 
+type ArchiveEntrySizeHint = {
+  filename?: string;
+  fileName?: string;
+  name?: string;
+  size?: number;
+};
+
+const getArchiveEntryCandidateNames = (entry: ArchiveEntrySizeHint): string[] =>
+  uniqueNonEmptyStrings([entry.filename || "", entry.fileName || "", entry.name || ""]);
+
+const getArchiveEntrySizeHint = (entries: ArchiveEntrySizeHint[], entryName: string): number | null => {
+  const normalizedEntry = normalizeEntryPath(entryName);
+  const normalizedBase = getPathBaseName(normalizedEntry, normalizedEntry);
+  for (const entry of entries) {
+    const size =
+      typeof entry.size === "number" && Number.isFinite(entry.size) ? Math.max(0, Math.floor(entry.size)) : null;
+    if (size === null) continue;
+    for (const candidateName of getArchiveEntryCandidateNames(entry)) {
+      const normalizedCandidate = normalizeEntryPath(candidateName);
+      const normalizedCandidateBase = getPathBaseName(normalizedCandidate, normalizedCandidate);
+      if (normalizedCandidate === normalizedEntry) return size;
+      if (normalizedCandidateBase === normalizedBase) return size;
+      if (normalizedEntry.endsWith(`/${normalizedCandidate}`)) return size;
+    }
+  }
+  return null;
+};
+
+const getBrowserArchiveExtractSizeHints = async ({
+  entryNames,
+  logLevel,
+  onLog,
+  sourcePath,
+}: {
+  entryNames: string[];
+  logLevel?: unknown;
+  onLog?: (log: WorkflowRuntimeLog) => void;
+  sourcePath: string;
+}): Promise<Map<string, number>> => {
+  const hints = new Map<string, number>();
+  if (!entryNames.length) return hints;
+  try {
+    const listed = await runRomWeaverInspectListWorker({
+      logLevel: logLevel as Parameters<typeof runRomWeaverInspectListWorker>[0]["logLevel"],
+      sourcePath,
+    });
+    for (const entryName of entryNames) {
+      const size = getArchiveEntrySizeHint(listed.entries || [], entryName);
+      if (size !== null) hints.set(normalizeEntryPath(entryName), size);
+    }
+    emitBrowserWorkflowTrace({ logLevel, onLog }, "archive extract size hints resolved", {
+      hints: Array.from(hints.entries()).map(([entryName, sizeBytes]) => ({ entryName, sizeBytes })),
+      requestedEntries: entryNames,
+      sourcePath,
+    });
+  } catch (error) {
+    emitBrowserWorkflowTrace({ logLevel, onLog }, "archive extract size hints unavailable", {
+      message: error instanceof Error ? error.message : String(error || ""),
+      requestedEntries: entryNames,
+      sourcePath,
+    });
+  }
+  return hints;
+};
+
 const createBrowserChecksumRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime["checksum"] =>
   createWorkerChecksumRuntime(workerIo, runRomWeaverChecksumWorker);
 
@@ -656,6 +727,12 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
       trace: { logLevel: workflowInput.options?.logLevel, onLog: workflowInput.options?.onLog },
     });
     try {
+      const extractSizeHints = await getBrowserArchiveExtractSizeHints({
+        entryNames: workflowInput.entries,
+        logLevel: workflowInput.options?.logLevel,
+        onLog: workflowInput.options?.onLog,
+        sourcePath: archive.filePath,
+      });
       const outputs = [];
       for (const entryName of workflowInput.entries) {
         const outDirPath = WORKER_OPFS_MOUNTPOINT;
@@ -693,6 +770,22 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
               forwardArchiveProgress("input", workflowInput.options?.onProgress),
               workflowInput.options?.onLog,
             );
+          const requiredBytes = extractSizeHints.get(normalizeEntryPath(entryName)) ?? null;
+          const operationLabel = `extract \`${entryName}\``;
+          await ensureBrowserStorageAvailableForOutput({
+            operationLabel,
+            requiredBytes,
+          });
+          const runExtractWithStorageContext = async () => {
+            try {
+              return await runExtract();
+            } catch (error) {
+              throw await withBrowserOutputStorageFailureContext(error, {
+                operationLabel,
+                requiredBytes,
+              });
+            }
+          };
           const selectMatchedOutput = async (extracted: Awaited<ReturnType<typeof runExtract>>) => {
             let matched = findExtractedFile(extracted.emittedFiles, entryName);
             if (!matched) {
@@ -733,14 +826,14 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
               "archive extract worker did not return browser output",
             );
 
-          let extracted = await runExtract();
+          let extracted = await runExtractWithStorageContext();
           let matched = await selectMatchedOutput(extracted);
           try {
             outputs.push(await createOutput(matched));
           } catch (error) {
             if (!isMissingBrowserVfsOutputError(error)) throw error;
             await ensureBrowserVfsOutputPaths(extracted.emittedFiles.map((entry) => entry.path));
-            extracted = await runExtract();
+            extracted = await runExtractWithStorageContext();
             matched = await selectMatchedOutput(extracted);
             outputs.push(await createOutput(matched));
           }
@@ -978,6 +1071,34 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
       const shouldSplitBin = mode === "cd" && splitBin !== false;
       const directOutputFileName = outputName || actualOutputFileName;
       const directOutputPath = stagedOutputFileName ? joinPath(outDirPath, stagedOutputFileName) : "";
+      if (mode === "cd") {
+        const listed = await runRomWeaverInspectListWorker(
+          {
+            logLevel,
+            sourcePath: workerSource.filePath,
+          },
+          undefined,
+          onLog,
+        ).catch(() => null);
+        const stagedSingleBinOutputFileName = getChdCdOutputFileName(stagedSourceFileName, "bin");
+        const cdOutputEntryNames = uniqueNonEmptyStrings([
+          ...(listed?.entries || [])
+            .map((entry) => String(entry?.fileName || entry?.filename || entry?.name || ""))
+            .filter(
+              (entryName) =>
+                !(shouldSplitBin && getPathBaseName(entryName, entryName) === stagedSingleBinOutputFileName),
+            ),
+          getChdCdOutputFileName(stagedSourceFileName, "cue"),
+          ...(shouldSplitBin ? [] : [stagedSingleBinOutputFileName, outputName || ""]),
+        ]);
+        await ensureBrowserVfsOutputPaths(
+          filterOutputCandidatesAwayFromSource(
+            cdOutputEntryNames.flatMap((entryName) => getBrowserExtractOutputPathCandidates(outDirPath, entryName)),
+            workerSource.filePath,
+          ),
+          [workerSource.filePath],
+        );
+      }
       if (directOutputPath) {
         const outputPathCandidates = shouldPreseedSingleBinCdOutputs
           ? [directOutputPath, stagedCueOutputFileName ? joinPath(outDirPath, stagedCueOutputFileName) : ""]
@@ -995,7 +1116,15 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
             invalidateMountCacheBeforeRun: !!directOutputPath || !!workerSource.virtual,
             logLevel,
             outDirPath,
-            scratchFilePoolSize: directOutputPath ? (shouldPreseedSingleBinCdOutputs ? 2 : 1) : undefined,
+            scratchFilePoolSize: directOutputPath
+              ? shouldPreseedSingleBinCdOutputs
+                ? CHD_CD_OUTPUT_SCRATCH_FILE_POOL_SIZE
+                : 1
+              : mode === "cd"
+                ? shouldSplitBin
+                  ? CHD_CD_SPLIT_BIN_SCRATCH_FILE_POOL_SIZE
+                  : CHD_CD_OUTPUT_SCRATCH_FILE_POOL_SIZE
+                : undefined,
             select: [],
             sourcePath: workerSource.filePath,
             splitBin: shouldSplitBin,

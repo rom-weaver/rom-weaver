@@ -2,7 +2,12 @@ import { readRuntimeOutputBlob, readRuntimeOutputBytes } from "../../storage/vfs
 import { createVfsFileRef } from "../../storage/vfs/source-ref.ts";
 import type { PublicOutput } from "../../types/workflow-runtime.ts";
 import type { PatchFileInstance } from "../../workers/protocol/patch-engine.ts";
-import { attachPatchFileSourceRef, createLazyExternalPatchFile, createPatchFile } from "../input/binary-service.ts";
+import {
+  attachPatchFileSourceRef,
+  createBlobBackedPatchFile,
+  createLazyExternalPatchFile,
+  createPatchFile,
+} from "../input/binary-service.ts";
 
 type CreatePatchFileFromPublicOutputOptions = {
   materializeBlob?: boolean;
@@ -72,6 +77,16 @@ const createPatchFileFromPublicOutput = async (
         sourceRef,
       ),
     );
+  }
+  if (options.materializeBlob === false) {
+    const directBlob = getDirectPublicOutputBlob(output);
+    if (directBlob) {
+      return attachOutputMetadata(
+        await createBlobBackedPatchFile(directBlob, fileName, output.cleanup, null, {
+          materialize: false,
+        }),
+      );
+    }
   }
   const file = canUseExternalFilePath
     ? await createPatchFile(

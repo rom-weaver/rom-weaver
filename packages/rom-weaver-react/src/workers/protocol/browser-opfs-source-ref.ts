@@ -42,12 +42,6 @@ const getStringRecordValue = (source: unknown, key: string) => {
   return typeof value === "string" && value.trim() ? value : "";
 };
 
-const getByteSource = (source: unknown): Uint8Array | null => {
-  if (source instanceof Uint8Array) return source;
-  const bytes = getRecordValue(source, "_u8array") || getRecordValue(source, "u8array");
-  return bytes instanceof Uint8Array ? bytes : null;
-};
-
 const toFileLike = (source: Blob, fileName: string): File => {
   if (isFileLike(source)) return source;
   if (typeof File !== "function") throw new Error("Browser worker Blob inputs require File support");
@@ -73,8 +67,6 @@ const NON_ASCII_CHARS_REGEX = /[^\x20-\x7e]+/g;
 const RESERVED_FILE_CHARS_REGEX = /[:*?"<>|]+/g;
 const EDGE_WHITESPACE_OR_UNDERSCORES_REGEX = /^[_\s]+|[_\s]+$/g;
 const TRAILING_SLASHES_REGEX = /\/+$/;
-const EAGER_MEMORY_VIRTUAL_SOURCE_EXTENSIONS = new Set([".7z", ".rvz"]);
-const EAGER_MEMORY_VIRTUAL_SOURCE_MAX_BYTES = 512 * 1024 * 1024;
 const allocatedVirtualInputPaths = new Set<string>();
 
 const getBrowserSourceTraceKind = (source: unknown) => {
@@ -117,18 +109,6 @@ const normalizeVirtualFileName = (fileName: string | null | undefined, fallback 
     .replace(RESERVED_FILE_CHARS_REGEX, "_")
     .replace(LEADING_DOTS_REGEX, "")
     .replace(EDGE_WHITESPACE_OR_UNDERSCORES_REGEX, "") || fallback;
-
-const lowerFileExtension = (fileName: string) => {
-  const normalized = String(fileName || "").toLowerCase();
-  const index = normalized.lastIndexOf(".");
-  return index >= 0 ? normalized.slice(index) : "";
-};
-
-const shouldUseEagerMemoryVirtualSource = (fileName: string, size: number | undefined) =>
-  typeof size === "number" &&
-  size > 0 &&
-  size <= EAGER_MEMORY_VIRTUAL_SOURCE_MAX_BYTES &&
-  EAGER_MEMORY_VIRTUAL_SOURCE_EXTENSIONS.has(lowerFileExtension(fileName));
 
 const splitVisibleFileName = (fileName: string) => {
   const dotIndex = fileName.lastIndexOf(".");
@@ -219,8 +199,7 @@ const createBrowserOpfsSourceRef = async (
   }
   const fileHandle = getBrowserSourceHandle(directSource) || getBrowserSourceHandle(source);
   const blob = getBrowserSourceBlob(directSource) || getBrowserSourceBlob(source);
-  const bytes = getByteSource(directSource) || getByteSource(source);
-  let virtualSource: Blob | Uint8Array | null = null;
+  let virtualSource: Blob | null = null;
   let virtualSize = sizeHint ?? undefined;
   if (fileHandle) {
     const sourceFile = await fileHandle.getFile();
@@ -232,29 +211,12 @@ const createBrowserOpfsSourceRef = async (
     });
   } else if (blob) {
     const resolvedFileName = fileName || fallbackFileName;
-    if (shouldUseEagerMemoryVirtualSource(resolvedFileName, blob.size)) {
-      virtualSource = new Uint8Array(await blob.arrayBuffer());
-      virtualSize = virtualSource.byteLength;
-      emitBrowserSourceRefTrace(options.trace, "using eager memory Blob source", {
-        fileName: resolvedFileName,
-        size: virtualSize,
-        sourceKind: getBrowserSourceTraceKind(blob),
-      });
-    } else {
-      virtualSource = toFileLike(blob, resolvedFileName);
-      virtualSize = blob.size;
-      emitBrowserSourceRefTrace(options.trace, "using Blob source", {
-        fileName: resolvedFileName,
-        size: blob.size,
-        sourceKind: getBrowserSourceTraceKind(blob),
-      });
-    }
-  } else if (bytes) {
-    virtualSource = bytes;
-    virtualSize = bytes.byteLength;
-    emitBrowserSourceRefTrace(options.trace, "using byte source", {
-      fileName: fileName || fallbackFileName,
-      size: bytes.byteLength,
+    virtualSource = toFileLike(blob, resolvedFileName);
+    virtualSize = blob.size;
+    emitBrowserSourceRefTrace(options.trace, "using Blob source", {
+      fileName: resolvedFileName,
+      size: blob.size,
+      sourceKind: getBrowserSourceTraceKind(blob),
     });
   }
   if (!virtualSource) {
@@ -264,7 +226,7 @@ const createBrowserOpfsSourceRef = async (
       fileName,
       sourceKind: getBrowserSourceTraceKind(source),
     });
-    throw new Error("Browser worker inputs must be File, Blob, Uint8Array, FileSystemFileHandle, or OPFS path values");
+    throw new Error("Browser worker inputs must be File, Blob, FileSystemFileHandle, or OPFS path values");
   }
 
   const virtualFileName = normalizeVirtualFileName(fileName || fallbackFileName, fallbackFileName || "input.bin");

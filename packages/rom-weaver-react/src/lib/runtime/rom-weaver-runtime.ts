@@ -3,6 +3,7 @@ import {
   formatBrowserStorageEstimateState,
   getBrowserStorageEstimateState,
 } from "../../storage/browser/browser-storage-estimate.ts";
+import { withBrowserOutputStorageFailureContext } from "../../storage/browser/browser-output-storage-guard.ts";
 import type { ChecksumResult } from "../../types/checksum.ts";
 import type { LogLevel } from "../../types/logging.ts";
 import type { CompressionListResult } from "../../types/workflow-runtime.ts";
@@ -160,6 +161,18 @@ const getTraceMessage = (value: unknown): string => {
 const appendBrowserStorageContext = async (message: string) => {
   const state = await getBrowserStorageEstimateState();
   return `${message} [storage: ${formatBrowserStorageEstimateState(state)}]`;
+};
+
+const throwRomWeaverFailureWithBrowserOutputContext = async (
+  result: RomWeaverRunJsonResult,
+  fallbackMessage: string,
+  operationLabel: string,
+): Promise<never> => {
+  const message = getRomWeaverFailureMessage(result, fallbackMessage);
+  const error = await withBrowserOutputStorageFailureContext(new Error(message), {
+    operationLabel,
+  });
+  throw error instanceof Error ? error : new Error(String(error || message));
 };
 
 const toRomWeaverOptions = (input: {
@@ -719,8 +732,13 @@ const invokeRomWeaverExtractWorker = async (
     },
   );
   if (!(result.ok && result.exitCode === 0)) {
-    const failureMessage = getRomWeaverFailureMessage(result, "Compression extract failed");
-    throw new Error(failureMessage);
+    const operationLabel =
+      select.length === 1
+        ? `extract \`${select[0]}\``
+        : select.length > 1
+          ? `extract ${select.length} entries`
+          : "extract output";
+    await throwRomWeaverFailureWithBrowserOutputContext(result, "Compression extract failed", operationLabel);
   }
   return {
     emittedFiles: getEmittedFiles(result),

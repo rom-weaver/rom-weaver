@@ -3974,9 +3974,7 @@ function createBrowserWasiThreadSpawnerForCommand({
     return wrapped;
   };
 
-  const spawn = function spawn(startArg) {
-    const errorOrTidPtr = arguments.length > 1 ? arguments[1] : undefined;
-    trace?.(`[browser-opfs] thread spawn requested startArg=${Number(startArg) | 0} command=${command.commandId}`);
+  const reapCompletedWorkers = () => {
     for (const [activeTid, slot] of activeWorkers.entries()) {
       const state = Atomics.load(slot.control, THREAD_SLOT_STATE_INDEX);
       if (state === THREAD_SLOT_STATE_IDLE) {
@@ -3992,6 +3990,75 @@ function createBrowserWasiThreadSpawnerForCommand({
         recordFailure(activeTid, slot.failure || new Error(`wasi thread ${activeTid} failed in browser worker ${slot.index}`));
       }
     }
+  };
+
+  const findIdlePooledWorker = () => command.slots.find((candidate) => candidate.online
+    && !candidate.busy
+    && Atomics.load(candidate.control, THREAD_SLOT_STATE_INDEX) === THREAD_SLOT_STATE_IDLE);
+
+  const findWaitablePooledWorker = () => {
+    for (const slot of activeWorkers.values()) {
+      const state = Atomics.load(slot.control, THREAD_SLOT_STATE_INDEX);
+      if (
+        state !== THREAD_SLOT_STATE_IDLE
+        && state !== THREAD_SLOT_STATE_FAILED
+        && state !== THREAD_SLOT_STATE_SHUTDOWN
+      ) {
+        return { slot, state };
+      }
+    }
+    for (const slot of command.slots) {
+      const state = Atomics.load(slot.control, THREAD_SLOT_STATE_INDEX);
+      if (
+        slot.online
+        && state !== THREAD_SLOT_STATE_IDLE
+        && state !== THREAD_SLOT_STATE_FAILED
+        && state !== THREAD_SLOT_STATE_SHUTDOWN
+      ) {
+        return { slot, state };
+      }
+    }
+    return null;
+  };
+
+  const waitForIdlePooledWorker = (tid) => {
+    const deadline = createWaitDeadline(THREAD_WORKER_BUSY_RETRY_TIMEOUT_MS);
+    let tracedWait = false;
+    while (true) {
+      reapCompletedWorkers();
+      if (firstThreadFailure) return null;
+      const idleSlot = findIdlePooledWorker();
+      if (idleSlot) return idleSlot;
+
+      const waitable = findWaitablePooledWorker();
+      if (!waitable) return null;
+      if (!tracedWait) {
+        trace?.(
+          `[browser-opfs] thread spawn waiting for idle pooled worker tid=${tid} command=${command.commandId}`
+          + ` active=${activeWorkers.size} slots=${command.slots.length}`,
+        );
+        tracedWait = true;
+      }
+      const waitResult = waitForAtomicsStateChange(
+        waitable.slot.control,
+        THREAD_SLOT_STATE_INDEX,
+        waitable.state,
+        { deadline },
+      );
+      if (waitResult === 'timed-out') {
+        trace?.(
+          `[browser-opfs] thread spawn wait for idle pooled worker timed out tid=${tid} command=${command.commandId}`
+          + ` active=${activeWorkers.size} slots=${command.slots.length}`,
+        );
+        return null;
+      }
+    }
+  };
+
+  const spawn = function spawn(startArg) {
+    const errorOrTidPtr = arguments.length > 1 ? arguments[1] : undefined;
+    trace?.(`[browser-opfs] thread spawn requested startArg=${Number(startArg) | 0} command=${command.commandId}`);
+    reapCompletedWorkers();
 
     const tid = allocateThreadId(threadIdState);
     if (tid < 0) {
@@ -3999,12 +4066,10 @@ function createBrowserWasiThreadSpawnerForCommand({
       return finishThreadSpawn(wasmMemory, errorOrTidPtr, Math.abs(tid), true);
     }
 
-    const slot = command.slots.find((candidate) => candidate.online
-      && !candidate.busy
-      && Atomics.load(candidate.control, THREAD_SLOT_STATE_INDEX) === THREAD_SLOT_STATE_IDLE);
+    const slot = findIdlePooledWorker() ?? waitForIdlePooledWorker(tid);
     if (!slot) {
       trace?.(
-        `[browser-opfs] thread spawn no idle pooled worker tid=${tid} command=${command.commandId} (overflow disabled)`,
+        `[browser-opfs] thread spawn no idle pooled worker tid=${tid} command=${command.commandId}`,
       );
       return finishThreadSpawn(wasmMemory, errorOrTidPtr, WASI_ERRNO_AGAIN, true);
     }

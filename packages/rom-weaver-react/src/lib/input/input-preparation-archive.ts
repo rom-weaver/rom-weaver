@@ -20,6 +20,7 @@ import {
   getPatchFileCleanup,
   getPatchFileExternalSource,
   getPatchFileHandle,
+  isLazyExternalPatchFile,
   normalizeArchiveEntryBytes,
   PatchFile,
 } from "./binary-service.ts";
@@ -98,6 +99,7 @@ type NestedArchiveOptions = {
 };
 const NESTED_ARCHIVE_SELECTION_PREFIX = "nested:";
 const PATH_BACKED_COMPRESSION_FORMATS = new Set(["chd", "rvz", "z3ds"]);
+const SYNC_READ_ARCHIVE_ENTRY_REGEX = /\.(?:cue|ips|ups|bps|aps|rup|ppf|ebp|bdf|bspatch|mod|xdelta|vcdiff)\d*$/i;
 const validatedPatchArchiveEntriesByFile = new WeakMap<PatchFileInstance, ValidatedPatchArchiveEntryCache>();
 const patchArchiveValidationCleanupAttached = new WeakSet<PatchFileInstance>();
 
@@ -106,6 +108,7 @@ const describeArchiveFileForTrace = (file: PatchFileInstance) => ({
   fileName: file.fileName || "input.bin",
   filePath: typeof file.filePath === "string" ? file.filePath : "",
   fileSize: typeof file.fileSize === "number" && Number.isFinite(file.fileSize) ? file.fileSize : 0,
+  isLazyExternal: isLazyExternalPatchFile(file),
 });
 
 const getArchiveFileSourceIdentity = (file: PatchFileInstance) => {
@@ -560,14 +563,13 @@ const extractCompressionEntries = async (
       const selectedEntryFileName = getBaseFileName(requestedEntryName);
       const usePathBackedOutput = isPathBackedCompressionOutput && !isCueEntryFileName(selectedEntryFileName);
       const isDiscExtractionOutput = isPathBackedCompressionOutput && !isCueEntryFileName(selectedEntryFileName);
+      const shouldMaterializeForSyncRead = SYNC_READ_ARCHIVE_ENTRY_REGEX.test(selectedEntryFileName);
       const resolvedFileName = isPathBackedCompressionOutput
         ? selectedEntryFileName
         : output.fileName || selectedEntryFileName;
       const binFile = await createPatchFileFromPublicOutput(output, resolvedFileName, {
-        materializeBlob: !usePathBackedOutput,
-        // Keep archive-extracted browser inputs materialized so subsequent staging does not depend on
-        // transient worker output paths that may be cleaned up between selection and apply.
-        preferExternalFilePath: false,
+        materializeBlob: shouldMaterializeForSyncRead,
+        preferExternalFilePath: !shouldMaterializeForSyncRead,
       });
       binFile.fileName = resolvedFileName;
       const externalSource = getPatchFileExternalSource(binFile, resolvedFileName, { preferDirectBrowserSource: true });
