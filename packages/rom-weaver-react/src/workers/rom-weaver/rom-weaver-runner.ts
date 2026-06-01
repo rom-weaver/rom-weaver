@@ -1,39 +1,28 @@
-import type { RomWeaverCommand, RomWeaverProgressEvent, RomWeaverRunRequest } from "rom-weaver-wasm";
+import type {
+  RomWeaverBrowserOpfsRunOptions,
+  RomWeaverCommand,
+  RomWeaverRunInput,
+  RomWeaverRunJsonEvent,
+  RomWeaverRunJsonOptions,
+  RomWeaverRunJsonResult,
+  RomWeaverRunRequest,
+} from "rom-weaver-wasm";
 import { type BrowserVirtualFile, getActiveBrowserVirtualFiles } from "../protocol/browser-virtual-files.ts";
 import { isBrowserRuntime } from "../shared/runtime-env.ts";
 import { WORKER_OPFS_MOUNTPOINT } from "../shared/worker-storage/storage-layout.ts";
+import { getRomWeaverRunEventLabel, isRomWeaverFailedRunEvent } from "./rom-weaver-run-events.ts";
 
-type RomWeaverRunJsonEvent = RomWeaverProgressEvent;
-type RomWeaverRunJsonInput = RomWeaverCommand | RomWeaverRunRequest;
-
-type RomWeaverRunJsonOptions = {
-  onEvent?: (event: RomWeaverRunJsonEvent) => void;
-  onNonJsonLine?: (line: string) => void;
-  onTraceEvent?: (event: RuntimeValue) => void;
-  onTraceNonJsonLine?: (line: string) => void;
-  [key: string]: RuntimeValue;
-};
-
-type RomWeaverRunJsonResult = {
-  command: RomWeaverCommand;
-  exitCode: number;
-  ok: boolean;
-  request: RomWeaverRunRequest;
-  stdout?: string;
-  stderr?: string;
-  events: RomWeaverRunJsonEvent[];
-  nonJsonLines: string[];
-  traceEvents: RuntimeValue[];
-  traceNonJsonLines: string[];
-};
+type RomWeaverRunnerRunJsonOptions = RomWeaverRunJsonOptions<RomWeaverRunJsonEvent, RuntimeValue> &
+  RomWeaverBrowserOpfsRunOptions;
+type RomWeaverRunnerRunJsonResult = RomWeaverRunJsonResult<RomWeaverRunJsonEvent, RuntimeValue>;
 
 type RomWeaverWorkerClient = {
   init: (...args: unknown[]) => Promise<RomWeaverRunnerReadyMetadata>;
   dispose?: () => Promise<void>;
   runJson: (
-    commandOrRequest: RomWeaverRunJsonInput,
-    options?: RomWeaverRunJsonOptions,
-  ) => Promise<RomWeaverRunJsonResult>;
+    commandOrRequest: RomWeaverRunInput,
+    options?: RomWeaverRunnerRunJsonOptions,
+  ) => Promise<RomWeaverRunnerRunJsonResult>;
 };
 
 type RomWeaverRunnerReadyMetadata = {
@@ -46,9 +35,9 @@ type RomWeaverRunner = {
   dispose?: () => Promise<void>;
   ready: RomWeaverRunnerReadyMetadata;
   runJson: (
-    commandOrRequest: RomWeaverRunJsonInput,
-    options?: RomWeaverRunJsonOptions,
-  ) => Promise<RomWeaverRunJsonResult>;
+    commandOrRequest: RomWeaverRunInput,
+    options?: RomWeaverRunnerRunJsonOptions,
+  ) => Promise<RomWeaverRunnerRunJsonResult>;
 };
 
 type BrowserWasmAssetSelection = {
@@ -84,28 +73,21 @@ const describeVirtualFilesForTrace = (files: BrowserVirtualFile[]) => {
   };
 };
 
-const emitRunnerTraceLine = (options: RomWeaverRunJsonOptions | undefined, message: string) => {
+const emitRunnerTraceLine = (options: RomWeaverRunnerRunJsonOptions | undefined, message: string) => {
   options?.onTraceNonJsonLine?.(`[browser-runner] ${message}`);
 };
 
-const readCommandArgs = (command: RuntimeValue): Record<string, RuntimeValue> => {
-  const args = (command as { args?: RuntimeValue })?.args;
-  return args && typeof args === "object" ? (args as Record<string, RuntimeValue>) : {};
-};
+const readRunCommand = (commandOrRequest: RomWeaverRunInput): RomWeaverCommand =>
+  isRomWeaverRunRequest(commandOrRequest) ? commandOrRequest.command : commandOrRequest;
 
-const readRunCommand = (commandOrRequest: RomWeaverRunJsonInput): RuntimeValue => {
-  const requestCommand = (commandOrRequest as { command?: RuntimeValue })?.command;
-  return requestCommand && typeof requestCommand === "object" ? requestCommand : commandOrRequest;
-};
-
-const pushPathValue = (out: Set<string>, value: RuntimeValue) => {
+const pushPathValue = (out: Set<string>, value: unknown) => {
   if (typeof value !== "string") return;
   const path = value.trim();
   if (!path || path.startsWith("-")) return;
   out.add(path);
 };
 
-const pushPathValues = (out: Set<string>, value: RuntimeValue) => {
+const pushPathValues = (out: Set<string>, value: unknown) => {
   if (Array.isArray(value)) {
     for (const entry of value) pushPathValue(out, entry);
     return;
@@ -113,37 +95,40 @@ const pushPathValues = (out: Set<string>, value: RuntimeValue) => {
   pushPathValue(out, value);
 };
 
+const throwUnhandledRomWeaverCommand = (command: never): never => {
+  throw new Error(`Unhandled rom-weaver command type: ${String((command as { type?: unknown }).type || "unknown")}`);
+};
+
 const collectReferencedVirtualFilePaths = (
-  commandOrRequest: RomWeaverRunJsonInput,
-  options?: RomWeaverRunJsonOptions,
+  commandOrRequest: RomWeaverRunInput,
+  options?: RomWeaverRunnerRunJsonOptions,
 ) => {
   const paths = new Set<string>();
-  const command = readRunCommand(commandOrRequest) as { type?: RuntimeValue };
-  const args = readCommandArgs(command);
+  const command = readRunCommand(commandOrRequest);
 
-  switch (command?.type) {
+  switch (command.type) {
     case "checksum":
     case "extract":
     case "inspect":
-      pushPathValue(paths, args.source);
+      pushPathValue(paths, command.args.source);
       break;
     case "compress":
-      pushPathValues(paths, args.input);
+      pushPathValues(paths, command.args.input);
       break;
     case "batch-header-fixer":
     case "trim":
-      pushPathValues(paths, args.source);
+      pushPathValues(paths, command.args.source);
       break;
     case "patch-apply":
-      pushPathValue(paths, args.input);
-      pushPathValues(paths, args.patches);
+      pushPathValue(paths, command.args.input);
+      pushPathValues(paths, command.args.patches);
       break;
     case "patch-create":
-      pushPathValue(paths, args.original);
-      pushPathValue(paths, args.modified);
+      pushPathValue(paths, command.args.original);
+      pushPathValue(paths, command.args.modified);
       break;
     default:
-      break;
+      throwUnhandledRomWeaverCommand(command);
   }
 
   pushPathValues(paths, options?.knownInputPaths);
@@ -152,12 +137,12 @@ const collectReferencedVirtualFilePaths = (
 
 const selectActiveVirtualFilesForRun = (
   activeVirtualFiles: BrowserVirtualFile[],
-  commandOrRequest: RomWeaverRunJsonInput,
-  options?: RomWeaverRunJsonOptions,
+  commandOrRequest: RomWeaverRunInput,
+  options?: RomWeaverRunnerRunJsonOptions,
 ) => {
-  const command = readRunCommand(commandOrRequest) as { type?: RuntimeValue };
+  const command = readRunCommand(commandOrRequest);
   const referencedPaths = collectReferencedVirtualFilePaths(commandOrRequest, options);
-  if (command?.type === "compress" && [...referencedPaths].some((path) => /\.cue$/i.test(path))) {
+  if (command.type === "compress" && [...referencedPaths].some((path) => /\.cue$/i.test(path))) {
     return activeVirtualFiles;
   }
   if (!referencedPaths.size) return activeVirtualFiles;
@@ -271,14 +256,14 @@ const resetRomWeaverRunner = async () => {
   }
 };
 
-const runRomWeaverJson = async (commandOrRequest: RomWeaverRunJsonInput, options?: RomWeaverRunJsonOptions) => {
+const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: RomWeaverRunnerRunJsonOptions) => {
   const activeVirtualFiles = getActiveBrowserVirtualFiles();
   const scopedActiveVirtualFiles = selectActiveVirtualFilesForRun(activeVirtualFiles, commandOrRequest, options);
   const configuredVirtualFiles = options?.virtualFiles;
   const runOptionOverrides = { ...(options || {}) };
   // Cached OPFS mounts hold sync access handles; release them before UI-side VFS writes/downloads.
   const defaultInvalidateMountCacheAfterRun = true;
-  const runOptions: RomWeaverRunJsonOptions =
+  const runOptions: RomWeaverRunnerRunJsonOptions =
     scopedActiveVirtualFiles.length > 0
       ? {
           ...runOptionOverrides,
@@ -346,7 +331,7 @@ const getResourceName = (urlLike: string) => {
   }
 };
 
-const formatCommandForTrace = (commandOrRequest: RomWeaverRunJsonInput) => {
+const formatCommandForTrace = (commandOrRequest: RomWeaverRunInput) => {
   const command: RomWeaverCommand = isRomWeaverRunRequest(commandOrRequest)
     ? commandOrRequest.command
     : commandOrRequest;
@@ -357,7 +342,7 @@ const formatCommandForTrace = (commandOrRequest: RomWeaverRunJsonInput) => {
   }
 };
 
-const isRomWeaverRunRequest = (value: RomWeaverRunJsonInput): value is RomWeaverRunRequest => {
+const isRomWeaverRunRequest = (value: RomWeaverRunInput): value is RomWeaverRunRequest => {
   return "command" in value && Boolean(value.command);
 };
 
@@ -391,14 +376,14 @@ const getErrorMessage = (value: unknown) => {
 };
 
 const getRomWeaverFailureMessage = (
-  result: Partial<RomWeaverRunJsonResult> | null | undefined,
+  result: Partial<RomWeaverRunnerRunJsonResult> | null | undefined,
   fallback = "rom-weaver operation failed",
 ) => {
   const events = Array.isArray(result?.events) ? result.events : [];
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];
-    if (!(event && event.status === "failed")) continue;
-    const label = typeof event.label === "string" ? event.label.trim() : "";
+    if (!(event && isRomWeaverFailedRunEvent(event))) continue;
+    const label = getRomWeaverRunEventLabel(event).trim();
     if (label) return label;
   }
 
@@ -419,7 +404,7 @@ const getRomWeaverFailureMessage = (
 
 const TRACE_STDERR_LINE_REGEX = /^\d{4}-\d{2}-\d{2}T\S+\s+(?:TRACE|DEBUG|INFO|WARN|ERROR)\s+[\w:]+:/;
 
-const getNonTraceStderr = (result: Partial<RomWeaverRunJsonResult> | null | undefined) => {
+const getNonTraceStderr = (result: Partial<RomWeaverRunnerRunJsonResult> | null | undefined) => {
   const stderr = typeof result?.stderr === "string" ? result.stderr.trim() : "";
   if (!stderr) return "";
   const lines = stderr
@@ -429,7 +414,11 @@ const getNonTraceStderr = (result: Partial<RomWeaverRunJsonResult> | null | unde
   return lines.join("\n").trim();
 };
 
-export type { RomWeaverRunJsonEvent, RomWeaverRunJsonOptions, RomWeaverRunJsonResult };
+export type {
+  RomWeaverRunJsonEvent,
+  RomWeaverRunnerRunJsonOptions as RomWeaverRunJsonOptions,
+  RomWeaverRunnerRunJsonResult as RomWeaverRunJsonResult,
+};
 export {
   getRomWeaverFailureMessage,
   getRomWeaverRunnerMetadata,

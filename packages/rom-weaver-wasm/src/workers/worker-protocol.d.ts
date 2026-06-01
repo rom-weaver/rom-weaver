@@ -1,6 +1,6 @@
 import type {
-  RomWeaverProgressEvent,
   RomWeaverRunInput,
+  RomWeaverRunJsonEvent,
   RomWeaverRunJsonOptions,
   RomWeaverRunJsonResult,
   RomWeaverRunOptions,
@@ -59,7 +59,7 @@ export interface RomWeaverWorkerResultMessage {
 export interface RomWeaverWorkerProgressEventMessage {
   type: 'event';
   requestId: number;
-  event: RomWeaverProgressEvent;
+  event: RomWeaverRunJsonEvent;
 }
 
 export interface RomWeaverWorkerNonJsonLineMessage {

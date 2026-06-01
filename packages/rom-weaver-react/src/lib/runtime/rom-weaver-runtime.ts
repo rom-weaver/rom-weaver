@@ -1,4 +1,13 @@
-import type { CompressionLevelProfile, RomWeaverCommand, ThreadBudget } from "rom-weaver-wasm";
+import type {
+  RomWeaverRunJsonOptions as BaseRomWeaverRunJsonOptions,
+  RomWeaverRunJsonResult as BaseRomWeaverRunJsonResult,
+  CompressionLevelProfile,
+  RomWeaverBrowserOpfsRunOptions,
+  RomWeaverBrowserSyncAccessMode,
+  RomWeaverCommand,
+  RomWeaverRunJsonEvent,
+  ThreadBudget,
+} from "rom-weaver-wasm";
 import { withBrowserOutputStorageFailureContext } from "../../storage/browser/browser-output-storage-guard.ts";
 import {
   formatBrowserStorageEstimateState,
@@ -15,13 +24,22 @@ import type {
   WorkflowRuntimeLog,
 } from "../../types/workflow-runtime-adapter.ts";
 import {
+  getRomWeaverRunEventDetails,
+  getRomWeaverRunEventFormat,
+  getRomWeaverRunEventLabel,
+  getRomWeaverRunEventPercent,
+  isRomWeaverLiveRunEvent,
+  isRomWeaverTerminalRunEvent,
+} from "../../workers/rom-weaver/rom-weaver-run-events.ts";
+import {
   getRomWeaverFailureMessage,
-  type RomWeaverRunJsonEvent,
-  type RomWeaverRunJsonOptions,
-  type RomWeaverRunJsonResult,
   resetRomWeaverRunner,
   runRomWeaverJson,
 } from "../../workers/rom-weaver/rom-weaver-runner.ts";
+
+type RomWeaverRunJsonOptions = BaseRomWeaverRunJsonOptions<RomWeaverRunJsonEvent, RuntimeValue> &
+  RomWeaverBrowserOpfsRunOptions;
+type RomWeaverRunJsonResult = BaseRomWeaverRunJsonResult<RomWeaverRunJsonEvent, RuntimeValue>;
 
 const CHECKSUM_PAIR_REGEX = /([a-z0-9_-]+)=([0-9a-f]+)/gi;
 const PATH_PART_SPLIT_REGEX = /[/\\]+/;
@@ -30,6 +48,11 @@ const CODEC_LEVEL_ENTRY_REGEX = /^([a-z0-9_+-]+)(?::(\d+))?$/i;
 const COMPRESSION_LEVEL_PROFILE_REGEX = /^(min|very-low|low|medium|high|very-high|max)$/i;
 const OUT_OF_MEMORY_FAILURE_REGEX = /\bout of memory\b|\bmemory allocation\b|\bcannot allocate memory\b/i;
 const WORK_ROOT_PATH = "/work";
+const BROWSER_SYNC_ACCESS_MODES = new Set<RomWeaverBrowserSyncAccessMode>([
+  "read-only",
+  "readwrite",
+  "readwrite-unsafe",
+]);
 
 const nowIso = () => new Date().toISOString();
 
@@ -63,8 +86,7 @@ const clampPercent = (value: unknown): number | null => {
 };
 
 const isLiveProgressEvent = (event: RomWeaverRunJsonEvent): boolean => {
-  const status = typeof event.status === "string" ? event.status.toLowerCase() : "";
-  return !status || status === "running";
+  return isRomWeaverLiveRunEvent(event);
 };
 
 const toThreadBudget = (value: unknown, fallback: ThreadBudget | null = null): ThreadBudget | null => {
@@ -78,6 +100,12 @@ const toThreadBudget = (value: unknown, fallback: ThreadBudget | null = null): T
   if (normalized === "auto") return "auto";
   const parsed = Number.parseInt(normalized, 10);
   return Number.isFinite(parsed) && parsed >= 1 ? parsed : fallback;
+};
+
+const toBrowserSyncAccessMode = (value: unknown): RomWeaverBrowserSyncAccessMode | undefined => {
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim() as RomWeaverBrowserSyncAccessMode;
+  return BROWSER_SYNC_ACCESS_MODES.has(normalized) ? normalized : undefined;
 };
 
 const XDELTA_PATCH_FILE_EXTENSION_REGEX = /\.(?:xdelta|vcdiff)$/i;
@@ -215,9 +243,8 @@ const toRomWeaverOptions = (input: {
   if (typeof input.defaultThreads === "number" && Number.isFinite(input.defaultThreads)) {
     options.defaultThreads = Math.floor(input.defaultThreads);
   }
-  if (typeof input.syncAccessMode === "string" && input.syncAccessMode.trim()) {
-    options.syncAccessMode = input.syncAccessMode.trim();
-  }
+  const syncAccessMode = toBrowserSyncAccessMode(input.syncAccessMode);
+  if (syncAccessMode) options.syncAccessMode = syncAccessMode;
   if (input.invalidateMountCacheBeforeRun) options.invalidateMountCacheBeforeRun = true;
   if (Array.isArray(input.knownInputPaths)) {
     const knownInputPaths = input.knownInputPaths
@@ -282,8 +309,7 @@ const getTerminalEvent = (result: RomWeaverRunJsonResult): RomWeaverRunJsonEvent
   const events = Array.isArray(result.events) ? result.events : [];
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];
-    const status = typeof event?.status === "string" ? event.status.toLowerCase() : "";
-    if (status === "succeeded" || status === "failed") return event || null;
+    if (event && isRomWeaverTerminalRunEvent(event)) return event;
   }
   return getLastEvent(result);
 };
@@ -327,7 +353,7 @@ const normalizeEmittedFileChecksums = (value: unknown): Record<string, string> |
 
 const getEmittedFiles = (result: RomWeaverRunJsonResult): RomWeaverEmittedFile[] => {
   const terminal = getTerminalEvent(result);
-  const details = asRecord(terminal?.details);
+  const details = asRecord(terminal ? getRomWeaverRunEventDetails(terminal) : null);
   const emitted = Array.isArray(details?.emitted_files) ? details?.emitted_files : [];
   const output: RomWeaverEmittedFile[] = [];
   for (const value of emitted) {
@@ -351,7 +377,7 @@ const getEmittedFiles = (result: RomWeaverRunJsonResult): RomWeaverEmittedFile[]
 
 const getContainerEntriesFromInspect = (result: RomWeaverRunJsonResult): CompressionListResult["entries"] => {
   const terminal = getTerminalEvent(result);
-  const details = asRecord(terminal?.details);
+  const details = asRecord(terminal ? getRomWeaverRunEventDetails(terminal) : null);
   const container = asRecord(details?.container);
   const entryRecords = Array.isArray(container?.entry_records) ? container.entry_records : [];
   const entries = entryRecords.length ? entryRecords : Array.isArray(container?.entries) ? container.entries : [];
@@ -387,10 +413,11 @@ const toSimpleProgress = (
   event: RomWeaverRunJsonEvent,
 ): { label?: string; message?: string; percent?: number | null } | null => {
   if (!isLiveProgressEvent(event)) return null;
+  const label = getRomWeaverRunEventLabel(event);
   return {
-    label: typeof event.label === "string" && event.label ? event.label : undefined,
+    label: label ? label : undefined,
     message: undefined,
-    percent: clampPercent(event.percent),
+    percent: clampPercent(getRomWeaverRunEventPercent(event)),
   };
 };
 
@@ -563,10 +590,11 @@ const getPatchApplyOutputFileName = (input: RuntimePatchApplyWorkerInput) => {
 
 const toPatchProgress = (event: RomWeaverRunJsonEvent): RuntimePatchWorkerProgress | null => {
   if (!isLiveProgressEvent(event)) return null;
+  const label = getRomWeaverRunEventLabel(event);
   return {
-    label: typeof event.label === "string" && event.label ? event.label : undefined,
+    label: label ? label : undefined,
     message: undefined,
-    percent: clampPercent(event.percent),
+    percent: clampPercent(getRomWeaverRunEventPercent(event)),
   };
 };
 
@@ -899,12 +927,14 @@ const invokeRomWeaverPatchApplyWorker = async (
   }
 
   const emitted = getEmittedFileDetails(result);
+  const lastEvent = getLastEvent(result);
+  const patchFormat = lastEvent ? getRomWeaverRunEventFormat(lastEvent) || "PATCH" : "PATCH";
   return {
     applySummary: {
       outputSize: emitted?.sizeBytes,
       patches: input.patchFiles.map((patch) => ({
         fileName: patch.patchFileName || getPathBaseName(patch.patchFilePath, "patch.bin"),
-        format: String(getLastEvent(result)?.format || "PATCH"),
+        format: String(patchFormat),
       })),
       rom: {
         fileName: input.romFileName || getPathBaseName(input.romFilePath, "input.bin"),
@@ -1066,10 +1096,11 @@ const runRomWeaverChecksumWorker = async (
       logLevel: input.logLevel,
       onEvent: (event) => {
         if (!isLiveProgressEvent(event)) return;
+        const label = getRomWeaverRunEventLabel(event);
         onProgress?.({
-          label: typeof event.label === "string" && event.label ? event.label : undefined,
+          label: label ? label : undefined,
           message: undefined,
-          percent: clampPercent(event.percent),
+          percent: clampPercent(getRomWeaverRunEventPercent(event)),
         });
       },
       onLog,
@@ -1084,7 +1115,7 @@ const runRomWeaverChecksumWorker = async (
   ensureRomWeaverSuccess(result, "Checksum calculation failed");
 
   const terminal = getLastEvent(result);
-  const checksums = parseChecksumLabel(typeof terminal?.label === "string" ? terminal.label : "");
+  const checksums = parseChecksumLabel(terminal ? getRomWeaverRunEventLabel(terminal) : "");
   return {
     checksums: {
       crc32: checksums.crc32 || 0,

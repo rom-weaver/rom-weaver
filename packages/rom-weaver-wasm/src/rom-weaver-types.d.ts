@@ -1,10 +1,11 @@
 import type {
-  Commands,
   CompressionLevelProfile,
   JsonValue,
   OperationFamily,
   OperationStatus,
-  ProgressEvent,
+  RomWeaverCommand,
+  RomWeaverRunInput,
+  RomWeaverRunJsonEvent,
   RomWeaverRunOutputOptions,
   RomWeaverRunRequest,
   ThreadBudget,
@@ -24,14 +25,16 @@ export type {
   InspectCommand,
   PatchApplyCommand,
   PatchCreateCommand,
+  RomWeaverCommand,
+  RomWeaverProgressEvent,
+  RomWeaverRunInput,
+  RomWeaverRunJsonEvent,
   RomWeaverRunOutputOptions,
   RomWeaverRunRequest,
   ThreadBudget,
   TrimCommand,
 } from './generated/rom-weaver-rust-types.d.ts';
 
-export type RomWeaverCommand = Commands;
-export type RomWeaverRunInput = RomWeaverCommand | RomWeaverRunRequest;
 export type RomWeaverCompressionLevelProfile = CompressionLevelProfile;
 export type RomWeaverThreadBudget = ThreadBudget;
 export type RomWeaverRunOutput = RomWeaverRunOutputOptions;
@@ -94,14 +97,13 @@ export type RomWeaverOperationFamily = OperationFamily;
 export type RomWeaverOperationStatus = OperationStatus;
 export type RomWeaverThreadMode = ThreadMode;
 export type RomWeaverThreadExecution = ThreadExecution;
-export type RomWeaverProgressEvent = ProgressEvent;
 
-export interface ParseJsonLinesOptions<TEvent = RomWeaverProgressEvent> {
+export interface ParseJsonLinesOptions<TEvent = RomWeaverRunJsonEvent> {
   onEvent?: (event: TEvent) => void;
   onNonJsonLine?: (line: string) => void;
 }
 
-export interface ParseJsonLinesResult<TEvent = RomWeaverProgressEvent> {
+export interface ParseJsonLinesResult<TEvent = RomWeaverRunJsonEvent> {
   events: TEvent[];
   nonJsonLines: string[];
 }
@@ -116,7 +118,7 @@ export interface ParseTraceJsonLinesResult<TTraceEvent = unknown> {
   traceNonJsonLines: string[];
 }
 
-export interface RomWeaverRunJsonOptions<TEvent = RomWeaverProgressEvent, TTraceEvent = unknown>
+export interface RomWeaverRunJsonOptions<TEvent = RomWeaverRunJsonEvent, TTraceEvent = unknown>
 extends RomWeaverRunOptions {
   onEvent?: (event: TEvent) => void;
   onNonJsonLine?: (line: string) => void;
@@ -124,7 +126,7 @@ extends RomWeaverRunOptions {
   onTraceNonJsonLine?: (line: string) => void;
 }
 
-export interface RomWeaverRunJsonResult<TEvent = RomWeaverProgressEvent, TTraceEvent = unknown>
+export interface RomWeaverRunJsonResult<TEvent = RomWeaverRunJsonEvent, TTraceEvent = unknown>
 extends RomWeaverRunResult {
   events: TEvent[];
   nonJsonLines: string[];
@@ -208,6 +210,8 @@ export interface RomWeaverBrowserOpfsRunOptions extends RomWeaverRunOptions {
   syncAccessMode?: RomWeaverBrowserSyncAccessMode;
   /** @deprecated Ignored. Browser OPFS runtime uses a fixed large scratch pool size. */
   scratchFilePoolSize?: number;
+  invalidateMountCacheBeforeRun?: boolean;
+  invalidateMountCacheAfterRun?: boolean;
   threadWorkerUrl?: string | URL;
   /**
    * Per-run default browser thread count applied for typed threaded commands

@@ -1,7 +1,7 @@
 import type {
-  RomWeaverProgressEvent,
   RomWeaverDefaultThreads,
   RomWeaverRunInput,
+  RomWeaverRunJsonEvent,
   RomWeaverRunJsonResult,
   RomWeaverRunOptions,
   RomWeaverRunResult,
@@ -16,7 +16,7 @@ export interface BrowserWorkerClientCreateOptions {
   workerOptions?: WorkerOptions;
 }
 
-export type BrowserWorkerRunJsonOptions<TEvent = RomWeaverProgressEvent, TTraceEvent = unknown> =
+export type BrowserWorkerRunJsonOptions<TEvent = RomWeaverRunJsonEvent, TTraceEvent = unknown> =
   WorkerClientRunJsonOptions<TEvent, TTraceEvent>;
 
 export type BrowserWorkerClientError = RomWeaverWorkerError;
@@ -36,7 +36,7 @@ export class BrowserRomWeaverWorkerClient {
   constructor(worker: Worker, options?: { defaultThreads?: RomWeaverDefaultThreads });
   init(options?: Record<string, unknown>): Promise<BrowserWorkerReady>;
   run(commandOrRequest: RomWeaverRunInput, options?: RomWeaverRunOptions & Record<string, unknown>): Promise<RomWeaverRunResult>;
-  runJson<TEvent = RomWeaverProgressEvent, TTraceEvent = unknown>(
+  runJson<TEvent = RomWeaverRunJsonEvent, TTraceEvent = unknown>(
     commandOrRequest: RomWeaverRunInput,
     options?: BrowserWorkerRunJsonOptions<TEvent, TTraceEvent>,
   ): Promise<RomWeaverRunJsonResult<TEvent, TTraceEvent>>;

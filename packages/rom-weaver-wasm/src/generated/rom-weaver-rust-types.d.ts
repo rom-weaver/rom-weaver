@@ -38,3 +38,11 @@ export type Commands = { "type": "inspect", "args": InspectCommand } | { "type":
 export type RomWeaverRunOutputOptions = { json?: boolean, progress?: boolean, trace?: boolean, interactive_selection_enabled?: boolean, };
 
 export type RomWeaverRunRequest = { command: Commands, output?: RomWeaverRunOutputOptions, };
+
+export type RomWeaverCommand = Commands;
+
+export type RomWeaverProgressEvent = ProgressEvent;
+
+export type RomWeaverRunJsonEvent = RomWeaverProgressEvent;
+
+export type RomWeaverRunInput = RomWeaverCommand | RomWeaverRunRequest;

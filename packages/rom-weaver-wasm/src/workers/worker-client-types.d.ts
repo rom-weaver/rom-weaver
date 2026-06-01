@@ -1,9 +1,9 @@
 import type {
-  RomWeaverProgressEvent,
+  RomWeaverRunJsonEvent,
   RomWeaverRunJsonOptions,
 } from '../rom-weaver-types.d.ts';
 
-export interface WorkerClientRunJsonOptions<TEvent = RomWeaverProgressEvent, TTraceEvent = unknown>
+export interface WorkerClientRunJsonOptions<TEvent = RomWeaverRunJsonEvent, TTraceEvent = unknown>
   extends Omit<RomWeaverRunJsonOptions<TEvent, TTraceEvent>, 'onEvent' | 'onNonJsonLine' | 'onTraceEvent' | 'onTraceNonJsonLine'> {
   onEvent?: (event: TEvent) => void;
   onNonJsonLine?: (line: string) => void;
