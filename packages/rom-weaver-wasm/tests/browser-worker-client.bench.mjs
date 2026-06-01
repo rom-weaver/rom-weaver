@@ -484,7 +484,6 @@ async function prepareExtractBenchmarkSource(formatName, codecLabel) {
     throw new Error(`extract source unavailable for ${formatName} codec:${codecLabel}: ${archiveSourceUnavailableReason(sourceKey)}`);
   }
 
-  await prepareSingleFileExtractOutput(formatName, codecLabel, outputDir);
 }
 
 async function cleanupExtractBenchmarkSource(formatName, codecLabel) {
@@ -520,7 +519,7 @@ async function ensureArchiveSource(formatName, codecLabel) {
 
   const [, codecValue] = codecCase;
   await removeGuestPath(fixtureRootHandle, markerPath, { recursive: false });
-  await precreateGuestFile(sourcePath);
+  await removeGuestPath(fixtureRootHandle, sourcePath, { recursive: false });
 
   benchLog(`prepare archive source ${formatName} codec:${codecLabel}`);
   const result = await runBenchmarkCommandAllowFailure(
@@ -555,7 +554,9 @@ async function prepareArchiveOutputFile(formatName, codecLabel) {
   await removeGuestPath(fixtureRootHandle, archiveArtifactReadyMarkerPath(formatName, codecLabel), {
     recursive: false,
   });
-  await precreateGuestFile(archiveArtifactPath(formatName, codecLabel));
+  await removeGuestPath(fixtureRootHandle, archiveArtifactPath(formatName, codecLabel), {
+    recursive: false,
+  });
 }
 
 async function markArchiveSourceReady(formatName, codecLabel) {
@@ -615,7 +616,7 @@ async function preparePatchSeedSources() {
     }
 
     const patchPath = joinGuestPath(ARTIFACT_ROOT, 'patch-seed', `${token(formatName)}.${extension}`);
-    await precreateGuestFile(patchPath);
+    await removeGuestPath(fixtureRootHandle, patchPath, { recursive: false });
     const { originalPath, modifiedPath } = patchFixturePairForFormat(formatName);
     const result = await runBenchmarkCommandAllowFailure(
       [
@@ -721,18 +722,6 @@ function archiveArtifactReadyMarkerPath(formatName, codecLabel) {
   );
 }
 
-async function prepareSingleFileExtractOutput(formatName, codecLabel, outputDir) {
-  const fileName = expectedSingleFileExtractName(formatName, codecLabel);
-  await writeGuestFile(fixtureRootHandle, joinGuestPath(outputDir, fileName), new Uint8Array());
-}
-
-function expectedSingleFileExtractName(formatName, codecLabel) {
-  if (['gz', 'bz2', 'xz', 'zst'].includes(formatName)) {
-    return `seed-${token(formatName)}-${token(codecLabel)}`;
-  }
-  return 'source.bin';
-}
-
 function patchArtifactPathForBench(commandName, formatName) {
   const extension = PATCH_EXTENSION[formatName] ?? 'patch';
   return joinGuestPath(
@@ -776,12 +765,7 @@ function isEmptyWarmupHook(mode) {
 
 async function prepareOutputFile(guestPath) {
   await ensureRuntimeReady();
-  await precreateGuestFile(guestPath);
-}
-
-async function precreateGuestFile(guestPath) {
   await removeGuestPath(fixtureRootHandle, guestPath, { recursive: false });
-  await writeGuestFile(fixtureRootHandle, guestPath, new Uint8Array());
 }
 
 function benchLog(message) {

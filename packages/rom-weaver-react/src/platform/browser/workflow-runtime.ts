@@ -478,13 +478,7 @@ const selectPreferredExtractedFile = async (input: {
   return selected;
 };
 
-const ensureBrowserVfsOutputPath = async (filePath: string) => {
-  const normalizedPath = String(filePath || "").trim();
-  if (!normalizedPath) return;
-  await browserVfs.truncate(normalizedPath, 0);
-};
-
-const ensureBrowserVfsOutputPaths = async (filePaths: string[], blockedPaths: string[] = []) => {
+const removeBrowserVfsOutputPaths = async (filePaths: string[], blockedPaths: string[] = []) => {
   const seen = new Set<string>();
   const blocked = new Set(
     blockedPaths.map((filePath) => String(filePath || "").trim()).filter((filePath) => !!filePath),
@@ -496,7 +490,7 @@ const ensureBrowserVfsOutputPaths = async (filePaths: string[], blockedPaths: st
       throw new Error(`Browser output path conflicts with an active input or patch: ${normalizedPath}`);
     }
     seen.add(normalizedPath);
-    await ensureBrowserVfsOutputPath(normalizedPath);
+    await browserVfs.remove(normalizedPath).catch(() => undefined);
   }
 };
 
@@ -522,9 +516,6 @@ const getBrowserExtractOutputPathCandidates = (outDirPath: string, entryName: st
       return true;
     });
 };
-
-const isMissingBrowserVfsOutputError = (error: unknown) =>
-  String(error instanceof Error ? error.message : error || "").includes("Browser VFS output is not available");
 
 type ArchiveEntrySizeHint = {
   filename?: string;
@@ -693,7 +684,7 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
       const fallbackOutputPathSource = staged.stagedEntries[0]?.filePath || `${WORKER_OPFS_MOUNTPOINT}/archive.bin`;
       const outputFileName = workflowInput.options?.outputName || (format === "zip" ? "archive.zip" : "archive.7z");
       const outputPath = selectRomWeaverOutputPath(fallbackOutputPathSource, outputFileName, staged.inputPaths);
-      await ensureBrowserVfsOutputPath(outputPath);
+      await removeBrowserVfsOutputPaths([outputPath], staged.inputPaths);
       return {
         output: await workerIo.createWorkerOutput(
           await invokeRomWeaverCompressionCreateWorker(
@@ -748,7 +739,7 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
           throw new Error(`Browser extract output path conflicts with the active input: ${entryName}`);
         }
         try {
-          await ensureBrowserVfsOutputPaths(outputPathCandidates, [archive.filePath]);
+          await removeBrowserVfsOutputPaths(outputPathCandidates, [archive.filePath]);
           const extractChecksumAlgorithms = Array.isArray(workflowInput.options?.extractChecksumAlgorithms)
             ? workflowInput.options.extractChecksumAlgorithms
                 .map((algorithm) =>
@@ -827,17 +818,9 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
               "archive extract worker did not return browser output",
             );
 
-          let extracted = await runExtractWithStorageContext();
-          let matched = await selectMatchedOutput(extracted);
-          try {
-            outputs.push(await createOutput(matched));
-          } catch (error) {
-            if (!isMissingBrowserVfsOutputError(error)) throw error;
-            await ensureBrowserVfsOutputPaths(extracted.emittedFiles.map((entry) => entry.path));
-            extracted = await runExtractWithStorageContext();
-            matched = await selectMatchedOutput(extracted);
-            outputs.push(await createOutput(matched));
-          }
+          const extracted = await runExtractWithStorageContext();
+          const matched = await selectMatchedOutput(extracted);
+          outputs.push(await createOutput(matched));
         } catch (error) {
           await cleanupExtractedFiles(outputPathCandidates).catch(() => undefined);
           throw error;
@@ -938,7 +921,10 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
         ...stagedInputPaths,
         ...(chdInputPath === workerInput.filePath ? [] : [chdInputPath]),
       ]);
-      await ensureBrowserVfsOutputPath(outputPath);
+      await removeBrowserVfsOutputPaths([outputPath], [
+        ...stagedInputPaths,
+        ...(chdInputPath === workerInput.filePath ? [] : [chdInputPath]),
+      ]);
       const codecs = normalizeCodecEntries(compressionCodecs);
       const result = await invokeRomWeaverCompressionCreateWorker(
         {
@@ -984,7 +970,7 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
       run: async (workerSource) => {
         const outputFileName = outputName || "output.rvz";
         const outputPath = selectRomWeaverOutputPath(workerSource.filePath, outputFileName, [workerSource.filePath]);
-        await ensureBrowserVfsOutputPath(outputPath);
+        await removeBrowserVfsOutputPaths([outputPath], [workerSource.filePath]);
         const codecs = withCodecLevel(rvzCompression || "zstd", rvzCompressionLevel);
         const result = await invokeRomWeaverCompressionCreateWorker(
           {
@@ -1016,7 +1002,7 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
       run: async (workerSource) => {
         const outputFileName = outputName || "output.z3ds";
         const outputPath = selectRomWeaverOutputPath(workerSource.filePath, outputFileName, [workerSource.filePath]);
-        await ensureBrowserVfsOutputPath(outputPath);
+        await removeBrowserVfsOutputPaths([outputPath], [workerSource.filePath]);
         const codecs = withCodecLevel("zstd", z3dsCompressionLevel);
         const result = await invokeRomWeaverCompressionCreateWorker(
           {
@@ -1072,6 +1058,7 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
       const shouldSplitBin = mode === "cd" && splitBin !== false;
       const directOutputFileName = outputName || actualOutputFileName;
       const directOutputPath = stagedOutputFileName ? joinPath(outDirPath, stagedOutputFileName) : "";
+      const staleOutputPaths: string[] = [];
       if (mode === "cd") {
         const listed = await runRomWeaverInspectListWorker(
           {
@@ -1092,12 +1079,11 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
           getChdCdOutputFileName(stagedSourceFileName, "cue"),
           ...(shouldSplitBin ? [] : [stagedSingleBinOutputFileName, outputName || ""]),
         ]);
-        await ensureBrowserVfsOutputPaths(
-          filterOutputCandidatesAwayFromSource(
+        staleOutputPaths.push(
+          ...filterOutputCandidatesAwayFromSource(
             cdOutputEntryNames.flatMap((entryName) => getBrowserExtractOutputPathCandidates(outDirPath, entryName)),
             workerSource.filePath,
           ),
-          [workerSource.filePath],
         );
       }
       if (directOutputPath) {
@@ -1108,8 +1094,9 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
               actualOutputFileName ? joinPath(outDirPath, actualOutputFileName) : "",
               outputName ? joinPath(outDirPath, outputName) : "",
             ];
-        await ensureBrowserVfsOutputPaths(uniqueNonEmptyStrings(outputPathCandidates), [workerSource.filePath]);
+        staleOutputPaths.push(...outputPathCandidates);
       }
+      await removeBrowserVfsOutputPaths(uniqueNonEmptyStrings(staleOutputPaths), [workerSource.filePath]);
       const runExtract = () =>
         invokeRomWeaverExtractWorker(
           {
@@ -1213,17 +1200,9 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
         return createCompressionExtractResult(outputs);
       };
 
-      let extracted = await runExtract();
-      let selected = selectChdOutputs(extracted);
-      try {
-        return await createChdOutputs(selected.cueFile, selected.outputFiles, selected.primaryFile);
-      } catch (error) {
-        if (!isMissingBrowserVfsOutputError(error)) throw error;
-        await ensureBrowserVfsOutputPaths(extracted.emittedFiles.map((entry) => entry.path));
-        extracted = await runExtract();
-        selected = selectChdOutputs(extracted);
-        return createChdOutputs(selected.cueFile, selected.outputFiles, selected.primaryFile);
-      }
+      const extracted = await runExtract();
+      const selected = selectChdOutputs(extracted);
+      return await createChdOutputs(selected.cueFile, selected.outputFiles, selected.primaryFile);
     } finally {
       await workerSource.cleanup().catch(() => undefined);
     }
@@ -1256,7 +1235,7 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
       const outputFileName = outputName || actualOutputFileName;
       const outputPath = joinPath(outDirPath, stagedOutputFileName);
       await ensureRvzSourceExists();
-      await ensureBrowserVfsOutputPaths(
+      await removeBrowserVfsOutputPaths(
         uniqueNonEmptyStrings([
           outputPath,
           actualOutputFileName ? joinPath(outDirPath, actualOutputFileName) : "",
@@ -1348,7 +1327,7 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
         preseedPaths.push(...getBrowserExtractOutputPathCandidates(outDirPath, stagedOutputFileName));
       preseedPaths.push(outputPath);
       preseedPaths.push(joinPath(outDirPath, actualOutputFileName));
-      await ensureBrowserVfsOutputPaths(filterOutputCandidatesAwayFromSource(preseedPaths, workerSource.filePath), [
+      await removeBrowserVfsOutputPaths(filterOutputCandidatesAwayFromSource(preseedPaths, workerSource.filePath), [
         workerSource.filePath,
       ]);
       const extracted = await invokeRomWeaverExtractWorker(
@@ -1460,10 +1439,15 @@ const createBrowserCompressionRuntime = (workerIo: RuntimeWorkerIo): WorkflowRun
 const createBrowserPatchRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime["patch"] =>
   createSharedPatchRuntime({
     invokeApplyPatchWorker: (input, onProgress, onLog) =>
-      invokeRomWeaverPatchApplyWorker(input, onProgress, onLog, (outputPath) => ensureBrowserVfsOutputPath(outputPath)),
+      invokeRomWeaverPatchApplyWorker(input, onProgress, onLog, (outputPath) =>
+        removeBrowserVfsOutputPaths(
+          [outputPath],
+          [input.romFilePath, ...input.patchFiles.map((patch) => patch.patchFilePath)],
+        ),
+      ),
     invokeCreatePatchWorker: (input, onProgress, onLog) =>
       invokeRomWeaverCreatePatchWorker(input, onProgress, onLog, (outputPath) =>
-        ensureBrowserVfsOutputPath(outputPath),
+        removeBrowserVfsOutputPaths([outputPath], [input.originalFilePath, input.modifiedFilePath]),
       ),
     workerIo,
     workerOutputFailureMessage: "Patch worker did not return browser output",

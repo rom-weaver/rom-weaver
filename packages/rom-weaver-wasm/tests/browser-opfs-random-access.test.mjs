@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   __createBrowserOpfsRandomAccessFileForTest,
   __createBrowserVirtualRandomAccessFileForTest,
+  __createWasiRandomAccessFileInodeForTest,
 } from '../src/rom-weaver-browser-opfs-api.mjs';
 import { createMockSyncAccessHandle } from './opfs-mock-sync-handle.mjs';
 
@@ -235,5 +236,127 @@ describe('BrowserVirtualRandomAccessFile Blob read cache correctness', () => {
     });
     expect(Array.from(second)).toEqual(Array.from(first));
     expect(Array.from(second)).toEqual(Array.from(patternBytes(offset, second.byteLength)));
+  });
+});
+
+function createTestWasiBackingFile(options = {}) {
+  const state = {
+    closeCount: 0,
+    closed: false,
+    flushCount: 0,
+    reopenCount: 0,
+    writes: [],
+  };
+  return {
+    supportsBufferedSequentialWrite: Boolean(options.supportsBufferedSequentialWrite),
+    supportsDirectWasmRead: true,
+    close() {
+      state.closeCount += 1;
+      state.closed = true;
+    },
+    flush() {
+      state.flushCount += 1;
+    },
+    readAt(offset, target) {
+      if (state.closed) return -1;
+      const start = Number(offset);
+      const length = Math.min(target.byteLength, Math.max(0, 16 - start));
+      for (let index = 0; index < length; index += 1) target[index] = (start + index) & 0xff;
+      return length;
+    },
+    reopen() {
+      state.reopenCount += 1;
+      state.closed = false;
+    },
+    size() {
+      return 16;
+    },
+    snapshot() {
+      return {
+        ...state,
+        writes: state.writes.map((write) => ({
+          offset: write.offset,
+          bytes: Array.from(write.bytes),
+        })),
+      };
+    },
+    truncate() {},
+    writeAt(offset, source) {
+      if (state.closed) return -1;
+      state.writes.push({ offset: Number(offset), bytes: source.slice() });
+      return source.byteLength;
+    },
+  };
+}
+
+function openTestInode(inode) {
+  const result = inode.path_open(0, 0n, 0);
+  expect(result.ret).toBe(0);
+  expect(result.fd_obj).toBeTruthy();
+  return result.fd_obj;
+}
+
+describe('WasiRandomAccessFileInode fd_close handling', () => {
+  it('closes close-on-last-fd backing files only after the final fd closes', () => {
+    const file = createTestWasiBackingFile();
+    const inode = __createWasiRandomAccessFileInodeForTest(file, {
+      closeOnLastFdClose: true,
+      readonly: true,
+    });
+    const first = openTestInode(inode);
+    const second = openTestInode(inode);
+
+    expect(first.fd_close()).toBe(0);
+    expect(file.snapshot().closeCount).toBe(0);
+
+    expect(second.fd_close()).toBe(0);
+    expect(file.snapshot().closeCount).toBe(1);
+
+    expect(second.fd_close()).toBe(0);
+    expect(file.snapshot().closeCount).toBe(1);
+    expect(first.fd_read(1).ret).not.toBe(0);
+  });
+
+  it('reopens close-on-last-fd backing files for a later open', () => {
+    const file = createTestWasiBackingFile();
+    const inode = __createWasiRandomAccessFileInodeForTest(file, {
+      closeOnLastFdClose: true,
+      readonly: true,
+    });
+    const first = openTestInode(inode);
+    expect(first.fd_close()).toBe(0);
+    expect(file.snapshot()).toMatchObject({ closeCount: 1, closed: true });
+
+    const second = openTestInode(inode);
+    const read = second.fd_read(4);
+
+    expect(read.ret).toBe(0);
+    expect(Array.from(read.data)).toEqual([0, 1, 2, 3]);
+    expect(file.snapshot()).toMatchObject({ closeCount: 1, closed: false });
+  });
+
+  it('leaves default backing files open after fd_close', () => {
+    const file = createTestWasiBackingFile();
+    const inode = __createWasiRandomAccessFileInodeForTest(file, { readonly: true });
+    const fd = openTestInode(inode);
+
+    expect(fd.fd_close()).toBe(0);
+
+    expect(file.snapshot()).toMatchObject({ closeCount: 0, closed: false });
+  });
+
+  it('flushes buffered writes on fd_close without closing default backing files', () => {
+    const file = createTestWasiBackingFile({ supportsBufferedSequentialWrite: true });
+    const inode = __createWasiRandomAccessFileInodeForTest(file);
+    const fd = openTestInode(inode);
+
+    expect(fd.fd_write(new Uint8Array([3, 1, 4])).ret).toBe(0);
+    expect(file.snapshot().writes).toEqual([]);
+    expect(fd.fd_close()).toBe(0);
+
+    expect(file.snapshot()).toMatchObject({
+      closeCount: 0,
+      writes: [{ bytes: [3, 1, 4], offset: 0 }],
+    });
   });
 });

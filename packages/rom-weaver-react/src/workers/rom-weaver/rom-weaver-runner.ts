@@ -88,6 +88,82 @@ const emitRunnerTraceLine = (options: RomWeaverRunJsonOptions | undefined, messa
   options?.onTraceNonJsonLine?.(`[browser-runner] ${message}`);
 };
 
+const readCommandArgs = (command: RuntimeValue): Record<string, RuntimeValue> => {
+  const args = (command as { args?: RuntimeValue })?.args;
+  return args && typeof args === "object" ? (args as Record<string, RuntimeValue>) : {};
+};
+
+const readRunCommand = (commandOrRequest: RomWeaverRunJsonInput): RuntimeValue => {
+  const requestCommand = (commandOrRequest as { command?: RuntimeValue })?.command;
+  return requestCommand && typeof requestCommand === "object" ? requestCommand : commandOrRequest;
+};
+
+const pushPathValue = (out: Set<string>, value: RuntimeValue) => {
+  if (typeof value !== "string") return;
+  const path = value.trim();
+  if (!path || path.startsWith("-")) return;
+  out.add(path);
+};
+
+const pushPathValues = (out: Set<string>, value: RuntimeValue) => {
+  if (Array.isArray(value)) {
+    for (const entry of value) pushPathValue(out, entry);
+    return;
+  }
+  pushPathValue(out, value);
+};
+
+const collectReferencedVirtualFilePaths = (
+  commandOrRequest: RomWeaverRunJsonInput,
+  options?: RomWeaverRunJsonOptions,
+) => {
+  const paths = new Set<string>();
+  const command = readRunCommand(commandOrRequest) as { type?: RuntimeValue };
+  const args = readCommandArgs(command);
+
+  switch (command?.type) {
+    case "checksum":
+    case "extract":
+    case "inspect":
+      pushPathValue(paths, args.source);
+      break;
+    case "compress":
+      pushPathValues(paths, args.input);
+      break;
+    case "batch-header-fixer":
+    case "trim":
+      pushPathValues(paths, args.source);
+      break;
+    case "patch-apply":
+      pushPathValue(paths, args.input);
+      pushPathValues(paths, args.patches);
+      break;
+    case "patch-create":
+      pushPathValue(paths, args.original);
+      pushPathValue(paths, args.modified);
+      break;
+    default:
+      break;
+  }
+
+  pushPathValues(paths, options?.knownInputPaths);
+  return paths;
+};
+
+const selectActiveVirtualFilesForRun = (
+  activeVirtualFiles: BrowserVirtualFile[],
+  commandOrRequest: RomWeaverRunJsonInput,
+  options?: RomWeaverRunJsonOptions,
+) => {
+  const command = readRunCommand(commandOrRequest) as { type?: RuntimeValue };
+  const referencedPaths = collectReferencedVirtualFilePaths(commandOrRequest, options);
+  if (command?.type === "compress" && [...referencedPaths].some((path) => /\.cue$/i.test(path))) {
+    return activeVirtualFiles;
+  }
+  if (!referencedPaths.size) return activeVirtualFiles;
+  return activeVirtualFiles.filter((file) => referencedPaths.has(file.path));
+};
+
 const readWasmUrlModuleDefault = (module: { default?: unknown }, fallback: string) => {
   const candidate = module.default;
   if (typeof candidate === "string" && candidate.trim()) return candidate;
@@ -197,16 +273,17 @@ const resetRomWeaverRunner = async () => {
 
 const runRomWeaverJson = async (commandOrRequest: RomWeaverRunJsonInput, options?: RomWeaverRunJsonOptions) => {
   const activeVirtualFiles = getActiveBrowserVirtualFiles();
+  const scopedActiveVirtualFiles = selectActiveVirtualFilesForRun(activeVirtualFiles, commandOrRequest, options);
   const configuredVirtualFiles = options?.virtualFiles;
   const runOptionOverrides = { ...(options || {}) };
   // Cached OPFS mounts hold sync access handles; release them before UI-side VFS writes/downloads.
   const defaultInvalidateMountCacheAfterRun = true;
   const runOptions: RomWeaverRunJsonOptions =
-    activeVirtualFiles.length > 0
+    scopedActiveVirtualFiles.length > 0
       ? {
           ...runOptionOverrides,
           virtualFiles: [
-            ...activeVirtualFiles,
+            ...scopedActiveVirtualFiles,
             ...(Array.isArray(configuredVirtualFiles) ? configuredVirtualFiles : []),
           ],
         }
@@ -220,6 +297,8 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunJsonInput, options
     options,
     `runJson preparing command=${formatCommandForTrace(commandOrRequest)} activeVirtualFiles=${JSON.stringify(
       describeVirtualFilesForTrace(activeVirtualFiles),
+    )} scopedVirtualFiles=${JSON.stringify(
+      describeVirtualFilesForTrace(scopedActiveVirtualFiles),
     )} configuredVirtualFiles=${Array.isArray(configuredVirtualFiles) ? configuredVirtualFiles.length : 0} invalidateMountCacheAfterRun=${String(runOptions.invalidateMountCacheAfterRun)}`,
   );
   const runner = await createRomWeaverRunner();

@@ -11,6 +11,7 @@ import {
 import { WORKER_OPFS_MOUNTPOINT } from "../../src/workers/shared/worker-storage/storage-layout.ts";
 
 const encoder = new TextEncoder();
+const MULTI_ROM_ZIP = "tests/fixtures/archives/multi-rom.zip";
 
 const failureDetails = (result) =>
   [
@@ -27,6 +28,12 @@ const failureDetails = (result) =>
 const expectRunSucceeded = (result) => {
   expect(result?.exitCode, failureDetails(result)).toBe(0);
   expect(result?.ok, failureDetails(result)).toBe(true);
+};
+
+const loadFixtureFile = async (filePath, type = "application/octet-stream") => {
+  const response = await fetch(`/${filePath}`);
+  if (!response.ok) throw new Error(`Failed to load fixture ${filePath}`);
+  return new File([await response.arrayBuffer()], filePath.replace(/^.*\//, ""), { type });
 };
 
 afterEach(async () => {
@@ -91,6 +98,7 @@ test("rom-weaver runner reads and writes staged /work OPFS paths", async () => {
 
   try {
     const compressEvents = [];
+    const traceLines = [];
     const compressResult = await runRomWeaverJson(
       {
         args: { format: "gz", input: [staged.filePath], output: outputPath, threads: 1 },
@@ -98,10 +106,12 @@ test("rom-weaver runner reads and writes staged /work OPFS paths", async () => {
       },
       {
         onEvent: (event) => compressEvents.push(event),
+        onTraceNonJsonLine: (line) => traceLines.push(line),
       },
     );
     expectRunSucceeded(compressResult);
     expect(compressEvents.some((event) => event.command === "compress" && event.status === "running")).toBe(true);
+    expect(traceLines.some((line) => line.includes("prepareKnownRequestPaths"))).toBe(false);
 
     const outputStat = await browserRuntime.vfs.stat(outputPath);
     expect(outputStat?.size || 0).toBeGreaterThan(0);
@@ -114,6 +124,47 @@ test("rom-weaver runner reads and writes staged /work OPFS paths", async () => {
   } finally {
     await staged.cleanup().catch(() => undefined);
     await browserRuntime.vfs.remove(sourcePath).catch(() => undefined);
+    await browserRuntime.vfs.remove(outputPath).catch(() => undefined);
+  }
+});
+
+test("rom-weaver runner lazily creates selected archive extract outputs", async () => {
+  await warmupRomWeaverRunner();
+
+  const archive = await browserRuntime.workerIo.stageSource({
+    fallbackFileName: "multi-rom.zip",
+    pathPrefix: "archive-lazy-output",
+    scope: "bench",
+    source: await loadFixtureFile(MULTI_ROM_ZIP, "application/zip"),
+  });
+  const outputPath = `${WORKER_OPFS_MOUNTPOINT}/game.bin`;
+  const traceLines = [];
+
+  try {
+    await browserRuntime.vfs.remove(outputPath).catch(() => undefined);
+    const result = await runRomWeaverJson(
+      {
+        args: {
+          no_nested_extract: true,
+          out_dir: WORKER_OPFS_MOUNTPOINT,
+          select: ["game.bin"],
+          source: archive.filePath,
+        },
+        type: "extract",
+      },
+      {
+        onTraceNonJsonLine: (line) => traceLines.push(line),
+      },
+    );
+    expectRunSucceeded(result);
+    expect(traceLines.some((line) => line.includes("prepareKnownRequestPaths"))).toBe(false);
+
+    const outputStat = await browserRuntime.vfs.stat(outputPath);
+    expect(outputStat?.size || 0).toBeGreaterThan(0);
+  } catch (error) {
+    throw new Error(`${error instanceof Error ? error.message : error}\n${traceLines.join("\n")}`);
+  } finally {
+    await archive.cleanup().catch(() => undefined);
     await browserRuntime.vfs.remove(outputPath).catch(() => undefined);
   }
 });
