@@ -23,7 +23,7 @@ const DEFAULT_WASM_MODULE = resolve(WASM_PACKAGE_DIR, 'rom-weaver-app.wasm');
 const WORK_GUEST_PATH = '/work';
 const STAGE_INPUT_CHUNK_BYTES = 2 * 1024 * 1024;
 
-const SUPPORTED_COMMANDS = new Set(['compress', 'extract', 'checksum', 'patch-create', 'patch-apply']);
+const SUPPORTED_COMMANDS = new Set(['compress', 'extract', 'checksum', 'patch-create', 'patch-apply', 'patch-validate']);
 
 function parseArgs(argv) {
   let wasmModule = DEFAULT_WASM_MODULE;
@@ -185,6 +185,10 @@ function collectPathBindings(commandArgs) {
       addFlagInput('--patch');
       addFlagOutputFile('--output');
       break;
+    case 'patch-validate':
+      addFlagInput('--input');
+      addFlagInput('--patch');
+      break;
     default:
       throw new Error(`unsupported command: ${command}`);
   }
@@ -296,6 +300,27 @@ function commandArgsToRunRequest(args) {
         ...(parsed.flags.has('strip-header') ? { strip_header: true } : {}),
         ...(parsed.flags.has('add-header') ? { add_header: true } : {}),
         ...(parsed.flags.has('repair-checksum') ? { repair_checksum: true } : {}),
+        ...(parsed.flags.has('ignore-checksum-validation') ? { ignore_checksum_validation: true } : {}),
+      };
+      break;
+    case 'patch-validate':
+      commandRequest.args = {
+        input: requireOptionValue(parsed, 'input'),
+        patches: readOptionValues(parsed, 'patch'),
+        ...(readOptionValues(parsed, 'select').length ? { select: readOptionValues(parsed, 'select') } : {}),
+        ...(parsed.flags.has('no-extract') ? { no_extract: true } : {}),
+        ...(parsed.flags.has('no-ignore') ? { no_ignore: true } : {}),
+        ...(readOptionValues(parsed, 'checksum-cache').length ? { checksum_cache: readOptionValues(parsed, 'checksum-cache') } : {}),
+        ...(readOptionValues(parsed, 'validate-with-checksum').length
+          ? { validate_with_checksums: readOptionValues(parsed, 'validate-with-checksum') }
+          : {}),
+        ...(readOptionalNumber(parsed, 'validate-with-size') !== null
+          ? { validate_with_size: readOptionalNumber(parsed, 'validate-with-size') }
+          : {}),
+        ...(readOptionalNumber(parsed, 'validate-with-min-size') !== null
+          ? { validate_with_min_size: readOptionalNumber(parsed, 'validate-with-min-size') }
+          : {}),
+        ...(parsed.flags.has('strip-header') ? { strip_header: true } : {}),
         ...(parsed.flags.has('ignore-checksum-validation') ? { ignore_checksum_validation: true } : {}),
       };
       break;

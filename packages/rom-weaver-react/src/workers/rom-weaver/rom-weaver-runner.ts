@@ -120,6 +120,7 @@ const collectReferencedVirtualFilePaths = (
       pushPathValues(paths, command.args.source);
       break;
     case "patch-apply":
+    case "patch-validate":
       pushPathValue(paths, command.args.input);
       pushPathValues(paths, command.args.patches);
       break;

@@ -11,8 +11,8 @@ use tracing::info;
 use rayon::prelude::*;
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
-    PatchCapabilities, PatchCreateRequest, PatchHandler, ProbeConfidence, Result, RomWeaverError,
-    SharedThreadPool, ThreadCapability,
+    PatchCapabilities, PatchCreateRequest, PatchHandler, PatchValidateRequest, ProbeConfidence,
+    Result, RomWeaverError, SharedThreadPool, ThreadCapability,
 };
 
 const GDIFF_MAGIC: [u8; 4] = [0xD1, 0xFF, 0xD1, 0xFF];
@@ -115,6 +115,38 @@ impl PatchHandler for GdiffPatchHandler {
             ),
             Some(100.0),
             Some(execution),
+        ))
+    }
+
+    fn validate(
+        &self,
+        request: &PatchValidateRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
+        let source_len = fs::metadata(&request.input)?.len();
+        let (summary, commands) = parse_gdiff_apply_plan(patch_path)?;
+        for command in &commands {
+            context.cancel().check()?;
+            if let GdiffApplyCommandKind::Copy { source_offset, len } = command.kind {
+                ensure_copy_range(source_len, source_offset, len)?;
+            }
+        }
+
+        Ok(OperationReport::succeeded(
+            OperationFamily::Patch,
+            Some(self.descriptor.name.to_string()),
+            "validate",
+            format!(
+                "validated {} patch source with {} command(s): {} copy / {} data; output would be {} byte(s)",
+                self.descriptor.name,
+                summary.command_count,
+                summary.copy_commands,
+                summary.data_commands,
+                summary.output_bytes
+            ),
+            Some(100.0),
+            Some(context.plan_threads(ThreadCapability::single_threaded())),
         ))
     }
 

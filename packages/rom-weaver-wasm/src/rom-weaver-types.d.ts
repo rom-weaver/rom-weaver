@@ -25,6 +25,7 @@ export type {
   InspectCommand,
   PatchApplyCommand,
   PatchCreateCommand,
+  PatchValidateCommand,
   RomWeaverCommand,
   RomWeaverProgressEvent,
   RomWeaverRunInput,
@@ -77,12 +78,16 @@ export interface RomWeaverInspectContainerDetails {
 
 export interface RomWeaverInspectPatchDetails {
   format: string | null;
+  minimum_source_size: number | null;
   source_size: number | null;
   target_size: number | null;
   source_crc32: number | null;
   target_crc32: number | null;
   patch_crc32: number | null;
   record_count: number | null;
+  source_window_count: number | null;
+  target_window_count: number | null;
+  window_checksum_count: number | null;
   [key: string]: unknown;
 }
 

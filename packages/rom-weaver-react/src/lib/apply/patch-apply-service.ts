@@ -20,6 +20,7 @@ type PatchSourceValidator = {
 
 type PatchInspectRequirements = {
   format?: string;
+  minimumSourceSize?: number;
   patchCrc32?: string;
   recordCount?: number;
   sourceCrc32?: string;
@@ -69,10 +70,7 @@ const toOptionalFiniteInt = (value: unknown): number | undefined => {
 const toOptionalCrc32Hex = (value: unknown): string | undefined => {
   if (typeof value === "number" && Number.isFinite(value)) return (value >>> 0).toString(16).padStart(8, "0");
   if (typeof value !== "string") return undefined;
-  const normalized = value
-    .trim()
-    .toLowerCase()
-    .replace(HEX_PREFIX_REGEX, "");
+  const normalized = value.trim().toLowerCase().replace(HEX_PREFIX_REGEX, "");
   if (!normalized) return undefined;
   if (HEX_DIGITS_REGEX.test(normalized) && normalized.length <= 8)
     return Number.parseInt(normalized, 16).toString(16).padStart(8, "0");
@@ -85,24 +83,37 @@ const normalizePatchInspectRequirements = (
   details: Awaited<ReturnType<NonNullable<WorkflowRuntime["patch"]["inspectPatch"]>>> | null | undefined,
 ): PatchInspectRequirements | undefined => {
   if (!details || typeof details !== "object") return undefined;
+  const detailRecord = details as Record<string, unknown>;
   const format =
     typeof details.format === "string" && details.format.trim() ? details.format.trim().toUpperCase() : undefined;
+  const minimumSourceSize = toOptionalFiniteInt(detailRecord.minimum_source_size ?? detailRecord.minimumSourceSize);
   const sourceSize = toOptionalFiniteInt(details.source_size);
   const targetSize = toOptionalFiniteInt(details.target_size);
   const recordCount = toOptionalFiniteInt(details.record_count);
   const sourceCrc32 = toOptionalCrc32Hex(details.source_crc32);
   const targetCrc32 = toOptionalCrc32Hex(details.target_crc32);
   const patchCrc32 = toOptionalCrc32Hex(details.patch_crc32);
-  if (!(format || sourceSize !== undefined || targetSize !== undefined || sourceCrc32 || targetCrc32 || patchCrc32))
+  if (
+    !(
+      format ||
+      minimumSourceSize !== undefined ||
+      sourceSize !== undefined ||
+      targetSize !== undefined ||
+      sourceCrc32 ||
+      targetCrc32 ||
+      patchCrc32
+    )
+  )
     return undefined;
   return {
     ...(format ? { format } : {}),
+    ...(minimumSourceSize === undefined ? {} : { minimumSourceSize }),
     ...(patchCrc32 ? { patchCrc32 } : {}),
-    ...(recordCount !== undefined ? { recordCount } : {}),
+    ...(recordCount === undefined ? {} : { recordCount }),
     ...(sourceCrc32 ? { sourceCrc32 } : {}),
-    ...(sourceSize !== undefined ? { sourceSize } : {}),
+    ...(sourceSize === undefined ? {} : { sourceSize }),
     ...(targetCrc32 ? { targetCrc32 } : {}),
-    ...(targetSize !== undefined ? { targetSize } : {}),
+    ...(targetSize === undefined ? {} : { targetSize }),
   };
 };
 

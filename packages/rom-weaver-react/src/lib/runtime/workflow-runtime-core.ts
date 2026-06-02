@@ -10,6 +10,7 @@ import type {
   RuntimeDiscExtractZ3dsInput,
   RuntimePatchApplyWorkerInput,
   RuntimePatchCreateWorkerInput,
+  RuntimePatchValidateWorkerInput,
   RuntimePatchWorkerProgress,
   RuntimeWorkerIo,
   RuntimeWorkerPathSource,
@@ -70,6 +71,11 @@ type PatchRuntimeAdapter = {
     onProgress: ((progress: RuntimePatchWorkerProgress) => void) | undefined,
     onLog: Parameters<NonNullable<WorkflowRuntime["patch"]["createPatch"]>>[0]["onLog"],
   ) => Promise<Parameters<RuntimeWorkerIo["createWorkerOutput"]>[0]>;
+  invokeValidatePatchWorker: (
+    input: RuntimePatchValidateWorkerInput,
+    onProgress: ((progress: RuntimePatchWorkerProgress) => void) | undefined,
+    onLog: Parameters<NonNullable<WorkflowRuntime["patch"]["validatePatch"]>>[0]["onLog"],
+  ) => Promise<{ message?: string; status: "passed" }>;
   workerIo: RuntimeWorkerIo;
   workerOutputFailureMessage?: string;
 };
@@ -139,10 +145,7 @@ const summarizeRuntimeWorkerPathSource = (source: RuntimeWorkerPathSource | unde
       }
     : null;
 
-const toPatchWorkerFiles = (
-  sources: RuntimeWorkerPathSource[],
-  patchMetadata: Array<{ patchFormat?: string }> = [],
-) =>
+const toPatchWorkerFiles = (sources: RuntimeWorkerPathSource[], patchMetadata: Array<{ patchFormat?: string }> = []) =>
   sources.map((patchSource, index) => ({
     patchFileName: patchSource.fileName,
     patchFilePath: patchSource.filePath,
@@ -210,10 +213,10 @@ const createSharedPatchRuntime = (adapter: PatchRuntimeAdapter): WorkflowRuntime
           {
             logLevel,
             options,
-            patchFormat: patches[0]?.patchFormat,
             patchFileName: patchSources[0]?.fileName || "patch.bin",
             patchFilePath: patchSources[0]?.filePath,
             patchFiles: toPatchWorkerFiles(patchSources, patches),
+            patchFormat: patches[0]?.patchFormat,
             romFileName: inputSource.fileName,
             romFilePath: inputSource.filePath,
           },
@@ -301,6 +304,53 @@ const createSharedPatchRuntime = (adapter: PatchRuntimeAdapter): WorkflowRuntime
         format,
         output: await adapter.workerIo.createWorkerOutput(result, outputName, adapter.workerOutputFailureMessage),
       };
+    } finally {
+      await cleanupWorkerSources(workerSources);
+    }
+  },
+  validatePatch: async ({ input, patches, options, logLevel, onLog, onProgress }) => {
+    const traceContext = { logLevel, onLog };
+    const workerSources = await adapter.workerIo.stageSources([
+      {
+        fallbackFileName: "input.bin",
+        pathBucket: "input",
+        pathPrefix: "validate-input",
+        scope: "patch-validate",
+        source: input,
+        trace: traceContext,
+      },
+      ...patches.map((patch, index) => ({
+        fallbackFileName: patch.patchFileName || `patch-${index + 1}.bin`,
+        pathBucket: "patches" as const,
+        pathPrefix: `validate-patch-${index + 1}`,
+        scope: "patch-validate" as const,
+        source: patch.patchFile,
+        trace: traceContext,
+      })),
+    ]);
+    try {
+      const [inputSource, ...patchSources] = workerSources;
+      if (!inputSource) throw new Error("Validate patch worker input was not staged");
+      traceRuntimePatchApply(traceContext, "patch.validate.worker.dispatch", {
+        input: summarizeRuntimeWorkerPathSource(inputSource),
+        patchCount: patchSources.length,
+        patches: patchSources.map((source, index) => summarizeRuntimeWorkerPathSource(source, index)),
+      });
+      const validationOptions = {
+        ...(options || {}),
+        validationRequirements: patches.map((patch) => patch.requirements || null),
+      };
+      return await adapter.invokeValidatePatchWorker(
+        {
+          logLevel,
+          options: validationOptions,
+          patchFiles: toPatchWorkerFiles(patchSources, patches),
+          romFileName: inputSource.fileName,
+          romFilePath: inputSource.filePath,
+        },
+        onProgress ? forwardCreatePatchProgress(onProgress) : undefined,
+        onLog,
+      );
     } finally {
       await cleanupWorkerSources(workerSources);
     }

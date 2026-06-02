@@ -27,6 +27,7 @@ use rom_weaver_core::{
     PatchCapabilities, PatchChecksumValidation, PatchCreateRequest, PatchHandler, ProbeConfidence,
     Result, RomWeaverError, ThreadCapability, XdeltaSecondaryMode,
 };
+use serde_json::json;
 
 const VCDIFF_MAGIC_BYTES: [u8; 3] = [0xD6, 0xC3, 0xC4];
 const VCDIFF_VERSION_STANDARD: u8 = 0x00;
@@ -124,10 +125,22 @@ impl PatchHandler for VcdiffPatchHandler {
     fn parse(&self, patch_path: &Path, _context: &OperationContext) -> Result<OperationReport> {
         let mut reader = BufReader::new(File::open(patch_path)?);
         let patch = parse_patch(&mut reader)?;
+        let minimum_source_size = patch.minimum_source_size()?;
+        let target_size = patch.target_size()?;
         let checksum_windows = patch
             .windows
             .iter()
             .filter(|window| window.checksum.is_some())
+            .count();
+        let source_windows = patch
+            .windows
+            .iter()
+            .filter(|window| matches!(window.source_kind, Some(WindowSourceKind::Source)))
+            .count();
+        let target_windows = patch
+            .windows
+            .iter()
+            .filter(|window| matches!(window.source_kind, Some(WindowSourceKind::Target)))
             .count();
         let mut label = if patch.secondary_compressor_id.is_some() {
             format!(
@@ -157,14 +170,29 @@ impl PatchHandler for VcdiffPatchHandler {
                 code_table.near_size, code_table.same_size, code_table.data_len
             ));
         }
-        Ok(OperationReport::succeeded(
+        let mut report = OperationReport::succeeded(
             OperationFamily::Patch,
             Some(self.descriptor.name.to_string()),
             "parse",
             label,
             Some(100.0),
             None,
-        ))
+        );
+        report.details = Some(json!({
+            "patch": {
+                "format": self.descriptor.name,
+                "minimum_source_size": minimum_source_size,
+                "record_count": patch.windows.len(),
+                "source_window_count": source_windows,
+                "target_size": target_size,
+                "target_window_count": target_windows,
+                "window_checksum_count": checksum_windows,
+                "secondary_compression": patch.secondary_compressor_id.is_some(),
+                "application_header": patch.app_header.is_some(),
+                "custom_code_table": patch.custom_code_table.is_some(),
+            }
+        }));
+        Ok(report)
     }
 
     fn apply(
@@ -593,6 +621,28 @@ struct WindowIndex {
 }
 
 impl WindowIndex {}
+
+impl ParsedPatch {
+    fn minimum_source_size(&self) -> Result<Option<u64>> {
+        self.windows
+            .iter()
+            .filter(|window| matches!(window.source_kind, Some(WindowSourceKind::Source)))
+            .try_fold(None, |required, window| {
+                let end = checked_add(
+                    window.source_segment_position,
+                    window.source_segment_size,
+                    "source requirement size",
+                )?;
+                Ok(Some(required.map_or(end, |current: u64| current.max(end))))
+            })
+    }
+
+    fn target_size(&self) -> Result<u64> {
+        self.windows.iter().try_fold(0, |total, window| {
+            checked_add(total, window.target_window_size, "patch target size")
+        })
+    }
+}
 
 fn read_source_segment<R: Read + Seek>(
     reader: &mut R,

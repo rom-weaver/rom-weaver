@@ -59,6 +59,7 @@ impl CliApp {
             Commands::Trim(args) => self.run_trim(args),
             Commands::BatchHeaderFixer(args) => self.run_batch_header_fixer(args),
             Commands::PatchApply(args) => self.run_patch_apply(args),
+            Commands::PatchValidate(args) => self.run_patch_validate(args),
             Commands::PatchCreate(args) => self.run_patch_create(args),
         }
     }
@@ -72,6 +73,7 @@ impl CliApp {
             Commands::Trim(_) => "trim",
             Commands::BatchHeaderFixer(_) => "batch-header-fixer",
             Commands::PatchApply(_) => "patch-apply",
+            Commands::PatchValidate(_) => "patch-validate",
             Commands::PatchCreate(_) => "patch-create",
         }
     }
@@ -1399,11 +1401,13 @@ impl CliApp {
         self.resolve_source_with_auto_extract_with_mode(
             source,
             select,
-            no_extract,
-            no_ignore,
             context,
             labels,
-            AutoExtractMode::Recursive,
+            AutoExtractResolutionOptions {
+                no_extract,
+                no_ignore,
+                mode: AutoExtractMode::Recursive,
+            },
         )
     }
 
@@ -1418,11 +1422,13 @@ impl CliApp {
         self.resolve_source_with_auto_extract_with_mode(
             source,
             select,
-            false,
-            no_ignore,
             context,
             labels,
-            AutoExtractMode::SingleStep,
+            AutoExtractResolutionOptions {
+                no_extract: false,
+                no_ignore,
+                mode: AutoExtractMode::SingleStep,
+            },
         )
     }
 
@@ -1430,25 +1436,23 @@ impl CliApp {
         &self,
         source: &Path,
         select: &[String],
-        no_extract: bool,
-        no_ignore: bool,
         context: &OperationContext,
         labels: AutoExtractResolutionLabels<'_>,
-        mode: AutoExtractMode,
+        options: AutoExtractResolutionOptions,
     ) -> Result<ResolvedChecksumSource> {
         trace!(
             source = %source.display(),
             selections = select.len(),
-            no_extract,
-            no_ignore,
-            mode = ?mode,
+            no_extract = options.no_extract,
+            no_ignore = options.no_ignore,
+            mode = ?options.mode,
             command = labels.command,
             family = ?labels.family,
             format = ?labels.format,
             source_label = labels.source_label,
             "starting auto-extract source resolution"
         );
-        if no_extract {
+        if options.no_extract {
             trace!(
                 source = %source.display(),
                 "auto-extract source resolution disabled by flag"
@@ -1601,7 +1605,7 @@ impl CliApp {
                 )));
             }
 
-            let candidates = if no_ignore {
+            let candidates = if options.no_ignore {
                 all_candidates.clone()
             } else {
                 let non_ignored = all_candidates
@@ -1630,7 +1634,7 @@ impl CliApp {
                                 "auto-extract continued with interactively selected ignored candidate"
                             );
                             current_source = selected.source;
-                            if mode == AutoExtractMode::SingleStep {
+                            if options.mode == AutoExtractMode::SingleStep {
                                 break;
                             }
                             continue;
@@ -1671,7 +1675,7 @@ impl CliApp {
                             "auto-extract continued with interactively selected candidate"
                         );
                         current_source = selected.source;
-                        if mode == AutoExtractMode::SingleStep {
+                        if options.mode == AutoExtractMode::SingleStep {
                             break;
                         }
                         continue;
@@ -1718,7 +1722,7 @@ impl CliApp {
                 "auto-extract selected single candidate"
             );
             current_source = selected_candidate.source;
-            if mode == AutoExtractMode::SingleStep {
+            if options.mode == AutoExtractMode::SingleStep {
                 break;
             }
         }

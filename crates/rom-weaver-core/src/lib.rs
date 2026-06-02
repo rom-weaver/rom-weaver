@@ -31,7 +31,7 @@ pub use registry::{
     CodecDescriptor, CodecOperationRequest, ContainerCapabilities, ContainerCreateRequest,
     ContainerExtractRequest, ContainerHandler, ContainerHandlerOperations, ContainerInspectRequest,
     ContainerListEntry, FormatDescriptor, OperationReport, PatchApplyRequest, PatchCapabilities,
-    PatchCreateRequest, PatchHandler, ProbeConfidence, traced_codec_backend,
+    PatchCreateRequest, PatchHandler, PatchValidateRequest, ProbeConfidence, traced_codec_backend,
     traced_container_handler, traced_patch_handler,
 };
 pub use selection::{SelectionMatcher, normalize_archive_name};

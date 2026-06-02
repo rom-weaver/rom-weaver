@@ -66,6 +66,7 @@ type ApplyWorkflowPatchState = {
   warnings: WorkflowWarning[];
   requirements?: {
     format?: string;
+    minimumSourceSize?: number;
     patchCrc32?: string;
     recordCount?: number;
     sourceCrc32?: string;
@@ -77,9 +78,16 @@ type ApplyWorkflowPatchState = {
     actualCrc32?: string;
     actualSize?: number;
     mismatchReason?: "crc32" | "size" | "size+crc32";
+    minimumSourceSize?: number;
     requiredCrc32?: string;
     requiredSize?: number;
     status: "invalid" | "pending" | "unknown" | "valid";
+  };
+  patchValidation?: {
+    message?: string;
+    status: "invalid" | "pending" | "unknown" | "valid";
+    targetInputId?: string;
+    validationKey?: string;
   };
 };
 

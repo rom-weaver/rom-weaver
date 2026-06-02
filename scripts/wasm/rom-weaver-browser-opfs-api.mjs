@@ -52,6 +52,7 @@ const THREAD_AWARE_COMMANDS = new Set([
   'extract',
   'patch-apply',
   'patch-create',
+  'patch-validate',
   'trim',
 ]);
 const MAX_WASI_THREAD_ID = 0x1fffffff;
@@ -2724,6 +2725,7 @@ function collectRequestInputPaths(request) {
       pushPathValue(values, args.modified);
       break;
     case 'patch-apply':
+    case 'patch-validate':
       pushPathValue(values, args.input);
       pushPathValues(values, args.patches);
       break;

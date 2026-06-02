@@ -11,8 +11,9 @@ use crc32fast::Hasher;
 use rayon::prelude::*;
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
-    PatchCapabilities, PatchChecksumValidation, PatchCreateRequest, PatchHandler, ProbeConfidence,
-    Result, RomWeaverError, SharedThreadPool, ThreadCapability,
+    PatchCapabilities, PatchChecksumValidation, PatchCreateRequest, PatchHandler,
+    PatchValidateRequest, ProbeConfidence, Result, RomWeaverError, SharedThreadPool,
+    ThreadCapability,
 };
 
 const PMSR_MAGIC: &[u8; 4] = b"PMSR";
@@ -147,6 +148,41 @@ impl PatchHandler for PmsrPatchHandler {
             ),
             Some(100.0),
             Some(execution),
+        ))
+    }
+
+    fn validate(
+        &self,
+        request: &PatchValidateRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
+        let patch = parse_pmsr_file(patch_path)?;
+        let validate_source =
+            context.patch_checksum_validation() == PatchChecksumValidation::Strict;
+
+        if validate_source {
+            validate_paper_mario_source(&request.input)?;
+        }
+        let source_len = fs::metadata(&request.input)?.len();
+        let output_len = patch.min_target_size.max(source_len);
+        let _ = pmsr_records_are_non_overlapping(&patch, output_len)?;
+
+        let checksum_suffix = if validate_source {
+            String::new()
+        } else {
+            "; checksum validation skipped".to_string()
+        };
+        Ok(crate::patch_success_report(
+            self.descriptor,
+            "validate",
+            format!(
+                "validated {} patch source with {} record(s){}",
+                self.descriptor.name,
+                patch.records.len(),
+                checksum_suffix
+            ),
+            Some(context.plan_threads(ThreadCapability::single_threaded())),
         ))
     }
 

@@ -12,8 +12,8 @@ use rom_weaver_codecs::decode_bzip2_exact;
 use rom_weaver_core::{
     BlockCacheReader, ChunkPlanner, DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES,
     DEFAULT_CHUNK_SIZE_BYTES, FormatDescriptor, OperationContext, OperationReport,
-    PatchApplyRequest, PatchCapabilities, PatchCreateRequest, PatchHandler, Result, RomWeaverError,
-    SharedBlockCacheReader, SharedThreadPool, ThreadCapability,
+    PatchApplyRequest, PatchCapabilities, PatchCreateRequest, PatchHandler, PatchValidateRequest,
+    Result, RomWeaverError, SharedBlockCacheReader, SharedThreadPool, ThreadCapability,
 };
 
 use crate::qbsdiff_support::qbsdiff_thread_capability;
@@ -122,6 +122,30 @@ impl PatchHandler for BdfPatchHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         self.apply_report(request, context)
+    }
+
+    fn validate(
+        &self,
+        request: &PatchValidateRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
+        let patch_layout = parse_bsdiff_patch_layout_from_path(patch_path)?;
+        let source_len_u64 = fs::metadata(&request.input)?.len();
+        let source_len = usize::try_from(source_len_u64).map_err(|_| {
+            RomWeaverError::Validation("BSDIFF40 source exceeded addressable memory".into())
+        })?;
+        let plan = parse_bsdiff_parallel_plan_with_layout(patch_path, &patch_layout, source_len)?;
+
+        Ok(crate::patch_success_report(
+            self.descriptor,
+            "validate",
+            format!(
+                "validated {} patch source; output would be {} byte(s)",
+                self.descriptor.name, plan.output_len
+            ),
+            Some(context.plan_threads(ThreadCapability::single_threaded())),
+        ))
     }
 
     fn create(

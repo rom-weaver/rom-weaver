@@ -19,6 +19,7 @@ import type { CompressionListResult } from "../../types/workflow-runtime.ts";
 import type {
   RuntimePatchApplyWorkerInput,
   RuntimePatchCreateWorkerInput,
+  RuntimePatchValidateWorkerInput,
   RuntimePatchWorkerProgress,
   RuntimeWorkerIo,
   WorkflowRuntimeLog,
@@ -136,14 +137,16 @@ const resolvePatchApplyThreadArg = (
   patchFiles: Array<{ patchFileName?: string; patchFilePath?: string; patchFormat?: string }>,
 ) => {
   const hasXdeltaPatch = patchFiles.some((patch) => {
-    return isXdeltaPatchFormat(patch.patchFormat)
-      || isXdeltaPatchPath(patch.patchFilePath)
-      || isXdeltaPatchPath(patch.patchFileName);
+    return (
+      isXdeltaPatchFormat(patch.patchFormat) ||
+      isXdeltaPatchPath(patch.patchFilePath) ||
+      isXdeltaPatchPath(patch.patchFileName)
+    );
   });
   const hasBpsPatch = patchFiles.some((patch) => {
-    return isBpsPatchFormat(patch.patchFormat)
-      || isBpsPatchPath(patch.patchFilePath)
-      || isBpsPatchPath(patch.patchFileName);
+    return (
+      isBpsPatchFormat(patch.patchFormat) || isBpsPatchPath(patch.patchFilePath) || isBpsPatchPath(patch.patchFileName)
+    );
   });
   if (hasXdeltaPatch) {
     return {
@@ -413,12 +416,16 @@ const getContainerEntriesFromInspect = (result: RomWeaverRunJsonResult): Compres
 
 type RomWeaverInspectPatchDetails = {
   format: string | null;
+  minimum_source_size: number | null;
   patch_crc32: number | null;
   record_count: number | null;
   source_crc32: number | null;
   source_size: number | null;
+  source_window_count: number | null;
   target_crc32: number | null;
   target_size: number | null;
+  target_window_count: number | null;
+  window_checksum_count: number | null;
 };
 
 const toNullableInt = (value: unknown): number | null => {
@@ -433,14 +440,28 @@ const toNullableInt = (value: unknown): number | null => {
 const toNullableUint32 = (value: unknown): number | null => {
   if (typeof value === "number" && Number.isFinite(value)) return value >>> 0;
   if (typeof value !== "string") return null;
-  const normalized = value
-    .trim()
-    .toLowerCase()
-    .replace(/^0x/, "");
+  const normalized = value.trim().toLowerCase().replace(/^0x/, "");
   if (!normalized) return null;
   if (/^[0-9a-f]+$/i.test(normalized) && normalized.length <= 8) return Number.parseInt(normalized, 16) >>> 0;
   if (/^\d+$/.test(normalized)) return Number.parseInt(normalized, 10) >>> 0;
   return null;
+};
+
+const toOptionalUint32Hex = (value: unknown): string | undefined => {
+  const normalized = toNullableUint32(value);
+  return normalized === null ? undefined : normalized.toString(16).padStart(8, "0");
+};
+
+const toOptionalChecksumHex = (value: unknown): string | undefined => {
+  if (typeof value === "number" && Number.isFinite(value)) return (value >>> 0).toString(16).padStart(8, "0");
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim().toLowerCase().replace(/^0x/, "");
+  return normalized && /^[0-9a-f]+$/i.test(normalized) ? normalized : undefined;
+};
+
+const toOptionalInt = (value: unknown): number | undefined => {
+  const normalized = toNullableInt(value);
+  return normalized === null ? undefined : normalized;
 };
 
 const getPatchDetailsFromInspect = (result: RomWeaverRunJsonResult): RomWeaverInspectPatchDetails => {
@@ -450,12 +471,16 @@ const getPatchDetailsFromInspect = (result: RomWeaverRunJsonResult): RomWeaverIn
   const formatValue = patch?.format ?? patch?.patch_format ?? details?.format;
   return {
     format: typeof formatValue === "string" && formatValue.trim() ? formatValue.trim() : null,
+    minimum_source_size: toNullableInt(patch?.minimum_source_size ?? patch?.minimumSourceSize),
     patch_crc32: toNullableUint32(patch?.patch_crc32 ?? patch?.patchCrc32),
     record_count: toNullableInt(patch?.record_count ?? patch?.recordCount),
     source_crc32: toNullableUint32(patch?.source_crc32 ?? patch?.sourceCrc32),
     source_size: toNullableInt(patch?.source_size ?? patch?.sourceSize),
+    source_window_count: toNullableInt(patch?.source_window_count ?? patch?.sourceWindowCount),
     target_crc32: toNullableUint32(patch?.target_crc32 ?? patch?.targetCrc32),
     target_size: toNullableInt(patch?.target_size ?? patch?.targetSize),
+    target_window_count: toNullableInt(patch?.target_window_count ?? patch?.targetWindowCount),
+    window_checksum_count: toNullableInt(patch?.window_checksum_count ?? patch?.windowChecksumCount),
   };
 };
 
@@ -834,6 +859,137 @@ const runRomWeaverInspectPatchWorker = async (
   return getPatchDetailsFromInspect(result);
 };
 
+const normalizePatchValidationChecksumEntries = (value: unknown): string[] => {
+  const entries: string[] = [];
+  const push = (algorithm: string, checksum: unknown) => {
+    const normalizedAlgorithm = String(algorithm || "")
+      .trim()
+      .toLowerCase();
+    const normalizedChecksum = toOptionalChecksumHex(checksum);
+    if (normalizedAlgorithm && normalizedChecksum) entries.push(`${normalizedAlgorithm}=${normalizedChecksum}`);
+  };
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      if (typeof entry === "string" && entry.trim()) entries.push(entry.trim());
+      else {
+        const record = asRecord(entry);
+        if (record) {
+          for (const [algorithm, checksum] of Object.entries(record)) push(algorithm, checksum);
+        }
+      }
+    }
+    return entries;
+  }
+  const record = asRecord(value);
+  if (!record) return entries;
+  for (const [algorithm, checksum] of Object.entries(record)) push(algorithm, checksum);
+  return entries;
+};
+
+const getPatchValidationRequirements = (options: RuntimePatchValidateWorkerInput["options"]) => {
+  const optionRecord = asRecord(options);
+  const requirementsValue = optionRecord?.validationRequirements;
+  if (Array.isArray(requirementsValue)) return asRecord(requirementsValue[0]) || null;
+  return asRecord(requirementsValue);
+};
+
+const invokeRomWeaverPatchValidateWorker = async (
+  input: RuntimePatchValidateWorkerInput,
+  onProgress?: (progress: RuntimePatchWorkerProgress) => void,
+  onLog?: (log: WorkflowRuntimeLog) => void,
+): Promise<{ message?: string; status: "passed" }> => {
+  const requirements = getPatchValidationRequirements(input.options);
+  const optionRecord = asRecord(input.options);
+  const sourceCrc32 = toOptionalUint32Hex(requirements?.sourceCrc32 ?? requirements?.source_crc32);
+  const validateWithChecksums = [
+    ...normalizePatchValidationChecksumEntries(
+      optionRecord?.validateWithChecksums ?? optionRecord?.validate_with_checksums,
+    ),
+    ...(sourceCrc32 ? [`crc32=${sourceCrc32}`] : []),
+  ];
+  const checksumCache = normalizePatchValidationChecksumEntries(
+    optionRecord?.checksumCache ?? optionRecord?.checksum_cache,
+  );
+  const validateWithSize = toOptionalInt(requirements?.sourceSize ?? requirements?.source_size);
+  const validateWithMinSize = toOptionalInt(requirements?.minimumSourceSize ?? requirements?.minimum_source_size);
+  const removeHeader = Boolean((input.options as { removeHeader?: unknown } | undefined)?.removeHeader);
+  const ignoreChecksumValidation = Boolean(
+    (input.options as { ignoreChecksumValidation?: unknown; ignore_checksum_validation?: unknown } | undefined)
+      ?.ignoreChecksumValidation ||
+      (input.options as { ignoreChecksumValidation?: unknown; ignore_checksum_validation?: unknown } | undefined)
+        ?.ignore_checksum_validation,
+  );
+  const requestedThreadArg = toThreadBudget((input.options as { workerThreads?: unknown } | undefined)?.workerThreads);
+  const { forceSingleThreadReason, forcedSingleThread, hasBpsPatch, hasXdeltaPatch, threadArg } =
+    resolvePatchApplyThreadArg(requestedThreadArg, input.patchFiles);
+  const disableDefaultThreadArgInjection = hasBpsPatch && !threadArg;
+  const virtualOnlyMounts = hasBpsPatch;
+  const scratchFilePoolSize = hasBpsPatch ? 8 : 64;
+  const syncAccessMode = hasBpsPatch ? "readwrite-unsafe" : undefined;
+  const command: RomWeaverCommand = {
+    args: {
+      ...(checksumCache.length ? { checksum_cache: checksumCache } : {}),
+      ignore_checksum_validation: ignoreChecksumValidation,
+      input: input.romFilePath,
+      no_extract: true,
+      patches: input.patchFiles.map((patch) => patch.patchFilePath),
+      strip_header: removeHeader,
+      ...(threadArg ? { threads: threadArg } : {}),
+      ...(validateWithChecksums.length ? { validate_with_checksums: validateWithChecksums } : {}),
+      ...(validateWithMinSize === undefined ? {} : { validate_with_min_size: BigInt(validateWithMinSize) }),
+      ...(validateWithSize === undefined ? {} : { validate_with_size: BigInt(validateWithSize) }),
+    },
+    type: "patch-validate",
+  };
+  emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson patch-validate dispatch", {
+    command,
+    disableDefaultThreadArgInjection,
+    forcedSingleThread,
+    forceSingleThreadReason,
+    hasBpsPatch,
+    hasXdeltaPatch,
+    patchCount: input.patchFiles.length,
+    requestedThreadArg,
+    romFilePath: input.romFilePath,
+    scratchFilePoolSize,
+    syncAccessMode: syncAccessMode || "",
+    threadArg,
+    validateWithChecksums,
+    validateWithMinSize,
+    validateWithSize,
+    virtualOnlyMounts,
+  });
+
+  const result = await runRomWeaverJson(
+    command,
+    toRomWeaverOptions({
+      defaultThreads: disableDefaultThreadArgInjection ? 0 : undefined,
+      invalidateMountCacheBeforeRun: true,
+      logLevel: input.logLevel,
+      onEvent: (event) => {
+        const progress = toSimpleProgress(event);
+        if (progress) onProgress?.(progress);
+      },
+      onLog,
+      scratchFilePoolSize,
+      syncAccessMode,
+      virtualOnlyMounts,
+    }),
+  );
+  if (!(result.ok && result.exitCode === 0)) {
+    const failureMessage = await appendBrowserStorageContext(
+      getRomWeaverFailureMessage(result, "Patch validation failed"),
+    );
+    throw new Error(failureMessage);
+  }
+
+  const terminal = getTerminalEvent(result);
+  return {
+    message: terminal ? getRomWeaverRunEventLabel(terminal) : "Patch validation passed",
+    status: "passed",
+  };
+};
+
 const invokeRomWeaverPatchApplyWorker = async (
   input: RuntimePatchApplyWorkerInput,
   onProgress?: (progress: RuntimePatchWorkerProgress) => void,
@@ -1121,6 +1277,7 @@ export {
   invokeRomWeaverCreatePatchWorker,
   invokeRomWeaverExtractWorker,
   invokeRomWeaverPatchApplyWorker,
+  invokeRomWeaverPatchValidateWorker,
   normalizeChdCodecArgs,
   normalizeCodecEntries,
   resolvePatchApplyThreadArg,

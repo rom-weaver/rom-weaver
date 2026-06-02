@@ -21,9 +21,9 @@ use rom_weaver_core::{
     CancellationToken, ChecksumEngine, ChecksumRequest, ContainerCreateRequest,
     ContainerExtractRequest, ContainerHandler, ContainerInspectRequest, ContainerListEntry,
     OperationContext, OperationFamily, OperationReport, OperationStatus, PatchApplyRequest,
-    PatchChecksumValidation, PatchCreateRequest, ProbeConfidence, ProgressEvent, ProgressSink,
-    Result, RomWeaverError, ThreadBudget, ThreadCapability, ThreadExecution, XdeltaSecondaryMode,
-    should_ignore_common_container_file,
+    PatchChecksumValidation, PatchCreateRequest, PatchValidateRequest, ProbeConfidence,
+    ProgressEvent, ProgressSink, Result, RomWeaverError, ThreadBudget, ThreadCapability,
+    ThreadExecution, XdeltaSecondaryMode, should_ignore_common_container_file,
 };
 use rom_weaver_libarchive::{
     ReadFilter as LibarchiveReadFilter, list_regular_archive_file_entries, with_raw_stream_reader,
@@ -67,6 +67,14 @@ pub enum Commands {
         )
     )]
     PatchApply(PatchApplyCommand),
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        command(
+            about = "Validate one or more ROM patch files against an input without writing output",
+            long_about = "Validate one or more ROM patch files against an input without writing output.\n\nValidation performs the same patch-format checksum checks as patch-apply when the handler supports them, including VCDIFF/xdelta target-window checksums. It also accepts optional input checksum and size values for source preflight."
+        )
+    )]
+    PatchValidate(PatchValidateCommand),
     PatchCreate(PatchCreateCommand),
 }
 
@@ -632,6 +640,119 @@ pub struct PatchApplyCommand {
         arg(
             long,
             help = "Skip patch-provided checksum validation during patch apply (source, target, and patch-level checks when supported)"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub ignore_checksum_validation: bool,
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long, default_value = "auto"))]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub threads: ThreadBudget,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+pub struct PatchValidateCommand {
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long))]
+    pub input: PathBuf,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "select",
+            help = "Container payload selection pattern(s) used while auto-extracting patch-validate input and patch files"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub select: Vec<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            help = "Disable container auto-extract and validate the raw input and patch bytes directly"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub no_extract: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            help = "Disable default ignore filtering during patch-validate container payload resolution"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub no_ignore: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "patch",
+            required = true,
+            help = "Patch file(s) to validate in order; repeat --patch for each step"
+        )
+    )]
+    pub patches: Vec<PathBuf>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "checksum-cache",
+            value_name = "ALGO=HEX",
+            help = "Seed effective patch input checksum cache before validation; repeat for multiple algorithms (for example: --checksum-cache crc32=1234abcd)"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub checksum_cache: Vec<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "validate-with-checksum",
+            value_name = "ALGO=HEX",
+            help = "Validate effective patch input checksum before dry-run apply; repeat for multiple algorithms (for example: --validate-with-checksum crc32=1234abcd)"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub validate_with_checksums: Vec<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "validate-with-size",
+            value_name = "BYTES",
+            help = "Validate exact effective patch input size before dry-run apply"
+        )
+    )]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub validate_with_size: Option<u64>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "validate-with-min-size",
+            value_name = "BYTES",
+            help = "Validate minimum effective patch input size before dry-run apply"
+        )
+    )]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub validate_with_min_size: Option<u64>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            help = "Remove a detected ROM header before patch validation (A78/LNX/NES/FDS/SMC signatures; SNES/PCE copier-size rules)"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub strip_header: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            help = "Skip patch-provided checksum validation during patch validation"
         )
     )]
     #[serde(default)]
@@ -1409,6 +1530,13 @@ struct AutoExtractResolutionLabels<'a> {
     format: Option<&'a str>,
     source_label: &'a str,
     temp_prefix: &'a str,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct AutoExtractResolutionOptions {
+    no_extract: bool,
+    no_ignore: bool,
+    mode: AutoExtractMode,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

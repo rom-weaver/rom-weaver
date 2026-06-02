@@ -67,6 +67,7 @@ type ApplyWorkflowSyncState = {
 };
 
 const PATCH_OUTPUT_LABEL_PATTERN = /\[([^\]]+)\](?:\.[^.]+)?\d*$/;
+const SIZE_VALIDATION_LABELS = new Set(["size", "min size"]);
 
 const getOutputSourceKey = (inputs: BinarySource[], patches: BinarySource[]) =>
   JSON.stringify({
@@ -107,7 +108,7 @@ const getAutomaticApplyOutputName = (
 
 const formatPatchValidationValue = (label: string, value: number | string | undefined) => {
   if (value === undefined || value === "") return "";
-  if (label !== "size") return `${label}=${value}`;
+  if (!SIZE_VALIDATION_LABELS.has(label)) return `${label}=${value}`;
   const numericValue = typeof value === "number" ? value : Number.parseInt(String(value), 10);
   if (!Number.isFinite(numericValue)) return `${label}=${value}`;
   const bytesLabel = formatByteSize(numericValue);
@@ -119,30 +120,36 @@ const formatPatchValidationValue = (label: string, value: number | string | unde
 const getPatchValidationDetails = (patch: ApplyWorkflowPatchState) => {
   const requirementValues = [
     formatPatchValidationValue("size", patch.requirements?.sourceSize),
+    formatPatchValidationValue("min size", patch.requirements?.minimumSourceSize),
     formatPatchValidationValue("crc32", patch.requirements?.sourceCrc32),
   ].filter(Boolean);
-  const actualValue = [
-    formatPatchValidationValue("size", patch.checksumPreflight?.actualSize),
-    formatPatchValidationValue("crc32", patch.checksumPreflight?.actualCrc32),
-  ]
-    .filter(Boolean)
-    .join(", ");
-  const status = patch.checksumPreflight?.status || (requirementValues.length ? "pending" : "unknown");
+  const validationValues = requirementValues.length || !patch.patchValidation ? requirementValues : ["dry-run apply"];
+  const actualValue = "";
+  const status =
+    patch.patchValidation?.status ||
+    patch.checksumPreflight?.status ||
+    (requirementValues.length ? "pending" : "unknown");
   const message =
-    status === "valid"
-      ? "Actual input"
-      : status === "invalid"
-        ? "Actual input"
-        : status === "pending"
-          ? "Actual input pending"
-          : "Patch does not provide source requirements";
+    patch.patchValidation?.status === "valid"
+      ? "Patch validation passed"
+      : patch.patchValidation?.status === "invalid"
+        ? patch.patchValidation.message || "Patch validation failed"
+        : patch.patchValidation?.status === "pending"
+          ? "Patch validation pending"
+          : status === "valid"
+            ? "Source requirements matched"
+            : status === "invalid"
+              ? "Source requirements mismatch"
+              : status === "pending"
+                ? "Source requirements pending"
+                : "Patch does not provide source requirements";
   return {
     checksumMismatch: status === "invalid",
     validationActualValue: actualValue,
-    validationLabel: "Expected",
+    validationLabel: requirementValues.length ? "Expected" : "Validation",
     validationMessage: message,
     validationState: status,
-    validationValues: requirementValues,
+    validationValues,
   };
 };
 

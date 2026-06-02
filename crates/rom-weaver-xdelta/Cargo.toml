@@ -12,3 +12,4 @@ oxidelta = { version = "0.1.4", default-features = false, features = ["adler32",
 rayon.workspace = true
 rom-weaver-checksum = { path = "../rom-weaver-checksum" }
 rom-weaver-core = { path = "../rom-weaver-core" }
+serde_json.workspace = true

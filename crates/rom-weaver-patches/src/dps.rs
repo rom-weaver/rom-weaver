@@ -11,9 +11,9 @@ use rayon::prelude::*;
 use rom_weaver_core::{
     DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES, FormatDescriptor,
     OperationContext, OperationFamily, OperationReport, PatchApplyRequest, PatchCapabilities,
-    PatchChecksumValidation, PatchCreateRequest, PatchHandler, ProbeConfidence, Result,
-    RomWeaverError, SharedBlockCacheReader, SharedThreadPool, ThreadCapability,
-    ValidationCodeError,
+    PatchChecksumValidation, PatchCreateRequest, PatchHandler, PatchValidateRequest,
+    ProbeConfidence, Result, RomWeaverError, SharedBlockCacheReader, SharedThreadPool,
+    ThreadCapability, ValidationCodeError,
 };
 
 const DPS_TEXT_FIELD_BYTES: usize = 64;
@@ -187,6 +187,75 @@ impl PatchHandler for DpsPatchHandler {
             ),
             Some(100.0),
             Some(execution),
+        ))
+    }
+
+    fn validate(
+        &self,
+        request: &PatchValidateRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
+        let validate_source_size =
+            context.patch_checksum_validation() == PatchChecksumValidation::Strict;
+        let parse_mode = if validate_source_size {
+            DpsParseMode::Strict
+        } else {
+            DpsParseMode::WarnAndStopOnMalformedRecord
+        };
+        let parsed = parse_dps_file(patch_path, parse_mode)?;
+        let source_len_u64 = fs::metadata(&request.input)?.len();
+        let source_len = usize::try_from(source_len_u64).map_err(|_| {
+            RomWeaverError::ValidationCode(
+                dps_validation_code("DPS_SOURCE_INPUT_EXCEEDED_ADDRESSABLE_MEMORY")
+                    .with_message("DPS source input exceeded addressable memory")
+                    .with_field("format", self.descriptor.name)
+                    .with_field("source_len", source_len_u64),
+            )
+        })?;
+        let source_len_u32 = u32::try_from(source_len_u64).map_err(|_| {
+            RomWeaverError::ValidationCode(
+                dps_validation_code("DPS_SOURCE_INPUT_EXCEEDED_U32_MAX")
+                    .with_message("DPS source input exceeded maximum supported size")
+                    .with_field("format", self.descriptor.name)
+                    .with_field("source_len", source_len_u64)
+                    .with_field("max_supported", u32::MAX),
+            )
+        })?;
+        if validate_source_size && source_len_u32 != parsed.source_size {
+            return Err(RomWeaverError::ValidationCode(
+                dps_validation_code("DPS_SOURCE_SIZE_MISMATCH")
+                    .with_message("DPS source size mismatch")
+                    .with_field("format", self.descriptor.name)
+                    .with_field("expected", parsed.source_size)
+                    .with_field("actual", source_len_u32),
+            ));
+        }
+        let output_len = usize::try_from(parsed.output_size).map_err(|_| {
+            RomWeaverError::ValidationCode(
+                dps_validation_code("DPS_OUTPUT_SIZE_EXCEEDED_ADDRESSABLE_MEMORY")
+                    .with_message("DPS output size exceeded addressable memory")
+                    .with_field("format", self.descriptor.name)
+                    .with_field("output_size", parsed.output_size),
+            )
+        })?;
+        validate_dps_record_ranges(&parsed.records, source_len, output_len)?;
+
+        let checksum_suffix = if validate_source_size {
+            String::new()
+        } else {
+            "; source size validation skipped".to_string()
+        };
+        Ok(crate::patch_success_report(
+            self.descriptor,
+            "validate",
+            format!(
+                "validated {} patch source with {} record(s){}",
+                self.descriptor.name,
+                parsed.records.len(),
+                checksum_suffix
+            ),
+            Some(context.plan_threads(ThreadCapability::single_threaded())),
         ))
     }
 
@@ -1335,6 +1404,37 @@ fn prepare_dps_write(
             })
         }
     }
+}
+
+fn validate_dps_record_ranges(
+    records: &[ParsedDpsRecord],
+    source_len: usize,
+    output_len: usize,
+) -> Result<()> {
+    for record in records {
+        match record {
+            ParsedDpsRecord::CopyFromSource {
+                output_offset,
+                source_offset,
+                length,
+            } => {
+                let _ = checked_range(*source_offset, *length, source_len, "DPS source copy")?;
+                let _ = checked_range(*output_offset, *length, output_len, "DPS output write")?;
+            }
+            ParsedDpsRecord::EmbeddedData {
+                output_offset,
+                data,
+            } => {
+                let data_len = u32::try_from(data.len()).map_err(|_| {
+                    RomWeaverError::Validation(
+                        "DPS embedded record length exceeded 32-bit range".into(),
+                    )
+                })?;
+                let _ = checked_range(*output_offset, data_len, output_len, "DPS output write")?;
+            }
+        }
+    }
+    Ok(())
 }
 
 fn apply_prepared_dps_writes(output: &mut File, writes: &[PreparedDpsWrite]) -> Result<()> {

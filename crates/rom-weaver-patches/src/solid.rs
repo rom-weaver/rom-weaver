@@ -9,8 +9,9 @@ use rayon::prelude::*;
 use rom_weaver_checksum::md5_file;
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
-    PatchCapabilities, PatchChecksumValidation, PatchCreateRequest, PatchHandler, ProbeConfidence,
-    Result, RomWeaverError, SharedThreadPool, ThreadCapability, ValidationCodeError,
+    PatchCapabilities, PatchChecksumValidation, PatchCreateRequest, PatchHandler,
+    PatchValidateRequest, ProbeConfidence, Result, RomWeaverError, SharedThreadPool,
+    ThreadCapability, ValidationCodeError,
 };
 
 const SOLID_MAGIC: &[u8; 2] = b"SP";
@@ -155,6 +156,40 @@ impl PatchHandler for SolidPatchHandler {
             ),
             Some(100.0),
             Some(execution),
+        ))
+    }
+
+    fn validate(
+        &self,
+        request: &PatchValidateRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
+        let parsed = parse_solid_patch_file(patch_path)?;
+        let validate_checksums =
+            context.patch_checksum_validation() == PatchChecksumValidation::Strict;
+        if validate_checksums {
+            validate_source_checksum(parsed.source_md5, &request.input)?;
+        }
+        let source_len =
+            usize_from_u64(fs::metadata(&request.input)?.len(), "SOLID source length")?;
+        let _ = build_primitive_write_plans(&parsed, source_len)?;
+        let checksum_suffix = if validate_checksums {
+            String::new()
+        } else {
+            "; checksum validation skipped".to_string()
+        };
+        Ok(crate::patch_success_report(
+            self.descriptor,
+            "validate",
+            format!(
+                "validated {} patch source with {} {}{}",
+                self.descriptor.name,
+                parsed.primitives.len(),
+                pluralize(parsed.primitives.len(), "primitive", "primitives"),
+                checksum_suffix
+            ),
+            Some(context.plan_threads(ThreadCapability::single_threaded())),
         ))
     }
 

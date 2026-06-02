@@ -31,9 +31,11 @@ export type BatchHeaderFixerCommand = { source: Array<string>, output?: string, 
 
 export type PatchApplyCommand = { input: string, select?: Array<string>, no_extract?: boolean, no_ignore?: boolean, patches: Array<string>, output: string, no_compress?: boolean, compress_format?: string, compress_codec?: Array<string>, compress_level?: CompressionLevelProfile, checksum_cache?: Array<string>, validate_with_checksums?: Array<string>, strip_header?: boolean, add_header?: boolean, repair_checksum?: boolean, ignore_checksum_validation?: boolean, threads?: ThreadBudget, };
 
+export type PatchValidateCommand = { input: string, select?: Array<string>, no_extract?: boolean, no_ignore?: boolean, patches: Array<string>, checksum_cache?: Array<string>, validate_with_checksums?: Array<string>, validate_with_size?: bigint, validate_with_min_size?: bigint, strip_header?: boolean, ignore_checksum_validation?: boolean, threads?: ThreadBudget, };
+
 export type PatchCreateCommand = { original: string, modified: string, format: string, output: string, ignore_checksum_validation?: boolean, threads?: ThreadBudget, xdelta_secondary?: string, };
 
-export type Commands = { "type": "inspect", "args": InspectCommand } | { "type": "extract", "args": ExtractCommand } | { "type": "checksum", "args": ChecksumCommand } | { "type": "compress", "args": CompressCommand } | { "type": "trim", "args": TrimCommand } | { "type": "batch-header-fixer", "args": BatchHeaderFixerCommand } | { "type": "patch-apply", "args": PatchApplyCommand } | { "type": "patch-create", "args": PatchCreateCommand };
+export type Commands = { "type": "inspect", "args": InspectCommand } | { "type": "extract", "args": ExtractCommand } | { "type": "checksum", "args": ChecksumCommand } | { "type": "compress", "args": CompressCommand } | { "type": "trim", "args": TrimCommand } | { "type": "batch-header-fixer", "args": BatchHeaderFixerCommand } | { "type": "patch-apply", "args": PatchApplyCommand } | { "type": "patch-validate", "args": PatchValidateCommand } | { "type": "patch-create", "args": PatchCreateCommand };
 
 export type RomWeaverRunOutputOptions = { json?: boolean, progress?: boolean, trace?: boolean, interactive_selection_enabled?: boolean, };
 

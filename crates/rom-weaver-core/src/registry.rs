@@ -1,4 +1,5 @@
 use std::{
+    fs,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -194,6 +195,12 @@ pub struct PatchApplyRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PatchValidateRequest {
+    pub input: PathBuf,
+    pub patches: Vec<PathBuf>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PatchCreateRequest {
     pub original: PathBuf,
     pub modified: PathBuf,
@@ -336,6 +343,46 @@ pub trait PatchHandler: Send + Sync {
         request: &PatchApplyRequest,
         context: &OperationContext,
     ) -> Result<OperationReport>;
+    fn validate(
+        &self,
+        request: &PatchValidateRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let output = context
+            .temp_paths()
+            .next_path("patch-validate-dry-run-output", Some("bin"));
+        if let Some(parent) = output.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        let apply_request = PatchApplyRequest {
+            input: request.input.clone(),
+            patches: request.patches.clone(),
+            output: output.clone(),
+        };
+        let apply_result = self.apply(&apply_request, context);
+        let _ = fs::remove_file(&output);
+
+        let apply_report = apply_result?;
+        if apply_report.status != OperationStatus::Succeeded {
+            return Ok(OperationReport {
+                stage: "validate".to_string(),
+                ..apply_report
+            });
+        }
+
+        Ok(OperationReport::succeeded(
+            OperationFamily::Patch,
+            Some(self.descriptor().name.to_string()),
+            "validate",
+            format!(
+                "validated {} patch via dry-run apply",
+                self.descriptor().name
+            ),
+            Some(100.0),
+            apply_report.thread_execution,
+        ))
+    }
     fn create(
         &self,
         request: &PatchCreateRequest,
@@ -602,6 +649,24 @@ impl PatchHandler for TracingPatchHandler {
         );
         let result = self.inner.apply(request, context);
         trace_operation_result("apply", descriptor, &result);
+        result
+    }
+
+    fn validate(
+        &self,
+        request: &PatchValidateRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let descriptor = self.inner.descriptor();
+        trace!(
+            family = ?descriptor.family,
+            format = descriptor.name,
+            input = %request.input.display(),
+            patch_count = request.patches.len(),
+            "patch validate start"
+        );
+        let result = self.inner.validate(request, context);
+        trace_operation_result("validate", descriptor, &result);
         result
     }
 

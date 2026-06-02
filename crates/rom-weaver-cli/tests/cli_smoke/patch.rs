@@ -4122,11 +4122,11 @@ fn inspect_succeeds_for_valid_vcdiff_patch() {
     let patch = build_patch(
         None,
         vec![TestWindow {
-            win_indicator: 1,
+            win_indicator: 1 | 4,
             source_segment_size: Some(5),
             source_segment_position: Some(0),
             target_window_size: 5,
-            checksum: None,
+            checksum: Some(0x1234_5678),
             data: Vec::new(),
             inst: vec![21],
             addr: encode_all_varints(&[0]),
@@ -4152,6 +4152,19 @@ fn inspect_succeeds_for_valid_vcdiff_patch() {
     assert_eq!(json["family"], "patch");
     assert_eq!(json["format"], "VCDIFF");
     assert_eq!(json["status"], "succeeded");
+    assert_eq!(json["details"]["patch"]["format"], "VCDIFF");
+    assert_eq!(json["details"]["patch"]["minimum_source_size"], 5);
+    assert_eq!(json["details"]["patch"]["target_size"], 5);
+    assert_eq!(json["details"]["patch"]["record_count"], 1);
+    assert_eq!(json["details"]["patch"]["source_window_count"], 1);
+    assert_eq!(json["details"]["patch"]["target_window_count"], 0);
+    assert_eq!(json["details"]["patch"]["window_checksum_count"], 1);
+    assert!(json["details"]["patch"].get("window_adler32").is_none());
+    assert!(
+        json["details"]["patch"]
+            .get("window_adler32_checksums")
+            .is_none()
+    );
 }
 
 #[test]
@@ -4590,6 +4603,247 @@ fn patch_apply_can_ignore_checksum_validation_for_xdelta() {
         fs::read(temp.child("output.bin").path()).expect("output"),
         expected
     );
+}
+
+#[test]
+fn patch_validate_detects_xdelta_window_checksum_mismatch() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("input.bin").path(), b"abcabcabcabc").expect("fixture");
+    let expected = b"abcabcZZabcabc";
+    let patch = build_patch(
+        Some(b"xdelta-cli"),
+        vec![TestWindow {
+            win_indicator: 0x01 | 0x04,
+            source_segment_size: Some(12),
+            source_segment_position: Some(0),
+            target_window_size: expected.len() as u64,
+            checksum: Some(adler32(expected) ^ 0x0000_0001),
+            data: b"ZZ".to_vec(),
+            inst: vec![22, 3, 22],
+            addr: encode_all_varints(&[0, 6]),
+        }],
+    );
+    fs::write(temp.child("update.xdelta").path(), patch).expect("fixture");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-validate",
+            "--input",
+            temp.child("input.bin").path().to_str().expect("path"),
+            "--patch",
+            temp.child("update.xdelta").path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "patch-validate");
+    assert_eq!(json["family"], "patch");
+    assert_eq!(json["format"], "xdelta");
+    assert_eq!(json["status"], "failed");
+    assert!(json["label"]
+        .as_str()
+        .expect("label")
+        .contains("checksum mismatch"));
+}
+
+#[test]
+fn patch_validate_succeeds_with_source_values() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.bin");
+    let modified = temp.child("new.bin");
+    let patch = temp.child("update.bps");
+
+    fs::write(original.path(), b"hello old world").expect("fixture");
+    fs::write(modified.path(), b"hello new world").expect("fixture");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--format",
+            "bps",
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let input_crc32 = checksum_value(original.path(), "crc32");
+    let input_size = fs::metadata(original.path()).expect("metadata").len().to_string();
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-validate",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--validate-with-size",
+            &input_size,
+            "--validate-with-checksum",
+            &format!("crc32={input_crc32}"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "patch-validate");
+    assert_eq!(json["family"], "patch");
+    assert_eq!(json["format"], "BPS");
+    assert_eq!(json["status"], "succeeded");
+    assert_eq!(json["details"]["patch_validation"]["dry_run"], true);
+    assert_eq!(json["details"]["patch_validation"]["status"], "passed");
+    let label = json["label"].as_str().expect("label");
+    assert!(label.contains("patch validation passed"));
+    assert!(label.contains("input size verified"));
+    assert!(label.contains("input checksum(s) verified"));
+}
+
+#[test]
+fn patch_validate_succeeds_for_native_validate_formats() {
+    let temp = setup_temp_dir();
+
+    fs::write(temp.child("ppf-input.bin").path(), b"abcabcabcabc").expect("fixture");
+    fs::write(
+        temp.child("update.ppf").path(),
+        build_ppf1_patch(
+            "cli validate patch",
+            vec![TestPpfRecord {
+                offset: 6,
+                data: b"ZZ".to_vec(),
+            }],
+        ),
+    )
+    .expect("fixture");
+
+    let mut gba_source = vec![0u8; APS_GBA_BLOCK_SIZE];
+    for (index, byte) in gba_source.iter_mut().enumerate() {
+        *byte = ((index * 17 + (index >> 5)) & 0xff) as u8;
+    }
+    let mut gba_target = gba_source.clone();
+    gba_target[0x0123] ^= 0x3f;
+    gba_target[0x8000] = 0x5a;
+    fs::write(temp.child("input.gba").path(), &gba_source).expect("fixture");
+    fs::write(
+        temp.child("update.aps").path(),
+        build_apsgba_patch(&gba_source, &gba_target),
+    )
+    .expect("fixture");
+
+    fs::write(temp.child("gdiff-input.bin").path(), b"abcd").expect("fixture");
+    fs::write(
+        temp.child("update.gdiff").path(),
+        build_gdiff_patch(vec![
+            TestGdiffCommand::Copy { offset: 0, len: 2 },
+            TestGdiffCommand::Data(b"XY".to_vec()),
+            TestGdiffCommand::Copy { offset: 2, len: 2 },
+        ]),
+    )
+    .expect("fixture");
+
+    let hdiff_source = b"source bytes";
+    let hdiff_target = b"target bytes for hdiffpatch";
+    fs::write(temp.child("hdiff-input.bin").path(), hdiff_source).expect("fixture");
+    fs::write(
+        temp.child("update.hpatchz").path(),
+        build_hdiff13_nocomp_patch(hdiff_source, hdiff_target),
+    )
+    .expect("fixture");
+
+    for (input_name, patch_name, expected_format) in [
+        ("ppf-input.bin", "update.ppf", "PPF"),
+        ("input.gba", "update.aps", "APSGBA"),
+        ("gdiff-input.bin", "update.gdiff", "GDIFF"),
+        ("hdiff-input.bin", "update.hpatchz", "HDiffPatch/HPatchZ"),
+    ] {
+        let output = Command::cargo_bin("rom-weaver")
+            .expect("binary")
+            .args([
+                "patch-validate",
+                "--input",
+                temp.child(input_name).path().to_str().expect("path"),
+                "--patch",
+                temp.child(patch_name).path().to_str().expect("path"),
+                "--threads",
+                "8",
+                "--json",
+            ])
+            .assert()
+            .code(0)
+            .get_output()
+            .stdout
+            .clone();
+
+        let json = parse_single_json_line(&output);
+        assert_eq!(json["command"], "patch-validate");
+        assert_eq!(json["family"], "patch");
+        assert_eq!(json["format"], expected_format);
+        assert_eq!(json["status"], "succeeded");
+        assert_eq!(json["details"]["patch_validation"]["status"], "passed");
+        assert!(json["label"]
+            .as_str()
+            .expect("label")
+            .contains("patch validation passed"));
+    }
+}
+
+#[test]
+fn patch_validate_rejects_apsgba_checksum_mismatch() {
+    let temp = setup_temp_dir();
+    let mut source = vec![0u8; APS_GBA_BLOCK_SIZE];
+    for (index, byte) in source.iter_mut().enumerate() {
+        *byte = ((index * 17 + (index >> 5)) & 0xff) as u8;
+    }
+    let mut target = source.clone();
+    target[0x0123] ^= 0x3f;
+    fs::write(temp.child("input.gba").path(), &source).expect("fixture");
+    fs::write(
+        temp.child("update.aps").path(),
+        build_apsgba_patch(&source, &target),
+    )
+    .expect("fixture");
+    source[0x0100] ^= 0xff;
+    fs::write(temp.child("wrong-input.gba").path(), &source).expect("fixture");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch-validate",
+            "--input",
+            temp.child("wrong-input.gba").path().to_str().expect("path"),
+            "--patch",
+            temp.child("update.aps").path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "patch-validate");
+    assert_eq!(json["family"], "patch");
+    assert_eq!(json["format"], "APSGBA");
+    assert_eq!(json["status"], "failed");
+    assert!(json["label"]
+        .as_str()
+        .expect("label")
+        .contains("Source checksum invalid"));
 }
 
 #[test]

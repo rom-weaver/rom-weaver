@@ -1780,6 +1780,7 @@ dependencies = [
  "rayon",
  "rom-weaver-checksum",
  "rom-weaver-core",
+ "serde_json",
 ]
 
 [[package]]

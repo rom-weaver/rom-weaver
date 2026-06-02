@@ -10,8 +10,9 @@ use rom_weaver_checksum::crc16_ccitt_bytes as crc16_bytes;
 use rom_weaver_core::{
     DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES, FormatDescriptor,
     OperationContext, OperationFamily, OperationReport, PatchApplyRequest, PatchCapabilities,
-    PatchChecksumValidation, PatchCreateRequest, PatchHandler, ProbeConfidence, Result,
-    RomWeaverError, SharedBlockCacheReader, SharedThreadPool, ThreadCapability,
+    PatchChecksumValidation, PatchCreateRequest, PatchHandler, PatchValidateRequest,
+    ProbeConfidence, Result, RomWeaverError, SharedBlockCacheReader, SharedThreadPool,
+    ThreadCapability,
 };
 
 const APS_GBA_MAGIC: &[u8; 4] = b"APS1";
@@ -142,6 +143,59 @@ impl PatchHandler for ApsGbaPatchHandler {
             ),
             Some(100.0),
             Some(execution),
+        ))
+    }
+
+    fn validate(
+        &self,
+        request: &PatchValidateRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
+        let patch = parse_apsgba_file(patch_path)?;
+        let validate_checksums =
+            context.patch_checksum_validation() == PatchChecksumValidation::Strict;
+        let expected_input_size = u64::from(patch.source_size);
+        let actual_input_size = fs::metadata(&request.input)?.len();
+        if actual_input_size != expected_input_size {
+            return Err(RomWeaverError::Validation(format!(
+                "APSGBA input size invalid; expected {expected_input_size}, got {}",
+                actual_input_size
+            )));
+        }
+
+        let output_len = usize::try_from(patch.target_size).expect("u32 fits usize");
+        let source = Arc::new(SharedBlockCacheReader::open(
+            &request.input,
+            DEFAULT_BLOCK_CACHE_SIZE_BYTES,
+            DEFAULT_BLOCK_CACHE_MAX_BLOCKS,
+        )?);
+        for record in &patch.records {
+            context.cancel().check()?;
+            let _ = prepare_apsgba_write(
+                record,
+                &source,
+                actual_input_size,
+                output_len,
+                validate_checksums,
+            )?;
+        }
+
+        let checksum_suffix = if validate_checksums {
+            String::new()
+        } else {
+            "; checksum validation skipped".to_string()
+        };
+        Ok(crate::patch_success_report(
+            self.descriptor,
+            "validate",
+            format!(
+                "validated {} patch source with {} record(s){}",
+                self.descriptor.name,
+                patch.records.len(),
+                checksum_suffix
+            ),
+            Some(context.plan_threads(ThreadCapability::single_threaded())),
         ))
     }
 

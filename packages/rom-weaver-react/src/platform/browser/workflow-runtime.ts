@@ -9,6 +9,7 @@ import {
   invokeRomWeaverCreatePatchWorker,
   invokeRomWeaverExtractWorker,
   invokeRomWeaverPatchApplyWorker,
+  invokeRomWeaverPatchValidateWorker,
   normalizeCodecEntries,
   runRomWeaverChecksumWorker,
   runRomWeaverInspectListWorker,
@@ -1241,11 +1242,10 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
         throw new Error(`RVZ output path conflicts with the active input: ${outputPath}`);
       }
       await browserVfs.truncate(outputPath, 0);
-      emitBrowserWorkflowTrace(
-        { logLevel, onLog },
-        "rvz output precreated",
-        { outputPath, sourcePath: workerSource.filePath },
-      );
+      emitBrowserWorkflowTrace({ logLevel, onLog }, "rvz output precreated", {
+        outputPath,
+        sourcePath: workerSource.filePath,
+      });
       const extracted = await invokeRomWeaverExtractWorker(
         {
           checksumAlgorithms: [...EXTRACT_CHECKSUM_ALGORITHMS],
@@ -1455,6 +1455,8 @@ const createBrowserPatchRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime["
       invokeRomWeaverCreatePatchWorker(input, onProgress, onLog, (outputPath) =>
         removeBrowserVfsOutputPaths([outputPath], [input.originalFilePath, input.modifiedFilePath]),
       ),
+    invokeValidatePatchWorker: (input, onProgress, onLog) =>
+      invokeRomWeaverPatchValidateWorker(input, onProgress, onLog),
     workerIo,
     workerOutputFailureMessage: "Patch worker did not return browser output",
   });

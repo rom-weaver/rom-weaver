@@ -264,6 +264,27 @@ function commandArgsToRunRequest(args) {
         ...(parsed.flags.has('ignore-checksum-validation') ? { ignore_checksum_validation: true } : {}),
       };
       break;
+    case 'patch-validate':
+      commandRequest.args = {
+        input: requireOptionValue(parsed, 'input'),
+        patches: readOptionValues(parsed, 'patch'),
+        ...(readOptionValues(parsed, 'select').length ? { select: readOptionValues(parsed, 'select') } : {}),
+        ...(parsed.flags.has('no-extract') ? { no_extract: true } : {}),
+        ...(parsed.flags.has('no-ignore') ? { no_ignore: true } : {}),
+        ...(readOptionValues(parsed, 'checksum-cache').length ? { checksum_cache: readOptionValues(parsed, 'checksum-cache') } : {}),
+        ...(readOptionValues(parsed, 'validate-with-checksum').length
+          ? { validate_with_checksums: readOptionValues(parsed, 'validate-with-checksum') }
+          : {}),
+        ...(readOptionalNumber(parsed, 'validate-with-size') !== null
+          ? { validate_with_size: readOptionalNumber(parsed, 'validate-with-size') }
+          : {}),
+        ...(readOptionalNumber(parsed, 'validate-with-min-size') !== null
+          ? { validate_with_min_size: readOptionalNumber(parsed, 'validate-with-min-size') }
+          : {}),
+        ...(parsed.flags.has('strip-header') ? { strip_header: true } : {}),
+        ...(parsed.flags.has('ignore-checksum-validation') ? { ignore_checksum_validation: true } : {}),
+      };
+      break;
     default:
       throw new Error(`unsupported command: ${command}`);
   }
@@ -277,7 +298,7 @@ function commandArgsToRunRequest(args) {
 }
 
 function locateCommand(args) {
-  const supportedCommands = new Set(['compress', 'extract', 'checksum', 'patch-create', 'patch-apply']);
+  const supportedCommands = new Set(['compress', 'extract', 'checksum', 'patch-create', 'patch-apply', 'patch-validate']);
   for (let index = 0; index < args.length; index += 1) {
     const token = String(args[index] ?? '').trim().toLowerCase();
     if (supportedCommands.has(token)) {

@@ -21,7 +21,7 @@ import {
   resolveAutomaticCompressionFormat,
 } from "../compression/container-format-registry.ts";
 import { RomWeaverError, throwIfAborted, toRomWeaverError, withAbortSignal } from "../errors.ts";
-import { getPatchFileCleanup } from "../input/binary-service.ts";
+import { getPatchFileCleanup, getPatchFileExternalSource } from "../input/binary-service.ts";
 import { getInputPreparationMetrics, type InputAsset, type InputParentCompression } from "../input/input-assets.ts";
 import {
   getBinarySourceSize,
@@ -60,6 +60,7 @@ type SourceRole = "input" | "patch";
 type SourceStatus = ApplyWorkflowInputState["status"];
 type InternalPatchRequirements = NonNullable<ApplyWorkflowPatchState["requirements"]>;
 type InternalPatchChecksumPreflight = NonNullable<ApplyWorkflowPatchState["checksumPreflight"]>;
+type InternalPatchValidation = NonNullable<ApplyWorkflowPatchState["patchValidation"]>;
 type InternalSourceState = {
   id: string;
   fileName?: string;
@@ -78,6 +79,7 @@ type InternalSourceState = {
   checksumTimeMs?: number;
   requirements?: InternalPatchRequirements;
   checksumPreflight?: InternalPatchChecksumPreflight;
+  patchValidation?: InternalPatchValidation;
   role: SourceRole;
 };
 type InternalCandidate<TSource> = {
@@ -119,10 +121,7 @@ const getPatchFilePrecomputedChecksums = (file: PatchFileInstance | undefined): 
 const toNormalizedCrc32 = (value: unknown): string | undefined => {
   if (typeof value === "number" && Number.isFinite(value)) return (value >>> 0).toString(16).padStart(8, "0");
   if (typeof value !== "string") return undefined;
-  const normalized = value
-    .trim()
-    .toLowerCase()
-    .replace(/^0x/, "");
+  const normalized = value.trim().toLowerCase().replace(/^0x/, "");
   if (!normalized) return undefined;
   if (/^[0-9a-f]+$/i.test(normalized) && normalized.length <= 8)
     return Number.parseInt(normalized, 16).toString(16).padStart(8, "0");
@@ -130,12 +129,16 @@ const toNormalizedCrc32 = (value: unknown): string | undefined => {
   return undefined;
 };
 
-const clonePatchRequirements = (requirements: InternalPatchRequirements | undefined): InternalPatchRequirements | undefined =>
-  requirements ? { ...requirements } : undefined;
+const clonePatchRequirements = (
+  requirements: InternalPatchRequirements | undefined,
+): InternalPatchRequirements | undefined => (requirements ? { ...requirements } : undefined);
 
 const clonePatchChecksumPreflight = (
   preflight: InternalPatchChecksumPreflight | undefined,
 ): InternalPatchChecksumPreflight | undefined => (preflight ? { ...preflight } : undefined);
+
+const clonePatchValidation = (validation: InternalPatchValidation | undefined): InternalPatchValidation | undefined =>
+  validation ? { ...validation } : undefined;
 
 const PATCH_OUTPUT_LABEL_PATTERN = /\[([^\]]+)\](?:\.[^.]+)?\d*$/;
 const PATCH_TARGET_SELECTION_ERROR_CODES = new Set(["AMBIGUOUS_SELECTION", "PATCH_TARGET_MISMATCH"]);
@@ -195,6 +198,7 @@ const clonePatchState = (
   fileName: state.fileName,
   id: state.id,
   parentCompressions: parentCompressions.map((entry) => ({ ...entry })),
+  patchValidation: clonePatchValidation(state.patchValidation),
   requirements: clonePatchRequirements(state.requirements),
   selectedCandidateId: state.selectedCandidateId,
   size: state.size,
@@ -344,6 +348,7 @@ const releasePreparedSource = (source?: StagedSource<unknown>) => {
   source.parsedPatch = undefined;
   source.state.requirements = undefined;
   source.state.checksumPreflight = undefined;
+  source.state.patchValidation = undefined;
 };
 
 const releasePreparedFileAndWait = async (file?: PatchFileInstance) => {
@@ -360,6 +365,7 @@ const releasePreparedSourceAndWait = async (source?: StagedSource<unknown>) => {
   source.parsedPatch = undefined;
   source.state.requirements = undefined;
   source.state.checksumPreflight = undefined;
+  source.state.patchValidation = undefined;
 };
 
 const getPreparedAssetFileName = (asset: InputAsset | undefined, fallback?: string) =>
@@ -1174,6 +1180,7 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
     stage.state.targetInputFileName = undefined;
     stage.state.requirements = undefined;
     stage.state.checksumPreflight = undefined;
+    stage.state.patchValidation = undefined;
     stage.state.status = "needsSelection";
     stage.state.wasDecompressed = undefined;
     stage.parentCompressions = [];
@@ -1316,6 +1323,7 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
       stage.state.status = "needsSelection";
       stage.state.requirements = undefined;
       stage.state.checksumPreflight = undefined;
+      stage.state.patchValidation = undefined;
       return;
     }
     const parsed = await patchWorkflowDeps.parsePatchForApply(patchFile, this.runtime);
@@ -1324,6 +1332,7 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
     stage.parsedPatch = parsed;
     stage.state.requirements = clonePatchRequirements(getPatchInspectRequirements(parsed));
     stage.state.checksumPreflight = undefined;
+    stage.state.patchValidation = undefined;
   }
 
   private addCandidateRequest(stage: StagedSource<TSource>, request: CandidateSelectionRequest) {
@@ -1540,6 +1549,7 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
     stage.state.targetInputId = undefined;
     stage.state.targetInputFileName = undefined;
     stage.state.checksumPreflight = undefined;
+    stage.state.patchValidation = undefined;
   }
 
   private assignPatchTarget(stage: StagedSource<TSource>, target: InputAsset) {
@@ -1558,8 +1568,12 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
       typeof requirements?.sourceSize === "number" && Number.isFinite(requirements.sourceSize)
         ? requirements.sourceSize
         : undefined;
+    const minimumSourceSize =
+      typeof requirements?.minimumSourceSize === "number" && Number.isFinite(requirements.minimumSourceSize)
+        ? requirements.minimumSourceSize
+        : undefined;
     const requiredCrc32 = toNormalizedCrc32(requirements?.sourceCrc32);
-    if (requiredSize === undefined && !requiredCrc32) {
+    if (requiredSize === undefined && minimumSourceSize === undefined && !requiredCrc32) {
       return {
         actualCrc32,
         actualSize,
@@ -1567,23 +1581,30 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
       };
     }
     const sizeMismatch = requiredSize !== undefined && actualSize !== undefined && actualSize !== requiredSize;
+    const minimumSizeMismatch =
+      minimumSourceSize !== undefined && actualSize !== undefined && actualSize < minimumSourceSize;
     const crcMismatch = !!(requiredCrc32 && actualCrc32 && actualCrc32 !== requiredCrc32);
-    if (sizeMismatch || crcMismatch) {
-      const mismatchReason = sizeMismatch && crcMismatch ? "size+crc32" : sizeMismatch ? "size" : "crc32";
+    if (sizeMismatch || minimumSizeMismatch || crcMismatch) {
+      const hasSizeMismatch = sizeMismatch || minimumSizeMismatch;
+      const mismatchReason = hasSizeMismatch && crcMismatch ? "size+crc32" : hasSizeMismatch ? "size" : "crc32";
       return {
         actualCrc32,
         actualSize,
+        minimumSourceSize,
         mismatchReason,
         requiredCrc32,
         requiredSize,
         status: "invalid",
       };
     }
-    const missingActual = (requiredSize !== undefined && actualSize === undefined) || (requiredCrc32 && !actualCrc32);
+    const missingActual =
+      ((requiredSize !== undefined || minimumSourceSize !== undefined) && actualSize === undefined) ||
+      (requiredCrc32 && !actualCrc32);
     if (missingActual) {
       return {
         actualCrc32,
         actualSize,
+        minimumSourceSize,
         requiredCrc32,
         requiredSize,
         status: "pending",
@@ -1592,10 +1613,140 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
     return {
       actualCrc32,
       actualSize,
+      minimumSourceSize,
       requiredCrc32,
       requiredSize,
       status: "valid",
     };
+  }
+
+  private createPatchValidationKey(
+    stage: StagedSource<TSource>,
+    target: InputAsset,
+    preflight: InternalPatchChecksumPreflight,
+  ): string {
+    return JSON.stringify({
+      patch: {
+        fileName: stage.preparedPatchFile?.fileName || stage.state.fileName,
+        size: stage.preparedPatchFile?.fileSize ?? stage.state.size,
+      },
+      preflight: {
+        actualCrc32: preflight.actualCrc32,
+        actualSize: preflight.actualSize,
+        minimumSourceSize: preflight.minimumSourceSize,
+        requiredCrc32: preflight.requiredCrc32,
+        requiredSize: preflight.requiredSize,
+      },
+      requirements: stage.state.requirements || null,
+      target: {
+        fileName: target.fileName,
+        id: target.id,
+        size: target.size,
+      },
+    });
+  }
+
+  private async validatePatchTarget(
+    stage: StagedSource<TSource>,
+    target: InputAsset,
+    preflight: InternalPatchChecksumPreflight,
+  ): Promise<void> {
+    const validationKey = this.createPatchValidationKey(stage, target, preflight);
+    const existingValidation = stage.state.patchValidation;
+    if (
+      existingValidation?.validationKey === validationKey &&
+      (existingValidation.status === "valid" || existingValidation.status === "invalid")
+    ) {
+      return;
+    }
+    const validatePatch = this.runtime.patch.validatePatch;
+    const patchFile = stage.preparedPatchFile;
+    if (!(validatePatch && patchFile && stage.parsedPatch)) {
+      stage.state.patchValidation =
+        preflight.status === "invalid"
+          ? {
+              message: "Patch source requirements failed",
+              status: "invalid",
+              targetInputId: target.id,
+              validationKey,
+            }
+          : undefined;
+      return;
+    }
+    const patchSource = getPatchFileExternalSource(
+      patchFile,
+      patchFile.fileName || stage.state.fileName || "patch.bin",
+    );
+    const inputSource = getPatchFileExternalSource(target.file, target.fileName || "input.bin");
+    if (!(patchSource && inputSource)) {
+      stage.state.patchValidation = {
+        message:
+          preflight.status === "invalid"
+            ? "Patch source requirements failed"
+            : "Patch validation is unavailable for this source",
+        status: preflight.status === "invalid" ? "invalid" : "unknown",
+        targetInputId: target.id,
+        validationKey,
+      };
+      return;
+    }
+
+    stage.state.patchValidation = {
+      message: "Validating patch against selected target",
+      status: "pending",
+      targetInputId: target.id,
+      validationKey,
+    };
+    try {
+      const result = await validatePatch({
+        input: inputSource as never,
+        logLevel: this.settings.logging?.level,
+        onLog: this.settings.logging?.sink,
+        onProgress: (progress) =>
+          this.emitProgress({
+            details: {
+              fileName: stage.state.fileName,
+              order: stage.state.order,
+              sourceId: stage.state.id,
+              targetInputId: target.id,
+              targetInputName: target.fileName,
+            },
+            id: `${this.id}:${stage.state.id}:patch-validate`,
+            label: String(progress.label || progress.message || "Validating patch..."),
+            percent:
+              typeof progress.percent === "number" && Number.isFinite(progress.percent) ? progress.percent : null,
+            role: "patch",
+            stage: "verify",
+            workflow: "apply",
+          }),
+        options: {
+          checksumCache: getInputAssetChecksums(target),
+          removeHeader: !!this.settings.compatibility?.removeHeader,
+          workerThreads: this.settings.workers?.threads,
+        },
+        patches: [
+          {
+            patchFile: patchSource as never,
+            patchFileName: patchFile.fileName || stage.state.fileName || "patch.bin",
+            patchFormat: stage.state.requirements?.format,
+            requirements: stage.state.requirements,
+          },
+        ],
+      });
+      stage.state.patchValidation = {
+        message: result.message || "Patch validation passed",
+        status: "valid",
+        targetInputId: target.id,
+        validationKey,
+      };
+    } catch (error) {
+      stage.state.patchValidation = {
+        message: toRomWeaverError(error).message,
+        status: "invalid",
+        targetInputId: target.id,
+        validationKey,
+      };
+    }
   }
 
   private createPatchTargetSelectionRequest(stage: StagedSource<TSource>, assets: InputAsset[]) {
@@ -1681,7 +1832,10 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
     try {
       const target = await this.resolvePatchTargetForStage(stage, assets);
       stage.state.status = target ? "ready" : "needsSelection";
-      stage.state.checksumPreflight = target ? this.createPatchChecksumPreflight(stage, target) : undefined;
+      const preflight = target ? this.createPatchChecksumPreflight(stage, target) : undefined;
+      stage.state.checksumPreflight = preflight;
+      if (target && preflight) await this.validatePatchTarget(stage, target, preflight);
+      else stage.state.patchValidation = undefined;
       if (!target) {
         this.pushWarning(
           stage,

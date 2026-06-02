@@ -9,8 +9,9 @@ use tracing::info;
 use rayon::prelude::*;
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
-    PatchCapabilities, PatchChecksumValidation, PatchCreateRequest, PatchHandler, ProbeConfidence,
-    Result, RomWeaverError, SharedThreadPool, ThreadCapability,
+    PatchCapabilities, PatchChecksumValidation, PatchCreateRequest, PatchHandler,
+    PatchValidateRequest, ProbeConfidence, Result, RomWeaverError, SharedThreadPool,
+    ThreadCapability,
 };
 
 const APS_N64_MAGIC: &[u8; 5] = b"APS10";
@@ -144,6 +145,45 @@ impl PatchHandler for ApsN64PatchHandler {
             ),
             Some(100.0),
             Some(execution),
+        ))
+    }
+
+    fn validate(
+        &self,
+        request: &PatchValidateRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
+        let patch = parse_aps_file(patch_path)?;
+        let validate_checksums =
+            context.patch_checksum_validation() == PatchChecksumValidation::Strict;
+
+        if validate_checksums
+            && patch.header_type == APS_N64_MODE
+            && let Some(n64_header) = &patch.n64_header
+        {
+            validate_n64_source(&request.input, n64_header)?;
+        }
+        for record in &patch.records {
+            context.cancel().check()?;
+            let _ = prepare_aps_write(record, patch.output_size)?;
+        }
+
+        let checksum_suffix = if validate_checksums {
+            String::new()
+        } else {
+            "; checksum validation skipped".to_string()
+        };
+        Ok(crate::patch_success_report(
+            self.descriptor,
+            "validate",
+            format!(
+                "validated {} patch source with {} record(s){}",
+                self.descriptor.name,
+                patch.records.len(),
+                checksum_suffix
+            ),
+            Some(context.plan_threads(ThreadCapability::single_threaded())),
         ))
     }
 

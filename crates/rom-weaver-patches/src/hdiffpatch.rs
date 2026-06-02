@@ -13,8 +13,8 @@ use rom_weaver_codecs::{
 use rom_weaver_core::{
     DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES, FormatDescriptor,
     OperationContext, OperationFamily, OperationReport, PatchApplyRequest, PatchCapabilities,
-    PatchCreateRequest, PatchHandler, ProbeConfidence, Result, RomWeaverError,
-    SharedBlockCacheReader, ThreadCapability, ValidationCodeError,
+    PatchCreateRequest, PatchHandler, PatchValidateRequest, ProbeConfidence, Result,
+    RomWeaverError, SharedBlockCacheReader, ThreadCapability, ThreadExecution, ValidationCodeError,
 };
 
 fn hdiff_validation_code(code: &'static str) -> ValidationCodeError {
@@ -88,102 +88,8 @@ impl PatchHandler for HdiffPatchHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
-        let variant = parse_hdiff_patch_file(patch_path)?;
-        let patch_len = fs::metadata(patch_path)?.len();
-        let patch_reader = Arc::new(SharedBlockCacheReader::open(
-            patch_path,
-            DEFAULT_BLOCK_CACHE_SIZE_BYTES,
-            DEFAULT_BLOCK_CACHE_MAX_BLOCKS,
-        )?);
-        let old_len = fs::metadata(&request.input)?.len();
-        let old_data = HdiffOldData::from_path(&request.input)?;
-
-        let (output_bytes, execution) = match variant {
-            ParsedPatchVariant::SingleFile13(header) => {
-                if old_len != header.old_data_size {
-                    return Err(RomWeaverError::ValidationCode(
-                        hdiff_validation_code("HDIFF_SOURCE_SIZE_MISMATCH")
-                            .with_message("HDiffPatch source size mismatch")
-                            .with_field("expected", header.old_data_size)
-                            .with_field("actual", old_len),
-                    ));
-                }
-
-                let thread_capability = hdiff13_apply_thread_capability(&header);
-                let planned_execution = context.plan_threads(thread_capability.clone());
-                if planned_execution.used_parallelism {
-                    let (execution, pool) = context.build_pool(thread_capability)?;
-                    let chunk_parallel = execution.used_parallelism;
-                    let output = pool.install(|| {
-                        apply_hdiff13_with_chunk_parallelism_from_reader(
-                            &old_data,
-                            &patch_reader,
-                            patch_len,
-                            &header,
-                            chunk_parallel,
-                        )
-                    })?;
-                    (output, execution)
-                } else {
-                    let output = apply_hdiff13_with_chunk_parallelism_from_reader(
-                        &old_data,
-                        &patch_reader,
-                        patch_len,
-                        &header,
-                        false,
-                    )?;
-                    (output, planned_execution)
-                }
-            }
-            ParsedPatchVariant::SingleStream20(header) => {
-                if old_len != header.old_data_size {
-                    return Err(RomWeaverError::ValidationCode(
-                        hdiff_validation_code("HDIFF_SOURCE_SIZE_MISMATCH")
-                            .with_message("HDiffPatch source size mismatch")
-                            .with_field("expected", header.old_data_size)
-                            .with_field("actual", old_len),
-                    ));
-                }
-
-                let thread_capability = hdiffsf20_apply_thread_capability(&header);
-                let planned_execution = context.plan_threads(thread_capability.clone());
-                if planned_execution.used_parallelism {
-                    let (mut execution, pool) = context.build_pool(thread_capability)?;
-                    let step_parallel = execution.used_parallelism;
-                    let apply = pool.install(|| {
-                        apply_hdiffsf20_with_step_parallelism_from_reader(
-                            &old_data,
-                            &patch_reader,
-                            patch_len,
-                            &header,
-                            step_parallel,
-                        )
-                    })?;
-                    if !apply.used_parallelism {
-                        execution.apply_pool_fallback(
-                            "HDIFFSF20 payload had no independent step-level parallel work"
-                                .to_string(),
-                        );
-                    }
-                    (apply.output, execution)
-                } else {
-                    let output = apply_hdiffsf20_with_step_parallelism_from_reader(
-                        &old_data,
-                        &patch_reader,
-                        patch_len,
-                        &header,
-                        false,
-                    )?
-                    .output;
-                    (output, planned_execution)
-                }
-            }
-            ParsedPatchVariant::Directory19(_) => {
-                return Err(RomWeaverError::Unsupported(
-                    "HDiffPatch directory patches (HDIFF19) are not supported for patch-apply; expected single-file patch (.hdiff/.hpatchz)".into(),
-                ));
-            }
-        };
+        let (output_bytes, execution) =
+            render_hdiff_patch_to_memory(&request.input, patch_path, context)?;
 
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
@@ -198,6 +104,29 @@ impl PatchHandler for HdiffPatchHandler {
             "apply",
             format!(
                 "applied {} patch; output {} byte(s)",
+                self.descriptor.name,
+                output_bytes.len()
+            ),
+            Some(100.0),
+            Some(execution),
+        ))
+    }
+
+    fn validate(
+        &self,
+        request: &PatchValidateRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
+        let (output_bytes, execution) =
+            render_hdiff_patch_to_memory(&request.input, patch_path, context)?;
+
+        Ok(OperationReport::succeeded(
+            OperationFamily::Patch,
+            Some(self.descriptor.name.to_string()),
+            "validate",
+            format!(
+                "validated {} patch; output would be {} byte(s)",
                 self.descriptor.name,
                 output_bytes.len()
             ),
@@ -230,6 +159,107 @@ impl PatchHandler for HdiffPatchHandler {
             threaded_diff: false,
             threaded_output: true,
         }
+    }
+}
+
+fn render_hdiff_patch_to_memory(
+    input_path: &Path,
+    patch_path: &Path,
+    context: &OperationContext,
+) -> Result<(Vec<u8>, ThreadExecution)> {
+    let variant = parse_hdiff_patch_file(patch_path)?;
+    let patch_len = fs::metadata(patch_path)?.len();
+    let patch_reader = Arc::new(SharedBlockCacheReader::open(
+        patch_path,
+        DEFAULT_BLOCK_CACHE_SIZE_BYTES,
+        DEFAULT_BLOCK_CACHE_MAX_BLOCKS,
+    )?);
+    let old_len = fs::metadata(input_path)?.len();
+    let old_data = HdiffOldData::from_path(input_path)?;
+
+    match variant {
+        ParsedPatchVariant::SingleFile13(header) => {
+            if old_len != header.old_data_size {
+                return Err(RomWeaverError::ValidationCode(
+                    hdiff_validation_code("HDIFF_SOURCE_SIZE_MISMATCH")
+                        .with_message("HDiffPatch source size mismatch")
+                        .with_field("expected", header.old_data_size)
+                        .with_field("actual", old_len),
+                ));
+            }
+
+            let thread_capability = hdiff13_apply_thread_capability(&header);
+            let planned_execution = context.plan_threads(thread_capability.clone());
+            if planned_execution.used_parallelism {
+                let (execution, pool) = context.build_pool(thread_capability)?;
+                let chunk_parallel = execution.used_parallelism;
+                let output = pool.install(|| {
+                    apply_hdiff13_with_chunk_parallelism_from_reader(
+                        &old_data,
+                        &patch_reader,
+                        patch_len,
+                        &header,
+                        chunk_parallel,
+                    )
+                })?;
+                Ok((output, execution))
+            } else {
+                let output = apply_hdiff13_with_chunk_parallelism_from_reader(
+                    &old_data,
+                    &patch_reader,
+                    patch_len,
+                    &header,
+                    false,
+                )?;
+                Ok((output, planned_execution))
+            }
+        }
+        ParsedPatchVariant::SingleStream20(header) => {
+            if old_len != header.old_data_size {
+                return Err(RomWeaverError::ValidationCode(
+                    hdiff_validation_code("HDIFF_SOURCE_SIZE_MISMATCH")
+                        .with_message("HDiffPatch source size mismatch")
+                        .with_field("expected", header.old_data_size)
+                        .with_field("actual", old_len),
+                ));
+            }
+
+            let thread_capability = hdiffsf20_apply_thread_capability(&header);
+            let planned_execution = context.plan_threads(thread_capability.clone());
+            if planned_execution.used_parallelism {
+                let (mut execution, pool) = context.build_pool(thread_capability)?;
+                let step_parallel = execution.used_parallelism;
+                let apply = pool.install(|| {
+                    apply_hdiffsf20_with_step_parallelism_from_reader(
+                        &old_data,
+                        &patch_reader,
+                        patch_len,
+                        &header,
+                        step_parallel,
+                    )
+                })?;
+                if !apply.used_parallelism {
+                    execution.apply_pool_fallback(
+                        "HDIFFSF20 payload had no independent step-level parallel work"
+                            .to_string(),
+                    );
+                }
+                Ok((apply.output, execution))
+            } else {
+                let output = apply_hdiffsf20_with_step_parallelism_from_reader(
+                    &old_data,
+                    &patch_reader,
+                    patch_len,
+                    &header,
+                    false,
+                )?
+                .output;
+                Ok((output, planned_execution))
+            }
+        }
+        ParsedPatchVariant::Directory19(_) => Err(RomWeaverError::Unsupported(
+            "HDiffPatch directory patches (HDIFF19) are not supported for patch-apply; expected single-file patch (.hdiff/.hpatchz)".into(),
+        )),
     }
 }
 

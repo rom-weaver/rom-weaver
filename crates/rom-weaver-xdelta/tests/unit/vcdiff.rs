@@ -182,6 +182,56 @@ mod tests {
     }
 
     #[test]
+    fn parse_reports_source_requirements_without_adler_values() {
+        let patch_bytes = build_patch(TestPatch {
+            windows: vec![
+                TestWindow {
+                    win_indicator: WIN_SOURCE | WIN_CHECKSUM,
+                    source_segment_size: Some(4),
+                    source_segment_position: Some(2),
+                    target_window_size: 4,
+                    checksum: Some(0x1234_5678),
+                    data: b"data".to_vec(),
+                    inst: vec![7],
+                    addr: Vec::new(),
+                },
+                TestWindow {
+                    win_indicator: WIN_TARGET,
+                    source_segment_size: Some(1),
+                    source_segment_position: Some(0),
+                    target_window_size: 1,
+                    checksum: None,
+                    data: b"!".to_vec(),
+                    inst: vec![4],
+                    addr: Vec::new(),
+                },
+            ],
+            ..Default::default()
+        });
+
+        let temp = create_temp_dir();
+        let patch_path = temp.join("inspect.xdelta");
+        fs::write(&patch_path, patch_bytes).expect("write patch");
+
+        let handler = VcdiffPatchHandler::new(&crate::XDELTA);
+        let report = handler
+            .parse(&patch_path, &test_context())
+            .expect("inspect patch");
+        let details = report.details.expect("details");
+        let patch = &details["patch"];
+
+        assert_eq!(patch["format"], "xdelta");
+        assert_eq!(patch["minimum_source_size"], 6);
+        assert_eq!(patch["target_size"], 5);
+        assert_eq!(patch["record_count"], 2);
+        assert_eq!(patch["source_window_count"], 1);
+        assert_eq!(patch["target_window_count"], 1);
+        assert_eq!(patch["window_checksum_count"], 1);
+        assert!(patch.get("window_adler32").is_none());
+        assert!(patch.get("window_adler32_checksums").is_none());
+    }
+
+    #[test]
     fn apply_supports_vcd_target_windows_with_thread_fallback() {
         let input = b"unused";
         let expected = b"abcdef";
