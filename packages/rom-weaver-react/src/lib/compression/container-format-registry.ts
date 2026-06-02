@@ -29,6 +29,9 @@ type CompressionOutputExtensionContext = {
   inputFileName?: string;
   settings?: Partial<ApplySettings>;
 };
+type CompressionParentKindEntry = {
+  kind?: string | null;
+};
 
 type ArchiveCompressionFormat = Extract<CompressionFormat, "7z" | "zip">;
 type DiscCompressionFormat = Extract<CompressionFormat, "chd" | "rvz" | "z3ds">;
@@ -264,6 +267,17 @@ const getCompressionFormatForParentKind = (parentKind: string | null | undefined
   )?.format;
 };
 
+const getCompressionFormatForParentCompressions = (
+  parentCompressions: readonly CompressionParentKindEntry[] | null | undefined,
+): CompressionFormat | undefined => {
+  if (!Array.isArray(parentCompressions) || parentCompressions.length === 0) return undefined;
+  for (let index = parentCompressions.length - 1; index >= 0; index -= 1) {
+    const format = getCompressionFormatForParentKind(parentCompressions[index]?.kind);
+    if (format) return format;
+  }
+  return undefined;
+};
+
 const getCompressionFormatForFileExtension = (
   extension: string | number | boolean | null | undefined,
 ): CompressionFormat | undefined => {
@@ -276,13 +290,16 @@ const getCompressionFormatForFileExtension = (
 
 const resolveAutomaticCompressionFormat = ({
   fallback = "7z",
+  parentCompressions,
   parentKind,
   sourceFileName,
 }: {
   fallback?: CompressionFormat;
+  parentCompressions?: readonly CompressionParentKindEntry[] | null;
   parentKind?: string | null;
   sourceFileName?: string;
 }): CompressionFormat =>
+  getCompressionFormatForParentCompressions(parentCompressions) ||
   getCompressionFormatForParentKind(parentKind) ||
   getCompressionFormatForFileExtension(getSourceFileExtension(sourceFileName)) ||
   fallback;
@@ -301,6 +318,7 @@ export {
   DISC_COMPRESSION_FORMAT_REGISTRY,
   getCompressionFormatForFileExtension,
   getCompressionFormatForParentKind,
+  getCompressionFormatForParentCompressions,
   getCompressionFormatRegistration,
   getCompressionOutputExtension,
   getDiscCompressionFormatRegistration,

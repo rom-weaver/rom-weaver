@@ -81,7 +81,7 @@ const getApplyOutputCompression = (
   if (configuredCompression !== "auto") return configuredCompression;
   const sourceName = snapshot.inputs[0] ? getReactBinarySourceFileName(snapshot.inputs[0], "") : "";
   return resolveAutomaticCompressionFormat({
-    parentKind: input?.parentCompressions[0]?.kind,
+    parentCompressions: input?.parentCompressions,
     sourceFileName: sourceName,
   });
 };

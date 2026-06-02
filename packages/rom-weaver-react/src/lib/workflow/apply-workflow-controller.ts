@@ -297,7 +297,7 @@ const resolveAutomaticFormat = (
 ): CompressionFormat => {
   const sourceName = input?.sources[0] ? getSourceFileName(input.sources[0], "input") : "";
   return resolveAutomaticCompressionFormat({
-    parentKind: input?.view?.parentCompressions?.[0]?.kind,
+    parentCompressions: input?.view?.parentCompressions,
     sourceFileName: stripFileNameQuery(sourceName),
   });
 };
