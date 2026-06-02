@@ -20,9 +20,10 @@ test("ensureBrowserStorageAvailableForOutput skips persistence when quota can fi
   ).resolves.toBeUndefined();
 
   expect(storage.persist).not.toHaveBeenCalled();
+  expect(storage.estimate).not.toHaveBeenCalled();
 });
 
-test("ensureBrowserStorageAvailableForOutput retries after requesting persistent storage", async () => {
+test("ensureBrowserStorageAvailableForOutput ignores quota estimates when storage is too small", async () => {
   const estimate = vi
     .fn()
     .mockResolvedValueOnce({ quota: 1024, usage: 900 })
@@ -41,11 +42,11 @@ test("ensureBrowserStorageAvailableForOutput retries after requesting persistent
     }),
   ).resolves.toBeUndefined();
 
-  expect(storage.persist).toHaveBeenCalledTimes(1);
-  expect(estimate).toHaveBeenCalledTimes(2);
+  expect(storage.persist).not.toHaveBeenCalled();
+  expect(estimate).not.toHaveBeenCalled();
 });
 
-test("ensureBrowserStorageAvailableForOutput throws a coded error when storage is still too small", async () => {
+test("ensureBrowserStorageAvailableForOutput is a no-op when required bytes are missing", async () => {
   const storage = {
     estimate: vi.fn(async () => ({ quota: 1024, usage: 900 })),
     persist: vi.fn(async () => false),
@@ -55,17 +56,12 @@ test("ensureBrowserStorageAvailableForOutput throws a coded error when storage i
   await expect(
     ensureBrowserStorageAvailableForOutput({
       operationLabel: "extract `game.bin`",
-      requiredBytes: 2048,
       storage,
     }),
-  ).rejects.toMatchObject({
-    code: "OUTPUT_WRITE_FAILED",
-    details: {
-      availableBytes: 124,
-      persistenceGranted: false,
-      requiredBytes: 2048,
-    },
-  });
+  ).resolves.toBeUndefined();
+
+  expect(storage.persist).not.toHaveBeenCalled();
+  expect(storage.estimate).not.toHaveBeenCalled();
 });
 
 test("withBrowserOutputStorageFailureContext annotates output write errors", async () => {
@@ -86,11 +82,10 @@ test("withBrowserOutputStorageFailureContext annotates output write errors", asy
   expect(error).toMatchObject({
     code: "OUTPUT_WRITE_FAILED",
     details: {
-      availableBytes: 124,
       operationLabel: "extract output",
     },
   });
-  expect(error instanceof Error ? error.message : "").toContain("[storage:");
+  expect(error instanceof Error ? error.message : "").toContain("No space left on device");
 });
 
 test("withBrowserOutputStorageFailureContext does not duplicate storage context", async () => {
