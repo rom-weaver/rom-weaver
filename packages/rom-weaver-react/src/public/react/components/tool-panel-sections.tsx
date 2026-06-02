@@ -19,12 +19,14 @@ function ToolOutputFileRow({
   value,
   disabled,
   onChange,
+  outputControl,
 }: {
   id: string;
   label: string;
   value: string;
   disabled: boolean;
   onChange: (nextValue: string) => void;
+  outputControl?: ReactNode;
 }) {
   return (
     <div className={rowClasses.output}>
@@ -33,13 +35,18 @@ function ToolOutputFileRow({
       </div>
       <div className={rowClasses.outputValue}>
         <input
-          className={cx(formClasses.base, formClasses.disabled)}
+          className={cx(
+            formClasses.base,
+            formClasses.disabled,
+            outputControl ? "min-w-0 w-auto flex-[1_1_auto]" : undefined,
+          )}
           disabled={disabled}
           id={id}
           onChange={(event) => onChange(event.currentTarget.value)}
           type="text"
           value={value}
         />
+        {outputControl}
       </div>
     </div>
   );

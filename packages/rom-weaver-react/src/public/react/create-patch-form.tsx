@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { appendFileNameExtension, hasFileNameExtension } from "../../lib/input/path-utils.ts";
 import {
   type BrowserCreateResult,
   type CreateSettings,
@@ -45,6 +46,13 @@ const mergeCreateSettings = (
   return merged;
 };
 
+const resolveCreateExecutionOutputName = (outputName: string, patchType: string) => {
+  const normalizedOutputName = outputName.trim();
+  if (!normalizedOutputName) return normalizedOutputName;
+  if (hasFileNameExtension(normalizedOutputName)) return normalizedOutputName;
+  return appendFileNameExtension(normalizedOutputName, patchType || "bps");
+};
+
 function CreatePatchForm(props: CreatePatchFormProps) {
   const providerSettings = useCreateSettings();
   const providerAssetBaseUrl = useRomWeaverAssetBaseUrl();
@@ -85,8 +93,9 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   const disabled = !!props.disabled || busy;
   const actionDisabled = !!props.disabled || !(busy || (original && modified));
   const configuredOutputName = getCreateSettingsOutputName(props.settings || props.defaultSettings || providerSettings);
-  const generatedOutputName = configuredOutputName || getDefaultCreateOutputName(original, patchType);
+  const generatedOutputName = configuredOutputName || getDefaultCreateOutputName(original);
   const resolvedOutputName = outputName.trim() || generatedOutputName;
+  const executionOutputName = resolveCreateExecutionOutputName(resolvedOutputName, patchType);
   const originalFileName = getReactBinarySourceFileName(original, "Original ROM");
   const modifiedFileName = getReactBinarySourceFileName(modified, "Modified ROM");
 
@@ -171,7 +180,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
         if (preferredCandidate?.selectable) return { id: preferredCandidate.id };
         return selectFile(request);
       },
-      settings: toCreateWorkflowSettings(settings, resolvedOutputName, props.workerThreads),
+      settings: toCreateWorkflowSettings(settings, executionOutputName, props.workerThreads),
       signal: abortController.signal,
     });
     const handleProgress = (event: WorkflowProgress) => {
@@ -183,7 +192,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
       await createWorkflow.setOriginal(toBrowserPublicBinarySource(original));
       await createWorkflow.setModified(toBrowserPublicBinarySource(modified));
       await createWorkflow.setPatchType(patchType as NonNullable<CreateSettings["format"]>);
-      await createWorkflow.setOutputName(resolvedOutputName);
+      await createWorkflow.setOutputName(executionOutputName);
 
       if (createWorkflow.getOriginal()?.status !== "ready" || !createWorkflow.getOriginal()?.selectedCandidateId) {
         throw new Error("Original source requires candidate selection");
@@ -275,26 +284,6 @@ function CreatePatchForm(props: CreatePatchFormProps) {
         onClear={() => updateModified(null)}
         progress={null}
       />
-      <div className={rowClasses.base}>
-        <div className={rowClasses.label}>
-          <label htmlFor="patch-builder-select-patch-type">Patch type</label>
-        </div>
-        <div className={rowClasses.value}>
-          <select
-            className={formClasses.select}
-            disabled={disabled}
-            id="patch-builder-select-patch-type"
-            onChange={(event) => updatePatchType(event.currentTarget.value)}
-            value={patchType}
-          >
-            {["aps", "bdf", "bps", "ebp", "ips", "pmsr", "ppf", "rup", "ups", "vcdiff", "xdelta"].map((value) => (
-              <option key={value} value={value}>
-                {value.toUpperCase()}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
       <ToolOutputFileRow
         disabled={disabled}
         id="patch-builder-output-file"
@@ -309,6 +298,23 @@ function CreatePatchForm(props: CreatePatchFormProps) {
             },
           });
         }}
+        outputControl={
+          <select
+            aria-label="Patch format"
+            className={`${formClasses.select} w-[68px] flex-[0_0_68px] px-2 pr-4 text-left text-[length:var(--rom-weaver-control-font-size)] leading-[var(--rom-weaver-control-line-height)] disabled:opacity-100`}
+            disabled={disabled}
+            id="patch-builder-select-patch-type"
+            onChange={(event) => updatePatchType(event.currentTarget.value)}
+            title="Patch format"
+            value={patchType}
+          >
+            {["aps", "bdf", "bps", "ebp", "ips", "pmsr", "ppf", "rup", "ups", "vcdiff", "xdelta"].map((value) => (
+              <option key={value} value={value}>
+                {value.toUpperCase()}
+              </option>
+            ))}
+          </select>
+        }
         value={resolvedOutputName}
       />
       <ToolActionSection

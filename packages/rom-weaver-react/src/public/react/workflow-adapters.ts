@@ -45,10 +45,10 @@ const getReactBinarySourceFileName = (source: BinarySource | null | undefined, f
   return fallback;
 };
 
-const getDefaultCreateOutputName = (original: BinarySource | null | undefined, patchType: string) => {
+const getDefaultCreateOutputName = (original: BinarySource | null | undefined) => {
   const originalName = getReactBinarySourceFileName(original, "patch");
   const baseName = originalName.replace(CREATE_OUTPUT_EXTENSION_REGEX, "") || "patch";
-  return `${baseName}.${patchType || "bps"}`;
+  return baseName;
 };
 
 const getReactProgressStage = (event: { role?: string; stage?: string }): ProgressEvent["stage"] => {
