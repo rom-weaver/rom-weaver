@@ -345,7 +345,9 @@ const getArchiveNameFromProgressDetails = (details: Record<string, unknown>) => 
 const getProgressStagedInputInfo = (event: ProgressEvent): StagedInputInfo => {
   const details = getProgressDetails(event);
   const fileName = typeof details.fileName === "string" ? details.fileName : "";
-  const isPreparedFileName = details.wasDecompressed === true || details.stage === "checksum";
+  const progressStage = typeof details.stage === "string" ? details.stage : event.stage;
+  const isPreparedFileName =
+    details.wasDecompressed === true || progressStage === "checksum" || progressStage === "decompress";
   return {
     archiveName: getArchiveNameFromProgressDetails(details),
     decompressionTimeMs: typeof details.decompressionTimeMs === "number" ? details.decompressionTimeMs : undefined,
