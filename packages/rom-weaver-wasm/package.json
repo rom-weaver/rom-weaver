@@ -24,22 +24,22 @@
     },
     "./browser-opfs": {
       "types": "./src/rom-weaver-browser-opfs-api.d.ts",
-      "import": "./src/rom-weaver-browser-opfs-api.mjs"
+      "import": "./src/rom-weaver-browser-opfs-api.ts"
     },
     "./workers/browser-client": {
       "types": "./src/workers/browser-worker-client.d.ts",
-      "import": "./src/workers/browser-worker-client.mjs"
+      "import": "./src/workers/browser-worker-client.ts"
     },
     "./workers/protocol": {
       "types": "./src/workers/worker-protocol.d.ts",
-      "import": "./src/workers/worker-protocol.mjs"
+      "import": "./src/workers/worker-protocol.ts"
     },
     "./workers/browser-runner-worker": {
       "types": "./src/workers/browser-runner-worker.d.ts",
-      "import": "./src/workers/browser-runner-worker.mjs"
+      "import": "./src/workers/browser-runner-worker.ts"
     },
     "./workers/browser-wasi-thread-worker": {
-      "import": "./src/workers/browser-wasi-thread-worker.mjs"
+      "import": "./src/workers/browser-wasi-thread-worker.ts"
     },
     "./rom-weaver-app.wasm": "./rom-weaver-app.wasm",
     "./rom-weaver-app.wasm.br": "./rom-weaver-app.wasm.br"
@@ -47,7 +47,8 @@
   "scripts": {
     "prepare:dist": "node ./scripts/sync-dist.mjs",
     "prepack": "npm run check",
-    "check": "node ./scripts/check-opfs-api-sync.mjs && node --check ./src/index.mjs && node --check ./src/browser-format-matrix.mjs && node --check ./src/rom-weaver-runtime-utils.mjs && node --check ./src/rom-weaver-browser-opfs-api.mjs && node --check ./src/workers/runner-worker-core.mjs && node --check ./src/workers/browser-runner-worker.mjs && node --check ./src/workers/browser-wasi-thread-worker.mjs && node --check ./src/workers/worker-client-core.mjs && node --check ./src/workers/browser-worker-client.mjs && node --check ./src/workers/worker-protocol.mjs",
+    "check": "npm run check:types && node --check ./src/index.mjs",
+    "check:types": "tsc -p tsconfig.json --noEmit",
     "check:opfs-api-sync": "node ./scripts/check-opfs-api-sync.mjs",
     "test": "npm run test:browser",
     "test:browser": "vitest --config ./vitest.browser.config.mjs run",
@@ -61,6 +62,7 @@
     "@vitest/browser": "^4.1.7",
     "@vitest/browser-playwright": "^4.1.7",
     "playwright": "^1.60.0",
+    "typescript": "^6.0.3",
     "vitest": "^4.1.7"
   },
   "peerDependencies": {

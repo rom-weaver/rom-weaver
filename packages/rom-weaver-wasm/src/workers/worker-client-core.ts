@@ -1,10 +1,63 @@
+// @ts-nocheck
 import {
   readWorkerErrorContext,
   resolveWorkerErrorKind,
-} from './worker-error-utils.mjs';
+} from './worker-error-utils.ts';
+import type {
+  RomWeaverRunInput,
+  RomWeaverRunJsonEvent,
+  RomWeaverRunJsonOptions,
+  RomWeaverRunJsonResult,
+  RomWeaverRunOptions,
+  RomWeaverRunResult,
+  RomWeaverWorkerError,
+  RomWeaverWorkerErrorKind,
+  RomWeaverWorkerSerializedError,
+} from '../rom-weaver-types.d.ts';
+import type { RomWeaverWorkerResponse } from './worker-protocol.ts';
+
+type WorkerStreamHandlers<TEvent = RomWeaverRunJsonEvent, TTraceEvent = unknown> = Pick<
+  RomWeaverRunJsonOptions<TEvent, TTraceEvent>,
+  'onEvent' | 'onNonJsonLine' | 'onTraceEvent' | 'onTraceNonJsonLine'
+>;
+
+type PendingRequest = Required<WorkerStreamHandlers<any, any>> & {
+  reject: (error: unknown) => void;
+  resolve: (value: unknown) => void;
+};
+
+type WorkerTransport = {
+  offError: (worker: Worker, listener: EventListener) => void;
+  offExit?: (worker: Worker, listener: (code: unknown) => void) => void;
+  offMessage: (worker: Worker, listener: EventListener) => void;
+  offMessageError?: (worker: Worker, listener: EventListener) => void;
+  onError: (worker: Worker, listener: EventListener) => void;
+  onExit?: (worker: Worker, listener: (code: unknown) => void) => void;
+  onMessage: (worker: Worker, listener: EventListener) => void;
+  onMessageError?: (worker: Worker, listener: EventListener) => void;
+  postMessage: (worker: Worker, message: unknown) => void;
+  readMessage: (event: unknown) => unknown;
+  terminate: (worker: Worker) => void;
+  toError: (event: unknown) => Error;
+  toExitError?: (code: unknown) => Error | undefined;
+  toMessageError?: (event: unknown) => Error;
+};
+
+type WorkerRequestPayload = {
+  options?: Record<string, unknown>;
+  request?: RomWeaverRunInput;
+  requestId?: number;
+  type: 'run' | 'runJson' | 'dispose' | 'init';
+  [key: string]: unknown;
+};
 
 export class RomWeaverWorkerClientCore {
-  constructor(worker, transport) {
+  protected worker: Worker;
+  protected _transport: WorkerTransport;
+  protected _nextRequestId: number;
+  protected _pending: Map<number, PendingRequest>;
+
+  constructor(worker: Worker, transport: WorkerTransport) {
     this.worker = worker;
     this._transport = transport;
     this._nextRequestId = 1;
@@ -21,11 +74,14 @@ export class RomWeaverWorkerClientCore {
     this._transport.onExit?.(this.worker, this._onExit);
   }
 
-  run(request, options = {}) {
-    return this._send({ type: 'run', request, options });
+  run(request: RomWeaverRunInput, options: RomWeaverRunOptions & Record<string, unknown> = {}) {
+    return this._send<RomWeaverRunResult>({ type: 'run', request, options });
   }
 
-  runJson(request, options = {}) {
+  runJson<TEvent = RomWeaverRunJsonEvent, TTraceEvent = unknown>(
+    request: RomWeaverRunInput,
+    options: RomWeaverRunJsonOptions<TEvent, TTraceEvent> & Record<string, unknown> = {},
+  ) {
     const {
       onEvent,
       onNonJsonLine,
@@ -36,14 +92,17 @@ export class RomWeaverWorkerClientCore {
     return this._send(
       { type: 'runJson', request, options: runOptions },
       { onEvent, onNonJsonLine, onTraceEvent, onTraceNonJsonLine },
-    );
+    ) as Promise<RomWeaverRunJsonResult<TEvent, TTraceEvent>>;
   }
 
   dispose() {
-    return this._send({ type: 'dispose' });
+    return this._send<{ disposed: true }>({ type: 'dispose' });
   }
 
-  _send(payload, handlers = {}) {
+  protected _send<TResponse = unknown>(
+    payload: WorkerRequestPayload,
+    handlers: WorkerStreamHandlers<any, any> = {},
+  ): Promise<TResponse> {
     const requestId = this._nextRequestId;
     this._nextRequestId += 1;
     const streamChannel = createWorkerStreamChannel({
@@ -54,11 +113,11 @@ export class RomWeaverWorkerClientCore {
 
     return new Promise((resolve, reject) => {
       this._pending.set(requestId, {
-        resolve: (value) => {
+        resolve: (value: unknown) => {
           streamChannel?.close();
-          resolve(value);
+          resolve(value as TResponse);
         },
-        reject: (error) => {
+        reject: (error: unknown) => {
           streamChannel?.close();
           reject(error);
         },
@@ -96,8 +155,8 @@ export class RomWeaverWorkerClientCore {
     });
   }
 
-  _onMessage(rawMessage) {
-    const message = this._transport.readMessage(rawMessage);
+  _onMessage(rawMessage: Event) {
+    const message = this._transport.readMessage(rawMessage) as (RomWeaverWorkerResponse & Record<string, any>) | null;
     if (!message || typeof message !== 'object') {
       return;
     }
@@ -160,17 +219,17 @@ export class RomWeaverWorkerClientCore {
     }
   }
 
-  _onError(rawError) {
+  _onError(rawError: Event) {
     this._rejectAllPending(this._transport.toError(rawError), 'worker error');
   }
 
-  _onMessageError(rawError) {
+  _onMessageError(rawError: Event) {
     const error = this._transport.toMessageError?.(rawError)
       ?? new Error('worker messageerror');
     this._rejectAllPending(error, 'worker messageerror');
   }
 
-  _onExit(code) {
+  _onExit(code: unknown) {
     if (this._pending.size === 0) {
       return;
     }
@@ -181,7 +240,7 @@ export class RomWeaverWorkerClientCore {
     }
   }
 
-  _rejectAllPending(error, reason = 'worker rejected pending requests') {
+  _rejectAllPending(error: unknown, reason = 'worker rejected pending requests') {
     const normalizedError = toWorkerError(error, 'worker');
     for (const pending of this._pending.values()) {
       emitPendingTrace(
@@ -457,10 +516,10 @@ function truncateForTrace(value, maxLength = 180) {
   return `${text.slice(0, maxLength - 1)}...`;
 }
 
-function deserializeError(error) {
+function deserializeError(error): RomWeaverWorkerError {
   const out = new Error(
     error && typeof error.message === 'string' ? error.message : 'worker request failed',
-  );
+  ) as RomWeaverWorkerError;
 
   if (error && typeof error.name === 'string') {
     out.name = error.name;
@@ -480,15 +539,16 @@ function deserializeError(error) {
 
 function toWorkerError(error, fallbackKind) {
   if (error instanceof Error) {
-    error.kind = resolveErrorKind(error, error.name, error.message, fallbackKind);
+    const workerError = error as RomWeaverWorkerError;
+    workerError.kind = resolveErrorKind(error, error.name, error.message, fallbackKind);
     const context = readErrorContext(error);
     if (context) {
-      error.context = context;
+      workerError.context = context;
     }
-    return error;
+    return workerError;
   }
 
-  const out = new Error(String(error));
+  const out = new Error(String(error)) as RomWeaverWorkerError;
   out.kind = resolveErrorKind(error, out.name, out.message, fallbackKind);
   const context = readErrorContext(error);
   if (context) {

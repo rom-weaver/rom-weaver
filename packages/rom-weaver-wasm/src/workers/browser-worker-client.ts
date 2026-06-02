@@ -1,16 +1,39 @@
 import {
   createBrowserWorkerTransport,
   RomWeaverWorkerClientCore,
-} from './worker-client-core.mjs';
+} from './worker-client-core.ts';
+import type {
+  RomWeaverBrowserOpfsOptions,
+  RomWeaverBrowserOpfsRunOptions,
+  RomWeaverDefaultThreads,
+  RomWeaverRunInput,
+  RomWeaverRunJsonEvent,
+  RomWeaverRunJsonOptions,
+  RomWeaverRunJsonResult,
+  RomWeaverRunResult,
+} from '../rom-weaver-types.d.ts';
+
+type BrowserWorkerClientOptions = {
+  defaultThreads?: RomWeaverDefaultThreads;
+  worker?: Worker;
+  workerOptions?: WorkerOptions;
+  workerUrl?: string | URL;
+};
+
+type BrowserWorkerReadyResult = {
+  mode: string;
+  threaded: boolean;
+  wasmUrl: string | null;
+};
 
 const DEFAULT_BROWSER_THREAD_COUNT = 4;
 const MAX_BROWSER_THREAD_COUNT = 64;
 
-export function createBrowserWorkerClient(options = {}) {
+export function createBrowserWorkerClient(options: BrowserWorkerClientOptions = {}) {
   options = options ?? {};
   const createWorker = () => (
     options.worker ?? new Worker(
-      options.workerUrl ?? new URL('./browser-runner-worker.mjs', import.meta.url),
+      options.workerUrl ?? new URL('./browser-runner-worker.ts', import.meta.url),
       {
         type: 'module',
         ...(options.workerOptions ?? {}),
@@ -28,27 +51,35 @@ export function createBrowserWorkerClient(options = {}) {
 const BROWSER_WORKER_TRANSPORT = createBrowserWorkerTransport();
 
 export class BrowserRomWeaverWorkerClient extends RomWeaverWorkerClientCore {
-  constructor(worker, options = {}) {
+  private _defaultThreads: number | null;
+
+  constructor(worker: Worker, options: Pick<BrowserWorkerClientOptions, 'defaultThreads'> = {}) {
     options = options ?? {};
     super(worker, BROWSER_WORKER_TRANSPORT);
     this._defaultThreads = normalizeDefaultThreads(options.defaultThreads);
   }
 
-  async init(options = {}) {
+  async init(options: RomWeaverBrowserOpfsOptions = {}): Promise<BrowserWorkerReadyResult> {
     options = options ?? {};
     const initOptions = this._createInitOptions(options);
     return this._sendInit(initOptions);
   }
 
-  async run(commandOrRequest, options = {}) {
-    return super.run(commandOrRequest, options);
+  override async run(commandOrRequest: RomWeaverRunInput, options: RomWeaverBrowserOpfsRunOptions = {}): Promise<RomWeaverRunResult> {
+    return super.run(commandOrRequest, options as RomWeaverBrowserOpfsRunOptions & Record<string, unknown>);
   }
 
-  async runJson(commandOrRequest, options = {}) {
-    return super.runJson(commandOrRequest, options);
+  override async runJson<TEvent = RomWeaverRunJsonEvent, TTraceEvent = unknown>(
+    commandOrRequest: RomWeaverRunInput,
+    options: RomWeaverRunJsonOptions<TEvent, TTraceEvent> & RomWeaverBrowserOpfsRunOptions = {},
+  ): Promise<RomWeaverRunJsonResult<TEvent, TTraceEvent>> {
+    return super.runJson(
+      commandOrRequest,
+      options as RomWeaverRunJsonOptions<TEvent, TTraceEvent> & Record<string, unknown>,
+    );
   }
 
-  _createInitOptions(options) {
+  _createInitOptions(options: RomWeaverBrowserOpfsOptions) {
     const initOptions = { ...options };
     if (!Object.hasOwn(initOptions, 'defaultThreads') && this._defaultThreads !== null) {
       initOptions.defaultThreads = this._defaultThreads;
@@ -56,11 +87,11 @@ export class BrowserRomWeaverWorkerClient extends RomWeaverWorkerClientCore {
     return initOptions;
   }
 
-  _sendInit(options) {
-    return this._send({
+  _sendInit(options: RomWeaverBrowserOpfsOptions): Promise<BrowserWorkerReadyResult> {
+    return this._send<BrowserWorkerReadyResult>({
       type: 'init',
       mode: 'browser-opfs',
-      options,
+      options: options as Record<string, unknown>,
     });
   }
 
@@ -70,7 +101,7 @@ export class BrowserRomWeaverWorkerClient extends RomWeaverWorkerClientCore {
   }
 }
 
-function resolveBrowserDefaultThreads(root = globalThis) {
+function resolveBrowserDefaultThreads(root: typeof globalThis = globalThis) {
   const hardwareConcurrency = Number(root?.navigator?.hardwareConcurrency);
   if (Number.isFinite(hardwareConcurrency) && hardwareConcurrency > 0) {
     return Math.max(1, Math.min(DEFAULT_BROWSER_THREAD_COUNT, Math.floor(hardwareConcurrency)));
@@ -78,7 +109,7 @@ function resolveBrowserDefaultThreads(root = globalThis) {
   return DEFAULT_BROWSER_THREAD_COUNT;
 }
 
-function normalizeDefaultThreads(value) {
+function normalizeDefaultThreads(value: RomWeaverDefaultThreads) {
   if (
     value === undefined
     || value === null

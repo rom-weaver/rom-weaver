@@ -1,6 +1,33 @@
-export function createWasmEnvImports(memory) {
+import type {
+  ParseJsonLinesOptions,
+  ParseJsonLinesResult,
+  ParseTraceJsonLinesOptions,
+  ParseTraceJsonLinesResult,
+  RomWeaverRunJsonEvent,
+} from './rom-weaver-types.d.ts';
+
+type WasmEnvImports = {
+  __archive_write_program_allocate: () => number;
+  __archive_write_program_close: () => number;
+  __archive_write_program_free: () => number;
+  __archive_write_program_open: () => number;
+  __archive_write_program_write: () => number;
+  __cxa_allocate_exception: () => number;
+  __cxa_throw: (pointer: unknown, typeInfo: unknown) => never;
+  memory?: WebAssembly.Memory;
+};
+
+type JsonLineParser<TEvent> = ParseJsonLinesResult<TEvent> & {
+  pushLine: (line: string) => void;
+};
+
+type TraceJsonLineParser<TTraceEvent> = ParseTraceJsonLinesResult<TTraceEvent> & {
+  pushLine: (line: string) => void;
+};
+
+export function createWasmEnvImports(memory?: WebAssembly.Memory) {
   const ARCHIVE_FAILED = -25;
-  const imports = {
+  const imports: WasmEnvImports = {
     __cxa_allocate_exception() {
       return 0;
     },
@@ -36,7 +63,7 @@ export function createWasmEnvImports(memory) {
   return imports;
 }
 
-export function normalizeGuestPath(pathLike, options = {}) {
+export function normalizeGuestPath(pathLike: unknown, options: { label?: string } = {}) {
   const label = typeof options.label === 'string' && options.label.length > 0
     ? options.label
     : 'guest path';
@@ -55,9 +82,11 @@ export function normalizeGuestPath(pathLike, options = {}) {
   return normalized;
 }
 
-export function createJsonLineParser(options = {}) {
-  const events = [];
-  const nonJsonLines = [];
+export function createJsonLineParser<TEvent = RomWeaverRunJsonEvent>(
+  options: ParseJsonLinesOptions<TEvent> = {},
+): JsonLineParser<TEvent> {
+  const events: TEvent[] = [];
+  const nonJsonLines: string[] = [];
   const onEvent = typeof options.onEvent === 'function' ? options.onEvent : null;
   const onNonJsonLine = typeof options.onNonJsonLine === 'function'
     ? options.onNonJsonLine
@@ -72,7 +101,7 @@ export function createJsonLineParser(options = {}) {
       }
 
       try {
-        const event = JSON.parse(line);
+        const event = JSON.parse(line) as TEvent;
         events.push(event);
         onEvent?.(event);
       } catch {
@@ -83,7 +112,10 @@ export function createJsonLineParser(options = {}) {
   };
 }
 
-export function parseJsonLines(text, options = {}) {
+export function parseJsonLines<TEvent = RomWeaverRunJsonEvent>(
+  text: string,
+  options: ParseJsonLinesOptions<TEvent> = {},
+): ParseJsonLinesResult<TEvent> {
   const parser = createJsonLineParser(options);
 
   for (const line of text.split(/\r?\n/)) {
@@ -96,9 +128,11 @@ export function parseJsonLines(text, options = {}) {
   };
 }
 
-export function createTraceJsonLineParser(options = {}) {
-  const traceEvents = [];
-  const traceNonJsonLines = [];
+export function createTraceJsonLineParser<TTraceEvent = unknown>(
+  options: ParseTraceJsonLinesOptions<TTraceEvent> = {},
+): TraceJsonLineParser<TTraceEvent> {
+  const traceEvents: TTraceEvent[] = [];
+  const traceNonJsonLines: string[] = [];
   const onTraceEvent = typeof options.onTraceEvent === 'function' ? options.onTraceEvent : null;
   const onTraceNonJsonLine = typeof options.onTraceNonJsonLine === 'function'
     ? options.onTraceNonJsonLine
@@ -113,7 +147,7 @@ export function createTraceJsonLineParser(options = {}) {
       }
 
       try {
-        const event = JSON.parse(line);
+        const event = JSON.parse(line) as TTraceEvent;
         traceEvents.push(event);
         onTraceEvent?.(event);
       } catch {
@@ -124,7 +158,10 @@ export function createTraceJsonLineParser(options = {}) {
   };
 }
 
-export function parseTraceJsonLines(text, options = {}) {
+export function parseTraceJsonLines<TTraceEvent = unknown>(
+  text: string,
+  options: ParseTraceJsonLinesOptions<TTraceEvent> = {},
+): ParseTraceJsonLinesResult<TTraceEvent> {
   const parser = createTraceJsonLineParser(options);
 
   for (const line of text.split(/\r?\n/)) {

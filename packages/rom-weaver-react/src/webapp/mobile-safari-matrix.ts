@@ -1,8 +1,44 @@
 import {
+  type BrowserFormatMatrixStep,
+  type BrowserFormatMatrixSummary,
   runBrowserFullFormatMatrix,
   summarizeBrowserFormatMatrixResult,
-} from "../../../rom-weaver-wasm/src/browser-format-matrix.mjs";
-import { collectBrowserRuntimeDiagnostics } from "./browser-runtime-diagnostics.ts";
+} from "../../../rom-weaver-wasm/src/browser-format-matrix.ts";
+import type { RomWeaverRunJsonEvent } from "../../../rom-weaver-wasm/src/rom-weaver-types.d.ts";
+import { type BrowserRuntimeDiagnostics, collectBrowserRuntimeDiagnostics } from "./browser-runtime-diagnostics.ts";
+
+type MobileSafariMatrixStatus = "idle" | "running" | "passed" | "failed" | "diagnostics failed";
+
+type MobileSafariMatrixState = {
+  diagnostics: BrowserRuntimeDiagnostics | null;
+  finishedAt: string | null;
+  lastEvent: RomWeaverRunJsonEvent | null;
+  result: BrowserFormatMatrixSummary | null;
+  startedAt: string | null;
+  status: MobileSafariMatrixStatus;
+  steps: BrowserFormatMatrixStep[];
+};
+
+type MobileSafariMatrixApi = {
+  collectDiagnostics: () => Promise<BrowserRuntimeDiagnostics>;
+  copyReport: () => Promise<void>;
+  getReport: () => {
+    diagnostics: BrowserRuntimeDiagnostics | null;
+    finishedAt: string | null;
+    lastEvent: RomWeaverRunJsonEvent | null;
+    result: BrowserFormatMatrixSummary | null;
+    startedAt: string | null;
+    status: MobileSafariMatrixStatus;
+    steps: BrowserFormatMatrixStep[];
+  };
+  run: () => Promise<void>;
+};
+
+declare global {
+  interface Window {
+    ROM_WEAVER_IOS_SAFARI_MATRIX?: MobileSafariMatrixApi;
+  }
+}
 
 const MAX_LOG_LINES = 220;
 const summaryElement = document.getElementById("matrix-summary");
@@ -10,7 +46,7 @@ const logElement = document.getElementById("matrix-log");
 const runButton = document.getElementById("matrix-run");
 const copyButton = document.getElementById("matrix-copy");
 
-const state = {
+const state: MobileSafariMatrixState = {
   diagnostics: null,
   finishedAt: null,
   lastEvent: null,
@@ -19,9 +55,9 @@ const state = {
   status: "idle",
   steps: [],
 };
-const logLines = [];
+const logLines: string[] = [];
 
-const importantDiagnosticFields = [
+const importantDiagnosticFields: Array<[string, (diagnostics: BrowserRuntimeDiagnostics) => boolean]> = [
   ["Secure context", (diagnostics) => diagnostics.isSecureContext],
   ["Isolated", (diagnostics) => diagnostics.crossOriginIsolated],
   ["SharedArrayBuffer", (diagnostics) => diagnostics.sharedArrayBuffer === "function"],
@@ -31,22 +67,22 @@ const importantDiagnosticFields = [
   ["Worker", (diagnostics) => diagnostics.worker === "function"],
 ];
 
-const appendLog = (line) => {
+const appendLog = (line: string) => {
   const timestamp = new Date().toISOString().slice(11, 19);
   logLines.push(`${timestamp} ${line}`);
   while (logLines.length > MAX_LOG_LINES) logLines.shift();
   if (logElement) logElement.textContent = logLines.join("\n");
 };
 
-const formatDuration = (milliseconds) => {
-  if (!Number.isFinite(milliseconds)) return "";
+const formatDuration = (milliseconds?: number | null) => {
+  if (typeof milliseconds !== "number" || !Number.isFinite(milliseconds)) return "";
   if (milliseconds < 1000) return `${Math.round(milliseconds)}ms`;
   const seconds = milliseconds / 1000;
   if (seconds < 60) return `${seconds.toFixed(1)}s`;
   return `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`;
 };
 
-const renderMetric = (label, value) => {
+const renderMetric = (label: string, value: unknown) => {
   const item = document.createElement("div");
   item.className = "metric";
   const heading = document.createElement("strong");
@@ -85,7 +121,7 @@ const collectAndRenderDiagnostics = async () => {
   return state.diagnostics;
 };
 
-const diagnosticSummary = (diagnostics) => ({
+const diagnosticSummary = (diagnostics: BrowserRuntimeDiagnostics) => ({
   atomicsWaitAsync: diagnostics.atomicsWaitAsync,
   crossOriginEmbedderPolicy: diagnostics.headers?.crossOriginEmbedderPolicy ?? null,
   crossOriginIsolated: diagnostics.crossOriginIsolated,
@@ -96,8 +132,8 @@ const diagnosticSummary = (diagnostics) => ({
   sharedArrayBuffer: diagnostics.sharedArrayBuffer,
 });
 
-const getDiagnosticFailures = (diagnostics) => {
-  const failures = [];
+const getDiagnosticFailures = (diagnostics: BrowserRuntimeDiagnostics) => {
+  const failures: string[] = [];
   for (const [label, passes] of importantDiagnosticFields) {
     if (!passes(diagnostics)) failures.push(label);
   }
@@ -119,9 +155,9 @@ const copyReport = async () => {
   appendLog("report copied");
 };
 
-const setRunning = (running) => {
-  if (runButton) runButton.disabled = running;
-  if (copyButton) copyButton.disabled = running || !state.result;
+const setRunning = (running: boolean) => {
+  if (runButton instanceof HTMLButtonElement) runButton.disabled = running;
+  if (copyButton instanceof HTMLButtonElement) copyButton.disabled = running || !state.result;
 };
 
 const runMatrix = async () => {

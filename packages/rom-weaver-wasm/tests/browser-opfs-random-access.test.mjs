@@ -3,7 +3,7 @@ import {
   __createBrowserOpfsRandomAccessFileForTest,
   __createBrowserVirtualRandomAccessFileForTest,
   __createWasiRandomAccessFileInodeForTest,
-} from '../src/rom-weaver-browser-opfs-api.mjs';
+} from '../src/rom-weaver-browser-opfs-api.ts';
 import { createMockSyncAccessHandle } from './opfs-mock-sync-handle.mjs';
 
 // Targeted correctness coverage for BrowserOpfsRandomAccessFile's read cache and its invalidation.

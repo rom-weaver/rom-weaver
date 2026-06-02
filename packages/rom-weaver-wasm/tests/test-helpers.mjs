@@ -1,6 +1,6 @@
 import { expect } from 'vitest';
-import { runBrowserFullFormatMatrixCore } from '../src/browser-format-matrix.mjs';
-import { createBrowserWorkerClient } from '../src/workers/browser-worker-client.mjs';
+import { runBrowserFullFormatMatrixCore } from '../src/browser-format-matrix.ts';
+import { createBrowserWorkerClient } from '../src/workers/browser-worker-client.ts';
 
 const OPFS_GUEST_ROOT = '/work';
 const TEXT_ENCODER = new TextEncoder();

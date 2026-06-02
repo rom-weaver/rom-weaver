@@ -1,3 +1,8 @@
+import type {
+  RomWeaverWorkerErrorContext,
+  RomWeaverWorkerErrorKind,
+} from '../rom-weaver-types.d.ts';
+
 const WORKER_ERROR_KINDS = new Set([
   'validation',
   'unknown_format',
@@ -8,10 +13,15 @@ const WORKER_ERROR_KINDS = new Set([
   'worker',
   'panic',
   'unknown',
-]);
+] satisfies RomWeaverWorkerErrorKind[]);
 
-export function resolveWorkerErrorKind(error, name, message, fallbackKind) {
-  const explicit = normalizeWorkerErrorKind(error && error.kind);
+export function resolveWorkerErrorKind(
+  error: unknown,
+  name: string,
+  message: string,
+  fallbackKind?: unknown,
+): RomWeaverWorkerErrorKind {
+  const explicit = normalizeWorkerErrorKind(readOptionalRecord(error)?.kind);
   if (explicit) {
     return explicit;
   }
@@ -37,28 +47,31 @@ export function resolveWorkerErrorKind(error, name, message, fallbackKind) {
   return 'unknown';
 }
 
-export function readWorkerContextFields(input) {
+export function readWorkerContextFields(input: unknown): RomWeaverWorkerErrorContext {
   if (!input || typeof input !== 'object') {
     return {};
   }
+  const record = input as Record<string, unknown>;
+  const format = record.format;
 
   return {
-    command: typeof input.command === 'string' ? input.command : undefined,
-    family: typeof input.family === 'string' ? input.family : undefined,
+    command: typeof record.command === 'string' ? record.command : undefined,
+    family: typeof record.family === 'string' ? record.family : undefined,
     format:
-      typeof input.format === 'string' || input.format === null
-        ? input.format
+      typeof format === 'string' || format === null
+        ? (format as string | null)
         : undefined,
-    stage: typeof input.stage === 'string' ? input.stage : undefined,
+    stage: typeof record.stage === 'string' ? record.stage : undefined,
   };
 }
 
-export function readWorkerErrorContext(input) {
+export function readWorkerErrorContext(input: unknown): RomWeaverWorkerErrorContext | undefined {
   if (!input || typeof input !== 'object') {
     return undefined;
   }
+  const record = input as Record<string, unknown>;
 
-  const fromContext = readWorkerContextFields(input.context);
+  const fromContext = readWorkerContextFields(record.context);
   const fromInput = readWorkerContextFields(input);
   const context = {
     command: fromContext.command ?? fromInput.command,
@@ -79,7 +92,7 @@ export function readWorkerErrorContext(input) {
   return context;
 }
 
-function inferCoreWorkerErrorKind(message) {
+function inferCoreWorkerErrorKind(message: string): RomWeaverWorkerErrorKind | null {
   if (/^validation failed:/i.test(message)) {
     return 'validation';
   }
@@ -102,11 +115,11 @@ function inferCoreWorkerErrorKind(message) {
   return null;
 }
 
-function isWorkerErrorMessage(message) {
+function isWorkerErrorMessage(message: string): boolean {
   return /\bworker\b/i.test(message);
 }
 
-function isPanicLikeError(name, message) {
+function isPanicLikeError(name: string, message: string): boolean {
   if (/\bpanic\b/i.test(name)) {
     return true;
   }
@@ -114,15 +127,19 @@ function isPanicLikeError(name, message) {
   return /\bpanicked at\b/i.test(message);
 }
 
-function normalizeWorkerErrorKind(value) {
+function normalizeWorkerErrorKind(value: unknown): RomWeaverWorkerErrorKind | null {
   if (typeof value !== 'string') {
     return null;
   }
 
   const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, '_');
-  if (!WORKER_ERROR_KINDS.has(normalized)) {
+  if (!WORKER_ERROR_KINDS.has(normalized as RomWeaverWorkerErrorKind)) {
     return null;
   }
 
-  return normalized;
+  return normalized as RomWeaverWorkerErrorKind;
+}
+
+function readOptionalRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : null;
 }

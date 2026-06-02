@@ -424,7 +424,7 @@ async function loadPlaywrightApi() {
 }
 
 function browserWorkerModuleUrl(baseUrl) {
-  return new URL('/packages/rom-weaver-wasm/src/workers/browser-worker-client.mjs', baseUrl).toString();
+  return new URL('/packages/rom-weaver-wasm/src/workers/browser-worker-client.ts', baseUrl).toString();
 }
 
 function wasmModuleUrl(baseUrl, wasmModulePath) {

@@ -1,6 +1,93 @@
-import { createBrowserWorkerClient } from './workers/browser-worker-client.mjs';
+import { createBrowserWorkerClient } from './workers/browser-worker-client.ts';
+import type {
+  RomWeaverBrowserOpfsRunOptions,
+  RomWeaverCommand,
+  RomWeaverRunJsonEvent,
+  RomWeaverRunJsonOptions,
+  RomWeaverRunJsonResult,
+} from './rom-weaver-types.d.ts';
 
 export const OPFS_GUEST_ROOT = '/work';
+
+type BrowserFormatMatrixBytes = string | Uint8Array | ArrayBuffer;
+type BrowserFormatMatrixRunOptions = RomWeaverRunJsonOptions<RomWeaverRunJsonEvent, unknown> &
+  RomWeaverBrowserOpfsRunOptions;
+type BrowserFormatMatrixRunJsonResult = RomWeaverRunJsonResult<RomWeaverRunJsonEvent, unknown>;
+type BrowserFormatMatrixRunJson = (
+  command: RomWeaverCommand,
+  options?: BrowserFormatMatrixRunOptions,
+) => Promise<BrowserFormatMatrixRunJsonResult>;
+type BrowserFormatMatrixRunCommand = (
+  name: string,
+  command: RomWeaverCommand,
+  options?: BrowserFormatMatrixRunOptions,
+) => Promise<BrowserFormatMatrixRunJsonResult>;
+type BrowserFormatMatrixFixtureUrls = {
+  patch: URL;
+  source: URL;
+  target: URL;
+};
+type BrowserFormatMatrixFixtures = {
+  patch?: BrowserFormatMatrixBytes;
+  source?: BrowserFormatMatrixBytes;
+  target?: BrowserFormatMatrixBytes;
+};
+type BrowserFormatMatrixOptions = {
+  clientOptions?: Parameters<typeof createBrowserWorkerClient>[0];
+  hdiffFixtures?: BrowserFormatMatrixFixtures;
+  hdiffFixtureUrls?: Partial<BrowserFormatMatrixFixtureUrls>;
+  initOptions?: Record<string, unknown>;
+  onEvent?: (event: RomWeaverRunJsonEvent) => void;
+  onStep?: (step: BrowserFormatMatrixStep) => void;
+  prefix?: string;
+  sourceContents?: BrowserFormatMatrixBytes;
+  sourceFileName?: string;
+  vcdiffFixtures?: BrowserFormatMatrixFixtures;
+  vcdiffFixtureUrls?: Partial<BrowserFormatMatrixFixtureUrls>;
+  wasmUrl?: string;
+};
+type BrowserFormatMatrixCoreFixtures = {
+  hdiffPatchPath: string;
+  hdiffSourcePath: string;
+  hdiffTargetPath: string;
+  vcdiffPatchPath: string;
+  vcdiffSourcePath: string;
+  vcdiffTargetPath: string;
+};
+type BrowserFormatMatrixCoreOptions = {
+  dir: string;
+  fixtures: BrowserFormatMatrixCoreFixtures;
+  onEvent?: (event: RomWeaverRunJsonEvent) => void;
+  onStep?: (step: BrowserFormatMatrixStep) => void;
+  opfsHandle: FileSystemDirectoryHandle;
+  runJson: BrowserFormatMatrixRunJson;
+  sourcePath: string;
+};
+export type BrowserFormatMatrixStep = {
+  command: RomWeaverCommand['type'];
+  durationMs?: number;
+  error?: string;
+  name: string;
+  status: 'failed' | 'running' | 'succeeded';
+  terminalStatus?: RomWeaverRunJsonEvent['status'];
+  timestamp: string;
+};
+export type BrowserFormatMatrixSummary = {
+  durationMs: number;
+  failedSteps: number;
+  passedSteps: number;
+  steps: BrowserFormatMatrixStep[];
+};
+type BrowserFormatMatrixState = {
+  addStep: (step: BrowserFormatMatrixStep) => void;
+  emitEvent: (event: RomWeaverRunJsonEvent) => void;
+  summary: () => BrowserFormatMatrixSummary;
+};
+type BrowserFormatMatrixCommandType = RomWeaverCommand['type'];
+type BrowserFormatMatrixCommand<TType extends BrowserFormatMatrixCommandType> = Extract<
+  RomWeaverCommand,
+  { type: TType }
+>;
 
 const TEXT_ENCODER = new TextEncoder();
 const DEFAULT_VCDIFF_FIXTURE_URLS = {
@@ -14,7 +101,7 @@ const DEFAULT_HDIFF_FIXTURE_URLS = {
   target: new URL('../../../crates/rom-weaver-patches/tests/fixtures/hdiffpatch/target.bin', import.meta.url),
 };
 
-export async function runBrowserFullFormatMatrix(options = {}) {
+export async function runBrowserFullFormatMatrix(options: BrowserFormatMatrixOptions = {}) {
   const root = await navigator.storage.getDirectory();
   const fixtureName = `${options.prefix || 'rom-weaver-browser-format-matrix-'}${Date.now()}-${Math.random()
     .toString(16)
@@ -70,9 +157,10 @@ export async function runBrowserFullFormatMatrix(options = {}) {
   }
 }
 
-export async function runBrowserFullFormatMatrixCore({ runJson, opfsHandle, dir, fixtures, sourcePath, onStep, onEvent }) {
+export async function runBrowserFullFormatMatrixCore(input: BrowserFormatMatrixCoreOptions) {
+  const { dir, fixtures, onEvent, onStep, opfsHandle, runJson } = input;
   const state = createMatrixState({ onEvent, onStep });
-  const runCommand = (name, command, options = {}) =>
+  const runCommand: BrowserFormatMatrixRunCommand = (name, command, options) =>
     runMatrixCommand(state, runJson, name, command, options);
 
   const archiveSourcePath = joinGuestPath(dir, 'all-format-source.bin');
@@ -179,7 +267,7 @@ export async function runBrowserFullFormatMatrixCore({ runJson, opfsHandle, dir,
   }
   const modified = new Uint8Array(original);
   for (let index = 0; index < 300; index += 1) {
-    modified[100 + index] = (modified[100 + index] + 17) % 256;
+    modified[100 + index] = ((modified[100 + index] ?? 0) + 17) % 256;
   }
   await writeGuestFile(opfsHandle, originalPath, original);
   await writeGuestFile(opfsHandle, modifiedPath, modified);
@@ -285,7 +373,7 @@ export async function runBrowserFullFormatMatrixCore({ runJson, opfsHandle, dir,
   await runBspApplyFixture({ dir, opfsHandle, runCommand });
 
   const xdeltaApplyPath = joinGuestPath(dir, 'fixture-applied-xdelta.bin');
-  const xdeltaApplyEvents = [];
+  const xdeltaApplyEvents: RomWeaverRunJsonEvent[] = [];
   const xdeltaApplyResult = await runPatchApplyNoCompress(
     runCommand,
     {
@@ -338,7 +426,17 @@ export async function runBrowserFullFormatMatrixCore({ runJson, opfsHandle, dir,
   return state.summary();
 }
 
-async function runHdiffApplyFixture({ dir, fixtures, opfsHandle, runCommand }) {
+async function runHdiffApplyFixture({
+  dir,
+  fixtures,
+  opfsHandle,
+  runCommand,
+}: {
+  dir: string;
+  fixtures: BrowserFormatMatrixCoreFixtures;
+  opfsHandle: FileSystemDirectoryHandle;
+  runCommand: BrowserFormatMatrixRunCommand;
+}) {
   if (!fixtures?.hdiffSourcePath || !fixtures?.hdiffPatchPath || !fixtures?.hdiffTargetPath) {
     throw new Error('hdiffpatch fixture paths are required for the full format matrix');
   }
@@ -359,7 +457,15 @@ async function runHdiffApplyFixture({ dir, fixtures, opfsHandle, runCommand }) {
   );
 }
 
-async function runBspApplyFixture({ dir, opfsHandle, runCommand }) {
+async function runBspApplyFixture({
+  dir,
+  opfsHandle,
+  runCommand,
+}: {
+  dir: string;
+  opfsHandle: FileSystemDirectoryHandle;
+  runCommand: BrowserFormatMatrixRunCommand;
+}) {
   const inputPath = joinGuestPath(dir, 'fixture-bsp-input.bin');
   const patchPath = joinGuestPath(dir, 'fixture-bsp-update.bsp');
   const outputPath = joinGuestPath(dir, 'fixture-applied-bsp.bin');
@@ -381,7 +487,11 @@ async function runBspApplyFixture({ dir, opfsHandle, runCommand }) {
   );
 }
 
-async function runPatchApplyNoCompress(runCommand, { inputPath, patchPath, outputPath }, runOptions = undefined) {
+async function runPatchApplyNoCompress(
+  runCommand: BrowserFormatMatrixRunCommand,
+  { inputPath, patchPath, outputPath }: { inputPath: string; outputPath: string; patchPath: string },
+  runOptions: BrowserFormatMatrixRunOptions | undefined = undefined,
+) {
   return runCommand(`patch-apply ${pathBasename(patchPath)}`, command('patch-apply', {
     input: inputPath,
     no_compress: true,
@@ -391,7 +501,15 @@ async function runPatchApplyNoCompress(runCommand, { inputPath, patchPath, outpu
   }), runOptions);
 }
 
-async function runCreatedPatchApply(runCommand, { format, createResult, originalPath, patchPath }) {
+async function runCreatedPatchApply(
+  runCommand: BrowserFormatMatrixRunCommand,
+  {
+    createResult,
+    format,
+    originalPath,
+    patchPath,
+  }: { createResult: BrowserFormatMatrixRunJsonResult; format: string; originalPath: string; patchPath: string },
+) {
   assert(createResult.ok, `patch-create ${format} should succeed`);
   assert(getTerminalEvent(createResult).status === 'succeeded', `patch-create ${format} should finish succeeded`);
   const applyPath = joinGuestPath(pathDirname(patchPath), `patch-applied-${format}.bin`);
@@ -403,12 +521,18 @@ async function runCreatedPatchApply(runCommand, { format, createResult, original
   return { applyPath, applyResult };
 }
 
-function command(type, args) {
-  return { args, type };
+function command<TType extends BrowserFormatMatrixCommandType>(
+  type: TType,
+  args: BrowserFormatMatrixCommand<TType>['args'],
+): BrowserFormatMatrixCommand<TType> {
+  return { args, type } as BrowserFormatMatrixCommand<TType>;
 }
 
-function createMatrixState({ onEvent, onStep } = {}) {
-  const steps = [];
+function createMatrixState({
+  onEvent,
+  onStep,
+}: Pick<BrowserFormatMatrixOptions, 'onEvent' | 'onStep'> = {}): BrowserFormatMatrixState {
+  const steps: BrowserFormatMatrixStep[] = [];
   const startedAt = now();
   return {
     addStep(step) {
@@ -429,7 +553,13 @@ function createMatrixState({ onEvent, onStep } = {}) {
   };
 }
 
-async function runMatrixCommand(state, runJson, name, typedCommand, options = {}) {
+async function runMatrixCommand(
+  state: BrowserFormatMatrixState,
+  runJson: BrowserFormatMatrixRunJson,
+  name: string,
+  typedCommand: RomWeaverCommand,
+  options: BrowserFormatMatrixRunOptions = {},
+) {
   const startedAt = now();
   state.addStep({
     command: typedCommand.type,
@@ -467,13 +597,15 @@ async function runMatrixCommand(state, runJson, name, typedCommand, options = {}
   }
 }
 
-function getTerminalEvent(result) {
+function getTerminalEvent(result: BrowserFormatMatrixRunJsonResult): RomWeaverRunJsonEvent {
   assert(Array.isArray(result?.events), 'runJson result should include events');
   assert(result.events.length > 0, 'runJson result should include at least one event');
-  return result.events.at(-1);
+  const event = result.events.at(-1);
+  assert(event, 'runJson result should include a terminal event');
+  return event;
 }
 
-function assertRunJsonSucceeded(result, options = {}) {
+function assertRunJsonSucceeded(result: BrowserFormatMatrixRunJsonResult, options: { command?: string } = {}) {
   const terminal = getTerminalEvent(result);
   const commandName = options.command ?? 'command';
   const failureMessage = [
@@ -495,7 +627,8 @@ function assertRunJsonSucceeded(result, options = {}) {
   return terminal;
 }
 
-function assertFailedByPattern(result, pattern, context) {
+function assertFailedByPattern(result: BrowserFormatMatrixRunJsonResult, pattern: RegExp | undefined, context: string) {
+  assert(pattern, `${context} should have a failure expectation`);
   assert(result.ok === false, `${context} should fail in the current wasm matrix`);
   assert(result.exitCode !== 0, `${context} should not exit with code 0`);
   const terminal = getTerminalEvent(result);
@@ -505,25 +638,26 @@ function assertFailedByPattern(result, pattern, context) {
   assert(matches, `${context} should match ${pattern}; label=${JSON.stringify(label)} stderr=${JSON.stringify(stderr)}`);
 }
 
-function assertBytesEqual(actual, expected, message) {
+function assertBytesEqual(actual: Uint8Array, expected: Uint8Array, message: string) {
   assert(actual.byteLength === expected.byteLength, `${message}; length ${actual.byteLength} !== ${expected.byteLength}`);
   for (let index = 0; index < actual.byteLength; index += 1) {
     assert(actual[index] === expected[index], `${message}; byte ${index} ${actual[index]} !== ${expected[index]}`);
   }
 }
 
-function assert(condition, message) {
+function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
 
-function errorMessage(error) {
+function errorMessage(error: unknown) {
   if (!error) return '';
   if (error instanceof Error) return error.message;
   return String(error);
 }
 
-function errorStack(error) {
-  if (error && typeof error === 'object' && typeof error.stack === 'string') return error.stack;
+function errorStack(error: unknown) {
+  const stack = error && typeof error === 'object' ? (error as { stack?: unknown }).stack : undefined;
+  if (typeof stack === 'string') return stack;
   return '';
 }
 
@@ -531,7 +665,7 @@ function now() {
   return typeof performance === 'object' && typeof performance.now === 'function' ? performance.now() : Date.now();
 }
 
-async function loadMatrixFixtureBytes(options) {
+async function loadMatrixFixtureBytes(options: BrowserFormatMatrixOptions) {
   const vcdiffUrls = normalizeFixtureUrls(options.vcdiffFixtureUrls, DEFAULT_VCDIFF_FIXTURE_URLS);
   const hdiffUrls = normalizeFixtureUrls(options.hdiffFixtureUrls, DEFAULT_HDIFF_FIXTURE_URLS);
   const [vcdiffSource, vcdiffPatch, vcdiffTarget, hdiffSource, hdiffPatch, hdiffTarget] = await Promise.all([
@@ -556,7 +690,10 @@ async function loadMatrixFixtureBytes(options) {
   };
 }
 
-function normalizeFixtureUrls(value, defaults) {
+function normalizeFixtureUrls(
+  value: Partial<BrowserFormatMatrixFixtureUrls> | undefined,
+  defaults: BrowserFormatMatrixFixtureUrls,
+): BrowserFormatMatrixFixtureUrls {
   return {
     patch: value?.patch || defaults.patch,
     source: value?.source || defaults.source,
@@ -564,14 +701,14 @@ function normalizeFixtureUrls(value, defaults) {
   };
 }
 
-async function loadFixtureBytes(value, fallbackUrl) {
+async function loadFixtureBytes(value: BrowserFormatMatrixBytes | undefined, fallbackUrl: URL) {
   if (value instanceof Uint8Array || value instanceof ArrayBuffer || typeof value === 'string') {
     return toBytes(value);
   }
   return fetchBytes(fallbackUrl);
 }
 
-async function fetchBytes(url) {
+async function fetchBytes(url: URL) {
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`failed to fetch fixture ${url}: ${response.status} ${response.statusText}`);
@@ -579,15 +716,15 @@ async function fetchBytes(url) {
   return new Uint8Array(await response.arrayBuffer());
 }
 
-export function toBytes(value) {
+export function toBytes(value: BrowserFormatMatrixBytes) {
   if (typeof value === 'string') return TEXT_ENCODER.encode(value);
   if (value instanceof Uint8Array) return value;
   if (value instanceof ArrayBuffer) return new Uint8Array(value);
   throw new TypeError('expected string, Uint8Array, or ArrayBuffer');
 }
 
-export function joinGuestPath(...parts) {
-  const tokens = [];
+export function joinGuestPath(...parts: string[]) {
+  const tokens: string[] = [];
   for (const part of parts) {
     const value = String(part);
     for (const token of value.split('/')) {
@@ -597,34 +734,34 @@ export function joinGuestPath(...parts) {
   return `/${tokens.join('/')}`;
 }
 
-async function readGuestFile(rootHandle, guestPath) {
+async function readGuestFile(rootHandle: FileSystemDirectoryHandle, guestPath: string) {
   const fileHandle = await getGuestFileHandle(rootHandle, guestPath);
   const file = await fileHandle.getFile();
   return new Uint8Array(await file.arrayBuffer());
 }
 
-export async function writeGuestFile(rootHandle, guestPath, contents) {
+export async function writeGuestFile(rootHandle: FileSystemDirectoryHandle, guestPath: string, contents: Uint8Array) {
   const fileHandle = await getGuestFileHandle(rootHandle, guestPath, { create: true });
   const writable = await fileHandle.createWritable();
-  await writable.write(contents);
+  await writable.write(contents as FileSystemWriteChunkType);
   await writable.close();
 }
 
-function pathBasename(path) {
+function pathBasename(path: string) {
   const normalized = String(path).replace(/\/+$/, '');
   const index = normalized.lastIndexOf('/');
   if (index < 0) return normalized;
   return normalized.slice(index + 1);
 }
 
-function pathDirname(path) {
+function pathDirname(path: string) {
   const normalized = String(path).replace(/\/+$/, '');
   const index = normalized.lastIndexOf('/');
   if (index <= 0) return '/';
   return normalized.slice(0, index);
 }
 
-function toGuestRelativePath(guestPath) {
+function toGuestRelativePath(guestPath: string) {
   const normalized = String(guestPath);
   if (normalized === OPFS_GUEST_ROOT) return '';
 
@@ -636,12 +773,12 @@ function toGuestRelativePath(guestPath) {
   return normalized.slice(prefix.length);
 }
 
-function splitRelativePath(relativePath) {
+function splitRelativePath(relativePath: string) {
   if (relativePath.length === 0) return [];
   return relativePath.split('/').filter((token) => token.length > 0);
 }
 
-async function getOrCreateDirectoryHandle(rootHandle, relativeDirectoryPath) {
+async function getOrCreateDirectoryHandle(rootHandle: FileSystemDirectoryHandle, relativeDirectoryPath: string) {
   const segments = splitRelativePath(relativeDirectoryPath);
   let current = rootHandle;
   for (const segment of segments) {
@@ -650,7 +787,11 @@ async function getOrCreateDirectoryHandle(rootHandle, relativeDirectoryPath) {
   return current;
 }
 
-async function getGuestFileHandle(rootHandle, guestPath, { create = false } = {}) {
+async function getGuestFileHandle(
+  rootHandle: FileSystemDirectoryHandle,
+  guestPath: string,
+  { create = false }: { create?: boolean } = {},
+) {
   const relativePath = toGuestRelativePath(guestPath);
   const fileName = pathBasename(relativePath);
   const parentPath = pathDirname(relativePath);
@@ -658,7 +799,7 @@ async function getGuestFileHandle(rootHandle, guestPath, { create = false } = {}
   return parentHandle.getFileHandle(fileName, { create });
 }
 
-async function removeFixtureDirectory(rootHandle, directoryName) {
+async function removeFixtureDirectory(rootHandle: FileSystemDirectoryHandle, directoryName: string) {
   try {
     await rootHandle.removeEntry(directoryName, { recursive: true });
   } catch (_error) {
@@ -666,11 +807,11 @@ async function removeFixtureDirectory(rootHandle, directoryName) {
   }
 }
 
-function formatToken(value) {
+function formatToken(value: string) {
   return value.replace(/[^a-z0-9]+/gi, '-');
 }
 
-function containerSuffix(format) {
+function containerSuffix(format: string) {
   switch (format) {
     case 'tar.gz':
       return 'tar.gz';
@@ -683,8 +824,8 @@ function containerSuffix(format) {
   }
 }
 
-function patchExtension(format) {
-  const map = {
+function patchExtension(format: string) {
+  const map: Record<string, string> = {
     aps: 'aps',
     apsgba: 'apsgba',
     bdf: 'bsdiff',
@@ -710,7 +851,7 @@ function patchExtension(format) {
   return map[format];
 }
 
-export function summarizeBrowserFormatMatrixResult(result) {
+export function summarizeBrowserFormatMatrixResult(result: Partial<BrowserFormatMatrixSummary> | null | undefined) {
   return [
     `passed=${result?.passedSteps ?? 0}`,
     `failed=${result?.failedSteps ?? 0}`,

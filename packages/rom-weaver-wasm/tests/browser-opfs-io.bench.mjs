@@ -1,7 +1,7 @@
 import { bench, describe } from 'vitest';
 import {
   __createBrowserOpfsRandomAccessFileForTest,
-} from '../src/rom-weaver-browser-opfs-api.mjs';
+} from '../src/rom-weaver-browser-opfs-api.ts';
 import { createBenchOptions, MIB, readBooleanEnv, readPositiveIntEnv } from './browser-bench-shared.mjs';
 import { createMockSyncAccessHandle } from './opfs-mock-sync-handle.mjs';
 

@@ -1,10 +1,64 @@
+// @ts-nocheck
 import * as wasiShim from '@bjorn3/browser_wasi_shim';
 import {
   createJsonLineParser,
   createTraceJsonLineParser,
   createWasmEnvImports,
   normalizeGuestPath,
-} from './rom-weaver-runtime-utils.mjs';
+} from './rom-weaver-runtime-utils.ts';
+import type {
+  FileSystemDirectoryHandleLike,
+  RomWeaverBrowserOpfsOptions,
+  RomWeaverBrowserOpfsRunOptions,
+  RomWeaverBrowserSyncAccessMode,
+  RomWeaverCommand,
+  RomWeaverDefaultThreads,
+  RomWeaverEnv,
+  RomWeaverRunInput,
+  RomWeaverRunJsonEvent,
+  RomWeaverRunJsonOptions,
+  RomWeaverRunJsonResult,
+  RomWeaverRunOptions,
+  RomWeaverRunOutput,
+  RomWeaverRunRequest,
+  RomWeaverRunResult,
+} from './rom-weaver-types.d.ts';
+
+type AnyRecord = Record<string, any>;
+type LineHandler = (line: string) => void;
+type TraceLine = (line: string) => void;
+type BrowserOpfsCreateOptions = RomWeaverBrowserOpfsOptions & {
+  preferThreadedWasm?: boolean;
+  threadedWasmUrl?: string | URL;
+  threadScratchFilePoolSize?: number;
+};
+type BrowserOpfsRunOptions = RomWeaverBrowserOpfsRunOptions &
+  RomWeaverRunJsonOptions<RomWeaverRunJsonEvent, unknown> & {
+    __streamBroadcastChannelName?: string;
+    __streamRequestId?: number;
+    onStderrLine?: LineHandler;
+    onStdoutLine?: LineHandler;
+    threadScratchFilePoolSize?: number;
+  };
+type BrowserOpfsRuntimePayload = AnyRecord;
+
+export interface RomWeaverBrowserOpfsRunner {
+  dispose(): Promise<void>;
+  fs: null;
+  mode: 'browser-opfs';
+  opfsGuestPath: string;
+  opfsHandle: unknown;
+  run(commandOrRequest: RomWeaverRunInput, options?: RomWeaverBrowserOpfsRunOptions): Promise<RomWeaverRunResult>;
+  runJson<TEvent = RomWeaverRunJsonEvent, TTraceEvent = unknown>(
+    commandOrRequest: RomWeaverRunInput,
+    options?: RomWeaverRunJsonOptions<TEvent, TTraceEvent> & RomWeaverBrowserOpfsRunOptions,
+  ): Promise<RomWeaverRunJsonResult<TEvent, TTraceEvent>>;
+  runtimeMounts: string[];
+  threaded: boolean;
+  wasmUrl: string | null;
+  workGuestPath: string;
+  writableRoots: string[];
+}
 
 const DEFAULT_WORK_GUEST_PATH = '/work';
 const DEFAULT_BROWSER_WASM_URLS = [
@@ -81,7 +135,7 @@ const WASI_ERRNO_AGAIN = 6;
 const WASI_ERRNO_ENOSYS = 52;
 const THREAD_WORKER_MOUNT_CACHE = createBrowserOpfsMountCache();
 
-export async function createRomWeaverBrowserOpfs(options = {}) {
+export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptions = {}) {
   assertDedicatedWorkerRuntime();
 
   const workGuestPath = normalizeGuestPath(
@@ -149,7 +203,10 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
       await threadWorkerPool?.dispose();
     },
 
-    async run(commandOrRequest, runOptions = {}) {
+    async run(
+      commandOrRequest: RomWeaverRunInput,
+      runOptions: BrowserOpfsRunOptions = {},
+    ): Promise<RomWeaverRunResult> {
       const runDefaultThreads = resolveConfiguredDefaultThreads(runOptions, baseDefaultThreads);
       const request = withBrowserThreadLimit(
         withDefaultThreadRequest(
@@ -192,7 +249,7 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
         trace('[browser-opfs] invalidate mount cache before run done');
       }
 
-      const closeables = [];
+      const closeables: any[] = [];
       let runSucceeded = false;
       const resolvedSyncAccessMode = resolveRunSyncAccessMode({
         baseMode: options.syncAccessMode,
@@ -361,27 +418,30 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
       }
     },
 
-    async runJson(commandOrRequest, runOptions = {}) {
+    async runJson<TEvent = RomWeaverRunJsonEvent, TTraceEvent = unknown>(
+      commandOrRequest: RomWeaverRunInput,
+      runOptions: BrowserOpfsRunOptions & RomWeaverRunJsonOptions<TEvent, TTraceEvent> = {},
+    ): Promise<RomWeaverRunJsonResult<TEvent, TTraceEvent>> {
       const trace = createRunTrace(runOptions);
       const request = normalizeRunRequest(commandOrRequest, {
         ...readRunOutputOverrides(runOptions),
         json: true,
       });
       trace(`[browser-opfs] runJson start command=${formatCommandForTrace(readRunRequestCommand(request))}`);
-      const parsed = createJsonLineParser({
+      const parsed = createJsonLineParser<TEvent>({
         onEvent: runOptions.onEvent,
         onNonJsonLine: runOptions.onNonJsonLine,
       });
-      const parsedTrace = createTraceJsonLineParser({
+      const parsedTrace = createTraceJsonLineParser<TTraceEvent>({
         onTraceEvent: runOptions.onTraceEvent,
         onTraceNonJsonLine: runOptions.onTraceNonJsonLine,
       });
       const result = await this.run(request, {
         ...runOptions,
-        onStderrLine(line) {
+        onStderrLine(line: string) {
           parsedTrace.pushLine(line);
         },
-        onStdoutLine(line) {
+        onStdoutLine(line: string) {
           parsed.pushLine(line);
         },
       });
@@ -410,12 +470,16 @@ export async function createRomWeaverBrowserOpfs(options = {}) {
     threaded,
     wasmUrl,
     writableRoots: baseWritableRoots,
-    run: (commandOrRequest, runOptions) => runner.run(commandOrRequest, runOptions),
-    runJson: (commandOrRequest, runOptions) => runner.runJson(commandOrRequest, runOptions),
+    run: (commandOrRequest: RomWeaverRunInput, runOptions?: BrowserOpfsRunOptions) =>
+      runner.run(commandOrRequest, runOptions),
+    runJson: <TEvent = RomWeaverRunJsonEvent, TTraceEvent = unknown>(
+      commandOrRequest: RomWeaverRunInput,
+      runOptions?: BrowserOpfsRunOptions & RomWeaverRunJsonOptions<TEvent, TTraceEvent>,
+    ) => runner.runJson<TEvent, TTraceEvent>(commandOrRequest, runOptions),
   };
 }
 
-export async function __runRomWeaverBrowserWasiThread(payload = {}) {
+export async function __runRomWeaverBrowserWasiThread(payload: BrowserOpfsRuntimePayload = {}) {
   assertDedicatedWorkerRuntime();
 
   const {
@@ -1308,6 +1372,8 @@ function directWasiFileWrite({
 }
 
 class BrowserOpfsMount {
+  [key: string]: any;
+
   static async create({
     directoryHandle,
     mountPath,
@@ -1491,6 +1557,8 @@ class BrowserOpfsMount {
 }
 
 class PreparedWasiPreopenDirectory extends wasiShim.PreopenDirectory {
+  [key: string]: any;
+
   constructor(mount, options = {}) {
     super(options.preopenName ?? mount.mountPath, mount.contents);
     this.mount = mount;
@@ -1599,6 +1667,8 @@ class PreparedWasiPreopenDirectory extends wasiShim.PreopenDirectory {
 }
 
 class BrowserOpfsRandomAccessFile {
+  [key: string]: any;
+
   constructor(syncHandle, options = {}) {
     this.syncHandle = syncHandle;
     this.scratchName = options.scratchName ?? null;
@@ -1815,6 +1885,8 @@ function readSyncAccessHandleFully(syncHandle, dst, offset) {
 }
 
 class BrowserMemoryRandomAccessFile {
+  [key: string]: any;
+
   constructor(initialCapacity = 0) {
     this.bytes = new Uint8Array(Math.max(0, Number(initialCapacity) || 0));
     this.length = 0;
@@ -1871,6 +1943,8 @@ class BrowserMemoryRandomAccessFile {
 }
 
 class BrowserVirtualRandomAccessFile {
+  [key: string]: any;
+
   constructor(source, options = {}) {
     this.source = source;
     this.proxy = isVirtualFileProxy(source) ? source : null;
@@ -2144,6 +2218,8 @@ export function __createBrowserVirtualRandomAccessFileForTest(source, options = 
 }
 
 class WasiRandomAccessFileInode extends wasiShim.Inode {
+  [key: string]: any;
+
   constructor(file, options = {}) {
     super();
     this.file = file;
@@ -2227,6 +2303,8 @@ function emitWasiReadErrorTrace(scope, rawValue, retCode) {
 }
 
 class OpenWasiRandomAccessFile extends wasiShim.Fd {
+  [key: string]: any;
+
   constructor(inode) {
     super();
     this.inode = inode;
@@ -4476,7 +4554,7 @@ function resolveRunSyncAccessMode({ baseMode, runMode, threaded }) {
 function resolveThreadWorkerUrl(value) {
   if (value instanceof URL) return value.href;
   if (typeof value === 'string' && value.trim().length > 0) return value;
-  return new URL('./workers/browser-wasi-thread-worker.mjs', import.meta.url).href;
+  return new URL('./workers/browser-wasi-thread-worker.ts', import.meta.url).href;
 }
 
 function assertDedicatedWorkerRuntime() {

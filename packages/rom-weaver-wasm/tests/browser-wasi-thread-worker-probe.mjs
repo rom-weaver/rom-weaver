@@ -19,7 +19,7 @@ self.addEventListener('message', (event) => {
   channel.close();
 });
 
-import '../src/workers/browser-wasi-thread-worker.mjs';
+import '../src/workers/browser-wasi-thread-worker.ts';
 
 if (typeof BroadcastChannel === 'function') {
   const channel = new BroadcastChannel(PROBE_CHANNEL_NAME);

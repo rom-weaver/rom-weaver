@@ -1,20 +1,48 @@
 import {
   readWorkerErrorContext,
   resolveWorkerErrorKind,
-} from './worker-error-utils.mjs';
+} from './worker-error-utils.ts';
+import type {
+  RomWeaverBrowserOpfsRunner,
+} from '../rom-weaver-browser-opfs-api.ts';
+import type {
+  RomWeaverRunJsonEvent,
+  RomWeaverRunJsonOptions,
+  RomWeaverWorkerErrorContext,
+  RomWeaverWorkerSerializedError,
+} from '../rom-weaver-types.d.ts';
+import type {
+  RomWeaverWorkerRequest,
+  RomWeaverWorkerResponse,
+} from './worker-protocol.ts';
 
-export function createRunnerWorkerMessageQueue({ postMessage, initRunner }) {
-  let runner = null;
+type RunnerWorkerInitResult = {
+  mode: 'browser-opfs';
+  runner: RomWeaverBrowserOpfsRunner;
+};
+
+type RunnerWorkerMessageQueueOptions = {
+  initRunner: (input: { mode?: string; options: Record<string, unknown> }) => Promise<RunnerWorkerInitResult>;
+  postMessage: (message: RomWeaverWorkerResponse) => void;
+};
+
+type RunnerWorkerRunOptions = RomWeaverRunJsonOptions<RomWeaverRunJsonEvent, unknown> & Record<string, unknown>;
+type AnyRecord = Record<string, any>;
+type AnyWorkerRequest = RomWeaverWorkerRequest & AnyRecord;
+
+export function createRunnerWorkerMessageQueue({ postMessage, initRunner }: RunnerWorkerMessageQueueOptions) {
+  let runner: RomWeaverBrowserOpfsRunner | null = null;
   let queue = Promise.resolve();
   let activeMessage = null;
   let queuedCount = 0;
 
   return {
-    enqueue(message) {
-      const queuedMessage = summarizeQueueMessage(message);
+    enqueue(message: RomWeaverWorkerRequest) {
+      const workerMessage = message as AnyWorkerRequest;
+      const queuedMessage = summarizeQueueMessage(workerMessage);
       queuedCount += 1;
       postTraceLine(
-        readRequestId(message),
+        readRequestId(workerMessage),
         `[runner-worker] message enqueued ${queuedMessage} queued=${queuedCount} active=${activeMessage ?? 'none'}`,
       );
       queue = queue
@@ -22,12 +50,12 @@ export function createRunnerWorkerMessageQueue({ postMessage, initRunner }) {
           queuedCount = Math.max(0, queuedCount - 1);
           activeMessage = queuedMessage;
           postTraceLine(
-            readRequestId(message),
+            readRequestId(workerMessage),
             `[runner-worker] message handling ${queuedMessage} queued=${queuedCount}`,
           );
           try {
-            await handleMessage(message);
-            postTraceLine(readRequestId(message), `[runner-worker] message handled ${queuedMessage}`);
+            await handleMessage(workerMessage);
+            postTraceLine(readRequestId(workerMessage), `[runner-worker] message handled ${queuedMessage}`);
           } finally {
             activeMessage = null;
           }
@@ -35,14 +63,14 @@ export function createRunnerWorkerMessageQueue({ postMessage, initRunner }) {
         .catch((error) => {
           postMessage({
             type: 'error',
-            requestId: readRequestId(message),
-            error: serializeError(error, message),
+            requestId: readRequestId(workerMessage),
+            error: serializeError(error, workerMessage),
           });
         });
     },
   };
 
-  async function handleMessage(message) {
+  async function handleMessage(message: AnyWorkerRequest) {
     const type = readType(message);
     const requestId = readRequestId(message);
 
@@ -81,18 +109,18 @@ export function createRunnerWorkerMessageQueue({ postMessage, initRunner }) {
           `[runner-worker] runJson received ${summarizeRunRequest(message)}`,
         );
         assertRunnerInitialized();
-        const runOptions = {
+        const runOptions: RunnerWorkerRunOptions = {
           ...(message.options ?? {}),
-          onEvent(event) {
+          onEvent(event: RomWeaverRunJsonEvent) {
             postMessage({ type: 'event', requestId, event });
           },
-          onNonJsonLine(line) {
+          onNonJsonLine(line: string) {
             postMessage({ type: 'nonJsonLine', requestId, line: String(line) });
           },
-          onTraceEvent(event) {
+          onTraceEvent(event: unknown) {
             postMessage({ type: 'traceEvent', requestId, event });
           },
-          onTraceNonJsonLine(line) {
+          onTraceNonJsonLine(line: string) {
             postMessage({ type: 'traceNonJsonLine', requestId, line: String(line) });
           },
         };
@@ -149,33 +177,33 @@ export function createRunnerWorkerMessageQueue({ postMessage, initRunner }) {
   }
 }
 
-function readType(message) {
+function readType(message: unknown) {
   if (!message || typeof message !== 'object') {
     throw new TypeError('worker message must be an object');
   }
 
-  return message.type;
+  return (message as AnyRecord).type;
 }
 
-function readRequestId(message) {
+function readRequestId(message: unknown) {
   if (!message || typeof message !== 'object') {
     return null;
   }
-  return message.requestId ?? null;
+  return (message as AnyRecord).requestId ?? null;
 }
 
-function readRunPayload(message) {
+function readRunPayload(message: unknown) {
   if (!message || typeof message !== 'object') return undefined;
-  return message.request;
+  return (message as AnyRecord).request;
 }
 
-function summarizeQueueMessage(message) {
+function summarizeQueueMessage(message: unknown) {
   const type = safeReadType(message);
   const requestId = readRequestId(message);
   return `requestId=${requestId ?? 'none'} type=${type}`;
 }
 
-function safeReadType(message) {
+function safeReadType(message: unknown) {
   try {
     return String(readType(message) ?? 'unknown');
   } catch {
@@ -183,7 +211,7 @@ function safeReadType(message) {
   }
 }
 
-function traceRunOptionLine(runOptions, line) {
+function traceRunOptionLine(runOptions: RunnerWorkerRunOptions, line: string) {
   const onTraceNonJsonLine = typeof runOptions?.onTraceNonJsonLine === 'function'
     ? runOptions.onTraceNonJsonLine
     : null;
@@ -195,25 +223,27 @@ function traceRunOptionLine(runOptions, line) {
   }
 }
 
-function summarizeRunRequest(message) {
-  const options = message?.options && typeof message.options === 'object' ? message.options : {};
+function summarizeRunRequest(message: unknown) {
+  const record = (message && typeof message === 'object' ? message : {}) as AnyRecord;
+  const options = record.options && typeof record.options === 'object' ? record.options : {};
   return [
-    `command=${formatCommandForTrace(readPayloadCommand(message?.request))}`,
+    `command=${formatCommandForTrace(readPayloadCommand(record.request))}`,
     `stream=${typeof options.__streamBroadcastChannelName === 'string'}`,
     `virtualFiles=${summarizeVirtualFiles(options.virtualFiles)}`,
   ].join(' ');
 }
 
-function summarizeRunResult(result) {
+function summarizeRunResult(result: unknown) {
   if (!result || typeof result !== 'object') return 'result=unknown';
-  const parts = [];
-  if (Object.hasOwn(result, 'ok')) parts.push(`ok=${Boolean(result.ok)}`);
-  if (Object.hasOwn(result, 'exitCode')) parts.push(`exitCode=${String(result.exitCode)}`);
-  if (Array.isArray(result.events)) parts.push(`events=${result.events.length}`);
-  if (Array.isArray(result.nonJsonLines)) parts.push(`nonJsonLines=${result.nonJsonLines.length}`);
-  if (Array.isArray(result.traceEvents)) parts.push(`traceEvents=${result.traceEvents.length}`);
-  if (Array.isArray(result.traceNonJsonLines)) {
-    parts.push(`traceNonJsonLines=${result.traceNonJsonLines.length}`);
+  const record = result as AnyRecord;
+  const parts: string[] = [];
+  if (Object.hasOwn(record, 'ok')) parts.push(`ok=${Boolean(record.ok)}`);
+  if (Object.hasOwn(record, 'exitCode')) parts.push(`exitCode=${String(record.exitCode)}`);
+  if (Array.isArray(record.events)) parts.push(`events=${record.events.length}`);
+  if (Array.isArray(record.nonJsonLines)) parts.push(`nonJsonLines=${record.nonJsonLines.length}`);
+  if (Array.isArray(record.traceEvents)) parts.push(`traceEvents=${record.traceEvents.length}`);
+  if (Array.isArray(record.traceNonJsonLines)) {
+    parts.push(`traceNonJsonLines=${record.traceNonJsonLines.length}`);
   }
   return parts.length > 0 ? parts.join(' ') : 'result=object';
 }
@@ -256,9 +286,10 @@ function formatCommandForTrace(command) {
   }
 }
 
-function readPayloadCommand(payload) {
+function readPayloadCommand(payload: unknown) {
   if (!payload || typeof payload !== 'object') return null;
-  return payload.command && typeof payload.command === 'object' ? payload.command : payload;
+  const record = payload as AnyRecord;
+  return record.command && typeof record.command === 'object' ? record.command : record;
 }
 
 function toTraceValue(value) {
@@ -287,10 +318,11 @@ function truncateForTrace(value, maxLength = 180) {
   return `${text.slice(0, maxLength - 1)}...`;
 }
 
-function serializeError(error, requestMessage) {
-  const name = error && typeof error.name === 'string' ? error.name : 'Error';
-  const message = error && typeof error.message === 'string' ? error.message : String(error);
-  const stack = error && typeof error.stack === 'string' ? error.stack : undefined;
+function serializeError(error: unknown, requestMessage: unknown): RomWeaverWorkerSerializedError {
+  const record = (error && typeof error === 'object' ? error : {}) as AnyRecord;
+  const name = typeof record.name === 'string' ? record.name : 'Error';
+  const message = typeof record.message === 'string' ? record.message : String(error);
+  const stack = typeof record.stack === 'string' ? record.stack : undefined;
   const kind = resolveErrorKind(error, name, message);
   const context = resolveErrorContext(error, requestMessage);
 
@@ -303,11 +335,11 @@ function serializeError(error, requestMessage) {
   };
 }
 
-function resolveErrorKind(error, name, message) {
+function resolveErrorKind(error: unknown, name: string, message: string) {
   return resolveWorkerErrorKind(error, name, message);
 }
 
-function resolveErrorContext(error, requestMessage) {
+function resolveErrorContext(error: unknown, requestMessage: unknown): RomWeaverWorkerErrorContext | undefined {
   const explicitContext = readErrorContext(error);
   const requestContext = readRequestContext(requestMessage);
   const context = {
@@ -332,22 +364,23 @@ function resolveErrorContext(error, requestMessage) {
   return context;
 }
 
-function readErrorContext(error) {
+function readErrorContext(error: unknown) {
   return readWorkerErrorContext(error) ?? {};
 }
 
-function readRequestContext(message) {
+function readRequestContext(message: unknown): RomWeaverWorkerErrorContext {
   if (!message || typeof message !== 'object') {
     return {};
   }
 
-  const context = {};
-  if (typeof message.type === 'string') {
-    context.stage = `worker.${message.type}`;
+  const record = message as AnyRecord;
+  const context: RomWeaverWorkerErrorContext = {};
+  if (typeof record.type === 'string') {
+    context.stage = `worker.${record.type}`;
   }
 
-  if (message.type === 'run' || message.type === 'runJson') {
-    const command = readPayloadCommand(message.request);
+  if (record.type === 'run' || record.type === 'runJson') {
+    const command = readPayloadCommand(record.request) as AnyRecord | null;
     if (typeof command?.type === 'string' && command.type.length > 0) {
       context.command = command.type;
     }

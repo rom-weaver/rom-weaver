@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { createRomWeaverBrowserOpfs } from '../src/rom-weaver-browser-opfs-api.mjs';
+import { createRomWeaverBrowserOpfs } from '../src/rom-weaver-browser-opfs-api.ts';
 import {
   BrowserRomWeaverWorkerClient,
   createBrowserWorkerClient,
-} from '../src/workers/browser-worker-client.mjs';
+} from '../src/workers/browser-worker-client.ts';
 import {
   assertRunJsonSucceeded,
   getGuestFileSize,

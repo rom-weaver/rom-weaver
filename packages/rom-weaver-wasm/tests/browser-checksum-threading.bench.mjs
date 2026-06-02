@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, bench, describe } from 'vitest';
-import { createBrowserWorkerClient } from '../src/workers/browser-worker-client.mjs';
+import { createBrowserWorkerClient } from '../src/workers/browser-worker-client.ts';
 import {
   CHECKSUM_THREADING_DEFAULTS,
   createBenchOptions,

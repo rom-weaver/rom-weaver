@@ -1,5 +1,7 @@
-import { createRomWeaverBrowserOpfs } from '../rom-weaver-browser-opfs-api.mjs';
-import { createRunnerWorkerMessageQueue } from './runner-worker-core.mjs';
+import { createRomWeaverBrowserOpfs } from '../rom-weaver-browser-opfs-api.ts';
+import { createRunnerWorkerMessageQueue } from './runner-worker-core.ts';
+import type { RomWeaverBrowserOpfsRunner } from '../rom-weaver-browser-opfs-api.ts';
+import type { RomWeaverWorkerRequest } from './worker-protocol.ts';
 
 const workerMessages = createRunnerWorkerMessageQueue({
   postMessage(message) {
@@ -15,14 +17,14 @@ const workerMessages = createRunnerWorkerMessageQueue({
     }
 
     return {
-      runner: await createRomWeaverBrowserOpfs(options),
-      mode: 'browser-opfs',
+      runner: await createRomWeaverBrowserOpfs(options) as RomWeaverBrowserOpfsRunner,
+      mode: 'browser-opfs' as const,
     };
   },
 });
 
 self.addEventListener('message', (event) => {
-  workerMessages.enqueue(event.data);
+  workerMessages.enqueue(event.data as RomWeaverWorkerRequest);
 });
 
 self.addEventListener('messageerror', () => {
