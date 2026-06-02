@@ -76,11 +76,11 @@ const layoutClasses = {
   tabPanelHidden: "hidden",
   tabPanelVisible: "block",
   title:
-    "m-0 inline-flex items-center gap-[9px] text-[28px] font-bold leading-[1.06] tracking-[0.01em] text-[var(--rom-weaver-color-outer-btn)] [text-shadow:0_10px_22px_rgba(7,15,22,.45)] max-[641px]:gap-[7px] max-[641px]:text-[22px]",
+    "m-0 inline-flex items-center gap-[11px] text-[36px] font-bold leading-[1.06] tracking-[0.01em] text-[var(--rom-weaver-color-outer-btn)] [text-shadow:0_10px_22px_rgba(7,15,22,.45)] max-[641px]:gap-[8px] max-[641px]:text-[26px]",
   titleAccent: "text-[var(--rom-weaver-color-primary-hover)] [text-shadow:0_8px_18px_oklch(0.59_0.15_301_/_0.45)]",
-  titleIcon: "h-[52px] w-[52px] flex-none max-[641px]:h-[42px] max-[641px]:w-[42px]",
+  titleIcon: "max-h-full max-w-full flex-none object-contain",
   titleIconFrame:
-    "inline-flex h-[52px] w-[52px] flex-none items-center justify-center rounded-[11px] max-[641px]:h-[42px] max-[641px]:w-[42px] max-[641px]:rounded-[9px]",
+    "inline-flex h-[72px] w-[72px] flex-none items-center justify-center rounded-[14px] max-[641px]:h-[54px] max-[641px]:w-[54px] max-[641px]:rounded-[11px]",
   titleWordmark: "inline-flex items-baseline whitespace-nowrap",
   toolHeader: "pointer-events-none relative z-10 h-0 flex justify-end",
   toolPanel: "relative",

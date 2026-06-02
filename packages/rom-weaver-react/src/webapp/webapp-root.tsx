@@ -37,7 +37,7 @@ function WebappRoot({ state, serviceWorkerCache, pageUpdate, confirmationDialog,
         <header className={layoutClasses.header}>
           <h1 className={layoutClasses.title}>
             <span aria-hidden="true" className={layoutClasses.titleIconFrame}>
-              <img alt="" className={layoutClasses.titleIcon} src="./logo.svg" />
+              <img alt="" className={layoutClasses.titleIcon} src="./logo.png" />
             </span>
             <span className={layoutClasses.titleWordmark}>
               <span className={layoutClasses.titleAccent}>ROM</span>

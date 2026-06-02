@@ -4,9 +4,9 @@
   "scope": "./",
   "icons": [
     {
-      "src": "src/assets/app/logo.svg",
-      "sizes": "any",
-      "type": "image/svg+xml"
+      "src": "src/assets/app/logo.png",
+      "sizes": "1204x1204",
+      "type": "image/png"
     }
   ],
   "start_url": "./index.html",
