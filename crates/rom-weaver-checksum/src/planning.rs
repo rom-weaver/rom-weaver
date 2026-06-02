@@ -188,9 +188,11 @@ fn execute_plan(
             &mut progress,
         )?,
         ChecksumMode::ParallelFanout => compute_parallel_fanout(
-            mapped.as_ref(),
-            source,
-            range,
+            ChecksumSourceRef {
+                mapped: mapped.as_ref(),
+                source,
+                range,
+            },
             algorithms,
             &pool,
             &execution,

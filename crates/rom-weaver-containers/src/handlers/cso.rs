@@ -48,6 +48,15 @@ struct CsoEncodedChunk {
     payload: Vec<u8>,
 }
 
+#[derive(Clone, Copy)]
+struct CsoCreateProgress<'a> {
+    execution: &'a ThreadExecution,
+    context: &'a OperationContext,
+    label: &'a str,
+    bytes: &'a Arc<AtomicU64>,
+    bucket: &'a Arc<AtomicU8>,
+}
+
 /// Source of a create task's concatenated compressed-sector bytes during output assembly.
 ///
 /// The native path streams the bytes back from a per-task temp file; the read+write-on-main path
@@ -512,18 +521,20 @@ impl CsoContainerHandler {
         })
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn encode_create_chunks_on_main(
         &self,
         source: &Path,
         logical_bytes: u64,
         create_tasks: &[CsoCreateTask],
-        execution: &ThreadExecution,
-        context: &OperationContext,
-        create_progress_label: &str,
-        create_progress_bytes: &Arc<AtomicU64>,
-        create_progress_bucket: &Arc<AtomicU8>,
+        progress: CsoCreateProgress<'_>,
     ) -> Result<Vec<CsoEncodedChunk>> {
+        let CsoCreateProgress {
+            execution,
+            context,
+            label: create_progress_label,
+            bytes: create_progress_bytes,
+            bucket: create_progress_bucket,
+        } = progress;
         let mut input = BufReader::new(File::open(source)?);
         input.seek(SeekFrom::Start(0))?;
         let mut chunks = Vec::with_capacity(create_tasks.len());
@@ -531,8 +542,10 @@ impl CsoContainerHandler {
         ordered_streaming_compress(
             create_tasks,
             execution.effective_threads,
-            "cso compression workers ended before all tasks were consumed",
-            "cso compression pipeline ended before all tasks were produced",
+            OrderedStreamingMessages {
+                worker_closed: "cso compression workers ended before all tasks were consumed",
+                result_closed: "cso compression pipeline ended before all tasks were produced",
+            },
             |_, task| {
                 let read_len = task
                     .sector_count
@@ -553,14 +566,16 @@ impl CsoContainerHandler {
                         .min(logical_bytes);
                     maybe_emit_container_byte_progress(
                         context,
-                        "compress",
-                        self.descriptor.name,
-                        "create",
                         completed,
                         logical_bytes,
-                        create_progress_label,
-                        Some(execution),
-                        create_progress_bucket.as_ref(),
+                        ContainerByteProgress {
+                            command: "compress",
+                            format: self.descriptor.name,
+                            stage: "create",
+                            label: create_progress_label,
+                            thread_execution: Some(execution),
+                            emitted_progress_bucket: create_progress_bucket.as_ref(),
+                        },
                     );
                 }
                 Ok((task.index, task.start_sector, task.sector_count, data))
@@ -902,14 +917,16 @@ impl ContainerHandlerOperations for CsoContainerHandler {
                             .min(logical_bytes);
                         maybe_emit_container_byte_progress(
                             &progress_context,
-                            "extract",
-                            self.descriptor.name,
-                            "extract",
                             completed,
                             logical_bytes,
-                            &extract_progress_label,
-                            Some(&progress_execution),
-                            extract_progress_bucket.as_ref(),
+                            ContainerByteProgress {
+                                command: "extract",
+                                format: self.descriptor.name,
+                                stage: "extract",
+                                label: &extract_progress_label,
+                                thread_execution: Some(&progress_execution),
+                                emitted_progress_bucket: extract_progress_bucket.as_ref(),
+                            },
                         );
                     }
                     Ok(())
@@ -948,14 +965,16 @@ impl ContainerHandlerOperations for CsoContainerHandler {
                             .min(logical_bytes);
                         maybe_emit_container_byte_progress(
                             &progress_context,
-                            "extract",
-                            self.descriptor.name,
-                            "extract",
                             completed,
                             logical_bytes,
-                            &extract_progress_label,
-                            Some(&progress_execution),
-                            extract_progress_bucket.as_ref(),
+                            ContainerByteProgress {
+                                command: "extract",
+                                format: self.descriptor.name,
+                                stage: "extract",
+                                label: &extract_progress_label,
+                                thread_execution: Some(&progress_execution),
+                                emitted_progress_bucket: extract_progress_bucket.as_ref(),
+                            },
                         );
                     }
                     Ok(())
@@ -984,14 +1003,16 @@ impl ContainerHandlerOperations for CsoContainerHandler {
                         .min(logical_bytes);
                     maybe_emit_container_byte_progress(
                         context,
-                        "extract",
-                        self.descriptor.name,
-                        "extract",
                         completed,
                         logical_bytes,
-                        &extract_progress_label,
-                        Some(&execution),
-                        extract_progress_bucket.as_ref(),
+                        ContainerByteProgress {
+                            command: "extract",
+                            format: self.descriptor.name,
+                            stage: "extract",
+                            label: &extract_progress_label,
+                            thread_execution: Some(&execution),
+                            emitted_progress_bucket: extract_progress_bucket.as_ref(),
+                        },
                     );
                 }
                 Ok(())
@@ -1066,11 +1087,13 @@ impl ContainerHandlerOperations for CsoContainerHandler {
                     input,
                     logical_bytes,
                     &create_tasks,
-                    &execution,
-                    context,
-                    &create_progress_label,
-                    &create_progress_bytes,
-                    &create_progress_bucket,
+                    CsoCreateProgress {
+                        execution: &execution,
+                        context,
+                        label: &create_progress_label,
+                        bytes: &create_progress_bytes,
+                        bucket: &create_progress_bucket,
+                    },
                 );
                 let mut chunks = chunks_result?;
                 chunks.sort_by_key(|chunk| chunk.start_sector);
@@ -1113,14 +1136,16 @@ impl ContainerHandlerOperations for CsoContainerHandler {
                                     .min(logical_bytes);
                                 maybe_emit_container_byte_progress(
                                     &progress_context,
-                                    "compress",
-                                    self.descriptor.name,
-                                    "create",
                                     completed,
                                     logical_bytes,
-                                    &create_progress_label,
-                                    Some(&progress_execution),
-                                    create_progress_bucket.as_ref(),
+                                    ContainerByteProgress {
+                                        command: "compress",
+                                        format: self.descriptor.name,
+                                        stage: "create",
+                                        label: &create_progress_label,
+                                        thread_execution: Some(&progress_execution),
+                                        emitted_progress_bucket: create_progress_bucket.as_ref(),
+                                    },
                                 );
                             }
                             Ok(encoded)
@@ -1141,14 +1166,16 @@ impl ContainerHandlerOperations for CsoContainerHandler {
                                 .min(logical_bytes);
                             maybe_emit_container_byte_progress(
                                 context,
-                                "compress",
-                                self.descriptor.name,
-                                "create",
                                 completed,
                                 logical_bytes,
-                                &create_progress_label,
-                                Some(&execution),
-                                create_progress_bucket.as_ref(),
+                                ContainerByteProgress {
+                                    command: "compress",
+                                    format: self.descriptor.name,
+                                    stage: "create",
+                                    label: &create_progress_label,
+                                    thread_execution: Some(&execution),
+                                    emitted_progress_bucket: create_progress_bucket.as_ref(),
+                                },
                             );
                         }
                         Ok(encoded)

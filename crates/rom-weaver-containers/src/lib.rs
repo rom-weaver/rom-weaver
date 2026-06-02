@@ -37,13 +37,14 @@ use rom_weaver_codecs::{
     parse_requested_codec,
 };
 use rom_weaver_core::{
-    ContainerCapabilities, ContainerCreateRequest, ContainerExtractRequest, ContainerHandler,
-    ContainerHandlerOperations, ContainerInspectRequest, ContainerListEntry, FormatDescriptor,
-    OperationContext, OperationFamily, OperationReport, OperationStatus, OrderedChunkWriter,
-    ProbeConfidence, ProgressEvent, Result, RomWeaverError, SelectionMatcher, SharedThreadPool,
-    ThreadCapability, ThreadExecution, bounded_items_for_threads, create_extract_output_file,
-    emit_container_running_progress, file_starts_with, maybe_emit_container_byte_progress,
-    normalize_archive_name, ordered_streaming_compress, should_ignore_common_container_file,
+    ContainerByteProgress, ContainerCapabilities, ContainerCreateRequest, ContainerExtractRequest,
+    ContainerHandler, ContainerHandlerOperations, ContainerInspectRequest, ContainerListEntry,
+    FormatDescriptor, OperationContext, OperationFamily, OperationReport, OperationStatus,
+    OrderedChunkWriter, OrderedStreamingMessages, ProbeConfidence, ProgressEvent, Result,
+    RomWeaverError, SelectionMatcher, SharedThreadPool, ThreadCapability, ThreadExecution,
+    bounded_items_for_threads, create_extract_output_file, emit_container_running_progress,
+    file_starts_with, maybe_emit_container_byte_progress, normalize_archive_name,
+    ordered_streaming_compress, should_ignore_common_container_file,
 };
 use rom_weaver_libarchive::{
     EntryFileType, EntrySpec, ReadArchive, ReadFilter as LibarchiveReadFilter,
@@ -922,14 +923,16 @@ fn write_archive_with_libarchive(
                     copied_bytes = copied_bytes.saturating_add(delta).min(total_input_bytes);
                     maybe_emit_container_byte_progress(
                         context,
-                        "compress",
-                        config.format_name,
-                        "create",
                         copied_bytes,
                         total_input_bytes,
-                        &format!("creating `{}`", config.format_name),
-                        Some(execution),
-                        &emitted_progress_bucket,
+                        ContainerByteProgress {
+                            command: "compress",
+                            format: config.format_name,
+                            stage: "create",
+                            label: &format!("creating `{}`", config.format_name),
+                            thread_execution: Some(execution),
+                            emitted_progress_bucket: &emitted_progress_bucket,
+                        },
                     );
                 },
             )?);
@@ -1158,14 +1161,16 @@ fn copy_reader_with_progress<R: Read, W: Write>(
         if total_bytes > 0 {
             maybe_emit_container_byte_progress(
                 context,
-                command,
-                format,
-                stage,
                 bytes_written.min(total_bytes),
                 total_bytes,
-                label,
-                thread_execution,
-                &emitted_progress_bucket,
+                ContainerByteProgress {
+                    command,
+                    format,
+                    stage,
+                    label,
+                    thread_execution,
+                    emitted_progress_bucket: &emitted_progress_bucket,
+                },
             );
         }
     }
@@ -1662,14 +1667,16 @@ fn extract_regular_archive_with_libarchive(
                     copied_bytes = copied_bytes.saturating_add(delta).min(total_bytes);
                     maybe_emit_container_byte_progress(
                         context,
-                        "extract",
-                        format_name,
-                        "extract",
                         copied_bytes,
                         total_bytes,
-                        &format!("extracting `{format_name}`"),
-                        Some(&execution),
-                        &emitted_progress_bucket,
+                        ContainerByteProgress {
+                            command: "extract",
+                            format: format_name,
+                            stage: "extract",
+                            label: &format!("extracting `{format_name}`"),
+                            thread_execution: Some(&execution),
+                            emitted_progress_bucket: &emitted_progress_bucket,
+                        },
                     );
                 }
             },
@@ -1819,14 +1826,16 @@ fn extract_regular_archive_with_libarchive(
                                 copied_bytes = copied_bytes.saturating_add(delta).min(total_bytes);
                                 maybe_emit_container_byte_progress(
                                     &progress_context,
-                                    "extract",
-                                    format_name,
-                                    "extract",
                                     copied_bytes,
                                     total_bytes,
-                                    &format!("extracting `{format_name}`"),
-                                    Some(&progress_execution),
-                                    &emitted_progress_bucket,
+                                    ContainerByteProgress {
+                                        command: "extract",
+                                        format: format_name,
+                                        stage: "extract",
+                                        label: &format!("extracting `{format_name}`"),
+                                        thread_execution: Some(&progress_execution),
+                                        emitted_progress_bucket: &emitted_progress_bucket,
+                                    },
                                 );
                             }
                             Ok(())
@@ -1909,14 +1918,16 @@ fn extract_regular_archive_with_libarchive(
                         copied_bytes = copied_bytes.saturating_add(delta).min(total_bytes);
                         maybe_emit_container_byte_progress(
                             &progress_context,
-                            "extract",
-                            format_name,
-                            "extract",
                             copied_bytes,
                             total_bytes,
-                            &format!("extracting `{format_name}`"),
-                            Some(&progress_execution),
-                            &emitted_progress_bucket,
+                            ContainerByteProgress {
+                                command: "extract",
+                                format: format_name,
+                                stage: "extract",
+                                label: &format!("extracting `{format_name}`"),
+                                thread_execution: Some(&progress_execution),
+                                emitted_progress_bucket: &emitted_progress_bucket,
+                            },
                         );
                     }
                 },

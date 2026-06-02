@@ -98,17 +98,21 @@ pub fn emit_container_running_progress(
     });
 }
 
-#[allow(clippy::too_many_arguments)]
+#[derive(Clone, Copy, Debug)]
+pub struct ContainerByteProgress<'a> {
+    pub command: &'a str,
+    pub format: &'a str,
+    pub stage: &'a str,
+    pub label: &'a str,
+    pub thread_execution: Option<&'a ThreadExecution>,
+    pub emitted_progress_bucket: &'a AtomicU8,
+}
+
 pub fn maybe_emit_container_byte_progress(
     context: &OperationContext,
-    command: &str,
-    format: &str,
-    stage: &str,
     completed_bytes: u64,
     total_bytes: u64,
-    label: &str,
-    thread_execution: Option<&ThreadExecution>,
-    emitted_progress_bucket: &AtomicU8,
+    progress: ContainerByteProgress<'_>,
 ) {
     if total_bytes == 0 || completed_bytes == 0 {
         return;
@@ -124,11 +128,11 @@ pub fn maybe_emit_container_byte_progress(
     }
 
     let (start_bucket, end_bucket) = loop {
-        let previous_bucket = emitted_progress_bucket.load(Ordering::Relaxed);
+        let previous_bucket = progress.emitted_progress_bucket.load(Ordering::Relaxed);
         if percent_bucket <= previous_bucket {
             return;
         }
-        match emitted_progress_bucket.compare_exchange(
+        match progress.emitted_progress_bucket.compare_exchange(
             previous_bucket,
             percent_bucket,
             Ordering::Relaxed,
@@ -142,12 +146,12 @@ pub fn maybe_emit_container_byte_progress(
     for bucket in start_bucket..=end_bucket {
         emit_container_running_progress(
             context,
-            command,
-            format,
-            stage,
-            label.to_string(),
+            progress.command,
+            progress.format,
+            progress.stage,
+            progress.label.to_string(),
             bucket as f32,
-            thread_execution,
+            progress.thread_execution,
         );
     }
 }

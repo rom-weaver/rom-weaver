@@ -108,14 +108,16 @@ impl ContainerHandlerOperations for WiaContainerHandler {
             |processed_bytes, total| {
                 maybe_emit_container_byte_progress(
                     context,
-                    "compress",
-                    WIA.name,
-                    "create",
                     processed_bytes,
                     total,
-                    &progress_label,
-                    Some(&execution),
-                    &emitted_progress_bucket,
+                    ContainerByteProgress {
+                        command: "compress",
+                        format: WIA.name,
+                        stage: "create",
+                        label: &progress_label,
+                        thread_execution: Some(&execution),
+                        emitted_progress_bucket: &emitted_progress_bucket,
+                    },
                 );
             },
         )?;

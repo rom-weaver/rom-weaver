@@ -87,18 +87,22 @@ fn compute_sequential_stream(
         .collect())
 }
 
-#[allow(clippy::too_many_arguments)]
+#[derive(Clone, Copy)]
+struct ChecksumSourceRef<'a> {
+    mapped: Option<&'a MappedRange>,
+    source: &'a Path,
+    range: &'a ResolvedRange,
+}
+
 fn compute_parallel_fanout(
-    mapped: Option<&MappedRange>,
-    source: &Path,
-    range: &ResolvedRange,
+    source_ref: ChecksumSourceRef<'_>,
     algorithms: &[Algorithm],
     pool: &SharedThreadPool,
     execution: &ThreadExecution,
     cancel: &CancellationToken,
     progress: &mut ChecksumProgressTracker<'_>,
 ) -> Result<BTreeMap<String, String>> {
-    if let Some(mapped) = mapped {
+    if let Some(mapped) = source_ref.mapped {
         return compute_parallel_fanout_mapped(
             mapped.bytes(),
             algorithms,
@@ -109,7 +113,15 @@ fn compute_parallel_fanout(
         );
     }
 
-    compute_parallel_fanout_stream(source, range, algorithms, pool, execution, cancel, progress)
+    compute_parallel_fanout_stream(
+        source_ref.source,
+        source_ref.range,
+        algorithms,
+        pool,
+        execution,
+        cancel,
+        progress,
+    )
 }
 
 fn compute_parallel_fanout_mapped(
@@ -204,21 +216,25 @@ fn compute_parallel_crc32(
     progress: &mut ChecksumProgressTracker<'_>,
 ) -> Result<BTreeMap<String, String>> {
     compute_parallel_chunked_checksum(
-        mapped,
-        source,
-        range,
+        ChecksumSourceRef {
+            mapped,
+            source,
+            range,
+        },
         pool,
         execution,
         cancel,
         progress,
-        Algorithm::Crc32.name(),
-        |chunk| {
-            let mut hasher = Crc32Hasher::new();
-            hasher.update(chunk);
-            hasher
+        ChunkedChecksumOps {
+            algorithm_name: Algorithm::Crc32.name(),
+            compute_partial: |chunk: &[u8]| {
+                let mut hasher = Crc32Hasher::new();
+                hasher.update(chunk);
+                hasher
+            },
+            combine_partials: combine_crc32_partials,
+            format_combined: |combined: Crc32Hasher| format!("{:08x}", combined.finalize()),
         },
-        combine_crc32_partials,
-        |combined| format!("{:08x}", combined.finalize()),
     )
 }
 
@@ -232,17 +248,21 @@ fn compute_parallel_crc32c(
     progress: &mut ChecksumProgressTracker<'_>,
 ) -> Result<BTreeMap<String, String>> {
     compute_parallel_chunked_checksum(
-        mapped,
-        source,
-        range,
+        ChecksumSourceRef {
+            mapped,
+            source,
+            range,
+        },
         pool,
         execution,
         cancel,
         progress,
-        Algorithm::Crc32c.name(),
-        |chunk| (crc32c_append(0, chunk), chunk.len()),
-        combine_crc32c_partials,
-        |combined| format!("{combined:08x}"),
+        ChunkedChecksumOps {
+            algorithm_name: Algorithm::Crc32c.name(),
+            compute_partial: |chunk: &[u8]| (crc32c_append(0, chunk), chunk.len()),
+            combine_partials: combine_crc32c_partials,
+            format_combined: |combined: u32| format!("{combined:08x}"),
+        },
     )
 }
 
@@ -256,21 +276,25 @@ fn compute_parallel_crc16(
     progress: &mut ChecksumProgressTracker<'_>,
 ) -> Result<BTreeMap<String, String>> {
     compute_parallel_chunked_checksum(
-        mapped,
-        source,
-        range,
+        ChecksumSourceRef {
+            mapped,
+            source,
+            range,
+        },
         pool,
         execution,
         cancel,
         progress,
-        Algorithm::Crc16.name(),
-        |chunk| {
-            let mut state = Crc16State::<ARC>::new();
-            state.update(chunk);
-            (state.get(), chunk.len())
+        ChunkedChecksumOps {
+            algorithm_name: Algorithm::Crc16.name(),
+            compute_partial: |chunk: &[u8]| {
+                let mut state = Crc16State::<ARC>::new();
+                state.update(chunk);
+                (state.get(), chunk.len())
+            },
+            combine_partials: combine_crc16_partials,
+            format_combined: |combined: u16| format!("{combined:04x}"),
         },
-        combine_crc16_partials,
-        |combined| format!("{combined:04x}"),
     )
 }
 
@@ -284,17 +308,21 @@ fn compute_parallel_adler32(
     progress: &mut ChecksumProgressTracker<'_>,
 ) -> Result<BTreeMap<String, String>> {
     compute_parallel_chunked_checksum(
-        mapped,
-        source,
-        range,
+        ChecksumSourceRef {
+            mapped,
+            source,
+            range,
+        },
         pool,
         execution,
         cancel,
         progress,
-        Algorithm::Adler32.name(),
-        |chunk| (adler32_checksum(chunk), chunk.len()),
-        combine_adler32_partials,
-        |combined| format!("{combined:08x}"),
+        ChunkedChecksumOps {
+            algorithm_name: Algorithm::Adler32.name(),
+            compute_partial: |chunk: &[u8]| (adler32_checksum(chunk), chunk.len()),
+            combine_partials: combine_adler32_partials,
+            format_combined: |combined: u32| format!("{combined:08x}"),
+        },
     )
 }
 
@@ -353,19 +381,20 @@ fn compute_parallel_blake3(
     Ok(results)
 }
 
-#[allow(clippy::too_many_arguments)]
+struct ChunkedChecksumOps<'a, PartialFn, CombineFn, FormatFn> {
+    algorithm_name: &'a str,
+    compute_partial: PartialFn,
+    combine_partials: CombineFn,
+    format_combined: FormatFn,
+}
+
 fn compute_parallel_chunked_checksum<T, C, PartialFn, CombineFn, FormatFn>(
-    mapped: Option<&MappedRange>,
-    source: &Path,
-    range: &ResolvedRange,
+    source_ref: ChecksumSourceRef<'_>,
     pool: &SharedThreadPool,
     execution: &ThreadExecution,
     cancel: &CancellationToken,
     progress: &mut ChecksumProgressTracker<'_>,
-    algorithm_name: &str,
-    compute_partial: PartialFn,
-    combine_partials: CombineFn,
-    format_combined: FormatFn,
+    ops: ChunkedChecksumOps<'_, PartialFn, CombineFn, FormatFn>,
 ) -> Result<BTreeMap<String, String>>
 where
     T: Send,
@@ -373,31 +402,32 @@ where
     CombineFn: Fn(Vec<Result<T>>) -> Result<C>,
     FormatFn: Fn(C) -> String,
 {
-    let chunk_size = crc32_parallel_chunk_size(range.len, execution.effective_threads) as usize;
-    let partials = if let Some(mapped) = mapped {
+    let chunk_size =
+        crc32_parallel_chunk_size(source_ref.range.len, execution.effective_threads) as usize;
+    let partials = if let Some(mapped) = source_ref.mapped {
         collect_parallel_partials_mapped(
             mapped.bytes(),
             chunk_size,
             pool,
             cancel,
             progress,
-            compute_partial,
+            ops.compute_partial,
         )?
     } else {
         collect_parallel_partials_stream(
-            source,
-            range,
+            source_ref.source,
+            source_ref.range,
             chunk_size,
             pool,
             cancel,
             progress,
-            compute_partial,
+            ops.compute_partial,
         )?
     };
-    let combined = combine_partials(partials)?;
+    let combined = (ops.combine_partials)(partials)?;
     Ok(single_checksum_result(
-        algorithm_name,
-        format_combined(combined),
+        ops.algorithm_name,
+        (ops.format_combined)(combined),
     ))
 }
 

@@ -7,8 +7,9 @@ use std::{
 };
 
 use super::{
-    BlockCacheReader, ChunkPlanner, OrderedChunkWriter, SharedBlockCacheReader, TempPathAllocator,
-    bounded_items_for_threads, ordered_streaming_compress,
+    BlockCacheReader, ChunkPlanner, OrderedChunkWriter, OrderedStreamingMessages,
+    SharedBlockCacheReader, TempPathAllocator, bounded_items_for_threads,
+    ordered_streaming_compress,
 };
 use crate::RomWeaverError;
 
@@ -92,8 +93,10 @@ fn ordered_streaming_compress_collects_worker_results_in_task_order() {
     ordered_streaming_compress(
         &tasks,
         3,
-        "workers closed",
-        "results closed",
+        OrderedStreamingMessages {
+            worker_closed: "workers closed",
+            result_closed: "results closed",
+        },
         |_, task| Ok(*task),
         || (),
         |_, _, task| {
@@ -118,8 +121,10 @@ fn ordered_streaming_compress_returns_collector_errors_without_deadlock() {
     let result = ordered_streaming_compress(
         tasks,
         4,
-        "workers closed",
-        "results closed",
+        OrderedStreamingMessages {
+            worker_closed: "workers closed",
+            result_closed: "results closed",
+        },
         |_, task| Ok(task),
         || (),
         |_, _, task| Ok(task),

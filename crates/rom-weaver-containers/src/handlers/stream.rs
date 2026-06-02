@@ -216,14 +216,16 @@ impl StreamContainerHandler {
                 copied = copied.saturating_add(read as u64).min(total_bytes);
                 maybe_emit_container_byte_progress(
                     context,
-                    "extract",
-                    format_name,
-                    "extract",
                     copied,
                     total_bytes,
-                    &progress_label,
-                    Some(execution),
-                    &emitted_progress_bucket,
+                    ContainerByteProgress {
+                        command: "extract",
+                        format: format_name,
+                        stage: "extract",
+                        label: &progress_label,
+                        thread_execution: Some(execution),
+                        emitted_progress_bucket: &emitted_progress_bucket,
+                    },
                 );
             }
             output.flush()?;

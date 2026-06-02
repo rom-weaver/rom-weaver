@@ -699,14 +699,16 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
                         .min(header.uncompressed_size);
                     maybe_emit_container_byte_progress(
                         context,
-                        "extract",
-                        Z3DS.name,
-                        "extract",
                         completed,
                         header.uncompressed_size,
-                        &extract_progress_label,
-                        Some(&execution),
-                        extract_progress_bucket.as_ref(),
+                        ContainerByteProgress {
+                            command: "extract",
+                            format: Z3DS.name,
+                            stage: "extract",
+                            label: &extract_progress_label,
+                            thread_execution: Some(&execution),
+                            emitted_progress_bucket: extract_progress_bucket.as_ref(),
+                        },
                     );
                 }
                 Ok(())
@@ -871,8 +873,10 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
             ordered_streaming_compress(
                 &create_tasks,
                 execution.effective_threads,
-                "z3ds compression workers ended before all frames were consumed",
-                "z3ds compression pipeline ended before all frames were produced",
+                OrderedStreamingMessages {
+                    worker_closed: "z3ds compression workers ended before all frames were consumed",
+                    result_closed: "z3ds compression pipeline ended before all frames were produced",
+                },
                 |_, task| {
                     let read_len = usize::try_from(task.len).map_err(|_| {
                         RomWeaverError::Validation(
@@ -888,14 +892,16 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
                             .min(input_size);
                         maybe_emit_container_byte_progress(
                             context,
-                            "compress",
-                            Z3DS.name,
-                            "create",
                             completed,
                             input_size,
-                            &create_progress_label,
-                            Some(&execution),
-                            create_progress_bucket.as_ref(),
+                            ContainerByteProgress {
+                                command: "compress",
+                                format: Z3DS.name,
+                                stage: "create",
+                                label: &create_progress_label,
+                                thread_execution: Some(&execution),
+                                emitted_progress_bucket: create_progress_bucket.as_ref(),
+                            },
                         );
                     }
                     Ok((task.index, task.len, data))
@@ -933,14 +939,16 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
                                 .min(input_size);
                             maybe_emit_container_byte_progress(
                                 &progress_context,
-                                "compress",
-                                Z3DS.name,
-                                "create",
                                 completed,
                                 input_size,
-                                &create_progress_label,
-                                Some(&progress_execution),
-                                create_progress_bucket.as_ref(),
+                                ContainerByteProgress {
+                                    command: "compress",
+                                    format: Z3DS.name,
+                                    stage: "create",
+                                    label: &create_progress_label,
+                                    thread_execution: Some(&progress_execution),
+                                    emitted_progress_bucket: create_progress_bucket.as_ref(),
+                                },
                             );
                         }
                         Ok(frame)
@@ -959,14 +967,16 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
                             .min(input_size);
                         maybe_emit_container_byte_progress(
                             context,
-                            "compress",
-                            Z3DS.name,
-                            "create",
                             completed,
                             input_size,
-                            &create_progress_label,
-                            Some(&execution),
-                            create_progress_bucket.as_ref(),
+                            ContainerByteProgress {
+                                command: "compress",
+                                format: Z3DS.name,
+                                stage: "create",
+                                label: &create_progress_label,
+                                thread_execution: Some(&execution),
+                                emitted_progress_bucket: create_progress_bucket.as_ref(),
+                            },
                         );
                     }
                     Ok(frame)

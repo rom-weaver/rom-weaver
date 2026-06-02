@@ -269,26 +269,30 @@ impl ContainerHandlerOperations for ChdContainerHandler {
                         self.create_compressed_rust_stream(
                             &mut source,
                             &source_label,
-                            &request.output,
-                            logical_bytes,
-                            &create_kind,
-                            compression_plan.codecs,
-                            compression_level,
-                            execution.effective_threads,
-                            request.parent.as_deref(),
-                            Some(&create_progress),
+                            CompressedCreateParams {
+                                output: &request.output,
+                                logical_bytes,
+                                create_kind: &create_kind,
+                                codecs: compression_plan.codecs,
+                                compression_level,
+                                thread_count: execution.effective_threads,
+                                parent_source: request.parent.as_deref(),
+                                on_progress: Some(&create_progress),
+                            },
                         )?
                     }
                     _ => self.create_compressed_rust_raw(
                         input,
-                        &request.output,
-                        logical_bytes,
-                        &create_kind,
-                        compression_plan.codecs,
-                        compression_level,
-                        execution.effective_threads,
-                        request.parent.as_deref(),
-                        Some(&create_progress),
+                        CompressedCreateParams {
+                            output: &request.output,
+                            logical_bytes,
+                            create_kind: &create_kind,
+                            codecs: compression_plan.codecs,
+                            compression_level,
+                            thread_count: execution.effective_threads,
+                            parent_source: request.parent.as_deref(),
+                            on_progress: Some(&create_progress),
+                        },
                     )?,
                 }
             };

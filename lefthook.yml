@@ -4,7 +4,7 @@ pre-commit:
     rust-format:
       run: cargo fmt --check
     rust-clippy:
-      run: cargo clippy --workspace --all-targets -- -D warnings -A clippy::style -A clippy::complexity -A clippy::perf
+      run: cargo clippy --workspace --all-targets -- -D warnings
     wasm-threaded-check:
       run: 'RUSTFLAGS="${RUSTFLAGS:-} -D warnings" scripts/wasm/with-wasi-env.sh cargo check -p rom-weaver-containers --target wasm32-wasip1-threads --lib'
     whitespace:

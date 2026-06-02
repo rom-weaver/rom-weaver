@@ -971,14 +971,16 @@ impl ContainerHandlerOperations for PbpContainerHandler {
                                     .min(total_extract_bytes);
                                 maybe_emit_container_byte_progress(
                                     &progress_context,
-                                    "extract",
-                                    PBP.name,
-                                    "extract",
                                     completed,
                                     total_extract_bytes,
-                                    &extract_progress_label,
-                                    Some(&progress_execution),
-                                    extract_progress_bucket.as_ref(),
+                                    ContainerByteProgress {
+                                        command: "extract",
+                                        format: PBP.name,
+                                        stage: "extract",
+                                        label: &extract_progress_label,
+                                        thread_execution: Some(&progress_execution),
+                                        emitted_progress_bucket: extract_progress_bucket.as_ref(),
+                                    },
                                 );
                             }
                             Ok(())
@@ -1015,14 +1017,16 @@ impl ContainerHandlerOperations for PbpContainerHandler {
                                 .min(total_extract_bytes);
                             maybe_emit_container_byte_progress(
                                 context,
-                                "extract",
-                                PBP.name,
-                                "extract",
                                 completed,
                                 total_extract_bytes,
-                                &extract_progress_label,
-                                Some(&execution),
-                                extract_progress_bucket.as_ref(),
+                                ContainerByteProgress {
+                                    command: "extract",
+                                    format: PBP.name,
+                                    stage: "extract",
+                                    label: &extract_progress_label,
+                                    thread_execution: Some(&execution),
+                                    emitted_progress_bucket: extract_progress_bucket.as_ref(),
+                                },
                             );
                         }
                         Ok(())

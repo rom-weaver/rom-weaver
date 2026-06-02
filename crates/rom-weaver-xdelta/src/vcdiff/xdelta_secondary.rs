@@ -209,15 +209,14 @@ fn xdelta_djw_compress_multi_group(
     Ok(writer.finish())
 }
 
-#[allow(clippy::needless_range_loop)]
 fn djw_seed_group_frequencies(groups: usize) -> Vec<[u32; DJW_ALPHABET_SIZE]> {
     let mut frequencies = vec![[0u32; DJW_ALPHABET_SIZE]; groups];
-    for symbol in 0..DJW_ALPHABET_SIZE {
-        let mut group = (symbol * groups) / DJW_ALPHABET_SIZE;
-        if group >= groups {
-            group = groups - 1;
+    for (group_index, group_frequencies) in frequencies.iter_mut().enumerate() {
+        let start = (group_index * DJW_ALPHABET_SIZE) / groups;
+        let end = ((group_index + 1) * DJW_ALPHABET_SIZE) / groups;
+        for value in group_frequencies.iter_mut().take(end).skip(start) {
+            *value = 8;
         }
-        frequencies[group][symbol] = 8;
     }
     frequencies
 }

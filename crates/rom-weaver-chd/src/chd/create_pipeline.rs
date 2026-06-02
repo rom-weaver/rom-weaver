@@ -1,4 +1,28 @@
 /* jscpd:ignore-start */
+#[derive(Clone, Copy)]
+struct CompressedCreateParams<'a> {
+    output: &'a Path,
+    logical_bytes: u64,
+    create_kind: &'a ChdCreateKind,
+    codecs: [ChdCodec; CHD_MAX_COMPRESSORS],
+    compression_level: i32,
+    thread_count: usize,
+    parent_source: Option<&'a Path>,
+    on_progress: Option<&'a Arc<dyn Fn(u64) + Send + Sync>>,
+}
+
+struct PipelineHunkRecord<'a> {
+    output: &'a Path,
+    entries: &'a mut Vec<RustCompressedHunkEntry>,
+    current_offset: &'a mut u64,
+    self_hunks_by_hash: &'a mut HashMap<HunkHashKey, u64>,
+    parent_hunks_by_hash: Option<&'a HashMap<HunkHashKey, u64>>,
+    hunk_index: usize,
+    hash_key: HunkHashKey,
+    compression_type: u8,
+    payload: Vec<u8>,
+}
+
     impl ChdContainerHandler {
         /// Hashes and compresses a single hunk, trying every encodable codec (including CD FLAC) and
         /// keeping the smallest, matching chdman. Shared by the sequential and pipelined create
@@ -27,20 +51,22 @@
         /// Appends a compressed hunk in hunk order: emits a self/parent reference when the hunk
         /// duplicates earlier data, otherwise writes the payload and records its map entry. Shared
         /// by the sequential and pipelined create paths.
-        #[allow(clippy::too_many_arguments)]
         fn record_pipeline_hunk(
             &self,
             output_file: &mut dyn Write,
-            output: &Path,
-            entries: &mut Vec<RustCompressedHunkEntry>,
-            current_offset: &mut u64,
-            self_hunks_by_hash: &mut HashMap<HunkHashKey, u64>,
-            parent_hunks_by_hash: Option<&HashMap<HunkHashKey, u64>>,
-            hunk_index: usize,
-            hash_key: HunkHashKey,
-            compression_type: u8,
-            payload: Vec<u8>,
+            record: PipelineHunkRecord<'_>,
         ) -> Result<()> {
+            let PipelineHunkRecord {
+                output,
+                entries,
+                current_offset,
+                self_hunks_by_hash,
+                parent_hunks_by_hash,
+                hunk_index,
+                hash_key,
+                compression_type,
+                payload,
+            } = record;
             if let Some(&other_hunk) = self_hunks_by_hash.get(&hash_key) {
                 entries.push(RustCompressedHunkEntry {
                     compression_type: Self::CHD_V5_MAP_TYPE_SELF,
@@ -381,26 +407,25 @@
                 || Self::force_compressed_payload_for_primary_codec(primary_codec)
         }
 
-        #[allow(clippy::too_many_arguments)]
         fn create_compressed_rust_raw(
             &self,
             input: &Path,
-            output: &Path,
-            logical_bytes: u64,
-            create_kind: &ChdCreateKind,
-            codecs: [ChdCodec; CHD_MAX_COMPRESSORS],
-            compression_level: i32,
-            thread_count: usize,
-            parent_source: Option<&Path>,
-            on_progress: Option<&Arc<dyn Fn(u64) + Send + Sync>>,
+            params: CompressedCreateParams<'_>,
         ) -> Result<ChdHeader> {
             let mut source = BufReader::new(File::open(input).map_err(|error| {
                 RomWeaverError::Validation(format!("failed to open `{}`: {error}", input.display()))
             })?);
             let source_label = input.display().to_string();
-            self.create_compressed_rust_stream(
-                &mut source,
-                &source_label,
+            self.create_compressed_rust_stream(&mut source, &source_label, params)
+        }
+
+        fn create_compressed_rust_stream(
+            &self,
+            source: &mut (dyn Read + Send),
+            source_label: &str,
+            params: CompressedCreateParams<'_>,
+        ) -> Result<ChdHeader> {
+            let CompressedCreateParams {
                 output,
                 logical_bytes,
                 create_kind,
@@ -409,23 +434,7 @@
                 thread_count,
                 parent_source,
                 on_progress,
-            )
-        }
-
-        #[allow(clippy::too_many_arguments)]
-        fn create_compressed_rust_stream(
-            &self,
-            source: &mut (dyn Read + Send),
-            source_label: &str,
-            output: &Path,
-            logical_bytes: u64,
-            create_kind: &ChdCreateKind,
-            codecs: [ChdCodec; CHD_MAX_COMPRESSORS],
-            compression_level: i32,
-            thread_count: usize,
-            parent_source: Option<&Path>,
-            on_progress: Option<&Arc<dyn Fn(u64) + Send + Sync>>,
-        ) -> Result<ChdHeader> {
+            } = params;
             let mut active_codecs = Vec::new();
             for (index, codec) in codecs.into_iter().enumerate() {
                 if codec == ChdCodec::NONE {
@@ -558,15 +567,17 @@
                     )?;
                     self.record_pipeline_hunk(
                         &mut buffered,
-                        output,
-                        &mut entries,
-                        &mut current_offset,
-                        &mut self_hunks_by_hash,
-                        parent_hunks_by_hash,
-                        hunk_index,
-                        hash_key,
-                        compression_type,
-                        payload,
+                        PipelineHunkRecord {
+                            output,
+                            entries: &mut entries,
+                            current_offset: &mut current_offset,
+                            self_hunks_by_hash: &mut self_hunks_by_hash,
+                            parent_hunks_by_hash,
+                            hunk_index,
+                            hash_key,
+                            compression_type,
+                            payload,
+                        },
                     )?;
                 }
                 let mut digest = [0_u8; Self::CHD_SHA1_BYTES];
@@ -582,8 +593,10 @@
                 ordered_streaming_compress(
                     0..hunk_count_usize,
                     effective_threads,
-                    "chd compression workers ended before all hunks were consumed",
-                    "chd compression pipeline ended before all hunks were produced",
+                    OrderedStreamingMessages {
+                        worker_closed: "chd compression workers ended before all hunks were consumed",
+                        result_closed: "chd compression pipeline ended before all hunks were produced",
+                    },
                     |hunk_index, _| {
                         let read_len = usize::try_from(remaining.min(u64::from(hunk_bytes)))
                             .map_err(|_| {
@@ -626,15 +639,17 @@
                         }
                         self.record_pipeline_hunk(
                             &mut buffered,
-                            output,
-                            &mut entries,
-                            &mut current_offset,
-                            &mut self_hunks_by_hash,
-                            parent_hunks_by_hash,
-                            hunk_index,
-                            hash_key,
-                            compression_type,
-                            payload,
+                            PipelineHunkRecord {
+                                output,
+                                entries: &mut entries,
+                                current_offset: &mut current_offset,
+                                self_hunks_by_hash: &mut self_hunks_by_hash,
+                                parent_hunks_by_hash,
+                                hunk_index,
+                                hash_key,
+                                compression_type,
+                                payload,
+                            },
                         )
                     },
                 )?;

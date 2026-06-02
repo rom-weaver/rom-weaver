@@ -39,9 +39,11 @@ fn decode_djw_secondary(input: &[u8], output_size: usize) -> Result<Vec<u8>> {
         &mut input_pos,
         &cl_decode_table,
         &mut cl_mtf,
-        groups * DJW_ALPHABET_SIZE,
-        DJW_ALPHABET_SIZE,
-        &mut clen,
+        DjwDecodeOutput {
+            elements: groups * DJW_ALPHABET_SIZE,
+            skip_offset: DJW_ALPHABET_SIZE,
+            output: &mut clen,
+        },
     )?;
 
     let mut group_tables = Vec::with_capacity(groups);
@@ -76,9 +78,11 @@ fn decode_djw_secondary(input: &[u8], output_size: usize) -> Result<Vec<u8>> {
             &mut input_pos,
             &selector_table,
             &mut sel_mtf,
-            sectors,
-            0,
-            &mut selected_groups,
+            DjwDecodeOutput {
+                elements: sectors,
+                skip_offset: 0,
+                output: &mut selected_groups,
+            },
         )?;
     }
 
@@ -155,17 +159,25 @@ fn decode_djw_clclen_table(
     build_djw_decoder_table(&cl_clen, DJW_TOTAL_CODES, DJW_MAX_CLCLEN)
 }
 
-#[allow(clippy::too_many_arguments)]
+struct DjwDecodeOutput<'a> {
+    elements: usize,
+    skip_offset: usize,
+    output: &'a mut [u8],
+}
+
 fn decode_djw_1_2(
     state: &mut DjwBitState,
     input: &[u8],
     input_pos: &mut usize,
     table: &DjwDecodeTable,
     mtf_values: &mut [u8],
-    elements: usize,
-    skip_offset: usize,
-    output: &mut [u8],
+    output_spec: DjwDecodeOutput<'_>,
 ) -> Result<()> {
+    let DjwDecodeOutput {
+        elements,
+        skip_offset,
+        output,
+    } = output_spec;
     let mut index = 0usize;
     let mut repeat = 0usize;
     let mut mtf = 0usize;

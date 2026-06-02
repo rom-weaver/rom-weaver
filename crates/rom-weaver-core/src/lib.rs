@@ -17,13 +17,14 @@ pub use error::{
 pub use io::{
     BlockCacheReader, BoundedIoPolicy, ChunkPlanner, DEFAULT_BLOCK_CACHE_MAX_BLOCKS,
     DEFAULT_BLOCK_CACHE_SIZE_BYTES, DEFAULT_CHUNK_SIZE_BYTES, FileChunk, IoWatermark,
-    OrderedChunkWriter, SharedBlockCacheReader, TempPathAllocator, bounded_items_for_threads,
-    create_extract_output_file, file_starts_with, ordered_streaming_compress,
-    reads_source_on_main_thread,
+    OrderedChunkWriter, OrderedStreamingMessages, SharedBlockCacheReader, TempPathAllocator,
+    bounded_items_for_threads, create_extract_output_file, file_starts_with,
+    ordered_streaming_compress, reads_source_on_main_thread,
 };
 pub use progress::{
-    NoopProgressSink, OperationFamily, OperationStatus, ProgressEvent, ProgressSink,
-    RecordingProgressSink, emit_container_running_progress, maybe_emit_container_byte_progress,
+    ContainerByteProgress, NoopProgressSink, OperationFamily, OperationStatus, ProgressEvent,
+    ProgressSink, RecordingProgressSink, emit_container_running_progress,
+    maybe_emit_container_byte_progress,
 };
 pub use registry::{
     ChecksumCapabilities, ChecksumEngine, ChecksumRequest, CodecBackend, CodecCapabilities,

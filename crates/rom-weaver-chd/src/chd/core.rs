@@ -64,14 +64,16 @@
                     .min(total_bytes);
                 maybe_emit_container_byte_progress(
                     &context,
-                    command,
-                    CHD.name,
-                    stage,
                     completed,
                     total_bytes,
-                    label.as_str(),
-                    Some(&execution),
-                    emitted_progress_bucket.as_ref(),
+                    ContainerByteProgress {
+                        command,
+                        format: CHD.name,
+                        stage,
+                        label: label.as_str(),
+                        thread_execution: Some(&execution),
+                        emitted_progress_bucket: emitted_progress_bucket.as_ref(),
+                    },
                 );
             })
         }
@@ -309,14 +311,16 @@
             } else {
                 self.create_compressed_rust_raw(
                     source,
-                    output,
-                    logical_bytes,
-                    &ChdCreateKind::Raw,
-                    [codec, ChdCodec::NONE, ChdCodec::NONE, ChdCodec::NONE],
-                    level,
-                    thread_count,
-                    None,
-                    None,
+                    CompressedCreateParams {
+                        output,
+                        logical_bytes,
+                        create_kind: &ChdCreateKind::Raw,
+                        codecs: [codec, ChdCodec::NONE, ChdCodec::NONE, ChdCodec::NONE],
+                        compression_level: level,
+                        thread_count,
+                        parent_source: None,
+                        on_progress: None,
+                    },
                 )
             }
         }

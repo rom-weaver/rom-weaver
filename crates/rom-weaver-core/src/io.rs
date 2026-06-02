@@ -66,6 +66,12 @@ pub const DEFAULT_BLOCK_CACHE_MAX_BLOCKS: usize = 32;
 
 static NEXT_TEMP_NAMESPACE_ID: AtomicU64 = AtomicU64::new(1);
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct OrderedStreamingMessages {
+    pub worker_closed: &'static str,
+    pub result_closed: &'static str,
+}
+
 pub fn bounded_items_for_threads(effective_threads: usize) -> usize {
     let threads = effective_threads.max(1);
     threads.saturating_mul(2).max(2)
@@ -95,7 +101,6 @@ pub fn file_starts_with(source: &Path, signature: &[u8]) -> bool {
     false
 }
 
-#[allow(clippy::too_many_arguments)]
 pub fn ordered_streaming_compress<
     Tasks,
     TTask,
@@ -109,8 +114,7 @@ pub fn ordered_streaming_compress<
 >(
     tasks: Tasks,
     effective_threads: usize,
-    worker_closed_message: &'static str,
-    result_closed_message: &'static str,
+    messages: OrderedStreamingMessages,
     mut read_task: ReadTask,
     make_worker_state: MakeWorkerState,
     compress_task: CompressTask,
@@ -183,7 +187,7 @@ where
                     Ok(work) => {
                         if work_tx.send((next_to_read, work)).is_err() {
                             pipeline_error =
-                                Some(RomWeaverError::Validation(worker_closed_message.into()));
+                                Some(RomWeaverError::Validation(messages.worker_closed.into()));
                             break;
                         }
                         next_to_read += 1;
@@ -239,7 +243,8 @@ where
                     break;
                 }
                 Err(_) => {
-                    pipeline_error = Some(RomWeaverError::Validation(result_closed_message.into()));
+                    pipeline_error =
+                        Some(RomWeaverError::Validation(messages.result_closed.into()));
                     break;
                 }
             }
