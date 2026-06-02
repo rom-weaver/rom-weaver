@@ -192,7 +192,12 @@ fn chd_compress_and_extract_avhuff_round_trip() {
     );
     let inspect_output = Command::cargo_bin("rom-weaver")
         .expect("binary")
-        .args(["inspect", chd_path.path().to_str().expect("path"), "--json"])
+        .args([
+            "inspect",
+            chd_path.path().to_str().expect("path"),
+            "--no-extract",
+            "--json",
+        ])
         .assert()
         .code(0)
         .get_output()
@@ -303,7 +308,12 @@ fn chd_compress_huffman_alias_emits_huff_label() {
 
     let inspect_output = Command::cargo_bin("rom-weaver")
         .expect("binary")
-        .args(["inspect", chd_path.path().to_str().expect("path"), "--json"])
+        .args([
+            "inspect",
+            chd_path.path().to_str().expect("path"),
+            "--no-extract",
+            "--json",
+        ])
         .assert()
         .code(0)
         .get_output()
@@ -842,7 +852,12 @@ fn chd_compress_accepts_cd_codec_aliases() {
 
     let inspect_output = Command::cargo_bin("rom-weaver")
         .expect("binary")
-        .args(["inspect", chd_path.path().to_str().expect("path"), "--json"])
+        .args([
+            "inspect",
+            chd_path.path().to_str().expect("path"),
+            "--no-extract",
+            "--json",
+        ])
         .assert()
         .code(0)
         .get_output()
@@ -967,7 +982,12 @@ fn chd_compress_accepts_multiple_codecs_from_repeated_flags() {
 
     let inspect_output = Command::cargo_bin("rom-weaver")
         .expect("binary")
-        .args(["inspect", chd_path.path().to_str().expect("path"), "--json"])
+        .args([
+            "inspect",
+            chd_path.path().to_str().expect("path"),
+            "--no-extract",
+            "--json",
+        ])
         .assert()
         .code(0)
         .get_output()
@@ -1291,6 +1311,7 @@ fn gcz_inspect_reports_succeeded() {
         .args([
             "inspect",
             temp.child("disc.gcz").path().to_str().expect("path"),
+            "--no-extract",
             "--json",
         ])
         .assert()
@@ -1418,6 +1439,7 @@ fn wbfs_inspect_reports_succeeded() {
         .args([
             "inspect",
             temp.child("disc.wbfs").path().to_str().expect("path"),
+            "--no-extract",
             "--json",
         ])
         .assert()
@@ -1546,6 +1568,7 @@ fn wia_inspect_reports_succeeded() {
         .args([
             "inspect",
             temp.child("disc.wia").path().to_str().expect("path"),
+            "--no-extract",
             "--json",
         ])
         .assert()

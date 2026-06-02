@@ -89,6 +89,14 @@ Global flags:
 
 Interactive selection fallback is enabled only for non-JSON TTY sessions (stdin and stderr are terminals).
 
+Inspect behavior highlights:
+
+- `inspect` auto-resolves payloads from containers by default
+- `inspect --no-extract` inspects source bytes directly
+- `inspect --select` chooses payload(s)
+- `inspect --no-ignore` disables default ignore filters (`.txt`, `.nfo`, `.sfv`, `.md5`, etc.)
+- `inspect --list` without `--select` lists the original container entries
+
 ## Patch Format Support
 
 All listed formats support inspect/parse (`inspect`) and apply (`patch-apply`).

@@ -17,7 +17,7 @@ export type ProgressEvent = { command: string, family: OperationFamily, format: 
 
 export type CompressionLevelProfile = "min" | "very-low" | "low" | "medium" | "high" | "very-high" | "max";
 
-export type InspectCommand = { source: string, list?: boolean, };
+export type InspectCommand = { source: string, select?: Array<string>, no_extract?: boolean, no_ignore?: boolean, list?: boolean, };
 
 export type ExtractCommand = { source: string, select?: Array<string>, out_dir: string, split_bin?: boolean, no_ignore?: boolean, no_nested_extract?: boolean, no_overwrite?: boolean, checksum?: Array<string>, threads?: ThreadBudget, };
 

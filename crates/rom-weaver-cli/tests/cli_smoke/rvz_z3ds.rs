@@ -10,6 +10,7 @@ fn rvz_inspect_reports_succeeded() {
         &[
             "inspect",
             temp.child("disc.rvz").path().to_str().expect("path"),
+            "--no-extract",
             "--json",
         ],
         0,
@@ -240,6 +241,7 @@ fn z3ds_compress_inspect_and_extract_round_trip() {
         &[
             "inspect",
             z3ds_path.path().to_str().expect("path"),
+            "--no-extract",
             "--json",
         ],
         0,

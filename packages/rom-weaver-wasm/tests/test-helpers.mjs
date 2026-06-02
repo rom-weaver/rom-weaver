@@ -155,6 +155,9 @@ function commandArgsToRunRequest(args) {
     case 'inspect':
       commandRequest.args = {
         source: requirePositional(parsed, 0, 'inspect source'),
+        ...(readOptionValues(parsed, 'select').length ? { select: readOptionValues(parsed, 'select') } : {}),
+        ...(parsed.flags.has('no-extract') ? { no_extract: true } : {}),
+        ...(parsed.flags.has('no-ignore') ? { no_ignore: true } : {}),
         ...(parsed.flags.has('list') ? { list: true } : {}),
       };
       break;

@@ -935,7 +935,12 @@ fn run_archive_round_trip(format: &str, archive_name: &str, codec: Option<&str>)
 
     let inspect_output = Command::cargo_bin("rom-weaver")
         .expect("binary")
-        .args(["inspect", archive.path().to_str().expect("path"), "--json"])
+        .args([
+            "inspect",
+            archive.path().to_str().expect("path"),
+            "--no-extract",
+            "--json",
+        ])
         .assert()
         .code(0)
         .get_output()

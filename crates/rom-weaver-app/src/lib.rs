@@ -134,6 +134,36 @@ pub struct InspectCommand {
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
+            long = "select",
+            help = "Select an extracted inspect payload by exact name, prefix, or glob (repeatable)"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub select: Vec<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            help = "Disable container auto-extract and inspect the source bytes directly"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub no_extract: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            help = "Disable default ignore filtering during inspect container payload resolution"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub no_ignore: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
             long,
             help = "List selectable archive entries in the inspect label when supported"
         )
@@ -1379,6 +1409,12 @@ struct AutoExtractResolutionLabels<'a> {
     format: Option<&'a str>,
     source_label: &'a str,
     temp_prefix: &'a str,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AutoExtractMode {
+    Recursive,
+    SingleStep,
 }
 
 #[derive(Clone, Debug)]

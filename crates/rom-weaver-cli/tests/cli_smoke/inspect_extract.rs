@@ -22,7 +22,12 @@ fn inspect_reports_known_container_as_supported() {
         .code(0);
 
     let json = run_single_json_event(
-        &["inspect", archive.path().to_str().expect("path"), "--json"],
+        &[
+            "inspect",
+            archive.path().to_str().expect("path"),
+            "--no-extract",
+            "--json",
+        ],
         0,
     );
     assert_eq!(json["command"], "inspect");
@@ -94,13 +99,291 @@ fn inspect_list_reports_selectable_zip_entries() {
 }
 
 #[test]
+fn inspect_auto_extracts_single_payload() {
+    let temp = setup_temp_dir();
+    let payload = b"header-aware inspect payload".to_vec();
+    fs::write(temp.child("game.nes").path(), with_nes_header(&payload)).expect("fixture");
+    let archive = temp.child("game.zip");
+
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("game.nes").path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            archive.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let json = run_single_json_event(
+        &["inspect", archive.path().to_str().expect("path"), "--json"],
+        0,
+    );
+    assert_eq!(json["command"], "inspect");
+    assert_eq!(json["family"], "command");
+    assert_eq!(json["format"], "rom-header");
+    assert_eq!(json["status"], "succeeded");
+    let label = json["label"].as_str().expect("label");
+    assert!(label.contains("detected ROM header No-Intro_NES.xml"));
+    assert!(label.contains("inspect source resolved via 1 container extract step(s)"));
+}
+
+#[test]
+fn inspect_auto_extracts_nested_payload() {
+    let temp = setup_temp_dir();
+    let payload = b"nested header-aware inspect payload".to_vec();
+    fs::write(temp.child("game.nes").path(), with_nes_header(&payload)).expect("fixture");
+
+    let inner = temp.child("inner.zip");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("game.nes").path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            inner.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let outer = temp.child("outer.7z");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            inner.path().to_str().expect("path"),
+            "--format",
+            "7z",
+            "--output",
+            outer.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let json = run_single_json_event(
+        &["inspect", outer.path().to_str().expect("path"), "--json"],
+        0,
+    );
+    assert_eq!(json["command"], "inspect");
+    assert_eq!(json["family"], "command");
+    assert_eq!(json["format"], "rom-header");
+    assert_eq!(json["status"], "succeeded");
+    let label = json["label"].as_str().expect("label");
+    assert!(label.contains("detected ROM header No-Intro_NES.xml"));
+    assert!(label.contains("inspect source resolved via 2 container extract step(s)"));
+}
+
+#[test]
+fn inspect_no_extract_reports_container_bytes() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("game.nes").path(), with_nes_header(b"payload")).expect("fixture");
+    let archive = temp.child("game.zip");
+
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("game.nes").path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            archive.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let json = run_single_json_event(
+        &[
+            "inspect",
+            archive.path().to_str().expect("path"),
+            "--no-extract",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(json["command"], "inspect");
+    assert_eq!(json["family"], "container");
+    assert_eq!(json["format"], "zip");
+    assert_eq!(json["status"], "succeeded");
+    assert!(!json["label"]
+        .as_str()
+        .expect("label")
+        .contains("inspect source resolved via"));
+}
+
+#[test]
+fn inspect_list_with_select_reports_selected_nested_container_entries() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("sample.bin").path(), b"payload").expect("payload fixture");
+    fs::write(temp.child("notes.txt").path(), b"ignore me").expect("note fixture");
+
+    let inner = temp.child("inner.zip");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("sample.bin").path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            inner.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let outer = temp.child("outer.zip");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            inner.path().to_str().expect("path"),
+            temp.child("notes.txt").path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            outer.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let json = run_single_json_event(
+        &[
+            "inspect",
+            outer.path().to_str().expect("path"),
+            "--select",
+            "inner.zip",
+            "--list",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(json["command"], "inspect");
+    assert_eq!(json["family"], "container");
+    assert_eq!(json["format"], "zip");
+    assert_eq!(json["status"], "succeeded");
+    assert_eq!(json["details"]["container"]["entry_count"], 1);
+    assert_eq!(json["details"]["container"]["entries"][0], "sample.bin");
+    assert!(json["label"]
+        .as_str()
+        .expect("label")
+        .contains("inspect source resolved via 1 container extract step(s)"));
+}
+
+#[test]
+fn inspect_auto_extract_ambiguity_requires_select() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("alpha.nes").path(), with_nes_header(b"alpha")).expect("alpha fixture");
+    fs::write(temp.child("beta.nes").path(), with_nes_header(b"beta")).expect("beta fixture");
+
+    let archive = temp.child("dupe.zip");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("alpha.nes").path().to_str().expect("path"),
+            temp.child("beta.nes").path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            archive.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let json = run_single_json_event(
+        &["inspect", archive.path().to_str().expect("path"), "--json"],
+        1,
+    );
+    let label = json["label"].as_str().expect("label");
+    assert_eq!(json["command"], "inspect");
+    assert_eq!(json["status"], "failed");
+    assert!(label.contains("ambiguous"));
+    assert!(label.contains("alpha.nes"));
+    assert!(label.contains("beta.nes"));
+    assert!(label.contains("--select"));
+}
+
+#[test]
+fn inspect_auto_extract_ignores_sidecars_unless_no_ignore() {
+    let temp = setup_temp_dir();
+    fs::create_dir_all(temp.child("__MACOSX").path()).expect("__MACOSX dir");
+    fs::write(temp.child("game.nes").path(), with_nes_header(b"payload")).expect("payload fixture");
+    fs::write(temp.child("notes.txt").path(), b"notes").expect("txt sidecar");
+    fs::write(temp.child("meta.json").path(), b"{}").expect("json sidecar");
+    fs::write(temp.child("maxcso-report.bin").path(), b"skip me").expect("maxcso sidecar");
+    fs::write(temp.child("__MACOSX/ghost.bin").path(), b"ghost").expect("macosx sidecar");
+
+    let archive = temp.child("bundle.zip");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("game.nes").path().to_str().expect("path"),
+            temp.child("notes.txt").path().to_str().expect("path"),
+            temp.child("meta.json").path().to_str().expect("path"),
+            temp.child("maxcso-report.bin")
+                .path()
+                .to_str()
+                .expect("path"),
+            temp.child("__MACOSX").path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            archive.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let json = run_single_json_event(
+        &["inspect", archive.path().to_str().expect("path"), "--json"],
+        0,
+    );
+    assert_eq!(json["command"], "inspect");
+    assert_eq!(json["format"], "rom-header");
+    assert_eq!(json["status"], "succeeded");
+
+    let no_ignore_json = run_single_json_event(
+        &[
+            "inspect",
+            archive.path().to_str().expect("path"),
+            "--no-ignore",
+            "--json",
+        ],
+        1,
+    );
+    let no_ignore_label = no_ignore_json["label"].as_str().expect("label");
+    assert_eq!(no_ignore_json["command"], "inspect");
+    assert_eq!(no_ignore_json["status"], "failed");
+    assert!(no_ignore_label.contains("ambiguous"));
+    assert!(no_ignore_label.contains("--select"));
+}
+
+#[test]
 fn inspect_reports_rar_container_as_supported() {
     let temp = setup_temp_dir();
     let source = temp.child("version.rar");
     fs::copy(rar_fixture_path("version.rar"), source.path()).expect("copy fixture");
 
     let json = run_single_json_event(
-        &["inspect", source.path().to_str().expect("path"), "--json"],
+        &[
+            "inspect",
+            source.path().to_str().expect("path"),
+            "--no-extract",
+            "--json",
+        ],
         0,
     );
     assert_eq!(json["command"], "inspect");

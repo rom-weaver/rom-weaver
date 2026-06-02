@@ -77,15 +77,73 @@ impl CliApp {
     }
 
     fn run_inspect(&self, args: InspectCommand) -> AppRunOutcome {
-        trace!(source = %args.source.display(), list = args.list, "starting inspect command");
+        let InspectCommand {
+            source,
+            select,
+            no_extract,
+            no_ignore,
+            list,
+        } = args;
+        trace!(
+            source = %source.display(),
+            selections = select.len(),
+            no_extract,
+            no_ignore,
+            list,
+            "starting inspect command"
+        );
         let context = self.context(ThreadBudget::Fixed(1));
-        let source = args.source.clone();
         if let Some(report) =
             self.require_existing_path("inspect", OperationFamily::Command, None, &source, None)
         {
             return self.finish("inspect", report);
         }
-        let inspect_recommendation = self.inspect_compress_recommendation(&source);
+
+        let should_auto_extract = !no_extract && (!list || !select.is_empty());
+        let resolved = if should_auto_extract {
+            let labels = AutoExtractResolutionLabels {
+                command: "inspect",
+                family: OperationFamily::Command,
+                format: None,
+                source_label: "inspect",
+                temp_prefix: "inspect-extract",
+            };
+            if list && !select.is_empty() {
+                self.resolve_source_with_single_auto_extract(
+                    &source, &select, no_ignore, &context, labels,
+                )
+            } else {
+                self.resolve_source_with_auto_extract(
+                    &source, &select, false, no_ignore, &context, labels,
+                )
+            }
+        } else {
+            Ok(ResolvedChecksumSource {
+                source: source.clone(),
+                extracted_archives: 0,
+                cleanup_paths: Vec::new(),
+            })
+        };
+        let ResolvedChecksumSource {
+            source: inspect_source,
+            extracted_archives,
+            cleanup_paths,
+        } = match resolved {
+            Ok(resolved) => resolved,
+            Err(error) => {
+                return self.finish(
+                    "inspect",
+                    OperationReport::failed(
+                        OperationFamily::Command,
+                        None,
+                        "prepare",
+                        error.to_string(),
+                        Some(context.plan_threads(ThreadCapability::single_threaded())),
+                    ),
+                );
+            }
+        };
+        let inspect_recommendation = self.inspect_compress_recommendation(&inspect_source);
 
         self.emit_running(
             OperationLabel {
@@ -94,12 +152,12 @@ impl CliApp {
                 format: None,
             },
             "probe",
-            format!("probing handlers for `{}`", source.display()),
+            format!("probing handlers for `{}`", inspect_source.display()),
             Some(0.0),
             None,
         );
 
-        if let Some(handler) = self.containers.probe(&source) {
+        if let Some(handler) = self.containers.probe(&inspect_source) {
             self.emit_running(
                 OperationLabel {
                     command: "inspect",
@@ -107,12 +165,12 @@ impl CliApp {
                     format: Some(handler.descriptor().name),
                 },
                 "inspect",
-                format!("inspecting `{}`", source.display()),
+                format!("inspecting `{}`", inspect_source.display()),
                 Some(0.0),
                 Some(context.plan_threads(ThreadCapability::single_threaded())),
             );
             let request = ContainerInspectRequest {
-                source: source.clone(),
+                source: inspect_source.clone(),
             };
             let mut report = handler.inspect(&request, &context).unwrap_or_else(|error| {
                 OperationReport::failed(
@@ -132,7 +190,7 @@ impl CliApp {
                         format: Some(handler.descriptor().name),
                     },
                     "list",
-                    format!("listing entries for `{}`", source.display()),
+                    format!("listing entries for `{}`", inspect_source.display()),
                     None,
                     Some(context.plan_threads(ThreadCapability::single_threaded())),
                 );
@@ -170,10 +228,10 @@ impl CliApp {
                 listed_entries,
                 inspect_recommendation.as_ref(),
             );
-            return self.finish("inspect", report);
+            return self.finish_inspect(report, extracted_archives, cleanup_paths);
         }
 
-        if let Some(handler) = self.patches.probe(&source) {
+        if let Some(handler) = self.patches.probe(&inspect_source) {
             self.emit_running(
                 OperationLabel {
                     command: "inspect",
@@ -181,11 +239,11 @@ impl CliApp {
                     format: Some(handler.descriptor().name),
                 },
                 "inspect",
-                format!("parsing `{}`", source.display()),
+                format!("parsing `{}`", inspect_source.display()),
                 Some(0.0),
                 None,
             );
-            if args.list {
+            if list {
                 let report = OperationReport::failed(
                     OperationFamily::Patch,
                     Some(handler.descriptor().name.to_string()),
@@ -193,9 +251,9 @@ impl CliApp {
                     "inspect --list is only supported for container formats",
                     None,
                 );
-                return self.finish("inspect", report);
+                return self.finish_inspect(report, extracted_archives, cleanup_paths);
             }
-            let mut report = handler.parse(&source, &context).unwrap_or_else(|error| {
+            let mut report = handler.parse(&inspect_source, &context).unwrap_or_else(|error| {
                 OperationReport::failed(
                     OperationFamily::Patch,
                     Some(handler.descriptor().name.to_string()),
@@ -210,17 +268,21 @@ impl CliApp {
                     inspect_recommendation.as_ref(),
                 );
             }
-            return self.finish("inspect", Self::attach_patch_inspect_details(report));
+            return self.finish_inspect(
+                Self::attach_patch_inspect_details(report),
+                extracted_archives,
+                cleanup_paths,
+            );
         }
 
-        if let Some(reason) = explicitly_unsupported_patch_reason_for_path(&source) {
+        if let Some(reason) = explicitly_unsupported_patch_reason_for_path(&inspect_source) {
             let mut report = OperationReport::failed(
                 OperationFamily::Patch,
                 Some("PDS".to_string()),
                 "probe",
                 format!(
                     "patch format for `{}` is explicitly not supported: {reason}",
-                    source.display()
+                    inspect_source.display()
                 ),
                 Some(context.plan_threads(ThreadCapability::single_threaded())),
             );
@@ -230,11 +292,11 @@ impl CliApp {
                     inspect_recommendation.as_ref(),
                 );
             }
-            return self.finish("inspect", report);
+            return self.finish_inspect(report, extracted_archives, cleanup_paths);
         }
 
-        if let Ok(Some(header_match)) = Self::detect_known_rom_header(&source) {
-            if args.list {
+        if let Ok(Some(header_match)) = Self::detect_known_rom_header(&inspect_source) {
+            if list {
                 let report = OperationReport::failed(
                     OperationFamily::Command,
                     Some("rom-header".to_string()),
@@ -242,7 +304,7 @@ impl CliApp {
                     "inspect --list is only supported for container formats",
                     None,
                 );
-                return self.finish("inspect", report);
+                return self.finish_inspect(report, extracted_archives, cleanup_paths);
             }
             let mut report = OperationReport::succeeded(
                 OperationFamily::Command,
@@ -267,20 +329,39 @@ impl CliApp {
                     inspect_recommendation.as_ref(),
                 );
             }
-            return self.finish("inspect", report);
+            return self.finish_inspect(report, extracted_archives, cleanup_paths);
         }
 
         let mut report = OperationReport::failed(
             OperationFamily::Command,
             None,
             "probe",
-            format!("no registered handler matched `{}`", source.display()),
+            format!(
+                "no registered handler matched `{}`",
+                inspect_source.display()
+            ),
             None,
         );
         if !self.emit_progress_events {
             report =
                 Self::append_recommended_compress_label(report, inspect_recommendation.as_ref());
         }
+        self.finish_inspect(report, extracted_archives, cleanup_paths)
+    }
+
+    fn finish_inspect(
+        &self,
+        mut report: OperationReport,
+        extracted_archives: usize,
+        cleanup_paths: Vec<PathBuf>,
+    ) -> AppRunOutcome {
+        if report.status == OperationStatus::Succeeded && extracted_archives > 0 {
+            report.label = format!(
+                "{}; inspect source resolved via {extracted_archives} container extract step(s)",
+                report.label
+            );
+        }
+        Self::cleanup_temp_paths(cleanup_paths);
         self.finish("inspect", report)
     }
 
@@ -1315,11 +1396,52 @@ impl CliApp {
         context: &OperationContext,
         labels: AutoExtractResolutionLabels<'_>,
     ) -> Result<ResolvedChecksumSource> {
+        self.resolve_source_with_auto_extract_with_mode(
+            source,
+            select,
+            no_extract,
+            no_ignore,
+            context,
+            labels,
+            AutoExtractMode::Recursive,
+        )
+    }
+
+    fn resolve_source_with_single_auto_extract(
+        &self,
+        source: &Path,
+        select: &[String],
+        no_ignore: bool,
+        context: &OperationContext,
+        labels: AutoExtractResolutionLabels<'_>,
+    ) -> Result<ResolvedChecksumSource> {
+        self.resolve_source_with_auto_extract_with_mode(
+            source,
+            select,
+            false,
+            no_ignore,
+            context,
+            labels,
+            AutoExtractMode::SingleStep,
+        )
+    }
+
+    fn resolve_source_with_auto_extract_with_mode(
+        &self,
+        source: &Path,
+        select: &[String],
+        no_extract: bool,
+        no_ignore: bool,
+        context: &OperationContext,
+        labels: AutoExtractResolutionLabels<'_>,
+        mode: AutoExtractMode,
+    ) -> Result<ResolvedChecksumSource> {
         trace!(
             source = %source.display(),
             selections = select.len(),
             no_extract,
             no_ignore,
+            mode = ?mode,
             command = labels.command,
             family = ?labels.family,
             format = ?labels.format,
@@ -1508,6 +1630,9 @@ impl CliApp {
                                 "auto-extract continued with interactively selected ignored candidate"
                             );
                             current_source = selected.source;
+                            if mode == AutoExtractMode::SingleStep {
+                                break;
+                            }
                             continue;
                         }
                         trace!(
@@ -1546,6 +1671,9 @@ impl CliApp {
                             "auto-extract continued with interactively selected candidate"
                         );
                         current_source = selected.source;
+                        if mode == AutoExtractMode::SingleStep {
+                            break;
+                        }
                         continue;
                     }
                     trace!(
@@ -1590,6 +1718,9 @@ impl CliApp {
                 "auto-extract selected single candidate"
             );
             current_source = selected_candidate.source;
+            if mode == AutoExtractMode::SingleStep {
+                break;
+            }
         }
 
         trace!(
