@@ -3,12 +3,15 @@ import {
   getBaseName,
   normalizePathSeparators,
   stripFileNameQuery,
-  stripLeadingDot,
 } from "../../storage/shared/path-utils.ts";
+import {
+  getFileNameWithoutExtension as getSharedFileNameWithoutExtension,
+  hasFileNameExtension as hasSharedFileNameExtension,
+  replaceFileNameExtension as replaceSharedFileNameExtension,
+  stripLeadingExtensionDot,
+} from "../path-utils.ts";
 
 const LEADING_SLASHES_REGEX = /^\/+/;
-
-const FILE_EXTENSION_PATTERN = /\.[^./\\\s]+$/;
 
 const normalizeArchiveEntryPath = (fileName: FileNameValue): string =>
   normalizePathSeparators(fileName).replace(LEADING_SLASHES_REGEX, "");
@@ -24,22 +27,20 @@ const getDirectoryPath = (fileName: FileNameValue): string => {
 
 const escapeRegExp = (value: FileNameValue): string => String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-const hasFileNameExtension = (fileName: FileNameValue): boolean => FILE_EXTENSION_PATTERN.test(String(fileName || ""));
+const hasFileNameExtension = (fileName: FileNameValue): boolean => hasSharedFileNameExtension(fileName);
 
 const replaceFileNameExtension = (fileName: string, extension: FileNameValue): string => {
-  const normalizedExtension = stripLeadingDot(extension || "bin");
-  if (FILE_EXTENSION_PATTERN.test(fileName)) return fileName.replace(FILE_EXTENSION_PATTERN, `.${normalizedExtension}`);
-  return `${fileName}.${normalizedExtension}`;
+  return replaceSharedFileNameExtension(fileName, extension || "bin");
 };
 
 const appendFileNameExtension = (fileName: string, extension: FileNameValue): string => {
-  const normalizedExtension = stripLeadingDot(extension);
+  const normalizedExtension = stripLeadingExtensionDot(extension);
   if (!normalizedExtension) return fileName;
   return `${fileName}.${normalizedExtension}`;
 };
 
 const getFileNameWithoutExtension = (fileName: FileNameValue): string =>
-  String(fileName || "disc").replace(FILE_EXTENSION_PATTERN, "");
+  getSharedFileNameWithoutExtension(fileName || "disc");
 
 const getBaseFileName = (fileName: FileNameValue): string => getBaseName(fileName);
 

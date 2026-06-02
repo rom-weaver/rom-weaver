@@ -1,4 +1,4 @@
-import { forwardCreatePatchProgress } from "../../platform/shared/workflow-runtime-progress.ts";
+import { forwardCreatePatchProgress, forwardDiscProgress } from "../../platform/shared/workflow-runtime-progress.ts";
 import type { ChecksumResult } from "../../types/checksum.ts";
 import type { CompressionExtractResult, PublicOutput } from "../../types/workflow-runtime.ts";
 import type {
@@ -8,7 +8,6 @@ import type {
   RuntimeDiscExtractChdInput,
   RuntimeDiscExtractRvzInput,
   RuntimeDiscExtractZ3dsInput,
-  RuntimeDiscHooks,
   RuntimePatchApplyWorkerInput,
   RuntimePatchCreateWorkerInput,
   RuntimePatchWorkerProgress,
@@ -25,18 +24,11 @@ import {
   type DiscCompressionFormatRegistration,
   getDiscCompressionFormatRegistration,
 } from "../compression/container-format-registry.ts";
+import { getPathBaseName } from "../path-utils.ts";
 import { getNamedSourceFileName, toWorkerMetadata } from "./source-normalization.ts";
 import { createCompressionExtractResult } from "./workflow-runtime-worker-helpers.ts";
 
 const CUE_FILE_REGEX = /\.cue$/i;
-const PATH_PART_SPLIT_REGEX = /[/\\]+/;
-
-const getPathBaseName = (value: string, fallback: string): string => {
-  const parts = String(value || "")
-    .split(PATH_PART_SPLIT_REGEX)
-    .filter((part) => !!part);
-  return parts[parts.length - 1] || fallback;
-};
 
 const isCueOutput = (output: PublicOutput) => CUE_FILE_REGEX.test(output.fileName || output.path || "");
 
@@ -349,9 +341,6 @@ const createSharedCompressionRuntime = (
     archiveRuntimeOptional?: boolean;
   } = {},
 ): WorkflowRuntime["compression"] => {
-  type CompressionProgressHandler = NonNullable<
-    Parameters<NonNullable<WorkflowRuntime["compression"]["extract"]>>[0]["options"]
-  >["onProgress"];
   const requireOutput = <TOutput>(output: TOutput | undefined, message: string): TOutput => {
     if (output === undefined) throw new Error(message);
     return output;
@@ -369,21 +358,6 @@ const createSharedCompressionRuntime = (
   type DiscListInput = RuntimeDiscExtractChdInput | RuntimeDiscExtractRvzInput | RuntimeDiscExtractZ3dsInput;
   type DiscCreateOutput = Awaited<ReturnType<RuntimeWorkerIo["createWorkerOutput"]>>;
   type DiscListEntries = Awaited<ReturnType<NonNullable<WorkflowRuntime["compression"]["list"]>>>["entries"];
-  const toDiscProgressCallback = (
-    stage: "input" | "output",
-    onProgress: CompressionProgressHandler,
-  ): RuntimeDiscHooks["onProgress"] =>
-    onProgress
-      ? (progress: { label?: string; message?: string; percent?: number | null }) => {
-          onProgress({
-            label: progress.label || (stage === "input" ? "Extracting disc image..." : "Creating disc image..."),
-            message: progress.message,
-            percent:
-              typeof progress.percent === "number" && Number.isFinite(progress.percent) ? progress.percent : null,
-            stage,
-          });
-        }
-      : undefined;
   const createDiscInputs = {
     chd: (request: DiscCreateRequest): RuntimeDiscCreateChdInput => ({
       chdSourceMode: request.chdSourceMode,
@@ -394,7 +368,7 @@ const createSharedCompressionRuntime = (
       logLevel: request.options?.logLevel,
       mode: request.mode,
       onLog: request.options?.onLog,
-      onProgress: toDiscProgressCallback("output", request.options?.onProgress),
+      onProgress: forwardDiscProgress("output", request.options?.onProgress),
       outputName: request.outputName,
       source: request.source,
       threads: request.options?.workerThreads,
@@ -403,7 +377,7 @@ const createSharedCompressionRuntime = (
       fileName: request.fileName,
       logLevel: request.options?.logLevel,
       onLog: request.options?.onLog,
-      onProgress: toDiscProgressCallback("output", request.options?.onProgress),
+      onProgress: forwardDiscProgress("output", request.options?.onProgress),
       outputName: request.outputName,
       rvzBlockSize: request.rvzBlockSize,
       rvzCompression: request.rvzCompression,
@@ -418,7 +392,7 @@ const createSharedCompressionRuntime = (
       fileName: request.fileName,
       logLevel: request.options?.logLevel,
       onLog: request.options?.onLog,
-      onProgress: toDiscProgressCallback("output", request.options?.onProgress),
+      onProgress: forwardDiscProgress("output", request.options?.onProgress),
       outputName: request.outputName,
       source: request.source,
       threads: request.options?.workerThreads,
@@ -455,7 +429,7 @@ const createSharedCompressionRuntime = (
     logLevel: request.options?.logLevel,
     mode: undefined,
     onLog: request.options?.onLog,
-    onProgress: toDiscProgressCallback("input", request.options?.onProgress),
+    onProgress: forwardDiscProgress("input", request.options?.onProgress),
     source: request.source,
     threads: request.options?.workerThreads,
   });
@@ -471,7 +445,7 @@ const createSharedCompressionRuntime = (
         logLevel: request.options?.logLevel,
         mode: cueEntryName ? "cd" : undefined,
         onLog: request.options?.onLog,
-        onProgress: toDiscProgressCallback("input", request.options?.onProgress),
+        onProgress: forwardDiscProgress("input", request.options?.onProgress),
         outputName: trackEntryName || request.outputName,
         source: request.source,
         splitBin: typeof request.options?.chdSplitBin === "boolean" ? request.options.chdSplitBin : undefined,
@@ -521,7 +495,7 @@ const createSharedCompressionRuntime = (
           fileName: getSourceFileName(request.source, registration.fallbackFileName),
           logLevel: request.options?.logLevel,
           onLog: request.options?.onLog,
-          onProgress: toDiscProgressCallback("input", request.options?.onProgress),
+          onProgress: forwardDiscProgress("input", request.options?.onProgress),
           outputName: request.entries[0] || request.outputName,
           source: request.source,
           threads: request.options?.workerThreads,

@@ -31,22 +31,15 @@ import {
   isRomWeaverLiveRunEvent,
   isRomWeaverTerminalRunEvent,
 } from "../../workers/rom-weaver/rom-weaver-run-events.ts";
-import {
-  getRomWeaverFailureMessage,
-  resetRomWeaverRunner,
-  runRomWeaverJson,
-} from "../../workers/rom-weaver/rom-weaver-runner.ts";
+import { getRomWeaverFailureMessage, runRomWeaverJson } from "../../workers/rom-weaver/rom-weaver-runner.ts";
+import { getFileNameParts, getPathBaseName, isCompressionLevelProfile } from "../path-utils.ts";
 
 type RomWeaverRunJsonOptions = BaseRomWeaverRunJsonOptions<RomWeaverRunJsonEvent, RuntimeValue> &
   RomWeaverBrowserOpfsRunOptions;
 type RomWeaverRunJsonResult = BaseRomWeaverRunJsonResult<RomWeaverRunJsonEvent, RuntimeValue>;
 
 const CHECKSUM_PAIR_REGEX = /([a-z0-9_-]+)=([0-9a-f]+)/gi;
-const PATH_PART_SPLIT_REGEX = /[/\\]+/;
-const FILE_EXTENSION_CAPTURE_REGEX = /^(.+?)(\.[^./\\]*)?$/;
 const CODEC_LEVEL_ENTRY_REGEX = /^([a-z0-9_+-]+)(?::(\d+))?$/i;
-const COMPRESSION_LEVEL_PROFILE_REGEX = /^(min|very-low|low|medium|high|very-high|max)$/i;
-const OUT_OF_MEMORY_FAILURE_REGEX = /\bout of memory\b|\bmemory allocation\b|\bcannot allocate memory\b/i;
 const WORK_ROOT_PATH = "/work";
 const BROWSER_SYNC_ACCESS_MODES = new Set<RomWeaverBrowserSyncAccessMode>([
   "read-only",
@@ -255,14 +248,6 @@ const toRomWeaverOptions = (input: {
   if (Array.isArray(input.virtualFiles)) options.virtualFiles = input.virtualFiles;
   if (typeof input.virtualOnlyMounts === "boolean") options.virtualOnlyMounts = input.virtualOnlyMounts;
   return options;
-};
-
-const getPathBaseName = (value: string, fallback: string): string => {
-  const text = String(value || "").trim();
-  if (!text) return fallback;
-  const parts = text.split(PATH_PART_SPLIT_REGEX).filter((part) => !!part);
-  if (!parts.length) return fallback;
-  return parts[parts.length - 1] || fallback;
 };
 
 const joinPath = (directory: string, fileName: string): string => {
@@ -480,51 +465,12 @@ const normalizeCompressionLevelProfile = (value: unknown): string | null => {
     .trim()
     .toLowerCase();
   if (!normalized) return null;
-  return COMPRESSION_LEVEL_PROFILE_REGEX.test(normalized) ? normalized : null;
+  return isCompressionLevelProfile(normalized) ? normalized : null;
 };
 
 const ensureRomWeaverSuccess = (result: RomWeaverRunJsonResult, fallbackMessage: string) => {
   if (result.ok && result.exitCode === 0) return;
   throw new Error(getRomWeaverFailureMessage(result, fallbackMessage));
-};
-
-const isOutOfMemoryFailure = (message: string) => OUT_OF_MEMORY_FAILURE_REGEX.test(String(message || "").toLowerCase());
-
-const runRomWeaverJsonWithRetryOnOutOfMemory = async (
-  command: RomWeaverCommand,
-  options: RomWeaverRunJsonOptions,
-  fallbackFailureMessage: string,
-  trace: {
-    commandLabel: string;
-    logLevel?: LogLevel | string;
-    onLog?: (log: WorkflowRuntimeLog) => void;
-  },
-): Promise<RomWeaverRunJsonResult> => {
-  try {
-    const result = await runRomWeaverJson(command, options);
-    if (result.ok && result.exitCode === 0) return result;
-    const failureMessage = getRomWeaverFailureMessage(result, fallbackFailureMessage);
-    if (!isOutOfMemoryFailure(failureMessage)) return result;
-    emitRuntimeTrace({ logLevel: trace.logLevel, onLog: trace.onLog }, "runJson retry after OOM", {
-      command,
-      commandLabel: trace.commandLabel,
-      failureMessage,
-      reason: "runner-reset",
-    });
-    await resetRomWeaverRunner().catch(() => undefined);
-    return runRomWeaverJson(command, options);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (!isOutOfMemoryFailure(message)) throw error;
-    emitRuntimeTrace({ logLevel: trace.logLevel, onLog: trace.onLog }, "runJson retry after OOM throw", {
-      command,
-      commandLabel: trace.commandLabel,
-      message,
-      reason: "runner-reset",
-    });
-    await resetRomWeaverRunner().catch(() => undefined);
-    return runRomWeaverJson(command, options);
-  }
 };
 
 const normalizeChdCodecArgs = (codecs: string[]) => {
@@ -561,14 +507,6 @@ const isChdCompressionFormat = (format: string): boolean => {
   return normalized === "chd" || normalized.startsWith("chd-");
 };
 
-const getFileNameParts = (fileName: string) => {
-  const match = getPathBaseName(fileName, "input.bin").match(FILE_EXTENSION_CAPTURE_REGEX);
-  return {
-    extension: match?.[2] || "",
-    stem: match?.[1] || getPathBaseName(fileName, "input.bin"),
-  };
-};
-
 const getPatchApplyOutputFileName = (input: RuntimePatchApplyWorkerInput) => {
   const options = input.options || {};
   const outputName = typeof options.outputName === "string" ? options.outputName.trim() : "";
@@ -586,16 +524,6 @@ const getPatchApplyOutputFileName = (input: RuntimePatchApplyWorkerInput) => {
     .join("-");
   const suffix = options.appendOutputSuffix === false ? "" : patchStem ? `-${patchStem}` : "-patched";
   return `${stem}${suffix}${normalizedOutputExtension || ".bin"}`;
-};
-
-const toPatchProgress = (event: RomWeaverRunJsonEvent): RuntimePatchWorkerProgress | null => {
-  if (!isLiveProgressEvent(event)) return null;
-  const label = getRomWeaverRunEventLabel(event);
-  return {
-    label: label ? label : undefined,
-    message: undefined,
-    percent: clampPercent(getRomWeaverRunEventPercent(event)),
-  };
 };
 
 const invokeRomWeaverCompressionCreateWorker = async (
@@ -656,7 +584,7 @@ const invokeRomWeaverCompressionCreateWorker = async (
     threadArg,
   });
 
-  const result = await runRomWeaverJsonWithRetryOnOutOfMemory(
+  const result = await runRomWeaverJson(
     command,
     toRomWeaverOptions({
       invalidateMountCacheBeforeRun: input.invalidateMountCacheBeforeRun,
@@ -669,12 +597,6 @@ const invokeRomWeaverCompressionCreateWorker = async (
       onLog,
       virtualFiles: input.virtualFiles,
     }),
-    "Compression create failed",
-    {
-      commandLabel: "compress",
-      logLevel: input.logLevel,
-      onLog,
-    },
   );
   if (!(result.ok && result.exitCode === 0)) {
     const failureMessage = getRomWeaverFailureMessage(result, "Compression create failed");
@@ -740,7 +662,7 @@ const invokeRomWeaverExtractWorker = async (
     sourcePath,
     threadArg,
   });
-  const result = await runRomWeaverJsonWithRetryOnOutOfMemory(
+  const result = await runRomWeaverJson(
     command,
     toRomWeaverOptions({
       invalidateMountCacheBeforeRun: input.invalidateMountCacheBeforeRun,
@@ -752,12 +674,6 @@ const invokeRomWeaverExtractWorker = async (
       onLog,
       scratchFilePoolSize: input.scratchFilePoolSize,
     }),
-    "Compression extract failed",
-    {
-      commandLabel: "extract",
-      logLevel: input.logLevel,
-      onLog,
-    },
   );
   if (!(result.ok && result.exitCode === 0)) {
     const operationLabel =
@@ -795,7 +711,7 @@ const runRomWeaverInspectListWorker = async (
     sourcePath,
   });
   const runInspectList = () =>
-    runRomWeaverJsonWithRetryOnOutOfMemory(
+    runRomWeaverJson(
       command,
       toRomWeaverOptions({
         logLevel: input.logLevel,
@@ -805,12 +721,6 @@ const runRomWeaverInspectListWorker = async (
         },
         onLog,
       }),
-      "Compression listing failed",
-      {
-        commandLabel: "inspect",
-        logLevel: input.logLevel,
-        onLog,
-      },
     );
   const result = await runInspectList();
   if (!(result.ok && result.exitCode === 0)) {
@@ -882,14 +792,14 @@ const invokeRomWeaverPatchApplyWorker = async (
   }
   await onBeforeRun?.(outputPath);
 
-  const result = await runRomWeaverJsonWithRetryOnOutOfMemory(
+  const result = await runRomWeaverJson(
     command,
     toRomWeaverOptions({
       defaultThreads: disableDefaultThreadArgInjection ? 0 : undefined,
       invalidateMountCacheBeforeRun: true,
       logLevel: input.logLevel,
       onEvent: (event) => {
-        const progress = toPatchProgress(event);
+        const progress = toSimpleProgress(event);
         if (progress) onProgress?.(progress);
       },
       onLog,
@@ -897,12 +807,6 @@ const invokeRomWeaverPatchApplyWorker = async (
       syncAccessMode,
       virtualOnlyMounts,
     }),
-    "Patch apply failed",
-    {
-      commandLabel: "patch-apply",
-      logLevel: input.logLevel,
-      onLog,
-    },
   );
   if (!(result.ok && result.exitCode === 0)) {
     const failureMessage = await appendBrowserStorageContext(getRomWeaverFailureMessage(result, "Patch apply failed"));
@@ -980,22 +884,16 @@ const invokeRomWeaverCreatePatchWorker = async (
   });
   await onBeforeRun?.(outputPath);
 
-  const result = await runRomWeaverJsonWithRetryOnOutOfMemory(
+  const result = await runRomWeaverJson(
     command,
     toRomWeaverOptions({
       logLevel: input.logLevel,
       onEvent: (event) => {
-        const progress = toPatchProgress(event);
+        const progress = toSimpleProgress(event);
         if (progress) onProgress?.(progress);
       },
       onLog,
     }),
-    "Patch create failed",
-    {
-      commandLabel: "patch-create",
-      logLevel: input.logLevel,
-      onLog,
-    },
   );
   ensureRomWeaverSuccess(result, "Patch create failed");
 
@@ -1090,27 +988,16 @@ const runRomWeaverChecksumWorker = async (
     filePath,
     startOffset: input.checksumStartOffset,
   });
-  const result = await runRomWeaverJsonWithRetryOnOutOfMemory(
+  const result = await runRomWeaverJson(
     command,
     toRomWeaverOptions({
       logLevel: input.logLevel,
       onEvent: (event) => {
-        if (!isLiveProgressEvent(event)) return;
-        const label = getRomWeaverRunEventLabel(event);
-        onProgress?.({
-          label: label ? label : undefined,
-          message: undefined,
-          percent: clampPercent(getRomWeaverRunEventPercent(event)),
-        });
+        const progress = toSimpleProgress(event);
+        if (progress) onProgress?.(progress);
       },
       onLog,
     }),
-    "Checksum calculation failed",
-    {
-      commandLabel: "checksum",
-      logLevel: input.logLevel,
-      onLog,
-    },
   );
   ensureRomWeaverSuccess(result, "Checksum calculation failed");
 

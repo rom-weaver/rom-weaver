@@ -11,13 +11,13 @@ import {
 } from "../input/binary-service.ts";
 import type { InputAsset } from "../input/input-assets.ts";
 import { verifyPatchedOutputChecksum } from "../output/output-checksum-verification.ts";
+import { getFileNameExtension } from "../path-utils.ts";
 import { normalizeApplyProgressInput, reportProgress } from "../progress/progress-reporting.ts";
 
 type PatchSourceValidator = {
   validateSourceAsync?: (file: PatchFileInstance) => boolean | Promise<boolean>;
 };
 
-const FILE_EXTENSION_REGEX = /\.([^./\\\s?#]+)(?:[?#].*)?$/;
 const PATCH_MAGIC_BY_EXTENSION = {
   bps: "BPS1",
   ips: "PATCH",
@@ -25,27 +25,18 @@ const PATCH_MAGIC_BY_EXTENSION = {
 } as const;
 
 const getPatchSummaryFormatName = (fileName: string | undefined) => {
-  const extension =
-    String(fileName || "")
-      .match(FILE_EXTENSION_REGEX)?.[1]
-      ?.toLowerCase() || "";
+  const extension = getFileNameExtension(fileName);
   if (extension === "ebp") return "IPS";
   if (extension === "xdelta" || extension === "vcdiff") return "VCDIFF";
   return extension ? extension.toUpperCase() : "Patch";
 };
 
 const isXdeltaPatchFileName = (fileName: string | undefined) => {
-  const extension =
-    String(fileName || "")
-      .match(FILE_EXTENSION_REGEX)?.[1]
-      ?.toLowerCase() || "";
+  const extension = getFileNameExtension(fileName);
   return extension === "xdelta" || extension === "vcdiff";
 };
 
-const getPatchFileExtension = (fileName: string | undefined) =>
-  String(fileName || "")
-    .match(FILE_EXTENSION_REGEX)?.[1]
-    ?.toLowerCase() || "";
+const getPatchFileExtension = (fileName: string | undefined) => getFileNameExtension(fileName);
 
 const readPatchHeader = async (patchFile: PatchFileInstance, length: number): Promise<string | null> => {
   try {

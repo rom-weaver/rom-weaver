@@ -1,6 +1,5 @@
 /* jscpd:ignore-start */
 const RVZ_NOD_CORE: NodHandlerCore = NodHandlerCore::new(&RVZ, NodFormat::Rvz);
-const RVZ_EXTRACT_MAX_BUFFER_BYTES: u64 = 4 * 1024 * 1024;
 
 struct RvzContainerHandler;
 
@@ -40,13 +39,7 @@ impl RvzContainerHandler {
         context: &OperationContext,
         execution: &ThreadExecution,
     ) -> Result<(u64, Option<BTreeMap<String, String>>)> {
-        let buffer_size = if total_bytes == 0 {
-            64 * 1024
-        } else {
-            ((total_bytes / 100)
-                .max(16 * 1024)
-                .min(RVZ_EXTRACT_MAX_BUFFER_BYTES)) as usize
-        };
+        let buffer_size = copy_progress_buffer_size(total_bytes);
 
         let mut bytes_written = 0_u64;
         let mut last_emitted_percent = -1.0_f32;

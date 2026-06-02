@@ -12,6 +12,8 @@ use std::{
     thread,
 };
 
+mod constants;
+
 use ciso::{read::CSOReader as CsoReader, split::SplitFileReader};
 use lz4_flex::frame::{
     BlockMode as Lz4BlockMode, BlockSize as Lz4BlockSize, FrameEncoder as Lz4FrameEncoder,
@@ -57,6 +59,13 @@ use xdvdfs::{
 };
 use zeekstd::{Decoder as ZeekstdDecoder, SeekTable as ZeekstdSeekTable};
 use zstd::bulk::compress as zstd_compress;
+
+use constants::{
+    LIBARCHIVE_CREATE_IO_BUFFER_BYTES, LIBARCHIVE_CREATE_ZSTD_IO_BUFFER_BYTES,
+    LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES, PARALLEL_COORDINATOR_STACK_SIZE_BYTES,
+    Z3DS_DEFAULT_COMPRESSION_LEVEL, Z3DS_DEFAULT_FRAME_SIZE_BYTES, Z3DS_EXTRACT_CHUNK_BYTES,
+    Z3DS_MAX_COMPRESSION_LEVEL, Z3DS_MIN_COMPRESSION_LEVEL, copy_progress_buffer_size,
+};
 
 fn ensure_extract_output_available(output_path: &Path, overwrite: bool) -> Result<()> {
     if overwrite || !output_path.exists() {
@@ -660,12 +669,6 @@ fn archive_path_to_name(path: &Path) -> Result<String> {
     Ok(parts.join("/"))
 }
 
-const LIBARCHIVE_CREATE_IO_BUFFER_BYTES: usize = 128 * 1024;
-const LIBARCHIVE_CREATE_ZSTD_IO_BUFFER_BYTES: usize = 1024 * 1024;
-const LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES: usize = 8 * 1024 * 1024;
-const COPY_WITH_PROGRESS_MAX_BUFFER_BYTES: u64 = 4 * 1024 * 1024;
-const PARALLEL_COORDINATOR_STACK_SIZE_BYTES: usize = 8 * 1024 * 1024;
-
 #[derive(Clone, Copy, Debug)]
 struct LibarchiveCreateConfig {
     format_name: &'static str,
@@ -1120,13 +1123,7 @@ fn copy_reader_with_progress<R: Read, W: Write>(
     label: &str,
     thread_execution: Option<&ThreadExecution>,
 ) -> Result<u64> {
-    let buffer_size = if total_bytes == 0 {
-        64 * 1024
-    } else {
-        ((total_bytes / 100)
-            .max(16 * 1024)
-            .min(COPY_WITH_PROGRESS_MAX_BUFFER_BYTES)) as usize
-    };
+    let buffer_size = copy_progress_buffer_size(total_bytes);
     let mut buffer = vec![0_u8; buffer_size];
     let mut bytes_written = 0_u64;
     let emitted_progress_bucket = AtomicU8::new(0);

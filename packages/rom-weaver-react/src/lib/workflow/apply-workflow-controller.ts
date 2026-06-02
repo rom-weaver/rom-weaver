@@ -37,6 +37,7 @@ import {
 import { selectionToArchiveEntry } from "../input/selection.ts";
 import { wrapPublicOutput } from "../output/index.ts";
 import { buildPatchedOutputBaseName } from "../output/output-name-composition.ts";
+import { getFileNameExtension } from "../path-utils.ts";
 import {
   cloneCandidate,
   cloneValue,
@@ -111,7 +112,6 @@ const getPatchFilePrecomputedChecksums = (file: PatchFileInstance | undefined): 
   return out;
 };
 const PATCH_OUTPUT_LABEL_PATTERN = /\[([^\]]+)\](?:\.[^.]+)?\d*$/;
-const FILE_EXTENSION_REGEX = /\.([^./\\\s]+)$/;
 const PATCH_TARGET_SELECTION_ERROR_CODES = new Set(["AMBIGUOUS_SELECTION", "PATCH_TARGET_MISMATCH"]);
 const MAX_INPUT_SELECTION_RETRY_COUNT = 12;
 
@@ -1662,7 +1662,7 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
       const extension = getCompressionExtension(this.outputFormat, this.getInput()?.fileName, this.settings);
       return extension ? appendFileNameExtension(outputName, extension) : outputName;
     }
-    const outputExtension = stripFileNameQuery(outputName).match(FILE_EXTENSION_REGEX)?.[1]?.toLowerCase();
+    const outputExtension = getFileNameExtension(stripFileNameQuery(outputName));
     const compressionExtension = getCompressionExtension(
       this.outputFormat,
       this.getInput()?.fileName,

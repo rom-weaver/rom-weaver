@@ -9,6 +9,7 @@ import type { ApplyWorkflowOptions, CreateWorkflowOptions } from "../../types/wo
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import type { PatchFileInstance } from "../../workers/protocol/patch-engine.ts";
 import { emitTraceLog } from "../logging.ts";
+import { getFileNameExtension, replaceFileNameExtension } from "../path-utils.ts";
 import { isCueEntryFileName, parseCueFileReferences } from "./archive.ts";
 import { getArchiveType } from "./archive-type-utils.ts";
 import { getArchiveMagicType, MAGIC_SIGNATURES } from "./archive-utils.ts";
@@ -56,8 +57,6 @@ const DISC_MAGIC_PREFIXES = [
   { extension: "rvz", magic: [0x52, 0x56, 0x5a, 0x00] },
   { extension: "z3ds", magic: [0x5a, 0x33, 0x44, 0x53] },
 ];
-const FILE_EXTENSION_REGEX = /\.[^./\\?#]*([?#].*)?$/;
-const FILE_QUERY_OR_HASH_REGEX = /[?#].*$/;
 const MAX_DISC_MAGIC_PREFIX_LENGTH = Math.max(...DISC_MAGIC_PREFIXES.map((entry) => entry.magic.length));
 const MAX_ARCHIVE_MAGIC_PREFIX_LENGTH = Math.max(
   ...MAGIC_SIGNATURES.map((entry) => (entry.offset || 0) + entry.bytes.length),
@@ -110,11 +109,7 @@ const emitInputPreparationTrace = (
   );
 };
 
-const getFileExtension = (fileName: string | undefined) => {
-  const normalized = String(fileName || "").replace(FILE_QUERY_OR_HASH_REGEX, "");
-  const extensionIndex = normalized.lastIndexOf(".");
-  return extensionIndex === -1 ? "" : normalized.slice(extensionIndex + 1).toLowerCase();
-};
+const getFileExtension = (fileName: string | undefined) => getFileNameExtension(fileName);
 
 const getDiscMagicExtension = (bytes: Uint8Array) => {
   for (const entry of DISC_MAGIC_PREFIXES) {
@@ -124,10 +119,7 @@ const getDiscMagicExtension = (bytes: Uint8Array) => {
   return null;
 };
 
-const replaceFileExtension = (fileName: string, extension: string) =>
-  FILE_EXTENSION_REGEX.test(fileName)
-    ? fileName.replace(FILE_EXTENSION_REGEX, `.${extension}`)
-    : `${fileName}.${extension}`;
+const replaceFileExtension = (fileName: string, extension: string) => replaceFileNameExtension(fileName, extension);
 
 const readBlobPrefix = async (blob: Blob, length: number) => {
   const buffer = await blob.slice(0, length).arrayBuffer();

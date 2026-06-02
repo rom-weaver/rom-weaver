@@ -1,6 +1,7 @@
 import { type SetStateAction, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import OutputCompressionManager from "../../lib/compression/output-compression-manager.ts";
 import { classifyPatcherInput } from "../../lib/input/input-classification.ts";
+import { getFileNameExtension as getSharedFileNameExtension, hasFileNameExtension } from "../../lib/path-utils.ts";
 import { createTiming, formatTiming } from "../../lib/progress/timing.ts";
 import { formatCodedErrorForDisplay } from "../../presentation/errors.ts";
 import { createBrowserLocalizer } from "../../presentation/localization/index.ts";
@@ -201,10 +202,8 @@ const getRequestedOutputName = (outputName: string): string | undefined => {
   return normalizedOutputName || undefined;
 };
 
-const FILE_EXTENSION_REGEX = /\.[^./\\\s]+$/;
-
 const getFileNameExtension = (fileName: string | null | undefined) =>
-  String(fileName || "").match(FILE_EXTENSION_REGEX)?.[0] || "";
+  getSharedFileNameExtension(fileName, { includeDot: true });
 
 const resolvePendingDownloadFileName = ({
   automaticOutputName,
@@ -220,7 +219,7 @@ const resolvePendingDownloadFileName = ({
   const normalizedRequestedOutputName = requestedOutputName ? getRequestedOutputName(requestedOutputName) : undefined;
   const normalizedResultOutputName = resultOutputName ? getRequestedOutputName(resultOutputName) : undefined;
   if (normalizedRequestedOutputName) {
-    if (FILE_EXTENSION_REGEX.test(normalizedRequestedOutputName)) return normalizedRequestedOutputName;
+    if (hasFileNameExtension(normalizedRequestedOutputName)) return normalizedRequestedOutputName;
     const resultExtension = getFileNameExtension(normalizedResultOutputName);
     return resultExtension ? `${normalizedRequestedOutputName}${resultExtension}` : normalizedRequestedOutputName;
   }

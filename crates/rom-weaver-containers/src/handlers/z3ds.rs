@@ -286,12 +286,6 @@ fn z3ds_reads_source_on_main_thread() -> bool {
 }
 
 impl Z3dsContainerHandler {
-    const DEFAULT_FRAME_SIZE: usize = 256 * 1024;
-    const DEFAULT_LEVEL: i32 = 3;
-    const MIN_LEVEL: i32 = 0;
-    const MAX_LEVEL: i32 = 22;
-    const EXTRACT_CHUNK: usize = Self::DEFAULT_FRAME_SIZE;
-
     fn align_16(size: usize) -> usize {
         let rem = size % 16;
         if rem == 0 { size } else { size + (16 - rem) }
@@ -365,12 +359,12 @@ impl Z3dsContainerHandler {
     }
 
     fn resolve_level(&self, codec: Option<&str>, level: Option<i32>) -> Result<i32> {
-        let level = level.unwrap_or(Self::DEFAULT_LEVEL);
-        if !(Self::MIN_LEVEL..=Self::MAX_LEVEL).contains(&level) {
+        let level = level.unwrap_or(Z3DS_DEFAULT_COMPRESSION_LEVEL);
+        if !(Z3DS_MIN_COMPRESSION_LEVEL..=Z3DS_MAX_COMPRESSION_LEVEL).contains(&level) {
             return Err(RomWeaverError::Validation(format!(
                 "z3ds level `{level}` is out of range; expected {}..={}",
-                Self::MIN_LEVEL,
-                Self::MAX_LEVEL
+                Z3DS_MIN_COMPRESSION_LEVEL,
+                Z3DS_MAX_COMPRESSION_LEVEL
             )));
         }
 
@@ -426,7 +420,7 @@ impl Z3dsContainerHandler {
         }
 
         let mut tasks = Vec::new();
-        let chunk_len = Self::EXTRACT_CHUNK as u64;
+        let chunk_len = Z3DS_EXTRACT_CHUNK_BYTES as u64;
         let mut offset = 0_u64;
         let mut index = 0_usize;
         while offset < total_len {
@@ -460,8 +454,8 @@ impl Z3dsContainerHandler {
             RomWeaverError::Validation("z3ds extract chunk size exceeded supported range".into())
         })?;
         let mut output = Vec::with_capacity(capacity);
-        let buffer_len = usize::try_from(task.len.min(Self::EXTRACT_CHUNK as u64))
-            .unwrap_or(Self::EXTRACT_CHUNK)
+        let buffer_len = usize::try_from(task.len.min(Z3DS_EXTRACT_CHUNK_BYTES as u64))
+            .unwrap_or(Z3DS_EXTRACT_CHUNK_BYTES)
             .max(1);
         let mut buffer = vec![0_u8; buffer_len];
         let mut written = 0_u64;
@@ -506,7 +500,7 @@ impl Z3dsContainerHandler {
         }
 
         let mut tasks = Vec::new();
-        let chunk_len = Self::DEFAULT_FRAME_SIZE as u64;
+        let chunk_len = Z3DS_DEFAULT_FRAME_SIZE_BYTES as u64;
         let mut offset = 0_u64;
         let mut index = 0_usize;
         while offset < total_len {
@@ -862,7 +856,7 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
             }
         }
 
-        let metadata = Z3dsMetadata::encode_default(Self::DEFAULT_FRAME_SIZE);
+        let metadata = Z3dsMetadata::encode_default(Z3DS_DEFAULT_FRAME_SIZE_BYTES);
         let metadata_aligned = Self::align_16(metadata.len());
         let metadata_size = u32::try_from(metadata_aligned).map_err(|_| {
             RomWeaverError::Validation("z3ds metadata exceeded supported size".into())
@@ -1051,7 +1045,7 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
                 request.output.display(),
                 input_path.display(),
                 level,
-                Self::DEFAULT_FRAME_SIZE,
+                Z3DS_DEFAULT_FRAME_SIZE_BYTES,
                 header.compressed_size,
                 frames.len()
             ),

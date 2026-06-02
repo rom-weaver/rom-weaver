@@ -1,10 +1,9 @@
+import { getFileNameExtension } from "../../lib/path-utils.ts";
 import { normalizeSafeFileName } from "../../storage/shared/path-utils.ts";
 import type { LogDetails, LogLevel } from "../../types/logging.ts";
 import type { WorkerKind } from "../../types/worker-messages.ts";
 import type { WorkerRequestId } from "../protocol/worker-protocol.ts";
 import { now } from "./worker-timing.ts";
-
-const FILE_EXTENSION_REGEX = /\.[^./\\\s]+$/;
 
 type WorkerMessageValue = object | string | number | boolean | null | undefined;
 type WorkerMessageRecord = Record<string, WorkerMessageValue>;
@@ -200,8 +199,9 @@ const normalizeWorkerFileName = (fileName: WorkerMessageValue, fallback: WorkerM
   normalizeSafeFileName(fileName, fallback);
 
 const getWorkerFileExtension = (fileName: WorkerMessageValue, fallback: string) => {
-  const match = normalizeWorkerFileName(fileName, fallback || "input.bin").match(FILE_EXTENSION_REGEX);
-  return match ? match[0] : fallback;
+  return (
+    getFileNameExtension(normalizeWorkerFileName(fileName, fallback || "input.bin"), { includeDot: true }) || fallback
+  );
 };
 
 export {

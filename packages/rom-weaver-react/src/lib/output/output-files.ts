@@ -7,8 +7,8 @@ import {
 } from "../compression/disc-format-support.ts";
 import OutputCompressionManager from "../compression/output-compression-manager.ts";
 import { appendFileNameExtension, hasFileNameExtension, replaceFileNameExtension } from "../input/path-utils.ts";
+import { CHD_EXTENSION_REGEX } from "../path-utils.ts";
 
-const CHD_EXTENSION_REGEX = /\.chd$/i;
 const RVZ_EXTENSION_REGEX = createDiscExtensionRegex(RVZ_DECOMPRESSION_INPUT_EXTENSIONS);
 const Z3DS_EXTENSION_REGEX = /\.(zcia|zcci|zcxi|z3dsx|z3ds)$/i;
 const Z3DS_EXTENSION_PREFIX_REGEX = /^z/i;

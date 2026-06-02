@@ -1,10 +1,8 @@
+import { getFileNameExtension, getFileNameWithoutExtension, stripFileNameQuery } from "../../lib/path-utils.ts";
 import { hasReadableBytes, toUint8Array } from "../../storage/shared/binary/binary-source-utils.ts";
 import type { BlobLike } from "./archive-source-types.ts";
 
 const MACOS_RESOURCE_FORK_ENTRY_REGEX = /(^|\/)\._[^/]+$/i;
-const FILE_EXTENSION_REGEX = /\.\S+$/;
-const FILE_EXTENSION_CAPTURE_REGEX = /\.([^.]+)$/;
-const FILE_QUERY_OR_HASH_REGEX = /[?#].*$/;
 const MACOSX_METADATA_DIRECTORY_REGEX = /^__MACOSX\//i;
 const ARCHIVE_TYPES = {
   AR: "ar",
@@ -340,21 +338,20 @@ const getBlobSource = (source: RuntimeValue) => {
 };
 
 const getFileNameLower = (source: RuntimeValue) => {
-  if (typeof source === "string") return source.toLowerCase().replace(FILE_QUERY_OR_HASH_REGEX, "");
+  if (typeof source === "string") return stripFileNameQuery(source.toLowerCase());
   if (isArchiveSourceObject(source) && typeof source.fileName === "string")
-    return source.fileName.toLowerCase().replace(FILE_QUERY_OR_HASH_REGEX, "");
+    return stripFileNameQuery(source.fileName.toLowerCase());
   if (isArchiveSourceObject(source) && typeof source.name === "string")
-    return source.name.toLowerCase().replace(FILE_QUERY_OR_HASH_REGEX, "");
+    return stripFileNameQuery(source.name.toLowerCase());
   if (isArchiveSourceObject(source) && source._file && typeof source._file.name === "string")
-    return source._file.name.toLowerCase().replace(FILE_QUERY_OR_HASH_REGEX, "");
+    return stripFileNameQuery(source._file.name.toLowerCase());
   return "";
 };
 
 const getExtension = (source: RuntimeValue) => {
   if (isArchiveSourceObject(source) && typeof source.getExtension === "function")
     return source.getExtension().toLowerCase();
-  const match = getFileNameLower(source).match(FILE_EXTENSION_CAPTURE_REGEX);
-  return match?.[1] || "";
+  return getFileNameExtension(getFileNameLower(source));
 };
 
 const getSupportedArchiveExtension = (fileName: string, extension: string) => {
@@ -406,10 +403,9 @@ const isMetadataEntry = (filename: string) =>
 const sortFileEntries = <TEntry extends ArchiveEntry>(entries: TEntry[]) =>
   entries
     .sort((file1, file2) =>
-      (file1.filename || "")
-        .toLowerCase()
-        .replace(FILE_EXTENSION_REGEX, "")
-        .localeCompare((file2.filename || "").toLowerCase().replace(FILE_EXTENSION_REGEX, "")),
+      getFileNameWithoutExtension((file1.filename || "").toLowerCase()).localeCompare(
+        getFileNameWithoutExtension((file2.filename || "").toLowerCase()),
+      ),
     )
     .sort(
       (file1, file2) =>

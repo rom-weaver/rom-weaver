@@ -1,10 +1,11 @@
+import {
+  getFileNameExtension as getSharedFileNameExtension,
+  replaceFileNameExtension,
+  stripFileNameQuery,
+} from "../../../lib/path-utils.ts";
 import { getBaseName, isRecord } from "./source-shared.ts";
 
-const FILE_EXTENSION_CAPTURE_REGEX = /\.([^./\\\s]+)$/;
 const LEADING_DOT_REGEX = /^\./;
-const FILE_EXTENSION_REGEX = /\.[^./\\\s]+$/;
-const FILE_QUERY_OR_HASH_REGEX = /[?#].*$/;
-const END_OF_STRING_REGEX = /$/u;
 
 type SourceScalar = string | number | boolean | null | undefined;
 type SourceValue = RuntimeValue;
@@ -138,18 +139,15 @@ const getSourceExtension = (
     if (typeof getExtension === "function") return String((getExtension as () => string).call(source)).toLowerCase();
   }
 
-  const fileName = String(typeof getFileName === "function" ? getFileName(source) : source || "")
-    .toLowerCase()
-    .replace(options?.stripQuery === true ? FILE_QUERY_OR_HASH_REGEX : END_OF_STRING_REGEX, "");
-  const match = fileName.match(FILE_EXTENSION_CAPTURE_REGEX);
-  return match ? match[1] || "" : "";
+  const rawFileName = String(typeof getFileName === "function" ? getFileName(source) : source || "").toLowerCase();
+  const fileName = options?.stripQuery === true ? stripFileNameQuery(rawFileName) : rawFileName;
+  return getSharedFileNameExtension(fileName, { stripQuery: false });
 };
 
 const replaceFileExtension = (fileName: string, extension: SourceScalar): string => {
   const normalizedExtension = String(extension || "").replace(LEADING_DOT_REGEX, "");
   if (!normalizedExtension) return fileName;
-  if (FILE_EXTENSION_REGEX.test(fileName)) return fileName.replace(FILE_EXTENSION_REGEX, `.${normalizedExtension}`);
-  return `${fileName}.${normalizedExtension}`;
+  return replaceFileNameExtension(fileName, normalizedExtension);
 };
 
 export {

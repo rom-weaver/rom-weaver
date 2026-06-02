@@ -1,24 +1,32 @@
 import type { ProgressEvent } from "../../types/workflow-runtime.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 
+type RuntimeProgress = {
+  label?: string;
+  message?: string;
+  percent?: number | null;
+};
+
 const forwardCreatePatchProgress =
   (onProgress?: Parameters<NonNullable<WorkflowRuntime["patch"]["createPatch"]>>[0]["onProgress"]) =>
-  (progress: { label?: string; message?: string; percent?: number | null }) => {
+  (progress: RuntimeProgress) => {
     onProgress?.({
       ...progress,
     });
   };
 
-const forwardDiscProgress = (
-  onProgress?: (progress: { label?: string; message?: string; percent?: number | null }) => void,
-) => {
+const forwardDiscProgress = (stage: "input" | "output", onProgress?: (progress: ProgressEvent) => void) => {
+  if (!onProgress) return undefined;
   let lastPercent = -1;
   let sawIntermediate = false;
-  return (progress: { label?: string; message?: string; percent?: number | null }) => {
+  return (progress: RuntimeProgress) => {
+    const label = progress.label || (stage === "input" ? "Extracting disc image..." : "Creating disc image...");
     const emit = (percent: number | null) => {
-      onProgress?.({
+      onProgress({
         ...progress,
+        label,
         percent,
+        stage,
       });
     };
     if (typeof progress.percent !== "number" || !Number.isFinite(progress.percent)) {

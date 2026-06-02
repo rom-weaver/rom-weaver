@@ -3,6 +3,7 @@ import {
   getDiscExtractedFileName,
 } from "../../lib/compression/container-format-registry.ts";
 import { replaceCuePatchFileName } from "../../lib/input/disc-file-utils.ts";
+import { getFileNameWithoutExtension, getPathBaseName, isCompressionLevelProfile } from "../../lib/path-utils.ts";
 import {
   invokeRomWeaverCompressionCreateWorker,
   invokeRomWeaverCreatePatchWorker,
@@ -47,16 +48,14 @@ import type {
 } from "../../types/workflow-runtime-adapter.ts";
 import { parseCueFile } from "../../workers/protocol/cue-file-utils.ts";
 import { WORKER_OPFS_MOUNTPOINT } from "../../workers/shared/worker-storage/storage-layout.ts";
-import { forwardArchiveProgress, forwardDiscProgress } from "../shared/workflow-runtime-progress.ts";
+import { forwardArchiveProgress } from "../shared/workflow-runtime-progress.ts";
 import { triggerBrowserDownload } from "./browser-download.ts";
 import { createBrowserRuntimeVfsIo } from "./browser-runtime-vfs.ts";
 
 const FILE_CAPTURE_REGEX = /^(.+[/\\])?([^/\\]+)$/;
-const FILE_EXTENSION_REGEX = /\.[^./\\\s]+$/;
 const CHD_SINGLE_BIN_OUTPUT_REGEX = /\.bin$/i;
 const CHD_CD_SPLIT_BIN_SCRATCH_FILE_POOL_SIZE = 100;
 const CHD_CD_OUTPUT_SCRATCH_FILE_POOL_SIZE = 2;
-const LEVEL_PROFILE_REGEX = /^(min|very-low|low|medium|high|very-high|max)$/i;
 const BROWSER_VFS_PATH_RETRY_ATTEMPTS = 6;
 const EXTRACT_CHECKSUM_ALGORITHMS = ["crc32", "md5", "sha1"] as const;
 const CHD_DISC_FORMAT = DISC_COMPRESSION_FORMAT_REGISTRY.chd;
@@ -71,15 +70,7 @@ const toFileBlobPart = (source: ArrayBufferLike | Uint8Array): BlobPart => {
   return copy.buffer;
 };
 
-const getPathBaseName = (filePath: string, fallback = ""): string => {
-  const parts = String(filePath || "")
-    .split(/[/\\]+/)
-    .filter((part) => !!part);
-  if (!parts.length) return fallback;
-  return parts[parts.length - 1] || fallback;
-};
-
-const getFileStem = (fileName: string) => String(fileName || "").replace(FILE_EXTENSION_REGEX, "");
+const getFileStem = (fileName: string) => getFileNameWithoutExtension(fileName);
 
 const getChdCdOutputFileName = (fileName: string, extension: "bin" | "cue"): string =>
   `${getFileStem(getPathBaseName(fileName, "input.chd")) || "input"}.${extension}`;
@@ -135,7 +126,7 @@ const toLevelProfile = (value: unknown): string | null => {
     .trim()
     .toLowerCase();
   if (!normalized) return null;
-  return LEVEL_PROFILE_REGEX.test(normalized) ? normalized : null;
+  return isCompressionLevelProfile(normalized) ? normalized : null;
 };
 
 const withCodecLevel = (codec: unknown, level: unknown): string[] => {
@@ -940,7 +931,7 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
           outputPath,
           workerThreads: threads,
         },
-        onProgress ? forwardDiscProgress(onProgress) : undefined,
+        onProgress,
         onLog,
       );
       return workerIo.createWorkerOutput(
@@ -986,7 +977,7 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
             outputPath,
             workerThreads: threads,
           },
-          onProgress ? forwardDiscProgress(onProgress) : undefined,
+          onProgress,
           onLog,
         );
         return outputName ? { ...result, fileName: outputName } : result;
@@ -1018,7 +1009,7 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
             outputPath,
             workerThreads: threads,
           },
-          onProgress ? forwardDiscProgress(onProgress) : undefined,
+          onProgress,
           onLog,
         );
         return outputName ? { ...result, fileName: outputName } : result;
@@ -1120,7 +1111,7 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
             splitBin: shouldSplitBin,
             workerThreads: threads,
           },
-          onProgress ? forwardDiscProgress(onProgress) : undefined,
+          onProgress,
           onLog,
         );
       const isChdCueOutput = (entry: ExtractedFileEntry | null | undefined) =>
@@ -1256,7 +1247,7 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
           sourcePath: workerSource.filePath,
           workerThreads: threads,
         },
-        onProgress ? forwardDiscProgress(onProgress) : undefined,
+        onProgress,
         onLog,
       ).catch((error) => {
         const message = String(error instanceof Error ? error.message : error || "");
@@ -1343,7 +1334,7 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
           sourcePath: workerSource.filePath,
           workerThreads: threads,
         },
-        onProgress ? forwardDiscProgress(onProgress) : undefined,
+        onProgress,
         onLog,
       );
       const primaryFile = await selectPreferredExtractedFile({
@@ -1387,7 +1378,7 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
           logLevel,
           sourcePath: workerSource.filePath,
         },
-        onProgress ? forwardDiscProgress(onProgress) : undefined,
+        onProgress,
         onLog,
       );
       return annotateChdListEntries(
@@ -1425,7 +1416,7 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
           logLevel,
           sourcePath: workerSource.filePath,
         },
-        onProgress ? forwardDiscProgress(onProgress) : undefined,
+        onProgress,
         onLog,
       );
       return normalizeDiscListEntries(result.entries, workerSource.fileName, fileName);

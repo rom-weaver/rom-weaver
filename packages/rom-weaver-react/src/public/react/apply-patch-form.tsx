@@ -3,6 +3,7 @@ import { resolveAutomaticCompressionFormat } from "../../lib/compression/contain
 import { getBaseFileName } from "../../lib/input/path-utils.ts";
 import { emitTraceLog } from "../../lib/logging.ts";
 import { buildPatchedOutputBaseName } from "../../lib/output/output-name-composition.ts";
+import { getFileNameWithoutExtension } from "../../lib/path-utils.ts";
 import { createTiming, formatTiming } from "../../lib/progress/timing.ts";
 import { ApplyWorkflow, type BrowserApplyResult, type WorkflowProgress } from "../../platform/browser/browser-api.ts";
 import { getErrorCode } from "../../presentation/errors.ts";
@@ -64,10 +65,8 @@ type ApplyWorkflowSyncState = {
   settingsKey: string;
 };
 
-const FILE_EXTENSION_REGEX = /\.([^./\\\s]+)$/;
 const PATCH_OUTPUT_LABEL_PATTERN = /\[([^\]]+)\](?:\.[^.]+)?\d*$/;
 
-const getFileNameWithoutExtension = (fileName: string) => fileName.replace(FILE_EXTENSION_REGEX, "") || fileName;
 const getOutputSourceKey = (inputs: BinarySource[], patches: BinarySource[]) =>
   JSON.stringify({
     inputs: getBinarySourceListStableIds(inputs),

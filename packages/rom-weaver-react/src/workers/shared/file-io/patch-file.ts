@@ -1,3 +1,4 @@
+import { getFileNameExtension } from "../../../lib/path-utils.ts";
 import {
   DEFAULT_FILE_NAME,
   DEFAULT_FILE_TYPE,
@@ -25,8 +26,6 @@ import type {
   SyncByteSource,
   WritableSyncByteSource,
 } from "../binary/types.ts";
-
-const FILE_EXTENSION_CAPTURE_REGEX = /\.(\w+)$/;
 
 /*
  * PatchFile.js (last update: 2024-08-21)
@@ -517,8 +516,7 @@ class PatchFile implements PatchFileLike {
   }
 
   getExtension() {
-    const ext = this.fileName ? this.fileName.toLowerCase().match(FILE_EXTENSION_CAPTURE_REGEX) : null;
-    return ext ? ext[1] || "" : "";
+    return getFileNameExtension(this.fileName);
   }
 
   getName() {

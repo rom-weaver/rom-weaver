@@ -1,6 +1,12 @@
 import type { ApplySettings, CompressionFormat } from "../../types/settings.ts";
 import type { RuntimeWorkerSourceScope } from "../../types/workflow-runtime-adapter.ts";
 import {
+  getFileNameExtension,
+  hasFileNameExtension,
+  replaceFileNameExtension,
+  stripLeadingExtensionDot,
+} from "../path-utils.ts";
+import {
   CHD_DECOMPRESSION_INPUT_EXTENSIONS,
   createDiscExtensionRegex,
   hasDiscExtension,
@@ -9,10 +15,6 @@ import {
   Z3DS_DECOMPRESSION_INPUT_EXTENSIONS,
 } from "./disc-format-support.ts";
 import OutputCompressionManager from "./output-compression-manager.ts";
-
-const FILE_EXTENSION_REGEX = /\.[^./\\?#]*([?#].*)?$/;
-const FILE_QUERY_OR_HASH_REGEX = /[?#].*$/;
-const LEADING_EXTENSION_DOT_REGEX = /^\./;
 
 type ByteInspectableSource = {
   _chdMode?: string;
@@ -72,24 +74,20 @@ type CompressionFormatRegistration =
 
 const getFileExtension = (source: ByteInspectableSource | null | undefined): string => {
   if (source && typeof source.getExtension === "function") return source.getExtension().toLowerCase();
-  const fileName = String(source?.fileName || "").replace(FILE_QUERY_OR_HASH_REGEX, "");
-  const index = fileName.lastIndexOf(".");
-  return index === -1 ? "" : fileName.slice(index + 1).toLowerCase();
+  return getFileNameExtension(source?.fileName);
 };
 
-const replaceFileExtension = (fileName: string, extension: string): string =>
-  String(fileName || "input.bin").replace(FILE_EXTENSION_REGEX, `.${extension}`);
+const replaceFileExtension = (fileName: string, extension: string): string => {
+  const normalizedFileName = String(fileName || "input.bin");
+  return hasFileNameExtension(normalizedFileName)
+    ? replaceFileNameExtension(normalizedFileName, extension)
+    : normalizedFileName;
+};
 
-const getSourceFileExtension = (fileName: string | undefined) =>
-  String(fileName || "")
-    .replace(FILE_QUERY_OR_HASH_REGEX, "")
-    .match(/\.([^./\\\s]+)$/)?.[1]
-    ?.toLowerCase() || "";
+const getSourceFileExtension = (fileName: string | undefined) => getFileNameExtension(fileName);
 
 const normalizeExtension = (extension: string | number | boolean | null | undefined) =>
-  String(extension || "")
-    .replace(LEADING_EXTENSION_DOT_REGEX, "")
-    .toLowerCase();
+  stripLeadingExtensionDot(extension).toLowerCase();
 
 const createMagicBytes = (magic: string): readonly number[] =>
   Array.from(magic, (character) => character.charCodeAt(0));

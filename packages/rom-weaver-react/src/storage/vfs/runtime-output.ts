@@ -1,3 +1,4 @@
+import { getPathBaseName } from "../../lib/path-utils.ts";
 import type { SourceRef } from "../../types/source.ts";
 import type { PublicOutput } from "../../types/workflow-runtime.ts";
 import { copySourceToWriter } from "../shared/binary/binary-source-utils.ts";
@@ -7,8 +8,6 @@ import { joinVfsPath } from "./path.ts";
 import { isVfsFileRef } from "./source-ref.ts";
 
 const OUTPUT_CHUNK_SIZE = 8 * 1024 * 1024;
-
-const PATH_PART_SPLIT_REGEX = /[/\\]+/;
 
 const attachRuntimeCleanup = (
   output: Omit<PublicOutput, "cleanup">,
@@ -26,11 +25,7 @@ const attachRuntimeCleanup = (
 };
 
 const getOutputFileName = (fileName: string, fallback = "output.bin") => {
-  const parts = String(fileName || "")
-    .trim()
-    .split(PATH_PART_SPLIT_REGEX)
-    .filter((part) => !!part);
-  return parts[parts.length - 1] || fallback;
+  return getPathBaseName(fileName, fallback);
 };
 
 const createRuntimeOutputPath = (rootPath: string, fileName: string, _pathPrefix = "runtime-output") => {
