@@ -7,7 +7,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-#[cfg(not(target_family = "wasm"))]
+#[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
 use std::{
     sync::{Arc, mpsc},
     thread,
@@ -75,12 +75,12 @@ pub struct StreamingChecksum {
 }
 
 enum StreamingChecksumInner {
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     Async(Vec<AsyncStreamingChecksumWorker>),
     Sync(Vec<(Algorithm, HasherState)>),
 }
 
-#[cfg(not(target_family = "wasm"))]
+#[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
 struct AsyncStreamingChecksumWorker {
     handle: thread::JoinHandle<BTreeMap<String, String>>,
     sender: Option<mpsc::SyncSender<Arc<[u8]>>>,
@@ -103,13 +103,13 @@ impl StreamingChecksum {
         if algorithms.is_empty() {
             return Ok(None);
         }
-        #[cfg(target_family = "wasm")]
+        #[cfg(all(target_family = "wasm", not(rom_weaver_wasi_threads)))]
         {
             let _ = context;
             Ok(Some(Self::from_algorithms_sync(algorithms)))
         }
 
-        #[cfg(not(target_family = "wasm"))]
+        #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
         {
             let execution = context.plan_threads(ThreadCapability::parallel(Some(algorithms.len())));
             if execution.used_parallelism
@@ -134,7 +134,7 @@ impl StreamingChecksum {
         }
     }
 
-    #[cfg(not(target_family = "wasm"))]
+    #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     fn try_from_algorithms_async(algorithms: Vec<Algorithm>, worker_count: usize) -> Option<Self> {
         let worker_algorithms = partition_streaming_algorithms(&algorithms, worker_count);
         let mut workers: Vec<AsyncStreamingChecksumWorker> = Vec::new();
@@ -178,7 +178,7 @@ impl StreamingChecksum {
 
     pub fn update(&mut self, bytes: &[u8]) -> Result<()> {
         match &mut self.inner {
-            #[cfg(not(target_family = "wasm"))]
+            #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
             StreamingChecksumInner::Async(workers) => {
                 let chunk = Arc::<[u8]>::from(bytes.to_vec());
                 send_streaming_checksum_chunk(workers, chunk)
@@ -194,7 +194,7 @@ impl StreamingChecksum {
 
     pub fn update_owned(&mut self, bytes: Vec<u8>) -> Result<()> {
         match &mut self.inner {
-            #[cfg(not(target_family = "wasm"))]
+            #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
             StreamingChecksumInner::Async(workers) => {
                 let chunk = Arc::<[u8]>::from(bytes.into_boxed_slice());
                 send_streaming_checksum_chunk(workers, chunk)
@@ -210,7 +210,7 @@ impl StreamingChecksum {
 
     pub fn finalize(self) -> Result<BTreeMap<String, String>> {
         match self.inner {
-            #[cfg(not(target_family = "wasm"))]
+            #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
             StreamingChecksumInner::Async(mut workers) => {
                 for worker in &mut workers {
                     drop(worker.sender.take());
@@ -232,7 +232,7 @@ impl StreamingChecksum {
     }
 }
 
-#[cfg(not(target_family = "wasm"))]
+#[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
 fn send_streaming_checksum_chunk(
     workers: &mut [AsyncStreamingChecksumWorker],
     chunk: Arc<[u8]>,
@@ -252,7 +252,7 @@ fn send_streaming_checksum_chunk(
     Ok(())
 }
 
-#[cfg(not(target_family = "wasm"))]
+#[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
 fn partition_streaming_algorithms(
     algorithms: &[Algorithm],
     worker_count: usize,

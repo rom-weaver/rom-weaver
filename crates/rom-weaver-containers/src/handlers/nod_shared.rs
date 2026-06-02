@@ -65,7 +65,7 @@ impl nod::read::DiscStream for ReopenablePathDiscStream {
 impl NodHandlerCore {
     const MAX_PRELOADER_THREADS: usize = 4;
     #[cfg(target_family = "wasm")]
-    const MAX_WASM_PRELOADER_THREADS: usize = 1;
+    const MAX_WASM_PRELOADER_THREADS: usize = 4;
 
     const fn new(descriptor: &'static FormatDescriptor, nod_format: NodFormat) -> Self {
         Self {
@@ -94,8 +94,8 @@ impl NodHandlerCore {
             .min(Self::MAX_PRELOADER_THREADS);
         #[cfg(target_family = "wasm")]
         {
-            // Browser WASI thread startup dominates RVZ open latency when preloader fanout is high.
-            // Keep one helper thread to reduce open stalls before extraction begins.
+            // Worker reuse keeps browser WASI startup bounded, so let RVZ use the same preloader
+            // fanout as native while still respecting the negotiated worker-thread budget.
             return negotiated.min(Self::MAX_WASM_PRELOADER_THREADS);
         }
         #[cfg(not(target_family = "wasm"))]

@@ -1237,6 +1237,15 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
         ]),
         [workerSource.filePath],
       );
+      if (outputPath === workerSource.filePath) {
+        throw new Error(`RVZ output path conflicts with the active input: ${outputPath}`);
+      }
+      await browserVfs.truncate(outputPath, 0);
+      emitBrowserWorkflowTrace(
+        { logLevel, onLog },
+        "rvz output precreated",
+        { outputPath, sourcePath: workerSource.filePath },
+      );
       const extracted = await invokeRomWeaverExtractWorker(
         {
           checksumAlgorithms: [...EXTRACT_CHECKSUM_ALGORITHMS],
