@@ -15,6 +15,7 @@ import {
 const LOCAL_STORAGE_SETTINGS_ID = "rom-weaver-settings";
 
 type SettingsState = {
+  defaultArchive: string;
   language: string;
   logLevel: string;
   fixChecksum: boolean;
@@ -135,6 +136,7 @@ function getDefaultLanguage(): string {
 }
 
 const SETTINGS_FIELD_ORDER = [
+  "defaultArchive",
   "language",
   "logLevel",
   "fixChecksum",
@@ -221,6 +223,20 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
       "Default: Max. RVZ/7z zstd levels: 0, 3, 5, 12, 19, 21, 22. ZIP/other levels: 0, 2, 3, 5, 7, 8, 9.",
     validationLabel: "Level",
     validValues: [...COMPRESSION_PROFILES],
+  },
+  defaultArchive: {
+    defaultValue: "zip",
+    id: "settings-default-archive",
+    key: "defaultArchive",
+    kind: "select",
+    label: "Default archive",
+    options: [
+      { label: ".zip", value: "zip" },
+      { label: ".7z", value: "7z" },
+    ],
+    suggestion: "Default: .zip",
+    validationLabel: "Default archive",
+    validValues: ["zip", "7z"],
   },
   erudaDevTools: {
     defaultValue: false,

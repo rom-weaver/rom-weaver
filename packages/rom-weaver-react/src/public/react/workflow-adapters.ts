@@ -46,9 +46,8 @@ const getReactBinarySourceFileName = (source: BinarySource | null | undefined, f
 };
 
 const getDefaultCreateOutputName = (original: BinarySource | null | undefined) => {
-  const originalName = getReactBinarySourceFileName(original, "patch");
-  const baseName = originalName.replace(CREATE_OUTPUT_EXTENSION_REGEX, "") || "patch";
-  return baseName;
+  const originalName = getReactBinarySourceFileName(original, "");
+  return originalName.replace(CREATE_OUTPUT_EXTENSION_REGEX, "");
 };
 
 const getReactProgressStage = (event: { role?: string; stage?: string }): ProgressEvent["stage"] => {

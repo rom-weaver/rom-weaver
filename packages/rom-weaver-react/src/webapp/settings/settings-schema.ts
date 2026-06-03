@@ -83,6 +83,7 @@ const HIDDEN_DEFAULT_SETTINGS_FIELDS = [
   "chdOutputMode",
 ] as const satisfies readonly SettingsFieldKey[];
 const ALWAYS_VALIDATE_CHOICE_FIELDS = [
+  "defaultArchive",
   "language",
   "logLevel",
   "compressionProfile",
@@ -631,6 +632,10 @@ const serializeSettingsForStorage = (source?: SettingsState | null): string | nu
     version: SETTINGS_STORAGE_VERSION,
   };
   const storeSetting = <K extends SettingsFieldKey>(fieldKey: K, value: SettingsState[K]) => {
+    if (fieldKey === "defaultArchive") {
+      (storedSettings.common as Record<string, unknown>)[fieldKey] = value;
+      return;
+    }
     if (fieldKey === "language" || fieldKey === "logLevel" || fieldKey === "erudaDevTools") {
       (storedSettings.common as Record<string, unknown>)[fieldKey] = value;
       return;
@@ -738,6 +743,7 @@ const buildSettingsForWebapp = (source?: SettingsState | null, extraSettings?: R
       chdOutputMode: getSettingsFieldDefaultValue("chdOutputMode"),
       compressionFormat: getSettingsFieldDefaultValue("compressionFormat"),
       compressionProfile: settings.compressionProfile,
+      defaultArchive: settings.defaultArchive,
       fixChecksum: settings.fixChecksum,
       language: settings.language,
       logLevel: settings.logLevel,
@@ -770,6 +776,8 @@ const normalizeRuntimeSharedSettingsSource = (source?: Record<string, unknown> |
 
   if (typeof source.language === "string")
     settings.language = normalizeChoiceField("language", source.language, settings.language);
+  if (typeof source.defaultArchive === "string")
+    settings.defaultArchive = normalizeChoiceField("defaultArchive", source.defaultArchive, settings.defaultArchive);
   if (typeof source.logLevel === "string")
     settings.logLevel = normalizeChoiceField("logLevel", source.logLevel, settings.logLevel);
   if (typeof source.fixChecksum === "boolean") settings.fixChecksum = source.fixChecksum;
