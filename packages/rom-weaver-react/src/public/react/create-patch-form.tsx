@@ -10,7 +10,11 @@ import { formatCodedErrorForDisplay, getErrorCode } from "../../presentation/err
 import { createBrowserLocalizer } from "../../presentation/localization/index.ts";
 import { createProgressViewModelFromEvent } from "../../presentation/workflow-presentation.ts";
 import { useCandidateSelection } from "./candidate-selection.tsx";
-import { ToolActionSection, ToolFileInputStack, ToolOutputFileRow } from "./components/tool-panel-sections.tsx";
+import { ExtractionTree } from "./components/ds/extraction-tree.tsx";
+import { FileProgress, Notice, RunButton } from "./components/ds/feedback.tsx";
+import { FileCard } from "./components/ds/file-card.tsx";
+import { DropZone, InfoPopover, StepSection } from "./components/ds/layout.tsx";
+import { OutputCard } from "./components/ds/output-card.tsx";
 import type { BinarySource } from "./patcher-form.ts";
 import type { CandidateSelectionPrompt, CreatePatchFormProps, CreatePatchFormSettings } from "./public-types.ts";
 import {
@@ -19,7 +23,6 @@ import {
   useCreateSettings,
   useRomWeaverAssetBaseUrl,
 } from "./settings-context.tsx";
-import { formClasses, noticeClasses, rowClasses } from "./tailwind-classes";
 import {
   getDefaultCreateOutputName,
   getReactBinarySourceFileName,
@@ -249,99 +252,116 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     [disposeActiveOutput],
   );
 
-  return (
-    <div
-      aria-labelledby="tab-creator"
-      className="font-['Inter_Tight','Segoe_UI',sans-serif]"
-      id="patch-builder-container"
-      role="tabpanel"
-    >
-      <ToolFileInputStack
-        ariaLabel="Selected original ROM"
-        disabled={disabled}
-        emptyText="Choose original ROM"
-        fileNames={originalFileName ? [originalFileName] : []}
-        id="patch-builder-input-file-original"
-        label="Original ROM"
-        onChange={(event) => {
-          updateOriginal(event.currentTarget.files?.[0] || null);
-          event.currentTarget.value = "";
-        }}
-        onClear={() => updateOriginal(null)}
-        progress={null}
-      />
-      <ToolFileInputStack
-        ariaLabel="Selected modified ROM"
-        disabled={disabled}
-        emptyText="Choose modified ROM"
-        fileNames={modifiedFileName ? [modifiedFileName] : []}
-        id="patch-builder-input-file-modified"
-        label="Modified ROM"
-        onChange={(event) => {
-          updateModified(event.currentTarget.files?.[0] || null);
-          event.currentTarget.value = "";
-        }}
-        onClear={() => updateModified(null)}
-        progress={null}
-      />
-      <ToolOutputFileRow
-        disabled={disabled}
-        id="patch-builder-output-file"
-        label="Output file"
-        onChange={(value) => {
-          setOutputName(value);
-          updateSettings({
-            ...settings,
-            output: {
-              ...settings.output,
-              outputName: value.trim() || undefined,
-            },
-          });
-        }}
-        outputControl={
-          <select
-            aria-label="Patch format"
-            className={`${formClasses.select} w-[68px] flex-[0_0_68px] px-2 pr-4 text-left text-[length:var(--rom-weaver-control-font-size)] leading-[var(--rom-weaver-control-line-height)] disabled:opacity-100`}
-            disabled={disabled}
-            id="patch-builder-select-patch-type"
-            onChange={(event) => updatePatchType(event.currentTarget.value)}
-            title="Patch format"
-            value={patchType}
-          >
-            {["aps", "bdf", "bps", "ebp", "ips", "pmsr", "ppf", "rup", "ups", "vcdiff", "xdelta"].map((value) => (
-              <option key={value} value={value}>
-                {value.toUpperCase()}
-              </option>
-            ))}
-          </select>
-        }
-        value={resolvedOutputName}
-      />
-      <ToolActionSection
-        actionId="patch-builder-button-create"
-        actionLabel={busy ? "Cancel" : "Create patch"}
-        disabled={actionDisabled}
-        onAction={runCreate}
-        progress={progress}
-      />
-      {message ? (
-        <div
-          aria-live="assertive"
-          className={rowClasses.message}
-          data-error-code={errorCode}
-          id="patch-builder-row-error-message"
-          role="alert"
-        >
-          <span
-            className={`${noticeClasses.message} ${errorCode === "AMBIGUOUS_SELECTION" ? noticeClasses.warning : ""}`}
-            id="patch-builder-error-message"
-          >
-            {message}
-          </span>
-        </div>
+  const progressProps = progress
+    ? {
+        indeterminate: progress.indeterminate && progress.visualPercent === null && progress.percent === null,
+        label: progress.label || progress.message || "Working…",
+        percent: typeof progress.visualPercent === "number" ? progress.visualPercent : progress.percent,
+        value: typeof progress.percent === "number" ? `${Math.round(progress.percent)}%` : "working",
+      }
+    : null;
+
+  const renderSourceStep = ({
+    num,
+    title,
+    file,
+    fileName,
+    onSelect,
+    onClear,
+  }: {
+    num: string;
+    title: string;
+    file: BinarySource | null;
+    fileName: string;
+    onSelect: (file: BinarySource | null) => void;
+    onClear: () => void;
+  }) => (
+    <StepSection num={num} title={title}>
+      {file ? (
+        <FileCard
+          name={<ExtractionTree levels={[{ name: fileName }]} />}
+          onRemove={onClear}
+          removeLabel={`Clear ${title.toLowerCase()}`}
+        />
       ) : null}
+      <DropZone
+        big={!file}
+        disabled={disabled}
+        hint={file ? undefined : "archives are extracted"}
+        label={
+          file ? `Replace ${title.toLowerCase()} · drop or browse` : `Select ${title.toLowerCase()} · drop or browse`
+        }
+        onFiles={(files) => onSelect(files[0] ?? null)}
+      />
+    </StepSection>
+  );
+
+  return (
+    <main aria-labelledby="tab-creator" className="panel" id="patch-builder-container">
+      {renderSourceStep({
+        file: original,
+        fileName: originalFileName,
+        num: "01",
+        onClear: () => updateOriginal(null),
+        onSelect: updateOriginal,
+        title: "Original ROM",
+      })}
+      {renderSourceStep({
+        file: modified,
+        fileName: modifiedFileName,
+        num: "02",
+        onClear: () => updateModified(null),
+        onSelect: updateModified,
+        title: "Modified ROM",
+      })}
+      <StepSection
+        info={
+          <InfoPopover title="Output options">
+            <strong>Output</strong>
+            <ul>
+              <li>Set the filename without an extension — the format selector controls the patch type.</li>
+              <li>BPS records source &amp; target checksums so applies can be verified.</li>
+            </ul>
+          </InfoPopover>
+        }
+        num="03"
+        title="Output"
+      >
+        <OutputCard
+          action={
+            <>
+              {busy && progressProps ? <FileProgress {...progressProps} /> : null}
+              <RunButton disabled={actionDisabled} id="patch-builder-button-create" onClick={runCreate}>
+                {busy ? "Cancel" : "Create & download patch"}
+              </RunButton>
+            </>
+          }
+          disabled={disabled}
+          fileName={resolvedOutputName}
+          fileNameId="patch-builder-output-file"
+          fileNamePlaceholder="Patch filename"
+          format={patchType}
+          formatId="patch-builder-select-patch-type"
+          formatOptions={["aps", "bdf", "bps", "ebp", "ips", "pmsr", "ppf", "rup", "ups", "vcdiff", "xdelta"].map(
+            (value) => ({ label: `.${value}`, value }),
+          )}
+          onFileNameChange={(value) => {
+            setOutputName(value);
+            updateSettings({
+              ...settings,
+              output: { ...settings.output, outputName: value.trim() || undefined },
+            });
+          }}
+          onFormatChange={updatePatchType}
+        />
+        {message ? (
+          <Notice id="patch-builder-row-error-message" level={errorCode === "AMBIGUOUS_SELECTION" ? "warn" : "error"}>
+            {message}
+          </Notice>
+        ) : null}
+      </StepSection>
       {candidateSelectionDialog}
-    </div>
+    </main>
   );
 }
 

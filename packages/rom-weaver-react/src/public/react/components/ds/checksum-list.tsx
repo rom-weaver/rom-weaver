@@ -78,6 +78,8 @@ const ChecksumList = ({
   match,
   sublabel,
   defaultOpen,
+  open,
+  onToggle,
   lead,
   children,
 }: {
@@ -86,10 +88,16 @@ const ChecksumList = ({
   match?: { ok: boolean; label: ReactNode };
   sublabel?: ReactNode;
   defaultOpen?: boolean;
+  open?: boolean;
+  onToggle?: (open: boolean) => void;
   lead?: ReactNode;
   children: ReactNode;
 }) => (
-  <details className="cks" open={defaultOpen}>
+  <details
+    className="cks"
+    onToggle={onToggle ? (event) => onToggle(event.currentTarget.open) : undefined}
+    open={open ?? defaultOpen}
+  >
     <summary className="cks-summary">
       <ChevronRight aria-hidden="true" className="chev" />
       <span className="lab">{label}</span>
