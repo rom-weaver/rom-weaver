@@ -1,12 +1,14 @@
 import { ApplyWorkflowController } from "../../lib/workflow/apply-workflow-controller.ts";
 import { CreateWorkflowController } from "../../lib/workflow/create-workflow-controller.ts";
+import { TrimWorkflowController } from "../../lib/workflow/trim-workflow-controller.ts";
 import type { ApplyWorkflowInputState, ApplyWorkflowPatchState } from "../../types/apply-workflow.ts";
 import type { CreateWorkflowSourceState } from "../../types/create-workflow.ts";
 import type { BrowserSaveDestination } from "../../types/output.ts";
 import type { WorkflowProgress } from "../../types/progress.ts";
-import type { ApplyResult, CreateResult } from "../../types/public.ts";
+import type { ApplyResult, CreateResult, TrimResult } from "../../types/public.ts";
 import type { ApplySettings, CompressionFormat, CreateSettings, WorkerSettings } from "../../types/settings.ts";
 import type { BrowserSourceRef } from "../../types/source.ts";
+import type { TrimWorkflowSourceState } from "../../types/trim-workflow.ts";
 import type { WorkflowOptions } from "../../types/workflow-public.ts";
 import { createPublicSourcesValidator, createPublicSourceValidator } from "../shared/public-source-validation.ts";
 import { configureBrowserAssetBaseUrl } from "./browser-asset-base.ts";
@@ -132,7 +134,9 @@ export type {
   ApplyResult,
   BrowserApplyResult,
   BrowserCreateResult,
+  BrowserTrimResult,
   CreateResult,
+  TrimResult,
 } from "../../types/public.ts";
 export type {
   CandidateSelectionRequest,
@@ -199,4 +203,34 @@ class ApplyWorkflow extends BrowserWorkflowBase<
   }
 }
 
-export { ApplyWorkflow, CreateWorkflow, preloadBrowserRuntime };
+class TrimWorkflow extends BrowserWorkflowBase<
+  TrimResult<BrowserSaveDestination>,
+  TrimWorkflowController<BrowserSourceRef, BrowserSaveDestination>
+> {
+  protected readonly controller: TrimWorkflowController<BrowserSourceRef, BrowserSaveDestination>;
+
+  constructor(options: WorkflowOptions<CreateSettings> = {}) {
+    super();
+    configureBrowserAssetBaseUrl(options.assetBaseUrl);
+    void preloadBrowserRuntime({ workerThreads: options.settings?.workers?.threads });
+    this.controller = new TrimWorkflowController(browserRuntime, options, assertPublicSources);
+  }
+
+  setInput(source: BrowserSourceRef | BrowserSourceRef[]): Promise<void> {
+    return this.controller.setInput(source);
+  }
+
+  getInput(): TrimWorkflowSourceState | null {
+    return this.controller.getInput();
+  }
+
+  setOutputName(name: string): Promise<void> {
+    return this.controller.setOutputName(name);
+  }
+
+  setOutputFormat(format: string): Promise<void> {
+    return this.controller.setOutputFormat(format);
+  }
+}
+
+export { ApplyWorkflow, CreateWorkflow, preloadBrowserRuntime, TrimWorkflow };

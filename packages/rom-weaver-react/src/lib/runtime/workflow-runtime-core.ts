@@ -12,6 +12,7 @@ import type {
   RuntimePatchCreateWorkerInput,
   RuntimePatchValidateWorkerInput,
   RuntimePatchWorkerProgress,
+  RuntimeTrimWorkerInput,
   RuntimeWorkerIo,
   RuntimeWorkerPathSource,
   WorkflowRuntime,
@@ -389,6 +390,53 @@ const createWorkerChecksumRuntime = (
   },
 });
 
+type TrimRuntimeAdapter = {
+  invokeTrimWorker: (
+    input: RuntimeTrimWorkerInput,
+    onProgress: ((progress: RuntimePatchWorkerProgress) => void) | undefined,
+    onLog: Parameters<NonNullable<WorkflowRuntime["trim"]["trim"]>>[0]["onLog"],
+  ) => Promise<Parameters<RuntimeWorkerIo["createWorkerOutput"]>[0]>;
+  workerIo: RuntimeWorkerIo;
+  workerOutputFailureMessage?: string;
+};
+
+const createSharedTrimRuntime = (adapter: TrimRuntimeAdapter): WorkflowRuntime["trim"] => ({
+  trim: async ({ source, extension, outputName, workerThreads, logLevel, onLog, onProgress }) => {
+    const traceContext = { logLevel, onLog };
+    const workerSource = await adapter.workerIo.stageSource({
+      fallbackFileName: "input.bin",
+      pathBucket: "input",
+      pathPrefix: "trim-input",
+      scope: "create-patch",
+      source,
+      trace: traceContext,
+    });
+    try {
+      const result = await adapter.invokeTrimWorker(
+        {
+          extension,
+          logLevel,
+          outputName,
+          sourceFileName: workerSource.fileName,
+          sourceFilePath: workerSource.filePath,
+          workerThreads: workerThreads ?? undefined,
+        },
+        onProgress ? forwardCreatePatchProgress(onProgress) : undefined,
+        onLog,
+      );
+      return {
+        output: await adapter.workerIo.createWorkerOutput(
+          result,
+          result.fileName || outputName || "trimmed.bin",
+          adapter.workerOutputFailureMessage,
+        ),
+      };
+    } finally {
+      await workerSource.cleanup().catch(() => undefined);
+    }
+  },
+});
+
 const createSharedCompressionRuntime = (
   archiveRuntime: Partial<WorkflowRuntime["compression"]>,
   discRuntime: DiscRuntimeAdapter,
@@ -660,5 +708,11 @@ const getPreloadWasmTool = (capability: Parameters<NonNullable<WorkflowRuntimePr
   return undefined;
 };
 
-export type { DiscRuntimeAdapter };
-export { createRuntimePreload, createSharedCompressionRuntime, createSharedPatchRuntime, createWorkerChecksumRuntime };
+export type { DiscRuntimeAdapter, TrimRuntimeAdapter };
+export {
+  createRuntimePreload,
+  createSharedCompressionRuntime,
+  createSharedPatchRuntime,
+  createSharedTrimRuntime,
+  createWorkerChecksumRuntime,
+};

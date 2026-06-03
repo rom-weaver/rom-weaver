@@ -10,6 +10,8 @@ export type {
   RomWeaverReactSettings,
   RomWeaverSettingsProviderProps,
   StartupState,
+  TrimPatchFormProps,
+  TrimPatchFormSettings,
 } from "./public-types.ts";
 export {
   RomWeaverSettingsProvider,
@@ -17,4 +19,5 @@ export {
   useCreateSettings,
   useRomWeaverSettings,
 } from "./settings-context.tsx";
+export { TrimPatchForm } from "./trim-form.tsx";
 export { useApplyWorkflow, useCreateWorkflow } from "./workflow-adapters.ts";

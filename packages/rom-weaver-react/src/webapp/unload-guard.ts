@@ -24,10 +24,19 @@ type CreatorState =
 type PendingPatchStackState = { items?: unknown[] } | null | undefined;
 type PendingOutputState = { pendingDownloadFileName?: RuntimeValue } | null | undefined;
 
+type TrimState =
+  | {
+      outputName?: RuntimeValue;
+      sourceFilePresent?: RuntimeValue;
+    }
+  | null
+  | undefined;
+
 type PendingChangeInputState = {
   patcherFormEdited?: RuntimeValue;
   webappState?: WebappState | null;
   creatorState?: CreatorState;
+  trimState?: TrimState;
   patchStackState?: PendingPatchStackState;
   outputState?: PendingOutputState;
   romFilePresent?: RuntimeValue;
@@ -77,6 +86,13 @@ const creatorHasPendingChanges = (creatorState: CreatorState): boolean => {
   return false;
 };
 
+const trimHasPendingChanges = (trimState: TrimState): boolean => {
+  if (!trimState) return false;
+  if (trimState.sourceFilePresent) return true;
+  if (String(trimState.outputName || "").trim()) return true;
+  return false;
+};
+
 const patcherHasPendingChanges = ({
   patcherFormEdited,
   patchStackState,
@@ -96,6 +112,7 @@ const patcherHasPendingChanges = ({
 const getPendingChangeState = ({
   webappState,
   creatorState,
+  trimState,
   patcherFormEdited,
   patchStackState,
   outputState,
@@ -109,11 +126,14 @@ const getPendingChangeState = ({
     romFilePresent,
   }),
   settings: settingsDraftHasChanges(webappState),
+  trim: trimHasPendingChanges(trimState),
 });
 
 const shouldWarnBeforeUnload = (state: PendingChangeInputState): boolean => {
   const pendingChangeState = getPendingChangeState(state);
-  return pendingChangeState.patcher || pendingChangeState.creator || pendingChangeState.settings;
+  return (
+    pendingChangeState.patcher || pendingChangeState.creator || pendingChangeState.trim || pendingChangeState.settings
+  );
 };
 
 const shouldConfirmDiscardSettings = (webappState?: WebappState | null): boolean =>
@@ -125,6 +145,7 @@ const getUnloadConfirmationMessage = (state: PendingChangeInputState): string =>
   const pendingChangeState = getPendingChangeState(state);
   if (pendingChangeState.settings) return UNSAVED_SETTINGS_UNLOAD_MESSAGE;
   if (pendingChangeState.creator) return "You have unsaved patch creator inputs. Reload and lose those changes?";
+  if (pendingChangeState.trim) return "You have an in-progress trim session. Reload and lose those changes?";
   if (pendingChangeState.patcher) return "You have an in-progress patching session. Reload and lose those changes?";
   return "";
 };
@@ -159,6 +180,7 @@ const getWorkflowViewSwitchConfirmationMessage = ({
   const nextViewLabel = formatWorkflowViewLabel(nextView);
   if (currentView === "creator")
     return `You have unsaved patch creator inputs. Leave Creator and switch to ${nextViewLabel}?`;
+  if (currentView === "trim") return `You have an in-progress trim session. Leave Trim and switch to ${nextViewLabel}?`;
   return `You have an in-progress patching session. Leave Patcher and switch to ${nextViewLabel}?`;
 };
 
@@ -231,4 +253,5 @@ export {
   shouldConfirmDiscardSettings,
   shouldConfirmWorkflowViewSwitch,
   shouldWarnBeforeUnload,
+  trimHasPendingChanges,
 };

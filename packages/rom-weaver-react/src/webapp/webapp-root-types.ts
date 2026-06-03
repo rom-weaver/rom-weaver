@@ -3,6 +3,7 @@ import type {
   CreatorSessionState,
   PatcherSessionState,
   StartupState,
+  TrimSessionState,
   ValidationState,
   WorkflowView,
 } from "./webapp-state-types.ts";
@@ -21,6 +22,7 @@ type WebappRootProps = {
     creatorSession: CreatorSessionState;
     currentView: WorkflowView;
     patcherSession: PatcherSessionState;
+    trimSession: TrimSessionState;
     settingsDialogOpen: boolean;
     settings: {
       [key: string]: RuntimeValue;
@@ -55,6 +57,9 @@ type WebappRootProps = {
     onPatcherInputsChange: (inputs: readonly unknown[]) => void;
     onPatcherPatchesChange: (patches: readonly unknown[]) => void;
     onPatcherSettingsChange: (settings: unknown) => void;
+    onTrimSourceChange: (file: unknown) => void;
+    onTrimOutputFormatChange: (format: string) => void;
+    onTrimSettingsChange: (settings: unknown) => void;
   };
 };
 

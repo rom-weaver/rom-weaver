@@ -3,6 +3,7 @@ import type {
   ApplySettings,
   BrowserApplyResult,
   BrowserCreateResult,
+  BrowserTrimResult,
   CandidateSelectionRequest,
   CreateSettings,
 } from "../../platform/browser/browser-api.ts";
@@ -49,6 +50,26 @@ type CreatePatchFormProps = {
   onError?: (error: Error) => void;
 };
 
+type TrimPatchFormSettings = CreateSettings;
+
+type TrimPatchFormProps = {
+  assetBaseUrl?: string;
+  source?: BinarySource | null;
+  defaultSource?: BinarySource | null;
+  settings?: TrimPatchFormSettings;
+  defaultSettings?: TrimPatchFormSettings;
+  outputFormat?: string;
+  defaultOutputFormat?: string;
+  disabled?: boolean;
+  workerThreads?: number | string;
+  onSourceChange?: (file: BinarySource | null) => void;
+  onSettingsChange?: (settings: TrimPatchFormSettings) => void;
+  onOutputFormatChange?: (format: string) => void;
+  onProgress?: (event: ProgressEvent) => void;
+  onTrimComplete?: (result: BrowserTrimResult) => void;
+  onError?: (error: Error) => void;
+};
+
 export type {
   ApplyPatchFormProps,
   ApplyPatchFormSettings,
@@ -62,4 +83,6 @@ export type {
   RomWeaverReactSettings,
   RomWeaverSettingsProviderProps,
   StartupState,
+  TrimPatchFormProps,
+  TrimPatchFormSettings,
 };

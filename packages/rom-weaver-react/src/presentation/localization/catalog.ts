@@ -50,6 +50,7 @@ const ENGLISH_MESSAGES = {
   "progress.detect": "Detecting files",
   "progress.parse": "Parsing patch",
   "progress.select": "Selecting file",
+  "progress.trim": "Trimming ROM",
   "progress.verify": "Verifying output",
   "progress.write": "Writing output",
   "settings.chdCreateCdCodecs": "Create CD codecs",

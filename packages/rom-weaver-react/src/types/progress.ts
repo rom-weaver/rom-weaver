@@ -1,4 +1,4 @@
-type WorkflowKind = "apply" | "create";
+type WorkflowKind = "apply" | "create" | "trim";
 
 type WorkflowProgressRole = "input" | "patch" | "original" | "modified" | "output" | "worker";
 
@@ -11,6 +11,7 @@ type WorkflowProgressStage =
   | "verify"
   | "apply"
   | "create"
+  | "trim"
   | "compress"
   | "write";
 

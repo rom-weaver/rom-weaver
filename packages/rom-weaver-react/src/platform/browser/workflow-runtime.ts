@@ -10,6 +10,7 @@ import {
   invokeRomWeaverExtractWorker,
   invokeRomWeaverPatchApplyWorker,
   invokeRomWeaverPatchValidateWorker,
+  invokeRomWeaverTrimWorker,
   normalizeCodecEntries,
   runRomWeaverChecksumWorker,
   runRomWeaverListWorker,
@@ -21,6 +22,7 @@ import {
   createRuntimePreload,
   createSharedCompressionRuntime,
   createSharedPatchRuntime,
+  createSharedTrimRuntime,
   createWorkerChecksumRuntime,
   type DiscRuntimeAdapter,
 } from "../../lib/runtime/workflow-runtime-core.ts";
@@ -1492,6 +1494,16 @@ const createBrowserPatchRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime["
   };
 };
 
+const createBrowserTrimRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime["trim"] =>
+  createSharedTrimRuntime({
+    invokeTrimWorker: (input, onProgress, onLog) =>
+      invokeRomWeaverTrimWorker(input, onProgress, onLog, (outputPath) =>
+        removeBrowserVfsOutputPaths([outputPath], [input.sourceFilePath]),
+      ),
+    workerIo,
+    workerOutputFailureMessage: "Trim worker did not return browser output",
+  });
+
 const createBrowserRuntime = (): WorkflowRuntime => {
   configureBrowserSourcePrimitives();
   const workerIo = createBrowserRuntimeVfsIo({
@@ -1519,6 +1531,7 @@ const createBrowserRuntime = (): WorkflowRuntime => {
     preload: createRuntimePreload(),
     publicOutput: createBrowserPublicOutputAdapter(),
     sidecars: {},
+    trim: createBrowserTrimRuntime(workerIo),
     useBlobOutput: true,
     vfs: browserVfs,
     workerIo,

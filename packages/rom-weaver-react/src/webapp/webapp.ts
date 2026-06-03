@@ -214,6 +214,10 @@ const getNavigationGuardState = () => {
       items: Array.from({ length: state.patcherSession.patchCount }),
     },
     romFilePresent: state.patcherSession.romFilePresent,
+    trimState: {
+      outputName: state.trimSession.outputName,
+      sourceFilePresent: state.trimSession.sourceFilePresent,
+    },
     webappState: state,
   };
 };
@@ -377,6 +381,9 @@ const renderWebappRoot = (): undefined => {
             webappController.saveDraftSettings();
           },
           onSelectView: (view) => webappController.selectView(view),
+          onTrimOutputFormatChange: (format) => webappController.setTrimOutputFormat(format),
+          onTrimSettingsChange: (settings) => webappController.setTrimSettingsState(settings),
+          onTrimSourceChange: (file) => webappController.setTrimSourceState(file),
         },
         confirmationDialog: confirmationDialogState,
         pageUpdate: getPageUpdateState({

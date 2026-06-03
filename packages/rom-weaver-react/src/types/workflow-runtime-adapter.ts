@@ -15,6 +15,7 @@ import type {
   CompressionListResult,
   CreatePatchResult,
   PublicOutput,
+  TrimResult,
 } from "./workflow-runtime.ts";
 
 type WorkflowRuntimeProgress = {
@@ -216,6 +217,15 @@ type RuntimePatchCreateWorkerInput = {
   workerThreads?: number | string | null;
 };
 
+type RuntimeTrimWorkerInput = {
+  extension?: string;
+  logLevel?: LogLevel;
+  outputName: string;
+  sourceFileName: string;
+  sourceFilePath: string;
+  workerThreads?: number | string | null;
+};
+
 type WorkflowRuntimeOutput = {
   createBytes: (bytes: Uint8Array, fileName: string) => Promise<PublicOutput>;
   createSource?: (source: SourceRef, fileName: string) => Promise<PublicOutput>;
@@ -307,6 +317,18 @@ type WorkflowRuntimePatch = {
   }) => Promise<CreatePatchResult>;
 };
 
+type WorkflowRuntimeTrim = {
+  trim?: (input: {
+    source: SourceRef;
+    extension?: string;
+    outputName: string;
+    workerThreads?: number | string | null;
+    logLevel?: LogLevel;
+    onLog?: (log: WorkflowRuntimeLog) => void;
+    onProgress?: (progress: WorkflowCreatePatchProgress) => void;
+  }) => Promise<TrimResult>;
+};
+
 type WorkflowRuntimeSidecars = {
   read?: (sourcePath: string, referencedName: string) => Promise<SourceRef>;
   list?: (sourcePath: string) => Promise<SourceRef[]>;
@@ -362,6 +384,7 @@ type WorkflowRuntime = {
   output: WorkflowRuntimeOutput;
   publicOutput: RuntimePublicOutputAdapter;
   patch: WorkflowRuntimePatch;
+  trim: WorkflowRuntimeTrim;
   preload?: WorkflowRuntimePreload;
   sidecars: WorkflowRuntimeSidecars;
   vfs: LargeFileVfs;
@@ -385,6 +408,7 @@ export type {
   RuntimePatchValidateWorkerInput,
   RuntimePatchWorkerProgress,
   RuntimePublicOutputAdapter,
+  RuntimeTrimWorkerInput,
   RuntimeWorkerIo,
   RuntimeWorkerOutput,
   RuntimeWorkerPathSource,
@@ -402,4 +426,5 @@ export type {
   WorkflowRuntimePreloadEvent,
   WorkflowRuntimeProgress,
   WorkflowRuntimeSidecars,
+  WorkflowRuntimeTrim,
 };

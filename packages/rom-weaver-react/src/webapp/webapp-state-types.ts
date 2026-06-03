@@ -1,4 +1,4 @@
-type WorkflowView = "patcher" | "creator";
+type WorkflowView = "patcher" | "creator" | "trim";
 
 type ValidationState = {
   messages: string[];
@@ -25,6 +25,12 @@ type CreatorSessionState = {
   patchType: string;
 };
 
+type TrimSessionState = {
+  outputFormat: string;
+  outputName: string;
+  sourceFilePresent: boolean;
+};
+
 const createEmptyValidationState = (): ValidationState => ({
   invalidFields: [],
   messages: [],
@@ -45,5 +51,16 @@ const createEmptyCreatorSessionState = (): CreatorSessionState => ({
   patchType: "bps",
 });
 
-export type { CreatorSessionState, PatcherSessionState, StartupState, ValidationState, WorkflowView };
-export { createEmptyCreatorSessionState, createEmptyPatcherSessionState, createEmptyValidationState };
+const createEmptyTrimSessionState = (): TrimSessionState => ({
+  outputFormat: "",
+  outputName: "",
+  sourceFilePresent: false,
+});
+
+export type { CreatorSessionState, PatcherSessionState, StartupState, TrimSessionState, ValidationState, WorkflowView };
+export {
+  createEmptyCreatorSessionState,
+  createEmptyPatcherSessionState,
+  createEmptyTrimSessionState,
+  createEmptyValidationState,
+};

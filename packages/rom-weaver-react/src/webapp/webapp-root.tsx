@@ -1,9 +1,10 @@
 import GitCompare from "lucide-react/dist/esm/icons/git-compare.js";
 import Puzzle from "lucide-react/dist/esm/icons/puzzle.js";
+import Scissors from "lucide-react/dist/esm/icons/scissors.js";
 import { useEffect } from "react";
 import { preloadBrowserRuntime } from "../platform/browser/browser-api.ts";
 import { ConfirmDialog, Modal } from "../public/react/components/ds/index.ts";
-import { ApplyPatchForm, CreatePatchForm, RomWeaverSettingsProvider } from "../public/react/index.tsx";
+import { ApplyPatchForm, CreatePatchForm, RomWeaverSettingsProvider, TrimPatchForm } from "../public/react/index.tsx";
 import { APP_BUILD_VERSION } from "./build-version.ts";
 import { Banner, Footer, Topbar } from "./components/shell.tsx";
 import { getSettingsUiState } from "./settings/settings-state.ts";
@@ -14,6 +15,7 @@ import { SettingsPanel } from "./webapp-settings";
 const WORKFLOW_TABS = [
   { icon: <Puzzle aria-hidden="true" />, id: "patcher", label: "Apply" },
   { icon: <GitCompare aria-hidden="true" />, id: "creator", label: "Create" },
+  { icon: <Scissors aria-hidden="true" />, id: "trim", label: "Trim" },
 ];
 
 function WebappRoot({ state, serviceWorkerCache, pageUpdate, confirmationDialog, actions }: WebappRootProps) {
@@ -49,6 +51,13 @@ function WebappRoot({ state, serviceWorkerCache, pageUpdate, confirmationDialog,
               onOriginalChange={actions.onCreatorOriginalChange}
               onPatchTypeChange={actions.onCreatorPatchTypeChange}
               onSettingsChange={actions.onCreatorSettingsChange}
+            />
+          ) : null}
+          {state.currentView === "trim" ? (
+            <TrimPatchForm
+              onOutputFormatChange={actions.onTrimOutputFormatChange}
+              onSettingsChange={actions.onTrimSettingsChange}
+              onSourceChange={actions.onTrimSourceChange}
             />
           ) : null}
           <Footer

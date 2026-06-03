@@ -21,6 +21,7 @@ import type {
   RuntimePatchCreateWorkerInput,
   RuntimePatchValidateWorkerInput,
   RuntimePatchWorkerProgress,
+  RuntimeTrimWorkerInput,
   RuntimeWorkerIo,
   WorkflowRuntimeLog,
 } from "../../types/workflow-runtime-adapter.ts";
@@ -1191,6 +1192,67 @@ const invokeRomWeaverCreatePatchWorker = async (
   };
 };
 
+const invokeRomWeaverTrimWorker = async (
+  input: RuntimeTrimWorkerInput,
+  onProgress?: (progress: RuntimePatchWorkerProgress) => void,
+  onLog?: (log: WorkflowRuntimeLog) => void,
+  onBeforeRun?: (outputPath: string) => Promise<void> | void,
+): Promise<Parameters<RuntimeWorkerIo["createWorkerOutput"]>[0]> => {
+  const sourceFilePath = String(input.sourceFilePath || "").trim();
+  if (!sourceFilePath) throw new Error("Trim source path is required");
+  const outputFileName = getPathBaseName(
+    input.outputName || getPathBaseName(sourceFilePath, "trimmed.bin"),
+    getPathBaseName(sourceFilePath, "trimmed.bin"),
+  );
+  const outputPath = selectRomWeaverOutputPath(sourceFilePath, outputFileName, [sourceFilePath]);
+  const normalizedExtension = typeof input.extension === "string" ? input.extension.trim() : "";
+  const threadArg = toThreadBudget(input.workerThreads);
+  // Matches the Rust `TrimCommand`: `source: Vec<PathBuf>` (required), `output: Option<PathBuf>`
+  // (conflicts with `in_place`), `extension: Option<String>`, `in_place`, `dry_run`, `revert`,
+  // `recursive` (defaults true), `threads`. We always write a new file (`in_place: false`), never
+  // simulate (`dry_run: false`), and never restore padding (`revert: false`).
+  const command: RomWeaverCommand = {
+    args: {
+      dry_run: false,
+      in_place: false,
+      output: outputPath,
+      revert: false,
+      source: [sourceFilePath],
+      ...(normalizedExtension ? { extension: normalizedExtension } : {}),
+      ...(threadArg ? { threads: threadArg } : {}),
+    },
+    type: "trim",
+  };
+  emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson trim dispatch", {
+    command,
+    extension: normalizedExtension || "",
+    outputPath,
+    sourceFilePath,
+    threadArg,
+  });
+  await onBeforeRun?.(outputPath);
+
+  const result = await runRomWeaverJson(
+    command,
+    toRomWeaverOptions({
+      logLevel: input.logLevel,
+      onEvent: (event) => {
+        const progress = toSimpleProgress(event);
+        if (progress) onProgress?.(progress);
+      },
+      onLog,
+    }),
+  );
+  ensureRomWeaverSuccess(result, "Trim failed");
+
+  const emitted = getEmittedFileDetails(result);
+  return {
+    fileName: outputFileName,
+    filePath: emitted?.path || outputPath,
+    size: emitted?.sizeBytes,
+  };
+};
+
 const normalizeChecksumResult = (
   checksums: Partial<ChecksumResult>,
   algorithm: string,
@@ -1305,6 +1367,7 @@ export {
   invokeRomWeaverExtractWorker,
   invokeRomWeaverPatchApplyWorker,
   invokeRomWeaverPatchValidateWorker,
+  invokeRomWeaverTrimWorker,
   normalizeChdCodecArgs,
   normalizeCodecEntries,
   resolvePatchApplyThreadArg,

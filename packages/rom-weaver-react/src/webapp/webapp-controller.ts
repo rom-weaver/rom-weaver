@@ -17,15 +17,17 @@ import {
   type CreatorSessionState,
   createEmptyCreatorSessionState,
   createEmptyPatcherSessionState,
+  createEmptyTrimSessionState,
   createEmptyValidationState,
   type PatcherSessionState,
   type StartupState,
+  type TrimSessionState,
   type ValidationState,
   type WorkflowView,
 } from "./webapp-state-types.ts";
 
 const DEFAULT_WORKFLOW_VIEW: WorkflowView = "patcher";
-const VALID_WORKFLOW_VIEWS: readonly WorkflowView[] = ["patcher", "creator"];
+const VALID_WORKFLOW_VIEWS: readonly WorkflowView[] = ["patcher", "creator", "trim"];
 
 const normalizeWorkflowView = (value: unknown): WorkflowView | null => {
   const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
@@ -36,6 +38,7 @@ type WebappState = {
   creatorSession: CreatorSessionState;
   currentView: WorkflowView;
   patcherSession: PatcherSessionState;
+  trimSession: TrimSessionState;
   settingsDialogOpen: boolean;
   settings: SettingsState;
   draftSettings: SettingsDraftState;
@@ -120,6 +123,7 @@ const createWebappRootController = (options: ControllerOptions) => {
       message: "",
       status: "loading",
     },
+    trimSession: createEmptyTrimSessionState(),
     validation: emptyValidation(),
   }));
 
@@ -183,6 +187,15 @@ const createWebappRootController = (options: ControllerOptions) => {
       creatorSession: {
         ...store.getState().creatorSession,
         ...nextCreatorSession,
+      },
+    });
+  };
+
+  const updateTrimSession = (nextTrimSession: Partial<TrimSessionState>) => {
+    setState({
+      trimSession: {
+        ...store.getState().trimSession,
+        ...nextTrimSession,
       },
     });
   };
@@ -314,6 +327,15 @@ const createWebappRootController = (options: ControllerOptions) => {
           status,
         },
       });
+    },
+    setTrimOutputFormat(format: unknown) {
+      updateTrimSession({ outputFormat: typeof format === "string" ? format : "" });
+    },
+    setTrimSettingsState(settings: unknown) {
+      updateTrimSession({ outputName: getOutputName(settings) });
+    },
+    setTrimSourceState(file: unknown) {
+      updateTrimSession({ sourceFilePresent: !!file });
     },
     subscribe(listener: () => void) {
       return store.subscribe(listener);

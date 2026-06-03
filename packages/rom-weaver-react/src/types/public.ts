@@ -68,6 +68,12 @@ type CreateResult<TDestination> = {
   type: PatchFormat;
 };
 
+type TrimResult<TDestination> = {
+  input: SelectedInputInfo;
+  output: PublicOutput<TDestination>;
+  sizeSummary?: WorkflowSizeSummary;
+};
+
 type UnifiedApplyInput = ApplyInput<SourceRef>;
 type UnifiedCreateInput = CreateInput<SourceRef>;
 type UnifiedApplyResult = ApplyResult<SaveDestination>;
@@ -76,6 +82,7 @@ type BrowserApplyInput = ApplyInput<BrowserSourceRef>;
 type BrowserCreateInput = CreateInput<BrowserSourceRef>;
 type BrowserApplyResult = ApplyResult<BrowserSaveDestination>;
 type BrowserCreateResult = CreateResult<BrowserSaveDestination>;
+type BrowserTrimResult = TrimResult<BrowserSaveDestination>;
 
 export type {
   AppliedPatchInfo,
@@ -85,9 +92,11 @@ export type {
   BrowserApplyResult,
   BrowserCreateInput,
   BrowserCreateResult,
+  BrowserTrimResult,
   CreateInput,
   CreateResult,
   SelectedInputInfo,
+  TrimResult,
   UnifiedApplyInput,
   UnifiedApplyResult,
   UnifiedCreateInput,

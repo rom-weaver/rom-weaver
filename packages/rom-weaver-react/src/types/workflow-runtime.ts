@@ -48,7 +48,7 @@ type WorkflowRuntimeHooks = {
   onCandidatesFound?: (request: CandidateSelectionRequest) => void;
   trace?: {
     operationId?: string | null;
-    workflow?: "apply" | "create";
+    workflow?: "apply" | "create" | "trim";
     workflowId?: string;
   };
 };
@@ -85,6 +85,18 @@ type CreatePatchInput = {
   selectedModifiedEntryName?: string;
   selectedOriginalEntryName?: string;
   options?: CreateWorkflowOptions;
+};
+
+type TrimWorkflowOptions = CreateWorkflowOptions;
+
+type TrimInput = {
+  source: SourceRef;
+  selectedSourceEntryName?: string;
+  options?: TrimWorkflowOptions;
+};
+
+type TrimResult = {
+  output: PublicOutput;
 };
 
 type PublicOutput = VfsOutputRef & {
@@ -241,4 +253,7 @@ export type {
   ProgressEvent,
   PublicOutput,
   SevenZipZstdCompressionOptions,
+  TrimInput,
+  TrimResult,
+  TrimWorkflowOptions,
 };

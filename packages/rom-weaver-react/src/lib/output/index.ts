@@ -23,7 +23,7 @@ type OutputTraceOptions = {
   logLevel?: LogLevel;
   onLog?: (record: Pick<LogRecord, "details" | "level" | "message" | "namespace" | "timestamp">) => void;
   operationId?: string | null;
-  workflow?: "apply" | "create";
+  workflow?: "apply" | "create" | "trim";
   workflowId?: string;
 };
 
