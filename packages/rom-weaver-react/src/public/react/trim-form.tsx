@@ -10,12 +10,14 @@ import { formatCodedErrorForDisplay, getErrorCode } from "../../presentation/err
 import { createBrowserLocalizer } from "../../presentation/localization/index.ts";
 import { createProgressViewModelFromEvent } from "../../presentation/workflow-presentation.ts";
 import { useCandidateSelection } from "./candidate-selection.tsx";
+import { CompressPanelBody } from "./components/ds/compress-panel.tsx";
 import { ExtractionTree } from "./components/ds/extraction-tree.tsx";
 import { FileProgress, Notice, RunButton } from "./components/ds/feedback.tsx";
 import { FileCard } from "./components/ds/file-card.tsx";
 import { DropZone, InfoPopover, StepSection } from "./components/ds/layout.tsx";
 import { ConfirmDialog } from "./components/ds/modal.tsx";
 import { OutputCard } from "./components/ds/output-card.tsx";
+import { buildCompressPanel } from "./compress-options.ts";
 import type { BinarySource } from "./patcher-form.ts";
 import type { CandidateSelectionPrompt, TrimPatchFormProps, TrimPatchFormSettings } from "./public-types.ts";
 import {
@@ -307,6 +309,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
           <InfoPopover title="Output options">
             <strong>Output</strong>
             <ul>
+              <li>Set the filename without an extension — the format selector controls it.</li>
               <li>Trimming permanently removes trailing padding from the ROM and can't be undone.</li>
               <li>Choose the raw extension to keep the trimmed bytes, or zip/7z to compress them.</li>
             </ul>
@@ -324,10 +327,25 @@ function TrimPatchForm(props: TrimPatchFormProps) {
               </RunButton>
             </>
           }
+          compress={(() => {
+            const panel = buildCompressPanel(resolvedOutputFormat, settings as Record<string, unknown>);
+            return panel
+              ? {
+                  children: (
+                    <CompressPanelBody
+                      disabled={disabled}
+                      fields={panel.fields}
+                      onChange={(key, value) => updateSettings({ ...settings, [key]: value })}
+                    />
+                  ),
+                  summary: panel.summary,
+                }
+              : null;
+          })()}
           disabled={disabled}
           fileName={resolvedOutputName}
           fileNameId="trim-builder-output-file"
-          fileNamePlaceholder="Trimmed filename"
+          fileNamePlaceholder="Trimmed filename (no extension)"
           format={resolvedOutputFormat}
           formatId="trim-builder-select-output-format"
           formatOptions={formatOptions}

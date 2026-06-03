@@ -339,7 +339,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
           disabled={disabled}
           fileName={resolvedOutputName}
           fileNameId="patch-builder-output-file"
-          fileNamePlaceholder="Patch filename"
+          fileNamePlaceholder="Patch filename (no extension)"
           format={patchType}
           formatId="patch-builder-select-patch-type"
           formatOptions={["aps", "bdf", "bps", "ebp", "ips", "pmsr", "ppf", "rup", "ups", "vcdiff", "xdelta"].map(

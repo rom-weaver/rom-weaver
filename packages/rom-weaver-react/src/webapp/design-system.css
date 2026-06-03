@@ -45,8 +45,10 @@
 
 .rw-app * { box-sizing: border-box; }
 
-/* fluid type: 1rem scales ~13px → 16.5px; all text sized in rem so it scales together */
-.rw-app { font-size: clamp(13px, 11.95px + 0.35vw, 16.5px); interpolate-size: allow-keywords; }
+/* fluid type: 1rem scales ~13px → 16.5px. Must live on the document root: every size
+   below is in rem, which resolves against <html>, not .rw-app — so the clamp belongs on
+   the root (scoped to when the app shell is mounted, to avoid leaking into library hosts). */
+:root:has(.rw-app) { font-size: clamp(13px, 11.95px + 0.35vw, 16.5px); interpolate-size: allow-keywords; }
 
 /* animate every <details> open/close */
 .rw-app details::details-content { block-size: 0; overflow: hidden; content-visibility: hidden; transition: block-size .26s cubic-bezier(.2,.85,.3,1), content-visibility .26s allow-discrete; }
@@ -265,6 +267,11 @@
 .rw-app .select, .rw-app .ptgt-sel { appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23939ba8' stroke-width='2.4'><path d='m6 9 6 6 6-6'/></svg>"); background-repeat: no-repeat; background-position: right 9px center; padding-right: 27px; }
 .rw-app .input.mono, .rw-app .select.mono { font-family: var(--rw-mono); font-size: 0.896552rem; }
 .rw-app .input:focus, .rw-app .select:focus { outline: none; border-color: var(--rw-accent); box-shadow: 0 0 0 1px var(--rw-accent); }
+/* iOS Safari auto-zooms when a focused control's font-size is < 16px. Bump text-entry
+   controls to 16px on iOS only (keeps pinch-zoom; no effect on desktop layout). */
+@supports (-webkit-touch-callout: none) {
+  .rw-app .input, .rw-app .select, .rw-app textarea, .rw-app input[type="text"], .rw-app input[type="number"], .rw-modal .input, .rw-modal .select { font-size: 16px; }
+}
 .rw-app .input:disabled, .rw-app .select:disabled { opacity: .55; cursor: not-allowed; }
 .rw-app .outbar { display: flex; gap: 8px; align-items: stretch; flex-wrap: wrap; }
 .rw-app .fname-group { display: flex; align-items: stretch; flex: 1 1 300px; min-width: 0; border: 1px solid var(--rw-line-strong); border-radius: 6px; background: var(--rw-inset); }
@@ -347,6 +354,10 @@
 .rw-app .info > summary::-webkit-details-marker { display: none; }
 .rw-app .info > summary:hover { color: var(--rw-ink); border-color: var(--rw-ink-soft); }
 .rw-app .info[open] > summary { color: var(--rw-accent-ink); background: var(--rw-accent); border-color: var(--rw-accent); }
+/* button-driven info trigger (JS popover, e.g. settings) shares the summary look */
+.rw-app .info > button { appearance: none; cursor: pointer; width: 16px; height: 16px; padding: 0; border-radius: 50%; border: 1px solid var(--rw-line-strong); background: var(--rw-inset); color: var(--rw-ink-mut); font: 700 0.689655rem/1 var(--rw-sans); display: grid; place-items: center; }
+.rw-app .info > button:hover { color: var(--rw-ink); border-color: var(--rw-ink-soft); }
+.rw-app .info > button[aria-expanded="true"] { color: var(--rw-accent-ink); background: var(--rw-accent); border-color: var(--rw-accent); }
 .rw-app .info-pop { display: none; position: absolute; top: calc(100% + 7px); left: -4px; z-index: 40; width: min(330px, 78vw); padding: 11px 13px; border: 1px solid var(--rw-line); border-radius: 8px; background: var(--rw-panel-2); box-shadow: 0 16px 34px -18px rgba(0,0,0,.55); font-size: 0.827586rem; line-height: 1.5; color: var(--rw-ink-soft); }
 .rw-app .info[open] > .info-pop { display: block; }
 .rw-app .info-pop strong { color: var(--rw-ink); display: block; margin-bottom: 5px; font-size: 0.758621rem; letter-spacing: .05em; text-transform: uppercase; }
@@ -434,7 +445,7 @@
 
 /* selection tree */
 .rw-modal .seltree { display: flex; flex-direction: column; gap: 4px; }
-.rw-modal .selnode { display: flex; align-items: center; gap: 9px; padding: 7px 9px; border-radius: 6px; border: 1px solid transparent; min-width: 0; }
+.rw-modal .selnode { appearance: none; width: 100%; text-align: left; font: inherit; display: flex; align-items: center; gap: 9px; padding: 7px 9px; border-radius: 6px; border: 1px solid transparent; min-width: 0; }
 .rw-modal .selrow { cursor: pointer; background: var(--rw-inset); border-color: var(--rw-line); transition: background .1s, border-color .1s; }
 .rw-modal .selrow:hover { background: var(--rw-panel-2); border-color: var(--rw-accent); }
 .rw-modal .selrow.off { cursor: not-allowed; opacity: .55; }
@@ -454,8 +465,8 @@
 .rw-modal .setrow { display: flex; align-items: center; gap: 10px; min-height: 32px; padding: 4px 12px; }
 .rw-modal .setrow + .setrow { border-top: 1px solid var(--rw-line-soft); }
 .rw-modal .setrow:hover { background: var(--rw-panel-2); }
-.rw-modal .setrow .slabel { flex: 1 1 auto; min-width: 0; font-size: 0.896552rem; color: var(--rw-ink); }
-.rw-modal .setrow .slabel small { display: block; font-size: 0.758621rem; color: var(--rw-ink-mut); margin-top: 1px; }
+.rw-modal .setrow .slabel { flex: 1 1 auto; min-width: 0; display: inline-flex; align-items: center; flex-wrap: wrap; gap: 2px 7px; font-size: 0.896552rem; color: var(--rw-ink); }
+.rw-modal .setrow .slabel small { flex-basis: 100%; font-size: 0.758621rem; color: var(--rw-ink-mut); margin-top: 1px; }
 .rw-modal .setrow .sctl { flex: none; }
 .rw-modal .setrow .sctl .select, .rw-modal .setrow .sctl .input { height: 32px; width: 150px; }
 .rw-modal .setchecks { display: flex; flex-wrap: wrap; align-items: center; gap: 9px 18px; padding: 9px 12px; }

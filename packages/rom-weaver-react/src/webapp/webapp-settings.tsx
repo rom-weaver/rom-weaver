@@ -38,8 +38,8 @@ type FieldRenderProps = Pick<SettingsPanelProps, "draftSettings" | "uiState" | "
 
 const settingsPanelSections: Array<{ fields: SettingsFieldKey[]; title: string }> = [
   { fields: ["language", "logLevel", "erudaDevTools"], title: "General" },
-  { fields: ["requireInputChecksumMatch", "requireOutputChecksumMatch"], title: "Verification" },
   { fields: ["fixChecksum"], title: "Fixes" },
+  { fields: ["requireInputChecksumMatch", "requireOutputChecksumMatch"], title: "Verification" },
   { fields: ["compressionProfile", "workerThreads"], title: "Compression" },
   { fields: ["zipCodec", "zipLevel"], title: "ZIP" },
   { fields: ["sevenZipCodec", "sevenZipLevel"], title: "7z" },
@@ -47,6 +47,10 @@ const settingsPanelSections: Array<{ fields: SettingsFieldKey[]; title: string }
   { fields: ["chdCreateCdCodecs", "chdCreateDvdCodecs"], title: "CHD" },
   { fields: ["z3dsCompressionLevel"], title: "z3ds" },
 ];
+
+// Per-format groups render in the two-column grid (`.setcols`); the general
+// groups above them stay full-width, matching the dark-pro prototype layout.
+const FORMAT_GROUP_TITLES = new Set(["ZIP", "7z", "RVZ", "CHD", "z3ds"]);
 
 const TOGGLE_KINDS = new Set(["checkbox", "choice-checkbox"]);
 
@@ -255,18 +259,19 @@ const SettingsGroup = ({
 };
 
 function SettingsPanel({ draftSettings, uiState, validation, onDraftChange }: SettingsPanelProps): ReactNode {
+  const shared = { draftSettings, onDraftChange, uiState, validation };
+  const fullWidthSections = settingsPanelSections.filter((section) => !FORMAT_GROUP_TITLES.has(section.title));
+  const gridSections = settingsPanelSections.filter((section) => FORMAT_GROUP_TITLES.has(section.title));
   return (
     <div>
-      {settingsPanelSections.map((section) => (
-        <SettingsGroup
-          draftSettings={draftSettings}
-          key={section.title}
-          onDraftChange={onDraftChange}
-          section={section}
-          uiState={uiState}
-          validation={validation}
-        />
+      {fullWidthSections.map((section) => (
+        <SettingsGroup key={section.title} section={section} {...shared} />
       ))}
+      <div className="setcols">
+        {gridSections.map((section) => (
+          <SettingsGroup key={section.title} section={section} {...shared} />
+        ))}
+      </div>
       {validation.messages.length ? (
         <div aria-live="polite" className="validation bad" id="settings-validation-message" role="alert">
           {validation.messages.join(" ")}

@@ -48,9 +48,11 @@ const ProgressTrack = ({
 }) => {
   const width =
     typeof percent === "number" && Number.isFinite(percent) ? `${Math.max(0, Math.min(100, percent))}%` : undefined;
+  // No usable percent → animate (indeterminate sliver) rather than fall back to the static default bar width.
+  const isIndeterminate = indeterminate || width === undefined;
   return (
-    <div className={join("track", indeterminate && "indet", className)}>
-      <div className="bar" style={indeterminate ? undefined : { width }} />
+    <div className={join("track", isIndeterminate && "indet", className)}>
+      <div className="bar" style={isIndeterminate ? undefined : { width }} />
     </div>
   );
 };

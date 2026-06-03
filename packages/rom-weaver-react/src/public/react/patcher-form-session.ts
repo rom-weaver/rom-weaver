@@ -7,6 +7,7 @@ import { formatCodedErrorForDisplay } from "../../presentation/errors.ts";
 import { createBrowserLocalizer } from "../../presentation/localization/index.ts";
 import type { CompressionFormat } from "../../types/settings.ts";
 import type { ApplyWorkflowResult, ProgressEvent } from "../../types/workflow-runtime.ts";
+import { buildCompressPanel } from "./compress-options.ts";
 import {
   getBinarySourceFileName,
   getBinarySourceListStableIds,
@@ -524,6 +525,7 @@ const inertOutputController: PatcherOutputController = {
       progress: null,
       title: "",
     },
+    compress: null,
     compressionFormat: "7z",
     disabled: true,
     displayFileName: "",
@@ -535,6 +537,7 @@ const inertOutputController: PatcherOutputController = {
   runPrimaryAction: () => undefined,
   setDisplayFileName: () => undefined,
   setOutputCompression: () => undefined,
+  setOutputCompressOption: () => undefined,
 };
 
 type LocalApplyPatchFormSessionOptions = Pick<
@@ -1175,6 +1178,7 @@ const useLocalApplyPatchFormSession = ({
         progress: hasPendingDownload ? null : progress ? toApplyButtonProgress({ stage: "apply", ...progress }) : null,
         title: hasPendingDownload ? `Download ${pendingDownloadFileName}` : "",
       },
+      compress: buildCompressPanel(displayedCompression, activeSettings as Record<string, unknown>),
       compressionFormat: displayedCompression,
       disabled: disabled || busy || inputStaging || patchStaging,
       displayFileName: outputNameEdited ? outputName : effectiveResolvedOutputName,
@@ -2138,6 +2142,11 @@ const useLocalApplyPatchFormSession = ({
             compression: value as "auto" | CompressionFormat,
           },
         });
+      },
+      setOutputCompressOption: (key: string, value: string) => {
+        // Per-job override of a flat compression setting (zipCodec, compressionProfile, …)
+        // the run already reads; leaves the persisted Settings untouched.
+        updateSettings({ ...activeSettings, [key]: value });
       },
       subscribe: localOutputStoreController.subscribe,
     }),

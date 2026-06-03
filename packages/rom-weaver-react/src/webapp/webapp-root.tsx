@@ -1,7 +1,9 @@
+import Bandage from "lucide-react/dist/esm/icons/bandage.js";
 import GitCompare from "lucide-react/dist/esm/icons/git-compare.js";
-import Puzzle from "lucide-react/dist/esm/icons/puzzle.js";
+import RotateCcw from "lucide-react/dist/esm/icons/rotate-ccw.js";
+import Save from "lucide-react/dist/esm/icons/save.js";
 import Scissors from "lucide-react/dist/esm/icons/scissors.js";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { preloadBrowserRuntime } from "../platform/browser/browser-api.ts";
 import { ConfirmDialog, Modal } from "../public/react/components/ds/index.ts";
 import { ApplyPatchForm, CreatePatchForm, RomWeaverSettingsProvider, TrimPatchForm } from "../public/react/index.tsx";
@@ -13,12 +15,13 @@ import type { WebappRootProps } from "./webapp-root-types.ts";
 import { SettingsPanel } from "./webapp-settings";
 
 const WORKFLOW_TABS = [
-  { icon: <Puzzle aria-hidden="true" />, id: "patcher", label: "Apply" },
+  { icon: <Bandage aria-hidden="true" />, id: "patcher", label: "Apply" },
   { icon: <GitCompare aria-hidden="true" />, id: "creator", label: "Create" },
   { icon: <Scissors aria-hidden="true" />, id: "trim", label: "Trim" },
 ];
 
 function WebappRoot({ state, serviceWorkerCache, pageUpdate, confirmationDialog, actions }: WebappRootProps) {
+  const [updateDismissed, setUpdateDismissed] = useState(false);
   const workerThreads = state.settings.workerThreads;
   useEffect(() => {
     void preloadBrowserRuntime({ workerThreads });
@@ -35,7 +38,11 @@ function WebappRoot({ state, serviceWorkerCache, pageUpdate, confirmationDialog,
             onSelectTab={(id) => actions.onSelectView(id as WebappRootProps["state"]["currentView"])}
             tabs={WORKFLOW_TABS}
           />
-          {pageUpdate.ready ? <Banner onReload={actions.onReloadUpdate}>{pageUpdate.title}</Banner> : null}
+          {pageUpdate.ready && !updateDismissed ? (
+            <Banner onDismiss={() => setUpdateDismissed(true)} onReload={actions.onReloadUpdate}>
+              {pageUpdate.title}
+            </Banner>
+          ) : null}
           <ProcessingWakeLockNotice active={false} />
           {state.currentView === "patcher" ? (
             <ApplyPatchForm
@@ -70,11 +77,13 @@ function WebappRoot({ state, serviceWorkerCache, pageUpdate, confirmationDialog,
         <Modal
           headerActions={
             <>
-              <button className="btn ghost" onClick={actions.onRestoreDefaults} type="button">
-                Reset
+              <button className="btn ghost" onClick={actions.onRestoreDefaults} title="Reset to defaults" type="button">
+                <RotateCcw aria-hidden="true" />
+                <span className="bl">Reset</span>
               </button>
-              <button className="btn primary" onClick={actions.onSaveClose} type="button">
-                Save
+              <button className="btn primary" onClick={actions.onSaveClose} title="Save &amp; close" type="button">
+                <Save aria-hidden="true" />
+                <span className="bl">Save</span>
               </button>
             </>
           }

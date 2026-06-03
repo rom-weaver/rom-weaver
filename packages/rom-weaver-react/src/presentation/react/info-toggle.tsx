@@ -1,6 +1,10 @@
 import { type CSSProperties, type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { cx, sectionClasses } from "../tailwind-classes.ts";
+import { cx } from "../tailwind-classes.ts";
+
+/** Popovers portal into the styled app root so the design-system `.info-pop` rules apply. */
+const getInfoPortalTarget = (): Element =>
+  (typeof document === "undefined" ? null : document.querySelector(".rw-app")) ?? document.body;
 
 function InfoToggle({
   ariaLabel,
@@ -69,26 +73,26 @@ function InfoToggle({
 
   const panel = (
     <div
-      className={cx(sectionClasses.infoPanel, portalPanel && sectionClasses.infoPortalPanel, panelClassName)}
+      className={cx("info-pop", panelClassName)}
       id={panelId}
       ref={panelRef}
-      style={portalPanel ? panelStyle : undefined}
+      // Portaled out of the trigger: render fixed, above the modal stacking context (z-60/70).
+      style={portalPanel ? { display: "block", position: "fixed", zIndex: 80, ...panelStyle } : { display: "block" }}
     >
       {children}
     </div>
   );
   let renderedPanel: ReactNode = null;
   if (open) {
-    renderedPanel = portalPanel && typeof document !== "undefined" ? createPortal(panel, document.body) : panel;
+    renderedPanel = portalPanel && typeof document !== "undefined" ? createPortal(panel, getInfoPortalTarget()) : panel;
   }
 
   return (
-    <span className={cx(sectionClasses.info, className)} ref={containerRef}>
+    <span className={cx("info", className)} ref={containerRef}>
       <button
         aria-controls={panelId}
         aria-expanded={open}
         aria-label={ariaLabel}
-        className={sectionClasses.infoButton}
         onClick={() => {
           if (!open) setPanelStyle(undefined);
           setOpen((currentOpen) => !currentOpen);

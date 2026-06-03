@@ -33,22 +33,44 @@ const ChecksumRow = ({
 
   const text = copyValue ?? (typeof value === "string" ? value : "");
 
+  const markCopied = () => {
+    setCopied(true);
+    clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(() => setCopied(false), COPIED_RESET_MS);
+  };
+
+  // Fallback for non-secure contexts (e.g. a self-signed LAN cert on iOS) where
+  // navigator.clipboard is unavailable — selection + execCommand still copies there.
+  const legacyCopy = (value: string): boolean => {
+    if (typeof document === "undefined") return false;
+    const textarea = document.createElement("textarea");
+    textarea.value = value;
+    textarea.setAttribute("readonly", "");
+    textarea.style.cssText = "position:fixed;top:-1000px;left:0;opacity:0;";
+    document.body.appendChild(textarea);
+    textarea.select();
+    let ok = false;
+    try {
+      ok = document.execCommand("copy");
+    } catch {
+      ok = false;
+    }
+    document.body.removeChild(textarea);
+    return ok;
+  };
+
   const copy = () => {
     if (!text) return;
     const clipboard = typeof navigator === "undefined" ? undefined : navigator.clipboard;
-    if (!clipboard?.writeText) {
-      logger.trace("Clipboard unavailable; skipping checksum copy");
+    if (clipboard?.writeText) {
+      clipboard.writeText(text).then(markCopied, () => {
+        if (legacyCopy(text)) markCopied();
+        else logger.trace("Checksum copy failed");
+      });
       return;
     }
-    clipboard.writeText(text).then(
-      () => {
-        setCopied(true);
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = setTimeout(() => setCopied(false), COPIED_RESET_MS);
-      },
-      (error) =>
-        logger.trace("Checksum copy failed", { message: error instanceof Error ? error.message : String(error || "") }),
-    );
+    if (legacyCopy(text)) markCopied();
+    else logger.trace("Clipboard unavailable; skipping checksum copy");
   };
 
   return (
@@ -92,27 +114,39 @@ const ChecksumList = ({
   onToggle?: (open: boolean) => void;
   lead?: ReactNode;
   children: ReactNode;
-}) => (
-  <details
-    className="cks"
-    onToggle={onToggle ? (event) => onToggle(event.currentTarget.open) : undefined}
-    open={open ?? defaultOpen}
-  >
-    <summary className="cks-summary">
-      <ChevronRight aria-hidden="true" className="chev" />
-      <span className="lab">{label}</span>
-      {sublabel ? <span className="sublab">{sublabel}</span> : null}
-      {match ? (
-        <span className={join("cks-match", !match.ok && "bad")}>{match.label}</span>
-      ) : timing ? (
-        <span className="tm">
-          <span className="t">{timing}</span>
-        </span>
-      ) : null}
-    </summary>
-    {lead}
-    <div className="cks-rows">{children}</div>
-  </details>
-);
+}) => {
+  const controlledOpen = open ?? defaultOpen;
+  return (
+    <details
+      className="cks"
+      // `toggle` fires whenever the `open` attribute changes — including when React
+      // re-asserts the controlled value. Only forward genuine changes so a controlled
+      // `open` + state-toggling handler can't feed back into an open/close oscillation.
+      onToggle={
+        onToggle
+          ? (event) => {
+              if (event.currentTarget.open !== controlledOpen) onToggle(event.currentTarget.open);
+            }
+          : undefined
+      }
+      open={controlledOpen}
+    >
+      <summary className="cks-summary">
+        <ChevronRight aria-hidden="true" className="chev" />
+        <span className="lab">{label}</span>
+        {sublabel ? <span className="sublab">{sublabel}</span> : null}
+        {match ? (
+          <span className={join("cks-match", !match.ok && "bad")}>{match.label}</span>
+        ) : timing ? (
+          <span className="tm">
+            <span className="t">{timing}</span>
+          </span>
+        ) : null}
+      </summary>
+      {lead}
+      <div className="cks-rows">{children}</div>
+    </details>
+  );
+};
 
 export { ChecksumList, ChecksumRow };

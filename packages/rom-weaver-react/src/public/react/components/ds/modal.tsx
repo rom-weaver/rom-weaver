@@ -6,12 +6,18 @@ import { createPortal } from "react-dom";
 
 /**
  * Design-system modal primitives. A generic overlay (header + scrollable body)
- * and a confirmation dialog, both portaled to <body> so fixed positioning and
- * stacking are unaffected by ancestor overflow. Shared by settings, candidate
- * selection, and every confirm flow.
+ * and a confirmation dialog. Both portal into the `.rw-app` root (falling back to
+ * <body>) so the design system's `.rw-app`-scoped control styles (.input/.select/
+ * .btn/…) reach the modal content; `.rw-modal` is `position: fixed`, so stacking
+ * and overflow are unaffected by where it sits in the tree. Shared by settings,
+ * candidate selection, and every confirm flow.
  */
 
 const join = (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(" ");
+
+/** The styled app root the design system scopes its rules under; modals portal here so controls inherit it. */
+const getModalPortalTarget = (): Element =>
+  (typeof document === "undefined" ? null : document.querySelector(".rw-app")) ?? document.body;
 
 const useEscapeKey = (active: boolean, onEscape: () => void) => {
   useEffect(() => {
@@ -44,7 +50,7 @@ const ModalShell = ({
       <button aria-label="Close" className="rw-modal-backdrop" onClick={onBackdrop} tabIndex={-1} type="button" />
       <div className={join("rw-modal-card", card)}>{children}</div>
     </div>,
-    document.body,
+    getModalPortalTarget(),
   );
 };
 

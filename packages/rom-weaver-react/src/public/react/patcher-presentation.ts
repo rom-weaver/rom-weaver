@@ -3,6 +3,7 @@ import {
   type OutputSizeSummaryViewModel,
   type ProgressViewModel,
 } from "../../presentation/workflow-presentation.ts";
+import type { CompressPanelModel } from "./compress-options.ts";
 import type { InputProgressState } from "./patcher-ui-state.ts";
 
 type OutputOption = {
@@ -22,6 +23,8 @@ type PatcherOutputState = {
   displayFileName: string;
   resolvedOutputName: string;
   compressionFormat: string;
+  /** Editable compress panel (codec/level/codec-lists) for the selected format, or null when uncompressed. */
+  compress?: CompressPanelModel | null;
   pendingDownloadFileName: string | null;
   sizeSummary: OutputSizeSummaryViewModel;
   disabled: boolean;

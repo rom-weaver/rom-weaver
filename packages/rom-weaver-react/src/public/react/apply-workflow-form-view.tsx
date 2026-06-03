@@ -2,6 +2,7 @@ import { useSyncExternalStore } from "react";
 import { createTiming, formatTiming } from "../../lib/progress/timing.ts";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import { ChecksumList, ChecksumRow } from "./components/ds/checksum-list.tsx";
+import { CompressPanelBody } from "./components/ds/compress-panel.tsx";
 import { type ExtractionLevel, ExtractionTree } from "./components/ds/extraction-tree.tsx";
 import { FileProgress, Notice } from "./components/ds/feedback.tsx";
 import { FileCard } from "./components/ds/file-card.tsx";
@@ -40,7 +41,8 @@ const toProgressProps = (progress: NonNullable<InputProgressState>) => {
       : typeof progress.percent === "number"
         ? progress.percent
         : null;
-  const indeterminate = progress.indeterminate === true && percent === null;
+  // No known percentage → indeterminate (animated sliver), never a static partial bar.
+  const indeterminate = percent === null;
   return {
     indeterminate,
     label: progress.label || progress.message || "Working…",
@@ -56,12 +58,18 @@ const toExtractionLevels = (
   fileSize: number | undefined,
   entries: ArchivePathEntry[] | undefined,
 ): ExtractionLevel[] => {
-  const levels: ExtractionLevel[] = (entries ?? []).map((entry) => ({
-    name: entry.fileName,
-    sizeBytes: entry.outputSize ?? entry.sourceSize,
-    sizeLabel: SIZE_LABEL(entry.outputSize ?? entry.sourceSize),
-    timing: TIMING_LABEL(entry.decompressionTimeMs),
-  }));
+  const levels: ExtractionLevel[] = (entries ?? []).map((entry) => {
+    // Each chain level shows that file's own stored size (the prototype's
+    // "original → extracted" reads outer-archive size → final ROM size), so prefer
+    // sourceSize; outputSize is the decompressed payload and only a fallback.
+    const levelSize = entry.sourceSize ?? entry.outputSize;
+    return {
+      name: entry.fileName,
+      sizeBytes: levelSize,
+      sizeLabel: SIZE_LABEL(levelSize),
+      timing: TIMING_LABEL(entry.decompressionTimeMs),
+    };
+  });
   const last = levels[levels.length - 1];
   if (!last || last.name !== fileName) {
     levels.push({ name: fileName, sizeBytes: fileSize, sizeLabel: SIZE_LABEL(fileSize) });
@@ -224,8 +232,12 @@ function ApplyWorkflowFormView({
               removeLabel={romInputs.length > 1 ? "Remove ROM input" : "Clear ROM input"}
               state={state}
             >
-              {rowProgress ? <FileProgress {...toProgressProps(rowProgress)} /> : null}
-              {romInput.kind === "cue" ? null : <RomChecksums controller={uiController} romInput={romInput} />}
+              {/* While extracting/decoding, show only progress — hide the collapsible sections. */}
+              {rowProgress ? (
+                <FileProgress {...toProgressProps(rowProgress)} />
+              ) : romInput.kind === "cue" ? null : (
+                <RomChecksums controller={uiController} romInput={romInput} />
+              )}
             </FileCard>
           );
         })}
@@ -246,7 +258,6 @@ function ApplyWorkflowFormView({
           big={romInputs.length === 0}
           hint={romInputs.length === 0 ? ".sfc, .nes, .gba, .iso, .chd, .rvz, .z3ds, .zip, .7z, .rar…" : undefined}
           label={romInputs.length ? "Add another ROM · drop or browse" : "Select ROM · drop or browse"}
-          multiple
           onFiles={(files) => uiController.provideRomInputFiles?.(files)}
         />
         <SectionNotice state={uiState.inputNotice} />
@@ -292,8 +303,7 @@ function ApplyWorkflowFormView({
             }}
             state={item.validationState === "invalid" ? "bad" : item.validationState === "valid" ? "ok" : undefined}
           >
-            {item.progress ? <FileProgress {...toProgressProps(item.progress)} /> : null}
-            <PatchInfo item={item} />
+            {item.progress ? <FileProgress {...toProgressProps(item.progress)} /> : <PatchInfo item={item} />}
           </FileCard>
         ))}
         {uiState.patchInput.embeddedPatchLoadingVisible ? (
@@ -334,7 +344,6 @@ function ApplyWorkflowFormView({
           big={patches.length === 0}
           hint={patches.length === 0 ? "compressed & archived patches are accepted" : undefined}
           label={patches.length ? "Add patch · drop or browse" : "Select patch · drop or browse"}
-          multiple
           onFiles={(files) => uiController.providePatchInputFiles?.(files)}
         />
         <SectionNotice state={uiState.patchNotice} />
@@ -435,10 +444,24 @@ function ApplyWorkflowFormView({
               ) : null}
             </>
           }
+          compress={
+            outputState.compress
+              ? {
+                  children: (
+                    <CompressPanelBody
+                      disabled={outputState.disabled}
+                      fields={outputState.compress.fields}
+                      onChange={(key, value) => controllers.output.setOutputCompressOption?.(key, value)}
+                    />
+                  ),
+                  summary: outputState.compress.summary,
+                }
+              : null
+          }
           disabled={outputState.disabled}
           fileName={outputState.displayFileName}
           fileNameId="rom-weaver-input-output-file-name"
-          fileNamePlaceholder="Output filename"
+          fileNamePlaceholder="Output filename (no extension)"
           format={outputState.compressionFormat}
           formatId="rom-weaver-select-output-format"
           formatOptions={outputState.options}
