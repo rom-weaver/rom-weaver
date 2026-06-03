@@ -4,7 +4,6 @@
 @import "tailwindcss";
 
 body{
-	color-scheme:dark;
 	--rom-weaver-color-background:oklch(0.23 0.022 292);
 	--rom-weaver-color-surface:oklch(0.958 0.018 304);
 	--rom-weaver-color-surface-muted:oklch(0.936 0.022 302);
@@ -40,13 +39,9 @@ body{
 
 body{
 	margin:0;
-	background-color:var(--rom-weaver-color-background);
-	background-image:
-		radial-gradient(1200px 600px at 8% -14%, oklch(0.43 0.12 300 / .36), transparent 58%),
-		radial-gradient(900px 500px at 96% -8%, oklch(0.4 0.11 278 / .26), transparent 54%),
-		linear-gradient(180deg, oklch(0.29 0.025 296), oklch(0.22 0.022 292));
-	background-attachment:fixed;
-	color:var(--rom-weaver-color-text);
+	/* follow the active dark-pro theme (which defaults to the OS preference) */
+	background-color:var(--rw-bg, var(--rom-weaver-color-background));
+	color:var(--rw-ink, var(--rom-weaver-color-text));
 	font:500 14.5px/1.5 "Inter Tight", "Segoe UI", sans-serif;
 	letter-spacing:0;
 	font-stretch:92%;
