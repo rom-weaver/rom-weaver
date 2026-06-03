@@ -1,24 +1,30 @@
+import Download from "lucide-react/dist/esm/icons/download.js";
+import GitCompare from "lucide-react/dist/esm/icons/git-compare.js";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { appendFileNameExtension, hasFileNameExtension } from "../../lib/input/path-utils.ts";
 import {
   type BrowserCreateResult,
+  type BrowserSaveDestination,
   type CreateSettings,
   CreateWorkflow,
   type WorkflowProgress,
 } from "../../platform/browser/browser-api.ts";
 import { formatCodedErrorForDisplay, getErrorCode } from "../../presentation/errors.ts";
 import { createBrowserLocalizer } from "../../presentation/localization/index.ts";
-import { createProgressViewModelFromEvent } from "../../presentation/workflow-presentation.ts";
+import { createProgressViewModelFromEvent, formatByteSize } from "../../presentation/workflow-presentation.ts";
 import { useCandidateSelection } from "./candidate-selection.tsx";
+import { CompressPanelBody } from "./components/ds/compress-panel.tsx";
 import { ExtractionTree } from "./components/ds/extraction-tree.tsx";
 import { FileProgress, Notice, RunButton } from "./components/ds/feedback.tsx";
 import { FileCard } from "./components/ds/file-card.tsx";
 import { DropZone, InfoPopover, StepSection } from "./components/ds/layout.tsx";
 import { OutputCard } from "./components/ds/output-card.tsx";
+import { buildCompressPanel } from "./compress-options.ts";
 import type { BinarySource } from "./patcher-form.ts";
 import type { CandidateSelectionPrompt, CreatePatchFormProps, CreatePatchFormSettings } from "./public-types.ts";
 import {
   getCreateSettingsOutputName,
+  normalizeDefaultArchive,
   toCreateWorkflowSettings,
   useCreateSettings,
   useRomWeaverAssetBaseUrl,
@@ -56,6 +62,12 @@ const resolveCreateExecutionOutputName = (outputName: string, patchType: string)
   return appendFileNameExtension(normalizedOutputName, patchType || "bps");
 };
 
+const getCompletedDownloadMeta = (fileName: string, size?: number | null) => ({
+  format: "Patch",
+  name: fileName,
+  size: typeof size === "number" && Number.isFinite(size) ? formatByteSize(size) : undefined,
+});
+
 function CreatePatchForm(props: CreatePatchFormProps) {
   const providerSettings = useCreateSettings();
   const providerAssetBaseUrl = useRomWeaverAssetBaseUrl();
@@ -72,12 +84,18 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   const [internalPatchType, setInternalPatchType] = useState(props.defaultPatchType || "bps");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [completedOutput, setCompletedOutput] = useState<{
+    fileName: string;
+    saveAs: (destination?: BrowserSaveDestination) => Promise<void>;
+    size?: number;
+  } | null>(null);
   const [progress, setProgress] = useState<{
     dedupeKey: string;
     indeterminate: boolean;
     label: string;
     message: string;
     percent: number | null;
+    role?: string;
     stage: string;
     timingText: string;
     visualPercent: number | null;
@@ -94,13 +112,22 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   const settings = props.settings || internalSettings || providerSettings;
   const patchType = props.patchType || internalPatchType;
   const disabled = !!props.disabled || busy;
-  const actionDisabled = !!props.disabled || !(busy || (original && modified));
+  const actionDisabled = !!props.disabled || !(busy || completedOutput || (original && modified));
   const configuredOutputName = getCreateSettingsOutputName(props.settings || props.defaultSettings || providerSettings);
   const generatedOutputName = configuredOutputName || getDefaultCreateOutputName(original);
   const resolvedOutputName = outputName.trim() || generatedOutputName;
   const executionOutputName = resolveCreateExecutionOutputName(resolvedOutputName, patchType);
+  const createCompression =
+    String(settings.output?.compression || normalizeDefaultArchive(settings.defaultArchive)).toLowerCase() === "7z"
+      ? "7z"
+      : "zip";
   const originalFileName = getReactBinarySourceFileName(original, "Original ROM");
   const modifiedFileName = getReactBinarySourceFileName(modified, "Modified ROM");
+
+  useEffect(() => {
+    if (props.settings !== undefined) return;
+    setInternalSettings(mergeCreateSettings(providerSettings, props.defaultSettings));
+  }, [props.defaultSettings, props.settings, providerSettings]);
 
   const disposeActiveOutput = useCallback(() => {
     const dispose = activeOutputDisposeRef.current;
@@ -110,6 +137,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
 
   const updateOriginal = (file: BinarySource | null) => {
     disposeActiveOutput();
+    setCompletedOutput(null);
     selectedOriginalCandidateIdRef.current = null;
     if (props.original === undefined) setInternalOriginal(file);
     props.onOriginalChange?.(file);
@@ -120,6 +148,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
 
   const updateModified = (file: BinarySource | null) => {
     disposeActiveOutput();
+    setCompletedOutput(null);
     selectedModifiedCandidateIdRef.current = null;
     if (props.modified === undefined) setInternalModified(file);
     props.onModifiedChange?.(file);
@@ -138,12 +167,14 @@ function CreatePatchForm(props: CreatePatchFormProps) {
 
   const updateSettings = (nextSettings: CreatePatchFormSettings) => {
     disposeActiveOutput();
+    setCompletedOutput(null);
     if (!props.settings) setInternalSettings(nextSettings);
     props.onSettingsChange?.(nextSettings);
   };
 
   const updatePatchType = (nextPatchType: string) => {
     disposeActiveOutput();
+    setCompletedOutput(null);
     if (!props.patchType) setInternalPatchType(nextPatchType);
     props.onPatchTypeChange?.(nextPatchType);
     setMessage("");
@@ -156,6 +187,10 @@ function CreatePatchForm(props: CreatePatchFormProps) {
       activeAbortControllerRef.current?.abort();
       return;
     }
+    if (completedOutput) {
+      await completedOutput.saveAs();
+      return;
+    }
     if (!(original && modified)) return;
     const abortController = new AbortController();
     activeAbortControllerRef.current = abortController;
@@ -163,12 +198,14 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     setMessage("");
     setErrorCode("");
     disposeActiveOutput();
+    setCompletedOutput(null);
     setProgress({
       dedupeKey: "create:start",
       indeterminate: true,
       label: "Creating patch...",
       message: "Creating patch...",
       percent: null,
+      role: "worker",
       stage: "create",
       timingText: "",
       visualPercent: null,
@@ -188,7 +225,10 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     });
     const handleProgress = (event: WorkflowProgress) => {
       props.onProgress?.(toReactProgressEvent(event));
-      setProgress(createProgressViewModelFromEvent(event, { stage: event.stage || "create" }));
+      setProgress({
+        ...createProgressViewModelFromEvent(event, { stage: event.stage || "create" }),
+        role: typeof event.role === "string" ? event.role : undefined,
+      });
     };
     createWorkflow.on("progress", handleProgress);
     try {
@@ -206,16 +246,12 @@ function CreatePatchForm(props: CreatePatchFormProps) {
 
       const result = (await createWorkflow.run()) as BrowserCreateResult;
       activeOutputDisposeRef.current = result.output.dispose;
-      setProgress({
-        dedupeKey: `create:complete:${result.output.fileName}`,
-        indeterminate: false,
-        label: `Created ${result.output.fileName}`,
-        message: `Created ${result.output.fileName}`,
-        percent: 100,
-        stage: "create",
-        timingText: "",
-        visualPercent: 100,
+      setCompletedOutput({
+        fileName: result.output.fileName,
+        saveAs: result.output.saveAs,
+        size: result.sizeSummary?.outputSize ?? result.output.size,
       });
+      setProgress(null);
       if (typeof window !== "undefined") await result.output.saveAs();
       props.onCreateComplete?.(result);
     } catch (error) {
@@ -235,6 +271,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
         ),
       );
       setProgress(null);
+      setCompletedOutput(null);
       props.onError?.(normalizedError);
     } finally {
       createWorkflow.off("progress", handleProgress);
@@ -260,37 +297,51 @@ function CreatePatchForm(props: CreatePatchFormProps) {
         value: typeof progress.percent === "number" ? `${Math.round(progress.percent)}%` : "working",
       }
     : null;
+  const showInputProgress = busy && progressProps && progress?.stage === "input";
+  const createCompressPanel = buildCompressPanel(createCompression, settings as Record<string, unknown>);
 
   const renderSourceStep = ({
     num,
     title,
     file,
     fileName,
+    emptyLabel,
+    hint,
+    replaceLabel,
+    removeLabel,
     onSelect,
     onClear,
+    progressVisible = false,
   }: {
     num: string;
     title: string;
     file: BinarySource | null;
     fileName: string;
+    hint: string;
+    emptyLabel: string;
+    replaceLabel: string;
+    removeLabel: string;
     onSelect: (file: BinarySource | null) => void;
     onClear: () => void;
+    progressVisible?: boolean;
   }) => (
     <StepSection num={num} title={title}>
       {file ? (
-        <FileCard
-          name={<ExtractionTree levels={[{ name: fileName }]} />}
-          onRemove={onClear}
-          removeLabel={`Clear ${title.toLowerCase()}`}
-        />
+        progressVisible && progressProps ? (
+          <FileProgress {...progressProps} />
+        ) : (
+          <FileCard
+            name={<ExtractionTree levels={[{ name: fileName }]} />}
+            onRemove={onClear}
+            removeLabel={removeLabel}
+          />
+        )
       ) : null}
       <DropZone
         big={!file}
         disabled={disabled}
-        hint={file ? undefined : "archives are extracted"}
-        label={
-          file ? `Replace ${title.toLowerCase()} · drop or browse` : `Select ${title.toLowerCase()} · drop or browse`
-        }
+        hint={file ? undefined : hint}
+        label={file ? replaceLabel : emptyLabel}
         onFiles={(files) => onSelect(files[0] ?? null)}
       />
     </StepSection>
@@ -299,19 +350,29 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   return (
     <main aria-labelledby="tab-creator" className="panel" id="patch-builder-container">
       {renderSourceStep({
+        emptyLabel: "Select original ROM · drop or browse",
         file: original,
         fileName: originalFileName,
+        hint: "the unmodified original · archives are extracted",
         num: "01",
         onClear: () => updateOriginal(null),
         onSelect: updateOriginal,
+        progressVisible: showInputProgress && progress?.role === "original",
+        removeLabel: "Clear original ROM",
+        replaceLabel: "Replace original ROM · drop or browse",
         title: "Original ROM",
       })}
       {renderSourceStep({
+        emptyLabel: "Select modified ROM · drop or browse",
         file: modified,
         fileName: modifiedFileName,
+        hint: "your edited / hacked ROM · archives are extracted",
         num: "02",
         onClear: () => updateModified(null),
         onSelect: updateModified,
+        progressVisible: showInputProgress && progress?.role === "modified",
+        removeLabel: "Clear modified ROM",
+        replaceLabel: "Replace modified ROM · drop or browse",
         title: "Modified ROM",
       })}
       <StepSection
@@ -330,16 +391,40 @@ function CreatePatchForm(props: CreatePatchFormProps) {
         <OutputCard
           action={
             <>
-              {busy && progressProps ? <FileProgress {...progressProps} /> : null}
-              <RunButton disabled={actionDisabled} id="patch-builder-button-create" onClick={runCreate}>
-                {busy ? "Cancel" : "Create & download patch"}
+              {busy && progressProps && progress?.stage !== "input" ? <FileProgress {...progressProps} /> : null}
+              <RunButton
+                disabled={actionDisabled}
+                download={
+                  completedOutput ? getCompletedDownloadMeta(completedOutput.fileName, completedOutput.size) : undefined
+                }
+                icon={
+                  completedOutput ? (
+                    <Download aria-hidden="true" />
+                  ) : busy ? undefined : (
+                    <GitCompare aria-hidden="true" />
+                  )
+                }
+                id="patch-builder-button-create"
+                onClick={() => void runCreate()}
+              >
+                {busy ? "Cancel" : "CREATE & DOWNLOAD PATCH"}
               </RunButton>
             </>
           }
+          compress={{
+            children: (
+              <CompressPanelBody
+                disabled={disabled}
+                fields={createCompressPanel?.fields || []}
+                onChange={(key, value) => updateSettings({ ...settings, [key]: value })}
+              />
+            ),
+            summary: createCompressPanel?.summary,
+          }}
           disabled={disabled}
           fileName={resolvedOutputName}
           fileNameId="patch-builder-output-file"
-          fileNamePlaceholder="Patch filename (no extension)"
+          fileNamePlaceholder="Patch filename"
           format={patchType}
           formatId="patch-builder-select-patch-type"
           formatOptions={["aps", "bdf", "bps", "ebp", "ips", "pmsr", "ppf", "rup", "ups", "vcdiff", "xdelta"].map(

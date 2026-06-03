@@ -1,6 +1,9 @@
+import Download from "lucide-react/dist/esm/icons/download.js";
+import Scissors from "lucide-react/dist/esm/icons/scissors.js";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { appendFileNameExtension, hasFileNameExtension } from "../../lib/input/path-utils.ts";
 import {
+  type BrowserSaveDestination,
   type BrowserTrimResult,
   type CreateSettings,
   TrimWorkflow,
@@ -8,7 +11,7 @@ import {
 } from "../../platform/browser/browser-api.ts";
 import { formatCodedErrorForDisplay, getErrorCode } from "../../presentation/errors.ts";
 import { createBrowserLocalizer } from "../../presentation/localization/index.ts";
-import { createProgressViewModelFromEvent } from "../../presentation/workflow-presentation.ts";
+import { createProgressViewModelFromEvent, formatByteSize } from "../../presentation/workflow-presentation.ts";
 import { useCandidateSelection } from "./candidate-selection.tsx";
 import { CompressPanelBody } from "./components/ds/compress-panel.tsx";
 import { ExtractionTree } from "./components/ds/extraction-tree.tsx";
@@ -22,6 +25,7 @@ import type { BinarySource } from "./patcher-form.ts";
 import type { CandidateSelectionPrompt, TrimPatchFormProps, TrimPatchFormSettings } from "./public-types.ts";
 import {
   getCreateSettingsOutputName,
+  normalizeDefaultArchive,
   toCreateWorkflowSettings,
   useCreateSettings,
   useRomWeaverAssetBaseUrl,
@@ -75,6 +79,12 @@ const resolveTrimExecutionOutputName = (outputName: string, outputFormat: string
   return appendFileNameExtension(normalizedOutputName, outputFormat || getSourceExtension(sourceFileName));
 };
 
+const getCompletedDownloadMeta = (fileName: string, size?: number | null) => ({
+  format: "Trimmed",
+  name: fileName,
+  size: typeof size === "number" && Number.isFinite(size) ? formatByteSize(size) : undefined,
+});
+
 function TrimPatchForm(props: TrimPatchFormProps) {
   const providerSettings = useCreateSettings();
   const providerAssetBaseUrl = useRomWeaverAssetBaseUrl();
@@ -92,11 +102,18 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [errorCode, setErrorCode] = useState("");
+  const [completedOutput, setCompletedOutput] = useState<{
+    fileName: string;
+    saveAs: (destination?: BrowserSaveDestination) => Promise<void>;
+    size?: number;
+  } | null>(null);
   const [progress, setProgress] = useState<{
     indeterminate: boolean;
     label: string;
     message: string;
     percent: number | null;
+    role?: string;
+    stage?: string;
     visualPercent: number | null;
   } | null>(null);
   const [outputName, setOutputName] = useState("");
@@ -109,14 +126,19 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   const settings = props.settings || internalSettings || providerSettings;
   const outputFormat = props.outputFormat ?? internalOutputFormat;
   const disabled = !!props.disabled || busy;
-  const actionDisabled = !!props.disabled || !(busy || source);
+  const actionDisabled = !!props.disabled || !(busy || completedOutput || source);
   const sourceFileName = getReactBinarySourceFileName(source, "ROM");
-  const resolvedOutputFormat = outputFormat || (source ? getSourceExtension(sourceFileName) : "");
+  const resolvedOutputFormat = outputFormat || normalizeDefaultArchive(settings.defaultArchive);
   const configuredOutputName = getCreateSettingsOutputName(props.settings || props.defaultSettings || providerSettings);
   const generatedOutputName =
     configuredOutputName || (source ? getDefaultTrimOutputName(sourceFileName, resolvedOutputFormat) : "");
   const resolvedOutputName = outputName.trim() || generatedOutputName;
   const executionOutputName = resolveTrimExecutionOutputName(resolvedOutputName, resolvedOutputFormat, sourceFileName);
+
+  useEffect(() => {
+    if (props.settings !== undefined) return;
+    setInternalSettings(mergeTrimSettings(providerSettings, props.defaultSettings));
+  }, [props.defaultSettings, props.settings, providerSettings]);
 
   const disposeActiveOutput = useCallback(() => {
     const dispose = activeOutputDisposeRef.current;
@@ -126,6 +148,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
 
   const updateSource = (file: BinarySource | null) => {
     disposeActiveOutput();
+    setCompletedOutput(null);
     selectedSourceCandidateIdRef.current = null;
     if (props.source === undefined) setInternalSource(file);
     props.onSourceChange?.(file);
@@ -138,12 +161,14 @@ function TrimPatchForm(props: TrimPatchFormProps) {
 
   const updateSettings = (nextSettings: TrimPatchFormSettings) => {
     disposeActiveOutput();
+    setCompletedOutput(null);
     if (!props.settings) setInternalSettings(nextSettings);
     props.onSettingsChange?.(nextSettings);
   };
 
   const updateOutputFormat = (nextOutputFormat: string) => {
     disposeActiveOutput();
+    setCompletedOutput(null);
     if (props.outputFormat === undefined) setInternalOutputFormat(nextOutputFormat);
     props.onOutputFormatChange?.(nextOutputFormat);
     setMessage("");
@@ -152,6 +177,10 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   };
 
   const runTrim = async () => {
+    if (completedOutput) {
+      await completedOutput.saveAs();
+      return;
+    }
     if (!source) return;
     const abortController = new AbortController();
     activeAbortControllerRef.current = abortController;
@@ -159,11 +188,14 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     setMessage("");
     setErrorCode("");
     disposeActiveOutput();
+    setCompletedOutput(null);
     setProgress({
       indeterminate: true,
       label: "Trimming...",
       message: "Trimming...",
       percent: null,
+      role: "worker",
+      stage: "trim",
       visualPercent: null,
     });
     const outputCompression =
@@ -187,7 +219,11 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     });
     const handleProgress = (event: WorkflowProgress) => {
       props.onProgress?.(toReactProgressEvent(event));
-      setProgress(createProgressViewModelFromEvent(event, { stage: event.stage || "trim" }));
+      setProgress({
+        ...createProgressViewModelFromEvent(event, { stage: event.stage || "trim" }),
+        role: typeof event.role === "string" ? event.role : undefined,
+        stage: typeof event.stage === "string" ? event.stage : "trim",
+      });
     };
     trimWorkflow.on("progress", handleProgress);
     try {
@@ -201,13 +237,12 @@ function TrimPatchForm(props: TrimPatchFormProps) {
 
       const result = (await trimWorkflow.run()) as BrowserTrimResult;
       activeOutputDisposeRef.current = result.output.dispose;
-      setProgress({
-        indeterminate: false,
-        label: `Trimmed ${result.output.fileName}`,
-        message: `Trimmed ${result.output.fileName}`,
-        percent: 100,
-        visualPercent: 100,
+      setCompletedOutput({
+        fileName: result.output.fileName,
+        saveAs: result.output.saveAs,
+        size: result.sizeSummary?.outputSize ?? result.output.size,
       });
+      setProgress(null);
       if (typeof window !== "undefined") await result.output.saveAs();
       props.onTrimComplete?.(result);
     } catch (error) {
@@ -227,6 +262,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
         ),
       );
       setProgress(null);
+      setCompletedOutput(null);
       props.onError?.(normalizedError);
     } finally {
       trimWorkflow.off("progress", handleProgress);
@@ -266,6 +302,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
         value: typeof progress.percent === "number" ? `${Math.round(progress.percent)}%` : "working",
       }
     : null;
+  const showInputProgress = busy && progressProps && progress?.stage === "input" && progress.role === "input";
 
   const rawExtensionOption = source ? getSourceExtension(sourceFileName) : "bin";
   const formatOptions = [
@@ -290,11 +327,15 @@ function TrimPatchForm(props: TrimPatchFormProps) {
         title="ROM"
       >
         {source ? (
-          <FileCard
-            name={<ExtractionTree levels={[{ name: sourceFileName }]} />}
-            onRemove={() => updateSource(null)}
-            removeLabel="Clear ROM"
-          />
+          showInputProgress && progressProps ? (
+            <FileProgress {...progressProps} />
+          ) : (
+            <FileCard
+              name={<ExtractionTree levels={[{ name: sourceFileName }]} />}
+              onRemove={() => updateSource(null)}
+              removeLabel="Clear ROM"
+            />
+          )
         ) : null}
         <DropZone
           big={!source}
@@ -321,9 +362,19 @@ function TrimPatchForm(props: TrimPatchFormProps) {
         <OutputCard
           action={
             <>
-              {busy && progressProps ? <FileProgress {...progressProps} /> : null}
-              <RunButton disabled={actionDisabled} id="trim-builder-button-run" onClick={onRunClick}>
-                {busy ? "Cancel" : "Trim & download ROM"}
+              {busy && progressProps && progress?.stage !== "input" ? <FileProgress {...progressProps} /> : null}
+              <RunButton
+                disabled={actionDisabled}
+                download={
+                  completedOutput ? getCompletedDownloadMeta(completedOutput.fileName, completedOutput.size) : undefined
+                }
+                icon={
+                  completedOutput ? <Download aria-hidden="true" /> : busy ? undefined : <Scissors aria-hidden="true" />
+                }
+                id="trim-builder-button-run"
+                onClick={() => (completedOutput ? void runTrim() : onRunClick())}
+              >
+                {busy ? "Cancel" : "TRIM & DOWNLOAD"}
               </RunButton>
             </>
           }
