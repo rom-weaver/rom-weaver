@@ -37,11 +37,11 @@ use rom_weaver_codecs::{
     parse_requested_codec,
 };
 use rom_weaver_core::{
-    ContainerByteProgress, ContainerCapabilities, ContainerCreateRequest, ContainerExtractRequest,
-    ContainerHandler, ContainerHandlerOperations, ContainerListEntry, ContainerProbeRequest,
-    FormatDescriptor, OperationContext, OperationFamily, OperationReport, OperationStatus,
-    OrderedChunkWriter, OrderedStreamingMessages, ProbeConfidence, ProgressEvent, Result,
-    RomWeaverError, SelectionMatcher, SharedThreadPool, ThreadCapability, ThreadExecution,
+    ArchiveEntryKindFilter, ContainerByteProgress, ContainerCapabilities, ContainerCreateRequest,
+    ContainerExtractRequest, ContainerHandler, ContainerHandlerOperations, ContainerListEntry,
+    ContainerProbeRequest, FormatDescriptor, OperationContext, OperationFamily, OperationReport,
+    OperationStatus, OrderedChunkWriter, OrderedStreamingMessages, ProbeConfidence, ProgressEvent,
+    Result, RomWeaverError, SelectionMatcher, SharedThreadPool, ThreadCapability, ThreadExecution,
     bounded_items_for_threads, create_extract_output_file, emit_container_running_progress,
     file_starts_with, maybe_emit_container_byte_progress, normalize_archive_name,
     ordered_streaming_compress, should_ignore_common_container_file,
@@ -1324,13 +1324,17 @@ fn build_libarchive_extract_tasks(
     source: &Path,
     out_dir: &Path,
     selections: &[String],
+    kind_filter: ArchiveEntryKindFilter,
     ignore_common_files: bool,
     format_name: &str,
 ) -> Result<Vec<LibarchiveExtractTask>> {
     let mut matcher = SelectionMatcher::new(selections);
     let should_filter_common = ignore_common_files && selections.is_empty();
     let mut ignored_count = 0usize;
+    let mut kind_filtered_count = 0usize;
     let mut tasks = Vec::new();
+    let mut payload_kind_tasks = Vec::new();
+    let mut container_fallback_tasks = Vec::new();
 
     for entry in list_regular_archive_entries(source, format_name)? {
         let entry_path = entry.path;
@@ -1344,20 +1348,45 @@ fn build_libarchive_extract_tasks(
         }
         let relative = sanitize_archive_relative_path_from_str(&entry_path)?;
         let is_dir = entry.is_dir;
-        tasks.push(LibarchiveExtractTask {
+        let task = LibarchiveExtractTask {
             index: entry.index,
-            archive_name,
+            archive_name: archive_name.clone(),
             output_path: out_dir.join(relative),
             is_dir,
             logical_bytes: if is_dir { Some(0) } else { entry.size },
-        });
+        };
+        if kind_filter.enabled() {
+            if kind_filter.matches_payload_name(&archive_name) {
+                payload_kind_tasks.push(task);
+            } else if kind_filter.matches_container_fallback_name(&archive_name) {
+                container_fallback_tasks.push(task);
+            } else {
+                kind_filtered_count = kind_filtered_count.saturating_add(1);
+            }
+        } else {
+            tasks.push(task);
+        }
     }
 
     matcher.ensure_all_matched()?;
+    if kind_filter.enabled() {
+        tasks = if payload_kind_tasks.iter().any(|task| !task.is_dir) {
+            payload_kind_tasks
+        } else {
+            container_fallback_tasks
+        };
+    }
     if should_filter_common && ignored_count > 0 && !tasks.iter().any(|task| !task.is_dir) {
         return Err(RomWeaverError::Validation(format!(
             "all extract entries from `{}` were ignored by default filters; rerun with --no-ignore or pass --select <pattern>",
             source.display()
+        )));
+    }
+    if kind_filter.enabled() && kind_filtered_count > 0 && !tasks.iter().any(|task| !task.is_dir) {
+        return Err(RomWeaverError::Validation(format!(
+            "no extract entries from `{}` matched {}",
+            source.display(),
+            kind_filter.flag_label()
         )));
     }
     Ok(tasks)
@@ -1632,6 +1661,7 @@ fn extract_regular_archive_with_libarchive(
         &request.source,
         &request.out_dir,
         &request.selections,
+        request.kind_filter,
         request.ignore_common_files,
         format_name,
     )?;

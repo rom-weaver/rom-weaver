@@ -1998,6 +1998,101 @@ fn patch_apply_auto_extract_select_resolves_ambiguity() {
 }
 
 #[test]
+fn patch_apply_auto_extract_filters_input_and_patch_roles() {
+    let temp = setup_temp_dir();
+    let original = temp.child("game.bin");
+    let modified = temp.child("game-modified.bin");
+    let patch = temp.child("update.bps");
+    let input_archive = temp.child("input-bundle.zip");
+    let patch_archive = temp.child("patch-bundle.zip");
+    let output = temp.child("output.bin");
+    fs::write(original.path(), b"game payload").expect("original fixture");
+    fs::write(modified.path(), b"game payload patched").expect("modified fixture");
+    fs::write(temp.child("decoy.bin").path(), b"decoy payload").expect("decoy fixture");
+
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch", "create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--format",
+            "bps",
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            original.path().to_str().expect("path"),
+            patch.path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            input_archive.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            patch.path().to_str().expect("path"),
+            temp.child("decoy.bin").path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            patch_archive.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let apply_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch", "apply",
+            "--input",
+            input_archive.path().to_str().expect("path"),
+            "--patch",
+            patch_archive.path().to_str().expect("path"),
+            "--rom-filter",
+            "--patch-filter",
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let apply_json = parse_single_json_line(&apply_output);
+    assert_eq!(apply_json["command"], "patch-apply");
+    assert_eq!(apply_json["family"], "patch");
+    assert_eq!(apply_json["format"], "BPS");
+    assert_eq!(apply_json["status"], "succeeded");
+    let label = apply_json["label"].as_str().expect("label");
+    assert!(label.contains("patch apply input source resolved via 1 container extract step(s)"));
+    assert!(label.contains("patch apply patch source resolved via 1 container extract step(s)"));
+    assert_eq!(
+        fs::read(output.path()).expect("output"),
+        fs::read(modified.path()).expect("modified")
+    );
+}
+
+#[test]
 fn patch_apply_auto_extract_patch_archive_ambiguity_requires_select() {
     let temp = setup_temp_dir();
     let original = temp.child("game.bin");

@@ -4,6 +4,7 @@
 struct SelectionExtract<'a> {
     out_dir: &'a Path,
     selections: &'a [String],
+    kind_filter: ArchiveEntryKindFilter,
     split_bin: bool,
     ignore_common_files: bool,
     overwrite: bool,
@@ -24,6 +25,7 @@ struct TarStreamCandidate<'a> {
 struct ChecksumStreamOptions<'a> {
     algo: &'a [String],
     select: &'a [String],
+    kind_filter: ArchiveEntryKindFilter,
     no_extract: bool,
     no_ignore: bool,
     strip_header: bool,
@@ -82,16 +84,48 @@ impl CliApp {
         }
     }
 
+    fn archive_entry_kind_filter(rom_filter: bool, patch_filter: bool) -> ArchiveEntryKindFilter {
+        ArchiveEntryKindFilter::new(rom_filter, patch_filter)
+    }
+
+    fn kind_filtered_container_list_entries(
+        entries: &[ContainerListEntry],
+        kind_filter: ArchiveEntryKindFilter,
+        ignore_common_files: bool,
+    ) -> (Vec<ContainerListEntry>, Vec<ContainerListEntry>) {
+        if kind_filter.disabled() {
+            return (entries.to_vec(), Vec::new());
+        }
+        let mut payload_matches = Vec::new();
+        let mut container_fallback_matches = Vec::new();
+        for entry in entries {
+            if ignore_common_files && should_ignore_common_container_file(&entry.path) {
+                continue;
+            }
+            if kind_filter.matches_payload_name(&entry.path) {
+                payload_matches.push(entry.clone());
+            } else if kind_filter.matches_container_fallback_name(&entry.path) {
+                container_fallback_matches.push(entry.clone());
+            }
+        }
+        (payload_matches, container_fallback_matches)
+    }
+
     fn run_probe(&self, args: ProbeCommand) -> AppRunOutcome {
         let ProbeCommand {
             source,
             select,
+            rom_filter,
+            patch_filter,
             no_extract,
             no_ignore,
         } = args;
+        let kind_filter = Self::archive_entry_kind_filter(rom_filter, patch_filter);
         trace!(
             source = %source.display(),
             selections = select.len(),
+            rom_filter,
+            patch_filter,
             no_extract,
             no_ignore,
             "starting probe command"
@@ -111,7 +145,17 @@ impl CliApp {
                 source_label: "probe",
                 temp_prefix: "probe-extract",
             };
-            self.resolve_source_with_auto_extract(&source, &select, false, no_ignore, &context, labels)
+            self.resolve_source_with_auto_extract(
+                &source,
+                &select,
+                &context,
+                labels,
+                AutoExtractResolutionFlags {
+                    no_extract: false,
+                    no_ignore,
+                    kind_filter,
+                },
+            )
         } else {
             Ok(ResolvedChecksumSource {
                 source: source.clone(),
@@ -308,11 +352,16 @@ impl CliApp {
         let ListCommand {
             source,
             select,
+            rom_filter,
+            patch_filter,
             no_ignore,
         } = args;
+        let kind_filter = Self::archive_entry_kind_filter(rom_filter, patch_filter);
         trace!(
             source = %source.display(),
             selections = select.len(),
+            rom_filter,
+            patch_filter,
             no_ignore,
             "starting list command"
         );
@@ -330,7 +379,57 @@ impl CliApp {
             source_label: "list",
             temp_prefix: "list-extract",
         };
-        let resolved = if select.is_empty() {
+        if select.is_empty()
+            && kind_filter.enabled()
+            && let Some(handler) = self.containers.probe(&source)
+        {
+            let request = ContainerProbeRequest {
+                source: source.clone(),
+            };
+            match handler.list_entry_records(&request, &context) {
+                Ok(entries) => {
+                    let (payload_entries, fallback_entries) =
+                        Self::kind_filtered_container_list_entries(&entries, kind_filter, !no_ignore);
+                    let report_entries = if payload_entries.is_empty() {
+                        fallback_entries
+                    } else {
+                        payload_entries
+                    };
+                    let report = if report_entries.is_empty() {
+                        OperationReport::failed(
+                            OperationFamily::Container,
+                            Some(handler.descriptor().name.to_string()),
+                            "list",
+                            format!(
+                                "no list entries from `{}` matched {}",
+                                source.display(),
+                                kind_filter.flag_label()
+                            ),
+                            None,
+                        )
+                    } else {
+                        self.build_container_list_report(
+                            handler.as_ref(),
+                            &source,
+                            report_entries,
+                            &context,
+                        )
+                    };
+                    return self.finish_list(report, 0, Vec::new());
+                }
+                Err(error) => {
+                    let report = OperationReport::failed(
+                        OperationFamily::Container,
+                        Some(handler.descriptor().name.to_string()),
+                        "list",
+                        error.to_string(),
+                        None,
+                    );
+                    return self.finish_list(report, 0, Vec::new());
+                }
+            }
+        }
+        let resolved = if select.is_empty() && kind_filter.disabled() {
             Ok(ResolvedChecksumSource {
                 source: source.clone(),
                 extracted_archives: 0,
@@ -338,7 +437,12 @@ impl CliApp {
             })
         } else {
             self.resolve_source_with_single_auto_extract(
-                &source, &select, no_ignore, &context, labels,
+                &source,
+                &select,
+                kind_filter,
+                no_ignore,
+                &context,
+                labels,
             )
         };
         let ResolvedChecksumSource {
@@ -389,26 +493,12 @@ impl CliApp {
                 Some(context.plan_threads(ThreadCapability::single_threaded())),
             );
             let report = match handler.list_entry_records(&request, &context) {
-                Ok(entries) => {
-                    let report = OperationReport::succeeded(
-                        OperationFamily::Container,
-                        Some(handler.descriptor().name.to_string()),
-                        "list",
-                        format!(
-                            "listed {} selectable entr{} for `{}`",
-                            entries.len(),
-                            if entries.len() == 1 { "y" } else { "ies" },
-                            list_source.display()
-                        ),
-                        Some(100.0),
-                        Some(context.plan_threads(ThreadCapability::single_threaded())),
-                    );
-                    Self::attach_container_probe_details(
-                        report,
-                        Some(entries),
-                        self.probe_compress_recommendation(&list_source).as_ref(),
-                    )
-                }
+                Ok(entries) => self.build_container_list_report(
+                    handler.as_ref(),
+                    &list_source,
+                    entries,
+                    &context,
+                ),
                 Err(error) => OperationReport::failed(
                     OperationFamily::Container,
                     Some(handler.descriptor().name.to_string()),
@@ -471,12 +561,41 @@ impl CliApp {
         self.finish("list", report)
     }
 
+    fn build_container_list_report(
+        &self,
+        handler: &dyn ContainerHandler,
+        source: &Path,
+        entries: Vec<ContainerListEntry>,
+        context: &OperationContext,
+    ) -> OperationReport {
+        let report = OperationReport::succeeded(
+            OperationFamily::Container,
+            Some(handler.descriptor().name.to_string()),
+            "list",
+            format!(
+                "listed {} selectable entr{} for `{}`",
+                entries.len(),
+                if entries.len() == 1 { "y" } else { "ies" },
+                source.display()
+            ),
+            Some(100.0),
+            Some(context.plan_threads(ThreadCapability::single_threaded())),
+        );
+        Self::attach_container_probe_details(
+            report,
+            Some(entries),
+            self.probe_compress_recommendation(source).as_ref(),
+        )
+    }
+
     fn run_extract(&self, args: ExtractCommand) -> AppRunOutcome {
         trace!(
             source = %args.source.display(),
             selections = args.select.len(),
             out_dir = %args.out_dir.display(),
             split_bin = args.split_bin,
+            rom_filter = args.rom_filter,
+            patch_filter = args.patch_filter,
             no_ignore = args.no_ignore,
             no_nested_extract = args.no_nested_extract,
             no_overwrite = args.no_overwrite,
@@ -486,6 +605,8 @@ impl CliApp {
         let ExtractCommand {
             source,
             select: selections,
+            rom_filter,
+            patch_filter,
             out_dir,
             split_bin,
             no_ignore,
@@ -494,6 +615,7 @@ impl CliApp {
             checksum,
             threads,
         } = args;
+        let kind_filter = Self::archive_entry_kind_filter(rom_filter, patch_filter);
         let out_dir_before = Self::snapshot_file_tree(&out_dir).unwrap_or_default();
         let context = self.context(threads).with_extract_checksum_algorithms(checksum);
         let probe_threads = Some(context.plan_threads(ThreadCapability::single_threaded()));
@@ -568,6 +690,7 @@ impl CliApp {
                 SelectionExtract {
                     out_dir: &out_dir,
                     selections: &selections,
+                    kind_filter,
                     split_bin: extract_split_bin,
                     ignore_common_files: !no_ignore,
                     overwrite: !no_overwrite,
@@ -637,6 +760,7 @@ impl CliApp {
             match self.extract_nested_archives(
                 &source,
                 &primary_emitted_files,
+                kind_filter,
                 !no_ignore,
                 !no_overwrite,
                 &context,
@@ -685,6 +809,8 @@ impl CliApp {
             source = %args.source.display(),
             algorithm_count = args.algo.len(),
             selections = args.select.len(),
+            rom_filter = args.rom_filter,
+            patch_filter = args.patch_filter,
             no_extract = args.no_extract,
             no_ignore = args.no_ignore,
             strip_header = args.strip_header,
@@ -698,6 +824,8 @@ impl CliApp {
             source,
             algo,
             select,
+            rom_filter,
+            patch_filter,
             no_extract,
             no_ignore,
             strip_header,
@@ -706,6 +834,7 @@ impl CliApp {
             length,
             threads,
         } = args;
+        let kind_filter = Self::archive_entry_kind_filter(rom_filter, patch_filter);
         let context = self.context(threads);
         let thread_execution =
             Some(context.plan_threads(ThreadCapability::parallel(Some(algo.len().max(1)))));
@@ -740,6 +869,7 @@ impl CliApp {
         let checksum_options = ChecksumStreamOptions {
             algo: &algo,
             select: &select,
+            kind_filter,
             no_extract,
             no_ignore,
             strip_header,
@@ -820,8 +950,6 @@ impl CliApp {
         let resolved = match self.resolve_source_with_auto_extract(
             &source,
             &select,
-            no_extract || strip_header,
-            no_ignore,
             &context,
             AutoExtractResolutionLabels {
                 command: "checksum",
@@ -829,6 +957,11 @@ impl CliApp {
                 format: Some(self.checksum.name()),
                 source_label: "checksum",
                 temp_prefix: "checksum-extract",
+            },
+            AutoExtractResolutionFlags {
+                no_extract: no_extract || strip_header,
+                no_ignore,
+                kind_filter,
             },
         ) {
             Ok(resolved) => resolved,
@@ -1038,6 +1171,7 @@ impl CliApp {
         let ChecksumStreamOptions {
             algo,
             select,
+            kind_filter,
             no_extract,
             strip_header,
             no_trim_fix,
@@ -1071,6 +1205,9 @@ impl CliApp {
         };
         let entries = handler.list_entries(&request, context)?;
         if !Self::chd_raw_sha1_fast_path_entries_supported(&entries) {
+            return Ok(None);
+        }
+        if kind_filter.enabled() && !kind_filter.matches_payload_name(&entries[0]) {
             return Ok(None);
         }
 
@@ -1133,6 +1270,7 @@ impl CliApp {
         let ChecksumStreamOptions {
             algo,
             select,
+            kind_filter,
             no_extract,
             no_ignore,
             strip_header,
@@ -1153,7 +1291,7 @@ impl CliApp {
         }
 
         let Some((candidate_name, candidate_index)) =
-            self.select_tar_stream_checksum_candidate(source, tar_format, no_ignore)?
+            self.select_tar_stream_checksum_candidate(source, tar_format, no_ignore, kind_filter)?
         else {
             return Ok(None);
         };
@@ -1280,6 +1418,7 @@ impl CliApp {
         source: &Path,
         tar_format: &str,
         no_ignore: bool,
+        kind_filter: ArchiveEntryKindFilter,
     ) -> Result<Option<(String, usize)>> {
         let mut candidates = BTreeMap::new();
         for entry in list_regular_archive_file_entries(source, tar_format)? {
@@ -1298,6 +1437,24 @@ impl CliApp {
                 .filter_map(|(name, (index, ignored))| (!ignored).then_some((name, index)))
                 .collect::<Vec<_>>()
         };
+        let selected = if kind_filter.enabled() {
+            let mut payload_matches = Vec::new();
+            let mut container_fallback_matches = Vec::new();
+            for (name, index) in selected {
+                if kind_filter.matches_payload_name(&name) {
+                    payload_matches.push((name, index));
+                } else if kind_filter.matches_container_fallback_name(&name) {
+                    container_fallback_matches.push((name, index));
+                }
+            }
+            if payload_matches.is_empty() {
+                container_fallback_matches
+            } else {
+                payload_matches
+            }
+        } else {
+            selected
+        };
         if selected.len() != 1 {
             return Ok(None);
         }
@@ -1312,6 +1469,7 @@ impl CliApp {
     ) -> Option<&'static str> {
         let ChecksumStreamOptions {
             select,
+            kind_filter,
             no_extract,
             no_trim_fix,
             strip_header,
@@ -1332,6 +1490,11 @@ impl CliApp {
         if let Some(inferred_output) =
             Self::inferred_stream_extract_output_path(source, stream_format)
         {
+            if kind_filter.enabled()
+                && !kind_filter.matches_payload_name(&inferred_output.to_string_lossy())
+            {
+                return None;
+            }
             if let Some(next_handler) = self.containers.probe(&inferred_output)
                 && !next_handler.descriptor().matches_name("xiso")
                 && next_handler.capabilities().extract
@@ -1342,6 +1505,8 @@ impl CliApp {
             if !no_trim_fix && self.trim_eligible_kind_for_path(&inferred_output).is_some() {
                 return None;
             }
+        } else if kind_filter.enabled() {
+            return None;
         }
 
         Some(stream_format)
@@ -1497,10 +1662,9 @@ impl CliApp {
         &self,
         source: &Path,
         select: &[String],
-        no_extract: bool,
-        no_ignore: bool,
         context: &OperationContext,
         labels: AutoExtractResolutionLabels<'_>,
+        flags: AutoExtractResolutionFlags,
     ) -> Result<ResolvedChecksumSource> {
         self.resolve_source_with_auto_extract_with_mode(
             source,
@@ -1508,8 +1672,9 @@ impl CliApp {
             context,
             labels,
             AutoExtractResolutionOptions {
-                no_extract,
-                no_ignore,
+                no_extract: flags.no_extract,
+                no_ignore: flags.no_ignore,
+                kind_filter: flags.kind_filter,
                 mode: AutoExtractMode::Recursive,
             },
         )
@@ -1519,6 +1684,7 @@ impl CliApp {
         &self,
         source: &Path,
         select: &[String],
+        kind_filter: ArchiveEntryKindFilter,
         no_ignore: bool,
         context: &OperationContext,
         labels: AutoExtractResolutionLabels<'_>,
@@ -1531,6 +1697,7 @@ impl CliApp {
             AutoExtractResolutionOptions {
                 no_extract: false,
                 no_ignore,
+                kind_filter,
                 mode: AutoExtractMode::SingleStep,
             },
         )
@@ -1549,6 +1716,8 @@ impl CliApp {
             selections = select.len(),
             no_extract = options.no_extract,
             no_ignore = options.no_ignore,
+            rom_filter = options.kind_filter.rom,
+            patch_filter = options.kind_filter.patch,
             mode = ?options.mode,
             command = labels.command,
             family = ?labels.family,
@@ -1664,6 +1833,7 @@ impl CliApp {
                 SelectionExtract {
                     out_dir: &out_dir,
                     selections: select,
+                    kind_filter: options.kind_filter,
                     split_bin: false,
                     ignore_common_files: false,
                     overwrite: true,
@@ -1764,6 +1934,47 @@ impl CliApp {
                 }
                 non_ignored
             };
+            let candidates = if options.kind_filter.enabled() {
+                let mut payload_matches = Vec::new();
+                let mut container_fallback_matches = Vec::new();
+                for candidate in &candidates {
+                    if options
+                        .kind_filter
+                        .matches_payload_name(&candidate.display_name)
+                    {
+                        payload_matches.push(candidate.clone());
+                    } else if options
+                        .kind_filter
+                        .matches_container_fallback_name(&candidate.display_name)
+                    {
+                        container_fallback_matches.push(candidate.clone());
+                    }
+                }
+                let filtered = if payload_matches.is_empty() {
+                    container_fallback_matches
+                } else {
+                    payload_matches
+                };
+                trace!(
+                    source = %current_source.display(),
+                    candidate_count = candidates.len(),
+                    filtered_count = filtered.len(),
+                    filter = %options.kind_filter.flag_label(),
+                    "auto-extract applied candidate kind filters"
+                );
+                if filtered.is_empty() {
+                    let choices = Self::render_checksum_candidate_choices(&candidates);
+                    return Err(RomWeaverError::Validation(format!(
+                        "no extracted {} candidates from `{}` matched {}; candidates: {choices}",
+                        labels.source_label,
+                        current_source.display(),
+                        options.kind_filter.flag_label()
+                    )));
+                }
+                filtered
+            } else {
+                candidates
+            };
             if candidates.len() > 1 {
                 if self.interactive_selection_enabled {
                     if let Some(selected) = self.prompt_for_checksum_candidate(
@@ -1855,6 +2066,7 @@ impl CliApp {
         let SelectionExtract {
             out_dir,
             selections,
+            kind_filter,
             split_bin,
             ignore_common_files,
             overwrite,
@@ -1863,6 +2075,7 @@ impl CliApp {
         let request = ContainerExtractRequest {
             source: source.to_path_buf(),
             selections: selections.to_vec(),
+            kind_filter,
             out_dir: out_dir.to_path_buf(),
             split_bin,
             ignore_common_files,
@@ -1890,6 +2103,7 @@ impl CliApp {
                 let retry_request = ContainerExtractRequest {
                     source: source.to_path_buf(),
                     selections: vec![selected_entry],
+                    kind_filter,
                     out_dir: out_dir.to_path_buf(),
                     split_bin,
                     ignore_common_files,
@@ -1996,6 +2210,17 @@ impl CliApp {
             .collect::<Vec<_>>();
         let selected_index = self.prompt_for_selection(&heading, &prompt_candidates)?;
         Ok(selected_index.map(|index| candidates[index].clone()))
+    }
+
+    fn render_checksum_candidate_choices(candidates: &[ChecksumExtractCandidate]) -> String {
+        if candidates.is_empty() {
+            return "(none)".to_string();
+        }
+        candidates
+            .iter()
+            .map(|candidate| format!("`{}`", candidate.display_name))
+            .collect::<Vec<_>>()
+            .join(", ")
     }
 
     fn normalize_selection_entry_name(name: &str) -> String {

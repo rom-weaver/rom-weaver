@@ -9,7 +9,11 @@ mod selection;
 mod threads;
 
 pub use cancel::CancellationToken;
-pub use common_files::should_ignore_common_container_file;
+pub use common_files::{
+    ArchiveEntryKindFilter, is_container_filter_passthrough_candidate_name,
+    is_patch_filter_candidate_name, is_rom_filter_candidate_name,
+    should_ignore_common_container_file,
+};
 pub use context::{OperationContext, PatchChecksumValidation, XdeltaSecondaryMode};
 pub use error::{
     Result, RomWeaverError, ValidationCodeError, ValidationField, ValidationFieldValue,

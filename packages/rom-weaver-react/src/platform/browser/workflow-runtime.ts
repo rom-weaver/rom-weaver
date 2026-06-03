@@ -750,6 +750,8 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
                 ...(extractChecksumAlgorithms.length ? { checksumAlgorithms: extractChecksumAlgorithms } : {}),
                 logLevel: workflowInput.options?.logLevel,
                 outDirPath,
+                patchFilter: workflowInput.options?.patchFilter,
+                romFilter: workflowInput.options?.romFilter,
                 select: [entryName],
                 sourcePath: archive.filePath,
                 workerThreads: workflowInput.options?.workerThreads,
@@ -838,6 +840,8 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
       return await runRomWeaverListWorker(
         {
           logLevel: workflowInput.options?.logLevel,
+          patchFilter: workflowInput.options?.patchFilter,
+          romFilter: workflowInput.options?.romFilter,
           sourcePath: archive.filePath,
         },
         forwardArchiveProgress("input", workflowInput.options?.onProgress),
@@ -1475,6 +1479,7 @@ const createBrowserPatchRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime["
         return await runRomWeaverProbePatchWorker(
           {
             logLevel,
+            patchFilter: true,
             sourcePath: workerSource.filePath,
           },
           onProgress,

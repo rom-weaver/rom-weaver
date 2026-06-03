@@ -870,16 +870,25 @@ impl ContainerHandlerOperations for PbpContainerHandler {
         for (disc_index, output) in outputs.iter().enumerate() {
             let cue_selected = selections.matches(&output.cue_name);
             let bin_selected = selections.matches(&output.bin_name);
-            let write_cue = !selection_requested || cue_selected;
-            let mut write_bin = !selection_requested || bin_selected;
+            let write_cue = (!selection_requested || cue_selected)
+                && request.kind_filter.matches_payload_name(&output.cue_name);
+            let mut write_bin = (!selection_requested || bin_selected)
+                && request.kind_filter.matches_payload_name(&output.bin_name);
             if selection_requested && cue_selected && !write_bin {
-                write_bin = true;
+                write_bin = request.kind_filter.matches_payload_name(&output.bin_name);
             }
             if write_cue || write_bin {
                 extract_plan.push((disc_index, write_cue, write_bin));
             }
         }
         selections.ensure_all_matched()?;
+        if request.kind_filter.enabled() && extract_plan.is_empty() {
+            return Err(RomWeaverError::Validation(format!(
+                "no extract entries from `{}` matched {}",
+                request.source.display(),
+                request.kind_filter.flag_label()
+            )));
+        }
         if selection_requested && extract_plan.is_empty() {
             return Err(RomWeaverError::Validation(
                 "requested selections resolved to no extractable pbp outputs".into(),

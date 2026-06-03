@@ -4,6 +4,8 @@ impl CliApp {
         trace!(
             input = %args.input.display(),
             selections = args.select.len(),
+            rom_filter = args.rom_filter,
+            patch_filter = args.patch_filter,
             patch_count = args.patches.len(),
             output = %args.output.display(),
             no_extract = args.no_extract,
@@ -24,6 +26,8 @@ impl CliApp {
         let PatchApplyCommand {
             input,
             select,
+            rom_filter,
+            patch_filter,
             no_extract,
             no_ignore,
             patches,
@@ -40,6 +44,8 @@ impl CliApp {
             ignore_checksum_validation,
             threads,
         } = args;
+        let input_kind_filter = Self::archive_entry_kind_filter(rom_filter, false);
+        let patch_kind_filter = Self::archive_entry_kind_filter(false, patch_filter);
         let context =
             self.context(threads)
                 .with_patch_checksum_validation(if ignore_checksum_validation {
@@ -126,8 +132,6 @@ impl CliApp {
         let resolved_input = match self.resolve_source_with_auto_extract(
             &input,
             &select,
-            no_extract,
-            no_ignore,
             &context,
             AutoExtractResolutionLabels {
                 command: "patch-apply",
@@ -135,6 +139,11 @@ impl CliApp {
                 format: None,
                 source_label: "patch apply input",
                 temp_prefix: "patch-apply-input-extract",
+            },
+            AutoExtractResolutionFlags {
+                no_extract,
+                no_ignore,
+                kind_filter: input_kind_filter,
             },
         ) {
             Ok(resolved) => resolved,
@@ -174,8 +183,6 @@ impl CliApp {
             let resolved_patch = match self.resolve_source_with_auto_extract(
                 patch_path,
                 &select,
-                no_extract,
-                no_ignore,
                 &context,
                 AutoExtractResolutionLabels {
                     command: "patch-apply",
@@ -183,6 +190,11 @@ impl CliApp {
                     format: None,
                     source_label: patch_source_label.as_str(),
                     temp_prefix: "patch-apply-patch-extract",
+                },
+                AutoExtractResolutionFlags {
+                    no_extract,
+                    no_ignore,
+                    kind_filter: patch_kind_filter,
                 },
             ) {
                 Ok(resolved) => resolved,
@@ -744,6 +756,8 @@ impl CliApp {
         trace!(
             input = %args.input.display(),
             selections = args.select.len(),
+            rom_filter = args.rom_filter,
+            patch_filter = args.patch_filter,
             patch_count = args.patches.len(),
             no_extract = args.no_extract,
             no_ignore = args.no_ignore,
@@ -759,6 +773,8 @@ impl CliApp {
         let PatchValidateCommand {
             input,
             select,
+            rom_filter,
+            patch_filter,
             no_extract,
             no_ignore,
             patches,
@@ -770,6 +786,8 @@ impl CliApp {
             ignore_checksum_validation,
             threads,
         } = args;
+        let input_kind_filter = Self::archive_entry_kind_filter(rom_filter, false);
+        let patch_kind_filter = Self::archive_entry_kind_filter(false, patch_filter);
         let context =
             self.context(threads)
                 .with_patch_checksum_validation(if ignore_checksum_validation {
@@ -836,8 +854,6 @@ impl CliApp {
         let resolved_input = match self.resolve_source_with_auto_extract(
             &input,
             &select,
-            no_extract,
-            no_ignore,
             &context,
             AutoExtractResolutionLabels {
                 command: "patch-validate",
@@ -845,6 +861,11 @@ impl CliApp {
                 format: None,
                 source_label: "patch validate input",
                 temp_prefix: "patch-validate-input-extract",
+            },
+            AutoExtractResolutionFlags {
+                no_extract,
+                no_ignore,
+                kind_filter: input_kind_filter,
             },
         ) {
             Ok(resolved) => resolved,
@@ -878,8 +899,6 @@ impl CliApp {
             let resolved_patch = match self.resolve_source_with_auto_extract(
                 patch_path,
                 &select,
-                no_extract,
-                no_ignore,
                 &context,
                 AutoExtractResolutionLabels {
                     command: "patch-validate",
@@ -887,6 +906,11 @@ impl CliApp {
                     format: None,
                     source_label: patch_source_label.as_str(),
                     temp_prefix: "patch-validate-patch-extract",
+                },
+                AutoExtractResolutionFlags {
+                    no_extract,
+                    no_ignore,
+                    kind_filter: patch_kind_filter,
                 },
             ) {
                 Ok(resolved) => resolved,

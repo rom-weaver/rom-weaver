@@ -388,6 +388,332 @@ fn probe_auto_extract_ignores_sidecars_unless_no_ignore() {
 }
 
 #[test]
+fn probe_auto_extract_patch_filter_selects_patch_payload() {
+    let temp = setup_temp_dir();
+    let original = temp.child("game.bin");
+    let modified = temp.child("game-modified.bin");
+    let patch = temp.child("update.bps");
+    fs::write(original.path(), b"game payload").expect("original fixture");
+    fs::write(modified.path(), b"game payload patched").expect("modified fixture");
+    fs::write(temp.child("game.nes").path(), with_nes_header(b"rom")).expect("rom fixture");
+    fs::write(temp.child("notes.txt").path(), b"notes").expect("notes fixture");
+
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch",
+            "create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--format",
+            "bps",
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let archive = temp.child("bundle.zip");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            patch.path().to_str().expect("path"),
+            temp.child("game.nes").path().to_str().expect("path"),
+            temp.child("notes.txt").path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            archive.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let json = run_single_json_event(
+        &[
+            "probe",
+            archive.path().to_str().expect("path"),
+            "--patch-filter",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(json["command"], "probe");
+    assert_eq!(json["family"], "patch");
+    assert_eq!(json["format"], "BPS");
+    assert_eq!(json["status"], "succeeded");
+    assert!(json["label"]
+        .as_str()
+        .expect("label")
+        .contains("probe source resolved via 1 container extract step(s)"));
+}
+
+#[test]
+fn probe_auto_extract_rom_filter_prefers_rom_payload_over_archive() {
+    let temp = setup_temp_dir();
+    fs::create_dir_all(temp.child("__MACOSX").path()).expect("__MACOSX dir");
+    fs::write(temp.child("game.nes").path(), with_nes_header(b"rom")).expect("rom fixture");
+    fs::write(temp.child("nested.nes").path(), with_nes_header(b"nested")).expect("nested fixture");
+    fs::write(temp.child("._game.nes").path(), b"resource fork").expect("resource fork");
+    fs::write(temp.child("maxcso-report.bin").path(), b"skip me").expect("maxcso sidecar");
+    fs::write(temp.child("__MACOSX/ghost.nes").path(), b"ghost").expect("macosx sidecar");
+
+    let inner = temp.child("inner.zip");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("nested.nes").path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            inner.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let outer = temp.child("bundle.zip");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("game.nes").path().to_str().expect("path"),
+            temp.child("._game.nes").path().to_str().expect("path"),
+            temp.child("maxcso-report.bin")
+                .path()
+                .to_str()
+                .expect("path"),
+            temp.child("__MACOSX").path().to_str().expect("path"),
+            inner.path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            outer.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let json = run_single_json_event(
+        &[
+            "probe",
+            outer.path().to_str().expect("path"),
+            "--rom-filter",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(json["command"], "probe");
+    assert_eq!(json["format"], "rom-header");
+    assert_eq!(json["status"], "succeeded");
+    let label = json["label"].as_str().expect("label");
+    assert!(label.contains("probe source resolved via 1 container extract step(s)"));
+    assert!(!label.contains("2 container extract step"));
+}
+
+#[test]
+fn list_rom_filter_prefers_payload_entries_over_archive_fallback() {
+    let temp = setup_temp_dir();
+    fs::create_dir_all(temp.child("__MACOSX").path()).expect("__MACOSX dir");
+    fs::write(temp.child("game.nes").path(), with_nes_header(b"rom")).expect("rom fixture");
+    fs::write(temp.child("nested.nes").path(), with_nes_header(b"nested")).expect("nested fixture");
+    fs::write(temp.child("._game.nes").path(), b"resource fork").expect("resource fork");
+    fs::write(temp.child("maxcso-report.bin").path(), b"skip me").expect("maxcso sidecar");
+    fs::write(temp.child("__MACOSX/ghost.nes").path(), b"ghost").expect("macosx sidecar");
+
+    let inner = temp.child("inner.zip");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("nested.nes").path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            inner.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let outer = temp.child("bundle.zip");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("game.nes").path().to_str().expect("path"),
+            temp.child("._game.nes").path().to_str().expect("path"),
+            temp.child("maxcso-report.bin")
+                .path()
+                .to_str()
+                .expect("path"),
+            temp.child("__MACOSX").path().to_str().expect("path"),
+            inner.path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            outer.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let json = run_single_json_event(
+        &[
+            "list",
+            outer.path().to_str().expect("path"),
+            "--rom-filter",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(json["command"], "list");
+    assert_eq!(json["status"], "succeeded");
+    assert_eq!(json["details"]["container"]["entries"][0], "game.nes");
+    assert_eq!(json["details"]["container"]["entry_count"], 1);
+
+    let no_ignore_json = run_single_json_event(
+        &[
+            "list",
+            outer.path().to_str().expect("path"),
+            "--rom-filter",
+            "--no-ignore",
+            "--json",
+        ],
+        0,
+    );
+    let entries = no_ignore_json["details"]["container"]["entries"]
+        .as_array()
+        .expect("entries");
+    let entry_names = entries
+        .iter()
+        .map(|value| value.as_str().expect("entry"))
+        .collect::<Vec<_>>();
+    assert_eq!(no_ignore_json["details"]["container"]["entry_count"], 4);
+    assert!(entry_names.contains(&"game.nes"));
+    assert!(entry_names.contains(&"._game.nes"));
+    assert!(entry_names.contains(&"maxcso-report.bin"));
+    assert!(entry_names.contains(&"__MACOSX/ghost.nes"));
+}
+
+#[test]
+fn list_rom_filter_lists_archive_fallback_when_no_payload_matches() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("nested.nes").path(), with_nes_header(b"nested")).expect("nested fixture");
+
+    let inner = temp.child("inner.zip");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("nested.nes").path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            inner.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let outer = temp.child("bundle.zip");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            inner.path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            outer.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let json = run_single_json_event(
+        &[
+            "list",
+            outer.path().to_str().expect("path"),
+            "--rom-filter",
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(json["command"], "list");
+    assert_eq!(json["status"], "succeeded");
+    assert_eq!(json["details"]["container"]["entries"][0], "inner.zip");
+    assert_eq!(json["details"]["container"]["entry_count"], 1);
+}
+
+#[test]
+fn extract_rom_filter_extracts_rom_entries_only() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("game.nes").path(), with_nes_header(b"rom")).expect("rom fixture");
+    fs::write(temp.child("update.bps").path(), SIMPLE_BPS_PATCH).expect("patch fixture");
+    fs::write(temp.child("notes.txt").path(), b"notes").expect("notes fixture");
+    fs::write(temp.child("nested.nes").path(), with_nes_header(b"nested")).expect("nested fixture");
+
+    let inner = temp.child("inner.zip");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("nested.nes").path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            inner.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let archive = temp.child("bundle.zip");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("game.nes").path().to_str().expect("path"),
+            temp.child("update.bps").path().to_str().expect("path"),
+            temp.child("notes.txt").path().to_str().expect("path"),
+            inner.path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            archive.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let out_dir = temp.child("extract-rom-filter");
+    let json = run_single_json_event(
+        &[
+            "extract",
+            archive.path().to_str().expect("path"),
+            "--rom-filter",
+            "--out-dir",
+            out_dir.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    assert_eq!(json["command"], "extract");
+    assert_eq!(json["status"], "succeeded");
+    assert!(out_dir.child("game.nes").path().exists());
+    assert!(!out_dir.child("update.bps").path().exists());
+    assert!(!out_dir.child("notes.txt").path().exists());
+    assert!(!out_dir.child("inner.zip").path().exists());
+    assert!(!out_dir.child("nested.nes").path().exists());
+}
+
+#[test]
 fn probe_reports_rar_container_as_supported() {
     let temp = setup_temp_dir();
     let source = temp.child("version.rar");

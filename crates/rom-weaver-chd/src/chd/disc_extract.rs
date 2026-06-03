@@ -708,15 +708,20 @@ impl ChdContainerHandler {
         let selection_requested = !request.selections.is_empty();
         let cue_name = format!("{stem}.cue");
         let mut selections = SelectionMatcher::new(&request.selections);
-        let write_cue = selections.matches(&cue_name);
+        let cue_selected = selections.matches(&cue_name);
+        let write_cue = cue_selected && request.kind_filter.matches_payload_name(&cue_name);
         let single_bin_name = format!("{stem}.bin");
-        let mut write_single_bin = single_bin && selections.matches(&single_bin_name);
+        let mut write_single_bin = single_bin
+            && selections.matches(&single_bin_name)
+            && request.kind_filter.matches_payload_name(&single_bin_name);
         let mut split_track_names = Vec::new();
         let mut write_split_tracks = Vec::new();
         if !single_bin {
             for track in &layout.tracks {
                 let track_name = self.track_output_name(stem, track.number);
-                write_split_tracks.push(selections.matches(&track_name));
+                let track_selected = selections.matches(&track_name);
+                write_split_tracks
+                    .push(track_selected && request.kind_filter.matches_payload_name(&track_name));
                 split_track_names.push(track_name);
             }
         }
@@ -728,9 +733,13 @@ impl ChdContainerHandler {
             };
             if !any_selected {
                 if single_bin {
-                    write_single_bin = true;
+                    write_single_bin = request.kind_filter.matches_payload_name(&single_bin_name);
                 } else {
-                    write_split_tracks.fill(true);
+                    for (selected, track_name) in
+                        write_split_tracks.iter_mut().zip(split_track_names.iter())
+                    {
+                        *selected = request.kind_filter.matches_payload_name(track_name);
+                    }
                 }
             }
         }
@@ -1039,6 +1048,13 @@ impl ChdContainerHandler {
 
         let (omitted_subcode, produced_outputs, wrote_single_bin_output, output_checksums) =
             build_result?;
+        if request.kind_filter.enabled() && produced_outputs.is_empty() {
+            return Err(RomWeaverError::Validation(format!(
+                "no extract entries from `{}` matched {}",
+                request.source.display(),
+                request.kind_filter.flag_label()
+            )));
+        }
         if selection_requested && produced_outputs.is_empty() {
             return Err(RomWeaverError::Validation(
                 "requested selections resolved to no extractable cd outputs".into(),
@@ -1150,16 +1166,20 @@ impl ChdContainerHandler {
         let selection_requested = !request.selections.is_empty();
         let gdi_name = format!("{stem}.gdi");
         let mut selections = SelectionMatcher::new(&request.selections);
-        let write_gdi = selections.matches(&gdi_name);
+        let gdi_selected = selections.matches(&gdi_name);
+        let write_gdi = gdi_selected && request.kind_filter.matches_payload_name(&gdi_name);
         let mut track_names = Vec::with_capacity(layout.tracks.len());
         let mut write_tracks = Vec::with_capacity(layout.tracks.len());
         for track in &layout.tracks {
             let track_name = self.track_output_name(stem, track.number);
-            write_tracks.push(selections.matches(&track_name));
+            let track_selected = selections.matches(&track_name);
+            write_tracks.push(track_selected && request.kind_filter.matches_payload_name(&track_name));
             track_names.push(track_name);
         }
         if selection_requested && write_gdi && !write_tracks.iter().any(|selected| *selected) {
-            write_tracks.fill(true);
+            for (selected, track_name) in write_tracks.iter_mut().zip(track_names.iter()) {
+                *selected = request.kind_filter.matches_payload_name(track_name);
+            }
         }
         selections.ensure_all_matched()?;
 
@@ -1298,6 +1318,13 @@ impl ChdContainerHandler {
         })();
 
         let (omitted_subcode, produced_outputs, output_checksums) = build_result?;
+        if request.kind_filter.enabled() && produced_outputs.is_empty() {
+            return Err(RomWeaverError::Validation(format!(
+                "no extract entries from `{}` matched {}",
+                request.source.display(),
+                request.kind_filter.flag_label()
+            )));
+        }
         if selection_requested && produced_outputs.is_empty() {
             return Err(RomWeaverError::Validation(
                 "requested selections resolved to no extractable gd outputs".into(),

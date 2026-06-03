@@ -40,6 +40,7 @@ impl CliApp {
         &self,
         root_source: &Path,
         root_candidates: &[PathBuf],
+        kind_filter: ArchiveEntryKindFilter,
         ignore_common_files: bool,
         overwrite: bool,
         context: &OperationContext,
@@ -138,6 +139,7 @@ impl CliApp {
             let nested_request = ContainerExtractRequest {
                 source: source.clone(),
                 selections: Vec::new(),
+                kind_filter,
                 out_dir: nested_out_dir.clone(),
                 split_bin: false,
                 ignore_common_files,

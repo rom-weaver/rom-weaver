@@ -99,6 +99,16 @@ impl ContainerHandlerOperations for XisoContainerHandler {
             selections.ensure_all_matched()?;
         }
         selections.ensure_all_matched()?;
+        if !request
+            .kind_filter
+            .matches_payload_or_container_name(&output_name)
+        {
+            return Err(RomWeaverError::Validation(format!(
+                "no extract entries from `{}` matched {}",
+                request.source.display(),
+                request.kind_filter.flag_label()
+            )));
+        }
 
         let execution = context.plan_threads(ThreadCapability::single_threaded());
         let mut source_fs = self.open_source_filesystem(&request.source)?;

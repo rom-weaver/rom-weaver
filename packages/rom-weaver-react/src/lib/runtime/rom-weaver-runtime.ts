@@ -708,6 +708,8 @@ const invokeRomWeaverExtractWorker = async (
     outDirPath: string;
     scratchFilePoolSize?: number | null;
     select?: string[];
+    romFilter?: boolean;
+    patchFilter?: boolean;
     checksumAlgorithms?: string[];
     sourcePath: string;
     splitBin?: boolean;
@@ -738,6 +740,8 @@ const invokeRomWeaverExtractWorker = async (
       checksum,
       no_nested_extract: true,
       out_dir: outDirPath,
+      ...(input.romFilter ? { rom_filter: true } : {}),
+      ...(input.patchFilter ? { patch_filter: true } : {}),
       select,
       source: sourcePath,
       ...(input.splitBin ? { split_bin: true } : {}),
@@ -748,6 +752,8 @@ const invokeRomWeaverExtractWorker = async (
   emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson extract dispatch", {
     command,
     outDirPath,
+    patchFilter: !!input.patchFilter,
+    romFilter: !!input.romFilter,
     selectCount: Array.isArray(input.select) ? input.select.length : 0,
     sourcePath,
     threadArg,
@@ -782,6 +788,8 @@ const invokeRomWeaverExtractWorker = async (
 const runRomWeaverListWorker = async (
   input: {
     logLevel?: LogLevel | string;
+    romFilter?: boolean;
+    patchFilter?: boolean;
     sourcePath: string;
   },
   onProgress?: (progress: { label?: string; message?: string; percent?: number | null }) => void,
@@ -791,12 +799,16 @@ const runRomWeaverListWorker = async (
   if (!sourcePath) throw new Error("Compression list source path is required");
   const command: RomWeaverCommand = {
     args: {
+      ...(input.romFilter ? { rom_filter: true } : {}),
+      ...(input.patchFilter ? { patch_filter: true } : {}),
       source: sourcePath,
     },
     type: "list",
   };
   emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson list dispatch", {
     command,
+    patchFilter: !!input.patchFilter,
+    romFilter: !!input.romFilter,
     sourcePath,
   });
   const runList = () =>
@@ -823,6 +835,7 @@ const runRomWeaverListWorker = async (
 const runRomWeaverProbePatchWorker = async (
   input: {
     logLevel?: LogLevel | string;
+    patchFilter?: boolean;
     sourcePath: string;
   },
   onProgress?: (progress: { label?: string; message?: string; percent?: number | null }) => void,
@@ -832,12 +845,14 @@ const runRomWeaverProbePatchWorker = async (
   if (!sourcePath) throw new Error("Patch probe source path is required");
   const command: RomWeaverCommand = {
     args: {
+      ...(input.patchFilter ? { patch_filter: true } : {}),
       source: sourcePath,
     },
     type: "probe",
   };
   emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson probe-patch dispatch", {
     command,
+    patchFilter: !!input.patchFilter,
     sourcePath,
   });
   const result = await runRomWeaverJson(
@@ -932,7 +947,9 @@ const invokeRomWeaverPatchValidateWorker = async (
         ignore_checksum_validation: ignoreChecksumValidation,
         input: input.romFilePath,
         no_extract: true,
+        patch_filter: true,
         patches: input.patchFiles.map((patch) => patch.patchFilePath),
+        rom_filter: true,
         strip_header: removeHeader,
         ...(threadArg ? { threads: threadArg } : {}),
         ...(validateWithChecksums.length ? { validate_with_checksums: validateWithChecksums } : {}),
@@ -1024,8 +1041,10 @@ const invokeRomWeaverPatchApplyWorker = async (
         input: input.romFilePath,
         no_compress: true,
         output: outputPath,
+        patch_filter: true,
         patches: input.patchFiles.map((patch) => patch.patchFilePath),
         repair_checksum: repairChecksum,
+        rom_filter: true,
         strip_header: removeHeader,
         ...(threadArg ? { threads: threadArg } : {}),
       },

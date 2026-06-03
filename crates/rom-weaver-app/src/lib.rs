@@ -18,12 +18,12 @@ use rom_weaver_checksum::{
 use rom_weaver_codecs::{CanonicalCodec, RequestedCodec, parse_requested_codec};
 use rom_weaver_containers::{CompressFormatRecommendation, ContainerRegistry};
 use rom_weaver_core::{
-    CancellationToken, ChecksumEngine, ChecksumRequest, ContainerCreateRequest,
-    ContainerExtractRequest, ContainerHandler, ContainerListEntry, ContainerProbeRequest,
-    OperationContext, OperationFamily, OperationReport, OperationStatus, PatchApplyRequest,
-    PatchChecksumValidation, PatchCreateRequest, PatchValidateRequest, ProbeConfidence,
-    ProgressEvent, ProgressSink, Result, RomWeaverError, ThreadBudget, ThreadCapability,
-    ThreadExecution, XdeltaSecondaryMode, should_ignore_common_container_file,
+    ArchiveEntryKindFilter, CancellationToken, ChecksumEngine, ChecksumRequest,
+    ContainerCreateRequest, ContainerExtractRequest, ContainerHandler, ContainerListEntry,
+    ContainerProbeRequest, OperationContext, OperationFamily, OperationReport, OperationStatus,
+    PatchApplyRequest, PatchChecksumValidation, PatchCreateRequest, PatchValidateRequest,
+    ProbeConfidence, ProgressEvent, ProgressSink, Result, RomWeaverError, ThreadBudget,
+    ThreadCapability, ThreadExecution, XdeltaSecondaryMode, should_ignore_common_container_file,
 };
 use rom_weaver_libarchive::{
     ReadFilter as LibarchiveReadFilter, list_regular_archive_file_entries, with_raw_stream_reader,
@@ -166,6 +166,26 @@ pub struct ProbeCommand {
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
+            long = "rom-filter",
+            help = "Keep ROM-like payload candidates during automatic extraction"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub rom_filter: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "patch-filter",
+            help = "Keep patch-like payload candidates during automatic extraction"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub patch_filter: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
             long,
             help = "Disable container auto-extract and probe the source bytes directly"
         )
@@ -203,6 +223,26 @@ pub struct ListCommand {
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
+            long = "rom-filter",
+            help = "Keep ROM-like payload candidates during nested list source resolution"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub rom_filter: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "patch-filter",
+            help = "Keep patch-like payload candidates during nested list source resolution"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub patch_filter: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
             long,
             help = "Disable default ignore filtering during nested list container selection"
         )
@@ -227,6 +267,26 @@ pub struct ExtractCommand {
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub select: Vec<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "rom-filter",
+            help = "Extract ROM-like entries and nested containers only"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub rom_filter: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "patch-filter",
+            help = "Extract patch-like entries and nested containers only"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub patch_filter: bool,
     #[cfg_attr(not(target_arch = "wasm32"), arg(long))]
     pub out_dir: PathBuf,
     #[cfg_attr(
@@ -297,6 +357,26 @@ pub struct ChecksumCommand {
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub select: Vec<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "rom-filter",
+            help = "Keep ROM-like payload candidates during checksum auto-extract"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub rom_filter: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "patch-filter",
+            help = "Keep patch-like payload candidates during checksum auto-extract"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub patch_filter: bool,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
@@ -547,6 +627,26 @@ pub struct PatchApplyCommand {
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
+            long = "rom-filter",
+            help = "Keep ROM-like payload candidates while resolving the patch input archive"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub rom_filter: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "patch-filter",
+            help = "Keep patch-like payload candidates while resolving patch archives"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub patch_filter: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
             long,
             help = "Disable container auto-extract and patch the raw input and patch bytes directly"
         )
@@ -698,6 +798,26 @@ pub struct PatchValidateCommand {
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub select: Vec<String>,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "rom-filter",
+            help = "Keep ROM-like payload candidates while resolving the patch validation input archive"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub rom_filter: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "patch-filter",
+            help = "Keep patch-like payload candidates while resolving patch archives"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub patch_filter: bool,
     #[cfg_attr(
         not(target_arch = "wasm32"),
         arg(
@@ -1567,7 +1687,15 @@ struct AutoExtractResolutionLabels<'a> {
 struct AutoExtractResolutionOptions {
     no_extract: bool,
     no_ignore: bool,
+    kind_filter: ArchiveEntryKindFilter,
     mode: AutoExtractMode,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct AutoExtractResolutionFlags {
+    no_extract: bool,
+    no_ignore: bool,
+    kind_filter: ArchiveEntryKindFilter,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

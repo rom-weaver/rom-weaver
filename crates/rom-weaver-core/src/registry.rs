@@ -7,8 +7,8 @@ use std::{
 use serde_json::Value;
 
 use crate::{
-    OperationContext, OperationFamily, OperationStatus, Result, RomWeaverError, ThreadCapability,
-    ThreadExecution,
+    ArchiveEntryKindFilter, OperationContext, OperationFamily, OperationStatus, Result,
+    RomWeaverError, ThreadCapability, ThreadExecution,
 };
 use tracing::trace;
 
@@ -170,6 +170,7 @@ pub struct ContainerListEntry {
 pub struct ContainerExtractRequest {
     pub source: PathBuf,
     pub selections: Vec<String>,
+    pub kind_filter: ArchiveEntryKindFilter,
     pub out_dir: PathBuf,
     pub split_bin: bool,
     pub ignore_common_files: bool,
