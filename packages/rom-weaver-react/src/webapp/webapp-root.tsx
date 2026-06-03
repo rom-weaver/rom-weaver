@@ -1,29 +1,20 @@
-import { type ReactNode, useEffect } from "react";
+import GitCompare from "lucide-react/dist/esm/icons/git-compare.js";
+import Puzzle from "lucide-react/dist/esm/icons/puzzle.js";
+import { useEffect } from "react";
 import { preloadBrowserRuntime } from "../platform/browser/browser-api.ts";
+import { ConfirmDialog, Modal } from "../public/react/components/ds/index.ts";
 import { ApplyPatchForm, CreatePatchForm, RomWeaverSettingsProvider } from "../public/react/index.tsx";
+import { APP_BUILD_VERSION } from "./build-version.ts";
+import { Banner, Footer, Topbar } from "./components/shell.tsx";
 import { getSettingsUiState } from "./settings/settings-state.ts";
-import {
-  AppFooter,
-  ConfirmationDialog,
-  layoutClasses,
-  PageUpdateBanner,
-  ProcessingWakeLockNotice,
-  SettingsDialog,
-  SettingsTrigger,
-} from "./webapp-layout.tsx";
+import { ProcessingWakeLockNotice } from "./webapp-layout.tsx";
 import type { WebappRootProps } from "./webapp-root-types.ts";
-import { SettingsHeaderActions, SettingsPanel, WorkflowTabs } from "./webapp-settings";
+import { SettingsPanel } from "./webapp-settings";
 
-function ToolPanelLayout({ children, onOpenSettings }: { children: ReactNode; onOpenSettings: () => void }) {
-  return (
-    <div className={layoutClasses.toolPanel}>
-      <div className={layoutClasses.toolHeader}>
-        <SettingsTrigger onClick={onOpenSettings} />
-      </div>
-      {children}
-    </div>
-  );
-}
+const WORKFLOW_TABS = [
+  { icon: <Puzzle aria-hidden="true" />, id: "patcher", label: "Apply" },
+  { icon: <GitCompare aria-hidden="true" />, id: "creator", label: "Create" },
+];
 
 function WebappRoot({ state, serviceWorkerCache, pageUpdate, confirmationDialog, actions }: WebappRootProps) {
   const workerThreads = state.settings.workerThreads;
@@ -33,81 +24,74 @@ function WebappRoot({ state, serviceWorkerCache, pageUpdate, confirmationDialog,
 
   return (
     <RomWeaverSettingsProvider settings={state.settings}>
-      <div className={layoutClasses.column} id="column">
-        <header className={layoutClasses.header}>
-          <h1 className={layoutClasses.title}>
-            <span aria-hidden="true" className={layoutClasses.titleIconFrame}>
-              <img alt="" className={layoutClasses.titleIcon} src="./logo.png" />
-            </span>
-            <span className={layoutClasses.titleWordmark}>
-              <span className={layoutClasses.titleAccent}>ROM</span>
-              <span>Weaver</span>
-            </span>
-          </h1>
-        </header>
-        <div className={layoutClasses.wrapper} id="wrapper">
-          <PageUpdateBanner onReloadUpdate={actions.onReloadUpdate} pageUpdate={pageUpdate} />
-          <div className={layoutClasses.switchContainer} id="switch-container">
-            <div aria-label="Workflow" className={layoutClasses.modeTabs} id="workflow-tabs" role="tablist">
-              <WorkflowTabs currentView={state.currentView} onSelectView={actions.onSelectView} />
-            </div>
-          </div>
+      <div className="rw-app" id="column">
+        <div className="app">
+          <Topbar
+            currentTab={state.currentView}
+            logoSrc="./logo.png"
+            onOpenSettings={actions.onOpenSettings}
+            onSelectTab={(id) => actions.onSelectView(id as WebappRootProps["state"]["currentView"])}
+            tabs={WORKFLOW_TABS}
+          />
+          {pageUpdate.ready ? <Banner onReload={actions.onReloadUpdate}>{pageUpdate.title}</Banner> : null}
           <ProcessingWakeLockNotice active={false} />
-          <div className={layoutClasses.tab}>
-            {state.currentView === "patcher" ? (
-              <div className={layoutClasses.tabPanelVisible}>
-                <ToolPanelLayout onOpenSettings={actions.onOpenSettings}>
-                  <ApplyPatchForm
-                    onInputsChange={actions.onPatcherInputsChange}
-                    onPatchesChange={actions.onPatcherPatchesChange}
-                    onSettingsChange={actions.onPatcherSettingsChange}
-                    startup={state.startup}
-                  />
-                </ToolPanelLayout>
-              </div>
-            ) : null}
-            {state.currentView === "creator" ? (
-              <div className={layoutClasses.tabPanelVisible}>
-                <ToolPanelLayout onOpenSettings={actions.onOpenSettings}>
-                  <CreatePatchForm
-                    onModifiedChange={actions.onCreatorModifiedChange}
-                    onOriginalChange={actions.onCreatorOriginalChange}
-                    onPatchTypeChange={actions.onCreatorPatchTypeChange}
-                    onSettingsChange={actions.onCreatorSettingsChange}
-                  />
-                </ToolPanelLayout>
-              </div>
-            ) : null}
-          </div>
-        </div>
-        <SettingsDialog
-          actions={
-            <SettingsHeaderActions
-              onClose={actions.onCloseSettings}
-              onRestoreDefaults={actions.onRestoreDefaults}
-              onSaveClose={actions.onSaveClose}
+          {state.currentView === "patcher" ? (
+            <ApplyPatchForm
+              onInputsChange={actions.onPatcherInputsChange}
+              onPatchesChange={actions.onPatcherPatchesChange}
+              onSettingsChange={actions.onPatcherSettingsChange}
+              startup={state.startup}
             />
+          ) : null}
+          {state.currentView === "creator" ? (
+            <CreatePatchForm
+              onModifiedChange={actions.onCreatorModifiedChange}
+              onOriginalChange={actions.onCreatorOriginalChange}
+              onPatchTypeChange={actions.onCreatorPatchTypeChange}
+              onSettingsChange={actions.onCreatorSettingsChange}
+            />
+          ) : null}
+          <Footer
+            cacheVersion={serviceWorkerCache.label}
+            donateHref="https://www.paypal.me/marcrobledo/5"
+            githubHref="https://github.com/marcrobledo/rom-weaver/"
+            version={APP_BUILD_VERSION}
+          />
+        </div>
+        <Modal
+          headerActions={
+            <>
+              <button className="btn ghost" onClick={actions.onRestoreDefaults} type="button">
+                Reset
+              </button>
+              <button className="btn primary" onClick={actions.onSaveClose} type="button">
+                Save
+              </button>
+            </>
           }
           onClose={actions.onCloseSettings}
           open={state.settingsDialogOpen}
+          title="Settings"
+          variant="settings-modal"
         >
-          <div className="w-full" id="settings-container" role="document">
-            <SettingsPanel
-              draftSettings={state.draftSettings as Parameters<typeof getSettingsUiState>[0]}
-              onClose={actions.onCloseSettings}
-              onDraftChange={actions.onDraftChange}
-              onRestoreDefaults={actions.onRestoreDefaults}
-              onSaveClose={actions.onSaveClose}
-              uiState={getSettingsUiState(state.draftSettings as Parameters<typeof getSettingsUiState>[0])}
-              validation={state.validation}
-            />
-          </div>
-        </SettingsDialog>
-        <AppFooter serviceWorkerCache={serviceWorkerCache} />
-        <ConfirmationDialog
+          <SettingsPanel
+            draftSettings={state.draftSettings as Parameters<typeof getSettingsUiState>[0]}
+            onClose={actions.onCloseSettings}
+            onDraftChange={actions.onDraftChange}
+            onRestoreDefaults={actions.onRestoreDefaults}
+            onSaveClose={actions.onSaveClose}
+            uiState={getSettingsUiState(state.draftSettings as Parameters<typeof getSettingsUiState>[0])}
+            validation={state.validation}
+          />
+        </Modal>
+        <ConfirmDialog
+          body={confirmationDialog.message}
+          cancelLabel={confirmationDialog.cancelLabel}
+          confirmLabel={confirmationDialog.confirmLabel}
           onCancel={actions.onCancelConfirmation}
           onConfirm={actions.onConfirmConfirmation}
-          state={confirmationDialog}
+          open={confirmationDialog.open}
+          title={confirmationDialog.title}
         />
       </div>
     </RomWeaverSettingsProvider>

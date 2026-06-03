@@ -78,7 +78,7 @@ let fileSelectionTrackerInstalled = false;
 let pageInteractionDetected = false;
 let pageInteractionTrackerInstalled = false;
 const VITE_PAGE_RELOAD_TIMEOUT_MS = 20;
-const WORKFLOW_PROGRESS_SELECTOR = ".rom-weaver-input-progress";
+const WORKFLOW_PROGRESS_SELECTOR = ".fileprog, .iprog";
 const VITE_RELOAD_PATTERN = /\blocation\.reload\s*\(/;
 const PAGE_INTERACTION_EVENTS = [
   "change",
