@@ -1885,6 +1885,7 @@ const useLocalApplyPatchFormSession = ({
     const inputsChanged = !sameBinarySourceLists(previousSync.inputs, effectiveInputs);
     const patchesChanged = !sameBinarySourceLists(previousSync.patches, activePatches);
     const settingsChanged = previousSync.settingsKey !== stageSettingsKey;
+    if (!(inputsChanged || patchesChanged || settingsChanged)) return;
     if (!activePatches.length) {
       patchStageSyncRef.current = {
         inputs: effectiveInputs.slice(),
@@ -1896,14 +1897,13 @@ const useLocalApplyPatchFormSession = ({
       setPatchProgress(null);
       return;
     }
-    if (!(inputsChanged || patchesChanged || settingsChanged)) return;
     patchStageSyncRef.current = {
       inputs: effectiveInputs.slice(),
       patches: activePatches.slice(),
       settingsKey: stageSettingsKey,
     };
-    const silentPatchRefresh = inputsChanged && !patchesChanged && !settingsChanged;
-    syncPatchFiles(createStageSnapshot(), { silent: silentPatchRefresh });
+    if (inputsChanged && !patchesChanged && !settingsChanged) return;
+    syncPatchFiles(createStageSnapshot());
   }, [activePatches, createStageSnapshot, effectiveInputs, stagePatches, stageSettingsKey, syncPatchFiles]);
 
   const localUiStoreController = useLiveStoreController(localUiState);

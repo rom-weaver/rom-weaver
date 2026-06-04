@@ -123,6 +123,10 @@ class CreateWorkflow extends BrowserWorkflowBase<
   setOutputName(name: string): Promise<void> {
     return this.controller.setOutputName(name);
   }
+
+  setSettings(settings: Partial<CreateSettings>): Promise<void> {
+    return this.controller.setSettings(settings);
+  }
 }
 
 export type {

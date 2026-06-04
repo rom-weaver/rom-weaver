@@ -208,6 +208,19 @@ class CreateWorkflowController<TSource, TDestination> extends WorkflowController
     });
   }
 
+  async setSettings(settings: Partial<CreateSettings>): Promise<void> {
+    return this.mutate("setSettings", async () => {
+      this.settings = cloneValue(settings || {});
+      if (this.settings.format) this.patchType = this.settings.format;
+      if (typeof this.settings.output?.outputName === "string" && this.settings.output.outputName.trim()) {
+        this.manualOutputName = true;
+        this.outputName = this.settings.output.outputName;
+      } else if (!this.manualOutputName) {
+        this.outputName = this.buildAutomaticOutputName();
+      }
+    });
+  }
+
   async run(): Promise<CreateResult<TDestination>> {
     return this.mutate("run", async () => {
       const original = this.getSelectedSourceOwner(this.originalSession);
@@ -436,7 +449,12 @@ class CreateWorkflowController<TSource, TDestination> extends WorkflowController
     if (selectable.length === 1) {
       stage.state.selectedCandidateId = selectable[0]?.id;
       stage.selectedArchiveEntry = stage.internalCandidates.get(selectable[0]?.id || "")?.archiveEntry;
-      await this.prepareSelectedSource(stage);
+      if (this.getPreparedPatchSource(stage)) {
+        this.applyPreparedSourceMetadata(stage);
+        stage.state.status = "ready";
+      } else {
+        await this.prepareSelectedSource(stage);
+      }
     } else {
       stage.state.status = "needsSelection";
       await this.maybeResolveBlockingStageSelection(stage);
@@ -447,7 +465,9 @@ class CreateWorkflowController<TSource, TDestination> extends WorkflowController
   private async prepareSelectedSource(stage: StagedSource<TSource>): Promise<void> {
     const requests: CandidateSelectionRequest[] = [];
     try {
-      stage.preparedInputAssets = await this.prepareStageAssets(stage, requests, stage.selectedArchiveEntry);
+      if (!stage.preparedInputAssets?.length) {
+        stage.preparedInputAssets = await this.prepareStageAssets(stage, requests, stage.selectedArchiveEntry);
+      }
       this.applyPreparedSourceMetadata(stage);
       stage.state.status = "ready";
     } catch (error) {
@@ -549,7 +569,7 @@ class CreateWorkflowController<TSource, TDestination> extends WorkflowController
   private setSelectedCandidate(stage: StagedSource<TSource>, candidateId: string): void {
     if (!stage.internalCandidates.has(candidateId))
       throw new RomWeaverError("SELECTION_NOT_FOUND", `Selection candidate was not found: ${candidateId}`);
-    releasePreparedSource(stage);
+    if (!stage.preparedInputAssets?.length) releasePreparedSource(stage);
     stage.state.selectedCandidateId = candidateId;
     stage.selectedArchiveEntry = stage.internalCandidates.get(candidateId)?.archiveEntry;
   }
@@ -682,6 +702,12 @@ class CreateWorkflowController<TSource, TDestination> extends WorkflowController
     return (stage.preparedInputAssets || []).map((asset) => asset.file);
   }
 
+  private getPreparedPatchSource(stage: StagedSource<TSource>): unknown | undefined {
+    return (
+      (stage.preparedInputAssets || []).find((asset) => asset.patchable)?.file || stage.preparedInputAssets?.[0]?.file
+    );
+  }
+
   private async releaseRuntimeSources(sources: unknown[]): Promise<void> {
     await this.runtime.workerIo?.releaseSources?.(sources).catch(() => undefined);
   }
@@ -746,8 +772,10 @@ class CreateWorkflowController<TSource, TDestination> extends WorkflowController
     const modified = this.getSelectedSourceOwner(this.modifiedSession);
     if (!(original && modified))
       throw new RomWeaverError("INVALID_INPUT", "Original and modified sources are required");
+    const preparedOriginal = this.getPreparedPatchSource(original);
+    const preparedModified = this.getPreparedPatchSource(modified);
     return {
-      modified: modified.source as never,
+      modified: (preparedModified || modified.source) as never,
       options: {
         ...this.createExecutionOptions(),
         onProgress: (progress) => {
@@ -770,9 +798,9 @@ class CreateWorkflowController<TSource, TDestination> extends WorkflowController
           });
         },
       },
-      original: original.source as never,
-      selectedModifiedEntryName: modified.selectedArchiveEntry,
-      selectedOriginalEntryName: original.selectedArchiveEntry,
+      original: (preparedOriginal || original.source) as never,
+      selectedModifiedEntryName: preparedModified ? undefined : modified.selectedArchiveEntry,
+      selectedOriginalEntryName: preparedOriginal ? undefined : original.selectedArchiveEntry,
     };
   }
 

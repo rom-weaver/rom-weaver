@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { appendFileNameExtension, hasFileNameExtension } from "../../lib/input/path-utils.ts";
 import { resolveAutomaticSelection, selectionToArchiveEntry } from "../../lib/input/selection.ts";
 import {
-  ApplyWorkflow,
   type BrowserCreateResult,
   type BrowserSaveDestination,
   type CreateSettings,
@@ -14,7 +13,6 @@ import {
 import { formatCodedErrorForDisplay, getErrorCode } from "../../presentation/errors.ts";
 import { createBrowserLocalizer } from "../../presentation/localization/index.ts";
 import { createProgressViewModelFromEvent, formatByteSize } from "../../presentation/workflow-presentation.ts";
-import type { ApplyWorkflowInputState } from "../../types/apply-workflow.ts";
 import type { CreateWorkflowSourceState } from "../../types/create-workflow.ts";
 import { useCandidateSelection } from "./candidate-selection.tsx";
 import { ChecksumList, ChecksumRow } from "./components/ds/checksum-list.tsx";
@@ -25,12 +23,12 @@ import { FileCard } from "./components/ds/file-card.tsx";
 import { DropZone, InfoPopover, StepSection } from "./components/ds/layout.tsx";
 import { OutputCard } from "./components/ds/output-card.tsx";
 import { buildCompressPanel } from "./compress-options.ts";
+import { getBinarySourceListStableIds } from "./input-session-helpers.ts";
 import type { BinarySource } from "./patcher-form.ts";
 import type { CandidateSelectionPrompt, CreatePatchFormProps, CreatePatchFormSettings } from "./public-types.ts";
 import {
   getCreateSettingsOutputName,
   normalizeDefaultArchive,
-  toApplyWorkflowSettings,
   toCreateWorkflowSettings,
   useCreateSettings,
   useRomWeaverAssetBaseUrl,
@@ -78,7 +76,7 @@ const getCompletedDownloadMeta = (fileName: string, size?: number | null) => ({
   size: typeof size === "number" && Number.isFinite(size) ? formatByteSize(size) : undefined,
 });
 
-type CreateDisplaySourceState = ApplyWorkflowInputState | CreateWorkflowSourceState;
+type CreateDisplaySourceState = CreateWorkflowSourceState;
 
 const getDisplaySourceInfo = (source: CreateDisplaySourceState | null | undefined, fallback: string) =>
   toStagedInputInfo(source, fallback);
@@ -89,14 +87,13 @@ const formatElapsedMs = (elapsedMs: number | undefined) =>
 const formatChecksumTiming = (elapsedMs: number | undefined) =>
   elapsedMs === 0 ? "from extract" : formatElapsedMs(elapsedMs);
 
-const isApplyPreviewSource = (source: CreateDisplaySourceState | null | undefined): source is ApplyWorkflowInputState =>
-  !!source && "checksums" in source;
-
 const getDisplaySourceChecksums = (source: CreateDisplaySourceState | null | undefined) =>
-  isApplyPreviewSource(source) ? source.checksums : undefined;
+  (source as (CreateDisplaySourceState & { checksums?: Record<string, string> }) | null | undefined)?.checksums;
 
 const getDisplaySourceChecksumTiming = (source: CreateDisplaySourceState | null | undefined) =>
-  isApplyPreviewSource(source) ? formatChecksumTiming(source.checksumTimeMs) : "";
+  formatChecksumTiming(
+    (source as (CreateDisplaySourceState & { checksumTimeMs?: number }) | null | undefined)?.checksumTimeMs,
+  );
 
 const getChecksumTimingLabel = (timing: string) => (timing ? `Checksum ${timing}` : "");
 const isChecksumProgress = (progress: NonNullable<ReturnType<typeof createProgressViewModelFromEvent>> | null) =>
@@ -214,6 +211,13 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   const activeAbortControllerRef = useRef<AbortController | null>(null);
   const stagingOriginalGenerationRef = useRef(0);
   const stagingModifiedGenerationRef = useRef(0);
+  const stagedCreateWorkflowRef = useRef<CreateWorkflow | null>(null);
+  const stagedCreateWorkflowGenerationRef = useRef(0);
+  const stagedCreateWorkflowSyncRef = useRef({
+    modifiedKey: "",
+    originalKey: "",
+    settingsKey: "",
+  });
   const workflowIdRef = useRef(createWorkflowId("react-create"));
   const selectedOriginalEntryRef = useRef<string | null>(null);
   const selectedModifiedEntryRef = useRef<string | null>(null);
@@ -257,21 +261,30 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   const createCompressionLabel = createCompressionOptions.find((option) => option.value === createCompression)?.label;
   const displayedOriginalFileName = displayedOriginalInfo?.fileName || originalFileName;
   const displayedModifiedFileName = displayedModifiedInfo?.fileName || modifiedFileName;
+  const settingsLanguage = (settings as { language?: string }).language;
+  const originalSourceKey = useMemo(
+    () => (original ? getBinarySourceListStableIds([original])[0] || "" : ""),
+    [original],
+  );
+  const modifiedSourceKey = useMemo(
+    () => (modified ? getBinarySourceListStableIds([modified])[0] || "" : ""),
+    [modified],
+  );
   const stagingSettingsKey = useMemo(
     () =>
       createSettingsDependencyKey({
         input: settings.input,
-        language: (settings as { language?: string }).language,
+        language: settingsLanguage,
         limits: settings.limits,
         loggingLevel: settings.logging?.level,
         workers: settings.workers,
         workerThreads: props.workerThreads,
       }),
-    [props.workerThreads, settings],
+    [props.workerThreads, settings.input, settings.limits, settings.logging?.level, settings.workers, settingsLanguage],
   );
   const stagingSettings = useMemo(
     () =>
-      toApplyWorkflowSettings(
+      toCreateWorkflowSettings(
         {
           input: settings.input,
           limits: settings.limits,
@@ -279,6 +292,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
           output: { compression: "none" },
           workers: settings.workers,
         } as never,
+        "",
         props.workerThreads,
       ),
     [props.workerThreads, settings.input, settings.limits, settings.logging, settings.workers],
@@ -376,89 +390,119 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     [selectFile],
   );
 
-  const stageSource = useCallback(
-    async (role: "modified" | "original", source: BinarySource | null, generation: number) => {
-      if (!source) {
-        if (role === "original") setOriginalState(null);
-        else setModifiedState(null);
-        return;
-      }
-      const workflow = new ApplyWorkflow({
+  useEffect(() => {
+    const generation = ++stagedCreateWorkflowGenerationRef.current;
+    stagingOriginalGenerationRef.current = generation;
+    stagingModifiedGenerationRef.current = generation;
+    const previousSync = stagedCreateWorkflowSyncRef.current;
+    const settingsChanged = previousSync.settingsKey !== stagingSettingsKey;
+    const originalKeyChanged = previousSync.originalKey !== originalSourceKey;
+    const modifiedKeyChanged = previousSync.modifiedKey !== modifiedSourceKey;
+    const sourceCleared = (originalKeyChanged && !original) || (modifiedKeyChanged && !modified);
+    const workflowReset = settingsChanged || sourceCleared;
+    const originalChanged = workflowReset || originalKeyChanged;
+    const modifiedChanged = workflowReset || modifiedKeyChanged;
+    let workflow = stagedCreateWorkflowRef.current;
+    if (workflowReset) {
+      workflow?.dispose().catch(() => undefined);
+      workflow = null;
+      stagedCreateWorkflowRef.current = null;
+    }
+    if (originalChanged) setOriginalState(null);
+    if (modifiedChanged) setModifiedState(null);
+    stagedCreateWorkflowSyncRef.current = {
+      modifiedKey: modifiedSourceKey,
+      originalKey: originalSourceKey,
+      settingsKey: stagingSettingsKey,
+    };
+    if (!(original || modified)) {
+      setStagingRole(null);
+      setProgress((current) => (current?.stage === "input" ? null : current));
+      return;
+    }
+    if (!workflow) {
+      workflow = new CreateWorkflow({
         ...(resolvedAssetBaseUrl ? { assetBaseUrl: resolvedAssetBaseUrl } : {}),
-        id: `${workflowIdRef.current}:${role}:stage:${generation}`,
-        selectFile: createSelectFileHandler(role),
+        id: `${workflowIdRef.current}:stage:${generation}`,
+        selectFile: async (request) =>
+          createSelectFileHandler(request.role === "modified" ? "modified" : "original")(request),
         settings: stagingSettingsRef.current,
       });
-      const handleProgress = (event: WorkflowProgress) => {
-        props.onProgress?.(toReactProgressEvent(event));
-        setProgress({
-          ...createProgressViewModelFromEvent(event, { stage: event.stage || "input" }),
-          role: typeof event.role === "string" ? event.role : undefined,
-        });
-      };
-      workflow.on("progress", handleProgress);
-      setStagingRole(role);
+      stagedCreateWorkflowRef.current = workflow;
+    }
+    const activeWorkflow = workflow;
+    const handleProgress = (event: WorkflowProgress) => {
+      props.onProgress?.(toReactProgressEvent(event));
+      setProgress({
+        ...createProgressViewModelFromEvent(event, { stage: event.stage || "input" }),
+        role: typeof event.role === "string" ? event.role : undefined,
+      });
+    };
+    activeWorkflow.on("progress", handleProgress);
+    const finishStaging = async () => {
       try {
-        await workflow.setInput([toBrowserPublicBinarySource(source)]);
-        const state = workflow.getInput();
-        if (
-          (role === "original" ? stagingOriginalGenerationRef.current : stagingModifiedGenerationRef.current) !==
-          generation
-        )
-          return;
-        if (role === "original") setOriginalState(state);
-        else setModifiedState(state);
-        setProgress((current) => (current?.stage === "input" ? null : current));
+        if (originalChanged && original) {
+          setStagingRole("original");
+          await activeWorkflow.setOriginal(toBrowserPublicBinarySource(original));
+          if (stagedCreateWorkflowRef.current !== activeWorkflow) return;
+          setOriginalState(activeWorkflow.getOriginal());
+          setProgress((current) => (current?.stage === "input" ? null : current));
+        }
+        if (modifiedChanged && modified) {
+          setStagingRole("modified");
+          await activeWorkflow.setModified(toBrowserPublicBinarySource(modified));
+          if (stagedCreateWorkflowRef.current !== activeWorkflow) return;
+          setModifiedState(activeWorkflow.getModified());
+          setProgress((current) => (current?.stage === "input" ? null : current));
+        }
       } catch (error) {
         const normalizedError = error instanceof Error ? error : new Error(String(error));
         const code = getErrorCode(normalizedError);
-        if (
-          code === "WORKFLOW_SELECTION_SKIPPED" ||
-          (role === "original" ? stagingOriginalGenerationRef.current : stagingModifiedGenerationRef.current) !==
-            generation
-        ) {
-          return;
-        }
+        if (code === "WORKFLOW_SELECTION_SKIPPED" || stagedCreateWorkflowRef.current !== activeWorkflow) return;
         setErrorCode(code);
-        setMessage(
-          formatCodedErrorForDisplay(
-            normalizedError,
-            createBrowserLocalizer((settings as { language?: string }).language),
-          ),
-        );
-        if (role === "original") setOriginalState(workflow.getInput());
-        else setModifiedState(workflow.getInput());
+        setMessage(formatCodedErrorForDisplay(normalizedError, createBrowserLocalizer(settingsLanguage)));
+        setOriginalState(activeWorkflow.getOriginal());
+        setModifiedState(activeWorkflow.getModified());
         props.onError?.(normalizedError);
       } finally {
-        workflow.off("progress", handleProgress);
-        await workflow.dispose();
-        if (
-          (role === "original" ? stagingOriginalGenerationRef.current : stagingModifiedGenerationRef.current) ===
-          generation
-        ) {
-          setStagingRole((current) => (current === role ? null : current));
+        activeWorkflow.off("progress", handleProgress);
+        if (stagedCreateWorkflowRef.current === activeWorkflow) {
+          setStagingRole(null);
           setProgress((current) => (current?.stage === "input" ? null : current));
         }
       }
+    };
+    void finishStaging();
+    return () => {
+      activeWorkflow.off("progress", handleProgress);
+    };
+  }, [
+    createSelectFileHandler,
+    modified,
+    modifiedSourceKey,
+    original,
+    originalSourceKey,
+    props.onError,
+    props.onProgress,
+    resolvedAssetBaseUrl,
+    settingsLanguage,
+    stagingSettingsKey,
+  ]);
+
+  useEffect(
+    () => () => {
+      stagedCreateWorkflowGenerationRef.current += 1;
+      const workflow = stagedCreateWorkflowRef.current;
+      stagedCreateWorkflowRef.current = null;
+      stagedCreateWorkflowSyncRef.current = {
+        modifiedKey: "",
+        originalKey: "",
+        settingsKey: "",
+      };
+      workflow?.dispose().catch(() => undefined);
     },
-    [
-      createSelectFileHandler,
-      props.onError,
-      props.onProgress,
-      resolvedAssetBaseUrl,
-      (settings as { language?: string }).language,
-    ],
+    [],
   );
-
-  useEffect(() => {
-    const generation = ++stagingOriginalGenerationRef.current;
-    void stageSource("original", original, generation);
-  }, [original, stageSource, stagingSettingsKey]);
-
-  useEffect(() => {
-    const generation = ++stagingModifiedGenerationRef.current;
-    void stageSource("modified", modified, generation);
-  }, [modified, stageSource, stagingSettingsKey]);
 
   const runCreate = async () => {
     if (busy) {
@@ -488,14 +532,17 @@ function CreatePatchForm(props: CreatePatchFormProps) {
       timingText: "",
       visualPercent: null,
     });
-    const createWorkflow = new CreateWorkflow({
-      ...(resolvedAssetBaseUrl ? { assetBaseUrl: resolvedAssetBaseUrl } : {}),
-      id: workflowIdRef.current,
-      selectFile: async (request) =>
-        createSelectFileHandler(request.role === "modified" ? "modified" : "original")(request),
-      settings: toCreateWorkflowSettings(settings, executionOutputName, props.workerThreads),
-      signal: abortController.signal,
-    });
+    const createWorkflow =
+      stagedCreateWorkflowRef.current ||
+      new CreateWorkflow({
+        ...(resolvedAssetBaseUrl ? { assetBaseUrl: resolvedAssetBaseUrl } : {}),
+        id: workflowIdRef.current,
+        selectFile: async (request) =>
+          createSelectFileHandler(request.role === "modified" ? "modified" : "original")(request),
+        settings: toCreateWorkflowSettings(settings, executionOutputName, props.workerThreads),
+        signal: abortController.signal,
+      });
+    const usingStagedWorkflow = stagedCreateWorkflowRef.current === createWorkflow;
     const handleProgress = (event: WorkflowProgress) => {
       props.onProgress?.(toReactProgressEvent(event));
       setProgress({
@@ -504,9 +551,15 @@ function CreatePatchForm(props: CreatePatchFormProps) {
       });
     };
     createWorkflow.on("progress", handleProgress);
+    const abortWorkflow = () => createWorkflow.abort(abortController.signal.reason);
+    abortController.signal.addEventListener("abort", abortWorkflow, { once: true });
     try {
-      await createWorkflow.setOriginal(toBrowserPublicBinarySource(original));
-      await createWorkflow.setModified(toBrowserPublicBinarySource(modified));
+      if (usingStagedWorkflow) {
+        await createWorkflow.setSettings(toCreateWorkflowSettings(settings, executionOutputName, props.workerThreads));
+      } else {
+        await createWorkflow.setOriginal(toBrowserPublicBinarySource(original));
+        await createWorkflow.setModified(toBrowserPublicBinarySource(modified));
+      }
       await createWorkflow.setPatchType(patchType as NonNullable<CreateSettings["format"]>);
       await createWorkflow.setOutputName(executionOutputName);
 
@@ -547,8 +600,9 @@ function CreatePatchForm(props: CreatePatchFormProps) {
       setCompletedOutput(null);
       props.onError?.(normalizedError);
     } finally {
+      abortController.signal.removeEventListener("abort", abortWorkflow);
       createWorkflow.off("progress", handleProgress);
-      await createWorkflow.dispose();
+      if (!usingStagedWorkflow) await createWorkflow.dispose();
       if (activeAbortControllerRef.current === abortController) activeAbortControllerRef.current = null;
       setBusy(false);
     }
