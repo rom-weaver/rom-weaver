@@ -31,6 +31,7 @@ type StackPatchItem = PatchStackItemState;
 type PatcherStackController = StoreController<PatchStackState> & {
   moveItem: (index: number, direction: number) => void;
   removeItem: (index: number) => void;
+  setPatchTarget?: (index: number, targetInputId: string) => void;
 };
 
 type PatcherOutputController = StoreController<PatcherOutputState> & {

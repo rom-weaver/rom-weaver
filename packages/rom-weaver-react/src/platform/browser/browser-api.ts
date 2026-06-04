@@ -201,6 +201,10 @@ class ApplyWorkflow extends BrowserWorkflowBase<
   setOutputFormat(format: CompressionFormat): Promise<void> {
     return this.controller.setOutputFormat(format);
   }
+
+  setPatchTarget(index: number, targetInputId: string | "auto"): Promise<void> {
+    return this.controller.setPatchTarget(index, targetInputId);
+  }
 }
 
 class TrimWorkflow extends BrowserWorkflowBase<

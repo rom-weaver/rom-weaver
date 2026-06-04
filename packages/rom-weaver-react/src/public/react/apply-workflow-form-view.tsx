@@ -427,6 +427,31 @@ function ApplyWorkflowFormView({
                 total: patches.length,
               }}
               state={item.validationState === "invalid" ? "bad" : item.validationState === "valid" ? "ok" : undefined}
+              target={
+                item.targetOptions && item.targetOptions.length > 1 ? (
+                  <div className="ptgt-row">
+                    <label className="sr-only" htmlFor={`rom-weaver-select-patch-target-${index}`}>
+                      Apply patch to
+                    </label>
+                    <select
+                      className="select ptgt-sel"
+                      disabled={item.targetDisabled}
+                      id={`rom-weaver-select-patch-target-${index}`}
+                      onChange={(event) => controllers.patchStack.setPatchTarget?.(index, event.currentTarget.value)}
+                      value={item.targetValue || ""}
+                    >
+                      <option disabled value="">
+                        Select target
+                      </option>
+                      {item.targetOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : undefined
+              }
             >
               <PatchInfo item={item} />
             </FileCard>

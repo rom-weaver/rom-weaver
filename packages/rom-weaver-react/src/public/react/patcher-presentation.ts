@@ -11,6 +11,11 @@ type OutputOption = {
   label: string;
 };
 
+type PatchTargetOption = {
+  value: string;
+  label: string;
+};
+
 type OutputApplyButtonState = {
   label: string;
   title: string;
@@ -62,6 +67,9 @@ type PatchStackItemState = {
   validationValues: string[];
   validationMessage: string;
   validationActualValue: string;
+  targetDisabled?: boolean;
+  targetOptions?: PatchTargetOption[];
+  targetValue?: string;
   canMoveUp: boolean;
   canMoveDown: boolean;
   canRemove: boolean;
@@ -119,6 +127,7 @@ export type {
   PatcherOutputState,
   PatchStackItemState,
   PatchStackState,
+  PatchTargetOption,
 };
 export {
   cloneOutputOptions,

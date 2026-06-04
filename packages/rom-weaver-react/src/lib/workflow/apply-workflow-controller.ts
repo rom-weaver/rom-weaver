@@ -284,6 +284,7 @@ const cloneResolvedInputAssetState = (
     kind: asset.kind,
     order,
     parentCompressions: getAssetParentCompressions(asset, parentCompressions),
+    patchable: asset.patchable,
     selected,
     selectedCandidateId,
     size: asset.size,
@@ -611,6 +612,26 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
         ...(this.settings.output || {}),
         compression: format,
       };
+      this.recomputeOutputState();
+    });
+  }
+
+  async setPatchTarget(index: number, targetInputId: string | "auto"): Promise<void> {
+    return this.mutate("setPatchTarget", async () => {
+      const stage = this.patches[index];
+      if (!stage) throw new RomWeaverError("INVALID_INPUT", `Patch ${index + 1} was not found`);
+      if (targetInputId === "auto") {
+        this.clearPatchTarget(stage);
+        await this.evaluatePatchReadiness(stage);
+        this.recomputeOutputState();
+        return;
+      }
+      const target = this.getPatchableInputAssets().find(
+        (asset) => asset.id === targetInputId || asset.fileName === targetInputId,
+      );
+      if (!target) throw new RomWeaverError("SELECTION_NOT_FOUND", `Patch target was not found: ${targetInputId}`);
+      this.assignPatchTarget(stage, target);
+      await this.evaluatePatchReadiness(stage);
       this.recomputeOutputState();
     });
   }
@@ -1756,31 +1777,6 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
     }
   }
 
-  private createPatchTargetSelectionRequest(stage: StagedSource<TSource>, assets: InputAsset[]) {
-    const inputByCandidateId = new Map<string, InputAsset>();
-    const candidates = assets.map((asset) => {
-      const id = `${this.id}:patch-target:${++this.nextCandidateSequence}`;
-      inputByCandidateId.set(id, asset);
-      return {
-        fileName: asset.fileName,
-        id,
-        kind: asset.kind,
-        patchable: true,
-        selectable: true,
-        size: asset.size,
-        type: "file",
-      } satisfies SelectionCandidate;
-    });
-    const request: CandidateSelectionRequest = {
-      candidates,
-      role: "patch",
-      sourceIndex: stage.index,
-      sourceName: stage.state.fileName || stage.state.id,
-      warnings: stage.state.warnings.map((warning) => warning.message),
-    };
-    return { inputByCandidateId, request };
-  }
-
   private async resolvePatchTargetForStage(
     stage: StagedSource<TSource>,
     assets: InputAsset[],
@@ -1804,17 +1800,8 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
         return existing;
       }
     }
-    const { inputByCandidateId, request } = this.createPatchTargetSelectionRequest(stage, assets);
-    const selection = await this.resolveSelectionRequest(request, this.selectFile);
-    if (!selection) {
-      this.clearPatchTarget(stage);
-      return null;
-    }
-    const target = inputByCandidateId.get(selection.id);
-    if (!target)
-      throw new RomWeaverError("SELECTION_NOT_FOUND", `Patch target candidate was not found: ${selection.id}`);
-    this.assignPatchTarget(stage, target);
-    return target;
+    this.clearPatchTarget(stage);
+    return null;
   }
 
   private async evaluatePatchReadiness(stage: StagedSource<TSource>): Promise<boolean> {

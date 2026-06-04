@@ -54,6 +54,8 @@ type StagedInputInfo = {
   kind?: string;
   archiveName?: string;
   parentCompressions?: ArchivePathEntry[];
+  patchable?: boolean;
+  targetInputId?: string;
   targetLabel?: string;
   checksums?: Record<string, string>;
   checksumTiming?: string;
@@ -520,10 +522,13 @@ const inertOutputController: PatcherOutputController = {
       progress: null,
       title: "",
     },
+    applyTiming: "",
     compress: null,
     compressionFormat: "zip",
+    compressTiming: "",
     disabled: true,
     displayFileName: "",
+    downloadSummary: null,
     options: [],
     pendingDownloadFileName: null,
     resolvedOutputName: "",
@@ -586,6 +591,11 @@ type LocalApplyPatchFormSessionOptions = Pick<
       onProgress: (event: ProgressEvent) => void;
     },
   ) => Promise<Array<StagedInputInfo | null | undefined>>;
+  setPatchTarget?: (
+    input: ApplyWorkflowStageSnapshot,
+    patchIndex: number,
+    targetInputId: string,
+  ) => Promise<Array<StagedInputInfo | null | undefined>>;
 };
 
 const useLocalApplyPatchFormSession = ({
@@ -613,6 +623,7 @@ const useLocalApplyPatchFormSession = ({
   resolvedOutputNameKey,
   stageInput,
   stagePatches,
+  setPatchTarget,
 }: LocalApplyPatchFormSessionOptions) => {
   const [internalInputs, setInternalInputs] = useState(defaultInputs);
   const [internalPatches, setInternalPatches] = useState(defaultPatches);
@@ -1188,6 +1199,12 @@ const useLocalApplyPatchFormSession = ({
       items: activePatches.map<StackPatchItem>((patch, index) => {
         const key = getPatchKey(patch);
         const patchInfo = patchInfoByKey[key];
+        const targetOptions = romInputs
+          .filter((input) => input.patchable !== false && input.kind !== "cue")
+          .map((input) => ({
+            label: input.info.fileName || `Input ${input.order + 1}`,
+            value: input.id,
+          }));
         return {
           archiveFileName: patchInfo?.archiveName || "",
           archivePathEntries: patchInfo?.parentCompressions,
@@ -1202,6 +1219,9 @@ const useLocalApplyPatchFormSession = ({
           index: index + 1,
           key,
           progress: patchProgressByKey[key] || null,
+          targetDisabled: disabled || busy || patchStaging || targetOptions.length < 2,
+          targetOptions,
+          targetValue: patchInfo?.targetInputId || (targetOptions.length === 1 ? targetOptions[0]?.value : ""),
           validationActualValue: patchInfo?.validationActualValue || "",
           validationLabel: patchInfo?.validationLabel || "",
           validationMessage: patchInfo?.validationMessage || "",
@@ -1210,7 +1230,7 @@ const useLocalApplyPatchFormSession = ({
         };
       }),
     }),
-    [activePatches, busy, disabled, getPatchKey, patchInfoByKey, patchProgressByKey],
+    [activePatches, busy, disabled, getPatchKey, patchInfoByKey, patchProgressByKey, patchStaging, romInputs],
   );
   const localOutputState = useMemo(
     () => ({
@@ -1380,6 +1400,7 @@ const useLocalApplyPatchFormSession = ({
           },
           kind: info.kind ?? patch.kind ?? existing.kind,
           order: info.order ?? patch.order ?? existing.order,
+          patchable: info.patchable ?? patch.patchable ?? existing.patchable,
           size: info.size ?? patch.size ?? existing.size,
           sourceSize: info.sourceSize ?? patch.sourceSize ?? existing.sourceSize,
           splitBinAvailable: info.splitBinAvailable ?? patch.splitBinAvailable ?? existing.splitBinAvailable,
@@ -1990,9 +2011,47 @@ const useLocalApplyPatchFormSession = ({
       removeItem: (index: number) => {
         updatePatches(activePatches.filter((_patch, patchIndex) => patchIndex !== index));
       },
+      setPatchTarget: async (index: number, targetInputId: string) => {
+        if (!setPatchTarget) return;
+        try {
+          const snapshot = createStageSnapshot();
+          const infos = await setPatchTarget(snapshot, index, targetInputId);
+          setPatchInfoByKey((current) => {
+            const next = { ...current };
+            for (const info of infos) {
+              if (!info) continue;
+              const patch = typeof info.order === "number" ? snapshot.patches[info.order] : undefined;
+              const key = patch ? getPatchKey(patch, snapshot.patches) : info.id;
+              if (key) next[key] = info;
+            }
+            return next;
+          });
+        } catch (error) {
+          const normalizedError = toError(error);
+          logUiError("Patch target selection failed", normalizedError);
+          setErrorMessage(
+            formatCodedErrorForDisplay(
+              normalizedError,
+              createBrowserLocalizer((activeSettings as { language?: string }).language),
+            ),
+          );
+          onError?.(normalizedError);
+        }
+      },
       subscribe: localStackStoreController.subscribe,
     }),
-    [activePatches, localStackStoreController, updatePatches],
+    [
+      activePatches,
+      activeSettings,
+      createStageSnapshot,
+      getPatchKey,
+      localStackStoreController,
+      onError,
+      setErrorMessage,
+      setPatchInfoByKey,
+      setPatchTarget,
+      updatePatches,
+    ],
   );
   const localOutputController = useMemo(
     () => ({

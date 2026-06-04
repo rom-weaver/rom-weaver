@@ -185,6 +185,7 @@ const toPatchStageInfo = (
     parentCompressions: patch.parentCompressions,
     size: patch.size,
     sourceSize: patch.sourceSize,
+    targetInputId: patch.targetInputId,
     targetLabel,
     validationActualValue: validation.validationActualValue,
     validationLabel: validation.validationLabel,
@@ -397,6 +398,7 @@ const toStagedInputInfos = (input: ApplyWorkflowInputState | null, originals: Bi
       kind: resolved.kind,
       order: resolved.order ?? index,
       parentCompressions: resolved.parentCompressions,
+      patchable: resolved.patchable ?? resolved.kind !== "cue",
       size: resolved.size,
       sourceSize: resolved.sourceSize,
       splitBinAvailable: resolved.splitBinAvailable,
@@ -615,9 +617,6 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           selectedPatchCandidateIdsRef.current.set(patchKey, patch.selectedCandidateId);
         }
       }
-
-      const patchTargetError = getPatchTargetSelectionError(workflow.getInput(), workflowPatches);
-      if (patchTargetError) throw patchTargetError;
     },
     [],
   );
@@ -986,6 +985,51 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     [emitWorkflowProgress, withPreparedWorkflow],
   );
 
+  const setPatchTarget = useCallback(
+    async (input: ApplyWorkflowSessionInput, patchIndex: number, targetInputId: string) => {
+      const originalNames = input.patches.map((patch, index) =>
+        getReactBinarySourceFileName(patch, `Patch ${index + 1}`),
+      );
+      return withPreparedWorkflow(
+        input,
+        {
+          selection: {
+            promptInputSelection: false,
+            promptPatchSelection: false,
+          },
+        },
+        async ({ input: stagedInput, workflow }) => {
+          await workflow.setPatchTarget(patchIndex, targetInputId || "auto");
+          const refreshedInput = workflow.getInput();
+          const refreshedPatches = workflow.getPatches();
+          setApplyReady(
+            !getWorkflowReadinessError(refreshedInput, refreshedPatches) &&
+              refreshedPatches.length === input.patches.length,
+          );
+          const inputLabelById = new Map(
+            toStagedInputInfos(refreshedInput || stagedInput, input.inputs).map((entry) => [
+              entry.id || "",
+              entry.fileName || "Input",
+            ]),
+          );
+          return refreshedPatches.map((patch, index) => {
+            const targetName =
+              patch?.targetInputFileName ||
+              (patch?.targetInputId ? inputLabelById.get(patch.targetInputId) : undefined) ||
+              "None selected";
+            return toPatchStageInfo(
+              patch,
+              originalNames[index] || `Patch ${index + 1}`,
+              index,
+              `Target: ${targetName}`,
+            );
+          });
+        },
+      );
+    },
+    [withPreparedWorkflow],
+  );
+
   const { localUiController, localStackController, localOutputController, localNoticeController } =
     useLocalApplyPatchFormSession({
       ...propsWithSettings,
@@ -998,6 +1042,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       resolvedOutputCompression,
       resolvedOutputName,
       resolvedOutputNameKey,
+      setPatchTarget,
       stageInput,
       stagePatches,
     });

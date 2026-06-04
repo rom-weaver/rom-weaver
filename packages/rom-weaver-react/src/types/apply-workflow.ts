@@ -19,6 +19,7 @@ type ApplyWorkflowResolvedInput = {
   id: string;
   fileName?: string;
   kind?: "rom" | "cue" | "track";
+  patchable?: boolean;
   checksums?: ApplyWorkflowChecksums;
   checksumTimeMs?: number;
   parentCompressions: ApplyWorkflowParentCompression[];

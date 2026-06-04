@@ -74,6 +74,7 @@ type RomInputRowState = InputUiState & {
   order: number;
   groupId: string;
   kind: string;
+  patchable?: boolean;
   info: RomInputInfoState;
   archivePathEntries?: ArchivePathEntryState[];
   size?: number;
