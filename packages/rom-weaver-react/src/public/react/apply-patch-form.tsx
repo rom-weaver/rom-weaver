@@ -371,6 +371,7 @@ const toStagedInputInfos = (input: ApplyWorkflowInputState | null, originals: Bi
     id: input.id,
     order: 0,
     parentCompressions: input.parentCompressions,
+    romProbe: input.romProbe,
     selected: true,
     selectedCandidateId: input.selectedCandidateId,
     size: input.size,
@@ -399,6 +400,7 @@ const toStagedInputInfos = (input: ApplyWorkflowInputState | null, originals: Bi
       order: resolved.order ?? index,
       parentCompressions: resolved.parentCompressions,
       patchable: resolved.patchable ?? resolved.kind !== "cue",
+      romProbe: resolved.romProbe || input.romProbe,
       size: resolved.size,
       sourceSize: resolved.sourceSize,
       splitBinAvailable: resolved.splitBinAvailable,
@@ -889,6 +891,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           checksums?: Record<string, string>;
           decompressionTimeMs?: number;
           fileName?: string;
+          romProbe?: ApplyWorkflowInputState["romProbe"];
           size?: number;
           sourceSize?: number;
           wasDecompressed?: boolean;
@@ -899,6 +902,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           checksums?: Record<string, string>;
           decompressionTimeMs?: number;
           fileName?: string;
+          romProbe?: ApplyWorkflowInputState["romProbe"];
           size?: number;
           sourceSize?: number;
           wasDecompressed?: boolean;

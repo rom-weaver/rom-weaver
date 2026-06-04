@@ -5,6 +5,7 @@ import type {
   ApplyWorkflowPatchState,
   ApplyWorkflowResolvedInput,
 } from "../../types/apply-workflow.ts";
+import type { ChecksumRomProbe } from "../../types/checksum.ts";
 import type { WorkflowProgress } from "../../types/progress.ts";
 import type { ApplyResult } from "../../types/public.ts";
 import type { CandidateSelectionRequest, SelectionCandidate, SelectionFileCandidate } from "../../types/selection.ts";
@@ -77,6 +78,7 @@ type InternalSourceState = {
   warnings: WorkflowWarning[];
   checksums?: ApplyWorkflowChecksums;
   checksumTimeMs?: number;
+  romProbe?: ChecksumRomProbe;
   requirements?: InternalPatchRequirements;
   checksumPreflight?: InternalPatchChecksumPreflight;
   patchValidation?: InternalPatchValidation;
@@ -140,6 +142,15 @@ const clonePatchChecksumPreflight = (
 const clonePatchValidation = (validation: InternalPatchValidation | undefined): InternalPatchValidation | undefined =>
   validation ? { ...validation } : undefined;
 
+const cloneChecksumRomProbe = (romProbe: ChecksumRomProbe | undefined): ChecksumRomProbe | undefined =>
+  romProbe
+    ? {
+        trim: {
+          ...romProbe.trim,
+        },
+      }
+    : undefined;
+
 const PATCH_OUTPUT_LABEL_PATTERN = /\[([^\]]+)\](?:\.[^.]+)?\d*$/;
 const PATCH_TARGET_SELECTION_ERROR_CODES = new Set(["AMBIGUOUS_SELECTION", "PATCH_TARGET_MISMATCH"]);
 const MAX_INPUT_SELECTION_RETRY_COUNT = 12;
@@ -178,7 +189,9 @@ const cloneInputState = (
           parentCompressions: entry.parentCompressions.map((parent) => ({
             ...parent,
           })),
+          romProbe: cloneChecksumRomProbe(entry.romProbe),
         })),
+        romProbe: cloneChecksumRomProbe(state.romProbe),
         selectedCandidateId: state.selectedCandidateId,
         size: state.size,
         sourceSize: state.sourceSize,
@@ -231,6 +244,7 @@ const cloneResolvedInputState = (
   id: state.id,
   order: state.order,
   parentCompressions: parentCompressions.map((entry) => ({ ...entry })),
+  romProbe: cloneChecksumRomProbe(state.romProbe),
   selected,
   selectedCandidateId: state.selectedCandidateId,
   size: state.size,
@@ -285,6 +299,7 @@ const cloneResolvedInputAssetState = (
     order,
     parentCompressions: getAssetParentCompressions(asset, parentCompressions),
     patchable: asset.patchable,
+    romProbe: cloneChecksumRomProbe(asset.romProbe),
     selected,
     selectedCandidateId,
     size: asset.size,
@@ -1428,6 +1443,7 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
     view.state.fileName = selectedOwner?.state.fileName || session.stages[0]?.state.fileName;
     view.state.checksums = selectedOwner?.state.checksums;
     view.state.checksumTimeMs = selectedOwner?.state.checksumTimeMs;
+    view.state.romProbe = cloneChecksumRomProbe(selectedOwner?.state.romProbe);
     view.state.size =
       selectedOwner?.state.size ||
       view.preparedInputAssets?.reduce((total, asset) => total + asset.size, 0) ||
@@ -1471,7 +1487,7 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
         }
         const checksumFileName = getPreparedAssetFileName(asset, stage.state.fileName);
         const checksumStartedAt = Date.now();
-        asset.checksums = await this.calculateChecksumsForFile(
+        const checksumResult = await this.calculateChecksumsForFile(
           asset.file,
           {
             ...stage.state,
@@ -1486,6 +1502,8 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
           "input",
           session.synthetic ? `${stage.state.id}:${index}:${assetIndex}` : `${stage.state.id}:${assetIndex}`,
         );
+        asset.checksums = checksumResult.checksums;
+        asset.romProbe = checksumResult.romProbe;
         asset.checksumTimeMs = Date.now() - checksumStartedAt;
       }
       const primaryAsset = getPrimaryInputAsset(assets);
@@ -1493,6 +1511,7 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
       if (primaryChecksums) {
         stage.state.checksums = primaryChecksums;
         stage.state.checksumTimeMs = primaryAsset?.checksumTimeMs;
+        stage.state.romProbe = cloneChecksumRomProbe(primaryAsset?.romProbe);
       }
     }
     if (session.synthetic) this.syncInputSessionView();
@@ -1511,8 +1530,8 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
     },
     role: WorkflowProgress["role"],
     progressId = state.id,
-  ): Promise<ApplyWorkflowChecksums> {
-    if (!this.runtime.checksum.calculate) return {};
+  ): Promise<{ checksums: ApplyWorkflowChecksums; romProbe?: ChecksumRomProbe }> {
+    if (!this.runtime.checksum.calculate) return { checksums: {} };
     const progressDetails = {
       decompressionTimeMs: state.decompressionTimeMs,
       fileName: state.fileName,
@@ -1551,11 +1570,14 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
       source: createChecksumSource(file, state.fileName) as never,
     });
     return {
-      crc32: Number(result.crc32 || 0)
-        .toString(16)
-        .padStart(8, "0"),
-      md5: result.md5 || "",
-      sha1: result.sha1 || "",
+      checksums: {
+        crc32: Number(result.crc32 || 0)
+          .toString(16)
+          .padStart(8, "0"),
+        md5: result.md5 || "",
+        sha1: result.sha1 || "",
+      },
+      romProbe: cloneChecksumRomProbe(result.romProbe),
     };
   }
 

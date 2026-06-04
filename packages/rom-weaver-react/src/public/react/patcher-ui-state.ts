@@ -1,4 +1,5 @@
 import { createProgressViewModelFromEvent } from "../../presentation/workflow-presentation.ts";
+import type { ChecksumRomProbe } from "../../types/checksum.ts";
 import type { JsonValue } from "../../types/runtime.ts";
 
 type StoreController<TState> = {
@@ -56,6 +57,7 @@ type RomInputInfoState = {
   md5: string;
   sha1: string;
   romInfo: string;
+  romProbe?: ChecksumRomProbe;
   validationPhase: string;
   checksumsExpanded: boolean;
   checksumTiming: string;
@@ -397,6 +399,8 @@ const normalizePatcherUiState = (
     fallbackChecksumTiming = "",
   ): RomInputInfoState => {
     const source = isRecord(info) ? info : {};
+    const romProbe = isRecord(source.romProbe) ? source.romProbe : {};
+    const trim = isRecord(romProbe.trim) ? romProbe.trim : {};
     return {
       archiveName: typeof source.archiveName === "string" ? source.archiveName : "",
       checksumsExpanded: source.checksumsExpanded !== false,
@@ -405,6 +409,17 @@ const normalizePatcherUiState = (
       fileName: typeof source.fileName === "string" ? source.fileName : "",
       md5: typeof source.md5 === "string" ? source.md5 : "",
       romInfo: typeof source.romInfo === "string" ? source.romInfo : "",
+      romProbe: isRecord(source.romProbe)
+        ? {
+            trim: {
+              detected: trim.detected === true,
+              mode: typeof trim.mode === "string" ? trim.mode : undefined,
+              preservedDownloadPlayCert:
+                typeof trim.preservedDownloadPlayCert === "boolean" ? trim.preservedDownloadPlayCert : undefined,
+              trimmedInputBytes: typeof trim.trimmedInputBytes === "number" ? trim.trimmedInputBytes : undefined,
+            },
+          }
+        : undefined,
       sha1: typeof source.sha1 === "string" ? source.sha1 : "",
       validationPhase: typeof source.validationPhase === "string" ? source.validationPhase : "idle",
     };

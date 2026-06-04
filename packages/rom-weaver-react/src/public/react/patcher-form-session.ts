@@ -59,6 +59,7 @@ type StagedInputInfo = {
   targetLabel?: string;
   checksums?: Record<string, string>;
   checksumTiming?: string;
+  romProbe?: RomInputRowState["info"]["romProbe"];
   decompressionTimeMs?: number;
   fileName?: string;
   size?: number;
@@ -1156,6 +1157,10 @@ const useLocalApplyPatchFormSession = ({
       },
       romInfo: {
         ...createInertState().romInfo,
+        alterHeaderChecked: activeSettings.compatibility?.fixChecksum === true,
+        alterHeaderDisabled: disabled || busy || inputStaging,
+        alterHeaderLabel: "Fix internal checksum",
+        alterHeaderVisible: true,
         archiveName: primaryRomInput?.info.archiveName ?? (effectiveInputs.length ? "-" : ""),
         crc32: primaryRomInput?.info.crc32 || "",
         fileName:
@@ -1395,6 +1400,7 @@ const useLocalApplyPatchFormSession = ({
             crc32: info.checksums?.crc32 ?? patch.info?.crc32 ?? existing.info.crc32,
             fileName,
             md5: info.checksums?.md5 ?? patch.info?.md5 ?? existing.info.md5,
+            romProbe: info.romProbe ?? patch.info?.romProbe ?? existing.info.romProbe,
             sha1: info.checksums?.sha1 ?? patch.info?.sha1 ?? existing.info.sha1,
             validationPhase: patch.info?.validationPhase ?? existing.info.validationPhase,
           },
@@ -1759,6 +1765,7 @@ const useLocalApplyPatchFormSession = ({
                     crc32: info.checksums?.crc32 || "",
                     fileName: info.fileName || getBinarySourceFileName(snapshot.inputs[index], `Input ${index + 1}`),
                     md5: info.checksums?.md5 || "",
+                    romProbe: info.romProbe || byId.get(stableId)?.info.romProbe,
                     sha1: info.checksums?.sha1 || "",
                     validationPhase: "idle",
                   },
@@ -1957,6 +1964,15 @@ const useLocalApplyPatchFormSession = ({
         });
         if (effectiveInputs.length === 1) updateInputs([]);
         else updateInputs(effectiveInputs.filter((_input, inputIndex) => inputIndex !== index));
+      },
+      setAlterHeader: (checked: boolean) => {
+        updateSettings({
+          ...activeSettings,
+          compatibility: {
+            ...activeSettings.compatibility,
+            fixChecksum: checked,
+          },
+        });
       },
       setChdSplitBin: (checked: boolean) => {
         updateSettings({

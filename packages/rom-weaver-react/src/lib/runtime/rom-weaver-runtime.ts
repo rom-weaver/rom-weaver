@@ -13,7 +13,7 @@ import {
   formatBrowserStorageEstimateState,
   getBrowserStorageEstimateState,
 } from "../../storage/browser/browser-storage-estimate.ts";
-import type { ChecksumResult } from "../../types/checksum.ts";
+import type { ChecksumResult, ChecksumRomProbe } from "../../types/checksum.ts";
 import type { LogLevel } from "../../types/logging.ts";
 import type { CompressionListResult } from "../../types/workflow-runtime.ts";
 import type {
@@ -1299,6 +1299,21 @@ const parseChecksumLabel = (label: string): Partial<ChecksumResult> => {
   return out;
 };
 
+const parseChecksumRomProbeLabel = (label: string): ChecksumRomProbe => {
+  const trimmedInputBytes = label.match(/\btrimmed_input_bytes=(\d+)\b/)?.[1];
+  const mode = label.match(/\bmode=([^;\s]+)\b/)?.[1];
+  const preservedDownloadPlayCert = label.match(/\bpreserved_download_play_cert=(true|false)\b/)?.[1];
+  const detected = typeof trimmedInputBytes === "string";
+  return {
+    trim: {
+      detected,
+      ...(mode ? { mode } : {}),
+      ...(preservedDownloadPlayCert ? { preservedDownloadPlayCert: preservedDownloadPlayCert === "true" } : {}),
+      ...(detected ? { trimmedInputBytes: Number.parseInt(trimmedInputBytes, 10) } : {}),
+    },
+  };
+};
+
 const runRomWeaverChecksumWorker = async (
   input: {
     checksumAlgorithms: string[];
@@ -1359,11 +1374,13 @@ const runRomWeaverChecksumWorker = async (
   ensureRomWeaverSuccess(result, "Checksum calculation failed");
 
   const terminal = getLastEvent(result);
-  const checksums = parseChecksumLabel(terminal ? getRomWeaverRunEventLabel(terminal) : "");
+  const label = terminal ? getRomWeaverRunEventLabel(terminal) : "";
+  const checksums = parseChecksumLabel(label);
   return {
     checksums: {
       crc32: checksums.crc32 || 0,
       md5: checksums.md5 || "",
+      romProbe: parseChecksumRomProbeLabel(label),
       sha1: checksums.sha1 || "",
       ...(checksums.adler32 === undefined ? {} : { adler32: checksums.adler32 }),
     } as ChecksumResult,

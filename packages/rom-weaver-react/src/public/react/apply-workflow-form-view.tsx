@@ -90,10 +90,6 @@ const SectionNotice = ({ state }: { state: NoticeState }) => {
   return <Notice level={state.level === "warning" ? "warn" : "error"}>{state.message}</Notice>;
 };
 
-const FILE_EXTENSION_REGEX = /\.[^./\\]+$/;
-
-const getGameName = (fileName: string) => fileName.replace(FILE_EXTENSION_REGEX, "").trim();
-
 const RomChecksums = ({ romInput, controller }: { romInput: RomInputRowState; controller: PatcherUiController }) => {
   const checksumProgress = romInput.progress && romInput.info.validationPhase === "checksum" ? romInput.progress : null;
   const bytes = romInput.size ?? romInput.sourceSize;
@@ -125,50 +121,49 @@ const RomChecksums = ({ romInput, controller }: { romInput: RomInputRowState; co
 
 const ROM_TYPE_REGEX = /^(.+?)\s+ROM\b/i;
 
-const getRomFixesSummary = (romInfoText: string, alterHeaderChecked: boolean) => {
+const getRomFixesSummary = (romInfoText: string, headerWillFix: boolean, trimDetected: boolean) => {
   const romType =
     String(romInfoText || "")
       .match(ROM_TYPE_REGEX)?.[1]
       ?.trim() || "";
-  const summary = [romType, alterHeaderChecked ? "header fixed" : "header option"].filter(Boolean);
+  const summary = [
+    romType,
+    headerWillFix ? "header will be fixed" : "header unchanged",
+    trimDetected ? "trim detected" : "trim not detected",
+  ].filter(Boolean);
   return summary.join(" · ");
 };
 
+const getTrimFixLabel = (romInput: RomInputRowState) => {
+  const trim = romInput.info.romProbe?.trim;
+  if (!trim?.detected) return "Not detected";
+  const details = [
+    typeof trim.trimmedInputBytes === "number" ? SIZE_LABEL(trim.trimmedInputBytes) : "",
+    trim.mode ? `mode ${trim.mode}` : "",
+    trim.preservedDownloadPlayCert ? "download-play cert preserved" : "",
+  ].filter(Boolean);
+  return details.length ? `Detected (${details.join(" · ")})` : "Detected";
+};
+
+const getHeaderFixLabel = (checked: boolean) => (checked ? "Will fix internal checksum" : "No change");
+
 const RomFixes = ({
+  romInput,
   romInfoText,
   checked,
-  disabled,
-  fileName,
-  label,
-  onChange,
 }: {
+  romInput: RomInputRowState;
   romInfoText: string;
   checked: boolean;
-  disabled: boolean;
-  fileName: string;
-  label: string;
-  onChange: (checked: boolean) => void;
 }) => (
-  <ChecksumList defaultOpen={false} label="ROM Details" sublabel={getRomFixesSummary(romInfoText, checked)}>
+  <ChecksumList
+    defaultOpen={false}
+    label="Fixes"
+    sublabel={getRomFixesSummary(romInfoText, checked, romInput.info.romProbe?.trim.detected === true)}
+  >
     {romInfoText ? <p className="pdesc">{romInfoText}</p> : null}
-    {fileName ? (
-      <div className="ofield">
-        <span className="ofld-lbl">Game</span>
-        <span>{getGameName(fileName)}</span>
-      </div>
-    ) : null}
-    <div className="ofield">
-      <span className="ofld-lbl">Header</span>
-      <label className="opt">
-        <input
-          checked={checked}
-          disabled={disabled}
-          onChange={(event) => onChange(event.currentTarget.checked)}
-          type="checkbox"
-        />
-        {label}
-      </label>
-    </div>
+    <ChecksumRow label="HEADER" value={getHeaderFixLabel(checked)} />
+    <ChecksumRow label="TRIM" value={getTrimFixLabel(romInput)} />
   </ChecksumList>
 );
 
@@ -324,9 +319,6 @@ function ApplyWorkflowFormView({
           const state = romInput.invalid ? "bad" : romInput.valid ? "ok" : undefined;
           const rowProgress =
             romInput.progress && romInput.info.validationPhase !== "checksum" ? romInput.progress : null;
-          const showRomFixes =
-            uiState.romInfo.alterHeaderVisible &&
-            (romInputs.length === 1 || romInput.info.fileName === uiState.romInfo.fileName);
           if (rowProgress) {
             return <FileProgress key={romInput.id} {...toProgressProps(rowProgress)} />;
           }
@@ -351,16 +343,11 @@ function ApplyWorkflowFormView({
               removeLabel={romInputs.length > 1 ? "Remove ROM input" : "Clear ROM input"}
               state={state}
             >
-              {showRomFixes ? (
-                <RomFixes
-                  checked={uiState.romInfo.alterHeaderChecked}
-                  disabled={uiState.romInfo.alterHeaderDisabled}
-                  fileName={romInput.info.fileName}
-                  label={uiState.romInfo.alterHeaderLabel}
-                  onChange={(checked) => uiController.setAlterHeader?.(checked)}
-                  romInfoText={romInput.info.romInfo}
-                />
-              ) : null}
+              <RomFixes
+                checked={uiState.romInfo.alterHeaderChecked}
+                romInfoText={romInput.info.romInfo}
+                romInput={romInput}
+              />
               {romInput.kind === "cue" ? null : <RomChecksums controller={uiController} romInput={romInput} />}
             </FileCard>
           );
