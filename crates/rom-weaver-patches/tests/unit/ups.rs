@@ -212,8 +212,8 @@ fn apply_can_ignore_patch_checksum_mismatch() {
 }
 
 #[test]
-fn create_omits_redundant_truncation_records() {
-    let source = b"\xff\xee\xdd\xcc\xbb\xaa\x99\x88\x77\x66\x55\x44\x33\x22\x11\x00";
+fn create_omits_zero_filled_truncation_records() {
+    let source = b"\xff\xee\xdd\xcc\xbb\xaa\x99\0\0\0\0";
     let target = b"\xff\xee\xdd\xcc\xbb\xaa\x99";
 
     let created = create_ups_patch_bytes(source, target).expect("patch");
@@ -221,6 +221,179 @@ fn create_omits_redundant_truncation_records() {
 
     assert_eq!(created.record_count, 0);
     assert!(parsed.changes.is_empty());
+}
+
+#[test]
+fn create_preserves_nonzero_truncation_suffix_for_reverse_apply() {
+    let temp = TestDir::new();
+    let source_path = temp.child("source.bin");
+    let target_path = temp.child("target.bin");
+    let patch_path = temp.child("truncate.ups");
+    let output_path = temp.child("output.bin");
+    let reverse_output_path = temp.child("reverse.bin");
+
+    let source = b"ABCDEFGH\x91\x92\x93\x94";
+    let target = b"ABCDEFGH";
+    fs::write(&source_path, source).expect("source fixture");
+    fs::write(&target_path, target).expect("target fixture");
+
+    let handler = UpsPatchHandler::new(&UPS);
+    handler
+        .create(
+            &PatchCreateRequest {
+                original: source_path.clone(),
+                modified: target_path.clone(),
+                output: patch_path.clone(),
+                format: "UPS".into(),
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect("create");
+
+    let parsed = parse_ups_bytes(&fs::read(&patch_path).expect("patch bytes")).expect("parse");
+    assert_eq!(parsed.changes.len(), 1);
+    assert_eq!(parsed.changes[0].offset, target.len() as u64);
+    assert_eq!(parsed.changes[0].xor_bytes, source[target.len()..]);
+
+    handler
+        .apply(
+            &PatchApplyRequest {
+                input: source_path,
+                patches: vec![patch_path.clone()],
+                output: output_path.clone(),
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect("forward apply");
+    assert_eq!(fs::read(&output_path).expect("output"), target);
+
+    handler
+        .apply(
+            &PatchApplyRequest {
+                input: target_path,
+                patches: vec![patch_path],
+                output: reverse_output_path.clone(),
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect("reverse apply");
+    assert_eq!(
+        fs::read(reverse_output_path).expect("reverse output"),
+        source
+    );
+}
+
+#[test]
+fn apply_accepts_flips_style_truncation_record_past_target_size() {
+    let temp = TestDir::new();
+    let source_path = temp.child("source.bin");
+    let target_path = temp.child("target.bin");
+    let patch_path = temp.child("flips-truncate.ups");
+    let output_path = temp.child("output.bin");
+    let reverse_output_path = temp.child("reverse.bin");
+
+    let source = b"ABCDEFGH\x91\x92\x93\x94";
+    let target = b"ABCDEFGH";
+    let mut patch = super::UPS_MAGIC.to_vec();
+    super::push_varint(&mut patch, source.len() as u64);
+    super::push_varint(&mut patch, target.len() as u64);
+    super::push_varint(&mut patch, target.len() as u64);
+    patch.extend_from_slice(&source[target.len()..]);
+    patch.push(0);
+    patch.extend_from_slice(&super::crc32_bytes(source).to_le_bytes());
+    patch.extend_from_slice(&super::crc32_bytes(target).to_le_bytes());
+    let patch_checksum = super::crc32_bytes(&patch);
+    patch.extend_from_slice(&patch_checksum.to_le_bytes());
+
+    fs::write(&source_path, source).expect("source fixture");
+    fs::write(&target_path, target).expect("target fixture");
+    fs::write(&patch_path, patch).expect("patch fixture");
+
+    let handler = UpsPatchHandler::new(&UPS);
+    handler
+        .apply(
+            &PatchApplyRequest {
+                input: source_path,
+                patches: vec![patch_path.clone()],
+                output: output_path.clone(),
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect("forward apply");
+    assert_eq!(fs::read(&output_path).expect("output"), target);
+
+    handler
+        .apply(
+            &PatchApplyRequest {
+                input: target_path,
+                patches: vec![patch_path],
+                output: reverse_output_path.clone(),
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect("reverse apply");
+    assert_eq!(
+        fs::read(reverse_output_path).expect("reverse output"),
+        source
+    );
+}
+
+#[test]
+fn create_parallel_preserves_nonzero_truncation_suffix_across_chunk_boundary() {
+    let temp = TestDir::new();
+    let source_path = temp.child("source-boundary-truncate.bin");
+    let target_path = temp.child("target-boundary-truncate.bin");
+    let patch_path = temp.child("boundary-truncate.ups");
+    let reverse_output_path = temp.child("reverse-boundary-truncate.bin");
+
+    let target_len = super::CREATE_THREAD_SCAN_CHUNK_BYTES - 8;
+    let source_len = super::CREATE_THREAD_SCAN_CHUNK_BYTES + 16;
+    let mut source = vec![0u8; source_len];
+    source[target_len..].fill(0x3c);
+    let target = source[..target_len].to_vec();
+
+    fs::write(&source_path, &source).expect("source fixture");
+    fs::write(&target_path, &target).expect("target fixture");
+
+    let handler = UpsPatchHandler::new(&UPS);
+    let create_report = handler
+        .create(
+            &PatchCreateRequest {
+                original: source_path.clone(),
+                modified: target_path.clone(),
+                output: patch_path.clone(),
+                format: "UPS".into(),
+            },
+            &test_context_with_threads(&temp, 8),
+        )
+        .expect("create");
+    assert!(
+        create_report
+            .thread_execution
+            .expect("thread execution")
+            .used_parallelism
+    );
+
+    let parsed = parse_ups_bytes(&fs::read(&patch_path).expect("patch bytes")).expect("parse");
+    assert_eq!(parsed.changes.len(), 1);
+    assert_eq!(parsed.changes[0].offset, target_len as u64);
+    assert_eq!(parsed.changes[0].xor_bytes.len(), source_len - target_len);
+    assert!(parsed.changes[0].xor_bytes.iter().all(|byte| *byte == 0x3c));
+
+    handler
+        .apply(
+            &PatchApplyRequest {
+                input: target_path,
+                patches: vec![patch_path],
+                output: reverse_output_path.clone(),
+            },
+            &test_context_with_threads(&temp, 8),
+        )
+        .expect("reverse apply");
+    assert_eq!(
+        fs::read(reverse_output_path).expect("reverse output"),
+        source
+    );
 }
 
 #[test]

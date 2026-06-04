@@ -159,8 +159,10 @@ impl PatchHandler for UpsPatchHandler {
         request: &PatchCreateRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
+        let source_size = fs::metadata(&request.original)?.len();
         let target_size = fs::metadata(&request.modified)?.len();
-        let (execution, pool) = context.build_pool(ups_create_thread_capability(target_size))?;
+        let scan_size = max(source_size, target_size);
+        let (execution, pool) = context.build_pool(ups_create_thread_capability(scan_size))?;
         let created = create_ups_patch(
             &request.original,
             &request.modified,
@@ -551,17 +553,17 @@ fn apply_prepared_ups_writes(output: &mut File, writes: &[PreparedUpsWrite]) -> 
     Ok(())
 }
 
-fn ups_create_thread_capability(target_size: u64) -> ThreadCapability {
-    let chunk_count = ups_create_chunk_count(target_size).max(1);
+fn ups_create_thread_capability(scan_size: u64) -> ThreadCapability {
+    let chunk_count = ups_create_chunk_count(scan_size).max(1);
     ThreadCapability::parallel(Some(chunk_count))
 }
 
-fn ups_create_chunk_count(target_size: u64) -> usize {
-    if target_size == 0 {
+fn ups_create_chunk_count(scan_size: u64) -> usize {
+    if scan_size == 0 {
         return 1;
     }
     let chunk_bytes = CREATE_THREAD_SCAN_CHUNK_BYTES as u64;
-    let chunk_count = target_size.saturating_add(chunk_bytes - 1) / chunk_bytes;
+    let chunk_count = scan_size.saturating_add(chunk_bytes - 1) / chunk_bytes;
     usize::try_from(chunk_count).unwrap_or(usize::MAX)
 }
 
@@ -621,15 +623,16 @@ fn collect_ups_changes_parallel(
     target_size: u64,
     pool: &SharedThreadPool,
 ) -> Result<Vec<UpsChange>> {
-    if target_size == 0 {
+    let scan_size = max(source_size, target_size);
+    if scan_size == 0 {
         return Ok(Vec::new());
     }
 
     let chunk_size = CREATE_THREAD_SCAN_CHUNK_BYTES as u64;
-    let chunk_ranges = (0..target_size)
+    let chunk_ranges = (0..scan_size)
         .step_by(CREATE_THREAD_SCAN_CHUNK_BYTES)
         .map(|start| {
-            let end = start.saturating_add(chunk_size).min(target_size);
+            let end = start.saturating_add(chunk_size).min(scan_size);
             start..end
         })
         .collect::<Vec<_>>();
@@ -638,10 +641,11 @@ fn collect_ups_changes_parallel(
         let buffered = chunk_ranges
             .iter()
             .map(|range| {
-                crate::read_original_modified_chunk(
+                read_ups_create_chunk(
                     source_path,
                     source_size,
                     target_path,
+                    target_size,
                     range.start,
                     range.end,
                 )
@@ -665,6 +669,7 @@ fn collect_ups_changes_parallel(
                         source_path,
                         source_size,
                         target_path,
+                        target_size,
                         range.start,
                         range.end,
                     )
@@ -694,10 +699,48 @@ fn collect_ups_changes_parallel(
     Ok(merged)
 }
 
+fn read_ups_create_chunk(
+    source_path: &Path,
+    source_size: u64,
+    target_path: &Path,
+    target_size: u64,
+    start: u64,
+    end: u64,
+) -> Result<(Vec<u8>, Vec<u8>)> {
+    let chunk_len = usize::try_from(end - start)
+        .map_err(|_| RomWeaverError::Validation("UPS create chunk length exceeded usize".into()))?;
+    let source_bytes = read_ups_file_chunk(source_path, source_size, start, chunk_len)?;
+    let target_bytes = read_ups_file_chunk(target_path, target_size, start, chunk_len)?;
+    Ok((source_bytes, target_bytes))
+}
+
+fn read_ups_file_chunk(
+    path: &Path,
+    file_size: u64,
+    start: u64,
+    chunk_len: usize,
+) -> Result<Vec<u8>> {
+    let mut bytes = vec![0u8; chunk_len];
+    if start >= file_size {
+        return Ok(bytes);
+    }
+
+    let readable = usize::try_from((file_size - start).min(chunk_len as u64)).map_err(|_| {
+        RomWeaverError::Validation("UPS create readable length exceeded usize".into())
+    })?;
+    if readable > 0 {
+        let mut file = File::open(path)?;
+        file.seek(SeekFrom::Start(start))?;
+        file.read_exact(&mut bytes[..readable])?;
+    }
+    Ok(bytes)
+}
+
 fn collect_ups_chunk_changes(
     source_path: &Path,
     source_size: u64,
     target_path: &Path,
+    target_size: u64,
     start: u64,
     end: u64,
 ) -> Result<Vec<UpsChange>> {
@@ -706,7 +749,9 @@ fn collect_ups_chunk_changes(
     if start < source_size {
         source.seek(SeekFrom::Start(start))?;
     }
-    target.seek(SeekFrom::Start(start))?;
+    if start < target_size {
+        target.seek(SeekFrom::Start(start))?;
+    }
 
     let mut source_buffer = vec![0u8; UPS_IO_BUFFER_SIZE];
     let mut target_buffer = vec![0u8; UPS_IO_BUFFER_SIZE];
@@ -718,8 +763,6 @@ fn collect_ups_chunk_changes(
     while absolute < end {
         let chunk_len = usize::try_from((end - absolute).min(UPS_IO_BUFFER_SIZE as u64))
             .map_err(|_| RomWeaverError::Validation("UPS chunk length exceeded usize".into()))?;
-
-        target.read_exact(&mut target_buffer[..chunk_len])?;
 
         let source_chunk_len = if absolute >= source_size {
             0
@@ -733,6 +776,20 @@ fn collect_ups_chunk_changes(
         }
         if source_chunk_len < chunk_len {
             source_buffer[source_chunk_len..chunk_len].fill(0);
+        }
+
+        let target_chunk_len = if absolute >= target_size {
+            0
+        } else {
+            usize::try_from((target_size - absolute).min(chunk_len as u64)).map_err(|_| {
+                RomWeaverError::Validation("UPS target chunk length exceeded usize".into())
+            })?
+        };
+        if target_chunk_len > 0 {
+            target.read_exact(&mut target_buffer[..target_chunk_len])?;
+        }
+        if target_chunk_len < chunk_len {
+            target_buffer[target_chunk_len..chunk_len].fill(0);
         }
 
         for index in 0..chunk_len {
@@ -775,9 +832,11 @@ fn collect_ups_chunk_changes_from_bytes(
     let mut pending_start: Option<u64> = None;
     let mut pending_xor = Vec::<u8>::new();
     let mut absolute = start;
+    let scan_len = source_bytes.len().max(target_bytes.len());
 
-    for (index, &target_byte) in target_bytes.iter().enumerate() {
+    for index in 0..scan_len {
         let source_byte = source_bytes.get(index).copied().unwrap_or(0);
+        let target_byte = target_bytes.get(index).copied().unwrap_or(0);
         if source_byte != target_byte {
             if pending_start.is_none() {
                 pending_start = Some(absolute);
@@ -808,9 +867,7 @@ fn collect_ups_chunk_changes_from_bytes(
 fn create_ups_patch_streaming(source_path: &Path, target_path: &Path) -> Result<CreatedUpsPatch> {
     let source_size = fs::metadata(source_path)?.len();
     let target_size = fs::metadata(target_path)?.len();
-    // Match RomPatcher.js/UPS encoder behavior: scan only through target bytes.
-    // When target is shorter, truncation is represented by target_size alone.
-    let scan_size = target_size;
+    let scan_size = max(source_size, target_size);
 
     let mut source = BufReader::new(File::open(source_path)?);
     let mut target = BufReader::new(File::open(target_path)?);
@@ -879,7 +936,7 @@ fn create_ups_patch_streaming(source_path: &Path, target_path: &Path) -> Result<
         target_remaining = target_remaining.saturating_sub(target_chunk_len as u64);
     }
 
-    // Finish hashing any unread suffix bytes (for source > target truncation cases).
+    // The max-size scan should consume both real files; these loops are defensive.
     while source_remaining > 0 {
         let chunk_len =
             usize::try_from(source_remaining.min(UPS_IO_BUFFER_SIZE as u64)).map_err(|_| {
@@ -938,11 +995,11 @@ fn create_ups_patch_bytes(source: &[u8], target: &[u8]) -> Result<CreatedUpsPatc
 
 #[cfg(test)]
 fn build_changes(source: &[u8], target: &[u8]) -> Result<Vec<UpsChange>> {
-    let target_size = target.len();
+    let scan_size = source.len().max(target.len());
     let mut changes = Vec::new();
 
     let mut index = 0usize;
-    while index < target_size {
+    while index < scan_size {
         let source_byte = source.get(index).copied().unwrap_or(0);
         let target_byte = target.get(index).copied().unwrap_or(0);
 
@@ -951,7 +1008,7 @@ fn build_changes(source: &[u8], target: &[u8]) -> Result<Vec<UpsChange>> {
                 .map_err(|_| RomWeaverError::Validation("UPS offset exceeded u64".into()))?;
             let mut xor_bytes = Vec::new();
 
-            while index < target_size {
+            while index < scan_size {
                 let source_byte = source.get(index).copied().unwrap_or(0);
                 let target_byte = target.get(index).copied().unwrap_or(0);
                 if source_byte == target_byte {
