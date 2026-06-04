@@ -8,8 +8,8 @@ use std::{
 use rayon::prelude::*;
 use rom_weaver_core::{
     ChunkPlanner, FileChunk, FormatDescriptor, OperationContext, OperationFamily, OperationReport,
-    PatchApplyRequest, PatchCapabilities, PatchCreateRequest, PatchHandler, ProbeConfidence,
-    Result, RomWeaverError, SharedThreadPool, ThreadCapability,
+    PatchApplyRequest, PatchCapabilities, PatchChecksumValidation, PatchCreateRequest,
+    PatchHandler, ProbeConfidence, Result, RomWeaverError, SharedThreadPool, ThreadCapability,
 };
 use serde_json::{Map as JsonMap, Value as JsonValue};
 
@@ -105,8 +105,8 @@ impl PatchHandler for IpsPatchHandler {
         ProbeConfidence::Extension
     }
 
-    fn parse(&self, patch_path: &Path, _context: &OperationContext) -> Result<OperationReport> {
-        let patch = parse_ips_file(patch_path, self.flavor)?;
+    fn parse(&self, patch_path: &Path, context: &OperationContext) -> Result<OperationReport> {
+        let patch = parse_ips_file(patch_path, self.flavor, context.patch_checksum_validation())?;
         let label = parse_label(self.descriptor.name, &patch);
 
         Ok(OperationReport::succeeded(
@@ -125,9 +125,9 @@ impl PatchHandler for IpsPatchHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
-        let patch = parse_ips_file(patch_path, self.flavor)?;
+        let patch = parse_ips_file(patch_path, self.flavor, context.patch_checksum_validation())?;
         let input_len = fs::metadata(&request.input)?.len();
-        let output_size = patch.resolved_output_size(input_len)?;
+        let output_size = patch.resolved_output_size(input_len);
         let max_parallel_chunks = max_parallel_chunks(output_size)?;
         let thread_capability = ThreadCapability::parallel(Some(max_parallel_chunks));
         let planned_execution = context.plan_threads(thread_capability.clone());
@@ -185,6 +185,12 @@ impl PatchHandler for IpsPatchHandler {
     ) -> Result<OperationReport> {
         let original_len = fs::metadata(&request.original)?.len();
         let modified_len = fs::metadata(&request.modified)?.len();
+        validate_ips_create_flips_limits(
+            original_len,
+            modified_len,
+            self.flavor,
+            context.patch_checksum_validation(),
+        )?;
         let thread_capability = ips_create_thread_capability(modified_len)?;
         let planned_execution = context.plan_threads(thread_capability.clone());
 
@@ -258,16 +264,10 @@ struct ParsedIpsPatch {
 }
 
 impl ParsedIpsPatch {
-    fn resolved_output_size(&self, input_len: u64) -> Result<u64> {
-        let output_size = self
-            .truncate_size
-            .unwrap_or_else(|| input_len.max(self.max_written_end));
-        if self.max_written_end > output_size {
-            return Err(RomWeaverError::Validation(format!(
-                "IPS record exceeded declared output size {output_size}"
-            )));
-        }
-        Ok(output_size)
+    fn resolved_output_size(&self, input_len: u64) -> u64 {
+        let output_size = input_len.max(self.max_written_end);
+        self.truncate_size
+            .map_or(output_size, |truncate_size| output_size.min(truncate_size))
     }
 }
 
@@ -324,7 +324,11 @@ impl IpsDiffRun {
     }
 }
 
-fn parse_ips_file(path: &Path, flavor: IpsFlavor) -> Result<ParsedIpsPatch> {
+fn parse_ips_file(
+    path: &Path,
+    flavor: IpsFlavor,
+    validation: PatchChecksumValidation,
+) -> Result<ParsedIpsPatch> {
     let file = File::open(path)?;
     let file_len = file.metadata()?.len();
     let min_len = (flavor.header().len() + flavor.footer().len()) as u64;
@@ -352,9 +356,11 @@ fn parse_ips_file(path: &Path, flavor: IpsFlavor) -> Result<ParsedIpsPatch> {
                     0 => (None, None),
                     3 => (Some(u64::from(parser.read_u24()?)), None),
                     _ => {
-                        warnings.push(format!(
-                            "ignored {trailing_len} trailing byte(s) after EOF in IPS patch"
-                        ));
+                        handle_unexpected_ips_trailing_bytes(
+                            trailing_len,
+                            validation,
+                            &mut warnings,
+                        )?;
                         (None, None)
                     }
                 },
@@ -381,13 +387,7 @@ fn parse_ips_file(path: &Path, flavor: IpsFlavor) -> Result<ParsedIpsPatch> {
                 },
             };
 
-            if let Some(size) = truncate_size
-                && max_written_end > size
-            {
-                return Err(RomWeaverError::Validation(format!(
-                    "IPS record exceeded declared output size {size}"
-                )));
-            }
+            warn_if_records_exceed_truncate_size(truncate_size, max_written_end, &mut warnings);
 
             return Ok(ParsedIpsPatch {
                 truncate_size,
@@ -408,9 +408,7 @@ fn parse_ips_file(path: &Path, flavor: IpsFlavor) -> Result<ParsedIpsPatch> {
             let rle_len = u64::from(parser.read_u16()?);
             let byte = parser.read_exact(1)?[0];
             if rle_len == 0 {
-                warnings.push(format!(
-                    "ignored zero-length IPS RLE record at offset {offset}"
-                ));
+                handle_zero_length_rle_record(offset, validation, &mut warnings)?;
                 continue;
             }
             (rle_len, IpsRecordData::Rle { byte })
@@ -427,6 +425,15 @@ fn parse_ips_file(path: &Path, flavor: IpsFlavor) -> Result<ParsedIpsPatch> {
 
 #[cfg(test)]
 fn parse_ips_bytes(bytes: &[u8], flavor: IpsFlavor) -> Result<ParsedIpsPatch> {
+    parse_ips_bytes_with_validation(bytes, flavor, PatchChecksumValidation::Strict)
+}
+
+#[cfg(test)]
+fn parse_ips_bytes_with_validation(
+    bytes: &[u8],
+    flavor: IpsFlavor,
+    validation: PatchChecksumValidation,
+) -> Result<ParsedIpsPatch> {
     if bytes.len() < flavor.header().len() + flavor.footer().len() {
         return Err(RomWeaverError::Validation(
             "IPS patch is too small to contain a valid header and footer".into(),
@@ -450,9 +457,11 @@ fn parse_ips_bytes(bytes: &[u8], flavor: IpsFlavor) -> Result<ParsedIpsPatch> {
                     0 => (None, None),
                     3 => (Some(u64::from(parser.read_u24()?)), None),
                     trailing_len => {
-                        warnings.push(format!(
-                            "ignored {trailing_len} trailing byte(s) after EOF in IPS patch"
-                        ));
+                        handle_unexpected_ips_trailing_bytes(
+                            trailing_len as u64,
+                            validation,
+                            &mut warnings,
+                        )?;
                         (None, None)
                     }
                 },
@@ -473,13 +482,7 @@ fn parse_ips_bytes(bytes: &[u8], flavor: IpsFlavor) -> Result<ParsedIpsPatch> {
                 },
             };
 
-            if let Some(size) = truncate_size
-                && max_written_end > size
-            {
-                return Err(RomWeaverError::Validation(format!(
-                    "IPS record exceeded declared output size {size}"
-                )));
-            }
+            warn_if_records_exceed_truncate_size(truncate_size, max_written_end, &mut warnings);
 
             return Ok(ParsedIpsPatch {
                 truncate_size,
@@ -500,9 +503,7 @@ fn parse_ips_bytes(bytes: &[u8], flavor: IpsFlavor) -> Result<ParsedIpsPatch> {
             let rle_len = u64::from(parser.read_u16()?);
             let byte = parser.read_exact(1)?[0];
             if rle_len == 0 {
-                warnings.push(format!(
-                    "ignored zero-length IPS RLE record at offset {offset}"
-                ));
+                handle_zero_length_rle_record(offset, validation, &mut warnings)?;
                 continue;
             }
             (rle_len, IpsRecordData::Rle { byte })
@@ -529,6 +530,79 @@ fn parse_label(format_name: &str, patch: &ParsedIpsPatch) -> String {
         label.push_str(" and metadata");
     }
     append_warning_labels(label, &patch.warnings)
+}
+
+fn handle_unexpected_ips_trailing_bytes(
+    trailing_len: u64,
+    validation: PatchChecksumValidation,
+    warnings: &mut Vec<String>,
+) -> Result<()> {
+    let message = format!("{trailing_len} trailing byte(s) after EOF in IPS patch");
+    if validation == PatchChecksumValidation::Strict {
+        return Err(RomWeaverError::Validation(format!(
+            "IPS patch contained unexpected {message}"
+        )));
+    }
+
+    warnings.push(format!("ignored {message}"));
+    Ok(())
+}
+
+fn handle_zero_length_rle_record(
+    offset: u64,
+    validation: PatchChecksumValidation,
+    warnings: &mut Vec<String>,
+) -> Result<()> {
+    let message = format!("zero-length IPS RLE record at offset {offset}");
+    if validation == PatchChecksumValidation::Strict {
+        return Err(RomWeaverError::Validation(format!(
+            "IPS patch contained invalid {message}"
+        )));
+    }
+
+    warnings.push(format!("ignored {message}"));
+    Ok(())
+}
+
+fn warn_if_records_exceed_truncate_size(
+    truncate_size: Option<u64>,
+    max_written_end: u64,
+    warnings: &mut Vec<String>,
+) {
+    if let Some(size) = truncate_size
+        && max_written_end > size
+    {
+        warnings.push(format!(
+            "IPS patch appears scrambled or malformed; records extend past truncate size {size}"
+        ));
+    }
+}
+
+fn validate_ips_create_flips_limits(
+    original_len: u64,
+    modified_len: u64,
+    flavor: IpsFlavor,
+    validation: PatchChecksumValidation,
+) -> Result<()> {
+    if flavor != IpsFlavor::Ips || validation != PatchChecksumValidation::Strict {
+        return Ok(());
+    }
+
+    let max_ips_len = MAX_IPS_OFFSET + 1;
+    if modified_len > max_ips_len {
+        return Err(RomWeaverError::Validation(format!(
+            "IPS create target size {modified_len} exceeds the Flips-compatible 16 MiB limit; use IPS32 or --ignore-checksum-validation to try a non-Flips-compatible IPS patch"
+        )));
+    }
+
+    if modified_len == max_ips_len && original_len > modified_len {
+        return Err(RomWeaverError::Validation(
+            "IPS create cannot encode a truncate footer for exact 16 MiB output; use IPS32 or --ignore-checksum-validation to try a non-Flips-compatible IPS patch"
+                .to_string(),
+        ));
+    }
+
+    Ok(())
 }
 
 fn append_warning_labels(mut label: String, warnings: &[String]) -> String {
@@ -634,7 +708,7 @@ fn create_ips_patch_streaming(
         for index in 0..chunk_len {
             let original_byte = original_buffer[index];
             let modified_byte = modified_buffer[index];
-            if original_byte == modified_byte {
+            if offset < original_len && original_byte == modified_byte {
                 push_unchanged_byte(&mut pending, modified_byte, output, &mut created, flavor)?;
             } else {
                 push_changed_byte(
@@ -657,7 +731,7 @@ fn create_ips_patch_streaming(
 
     match flavor {
         IpsFlavor::Ips => {
-            if truncate_size_required(original_len, modified_len, created.max_written_end) {
+            if truncate_size_required(original_len, modified_len) {
                 write_u24(output, modified_len, "IPS truncate size")?;
             }
         }
@@ -723,7 +797,12 @@ fn create_ips_patch_parallel(
                 .enumerate()
                 .map(|(chunk_index, (original_bytes, modified_bytes))| {
                     let start = (chunk_index as u64) * (CREATE_SCAN_CHUNK_BYTES as u64);
-                    collect_ips_diff_runs_from_bytes(start, &original_bytes, &modified_bytes)
+                    collect_ips_diff_runs_from_bytes(
+                        start,
+                        &original_bytes,
+                        &modified_bytes,
+                        original_len,
+                    )
                 })
                 .collect::<Result<Vec<_>>>()
         })?;
@@ -769,7 +848,7 @@ fn write_ips_runs_to_output(
 
     match flavor {
         IpsFlavor::Ips => {
-            if truncate_size_required(original_len, modified_len, created.max_written_end) {
+            if truncate_size_required(original_len, modified_len) {
                 write_u24(output, modified_len, "IPS truncate size")?;
             }
         }
@@ -837,7 +916,7 @@ fn collect_ips_diff_runs_for_chunk(
         for index in 0..chunk_len {
             let source = original_buffer[index];
             let target = modified_buffer[index];
-            if source == target {
+            if cursor < original_len && source == target {
                 if !pending_bytes.is_empty() {
                     runs.push(IpsDiffRun {
                         offset: pending_start.expect("pending start exists"),
@@ -869,6 +948,7 @@ fn collect_ips_diff_runs_from_bytes(
     start: u64,
     original_bytes: &[u8],
     modified_bytes: &[u8],
+    original_len: u64,
 ) -> Result<Vec<IpsDiffRun>> {
     let mut runs = Vec::new();
     let mut pending_start: Option<u64> = None;
@@ -878,7 +958,7 @@ fn collect_ips_diff_runs_from_bytes(
         let cursor = checked_add(start, index as u64, "IPS create scan offset")?;
         let source = original_bytes[index];
         let target = modified_bytes[index];
-        if source == target {
+        if cursor < original_len && source == target {
             if !pending_bytes.is_empty() {
                 runs.push(IpsDiffRun {
                     offset: pending_start.expect("pending start exists"),
@@ -1332,8 +1412,8 @@ fn write_rle_record(
     Ok(())
 }
 
-fn truncate_size_required(original_len: u64, modified_len: u64, max_written_end: u64) -> bool {
-    modified_len < original_len || (modified_len > original_len && max_written_end < modified_len)
+fn truncate_size_required(original_len: u64, modified_len: u64) -> bool {
+    modified_len < original_len
 }
 
 fn write_offset(output: &mut impl Write, value: u64, flavor: IpsFlavor) -> Result<()> {
@@ -1389,10 +1469,16 @@ fn build_chunk_tasks(
     let mut record_indexes = vec![Vec::new(); chunks.len()];
 
     for (record_index, record) in patch.records.iter().enumerate() {
+        let record_end = record.end()?;
+        let clipped_end = min(record_end, output_size);
+        if record.offset >= clipped_end {
+            continue;
+        }
+
         let start_chunk = usize::try_from(record.offset / OUTPUT_CHUNK_SIZE).map_err(|_| {
             RomWeaverError::Validation("IPS record offset exceeded chunk index range".into())
         })?;
-        let end_chunk = usize::try_from((record.end()? - 1) / OUTPUT_CHUNK_SIZE).map_err(|_| {
+        let end_chunk = usize::try_from((clipped_end - 1) / OUTPUT_CHUNK_SIZE).map_err(|_| {
             RomWeaverError::Validation("IPS record end exceeded chunk index range".into())
         })?;
 

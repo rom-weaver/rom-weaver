@@ -71,6 +71,85 @@ fn patch_apply_succeeds_for_valid_ips_patch() {
 }
 
 #[test]
+fn patch_apply_can_ignore_recoverable_ips_validation() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("input.bin").path(), b"abcdefgh").expect("fixture");
+    fs::write(
+        temp.child("update.ips").path(),
+        build_ips_patch(
+            vec![TestIpsRecord::Rle {
+                offset: 0,
+                len: 0,
+                value: 0xFF,
+            }],
+            None,
+        ),
+    )
+    .expect("fixture");
+
+    let strict_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch",
+            "apply",
+            "--input",
+            temp.child("input.bin").path().to_str().expect("path"),
+            "--patch",
+            temp.child("update.ips").path().to_str().expect("path"),
+            "--output",
+            temp.child("strict-output.bin").path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .stdout
+        .clone();
+    let strict_json = parse_single_json_line(&strict_output);
+    assert_eq!(strict_json["command"], "patch-apply");
+    assert_eq!(strict_json["format"], "IPS");
+    assert_eq!(strict_json["status"], "failed");
+    assert!(strict_json["label"]
+        .as_str()
+        .expect("label")
+        .contains("invalid zero-length IPS RLE record"));
+
+    let ignored_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch",
+            "apply",
+            "--input",
+            temp.child("input.bin").path().to_str().expect("path"),
+            "--patch",
+            temp.child("update.ips").path().to_str().expect("path"),
+            "--output",
+            temp.child("ignored-output.bin").path().to_str().expect("path"),
+            "--ignore-checksum-validation",
+            "--no-compress",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let ignored_json = parse_single_json_line(&ignored_output);
+    assert_eq!(ignored_json["command"], "patch-apply");
+    assert_eq!(ignored_json["format"], "IPS");
+    assert_eq!(ignored_json["status"], "succeeded");
+    assert!(ignored_json["label"]
+        .as_str()
+        .expect("label")
+        .contains("warning=ignored zero-length IPS RLE record at offset 0"));
+    assert_eq!(
+        fs::read(temp.child("ignored-output.bin").path()).expect("output"),
+        b"abcdefgh"
+    );
+}
+
+#[test]
 fn patch_apply_reports_pds_as_explicitly_unsupported() {
     let temp = setup_temp_dir();
     fs::write(temp.child("input.bin").path(), b"abcdefgh").expect("fixture");
@@ -726,6 +805,78 @@ fn patch_create_succeeds_for_ips_and_round_trips() {
     assert_eq!(
         fs::read(output.path()).expect("output"),
         fs::read(modified.path()).expect("modified")
+    );
+}
+
+#[test]
+fn patch_create_can_ignore_classic_ips_flips_size_limit() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.bin");
+    let modified = temp.child("new.bin");
+    let patch = temp.child("output.ips");
+    let len = 0x0100_0001;
+    write_sparse_bytes(original.path(), len, 0, &[0]);
+    write_sparse_bytes(modified.path(), len, 0, &[0x5A]);
+
+    let strict_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch",
+            "create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--format",
+            "ips",
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .stdout
+        .clone();
+
+    let strict_json = parse_single_json_line(&strict_output);
+    assert_eq!(strict_json["command"], "patch-create");
+    assert_eq!(strict_json["format"], "IPS");
+    assert_eq!(strict_json["status"], "failed");
+    assert!(strict_json["label"]
+        .as_str()
+        .expect("label")
+        .contains("exceeds the Flips-compatible 16 MiB limit"));
+
+    let ignored_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch",
+            "create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--format",
+            "ips",
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--ignore-checksum-validation",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let ignored_json = parse_single_json_line(&ignored_output);
+    assert_eq!(ignored_json["command"], "patch-create");
+    assert_eq!(ignored_json["format"], "IPS");
+    assert_eq!(ignored_json["status"], "succeeded");
+    assert_eq!(
+        fs::read(patch.path()).expect("patch"),
+        b"PATCH\x00\x00\x00\x00\x01ZEOF"
     );
 }
 

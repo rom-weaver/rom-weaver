@@ -800,7 +800,7 @@ pub struct PatchApplyCommand {
         not(target_arch = "wasm32"),
         arg(
             long,
-            help = "Skip patch-provided checksum validation during patch apply (source, target, and patch-level checks when supported)"
+            help = "Skip patch-provided checksum validation during patch apply and permit recoverable patch-format validation issues"
         )
     )]
     #[serde(default)]
@@ -933,7 +933,7 @@ pub struct PatchValidateCommand {
         not(target_arch = "wasm32"),
         arg(
             long,
-            help = "Skip patch-provided checksum validation during patch validation"
+            help = "Skip patch-provided checksum validation during patch validation and permit recoverable patch-format validation issues"
         )
     )]
     #[serde(default)]
@@ -961,7 +961,7 @@ pub struct PatchCreateCommand {
         not(target_arch = "wasm32"),
         arg(
             long,
-            help = "Skip patch checksum emission during patch create when supported (for example xdelta or VCDIFF window checksums)"
+            help = "Skip strict patch validation during patch create when supported, including checksum emission and compatibility checks"
         )
     )]
     #[serde(default)]

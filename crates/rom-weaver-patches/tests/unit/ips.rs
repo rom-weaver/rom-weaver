@@ -5,12 +5,15 @@ use std::{
     path::PathBuf,
 };
 
-use rom_weaver_core::{OperationContext, PatchApplyRequest, PatchCreateRequest, PatchHandler};
+use rom_weaver_core::{
+    OperationContext, PatchApplyRequest, PatchChecksumValidation, PatchCreateRequest, PatchHandler,
+};
 
 use super::{
     CREATE_SCAN_CHUNK_BYTES, DEFAULT_EBP_METADATA_JSON, IPS_EOF, IPS_MAGIC,
     IPS_RESERVED_EOF_OFFSET, IPS32_EOF, IPS32_MAGIC, IpsFlavor, IpsPatchHandler, IpsRecordData,
     JsonValue, MAX_IPS_RECORD_LEN, OUTPUT_CHUNK_SIZE, parse_ips_bytes,
+    parse_ips_bytes_with_validation,
 };
 use crate::{
     EBP, IPS, IPS32,
@@ -24,7 +27,7 @@ enum TestIpsRecord {
 }
 
 #[test]
-fn parse_rejects_records_beyond_declared_output_size() {
+fn parse_accepts_records_beyond_truncate_size_with_warning() {
     let patch = build_ips_patch(
         vec![TestIpsRecord::Literal {
             offset: 4,
@@ -33,16 +36,20 @@ fn parse_rejects_records_beyond_declared_output_size() {
         Some(6),
     );
 
-    let error = parse_ips_bytes(&patch, IpsFlavor::Ips).expect_err("invalid patch");
+    let parsed = parse_ips_bytes(&patch, IpsFlavor::Ips).expect("parse");
+    assert_eq!(parsed.truncate_size, Some(6));
+    assert_eq!(parsed.records.len(), 1);
+    assert_eq!(parsed.max_written_end, 11);
+    assert_eq!(parsed.warnings.len(), 1);
     assert!(
-        error
-            .to_string()
-            .contains("IPS record exceeded declared output size")
+        parsed.warnings[0].contains("records extend past truncate size 6"),
+        "warning mismatch: {}",
+        parsed.warnings[0]
     );
 }
 
 #[test]
-fn parse_accepts_zero_length_rle_records_with_warning() {
+fn parse_rejects_zero_length_rle_records_in_strict_mode() {
     let patch = build_ips_patch(
         vec![
             TestIpsRecord::Rle {
@@ -58,7 +65,34 @@ fn parse_accepts_zero_length_rle_records_with_warning() {
         None,
     );
 
-    let parsed = parse_ips_bytes(&patch, IpsFlavor::Ips).expect("parse");
+    let error = parse_ips_bytes(&patch, IpsFlavor::Ips).expect_err("invalid zero RLE");
+    assert!(
+        error
+            .to_string()
+            .contains("invalid zero-length IPS RLE record at offset 0")
+    );
+}
+
+#[test]
+fn parse_can_ignore_zero_length_rle_records_with_warning() {
+    let patch = build_ips_patch(
+        vec![
+            TestIpsRecord::Rle {
+                offset: 0,
+                len: 0,
+                value: 0xFF,
+            },
+            TestIpsRecord::Literal {
+                offset: 1,
+                data: b"A".to_vec(),
+            },
+        ],
+        None,
+    );
+
+    let parsed =
+        parse_ips_bytes_with_validation(&patch, IpsFlavor::Ips, PatchChecksumValidation::Ignore)
+            .expect("parse");
     assert_eq!(parsed.records.len(), 1);
     assert_eq!(parsed.records[0].offset, 1);
     assert_eq!(parsed.records[0].len, 1);
@@ -71,7 +105,7 @@ fn parse_accepts_zero_length_rle_records_with_warning() {
 }
 
 #[test]
-fn parse_accepts_trailing_bytes_after_eof_with_warning() {
+fn parse_rejects_trailing_bytes_after_eof_in_strict_mode() {
     let mut patch = build_ips_patch(
         vec![TestIpsRecord::Literal {
             offset: 0,
@@ -81,7 +115,28 @@ fn parse_accepts_trailing_bytes_after_eof_with_warning() {
     );
     patch.extend_from_slice(&[0xDE, 0xAD]);
 
-    let parsed = parse_ips_bytes(&patch, IpsFlavor::Ips).expect("parse");
+    let error = parse_ips_bytes(&patch, IpsFlavor::Ips).expect_err("invalid trailing bytes");
+    assert!(
+        error
+            .to_string()
+            .contains("unexpected 2 trailing byte(s) after EOF in IPS patch")
+    );
+}
+
+#[test]
+fn parse_can_ignore_trailing_bytes_after_eof_with_warning() {
+    let mut patch = build_ips_patch(
+        vec![TestIpsRecord::Literal {
+            offset: 0,
+            data: b"A".to_vec(),
+        }],
+        None,
+    );
+    patch.extend_from_slice(&[0xDE, 0xAD]);
+
+    let parsed =
+        parse_ips_bytes_with_validation(&patch, IpsFlavor::Ips, PatchChecksumValidation::Ignore)
+            .expect("parse");
     assert_eq!(parsed.records.len(), 1);
     assert_eq!(parsed.truncate_size, None);
     assert_eq!(parsed.warnings.len(), 1);
@@ -111,7 +166,7 @@ fn parse_report_includes_warning_for_zero_length_rle_record() {
 
     let handler = IpsPatchHandler::new(&IPS);
     let report = handler
-        .parse(&patch_path, &test_context_with_threads(&temp, 1))
+        .parse(&patch_path, &ignore_validation_context(&temp, 1))
         .expect("parse report");
 
     assert!(
@@ -149,7 +204,7 @@ fn apply_report_includes_warning_for_trailing_bytes_after_eof() {
                 patches: vec![patch_path],
                 output: output_path.clone(),
             },
-            &test_context_with_threads(&temp, 1),
+            &ignore_validation_context(&temp, 1),
         )
         .expect("apply report");
 
@@ -211,6 +266,77 @@ fn apply_round_trips_overlaps_and_truncation() {
     assert_eq!(execution.effective_threads, 1);
     assert!(!execution.used_parallelism);
     assert_eq!(fs::read(&output_path).expect("output"), b"a1XYZf!!!");
+}
+
+#[test]
+fn apply_clips_records_beyond_truncate_size() {
+    let temp = TestDir::new();
+    let input_path = temp.child("input.bin");
+    let patch_path = temp.child("update.ips");
+    let output_path = temp.child("output.bin");
+    fs::write(&input_path, b"abcdefgh").expect("fixture");
+    fs::write(
+        &patch_path,
+        build_ips_patch(
+            vec![
+                TestIpsRecord::Literal {
+                    offset: 0,
+                    data: b"Z".to_vec(),
+                },
+                TestIpsRecord::Literal {
+                    offset: 4,
+                    data: b"toolong".to_vec(),
+                },
+            ],
+            Some(6),
+        ),
+    )
+    .expect("fixture");
+
+    let handler = IpsPatchHandler::new(&IPS);
+    let report = handler
+        .apply(
+            &PatchApplyRequest {
+                input: input_path,
+                patches: vec![patch_path],
+                output: output_path.clone(),
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect("apply");
+
+    assert_eq!(fs::read(&output_path).expect("output"), b"Zbcdto");
+    assert!(
+        report
+            .label
+            .contains("warning=IPS patch appears scrambled or malformed"),
+        "label mismatch: {}",
+        report.label
+    );
+}
+
+#[test]
+fn apply_truncate_footer_does_not_grow_output() {
+    let temp = TestDir::new();
+    let input_path = temp.child("input.bin");
+    let patch_path = temp.child("update.ips");
+    let output_path = temp.child("output.bin");
+    fs::write(&input_path, []).expect("fixture");
+    fs::write(&patch_path, build_ips_patch(Vec::new(), Some(32))).expect("fixture");
+
+    let handler = IpsPatchHandler::new(&IPS);
+    handler
+        .apply(
+            &PatchApplyRequest {
+                input: input_path,
+                patches: vec![patch_path],
+                output: output_path.clone(),
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect("apply");
+
+    assert_eq!(fs::read(&output_path).expect("output"), Vec::<u8>::new());
 }
 
 #[test]
@@ -298,7 +424,7 @@ fn create_round_trips_and_encodes_truncation_when_shrinking() {
 }
 
 #[test]
-fn create_can_grow_with_zero_tail_using_only_truncate_size() {
+fn create_grows_with_explicit_zero_record_not_truncate_only() {
     let temp = TestDir::new();
     let original_path = temp.child("input.bin");
     let patch_path = temp.child("update.ips");
@@ -322,8 +448,14 @@ fn create_can_grow_with_zero_tail_using_only_truncate_size() {
 
     let patch =
         parse_ips_bytes(&fs::read(&patch_path).expect("patch"), IpsFlavor::Ips).expect("parse");
-    assert_eq!(patch.truncate_size, Some(32));
-    assert!(patch.records.is_empty());
+    assert_eq!(patch.truncate_size, None);
+    assert_eq!(patch.records.len(), 1);
+    assert_eq!(patch.records[0].offset, 0);
+    assert_eq!(patch.records[0].len, 32);
+    match &patch.records[0].data {
+        IpsRecordData::Rle { byte } => assert_eq!(*byte, 0),
+        other => panic!("expected RLE record, got {other:?}"),
+    }
 
     handler
         .apply(
@@ -658,6 +790,68 @@ fn create_unchanged_files_produce_empty_patch() {
 
     let patch = fs::read(&patch_path).expect("patch");
     assert_eq!(patch, b"PATCHEOF");
+}
+
+#[test]
+fn create_rejects_classic_ips_targets_larger_than_flips_limit() {
+    let temp = TestDir::new();
+    let original_path = temp.child("input.bin");
+    let modified_path = temp.child("modified.bin");
+    let patch_path = temp.child("update.ips");
+    let len = (0x00FF_FFFF_u64) + 2;
+    write_sparse_bytes(&original_path, len, 0, &[0]);
+    write_sparse_bytes(&modified_path, len, 0, &[0x5A]);
+
+    let handler = IpsPatchHandler::new(&IPS);
+    let error = handler
+        .create(
+            &PatchCreateRequest {
+                original: original_path,
+                modified: modified_path,
+                output: patch_path,
+                format: "IPS".into(),
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect_err("oversized IPS create should fail");
+
+    assert!(
+        error
+            .to_string()
+            .contains("exceeds the Flips-compatible 16 MiB limit"),
+        "error mismatch: {error}"
+    );
+}
+
+#[test]
+fn create_can_ignore_classic_ips_flips_size_limit_when_records_remain_encodable() {
+    let temp = TestDir::new();
+    let original_path = temp.child("input.bin");
+    let modified_path = temp.child("modified.bin");
+    let patch_path = temp.child("update.ips");
+    let len = (0x00FF_FFFF_u64) + 2;
+    write_sparse_bytes(&original_path, len, 0, &[0]);
+    write_sparse_bytes(&modified_path, len, 0, &[0x5A]);
+
+    let handler = IpsPatchHandler::new(&IPS);
+    handler
+        .create(
+            &PatchCreateRequest {
+                original: original_path,
+                modified: modified_path,
+                output: patch_path.clone(),
+                format: "IPS".into(),
+            },
+            &ignore_validation_context(&temp, 1),
+        )
+        .expect("ignored validation create");
+
+    let parsed =
+        parse_ips_bytes(&fs::read(&patch_path).expect("patch"), IpsFlavor::Ips).expect("parse");
+    assert_eq!(parsed.records.len(), 1);
+    assert_eq!(parsed.records[0].offset, 0);
+    assert_eq!(parsed.records[0].len, 1);
+    assert_eq!(parsed.truncate_size, None);
 }
 
 #[test]
@@ -1012,5 +1206,10 @@ fn write_sparse_bytes(path: &PathBuf, len: u64, offset: u64, bytes: &[u8]) {
 
 fn test_context_with_threads(temp: &TestDir, threads: usize) -> OperationContext {
     test_context_with_threads_named(temp, threads, "temp-root")
+}
+
+fn ignore_validation_context(temp: &TestDir, threads: usize) -> OperationContext {
+    test_context_with_threads(temp, threads)
+        .with_patch_checksum_validation(PatchChecksumValidation::Ignore)
 }
 /* jscpd:ignore-end */
