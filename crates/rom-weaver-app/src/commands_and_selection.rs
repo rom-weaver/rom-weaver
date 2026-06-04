@@ -654,8 +654,6 @@ impl CliApp {
             } else {
                 (split_bin, None)
             };
-        let suppress_scaffold_percent =
-            Self::container_handler_emits_incremental_byte_progress(handler.descriptor().name);
         let extract_threads = Some(context.plan_threads(handler.capabilities().extract_threads));
         self.emit_running(
             OperationLabel {
@@ -665,7 +663,7 @@ impl CliApp {
             },
             "extract",
             format!("extracting `{}`", source.display()),
-            Some(0.0),
+            None,
             extract_threads.clone(),
         );
         self.emit_running(
@@ -676,11 +674,7 @@ impl CliApp {
             },
             "extract",
             format!("preparing extraction for `{}`", source.display()),
-            if suppress_scaffold_percent {
-                None
-            } else {
-                Some(1.0)
-            },
+            None,
             extract_threads.clone(),
         );
         let mut report = self
@@ -739,11 +733,7 @@ impl CliApp {
                 },
                 "extract",
                 format!("extracting `{}`", source.display()),
-                if suppress_scaffold_percent {
-                    None
-                } else {
-                    Some(95.0)
-                },
+                None,
                 progress_execution,
             );
             self.emit_running(
@@ -793,11 +783,7 @@ impl CliApp {
                 },
                 "extract",
                 format!("finalizing extracted output from `{}`", source.display()),
-                if suppress_scaffold_percent {
-                    None
-                } else {
-                    Some(99.0)
-                },
+                None,
                 report.thread_execution.clone(),
             );
         }

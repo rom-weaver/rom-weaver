@@ -59,6 +59,8 @@ const WASM_BINDGEN_FUNCTIONS: &[&str] = &[
     "archive_write_add_filter_bzip2",
     "archive_write_add_filter_xz",
     "archive_write_add_filter_zstd",
+    "archive_write_set_format_7zip_progress_callback",
+    "archive_write_open",
     "archive_write_open_filename",
     "archive_write_header",
     "archive_write_data",

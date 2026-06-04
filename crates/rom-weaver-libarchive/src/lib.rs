@@ -1,7 +1,7 @@
 use std::{
     borrow::Cow,
     collections::BTreeSet,
-    ffi::{CStr, CString},
+    ffi::{CStr, CString, c_void},
     fs::{self, File},
     io::{self, Read, Write},
     path::Path,
@@ -25,10 +25,11 @@ use sys::{
     archive_read_support_format_raw, archive_write_add_filter_bzip2, archive_write_add_filter_gzip,
     archive_write_add_filter_none, archive_write_add_filter_xz, archive_write_add_filter_zstd,
     archive_write_close, archive_write_data, archive_write_finish_entry, archive_write_free,
-    archive_write_header, archive_write_new, archive_write_open_filename,
+    archive_write_header, archive_write_new, archive_write_open, archive_write_open_filename,
     archive_write_set_filter_option, archive_write_set_format_7zip,
-    archive_write_set_format_option, archive_write_set_format_pax_restricted,
-    archive_write_set_format_raw, archive_write_set_format_zip,
+    archive_write_set_format_7zip_progress_callback, archive_write_set_format_option,
+    archive_write_set_format_pax_restricted, archive_write_set_format_raw,
+    archive_write_set_format_zip,
 };
 
 const REGULAR_ARCHIVE_READ_BLOCK_BYTES: usize = 2 * 1024 * 1024;
@@ -143,6 +144,17 @@ pub enum ZeroWriteBehavior {
 
 pub struct WriteArchive {
     ptr: Option<NonNull<archive>>,
+    codec_progress_callback_data: Option<Box<CodecProgressCallbackData>>,
+    write_callback_data: Option<Box<WriteCallbackData>>,
+}
+
+struct CodecProgressCallbackData {
+    on_bytes_processed: Box<dyn FnMut(u64)>,
+}
+
+struct WriteCallbackData {
+    file: File,
+    on_bytes_written: Box<dyn FnMut(u64)>,
 }
 
 impl WriteArchive {
@@ -153,7 +165,11 @@ impl WriteArchive {
                 "{context}: libarchive writer allocation returned null"
             ))
         })?;
-        Ok(Self { ptr: Some(ptr) })
+        Ok(Self {
+            ptr: Some(ptr),
+            codec_progress_callback_data: None,
+            write_callback_data: None,
+        })
     }
 
     pub fn set_format(&mut self, format: WriteFormat, context: &str) -> Result<()> {
@@ -271,6 +287,67 @@ impl WriteArchive {
         self.check_status(status, context)
     }
 
+    pub fn set_7zip_progress_callback<F>(
+        &mut self,
+        on_bytes_processed: F,
+        context: &str,
+    ) -> Result<()>
+    where
+        F: FnMut(u64) + 'static,
+    {
+        if self.codec_progress_callback_data.is_some() {
+            return Err(RomWeaverError::Validation(format!(
+                "{context}: libarchive 7z progress callback is already set"
+            )));
+        }
+        let mut callback_data = Box::new(CodecProgressCallbackData {
+            on_bytes_processed: Box::new(on_bytes_processed),
+        });
+        let status = unsafe {
+            archive_write_set_format_7zip_progress_callback(
+                self.as_ptr(),
+                Some(codec_progress_callback),
+                (&mut *callback_data as *mut CodecProgressCallbackData).cast::<c_void>(),
+            )
+        };
+        self.check_status(status, context)?;
+        self.codec_progress_callback_data = Some(callback_data);
+        Ok(())
+    }
+
+    pub fn open_file_with_write_callback<F>(
+        &mut self,
+        output: &Path,
+        on_bytes_written: F,
+        context: &str,
+    ) -> Result<()>
+    where
+        F: FnMut(u64) + 'static,
+    {
+        if self.write_callback_data.is_some() {
+            return Err(RomWeaverError::Validation(format!(
+                "{context}: libarchive writer is already open"
+            )));
+        }
+        let file = File::create(output)?;
+        let mut callback_data = Box::new(WriteCallbackData {
+            file,
+            on_bytes_written: Box::new(on_bytes_written),
+        });
+        let status = unsafe {
+            archive_write_open(
+                self.as_ptr(),
+                (&mut *callback_data as *mut WriteCallbackData).cast::<c_void>(),
+                None,
+                Some(write_file_callback),
+                None,
+            )
+        };
+        self.check_status(status, context)?;
+        self.write_callback_data = Some(callback_data);
+        Ok(())
+    }
+
     pub fn start_entry(&mut self, spec: EntrySpec<'_>, context: &str) -> Result<()> {
         let entry = ArchiveEntry::new(context)?;
         let pathname = cstring(spec.pathname, "archive entry name", context)?;
@@ -368,6 +445,38 @@ impl WriteArchive {
         self.ptr
             .expect("libarchive write handle used after close")
             .as_ptr()
+    }
+}
+
+unsafe extern "C" fn codec_progress_callback(client_data: *mut c_void, processed_bytes: u64) {
+    if client_data.is_null() {
+        return;
+    }
+    let callback_data = unsafe { &mut *client_data.cast::<CodecProgressCallbackData>() };
+    (callback_data.on_bytes_processed)(processed_bytes);
+}
+
+unsafe extern "C" fn write_file_callback(
+    _archive: *mut archive,
+    client_data: *mut c_void,
+    buffer: *const c_void,
+    length: usize,
+) -> sys::la_ssize_t {
+    if client_data.is_null() || (buffer.is_null() && length > 0) {
+        return -1;
+    }
+    let callback_data = unsafe { &mut *client_data.cast::<WriteCallbackData>() };
+    let payload = if length == 0 {
+        &[]
+    } else {
+        unsafe { std::slice::from_raw_parts(buffer.cast::<u8>(), length) }
+    };
+    match callback_data.file.write_all(payload) {
+        Ok(()) => {
+            (callback_data.on_bytes_written)(length as u64);
+            length as sys::la_ssize_t
+        }
+        Err(_) => -1,
     }
 }
 

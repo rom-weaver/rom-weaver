@@ -144,8 +144,6 @@ impl CliApp {
             );
         }
         let create_threads = Some(context.plan_threads(capabilities.create_threads.clone()));
-        let suppress_scaffold_percent =
-            Self::container_handler_emits_incremental_byte_progress(handler.descriptor().name);
         self.emit_running(
             OperationLabel {
                 command: "compress",
@@ -158,7 +156,7 @@ impl CliApp {
                 handler.descriptor().name,
                 input.len()
             ),
-            Some(0.0),
+            None,
             create_threads.clone(),
         );
         self.emit_running(
@@ -169,11 +167,7 @@ impl CliApp {
             },
             "create",
             format!("preparing {} archive build", handler.descriptor().name),
-            if suppress_scaffold_percent {
-                None
-            } else {
-                Some(1.0)
-            },
+            None,
             create_threads.clone(),
         );
 
@@ -209,24 +203,13 @@ impl CliApp {
                 },
                 "create",
                 format!("finalizing `{}` archive", handler.descriptor().name),
-                if suppress_scaffold_percent {
-                    None
-                } else {
-                    Some(99.0)
-                },
+                None,
                 report.thread_execution.clone(),
             );
             report =
                 Self::attach_emitted_files_details(report, vec![expected_output], Some("archive"));
         }
         self.finish("compress", report)
-    }
-
-    fn container_handler_emits_incremental_byte_progress(format_name: &str) -> bool {
-        matches!(
-            format_name,
-            "zip" | "zipx" | "7z" | "rar" | "tar" | "tar.gz" | "tar.bz2" | "tar.xz"
-        )
     }
 
     fn run_trim(&self, args: TrimCommand) -> AppRunOutcome {

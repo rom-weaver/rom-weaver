@@ -24,30 +24,24 @@ const forwardCreatePatchProgress =
 
 const forwardDiscProgress = (stage: "input" | "output", onProgress?: (progress: ProgressEvent) => void) => {
   if (!onProgress) return undefined;
-  let lastPercent = -1;
-  let sawIntermediate = false;
   return (progress: RuntimeProgress) => {
     const label = progress.label || (stage === "input" ? "Extracting disc image..." : "Creating disc image...");
-    const emit = (percent: number | null) => {
+    if (typeof progress.percent !== "number" || !Number.isFinite(progress.percent)) {
       onProgress({
         ...progress,
         label,
-        percent,
+        percent: null,
         stage,
       });
-    };
-    if (typeof progress.percent !== "number" || !Number.isFinite(progress.percent)) {
-      emit(null);
       return;
     }
     const percent = Math.max(0, Math.min(100, progress.percent));
-    if (percent > 0 && percent < 100) sawIntermediate = true;
-    if (percent >= 100 && !sawIntermediate) {
-      emit(lastPercent > 0 ? Math.min(99, Math.max(lastPercent + 1, 50)) : 50);
-      sawIntermediate = true;
-    }
-    lastPercent = percent;
-    emit(percent);
+    onProgress({
+      ...progress,
+      label,
+      percent,
+      stage,
+    });
   };
 };
 
@@ -76,6 +70,10 @@ const forwardArchiveProgress = (stage: "input" | "output", onProgress?: (progres
     }
     const percent = Math.max(0, Math.min(100, progress.percent));
     if (percent > 0 && percent < 100) sawIntermediate = true;
+    if (percent >= 100 && !sawIntermediate) {
+      emit(null);
+      return;
+    }
     if (percent <= 0 && !sawIntermediate) {
       emit(null);
       return;

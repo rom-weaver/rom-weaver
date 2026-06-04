@@ -687,6 +687,8 @@ struct LibarchiveCreateConfig {
 fn libarchive_open_create_archive(
     output: &Path,
     config: LibarchiveCreateConfig,
+    on_codec_bytes_processed: Option<Box<dyn FnMut(u64)>>,
+    on_compressed_bytes_written: Option<Box<dyn FnMut(u64)>>,
 ) -> Result<WriteArchive> {
     let mut archive = WriteArchive::new(&format!("{} create failed", config.format_name))?;
     let setup_result = (|| -> Result<()> {
@@ -698,6 +700,18 @@ fn libarchive_open_create_archive(
                 libarchive_create_format_name(config.format)
             ),
         )?;
+
+        if let Some(on_codec_bytes_processed) = on_codec_bytes_processed
+            && let LibarchiveCreateFormat::SevenZ = config.format
+        {
+            archive.set_7zip_progress_callback(
+                on_codec_bytes_processed,
+                &format!(
+                    "{} create failed while setting 7z progress callback",
+                    config.format_name
+                ),
+            )?;
+        }
 
         archive.add_filter(
             config.filter,
@@ -788,15 +802,20 @@ fn libarchive_open_create_archive(
             )?;
         }
 
-        archive.open_filename(
-            output,
-            "container output",
-            &format!(
-                "{} create failed while opening output `{}`",
-                config.format_name,
-                output.display()
-            ),
-        )?;
+        let open_context = format!(
+            "{} create failed while opening output `{}`",
+            config.format_name,
+            output.display()
+        );
+        if let Some(on_compressed_bytes_written) = on_compressed_bytes_written {
+            archive.open_file_with_write_callback(
+                output,
+                on_compressed_bytes_written,
+                &open_context,
+            )?;
+        } else {
+            archive.open_filename(output, "container output", &open_context)?;
+        }
         Ok(())
     })();
 
@@ -904,12 +923,90 @@ fn write_archive_with_libarchive(
         entry_sizes.push(size);
     }
 
-    let mut archive = libarchive_open_create_archive(&request.output, config)?;
+    let compressed_bytes_written = Arc::new(AtomicU64::new(0));
+    let emitted_compressed_progress_bucket = Arc::new(AtomicU64::new(0));
+    let emitted_codec_progress_bucket = Arc::new(AtomicU8::new(0));
+    let codec_progress_context = context.clone();
+    let codec_progress_bucket = Arc::clone(&emitted_codec_progress_bucket);
+    let codec_progress_execution = execution.clone();
+    let codec_progress_format = config.format_name;
+    let on_codec_bytes_processed: Option<Box<dyn FnMut(u64)>> =
+        if matches!(config.format, LibarchiveCreateFormat::SevenZ) && total_input_bytes > 0 {
+            Some(Box::new(move |processed_bytes| {
+                let running_processed = processed_bytes.min(total_input_bytes.saturating_sub(1));
+                if running_processed == 0 {
+                    return;
+                }
+                let percent = running_processed.saturating_mul(100) / total_input_bytes;
+                if percent >= 99 && codec_progress_bucket.load(Ordering::Relaxed) == 0 {
+                    return;
+                }
+                maybe_emit_container_byte_progress(
+                    &codec_progress_context,
+                    running_processed,
+                    total_input_bytes,
+                    ContainerByteProgress {
+                        command: "compress",
+                        format: codec_progress_format,
+                        stage: "create",
+                        label: &format!("compressing `{codec_progress_format}`"),
+                        thread_execution: Some(&codec_progress_execution),
+                        emitted_progress_bucket: codec_progress_bucket.as_ref(),
+                    },
+                );
+            }))
+        } else {
+            None
+        };
+    let compressed_progress_context = context.clone();
+    let compressed_progress_bytes = Arc::clone(&compressed_bytes_written);
+    let compressed_progress_bucket = Arc::clone(&emitted_compressed_progress_bucket);
+    let compressed_progress_execution = execution.clone();
+    let compressed_progress_format = config.format_name;
+    let on_compressed_bytes_written = move |delta: u64| {
+        let total = compressed_progress_bytes
+            .fetch_add(delta, Ordering::Relaxed)
+            .saturating_add(delta);
+        let bucket = (total / (1024 * 1024)).max(1);
+        let previous = compressed_progress_bucket.load(Ordering::Relaxed);
+        if bucket <= previous {
+            return;
+        }
+        if compressed_progress_bucket
+            .compare_exchange(previous, bucket, Ordering::Relaxed, Ordering::Relaxed)
+            .is_err()
+        {
+            return;
+        }
+        compressed_progress_context.emit(ProgressEvent {
+            command: "compress".to_string(),
+            family: OperationFamily::Container,
+            format: Some(compressed_progress_format.to_string()),
+            stage: "write".to_string(),
+            label: format!("wrote {total} compressed bytes to `{compressed_progress_format}`"),
+            details: Some(json!({
+                "compressedBytesWritten": total,
+            })),
+            percent: None,
+            requested_threads: Some(compressed_progress_execution.requested_threads),
+            effective_threads: Some(compressed_progress_execution.effective_threads),
+            thread_mode: Some(compressed_progress_execution.thread_mode),
+            used_parallelism: Some(compressed_progress_execution.used_parallelism),
+            thread_fallback: Some(compressed_progress_execution.thread_fallback),
+            thread_fallback_reason: compressed_progress_execution.thread_fallback_reason.clone(),
+            status: OperationStatus::Running,
+        });
+    };
+
+    let mut archive = libarchive_open_create_archive(
+        &request.output,
+        config,
+        on_codec_bytes_processed,
+        Some(Box::new(on_compressed_bytes_written)),
+    )?;
     let result = (|| -> Result<u64> {
         let total_entries = entries.len();
         let mut logical_bytes = 0u64;
-        let mut copied_bytes = 0u64;
-        let emitted_progress_bucket = AtomicU8::new(0);
         for (entry_index, (entry, entry_size_bytes)) in
             entries.iter().zip(entry_sizes.iter().copied()).enumerate()
         {
@@ -919,22 +1016,7 @@ fn write_archive_with_libarchive(
                 entry,
                 entry_size_bytes,
                 config.io_buffer_bytes,
-                |delta| {
-                    copied_bytes = copied_bytes.saturating_add(delta).min(total_input_bytes);
-                    maybe_emit_container_byte_progress(
-                        context,
-                        copied_bytes,
-                        total_input_bytes,
-                        ContainerByteProgress {
-                            command: "compress",
-                            format: config.format_name,
-                            stage: "create",
-                            label: &format!("creating `{}`", config.format_name),
-                            thread_execution: Some(execution),
-                            emitted_progress_bucket: &emitted_progress_bucket,
-                        },
-                    );
-                },
+                |_| {},
             )?);
             if total_input_bytes == 0 {
                 emit_container_step_progress(

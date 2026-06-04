@@ -413,7 +413,6 @@ impl CliApp {
                 };
                 applied_formats.push(handler.descriptor().name);
                 let patch_start_percent = patch_progress_segment_start(index, patch_count);
-                let patch_completion_percent = patch_progress_completion_percent(index, patch_count);
 
                 let is_last = index + 1 == patch_count;
                 let apply_output = if is_last {
@@ -525,7 +524,7 @@ impl CliApp {
                                 patch_path.display()
                             )
                         },
-                        Some(patch_completion_percent),
+                        None,
                         report.thread_execution.clone(),
                     );
                 }
@@ -1362,7 +1361,7 @@ impl CliApp {
                                 patch_path.display()
                             )
                         },
-                        Some(patch_progress_completion_percent(index, patch_count)),
+                        None,
                         report.thread_execution.clone(),
                     );
                 }
@@ -1789,19 +1788,4 @@ fn patch_progress_segment_end(index: usize, patch_count: usize) -> f32 {
     }
 }
 
-fn patch_progress_completion_percent(index: usize, patch_count: usize) -> f32 {
-    let start = patch_progress_segment_start(index, patch_count);
-    let end = patch_progress_segment_end(index, patch_count);
-    let span = (end - start).max(0.0);
-    if span <= f32::EPSILON {
-        return end.min(99.9);
-    }
-
-    let completion = (start + span * 0.99).min(end);
-    if completion > start {
-        completion
-    } else {
-        (start + span * 0.5).min(end)
-    }
-}
 /* jscpd:ignore-end */

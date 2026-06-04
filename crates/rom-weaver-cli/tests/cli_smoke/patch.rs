@@ -530,7 +530,13 @@ fn patch_apply_applies_multiple_patches_in_order() {
 
     let events = parse_json_lines(&apply_output);
     assert_running_percent_event_in_range(&events, "patch-apply", "BPS", 0.0, 50.1);
-    assert_running_percent_event_in_range(&events, "patch-apply", "IPS", 50.0, 100.0);
+    assert!(events.iter().any(|event| {
+        event["command"] == "patch-apply"
+            && event["status"] == "running"
+            && event["stage"] == "apply"
+            && event["format"] == "IPS"
+            && event["percent"].is_null()
+    }));
     let json = events.last().expect("json line");
     assert_eq!(json["command"], "patch-apply");
     assert_eq!(json["family"], "patch");

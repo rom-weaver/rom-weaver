@@ -419,6 +419,8 @@ export function assertFailedWithLabel(result, labelPattern, context) {
 
 export async function runProgressMatrix({ runJson, opfsHandle, dir, sourcePath, appliedOutputName }) {
   const archivePath = joinGuestPath(OPFS_GUEST_ROOT, 'archive.gz');
+  const sevenZSourcePath = joinGuestPath(dir, 'seven-z-progress-source.bin');
+  const sevenZArchivePath = joinGuestPath(OPFS_GUEST_ROOT, 'archive-progress.7z');
   const extractDir = joinGuestPath(OPFS_GUEST_ROOT, 'extract');
   const originalPath = joinGuestPath(dir, 'original.bin');
   const modifiedPath = joinGuestPath(dir, 'modified.bin');
@@ -427,6 +429,11 @@ export async function runProgressMatrix({ runJson, opfsHandle, dir, sourcePath, 
 
   await writeGuestFile(opfsHandle, originalPath, toBytes('abcdefgh'));
   await writeGuestFile(opfsHandle, modifiedPath, toBytes('a1XYZf!!!'));
+  const sevenZSource = new Uint8Array(1024 * 1024);
+  for (let index = 0; index < sevenZSource.length; index += 1) {
+    sevenZSource[index] = index % 251;
+  }
+  await writeGuestFile(opfsHandle, sevenZSourcePath, sevenZSource);
 
   const compressEvents = [];
   const compressResult = await runJson(
@@ -441,6 +448,48 @@ export async function runProgressMatrix({ runJson, opfsHandle, dir, sourcePath, 
   expect(
     compressEvents.some(
       (event) => event.command === 'compress' && event.status === 'running' && event.format === 'gz',
+    ),
+  ).toBe(true);
+
+  const sevenZCompressEvents = [];
+  const sevenZCompressResult = await runJson(
+    [
+      'compress',
+      sevenZSourcePath,
+      '--format',
+      '7z',
+      '--codec',
+      'lzma2',
+      '--output',
+      sevenZArchivePath,
+      '--threads',
+      '2',
+    ],
+    {
+      onEvent(event) {
+        sevenZCompressEvents.push(event);
+      },
+    },
+  );
+  assertRunJsonSucceeded(sevenZCompressResult, { command: 'compress' });
+  expect(
+    sevenZCompressEvents.some(
+      (event) => event.command === 'compress'
+        && event.status === 'running'
+        && event.format === '7z'
+        && event.stage === 'create'
+        && typeof event.percent === 'number'
+        && event.percent >= 99,
+    ),
+  ).toBe(false);
+  expect(
+    sevenZCompressEvents.some(
+      (event) => event.command === 'compress'
+        && event.status === 'running'
+        && event.format === '7z'
+        && event.stage === 'write'
+        && event.percent === null
+        && Number(event.details?.compressedBytesWritten || 0) > 0,
     ),
   ).toBe(true);
 

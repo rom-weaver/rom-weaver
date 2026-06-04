@@ -1314,7 +1314,24 @@ fn zip_emits_incremental_running_progress_beyond_placeholders() {
         .stdout
         .clone();
     let compress_events = parse_json_lines(&compress_output);
-    assert_running_percent_event_in_range(&compress_events, "compress", "zip", 1.0, 99.0);
+    assert!(compress_events.iter().any(|event| {
+        event["command"] == "compress"
+            && event["status"] == "running"
+            && event["format"] == "zip"
+            && event["stage"] == "write"
+            && event["percent"].is_null()
+            && event["details"]["compressedBytesWritten"]
+                .as_u64()
+                .map(|bytes| bytes > 0)
+                .unwrap_or(false)
+    }));
+    assert!(!compress_events.iter().any(|event| {
+        event["command"] == "compress"
+            && event["status"] == "running"
+            && event["format"] == "zip"
+            && event["stage"] == "create"
+            && event["percent"].as_f64() == Some(100.0)
+    }));
 
     let out_dir = temp.child("extract");
     let extract_output = Command::cargo_bin("rom-weaver")
@@ -1336,12 +1353,14 @@ fn zip_emits_incremental_running_progress_beyond_placeholders() {
 }
 
 #[test]
-fn seven_z_emits_incremental_running_progress_beyond_placeholders() {
+fn seven_z_does_not_emit_synthetic_running_progress() {
     let temp = setup_temp_dir();
     let input_dir = temp.child("input");
     fs::create_dir_all(input_dir.path()).expect("input dir");
     for index in 0..3usize {
-        let payload = vec![index as u8; 12_288 + (index * 1_024)];
+        let payload: Vec<u8> = (0..(2 * 1024 * 1024 + index * 1024))
+            .map(|offset| ((offset + index) % 251) as u8)
+            .collect();
         fs::write(input_dir.child(format!("file-{index}.bin")).path(), payload).expect("fixture");
     }
 
@@ -1357,6 +1376,8 @@ fn seven_z_emits_incremental_running_progress_beyond_placeholders() {
             archive.path().to_str().expect("path"),
             "--codec",
             "lzma2",
+            "--threads",
+            "10",
             "--json",
         ])
         .assert()
@@ -1365,7 +1386,34 @@ fn seven_z_emits_incremental_running_progress_beyond_placeholders() {
         .stdout
         .clone();
     let compress_events = parse_json_lines(&compress_output);
-    assert_running_percent_event_in_range(&compress_events, "compress", "7z", 1.0, 99.0);
+    assert!(compress_events.iter().any(|event| {
+        event["command"] == "compress"
+            && event["status"] == "running"
+            && event["format"] == "7z"
+            && event["stage"] == "write"
+            && event["percent"].is_null()
+            && event["details"]["compressedBytesWritten"]
+                .as_u64()
+                .map(|bytes| bytes > 0)
+                .unwrap_or(false)
+    }));
+    assert!(!compress_events.iter().any(|event| {
+        event["command"] == "compress"
+            && event["status"] == "running"
+            && event["format"] == "7z"
+            && event["label"] == "finalizing `7z` archive"
+            && event["percent"].as_f64() == Some(99.0)
+    }));
+    assert!(!compress_events.iter().any(|event| {
+        event["command"] == "compress"
+            && event["status"] == "running"
+            && event["format"] == "7z"
+            && event["stage"] == "create"
+            && event["percent"]
+                .as_f64()
+                .map(|percent| percent >= 99.0)
+                .unwrap_or(false)
+    }));
 
     let out_dir = temp.child("extract");
     let extract_output = Command::cargo_bin("rom-weaver")

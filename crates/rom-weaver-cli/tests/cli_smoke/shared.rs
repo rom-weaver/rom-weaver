@@ -97,14 +97,10 @@ fn assert_patch_apply_running_progress(events: &[Value], terminal: &Value) {
         event["command"] == "patch-apply"
             && event["status"] == "running"
             && event["stage"] == "apply"
-            && event["percent"]
-                .as_f64()
-                .map(|percent| percent > 0.0 && percent < 100.0)
-                .unwrap_or(false)
     });
     assert!(
         has_running_apply_progress,
-        "expected successful patch-apply to emit running apply progress with percent in (0, 100)"
+        "expected successful patch-apply to emit a running apply progress event"
     );
 }
 
