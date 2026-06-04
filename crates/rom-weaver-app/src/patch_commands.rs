@@ -665,6 +665,24 @@ impl CliApp {
                         Some(context.plan_threads(ThreadCapability::single_threaded())),
                     );
                 };
+                let archive_input = match Self::stage_patch_apply_archive_input(
+                    &raw_ready_output,
+                    &output,
+                    &resolved_input,
+                    &context,
+                    &mut temp_paths,
+                ) {
+                    Ok(path) => path,
+                    Err(error) => {
+                        return OperationReport::failed(
+                            OperationFamily::Patch,
+                            report.format.clone(),
+                            "compress",
+                            error.to_string(),
+                            Some(context.plan_threads(ThreadCapability::single_threaded())),
+                        );
+                    }
+                };
                 let compress_threads =
                     Some(context.plan_threads(compress_handler.capabilities().create_threads));
                 let codec_label = compression_plan
@@ -687,7 +705,7 @@ impl CliApp {
                     compress_threads,
                 );
                 let compress_request = ContainerCreateRequest {
-                    inputs: vec![raw_ready_output],
+                    inputs: vec![archive_input],
                     output: compression_plan.output_path.clone(),
                     format: compression_plan.format.clone(),
                     codec: compression_plan.codec.clone(),
@@ -750,6 +768,76 @@ impl CliApp {
 
         Self::cleanup_temp_paths(temp_paths);
         self.finish("patch-apply", report)
+    }
+
+    fn stage_patch_apply_archive_input(
+        raw_ready_output: &Path,
+        requested_output: &Path,
+        extension_source: &Path,
+        context: &OperationContext,
+        temp_paths: &mut Vec<PathBuf>,
+    ) -> Result<PathBuf> {
+        let entry_file_name =
+            Self::patch_apply_archive_entry_file_name(requested_output, extension_source);
+        if raw_ready_output
+            .file_name()
+            .is_some_and(|file_name| file_name == entry_file_name.as_os_str())
+        {
+            return Ok(raw_ready_output.to_path_buf());
+        }
+
+        let entry_dir = context
+            .temp_paths()
+            .next_path("patch-apply-output-archive-entry", None);
+        fs::create_dir_all(&entry_dir)?;
+        let archive_input = entry_dir.join(&entry_file_name);
+        fs::copy(raw_ready_output, &archive_input)?;
+        temp_paths.push(entry_dir);
+        Ok(archive_input)
+    }
+
+    fn patch_apply_archive_entry_file_name(
+        requested_output: &Path,
+        extension_source: &Path,
+    ) -> std::ffi::OsString {
+        let fallback = std::ffi::OsString::from("patched.bin");
+        let Some(file_name) = requested_output.file_name() else {
+            return fallback;
+        };
+        let file_name_text = file_name.to_string_lossy();
+        let archive_entry_name = Self::strip_archive_extension(&file_name_text);
+        let archive_entry_path = Path::new(&archive_entry_name);
+        if archive_entry_path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .is_some_and(|extension| !extension.is_empty())
+        {
+            return archive_entry_path.as_os_str().to_os_string();
+        }
+
+        let Some(source_extension) = extension_source
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .map(str::trim)
+            .filter(|extension| !extension.is_empty())
+        else {
+            return archive_entry_path.as_os_str().to_os_string();
+        };
+
+        let mut archive_entry_path = archive_entry_path.to_path_buf();
+        archive_entry_path.set_extension(source_extension);
+        archive_entry_path.as_os_str().to_os_string()
+    }
+
+    fn strip_archive_extension(file_name: &str) -> String {
+        let lower = file_name.to_ascii_lowercase();
+        for extension in [".zipx", ".zip", ".7z"] {
+            if lower.ends_with(extension) {
+                let stripped_len = file_name.len().saturating_sub(extension.len());
+                return file_name[..stripped_len].to_string();
+            }
+        }
+        file_name.to_string()
     }
 
     fn run_patch_validate(&self, args: PatchValidateCommand) -> AppRunOutcome {

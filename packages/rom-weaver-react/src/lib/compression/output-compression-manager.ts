@@ -393,6 +393,11 @@ const OutputCompressionManager = (() => {
     if (selected === OUTPUT_COMPRESSION.ZIP && _getArchiveCodec(compression, options) === "zstd") return "zipx";
     return selected;
   };
+  const _appendFileExtension = (fileName: string, extension: string | number | boolean | null | undefined): string => {
+    const normalizedExtension = String(extension || "").replace(/^\./, "");
+    if (!normalizedExtension) return fileName;
+    return `${fileName}.${normalizedExtension}`;
+  };
   const _getZ3dsOutputExtension = (source: CompressionSource | null | undefined) => {
     const extension = _getExtension(source);
     if (extension === "cia" || extension === "zcia") return "zcia";
@@ -534,6 +539,8 @@ const OutputCompressionManager = (() => {
       if (selected === OUTPUT_COMPRESSION.NONE || selected === OUTPUT_COMPRESSION.AUTO) return fileName;
       if (selected === OUTPUT_COMPRESSION.Z3DS)
         return _replaceExtension(fileName, _getZ3dsOutputExtension(source as CompressionSource | null | undefined));
+      if (selected === OUTPUT_COMPRESSION.SEVEN_ZIP || selected === OUTPUT_COMPRESSION.ZIP)
+        return _appendFileExtension(fileName, _getArchiveOutputExtension(selected, options));
       return _replaceExtension(fileName, _getArchiveOutputExtension(selected, options));
     },
     getCompressionProfileLevel: _getCompressionProfileLevel,

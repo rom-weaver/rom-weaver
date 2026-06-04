@@ -239,6 +239,28 @@ fn emitted_rom_extensions_cover_3ds_family_inputs() {
 }
 
 #[test]
+fn patch_apply_archive_entry_name_preserves_source_extension() {
+    assert_eq!(
+        CliApp::patch_apply_archive_entry_file_name(Path::new("patched"), Path::new("source.gba")),
+        std::ffi::OsString::from("patched.gba")
+    );
+    assert_eq!(
+        CliApp::patch_apply_archive_entry_file_name(
+            Path::new("patched.gba.7z"),
+            Path::new("source.gba")
+        ),
+        std::ffi::OsString::from("patched.gba")
+    );
+    assert_eq!(
+        CliApp::patch_apply_archive_entry_file_name(
+            Path::new("patched.7z"),
+            Path::new("source.gba")
+        ),
+        std::ffi::OsString::from("patched.gba")
+    );
+}
+
+#[test]
 fn resolve_codec_level_supports_multi_codec_lists() {
     let (codec, level) =
         CliApp::resolve_codec_level(vec!["cdzs,cdzl".to_string(), "cdfl".to_string()], "--codec")

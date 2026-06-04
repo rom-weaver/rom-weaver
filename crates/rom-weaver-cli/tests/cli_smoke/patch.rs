@@ -182,7 +182,7 @@ fn patch_apply_defaults_to_compressed_output_and_appends_extension() {
         .assert()
         .code(0);
     assert_eq!(
-        read_single_file_bytes(out_dir.path()),
+        fs::read(out_dir.child("patched-output.bin").path()).expect("archive entry"),
         fs::read(modified.path()).expect("modified")
     );
 }

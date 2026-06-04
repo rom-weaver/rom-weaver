@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import OutputCompressionManager from "../../src/lib/compression/output-compression-manager.ts";
 import { buildPatchedOutputBaseName } from "../../src/lib/output/output-name-composition.ts";
 import { createPatchedRomSavePlan } from "../../src/lib/output/output-save-plan.ts";
 import { getGeneratedOutputName } from "../../src/public/react/output-view-model.ts";
@@ -74,4 +75,12 @@ test("archive recompression preserves the rom extension for the inner entry", ()
 
   expect(savePlan.finalOutputFileName).toBe("Crash Bandicoot (USA) - Quality of Life.zip");
   expect(savePlan.archiveEntryFileName).toBe("Crash Bandicoot (USA) - Quality of Life.bin");
+});
+
+test("archive compression appends archive extension after explicit rom extension", () => {
+  expect(OutputCompressionManager.getCompressedFileName({ fileName: "patched" }, "7z", {})).toBe("patched.7z");
+  expect(OutputCompressionManager.getCompressedFileName({ fileName: "patched.gba" }, "7z", {})).toBe("patched.gba.7z");
+  expect(OutputCompressionManager.getCompressedFileName({ fileName: "patched.sfc" }, "zip", {})).toBe(
+    "patched.sfc.zip",
+  );
 });
