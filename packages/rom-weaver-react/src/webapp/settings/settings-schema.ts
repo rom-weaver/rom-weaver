@@ -514,6 +514,13 @@ const loadSettings = (storage?: StorageLike): SettingsState => {
     const logLevel = readStoredField(storedStringSchema, loadedSettings.logLevel);
     if (logLevel !== undefined) settings.logLevel = normalizeChoiceField("logLevel", logLevel, settings.logLevel);
 
+    const defaultArchive = readStoredField(storedStringSchema, loadedSettings.defaultArchive);
+    if (defaultArchive !== undefined)
+      settings.defaultArchive = normalizeChoiceField("defaultArchive", defaultArchive, settings.defaultArchive);
+
+    const specialCompression = readStoredField(storedBooleanSchema, loadedSettings.specialCompression);
+    if (specialCompression !== undefined) settings.specialCompression = specialCompression;
+
     const fixChecksum = readStoredField(storedBooleanSchema, loadedSettings.fixChecksum);
     if (fixChecksum !== undefined) settings.fixChecksum = fixChecksum;
 
