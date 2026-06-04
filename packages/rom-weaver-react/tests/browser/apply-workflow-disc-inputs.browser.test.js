@@ -2,6 +2,7 @@ import { expect, test } from "vitest";
 import { ApplyWorkflow } from "../../src/platform/browser/browser-api.ts";
 
 const RAW_ROM = "tests/fixtures/archive_sources/game.bin";
+const RAW_PATCH = "tests/fixtures/archive_sources/change.ips";
 const ONE_PATCH_7Z = "tests/fixtures/archives/one-patch.7z";
 const MULTI_PATCH_ZIP = "tests/fixtures/archives/multi-patch.zip";
 
@@ -10,6 +11,41 @@ const loadFixtureFile = async (filePath, type = "application/octet-stream") => {
   if (!response.ok) throw new Error(`Failed to load fixture ${filePath}`);
   const bytes = await response.arrayBuffer();
   return new File([bytes], filePath.split("/").pop() || "input.bin", { type });
+};
+
+const readUint16Le = (bytes, offset) => bytes[offset] | (bytes[offset + 1] << 8);
+const readUint32Le = (bytes, offset) =>
+  (bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16) | (bytes[offset + 3] << 24)) >>> 0;
+
+const readZipCentralDirectoryEntries = (bytes) => {
+  const entries = [];
+  const decoder = new TextDecoder();
+  for (let offset = 0; offset <= bytes.length - 46; offset += 1) {
+    if (readUint32Le(bytes, offset) !== 0x02014b50) continue;
+    const fileNameLength = readUint16Le(bytes, offset + 28);
+    const extraLength = readUint16Le(bytes, offset + 30);
+    const commentLength = readUint16Le(bytes, offset + 32);
+    const fileNameStart = offset + 46;
+    const fileNameEnd = fileNameStart + fileNameLength;
+    entries.push({
+      compressedSize: readUint32Le(bytes, offset + 20),
+      fileName: decoder.decode(bytes.subarray(fileNameStart, fileNameEnd)),
+      localHeaderOffset: readUint32Le(bytes, offset + 42),
+      method: readUint16Le(bytes, offset + 10),
+      uncompressedSize: readUint32Le(bytes, offset + 24),
+    });
+    offset = fileNameEnd + extraLength + commentLength - 1;
+  }
+  return entries;
+};
+
+const readZipStoredEntryData = (bytes, entry) => {
+  const offset = entry.localHeaderOffset;
+  expect(readUint32Le(bytes, offset)).toBe(0x04034b50);
+  const fileNameLength = readUint16Le(bytes, offset + 26);
+  const extraLength = readUint16Le(bytes, offset + 28);
+  const dataStart = offset + 30 + fileNameLength + extraLength;
+  return bytes.subarray(dataStart, dataStart + entry.compressedSize);
 };
 
 const createTraceWorkflow = () => {
@@ -156,6 +192,63 @@ test("CHD staging emits list then extract trace events", async () => {
     expect(workerTraceLines.length).toBeGreaterThan(0);
     expect(workerTraceLines.some((line) => line.includes('command="extract"'))).toBe(true);
     expect(checksumDispatch).toBeUndefined();
+  } finally {
+    await workflow.dispose();
+  }
+});
+
+test("apply workflow stores direct CUE plus BIN raw output in one ZIP", async () => {
+  const runId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const inputStem = `direct-disc-${runId}`;
+  const outputStem = `patched-disc-${runId}`;
+  const workflow = new ApplyWorkflow({
+    settings: {
+      output: {
+        compression: "none",
+        outputName: outputStem,
+      },
+      workers: {
+        threads: 1,
+      },
+    },
+  });
+  try {
+    const rawInput = await loadFixtureFile(RAW_ROM);
+    const binFile = new File([await rawInput.arrayBuffer()], `${inputStem}.bin`, {
+      type: "application/octet-stream",
+    });
+    const cueFile = new File(
+      [`FILE "${inputStem}.bin" BINARY\n  TRACK 01 MODE1/2048\n    INDEX 01 00:00:00\n`],
+      `${inputStem}.cue`,
+      { type: "application/x-cue" },
+    );
+
+    await workflow.setInput([cueFile, binFile]);
+    await workflow.addPatch(await loadFixtureFile(RAW_PATCH));
+
+    const result = await workflow.run();
+    try {
+      expect(result.outputs).toHaveLength(1);
+      expect(result.output.fileName).toBe(`${outputStem}.zip`);
+      expect(result.sizeSummary?.rawSize).toBeGreaterThan(rawInput.size);
+
+      const blob = await result.output.getBlob?.();
+      expect(blob).toBeInstanceOf(Blob);
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      expect([...bytes.subarray(0, 4)]).toEqual([0x50, 0x4b, 0x03, 0x04]);
+
+      const entries = readZipCentralDirectoryEntries(bytes);
+      expect(entries.map((entry) => entry.fileName).sort()).toEqual([`${outputStem}.bin`, `${outputStem}.cue`]);
+      expect(entries.map((entry) => entry.method)).toEqual([0, 0]);
+      expect(entries.every((entry) => entry.compressedSize === entry.uncompressedSize)).toBe(true);
+
+      const cueEntry = entries.find((entry) => entry.fileName === `${outputStem}.cue`);
+      expect(cueEntry).toBeTruthy();
+      const cueText = new TextDecoder().decode(readZipStoredEntryData(bytes, cueEntry));
+      expect(cueText).toContain(`FILE "${outputStem}.bin" BINARY`);
+    } finally {
+      await result.output.dispose();
+    }
   } finally {
     await workflow.dispose();
   }

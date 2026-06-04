@@ -1,41 +1,32 @@
-import { resolveCompressionLevels } from "../../lib/compression/compression-settings.ts";
 import {
   createDiscExtensionRegex,
   DISC_DECOMPRESSION_INPUT_EXTENSIONS,
 } from "../../lib/compression/disc-format-support.ts";
-import OutputCompressionManager from "../../lib/compression/output-compression-manager.ts";
 import { isArchiveFile } from "../../lib/input/archive-type-utils.ts";
 import { getPatchFileBytes } from "../../lib/input/binary-service.ts";
 import { classifyPatcherInput, getInputSourceFileName } from "../../lib/input/input-classification.ts";
-import {
-  createCompressionProgressLabelFromEvent,
-  getProgressEventPercent,
-  isCompressionWriteTelemetryProgress,
-} from "../../presentation/workflow-presentation.ts";
+import { getProgressEventPercent } from "../../presentation/workflow-presentation.ts";
 import {
   getNamedSource,
   getNamedSourceFileName,
   getNamedSourceSize,
 } from "../../storage/shared/binary/source-file-utils.ts";
 import type { DirectSource, SourceRef } from "../../types/source.ts";
-import type { CreateWorkflowDeps, PatchFileInstance, SharedProgressEventLike } from "../../types/workflow-internal.ts";
-import type {
-  JsonValue,
-  SevenZipZstdCompressionOptions,
-  TrimInput,
-  TrimResult,
-  TrimWorkflowOptions,
-} from "../../types/workflow-runtime.ts";
+import type { CreateWorkflowDeps, PatchFileInstance } from "../../types/workflow-internal.ts";
+import type { TrimInput, TrimResult, TrimWorkflowOptions } from "../../types/workflow-runtime.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import { createWorkflowDeps } from "../create/workflow.ts";
+import {
+  createSingleFileArchiveOutput,
+  getArchiveOutputCompression,
+  hasArchiveFileName,
+} from "../output/archive-output-service.ts";
 import { requireOutputName } from "../output/output-name-validation.ts";
 import { createPatchFileFromPublicOutput } from "../runtime/public-output-bin-file.ts";
 import { createWorkflowTracer } from "../workflow/workflow-tracing.ts";
 
 const DISC_INPUT_EXTENSION_REGEX = createDiscExtensionRegex(DISC_DECOMPRESSION_INPUT_EXTENSIONS);
 const FILE_QUERY_OR_HASH_REGEX = /[?#].*$/;
-const ZIP_COMPRESSED_EXTENSION_REGEX = /\.(zip|zipx)$/i;
-const SEVEN_ZIP_EXTENSION_REGEX = /\.7z$/i;
 type TrimSourceInput = PatchFileInstance | SourceRef;
 type TrimWorkflowDeps = CreateWorkflowDeps;
 
@@ -43,16 +34,7 @@ const getTrimLogLevel = (options: TrimWorkflowOptions | undefined) => options?.l
 const getTrimWorkerThreads = (options: TrimWorkflowOptions | undefined) => options?.workers?.threads;
 const getTrimCompression = (options: TrimWorkflowOptions | undefined) => options?.output?.compression;
 const getTrimOutputName = (options: TrimWorkflowOptions | undefined) => options?.output?.outputName;
-const getTrimContainerSettings = (options: TrimWorkflowOptions | undefined) => options?.output?.container || {};
 const { traceWorkflowStage, traceWorkflowStageBlock } = createWorkflowTracer("trim");
-
-const getArchiveCompression = (value: string | number | boolean | null | undefined) => {
-  const compression = OutputCompressionManager.normalizeOutputCompression(value || "none");
-  if (compression !== "none" && compression !== "zip" && compression !== "7z") {
-    throw new Error(`Unsupported trim output compression: ${compression}`);
-  }
-  return compression;
-};
 
 const createClassificationSource = (
   source: SourceRef,
@@ -139,90 +121,22 @@ const runTrimWorkflow = async (
   };
 
   const createCompressedTrimOutput = async (trimmedFile: PatchFileInstance): Promise<TrimResult["output"]> => {
-    const compression = getArchiveCompression(getTrimCompression(options));
+    const compression = getArchiveOutputCompression(getTrimCompression(options), "trim");
     if (compression === "none") {
       traceWorkflowStage(options, "stage.skip", "compress", "output", { reason: "output compression disabled" });
       return deps.toPublicOutput(trimmedFile, runtime);
     }
-    const requestedFileName = String(getTrimOutputName(options) || "").trim();
-    const trimEntryName =
-      requestedFileName && !deps.hasArchiveFileName(requestedFileName, compression)
-        ? requestedFileName
-        : trimmedFile.fileName || "trimmed.bin";
-    trimmedFile.fileName = trimEntryName;
-    const archiveSettings = getTrimContainerSettings(options);
-    const compressionSettings = resolveCompressionLevels({
-      compressionProfile: archiveSettings.profile || "max",
-      sevenZipCodec: archiveSettings.sevenZipCodec,
-      sevenZipLevel: archiveSettings.sevenZipLevel,
-      zipCodec: archiveSettings.zipCodec,
-      zipLevel: archiveSettings.zipLevel,
-    });
-    const createArchive = runtime.compression.create;
-    if (!createArchive) throw new Error("Trim output compression requires the rom-weaver wasm runtime");
-    const outputName =
-      requestedFileName && deps.hasArchiveFileName(requestedFileName, compression)
-        ? requestedFileName
-        : OutputCompressionManager.getCompressedFileName({ fileName: trimEntryName }, compression, compressionSettings);
-    const compressionOptions: SevenZipZstdCompressionOptions = {
+    return createSingleFileArchiveOutput({
       compression,
-      compressionProfile:
-        compressionSettings.compressionProfile as SevenZipZstdCompressionOptions["compressionProfile"],
-      onProgress: (progress: SharedProgressEventLike) => {
-        if (isCompressionWriteTelemetryProgress(progress)) return;
-        const formatLabel = compression === "zip" ? "ZIP" : "7z";
-        const progressDetails =
-          progress.details && typeof progress.details === "object" && !Array.isArray(progress.details)
-            ? (progress.details as Record<string, JsonValue>)
-            : {};
-        deps.reportProgress(options, {
-          details: {
-            ...(progress as Record<string, JsonValue>),
-            ...progressDetails,
-            runtimeStage: progressDetails.runtimeStage || progress.stage,
-            stage: "compress",
-          },
-          label: createCompressionProgressLabelFromEvent({
-            fallbackLabel: `Compressing to ${formatLabel}`,
-            formatLabel,
-            progress,
-            threads: getTrimWorkerThreads(options),
-          }),
-          percent: getProgressEventPercent(progress),
-          stage: "output",
-        });
-      },
-      outputName,
-      sevenZipCodec: compressionSettings.sevenZipCodec as SevenZipZstdCompressionOptions["sevenZipCodec"],
-      sevenZipLevel: compressionSettings.sevenZipLevel,
-      workerThreads: getTrimWorkerThreads(options),
-      zipCodec: compressionSettings.zipCodec as SevenZipZstdCompressionOptions["zipCodec"],
-      zipLevel: compressionSettings.zipLevel,
-    };
-    const compressionResult = await traceWorkflowStageBlock(
+      deps,
+      entryFile: trimmedFile,
+      entryNameDetailKey: "trimEntryName",
+      fallbackEntryName: trimmedFile.fileName || "trimmed.bin",
       options,
-      "compress",
-      "output",
-      () =>
-        createArchive({
-          entries: [
-            {
-              data: deps.getPatchFileBytes(trimmedFile),
-              fileName: trimEntryName,
-              filename: trimEntryName,
-            },
-          ],
-          format: compression,
-          options: compressionOptions,
-        }),
-      () => ({
-        compression,
-        entryCount: 1,
-        trimEntryName,
-      }),
-    );
-    if ("output" in compressionResult) return compressionResult.output;
-    return compressionResult;
+      runtime,
+      trace: (operation, details) => traceWorkflowStageBlock(options, "compress", "output", operation, details),
+      unsupportedRuntimeMessage: "Trim output compression requires the rom-weaver wasm runtime",
+    });
   };
 
   const trimCapability = runtime.trim.trim;
@@ -232,7 +146,7 @@ const runTrimWorkflow = async (
   const inputSize = getTrimSourceSize(source);
   const requestedFileName =
     String(getTrimOutputName(options) || "").trim() || getTrimSourceFileName(source, "trimmed.bin", deps);
-  const compression = getArchiveCompression(getTrimCompression(options));
+  const compression = getArchiveOutputCompression(getTrimCompression(options), "trim");
   const rawTrimFileName =
     compression !== "none" && deps.hasArchiveFileName(requestedFileName, compression)
       ? getTrimSourceFileName(source, "trimmed.bin", deps)
@@ -286,9 +200,6 @@ const runTrimWorkflow = async (
     },
   };
 };
-
-const hasArchiveFileName = (fileName: string, compression: string) =>
-  compression === "zip" ? ZIP_COMPRESSED_EXTENSION_REGEX.test(fileName) : SEVEN_ZIP_EXTENSION_REGEX.test(fileName);
 
 const trimWorkflowDeps: TrimWorkflowDeps = {
   ...(createWorkflowDeps as unknown as TrimWorkflowDeps),

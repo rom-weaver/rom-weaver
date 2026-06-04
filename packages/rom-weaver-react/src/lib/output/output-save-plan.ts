@@ -41,10 +41,7 @@ const createCueOutputEntry = ({
   };
 };
 
-const getArchivePatchedRomEntryName = (
-  romFile: RomFileLike | null | undefined,
-  outputName?: string | null,
-): string => {
+const getArchivePatchedRomEntryName = (romFile: RomFileLike | null | undefined, outputName?: string | null): string => {
   const fileName = getBaseFileName(outputName || "patched.bin");
   const archiveEntryFileName = fileName.replace(ARCHIVE_OUTPUT_EXTENSION_REGEX, "") || fileName;
   if (hasFileNameExtension(archiveEntryFileName)) return archiveEntryFileName;

@@ -1,18 +1,11 @@
 import {
   createCompressionProgressLabel,
-  createCompressionProgressLabelFromEvent,
   getProgressEventPercent,
   getRawProgressLabel,
-  isCompressionWriteTelemetryProgress,
 } from "../../presentation/workflow-presentation.ts";
 import { isVfsFileRef } from "../../storage/vfs/source-ref.ts";
-import type { ArchiveEntryInput, JsonValue, ProgressEvent as SharedProgressEvent } from "../../types/runtime.ts";
-import type {
-  ApplyWorkflowOptions,
-  CompressionEntryInput,
-  ProgressEvent,
-  PublicOutput,
-} from "../../types/workflow-runtime.ts";
+import type { JsonValue, ProgressEvent as SharedProgressEvent } from "../../types/runtime.ts";
+import type { ApplyWorkflowOptions, ProgressEvent } from "../../types/workflow-runtime.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import { resolveCompressionLevels } from "../compression/compression-settings.ts";
 import OutputCompressionManager from "../compression/output-compression-manager.ts";
@@ -29,7 +22,13 @@ import { getChdAutoCreateMode, replaceCuePatchFileName } from "../input/disc-fil
 import type { InputAsset } from "../input/input-assets.ts";
 import { getFileNameWithoutExtension, hasFileNameExtension, replaceFileNameExtension } from "../input/path-utils.ts";
 import { reportProgress } from "../progress/progress-reporting.ts";
-import { createPatchFileFromPublicOutput } from "../runtime/public-output-bin-file.ts";
+import {
+  type ArchiveCompressionOverrides,
+  type ArchiveOutputEntry,
+  createArchiveEntryInputFromPatchFile,
+  createArchivePatchFileOutput,
+  createPatchFileFromRuntimeOutput,
+} from "./archive-output-service.ts";
 import { createPatchedOutputPlan, type PatchedOutputPlan } from "./patched-output-plan.ts";
 
 const DEFAULT_CHD_CREATE_CD_CODECS = "cdlz,cdzl,cdfl";
@@ -83,55 +82,6 @@ const getDefaultChdCompressionCodecs = (mode: string | null | undefined, compres
     compressionProfile,
   });
 
-const createArchiveProgressReporter =
-  (compression: "zip" | "7z", options: ApplyWorkflowOptions | undefined) => (progress: SharedProgressEvent) => {
-    if (isCompressionWriteTelemetryProgress(progress)) return;
-    const formatLabel = compression === "zip" ? "ZIP" : "7z";
-    const progressDetails =
-      progress.details && typeof progress.details === "object" && !Array.isArray(progress.details)
-        ? (progress.details as Record<string, JsonValue>)
-        : {};
-    reportProgress(options, {
-      details: {
-        ...(progress as RuntimeValue as Record<string, JsonValue>),
-        ...progressDetails,
-        runtimeStage: progressDetails.runtimeStage || progress.stage,
-        stage: "compress",
-      },
-      label: createCompressionProgressLabelFromEvent({
-        fallbackLabel: `Compressing to ${formatLabel}`,
-        formatLabel,
-        progress,
-        threads: getWorkerThreads(options),
-      }),
-      percent: getProgressEventPercent(progress),
-      stage: "output",
-    });
-  };
-
-const canReusePublicOutputPath = (output: unknown) =>
-  !!(
-    output &&
-    typeof output === "object" &&
-    "path" in output &&
-    typeof (output as { path?: unknown }).path === "string" &&
-    (output as { path: string }).path &&
-    "vfs" in output &&
-    (output as { vfs?: unknown }).vfs
-  );
-
-const createPatchFileFromRuntimeOutput = async (output: PublicOutput, fallbackFileName: string) =>
-  createPatchFileFromPublicOutput(
-    output,
-    fallbackFileName,
-    canReusePublicOutputPath(output)
-      ? {
-          materializeBlob: false,
-          preferExternalFilePath: true,
-        }
-      : undefined,
-  );
-
 const collectPatchFileCleanups = (files: PatchFileInstance[]): Array<() => Promise<void> | void> => {
   const seen = new Set<() => Promise<void> | void>();
   const output: Array<() => Promise<void> | void> = [];
@@ -148,39 +98,6 @@ const runPatchFileCleanups = async (cleanups: Array<() => Promise<void> | void>)
   for (const cleanup of cleanups) {
     await Promise.resolve(cleanup()).catch(() => undefined);
   }
-};
-
-const createArchiveEntryInputFromPatchFile = (
-  file: PatchFileInstance,
-  outputFileName: string,
-): { entry: ArchiveEntryInput; size: number } => {
-  const sourceRef = getPatchFileExternalSource(file, outputFileName);
-  if (sourceRef) {
-    if (typeof sourceRef.source === "string" && sourceRef.source.trim()) {
-      return {
-        entry: { filename: outputFileName, filePath: sourceRef.source },
-        size: sourceRef.size || file.fileSize || 0,
-      };
-    }
-    if (isVfsFileRef(sourceRef.source)) {
-      return {
-        entry: { filename: outputFileName, filePath: sourceRef.source.path },
-        size: sourceRef.size || file.fileSize || 0,
-      };
-    }
-    if (typeof Blob !== "undefined" && sourceRef.source instanceof Blob) {
-      return {
-        entry: { file: sourceRef.source, filename: outputFileName },
-        size: sourceRef.size || sourceRef.source.size || file.fileSize || 0,
-      };
-    }
-  }
-
-  const data = getPatchFileBytes(file);
-  return {
-    entry: { data, filename: outputFileName },
-    size: data.byteLength,
-  };
 };
 
 const toBlobPart = (bytes: Uint8Array): ArrayBuffer => {
@@ -201,29 +118,6 @@ const createRuntimeSourceFromPatchFile = (file: PatchFileInstance, fallbackFileN
   if (typeof File !== "undefined")
     return new File([toBlobPart(bytes)], fallbackFileName, { type: "application/octet-stream" });
   return new Blob([toBlobPart(bytes)], { type: "application/octet-stream" });
-};
-
-const toRuntimeCompressionEntry = (entry: ArchiveEntryInput): CompressionEntryInput => {
-  const fileName = entry.fileName || entry.filename || entry.name || "entry.bin";
-  const file =
-    entry.file && typeof File === "function"
-      ? entry.file instanceof File
-        ? entry.file
-        : new File([entry.file as BlobPart], fileName, { type: "application/octet-stream" })
-      : undefined;
-  return {
-    arrayBuffer: entry.arrayBuffer,
-    data: entry.data,
-    file,
-    fileName,
-    filename: entry.filename || fileName,
-    filePath: entry.filePath,
-    lastModified: entry.lastModified,
-    mtime: entry.mtime,
-    name: entry.name || fileName,
-    text: entry.text,
-    u8array: entry.u8array,
-  };
 };
 
 const createRuntimeDiscOutputFiles = async (
@@ -352,13 +246,14 @@ const buildOutputFiles = async (
       romFileName: romFile?.fileName || "",
       sourceExtension: typeof romFile?.getExtension === "function" ? romFile.getExtension() : "",
     });
-    const compressed = await createCompressedArchive(
-      entries.map((entry) => entry.entry),
+    const compressed = await createArchivePatchFileOutput({
       compression,
-      outputPlan.finalOutputFileName,
+      entries: entries.map((entry) => entry.entry),
       options,
+      outputName: outputPlan.finalOutputFileName,
       runtime,
-    );
+      trace: (message, details) => traceOutputName(options, message, details),
+    });
     await Promise.resolve(patchedCleanup?.()).catch(() => undefined);
     return [compressed];
   }
@@ -383,92 +278,63 @@ const resolveRawRequestedOutputName = (outputName: string, source: PatchFileInst
   return sourceExtension ? replaceFileNameExtension(outputName, sourceExtension) : outputName;
 };
 
-const createCompressedArchive = async (
-  entries: ArchiveEntryInput[],
-  compression: "zip" | "7z",
-  fileName: string,
-  options: ApplyWorkflowOptions | undefined,
-  runtime?: WorkflowRuntime,
-) => {
-  const archiveSettings = getContainerSettings(options);
-  const levels = resolveCompressionLevels({
-    compressionProfile: getCompressionProfile(options),
-    sevenZipCodec: archiveSettings.sevenZipCodec,
-    sevenZipLevel: archiveSettings.sevenZipLevel,
-    zipCodec: archiveSettings.zipCodec,
-    zipLevel: archiveSettings.zipLevel,
-  });
-  if (!runtime?.compression.create) throw new Error("Runtime compression create capability is unavailable");
-  traceOutputName(options, "output.archive.create", {
-    archiveFileName: fileName,
-    compression,
-    entryFileNames: entries.map((entry) => entry.filename || entry.fileName || entry.name || ""),
-    sevenZipCodec: levels.sevenZipCodec,
-    sevenZipLevel: levels.sevenZipLevel,
-    zipCodec: levels.zipCodec,
-    zipLevel: levels.zipLevel,
-  });
-  const result = await runtime.compression.create({
-    entries: entries.map((entry) => toRuntimeCompressionEntry(entry)),
-    format: compression,
-    options: {
-      compression,
-      compressionProfile: getCompressionProfile(options),
-      logLevel: getLogLevel(options),
-      onLog: options?.onLog,
-      onProgress: createArchiveProgressReporter(compression, options),
-      outputName: fileName,
-      sevenZipCodec: levels.sevenZipCodec as "lzma2" | "zstd",
-      sevenZipLevel: levels.sevenZipLevel,
-      workerThreads: getWorkerThreads(options),
-      zipCodec: levels.zipCodec as "deflate" | "store" | "zstd",
-      zipLevel: levels.zipLevel,
-    },
-  });
-  const output = "output" in result ? result.output : result;
-  return createPatchFileFromRuntimeOutput(output, fileName);
-};
-
 const createArchiveEntryFromPatchFile = (
   asset: InputAsset,
   file: PatchFileInstance,
-): { entry: ArchiveEntryInput; size: number } => {
+  outputFileName = asset.fileName,
+  cueTextOverride?: string,
+): ArchiveOutputEntry => {
   if (asset.kind === "cue") {
-    const cueText = asset.disc?.cueText || decodeUtf8(getPatchFileBytes(file));
+    const cueText = cueTextOverride ?? asset.disc?.cueText ?? decodeUtf8(getPatchFileBytes(file));
     const data = new TextEncoder().encode(cueText);
     return {
-      entry: { data, filename: asset.fileName },
+      entry: { data, filename: outputFileName },
       size: data.byteLength,
     };
   }
 
-  const sourceRef = getPatchFileExternalSource(file, asset.fileName);
-  if (sourceRef) {
-    if (typeof sourceRef.source === "string" && sourceRef.source.trim()) {
-      return {
-        entry: { filename: asset.fileName, filePath: sourceRef.source },
-        size: sourceRef.size || file.fileSize || 0,
-      };
-    }
-    if (isVfsFileRef(sourceRef.source)) {
-      return {
-        entry: { filename: asset.fileName, filePath: sourceRef.source.path },
-        size: sourceRef.size || file.fileSize || 0,
-      };
-    }
-    if (typeof Blob !== "undefined" && sourceRef.source instanceof Blob) {
-      return {
-        entry: { file: sourceRef.source, filename: asset.fileName },
-        size: sourceRef.size || sourceRef.source.size || file.fileSize || 0,
-      };
-    }
-  }
+  return createArchiveEntryInputFromPatchFile(file, outputFileName);
+};
 
-  const data = getPatchFileBytes(file);
-  return {
-    entry: { data, filename: asset.fileName },
-    size: data.byteLength,
-  };
+const getArchiveTrackExtension = (file: PatchFileInstance, fallbackFileName: string) => {
+  const extension = typeof file.getExtension === "function" ? file.getExtension() : "";
+  if (extension) return extension;
+  const match = String(fallbackFileName || "").match(/\.([^.\/?#]+)(?:[?#].*)?$/);
+  return match?.[1] || "bin";
+};
+
+const createArchiveEntriesFromOutputAssets = (
+  outputAssets: Array<{ asset: InputAsset; file: PatchFileInstance }>,
+  baseName: string,
+) => {
+  const createDefaultEntries = () =>
+    outputAssets.map(({ asset, file }) => createArchiveEntryFromPatchFile(asset, file));
+  const cueOutput = outputAssets.find(({ asset }) => asset.kind === "cue");
+  const trackOutputs = outputAssets.filter(({ asset }) => asset.kind === "track");
+  const trackOutput = trackOutputs[0];
+  if (cueOutput && trackOutput && trackOutputs.length === 1) {
+    const trackExtension = getArchiveTrackExtension(trackOutput.file, trackOutput.asset.fileName);
+    if (trackExtension.toLowerCase() !== "bin") return createDefaultEntries();
+    const trackFileName = replaceFileNameExtension(baseName, trackExtension);
+    const cueFileName = replaceFileNameExtension(baseName, "cue");
+    let cueText: string;
+    try {
+      cueText = replaceCuePatchFileName(
+        cueOutput.asset.disc?.cueText || decodeUtf8(getPatchFileBytes(cueOutput.file)),
+        trackFileName,
+      );
+    } catch (_error) {
+      return createDefaultEntries();
+    }
+    return outputAssets.map(({ asset, file }) =>
+      asset.kind === "cue"
+        ? createArchiveEntryFromPatchFile(asset, file, cueFileName, cueText)
+        : asset.kind === "track"
+          ? createArchiveEntryFromPatchFile(asset, file, trackFileName)
+          : createArchiveEntryFromPatchFile(asset, file),
+    );
+  }
+  return createDefaultEntries();
 };
 
 const assertOutputSizeLimit = (rawOutputSize: number, options: ApplyWorkflowOptions | undefined) => {
@@ -515,28 +381,28 @@ const buildSessionOutputFiles = async (
     };
   }
 
-  const entries = outputAssets.map(({ asset, file }) => createArchiveEntryFromPatchFile(asset, file));
+  const baseName = requestedOutputName || getOutputBaseName(assets);
+  const entries = createArchiveEntriesFromOutputAssets(outputAssets, baseName);
   const rawOutputSize = entries.reduce((total, entry) => total + entry.size, 0);
   assertOutputSizeLimit(rawOutputSize, options);
 
-  if (compression === "none") {
-    throw new Error(
-      "output.compression: 'none' cannot be used for multi-file output; use output.compression: 'zip' with zipCodec: 'store'",
-    );
-  }
-  if (compression === "rvz") throw new Error("RVZ output is not supported for CD disc groups");
-  if (compression === "z3ds") throw new Error("Z3DS output is not supported for CD disc groups");
+  const archiveCompression = compression === "none" ? "zip" : compression;
+  const archiveOverrides: ArchiveCompressionOverrides | undefined =
+    compression === "none" ? { zipCodec: "store" } : undefined;
+  if (archiveCompression === "rvz") throw new Error("RVZ output is not supported for CD disc groups");
+  if (archiveCompression === "z3ds") throw new Error("Z3DS output is not supported for CD disc groups");
 
-  const baseName = requestedOutputName || getOutputBaseName(assets);
-  if (compression === "zip") {
+  if (archiveCompression === "zip") {
     const files = [
-      await createCompressedArchive(
-        entries.map((entry) => entry.entry),
-        "zip",
-        `${baseName}.zip`,
+      await createArchivePatchFileOutput({
+        compression: "zip",
+        entries: entries.map((entry) => entry.entry),
         options,
+        outputName: `${baseName}.zip`,
+        overrides: archiveOverrides,
         runtime,
-      ),
+        trace: (message, details) => traceOutputName(options, message, details),
+      }),
     ];
     await runPatchFileCleanups(outputAssetCleanups);
     return {
@@ -544,15 +410,16 @@ const buildSessionOutputFiles = async (
       rawOutputSize,
     };
   }
-  if (compression === "7z") {
+  if (archiveCompression === "7z") {
     const files = [
-      await createCompressedArchive(
-        entries.map((entry) => entry.entry),
-        "7z",
-        `${baseName}.7z`,
+      await createArchivePatchFileOutput({
+        compression: "7z",
+        entries: entries.map((entry) => entry.entry),
         options,
+        outputName: `${baseName}.7z`,
         runtime,
-      ),
+        trace: (message, details) => traceOutputName(options, message, details),
+      }),
     ];
     await runPatchFileCleanups(outputAssetCleanups);
     return {
@@ -560,7 +427,7 @@ const buildSessionOutputFiles = async (
       rawOutputSize,
     };
   }
-  if (compression === "chd") {
+  if (archiveCompression === "chd") {
     const cueOutput = outputAssets.find(({ asset }) => asset.kind === "cue");
     const trackOutputs = outputAssets.filter(({ asset }) => asset.kind === "track");
     if (!cueOutput || trackOutputs.length < 1) throw new Error("CHD output requires a CUE disc group with tracks");
@@ -610,13 +477,14 @@ const buildSessionOutputFiles = async (
     };
   }
   const files = [
-    await createCompressedArchive(
-      entries.map((entry) => entry.entry),
-      "7z",
-      `${baseName}.7z`,
+    await createArchivePatchFileOutput({
+      compression: "7z",
+      entries: entries.map((entry) => entry.entry),
       options,
+      outputName: `${baseName}.7z`,
       runtime,
-    ),
+      trace: (message, details) => traceOutputName(options, message, details),
+    }),
   ];
   await runPatchFileCleanups(outputAssetCleanups);
   return {
