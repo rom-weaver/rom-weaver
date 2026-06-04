@@ -97,6 +97,11 @@ type TrimInput = {
 
 type TrimResult = {
   output: PublicOutput;
+  sizeSummary?: {
+    inputSize?: number;
+    outputSize?: number;
+    rawSize?: number;
+  };
 };
 
 type PublicOutput = VfsOutputRef & {
@@ -231,6 +236,10 @@ type ApplyWorkflowResult = {
 type CreatePatchResult = {
   output: PublicOutput;
   format: string;
+  sizeSummary?: {
+    outputSize?: number;
+    rawSize?: number;
+  };
 };
 
 export type {

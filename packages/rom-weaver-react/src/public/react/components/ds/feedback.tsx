@@ -92,7 +92,7 @@ const FileProgress = (props: Parameters<typeof InlineProgress>[0]) => (
   </div>
 );
 
-type DownloadMeta = { format?: string; name?: string; size?: string; savedSize?: string };
+type DownloadMeta = { format?: string; name?: string; ratio?: string; savedSize?: string; size?: string };
 
 /**
  * The primary action button. Renders the uppercase action by default, or a
@@ -125,6 +125,7 @@ const RunButton = ({
           <span className="dl-sz">
             &middot; {download.size}
             {download.savedSize ? <> &middot; saved {download.savedSize}</> : null}
+            {download.ratio ? <> &middot; {download.ratio}</> : null}
           </span>
         ) : null}
       </>

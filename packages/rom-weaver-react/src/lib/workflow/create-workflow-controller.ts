@@ -242,11 +242,12 @@ class CreateWorkflowController<TSource, TDestination> extends WorkflowController
         this.abortController.signal,
       );
       const output = wrapPublicOutput<TDestination>(result.output, this.runtime, 0);
+      const rawSize = result.sizeSummary?.rawSize ?? result.sizeSummary?.outputSize ?? result.output.size;
       return {
         modified: this.toSelectedInputInfo(modified, "modified"),
         original: this.toSelectedInputInfo(original, "original"),
         output,
-        sizeSummary: { outputSize: output.size },
+        sizeSummary: { ...(result.sizeSummary || {}), outputSize: output.size, rawSize },
         type: result.format as PatchFormat,
       };
     });

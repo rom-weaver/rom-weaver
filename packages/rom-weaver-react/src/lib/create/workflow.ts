@@ -280,9 +280,15 @@ const runCreateWorkflow = async (
     );
     if (compression === "none") return result;
     const patchFile = await createPatchFileFromPublicOutput(result.output, rawPatchFileName);
+    const output = await createCompressedPatchOutput(patchFile);
     return {
       format,
-      output: await createCompressedPatchOutput(patchFile),
+      output,
+      sizeSummary: {
+        ...(result.sizeSummary || {}),
+        outputSize: output.size,
+        rawSize: patchFile.fileSize,
+      },
     };
   }
 

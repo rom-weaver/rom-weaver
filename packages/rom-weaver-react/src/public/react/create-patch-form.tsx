@@ -70,9 +70,45 @@ const resolveCreateExecutionOutputName = (outputName: string, patchType: string)
   return appendFileNameExtension(normalizedOutputName, patchType || "bps");
 };
 
-const getCompletedDownloadMeta = (fileName: string, size?: number | null) => ({
-  format: "Patch",
-  name: fileName,
+const getFileExtensionLabel = (fileName: string) => {
+  const extension = fileName.trim().match(/(\.[^./\\]+)$/)?.[1];
+  return extension || fileName;
+};
+
+const getCompressionRatioLabel = (
+  compression: "7z" | "none" | "zip",
+  outputSize?: number | null,
+  rawSize?: number | null,
+) => {
+  if (compression === "none") return undefined;
+  if (
+    typeof outputSize !== "number" ||
+    !Number.isFinite(outputSize) ||
+    typeof rawSize !== "number" ||
+    !Number.isFinite(rawSize) ||
+    rawSize <= 0
+  ) {
+    return undefined;
+  }
+  return `${Math.round((outputSize / rawSize) * 100)}%`;
+};
+
+const getCompletedDownloadMeta = ({
+  compression,
+  fileName,
+  patchType,
+  rawSize,
+  size,
+}: {
+  compression: "7z" | "none" | "zip";
+  fileName: string;
+  patchType: string;
+  rawSize?: number | null;
+  size?: number | null;
+}) => ({
+  format: `.${patchType || getFileExtensionLabel(fileName).replace(/^\./, "") || "patch"}`,
+  name: compression === "none" ? undefined : getFileExtensionLabel(fileName),
+  ratio: getCompressionRatioLabel(compression, size, rawSize),
   size: typeof size === "number" && Number.isFinite(size) ? formatByteSize(size) : undefined,
 });
 
@@ -191,7 +227,10 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   const [originalState, setOriginalState] = useState<CreateDisplaySourceState | null>(null);
   const [modifiedState, setModifiedState] = useState<CreateDisplaySourceState | null>(null);
   const [completedOutput, setCompletedOutput] = useState<{
+    compression: "7z" | "none" | "zip";
     fileName: string;
+    patchType: string;
+    rawSize?: number;
     saveAs: (destination?: BrowserSaveDestination) => Promise<void>;
     size?: number;
   } | null>(null);
@@ -573,7 +612,10 @@ function CreatePatchForm(props: CreatePatchFormProps) {
       const result = (await createWorkflow.run()) as BrowserCreateResult;
       activeOutputDisposeRef.current = result.output.dispose;
       setCompletedOutput({
+        compression: createCompression,
         fileName: result.output.fileName,
+        patchType,
+        rawSize: result.sizeSummary?.rawSize,
         saveAs: result.output.saveAs,
         size: result.sizeSummary?.outputSize ?? result.output.size,
       });
@@ -741,9 +783,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
               {busy && progressProps && progress?.role !== "input" ? <FileProgress {...progressProps} /> : null}
               <RunButton
                 disabled={actionDisabled}
-                download={
-                  completedOutput ? getCompletedDownloadMeta(completedOutput.fileName, completedOutput.size) : undefined
-                }
+                download={completedOutput ? getCompletedDownloadMeta(completedOutput) : undefined}
                 icon={
                   completedOutput ? (
                     <Download aria-hidden="true" />
