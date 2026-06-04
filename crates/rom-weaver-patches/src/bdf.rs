@@ -6,14 +6,15 @@ use std::{
     sync::Arc,
 };
 
-use bzip2::{Compression, read::MultiBzDecoder, write::BzEncoder};
+use bzip2::read::MultiBzDecoder;
+use qbsdiff::ParallelScheme;
 use rayon::prelude::*;
 use rom_weaver_codecs::decode_bzip2_exact;
 use rom_weaver_core::{
-    BlockCacheReader, ChunkPlanner, DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES,
-    DEFAULT_CHUNK_SIZE_BYTES, FormatDescriptor, OperationContext, OperationReport,
-    PatchApplyRequest, PatchCapabilities, PatchCreateRequest, PatchHandler, PatchValidateRequest,
-    Result, RomWeaverError, SharedBlockCacheReader, SharedThreadPool, ThreadCapability,
+    BlockCacheReader, DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES,
+    FormatDescriptor, OperationContext, OperationReport, PatchApplyRequest, PatchCapabilities,
+    PatchCreateRequest, PatchHandler, PatchValidateRequest, Result, RomWeaverError,
+    SharedBlockCacheReader, SharedThreadPool, ThreadCapability,
 };
 
 use crate::qbsdiff_support::qbsdiff_thread_capability;
@@ -75,6 +76,7 @@ impl BdfPatchHandler {
             let writes = prepare_bsdiff_writes_parallel(
                 &plan.writes,
                 &source_reader,
+                source_len,
                 &plan.delta_payload,
                 &plan.extra_payload,
                 &pool,
@@ -85,6 +87,7 @@ impl BdfPatchHandler {
             let writes = prepare_bsdiff_writes_sequential(
                 &plan.writes,
                 &request.input,
+                source_len,
                 &plan.delta_payload,
                 &plan.extra_payload,
                 context,
@@ -170,7 +173,7 @@ impl PatchHandler for BdfPatchHandler {
             fs::create_dir_all(parent)?;
         }
 
-        pool.install(|| create_streaming_bsdiff_patch(request, context))?;
+        pool.install(|| create_qbsdiff_patch(request, context, execution.effective_threads))?;
         let patch_len = fs::metadata(&request.output)?.len();
 
         Ok(crate::patch_success_report(
@@ -224,7 +227,7 @@ struct BsdiffWritePlan {
 #[derive(Clone, Debug)]
 enum BsdiffWritePlanKind {
     Add {
-        source_offset: u64,
+        source_offset: i128,
         delta_offset: u64,
         len: u64,
     },
@@ -251,164 +254,41 @@ fn build_bdf_parse_label(format_name: &str, target_size: u64) -> String {
     format!("parsed {format_name} patch targeting {target_size} byte(s)")
 }
 
-fn create_streaming_bsdiff_patch(
+fn create_qbsdiff_patch(
     request: &PatchCreateRequest,
     context: &OperationContext,
+    effective_threads: usize,
 ) -> Result<()> {
-    let source_len = fs::metadata(&request.original)?.len();
-    let target_len = fs::metadata(&request.modified)?.len();
-    let common_len = source_len.min(target_len);
+    context.cancel().check()?;
+    let source = fs::read(&request.original)?;
+    context.cancel().check()?;
+    let target = fs::read(&request.modified)?;
+    context.cancel().check()?;
 
-    let control_path = context
-        .temp_paths()
-        .next_path("bdf-create-control", Some("bz2"));
-    let delta_path = context
-        .temp_paths()
-        .next_path("bdf-create-delta", Some("bz2"));
-    let extra_path = context
-        .temp_paths()
-        .next_path("bdf-create-extra", Some("bz2"));
-    for path in [&control_path, &delta_path, &extra_path] {
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-    }
-
-    let encode_result = (|| -> Result<()> {
-        let mut control_encoder = BzEncoder::new(
-            BufWriter::new(File::create(&control_path)?),
-            Compression::new(6),
-        );
-        let mut delta_encoder = BzEncoder::new(
-            BufWriter::new(File::create(&delta_path)?),
-            Compression::new(6),
-        );
-        let mut extra_encoder = BzEncoder::new(
-            BufWriter::new(File::create(&extra_path)?),
-            Compression::new(6),
-        );
-
-        let planner = ChunkPlanner::new(DEFAULT_CHUNK_SIZE_BYTES)?;
-        let mut source_reader = BlockCacheReader::open(
-            &request.original,
-            DEFAULT_BLOCK_CACHE_SIZE_BYTES,
-            DEFAULT_BLOCK_CACHE_MAX_BLOCKS,
-        )?;
-        let mut target_reader = BlockCacheReader::open(
-            &request.modified,
-            DEFAULT_BLOCK_CACHE_SIZE_BYTES,
-            DEFAULT_BLOCK_CACHE_MAX_BLOCKS,
-        )?;
-
-        for chunk in planner.plan(common_len) {
-            context.cancel().check()?;
-            let chunk_len_usize = usize::try_from(chunk.len).map_err(|_| {
-                RomWeaverError::Validation(
-                    "BSDIFF40 chunk length exceeded addressable memory".into(),
-                )
-            })?;
-            write_bsdiff_i64(
-                &mut control_encoder,
-                u64_to_bsdiff_i64(chunk.len, "chunk add length")?,
-            )?;
-            write_bsdiff_i64(&mut control_encoder, 0)?;
-            write_bsdiff_i64(&mut control_encoder, 0)?;
-
-            let mut source_bytes = vec![0u8; chunk_len_usize];
-            source_reader.read_exact_at(chunk.offset, source_bytes.as_mut_slice())?;
-            let mut target_bytes = vec![0u8; chunk_len_usize];
-            target_reader.read_exact_at(chunk.offset, target_bytes.as_mut_slice())?;
-            for (target_byte, source_byte) in target_bytes.iter_mut().zip(source_bytes.iter()) {
-                *target_byte = target_byte.wrapping_sub(*source_byte);
-            }
-            delta_encoder.write_all(target_bytes.as_slice())?;
-        }
-
-        if target_len > common_len {
-            let tail_len = target_len - common_len;
-            write_bsdiff_i64(&mut control_encoder, 0)?;
-            write_bsdiff_i64(
-                &mut control_encoder,
-                u64_to_bsdiff_i64(tail_len, "tail copy length")?,
-            )?;
-            write_bsdiff_i64(&mut control_encoder, 0)?;
-
-            for chunk in planner.plan(tail_len) {
-                context.cancel().check()?;
-                let chunk_len_usize = usize::try_from(chunk.len).map_err(|_| {
-                    RomWeaverError::Validation(
-                        "BSDIFF40 tail chunk length exceeded addressable memory".into(),
-                    )
-                })?;
-                let mut target_tail = vec![0u8; chunk_len_usize];
-                target_reader.read_exact_at(
-                    common_len.checked_add(chunk.offset).ok_or_else(|| {
-                        RomWeaverError::Validation("BSDIFF40 tail chunk offset overflowed".into())
-                    })?,
-                    target_tail.as_mut_slice(),
-                )?;
-                extra_encoder.write_all(target_tail.as_slice())?;
-            }
-        }
-
-        let mut control_writer = control_encoder.finish()?;
-        control_writer.flush()?;
-        let mut delta_writer = delta_encoder.finish()?;
-        delta_writer.flush()?;
-        let mut extra_writer = extra_encoder.finish()?;
-        extra_writer.flush()?;
-        Ok(())
-    })();
-
-    let patch_result = (|| -> Result<()> {
-        encode_result?;
-        let control_len = fs::metadata(&control_path)?.len();
-        let delta_len = fs::metadata(&delta_path)?.len();
-        let mut patch_writer = BufWriter::new(File::create(&request.output)?);
-        patch_writer.write_all(BSDIFF40_MAGIC)?;
-        write_bsdiff_i64(
-            &mut patch_writer,
-            u64_to_bsdiff_i64(control_len, "control payload length")?,
-        )?;
-        write_bsdiff_i64(
-            &mut patch_writer,
-            u64_to_bsdiff_i64(delta_len, "delta payload length")?,
-        )?;
-        write_bsdiff_i64(
-            &mut patch_writer,
-            u64_to_bsdiff_i64(target_len, "target length")?,
-        )?;
-
-        for segment_path in [&control_path, &delta_path, &extra_path] {
-            let mut segment = File::open(segment_path)?;
-            std::io::copy(&mut segment, &mut patch_writer)?;
-        }
-        patch_writer.flush()?;
-        Ok(())
-    })();
-
-    let _ = fs::remove_file(&control_path);
-    let _ = fs::remove_file(&delta_path);
-    let _ = fs::remove_file(&extra_path);
-    patch_result
-}
-
-fn write_bsdiff_i64(output: &mut impl Write, value: i64) -> Result<()> {
-    output.write_all(&encode_bsdiff_i64(value))?;
+    let patch_writer = BufWriter::new(File::create(&request.output)?);
+    qbsdiff::Bsdiff::new(source.as_slice(), target.as_slice())
+        .parallel_scheme(qbsdiff_parallel_scheme(effective_threads))
+        .compression_level(9)
+        .compare(patch_writer)?;
+    context.cancel().check()?;
     Ok(())
 }
 
+fn qbsdiff_parallel_scheme(effective_threads: usize) -> ParallelScheme {
+    if effective_threads > 1 {
+        ParallelScheme::NumJobs(effective_threads)
+    } else {
+        ParallelScheme::Never
+    }
+}
+
+#[cfg(test)]
 fn encode_bsdiff_i64(value: i64) -> [u8; 8] {
     let mut bytes = value.unsigned_abs().to_le_bytes();
     if value < 0 {
         bytes[7] |= 0x80;
     }
     bytes
-}
-
-fn u64_to_bsdiff_i64(value: u64, label: &str) -> Result<i64> {
-    i64::try_from(value)
-        .map_err(|_| RomWeaverError::Validation(format!("BSDIFF40 {label} overflowed i64")))
 }
 
 fn parse_bsdiff_parallel_plan_with_layout(
@@ -430,6 +310,11 @@ fn parse_bsdiff_parallel_plan_with_layout(
     )?;
     let (writes, delta_len, extra_len, output_len) =
         collect_bsdiff_write_plans(control_block.as_slice(), source_len)?;
+    if output_len != layout.target_len_hint {
+        return Err(RomWeaverError::Validation(
+            "BSDIFF40 control output length did not match header target length".into(),
+        ));
+    }
     let delta_payload = {
         let delta_block = read_patch_block(
             &mut patch_reader,
@@ -524,12 +409,9 @@ fn parse_bsdiff_patch_layout_from_path(path: &Path) -> Result<BsdiffPatchFileLay
 
 fn collect_bsdiff_write_plans(
     compressed_control_block: &[u8],
-    source_len: usize,
+    _source_len: usize,
 ) -> Result<(Vec<BsdiffWritePlan>, u64, u64, u64)> {
     let mut control_decoder = MultiBzDecoder::new(Cursor::new(compressed_control_block));
-    let source_len = i128::try_from(source_len).map_err(|_| {
-        RomWeaverError::Validation("BSDIFF40 source exceeded addressable memory".into())
-    })?;
 
     let mut writes = Vec::new();
     let mut source_offset = 0i128;
@@ -579,19 +461,10 @@ fn collect_bsdiff_write_plans(
                 .ok_or_else(|| {
                     RomWeaverError::Validation("BSDIFF40 source offset overflowed".into())
                 })?;
-            if source_start < 0 || source_end > source_len {
-                return Err(RomWeaverError::Validation(
-                    "BSDIFF40 patch add range exceeded source bounds".into(),
-                ));
-            }
             writes.push(BsdiffWritePlan {
                 output_offset,
                 kind: BsdiffWritePlanKind::Add {
-                    source_offset: u64::try_from(source_start).map_err(|_| {
-                        RomWeaverError::Validation(
-                            "BSDIFF40 source offset exceeded addressable memory".into(),
-                        )
-                    })?,
+                    source_offset: source_start,
                     delta_offset,
                     len: add_len,
                 },
@@ -624,11 +497,6 @@ fn collect_bsdiff_write_plans(
         source_offset = source_offset
             .checked_add(i128::from(seek))
             .ok_or_else(|| RomWeaverError::Validation("BSDIFF40 source seek overflowed".into()))?;
-        if source_offset < 0 {
-            return Err(RomWeaverError::Validation(
-                "BSDIFF40 source seek moved before the start of input".into(),
-            ));
-        }
     }
 
     Ok((writes, delta_offset, extra_offset, output_offset))
@@ -637,6 +505,7 @@ fn collect_bsdiff_write_plans(
 fn prepare_bsdiff_writes_parallel(
     plans: &[BsdiffWritePlan],
     source: &Arc<SharedBlockCacheReader>,
+    source_len: usize,
     delta_payload: &[u8],
     extra_payload: &[u8],
     pool: &SharedThreadPool,
@@ -666,19 +535,20 @@ fn prepare_bsdiff_writes_parallel(
                         let delta_end = delta_start.checked_add(range_len).ok_or_else(|| {
                             RomWeaverError::Validation("BSDIFF40 delta range overflowed".into())
                         })?;
-                        let mut source_slice = vec![0u8; range_len];
-                        source.read_exact_at(*source_offset, &mut source_slice)?;
                         let delta_slice =
                             delta_payload.get(delta_start..delta_end).ok_or_else(|| {
                                 RomWeaverError::Validation(
                                     "BSDIFF40 delta range exceeded patch bounds".into(),
                                 )
                             })?;
-                        source_slice
-                            .iter()
-                            .zip(delta_slice.iter())
-                            .map(|(source_byte, delta_byte)| source_byte.wrapping_add(*delta_byte))
-                            .collect()
+                        let mut data = delta_slice.to_vec();
+                        add_source_overlap_shared(
+                            source,
+                            source_len,
+                            *source_offset,
+                            data.as_mut_slice(),
+                        )?;
+                        data
                     }
                     BsdiffWritePlanKind::Copy { extra_offset, len } => {
                         let extra_start = usize::try_from(*extra_offset).map_err(|_| {
@@ -716,6 +586,7 @@ fn prepare_bsdiff_writes_parallel(
 fn prepare_bsdiff_writes_sequential(
     plans: &[BsdiffWritePlan],
     source_path: &Path,
+    source_len: usize,
     delta_payload: &[u8],
     extra_payload: &[u8],
     context: &OperationContext,
@@ -729,7 +600,7 @@ fn prepare_bsdiff_writes_sequential(
         .iter()
         .map(|plan| {
             context.cancel().check()?;
-            prepare_bsdiff_write(plan, &mut source, delta_payload, extra_payload)
+            prepare_bsdiff_write(plan, &mut source, source_len, delta_payload, extra_payload)
         })
         .collect()
 }
@@ -737,6 +608,7 @@ fn prepare_bsdiff_writes_sequential(
 fn prepare_bsdiff_write(
     plan: &BsdiffWritePlan,
     source: &mut BlockCacheReader,
+    source_len: usize,
     delta_payload: &[u8],
     extra_payload: &[u8],
 ) -> Result<PreparedBsdiffWrite> {
@@ -759,16 +631,12 @@ fn prepare_bsdiff_write(
             let delta_end = delta_start.checked_add(range_len).ok_or_else(|| {
                 RomWeaverError::Validation("BSDIFF40 delta range overflowed".into())
             })?;
-            let mut source_slice = vec![0u8; range_len];
-            source.read_exact_at(*source_offset, &mut source_slice)?;
             let delta_slice = delta_payload.get(delta_start..delta_end).ok_or_else(|| {
                 RomWeaverError::Validation("BSDIFF40 delta range exceeded patch bounds".into())
             })?;
-            source_slice
-                .iter()
-                .zip(delta_slice.iter())
-                .map(|(source_byte, delta_byte)| source_byte.wrapping_add(*delta_byte))
-                .collect()
+            let mut data = delta_slice.to_vec();
+            add_source_overlap(source, source_len, *source_offset, data.as_mut_slice())?;
+            data
         }
         BsdiffWritePlanKind::Copy { extra_offset, len } => {
             let extra_start = usize::try_from(*extra_offset).map_err(|_| {
@@ -796,6 +664,83 @@ fn prepare_bsdiff_write(
         output_offset: plan.output_offset,
         data,
     })
+}
+
+fn add_source_overlap_shared(
+    source: &SharedBlockCacheReader,
+    source_len: usize,
+    source_offset: i128,
+    data: &mut [u8],
+) -> Result<()> {
+    let Some((read_offset, data_offset, len)) =
+        source_overlap(source_len, source_offset, data.len())?
+    else {
+        return Ok(());
+    };
+    let mut source_slice = vec![0u8; len];
+    source.read_exact_at(read_offset, source_slice.as_mut_slice())?;
+    add_source_slice(data, data_offset, source_slice.as_slice());
+    Ok(())
+}
+
+fn add_source_overlap(
+    source: &mut BlockCacheReader,
+    source_len: usize,
+    source_offset: i128,
+    data: &mut [u8],
+) -> Result<()> {
+    let Some((read_offset, data_offset, len)) =
+        source_overlap(source_len, source_offset, data.len())?
+    else {
+        return Ok(());
+    };
+    let mut source_slice = vec![0u8; len];
+    source.read_exact_at(read_offset, source_slice.as_mut_slice())?;
+    add_source_slice(data, data_offset, source_slice.as_slice());
+    Ok(())
+}
+
+fn source_overlap(
+    source_len: usize,
+    source_offset: i128,
+    data_len: usize,
+) -> Result<Option<(u64, usize, usize)>> {
+    if source_len == 0 || data_len == 0 {
+        return Ok(None);
+    }
+
+    let source_len = i128::try_from(source_len).map_err(|_| {
+        RomWeaverError::Validation("BSDIFF40 source exceeded addressable memory".into())
+    })?;
+    let data_len = i128::try_from(data_len).map_err(|_| {
+        RomWeaverError::Validation("BSDIFF40 segment length exceeded addressable memory".into())
+    })?;
+    let source_end = source_offset
+        .checked_add(data_len)
+        .ok_or_else(|| RomWeaverError::Validation("BSDIFF40 source offset overflowed".into()))?;
+
+    let overlap_start = source_offset.max(0);
+    let overlap_end = source_end.min(source_len);
+    if overlap_start >= overlap_end {
+        return Ok(None);
+    }
+
+    let read_offset = u64::try_from(overlap_start).map_err(|_| {
+        RomWeaverError::Validation("BSDIFF40 source offset exceeded addressable memory".into())
+    })?;
+    let data_offset = usize::try_from(overlap_start - source_offset).map_err(|_| {
+        RomWeaverError::Validation("BSDIFF40 source overlap exceeded addressable memory".into())
+    })?;
+    let len = usize::try_from(overlap_end - overlap_start).map_err(|_| {
+        RomWeaverError::Validation("BSDIFF40 source overlap exceeded addressable memory".into())
+    })?;
+    Ok(Some((read_offset, data_offset, len)))
+}
+
+fn add_source_slice(data: &mut [u8], data_offset: usize, source_slice: &[u8]) {
+    for (data_byte, source_byte) in data[data_offset..].iter_mut().zip(source_slice.iter()) {
+        *data_byte = data_byte.wrapping_add(*source_byte);
+    }
 }
 
 fn apply_prepared_bsdiff_writes(output: &mut File, writes: &[PreparedBsdiffWrite]) -> Result<()> {
