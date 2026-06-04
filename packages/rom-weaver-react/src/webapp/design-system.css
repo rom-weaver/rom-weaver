@@ -278,10 +278,12 @@
 .rw-app .select, .rw-app .ptgt-sel { appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23939ba8' stroke-width='2.4'><path d='m6 9 6 6 6-6'/></svg>"); background-repeat: no-repeat; background-position: right 9px center; padding-right: 27px; }
 .rw-app .input.mono, .rw-app .select.mono { font-family: var(--rw-mono); font-size: 0.896552rem; }
 .rw-app .input:focus, .rw-app .select:focus { outline: none; border-color: var(--rw-accent); box-shadow: 0 0 0 1px var(--rw-accent); }
-/* iOS Safari auto-zooms when a focused control's font-size is < 16px. Bump text-entry
-   controls to 16px on iOS only (keeps pinch-zoom; no effect on desktop layout). */
+/* iOS Safari auto-zooms when a focused control's font-size is < 16px. Bump form
+   controls on touch WebKit only; keep pinch-zoom enabled. */
 @supports (-webkit-touch-callout: none) {
-  .rw-app .input, .rw-app .select, .rw-app textarea, .rw-app input[type="text"], .rw-app input[type="number"], .rw-modal .input, .rw-modal .select { font-size: 16px; }
+  @media (pointer: coarse) {
+    .rw-app .input, .rw-app .select, .rw-app input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]), .rw-app textarea, .rw-app select, .rw-modal .input, .rw-modal .select, .rw-modal input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]), .rw-modal textarea, .rw-modal select { font-size: max(16px, 1em); }
+  }
 }
 .rw-app .input:disabled, .rw-app .select:disabled { opacity: .55; cursor: not-allowed; }
 .rw-app .outbar { display: flex; gap: 8px; align-items: stretch; flex-wrap: wrap; }
