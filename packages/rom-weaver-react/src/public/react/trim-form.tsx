@@ -103,6 +103,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   );
   const [internalOutputFormat, setInternalOutputFormat] = useState(props.defaultOutputFormat || "");
   const [busy, setBusy] = useState(false);
+  const [sourceStaging, setSourceStaging] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [errorCode, setErrorCode] = useState("");
@@ -130,8 +131,8 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   const source = props.source === undefined ? internalSource : props.source;
   const settings = props.settings || internalSettings || providerSettings;
   const outputFormat = props.outputFormat ?? internalOutputFormat;
-  const disabled = !!props.disabled || busy;
-  const actionDisabled = !!props.disabled || !(busy || completedOutput || source);
+  const disabled = !!props.disabled || busy || sourceStaging;
+  const actionDisabled = !!props.disabled || sourceStaging || !(busy || completedOutput || source);
   const sourceFileName = getReactBinarySourceFileName(source, "ROM");
   const resolvedSourceFileName = sourceState?.fileName || sourceFileName;
   const rawOutputFormat = getSourceExtension(resolvedSourceFileName);
@@ -217,6 +218,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   useEffect(() => {
     if (!source) {
       setSourceState(null);
+      setSourceStaging(false);
       return;
     }
     let cancelled = false;
@@ -234,6 +236,16 @@ function TrimPatchForm(props: TrimPatchFormProps) {
       },
       settings: stagingSettingsRef.current,
     });
+    const handleProgress = (event: WorkflowProgress) => {
+      props.onProgress?.(toReactProgressEvent(event));
+      setProgress({
+        ...createProgressViewModelFromEvent(event, { stage: event.stage || "input" }),
+        role: typeof event.role === "string" ? event.role : undefined,
+        stage: typeof event.stage === "string" ? event.stage : "input",
+      });
+    };
+    workflow.on("progress", handleProgress);
+    setSourceStaging(true);
 
     void workflow
       .setInput(toBrowserPublicBinarySource(source))
@@ -246,14 +258,20 @@ function TrimPatchForm(props: TrimPatchFormProps) {
         setSourceState(workflow.getInput());
       })
       .finally(() => {
+        workflow.off("progress", handleProgress);
+        if (!cancelled) {
+          setSourceStaging(false);
+          setProgress((current) => (current?.stage === "input" ? null : current));
+        }
         void workflow.dispose();
       });
 
     return () => {
       cancelled = true;
+      workflow.off("progress", handleProgress);
       void workflow.dispose();
     };
-  }, [props.workerThreads, resolvedAssetBaseUrl, selectFile, source, stagingSettingsKey]);
+  }, [props.onProgress, props.workerThreads, resolvedAssetBaseUrl, selectFile, source, stagingSettingsKey]);
 
   const runTrim = async () => {
     if (completedOutput) {
@@ -381,7 +399,8 @@ function TrimPatchForm(props: TrimPatchFormProps) {
         value: typeof progress.percent === "number" ? `${Math.round(progress.percent)}%` : "working",
       }
     : null;
-  const showInputProgress = busy && progressProps && progress?.stage === "input" && progress.role === "input";
+  const showInputProgress =
+    sourceStaging || (busy && progressProps && progress?.stage === "input" && progress.role === "input");
 
   const rawExtensionOption = rawOutputFormat;
   const formatOptions = [
@@ -415,7 +434,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
             <FileProgress {...progressProps} />
           ) : (
             <FileCard
-              name={<ExtractionTree levels={[{ name: sourceFileName }]} />}
+              name={<ExtractionTree levels={[{ name: resolvedSourceFileName }]} />}
               onRemove={() => updateSource(null)}
               removeLabel="Clear ROM"
             />

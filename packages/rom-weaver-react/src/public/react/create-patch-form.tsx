@@ -606,7 +606,9 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     checksumProgress?: NonNullable<ReturnType<typeof createProgressViewModelFromEvent>> | null;
   }) => (
     <StepSection num={num} title={title}>
-      {file ? (
+      {file && sourceProgress ? (
+        <FileProgress {...sourceProgress} />
+      ) : file ? (
         <FileCard
           name={
             <ExtractionTree
@@ -621,7 +623,6 @@ function CreatePatchForm(props: CreatePatchFormProps) {
           onRemove={onClear}
           removeLabel={removeLabel}
         >
-          {sourceProgress ? <FileProgress {...sourceProgress} /> : null}
           <SourceChecksums progress={checksumProgress} sourceState={sourceState} />
         </FileCard>
       ) : null}
