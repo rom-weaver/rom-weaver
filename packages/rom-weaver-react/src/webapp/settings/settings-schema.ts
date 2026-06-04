@@ -74,6 +74,7 @@ const storedStringSchema = v.string();
 const storedBooleanSchema = v.boolean();
 const storedStringOrNumberSchema = v.union([v.string(), v.number()]);
 const BOOLEAN_SETTINGS_FIELDS = [
+  "specialCompression",
   "fixChecksum",
   "rvzScrub",
   "erudaDevTools",
@@ -454,6 +455,7 @@ const readGroupedStoredSettings = (source: Record<string, unknown>): Record<stri
     chdCreateCdCodecs: compression.chdCreateCdCodecs,
     chdCreateDvdCodecs: compression.chdCreateDvdCodecs,
     compressionProfile: compression.profile,
+    defaultArchive: commonSettings.defaultArchive,
     erudaDevTools: commonSettings.erudaDevTools,
     fixChecksum: patch.fixChecksum,
     language: commonSettings.language,
@@ -466,6 +468,7 @@ const readGroupedStoredSettings = (source: Record<string, unknown>): Record<stri
     rvzScrub: compression.rvzScrub,
     sevenZipCodec: compression.sevenZipCodec,
     sevenZipLevel: compression.sevenZipLevel,
+    specialCompression: commonSettings.specialCompression,
     workerThreads: compression.workerThreads,
     z3dsCompressionLevel: compression.z3dsCompressionLevel,
     zipCodec: compression.zipCodec,
@@ -632,7 +635,7 @@ const serializeSettingsForStorage = (source?: SettingsState | null): string | nu
     version: SETTINGS_STORAGE_VERSION,
   };
   const storeSetting = <K extends SettingsFieldKey>(fieldKey: K, value: SettingsState[K]) => {
-    if (fieldKey === "defaultArchive") {
+    if (fieldKey === "defaultArchive" || fieldKey === "specialCompression") {
       (storedSettings.common as Record<string, unknown>)[fieldKey] = value;
       return;
     }
@@ -755,6 +758,7 @@ const buildSettingsForWebapp = (source?: SettingsState | null, extraSettings?: R
       rvzScrub: settings.rvzScrub,
       sevenZipCodec: settings.sevenZipCodec,
       sevenZipLevel: compressionLevels.sevenZipLevel,
+      specialCompression: settings.specialCompression,
       workerThreads: settings.workerThreads,
       z3dsCompressionLevel: compressionLevels.z3dsCompressionLevel,
       zipCodec: settings.zipCodec,
@@ -778,6 +782,7 @@ const normalizeRuntimeSharedSettingsSource = (source?: Record<string, unknown> |
     settings.language = normalizeChoiceField("language", source.language, settings.language);
   if (typeof source.defaultArchive === "string")
     settings.defaultArchive = normalizeChoiceField("defaultArchive", source.defaultArchive, settings.defaultArchive);
+  if (typeof source.specialCompression === "boolean") settings.specialCompression = source.specialCompression;
   if (typeof source.logLevel === "string")
     settings.logLevel = normalizeChoiceField("logLevel", source.logLevel, settings.logLevel);
   if (typeof source.fixChecksum === "boolean") settings.fixChecksum = source.fixChecksum;

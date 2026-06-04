@@ -63,6 +63,7 @@ type RomInputInfoState = {
 
 type ArchivePathEntryState = {
   fileName: string;
+  kind?: string;
   sourceSize?: number;
   outputSize?: number;
   decompressionTimeMs?: number;

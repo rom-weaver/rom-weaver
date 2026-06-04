@@ -1,4 +1,5 @@
 import { type SetStateAction, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { resolveAutomaticCompressionFormat } from "../../lib/compression/container-format-registry.ts";
 import OutputCompressionManager from "../../lib/compression/output-compression-manager.ts";
 import { classifyPatcherInput } from "../../lib/input/input-classification.ts";
 import { getFileNameExtension as getSharedFileNameExtension, hasFileNameExtension } from "../../lib/path-utils.ts";
@@ -22,7 +23,6 @@ import {
   createOutputOptions,
   createSectionSizeText,
   getGeneratedOutputName,
-  type OutputOptionLabelMap,
 } from "./output-view-model.ts";
 import type {
   ApplyPatchFormProps,
@@ -42,6 +42,7 @@ import { createInertPatcherUiSessionState } from "./patcher-ui-state.ts";
 type PatcherUiState = PatcherUiSessionState;
 type ArchivePathEntry = {
   fileName: string;
+  kind?: string;
   sourceSize?: number;
   outputSize?: number;
   decompressionTimeMs?: number;
@@ -256,17 +257,15 @@ const createStageSettingsKey = ({
 }) =>
   JSON.stringify(
     {
-      ...settings,
       input: {
         ...settings.input,
         containerInputsEnabled,
       },
-      output: {
-        ...(settings.output || {}),
-        compression: undefined,
-        outputName: undefined,
+      limits: settings.limits,
+      workers: {
+        ...settings.workers,
+        threads: settings.workers?.threads ?? getLegacyCompressionWorkerThreads(settings) ?? workerThreads,
       },
-      workerThreads,
     },
     (_key, value) => (typeof value === "function" ? "[function]" : value),
   );
@@ -337,6 +336,7 @@ const getArchivePathEntriesFromProgressDetails = (details: Record<string, unknow
           ? entry.decompressionTimeMs
           : undefined,
       fileName: typeof entry.fileName === "string" ? entry.fileName : "",
+      kind: typeof entry.kind === "string" ? entry.kind : undefined,
       outputSize:
         typeof entry.outputSize === "number" && Number.isFinite(entry.outputSize) ? entry.outputSize : undefined,
       sourceSize:
@@ -480,23 +480,6 @@ const createStaticStoreController = <State>(state: State) => ({
   getState: () => state,
   subscribe: () => () => undefined,
 });
-const Z3DS_LABEL_BY_OUTPUT_EXTENSION: Record<string, string> = {
-  z3ds: "Z3DS",
-  z3dsx: "Z3DSX",
-  zcci: "ZCCI",
-  zcia: "ZCIA",
-  zcxi: "ZCXI",
-};
-const getZ3dsOutputOptionLabel = (source: BinarySource | undefined) => {
-  if (!source) return "Z3DS";
-  try {
-    const outputName = OutputCompressionManager.getCompressedFileName(source, "z3ds", {});
-    const extension = OutputCompressionManager.getExtension({ fileName: outputName });
-    return Z3DS_LABEL_BY_OUTPUT_EXTENSION[extension] || "Z3DS";
-  } catch (_error) {
-    return "Z3DS";
-  }
-};
 const useLiveStoreController = <State>(state: State) => {
   const stateRef = useRef(state);
   const listenersRef = useRef(new Set<() => void>());
@@ -640,6 +623,7 @@ const useLocalApplyPatchFormSession = ({
     undefined,
     createLocalPatcherSessionState,
   );
+  const [outputCompressionEdited, setOutputCompressionEdited] = useState(false);
   const {
     busy,
     completedApplyTimeMs,
@@ -800,29 +784,66 @@ const useLocalApplyPatchFormSession = ({
     },
     [activeSettings],
   );
-  const activeCompression = activeSettings.output?.compression || "zip";
-  const autoResolvedCompression = OutputCompressionManager.resolveOutputCompression(effectiveInputs[0], {
-    compressionFormat: "zip",
+  const defaultArchiveCompression =
+    activeSettings.defaultArchive === "7z" || activeSettings.defaultArchive === "none"
+      ? activeSettings.defaultArchive
+      : "zip";
+  const activeCompression = activeSettings.output?.compression || defaultArchiveCompression;
+  const z3dsLabelSource = useMemo<BinarySource | undefined>(() => {
+    const selectedInputFileName = String(romInputs[0]?.info?.fileName || "").trim();
+    const baseSource = effectiveInputs[0];
+    if (!selectedInputFileName) return baseSource;
+    if (baseSource && typeof baseSource === "object") {
+      return {
+        ...(baseSource as unknown as Record<string, unknown>),
+        fileName: selectedInputFileName,
+        name: selectedInputFileName,
+      } as unknown as BinarySource;
+    }
+    if (typeof File === "function") return new File([], selectedInputFileName);
+    return { fileName: selectedInputFileName } as unknown as BinarySource;
+  }, [effectiveInputs, romInputs]);
+  const supportedCompressionOptions = useMemo(
+    () =>
+      compressionOptions.filter((option) =>
+        OutputCompressionManager.supportsOutputCompression(z3dsLabelSource, option),
+      ),
+    [compressionOptions, z3dsLabelSource],
+  );
+  const effectiveActiveCompression =
+    activeCompression === "auto" ||
+    OutputCompressionManager.supportsOutputCompression(z3dsLabelSource, activeCompression)
+      ? activeCompression
+      : "none";
+  const autoResolvedCompression = resolveAutomaticCompressionFormat({
+    fallback: "zip",
+    parentCompressions: romInputs[0]?.archivePathEntries,
+    sourceFileName: String(romInputs[0]?.info?.fileName || getBinarySourceFileName(effectiveInputs[0], "")),
   });
+  const specialCompressionFormat =
+    autoResolvedCompression === "chd" || autoResolvedCompression === "rvz" || autoResolvedCompression === "z3ds"
+      ? autoResolvedCompression
+      : null;
+  const requestedCompression = outputCompressionEdited
+    ? effectiveActiveCompression
+    : activeSettings.specialCompression !== false && specialCompressionFormat
+      ? specialCompressionFormat
+      : effectiveActiveCompression === "auto"
+        ? defaultArchiveCompression
+        : effectiveActiveCompression;
   const displayedCompression =
-    activeCompression === "auto"
+    requestedCompression === "auto"
       ? effectiveInputs.length
         ? resolvedOutputCompression || autoResolvedCompression
         : autoResolvedCompression
-      : activeCompression;
-  const z3dsLabelSource = useMemo<BinarySource | undefined>(() => {
-    const selectedInputFileName = String(romInputs[0]?.info?.fileName || "").trim();
-    if (selectedInputFileName && typeof File === "function") return new File([], selectedInputFileName);
-    return effectiveInputs[0];
-  }, [effectiveInputs, romInputs]);
-  const outputOptionLabels = useMemo<OutputOptionLabelMap>(() => {
-    const labels: OutputOptionLabelMap = {};
-    if (compressionOptions.includes("z3ds")) labels.z3ds = getZ3dsOutputOptionLabel(z3dsLabelSource);
-    return labels;
-  }, [compressionOptions, z3dsLabelSource]);
+      : requestedCompression;
   const outputOptions = useMemo(
-    () => createOutputOptions(compressionOptions, outputOptionLabels),
-    [compressionOptions, outputOptionLabels],
+    () => createOutputOptions(supportedCompressionOptions, z3dsLabelSource),
+    [supportedCompressionOptions, z3dsLabelSource],
+  );
+  const selectedOutputOptionLabel = useMemo(
+    () => outputOptions.find((option) => option.value === displayedCompression)?.label,
+    [displayedCompression, outputOptions],
   );
   const outputSourceKey = useMemo(
     () =>
@@ -941,7 +962,7 @@ const useLocalApplyPatchFormSession = ({
         },
         output: {
           ...activeSettings.output,
-          compression: activeCompression,
+          compression: requestedCompression,
           outputName: requestedOutputName,
         },
         workerThreads: resolvedWorkerThreads,
@@ -949,12 +970,12 @@ const useLocalApplyPatchFormSession = ({
       patches: activePatches,
     }),
     [
-      activeCompression,
       activePatches,
       activeSettings,
       containerInputsEnabled,
       effectiveInputs,
       requestedOutputName,
+      requestedCompression,
       resolvedWorkerThreads,
     ],
   );
@@ -1174,6 +1195,7 @@ const useLocalApplyPatchFormSession = ({
           canMoveUp: index > 0 && !(busy || disabled),
           canRemove: !(busy || disabled),
           checksumTiming: patchInfo?.checksumTiming || "",
+          decompressionTimeMs: patchInfo?.decompressionTimeMs,
           detailText: patchInfo?.targetLabel || "",
           fileName: patchInfo?.fileName || getBinarySourceFileName(patch, `Patch ${index + 1}`),
           fileSize: patchInfo?.size ?? patchInfo?.sourceSize ?? getBinarySourceSize(patch) ?? undefined,
@@ -1200,14 +1222,14 @@ const useLocalApplyPatchFormSession = ({
         title: hasPendingDownload ? `Download ${pendingDownloadFileName}` : "",
       },
       applyTiming: applyTimingText,
-      compress: buildCompressPanel(displayedCompression, activeSettings as Record<string, unknown>),
+      compress: buildCompressPanel(displayedCompression, activeSettings as Record<string, unknown>, z3dsLabelSource),
       compressionFormat: displayedCompression,
       compressTiming: compressTimingText,
       disabled: disabled || busy || inputStaging || patchStaging,
       displayFileName: outputNameEdited ? outputName : effectiveResolvedOutputName,
       downloadSummary: hasPendingDownload
         ? {
-            format: displayedCompression?.toUpperCase() || undefined,
+            format: selectedOutputOptionLabel || displayedCompression?.toUpperCase() || undefined,
             ratio:
               formatDownloadCompressionRatio(completedSizeSummary.inputBytes, completedSizeSummary.outputBytes) ||
               undefined,
@@ -1238,6 +1260,7 @@ const useLocalApplyPatchFormSession = ({
       outputName,
       outputNameEdited,
       progress,
+      selectedOutputOptionLabel,
     ],
   );
   const localNoticeState = useMemo<NoticeState>(
@@ -1274,6 +1297,16 @@ const useLocalApplyPatchFormSession = ({
     },
     [onSettingsChange, setChecksumOverrideChecked, settings],
   );
+  useEffect(() => {
+    if (!outputCompressionEdited || activeCompression === effectiveActiveCompression) return;
+    updateSettings({
+      ...activeSettings,
+      output: {
+        ...activeSettings.output,
+        compression: effectiveActiveCompression,
+      },
+    });
+  }, [activeCompression, activeSettings, effectiveActiveCompression, outputCompressionEdited, updateSettings]);
   const updatePatches = useCallback(
     (nextPatches: BinarySource[]) => {
       setChecksumOverrideChecked(false);
@@ -2058,7 +2091,7 @@ const useLocalApplyPatchFormSession = ({
               },
               output: {
                 ...activeSettings.output,
-                compression: activeCompression,
+                compression: requestedCompression,
                 outputName: requestedOutputName,
               },
               signal: abortController.signal,
@@ -2169,6 +2202,7 @@ const useLocalApplyPatchFormSession = ({
         });
       },
       setOutputCompression: (value: string) => {
+        setOutputCompressionEdited(true);
         updateSettings({
           ...activeSettings,
           output: {

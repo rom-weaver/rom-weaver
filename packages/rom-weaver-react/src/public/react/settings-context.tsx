@@ -77,10 +77,11 @@ const useApplySettings = () => {
   return useMemo(() => toApplyWorkflowSettings(settings as ApplyPatchFormSettings), [settings]);
 };
 
-const normalizeDefaultArchive = (value: RuntimeValue): "7z" | "zip" => {
+const normalizeDefaultArchive = (value: RuntimeValue): "7z" | "none" | "zip" => {
   const normalized = String(value || "")
     .trim()
     .toLowerCase();
+  if (normalized === "none") return "none";
   return normalized === "7z" ? "7z" : "zip";
 };
 

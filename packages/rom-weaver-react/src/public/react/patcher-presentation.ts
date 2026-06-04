@@ -51,6 +51,7 @@ type PatchStackItemState = {
   index: number;
   fileName: string;
   fileSize?: number;
+  decompressionTimeMs?: number;
   archiveFileName: string;
   archivePathEntries?: ArchivePathEntry[];
   detailText?: string;

@@ -9,6 +9,7 @@ import type { ReactNode } from "react";
  */
 
 type FormatOption = { value: string; label: string };
+const HEADER_SUMMARY_SEPARATOR = " · ";
 
 /** One labeled control row inside the Compress panel. */
 const OutputField = ({ label, children }: { label: ReactNode; children: ReactNode }) => (
@@ -43,7 +44,17 @@ const OutputCard = ({
   onFormatChange: (value: string) => void;
   formatLabel?: string;
   formatId?: string;
-  compress?: { summary?: ReactNode; timing?: ReactNode; children: ReactNode } | null;
+  compress?: {
+    summary?: ReactNode;
+    timing?: ReactNode;
+    children: ReactNode;
+    format?: string;
+    formatValue?: string;
+    formatOptions?: FormatOption[];
+    formatLabel?: string;
+    formatId?: string;
+    onFormatChange?: (value: string) => void;
+  } | null;
   disabled?: boolean;
   action?: ReactNode;
 }) => (
@@ -81,14 +92,42 @@ const OutputCard = ({
         <summary>
           <ChevronRight aria-hidden="true" className="chev" />
           <span className="lab">Compress</span>
-          {compress.summary ? <span className="sumv">{compress.summary}</span> : null}
+          {compress.format ? <span className="sumv">{compress.format}</span> : null}
+          {compress.format && compress.summary ? <span className="sumv">·</span> : null}
+          {compress.summary ? (
+            <span className="sumv">
+              {typeof compress.summary === "string"
+                ? compress.summary.replaceAll(" · ", HEADER_SUMMARY_SEPARATOR)
+                : compress.summary}
+            </span>
+          ) : null}
           {compress.timing ? (
             <span className="tm">
               <span className="t">{compress.timing}</span>
             </span>
           ) : null}
         </summary>
-        <div className="outopts-body">{compress.children}</div>
+        <div className="outopts-body">
+          {compress.formatOptions?.length && compress.onFormatChange ? (
+            <OutputField label={compress.formatLabel || "Type"}>
+              <select
+                aria-label={compress.formatLabel || "Type"}
+                className="select"
+                disabled={disabled}
+                id={compress.formatId}
+                onChange={(event) => compress.onFormatChange?.(event.currentTarget.value)}
+                value={compress.formatValue || ""}
+              >
+                {compress.formatOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </OutputField>
+          ) : null}
+          {compress.children}
+        </div>
       </details>
     ) : null}
     {action}

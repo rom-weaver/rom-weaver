@@ -36,10 +36,11 @@ type LoggingSettings = {
 };
 
 type CommonSettings = {
-  defaultArchive?: "7z" | "zip";
+  defaultArchive?: "7z" | "none" | "zip";
   input?: InputSettings;
   limits?: DecompressionLimits;
   logging?: LoggingSettings;
+  specialCompression?: boolean;
   storage?: StorageSettings;
   workers?: WorkerSettings;
 };

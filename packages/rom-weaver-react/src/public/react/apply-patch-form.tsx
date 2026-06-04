@@ -140,7 +140,7 @@ const getPatchValidationDetails = (patch: ApplyWorkflowPatchState) => {
                 : "Patch does not provide source requirements";
   return {
     checksumMismatch: status === "invalid",
-    checksumTiming: formatElapsedMs(patch.checksumTimeMs),
+    checksumTiming: formatChecksumTiming(patch.checksumTimeMs),
     validationActualValue: actualValue,
     validationLabel: requirementValues.length ? "Expected" : "Validation",
     validationMessage: message,
@@ -357,6 +357,9 @@ const getResolvedInputArchiveName = (
 const formatElapsedMs = (elapsedMs: number | undefined) =>
   typeof elapsedMs === "number" && Number.isFinite(elapsedMs) ? formatTiming(createTiming(elapsedMs)) : "";
 
+const formatChecksumTiming = (elapsedMs: number | undefined) =>
+  elapsedMs === 0 ? "from extract" : formatElapsedMs(elapsedMs);
+
 const toStagedInputInfos = (input: ApplyWorkflowInputState | null, originals: BinarySource[]) => {
   if (!input) return [];
   const fallbackResolvedInput: NonNullable<ApplyWorkflowInputState["resolvedInputs"]>[number] = {
@@ -386,7 +389,7 @@ const toStagedInputInfos = (input: ApplyWorkflowInputState | null, originals: Bi
     return {
       archiveName: getResolvedInputArchiveName(resolved, input, originals, index),
       checksums: resolved.checksums || undefined,
-      checksumTiming: formatElapsedMs(resolved.checksumTimeMs ?? input.checksumTimeMs),
+      checksumTiming: formatChecksumTiming(resolved.checksumTimeMs ?? input.checksumTimeMs),
       decompressionTimeMs: resolved.decompressionTimeMs,
       fileName: stagedFileName,
       groupId: resolved.groupId,

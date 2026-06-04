@@ -32,6 +32,7 @@ import type { InputProgressState, NoticeState, RomInputRowState } from "./patche
 const SIZE_LABEL = (bytes?: number) => (typeof bytes === "number" ? formatByteSize(bytes) : "");
 const TIMING_LABEL = (ms?: number) =>
   typeof ms === "number" && Number.isFinite(ms) ? formatTiming(createTiming(ms)) : "";
+const CHECKSUM_TIMING_LABEL = (timing?: string, prefix = "Checksum") => (timing ? `${prefix} ${timing}` : undefined);
 
 /** Map a runtime InputProgressState onto the FileProgress primitive's props. */
 const toProgressProps = (progress: NonNullable<InputProgressState>) => {
@@ -51,6 +52,13 @@ const toProgressProps = (progress: NonNullable<InputProgressState>) => {
       typeof progress.percent === "number" ? `${Math.round(progress.percent)}%` : indeterminate ? "working" : undefined,
   };
 };
+
+const toChecksumProgressProps = (progress: NonNullable<InputProgressState>) => ({
+  ...toProgressProps(progress),
+  label: /^checksum\b/i.test(progress.label || progress.message || "")
+    ? progress.label || progress.message || "Checksum"
+    : `Checksum ${progress.label || progress.message || "working"}`,
+});
 
 /** Build the extraction-tree levels for a resolved file from its archive chain. */
 const toExtractionLevels = (
@@ -91,17 +99,17 @@ const RomChecksums = ({ romInput, controller }: { romInput: RomInputRowState; co
   const bytes = romInput.size ?? romInput.sourceSize;
   return (
     <ChecksumList
-      label="Verify"
+      label="Info"
       lead={
         checksumProgress ? (
-          <FileProgress {...toProgressProps(checksumProgress)} />
+          <FileProgress {...toChecksumProgressProps(checksumProgress)} />
         ) : romInput.info.romInfo ? (
           <p className="pdesc">{romInput.info.romInfo}</p>
         ) : null
       }
       onToggle={() => controller.toggleRomInputChecksums?.(romInput.id)}
       open={romInput.info.checksumsExpanded}
-      timing={romInput.info.checksumTiming || undefined}
+      timing={CHECKSUM_TIMING_LABEL(romInput.info.checksumTiming)}
     >
       <ChecksumRow
         copyValue={typeof bytes === "number" ? String(Math.floor(bytes)) : ""}
@@ -130,6 +138,7 @@ const RomFixes = ({
   romInfoText,
   checked,
   disabled,
+  fileName,
   label,
   onChange,
 }: {
@@ -210,7 +219,7 @@ const PatchInfo = ({ item }: { item: PatchStackItemState }) => {
       {hasInputDetails ? (
         <ChecksumList
           defaultOpen={hasInputVerificationInfo}
-          label="Input Verify"
+          label="Input Check"
           lead={bad && item.validationMessage ? <p className="pdesc bad">{item.validationMessage}</p> : undefined}
           match={
             item.validationState === "invalid"
@@ -219,7 +228,7 @@ const PatchInfo = ({ item }: { item: PatchStackItemState }) => {
                 ? { label: null, ok: true }
                 : undefined
           }
-          timing={item.checksumTiming || undefined}
+          timing={CHECKSUM_TIMING_LABEL(item.checksumTiming, "Verify")}
         >
           {inputRows.map((row) => (
             <ChecksumRow key={`input:${row.label}:${row.value}`} label={row.label} value={row.value} />
@@ -227,7 +236,7 @@ const PatchInfo = ({ item }: { item: PatchStackItemState }) => {
         </ChecksumList>
       ) : null}
       {hasOutputDetails ? (
-        <ChecksumList defaultOpen={hasOutputVerificationInfo} label="Output Verify">
+        <ChecksumList defaultOpen={hasOutputVerificationInfo} label="Output Check">
           {outputRows.map((row) => (
             <ChecksumRow key={`output:${row.label}:${row.value}`} label={row.label} value={row.value} />
           ))}
@@ -273,6 +282,10 @@ function ApplyWorkflowFormView({
 
   const romInputs: RomInputRowState[] = uiState.romInputs;
   const patches = patchState.items;
+  const selectedOutputFormatLabel = outputState.options.find(
+    (option) => option.value === outputState.compressionFormat,
+  )?.label;
+  const compressHeaderFormat = outputState.compressionFormat === "none" ? "None" : selectedOutputFormatLabel;
 
   if (startup.status === "error") {
     return (
@@ -545,21 +558,23 @@ function ApplyWorkflowFormView({
               ) : null}
             </>
           }
-          compress={
-            outputState.compress
-              ? {
-                  children: (
-                    <CompressPanelBody
-                      disabled={outputState.disabled}
-                      fields={outputState.compress.fields}
-                      onChange={(key, value) => controllers.output.setOutputCompressOption?.(key, value)}
-                    />
-                  ),
-                  summary: outputState.compress.summary,
-                  timing: outputState.compressTiming || undefined,
-                }
-              : null
-          }
+          compress={{
+            children: outputState.compress ? (
+              <CompressPanelBody
+                disabled={outputState.disabled}
+                fields={outputState.compress.fields}
+                onChange={(key, value) => controllers.output.setOutputCompressOption?.(key, value)}
+              />
+            ) : null,
+            format: compressHeaderFormat,
+            formatId: "rom-weaver-select-output-format-compress",
+            formatLabel: "Type",
+            formatOptions: outputState.options,
+            formatValue: outputState.compressionFormat,
+            onFormatChange: (value) => controllers.output.setOutputCompression(value),
+            summary: outputState.compress?.summary,
+            timing: outputState.compressTiming || undefined,
+          }}
           disabled={outputState.disabled}
           fileName={outputState.displayFileName}
           fileNameId="rom-weaver-input-output-file-name"

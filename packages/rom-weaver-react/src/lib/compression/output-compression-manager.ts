@@ -87,6 +87,7 @@ type OutputCompressionManagerApi = {
     source: CompressionSourceInput,
     options?: OutputCompressionOptions,
   ) => OutputCompressionValue;
+  supportsOutputCompression: (source: CompressionSourceInput, compression: CompressionChoiceInput) => boolean;
   isDiscInput: (source: CompressionSourceInput) => boolean;
   isRawDiscInput: (source: CompressionSourceInput) => boolean;
   isChdSource: (source: CompressionSourceInput) => boolean;
@@ -268,6 +269,32 @@ const OutputCompressionManager = (() => {
     if (_isRvzCompressionInput(source)) return OUTPUT_COMPRESSION.RVZ;
     if (_isRvzSource(source)) return OUTPUT_COMPRESSION.RVZ;
     return OUTPUT_COMPRESSION.SEVEN_ZIP;
+  };
+  const _supportsOutputCompression = (source: CompressionSourceInput, compression: CompressionChoiceInput) => {
+    const selected = _normalizeOutputCompression(compression);
+    if (
+      selected === OUTPUT_COMPRESSION.AUTO ||
+      selected === OUTPUT_COMPRESSION.NONE ||
+      selected === OUTPUT_COMPRESSION.SEVEN_ZIP ||
+      selected === OUTPUT_COMPRESSION.ZIP
+    )
+      return true;
+    if (selected === OUTPUT_COMPRESSION.CHD)
+      return (
+        _isChdCompressionInput(source as CompressionSource | null | undefined) ||
+        _isChdSource(source as CompressionSource | null | undefined)
+      );
+    if (selected === OUTPUT_COMPRESSION.RVZ)
+      return (
+        _isRvzCompressionInput(source as CompressionSource | null | undefined) ||
+        _isRvzSource(source as CompressionSource | null | undefined)
+      );
+    if (selected === OUTPUT_COMPRESSION.Z3DS)
+      return (
+        _isZ3dsCompressionInput(source as CompressionSource | null | undefined) ||
+        _isZ3dsSource(source as CompressionSource | null | undefined)
+      );
+    return false;
   };
 
   const _normalizeIntegerOption = (
@@ -538,6 +565,7 @@ const OutputCompressionManager = (() => {
     replaceExtension: _replaceExtension,
     resolveOutputCompression: _resolveOutputCompression,
     SEVEN_ZIP_COMPRESSION_METHODS: SEVEN_ZIP_COMPRESSION_METHODS,
+    supportsOutputCompression: _supportsOutputCompression,
     ZIP_COMPRESSION_METHODS: ZIP_COMPRESSION_METHODS,
   };
 })() as OutputCompressionManagerApi;

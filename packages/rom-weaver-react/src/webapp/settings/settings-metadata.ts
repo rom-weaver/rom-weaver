@@ -16,6 +16,7 @@ const LOCAL_STORAGE_SETTINGS_ID = "rom-weaver-settings";
 
 type SettingsState = {
   defaultArchive: string;
+  specialCompression: boolean;
   language: string;
   logLevel: string;
   fixChecksum: boolean;
@@ -137,6 +138,7 @@ function getDefaultLanguage(): string {
 
 const SETTINGS_FIELD_ORDER = [
   "defaultArchive",
+  "specialCompression",
   "language",
   "logLevel",
   "fixChecksum",
@@ -231,12 +233,13 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     kind: "select",
     label: "Default archive",
     options: [
+      { label: "Raw", value: "none" },
       { label: ".zip", value: "zip" },
       { label: ".7z", value: "7z" },
     ],
     suggestion: "Default: .zip",
     validationLabel: "Default archive",
-    validValues: ["zip", "7z"],
+    validValues: ["none", "zip", "7z"],
   },
   erudaDevTools: {
     defaultValue: false,
@@ -408,6 +411,16 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
         : "Optional override. Blank uses the compression profile. Valid values: 0-9.",
     suggestionDataLocalize: "Optional override. Blank uses the compression profile. Valid values: 0-9.",
     validationLabel: "7z compression level override",
+  },
+  specialCompression: {
+    defaultValue: true,
+    id: "settings-special-compression",
+    key: "specialCompression",
+    kind: "checkbox",
+    label: "Use special compression",
+    suggestion:
+      "When enabled, special output formats like CHD, RVZ, and Z3DS are chosen automatically when the input supports them.",
+    validationLabel: "Special compression",
   },
   workerThreads: {
     defaultValue: "auto",

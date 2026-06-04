@@ -1,3 +1,4 @@
+import OutputCompressionManager from "../../lib/compression/output-compression-manager.ts";
 import { classifyPatcherInput } from "../../lib/input/input-classification.ts";
 import { buildPatchedOutputBaseName } from "../../lib/output/output-name-composition.ts";
 import { formatByteSize, formatPercentFixed } from "../../presentation/workflow-presentation.ts";
@@ -137,9 +138,29 @@ const getGeneratedOutputName = (
   );
 };
 
-const createOutputOptions = (compressionOptions: string[], labels: OutputOptionLabelMap = {}): OutputOption[] =>
+const getOutputOptionExtensionLabel = (option: string, source?: GeneratedOutputSource) => {
+  try {
+    const fileName = OutputCompressionManager.getCompressedFileName(
+      source as Parameters<typeof OutputCompressionManager.getCompressedFileName>[0],
+      option,
+    );
+    const extension = getBaseFileName(fileName).match(EXTENSION_REGEX)?.[1]?.toLowerCase();
+    return extension ? `.${extension}` : "";
+  } catch (_error) {
+    return "";
+  }
+};
+
+const createOutputOptions = (
+  compressionOptions: string[],
+  source?: GeneratedOutputSource,
+  labels: OutputOptionLabelMap = {},
+): OutputOption[] =>
   compressionOptions.map((option) => ({
-    label: labels[option] || (option === "none" ? "None" : option.toUpperCase()),
+    label:
+      labels[option] ||
+      getOutputOptionExtensionLabel(option, source) ||
+      (option === "none" ? ".raw" : `.${String(option).toLowerCase()}`),
     value: option,
   }));
 
