@@ -312,6 +312,24 @@ const selectRomWeaverOutputPath = (sourcePath: string, outputFileName: string, b
   return preferredPath;
 };
 
+const appendTrimmedOutputMarker = (fileName: string) => {
+  const { extension, stem } = getFileNameParts(fileName || "trimmed.bin");
+  const normalizedStem = stem.trim() || "trimmed";
+  const trimmedStem = /\(trimmed\)$/i.test(normalizedStem) ? normalizedStem : `${normalizedStem} (trimmed)`;
+  return `${trimmedStem}${extension || ".bin"}`;
+};
+
+const getTrimOutputFileName = (sourceFilePath: string, requestedOutputName: string | undefined) => {
+  const sourceBaseName = getPathBaseName(sourceFilePath, "trimmed.bin");
+  const requestedBaseName = getPathBaseName(requestedOutputName || sourceBaseName, sourceBaseName);
+  const sourceParts = getFileNameParts(sourceBaseName);
+  const requestedParts = getFileNameParts(requestedBaseName);
+  if (requestedParts.stem.trim().toLowerCase() === sourceParts.stem.trim().toLowerCase()) {
+    return appendTrimmedOutputMarker(requestedBaseName);
+  }
+  return requestedBaseName;
+};
+
 const getLastEvent = (result: RomWeaverRunJsonResult): RomWeaverRunJsonEvent | null => {
   const events = Array.isArray(result.events) ? result.events : [];
   if (!events.length) return null;
@@ -1209,10 +1227,7 @@ const invokeRomWeaverTrimWorker = async (
 ): Promise<Parameters<RuntimeWorkerIo["createWorkerOutput"]>[0]> => {
   const sourceFilePath = String(input.sourceFilePath || "").trim();
   if (!sourceFilePath) throw new Error("Trim source path is required");
-  const outputFileName = getPathBaseName(
-    input.outputName || getPathBaseName(sourceFilePath, "trimmed.bin"),
-    getPathBaseName(sourceFilePath, "trimmed.bin"),
-  );
+  const outputFileName = getTrimOutputFileName(sourceFilePath, input.outputName);
   const outputPath = selectRomWeaverOutputPath(sourceFilePath, outputFileName, [sourceFilePath]);
   const normalizedExtension = typeof input.extension === "string" ? input.extension.trim() : "";
   const threadArg = toThreadBudget(input.workerThreads);

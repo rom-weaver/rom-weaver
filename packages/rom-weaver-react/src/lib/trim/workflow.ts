@@ -12,7 +12,11 @@ import {
   getProgressEventPercent,
   isCompressionWriteTelemetryProgress,
 } from "../../presentation/workflow-presentation.ts";
-import { getNamedSource, getNamedSourceFileName } from "../../storage/shared/binary/source-file-utils.ts";
+import {
+  getNamedSource,
+  getNamedSourceFileName,
+  getNamedSourceSize,
+} from "../../storage/shared/binary/source-file-utils.ts";
 import type { DirectSource, SourceRef } from "../../types/source.ts";
 import type { CreateWorkflowDeps, PatchFileInstance, SharedProgressEventLike } from "../../types/workflow-internal.ts";
 import type {
@@ -93,6 +97,12 @@ const getTrimSourceFileName = (
     return normalized.slice(slashIndex + 1) || fallback;
   }
   return getInputSourceFileName(source) || fallback;
+};
+
+const getTrimSourceSize = (source: TrimSourceInput) => {
+  const record = source && typeof source === "object" ? (source as { fileSize?: unknown }) : null;
+  if (typeof record?.fileSize === "number" && Number.isFinite(record.fileSize)) return record.fileSize;
+  return getNamedSourceSize(source as SourceRef) ?? undefined;
 };
 
 const runTrimWorkflow = async (
@@ -219,6 +229,7 @@ const runTrimWorkflow = async (
   if (!trimCapability) throw new Error("Trimming requires the rom-weaver wasm runtime");
 
   const source = await prepareTrimSource(input.source, input.selectedSourceEntryName);
+  const inputSize = getTrimSourceSize(source);
   const requestedFileName =
     String(getTrimOutputName(options) || "").trim() || getTrimSourceFileName(source, "trimmed.bin", deps);
   const compression = getArchiveCompression(getTrimCompression(options));
@@ -252,10 +263,27 @@ const runTrimWorkflow = async (
       }),
     () => ({ worker: true }),
   );
-  if (compression === "none") return result;
+  const rawSize = result.sizeSummary?.outputSize ?? result.output.size;
+  if (compression === "none")
+    return {
+      ...result,
+      sizeSummary: {
+        ...(result.sizeSummary || {}),
+        inputSize,
+        outputSize: result.output.size,
+        rawSize,
+      },
+    };
   const trimmedFile = await createPatchFileFromPublicOutput(result.output, rawTrimFileName);
+  const output = await createCompressedTrimOutput(trimmedFile);
   return {
-    output: await createCompressedTrimOutput(trimmedFile),
+    output,
+    sizeSummary: {
+      ...(result.sizeSummary || {}),
+      inputSize,
+      outputSize: output.size,
+      rawSize: trimmedFile.fileSize,
+    },
   };
 };
 

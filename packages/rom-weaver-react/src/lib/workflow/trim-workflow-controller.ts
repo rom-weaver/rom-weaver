@@ -1,8 +1,13 @@
+import type { ChecksumRomProbe } from "../../types/checksum.ts";
 import type { WorkflowProgress } from "../../types/progress.ts";
 import type { SelectedInputInfo, TrimResult } from "../../types/public.ts";
 import type { CandidateSelectionRequest, SelectionCandidate } from "../../types/selection.ts";
 import type { CreateSettings } from "../../types/settings.ts";
-import type { TrimWorkflowSourceState } from "../../types/trim-workflow.ts";
+import type {
+  TrimWorkflowChecksums,
+  TrimWorkflowParentCompression,
+  TrimWorkflowSourceState,
+} from "../../types/trim-workflow.ts";
 import type { WorkflowOptions, WorkflowWarning } from "../../types/workflow-controller.ts";
 import type { CreateWorkflowOptions, TrimInput } from "../../types/workflow-runtime.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
@@ -39,7 +44,11 @@ type InternalSourceState = {
   selectedCandidateId?: string;
   size?: number;
   sourceSize?: number;
+  checksums?: TrimWorkflowChecksums;
+  checksumTimeMs?: number;
   decompressionTimeMs?: number;
+  parentCompressions: TrimWorkflowParentCompression[];
+  romProbe?: ChecksumRomProbe;
   wasDecompressed?: boolean;
   warnings: WorkflowWarning[];
   role: SourceRole;
@@ -62,14 +71,24 @@ type StagedSource<TSource> = {
 
 const TRIM_INPUT_ROLE: SourceRole = "input";
 const TRIM_OUTPUT_FORMATS = new Set(["7z", "none", "zip"]);
+const FILE_EXTENSION_REGEX = /\.[^./\\]+$/;
 
 const cloneSourceState = (state: InternalSourceState | null | undefined) =>
   state
     ? ({
         candidates: state.candidates.map(cloneCandidate),
+        checksums: state.checksums ? cloneValue(state.checksums) : undefined,
+        checksumTimeMs: state.checksumTimeMs,
         decompressionTimeMs: state.decompressionTimeMs,
         fileName: state.fileName,
         id: state.id,
+        parentCompressions: state.parentCompressions.map((entry) => ({ ...entry })),
+        romProbe: state.romProbe
+          ? {
+              ...state.romProbe,
+              trim: state.romProbe.trim ? { ...state.romProbe.trim } : state.romProbe.trim,
+            }
+          : undefined,
         selectedCandidateId: state.selectedCandidateId,
         size: state.size,
         sourceSize: state.sourceSize,
@@ -104,6 +123,14 @@ const canRecoverWithCandidateSelection = (error: unknown, requests: CandidateSel
   const normalized = toRomWeaverError(error);
   if (normalized.code === "AMBIGUOUS_SELECTION") return true;
   return false;
+};
+
+const appendTrimmedMarker = (baseName: string) =>
+  /\(trimmed\)$/i.test(baseName.trim()) ? baseName.trim() : `${baseName.trim() || "trimmed"} (trimmed)`;
+
+const getFileNameExtension = (fileName: string) => {
+  const match = fileName.match(FILE_EXTENSION_REGEX);
+  return match ? match[0].slice(1) : "";
 };
 
 class TrimWorkflowController<TSource, TDestination> extends WorkflowController<{ progress: WorkflowProgress }> {
@@ -196,7 +223,7 @@ class TrimWorkflowController<TSource, TDestination> extends WorkflowController<{
     return this.mutate("setOutputName", async () => {
       const normalizedName = name.trim();
       this.manualOutputName = !!normalizedName;
-      this.outputName = this.manualOutputName ? name : this.buildAutomaticOutputName();
+      this.outputName = this.manualOutputName ? this.normalizeOutputName(name) : this.buildAutomaticOutputName();
     });
   }
 
@@ -217,7 +244,7 @@ class TrimWorkflowController<TSource, TDestination> extends WorkflowController<{
       return {
         input: this.toSelectedInputInfo(stage),
         output,
-        sizeSummary: { outputSize: output.size },
+        sizeSummary: { ...(result.sizeSummary || {}), outputSize: output.size },
       };
     });
   }
@@ -298,6 +325,7 @@ class TrimWorkflowController<TSource, TDestination> extends WorkflowController<{
         candidates: [],
         fileName,
         id: `${TRIM_INPUT_ROLE}-${index + 1}`,
+        parentCompressions: [],
         role: TRIM_INPUT_ROLE,
         size: sourceSize,
         sourceSize,
@@ -315,6 +343,7 @@ class TrimWorkflowController<TSource, TDestination> extends WorkflowController<{
       if (requests.length && !canRecoverWithCandidateSelection(error, requests)) throw error;
       if (!requests.length) this.pushWarning(stage, toRomWeaverError(error));
     }
+    if (stage.preparedInputAssets?.filter((asset) => asset.patchable).length === 1) requests.length = 0;
     for (const request of requests) this.addCandidateRequest(stage, request);
     if (!stage.state.candidates.length) this.addDirectCandidate(stage, stage.index, stage.state.id);
     const selectable = stage.state.candidates.filter((candidate) => candidate.selectable);
@@ -331,8 +360,26 @@ class TrimWorkflowController<TSource, TDestination> extends WorkflowController<{
 
   private async prepareSelectedSource(stage: StagedSource<TSource>): Promise<void> {
     const requests: CandidateSelectionRequest[] = [];
+    const canReusePreparedAssets = !!stage.preparedInputAssets?.length;
+    traceWorkflowControllerEvent(
+      {
+        logLevel: this.settings.logging?.level,
+        onLog: this.settings.logging?.sink,
+        workflow: "trim",
+        workflowId: this.id,
+      },
+      "prepareSelectedSource",
+      {
+        assetCount: stage.preparedInputAssets?.length || 0,
+        canReusePreparedAssets,
+        selectedArchiveEntry: stage.selectedArchiveEntry || "",
+        sourceId: stage.state.id,
+      },
+    );
     try {
-      stage.preparedInputAssets = await this.prepareStageAssets(stage, requests, stage.selectedArchiveEntry);
+      if (!canReusePreparedAssets) {
+        stage.preparedInputAssets = await this.prepareStageAssets(stage, requests, stage.selectedArchiveEntry);
+      }
       this.applyPreparedSourceMetadata(stage);
       stage.state.status = "ready";
     } catch (error) {
@@ -437,7 +484,11 @@ class TrimWorkflowController<TSource, TDestination> extends WorkflowController<{
     stage.internalCandidates.clear();
     stage.state.candidates = [];
     for (const request of requests) this.addCandidateRequest(stage, request);
+    stage.state.checksums = undefined;
+    stage.state.checksumTimeMs = undefined;
     stage.state.decompressionTimeMs = undefined;
+    stage.state.parentCompressions = [];
+    stage.state.romProbe = undefined;
     stage.state.selectedCandidateId = undefined;
     stage.state.status = "needsSelection";
     stage.state.wasDecompressed = undefined;
@@ -449,6 +500,7 @@ class TrimWorkflowController<TSource, TDestination> extends WorkflowController<{
     const preparation = getInputPreparationMetrics(assets);
     stage.state.fileName = assets[0]?.fileName || stage.state.fileName;
     stage.state.size = assets.reduce((total, asset) => total + asset.size, 0) || stage.state.size;
+    stage.state.parentCompressions = (preparation?.parentCompressions || []).map((entry) => ({ ...entry }));
     stage.state.sourceSize =
       (typeof preparation?.sourceSize === "number" && Number.isFinite(preparation.sourceSize)
         ? preparation.sourceSize
@@ -529,6 +581,12 @@ class TrimWorkflowController<TSource, TDestination> extends WorkflowController<{
     return (stage.preparedInputAssets || []).map((asset) => asset.file);
   }
 
+  private getPreparedTrimSource(stage: StagedSource<TSource>): unknown | undefined {
+    return (
+      (stage.preparedInputAssets || []).find((asset) => asset.patchable)?.file || stage.preparedInputAssets?.[0]?.file
+    );
+  }
+
   private async releaseRuntimeSources(sources: unknown[]): Promise<void> {
     await this.runtime.workerIo?.releaseSources?.(sources).catch(() => undefined);
   }
@@ -544,11 +602,23 @@ class TrimWorkflowController<TSource, TDestination> extends WorkflowController<{
   private buildAutomaticOutputName() {
     const input = this.getInput();
     if (!input?.fileName) return this.outputName;
+    const baseName = appendTrimmedMarker(getFileNameWithoutExtension(input.fileName) || "trimmed");
     if (this.outputExtension) {
-      const baseName = getFileNameWithoutExtension(input.fileName) || "trimmed";
       return `${baseName}.${this.outputExtension}`;
     }
-    return input.fileName;
+    if (this.outputFormat === "zip" || this.outputFormat === "7z") return `${baseName}.${this.outputFormat}`;
+    return `${baseName}.${getFileNameExtension(input.fileName) || "bin"}`;
+  }
+
+  private normalizeOutputName(name: string) {
+    const normalizedName = name.trim();
+    const input = this.getInput();
+    if (!(normalizedName && input?.fileName)) return normalizedName;
+    const outputBaseName = getFileNameWithoutExtension(normalizedName).trim().toLowerCase();
+    const inputBaseName = getFileNameWithoutExtension(input.fileName).trim().toLowerCase();
+    if (!outputBaseName || outputBaseName !== inputBaseName) return normalizedName;
+    const baseName = appendTrimmedMarker(getFileNameWithoutExtension(input.fileName) || "trimmed");
+    return `${baseName}.${getFileNameExtension(normalizedName) || getFileNameExtension(input.fileName) || "bin"}`;
   }
 
   private createExecutionOptions(): CreateWorkflowOptions {
@@ -560,13 +630,14 @@ class TrimWorkflowController<TSource, TDestination> extends WorkflowController<{
       output: {
         ...cloneValue(this.settings.output || {}),
         compression: this.getOutputCompression(),
-        outputName: this.outputName || this.settings.output?.outputName,
+        outputName: this.normalizeOutputName(this.outputName || this.settings.output?.outputName || ""),
       },
       workers: cloneValue(this.settings.workers || {}),
     };
   }
 
   private createTrimInput(stage: StagedSource<TSource>): TrimInput {
+    const preparedSource = this.getPreparedTrimSource(stage);
     return {
       options: {
         ...this.createExecutionOptions(),
@@ -589,8 +660,8 @@ class TrimWorkflowController<TSource, TDestination> extends WorkflowController<{
           });
         },
       },
-      selectedSourceEntryName: stage.selectedArchiveEntry,
-      source: stage.source as never,
+      selectedSourceEntryName: preparedSource ? undefined : stage.selectedArchiveEntry,
+      source: (preparedSource || stage.source) as never,
     };
   }
 
