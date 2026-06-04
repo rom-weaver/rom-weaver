@@ -1314,6 +1314,20 @@ fn zip_emits_incremental_running_progress_beyond_placeholders() {
         .stdout
         .clone();
     let compress_events = parse_json_lines(&compress_output);
+    assert!(
+        compress_events.iter().any(|event| {
+            event["command"] == "compress"
+                && event["status"] == "running"
+                && event["format"] == "zip"
+                && event["stage"] == "create"
+                && event["label"] == "creating `zip`"
+                && event["percent"]
+                    .as_f64()
+                    .map(|percent| percent > 0.0 && percent < 100.0)
+                    .unwrap_or(false)
+        }),
+        "expected zip compress to emit running create progress between 0 and 100"
+    );
     assert!(compress_events.iter().any(|event| {
         event["command"] == "compress"
             && event["status"] == "running"

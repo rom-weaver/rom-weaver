@@ -1004,6 +1004,13 @@ fn write_archive_with_libarchive(
         on_codec_bytes_processed,
         Some(Box::new(on_compressed_bytes_written)),
     )?;
+    let input_progress_enabled =
+        !matches!(config.format, LibarchiveCreateFormat::SevenZ) && total_input_bytes > 0;
+    let input_progress_bytes = Arc::new(AtomicU64::new(0));
+    let emitted_input_progress_bucket = Arc::new(AtomicU8::new(0));
+    let input_progress_context = context.clone();
+    let input_progress_execution = execution.clone();
+    let input_progress_format = config.format_name;
     let result = (|| -> Result<u64> {
         let total_entries = entries.len();
         let mut logical_bytes = 0u64;
@@ -1016,7 +1023,31 @@ fn write_archive_with_libarchive(
                 entry,
                 entry_size_bytes,
                 config.io_buffer_bytes,
-                |_| {},
+                |delta| {
+                    if !input_progress_enabled {
+                        return;
+                    }
+                    let accepted = input_progress_bytes
+                        .fetch_add(delta, Ordering::Relaxed)
+                        .saturating_add(delta)
+                        .min(total_input_bytes);
+                    if accepted >= total_input_bytes {
+                        return;
+                    }
+                    maybe_emit_container_byte_progress(
+                        &input_progress_context,
+                        accepted,
+                        total_input_bytes,
+                        ContainerByteProgress {
+                            command: "compress",
+                            format: input_progress_format,
+                            stage: "create",
+                            label: &format!("creating `{input_progress_format}`"),
+                            thread_execution: Some(&input_progress_execution),
+                            emitted_progress_bucket: emitted_input_progress_bucket.as_ref(),
+                        },
+                    );
+                },
             )?);
             if total_input_bytes == 0 {
                 emit_container_step_progress(
