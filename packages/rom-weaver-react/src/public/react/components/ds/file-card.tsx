@@ -87,6 +87,7 @@ const FileCard = ({
   state,
   inputMatch,
   index,
+  hideName = false,
   onRemove,
   removeLabel = "Remove",
   patch,
@@ -97,6 +98,7 @@ const FileCard = ({
   state?: FileState;
   inputMatch?: boolean;
   index?: number;
+  hideName?: boolean;
   onRemove?: () => void;
   removeLabel?: string;
   patch?: PatchReorderProps;
@@ -105,11 +107,13 @@ const FileCard = ({
   children?: ReactNode;
 }) => (
   <div className={join("file", state, inputMatch && "im", patch && "patch")}>
-    <div className="file-name">
-      {patch ? <PatchReorder {...patch} /> : typeof index === "number" ? <span className="fidx">{index}</span> : null}
-      {name}
-      {target}
-    </div>
+    {hideName ? null : (
+      <div className="file-name">
+        {patch ? <PatchReorder {...patch} /> : typeof index === "number" ? <span className="fidx">{index}</span> : null}
+        {name}
+        {target}
+      </div>
+    )}
     {!patch && onRemove ? <RemoveButton label={removeLabel} onClick={onRemove} /> : null}
     {children}
   </div>

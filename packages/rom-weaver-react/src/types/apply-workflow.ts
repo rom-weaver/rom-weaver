@@ -55,6 +55,7 @@ type ApplyWorkflowPatchState = {
   fileName?: string;
   status: ApplyWorkflowSourceStatus;
   candidates: SelectionCandidate[];
+  checksumTimeMs?: number;
   decompressionTimeMs?: number;
   parentCompressions: ApplyWorkflowParentCompression[];
   selectedCandidateId?: string;

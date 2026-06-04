@@ -194,6 +194,7 @@ const clonePatchState = (
 ): ApplyWorkflowPatchState => ({
   candidates: state.candidates.map(cloneCandidate),
   checksumPreflight: clonePatchChecksumPreflight(state.checksumPreflight),
+  checksumTimeMs: state.checksumTimeMs,
   decompressionTimeMs: state.decompressionTimeMs,
   fileName: state.fileName,
   id: state.id,
@@ -1546,6 +1547,7 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
   }
 
   private clearPatchTarget(stage: StagedSource<TSource>) {
+    stage.state.checksumTimeMs = undefined;
     stage.state.targetInputId = undefined;
     stage.state.targetInputFileName = undefined;
     stage.state.checksumPreflight = undefined;
@@ -1659,6 +1661,7 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
     ) {
       return;
     }
+    const validationStartedAt = Date.now();
     const validatePatch = this.runtime.patch.validatePatch;
     const patchFile = stage.preparedPatchFile;
     if (!(validatePatch && patchFile && stage.parsedPatch)) {
@@ -1671,6 +1674,7 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
               validationKey,
             }
           : undefined;
+      stage.state.checksumTimeMs = Date.now() - validationStartedAt;
       return;
     }
     const patchSource = getPatchFileExternalSource(
@@ -1688,6 +1692,7 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
         targetInputId: target.id,
         validationKey,
       };
+      stage.state.checksumTimeMs = Date.now() - validationStartedAt;
       return;
     }
 
@@ -1739,6 +1744,7 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
         targetInputId: target.id,
         validationKey,
       };
+      stage.state.checksumTimeMs = Date.now() - validationStartedAt;
     } catch (error) {
       stage.state.patchValidation = {
         message: toRomWeaverError(error).message,
@@ -1746,6 +1752,7 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
         targetInputId: target.id,
         validationKey,
       };
+      stage.state.checksumTimeMs = Date.now() - validationStartedAt;
     }
   }
 

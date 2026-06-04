@@ -23,6 +23,13 @@ type PatcherOutputState = {
   displayFileName: string;
   resolvedOutputName: string;
   compressionFormat: string;
+  applyTiming: string;
+  compressTiming: string;
+  downloadSummary: {
+    format?: string;
+    size?: string;
+    ratio?: string;
+  } | null;
   /** Editable compress panel (codec/level/codec-lists) for the selected format, or null when uncompressed. */
   compress?: CompressPanelModel | null;
   pendingDownloadFileName: string | null;
@@ -48,6 +55,7 @@ type PatchStackItemState = {
   archivePathEntries?: ArchivePathEntry[];
   detailText?: string;
   progress?: InputProgressState;
+  checksumTiming?: string;
   validationState: string;
   validationLabel: string;
   validationValues: string[];
@@ -74,7 +82,7 @@ const DEFAULT_OUTPUT_OPTIONS: OutputOption[] = [
 const cloneOutputOptions = (options: OutputOption[]) => options.map((option) => ({ ...option }));
 
 const createEmptyPatcherOutputState = ({
-  applyButtonLabel = "Apply, Compress, and Download",
+  applyButtonLabel = "Apply & Download",
   options = DEFAULT_OUTPUT_OPTIONS,
 }: {
   applyButtonLabel?: string;
@@ -87,9 +95,12 @@ const createEmptyPatcherOutputState = ({
     progress: null,
     title: "",
   },
-  compressionFormat: "7z",
+  applyTiming: "",
+  compressionFormat: "zip",
+  compressTiming: "",
   disabled: true,
   displayFileName: "",
+  downloadSummary: null,
   options: cloneOutputOptions(options),
   pendingDownloadFileName: null,
   resolvedOutputName: "",

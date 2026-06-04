@@ -1,10 +1,10 @@
-import Bandage from "lucide-react/dist/esm/icons/bandage.js";
 import GitCompare from "lucide-react/dist/esm/icons/git-compare.js";
 import RotateCcw from "lucide-react/dist/esm/icons/rotate-ccw.js";
 import Save from "lucide-react/dist/esm/icons/save.js";
 import Scissors from "lucide-react/dist/esm/icons/scissors.js";
 import { useEffect, useState } from "react";
 import { preloadBrowserRuntime } from "../platform/browser/browser-api.ts";
+import { ApplyBandaidIcon } from "../public/react/components/apply-bandaid-icon.tsx";
 import { ConfirmDialog, Modal } from "../public/react/components/ds/index.ts";
 import { ApplyPatchForm, CreatePatchForm, RomWeaverSettingsProvider, TrimPatchForm } from "../public/react/index.tsx";
 import { APP_BUILD_VERSION } from "./build-version.ts";
@@ -15,7 +15,7 @@ import type { WebappRootProps } from "./webapp-root-types.ts";
 import { SettingsPanel } from "./webapp-settings";
 
 const WORKFLOW_TABS = [
-  { icon: <Bandage aria-hidden="true" />, id: "patcher", label: "Apply" },
+  { icon: <ApplyBandaidIcon className="apply-tab-icon" />, id: "patcher", label: "Apply" },
   { icon: <GitCompare aria-hidden="true" />, id: "creator", label: "Create" },
   { icon: <Scissors aria-hidden="true" />, id: "trim", label: "Trim" },
 ];

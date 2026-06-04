@@ -82,11 +82,16 @@ const SectionNotice = ({ state }: { state: NoticeState }) => {
   return <Notice level={state.level === "warning" ? "warn" : "error"}>{state.message}</Notice>;
 };
 
+const FILE_EXTENSION_REGEX = /\.[^./\\]+$/;
+
+const getGameName = (fileName: string) => fileName.replace(FILE_EXTENSION_REGEX, "").trim();
+
 const RomChecksums = ({ romInput, controller }: { romInput: RomInputRowState; controller: PatcherUiController }) => {
   const checksumProgress = romInput.progress && romInput.info.validationPhase === "checksum" ? romInput.progress : null;
+  const bytes = romInput.size ?? romInput.sourceSize;
   return (
     <ChecksumList
-      label="Checksums"
+      label="Verify"
       lead={
         checksumProgress ? (
           <FileProgress {...toProgressProps(checksumProgress)} />
@@ -98,6 +103,11 @@ const RomChecksums = ({ romInput, controller }: { romInput: RomInputRowState; co
       open={romInput.info.checksumsExpanded}
       timing={romInput.info.checksumTiming || undefined}
     >
+      <ChecksumRow
+        copyValue={typeof bytes === "number" ? String(Math.floor(bytes)) : ""}
+        label="BYTES"
+        value={typeof bytes === "number" ? String(Math.floor(bytes)) : ""}
+      />
       <ChecksumRow label="CRC32" value={romInput.info.crc32} />
       <ChecksumRow label="MD5" value={romInput.info.md5} />
       <ChecksumRow label="SHA-1" value={romInput.info.sha1} />
@@ -105,28 +115,125 @@ const RomChecksums = ({ romInput, controller }: { romInput: RomInputRowState; co
   );
 };
 
+const ROM_TYPE_REGEX = /^(.+?)\s+ROM\b/i;
+
+const getRomFixesSummary = (romInfoText: string, alterHeaderChecked: boolean) => {
+  const romType =
+    String(romInfoText || "")
+      .match(ROM_TYPE_REGEX)?.[1]
+      ?.trim() || "";
+  const summary = [romType, alterHeaderChecked ? "header fixed" : "header option"].filter(Boolean);
+  return summary.join(" · ");
+};
+
+const RomFixes = ({
+  romInfoText,
+  checked,
+  disabled,
+  label,
+  onChange,
+}: {
+  romInfoText: string;
+  checked: boolean;
+  disabled: boolean;
+  fileName: string;
+  label: string;
+  onChange: (checked: boolean) => void;
+}) => (
+  <ChecksumList defaultOpen={false} label="ROM Details" sublabel={getRomFixesSummary(romInfoText, checked)}>
+    {romInfoText ? <p className="pdesc">{romInfoText}</p> : null}
+    {fileName ? (
+      <div className="ofield">
+        <span className="ofld-lbl">Game</span>
+        <span>{getGameName(fileName)}</span>
+      </div>
+    ) : null}
+    <div className="ofield">
+      <span className="ofld-lbl">Header</span>
+      <label className="opt">
+        <input
+          checked={checked}
+          disabled={disabled}
+          onChange={(event) => onChange(event.currentTarget.checked)}
+          type="checkbox"
+        />
+        {label}
+      </label>
+    </div>
+  </ChecksumList>
+);
+
+const PATCH_INPUT_VERIFICATION_LABELS: Record<string, string> = {
+  "in crc32": "CRC32",
+  "in min size": "MIN BYTES",
+  "in size": "BYTES",
+};
+
+const PATCH_OUTPUT_VERIFICATION_LABELS: Record<string, string> = {
+  "out crc32": "CRC32",
+  "out size": "BYTES",
+  "patch crc32": "PATCH CRC32",
+};
+
+const getPatchVerificationRows = (item: PatchStackItemState) => {
+  const inputRows: Array<{ label: string; value: string }> = [];
+  const outputRows: Array<{ label: string; value: string }> = [];
+  for (const entry of item.validationValues) {
+    const separatorIndex = entry.indexOf("=");
+    if (separatorIndex === -1) {
+      inputRows.push({ label: "VALIDATION", value: entry });
+      continue;
+    }
+    const rawLabel = entry.slice(0, separatorIndex).trim().toLowerCase();
+    const value = entry.slice(separatorIndex + 1).trim();
+    if (!value) continue;
+    if (PATCH_INPUT_VERIFICATION_LABELS[rawLabel]) {
+      inputRows.push({ label: PATCH_INPUT_VERIFICATION_LABELS[rawLabel], value });
+      continue;
+    }
+    outputRows.push({ label: PATCH_OUTPUT_VERIFICATION_LABELS[rawLabel] || rawLabel.toUpperCase(), value });
+  }
+  return { inputRows, outputRows };
+};
+
 const PatchInfo = ({ item }: { item: PatchStackItemState }) => {
-  const hasDetails = !!(item.detailText || item.validationMessage || item.validationValues.length);
+  const { inputRows, outputRows } = getPatchVerificationRows(item);
+  const hasInputDetails = !!(inputRows.length || item.validationMessage);
+  const hasOutputDetails = outputRows.length > 0;
+  const hasDetails = hasInputDetails || hasOutputDetails;
   if (!hasDetails) return null;
   const bad = item.validationState === "invalid";
+  const hasInputVerificationInfo = inputRows.length > 0;
+  const hasOutputVerificationInfo = outputRows.length > 0;
   return (
-    <ChecksumList
-      label="Info"
-      lead={
-        item.validationMessage ? <p className={bad ? "pdesc bad" : "pdesc"}>{item.validationMessage}</p> : undefined
-      }
-      match={
-        item.validationState === "invalid"
-          ? { label: "Mismatch", ok: false }
-          : item.validationState === "valid"
-            ? { label: "Match", ok: true }
-            : undefined
-      }
-    >
-      {item.validationValues.map((value) => (
-        <ChecksumRow key={value} label={item.validationLabel} value={value} />
-      ))}
-    </ChecksumList>
+    <>
+      {hasInputDetails ? (
+        <ChecksumList
+          defaultOpen={hasInputVerificationInfo}
+          label="Input Verify"
+          lead={bad && item.validationMessage ? <p className="pdesc bad">{item.validationMessage}</p> : undefined}
+          match={
+            item.validationState === "invalid"
+              ? { label: null, ok: false }
+              : item.validationState === "valid"
+                ? { label: null, ok: true }
+                : undefined
+          }
+          timing={item.checksumTiming || undefined}
+        >
+          {inputRows.map((row) => (
+            <ChecksumRow key={`input:${row.label}:${row.value}`} label={row.label} value={row.value} />
+          ))}
+        </ChecksumList>
+      ) : null}
+      {hasOutputDetails ? (
+        <ChecksumList defaultOpen={hasOutputVerificationInfo} label="Output Verify">
+          {outputRows.map((row) => (
+            <ChecksumRow key={`output:${row.label}:${row.value}`} label={row.label} value={row.value} />
+          ))}
+        </ChecksumList>
+      ) : null}
+    </>
   );
 };
 
@@ -197,13 +304,6 @@ function ApplyWorkflowFormView({
             </ul>
           </InfoPopover>
         }
-        meta={
-          uiState.sectionTimings.input ? (
-            <>
-              <span className="k">extract</span> <span className="t">{uiState.sectionTimings.input}</span>
-            </>
-          ) : null
-        }
         num="01"
         title="ROMs"
       >
@@ -211,6 +311,12 @@ function ApplyWorkflowFormView({
           const state = romInput.invalid ? "bad" : romInput.valid ? "ok" : undefined;
           const rowProgress =
             romInput.progress && romInput.info.validationPhase !== "checksum" ? romInput.progress : null;
+          const showRomFixes =
+            uiState.romInfo.alterHeaderVisible &&
+            (romInputs.length === 1 || romInput.info.fileName === uiState.romInfo.fileName);
+          if (rowProgress) {
+            return <FileProgress key={romInput.id} {...toProgressProps(rowProgress)} />;
+          }
           return (
             <FileCard
               index={index + 1}
@@ -232,12 +338,17 @@ function ApplyWorkflowFormView({
               removeLabel={romInputs.length > 1 ? "Remove ROM input" : "Clear ROM input"}
               state={state}
             >
-              {/* While extracting/decoding, show only progress — hide the collapsible sections. */}
-              {rowProgress ? (
-                <FileProgress {...toProgressProps(rowProgress)} />
-              ) : romInput.kind === "cue" ? null : (
-                <RomChecksums controller={uiController} romInput={romInput} />
-              )}
+              {showRomFixes ? (
+                <RomFixes
+                  checked={uiState.romInfo.alterHeaderChecked}
+                  disabled={uiState.romInfo.alterHeaderDisabled}
+                  fileName={romInput.info.fileName}
+                  label={uiState.romInfo.alterHeaderLabel}
+                  onChange={(checked) => uiController.setAlterHeader?.(checked)}
+                  romInfoText={romInput.info.romInfo}
+                />
+              ) : null}
+              {romInput.kind === "cue" ? null : <RomChecksums controller={uiController} romInput={romInput} />}
             </FileCard>
           );
         })}
@@ -280,32 +391,34 @@ function ApplyWorkflowFormView({
             </ul>
           </InfoPopover>
         }
-        meta={
-          uiState.sectionTimings.patch ? (
-            <>
-              <span className="k">extract</span> <span className="t">{uiState.sectionTimings.patch}</span>
-            </>
-          ) : null
-        }
         num="02"
         title="Patches"
       >
-        {patches.map((item, index) => (
-          <FileCard
-            key={item.key ?? `${index}:${item.fileName}`}
-            name={<ExtractionTree levels={toExtractionLevels(item.fileName, item.fileSize, item.archivePathEntries)} />}
-            patch={{
-              index,
-              onDown: () => controllers.patchStack.moveItem(index, 1),
-              onRemove: () => controllers.patchStack.removeItem(index),
-              onUp: () => controllers.patchStack.moveItem(index, -1),
-              total: patches.length,
-            }}
-            state={item.validationState === "invalid" ? "bad" : item.validationState === "valid" ? "ok" : undefined}
-          >
-            {item.progress ? <FileProgress {...toProgressProps(item.progress)} /> : <PatchInfo item={item} />}
-          </FileCard>
-        ))}
+        {patches.map((item, index) =>
+          item.progress ? (
+            <FileProgress key={item.key ?? `${index}:${item.fileName}`} {...toProgressProps(item.progress)} />
+          ) : (
+            <FileCard
+              key={item.key ?? `${index}:${item.fileName}`}
+              name={
+                <ExtractionTree
+                  levels={toExtractionLevels(item.fileName, item.fileSize, item.archivePathEntries)}
+                  timing={TIMING_LABEL(item.decompressionTimeMs)}
+                />
+              }
+              patch={{
+                index,
+                onDown: () => controllers.patchStack.moveItem(index, 1),
+                onRemove: () => controllers.patchStack.removeItem(index),
+                onUp: () => controllers.patchStack.moveItem(index, -1),
+                total: patches.length,
+              }}
+              state={item.validationState === "invalid" ? "bad" : item.validationState === "valid" ? "ok" : undefined}
+            >
+              <PatchInfo item={item} />
+            </FileCard>
+          ),
+        )}
         {uiState.patchInput.embeddedPatchLoadingVisible ? (
           <p className="hintline">{uiState.patchInput.embeddedPatchLoadingMessage}</p>
         ) : null}
@@ -378,25 +491,13 @@ function ApplyWorkflowFormView({
             </ul>
           </InfoPopover>
         }
-        meta={uiState.sectionTimings.output ? <span className="t">{uiState.sectionTimings.output}</span> : null}
+        meta={outputState.applyTiming ? <span className="t">{outputState.applyTiming}</span> : undefined}
         num="03"
         title="Apply"
       >
         <OutputCard
           action={
             <>
-              {uiState.romInfo.alterHeaderVisible ? (
-                <label className="opt trim-ack">
-                  <input
-                    checked={uiState.romInfo.alterHeaderChecked}
-                    disabled={uiState.romInfo.alterHeaderDisabled}
-                    id="rom-weaver-checkbox-alter-header"
-                    onChange={(event) => uiController.setAlterHeader?.(event.currentTarget.checked)}
-                    type="checkbox"
-                  />
-                  {uiState.romInfo.alterHeaderLabel}
-                </label>
-              ) : null}
               {errorNotice?.visible ? (
                 <Notice id="rom-weaver-row-error-message" level={errorNotice.level === "warning" ? "warn" : "error"}>
                   {errorNotice.message}
@@ -455,6 +556,7 @@ function ApplyWorkflowFormView({
                     />
                   ),
                   summary: outputState.compress.summary,
+                  timing: outputState.compressTiming || undefined,
                 }
               : null
           }

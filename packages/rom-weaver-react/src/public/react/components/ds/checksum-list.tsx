@@ -1,6 +1,7 @@
 import Check from "lucide-react/dist/esm/icons/check.js";
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right.js";
 import Copy from "lucide-react/dist/esm/icons/copy.js";
+import X from "lucide-react/dist/esm/icons/x.js";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { createLogger } from "../../../../lib/logging.ts";
 
@@ -116,6 +117,7 @@ const ChecksumList = ({
   children: ReactNode;
 }) => {
   const controlledOpen = open ?? defaultOpen;
+  const hasSummaryMeta = !!(timing || match);
   return (
     <details
       className="cks"
@@ -135,11 +137,18 @@ const ChecksumList = ({
         <ChevronRight aria-hidden="true" className="chev" />
         <span className="lab">{label}</span>
         {sublabel ? <span className="sublab">{sublabel}</span> : null}
-        {match ? (
-          <span className={join("cks-match", !match.ok && "bad")}>{match.label}</span>
-        ) : timing ? (
+        {hasSummaryMeta ? (
           <span className="tm">
-            <span className="t">{timing}</span>
+            {timing ? <span className="t">{timing}</span> : null}
+            {match ? (
+              <span
+                className={join("cks-match", !match.ok && "bad")}
+                title={match.ok ? "Verified" : "Verification failed"}
+              >
+                {match.ok ? <Check aria-hidden="true" /> : <X aria-hidden="true" />}
+                {match.label ? <span>{match.label}</span> : null}
+              </span>
+            ) : null}
           </span>
         ) : null}
       </summary>

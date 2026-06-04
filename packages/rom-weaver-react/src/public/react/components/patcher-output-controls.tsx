@@ -1,7 +1,9 @@
 import Download from "lucide-react/dist/esm/icons/download.js";
 import { useCallback, useLayoutEffect, useRef, useSyncExternalStore } from "react";
+import { RunButton } from "../components/ds/feedback.tsx";
 import type { PatcherOutputState } from "../patcher-presentation.ts";
 import { buttonClasses, cx, formClasses } from "../tailwind-classes";
+import { ApplyBandaidIcon } from "./apply-bandaid-icon.tsx";
 import { ProgressActionButton } from "./progress-action-button.tsx";
 
 type OutputController = {
@@ -107,11 +109,28 @@ function PatcherOutputControls({ controller }: { controller: OutputController })
 
 function PatcherPrimaryAction({ controller }: { controller: OutputController }) {
   const state = useSyncExternalStore(controller.subscribe, controller.getState, controller.getState);
+  if (state.pendingDownloadFileName && !state.applyButton.progress && !state.applyButton.loading) {
+    return (
+      <RunButton
+        disabled={state.applyButton.disabled}
+        download={{
+          format: state.downloadSummary?.format ? `Patched ${state.downloadSummary.format}` : "Patched",
+          size:
+            state.downloadSummary?.size && state.downloadSummary?.ratio
+              ? `${state.downloadSummary.size} (${state.downloadSummary.ratio})`
+              : state.downloadSummary?.size || undefined,
+        }}
+        icon={<Download aria-hidden="true" className={buttonClasses.icon} />}
+        id="rom-weaver-button-apply"
+        onClick={() => controller.runPrimaryAction()}
+      />
+    );
+  }
 
   return (
     <ProgressActionButton
       disabled={state.applyButton.disabled}
-      icon={<Download aria-hidden="true" className={buttonClasses.icon} />}
+      icon={<ApplyBandaidIcon className={`${buttonClasses.icon} apply-button-icon`} />}
       id="rom-weaver-button-apply"
       label={state.applyButton.label}
       loading={state.applyButton.loading}

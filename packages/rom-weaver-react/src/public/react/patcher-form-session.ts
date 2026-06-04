@@ -5,6 +5,7 @@ import { getFileNameExtension as getSharedFileNameExtension, hasFileNameExtensio
 import { createTiming, formatTiming } from "../../lib/progress/timing.ts";
 import { formatCodedErrorForDisplay } from "../../presentation/errors.ts";
 import { createBrowserLocalizer } from "../../presentation/localization/index.ts";
+import { formatPercentFixed } from "../../presentation/workflow-presentation.ts";
 import type { CompressionFormat } from "../../types/settings.ts";
 import type { ApplyWorkflowResult, ProgressEvent } from "../../types/workflow-runtime.ts";
 import { buildCompressPanel } from "./compress-options.ts";
@@ -463,6 +464,17 @@ const formatOperationTiming = (label: string, elapsedMs: number | null) => {
   return `${label}: ${formatTiming(createTiming(elapsedMs))}`;
 };
 
+const formatElapsedTiming = (elapsedMs: number | null) => {
+  if (typeof elapsedMs !== "number" || !Number.isFinite(elapsedMs) || elapsedMs < 0) return "";
+  return formatTiming(createTiming(elapsedMs));
+};
+
+const formatDownloadCompressionRatio = (inputBytes: number | null, outputBytes: number | null) => {
+  if (!(typeof inputBytes === "number" && inputBytes > 0 && typeof outputBytes === "number" && outputBytes >= 0))
+    return "";
+  return `${formatPercentFixed((outputBytes / inputBytes) * 100)}%`;
+};
+
 const createInertState = (): PatcherUiState => createInertPatcherUiSessionState();
 const createStaticStoreController = <State>(state: State) => ({
   getState: () => state,
@@ -526,7 +538,7 @@ const inertOutputController: PatcherOutputController = {
       title: "",
     },
     compress: null,
-    compressionFormat: "7z",
+    compressionFormat: "zip",
     disabled: true,
     displayFileName: "",
     options: [],
@@ -788,9 +800,9 @@ const useLocalApplyPatchFormSession = ({
     },
     [activeSettings],
   );
-  const activeCompression = activeSettings.output?.compression || "auto";
+  const activeCompression = activeSettings.output?.compression || "zip";
   const autoResolvedCompression = OutputCompressionManager.resolveOutputCompression(effectiveInputs[0], {
-    compressionFormat: "auto",
+    compressionFormat: "zip",
   });
   const displayedCompression =
     activeCompression === "auto"
@@ -829,6 +841,12 @@ const useLocalApplyPatchFormSession = ({
     },
     [setPendingDownloadFileName],
   );
+
+  useEffect(() => {
+    if (settings !== undefined) return;
+    setInternalSettings(defaultSettings);
+  }, [defaultSettings, settings]);
+
   const clearPendingDownload = useCallback(() => {
     pendingDownloadFileNameRef.current = null;
     pendingDownloadResultRef.current = null;
@@ -979,6 +997,8 @@ const useLocalApplyPatchFormSession = ({
   ]
     .filter(Boolean)
     .join(" / ");
+  const applyTimingText = formatElapsedTiming(completedApplyTimeMs);
+  const compressTimingText = formatElapsedTiming(completedCompressionTimeMs);
   const patchDecompressionTimingText = (() => {
     const elapsedMs = getStagedDecompressionTimeMs(stagedPatchInfos);
     if (typeof elapsedMs !== "number" || !Number.isFinite(elapsedMs)) return "";
@@ -1153,6 +1173,7 @@ const useLocalApplyPatchFormSession = ({
           canMoveDown: index < activePatches.length - 1 && !(busy || disabled),
           canMoveUp: index > 0 && !(busy || disabled),
           canRemove: !(busy || disabled),
+          checksumTiming: patchInfo?.checksumTiming || "",
           detailText: patchInfo?.targetLabel || "",
           fileName: patchInfo?.fileName || getBinarySourceFileName(patch, `Patch ${index + 1}`),
           fileSize: patchInfo?.size ?? patchInfo?.sourceSize ?? getBinarySourceSize(patch) ?? undefined,
@@ -1173,15 +1194,26 @@ const useLocalApplyPatchFormSession = ({
     () => ({
       applyButton: {
         disabled: disabled || !(busy || hasPendingDownload || canQueueApply),
-        label: busy ? "Cancel" : hasPendingDownload ? "Download output" : "Apply patch",
+        label: busy ? "Cancel" : hasPendingDownload ? "Download output" : "Apply & download",
         loading: busy,
         progress: hasPendingDownload ? null : progress ? toApplyButtonProgress({ stage: "apply", ...progress }) : null,
         title: hasPendingDownload ? `Download ${pendingDownloadFileName}` : "",
       },
+      applyTiming: applyTimingText,
       compress: buildCompressPanel(displayedCompression, activeSettings as Record<string, unknown>),
       compressionFormat: displayedCompression,
+      compressTiming: compressTimingText,
       disabled: disabled || busy || inputStaging || patchStaging,
       displayFileName: outputNameEdited ? outputName : effectiveResolvedOutputName,
+      downloadSummary: hasPendingDownload
+        ? {
+            format: displayedCompression?.toUpperCase() || undefined,
+            ratio:
+              formatDownloadCompressionRatio(completedSizeSummary.inputBytes, completedSizeSummary.outputBytes) ||
+              undefined,
+            size: completedSizeSummary.outputLabel || undefined,
+          }
+        : null,
       options: outputOptions,
       pendingDownloadFileName,
       resolvedOutputName: effectiveResolvedOutputName,
@@ -1189,9 +1221,11 @@ const useLocalApplyPatchFormSession = ({
     }),
     [
       activePatches.length,
+      applyTimingText,
       busy,
       canQueueApply,
       completedSizeSummary,
+      compressTimingText,
       disabled,
       displayedCompression,
       effectiveResolvedOutputName,

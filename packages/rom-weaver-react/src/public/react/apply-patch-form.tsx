@@ -7,7 +7,6 @@ import { getFileNameWithoutExtension } from "../../lib/path-utils.ts";
 import { createTiming, formatTiming } from "../../lib/progress/timing.ts";
 import { ApplyWorkflow, type BrowserApplyResult, type WorkflowProgress } from "../../platform/browser/browser-api.ts";
 import { getErrorCode } from "../../presentation/errors.ts";
-import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import type { ApplyWorkflowInputState, ApplyWorkflowPatchState } from "../../types/apply-workflow.ts";
 import type { CompressionFormat } from "../../types/settings.ts";
 import type { ApplyWorkflowResult, ProgressEvent } from "../../types/workflow-runtime.ts";
@@ -67,8 +66,6 @@ type ApplyWorkflowSyncState = {
 };
 
 const PATCH_OUTPUT_LABEL_PATTERN = /\[([^\]]+)\](?:\.[^.]+)?\d*$/;
-const SIZE_VALIDATION_LABELS = new Set(["size", "min size"]);
-
 const getOutputSourceKey = (inputs: BinarySource[], patches: BinarySource[]) =>
   JSON.stringify({
     inputs: getBinarySourceListStableIds(inputs),
@@ -108,20 +105,18 @@ const getAutomaticApplyOutputName = (
 
 const formatPatchValidationValue = (label: string, value: number | string | undefined) => {
   if (value === undefined || value === "") return "";
-  if (!SIZE_VALIDATION_LABELS.has(label)) return `${label}=${value}`;
-  const numericValue = typeof value === "number" ? value : Number.parseInt(String(value), 10);
-  if (!Number.isFinite(numericValue)) return `${label}=${value}`;
-  const bytesLabel = formatByteSize(numericValue);
-  return bytesLabel
-    ? `${label}=${bytesLabel} (${Math.floor(numericValue)} B)`
-    : `${label}=${Math.floor(numericValue)} B`;
+  if (typeof value === "number" && Number.isFinite(value)) return `${label}=${Math.floor(value)}`;
+  return `${label}=${String(value).trim()}`;
 };
 
 const getPatchValidationDetails = (patch: ApplyWorkflowPatchState) => {
   const requirementValues = [
-    formatPatchValidationValue("size", patch.requirements?.sourceSize),
-    formatPatchValidationValue("min size", patch.requirements?.minimumSourceSize),
-    formatPatchValidationValue("crc32", patch.requirements?.sourceCrc32),
+    formatPatchValidationValue("in size", patch.requirements?.sourceSize),
+    formatPatchValidationValue("in min size", patch.requirements?.minimumSourceSize),
+    formatPatchValidationValue("in crc32", patch.requirements?.sourceCrc32),
+    formatPatchValidationValue("out size", patch.requirements?.targetSize),
+    formatPatchValidationValue("out crc32", patch.requirements?.targetCrc32),
+    formatPatchValidationValue("patch crc32", patch.requirements?.patchCrc32),
   ].filter(Boolean);
   const validationValues = requirementValues.length || !patch.patchValidation ? requirementValues : ["dry-run apply"];
   const actualValue = "";
@@ -145,6 +140,7 @@ const getPatchValidationDetails = (patch: ApplyWorkflowPatchState) => {
                 : "Patch does not provide source requirements";
   return {
     checksumMismatch: status === "invalid",
+    checksumTiming: formatElapsedMs(patch.checksumTimeMs),
     validationActualValue: actualValue,
     validationLabel: requirementValues.length ? "Expected" : "Validation",
     validationMessage: message,
@@ -181,6 +177,7 @@ const toPatchStageInfo = (
   return {
     archiveName,
     checksumPreflightMismatch: validation.checksumMismatch,
+    checksumTiming: validation.checksumTiming,
     decompressionTimeMs: patch.decompressionTimeMs,
     fileName,
     id: patch.id,
