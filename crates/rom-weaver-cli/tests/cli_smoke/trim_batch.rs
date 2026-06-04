@@ -293,7 +293,7 @@ fn trim_recursively_scans_directories_by_default() {
     assert_eq!(terminal["status"], "succeeded");
     let label = terminal["label"].as_str().expect("label");
     assert!(label.contains("processed=2"));
-    assert!(label.contains("skipped_non_nds=1"));
+    assert!(label.contains("skipped_unsupported=1"));
     assert!(top_level.path().with_extension("trim.nds").exists());
     assert!(nested.path().with_extension("trim.nds").exists());
 }
@@ -560,6 +560,32 @@ fn trim_gba_uses_zero_padding_boundary() {
 
     let terminal = parse_single_json_line(&output);
     assert_eq!(terminal["command"], "trim");
+    assert_eq!(terminal["status"], "succeeded");
+    let label = terminal["label"].as_str().expect("label");
+    assert!(label.contains("mode=gba"));
+    assert!(label.contains("trimmed_size=13398"));
+
+    let trimmed = source.path().with_extension("trim.gba");
+    assert_eq!(fs::read(trimmed).expect("trimmed gba").len(), 0x3456);
+}
+
+#[test]
+fn trim_gba_detects_ff_padding_boundary() {
+    let temp = setup_temp_dir();
+    let source = temp.child("sample.gba");
+    // Real GBA carts pad with 0xFF; trim must auto-detect and remove it just like 0x00 padding.
+    fs::write(source.path(), build_test_padded_rom(0x3456, 0x4000, 0xFF)).expect("fixture");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args(["trim", source.path().to_str().expect("path"), "--json"])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let terminal = parse_single_json_line(&output);
     assert_eq!(terminal["status"], "succeeded");
     let label = terminal["label"].as_str().expect("label");
     assert!(label.contains("mode=gba"));
@@ -1013,7 +1039,7 @@ fn trim_skips_non_nds_inputs() {
         terminal["label"]
             .as_str()
             .expect("label")
-            .contains("no trim-eligible inputs found; skipped_non_nds=1")
+            .contains("no trim-eligible inputs found; skipped_unsupported=1")
     );
 }
 
@@ -1337,4 +1363,233 @@ fn batch_header_fixer_dry_run_does_not_write_outputs() {
     assert_eq!(terminal["details"]["batch_header_fixer"]["failed_files"], 0);
     assert_eq!(fs::read(source.path()).expect("source bytes"), gba);
     assert!(!source.path().with_extension("fixed.gba").exists());
+}
+
+#[test]
+fn trim_extracts_rom_from_zip_and_writes_side_by_side() {
+    let temp = setup_temp_dir();
+    let rom_path = temp.child("game.nds");
+    let archive = temp.child("game.zip");
+    let rom = build_test_nds_rom(0x00, 0x2000, 0x2000, 0x4000, false);
+    fs::write(rom_path.path(), &rom).expect("fixture");
+
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            rom_path.path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            archive.path().to_str().expect("path"),
+        ])
+        .assert()
+        .code(0);
+
+    // Drop the loose ROM so the archive is the only trim input.
+    fs::remove_file(rom_path.path()).expect("remove loose rom");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args(["trim", archive.path().to_str().expect("path"), "--json"])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let terminal = parse_single_json_line(&output);
+    assert_eq!(terminal["command"], "trim");
+    assert_eq!(terminal["status"], "succeeded");
+    let label = terminal["label"].as_str().expect("label");
+    assert!(label.contains("processed=1"));
+    assert!(label.contains("skipped_unsupported=0"));
+    assert!(label.contains("mode=ds"));
+
+    // Side-by-side output lands next to the archive using the payload stem.
+    let side_by_side = temp.child("game.trim.nds");
+    let trimmed = fs::read(side_by_side.path()).expect("trimmed side-by-side output");
+    assert_eq!(trimmed.len(), 0x2000);
+    assert_eq!(&trimmed[..], &rom[..0x2000]);
+    // The archive itself is left in place.
+    assert!(archive.path().exists());
+}
+
+#[test]
+fn trim_in_place_archive_with_sidecar_fails_without_tty() {
+    let temp = setup_temp_dir();
+    let rom_path = temp.child("game.nds");
+    let note = temp.child("readme.txt");
+    let archive = temp.child("game.zip");
+    let rom = build_test_nds_rom(0x00, 0x2000, 0x2000, 0x4000, false);
+    fs::write(rom_path.path(), &rom).expect("fixture");
+    fs::write(note.path(), b"keep me").expect("fixture");
+
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            rom_path.path().to_str().expect("path"),
+            note.path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            archive.path().to_str().expect("path"),
+        ])
+        .assert()
+        .code(0);
+
+    let before = fs::read(archive.path()).expect("archive bytes");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "trim",
+            "--in-place",
+            archive.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .failure()
+        .get_output()
+        .stdout
+        .clone();
+
+    let terminal = parse_single_json_line(&output);
+    assert_eq!(terminal["status"], "failed");
+    assert!(
+        terminal["label"]
+            .as_str()
+            .expect("label")
+            .contains("refusing to repack")
+    );
+    // Non-interactive repack must not touch the archive.
+    assert_eq!(fs::read(archive.path()).expect("archive bytes"), before);
+}
+
+#[test]
+fn trim_in_place_rom_only_archive_repacks() {
+    let temp = setup_temp_dir();
+    let rom_path = temp.child("game.nds");
+    let archive = temp.child("game.zip");
+    let extract_dir = temp.child("out");
+    let rom = build_test_nds_rom(0x00, 0x2000, 0x2000, 0x4000, false);
+    fs::write(rom_path.path(), &rom).expect("fixture");
+
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            rom_path.path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            archive.path().to_str().expect("path"),
+        ])
+        .assert()
+        .code(0);
+    fs::remove_file(rom_path.path()).expect("remove loose rom");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "trim",
+            "--in-place",
+            archive.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let terminal = parse_single_json_line(&output);
+    assert_eq!(terminal["status"], "succeeded");
+    assert!(terminal["label"].as_str().expect("label").contains("processed=1"));
+
+    // The repacked archive contains the trimmed ROM.
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "extract",
+            archive.path().to_str().expect("path"),
+            "--out-dir",
+            extract_dir.path().to_str().expect("path"),
+            "--no-nested-extract",
+        ])
+        .assert()
+        .code(0);
+    let trimmed = fs::read(extract_dir.child("game.nds").path()).expect("repacked rom");
+    assert_eq!(trimmed.len(), 0x2000);
+    assert_eq!(&trimmed[..], &rom[..0x2000]);
+}
+
+#[test]
+fn trim_revert_marker_round_trips_byte_identical() {
+    let temp = setup_temp_dir();
+    let source = temp.child("game.gba");
+    // 0x00 padding cannot be reconstructed from convention alone; the revert marker must record it.
+    let original = build_test_padded_rom(0x3456, 0x4000, 0x00);
+    fs::write(source.path(), &original).expect("fixture");
+
+    let trimmed = temp.child("game.trim.gba");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "trim",
+            source.path().to_str().expect("path"),
+            "--revert-marker",
+            "--output",
+            trimmed.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+    // Trimmed payload plus the 14-byte revert footer.
+    assert_eq!(
+        fs::read(trimmed.path()).expect("trimmed gba").len(),
+        0x3456 + 14
+    );
+
+    let reverted = temp.child("game.revert.gba");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "trim",
+            trimmed.path().to_str().expect("path"),
+            "--revert",
+            "--output",
+            reverted.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+    // Revert reconstructs the original byte-for-byte, including the 0x00 padding.
+    assert_eq!(fs::read(reverted.path()).expect("reverted gba"), original);
+}
+
+#[test]
+fn trim_without_revert_marker_writes_no_footer() {
+    let temp = setup_temp_dir();
+    let source = temp.child("game.gba");
+    fs::write(source.path(), build_test_padded_rom(0x3456, 0x4000, 0xFF)).expect("fixture");
+
+    let trimmed = temp.child("game.trim.gba");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "trim",
+            source.path().to_str().expect("path"),
+            "--output",
+            trimmed.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+    // Opt-in: without --revert-marker the trim is a clean truncation with no footer appended.
+    assert_eq!(
+        fs::read(trimmed.path()).expect("trimmed gba").len(),
+        0x3456
+    );
 }
