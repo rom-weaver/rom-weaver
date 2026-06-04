@@ -158,6 +158,33 @@ fn apply_normalizes_nes_ines_header_and_preserves_it_on_reverse() {
 }
 
 #[test]
+fn apply_does_not_strip_nes_payload_without_ines_magic() {
+    let temp = TestDir::new();
+    let source_path = temp.child("source.nes");
+    let output_path = temp.child("output.nes");
+    let patch_path = temp.child("update.rup");
+
+    let source = b"NES!headerless-payload".to_vec();
+    let mut target = source.clone();
+    target[4] ^= 0x5a;
+    fs::write(&source_path, &source).expect("source");
+    fs::write(&patch_path, typed_rup_patch(&source, &target, 1)).expect("patch");
+
+    RupPatchHandler::new(&RUP)
+        .apply(
+            &PatchApplyRequest {
+                input: source_path,
+                patches: vec![patch_path],
+                output: output_path.clone(),
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect("apply");
+
+    assert_eq!(fs::read(output_path).expect("output"), target);
+}
+
+#[test]
 fn apply_normalizes_unif_prg_chr_payloads() {
     let temp = TestDir::new();
     let source_path = temp.child("source.unif");
@@ -435,6 +462,41 @@ fn apply_normalizes_smd_interleaved_genesis_input() {
         .expect("apply");
 
     assert_eq!(fs::read(output_path).expect("output"), target_payload);
+}
+
+#[test]
+fn apply_continues_after_normalization_failure_to_later_variant() {
+    let temp = TestDir::new();
+    let source_path = temp.child("source.bin");
+    let output_path = temp.child("output.bin");
+    let patch_path = temp.child("multi.rup");
+
+    let source = b"abc".to_vec();
+    let target = b"axc".to_vec();
+    let unrelated = b"unused".to_vec();
+    let patch = encode_rup_patch(
+        &RupMetadata::default(),
+        &[
+            typed_rup_file(&unrelated, &unrelated, 3),
+            typed_rup_file(&source, &target, 0),
+        ],
+    )
+    .expect("patch");
+    fs::write(&source_path, &source).expect("source");
+    fs::write(&patch_path, patch).expect("patch");
+
+    RupPatchHandler::new(&RUP)
+        .apply(
+            &PatchApplyRequest {
+                input: source_path,
+                patches: vec![patch_path],
+                output: output_path.clone(),
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect("apply");
+
+    assert_eq!(fs::read(output_path).expect("output"), target);
 }
 
 #[test]
@@ -920,22 +982,26 @@ fn create_is_deterministic_across_thread_budgets() {
 }
 
 fn typed_rup_patch(source_payload: &[u8], target_payload: &[u8], rom_type: u8) -> Vec<u8> {
-    assert_eq!(source_payload.len(), target_payload.len());
     encode_rup_patch(
         &RupMetadata::default(),
-        &[RupFile {
-            file_name: String::new(),
-            rom_type,
-            source_file_size: source_payload.len() as u64,
-            target_file_size: target_payload.len() as u64,
-            source_md5: md5_bytes(source_payload),
-            target_md5: md5_bytes(target_payload),
-            overflow_mode: None,
-            overflow_data: Vec::new(),
-            records: build_xor_records(source_payload, target_payload).expect("records"),
-        }],
+        &[typed_rup_file(source_payload, target_payload, rom_type)],
     )
     .expect("typed rup patch")
+}
+
+fn typed_rup_file(source_payload: &[u8], target_payload: &[u8], rom_type: u8) -> RupFile {
+    assert_eq!(source_payload.len(), target_payload.len());
+    RupFile {
+        file_name: String::new(),
+        rom_type,
+        source_file_size: source_payload.len() as u64,
+        target_file_size: target_payload.len() as u64,
+        source_md5: md5_bytes(source_payload),
+        target_md5: md5_bytes(target_payload),
+        overflow_mode: None,
+        overflow_data: Vec::new(),
+        records: build_xor_records(source_payload, target_payload).expect("records"),
+    }
 }
 
 fn unif_fixture(prg: &[u8], chr: &[u8]) -> Vec<u8> {

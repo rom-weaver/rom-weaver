@@ -597,7 +597,13 @@ fn select_matching_file_for_input<'a>(
     let raw_input_md5 = md5_file(input_path)?;
     let mut matches = Vec::new();
     for file in &patch.files {
-        let normalized_input = normalize_rup_input(input_path, file, context)?;
+        let normalized_input = match normalize_rup_input(input_path, file, context) {
+            Ok(normalized_input) => normalized_input,
+            Err(RomWeaverError::Validation(_) | RomWeaverError::ValidationCode(_)) => {
+                continue;
+            }
+            Err(error) => return Err(error),
+        };
         let input_md5 = md5_file(&normalized_input.path)?;
         if file.source_md5 == input_md5 || file.target_md5 == input_md5 {
             matches.push(RupSelectedFile {
@@ -660,7 +666,7 @@ fn normalize_nes_input(
     context: &OperationContext,
 ) -> Result<RupNormalizedInput> {
     let prefix = read_prefix(input_path, 10)?;
-    if prefix.len() >= 3 && &prefix[..3] == b"NES" {
+    if prefix.len() >= 4 && &prefix[..4] == b"NES\x1A" {
         return strip_header_to_normalized_input(
             input_path,
             NES_INES_HEADER_SIZE,
