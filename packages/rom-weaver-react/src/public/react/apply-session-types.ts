@@ -1,0 +1,148 @@
+import type { CompressionFormat } from "../../types/settings.ts";
+import type { ApplyWorkflowResult, ProgressEvent } from "../../types/workflow-runtime.ts";
+import type { ApplyPatchFormProps, ApplyPatchFormSettings, BinarySource } from "./patcher-form.ts";
+import type { createOutputSizeSummary } from "./patcher-presentation.ts";
+import type { InputProgress, RomInputRowState } from "./patcher-ui-state.ts";
+
+type ArchivePathEntry = {
+  fileName: string;
+  kind?: string;
+  sourceSize?: number;
+  outputSize?: number;
+  decompressionTimeMs?: number;
+};
+
+type StagedInputInfo = {
+  id?: string;
+  order?: number;
+  groupId?: string;
+  kind?: string;
+  archiveName?: string;
+  parentCompressions?: ArchivePathEntry[];
+  patchable?: boolean;
+  targetInputId?: string;
+  targetLabel?: string;
+  checksums?: Record<string, string>;
+  checksumTiming?: string;
+  romProbe?: RomInputRowState["info"]["romProbe"];
+  decompressionTimeMs?: number;
+  fileName?: string;
+  size?: number;
+  sourceSize?: number;
+  splitBinAvailable?: boolean;
+  wasDecompressed?: boolean;
+  validationActualValue?: string;
+  validationLabel?: string;
+  validationMessage?: string;
+  validationState?: string;
+  validationValues?: string[];
+  checksumPreflightMismatch?: boolean;
+};
+
+type ApplyWorkflowStageSnapshot = {
+  inputs: BinarySource[];
+  patches: BinarySource[];
+  options: ApplyPatchFormSettings & {
+    output: NonNullable<ApplyPatchFormSettings["output"]> & {
+      compression: "auto" | CompressionFormat;
+    };
+    workerThreads?: number | string;
+    containerInputsEnabled?: boolean;
+  };
+};
+
+type ApplyExecutionTimingTracker = {
+  applyStartedAt: number | null;
+  compressionStartedAt: number | null;
+};
+
+type LocalPatcherSessionState = {
+  busy: boolean;
+  completedApplyTimeMs: number | null;
+  completedCompressionTimeMs: number | null;
+  completedSizeSummary: ReturnType<typeof createOutputSizeSummary>;
+  failureMessage: string;
+  inputStaging: boolean;
+  outputErrorMessage: string;
+  outputName: string;
+  outputNameEdited: boolean;
+  patchInfoByKey: Record<string, StagedInputInfo>;
+  patchProgress: InputProgress | null;
+  patchProgressByKey: Record<string, InputProgress>;
+  patchStaging: boolean;
+  pendingDownloadFileName: string | null;
+  progress: InputProgress | null;
+  romInputs: RomInputRowState[];
+};
+
+type LocalPatcherSessionStatePatch =
+  | Partial<LocalPatcherSessionState>
+  | ((state: LocalPatcherSessionState) => Partial<LocalPatcherSessionState>);
+
+type LocalApplyPatchFormSessionOptions = Pick<
+  ApplyPatchFormProps,
+  | "inputs"
+  | "patches"
+  | "settings"
+  | "defaultInputs"
+  | "defaultPatches"
+  | "defaultSettings"
+  | "disabled"
+  | "workerThreads"
+  | "containerInputsEnabled"
+  | "compressionOptions"
+  | "onInputsChange"
+  | "onPatchesChange"
+  | "onSettingsChange"
+  | "onProgress"
+  | "onApplyComplete"
+  | "onError"
+> & {
+  applyPatches: (input: {
+    inputs: BinarySource[];
+    patches: BinarySource[];
+    options: ApplyPatchFormSettings & {
+      output: NonNullable<ApplyPatchFormSettings["output"]> & {
+        compression: "auto" | CompressionFormat;
+      };
+      signal?: AbortSignal;
+      workerThreads?: number | string;
+      containerInputsEnabled?: boolean;
+      onProgress: (event: ProgressEvent) => void;
+    };
+  }) => Promise<ApplyWorkflowResult>;
+  downloadOutput: (result: ApplyWorkflowResult, fileName?: string) => void | Promise<void>;
+  applyReady?: boolean;
+  resolvedOutputCompression?: CompressionFormat;
+  resolvedOutputName?: string;
+  resolvedOutputNameKey?: string;
+  stageInput?: (
+    input: ApplyWorkflowStageSnapshot,
+    handlers: {
+      onChecksum: (info: StagedInputInfo) => void;
+      onProgress: (event: ProgressEvent) => void;
+      onState: (info: StagedInputInfo) => void;
+    },
+  ) => Promise<StagedInputInfo[]>;
+  stagePatches?: (
+    input: ApplyWorkflowStageSnapshot,
+    handlers: {
+      onProgress: (event: ProgressEvent) => void;
+    },
+  ) => Promise<Array<StagedInputInfo | null | undefined>>;
+  setPatchTarget?: (
+    input: ApplyWorkflowStageSnapshot,
+    patchIndex: number,
+    targetInputId: string,
+  ) => Promise<Array<StagedInputInfo | null | undefined>>;
+};
+
+export type {
+  ApplyExecutionTimingTracker,
+  ApplyWorkflowStageSnapshot,
+  ArchivePathEntry,
+  LocalApplyPatchFormSessionOptions,
+  LocalPatcherSessionState,
+  LocalPatcherSessionStatePatch,
+  StagedInputInfo,
+};

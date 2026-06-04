@@ -1,14 +1,40 @@
-import { type SetStateAction, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { resolveAutomaticCompressionFormat } from "../../lib/compression/container-format-registry.ts";
 import OutputCompressionManager from "../../lib/compression/output-compression-manager.ts";
-import { classifyPatcherInput } from "../../lib/input/input-classification.ts";
-import { getFileNameExtension as getSharedFileNameExtension, hasFileNameExtension } from "../../lib/path-utils.ts";
 import { createTiming, formatTiming } from "../../lib/progress/timing.ts";
 import { formatCodedErrorForDisplay } from "../../presentation/errors.ts";
 import { createBrowserLocalizer } from "../../presentation/localization/index.ts";
-import { formatPercentFixed } from "../../presentation/workflow-presentation.ts";
 import type { CompressionFormat } from "../../types/settings.ts";
-import type { ApplyWorkflowResult, ProgressEvent } from "../../types/workflow-runtime.ts";
+import type { ApplyWorkflowResult } from "../../types/workflow-runtime.ts";
+import {
+  createInertState,
+  inertDialogController,
+  inertOutputController,
+  inertStackController,
+  inertUiController,
+  useLiveStoreController,
+} from "./apply-session-controllers.ts";
+import {
+  createRomInputRow,
+  formatOperationTiming,
+  getChecksumProgressInfoPatch,
+  getPendingInputDisplayFileName,
+  getProgressDetails,
+  getProgressStagedInputInfo,
+  getStagedDecompressionTimeMs,
+  resolveMergedRomFileName,
+  sortRomInputs,
+  sumStagedInfoSize,
+} from "./apply-session-inputs.ts";
+import { getTraceSourceSummaries, getTraceSourceSummary, logUiError } from "./apply-session-logging.ts";
+import { createStageSettingsKey, getLegacyCompressionWorkerThreads } from "./apply-session-settings.ts";
+import { useLocalPatcherSessionState } from "./apply-session-state.ts";
+import type {
+  ApplyExecutionTimingTracker,
+  ApplyWorkflowStageSnapshot,
+  LocalApplyPatchFormSessionOptions,
+  StagedInputInfo,
+} from "./apply-session-types.ts";
 import { buildCompressPanel } from "./compress-options.ts";
 import {
   getBinarySourceFileName,
@@ -24,580 +50,26 @@ import {
   createSectionSizeText,
   getGeneratedOutputName,
 } from "./output-view-model.ts";
-import type {
-  ApplyPatchFormProps,
-  ApplyPatchFormSettings,
-  BinarySource,
-  DialogController,
-  NoticeController,
-  PatcherOutputController,
-  PatcherStackController,
-  PatcherUiController,
-  StackPatchItem,
-} from "./patcher-form.ts";
+import type { ApplyPatchFormSettings, BinarySource, NoticeController, StackPatchItem } from "./patcher-form.ts";
+import {
+  formatDownloadCompressionRatio,
+  formatElapsedTiming,
+  getLogicalRomInputCount,
+  getMultiInputOutputError,
+  getPublicOutputSize,
+  getRequestedOutputName,
+  isTraceLoggingEnabled,
+  resolvePendingDownloadFileName,
+  toError,
+  waitForNextUiPaint,
+} from "./patcher-form-session-utils.ts";
 import { createOutputSizeSummary } from "./patcher-presentation.ts";
-import type { InputProgress, NoticeState, PatcherUiSessionState, RomInputRowState } from "./patcher-ui-state.ts";
-import { createInertPatcherUiSessionState } from "./patcher-ui-state.ts";
-
-type PatcherUiState = PatcherUiSessionState;
-type ArchivePathEntry = {
-  fileName: string;
-  kind?: string;
-  sourceSize?: number;
-  outputSize?: number;
-  decompressionTimeMs?: number;
-};
-type StagedInputInfo = {
-  id?: string;
-  order?: number;
-  groupId?: string;
-  kind?: string;
-  archiveName?: string;
-  parentCompressions?: ArchivePathEntry[];
-  patchable?: boolean;
-  targetInputId?: string;
-  targetLabel?: string;
-  checksums?: Record<string, string>;
-  checksumTiming?: string;
-  romProbe?: RomInputRowState["info"]["romProbe"];
-  decompressionTimeMs?: number;
-  fileName?: string;
-  size?: number;
-  sourceSize?: number;
-  splitBinAvailable?: boolean;
-  wasDecompressed?: boolean;
-  validationActualValue?: string;
-  validationLabel?: string;
-  validationMessage?: string;
-  validationState?: string;
-  validationValues?: string[];
-  checksumPreflightMismatch?: boolean;
-};
-type ApplyWorkflowStageSnapshot = {
-  inputs: BinarySource[];
-  patches: BinarySource[];
-  options: ApplyPatchFormSettings & {
-    output: NonNullable<ApplyPatchFormSettings["output"]> & {
-      compression: "auto" | CompressionFormat;
-    };
-    workerThreads?: number | string;
-    containerInputsEnabled?: boolean;
-  };
-};
-type ApplyExecutionTimingTracker = {
-  applyStartedAt: number | null;
-  compressionStartedAt: number | null;
-};
-type LocalPatcherSessionState = {
-  busy: boolean;
-  completedApplyTimeMs: number | null;
-  completedCompressionTimeMs: number | null;
-  completedSizeSummary: ReturnType<typeof createOutputSizeSummary>;
-  failureMessage: string;
-  inputStaging: boolean;
-  outputErrorMessage: string;
-  outputName: string;
-  outputNameEdited: boolean;
-  patchInfoByKey: Record<string, StagedInputInfo>;
-  patchProgress: InputProgress | null;
-  patchProgressByKey: Record<string, InputProgress>;
-  patchStaging: boolean;
-  pendingDownloadFileName: string | null;
-  progress: InputProgress | null;
-  romInputs: RomInputRowState[];
-};
-type LocalPatcherSessionStatePatch =
-  | Partial<LocalPatcherSessionState>
-  | ((state: LocalPatcherSessionState) => Partial<LocalPatcherSessionState>);
-
-const getPublicOutputSize = (output: { size?: number }) => output.size || 0;
-
-const waitForNextUiPaint = () =>
-  new Promise<void>((resolve) => {
-    if (typeof globalThis.requestAnimationFrame === "function") {
-      globalThis.requestAnimationFrame(() => resolve());
-      return;
-    }
-    globalThis.setTimeout(() => resolve(), 0);
-  });
-
-const isTraceLoggingEnabled = (settings: ApplyPatchFormSettings) =>
-  String(settings.logging?.level || "").toLowerCase() === "trace";
-
-const getTraceSourceKind = (source: unknown) => {
-  if (typeof File !== "undefined" && source instanceof File) return "file";
-  if (typeof Blob !== "undefined" && source instanceof Blob) return "blob";
-  if (source instanceof Uint8Array) return "uint8array";
-  if (source instanceof ArrayBuffer) return "arraybuffer";
-  if (
-    source &&
-    typeof source === "object" &&
-    "getFile" in source &&
-    typeof (source as { getFile?: unknown }).getFile === "function"
-  )
-    return "file-handle";
-  if (source && typeof source === "object") return "object";
-  return typeof source;
-};
-
-const getTraceSourceSummary = (source: unknown, fallback: string) => ({
-  fileName: getBinarySourceFileName(source as BinarySource, fallback),
-  kind: getTraceSourceKind(source),
-  size: getBinarySourceSize(source as BinarySource) ?? undefined,
-});
-
-const getTraceSourceSummaries = (sources: BinarySource[], fallbackPrefix: string) =>
-  sources.map((source, index) => getTraceSourceSummary(source, `${fallbackPrefix} ${index + 1}`));
-
-const createLocalPatcherSessionState = (): LocalPatcherSessionState => ({
-  busy: false,
-  completedApplyTimeMs: null,
-  completedCompressionTimeMs: null,
-  completedSizeSummary: createOutputSizeSummary(),
-  failureMessage: "",
-  inputStaging: false,
-  outputErrorMessage: "",
-  outputName: "",
-  outputNameEdited: false,
-  patchInfoByKey: {},
-  patchProgress: null,
-  patchProgressByKey: {},
-  patchStaging: false,
-  pendingDownloadFileName: null,
-  progress: null,
-  romInputs: [],
-});
-
-const localPatcherSessionStateReducer = (
-  state: LocalPatcherSessionState,
-  patch: LocalPatcherSessionStatePatch,
-): LocalPatcherSessionState => ({
-  ...state,
-  ...(typeof patch === "function" ? patch(state) : patch),
-});
-
-const resolveLocalStateUpdate = <T>(current: T, update: SetStateAction<T>): T =>
-  typeof update === "function" ? (update as (current: T) => T)(current) : update;
-
-const toError = (error: RuntimeValue): Error => (error instanceof Error ? error : new Error(String(error)));
-
-const getErrorLogDetails = (error: Error): Record<string, unknown> => {
-  const coded = error as Error & { cause?: unknown; code?: unknown; details?: unknown };
-  const cause = coded.cause;
-  return {
-    cause:
-      cause instanceof Error
-        ? {
-            message: cause.message,
-            name: cause.name,
-            stack: cause.stack,
-          }
-        : cause,
-    code: typeof coded.code === "string" ? coded.code : undefined,
-    details: coded.details,
-    message: error.message,
-    name: error.name,
-    stack: error.stack,
-  };
-};
-
-const logUiError = (context: string, error: Error) => {
-  try {
-    console.error(`[RomWeaver UI] ${context}: ${error.message}`, getErrorLogDetails(error), error);
-  } catch (_logError) {
-    // Ignore console failures; the UI still surfaces the normalized message.
-  }
-};
-
-const getRequestedOutputName = (outputName: string): string | undefined => {
-  const normalizedOutputName = outputName.trim();
-  return normalizedOutputName || undefined;
-};
-
-const getFileNameExtension = (fileName: string | null | undefined) =>
-  getSharedFileNameExtension(fileName, { includeDot: true });
-
-const resolvePendingDownloadFileName = ({
-  automaticOutputName,
-  fallbackOutputName,
-  requestedOutputName,
-  resultOutputName,
-}: {
-  automaticOutputName?: string;
-  fallbackOutputName?: string;
-  requestedOutputName?: string;
-  resultOutputName?: string;
-}) => {
-  const normalizedRequestedOutputName = requestedOutputName ? getRequestedOutputName(requestedOutputName) : undefined;
-  const normalizedResultOutputName = resultOutputName ? getRequestedOutputName(resultOutputName) : undefined;
-  if (normalizedRequestedOutputName) {
-    if (hasFileNameExtension(normalizedRequestedOutputName)) return normalizedRequestedOutputName;
-    const resultExtension = getFileNameExtension(normalizedResultOutputName);
-    return resultExtension ? `${normalizedRequestedOutputName}${resultExtension}` : normalizedRequestedOutputName;
-  }
-  return (
-    normalizedResultOutputName ||
-    (automaticOutputName ? getRequestedOutputName(automaticOutputName) : undefined) ||
-    (fallbackOutputName ? getRequestedOutputName(fallbackOutputName) : undefined) ||
-    "output"
-  );
-};
-
-const getNestedCompressionWorkerThreads = (settings: ApplyPatchFormSettings): number | string | undefined => {
-  const nestedThreads = (settings as { compression?: { workerThreads?: unknown } }).compression?.workerThreads;
-  if (typeof nestedThreads === "number" || typeof nestedThreads === "string") return nestedThreads;
-  return undefined;
-};
-
-const createStageSettingsKey = ({
-  containerInputsEnabled,
-  settings,
-  workerThreads,
-}: {
-  containerInputsEnabled: boolean;
-  settings: ApplyPatchFormSettings;
-  workerThreads?: number | string;
-}) =>
-  JSON.stringify(
-    {
-      input: {
-        ...settings.input,
-        containerInputsEnabled,
-      },
-      limits: settings.limits,
-      workers: {
-        ...settings.workers,
-        threads: settings.workers?.threads ?? getNestedCompressionWorkerThreads(settings) ?? workerThreads,
-      },
-    },
-    (_key, value) => (typeof value === "function" ? "[function]" : value),
-  );
-
-const createRomInputRow = (
-  partial: Omit<Partial<RomInputRowState>, "info"> & {
-    id: string;
-    order?: number;
-    info?: Partial<RomInputRowState["info"]>;
-  },
-): RomInputRowState => ({
-  ...createInertPatcherUiSessionState().romInput,
-  ...partial,
-  groupId: partial.groupId || "",
-  id: partial.id,
-  info: {
-    archiveName: "",
-    checksumsExpanded: true,
-    checksumTiming: "",
-    crc32: "",
-    fileName: "",
-    md5: "",
-    romInfo: "",
-    sha1: "",
-    validationPhase: "idle",
-    ...(partial.info || {}),
-  },
-  kind: partial.kind || "",
-  order: partial.order ?? 0,
-});
-
-const sortRomInputs = (rows: RomInputRowState[]) =>
-  rows.toSorted((left, right) => left.order - right.order || left.id.localeCompare(right.id));
-
-const getLogicalRomInputCount = (rows: RomInputRowState[]) => {
-  const groupIds = new Set<string>();
-  let ungroupedCount = 0;
-  for (const row of rows) {
-    const groupId = String(row.groupId || "").trim();
-    if (groupId) groupIds.add(groupId);
-    else ungroupedCount += 1;
-  }
-  return groupIds.size + ungroupedCount;
-};
-
-const getMultiInputOutputError = (compression: string, logicalInputCount: number) => {
-  if (logicalInputCount <= 1) return "";
-  if (compression === "7z" || compression === "zip") return "";
-  if (compression === "none") {
-    return "output.compression: 'none' cannot be used for multi-file output; use output.compression: 'zip' with zipCodec: 'store'";
-  }
-  return `output.compression: '${compression}' cannot be used for multi-file output; use output.compression: 'zip' or '7z'`;
-};
-
-const getProgressDetails = (event: ProgressEvent): Record<string, unknown> =>
-  event.details && typeof event.details === "object" && !Array.isArray(event.details)
-    ? (event.details as Record<string, unknown>)
-    : {};
-
-const getArchivePathEntriesFromProgressDetails = (details: Record<string, unknown>): ArchivePathEntry[] => {
-  const parentCompressions = Array.isArray(details.parentCompressions) ? details.parentCompressions : [];
-  return parentCompressions
-    .map((entry) => (entry && typeof entry === "object" ? (entry as Record<string, unknown>) : {}))
-    .sort((left, right) => Number(left.depth || 0) - Number(right.depth || 0))
-    .map((entry) => ({
-      decompressionTimeMs:
-        typeof entry.decompressionTimeMs === "number" && Number.isFinite(entry.decompressionTimeMs)
-          ? entry.decompressionTimeMs
-          : undefined,
-      fileName: typeof entry.fileName === "string" ? entry.fileName : "",
-      kind: typeof entry.kind === "string" ? entry.kind : undefined,
-      outputSize:
-        typeof entry.outputSize === "number" && Number.isFinite(entry.outputSize) ? entry.outputSize : undefined,
-      sourceSize:
-        typeof entry.sourceSize === "number" && Number.isFinite(entry.sourceSize) ? entry.sourceSize : undefined,
-    }))
-    .filter((entry) => !!entry.fileName);
-};
-
-const getArchiveNameFromProgressDetails = (details: Record<string, unknown>) => {
-  const archivePathEntries = getArchivePathEntriesFromProgressDetails(details);
-  return archivePathEntries.map((entry) => entry.fileName).join(" > ");
-};
-
-const getProgressStagedInputInfo = (event: ProgressEvent): StagedInputInfo => {
-  const details = getProgressDetails(event);
-  const fileName = typeof details.fileName === "string" ? details.fileName : "";
-  const progressStage = typeof details.stage === "string" ? details.stage : event.stage;
-  const isPreparedFileName =
-    details.wasDecompressed === true || progressStage === "checksum" || progressStage === "decompress";
-  return {
-    archiveName: getArchiveNameFromProgressDetails(details),
-    decompressionTimeMs: typeof details.decompressionTimeMs === "number" ? details.decompressionTimeMs : undefined,
-    fileName: getInputDisplayFileName(fileName, isPreparedFileName),
-    id: typeof details.sourceId === "string" ? details.sourceId : "",
-    order: typeof details.order === "number" ? details.order : undefined,
-    parentCompressions: getArchivePathEntriesFromProgressDetails(details),
-    size: typeof details.size === "number" ? details.size : undefined,
-    sourceSize: typeof details.sourceSize === "number" ? details.sourceSize : undefined,
-    wasDecompressed: typeof details.wasDecompressed === "boolean" ? details.wasDecompressed : undefined,
-  };
-};
-
-const getChecksumProgressInfoPatch = (
-  details: Record<string, unknown>,
-): Omit<Partial<RomInputRowState>, "info"> & { info?: Partial<RomInputRowState["info"]> } => {
-  const isChecksum = details.stage === "checksum";
-  const info: Partial<RomInputRowState["info"]> = {
-    crc32: isChecksum ? "" : undefined,
-    md5: isChecksum ? "" : undefined,
-    sha1: isChecksum ? "" : undefined,
-    validationPhase: isChecksum ? "checksum" : "idle",
-  };
-  return {
-    disabled: true,
-    info,
-    loading: true,
-  };
-};
-
-const isCompressedInputFileName = (fileName: string) => {
-  if (!fileName) return false;
-  try {
-    return classifyPatcherInput({ fileName }).kind === "compression";
-  } catch (_error) {
-    return false;
-  }
-};
-
-const getInputDisplayFileName = (fileName: string | undefined, prepared = false) => {
-  const normalized = String(fileName || "");
-  if (!normalized) return "";
-  return !prepared && isCompressedInputFileName(normalized) ? "" : normalized;
-};
-
-const getPendingInputDisplayFileName = (input: BinarySource, fallback: string) =>
-  getInputDisplayFileName(getBinarySourceFileName(input, fallback));
-
-const archiveNameIncludesFileName = (archiveName: string, fileName: string) =>
-  archiveName
-    .split(" > ")
-    .map((entry) => entry.trim())
-    .filter(Boolean)
-    .includes(fileName);
-
-const resolveMergedRomFileName = ({
-  archiveName,
-  existingFileName,
-  nextFileName,
-}: {
-  archiveName: string;
-  existingFileName: string;
-  nextFileName: string | undefined;
-}) => {
-  if (!nextFileName) return existingFileName;
-  if (
-    existingFileName &&
-    existingFileName !== nextFileName &&
-    archiveNameIncludesFileName(archiveName, nextFileName) &&
-    !archiveNameIncludesFileName(archiveName, existingFileName)
-  ) {
-    return existingFileName;
-  }
-  return nextFileName;
-};
-
-const sumStagedInfoSize = (infos: StagedInputInfo[], key: "size" | "sourceSize") => {
-  let total = 0;
-  let found = false;
-  for (const info of infos) {
-    const value = info[key];
-    if (typeof value === "number" && Number.isFinite(value)) {
-      total += value;
-      found = true;
-    }
-  }
-  return found ? total : null;
-};
-
-const getStagedDecompressionTimeMs = (infos: StagedInputInfo[]) => {
-  if (!infos.some((info) => info.wasDecompressed)) return null;
-  let total = 0;
-  let found = false;
-  for (const info of infos) {
-    const elapsedMs = info.decompressionTimeMs;
-    if (typeof elapsedMs === "number" && Number.isFinite(elapsedMs)) {
-      total += elapsedMs;
-      found = true;
-    }
-  }
-  return found ? total : null;
-};
-
-const formatOperationTiming = (label: string, elapsedMs: number | null) => {
-  if (typeof elapsedMs !== "number" || !Number.isFinite(elapsedMs) || elapsedMs < 0) return "";
-  return `${label}: ${formatTiming(createTiming(elapsedMs))}`;
-};
-
-const formatElapsedTiming = (elapsedMs: number | null) => {
-  if (typeof elapsedMs !== "number" || !Number.isFinite(elapsedMs) || elapsedMs < 0) return "";
-  return formatTiming(createTiming(elapsedMs));
-};
-
-const formatDownloadCompressionRatio = (inputBytes: number | null, outputBytes: number | null) => {
-  if (!(typeof inputBytes === "number" && inputBytes > 0 && typeof outputBytes === "number" && outputBytes >= 0))
-    return "";
-  return formatPercentFixed((outputBytes / inputBytes) * 100);
-};
-
-const createInertState = (): PatcherUiState => createInertPatcherUiSessionState();
-const createStaticStoreController = <State>(state: State) => ({
-  getState: () => state,
-  subscribe: () => () => undefined,
-});
-const useLiveStoreController = <State>(state: State) => {
-  const stateRef = useRef(state);
-  const listenersRef = useRef(new Set<() => void>());
-
-  stateRef.current = state;
-
-  useEffect(() => {
-    stateRef.current = state;
-    for (const listener of listenersRef.current) listener();
-  }, [state]);
-
-  const getState = useCallback(() => stateRef.current, []);
-  const subscribe = useCallback((listener: () => void) => {
-    listenersRef.current.add(listener);
-    return () => {
-      listenersRef.current.delete(listener);
-    };
-  }, []);
-
-  return useMemo(() => ({ getState, subscribe }), [getState, subscribe]);
-};
-
-const inertState = createInertState();
-
-const inertUiController: PatcherUiController = createStaticStoreController(inertState);
-const inertDialogController: DialogController = createStaticStoreController(inertState);
-const inertStackController: PatcherStackController = {
-  ...createStaticStoreController({ items: [] }),
-  moveItem: () => undefined,
-  removeItem: () => undefined,
-};
-const inertOutputController: PatcherOutputController = {
-  ...createStaticStoreController({
-    applyButton: {
-      disabled: true,
-      label: "Apply patch",
-      loading: false,
-      progress: null,
-      title: "",
-    },
-    applyTiming: "",
-    compress: null,
-    compressionFormat: "zip",
-    compressTiming: "",
-    disabled: true,
-    displayFileName: "",
-    downloadSummary: null,
-    options: [],
-    pendingDownloadFileName: null,
-    resolvedOutputName: "",
-    sizeSummary: createOutputSizeSummary(),
-  }),
-  runPrimaryAction: () => undefined,
-  setDisplayFileName: () => undefined,
-  setOutputCompression: () => undefined,
-  setOutputCompressOption: () => undefined,
-};
-
-type LocalApplyPatchFormSessionOptions = Pick<
-  ApplyPatchFormProps,
-  | "inputs"
-  | "patches"
-  | "settings"
-  | "defaultInputs"
-  | "defaultPatches"
-  | "defaultSettings"
-  | "disabled"
-  | "workerThreads"
-  | "containerInputsEnabled"
-  | "compressionOptions"
-  | "onInputsChange"
-  | "onPatchesChange"
-  | "onSettingsChange"
-  | "onProgress"
-  | "onApplyComplete"
-  | "onError"
-> & {
-  applyPatches: (input: {
-    inputs: BinarySource[];
-    patches: BinarySource[];
-    options: ApplyPatchFormSettings & {
-      output: NonNullable<ApplyPatchFormSettings["output"]> & {
-        compression: "auto" | CompressionFormat;
-      };
-      signal?: AbortSignal;
-      workerThreads?: number | string;
-      containerInputsEnabled?: boolean;
-      onProgress: (event: ProgressEvent) => void;
-    };
-  }) => Promise<ApplyWorkflowResult>;
-  downloadOutput: (result: ApplyWorkflowResult, fileName?: string) => void | Promise<void>;
-  applyReady?: boolean;
-  resolvedOutputCompression?: CompressionFormat;
-  resolvedOutputName?: string;
-  resolvedOutputNameKey?: string;
-  stageInput?: (
-    input: ApplyWorkflowStageSnapshot,
-    handlers: {
-      onChecksum: (info: StagedInputInfo) => void;
-      onProgress: (event: ProgressEvent) => void;
-      onState: (info: StagedInputInfo) => void;
-    },
-  ) => Promise<StagedInputInfo[]>;
-  stagePatches?: (
-    input: ApplyWorkflowStageSnapshot,
-    handlers: {
-      onProgress: (event: ProgressEvent) => void;
-    },
-  ) => Promise<Array<StagedInputInfo | null | undefined>>;
-  setPatchTarget?: (
-    input: ApplyWorkflowStageSnapshot,
-    patchIndex: number,
-    targetInputId: string,
-  ) => Promise<Array<StagedInputInfo | null | undefined>>;
-};
+import type { InputProgress, NoticeState, RomInputRowState } from "./patcher-ui-state.ts";
+import {
+  createIndeterminateWorkflowProgress,
+  useActiveAbortController,
+  useDisposableCleanup,
+} from "./workflow-run-hooks.ts";
 
 const useLocalApplyPatchFormSession = ({
   inputs,
@@ -630,11 +102,25 @@ const useLocalApplyPatchFormSession = ({
   const [internalPatches, setInternalPatches] = useState(defaultPatches);
   const [internalSettings, setInternalSettings] = useState<ApplyPatchFormSettings>(defaultSettings);
   const [checksumOverrideChecked, setChecksumOverrideChecked] = useState(false);
-  const [localState, setLocalState] = useReducer(
-    localPatcherSessionStateReducer,
-    undefined,
-    createLocalPatcherSessionState,
-  );
+  const {
+    localState,
+    setBusy,
+    setCompletedApplyTimeMs,
+    setCompletedCompressionTimeMs,
+    setCompletedSizeSummary,
+    setErrorMessage,
+    setInputStaging,
+    setOutputErrorMessage,
+    setOutputName,
+    setOutputNameEdited,
+    setPatchInfoByKey,
+    setPatchProgress,
+    setPatchProgressByKey,
+    setPatchStaging,
+    setPendingDownloadFileName,
+    setProgress,
+    setRomInputs,
+  } = useLocalPatcherSessionState();
   const [outputCompressionEdited, setOutputCompressionEdited] = useState(false);
   const {
     busy,
@@ -654,104 +140,11 @@ const useLocalApplyPatchFormSession = ({
     progress,
     romInputs,
   } = localState;
-  const setBusy = useCallback(
-    (value: SetStateAction<boolean>) =>
-      setLocalState((current) => ({ busy: resolveLocalStateUpdate(current.busy, value) })),
-    [],
-  );
-  const setInputStaging = useCallback(
-    (value: SetStateAction<boolean>) =>
-      setLocalState((current) => ({ inputStaging: resolveLocalStateUpdate(current.inputStaging, value) })),
-    [],
-  );
-  const setErrorMessage = useCallback(
-    (value: SetStateAction<string>) =>
-      setLocalState((current) => ({ failureMessage: resolveLocalStateUpdate(current.failureMessage, value) })),
-    [],
-  );
-  const setOutputErrorMessage = useCallback(
-    (value: SetStateAction<string>) =>
-      setLocalState((current) => ({
-        outputErrorMessage: resolveLocalStateUpdate(current.outputErrorMessage, value),
-      })),
-    [],
-  );
-  const setProgress = useCallback(
-    (value: SetStateAction<InputProgress | null>) =>
-      setLocalState((current) => ({ progress: resolveLocalStateUpdate(current.progress, value) })),
-    [],
-  );
-  const setPatchProgress = useCallback(
-    (value: SetStateAction<InputProgress | null>) =>
-      setLocalState((current) => ({ patchProgress: resolveLocalStateUpdate(current.patchProgress, value) })),
-    [],
-  );
-  const setPatchProgressByKey = useCallback(
-    (value: SetStateAction<Record<string, InputProgress>>) =>
-      setLocalState((current) => ({
-        patchProgressByKey: resolveLocalStateUpdate(current.patchProgressByKey, value),
-      })),
-    [],
-  );
-  const setPatchStaging = useCallback(
-    (value: SetStateAction<boolean>) =>
-      setLocalState((current) => ({ patchStaging: resolveLocalStateUpdate(current.patchStaging, value) })),
-    [],
-  );
-  const setPatchInfoByKey = useCallback(
-    (value: SetStateAction<Record<string, StagedInputInfo>>) =>
-      setLocalState((current) => ({ patchInfoByKey: resolveLocalStateUpdate(current.patchInfoByKey, value) })),
-    [],
-  );
-  const setRomInputs = useCallback(
-    (value: SetStateAction<RomInputRowState[]>) =>
-      setLocalState((current) => ({ romInputs: resolveLocalStateUpdate(current.romInputs, value) })),
-    [],
-  );
-  const setOutputName = useCallback(
-    (value: SetStateAction<string>) =>
-      setLocalState((current) => ({ outputName: resolveLocalStateUpdate(current.outputName, value) })),
-    [],
-  );
-  const setOutputNameEdited = useCallback(
-    (value: SetStateAction<boolean>) =>
-      setLocalState((current) => ({
-        outputNameEdited: resolveLocalStateUpdate(current.outputNameEdited, value),
-      })),
-    [],
-  );
-  const setCompletedSizeSummary = useCallback(
-    (value: SetStateAction<ReturnType<typeof createOutputSizeSummary>>) =>
-      setLocalState((current) => ({
-        completedSizeSummary: resolveLocalStateUpdate(current.completedSizeSummary, value),
-      })),
-    [],
-  );
-  const setCompletedApplyTimeMs = useCallback(
-    (value: SetStateAction<number | null>) =>
-      setLocalState((current) => ({
-        completedApplyTimeMs: resolveLocalStateUpdate(current.completedApplyTimeMs, value),
-      })),
-    [],
-  );
-  const setCompletedCompressionTimeMs = useCallback(
-    (value: SetStateAction<number | null>) =>
-      setLocalState((current) => ({
-        completedCompressionTimeMs: resolveLocalStateUpdate(current.completedCompressionTimeMs, value),
-      })),
-    [],
-  );
-  const setPendingDownloadFileName = useCallback(
-    (value: SetStateAction<string | null>) =>
-      setLocalState((current) => ({
-        pendingDownloadFileName: resolveLocalStateUpdate(current.pendingDownloadFileName, value),
-      })),
-    [],
-  );
-  const activeOutputCleanupRef = useRef<(() => Promise<void> | void) | null>(null);
+  const { disposeActiveCleanup: disposeActiveOutputCleanup, rememberActiveCleanup: rememberActiveOutputCleanup } =
+    useDisposableCleanup();
+  const { abortActiveOperation, activeAbortControllerRef, rememberAbortController } = useActiveAbortController();
   const pendingDownloadFileNameRef = useRef<string | null>(null);
   const pendingDownloadResultRef = useRef<ApplyWorkflowResult | null>(null);
-  const activeAbortControllerRef = useRef<AbortController | null>(null);
   const applyExecutionTimingRef = useRef<ApplyExecutionTimingTracker>({
     applyStartedAt: null,
     compressionStartedAt: null,
@@ -952,7 +345,7 @@ const useLocalApplyPatchFormSession = ({
     ? currentResolvedOutputName || generatedOutputName
     : generatedOutputName;
   const resolvedWorkerThreads =
-    activeSettings.workers?.threads ?? getNestedCompressionWorkerThreads(activeSettings) ?? workerThreads;
+    activeSettings.workers?.threads ?? getLegacyCompressionWorkerThreads(activeSettings) ?? workerThreads;
   const effectiveResolvedOutputName = requestedOutputName || automaticResolvedOutputName;
   const stageSettingsKey = useMemo(
     () =>
@@ -1061,20 +454,16 @@ const useLocalApplyPatchFormSession = ({
     !(inputStaging || patchStaging) &&
     !strictInputChecksumBlocked;
   const disposeActiveOutput = useCallback(() => {
-    const cleanup = activeOutputCleanupRef.current;
-    activeOutputCleanupRef.current = null;
     clearPendingDownload();
-    if (cleanup) void Promise.resolve(cleanup()).catch(() => undefined);
-  }, [clearPendingDownload]);
+    disposeActiveOutputCleanup();
+  }, [clearPendingDownload, disposeActiveOutputCleanup]);
 
   const invalidateCompletedOutputState = useCallback(() => {
     disposeActiveOutput();
     resetCompletedOutputState();
   }, [disposeActiveOutput, resetCompletedOutputState]);
 
-  const cancelActiveOperation = useCallback(() => {
-    activeAbortControllerRef.current?.abort();
-  }, []);
+  const cancelActiveOperation = abortActiveOperation;
 
   useEffect(
     () => () => {
@@ -2097,7 +1486,7 @@ const useLocalApplyPatchFormSession = ({
             }
           : activeSettings.validation;
         const abortController = new AbortController();
-        activeAbortControllerRef.current = abortController;
+        rememberAbortController(abortController);
         setBusy(true);
         setErrorMessage("");
         setOutputErrorMessage("");
@@ -2106,13 +1495,7 @@ const useLocalApplyPatchFormSession = ({
           applyStartedAt: Date.now(),
           compressionStartedAt: null,
         };
-        setProgress({
-          indeterminate: true,
-          label: "Applying patch...",
-          message: "Applying patch...",
-          percent: null,
-          stage: "apply",
-        });
+        setProgress(createIndeterminateWorkflowProgress({ label: "Applying patch...", stage: "apply" }));
         try {
           await waitForNextUiPaint();
           let clearedPatchRowProgress = false;
@@ -2212,12 +1595,13 @@ const useLocalApplyPatchFormSession = ({
                 (result.sizeSummary?.outputSize ?? getPublicOutputSize(result.output)),
             }),
           );
-          activeOutputCleanupRef.current =
+          rememberActiveOutputCleanup(
             result.outputs.length > 0
               ? async () => {
                   await Promise.all(result.outputs.map((output) => output.cleanup?.()));
                 }
-              : result.output.cleanup || null;
+              : result.output.cleanup || null,
+          );
           pendingDownloadResultRef.current = result;
           const initialDownloadFileName = result.output.fileName || effectiveResolvedOutputName || "output";
           setPendingDownloadReadyFileName(initialDownloadFileName);
@@ -2247,7 +1631,7 @@ const useLocalApplyPatchFormSession = ({
           resetCompletedOutputState();
           onError?.(normalizedError);
         } finally {
-          if (activeAbortControllerRef.current === abortController) activeAbortControllerRef.current = null;
+          if (activeAbortControllerRef.current === abortController) rememberAbortController(null);
           applyExecutionTimingRef.current = {
             applyStartedAt: null,
             compressionStartedAt: null,
@@ -2321,6 +1705,8 @@ const useLocalApplyPatchFormSession = ({
       hasStrictInputChecksumMismatch,
       mergeRomInput,
       pendingDownloadFileName,
+      rememberAbortController,
+      rememberActiveOutputCleanup,
       setPendingDownloadReadyFileName,
       setChecksumOverrideChecked,
     ],
