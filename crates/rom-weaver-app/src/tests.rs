@@ -229,6 +229,16 @@ fn z3ds_extension_append_uses_hint_when_output_has_no_extension() {
 }
 
 #[test]
+fn emitted_rom_extensions_cover_3ds_family_inputs() {
+    for extension in [".3ds", ".3dsx", ".app", ".cci", ".cia", ".cxi"] {
+        assert!(
+            super::EMITTED_ROM_EXTENSIONS.contains(&extension),
+            "missing {extension}"
+        );
+    }
+}
+
+#[test]
 fn resolve_codec_level_supports_multi_codec_lists() {
     let (codec, level) =
         CliApp::resolve_codec_level(vec!["cdzs,cdzl".to_string(), "cdfl".to_string()], "--codec")

@@ -1270,8 +1270,9 @@ const EMITTED_ARCHIVE_EXTENSIONS: &[&str] = &[
     ".ciso", ".rar", ".pbp", ".z3d", ".z3ds",
 ];
 const EMITTED_ROM_EXTENSIONS: &[&str] = &[
-    ".iso", ".img", ".bin", ".gdi", ".nds", ".dsi", ".srl", ".gba", ".3ds", ".n64", ".z64", ".v64",
-    ".nes", ".fds", ".sfc", ".smc", ".gen", ".md", ".gb", ".gbc", ".pce", ".a78", ".lnx", ".msx",
+    ".iso", ".img", ".bin", ".gdi", ".nds", ".dsi", ".srl", ".gba", ".3ds", ".3dsx", ".app",
+    ".cci", ".cia", ".cxi", ".n64", ".z64", ".v64", ".nes", ".fds", ".sfc", ".smc", ".gen", ".md",
+    ".gb", ".gbc", ".pce", ".a78", ".lnx", ".msx",
 ];
 const HEADER_FIXER_SUPPORTED_EXTENSIONS: &[&str] = &[
     "a78", "lnx", "nes", "fds", "smc", "sfc", "gb", "gbc", "gba", "gen", "md", "sms", "gg", "bin",
