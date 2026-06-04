@@ -42,21 +42,20 @@ const WorkflowRomInputStep = ({
   listId,
   notice,
   ...stepProps
-}: WorkflowRomInputStepProps) => (
-  <StepSection {...stepProps}>
-    {listId ? (
-      <div id={listId}>
-        {items.map((item) => (
-          <WorkflowRomInputStepRow item={item} key={item.id} />
-        ))}
-      </div>
-    ) : (
-      items.map((item) => <WorkflowRomInputStepRow item={item} key={item.id} />)
-    )}
-    {afterItems}
-    <DropZone {...dropZone} />
-    {notice}
-  </StepSection>
-);
+}: WorkflowRomInputStepProps) => {
+  const rows = items.map((item) => <WorkflowRomInputStepRow item={item} key={item.id} />);
+  return (
+    <StepSection {...stepProps}>
+      {listId || rows.length ? (
+        <div className="workflow-file-list" id={listId}>
+          {rows}
+        </div>
+      ) : null}
+      {afterItems ? <div className="workflow-step-after-items">{afterItems}</div> : null}
+      <DropZone {...dropZone} />
+      {notice}
+    </StepSection>
+  );
+};
 
 export { WorkflowRomInputStep, type WorkflowRomInputStepItem, type WorkflowRomInputStepProps };

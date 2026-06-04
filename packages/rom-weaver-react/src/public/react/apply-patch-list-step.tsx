@@ -127,7 +127,7 @@ const ApplyPatchListStep = ({
       num="02"
       title="Patches"
     >
-      <div id="rom-weaver-list-patch-stack">
+      <div className="workflow-file-list" id="rom-weaver-list-patch-stack">
         {patches.map((item, index) =>
           item.progress ? (
             <FileProgress

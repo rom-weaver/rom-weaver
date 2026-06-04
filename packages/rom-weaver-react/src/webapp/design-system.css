@@ -131,6 +131,9 @@
 .rw-app .drop .hint { font-size: 0.758621rem; color: var(--rw-ink-mut); }
 .rw-app .drop.dragging { border-color: var(--rw-accent); border-style: solid; background: color-mix(in oklab, var(--rw-accent) 15%, var(--rw-inset)); color: var(--rw-ink); }
 .rw-app .drop.dragging svg { color: var(--rw-accent); opacity: 1; }
+.rw-app .workflow-file-list { display: flex; flex-direction: column; gap: 14px; }
+.rw-app .workflow-file-list:not(:empty), .rw-app .workflow-step-after-items:not(:empty) { margin-bottom: 14px; }
+.rw-app .workflow-file-list > .file, .rw-app .workflow-file-list > .fileprog { margin-top: 0; }
 
 /* resolved file row */
 .rw-app .file {
@@ -537,10 +540,9 @@
   .rw-app .panel { margin-left: -10px; margin-right: -10px; border-left: 0; border-right: 0; border-radius: 0; }
   .rw-modal .setcols { grid-template-columns: 1fr; }
   .rw-modal { padding: 10px; }
-  .rw-modal.settings-modal, .rw-modal.select-modal { padding: 0; }
+  .rw-modal.settings-modal { padding: 0; }
   .rw-modal.settings-modal .rw-modal-card { width: 100%; max-width: none; height: 100%; max-height: 100%; border: 0; border-radius: 0; }
-  .rw-modal.select-modal { align-items: flex-start; }
-  .rw-modal.select-modal .rw-modal-card { width: 100%; max-width: none; max-height: 100%; border-left: 0; border-right: 0; border-radius: 0; }
+  .rw-modal.select-modal .rw-modal-card { width: 100%; max-width: none; max-height: calc(100dvh - 20px); }
   .rw-modal .setchecks { display: grid; grid-template-columns: 1fr 1fr; gap: 9px 12px; }
   .rw-modal .modal-head .btn { padding: 0; width: 30px; }
   .rw-modal .modal-head .btn .bl { display: none; }
