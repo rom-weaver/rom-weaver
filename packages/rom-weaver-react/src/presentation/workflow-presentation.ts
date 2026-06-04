@@ -42,6 +42,10 @@ type ContextualProgressLabelOptions = {
   threads?: string | number | null | undefined;
 };
 
+type CompressionProgressLabelOptions = ContextualProgressLabelOptions & {
+  progress?: WorkflowValue | object | null;
+};
+
 type ValidationViewModelOptions = {
   severity?: WorkflowScalar;
   message?: WorkflowScalar;
@@ -391,6 +395,13 @@ const createCompressionProgressLabel = (options: ContextualProgressLabelOptions 
   return `${contextualLabel}${threadLabel ? ` - ${threadLabel}` : ""}`;
 };
 
+const getCompressedBytesWritten = (progress: WorkflowValue | object | null | undefined): number | null => {
+  if (!isRecord(progress)) return null;
+  const details = isRecord(progress.details) ? progress.details : {};
+  const value = details.compressedBytesWritten;
+  return typeof value === "number" || typeof value === "string" ? normalizeByteCount(value) : null;
+};
+
 const formatByteSize = (value: string | number | null | undefined): string => {
   const bytes = normalizeByteCount(value);
   if (bytes === null) return "";
@@ -403,6 +414,22 @@ const formatByteSize = (value: string | number | null | undefined): string => {
     unitIndex++;
   }
   return `${normalizedValue.toFixed(1)} ${units[unitIndex]}`;
+};
+
+const createCompressionProgressLabelFromEvent = (options: CompressionProgressLabelOptions = {}): string => {
+  const formatLabel = String(options.formatLabel || "");
+  const compressedBytesWritten = getCompressedBytesWritten(options.progress);
+  const writtenLabel = formatByteSize(compressedBytesWritten);
+  const fallbackLabel = String(options.fallbackLabel || `Compressing to${formatLabel ? ` ${formatLabel}` : ""}`);
+  const label = writtenLabel
+    ? `Compressing to${formatLabel ? ` ${formatLabel}` : ""} - wrote ${writtenLabel}`
+    : getRawProgressLabel(options.progress || null, String(options.label || ""));
+  return createCompressionProgressLabel({
+    fallbackLabel,
+    formatLabel,
+    label,
+    threads: options.threads,
+  });
 };
 
 const formatPercentFixed = (value: string | number | null | undefined, digits = 1): string => {
@@ -526,6 +553,7 @@ const createResultViewModel = ({
 export {
   clampProgressPercent,
   createCompressionProgressLabel,
+  createCompressionProgressLabelFromEvent,
   createContextualProgressLabel,
   createOutputSizeSummary,
   createProgressEvent,

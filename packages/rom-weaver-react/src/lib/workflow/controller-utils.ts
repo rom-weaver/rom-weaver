@@ -124,6 +124,7 @@ const createWorkflowProgress = (
     details?: Record<string, unknown>;
     hasProgress?: boolean;
     id: string;
+    indeterminate?: boolean;
     label: string;
     percent?: number | null;
     role: WorkflowProgressRole;
@@ -133,6 +134,13 @@ const createWorkflowProgress = (
   },
 ): WorkflowProgress => {
   const percent = typeof event.percent === "number" && Number.isFinite(event.percent) ? event.percent : null;
+  const hasExplicitProgress =
+    event.hasProgress !== false &&
+    (event.hasProgress === true ||
+      event.indeterminate === true ||
+      Object.hasOwn(event, "percent") ||
+      typeof event.current === "number" ||
+      typeof event.total === "number");
   const details = {
     ...(event.details || {}),
     role: event.role,
@@ -142,8 +150,9 @@ const createWorkflowProgress = (
   return {
     details,
     ...(typeof event.current === "number" ? { current: event.current } : {}),
-    hasProgress: event.hasProgress === false ? false : typeof percent === "number",
+    hasProgress: hasExplicitProgress,
     id: event.id,
+    indeterminate: hasExplicitProgress && percent === null,
     label: event.label,
     percent,
     role: event.role,

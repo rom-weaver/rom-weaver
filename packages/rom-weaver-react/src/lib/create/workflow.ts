@@ -11,7 +11,10 @@ import {
   getPatchFileBytes,
 } from "../../lib/input/binary-service.ts";
 import { classifyPatcherInput, getInputSourceFileName } from "../../lib/input/input-classification.ts";
-import { createCompressionProgressLabel, getProgressEventPercent } from "../../presentation/workflow-presentation.ts";
+import {
+  createCompressionProgressLabelFromEvent,
+  getProgressEventPercent,
+} from "../../presentation/workflow-presentation.ts";
 import { getNamedSource, getNamedSourceFileName } from "../../storage/shared/binary/source-file-utils.ts";
 import type { DirectSource, SourceRef } from "../../types/source.ts";
 import type { CreateWorkflowDeps, PatchFileInstance, SharedProgressEventLike } from "../../types/workflow-internal.ts";
@@ -177,11 +180,21 @@ const runCreateWorkflow = async (
         compressionSettings.compressionProfile as SevenZipZstdCompressionOptions["compressionProfile"],
       onProgress: (progress: SharedProgressEventLike) => {
         const formatLabel = compression === "zip" ? "ZIP" : "7z";
+        const progressDetails =
+          progress.details && typeof progress.details === "object" && !Array.isArray(progress.details)
+            ? (progress.details as Record<string, JsonValue>)
+            : {};
         deps.reportProgress(options, {
-          details: progress as JsonValue,
-          label: createCompressionProgressLabel({
+          details: {
+            ...(progress as Record<string, JsonValue>),
+            ...progressDetails,
+            runtimeStage: progressDetails.runtimeStage || progress.stage,
+            stage: "compress",
+          },
+          label: createCompressionProgressLabelFromEvent({
             fallbackLabel: `Compressing to ${formatLabel}`,
             formatLabel,
+            progress,
             threads: getCreateWorkerThreads(options),
           }),
           percent: getProgressEventPercent(progress),

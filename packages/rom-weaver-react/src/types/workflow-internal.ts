@@ -4,9 +4,11 @@ import type { JsonValue } from "./runtime.ts";
 import type { CompressionCreateInput, CompressionExtractInput } from "./workflow-runtime.ts";
 
 type SharedProgressEventLike = {
+  details?: JsonValue;
   label?: string;
   message?: string;
   percent?: string | number | null;
+  stage?: string;
   loaded?: string | number | boolean | null;
   total?: string | number | boolean | null;
 };

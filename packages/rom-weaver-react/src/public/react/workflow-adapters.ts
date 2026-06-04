@@ -60,6 +60,7 @@ const toReactProgressEvent = (event: {
   details?: Record<string, unknown>;
   hasProgress?: boolean;
   id?: string;
+  indeterminate?: boolean;
   label: string;
   percent?: number | null;
   role?: string;
@@ -68,17 +69,21 @@ const toReactProgressEvent = (event: {
 }): ProgressEvent => {
   const percent = normalizeProgressDisplayPercent(event.percent);
   const visualPercent = clampProgressPercent(event.percent);
-  const hasProgress = event.hasProgress === false ? false : percent !== null;
+  const hasProgress =
+    event.hasProgress === false
+      ? false
+      : event.hasProgress === true || event.indeterminate === true || "percent" in event;
   return {
     details: {
       ...(event.details || {}),
       id: event.id,
       role: event.role,
       stage: event.stage,
-      visualPercent,
+      ...(visualPercent === null ? {} : { visualPercent }),
       workflow: event.workflow,
     },
     ...(event.hasProgress === false ? { hasProgress: false } : {}),
+    ...(event.indeterminate === true ? { indeterminate: true } : {}),
     label: event.label,
     message: typeof percent === "number" ? `${event.label} ${percent}%` : event.label,
     ...(hasProgress ? { percent } : {}),

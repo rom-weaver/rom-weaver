@@ -8,7 +8,16 @@
  * editing here simply overrides Settings for this one job.
  */
 
+import { getChdAutoCreateMode } from "../../lib/input/disc-file-utils.ts";
+
 type SettingsLike = Record<string, unknown>;
+type SourceLike = {
+  _chdCuePath?: string;
+  _chdCueText?: string;
+  _chdMode?: string;
+  fileName?: string;
+  getExtension?: () => string;
+};
 
 type CompressFieldOption = { value: string; label: string };
 
@@ -44,6 +53,14 @@ const str = (settings: SettingsLike, key: string, fallback = ""): string => {
   return value === undefined || value === null || value === "" ? fallback : String(value);
 };
 
+const stripChdCodecLevels = (value: string): string =>
+  value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => entry.replace(/:\d+$/u, ""))
+    .join(",");
+
 /** Normalize a stored compression-profile value to its scale index (defaults to Max). */
 const profileIndex = (settings: SettingsLike): number => {
   const raw = str(settings, "compressionProfile", "max").toLowerCase();
@@ -65,7 +82,15 @@ const codecLabel = (options: CompressFieldOption[], value: string): string =>
   options.find((option) => option.value === value)?.label || value;
 
 /** Build the compress-panel model for a normalized output format, or null when the format isn't compressed. */
-const buildCompressPanel = (format: string, settings: SettingsLike): CompressPanelModel | null => {
+const resolveChdPanelMode = (settings: SettingsLike, source?: unknown): "cd" | "dvd" | null => {
+  const configuredMode = str(settings, "chdOutputMode", "auto").toLowerCase();
+  if (configuredMode === "cd" || configuredMode === "dvd") return configuredMode;
+  if (!source) return null;
+  const resolvedMode = getChdAutoCreateMode(source as SourceLike);
+  return resolvedMode === "cd" || resolvedMode === "dvd" ? resolvedMode : null;
+};
+
+const buildCompressPanel = (format: string, settings: SettingsLike, source?: unknown): CompressPanelModel | null => {
   const normalized = String(format || "").toLowerCase();
   const level = levelField(settings);
   const levelSummary = PROFILE_LABELS[profileIndex(settings)] ?? "Max";
@@ -106,27 +131,25 @@ const buildCompressPanel = (format: string, settings: SettingsLike): CompressPan
     };
   }
   if (normalized === "chd") {
-    const cd = str(settings, "chdCreateCdCodecs", "cdlz,cdzl,cdfl");
+    const mode = resolveChdPanelMode(settings, source);
+    const cd = stripChdCodecLevels(str(settings, "chdCreateCdCodecs", "cdlz,cdzl,cdfl"));
+    const dvd = stripChdCodecLevels(str(settings, "chdCreateDvdCodecs", "lzma,zlib,huff,flac"));
+    const codecKey = mode === "cd" ? "chdCreateCdCodecs" : "chdCreateDvdCodecs";
+    const codecLabel = mode === "cd" ? "CD codecs" : mode === "dvd" ? "DVD codecs" : "Codecs";
+    const codecValue = mode === "cd" ? cd : mode === "dvd" ? dvd : "";
     return {
       fields: [
         {
-          key: "chdCreateCdCodecs",
+          key: codecKey,
           kind: "text",
-          label: "CD codecs",
+          label: codecLabel,
           mono: true,
-          placeholder: "cdlz,cdzl,cdfl",
-          value: cd,
+          placeholder: mode === "cd" ? "cdlz,cdzl,cdfl" : "lzma,zlib,huff,flac",
+          value: codecValue,
         },
-        {
-          key: "chdCreateDvdCodecs",
-          kind: "text",
-          label: "DVD codecs",
-          mono: true,
-          placeholder: "lzma,zlib,huff,flac",
-          value: str(settings, "chdCreateDvdCodecs"),
-        },
+        level,
       ],
-      summary: cd,
+      summary: codecValue ? `${codecValue} · ${levelSummary}` : levelSummary,
     };
   }
   if (normalized === "z3ds") {

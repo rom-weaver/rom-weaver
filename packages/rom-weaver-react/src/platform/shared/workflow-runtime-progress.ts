@@ -1,11 +1,18 @@
-import type { ProgressEvent } from "../../types/workflow-runtime.ts";
+import type { JsonValue, ProgressEvent } from "../../types/workflow-runtime.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 
+type JsonRecord = { [key: string]: JsonValue | undefined };
+
 type RuntimeProgress = {
+  details?: JsonValue;
   label?: string;
   message?: string;
   percent?: number | null;
+  stage?: string;
 };
+
+const isRecord = (value: JsonValue | object | null | undefined): value is JsonRecord =>
+  !!value && typeof value === "object" && !Array.isArray(value) && !ArrayBuffer.isView(value);
 
 const forwardCreatePatchProgress =
   (onProgress?: Parameters<NonNullable<WorkflowRuntime["patch"]["createPatch"]>>[0]["onProgress"]) =>
@@ -46,11 +53,18 @@ const forwardDiscProgress = (stage: "input" | "output", onProgress?: (progress: 
 
 const forwardArchiveProgress = (stage: "input" | "output", onProgress?: (progress: ProgressEvent) => void) => {
   let sawIntermediate = false;
-  return (progress: { label?: string; percent?: number | null }) => {
+  return (progress: RuntimeProgress) => {
     const label = progress.label || (stage === "input" ? "Extracting archive entry..." : "Creating archive...");
+    const details = isRecord(progress.details)
+      ? {
+          ...progress.details,
+          ...(progress.stage ? { runtimeStage: progress.stage } : {}),
+        }
+      : progress.details;
     const emit = (percent: number | null) => {
       onProgress?.({
         ...progress,
+        details,
         label,
         percent,
         stage,

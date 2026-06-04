@@ -1,5 +1,6 @@
 import {
   createCompressionProgressLabel,
+  createCompressionProgressLabelFromEvent,
   getProgressEventPercent,
   getRawProgressLabel,
 } from "../../presentation/workflow-presentation.ts";
@@ -69,11 +70,21 @@ const getDefaultChdCompressionCodecs = (mode: string | null | undefined, compres
 const createArchiveProgressReporter =
   (compression: "zip" | "7z", options: ApplyWorkflowOptions | undefined) => (progress: SharedProgressEvent) => {
     const formatLabel = compression === "zip" ? "ZIP" : "7z";
+    const progressDetails =
+      progress.details && typeof progress.details === "object" && !Array.isArray(progress.details)
+        ? (progress.details as Record<string, JsonValue>)
+        : {};
     reportProgress(options, {
-      details: progress as RuntimeValue as JsonValue,
-      label: createCompressionProgressLabel({
+      details: {
+        ...(progress as RuntimeValue as Record<string, JsonValue>),
+        ...progressDetails,
+        runtimeStage: progressDetails.runtimeStage || progress.stage,
+        stage: "compress",
+      },
+      label: createCompressionProgressLabelFromEvent({
         fallbackLabel: `Compressing to ${formatLabel}`,
         formatLabel,
+        progress,
         threads: getWorkerThreads(options),
       }),
       percent: getProgressEventPercent(progress),

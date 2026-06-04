@@ -1,6 +1,6 @@
 import Download from "lucide-react/dist/esm/icons/download.js";
 import Scissors from "lucide-react/dist/esm/icons/scissors.js";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { appendFileNameExtension, hasFileNameExtension } from "../../lib/input/path-utils.ts";
 import {
   type BrowserSaveDestination,
@@ -12,6 +12,7 @@ import {
 import { formatCodedErrorForDisplay, getErrorCode } from "../../presentation/errors.ts";
 import { createBrowserLocalizer } from "../../presentation/localization/index.ts";
 import { createProgressViewModelFromEvent, formatByteSize } from "../../presentation/workflow-presentation.ts";
+import type { TrimWorkflowSourceState } from "../../types/trim-workflow.ts";
 import { useCandidateSelection } from "./candidate-selection.tsx";
 import { CompressPanelBody } from "./components/ds/compress-panel.tsx";
 import { ExtractionTree } from "./components/ds/extraction-tree.tsx";
@@ -57,10 +58,13 @@ const mergeTrimSettings = (
   return merged;
 };
 
+const createSettingsDependencyKey = (value: unknown) =>
+  JSON.stringify(value, (_key, entry) => (typeof entry === "function" ? "[function]" : entry));
+
 // Raw extension keeps the trimmed bytes uncompressed; zip/7z wrap the trimmed file in an archive.
 const getSourceExtension = (fileName: string) => {
   const match = fileName.match(FILE_EXTENSION_REGEX);
-  return match ? match[0].slice(1).toLowerCase() : "bin";
+  return match ? match[0].slice(1).toLowerCase() : "raw";
 };
 
 const getDefaultTrimOutputName = (sourceFileName: string, outputFormat: string) => {
@@ -102,6 +106,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [errorCode, setErrorCode] = useState("");
+  const [sourceState, setSourceState] = useState<TrimWorkflowSourceState | null>(null);
   const [completedOutput, setCompletedOutput] = useState<{
     fileName: string;
     saveAs: (destination?: BrowserSaveDestination) => Promise<void>;
@@ -128,12 +133,44 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   const disabled = !!props.disabled || busy;
   const actionDisabled = !!props.disabled || !(busy || completedOutput || source);
   const sourceFileName = getReactBinarySourceFileName(source, "ROM");
-  const resolvedOutputFormat = outputFormat || normalizeDefaultArchive(settings.defaultArchive);
+  const resolvedSourceFileName = sourceState?.fileName || sourceFileName;
+  const rawOutputFormat = getSourceExtension(resolvedSourceFileName);
+  const defaultArchiveFormat = normalizeDefaultArchive(settings.defaultArchive);
+  const resolvedOutputFormat =
+    outputFormat || (defaultArchiveFormat === "none" ? rawOutputFormat : defaultArchiveFormat);
   const configuredOutputName = getCreateSettingsOutputName(props.settings || props.defaultSettings || providerSettings);
   const generatedOutputName =
-    configuredOutputName || (source ? getDefaultTrimOutputName(sourceFileName, resolvedOutputFormat) : "");
+    configuredOutputName || (source ? getDefaultTrimOutputName(resolvedSourceFileName, resolvedOutputFormat) : "");
   const resolvedOutputName = outputName.trim() || generatedOutputName;
-  const executionOutputName = resolveTrimExecutionOutputName(resolvedOutputName, resolvedOutputFormat, sourceFileName);
+  const executionOutputName = resolveTrimExecutionOutputName(
+    resolvedOutputName,
+    resolvedOutputFormat,
+    resolvedSourceFileName,
+  );
+  const stagingSettingsKey = useMemo(
+    () =>
+      createSettingsDependencyKey({
+        input: settings.input,
+        limits: settings.limits,
+        loggingLevel: settings.logging?.level,
+        workers: settings.workers,
+        workerThreads: props.workerThreads,
+      }),
+    [props.workerThreads, settings],
+  );
+  const stagingSettings = useMemo(
+    () =>
+      toCreateWorkflowSettings(
+        { ...settings, output: { ...settings.output, compression: "none" } } as CreateSettings,
+        "",
+        props.workerThreads,
+      ),
+    [props.workerThreads, settings.input, settings.limits, settings.logging, settings.workers],
+  );
+  const stagingSettingsRef = useRef(stagingSettings);
+  useEffect(() => {
+    stagingSettingsRef.current = stagingSettings;
+  }, [stagingSettings]);
 
   useEffect(() => {
     if (props.settings !== undefined) return;
@@ -150,6 +187,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     disposeActiveOutput();
     setCompletedOutput(null);
     selectedSourceCandidateIdRef.current = null;
+    setSourceState(null);
     if (props.source === undefined) setInternalSource(file);
     props.onSourceChange?.(file);
     setMessage("");
@@ -175,6 +213,47 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     setErrorCode("");
     setProgress(null);
   };
+
+  useEffect(() => {
+    if (!source) {
+      setSourceState(null);
+      return;
+    }
+    let cancelled = false;
+    const workflow = new TrimWorkflow({
+      ...(resolvedAssetBaseUrl ? { assetBaseUrl: resolvedAssetBaseUrl } : {}),
+      id: `${workflowIdRef.current}:stage`,
+      selectFile: async (request) => {
+        const preferredCandidate = request.candidates.find(
+          (candidate) => candidate.id === selectedSourceCandidateIdRef.current,
+        );
+        if (preferredCandidate?.selectable) return { id: preferredCandidate.id };
+        const choice = await selectFile(request);
+        selectedSourceCandidateIdRef.current = choice.id;
+        return choice;
+      },
+      settings: stagingSettingsRef.current,
+    });
+
+    void workflow
+      .setInput(toBrowserPublicBinarySource(source))
+      .then(() => {
+        if (cancelled) return;
+        setSourceState(workflow.getInput());
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSourceState(workflow.getInput());
+      })
+      .finally(() => {
+        void workflow.dispose();
+      });
+
+    return () => {
+      cancelled = true;
+      void workflow.dispose();
+    };
+  }, [props.workerThreads, resolvedAssetBaseUrl, selectFile, source, stagingSettingsKey]);
 
   const runTrim = async () => {
     if (completedOutput) {
@@ -304,12 +383,17 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     : null;
   const showInputProgress = busy && progressProps && progress?.stage === "input" && progress.role === "input";
 
-  const rawExtensionOption = source ? getSourceExtension(sourceFileName) : "bin";
+  const rawExtensionOption = rawOutputFormat;
   const formatOptions = [
     { label: `.${rawExtensionOption}`, value: rawExtensionOption },
     { label: ".zip", value: "zip" },
     { label: ".7z", value: "7z" },
   ];
+  const compressFormatOptions = formatOptions;
+  const compressHeaderFormat =
+    resolvedOutputFormat === rawExtensionOption
+      ? "None"
+      : compressFormatOptions.find((option) => option.value === resolvedOutputFormat)?.label;
 
   return (
     <main aria-labelledby="tab-trim" className="panel" id="trim-builder-container">
@@ -379,19 +463,32 @@ function TrimPatchForm(props: TrimPatchFormProps) {
             </>
           }
           compress={(() => {
-            const panel = buildCompressPanel(resolvedOutputFormat, settings as Record<string, unknown>);
-            return panel
-              ? {
-                  children: (
-                    <CompressPanelBody
-                      disabled={disabled}
-                      fields={panel.fields}
-                      onChange={(key, value) => updateSettings({ ...settings, [key]: value })}
-                    />
-                  ),
-                  summary: panel.summary,
-                }
-              : null;
+            const panel = buildCompressPanel(
+              resolvedOutputFormat,
+              settings as Record<string, unknown>,
+              source
+                ? ({ ...(source as unknown as Record<string, unknown>), fileName: resolvedSourceFileName } as Record<
+                    string,
+                    unknown
+                  >)
+                : null,
+            );
+            return {
+              children: panel ? (
+                <CompressPanelBody
+                  disabled={disabled}
+                  fields={panel.fields}
+                  onChange={(key, value) => updateSettings({ ...settings, [key]: value })}
+                />
+              ) : null,
+              format: compressHeaderFormat,
+              formatId: "trim-builder-select-output-compression",
+              formatLabel: "Type",
+              formatOptions: compressFormatOptions,
+              formatValue: resolvedOutputFormat,
+              onFormatChange: updateOutputFormat,
+              summary: panel?.summary,
+            };
           })()}
           disabled={disabled}
           fileName={resolvedOutputName}

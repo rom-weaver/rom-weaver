@@ -3,11 +3,21 @@ import type { WorkflowWarning } from "./workflow-controller.ts";
 
 type CreateWorkflowSourceStatus = "empty" | "failed" | "loading" | "needsSelection" | "ready";
 
+type CreateWorkflowParentCompression = {
+  depth: number;
+  kind: string;
+  fileName: string;
+  sourceSize?: number;
+  outputSize?: number;
+  decompressionTimeMs?: number;
+};
+
 type CreateWorkflowSourceState = {
   id: string;
   fileName?: string;
   status: CreateWorkflowSourceStatus;
   candidates: SelectionCandidate[];
+  parentCompressions: CreateWorkflowParentCompression[];
   selectedCandidateId?: string;
   size?: number;
   sourceSize?: number;
@@ -16,4 +26,4 @@ type CreateWorkflowSourceState = {
   warnings: WorkflowWarning[];
 };
 
-export type { CreateWorkflowSourceState, CreateWorkflowSourceStatus };
+export type { CreateWorkflowParentCompression, CreateWorkflowSourceState, CreateWorkflowSourceStatus };

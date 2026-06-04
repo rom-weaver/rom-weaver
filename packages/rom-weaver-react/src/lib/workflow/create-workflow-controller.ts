@@ -1,4 +1,4 @@
-import type { CreateWorkflowSourceState } from "../../types/create-workflow.ts";
+import type { CreateWorkflowParentCompression, CreateWorkflowSourceState } from "../../types/create-workflow.ts";
 import type { WorkflowProgress } from "../../types/progress.ts";
 import type { CreateResult, SelectedInputInfo } from "../../types/public.ts";
 import type { CandidateSelectionRequest, SelectionCandidate } from "../../types/selection.ts";
@@ -31,11 +31,13 @@ import { traceWorkflowControllerEvent } from "./workflow-tracing.ts";
 type SourceValidator<TSource> = (sources: TSource | TSource[] | undefined) => void;
 type SourceRole = "modified" | "original";
 type SourceStatus = CreateWorkflowSourceState["status"];
+type ParentCompression = CreateWorkflowParentCompression;
 type InternalSourceState = {
   id: string;
   fileName?: string;
   status: SourceStatus;
   candidates: SelectionCandidate[];
+  parentCompressions: ParentCompression[];
   selectedCandidateId?: string;
   size?: number;
   sourceSize?: number;
@@ -98,6 +100,7 @@ const cloneSourceState = (state: InternalSourceState | null | undefined) =>
         decompressionTimeMs: state.decompressionTimeMs,
         fileName: state.fileName,
         id: state.id,
+        parentCompressions: state.parentCompressions.map((entry) => ({ ...entry })),
         selectedCandidateId: state.selectedCandidateId,
         size: state.size,
         sourceSize: state.sourceSize,
@@ -341,6 +344,7 @@ class CreateWorkflowController<TSource, TDestination> extends WorkflowController
         candidates: [],
         fileName,
         id: `${role}-${index + 1}`,
+        parentCompressions: [],
         role,
         size: sourceSize,
         sourceSize,
@@ -358,9 +362,7 @@ class CreateWorkflowController<TSource, TDestination> extends WorkflowController
 
   private async stageSourceSession(role: SourceRole, sources: TSource[]): Promise<SourceSession<TSource>> {
     if (sources.length === 1) {
-      const view = await this.stageSource(
-        this.createInitialSource(role, sources[0] as TSource, 0, { allowLazyBrowserRomSource: true }),
-      );
+      const view = await this.stageSource(this.createInitialSource(role, sources[0] as TSource, 0));
       return { role, sources, stages: [view], synthetic: false, view };
     }
     const requests: CandidateSelectionRequest[] = [];
@@ -557,6 +559,7 @@ class CreateWorkflowController<TSource, TDestination> extends WorkflowController
     stage.state.candidates = [];
     for (const request of requests) this.addCandidateRequest(stage, request);
     stage.state.decompressionTimeMs = undefined;
+    stage.state.parentCompressions = [];
     stage.state.selectedCandidateId = undefined;
     stage.state.status = "needsSelection";
     stage.state.wasDecompressed = undefined;
@@ -567,6 +570,7 @@ class CreateWorkflowController<TSource, TDestination> extends WorkflowController
     const assets = stage.preparedInputAssets || [];
     const preparation = getInputPreparationMetrics(assets);
     stage.state.fileName = assets[0]?.fileName || stage.state.fileName;
+    stage.state.parentCompressions = (preparation?.parentCompressions || []).map((entry) => ({ ...entry }));
     stage.state.size = assets.reduce((total, asset) => total + asset.size, 0) || stage.state.size;
     stage.state.sourceSize =
       (typeof preparation?.sourceSize === "number" && Number.isFinite(preparation.sourceSize)
@@ -649,6 +653,8 @@ class CreateWorkflowController<TSource, TDestination> extends WorkflowController
       selectedOwner?.state.size ||
       session.view.preparedInputAssets?.reduce((total, asset) => total + asset.size, 0) ||
       undefined;
+    session.view.state.parentCompressions =
+      selectedOwner?.state.parentCompressions.map((entry) => ({ ...entry })) || [];
     session.view.state.sourceSize =
       selectedOwner?.state.sourceSize ||
       session.stages.reduce((total, stage) => total + (stage.state.sourceSize || 0), 0) ||

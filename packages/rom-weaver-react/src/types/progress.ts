@@ -22,6 +22,7 @@ type WorkflowProgress = {
   details?: Record<string, unknown>;
   hasProgress?: boolean;
   id: string;
+  indeterminate?: boolean;
   label: string;
   parentId?: string;
   percent?: number | null;

@@ -51,6 +51,14 @@ const BROWSER_SYNC_ACCESS_MODES = new Set<RomWeaverBrowserSyncAccessMode>([
 
 const nowIso = () => new Date().toISOString();
 
+type SimpleRuntimeProgress = {
+  details?: RuntimeValue;
+  label?: string;
+  message?: string;
+  percent?: number | null;
+  stage?: string;
+};
+
 const emitRuntimeLog = (
   onLog: ((log: WorkflowRuntimeLog) => void) | undefined,
   level: WorkflowRuntimeLog["level"],
@@ -485,15 +493,16 @@ const getPatchDetailsFromProbe = (result: RomWeaverRunJsonResult): RomWeaverProb
   };
 };
 
-const toSimpleProgress = (
-  event: RomWeaverRunJsonEvent,
-): { label?: string; message?: string; percent?: number | null } | null => {
+const toSimpleProgress = (event: RomWeaverRunJsonEvent): SimpleRuntimeProgress | null => {
   if (!isLiveProgressEvent(event)) return null;
   const label = getRomWeaverRunEventLabel(event);
+  const details = getRomWeaverRunEventDetails(event) as RuntimeValue;
   return {
+    details: details === null || details === undefined ? undefined : details,
     label: label ? label : undefined,
     message: undefined,
     percent: clampPercent(getRomWeaverRunEventPercent(event)),
+    stage: typeof event.stage === "string" && event.stage ? event.stage : undefined,
   };
 };
 
