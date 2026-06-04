@@ -7,10 +7,11 @@ use rom_weaver_core::{
 };
 
 use super::{
-    BPS_CREATE_MEMORY_LIMIT_BYTES, BPS_MAGIC, BpsAction, BpsPatchHandler,
-    bps_create_copy_match_is_worth, bps_create_estimated_suffix_memory_bytes, crc32_bytes,
-    encode_signed_offset, initial_bps_sorted_target_len, next_bps_sorted_target_len,
-    parse_bps_bytes, push_varint,
+    BPS_CREATE_MEMORY_LIMIT_BYTES, BPS_MAGIC, BpsAction, BpsCombinedSuffixMatcher, BpsCreateData,
+    BpsCreateProgress, BpsPatchHandler, BpsSuffixIndexMode, bps_create_copy_match_is_worth,
+    bps_create_estimated_low_memory_suffix_bytes, bps_create_estimated_suffix_memory_bytes,
+    bps_create_suffix_index_mode, crc32_bytes, encode_signed_offset, initial_bps_sorted_target_len,
+    next_bps_sorted_target_len, parse_bps_bytes, push_varint,
 };
 use crate::{
     BPS,
@@ -430,6 +431,10 @@ fn create_rejects_inputs_that_exceed_suffix_memory_budget_before_reading() {
         bps_create_estimated_suffix_memory_bytes(sparse_len, sparse_len).expect("estimate")
             > u128::from(BPS_CREATE_MEMORY_LIMIT_BYTES)
     );
+    assert!(
+        bps_create_estimated_low_memory_suffix_bytes(sparse_len, sparse_len).expect("estimate")
+            > u128::from(BPS_CREATE_MEMORY_LIMIT_BYTES)
+    );
 
     let handler = BpsPatchHandler::new(&BPS);
     let error = handler
@@ -444,7 +449,74 @@ fn create_rejects_inputs_that_exceed_suffix_memory_budget_before_reading() {
         )
         .expect_err("oversized suffix index should fail before reading sparse files");
 
-    assert!(error.to_string().contains("suffix-index memory"));
+    assert!(
+        error
+            .to_string()
+            .contains("lower-memory suffix-index memory")
+    );
+}
+
+#[test]
+fn create_uses_lower_memory_suffix_lookup_when_reverse_index_exceeds_budget() {
+    let source_len = 64 * 1024 * 1024;
+    let target_len = 64 * 1024 * 1024;
+
+    assert!(
+        bps_create_estimated_suffix_memory_bytes(source_len, target_len).expect("fast estimate")
+            > u128::from(BPS_CREATE_MEMORY_LIMIT_BYTES)
+    );
+    assert!(
+        bps_create_estimated_low_memory_suffix_bytes(source_len, target_len)
+            .expect("low-memory estimate")
+            <= u128::from(BPS_CREATE_MEMORY_LIMIT_BYTES)
+    );
+    assert_eq!(
+        bps_create_suffix_index_mode(source_len, target_len).expect("mode"),
+        BpsSuffixIndexMode::LowMemory
+    );
+}
+
+#[test]
+fn lower_memory_suffix_lookup_matches_reverse_index_candidates() {
+    let temp = TestDir::new();
+    let target = b"abcabcZZabcabcYYYYabcabc".to_vec();
+    let source = b"----abcabc----YYYYabcabc".to_vec();
+    let mut bytes = target.clone();
+    bytes.extend_from_slice(&source);
+    let data = BpsCreateData {
+        bytes,
+        target_len: target.len(),
+        source_len: source.len(),
+    };
+    let context = test_context_with_threads(&temp, 1);
+    let mut fast_progress = BpsCreateProgress::new(&context, "BPS", target.len() as u64);
+    let mut low_progress = BpsCreateProgress::new(&context, "BPS", target.len() as u64);
+    let mut fast = BpsCombinedSuffixMatcher::new(
+        &data,
+        BpsSuffixIndexMode::FastReverse,
+        &context,
+        &mut fast_progress,
+    )
+    .expect("fast matcher");
+    let mut low = BpsCombinedSuffixMatcher::new(
+        &data,
+        BpsSuffixIndexMode::LowMemory,
+        &context,
+        &mut low_progress,
+    )
+    .expect("low-memory matcher");
+
+    for output_offset in 0..target.len() {
+        fast.ensure_indexed(output_offset, &context, &mut fast_progress)
+            .expect("fast reindex");
+        low.ensure_indexed(output_offset, &context, &mut low_progress)
+            .expect("low reindex");
+        assert_eq!(
+            low.find(output_offset).expect("low candidate"),
+            fast.find(output_offset).expect("fast candidate"),
+            "candidate mismatch at output offset {output_offset}"
+        );
+    }
 }
 
 #[test]

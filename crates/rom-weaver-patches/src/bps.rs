@@ -1,4 +1,5 @@
 use std::{
+    cmp::Ordering,
     fs::{self, File, OpenOptions},
     io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write},
     path::Path,
@@ -281,6 +282,12 @@ enum BpsCreateMode {
     TargetRead,
     SourceCopy,
     TargetCopy,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum BpsSuffixIndexMode {
+    FastReverse,
+    LowMemory,
 }
 
 fn parse_bps_file(path: &Path) -> Result<ParsedBpsPatch> {
@@ -803,7 +810,7 @@ fn create_bps_patch_in_memory(
             crate::IN_MEMORY_APPLY_LIMIT_BYTES
         )));
     }
-    validate_bps_create_memory_budget(original_len, modified_len)?;
+    let suffix_index_mode = bps_create_suffix_index_mode(original_len, modified_len)?;
 
     let mut progress = BpsCreateProgress::new(context, format_name, modified_len);
     progress.report(0.0, "reading BPS create inputs");
@@ -814,7 +821,8 @@ fn create_bps_patch_in_memory(
     let source_checksum = crc32_slice(source);
     let target_checksum = crc32_slice(target);
     progress.report(3.0, "indexing BPS copy candidates");
-    let mut combined_matcher = BpsCombinedSuffixMatcher::new(&create_data, context, &mut progress)?;
+    let mut combined_matcher =
+        BpsCombinedSuffixMatcher::new(&create_data, suffix_index_mode, context, &mut progress)?;
 
     let mut created = CreatedBpsPatch::default();
     let mut writer = BpsCreateWriter::new(output);
@@ -842,7 +850,7 @@ fn create_bps_patch_in_memory(
             best_offset = output_offset;
         }
 
-        let candidate = combined_matcher.find(output_offset);
+        let candidate = combined_matcher.find(output_offset)?;
         if candidate.len > best_len {
             best_mode = candidate.mode;
             best_len = candidate.len;
@@ -921,7 +929,7 @@ fn create_bps_patch_in_memory(
     Ok(created)
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct BpsCreateMatch {
     mode: BpsCreateMode,
     offset: usize,
@@ -1035,6 +1043,7 @@ impl<'a> BpsJoinedSuffixBytes<'a> {
 
 struct BpsCombinedSuffixMatcher<'a> {
     data: &'a BpsCreateData,
+    index_mode: BpsSuffixIndexMode,
     sorted_target_len: usize,
     joined: BpsJoinedSuffixBytes<'a>,
     sorted: Vec<u32>,
@@ -1044,11 +1053,13 @@ struct BpsCombinedSuffixMatcher<'a> {
 impl<'a> BpsCombinedSuffixMatcher<'a> {
     fn new(
         data: &'a BpsCreateData,
+        index_mode: BpsSuffixIndexMode,
         context: &OperationContext,
         progress: &mut BpsCreateProgress<'_>,
     ) -> Result<Self> {
         let mut matcher = Self {
             data,
+            index_mode,
             sorted_target_len: 0,
             joined: BpsJoinedSuffixBytes::empty(),
             sorted: Vec::new(),
@@ -1117,24 +1128,26 @@ impl<'a> BpsCombinedSuffixMatcher<'a> {
         self.sorted = sorted;
         context.cancel().check()?;
 
-        let mut reverse = Vec::new();
-        try_reserve_exact(&mut reverse, self.sorted.len(), "BPS suffix reverse index")?;
-        reverse.resize(self.sorted.len(), 0u32);
-        for (rank, &position) in self.sorted.iter().enumerate() {
-            if rank % COPY_BUFFER_SIZE == 0 {
-                context.cancel().check()?;
+        if self.index_mode == BpsSuffixIndexMode::FastReverse {
+            let mut reverse = Vec::new();
+            try_reserve_exact(&mut reverse, self.sorted.len(), "BPS suffix reverse index")?;
+            reverse.resize(self.sorted.len(), 0u32);
+            for (rank, &position) in self.sorted.iter().enumerate() {
+                if rank % COPY_BUFFER_SIZE == 0 {
+                    context.cancel().check()?;
+                }
+                reverse[position as usize] = u32::try_from(rank).map_err(|_| {
+                    RomWeaverError::Validation("BPS suffix-array rank exceeded u32".into())
+                })?;
             }
-            reverse[position as usize] = u32::try_from(rank).map_err(|_| {
-                RomWeaverError::Validation("BPS suffix-array rank exceeded u32".into())
-            })?;
+            self.reverse = reverse;
         }
-        self.reverse = reverse;
         progress.report_indexed(sorted_target_len);
         Ok(())
     }
 
-    fn find(&self, output_offset: usize) -> BpsCreateMatch {
-        let rank = self.reverse[output_offset] as usize;
+    fn find(&self, output_offset: usize) -> Result<BpsCreateMatch> {
+        let rank = self.rank_for_output_offset(output_offset)?;
         let previous = self.nearest_legal(rank, -1, output_offset);
         let next = self.nearest_legal(rank, 1, output_offset);
         let mut best = BpsCreateMatch::default();
@@ -1146,7 +1159,34 @@ impl<'a> BpsCombinedSuffixMatcher<'a> {
             }
         }
 
-        best
+        Ok(best)
+    }
+
+    fn rank_for_output_offset(&self, output_offset: usize) -> Result<usize> {
+        match self.index_mode {
+            BpsSuffixIndexMode::FastReverse => Ok(self.reverse[output_offset] as usize),
+            BpsSuffixIndexMode::LowMemory => self.find_suffix_rank(output_offset),
+        }
+    }
+
+    fn find_suffix_rank(&self, output_offset: usize) -> Result<usize> {
+        let bytes = self.joined.as_slice();
+        let mut low = 0usize;
+        let mut high = self.sorted.len();
+
+        while low < high {
+            let mid = low + (high - low) / 2;
+            let position = self.sorted[mid] as usize;
+            match compare_bps_suffixes(bytes, position, output_offset) {
+                Ordering::Less => low = mid + 1,
+                Ordering::Greater => high = mid,
+                Ordering::Equal => return Ok(mid),
+            }
+        }
+
+        Err(RomWeaverError::Validation(
+            "BPS lower-memory suffix lookup lost the current target suffix".into(),
+        ))
     }
 
     fn nearest_legal(&self, rank: usize, direction: isize, output_offset: usize) -> Option<usize> {
@@ -1303,27 +1343,48 @@ fn bps_varint_len(mut data: u64) -> usize {
     len
 }
 
-fn validate_bps_create_memory_budget(source_len: u64, target_len: u64) -> Result<()> {
-    let estimated = bps_create_estimated_suffix_memory_bytes(source_len, target_len)?;
-    if estimated > u128::from(BPS_CREATE_MEMORY_LIMIT_BYTES) {
-        return Err(RomWeaverError::Validation(format!(
-            "BPS create requires an estimated {estimated} bytes of suffix-index memory; limit is {} bytes",
-            BPS_CREATE_MEMORY_LIMIT_BYTES
-        )));
+fn bps_create_suffix_index_mode(source_len: u64, target_len: u64) -> Result<BpsSuffixIndexMode> {
+    let fast_estimated = bps_create_estimated_suffix_memory_bytes(source_len, target_len)?;
+    if fast_estimated <= u128::from(BPS_CREATE_MEMORY_LIMIT_BYTES) {
+        return Ok(BpsSuffixIndexMode::FastReverse);
     }
-    Ok(())
+
+    let low_memory_estimated =
+        bps_create_estimated_low_memory_suffix_bytes(source_len, target_len)?;
+    if low_memory_estimated <= u128::from(BPS_CREATE_MEMORY_LIMIT_BYTES) {
+        return Ok(BpsSuffixIndexMode::LowMemory);
+    }
+
+    Err(RomWeaverError::Validation(format!(
+        "BPS create requires an estimated {fast_estimated} bytes of fast suffix-index memory or {low_memory_estimated} bytes of lower-memory suffix-index memory; limit is {} bytes",
+        BPS_CREATE_MEMORY_LIMIT_BYTES
+    )))
 }
 
 fn bps_create_estimated_suffix_memory_bytes(source_len: u64, target_len: u64) -> Result<u128> {
+    bps_create_estimated_suffix_memory_bytes_for_index(source_len, target_len, 8)
+}
+
+fn bps_create_estimated_low_memory_suffix_bytes(source_len: u64, target_len: u64) -> Result<u128> {
+    bps_create_estimated_suffix_memory_bytes_for_index(source_len, target_len, 4)
+}
+
+fn bps_create_estimated_suffix_memory_bytes_for_index(
+    source_len: u64,
+    target_len: u64,
+    index_bytes_per_slot: u128,
+) -> Result<u128> {
     let total = u128::from(source_len)
         .checked_add(u128::from(target_len))
         .ok_or_else(|| RomWeaverError::Validation("BPS create input size overflowed".into()))?;
     let suffix_slots = total
         .checked_add(1)
         .ok_or_else(|| RomWeaverError::Validation("BPS suffix slot count overflowed".into()))?;
-    let suffix_indexes = suffix_slots.checked_mul(8).ok_or_else(|| {
-        RomWeaverError::Validation("BPS suffix memory estimate overflowed".into())
-    })?;
+    let suffix_indexes = suffix_slots
+        .checked_mul(index_bytes_per_slot)
+        .ok_or_else(|| {
+            RomWeaverError::Validation("BPS suffix memory estimate overflowed".into())
+        })?;
     total
         .checked_add(suffix_indexes)
         .ok_or_else(|| RomWeaverError::Validation("BPS create memory estimate overflowed".into()))
@@ -1456,6 +1517,22 @@ fn common_prefix_len_limited(
         offset += 1;
     }
     offset
+}
+
+fn compare_bps_suffixes(bytes: &[u8], left_offset: usize, right_offset: usize) -> Ordering {
+    if left_offset == right_offset {
+        return Ordering::Equal;
+    }
+
+    let left_len = bytes.len() - left_offset;
+    let right_len = bytes.len() - right_offset;
+    let limit = left_len.min(right_len);
+    let common = common_prefix_len_limited(bytes, left_offset, right_offset, limit);
+    if common == limit {
+        return left_len.cmp(&right_len);
+    }
+
+    bytes[left_offset + common].cmp(&bytes[right_offset + common])
 }
 
 fn read_u64_le_unaligned(bytes: &[u8], offset: usize) -> u64 {
