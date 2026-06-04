@@ -70,7 +70,14 @@
   background: var(--rw-bg);
 }
 .rw-app .wordmark { flex: none; display: inline-flex; align-items: center; gap: 8px; font-family: var(--rw-mono); font-size: 1.03448rem; font-weight: 600; letter-spacing: -.02em; color: var(--rw-ink); white-space: nowrap; }
-.rw-app .wordmark .logo { height: 26px; width: 26px; flex: none; border-radius: 6px; }
+.rw-app .wordmark .logo { height: 72px; width: 72px; flex: none; border-radius: 6px; }
+:root[data-theme="dark"] .rw-app .wordmark .logo {
+  filter:
+    drop-shadow(0 1px 0 rgba(255,255,255,.45))
+    drop-shadow(0 -1px 0 rgba(255,255,255,.45))
+    drop-shadow(1px 0 0 rgba(255,255,255,.45))
+    drop-shadow(-1px 0 0 rgba(255,255,255,.45));
+}
 .rw-app .wordmark b { color: var(--rw-accent); font-weight: 600; }
 .rw-app .wordmark .hy { color: var(--rw-ink-mut); font-weight: 400; }
 .rw-app .topbar .spacer { flex: 1; }
@@ -534,6 +541,7 @@
   .rw-modal .modal-head .btn { padding: 0; width: 30px; }
   .rw-modal .modal-head .btn .bl { display: none; }
   .rw-app .topbar { flex-wrap: wrap; row-gap: 10px; }
+  .rw-app .wordmark .logo { height: 56px; width: 56px; }
   .rw-app .topbar .spacer { display: none; }
   .rw-app .tabs { order: 3; width: 100%; } .rw-app .tab { flex: 1; }
   .rw-app .topbar .theme-toggle { margin-left: auto; }

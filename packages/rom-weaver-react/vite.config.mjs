@@ -29,14 +29,6 @@ const linkedDependencyAllowRoots = [
 
 const rootManifestSourcePath = path.join(rootDir, "src", "assets", "app", "root", "manifest.json");
 const rootStaticAssetSources = {
-  "/apple-touch-icon-precomposed.png": path.join(
-    rootDir,
-    "src",
-    "assets",
-    "app",
-    "root",
-    "apple-touch-icon-precomposed.png",
-  ),
   "/apple-touch-icon.png": path.join(rootDir, "src", "assets", "app", "root", "apple-touch-icon.png"),
   "/favicon.ico": path.join(rootDir, "src", "assets", "app", "root", "favicon.ico"),
   "/logo.png": path.join(rootDir, "src", "assets", "app", "logo.png"),
@@ -298,7 +290,6 @@ export default defineConfig(({ command }) => {
             "logo.png",
             "favicon.ico",
             "apple-touch-icon.png",
-            "apple-touch-icon-precomposed.png",
             "assets/**/*.{css,js,mjs,json,png,svg,jpg,jpeg,webp,woff2,wasm}",
           ],
           maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
