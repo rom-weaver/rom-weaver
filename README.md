@@ -134,6 +134,7 @@ Notes:
 
 - `patch apply` accepts repeated `--patch` and applies patches sequentially.
 - Patch checksum validation is strict by default for formats that embed checksums; use `--ignore-checksum-validation` to skip it.
+- RUP apply honors legacy Ninja2 console normalization for existing patches. RUP create emits generic single-file `rom_type = 0` patches rather than console-normalized RUP variants.
 
 ## Container And Compression Format Support
 

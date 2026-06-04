@@ -6,8 +6,8 @@ use rom_weaver_core::{
 };
 
 use super::{
-    RUP_COMMAND_OPEN_NEW_FILE, RupFile, RupMetadata, RupPatchHandler, create_rup_patch_bytes,
-    encode_rup_patch, format_md5_hex, md5_bytes, parse_rup_bytes,
+    RUP_COMMAND_OPEN_NEW_FILE, RupFile, RupMetadata, RupPatchHandler, build_xor_records,
+    create_rup_patch_bytes, encode_rup_patch, format_md5_hex, md5_bytes, parse_rup_bytes,
 };
 use crate::{
     RUP,
@@ -108,6 +108,372 @@ fn parse_reports_md5_for_each_variant() {
         format_md5_hex(source_md5_b),
         format_md5_hex(target_md5_b)
     )));
+}
+
+#[test]
+fn apply_normalizes_nes_ines_header_and_preserves_it_on_reverse() {
+    let temp = TestDir::new();
+    let source_path = temp.child("source.nes");
+    let patched_path = temp.child("patched.nes");
+    let reverse_path = temp.child("reverse.nes");
+    let patch_path = temp.child("update.rup");
+
+    let mut header = b"NES\x1A".to_vec();
+    header.resize(0x10, 0);
+    let source_payload = b"ABCDEFGH".to_vec();
+    let target_payload = b"ABCXEFGH".to_vec();
+    let source = [header.as_slice(), source_payload.as_slice()].concat();
+    let target = [header.as_slice(), target_payload.as_slice()].concat();
+    fs::write(&source_path, &source).expect("source");
+    fs::write(
+        &patch_path,
+        typed_rup_patch(&source_payload, &target_payload, 1),
+    )
+    .expect("patch");
+
+    let handler = RupPatchHandler::new(&RUP);
+    handler
+        .apply(
+            &PatchApplyRequest {
+                input: source_path,
+                patches: vec![patch_path.clone()],
+                output: patched_path.clone(),
+            },
+            &test_context_with_threads(&temp, 2),
+        )
+        .expect("apply");
+    assert_eq!(fs::read(&patched_path).expect("patched"), target);
+
+    handler
+        .apply(
+            &PatchApplyRequest {
+                input: patched_path,
+                patches: vec![patch_path],
+                output: reverse_path.clone(),
+            },
+            &test_context_with_threads(&temp, 2),
+        )
+        .expect("reverse");
+    assert_eq!(fs::read(reverse_path).expect("reverse"), source);
+}
+
+#[test]
+fn apply_normalizes_unif_prg_chr_payloads() {
+    let temp = TestDir::new();
+    let source_path = temp.child("source.unif");
+    let output_path = temp.child("output.unif");
+    let patch_path = temp.child("update.rup");
+
+    let source_payload = b"PRG1CHR1".to_vec();
+    let target_payload = b"PRG2CHR2".to_vec();
+    let source = unif_fixture(b"PRG1", b"CHR1");
+    let target = unif_fixture(b"PRG2", b"CHR2");
+    fs::write(&source_path, &source).expect("source");
+    fs::write(
+        &patch_path,
+        typed_rup_patch(&source_payload, &target_payload, 1),
+    )
+    .expect("patch");
+
+    let handler = RupPatchHandler::new(&RUP);
+    handler
+        .apply(
+            &PatchApplyRequest {
+                input: source_path,
+                patches: vec![patch_path],
+                output: output_path.clone(),
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect("apply");
+
+    assert_eq!(fs::read(output_path).expect("output"), target);
+}
+
+#[test]
+fn apply_normalizes_snes_copier_header_and_preserves_nsrt_header() {
+    let temp = TestDir::new();
+    let source_path = temp.child("source.sfc");
+    let output_path = temp.child("output.sfc");
+    let patch_path = temp.child("update.rup");
+
+    let mut header = vec![0u8; 0x200];
+    header[0x1e8..0x1ec].copy_from_slice(b"NSRT");
+    let mut source_payload = vec![0u8; 0x8000];
+    source_payload[0x7fd5] = 0;
+    source_payload[0x7fdc..0x7fde].copy_from_slice(&0x4321u16.to_le_bytes());
+    source_payload[0x7fde..0x7fe0].copy_from_slice(&0xbcdeu16.to_le_bytes());
+    let mut target_payload = source_payload.clone();
+    target_payload[0x40] = 0x77;
+    let expected = [header.as_slice(), target_payload.as_slice()].concat();
+    fs::write(
+        &source_path,
+        [header.as_slice(), source_payload.as_slice()].concat(),
+    )
+    .expect("source");
+    fs::write(
+        &patch_path,
+        typed_rup_patch(&source_payload, &target_payload, 3),
+    )
+    .expect("patch");
+
+    let handler = RupPatchHandler::new(&RUP);
+    handler
+        .apply(
+            &PatchApplyRequest {
+                input: source_path,
+                patches: vec![patch_path],
+                output: output_path.clone(),
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect("apply");
+
+    assert_eq!(fs::read(output_path).expect("output"), expected);
+}
+
+#[test]
+fn apply_normalizes_snes_interleaved_payload_to_native_output() {
+    let temp = TestDir::new();
+    let source_path = temp.child("source.smc");
+    let output_path = temp.child("output.sfc");
+    let patch_path = temp.child("update.rup");
+
+    let mut interleaved_source = vec![0u8; 0x10000];
+    for (index, byte) in interleaved_source.iter_mut().enumerate() {
+        *byte = ((index * 7) & 0xff) as u8;
+    }
+    interleaved_source[0x7fd5] = 1;
+    interleaved_source[0x7fdc..0x7fde].copy_from_slice(&0x1357u16.to_le_bytes());
+    interleaved_source[0x7fde..0x7fe0].copy_from_slice(&0xeca8u16.to_le_bytes());
+    let source_native = super::deinterleave_snes_payload(&interleaved_source);
+    let mut target_native = source_native.clone();
+    target_native[0x100] ^= 0x33;
+    fs::write(&source_path, interleaved_source).expect("source");
+    fs::write(
+        &patch_path,
+        typed_rup_patch(&source_native, &target_native, 3),
+    )
+    .expect("patch");
+
+    let handler = RupPatchHandler::new(&RUP);
+    handler
+        .apply(
+            &PatchApplyRequest {
+                input: source_path,
+                patches: vec![patch_path],
+                output: output_path.clone(),
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect("apply");
+
+    assert_eq!(fs::read(output_path).expect("output"), target_native);
+}
+
+#[test]
+fn apply_normalizes_n64_byte_swapped_input_to_native_output() {
+    let temp = TestDir::new();
+    let source_path = temp.child("source.v64");
+    let output_path = temp.child("output.z64");
+    let patch_path = temp.child("update.rup");
+
+    let source_native = vec![0x80, 0x37, 0x12, 0x40, 0xAA, 0x55];
+    let mut target_native = source_native.clone();
+    target_native[5] = 0x66;
+    fs::write(&source_path, byte_swap_pairs(&source_native)).expect("source");
+    fs::write(
+        &patch_path,
+        typed_rup_patch(&source_native, &target_native, 4),
+    )
+    .expect("patch");
+
+    let handler = RupPatchHandler::new(&RUP);
+    handler
+        .apply(
+            &PatchApplyRequest {
+                input: source_path,
+                patches: vec![patch_path],
+                output: output_path.clone(),
+            },
+            &test_context_with_threads(&temp, 2),
+        )
+        .expect("apply");
+
+    assert_eq!(fs::read(output_path).expect("output"), target_native);
+}
+
+#[test]
+fn apply_normalizes_copier_headers_that_multipatch_drops() {
+    let temp = TestDir::new();
+    let gb_source = temp.child("source.gb");
+    let gb_output = temp.child("output.gb");
+    let gb_patch = temp.child("update-gb.rup");
+    let pce_source = temp.child("source.pce");
+    let pce_output = temp.child("output.pce");
+    let pce_patch = temp.child("update-pce.rup");
+
+    let gb_payload = vec![0x11; 0x4000];
+    let mut gb_target = gb_payload.clone();
+    gb_target[3] = 0x22;
+    fs::write(&gb_source, [vec![0xAB; 0x200], gb_payload.clone()].concat()).expect("gb source");
+    fs::write(&gb_patch, typed_rup_patch(&gb_payload, &gb_target, 5)).expect("gb patch");
+
+    let pce_payload = vec![0x44; 0x1000];
+    let mut pce_target = pce_payload.clone();
+    pce_target[4] = 0x55;
+    fs::write(
+        &pce_source,
+        [vec![0xCD; 0x200], pce_payload.clone()].concat(),
+    )
+    .expect("pce source");
+    fs::write(&pce_patch, typed_rup_patch(&pce_payload, &pce_target, 8)).expect("pce patch");
+
+    let handler = RupPatchHandler::new(&RUP);
+    handler
+        .apply(
+            &PatchApplyRequest {
+                input: gb_source,
+                patches: vec![gb_patch],
+                output: gb_output.clone(),
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect("gb apply");
+    handler
+        .apply(
+            &PatchApplyRequest {
+                input: pce_source,
+                patches: vec![pce_patch],
+                output: pce_output.clone(),
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect("pce apply");
+
+    assert_eq!(fs::read(gb_output).expect("gb output"), gb_target);
+    assert_eq!(fs::read(pce_output).expect("pce output"), pce_target);
+}
+
+#[test]
+fn apply_normalizes_lynx_header_and_preserves_it() {
+    let temp = TestDir::new();
+    let source_path = temp.child("source.lnx");
+    let output_path = temp.child("output.lnx");
+    let patch_path = temp.child("update.rup");
+
+    let mut header = b"LYNX".to_vec();
+    header.resize(0x40, 0x9A);
+    let source_payload = b"lynxdata".to_vec();
+    let target_payload = b"lynxDATA".to_vec();
+    fs::write(
+        &source_path,
+        [header.as_slice(), source_payload.as_slice()].concat(),
+    )
+    .expect("source");
+    fs::write(
+        &patch_path,
+        typed_rup_patch(&source_payload, &target_payload, 9),
+    )
+    .expect("patch");
+
+    let handler = RupPatchHandler::new(&RUP);
+    handler
+        .apply(
+            &PatchApplyRequest {
+                input: source_path,
+                patches: vec![patch_path],
+                output: output_path.clone(),
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect("apply");
+
+    assert_eq!(
+        fs::read(output_path).expect("output"),
+        [header.as_slice(), target_payload.as_slice()].concat()
+    );
+}
+
+#[test]
+fn apply_normalizes_smd_interleaved_genesis_input() {
+    let temp = TestDir::new();
+    let source_path = temp.child("source.smd");
+    let output_path = temp.child("output.bin");
+    let patch_path = temp.child("update.rup");
+
+    let mut source_payload = vec![0u8; 0x4000];
+    for (index, byte) in source_payload.iter_mut().enumerate() {
+        *byte = (index & 0xff) as u8;
+    }
+    let mut target_payload = source_payload.clone();
+    target_payload[17] ^= 0x5a;
+    let mut header = vec![0u8; 0x200];
+    header[8] = 0xaa;
+    header[9] = 0xbb;
+    fs::write(
+        &source_path,
+        [header, smd_interleave_block(&source_payload)].concat(),
+    )
+    .expect("source");
+    fs::write(
+        &patch_path,
+        typed_rup_patch(&source_payload, &target_payload, 7),
+    )
+    .expect("patch");
+
+    let handler = RupPatchHandler::new(&RUP);
+    handler
+        .apply(
+            &PatchApplyRequest {
+                input: source_path,
+                patches: vec![patch_path],
+                output: output_path.clone(),
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect("apply");
+
+    assert_eq!(fs::read(output_path).expect("output"), target_payload);
+}
+
+#[test]
+fn apply_rejects_named_rup_entries_for_single_file_apply() {
+    let temp = TestDir::new();
+    let source_path = temp.child("source.bin");
+    let patch_path = temp.child("named.rup");
+    let output_path = temp.child("output.bin");
+    fs::write(&source_path, b"source").expect("source");
+    let patch = encode_rup_patch(
+        &RupMetadata::default(),
+        &[RupFile {
+            file_name: "nested.bin".to_string(),
+            rom_type: 0,
+            source_file_size: 6,
+            target_file_size: 6,
+            source_md5: md5_bytes(b"source"),
+            target_md5: md5_bytes(b"target"),
+            overflow_mode: None,
+            overflow_data: Vec::new(),
+            records: build_xor_records(b"source", b"target").expect("records"),
+        }],
+    )
+    .expect("patch");
+    fs::write(&patch_path, patch).expect("patch file");
+
+    let handler = RupPatchHandler::new(&RUP);
+    let error = handler
+        .apply(
+            &PatchApplyRequest {
+                input: source_path,
+                patches: vec![patch_path],
+                output: output_path,
+            },
+            &test_context_with_threads(&temp, 1),
+        )
+        .expect_err("named entries are unsupported");
+
+    assert!(error.to_string().contains("named file entries"));
 }
 
 #[test]
@@ -551,5 +917,59 @@ fn create_is_deterministic_across_thread_budgets() {
         fs::read(single_patch).expect("single patch"),
         fs::read(parallel_patch).expect("parallel patch")
     );
+}
+
+fn typed_rup_patch(source_payload: &[u8], target_payload: &[u8], rom_type: u8) -> Vec<u8> {
+    assert_eq!(source_payload.len(), target_payload.len());
+    encode_rup_patch(
+        &RupMetadata::default(),
+        &[RupFile {
+            file_name: String::new(),
+            rom_type,
+            source_file_size: source_payload.len() as u64,
+            target_file_size: target_payload.len() as u64,
+            source_md5: md5_bytes(source_payload),
+            target_md5: md5_bytes(target_payload),
+            overflow_mode: None,
+            overflow_data: Vec::new(),
+            records: build_xor_records(source_payload, target_payload).expect("records"),
+        }],
+    )
+    .expect("typed rup patch")
+}
+
+fn unif_fixture(prg: &[u8], chr: &[u8]) -> Vec<u8> {
+    let mut bytes = b"UNIF".to_vec();
+    bytes.resize(0x20, 0);
+    push_unif_chunk(&mut bytes, b"NAME", b"keep");
+    push_unif_chunk(&mut bytes, b"PRG0", prg);
+    push_unif_chunk(&mut bytes, b"CHR0", chr);
+    bytes
+}
+
+fn push_unif_chunk(bytes: &mut Vec<u8>, id: &[u8; 4], data: &[u8]) {
+    bytes.extend_from_slice(id);
+    bytes.extend_from_slice(&(data.len() as u32).to_le_bytes());
+    bytes.extend_from_slice(data);
+}
+
+fn byte_swap_pairs(bytes: &[u8]) -> Vec<u8> {
+    assert_eq!(bytes.len() % 2, 0);
+    let mut output = Vec::with_capacity(bytes.len());
+    for pair in bytes.chunks_exact(2) {
+        output.push(pair[1]);
+        output.push(pair[0]);
+    }
+    output
+}
+
+fn smd_interleave_block(payload: &[u8]) -> Vec<u8> {
+    assert_eq!(payload.len(), 0x4000);
+    let mut output = vec![0u8; payload.len()];
+    for index in 0..0x2000 {
+        output[index] = payload[index * 2];
+        output[0x2000 + index] = payload[(index * 2) + 1];
+    }
+    output
 }
 /* jscpd:ignore-end */
