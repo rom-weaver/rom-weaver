@@ -67,9 +67,8 @@ const toExtractionLevels = (
   entries: ArchivePathEntry[] | undefined,
 ): ExtractionLevel[] => {
   const levels: ExtractionLevel[] = (entries ?? []).map((entry) => {
-    // Each chain level shows that file's own stored size (the prototype's
-    // "original → extracted" reads outer-archive size → final ROM size), so prefer
-    // sourceSize; outputSize is the decompressed payload and only a fallback.
+    // Each chain level shows that file's own stored size, so prefer sourceSize;
+    // outputSize is the decompressed payload and only a fallback.
     const levelSize = entry.sourceSize ?? entry.outputSize;
     return {
       name: entry.fileName,

@@ -1,7 +1,7 @@
 /**
- * Output "Compress" panel model (prototype `.outopts`). Maps the selected output
- * format to the editable compression controls (codec / level / codec-lists), with
- * values defaulting to the active settings and edits applied as per-job overrides.
+ * Output "Compress" panel model. Maps the selected output format to the editable
+ * compression controls (codec / level / codec-lists), with values defaulting to
+ * the active settings and edits applied as per-job overrides.
  *
  * The override target is the same flat settings shape the run consumes (top-level
  * `zipCodec`, `sevenZipCodec`, `compressionProfile`, `rvzCompression`, …), so

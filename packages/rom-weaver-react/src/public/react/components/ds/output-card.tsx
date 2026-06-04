@@ -2,10 +2,10 @@ import ChevronRight from "lucide-react/dist/esm/icons/chevron-right.js";
 import type { ReactNode } from "react";
 
 /**
- * Output section (prototype `.outcard`): the filename field grouped with a
- * format selector, an optional collapsible "Compress" panel (codec/level/archive
- * overrides), and a caller-supplied action (run button or inline progress).
- * Shared by apply, create, and trim outputs.
+ * Output section: the filename field grouped with a format selector, an
+ * optional collapsible "Compress" panel (codec/level/archive overrides), and a
+ * caller-supplied action (run button or inline progress). Shared by apply,
+ * create, and trim outputs.
  */
 
 type FormatOption = { value: string; label: string };

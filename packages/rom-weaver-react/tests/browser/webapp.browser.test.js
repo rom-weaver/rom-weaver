@@ -4,8 +4,8 @@ import { beforeEach, expect, test } from "vitest";
 import { page } from "vitest/browser";
 import { createEmptyPageUpdateState } from "../../src/webapp/page-update-state.ts";
 import { getDefaultSettings } from "../../src/webapp/settings/settings-state.ts";
-import { createEmptyConfirmationDialogState } from "../../src/webapp/webapp-layout.tsx";
 import { WebappRoot } from "../../src/webapp/webapp-root.tsx";
+import { createEmptyConfirmationDialogState } from "../../src/webapp/webapp-root-types.ts";
 import {
   createEmptyCreatorSessionState,
   createEmptyPatcherSessionState,

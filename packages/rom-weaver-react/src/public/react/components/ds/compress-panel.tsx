@@ -2,9 +2,9 @@ import type { CompressField } from "../../compress-options.ts";
 import { OutputField } from "./output-card.tsx";
 
 /**
- * Body of the output "Compress" collapsible (prototype `.outopts-body`): one
- * labeled control per compression field. Edits are forwarded as per-job overrides
- * via `onChange(settingsKey, value)`. Shared by the apply, create, and trim outputs.
+ * Body of the output "Compress" collapsible: one labeled control per compression
+ * field. Edits are forwarded as per-job overrides via `onChange(settingsKey,
+ * value)`. Shared by the apply, create, and trim outputs.
  */
 const CompressPanelBody = ({
   fields,

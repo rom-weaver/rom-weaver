@@ -463,7 +463,7 @@ const normalizePatcherUiState = (
     };
   };
   const normalizedRomInputs = romInputs.map((row, index) => normalizeRomInputRow(row, index));
-  const shouldFallbackLegacyRomInput =
+  const shouldUseSingleRomInputFallback =
     !normalizedRomInputs.length &&
     (!!normalizeInputProgress(romInput.progress) ||
       !!romInput.loading ||
@@ -554,7 +554,7 @@ const normalizePatcherUiState = (
       progress: normalizeInputProgress(romInput.progress),
       valid: !!romInput.valid,
     },
-    romInputs: shouldFallbackLegacyRomInput
+    romInputs: shouldUseSingleRomInputFallback
       ? [
           normalizeRomInputRow({ ...romInput, id: "input", info: romInfo }, 0, {
             checksumTiming: typeof sectionTimings.checksum === "string" ? sectionTimings.checksum : "",

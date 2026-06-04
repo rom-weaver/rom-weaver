@@ -6,9 +6,9 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { createLogger } from "../../../../lib/logging.ts";
 
 /**
- * Collapsible checksum / patch-info section (prototype `.cks`). Rows copy to the
- * clipboard on click with a brief confirmation. Shared by ROM inputs, patch
- * info, and create-output verification so the copy behaviour lives in one place.
+ * Collapsible checksum / patch-info section. Rows copy to the clipboard on
+ * click with a brief confirmation. Shared by ROM inputs, patch info, and
+ * create-output verification so the copy behaviour lives in one place.
  */
 
 const logger = createLogger("checksum-list");
@@ -42,7 +42,7 @@ const ChecksumRow = ({
 
   // Fallback for non-secure contexts (e.g. a self-signed LAN cert on iOS) where
   // navigator.clipboard is unavailable — selection + execCommand still copies there.
-  const legacyCopy = (value: string): boolean => {
+  const execCommandCopy = (value: string): boolean => {
     if (typeof document === "undefined") return false;
     const textarea = document.createElement("textarea");
     textarea.value = value;
@@ -65,12 +65,12 @@ const ChecksumRow = ({
     const clipboard = typeof navigator === "undefined" ? undefined : navigator.clipboard;
     if (clipboard?.writeText) {
       clipboard.writeText(text).then(markCopied, () => {
-        if (legacyCopy(text)) markCopied();
+        if (execCommandCopy(text)) markCopied();
         else logger.trace("Checksum copy failed");
       });
       return;
     }
-    if (legacyCopy(text)) markCopied();
+    if (execCommandCopy(text)) markCopied();
     else logger.trace("Clipboard unavailable; skipping checksum copy");
   };
 

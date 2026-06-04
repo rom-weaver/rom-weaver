@@ -10,8 +10,8 @@ import { ConfirmDialog, Modal } from "../public/react/components/ds/index.ts";
 import { ApplyPatchForm, CreatePatchForm, RomWeaverSettingsProvider, TrimPatchForm } from "../public/react/index.tsx";
 import { APP_BUILD_VERSION } from "./build-version.ts";
 import { Banner, Footer, Topbar } from "./components/shell.tsx";
+import { ProcessingWakeLockNotice } from "./components/wake-lock-notice.tsx";
 import { getSettingsUiState } from "./settings/settings-state.ts";
-import { ProcessingWakeLockNotice } from "./webapp-layout.tsx";
 import type { WebappRootProps } from "./webapp-root-types.ts";
 import { SettingsPanel } from "./webapp-settings";
 

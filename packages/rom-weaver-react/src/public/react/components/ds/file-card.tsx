@@ -4,10 +4,10 @@ import X from "lucide-react/dist/esm/icons/x.js";
 import type { ReactNode } from "react";
 
 /**
- * Resolved-file card (prototype `.file`). One component for every workflow's
- * input rows: ROM/original/modified (index badge + clear button) and patches
- * (reorder controls + remove + target pill). The name area and collapsible
- * sections (extraction tree, checksums, fixes) are supplied as children.
+ * Resolved-file card for every workflow's input rows: ROM/original/modified
+ * (index badge + clear button) and patches (reorder controls + remove + target
+ * pill). The name area and collapsible sections (extraction tree, checksums,
+ * fixes) are supplied as children.
  */
 
 const join = (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(" ");

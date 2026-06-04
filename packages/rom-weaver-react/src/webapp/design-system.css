@@ -1,6 +1,6 @@
 /* ───────────────────────────────────────────────────────────────
    RomWeaver — "pro tool, flat & dense" design system (light + dark)
-   Ported from docs/design/dark-pro-prototype.html. Tokens are
+   Tokens are
    namespaced --rw-* and every component rule is scoped under .rw-app
    so this sheet stays dormant until the redesigned root mounts.
    ─────────────────────────────────────────────────────────────── */

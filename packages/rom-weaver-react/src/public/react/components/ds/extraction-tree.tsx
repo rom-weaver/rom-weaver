@@ -1,11 +1,10 @@
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right.js";
 
 /**
- * Nested-extraction view (prototype `.chain` + collapsible "Extract"). When a
- * ROM/patch came from one or more archives, the final extracted file is shown
- * on its own line and the full archive chain (with sizes, ratio, and timings)
- * lives in a collapsible section. A single, non-nested file renders just its
- * name. Shared by every workflow's file card.
+ * Nested-extraction view. When a ROM/patch came from one or more archives, the
+ * final extracted file is shown on its own line and the full archive chain (with
+ * sizes, ratio, and timings) lives in a collapsible section. A single,
+ * non-nested file renders just its name. Shared by every workflow's file card.
  */
 
 const join = (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(" ");

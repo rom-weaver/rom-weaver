@@ -17,6 +17,15 @@ type ConfirmationDialogState = {
   level: "error" | "warning";
 };
 
+const createEmptyConfirmationDialogState = (): ConfirmationDialogState => ({
+  cancelLabel: "Cancel",
+  confirmLabel: "Continue",
+  level: "warning",
+  message: "",
+  open: false,
+  title: "",
+});
+
 type WebappRootProps = {
   state: {
     creatorSession: CreatorSessionState;
@@ -64,3 +73,4 @@ type WebappRootProps = {
 };
 
 export type { ConfirmationDialogState, WebappRootProps, WorkflowView };
+export { createEmptyConfirmationDialogState };

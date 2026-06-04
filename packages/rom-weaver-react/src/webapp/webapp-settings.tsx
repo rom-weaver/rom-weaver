@@ -49,7 +49,7 @@ const settingsPanelSections: Array<{ fields: SettingsFieldKey[]; title: string }
 ];
 
 // Per-format groups render in the two-column grid (`.setcols`); the general
-// groups above them stay full-width, matching the dark-pro prototype layout.
+// groups above them stay full-width in the grouped settings layout.
 const FORMAT_GROUP_TITLES = new Set(["ZIP", "7z", "RVZ", "CHD", "z3ds"]);
 
 const TOGGLE_KINDS = new Set(["checkbox", "choice-checkbox"]);

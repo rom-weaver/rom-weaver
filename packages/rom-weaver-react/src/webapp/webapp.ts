@@ -16,8 +16,8 @@ import {
   shouldWarnBeforeUnload,
 } from "./unload-guard.ts";
 import { createWebappRootController, readWorkflowViewFromHash } from "./webapp-controller.ts";
-import { type ConfirmationDialogState, createEmptyConfirmationDialogState } from "./webapp-layout.tsx";
 import { WebappRoot } from "./webapp-root.tsx";
+import { type ConfirmationDialogState, createEmptyConfirmationDialogState } from "./webapp-root-types.ts";
 
 // Webapp controller invariants now live across `settings-state` and `webapp-controller`:
 // erudaDevTools: false

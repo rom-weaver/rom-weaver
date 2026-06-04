@@ -53,10 +53,7 @@ const runtimeScratchIgnorePatterns = [
 ];
 // Fast Refresh remounts these stateful forms and aborts active WASM runs; defer to the reload banner instead.
 const statefulReactHotUpdateRoots = [path.join(rootDir, "src", "public", "react")];
-const statefulReactHotUpdateFiles = new Set([
-  path.join(rootDir, "src", "webapp", "webapp-layout.tsx"),
-  path.join(rootDir, "src", "webapp", "webapp-root.tsx"),
-]);
+const statefulReactHotUpdateFiles = new Set([path.join(rootDir, "src", "webapp", "webapp-root.tsx")]);
 const statefulReactHotUpdateExtensionPattern = /\.[cm]?[jt]sx?$/i;
 
 const normalizePath = (filePath) => path.normalize(filePath);
@@ -107,33 +104,6 @@ const suppressNestedWorkerFactoryBundling = () => {
     },
   };
 };
-
-// Serve the design prototype (docs/design/dark-pro-prototype.html) from the dev server
-// at /prototype, rewriting its repo-relative asset paths to the dev server's /src/ root.
-const prototypeDocPath = path.join(repoRoot, "docs", "design", "dark-pro-prototype.html");
-const servePrototype = () => ({
-  apply: "serve",
-  configureServer(server) {
-    server.middlewares.use((req, res, next) => {
-      const requestPath = req.url ? req.url.split("?")[0] : "";
-      if (requestPath !== "/prototype" && requestPath !== "/prototype.html") {
-        next();
-        return;
-      }
-      fs.readFile(prototypeDocPath, "utf8", (err, html) => {
-        if (err) {
-          next(err);
-          return;
-        }
-        res.statusCode = 200;
-        res.setHeader("Content-Type", "text/html; charset=utf-8");
-        res.setHeader("Cache-Control", "no-cache");
-        res.end(html.replaceAll("../../packages/rom-weaver-react/src/", "/src/"));
-      });
-    });
-  },
-  name: "rom-weaver-prototype",
-});
 
 const serveRootStaticAssets = () => ({
   apply: "serve",
@@ -269,7 +239,6 @@ export default defineConfig(({ command }) => {
       ],
     },
     plugins: [
-      servePrototype(),
       serveRootStaticAssets(),
       deferStatefulReactHotUpdates(),
       react(),

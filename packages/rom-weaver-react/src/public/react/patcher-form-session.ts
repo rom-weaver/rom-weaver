@@ -243,9 +243,9 @@ const resolvePendingDownloadFileName = ({
   );
 };
 
-const getLegacyCompressionWorkerThreads = (settings: ApplyPatchFormSettings): number | string | undefined => {
-  const legacyThreads = (settings as { compression?: { workerThreads?: unknown } }).compression?.workerThreads;
-  if (typeof legacyThreads === "number" || typeof legacyThreads === "string") return legacyThreads;
+const getNestedCompressionWorkerThreads = (settings: ApplyPatchFormSettings): number | string | undefined => {
+  const nestedThreads = (settings as { compression?: { workerThreads?: unknown } }).compression?.workerThreads;
+  if (typeof nestedThreads === "number" || typeof nestedThreads === "string") return nestedThreads;
   return undefined;
 };
 
@@ -267,7 +267,7 @@ const createStageSettingsKey = ({
       limits: settings.limits,
       workers: {
         ...settings.workers,
-        threads: settings.workers?.threads ?? getLegacyCompressionWorkerThreads(settings) ?? workerThreads,
+        threads: settings.workers?.threads ?? getNestedCompressionWorkerThreads(settings) ?? workerThreads,
       },
     },
     (_key, value) => (typeof value === "function" ? "[function]" : value),
@@ -952,7 +952,7 @@ const useLocalApplyPatchFormSession = ({
     ? currentResolvedOutputName || generatedOutputName
     : generatedOutputName;
   const resolvedWorkerThreads =
-    activeSettings.workers?.threads ?? getLegacyCompressionWorkerThreads(activeSettings) ?? workerThreads;
+    activeSettings.workers?.threads ?? getNestedCompressionWorkerThreads(activeSettings) ?? workerThreads;
   const effectiveResolvedOutputName = requestedOutputName || automaticResolvedOutputName;
   const stageSettingsKey = useMemo(
     () =>
