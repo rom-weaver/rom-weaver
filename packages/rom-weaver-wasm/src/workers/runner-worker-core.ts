@@ -321,10 +321,11 @@ function truncateForTrace(value, maxLength = 180) {
 function serializeError(error: unknown, requestMessage: unknown): RomWeaverWorkerSerializedError {
   const record = (error && typeof error === 'object' ? error : {}) as AnyRecord;
   const name = typeof record.name === 'string' ? record.name : 'Error';
-  const message = typeof record.message === 'string' ? record.message : String(error);
+  const message = typeof record.message === 'string' ? record.message : stringifyThrownValue(error);
   const stack = typeof record.stack === 'string' ? record.stack : undefined;
   const kind = resolveErrorKind(error, name, message);
   const context = resolveErrorContext(error, requestMessage);
+  const cause = serializeErrorCause(record.cause);
 
   return {
     name,
@@ -332,7 +333,33 @@ function serializeError(error: unknown, requestMessage: unknown): RomWeaverWorke
     stack,
     kind,
     ...(context ? { context } : {}),
+    ...(cause !== undefined ? { cause } : {}),
   };
+}
+
+function serializeErrorCause(value: unknown): RomWeaverWorkerSerializedError | string | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (value instanceof Error) {
+    return {
+      name: typeof value.name === 'string' ? value.name : 'Error',
+      message: typeof value.message === 'string' ? value.message : String(value),
+      stack: typeof value.stack === 'string' ? value.stack : undefined,
+    };
+  }
+  return typeof value === 'string' ? value : undefined;
+}
+
+function stringifyThrownValue(error: unknown): string {
+  if (typeof error === 'string') return error;
+  if (error === undefined) return 'undefined';
+  if (error === null) return 'null';
+  try {
+    const json = JSON.stringify(error);
+    if (json && json !== '{}') return json;
+  } catch {
+    // Non-serializable thrown value; fall back to String() below.
+  }
+  return String(error);
 }
 
 function resolveErrorKind(error: unknown, name: string, message: string) {

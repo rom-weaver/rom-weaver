@@ -56,12 +56,14 @@ export class RomWeaverWorkerClientCore {
   protected _transport: WorkerTransport;
   protected _nextRequestId: number;
   protected _pending: Map<number, PendingRequest>;
+  protected _disposed: boolean;
 
   constructor(worker: Worker, transport: WorkerTransport) {
     this.worker = worker;
     this._transport = transport;
     this._nextRequestId = 1;
     this._pending = new Map();
+    this._disposed = false;
 
     this._onMessage = this._onMessage.bind(this);
     this._onError = this._onError.bind(this);
@@ -103,6 +105,13 @@ export class RomWeaverWorkerClientCore {
     payload: WorkerRequestPayload,
     handlers: WorkerStreamHandlers<any, any> = {},
   ): Promise<TResponse> {
+    if (this._disposed) {
+      // The worker was terminated; its listeners are gone and postMessage is a silent no-op, so a
+      // new request would never settle. Reject eagerly instead of leaking a pending promise.
+      return Promise.reject(
+        toWorkerError(new Error('worker client has been terminated'), 'worker'),
+      );
+    }
     const requestId = this._nextRequestId;
     this._nextRequestId += 1;
     const streamChannel = createWorkerStreamChannel({
@@ -253,6 +262,7 @@ export class RomWeaverWorkerClientCore {
   }
 
   _shutdown(reason = 'worker terminated') {
+    this._disposed = true;
     this._detachListeners();
     this._rejectAllPending(new Error(reason));
   }
@@ -343,7 +353,12 @@ function createWorkerStreamChannel({ handlers, payload, requestId }) {
   channel.onmessage = (event) => {
     const message = event?.data;
     if (!message || typeof message !== 'object' || message.requestId !== requestId) return;
-    dispatchStreamMessage(handlers, message);
+    try {
+      dispatchStreamMessage(handlers, message);
+    } catch {
+      // A throwing user stream callback must not break the channel; the authoritative result
+      // still arrives on the worker's result message.
+    }
   };
   payload.options = {
     ...(payload.options ?? {}),
@@ -527,6 +542,9 @@ function deserializeError(error): RomWeaverWorkerError {
   if (error && typeof error.stack === 'string') {
     out.stack = error.stack;
   }
+  if (error && 'cause' in error && error.cause !== undefined) {
+    out.cause = deserializeErrorCause(error.cause);
+  }
 
   out.kind = resolveErrorKind(error, out.name, out.message, 'unknown');
   const context = readErrorContext(error);
@@ -535,6 +553,16 @@ function deserializeError(error): RomWeaverWorkerError {
   }
 
   return out;
+}
+
+function deserializeErrorCause(value) {
+  if (value === null || value === undefined || typeof value !== 'object') return value;
+  const causeError = new Error(
+    typeof value.message === 'string' ? value.message : 'caused by error',
+  );
+  if (typeof value.name === 'string') causeError.name = value.name;
+  if (typeof value.stack === 'string') causeError.stack = value.stack;
+  return causeError;
 }
 
 function toWorkerError(error, fallbackKind) {

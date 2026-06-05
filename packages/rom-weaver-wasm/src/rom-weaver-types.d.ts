@@ -255,6 +255,7 @@ export interface RomWeaverWorkerSerializedError {
   stack?: string;
   kind?: RomWeaverWorkerErrorKind;
   context?: RomWeaverWorkerErrorContext;
+  cause?: RomWeaverWorkerSerializedError | string;
 }
 
 export interface RomWeaverWorkerError extends Error {
