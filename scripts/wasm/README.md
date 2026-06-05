@@ -5,8 +5,11 @@ This folder contains ESM wrappers for browser execution of `rom-weaver-app.wasm`
 ## Files
 
 - `rom-weaver-runtime-utils.mjs`: shared wasm import and JSON/trace parsing helpers
-- `rom-weaver-browser-opfs-api.mjs`: browser OPFS + WASI `/work` runner
-- `workers/browser-wasi-thread-worker.mjs`: browser WASI thread worker for `rom-weaver-app.wasm`
+
+The browser OPFS + WASI `/work` runner and the WASI thread worker now live only as TypeScript
+in the `rom-weaver-wasm` package (`packages/rom-weaver-wasm/src/rom-weaver-browser-opfs-api.ts`
+and `src/workers/browser-wasi-thread-worker.ts`); import them from the package rather than from
+forked `.mjs` copies.
 
 ## Runtime Requirements
 
@@ -19,7 +22,7 @@ This folder contains ESM wrappers for browser execution of `rom-weaver-app.wasm`
 ## Quick Use (Dedicated Worker)
 
 ```js
-import { createRomWeaverBrowserOpfs } from './scripts/wasm/rom-weaver-browser-opfs-api.mjs';
+import { createRomWeaverBrowserOpfs } from 'rom-weaver-wasm/browser-opfs';
 
 const runner = await createRomWeaverBrowserOpfs({
   wasmUrl: '/wasm/rom-weaver-app.wasm',

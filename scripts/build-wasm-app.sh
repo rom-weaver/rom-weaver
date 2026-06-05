@@ -6,8 +6,6 @@ WASM_PACKAGE_DIR="$ROOT_DIR/packages/rom-weaver-wasm"
 DEFAULT_OUT_DIR="$WASM_PACKAGE_DIR"
 OUT_DIR="${1:-${ROM_WEAVER_WASM_OUT_DIR:-$DEFAULT_OUT_DIR}}"
 RUNTIME_UTILS_SOURCE="$ROOT_DIR/scripts/wasm/rom-weaver-runtime-utils.mjs"
-BROWSER_OPFS_API_SOURCE="$ROOT_DIR/scripts/wasm/rom-weaver-browser-opfs-api.mjs"
-BROWSER_WASI_THREAD_WORKER_SOURCE="$ROOT_DIR/scripts/wasm/workers/browser-wasi-thread-worker.mjs"
 JS_API_README="$ROOT_DIR/scripts/wasm/README.md"
 WASM_NPM_PACKAGE_SYNC="$ROOT_DIR/packages/rom-weaver-wasm/scripts/sync-dist.mjs"
 SYNC_WASM_PACKAGE="${SYNC_WASM_PACKAGE:-0}"
@@ -199,20 +197,13 @@ build_target "wasm32-wasip1-threads" "rom-weaver-app.wasm" "$THREADED_RUSTFLAGS"
 
 postprocess_artifact "$OUT_DIR/rom-weaver-app.wasm" "threaded"
 
-# Only emit the standalone .mjs runtime (+ README) when building to a separate artifact
-# directory. The npm package consumes the .ts sources directly — its exports and
-# src/index.mjs point at the .ts files — so copying these into the package src/ only left
-# unused, untracked .mjs files behind after every build.
+# Only emit the standalone runtime helper (+ README) when building to a separate artifact
+# directory. The npm package and the browser app consume the TypeScript sources directly
+# (Node 26 strips types; Vite compiles them), so the OPFS API and WASI thread worker live
+# only as .ts under packages/rom-weaver-wasm and are no longer copied as forked .mjs.
 if [[ "$OUT_DIR" != "$WASM_PACKAGE_DIR" ]]; then
-  mkdir -p "$OUT_DIR/workers"
   if [[ -f "$RUNTIME_UTILS_SOURCE" ]]; then
     cp "$RUNTIME_UTILS_SOURCE" "$OUT_DIR/rom-weaver-runtime-utils.mjs"
-  fi
-  if [[ -f "$BROWSER_OPFS_API_SOURCE" ]]; then
-    cp "$BROWSER_OPFS_API_SOURCE" "$OUT_DIR/rom-weaver-browser-opfs-api.mjs"
-  fi
-  if [[ -f "$BROWSER_WASI_THREAD_WORKER_SOURCE" ]]; then
-    cp "$BROWSER_WASI_THREAD_WORKER_SOURCE" "$OUT_DIR/workers/browser-wasi-thread-worker.mjs"
   fi
 
   if [[ -f "$JS_API_README" ]]; then

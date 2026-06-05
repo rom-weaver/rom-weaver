@@ -49,7 +49,6 @@
     "prepack": "npm run check",
     "check": "npm run check:types && node --check ./src/index.mjs",
     "check:types": "tsc -p tsconfig.json --noEmit",
-    "check:opfs-api-sync": "node ./scripts/check-opfs-api-sync.mjs",
     "test": "npm run test:browser",
     "test:browser": "vitest --config ./vitest.browser.config.mjs run",
     "test:browser:bench": "ROM_WEAVER_WASM_BENCH=1 vitest --config ./vitest.browser.config.mjs bench",
