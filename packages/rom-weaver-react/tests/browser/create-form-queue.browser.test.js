@@ -5,8 +5,10 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 const workflowMockState = {
   instances: [],
   modifiedDeferred: null,
+  modifiedSetCalls: 0,
   modifiedStateOverrides: {},
   originalDeferred: null,
+  originalSetCalls: 0,
   originalStateOverrides: {},
   runCalls: 0,
 };
@@ -47,6 +49,16 @@ const setFormControlValue = (element, value) => {
   descriptor?.set?.call(element, value);
   element.dispatchEvent(new Event("input", { bubbles: true }));
   element.dispatchEvent(new Event("change", { bubbles: true }));
+};
+
+const selectFileInput = (input, file) => {
+  const dataTransfer = new DataTransfer();
+  dataTransfer.items.add(file);
+  Object.defineProperty(input, "files", {
+    configurable: true,
+    value: dataTransfer.files,
+  });
+  input.dispatchEvent(new Event("change", { bubbles: true }));
 };
 
 const getOutputWaitingText = () => document.querySelector(".outcard > .fileprog")?.textContent || "";
@@ -115,6 +127,7 @@ const importMockedCreatePatchForm = async () => {
       }
 
       setModified(source) {
+        workflowMockState.modifiedSetCalls += 1;
         this.emitProgress("Preparing modified ROM...");
         return workflowMockState.modifiedDeferred.promise.then(() => {
           this.modified = {
@@ -129,6 +142,7 @@ const importMockedCreatePatchForm = async () => {
       }
 
       setOriginal(source) {
+        workflowMockState.originalSetCalls += 1;
         this.emitProgress("Preparing original ROM...");
         return workflowMockState.originalDeferred.promise.then(() => {
           this.original = {
@@ -185,8 +199,10 @@ beforeEach(() => {
   document.body.innerHTML = '<div id="app"></div>';
   workflowMockState.instances = [];
   workflowMockState.modifiedDeferred = createDeferred();
+  workflowMockState.modifiedSetCalls = 0;
   workflowMockState.modifiedStateOverrides = {};
   workflowMockState.originalDeferred = createDeferred();
+  workflowMockState.originalSetCalls = 0;
   workflowMockState.originalStateOverrides = {};
   workflowMockState.runCalls = 0;
 });
@@ -234,6 +250,38 @@ test("create output edits stay enabled while queued and cancel the queued run", 
   workflowMockState.modifiedDeferred.resolve();
   await new Promise((resolve) => globalThis.setTimeout(resolve, 50));
   expect(workflowMockState.runCalls).toBe(0);
+});
+
+test("replacing the modified ROM keeps the prepared original ROM", async () => {
+  const { CreatePatchForm } = await importMockedCreatePatchForm();
+  mount(
+    createElement(CreatePatchForm, {
+      defaultModified: new File([new Uint8Array([0, 1, 2, 4])], "modified.bin"),
+      defaultOriginal: new File([new Uint8Array([0, 1, 2, 3])], "original.bin"),
+    }),
+  );
+
+  await expect.poll(() => document.querySelectorAll(".fileprog").length).toBeGreaterThan(0);
+  workflowMockState.originalDeferred.resolve();
+  workflowMockState.modifiedDeferred.resolve();
+  await expect.poll(() => document.body.textContent || "").toContain("original.bin");
+  await expect.poll(() => document.body.textContent || "").toContain("modified.bin");
+  await expect.poll(() => document.querySelectorAll(".fileprog").length).toBe(0);
+
+  workflowMockState.modifiedDeferred = createDeferred();
+  const modifiedInput = Array.from(document.querySelectorAll("input[type='file']")).find(
+    (input) => input.getAttribute("aria-label") === "Replace modified ROM · drop or browse",
+  );
+  expect(modifiedInput).toBeInstanceOf(HTMLInputElement);
+  selectFileInput(modifiedInput, new File([new Uint8Array([0, 1, 2, 5])], "modified-v2.bin"));
+
+  await expect.poll(() => document.body.textContent || "").toContain("original.bin");
+  expect(document.body.textContent || "").not.toContain("Waiting for other actions");
+  await expect.poll(() => workflowMockState.originalSetCalls).toBe(1);
+  await expect.poll(() => workflowMockState.modifiedSetCalls).toBe(2);
+
+  workflowMockState.modifiedDeferred.resolve();
+  await expect.poll(() => document.body.textContent || "").toContain("modified-v2.bin");
 });
 
 test("create queued run cancels when source preparation warns", async () => {

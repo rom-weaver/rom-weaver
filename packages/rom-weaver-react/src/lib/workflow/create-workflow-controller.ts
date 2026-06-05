@@ -111,6 +111,7 @@ class CreateWorkflowController<TSource, TDestination> extends WorkflowController
   private readonly sourceStages: StagedRomSourceController<TSource, InternalSourceState>;
   private disposed = false;
   private activeMutation: string | null = null;
+  private mutationQueue: Promise<void> | null = null;
   private progressSequence = 0;
   private settings: Partial<CreateSettings>;
   private patchType?: PatchFormat | string;
@@ -296,20 +297,28 @@ class CreateWorkflowController<TSource, TDestination> extends WorkflowController
   }
 
   private async mutate<TValue>(operation: string, callback: () => Promise<TValue>): Promise<TValue> {
-    if (this.disposed) throw new RomWeaverError("WORKFLOW_DISPOSED", "Workflow has been disposed");
-    throwIfAborted(this.abortController.signal);
-    throwIfAborted(this.constructorSignal);
-    if (this.activeMutation) {
-      throw new RomWeaverError("WORKFLOW_BUSY", "Workflow is already running another operation", {
-        details: { activeOperation: this.activeMutation, operation },
-      });
-    }
-    this.activeMutation = operation;
-    try {
-      return await callback();
-    } finally {
-      this.activeMutation = null;
-    }
+    const execute = async () => {
+      if (this.disposed) throw new RomWeaverError("WORKFLOW_DISPOSED", "Workflow has been disposed");
+      throwIfAborted(this.abortController.signal);
+      throwIfAborted(this.constructorSignal);
+      this.activeMutation = operation;
+      try {
+        return await callback();
+      } finally {
+        this.activeMutation = null;
+      }
+    };
+    const previousMutation = this.mutationQueue;
+    const run = previousMutation ? previousMutation.catch(() => undefined).then(execute) : execute();
+    const queued = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.mutationQueue = queued;
+    queued.finally(() => {
+      if (this.mutationQueue === queued) this.mutationQueue = null;
+    });
+    return run;
   }
 
   private async setSource(operation: string, role: SourceRole, source: TSource | TSource[]): Promise<void> {

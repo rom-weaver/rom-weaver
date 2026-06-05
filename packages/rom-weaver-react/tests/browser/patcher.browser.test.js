@@ -953,6 +953,104 @@ test("queued staging rows show waiting progress", async () => {
   }
 });
 
+test("adding a ROM input preserves active input progress", async () => {
+  const firstInput = new File([new Uint8Array([0, 1, 2, 3])], "first.nds", {
+    type: "application/octet-stream",
+  });
+  const secondInput = new File([new Uint8Array([4, 5, 6, 7])], "second.nds", {
+    type: "application/octet-stream",
+  });
+  let resolveInitialStaging = () => undefined;
+  let resolveUpdatedStaging = () => undefined;
+  const initialStaging = new Promise((resolve) => {
+    resolveInitialStaging = () =>
+      resolve([
+        {
+          fileName: "first.nds",
+          id: "input-1",
+          order: 0,
+          size: firstInput.size,
+          sourceSize: firstInput.size,
+        },
+      ]);
+  });
+  const updatedStaging = new Promise((resolve) => {
+    resolveUpdatedStaging = () =>
+      resolve([
+        {
+          fileName: "first.nds",
+          id: "input-1",
+          order: 0,
+          size: firstInput.size,
+          sourceSize: firstInput.size,
+        },
+        {
+          fileName: "second.nds",
+          id: "input-2",
+          order: 1,
+          size: secondInput.size,
+          sourceSize: secondInput.size,
+        },
+      ]);
+  });
+  let latestUiController = null;
+  const stageInput = vi.fn(async (snapshot) => (snapshot.inputs.length === 1 ? initialStaging : updatedStaging));
+  const Harness = () => {
+    const [inputs, setInputs] = useState([firstInput]);
+    const { localNoticeController, localOutputController, localStackController, localUiController } =
+      useLocalApplyPatchFormSession({
+        applyPatches: vi.fn(async () => createMockApplyResult()),
+        applyReady: true,
+        defaultSettings: {
+          output: {
+            compression: "zip",
+          },
+        },
+        downloadOutput: () => undefined,
+        inputs,
+        onInputsChange: setInputs,
+        patches: [],
+        stageInput,
+      });
+    latestUiController = localUiController;
+    return createElement(ApplyWorkflowFormView, {
+      controllers: {
+        dialog: inertDialogController,
+        notice: localNoticeController,
+        output: localOutputController,
+        patchStack: localStackController,
+        ui: localUiController,
+      },
+    });
+  };
+
+  try {
+    mount(createElement(Harness));
+
+    await expect
+      .poll(() =>
+        Array.from(document.querySelectorAll("#rom-weaver-list-input-stack .fileprog")).map(
+          (row) => row.textContent || "",
+        ),
+      )
+      .toEqual([expect.stringContaining("Preparing input")]);
+
+    latestUiController.provideRomInputFiles([secondInput]);
+
+    await expect
+      .poll(() =>
+        Array.from(document.querySelectorAll("#rom-weaver-list-input-stack .fileprog")).map(
+          (row) => row.textContent || "",
+        ),
+      )
+      .toEqual([expect.stringContaining("Preparing input"), expect.stringContaining("Waiting for other actions")]);
+    expect(stageInput.mock.calls.map((call) => call[0].inputs.length)).toEqual([1, 2]);
+  } finally {
+    resolveInitialStaging();
+    resolveUpdatedStaging();
+  }
+});
+
 test("apply can queue and start without a patch", async () => {
   const inputFiles = [new File([new Uint8Array([0, 1, 2, 3])], "game.bin", { type: "application/octet-stream" })];
   let resolveInputStaging = () => undefined;

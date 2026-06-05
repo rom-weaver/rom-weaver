@@ -862,11 +862,12 @@ const useLocalApplyPatchFormSession = ({
                 fileName: existing?.info.fileName || getPendingInputDisplayFileName(input, `Input ${index + 1}`),
                 validationPhase: "idle",
               },
-              loading: false,
+              loading: existing?.loading ?? false,
               order: index,
-              progress: null,
+              progress: existing?.progress || null,
               size: existing?.size ?? getBinarySourceSize(input) ?? undefined,
               sourceSize: existing?.sourceSize ?? getBinarySourceSize(input) ?? undefined,
+              valid: existing?.valid ?? false,
             });
           }),
         );
@@ -1001,23 +1002,26 @@ const useLocalApplyPatchFormSession = ({
       setRomInputs((current) =>
         sortRomInputs(
           snapshot.inputs.map((input, index) => {
-            const existing = current[index];
+            const id = getInputKey(input, snapshot.inputs);
+            const existing = current.find((entry) => entry.id === id) || current.find((entry) => entry.order === index);
             const existingProgress = existing?.progress || null;
+            const retained = retainedInputKeys.has(id);
             const isQueued = index > 0 || retainedInputKeys.size > 0;
             return createRomInputRow({
               ...existing,
               disabled: true,
-              id: existing?.id || getInputKey(input, snapshot.inputs),
+              id,
               info: {
                 ...existing?.info,
                 archiveName: existing?.info.archiveName || "",
                 fileName: existing?.info.fileName || getPendingInputDisplayFileName(input, `Input ${index + 1}`),
               },
-              loading: true,
-              order: existing?.order ?? index,
+              loading: retained && existing ? existing.loading : true,
+              order: index,
               progress:
-                existingProgress || (existing ? null : isQueued ? createWaitingWorkflowProgress() : initialProgress),
-              valid: false,
+                existingProgress ||
+                (retained && existing ? null : isQueued ? createWaitingWorkflowProgress() : initialProgress),
+              valid: retained && existing ? existing.valid : false,
             });
           }),
         ),

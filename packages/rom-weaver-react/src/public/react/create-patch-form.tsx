@@ -177,6 +177,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   const stagingModifiedGenerationRef = useRef(0);
   const stagedCreateWorkflowRef = useRef<CreateWorkflow | null>(null);
   const stagedCreateWorkflowGenerationRef = useRef(0);
+  const sourceStageQueueRef = useRef(Promise.resolve<void>(undefined));
   const stagedCreateWorkflowSyncRef = useRef({
     modifiedKey: "",
     originalKey: "",
@@ -332,8 +333,6 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     setCreateQueued(false);
     disposeActiveOutput();
     clearCompletedOutput();
-    stagedCreateWorkflowGenerationRef.current += 1;
-    stagingOriginalGenerationRef.current += 1;
     setOriginalState(null);
     if (props.original === undefined) setInternalOriginal(file);
     props.onOriginalChange?.(file);
@@ -346,8 +345,6 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     setCreateQueued(false);
     disposeActiveOutput();
     clearCompletedOutput();
-    stagedCreateWorkflowGenerationRef.current += 1;
-    stagingModifiedGenerationRef.current += 1;
     setModifiedState(null);
     if (props.modified === undefined) setInternalModified(file);
     props.onModifiedChange?.(file);
@@ -393,23 +390,29 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   );
 
   useEffect(() => {
-    const generation = ++stagedCreateWorkflowGenerationRef.current;
-    stagingOriginalGenerationRef.current = generation;
-    stagingModifiedGenerationRef.current = generation;
     const previousSync = stagedCreateWorkflowSyncRef.current;
     const settingsChanged = previousSync.settingsKey !== stagingSettingsKey;
     const originalKeyChanged = previousSync.originalKey !== originalSourceKey;
     const modifiedKeyChanged = previousSync.modifiedKey !== modifiedSourceKey;
     const sourceCleared = (originalKeyChanged && !original) || (modifiedKeyChanged && !modified);
-    const workflowReset = settingsChanged || sourceCleared || originalKeyChanged || modifiedKeyChanged;
-    const originalChanged = workflowReset || originalKeyChanged;
-    const modifiedChanged = workflowReset || modifiedKeyChanged;
+    const workflowReset = settingsChanged || sourceCleared;
+    const originalChanged = settingsChanged || originalKeyChanged || (workflowReset && !!original);
+    const modifiedChanged = settingsChanged || modifiedKeyChanged || (workflowReset && !!modified);
     let workflow = stagedCreateWorkflowRef.current;
+    const generation = workflowReset
+      ? ++stagedCreateWorkflowGenerationRef.current
+      : stagedCreateWorkflowGenerationRef.current;
     if (workflowReset) {
       workflow?.dispose().catch(() => undefined);
       workflow = null;
       stagedCreateWorkflowRef.current = null;
     }
+    const originalGeneration = originalChanged
+      ? ++stagingOriginalGenerationRef.current
+      : stagingOriginalGenerationRef.current;
+    const modifiedGeneration = modifiedChanged
+      ? ++stagingModifiedGenerationRef.current
+      : stagingModifiedGenerationRef.current;
     if (originalChanged) setOriginalState(null);
     if (modifiedChanged) setModifiedState(null);
     stagedCreateWorkflowSyncRef.current = {
@@ -437,21 +440,42 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     activeWorkflow.on("progress", handleProgress);
     const isCurrentStaging = () =>
       stagedCreateWorkflowGenerationRef.current === generation && stagedCreateWorkflowRef.current === activeWorkflow;
+    const isCurrentRoleStaging = (role: "modified" | "original", roleGeneration: number) =>
+      isCurrentStaging() &&
+      (role === "original"
+        ? stagingOriginalGenerationRef.current === roleGeneration
+        : stagingModifiedGenerationRef.current === roleGeneration);
+    const enqueueSourceStage = (role: "modified" | "original", run: () => Promise<void>) => {
+      const queued = sourceStageQueueRef.current
+        .catch(() => undefined)
+        .then(async () => {
+          if (!isCurrentStaging()) return;
+          setStagingRole(role);
+          await run();
+        });
+      sourceStageQueueRef.current = queued.then(
+        () => undefined,
+        () => undefined,
+      );
+      return queued;
+    };
     const finishStaging = async () => {
       try {
         if (originalChanged && original) {
-          setStagingRole("original");
-          await activeWorkflow.setOriginal(toBrowserPublicBinarySource(original));
+          await enqueueSourceStage("original", () => activeWorkflow.setOriginal(toBrowserPublicBinarySource(original)));
           if (!isCurrentStaging()) return;
-          setOriginalState(activeWorkflow.getOriginal());
-          clearProgressForStage("input");
+          if (isCurrentRoleStaging("original", originalGeneration)) {
+            setOriginalState(activeWorkflow.getOriginal());
+            clearProgressForStage("input");
+          }
         }
         if (modifiedChanged && modified) {
-          setStagingRole("modified");
-          await activeWorkflow.setModified(toBrowserPublicBinarySource(modified));
+          await enqueueSourceStage("modified", () => activeWorkflow.setModified(toBrowserPublicBinarySource(modified)));
           if (!isCurrentStaging()) return;
-          setModifiedState(activeWorkflow.getModified());
-          clearProgressForStage("input");
+          if (isCurrentRoleStaging("modified", modifiedGeneration)) {
+            setModifiedState(activeWorkflow.getModified());
+            clearProgressForStage("input");
+          }
         }
       } catch (error) {
         const normalizedError = error instanceof Error ? error : new Error(String(error));
