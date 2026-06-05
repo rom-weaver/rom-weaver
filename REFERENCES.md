@@ -32,11 +32,13 @@ It is intentionally a living document. Some patch families do not have stable fo
   - <https://github.com/Alcaro/Flips>
   - IPS delta creator: <https://github.com/Alcaro/Flips/blob/master/libips.cpp>
   - BPS suffix-array delta creator: <https://github.com/Alcaro/Flips/blob/master/libbps-suf.cpp>
-- MultiPatch (macOS reference app; PPF routes through ApplyPPF/MakePPF):
+- MultiPatch (macOS reference app; BPS routes through vendored Flips):
   - <https://github.com/Sappharad/MultiPatch>
+  - BPS adapter snapshot: <https://github.com/Sappharad/MultiPatch/blob/b047dd325f5d37fd3cc920433080e27af779cf47/adapters/BPSAdapter.mm>
   - PPF adapter: <https://github.com/Sappharad/MultiPatch/blob/master/adapters/PPFAdapter.m>
   - PPF apply implementation: <https://github.com/Sappharad/MultiPatch/blob/master/ppfdev/applyppf3_linux.c>
   - PPF create implementation: <https://github.com/Sappharad/MultiPatch/blob/master/ppfdev/makeppf3_linux.c>
+  - Vendored Flips snapshot: <https://github.com/Alcaro/Flips/tree/5a3d2012b8ea53ae777c24b8ac4edb9a6bdb9761>
 - xdelta3 (VCDIFF-compatible toolchain): <https://github.com/jmacd/xdelta>
 - open-vcdiff (RFC 3284 implementation): <https://github.com/google/open-vcdiff>
 
@@ -60,7 +62,7 @@ It is intentionally a living document. Some patch families do not have stable fo
 | `rom-weaver` format   | Primary reference(s)                                                      |
 | --------------------- | ------------------------------------------------------------------------- |
 | `IPS`, `IPS32`, `EBP` | IPS spec, Flips IPS delta creator, RomPatcher.js IPS implementation       |
-| `BPS`                 | byuu BPS spec, Flips BPS delta creator, RomPatcher.js BPS implementation  |
+| `BPS`                 | byuu BPS spec, Flips/MultiPatch, RomPatcher.js BPS implementation         |
 | `UPS`                 | RomPatcher.js UPS implementation                                          |
 | `VCDIFF`, `xdelta`    | RFC 3284, xdelta3, open-vcdiff, RomPatcher.js VCDIFF implementation       |
 | `GDIFF`               | `rom-weaver` handler implementation (no single canonical spec linked yet) |
@@ -74,6 +76,27 @@ It is intentionally a living document. Some patch families do not have stable fo
 | `DLDI`                | Chishm DLDI page, `rom-weaver` DLDI implementation                        |
 | `DPS`                 | `rom-weaver` DPS implementation                                           |
 | `SOLID`               | `rom-weaver` SOLID implementation                                         |
+
+## BPS Comparison: MultiPatch / Flips
+
+Comparison target: MultiPatch `b047dd325f5d37fd3cc920433080e27af779cf47`, whose `flips`
+submodule is `Alcaro/Flips` `5a3d2012b8ea53ae777c24b8ac4edb9a6bdb9761`.
+MultiPatch's BPS adapter calls Flips `ApplyPatch`, `CreatePatch(... ty_bps_linear)`,
+and `CreatePatch(... ty_bps)`.
+
+| Area | MultiPatch / Flips | `rom-weaver` |
+| ---- | ------------------ | ------------ |
+| Format grammar | Uses the standard `BPS1` header, source/target sizes, metadata length, four action kinds (`SourceRead`, `TargetRead`, `SourceCopy`, `TargetCopy`), and CRC32 footer. | Parses and writes the same BPS grammar in [`crates/rom-weaver-patches/src/bps.rs`](crates/rom-weaver-patches/src/bps.rs). |
+| Apply execution | Flips reads the input patch and ROM into memory, applies to an output buffer, then MultiPatch writes the result. | Uses an in-memory fast path for small files, a streaming sequential path for large files, and a parallel source/literal write path when a patch has no `TargetCopy`. `TargetCopy` stays sequential because it depends on previously produced output. |
+| Checksum policy | Flips validates patch/input/output CRCs, but MultiPatch passes `verifyinput = NO`; a wrong-input BPS can still produce an output with a warning. | Defaults to strict patch, input, and output CRC validation. The shared checksum-validation override can skip CRC checks, but input and output sizes are still enforced. |
+| Metadata / manifests | Flips can carry BPS metadata and its app wrapper has manifest plumbing. | Reads and skips metadata during parse/apply, reports sizes/checksums/action count, and currently creates zero-length metadata. |
+| Patch creation modes | MultiPatch exposes both Flips linear BPS and delta BPS. Flips delta creation uses suffix sorting over target/source data, target-window growth near the current output offset, and cost thresholds before emitting copy actions. | Exposes one copy-aware BPS create path. It mirrors the Flips target-window growth and copy-cost threshold shapes, emits source reads/copies, target reads/copies, and repeated-byte `TargetCopy`, but does not expose a separate linear mode. |
+| Header handling | Flips has legacy SMC/SFC 512-byte header removal unless exact handling is requested. MultiPatch inherits that behavior through Flips. | Treats input and output files as exact byte streams; no implicit SMC/SFC header removal. |
+| Limits | Flips is bounded by host `size_t`/`off_t` and allocation success; delta creation can use more memory for reverse indexes in some modes. | BPS create is intentionally in-memory and copy-aware only under the repo memory limits, including the current suffix-index budget and 32-bit suffix-array range. |
+
+Use MultiPatch/Flips as a behavioral oracle for applying BPS patches and for creation
+heuristics, not as a byte-for-byte creation oracle. Different valid creators can emit
+different action streams for the same source/target pair.
 
 ## PPF Comparison: MultiPatch / ApplyPPF
 
