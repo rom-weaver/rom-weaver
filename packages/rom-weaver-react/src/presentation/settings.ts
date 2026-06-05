@@ -15,7 +15,6 @@ const SETTINGS_MESSAGE_KEYS = [
   "rvzBlockSize",
   "rvzCompression",
   "rvzCompressionLevel",
-  "rvzScrub",
   "sevenZipCodec",
   "sevenZipLevel",
   "workerThreads",

@@ -66,7 +66,6 @@ const ENGLISH_MESSAGES = {
   "settings.rvzBlockSize": "RVZ block size",
   "settings.rvzCompression": "Compression",
   "settings.rvzCompressionLevel": "Level override",
-  "settings.rvzScrub": "Scrub",
   "settings.sevenZipCodec": "Codec",
   "settings.sevenZipLevel": "Level override",
   "settings.workerThreads": "Worker threads",

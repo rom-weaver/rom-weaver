@@ -378,6 +378,8 @@
 .rw-app .info[open] > .info-pop { display: block; }
 .rw-app .info-pop strong { color: var(--rw-ink); display: block; margin-bottom: 5px; font-size: 0.758621rem; letter-spacing: .05em; text-transform: uppercase; }
 .rw-app .info-pop ul { margin: 0; padding-left: 16px; } .rw-app .info-pop li { margin: 3px 0; }
+.rw-app .info-pop .info-list, .rw-app .info-pop .info-list ul { list-style-type: disc; }
+.rw-app .info-pop .info-list ul { margin-top: 4px; list-style-type: circle; }
 .rw-app .info-pop a { color: var(--rw-accent); text-decoration: none; border-bottom: 1px solid color-mix(in oklab, var(--rw-accent) 50%, transparent); }
 .rw-app .comp-mini .info-pop { left: auto; right: -4px; }
 
@@ -502,6 +504,8 @@
 .rw-modal .srange { display: flex; flex-direction: column; gap: 6px; padding: 9px 13px 12px; }
 .rw-modal .srange + .setrow { border-top: 1px solid var(--rw-line-soft); }
 .rw-modal .srange-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 0.896552rem; color: var(--rw-ink); }
+.rw-modal .srange-label { min-width: 0; display: inline-flex; align-items: center; gap: 8px; }
+.rw-modal .srange-label .info { flex: none; }
 .rw-modal .dflt { color: var(--rw-ink-mut); font-weight: 400; font-size: 0.82em; }
 .rw-modal .rom-type { color: var(--rw-ink-soft); font-weight: 700; }
 .rw-modal .srange-head .v { font-family: var(--rw-mono); color: var(--rw-accent); }
@@ -551,7 +555,8 @@
   .rw-modal.settings-modal { padding: 0; }
   .rw-modal.settings-modal .rw-modal-card { width: 100%; max-width: none; height: 100%; max-height: 100%; border: 0; border-radius: 0; }
   .rw-modal.select-modal .rw-modal-card { width: 100%; max-width: none; max-height: calc(100dvh - 20px); }
-  .rw-modal .setchecks { display: grid; grid-template-columns: 1fr 1fr; gap: 9px 12px; }
+  .rw-modal .setchecks { display: grid; grid-template-columns: 1fr; gap: 10px; }
+  .rw-modal .setrow .sctl .select, .rw-modal .setrow .sctl .input { font-size: 14px; }
   .rw-modal .modal-head .btn { padding: 0; width: 30px; }
   .rw-modal .modal-head .btn .bl { display: none; }
   .rw-app .topbar { flex-wrap: wrap; row-gap: 10px; }

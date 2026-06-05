@@ -53,6 +53,8 @@ test("settings persistence round-trips every visible settings field", () => {
   storage.setItem(LOCAL_STORAGE_SETTINGS_ID, serializedSettings);
 
   const loadedSettings = loadSettings(storage);
+  expect(SETTINGS_PANEL_FIELD_ORDER).not.toContain("rvzScrub");
+  expect(loadedSettings.rvzScrub).toBe(true);
   const roundTrippedFields = Object.fromEntries(
     SETTINGS_PANEL_FIELD_ORDER.map((fieldKey) => [fieldKey, loadedSettings[fieldKey]]),
   );

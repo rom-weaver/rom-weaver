@@ -220,9 +220,8 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     min: 0,
     scaleLabels: ["Min", "Very Low", "Low", "Medium", "High", "Very High", "Max"],
     step: 1,
-    suggestion: "Default: Max. RVZ/7z zstd levels: 0, 3, 5, 12, 19, 21, 22. ZIP/other levels: 0, 2, 3, 5, 7, 8, 9.",
-    suggestionDataLocalize:
-      "Default: Max. RVZ/7z zstd levels: 0, 3, 5, 12, 19, 21, 22. ZIP/other levels: 0, 2, 3, 5, 7, 8, 9.",
+    suggestion: "Default: Max. zstd levels: 0-22. Other codec levels: 0-9.",
+    suggestionDataLocalize: "Default: Max. zstd levels: 0-22. Other codec levels: 0-9.",
     validationLabel: "Level",
     validValues: [...COMPRESSION_PROFILES],
   },
@@ -373,10 +372,7 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     disabled: ({ uiState }) => !uiState.rvzEnabled,
     id: "settings-rvz-scrub",
     key: "rvzScrub",
-    kind: "checkbox",
-    label: getSettingsLabel("rvzScrub"),
-    labelDataLocalize: "Scrub junk data",
-    layout: "large",
+    kind: "hidden",
   },
   sevenZipCodec: {
     defaultValue: "lzma2",
@@ -417,7 +413,7 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     id: "settings-special-compression",
     key: "specialCompression",
     kind: "checkbox",
-    label: "Use special compression",
+    label: "Use Special Compression (rvz, chd, z3ds, etc)",
     suggestion:
       "When enabled, special output formats like CHD, RVZ, and Z3DS are chosen automatically when the input supports them.",
     validationLabel: "Special compression",

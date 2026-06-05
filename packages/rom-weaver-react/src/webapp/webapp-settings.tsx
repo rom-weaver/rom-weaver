@@ -43,7 +43,7 @@ const settingsPanelSections: Array<{ fields: SettingsFieldKey[]; title: string }
   { fields: ["defaultArchive", "specialCompression", "compressionProfile", "workerThreads"], title: "Compression" },
   { fields: ["zipCodec", "zipLevel"], title: "ZIP" },
   { fields: ["sevenZipCodec", "sevenZipLevel"], title: "7z" },
-  { fields: ["rvzCompression", "rvzCompressionLevel", "rvzBlockSize", "rvzScrub"], title: "RVZ" },
+  { fields: ["rvzCompression", "rvzCompressionLevel", "rvzBlockSize"], title: "RVZ" },
   { fields: ["chdCreateCdCodecs", "chdCreateDvdCodecs"], title: "CHD" },
   { fields: ["z3dsCompressionLevel"], title: "z3ds" },
 ];
@@ -52,7 +52,7 @@ const settingsPanelSections: Array<{ fields: SettingsFieldKey[]; title: string }
 // groups above them stay full-width in the grouped settings layout.
 const FORMAT_GROUP_TITLES = new Set(["ZIP", "7z", "RVZ", "CHD", "z3ds"]);
 
-const DEFAULT_PLACEHOLDER_KINDS = new Set(["number", "select", "text"]);
+const DEFAULT_PLACEHOLDER_KINDS = new Set(["number", "text"]);
 const TOGGLE_KINDS = new Set(["checkbox", "choice-checkbox"]);
 
 const isInvalid = (validation: ValidationState, id: string) =>
@@ -67,13 +67,17 @@ const shouldRenderDefaultAsPlaceholder = (fieldKey: SettingsFieldKey): boolean =
   DEFAULT_PLACEHOLDER_KINDS.has(SETTINGS_FIELD_METADATA[fieldKey].kind) && getDefaultValueString(fieldKey) !== "";
 
 const cleanDefaultOptionLabel = (label: string): string => label.replace(/\s*\([^)]*default[^)]*\)\s*/i, "").trim();
+const formatDefaultLabel = (label: string): string => `${cleanDefaultOptionLabel(label) || label} (Default)`;
 
 const getDefaultPlaceholderValue = (fieldKey: SettingsFieldKey): string => {
   const field = SETTINGS_FIELD_METADATA[fieldKey];
   const defaultValue = getDefaultValueString(fieldKey);
   const optionLabel = field.options?.find((option) => option.value === defaultValue)?.label;
-  return optionLabel ? cleanDefaultOptionLabel(optionLabel) || optionLabel : defaultValue;
+  return formatDefaultLabel(optionLabel || defaultValue);
 };
+
+const getSelectOptionLabel = (fieldKey: SettingsFieldKey, option: { label: string; value: string }): string =>
+  option.value === getDefaultValueString(fieldKey) ? formatDefaultLabel(option.label) : option.label;
 
 const getFieldPlaceholder = (
   fieldKey: SettingsFieldKey,
@@ -81,7 +85,7 @@ const getFieldPlaceholder = (
   uiState: SettingsUiState,
 ): string | undefined =>
   shouldRenderDefaultAsPlaceholder(fieldKey)
-    ? `Default: ${getDefaultPlaceholderValue(fieldKey)}`
+    ? getDefaultPlaceholderValue(fieldKey)
     : getSettingsFieldPlaceholder(fieldKey, draftSettings, uiState);
 
 const handleSettingsEvent = (
@@ -135,10 +139,25 @@ const renderFieldInfo = (fieldKey: SettingsFieldKey, draftSettings: SettingsDraf
   if (!suggestion) return null;
   const suggestionDataLocalize = getSettingsFieldSuggestionDataLocalize(fieldKey, draftSettings, uiState);
   const label = SETTINGS_FIELD_METADATA[fieldKey].label || fieldKey;
+  const content =
+    fieldKey === "compressionProfile" ? (
+      <ul className="info-list">
+        <li>Default: Max</li>
+        <li>
+          Codec level ranges
+          <ul>
+            <li>zstd: 0-22</li>
+            <li>Other codecs: 0-9</li>
+          </ul>
+        </li>
+      </ul>
+    ) : (
+      suggestion
+    );
   return (
     <InfoToggle ariaLabel={`Show ${label} details`} portalPanel title={`Show ${label} details`}>
       <div data-localize={typeof suggestionDataLocalize === "string" ? suggestionDataLocalize : undefined}>
-        {suggestion}
+        {content}
       </div>
     </InfoToggle>
   );
@@ -163,7 +182,7 @@ const FieldControl = ({ fieldKey, draftSettings, uiState, validation, onDraftCha
         {placeholder ? <option value="">{placeholder}</option> : null}
         {(field.options || []).map((option) => (
           <option key={`${field.id}-${option.value}`} value={option.value}>
-            {option.label}
+            {getSelectOptionLabel(fieldKey, option)}
           </option>
         ))}
       </select>
@@ -232,7 +251,7 @@ const SettingsRange = ({ fieldKey, draftSettings, uiState, validation, onDraftCh
   return (
     <div className="srange">
       <div className="srange-head">
-        <span>
+        <span className="srange-label">
           <label htmlFor={field.id}>{field.label}</label>
           {renderFieldInfo(fieldKey, draftSettings, uiState)}
         </span>
