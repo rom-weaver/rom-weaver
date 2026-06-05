@@ -78,6 +78,27 @@ const openSyncAccessHandle = async (fileHandle: FileSystemFileHandle): Promise<F
   }
 };
 
+// FileSystemSyncAccessHandle.write() may write fewer bytes than requested (the spec permits a
+// short count, e.g. under quota pressure). Loop until the whole buffer lands, failing fast if a
+// write makes no forward progress so a partial write can't silently corrupt the staged file.
+const writeAllToSyncAccessHandle = (
+  accessHandle: FileSystemSyncAccessHandle,
+  bytes: Uint8Array,
+  position: number,
+) => {
+  let written = 0;
+  while (written < bytes.byteLength) {
+    const chunk = written === 0 ? bytes : bytes.subarray(written);
+    const count = accessHandle.write(chunk, { at: position + written });
+    if (!(count > 0)) {
+      throw new Error(
+        `OPFS sync write made no progress at offset ${position + written} (${written}/${bytes.byteLength} bytes)`,
+      );
+    }
+    written += count;
+  }
+};
+
 const readBlobChunk = async (file: Blob, position: number) => {
   const nextPosition = Math.min(position + CHUNK_SIZE, file.size);
   return new Uint8Array(await file.slice(position, nextPosition).arrayBuffer());
@@ -92,7 +113,7 @@ const writeBlobToSyncAccessHandle = async (file: Blob, accessHandle: FileSystemS
     const chunkBytes = await pendingChunk;
     const nextPosition = position + chunkBytes.byteLength;
     pendingChunk = nextPosition < file.size ? readBlobChunk(file, nextPosition) : null;
-    accessHandle.write(chunkBytes, { at: position });
+    writeAllToSyncAccessHandle(accessHandle, chunkBytes, position);
     position = nextPosition;
   }
   accessHandle.truncate(file.size);
@@ -198,7 +219,7 @@ const writeBytesToOpfsPath = async (request: StageRequest): Promise<StageRespons
   });
   if (syncAccessHandle) {
     try {
-      syncAccessHandle.write(bytes, { at: position });
+      writeAllToSyncAccessHandle(syncAccessHandle, bytes, position);
       syncAccessHandle.flush();
     } finally {
       syncAccessHandle.close();

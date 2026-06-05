@@ -19,12 +19,16 @@ const emitOpfsPathTrace = (message: string, details?: Record<string, unknown>) =
 };
 
 const normalizeOpfsPathParts = (filePath: string): string[] => {
-  const rawParts = String(filePath || "")
+  const raw = String(filePath || "");
+  const parts = raw
     .replace(LEADING_SLASHES_REGEX, "")
     .split(PATH_SEPARATOR_REGEX)
     .filter((part) => part && part !== "." && part !== "..");
-  if (String(filePath || "").startsWith("/") && rawParts.length > 1) rawParts.shift();
-  return rawParts;
+  // Absolute guest paths are mounted under a single leading root segment (the guest mount root,
+  // e.g. the VFS root); strip it so the remainder maps to an OPFS-relative storage path. Never
+  // strip the only segment — that would leave the file without a name.
+  if (LEADING_SLASHES_REGEX.test(raw) && parts.length > 1) parts.shift();
+  return parts;
 };
 
 const getManagedOpfsStorageName = (filePath: string): string =>
