@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { InfoToggle } from "./components/info-toggle.tsx";
 import type { SettingsDraftState, SettingsFieldKey, SettingsUiState } from "./settings/settings-state.ts";
 import {
+  getDefaultWorkerThreads,
   getSettingsFieldDefaultValue,
   getSettingsFieldMax,
   getSettingsFieldMin,
@@ -70,6 +71,7 @@ const cleanDefaultOptionLabel = (label: string): string => label.replace(/\s*\([
 const formatDefaultLabel = (label: string): string => `${cleanDefaultOptionLabel(label) || label} (Default)`;
 
 const getDefaultPlaceholderValue = (fieldKey: SettingsFieldKey): string => {
+  if (fieldKey === "workerThreads") return `auto (${getDefaultWorkerThreads()})`;
   const field = SETTINGS_FIELD_METADATA[fieldKey];
   const defaultValue = getDefaultValueString(fieldKey);
   const optionLabel = field.options?.find((option) => option.value === defaultValue)?.label;
