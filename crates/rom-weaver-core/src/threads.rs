@@ -13,6 +13,26 @@ use crate::{Result, RomWeaverError};
 const DEFAULT_THREAD_COUNT: usize = 4;
 const DEFAULT_RAYON_STACK_SIZE_BYTES: usize = 8 * 1024 * 1024;
 
+/// Upper bound on negotiated parallel threads under wasm. The JS host serves `thread-spawn`
+/// from a bounded WASI thread-worker pool; requesting more rayon workers than the pool can
+/// provide makes spawn return `EAGAIN` and the pool build fail (or block on a worker that
+/// never starts). Keep aligned with the JS-side thread-pool cap.
+#[cfg(target_family = "wasm")]
+const MAX_WASI_THREAD_COUNT: usize = 256;
+
+/// Clamps a negotiated thread count to the platform ceiling. Native hosts spawn OS threads
+/// directly and need no cap; wasm hosts are bounded by the JS WASI thread-worker pool.
+fn clamp_platform_thread_count(count: usize) -> usize {
+    #[cfg(target_family = "wasm")]
+    {
+        count.min(MAX_WASI_THREAD_COUNT)
+    }
+    #[cfg(not(target_family = "wasm"))]
+    {
+        count
+    }
+}
+
 /// Resolves the thread count for `ThreadBudget::Auto`: the host's available parallelism on
 /// native targets, falling back to [`DEFAULT_THREAD_COUNT`] on wasm or when the query fails.
 fn auto_thread_count() -> usize {
@@ -194,7 +214,7 @@ impl ThreadCapability {
 
     pub fn negotiate(&self, budget: ThreadBudget) -> ThreadExecution {
         let requested_threads = budget.requested_threads();
-        let effective_budget_threads = requested_threads;
+        let effective_budget_threads = clamp_platform_thread_count(requested_threads);
         let execution = match self {
             Self::SingleThreaded => ThreadExecution {
                 requested_threads,
