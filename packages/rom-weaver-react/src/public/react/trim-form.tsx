@@ -37,6 +37,7 @@ import { getReactBinarySourceFileName, toBrowserPublicBinarySource } from "./wor
 import { createReactWorkflowId, createSettingsDependencyKey, mergeSettingsWithOutput } from "./workflow-form-utils.ts";
 import {
   createIndeterminateWorkflowProgress,
+  createWaitingWorkflowProgress,
   toWorkflowChecksumProgressProps,
   toWorkflowFileProgressProps,
   useActiveAbortController,
@@ -189,6 +190,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   }, []);
   const outputFormat = props.outputFormat ?? internalOutputFormat;
   const disabled = !!props.disabled || busy || sourceStaging;
+  const uploadDisabled = !!props.disabled || busy;
   const actionDisabled = !!props.disabled || sourceStaging || !(busy || completedOutput || source);
   const sourceFileName = getReactBinarySourceFileName(source, "ROM");
   const resolvedSourceFileName = sourceState?.fileName || sourceFileName;
@@ -537,8 +539,10 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   );
 
   const progressProps = toWorkflowFileProgressProps(progress);
+  const waitingProgressProps = toWorkflowFileProgressProps(createWaitingWorkflowProgress());
   const showInputProgress =
     sourceStaging || (busy && progressProps && progress?.stage === "input" && progress.role === "input");
+  const inputProgressProps = showInputProgress ? progressProps || waitingProgressProps : null;
 
   const rawExtensionOption = rawOutputFormat;
   const formatOptions = useMemo(() => createTrimOutputOptions(rawExtensionOption), [rawExtensionOption]);
@@ -565,7 +569,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
       <WorkflowRomInputStep
         dropZone={{
           big: !source,
-          disabled,
+          disabled: uploadDisabled,
           hint: source ? undefined : "archives are extracted",
           label: source ? "Replace ROM · drop or browse" : "Select ROM · drop or browse",
           onFiles: (files) => updateSource(files[0] ?? null),
@@ -582,10 +586,10 @@ function TrimPatchForm(props: TrimPatchFormProps) {
         items={
           source
             ? [
-                showInputProgress && progressProps
+                inputProgressProps
                   ? {
                       id: "trim-input-progress",
-                      progress: progressProps,
+                      progress: inputProgressProps,
                     }
                   : {
                       card: {

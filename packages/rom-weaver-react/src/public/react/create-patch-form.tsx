@@ -41,6 +41,7 @@ import {
 import { createReactWorkflowId, createSettingsDependencyKey, mergeSettingsWithOutput } from "./workflow-form-utils.ts";
 import {
   createIndeterminateWorkflowProgress,
+  createWaitingWorkflowProgress,
   toWorkflowChecksumProgressProps,
   toWorkflowFileProgressProps,
   useActiveAbortController,
@@ -171,6 +172,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   const settings = props.settings || internalSettings || providerSettings;
   const patchType = props.patchType || internalPatchType;
   const disabled = !!props.disabled || busy || !!stagingRole;
+  const uploadDisabled = !!props.disabled || busy;
   const actionDisabled =
     !!props.disabled ||
     !!stagingRole ||
@@ -250,6 +252,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   const updateOriginal = (file: BinarySource | null) => {
     disposeActiveOutput();
     clearCompletedOutput();
+    stagedCreateWorkflowGenerationRef.current += 1;
     stagingOriginalGenerationRef.current += 1;
     setOriginalState(null);
     if (props.original === undefined) setInternalOriginal(file);
@@ -262,6 +265,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   const updateModified = (file: BinarySource | null) => {
     disposeActiveOutput();
     clearCompletedOutput();
+    stagedCreateWorkflowGenerationRef.current += 1;
     stagingModifiedGenerationRef.current += 1;
     setModifiedState(null);
     if (props.modified === undefined) setInternalModified(file);
@@ -313,7 +317,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     const originalKeyChanged = previousSync.originalKey !== originalSourceKey;
     const modifiedKeyChanged = previousSync.modifiedKey !== modifiedSourceKey;
     const sourceCleared = (originalKeyChanged && !original) || (modifiedKeyChanged && !modified);
-    const workflowReset = settingsChanged || sourceCleared;
+    const workflowReset = settingsChanged || sourceCleared || originalKeyChanged || modifiedKeyChanged;
     const originalChanged = workflowReset || originalKeyChanged;
     const modifiedChanged = workflowReset || modifiedKeyChanged;
     let workflow = stagedCreateWorkflowRef.current;
@@ -347,26 +351,28 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     const activeWorkflow = workflow;
     const handleProgress = createProgressHandler("input");
     activeWorkflow.on("progress", handleProgress);
+    const isCurrentStaging = () =>
+      stagedCreateWorkflowGenerationRef.current === generation && stagedCreateWorkflowRef.current === activeWorkflow;
     const finishStaging = async () => {
       try {
         if (originalChanged && original) {
           setStagingRole("original");
           await activeWorkflow.setOriginal(toBrowserPublicBinarySource(original));
-          if (stagedCreateWorkflowRef.current !== activeWorkflow) return;
+          if (!isCurrentStaging()) return;
           setOriginalState(activeWorkflow.getOriginal());
           clearProgressForStage("input");
         }
         if (modifiedChanged && modified) {
           setStagingRole("modified");
           await activeWorkflow.setModified(toBrowserPublicBinarySource(modified));
-          if (stagedCreateWorkflowRef.current !== activeWorkflow) return;
+          if (!isCurrentStaging()) return;
           setModifiedState(activeWorkflow.getModified());
           clearProgressForStage("input");
         }
       } catch (error) {
         const normalizedError = error instanceof Error ? error : new Error(String(error));
         const code = getErrorCode(normalizedError);
-        if (code === "WORKFLOW_SELECTION_SKIPPED" || stagedCreateWorkflowRef.current !== activeWorkflow) return;
+        if (code === "WORKFLOW_SELECTION_SKIPPED" || !isCurrentStaging()) return;
         setErrorCode(code);
         setMessage(formatCodedErrorForDisplay(normalizedError, createBrowserLocalizer(settingsLanguage)));
         setOriginalState(activeWorkflow.getOriginal());
@@ -374,7 +380,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
         props.onError?.(normalizedError);
       } finally {
         activeWorkflow.off("progress", handleProgress);
-        if (stagedCreateWorkflowRef.current === activeWorkflow) {
+        if (isCurrentStaging()) {
           setStagingRole(null);
           clearProgressForStage("input");
         }
@@ -513,8 +519,13 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   );
 
   const progressProps = toWorkflowFileProgressProps(progress);
-  const getSourceProgress = (role: "modified" | "original") =>
-    stagingRole === role && progressProps && progress && !isChecksumProgress(progress) ? progressProps : null;
+  const waitingProgressProps = toWorkflowFileProgressProps(createWaitingWorkflowProgress());
+  const getSourceProgress = (role: "modified" | "original") => {
+    if (stagingRole === role && progressProps && progress && !isChecksumProgress(progress)) return progressProps;
+    const file = role === "original" ? original : modified;
+    const sourceState = role === "original" ? originalState : modifiedState;
+    return file && !sourceState && stagingRole ? waitingProgressProps : null;
+  };
   const getSourceChecksumProgress = (role: "modified" | "original") =>
     stagingRole === role && progress && isChecksumProgress(progress) ? progress : null;
   const createCompressPanel = buildCompressPanel(createCompression, settings as Record<string, unknown>);
@@ -554,7 +565,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
       <WorkflowRomInputStep
         dropZone={{
           big: !file,
-          disabled,
+          disabled: uploadDisabled,
           hint: file ? undefined : hint,
           label: file ? replaceLabel : emptyLabel,
           onFiles: (files) => onSelect(files[0] ?? null),

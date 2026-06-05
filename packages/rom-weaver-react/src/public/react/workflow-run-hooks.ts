@@ -15,8 +15,19 @@ type WorkflowFileProgressInput = {
   label?: string;
   message?: string;
   percent?: number | null;
+  value?: string;
   visualPercent?: number | null;
 };
+
+const WAITING_FOR_OTHER_ACTIONS_LABEL = "Waiting for other actions...";
+
+const createWaitingWorkflowProgress = (): WorkflowFileProgressInput => ({
+  indeterminate: true,
+  label: WAITING_FOR_OTHER_ACTIONS_LABEL,
+  message: WAITING_FOR_OTHER_ACTIONS_LABEL,
+  percent: null,
+  value: "waiting",
+});
 
 const createWorkflowFormProgress = (event: WorkflowProgress, fallbackStage: string): WorkflowFormProgressState => ({
   ...createProgressViewModelFromEvent(event, { stage: event.stage || fallbackStage }),
@@ -59,7 +70,7 @@ const toWorkflowFileProgressProps = (
     indeterminate: percent === null,
     label: progress.label || progress.message || "Working…",
     percent,
-    value: typeof progress.percent === "number" ? `${Math.round(progress.percent)}%` : "working",
+    value: progress.value || (typeof progress.percent === "number" ? `${Math.round(progress.percent)}%` : "working"),
   };
 };
 
@@ -171,6 +182,7 @@ const useActiveAbortController = () => {
 export type { WorkflowFormProgressState };
 export {
   createIndeterminateWorkflowProgress,
+  createWaitingWorkflowProgress,
   createWorkflowFormProgress,
   toWorkflowChecksumProgressProps,
   toWorkflowFileProgressProps,

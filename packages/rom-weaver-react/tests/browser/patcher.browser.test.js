@@ -832,6 +832,76 @@ test("split-bin checkbox renders only when CHD split-bin is available", async ()
   expect(setChdSplitBin).toHaveBeenCalledWith(false);
 });
 
+test("queued staging rows show waiting progress", async () => {
+  const inputFiles = [
+    new File([new Uint8Array([0, 1, 2, 3])], "first.bin", { type: "application/octet-stream" }),
+    new File([new Uint8Array([4, 5, 6, 7])], "second.bin", { type: "application/octet-stream" }),
+  ];
+  const patchFiles = [
+    new File([new Uint8Array([0x42, 0x50, 0x53, 0x31])], "first.bps", { type: "application/octet-stream" }),
+    new File([new Uint8Array([0x42, 0x50, 0x53, 0x31])], "second.bps", { type: "application/octet-stream" }),
+  ];
+  let resolveInputStaging = () => undefined;
+  let resolvePatchStaging = () => undefined;
+  const inputStaging = new Promise((resolve) => {
+    resolveInputStaging = () => resolve([]);
+  });
+  const patchStaging = new Promise((resolve) => {
+    resolvePatchStaging = () => resolve([]);
+  });
+  const Harness = () => {
+    const { localNoticeController, localOutputController, localStackController, localUiController } =
+      useLocalApplyPatchFormSession({
+        applyPatches: vi.fn(),
+        applyReady: true,
+        defaultSettings: {
+          output: {
+            compression: "none",
+          },
+        },
+        downloadOutput: () => undefined,
+        inputs: inputFiles,
+        patches: patchFiles,
+        stageInput: async () => inputStaging,
+        stagePatches: async () => patchStaging,
+      });
+    return createElement(ApplyWorkflowFormView, {
+      controllers: {
+        dialog: inertDialogController,
+        notice: localNoticeController,
+        output: localOutputController,
+        patchStack: localStackController,
+        ui: localUiController,
+      },
+    });
+  };
+
+  try {
+    mount(createElement(Harness));
+
+    await expect
+      .poll(() => Array.from(document.querySelectorAll("#rom-weaver-list-input-stack .fileprog")).length)
+      .toBe(2);
+    await expect
+      .poll(() => Array.from(document.querySelectorAll("#rom-weaver-list-patch-stack .fileprog")).length)
+      .toBe(2);
+
+    const inputProgressRows = Array.from(document.querySelectorAll("#rom-weaver-list-input-stack .fileprog")).map(
+      (row) => row.textContent || "",
+    );
+    const patchProgressRows = Array.from(document.querySelectorAll("#rom-weaver-list-patch-stack .fileprog")).map(
+      (row) => row.textContent || "",
+    );
+    expect(inputProgressRows[0]).toContain("Preparing input");
+    expect(inputProgressRows[1]).toContain("Waiting for other actions");
+    expect(patchProgressRows[0]).toContain("Preparing patch");
+    expect(patchProgressRows[1]).toContain("Waiting for other actions");
+  } finally {
+    resolveInputStaging();
+    resolvePatchStaging();
+  }
+});
+
 test("download-ready apply button does not duplicate ratio percent signs", async () => {
   const outputState = createEmptyPatcherOutputState();
   outputState.applyButton.disabled = false;

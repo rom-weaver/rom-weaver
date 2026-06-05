@@ -67,6 +67,7 @@ import { createOutputSizeSummary } from "./patcher-presentation.ts";
 import type { InputProgress, NoticeState, RomInputRowState } from "./patcher-ui-state.ts";
 import {
   createIndeterminateWorkflowProgress,
+  createWaitingWorkflowProgress,
   useActiveAbortController,
   useDisposableCleanup,
 } from "./workflow-run-hooks.ts";
@@ -888,7 +889,12 @@ const useLocalApplyPatchFormSession = ({
         setPatchStaging(true);
         setPatchProgress(null);
         setPatchProgressByKey(
-          Object.fromEntries(snapshot.patches.map((patch) => [getPatchKey(patch, snapshot.patches), initialProgress])),
+          Object.fromEntries(
+            snapshot.patches.map((patch, index) => [
+              getPatchKey(patch, snapshot.patches),
+              index === 0 ? initialProgress : createWaitingWorkflowProgress(),
+            ]),
+          ),
         );
       }
       void stagePatches(snapshot, {
@@ -969,11 +975,17 @@ const useLocalApplyPatchFormSession = ({
         return;
       }
       setInputStaging(true);
+      const initialProgress = {
+        indeterminate: true,
+        label: "Preparing input...",
+        message: "Preparing input...",
+      };
       setRomInputs((current) =>
         sortRomInputs(
           snapshot.inputs.map((input, index) => {
             const existing = current[index];
             const existingProgress = existing?.progress || null;
+            const isQueued = index > 0 || retainedInputKeys.size > 0;
             return createRomInputRow({
               ...existing,
               disabled: true,
@@ -986,14 +998,7 @@ const useLocalApplyPatchFormSession = ({
               loading: true,
               order: existing?.order ?? index,
               progress:
-                existingProgress ||
-                (existing
-                  ? null
-                  : {
-                      indeterminate: true,
-                      label: "Preparing input...",
-                      message: "Preparing input...",
-                    }),
+                existingProgress || (existing ? null : isQueued ? createWaitingWorkflowProgress() : initialProgress),
               valid: false,
             });
           }),
