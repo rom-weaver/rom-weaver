@@ -73,28 +73,8 @@ let confirmationDialogState = createEmptyConfirmationDialogState();
 let renderWebappRootIfReady = () => undefined;
 let resolvePendingConfirmation: ((accepted: boolean) => void) | null = null;
 let vitePageUpdateState = createEmptyVitePageUpdateState();
-let fileSelectionInProgress = false;
-let fileSelectionTrackerInstalled = false;
-let pageInteractionDetected = false;
-let pageInteractionTrackerInstalled = false;
 const VITE_PAGE_RELOAD_TIMEOUT_MS = 20;
-const WORKFLOW_PROGRESS_SELECTOR = ".fileprog, .iprog";
 const VITE_RELOAD_PATTERN = /\blocation\.reload\s*\(/;
-const PAGE_INTERACTION_EVENTS = [
-  "change",
-  "click",
-  "cut",
-  "dragenter",
-  "drop",
-  "focusin",
-  "input",
-  "keydown",
-  "paste",
-  "pointerdown",
-  "submit",
-  "touchstart",
-  "wheel",
-] as const;
 
 const deferViteReload = (payload?: { label?: string; source?: string }) => {
   vitePageUpdateState = createVitePageUpdateState(payload || { source: "vite" });
@@ -229,73 +209,13 @@ const isLikelyViteReloadTimer = (handler: TimerHandler, timeout?: number) => {
   return false;
 };
 
-const hasVisibleWorkflowProgress = () => {
-  if (typeof document === "undefined" || typeof document.querySelector !== "function") return false;
-  return !!document.querySelector(WORKFLOW_PROGRESS_SELECTOR);
-};
-
-const isDocumentHidden = () => {
-  if (typeof document === "undefined") return false;
-  return document.visibilityState === "hidden";
-};
-
-const shouldDeferViteReload = () =>
-  pageInteractionDetected ||
-  fileSelectionInProgress ||
-  hasVisibleWorkflowProgress() ||
-  isDocumentHidden() ||
-  shouldWarnBeforeUnload(getNavigationGuardState());
-
-const getFileInputFromTarget = (target: EventTarget | null): HTMLInputElement | null => {
-  if (!(target instanceof Element)) return null;
-  if (target instanceof HTMLInputElement && target.type === "file") return target;
-  const nestedInput = target.closest("input[type='file']");
-  if (nestedInput instanceof HTMLInputElement) return nestedInput;
-  const label = target.closest("label");
-  if (!(label instanceof HTMLLabelElement)) return null;
-  const labeledInput = label.control || (label.htmlFor ? document.getElementById(label.htmlFor) : null);
-  if (labeledInput instanceof HTMLInputElement && labeledInput.type === "file") return labeledInput;
-  return null;
-};
-
-const installFileSelectionTracker = () => {
-  if (fileSelectionTrackerInstalled || typeof document === "undefined" || typeof window === "undefined") return;
-  fileSelectionTrackerInstalled = true;
-  const beginSelection = (event: Event) => {
-    const input = getFileInputFromTarget(event.target);
-    if (!input || input.disabled) return;
-    fileSelectionInProgress = true;
-  };
-  const endSelection = (event?: Event) => {
-    if (event) {
-      const input = getFileInputFromTarget(event.target);
-      if (!input) return;
-    }
-    fileSelectionInProgress = false;
-  };
-  document.addEventListener("click", beginSelection, true);
-  document.addEventListener("change", endSelection, true);
-  document.addEventListener("cancel", endSelection, true);
-  window.addEventListener("focus", () => endSelection());
-};
-
-const installPageInteractionTracker = () => {
-  if (pageInteractionTrackerInstalled || typeof document === "undefined") return;
-  pageInteractionTrackerInstalled = true;
-  const markInteracted = (event: Event) => {
-    if (pageInteractionDetected || !event.isTrusted) return;
-    pageInteractionDetected = true;
-  };
-  for (const eventName of PAGE_INTERACTION_EVENTS) document.addEventListener(eventName, markInteracted, true);
-};
-
-const installViteDirtyReloadGuard = () => {
+const installViteReloadGuard = () => {
   if (!(import.meta.hot && typeof window !== "undefined")) return;
   const guardedSetTimeout = window.setTimeout as typeof window.setTimeout & { __romWeaverViteReloadGuard?: boolean };
   if (guardedSetTimeout.__romWeaverViteReloadGuard) return;
   const originalSetTimeout = window.setTimeout.bind(window) as typeof window.setTimeout;
   const nextSetTimeout = ((handler: TimerHandler, timeout?: number, ...args: unknown[]) => {
-    if (isLikelyViteReloadTimer(handler, timeout) && shouldDeferViteReload()) {
+    if (isLikelyViteReloadTimer(handler, timeout)) {
       deferViteReload({ source: "vite" });
       return originalSetTimeout(() => undefined, 0);
     }
@@ -324,8 +244,7 @@ import.meta.hot?.on("rom-weaver:reload-available", (payload) => {
   renderWebappRootIfReady();
 });
 import.meta.hot?.on("vite:beforeFullReload", (payload) => {
-  // Defer full reload to the in-app update guard whenever user work may be at risk.
-  if (!shouldDeferViteReload()) return;
+  // Defer full reload to the in-app update guard.
   deferViteReload({ label: payload?.path, source: "vite" });
 });
 
@@ -401,9 +320,7 @@ const renderWebappRoot = (): undefined => {
 renderWebappRootIfReady = renderWebappRoot;
 
 webappController.subscribe(renderWebappRoot);
-installViteDirtyReloadGuard();
-installFileSelectionTracker();
-installPageInteractionTracker();
+installViteReloadGuard();
 
 if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
   window.addEventListener("storage", (event) => {
