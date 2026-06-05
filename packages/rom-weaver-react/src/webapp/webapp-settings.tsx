@@ -52,10 +52,37 @@ const settingsPanelSections: Array<{ fields: SettingsFieldKey[]; title: string }
 // groups above them stay full-width in the grouped settings layout.
 const FORMAT_GROUP_TITLES = new Set(["ZIP", "7z", "RVZ", "CHD", "z3ds"]);
 
+const DEFAULT_PLACEHOLDER_KINDS = new Set(["number", "select", "text"]);
 const TOGGLE_KINDS = new Set(["checkbox", "choice-checkbox"]);
 
 const isInvalid = (validation: ValidationState, id: string) =>
   validation.invalidFields.includes(id) ? { "aria-invalid": true as const } : {};
+
+const getDefaultValueString = (fieldKey: SettingsFieldKey): string => {
+  const defaultValue = getSettingsFieldDefaultValue(fieldKey);
+  return defaultValue === undefined || defaultValue === null ? "" : String(defaultValue);
+};
+
+const shouldRenderDefaultAsPlaceholder = (fieldKey: SettingsFieldKey): boolean =>
+  DEFAULT_PLACEHOLDER_KINDS.has(SETTINGS_FIELD_METADATA[fieldKey].kind) && getDefaultValueString(fieldKey) !== "";
+
+const cleanDefaultOptionLabel = (label: string): string => label.replace(/\s*\([^)]*default[^)]*\)\s*/i, "").trim();
+
+const getDefaultPlaceholderValue = (fieldKey: SettingsFieldKey): string => {
+  const field = SETTINGS_FIELD_METADATA[fieldKey];
+  const defaultValue = getDefaultValueString(fieldKey);
+  const optionLabel = field.options?.find((option) => option.value === defaultValue)?.label;
+  return optionLabel ? cleanDefaultOptionLabel(optionLabel) || optionLabel : defaultValue;
+};
+
+const getFieldPlaceholder = (
+  fieldKey: SettingsFieldKey,
+  draftSettings: SettingsDraftState,
+  uiState: SettingsUiState,
+): string | undefined =>
+  shouldRenderDefaultAsPlaceholder(fieldKey)
+    ? `Default: ${getDefaultPlaceholderValue(fieldKey)}`
+    : getSettingsFieldPlaceholder(fieldKey, draftSettings, uiState);
 
 const handleSettingsEvent = (
   target: HTMLInputElement | HTMLSelectElement,
@@ -73,16 +100,22 @@ const handleSettingsEvent = (
     onDraftChange(fieldKey, checked ? field.checkedValue || "" : field.uncheckedValue || "");
     return;
   }
+  if (target.value === "" && shouldRenderDefaultAsPlaceholder(fieldKey)) {
+    onDraftChange(fieldKey, getDefaultValueString(fieldKey));
+    return;
+  }
   onDraftChange(fieldKey, target.value);
 };
 
-const getFieldValue = (fieldKey: SettingsFieldKey, draftSettings: SettingsDraftState): string => {
+const getResolvedFieldValue = (fieldKey: SettingsFieldKey, draftSettings: SettingsDraftState): string => {
   const value = draftSettings[fieldKey];
-  if (value === undefined || value === null) {
-    const defaultValue = getSettingsFieldDefaultValue(fieldKey);
-    return defaultValue === undefined || defaultValue === null ? "" : String(defaultValue);
-  }
+  if (value === undefined || value === null) return getDefaultValueString(fieldKey);
   return String(value);
+};
+
+const getFieldValue = (fieldKey: SettingsFieldKey, draftSettings: SettingsDraftState): string => {
+  const value = getResolvedFieldValue(fieldKey, draftSettings);
+  return shouldRenderDefaultAsPlaceholder(fieldKey) && value === getDefaultValueString(fieldKey) ? "" : value;
 };
 
 const getCheckboxValue = (fieldKey: SettingsFieldKey, draftSettings: SettingsDraftState): boolean => {
@@ -116,15 +149,18 @@ const FieldControl = ({ fieldKey, draftSettings, uiState, validation, onDraftCha
   const field = SETTINGS_FIELD_METADATA[fieldKey];
   const disabled = isSettingsFieldDisabled(fieldKey, draftSettings, uiState);
   if (field.kind === "select") {
+    const placeholder = getFieldPlaceholder(fieldKey, draftSettings, uiState);
+    const value = getFieldValue(fieldKey, draftSettings);
     return (
       <select
-        className="select"
+        className={value === "" && placeholder ? "select settings-placeholder-value" : "select"}
         disabled={disabled}
         id={field.id}
         onChange={(event) => handleSettingsEvent(event.currentTarget, onDraftChange)}
-        value={getFieldValue(fieldKey, draftSettings)}
+        value={value}
         {...isInvalid(validation, field.id)}
       >
+        {placeholder ? <option value="">{placeholder}</option> : null}
         {(field.options || []).map((option) => (
           <option key={`${field.id}-${option.value}`} value={option.value}>
             {option.label}
@@ -134,18 +170,20 @@ const FieldControl = ({ fieldKey, draftSettings, uiState, validation, onDraftCha
     );
   }
   const inputType = field.kind === "number" && fieldKey !== "workerThreads" ? "number" : "text";
+  const placeholder = getFieldPlaceholder(fieldKey, draftSettings, uiState);
+  const value = getFieldValue(fieldKey, draftSettings);
   return (
     <input
-      className="input mono"
+      className={value === "" && placeholder ? "input mono settings-placeholder-value" : "input mono"}
       disabled={disabled}
       id={field.id}
       max={inputType === "number" ? getSettingsFieldMax(fieldKey, draftSettings, uiState) : undefined}
       min={inputType === "number" ? getSettingsFieldMin(fieldKey, draftSettings, uiState) : undefined}
       onChange={(event) => handleSettingsEvent(event.currentTarget, onDraftChange)}
-      placeholder={getSettingsFieldPlaceholder(fieldKey, draftSettings, uiState)}
+      placeholder={placeholder}
       step={inputType === "number" ? field.step : undefined}
       type={inputType}
-      value={getFieldValue(fieldKey, draftSettings)}
+      value={value}
       {...isInvalid(validation, field.id)}
     />
   );

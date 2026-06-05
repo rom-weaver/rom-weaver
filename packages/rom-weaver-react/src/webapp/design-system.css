@@ -484,10 +484,18 @@
 .rw-modal .setrow { display: flex; align-items: center; gap: 10px; min-height: 32px; padding: 4px 12px; }
 .rw-modal .setrow + .setrow { border-top: 1px solid var(--rw-line-soft); }
 .rw-modal .setrow:hover { background: var(--rw-panel-2); }
-.rw-modal .setrow .slabel { flex: 1 1 auto; min-width: 0; display: inline-flex; align-items: center; flex-wrap: wrap; gap: 2px 7px; font-size: 0.896552rem; color: var(--rw-ink); }
+.rw-modal .setrow .slabel { flex: 1 1 auto; min-width: 0; display: inline-flex; align-items: center; flex-wrap: nowrap; gap: 7px; font-size: 0.896552rem; color: var(--rw-ink); }
+.rw-modal .setrow .slabel label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rw-modal .setrow .slabel .info { flex: none; }
 .rw-modal .setrow .slabel small { flex-basis: 100%; font-size: 0.758621rem; color: var(--rw-ink-mut); margin-top: 1px; }
 .rw-modal .setrow .sctl { flex: none; }
-.rw-modal .setrow .sctl .select, .rw-modal .setrow .sctl .input { height: 32px; width: 150px; }
+.rw-modal .setrow .sctl .select, .rw-modal .setrow .sctl .input { height: 32px; width: 150px; overflow: hidden; text-overflow: ellipsis; font-size: 0.793103rem; }
+.rw-modal .setrow .sctl .settings-placeholder-value { color: var(--rw-ink-mut); font-style: italic; font-weight: 450; }
+.rw-modal .setrow .sctl .input::placeholder { color: var(--rw-ink-mut); font-style: italic; opacity: .78; }
+.rw-modal .setrow .sctl .select option[value=""] { color: var(--rw-ink-mut); font-style: italic; }
+.rw-modal .setcols .setrow { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 5px; padding-top: 7px; padding-bottom: 8px; }
+.rw-modal .setcols .setrow .sctl { width: 100%; }
+.rw-modal .setcols .setrow .sctl .select, .rw-modal .setcols .setrow .sctl .input { width: 100%; }
 .rw-modal .setchecks { display: flex; flex-wrap: wrap; align-items: center; gap: 9px 18px; padding: 9px 12px; }
 .rw-modal .setrow.toggle { gap: 9px; }
 .rw-modal .setrow.toggle .opt { font-size: 0.896552rem; }

@@ -362,7 +362,7 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     labelDataLocalize: "Compression level override",
     max: 22,
     min: 0,
-    placeholder: "Profile",
+    placeholder: "Uses Compression Level",
     step: 1,
     suggestion: "Optional override. Blank uses the compression profile. Valid values: 0-22.",
     suggestionDataLocalize: "Optional override. Blank uses the compression profile. Valid values: 0-22.",
@@ -403,7 +403,7 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     labelDataLocalize: "Compression level override",
     max: ({ settings }) => (settings.sevenZipCodec === "zstd" ? 22 : 9),
     min: 0,
-    placeholder: "Profile",
+    placeholder: "Uses Compression Level",
     step: 1,
     suggestion: ({ settings }) =>
       settings.sevenZipCodec === "zstd"
@@ -449,7 +449,7 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     labelDataLocalize: "Compression level override",
     max: 22,
     min: 0,
-    placeholder: "Profile",
+    placeholder: "Uses Compression Level",
     step: 1,
     suggestion: "Optional override. Blank uses the compression profile. Valid values: 0-22.",
     suggestionDataLocalize: "Optional override. Blank uses the compression profile. Valid values: 0-22.",
@@ -483,7 +483,7 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     labelDataLocalize: "ZIP compression level override",
     max: ({ settings }) => (settings.zipCodec === "zstd" ? 22 : 9),
     min: 0,
-    placeholder: "Profile",
+    placeholder: "Uses Compression Level",
     step: 1,
     suggestion: ({ settings }) =>
       settings.zipCodec === "store"
