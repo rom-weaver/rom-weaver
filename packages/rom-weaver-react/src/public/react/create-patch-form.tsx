@@ -108,6 +108,7 @@ type CreatePatchFormatCandidateState = RuntimePatchCreateFormatCandidates & {
 };
 type CompletedCreateOutput = {
   compression: "7z" | "none" | "zip";
+  createTimeMs?: number;
   fileName: string;
   patchType: string;
   rawSize?: number;
@@ -181,6 +182,10 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     settingsKey: "",
   });
   const workflowIdRef = useRef(createReactWorkflowId("react-create"));
+  const createExecutionTimingRef = useRef<{ compressionStartedAt: number | null; createStartedAt: number | null }>({
+    compressionStartedAt: null,
+    createStartedAt: null,
+  });
   const [errorCode, setErrorCode] = useState("");
   const original = props.original === undefined ? internalOriginal : props.original;
   const modified = props.modified === undefined ? internalModified : props.modified;
@@ -538,7 +543,13 @@ function CreatePatchForm(props: CreatePatchFormProps) {
         signal: abortController.signal,
       });
     const usingStagedWorkflow = stagedCreateWorkflowRef.current === createWorkflow;
-    const handleProgress = createProgressHandler("create");
+    const baseProgressHandler = createProgressHandler("create");
+    const handleProgress: typeof baseProgressHandler = (event) => {
+      if (event.stage === "compress" && createExecutionTimingRef.current.compressionStartedAt === null) {
+        createExecutionTimingRef.current.compressionStartedAt = Date.now();
+      }
+      baseProgressHandler(event);
+    };
     createWorkflow.on("progress", handleProgress);
     const abortWorkflow = () => createWorkflow.abort(abortController.signal.reason);
     abortController.signal.addEventListener("abort", abortWorkflow, { once: true });
@@ -559,10 +570,18 @@ function CreatePatchForm(props: CreatePatchFormProps) {
         throw new Error("Modified source requires candidate selection");
       }
 
+      createExecutionTimingRef.current = { compressionStartedAt: null, createStartedAt: Date.now() };
       const result = (await createWorkflow.run()) as BrowserCreateResult;
+      const completedAt = Date.now();
+      const { compressionStartedAt, createStartedAt } = createExecutionTimingRef.current;
+      const createTimeMs =
+        typeof createStartedAt === "number"
+          ? Math.max(0, (compressionStartedAt ?? completedAt) - createStartedAt)
+          : undefined;
       rememberOutputDispose(result.output.dispose);
       setCompletedOutput({
         compression: createCompression,
+        createTimeMs,
         fileName: result.output.fileName,
         patchType,
         rawSize: result.sizeSummary?.rawSize,
@@ -641,6 +660,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   const getSourceChecksumProgress = (role: "modified" | "original") =>
     stagingRole === role && progress && isChecksumProgress(progress) ? progress : null;
   const createCompressPanel = buildCompressPanel(createCompression, settings as Record<string, unknown>);
+  const createTimingText = completedOutput ? formatElapsedMs(completedOutput.createTimeMs) : "";
 
   const renderSourceStep = ({
     num,
@@ -806,6 +826,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
             </ul>
           </InfoPopover>
         }
+        meta={createTimingText ? <span className="t">{createTimingText}</span> : undefined}
         notice={
           message ? (
             <Notice id="patch-builder-row-error-message" level={errorCode === "AMBIGUOUS_SELECTION" ? "warn" : "error"}>
