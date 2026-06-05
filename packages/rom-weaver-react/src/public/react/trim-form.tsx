@@ -28,7 +28,7 @@ import { ConfirmDialog } from "./components/ds/modal.tsx";
 import { OutputRunAction, WorkflowOutputStep } from "./components/ds/workflow-output-step.tsx";
 import { WorkflowRomInputStep } from "./components/ds/workflow-rom-input-step.tsx";
 import { buildCompressPanel } from "./compress-options.ts";
-import { createTrimOutputOptions } from "./output-view-model.ts";
+import { createCompressionTypeOptions, createTrimOutputOptions } from "./output-view-model.ts";
 import type { BinarySource } from "./patcher-form.ts";
 import type { CandidateSelectionPrompt, TrimPatchFormProps, TrimPatchFormSettings } from "./public-types.ts";
 import {
@@ -635,7 +635,10 @@ function TrimPatchForm(props: TrimPatchFormProps) {
 
   const rawExtensionOption = rawOutputFormat;
   const formatOptions = useMemo(() => createTrimOutputOptions(rawExtensionOption), [rawExtensionOption]);
-  const compressFormatOptions = formatOptions;
+  const compressFormatOptions = useMemo(
+    () => createCompressionTypeOptions(formatOptions, rawExtensionOption),
+    [formatOptions, rawExtensionOption],
+  );
   const compressHeaderFormat = getOutputCompressionFormatLabel(resolvedOutputFormat, compressFormatOptions, {
     uncompressedValues: [rawExtensionOption],
   });

@@ -241,7 +241,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
       .toLowerCase();
     return normalized === "7z" ? "7z" : normalized === "none" ? "none" : "zip";
   })();
-  const createCompressionOptions = useMemo(() => createCreateOutputCompressionOptions(patchType), [patchType]);
+  const createCompressionOptions = useMemo(() => createCreateOutputCompressionOptions(), []);
   const patchFormatOptions = useMemo(
     () =>
       createCreatePatchFormatOptions({

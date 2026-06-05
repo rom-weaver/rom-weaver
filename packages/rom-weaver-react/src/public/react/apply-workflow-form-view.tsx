@@ -8,6 +8,7 @@ import { WorkflowOutputStep } from "./components/ds/workflow-output-step.tsx";
 import { WorkflowRomInputStep } from "./components/ds/workflow-rom-input-step.tsx";
 import { PatcherPrimaryAction } from "./components/patcher-output-controls.tsx";
 import { getFileInputAcceptAttributes } from "./file-input-accept";
+import { createCompressionTypeOptions } from "./output-view-model.ts";
 import type {
   DialogController,
   NoticeController,
@@ -75,6 +76,7 @@ function ApplyWorkflowFormView({
   const romInputs: RomInputRowState[] = uiState.romInputs;
   const patches = patchState.items;
   const compressHeaderFormat = getOutputCompressionFormatLabel(outputState.compressionFormat, outputState.options);
+  const compressionTypeOptions = createCompressionTypeOptions(outputState.options, "none");
 
   if (startup.status === "error") {
     return (
@@ -280,7 +282,7 @@ function ApplyWorkflowFormView({
           fields: outputState.compress?.fields,
           format: compressHeaderFormat,
           formatId: "rom-weaver-select-output-format-compress",
-          formatOptions: outputState.options,
+          formatOptions: compressionTypeOptions,
           formatValue: outputState.compressionFormat,
           onFieldChange: (key, value) => controllers.output.setOutputCompressOption?.(key, value),
           onFormatChange: (value) => controllers.output.setOutputCompression(value),

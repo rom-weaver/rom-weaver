@@ -43,6 +43,7 @@ type CreatePatchFormatOptions = {
 
 const EXTENSION_REGEX = /\.([^./\\\s]+)$/;
 const FILE_NAME_SEPARATOR_REGEX = /[/\\]+/;
+const NONE_COMPRESSION_LABEL = "None";
 
 const getFileNameWithoutExtension = (fileName: string) =>
   getBaseFileName(fileName).replace(EXTENSION_REGEX, "") || getBaseFileName(fileName);
@@ -172,13 +173,30 @@ const createOutputOptions = (
 
 const createApplyOutputOptions = createOutputOptions;
 
+/**
+ * Compression-type options for the output "Compress" panel. The uncompressed
+ * choice collapses to a single "None" entry floated to the top, while compressed
+ * formats keep their extension labels. The separate output-extension selector
+ * still surfaces the real rom/patch extension for the uncompressed choice — only
+ * the compression-type dropdown shows "None".
+ */
+const createCompressionTypeOptions = (
+  options: OutputOption[],
+  uncompressedValue: string,
+  noneLabel: string = NONE_COMPRESSION_LABEL,
+): OutputOption[] => {
+  if (!options.some((option) => option.value === uncompressedValue)) return options;
+  const compressed = options.filter((option) => option.value !== uncompressedValue);
+  return [{ label: noneLabel, value: uncompressedValue }, ...compressed];
+};
+
 const normalizeExtensionValue = (value: string, fallback: string) =>
   String(value || "")
     .trim()
     .replace(/^\./, "") || fallback;
 
-const createCreateOutputCompressionOptions = (patchType: string): OutputOption[] => [
-  { label: `.${normalizeExtensionValue(patchType, "patch")}`, value: "none" },
+const createCreateOutputCompressionOptions = (): OutputOption[] => [
+  { label: NONE_COMPRESSION_LABEL, value: "none" },
   ...createOutputOptions(["zip", "7z"]),
 ];
 
@@ -255,6 +273,7 @@ export type { OutputOption, OutputOptionLabelMap, SectionSizeSummary };
 export {
   combineSectionTimingText,
   createApplyOutputOptions,
+  createCompressionTypeOptions,
   createCreateOutputCompressionOptions,
   createCreatePatchFormatOptions,
   createOutputOptions,
