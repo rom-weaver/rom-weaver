@@ -2,7 +2,7 @@ import type { ChecksumRomProbe } from "../../types/checksum.ts";
 import type { WorkflowProgress } from "../../types/progress.ts";
 import type { SelectedInputInfo, TrimResult } from "../../types/public.ts";
 import type { SelectionCandidate } from "../../types/selection.ts";
-import type { CreateSettings } from "../../types/settings.ts";
+import type { CompressionFormat, CreateSettings } from "../../types/settings.ts";
 import type {
   TrimWorkflowChecksums,
   TrimWorkflowParentCompression,
@@ -11,6 +11,7 @@ import type {
 import type { WorkflowOptions, WorkflowWarning } from "../../types/workflow-controller.ts";
 import type { CreateWorkflowOptions, TrimInput } from "../../types/workflow-runtime.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
+import { getCompressionOutputExtension, isCompressionFormat } from "../compression/container-format-registry.ts";
 import { RomWeaverError, throwIfAborted, withAbortSignal } from "../errors.ts";
 import { getFileNameWithoutExtension } from "../input/path-utils.ts";
 import { wrapPublicOutput } from "../output/index.ts";
@@ -51,7 +52,6 @@ type InternalSourceState = {
 type StagedSource<TSource> = SharedRomStagedSource<TSource, InternalSourceState>;
 
 const TRIM_INPUT_ROLE: SourceRole = "input";
-const TRIM_OUTPUT_FORMATS = new Set(["7z", "none", "zip"]);
 const FILE_EXTENSION_REGEX = /\.[^./\\]+$/;
 
 const cloneSourceState = (state: InternalSourceState | null | undefined) =>
@@ -99,7 +99,7 @@ class TrimWorkflowController<TSource, TDestination> extends WorkflowController<{
   private activeMutation: string | null = null;
   private progressSequence = 0;
   private settings: Partial<CreateSettings>;
-  private outputFormat: "7z" | "none" | "zip" = "none";
+  private outputFormat: CompressionFormat = "none";
   private outputExtension = "";
   private outputName = "";
   private manualOutputName = false;
@@ -141,8 +141,8 @@ class TrimWorkflowController<TSource, TDestination> extends WorkflowController<{
       workflow: "trim",
     });
     const configuredCompression = this.settings.output?.compression;
-    if (configuredCompression && TRIM_OUTPUT_FORMATS.has(String(configuredCompression))) {
-      this.outputFormat = configuredCompression as "7z" | "none" | "zip";
+    if (isCompressionFormat(configuredCompression)) {
+      this.outputFormat = configuredCompression;
     }
     if (typeof this.settings.output?.outputName === "string" && this.settings.output.outputName.trim()) {
       this.manualOutputName = true;
@@ -185,11 +185,11 @@ class TrimWorkflowController<TSource, TDestination> extends WorkflowController<{
     });
   }
 
-  async setOutputFormat(format: "7z" | "none" | "zip" | string): Promise<void> {
+  async setOutputFormat(format: CompressionFormat | string): Promise<void> {
     return this.mutate("setOutputFormat", async () => {
       const normalized = String(format || "").trim();
-      if (TRIM_OUTPUT_FORMATS.has(normalized)) {
-        this.outputFormat = normalized as "7z" | "none" | "zip";
+      if (isCompressionFormat(normalized)) {
+        this.outputFormat = normalized;
         this.outputExtension = "";
       } else {
         // A raw output extension (for example `nds`) keeps the trimmed bytes uncompressed.
@@ -311,9 +311,6 @@ class TrimWorkflowController<TSource, TDestination> extends WorkflowController<{
 
   private getOutputCompression() {
     const compression = this.outputFormat || "none";
-    if (!TRIM_OUTPUT_FORMATS.has(String(compression))) {
-      throw new RomWeaverError("INVALID_SETTINGS", `Unsupported trim output compression: ${compression}`);
-    }
     return compression;
   }
 
@@ -324,7 +321,12 @@ class TrimWorkflowController<TSource, TDestination> extends WorkflowController<{
     if (this.outputExtension) {
       return `${baseName}.${this.outputExtension}`;
     }
-    if (this.outputFormat === "zip" || this.outputFormat === "7z") return `${baseName}.${this.outputFormat}`;
+    if (isCompressionFormat(this.outputFormat)) {
+      return `${baseName}.${getCompressionOutputExtension(this.outputFormat, {
+        inputFileName: input.fileName,
+        settings: this.settings,
+      })}`;
+    }
     return `${baseName}.${getFileNameExtension(input.fileName) || "bin"}`;
   }
 

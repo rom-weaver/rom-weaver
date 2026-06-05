@@ -1,4 +1,4 @@
-import { createElement } from "react";
+import { createElement, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { ApplyWorkflowFormView } from "../../src/public/react/apply-workflow-form-view.tsx";
@@ -72,6 +72,26 @@ const selectFileInputs = (input, files) => {
 };
 
 const selectFileInput = (input, file) => selectFileInputs(input, [file]);
+
+const createMockApplyResult = () => ({
+  output: {
+    cleanup: () => undefined,
+    fileName: "game - change.bin",
+    path: "",
+    saveAs: () => Promise.resolve(),
+    size: 4,
+    vfs: {},
+  },
+  outputs: [],
+  rom: {
+    size: 4,
+  },
+  sizeSummary: {
+    inputSize: 4,
+    outputSize: 4,
+    rawSize: 4,
+  },
+});
 
 const setFormControlValue = (element, value) => {
   const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(element), "value");
@@ -376,6 +396,8 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  mountedRoot?.unmount?.();
+  mountedRoot = null;
   await new Promise((resolve) => globalThis.setTimeout(resolve, 20));
 });
 
@@ -834,8 +856,8 @@ test("split-bin checkbox renders only when CHD split-bin is available", async ()
 
 test("queued staging rows show waiting progress", async () => {
   const inputFiles = [
-    new File([new Uint8Array([0, 1, 2, 3])], "first.bin", { type: "application/octet-stream" }),
-    new File([new Uint8Array([4, 5, 6, 7])], "second.bin", { type: "application/octet-stream" }),
+    new File([new Uint8Array([0, 1, 2, 3])], "first.nds", { type: "application/octet-stream" }),
+    new File([new Uint8Array([4, 5, 6, 7])], "second.nds", { type: "application/octet-stream" }),
   ];
   const patchFiles = [
     new File([new Uint8Array([0x42, 0x50, 0x53, 0x31])], "first.bps", { type: "application/octet-stream" }),
@@ -849,14 +871,15 @@ test("queued staging rows show waiting progress", async () => {
   const patchStaging = new Promise((resolve) => {
     resolvePatchStaging = () => resolve([]);
   });
+  const applyPatches = vi.fn(async () => createMockApplyResult());
   const Harness = () => {
     const { localNoticeController, localOutputController, localStackController, localUiController } =
       useLocalApplyPatchFormSession({
-        applyPatches: vi.fn(),
+        applyPatches,
         applyReady: true,
         defaultSettings: {
           output: {
-            compression: "none",
+            compression: "zip",
           },
         },
         downloadOutput: () => undefined,
@@ -896,6 +919,304 @@ test("queued staging rows show waiting progress", async () => {
     expect(inputProgressRows[1]).toContain("Waiting for other actions");
     expect(patchProgressRows[0]).toContain("Preparing patch");
     expect(patchProgressRows[1]).toContain("Waiting for other actions");
+
+    let applyButton = document.getElementById("rom-weaver-button-apply");
+    expect(applyButton).toBeInstanceOf(HTMLButtonElement);
+    expect(applyButton.disabled).toBe(false);
+    applyButton.click();
+    await expect
+      .poll(() => document.getElementById("rom-weaver-progress-apply")?.textContent || "")
+      .toContain("Waiting for other actions");
+    expect(document.querySelector("#rom-weaver-progress-apply .track.indet")).toBeTruthy();
+    const outputName = document.getElementById("rom-weaver-input-output-file-name");
+    const outputFormat = document.getElementById("rom-weaver-select-output-format");
+    expect(outputName).toBeInstanceOf(HTMLTextAreaElement);
+    expect(outputFormat).toBeInstanceOf(HTMLSelectElement);
+    expect(outputName.disabled).toBe(false);
+    expect(outputFormat.disabled).toBe(false);
+    setFormControlValue(outputName, "queued-output");
+    await expect.poll(() => document.getElementById("rom-weaver-progress-apply")?.textContent || "").toBe("");
+    expect(applyPatches).not.toHaveBeenCalled();
+
+    applyButton = document.getElementById("rom-weaver-button-apply");
+    expect(applyButton).toBeInstanceOf(HTMLButtonElement);
+    applyButton.click();
+    await expect
+      .poll(() => document.getElementById("rom-weaver-progress-apply")?.textContent || "")
+      .toContain("Waiting for other actions");
+    resolveInputStaging();
+    resolvePatchStaging();
+    await expect.poll(() => applyPatches.mock.calls.length).toBe(1);
+  } finally {
+    resolveInputStaging();
+    resolvePatchStaging();
+  }
+});
+
+test("apply can queue and start without a patch", async () => {
+  const inputFiles = [new File([new Uint8Array([0, 1, 2, 3])], "game.bin", { type: "application/octet-stream" })];
+  let resolveInputStaging = () => undefined;
+  const inputStaging = new Promise((resolve) => {
+    resolveInputStaging = () => resolve([]);
+  });
+  const applyPatches = vi.fn(async () => createMockApplyResult());
+  const Harness = () => {
+    const { localNoticeController, localOutputController, localStackController, localUiController } =
+      useLocalApplyPatchFormSession({
+        applyPatches,
+        applyReady: true,
+        defaultSettings: {
+          output: {
+            compression: "zip",
+          },
+        },
+        downloadOutput: () => undefined,
+        inputs: inputFiles,
+        patches: [],
+        stageInput: async () => inputStaging,
+      });
+    return createElement(ApplyWorkflowFormView, {
+      controllers: {
+        dialog: inertDialogController,
+        notice: localNoticeController,
+        output: localOutputController,
+        patchStack: localStackController,
+        ui: localUiController,
+      },
+    });
+  };
+
+  try {
+    mount(createElement(Harness));
+
+    await expect
+      .poll(() => {
+        const applyButton = document.getElementById("rom-weaver-button-apply");
+        return applyButton instanceof HTMLButtonElement && !applyButton.disabled;
+      })
+      .toBe(true);
+    const applyButton = document.getElementById("rom-weaver-button-apply");
+    expect(applyButton).toBeInstanceOf(HTMLButtonElement);
+    applyButton.click();
+    await expect
+      .poll(() => document.getElementById("rom-weaver-progress-apply")?.textContent || "")
+      .toContain("Waiting for other actions");
+    expect(applyPatches).not.toHaveBeenCalled();
+
+    resolveInputStaging();
+    await expect.poll(() => applyPatches.mock.calls.length).toBe(1);
+    expect(applyPatches.mock.calls[0][0].patches).toHaveLength(0);
+  } finally {
+    resolveInputStaging();
+  }
+});
+
+test("apply queued default format follows unambiguous special compression input", async () => {
+  const inputFiles = [new File([new Uint8Array([0, 1, 2, 3])], "game.gcm", { type: "application/octet-stream" })];
+  let resolveInputStaging = () => undefined;
+  const inputStaging = new Promise((resolve) => {
+    resolveInputStaging = () => resolve([]);
+  });
+  const applyPatches = vi.fn(async () => createMockApplyResult());
+  const Harness = () => {
+    const { localNoticeController, localOutputController, localStackController, localUiController } =
+      useLocalApplyPatchFormSession({
+        applyPatches,
+        applyReady: true,
+        defaultSettings: {
+          output: {
+            compression: "zip",
+          },
+        },
+        downloadOutput: () => undefined,
+        inputs: inputFiles,
+        patches: [],
+        stageInput: async () => inputStaging,
+      });
+    return createElement(ApplyWorkflowFormView, {
+      controllers: {
+        dialog: inertDialogController,
+        notice: localNoticeController,
+        output: localOutputController,
+        patchStack: localStackController,
+        ui: localUiController,
+      },
+    });
+  };
+
+  try {
+    mount(createElement(Harness));
+
+    await expect.poll(() => document.getElementById("rom-weaver-select-output-format")?.value || "").toBe("rvz");
+    const applyButton = document.getElementById("rom-weaver-button-apply");
+    expect(applyButton).toBeInstanceOf(HTMLButtonElement);
+    applyButton.click();
+    await expect
+      .poll(() => document.getElementById("rom-weaver-progress-apply")?.textContent || "")
+      .toContain("Waiting for other actions");
+    expect(applyPatches).not.toHaveBeenCalled();
+
+    resolveInputStaging();
+    await expect.poll(() => applyPatches.mock.calls.length).toBe(1);
+    expect(applyPatches.mock.calls[0][0].options.output.compression).toBe("rvz");
+  } finally {
+    resolveInputStaging();
+  }
+});
+
+test("apply waits for a patch added before queued start", async () => {
+  const inputFiles = [new File([new Uint8Array([0, 1, 2, 3])], "game.bin", { type: "application/octet-stream" })];
+  const patchFiles = [
+    new File([new Uint8Array([0x42, 0x50, 0x53, 0x31])], "change.bps", { type: "application/octet-stream" }),
+  ];
+  let resolveInputStaging = () => undefined;
+  let resolvePatchStaging = () => undefined;
+  const inputStaging = new Promise((resolve) => {
+    resolveInputStaging = () => resolve([]);
+  });
+  const patchStaging = new Promise((resolve) => {
+    resolvePatchStaging = () => resolve([]);
+  });
+  const applyPatches = vi.fn(async () => createMockApplyResult());
+  const defaultSettings = {
+    output: {
+      compression: "zip",
+    },
+  };
+  const downloadOutput = () => undefined;
+  const stageInput = async () => inputStaging;
+  const stagePatches = async () => patchStaging;
+  let latestUiController = null;
+  const Harness = () => {
+    const [patches, setPatches] = useState([]);
+    const { localNoticeController, localOutputController, localStackController, localUiController } =
+      useLocalApplyPatchFormSession({
+        applyPatches,
+        applyReady: true,
+        defaultSettings,
+        downloadOutput,
+        inputs: inputFiles,
+        onPatchesChange: setPatches,
+        patches,
+        stageInput,
+        stagePatches,
+      });
+    latestUiController = localUiController;
+    return createElement(ApplyWorkflowFormView, {
+      controllers: {
+        dialog: inertDialogController,
+        notice: localNoticeController,
+        output: localOutputController,
+        patchStack: localStackController,
+        ui: localUiController,
+      },
+    });
+  };
+
+  try {
+    mount(createElement(Harness));
+
+    await expect
+      .poll(() => {
+        const applyButton = document.getElementById("rom-weaver-button-apply");
+        return applyButton instanceof HTMLButtonElement && !applyButton.disabled;
+      })
+      .toBe(true);
+    const applyButton = document.getElementById("rom-weaver-button-apply");
+    expect(applyButton).toBeInstanceOf(HTMLButtonElement);
+    applyButton.click();
+    await expect
+      .poll(() => document.getElementById("rom-weaver-progress-apply")?.textContent || "")
+      .toContain("Waiting for other actions");
+    expect(applyPatches).not.toHaveBeenCalled();
+
+    latestUiController.providePatchInputFiles(patchFiles);
+    await expect
+      .poll(() => document.getElementById("rom-weaver-progress-apply")?.textContent || "")
+      .toContain("Waiting for other actions");
+    resolveInputStaging();
+    resolvePatchStaging();
+    await expect.poll(() => applyPatches.mock.calls.length).toBe(1);
+    expect(applyPatches.mock.calls[0][0].patches).toHaveLength(1);
+  } finally {
+    resolveInputStaging();
+    resolvePatchStaging();
+  }
+});
+
+test("apply queued run cancels when staged patch validation fails", async () => {
+  const inputFiles = [new File([new Uint8Array([0, 1, 2, 3])], "game.bin", { type: "application/octet-stream" })];
+  const patchFiles = [
+    new File([new Uint8Array([0x42, 0x50, 0x53, 0x31])], "change.bps", { type: "application/octet-stream" }),
+  ];
+  let resolveInputStaging = () => undefined;
+  let resolvePatchStaging = () => undefined;
+  const inputStaging = new Promise((resolve) => {
+    resolveInputStaging = () => resolve([]);
+  });
+  const patchStaging = new Promise((resolve) => {
+    resolvePatchStaging = () =>
+      resolve([
+        {
+          fileName: "change.bps",
+          validationMessage: "Patch validation failed",
+          validationState: "invalid",
+        },
+      ]);
+  });
+  const applyPatches = vi.fn(async () => createMockApplyResult());
+  const defaultSettings = {
+    output: {
+      compression: "zip",
+    },
+  };
+  const downloadOutput = () => undefined;
+  const stageInput = async () => inputStaging;
+  const stagePatches = async () => patchStaging;
+  const Harness = () => {
+    const { localNoticeController, localOutputController, localStackController, localUiController } =
+      useLocalApplyPatchFormSession({
+        applyPatches,
+        applyReady: true,
+        defaultSettings,
+        downloadOutput,
+        inputs: inputFiles,
+        patches: patchFiles,
+        stageInput,
+        stagePatches,
+      });
+    return createElement(ApplyWorkflowFormView, {
+      controllers: {
+        dialog: inertDialogController,
+        notice: localNoticeController,
+        output: localOutputController,
+        patchStack: localStackController,
+        ui: localUiController,
+      },
+    });
+  };
+
+  try {
+    mount(createElement(Harness));
+
+    await expect
+      .poll(() => {
+        const applyButton = document.getElementById("rom-weaver-button-apply");
+        return applyButton instanceof HTMLButtonElement && !applyButton.disabled;
+      })
+      .toBe(true);
+    const applyButton = document.getElementById("rom-weaver-button-apply");
+    expect(applyButton).toBeInstanceOf(HTMLButtonElement);
+    applyButton.click();
+    await expect
+      .poll(() => document.getElementById("rom-weaver-progress-apply")?.textContent || "")
+      .toContain("Waiting for other actions");
+
+    resolvePatchStaging();
+    await expect.poll(() => document.getElementById("rom-weaver-progress-apply")?.textContent || "").toBe("");
+    resolveInputStaging();
+    await new Promise((resolve) => globalThis.setTimeout(resolve, 50));
+    expect(applyPatches).not.toHaveBeenCalled();
   } finally {
     resolveInputStaging();
     resolvePatchStaging();

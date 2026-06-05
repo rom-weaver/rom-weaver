@@ -141,6 +141,7 @@ const useLocalApplyPatchFormSession = ({
     progress,
     romInputs,
   } = localState;
+  const [applyQueued, setApplyQueued] = useState(false);
   const { disposeActiveCleanup: disposeActiveOutputCleanup, rememberActiveCleanup: rememberActiveOutputCleanup } =
     useDisposableCleanup();
   const { abortActiveOperation, activeAbortControllerRef, rememberAbortController } = useActiveAbortController();
@@ -448,12 +449,19 @@ const useLocalApplyPatchFormSession = ({
   const strictInputChecksumBlocked = hasStrictInputChecksumMismatch && !checksumOverrideChecked;
   const multiInputOutputError = getMultiInputOutputError(displayedCompression, getLogicalRomInputCount(romInputs));
   const effectiveOutputNoticeMessage = outputErrorMessage || multiInputOutputError;
-  const canQueueApply =
-    !!effectiveInputs.length &&
-    !multiInputOutputError &&
-    applyReady &&
-    !(inputStaging || patchStaging) &&
-    !strictInputChecksumBlocked;
+  const applyPreparationPending =
+    inputStaging ||
+    patchStaging ||
+    !!patchProgress ||
+    Object.keys(patchProgressByKey).length > 0 ||
+    romInputs.some((entry) => entry.loading || !!entry.progress);
+  const patchValidationBlocked = stagedPatchInfos.some(
+    (info) => info.checksumPreflightMismatch === true || info.validationState === "invalid",
+  );
+  const applyQueueBlocked =
+    !!failureMessage || !!outputErrorMessage || strictInputChecksumBlocked || patchValidationBlocked;
+  const canQueueApply = !!effectiveInputs.length && !multiInputOutputError;
+  const canStartApply = canQueueApply && applyReady && !applyQueueBlocked && !applyPreparationPending;
   const disposeActiveOutput = useCallback(() => {
     clearPendingDownload();
     disposeActiveOutputCleanup();
@@ -632,15 +640,21 @@ const useLocalApplyPatchFormSession = ({
       applyButton: {
         disabled: disabled || !(busy || hasPendingDownload || canQueueApply),
         label: busy ? "Cancel" : hasPendingDownload ? "Download output" : "Apply & download",
-        loading: busy,
-        progress: hasPendingDownload ? null : progress ? toApplyButtonProgress({ stage: "apply", ...progress }) : null,
+        loading: busy || applyQueued,
+        progress: hasPendingDownload
+          ? null
+          : applyQueued
+            ? toApplyButtonProgress({ stage: "apply", ...createWaitingWorkflowProgress() })
+            : progress
+              ? toApplyButtonProgress({ stage: "apply", ...progress })
+              : null,
         title: hasPendingDownload ? `Download ${pendingDownloadFileName}` : "",
       },
       applyTiming: applyTimingText,
       compress: buildCompressPanel(displayedCompression, activeSettings as Record<string, unknown>, z3dsLabelSource),
       compressionFormat: displayedCompression,
       compressTiming: compressTimingText,
-      disabled: disabled || busy || inputStaging || patchStaging,
+      disabled: disabled || busy,
       displayFileName: outputNameEdited ? outputName : effectiveResolvedOutputName,
       downloadSummary: hasPendingDownload
         ? {
@@ -658,9 +672,11 @@ const useLocalApplyPatchFormSession = ({
     }),
     [
       activePatches.length,
+      applyQueued,
       applyTimingText,
       busy,
       canQueueApply,
+      canStartApply,
       completedSizeSummary,
       compressTimingText,
       disabled,
@@ -698,6 +714,7 @@ const useLocalApplyPatchFormSession = ({
   const updateSettings = useCallback(
     (nextSettings: ApplyPatchFormSettings) => {
       setChecksumOverrideChecked(false);
+      setApplyQueued(false);
       invalidateCompletedOutputState();
       if (settings === undefined) setInternalSettings(nextSettings);
       onSettingsChange?.(nextSettings);
@@ -707,6 +724,7 @@ const useLocalApplyPatchFormSession = ({
   const commitSettings = useCallback(
     (nextSettings: ApplyPatchFormSettings) => {
       setChecksumOverrideChecked(false);
+      setApplyQueued(false);
       if (settings === undefined) setInternalSettings(nextSettings);
       onSettingsChange?.(nextSettings);
     },
@@ -1481,7 +1499,16 @@ const useLocalApplyPatchFormSession = ({
           );
           return;
         }
-        if (!canQueueApply) return;
+        if (applyQueueBlocked) {
+          setApplyQueued(false);
+          return;
+        }
+        if (canQueueApply && !canStartApply) {
+          setApplyQueued(true);
+          return;
+        }
+        if (!canStartApply) return;
+        setApplyQueued(false);
         const useChecksumOverride = hasStrictInputChecksumMismatch && checksumOverrideChecked;
         if (useChecksumOverride) setChecksumOverrideChecked(false);
         const runtimeValidationSettings = useChecksumOverride
@@ -1685,6 +1712,8 @@ const useLocalApplyPatchFormSession = ({
     [
       activePatches,
       activeSettings,
+      applyPreparationPending,
+      applyQueueBlocked,
       automaticResolvedOutputName,
       containerInputsEnabled,
       applyPatches,
@@ -1704,6 +1733,7 @@ const useLocalApplyPatchFormSession = ({
       requestedOutputName,
       activeCompression,
       canQueueApply,
+      canStartApply,
       checksumOverrideChecked,
       effectiveResolvedOutputName,
       hasPendingDownload,
@@ -1716,6 +1746,19 @@ const useLocalApplyPatchFormSession = ({
       setChecksumOverrideChecked,
     ],
   );
+  useEffect(() => {
+    if (!applyQueued) return;
+    if (busy || hasPendingDownload) {
+      setApplyQueued(false);
+      return;
+    }
+    if (!canQueueApply || applyQueueBlocked) {
+      setApplyQueued(false);
+      return;
+    }
+    if (!canStartApply) return;
+    void localOutputController.runPrimaryAction();
+  }, [applyQueued, applyQueueBlocked, busy, canQueueApply, canStartApply, hasPendingDownload, localOutputController]);
   const localNoticeController = useMemo(
     (): NoticeController => ({
       getState: localNoticeStoreController.getState,

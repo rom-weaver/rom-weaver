@@ -11,30 +11,73 @@ import {
   getNamedSourceFileName,
   getNamedSourceSize,
 } from "../../storage/shared/binary/source-file-utils.ts";
+import type { CompressionFormat } from "../../types/settings.ts";
 import type { DirectSource, SourceRef } from "../../types/source.ts";
 import type { CreateWorkflowDeps, PatchFileInstance } from "../../types/workflow-internal.ts";
 import type { TrimInput, TrimResult, TrimWorkflowOptions } from "../../types/workflow-runtime.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
+import { isDiscCompressionFormat } from "../compression/container-format-registry.ts";
+import OutputCompressionManager from "../compression/output-compression-manager.ts";
 import { createWorkflowDeps } from "../create/workflow.ts";
-import {
-  createSingleFileArchiveOutput,
-  getArchiveOutputCompression,
-  hasArchiveFileName,
-} from "../output/archive-output-service.ts";
+import { createSingleFileArchiveOutput, hasArchiveFileName } from "../output/archive-output-service.ts";
+import { createSingleFileDiscOutput } from "../output/output-build-service.ts";
+import { getCompressionIntermediateFileName } from "../output/output-files.ts";
 import { requireOutputName } from "../output/output-name-validation.ts";
 import { createPatchFileFromPublicOutput } from "../runtime/public-output-bin-file.ts";
 import { createWorkflowTracer } from "../workflow/workflow-tracing.ts";
 
 const DISC_INPUT_EXTENSION_REGEX = createDiscExtensionRegex(DISC_DECOMPRESSION_INPUT_EXTENSIONS);
 const FILE_QUERY_OR_HASH_REGEX = /[?#].*$/;
+const FILE_EXTENSION_REGEX = /\.([^./\\?#]+)(?:[?#].*)?$/;
 type TrimSourceInput = PatchFileInstance | SourceRef;
 type TrimWorkflowDeps = CreateWorkflowDeps;
+type OutputCompressionSource = Parameters<typeof OutputCompressionManager.resolveOutputCompression>[0];
 
 const getTrimLogLevel = (options: TrimWorkflowOptions | undefined) => options?.logging?.level;
 const getTrimWorkerThreads = (options: TrimWorkflowOptions | undefined) => options?.workers?.threads;
 const getTrimCompression = (options: TrimWorkflowOptions | undefined) => options?.output?.compression;
 const getTrimOutputName = (options: TrimWorkflowOptions | undefined) => options?.output?.outputName;
 const { traceWorkflowStage, traceWorkflowStageBlock } = createWorkflowTracer("trim");
+
+const isArchiveOutputCompression = (compression: CompressionFormat): compression is "7z" | "zip" =>
+  compression === "7z" || compression === "zip";
+
+const getTrimOutputCompression = (
+  options: TrimWorkflowOptions | undefined,
+  source: TrimSourceInput | null | undefined,
+): CompressionFormat => {
+  const requestedCompression = OutputCompressionManager.normalizeOutputCompression(
+    getTrimCompression(options) || "none",
+  );
+  if (requestedCompression === "auto") {
+    const resolvedCompression = OutputCompressionManager.resolveOutputCompression(source as OutputCompressionSource, {
+      compressionFormat: "auto",
+    });
+    return resolvedCompression === "auto" ? "7z" : resolvedCompression;
+  }
+  return requestedCompression;
+};
+
+const getFileNameExtension = (fileName: string) => {
+  const match = fileName.match(FILE_EXTENSION_REGEX);
+  return match?.[1]?.toLowerCase() || "";
+};
+
+const createCompressionSource = (source: TrimSourceInput, fileName: string): PatchFileInstance => {
+  if (source && typeof source === "object") {
+    const sourceFile = source as PatchFileInstance;
+    const getExtension =
+      typeof sourceFile.getExtension === "function"
+        ? () => sourceFile.getExtension?.() || ""
+        : () => getFileNameExtension(fileName);
+    return {
+      ...(source as unknown as Record<string, unknown>),
+      fileName,
+      getExtension,
+    } as PatchFileInstance;
+  }
+  return { fileName, getExtension: () => getFileNameExtension(fileName) } as unknown as PatchFileInstance;
+};
 
 const createClassificationSource = (
   source: SourceRef,
@@ -120,23 +163,48 @@ const runTrimWorkflow = async (
     );
   };
 
-  const createCompressedTrimOutput = async (trimmedFile: PatchFileInstance): Promise<TrimResult["output"]> => {
-    const compression = getArchiveOutputCompression(getTrimCompression(options), "trim");
+  const createCompressedTrimOutput = async (
+    trimmedFile: PatchFileInstance,
+    compression: CompressionFormat,
+  ): Promise<TrimResult["output"]> => {
     if (compression === "none") {
       traceWorkflowStage(options, "stage.skip", "compress", "output", { reason: "output compression disabled" });
       return deps.toPublicOutput(trimmedFile, runtime);
     }
-    return createSingleFileArchiveOutput({
-      compression,
-      deps,
-      entryFile: trimmedFile,
-      entryNameDetailKey: "trimEntryName",
-      fallbackEntryName: trimmedFile.fileName || "trimmed.bin",
-      options,
-      runtime,
-      trace: (operation, details) => traceWorkflowStageBlock(options, "compress", "output", operation, details),
-      unsupportedRuntimeMessage: "Trim output compression requires the rom-weaver wasm runtime",
-    });
+    if (isArchiveOutputCompression(compression)) {
+      return createSingleFileArchiveOutput({
+        compression,
+        deps,
+        entryFile: trimmedFile,
+        entryNameDetailKey: "trimEntryName",
+        fallbackEntryName: trimmedFile.fileName || "trimmed.bin",
+        options,
+        runtime,
+        trace: (operation, details) => traceWorkflowStageBlock(options, "compress", "output", operation, details),
+        unsupportedRuntimeMessage: "Trim output compression requires the rom-weaver wasm runtime",
+      });
+    }
+    if (isDiscCompressionFormat(compression)) {
+      const compressedFile = await traceWorkflowStageBlock(
+        options,
+        "compress",
+        "output",
+        () =>
+          createSingleFileDiscOutput({
+            compression,
+            options,
+            outputFile: trimmedFile,
+            runtime,
+          }),
+        () => ({
+          compression,
+          trimEntryName: trimmedFile.fileName || "trimmed.bin",
+        }),
+      );
+      if (!compressedFile) throw new Error("Runtime disc compression create capability is unavailable");
+      return deps.toPublicOutput(compressedFile, runtime);
+    }
+    throw new Error(`Unsupported trim output compression: ${compression}`);
   };
 
   const trimCapability = runtime.trim.trim;
@@ -144,13 +212,21 @@ const runTrimWorkflow = async (
 
   const source = await prepareTrimSource(input.source, input.selectedSourceEntryName);
   const inputSize = getTrimSourceSize(source);
+  const sourceFileName = getTrimSourceFileName(source, "trimmed.bin", deps);
+  const compression = getTrimOutputCompression(options, source);
   const requestedFileName =
     String(getTrimOutputName(options) || "").trim() || getTrimSourceFileName(source, "trimmed.bin", deps);
-  const compression = getArchiveOutputCompression(getTrimCompression(options), "trim");
   const rawTrimFileName =
-    compression !== "none" && deps.hasArchiveFileName(requestedFileName, compression)
-      ? getTrimSourceFileName(source, "trimmed.bin", deps)
-      : requestedFileName;
+    compression === "none"
+      ? requestedFileName
+      : getCompressionIntermediateFileName(
+          requestedFileName,
+          compression,
+          createCompressionSource(source, sourceFileName),
+          {
+            chdOutputMode: "auto",
+          },
+        );
 
   deps.reportProgress(options, {
     label: "Trimming...",
@@ -189,7 +265,7 @@ const runTrimWorkflow = async (
       },
     };
   const trimmedFile = await createPatchFileFromPublicOutput(result.output, rawTrimFileName);
-  const output = await createCompressedTrimOutput(trimmedFile);
+  const output = await createCompressedTrimOutput(trimmedFile, compression);
   return {
     output,
     sizeSummary: {

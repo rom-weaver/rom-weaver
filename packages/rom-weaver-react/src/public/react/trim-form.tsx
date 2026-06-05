@@ -1,6 +1,11 @@
 import Download from "lucide-react/dist/esm/icons/download.js";
 import Scissors from "lucide-react/dist/esm/icons/scissors.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  getCompressionOutputExtension,
+  isCompressionFormat,
+  resolveAutomaticCompressionFormat,
+} from "../../lib/compression/container-format-registry.ts";
 import { appendFileNameExtension, hasFileNameExtension } from "../../lib/input/path-utils.ts";
 import { emitTraceLog } from "../../lib/logging.ts";
 import { createTiming, formatTiming } from "../../lib/progress/timing.ts";
@@ -66,32 +71,47 @@ const getFileNameStem = (fileName: string) => fileName.replace(FILE_EXTENSION_RE
 
 const appendTrimmedMarker = (baseName: string) => (/\(trimmed\)$/i.test(baseName) ? baseName : `${baseName} (trimmed)`);
 
-const getDefaultTrimOutputName = (sourceFileName: string, outputFormat: string) => {
-  const sourceBaseName = getFileNameStem(sourceFileName) || "trimmed";
-  const baseName = appendTrimmedMarker(sourceBaseName);
-  if (outputFormat === "zip") return `${baseName}.zip`;
-  if (outputFormat === "7z") return `${baseName}.7z`;
-  return `${baseName}.${outputFormat || getSourceExtension(sourceFileName)}`;
+const getTrimOutputExtension = (sourceFileName: string, outputFormat: string, settings?: TrimPatchFormSettings) => {
+  if (isCompressionFormat(outputFormat))
+    return getCompressionOutputExtension(outputFormat, {
+      inputFileName: sourceFileName,
+      settings,
+    });
+  return outputFormat || getSourceExtension(sourceFileName);
 };
 
-const ensureTrimmedOutputName = (outputName: string, outputFormat: string, sourceFileName: string) => {
+const getDefaultTrimOutputName = (sourceFileName: string, outputFormat: string, settings?: TrimPatchFormSettings) => {
+  const sourceBaseName = getFileNameStem(sourceFileName) || "trimmed";
+  const baseName = appendTrimmedMarker(sourceBaseName);
+  return `${baseName}.${getTrimOutputExtension(sourceFileName, outputFormat, settings)}`;
+};
+
+const ensureTrimmedOutputName = (
+  outputName: string,
+  outputFormat: string,
+  sourceFileName: string,
+  settings?: TrimPatchFormSettings,
+) => {
   const normalizedOutputName = outputName.trim();
   if (!normalizedOutputName) return normalizedOutputName;
   const outputBaseName = getFileNameStem(normalizedOutputName).toLowerCase();
   const sourceBaseName = getFileNameStem(sourceFileName).toLowerCase();
   if (outputBaseName && outputBaseName === sourceBaseName) {
-    return getDefaultTrimOutputName(sourceFileName, outputFormat);
+    return getDefaultTrimOutputName(sourceFileName, outputFormat, settings);
   }
   return normalizedOutputName;
 };
 
-const resolveTrimExecutionOutputName = (outputName: string, outputFormat: string, sourceFileName: string) => {
+const resolveTrimExecutionOutputName = (
+  outputName: string,
+  outputFormat: string,
+  sourceFileName: string,
+  settings?: TrimPatchFormSettings,
+) => {
   const normalizedOutputName = outputName.trim();
   if (!normalizedOutputName) return normalizedOutputName;
   if (hasFileNameExtension(normalizedOutputName)) return normalizedOutputName;
-  if (outputFormat === "zip" || outputFormat === "7z")
-    return appendFileNameExtension(normalizedOutputName, outputFormat);
-  return appendFileNameExtension(normalizedOutputName, outputFormat || getSourceExtension(sourceFileName));
+  return appendFileNameExtension(normalizedOutputName, getTrimOutputExtension(sourceFileName, outputFormat, settings));
 };
 
 const getFiniteSize = (size?: number | null) => (typeof size === "number" && Number.isFinite(size) ? size : undefined);
@@ -130,6 +150,9 @@ const getProgressDetails = (event: WorkflowProgress): Record<string, unknown> =>
 const formatElapsedMs = (ms?: number) =>
   typeof ms === "number" && Number.isFinite(ms) ? formatTiming(createTiming(ms)) : undefined;
 
+const hasSourceQueueWarning = (source: TrimWorkflowSourceState | null | undefined) =>
+  !!source && (source.status === "failed" || (source.warnings?.length ?? 0) > 0);
+
 function TrimPatchForm(props: TrimPatchFormProps) {
   const providerSettings = useCreateSettings();
   const providerAssetBaseUrl = useRomWeaverAssetBaseUrl();
@@ -143,7 +166,11 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     mergeSettingsWithOutput(providerSettings, props.defaultSettings),
   );
   const [internalOutputFormat, setInternalOutputFormat] = useState(props.defaultOutputFormat || "");
+  const [outputFormatEdited, setOutputFormatEdited] = useState(
+    props.outputFormat !== undefined || !!props.defaultOutputFormat,
+  );
   const [busy, setBusy] = useState(false);
+  const [trimQueued, setTrimQueued] = useState(false);
   const [sourceStaging, setSourceStaging] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [message, setMessage] = useState("");
@@ -188,29 +215,50 @@ function TrimPatchForm(props: TrimPatchFormProps) {
       details,
     );
   }, []);
-  const outputFormat = props.outputFormat ?? internalOutputFormat;
-  const disabled = !!props.disabled || busy || sourceStaging;
   const uploadDisabled = !!props.disabled || busy;
-  const actionDisabled = !!props.disabled || sourceStaging || !(busy || completedOutput || source);
+  const outputDisabled = !!props.disabled || busy;
+  const trimSourceReady = !!source && sourceState?.status === "ready";
+  const trimPreparationPending = sourceStaging || progress?.stage === "input" || (!!source && !sourceState);
+  const trimQueueBlocked = !!message || !!errorCode || hasSourceQueueWarning(sourceState);
+  const trimReady = trimSourceReady && !trimPreparationPending;
+  const actionDisabled = !!props.disabled || trimQueued || !(busy || completedOutput || source);
   const sourceFileName = getReactBinarySourceFileName(source, "ROM");
   const resolvedSourceFileName = sourceState?.fileName || sourceFileName;
   const rawOutputFormat = getSourceExtension(resolvedSourceFileName);
   const defaultArchiveFormat = normalizeDefaultArchive(settings.defaultArchive);
-  const resolvedOutputFormat =
-    outputFormat || (defaultArchiveFormat === "none" ? rawOutputFormat : defaultArchiveFormat);
+  const configuredOutputFormat = props.outputFormat ?? (outputFormatEdited ? internalOutputFormat : "");
+  const automaticArchiveFormat = defaultArchiveFormat === "none" ? "none" : defaultArchiveFormat;
+  const automaticCompressionFormat = resolveAutomaticCompressionFormat({
+    fallback: automaticArchiveFormat,
+    parentCompressions: sourceState?.parentCompressions,
+    sourceFileName: resolvedSourceFileName,
+  });
+  const automaticSpecialOutputFormat =
+    settings.specialCompression !== false &&
+    (automaticCompressionFormat === "chd" ||
+      automaticCompressionFormat === "rvz" ||
+      automaticCompressionFormat === "z3ds")
+      ? automaticCompressionFormat
+      : "";
+  const automaticOutputFormat =
+    automaticSpecialOutputFormat || (defaultArchiveFormat === "none" ? rawOutputFormat : defaultArchiveFormat);
+  const resolvedOutputFormat = configuredOutputFormat || automaticOutputFormat;
   const configuredOutputName = getCreateSettingsOutputName(props.settings || props.defaultSettings || providerSettings);
   const generatedOutputName =
-    configuredOutputName || (source ? getDefaultTrimOutputName(resolvedSourceFileName, resolvedOutputFormat) : "");
+    configuredOutputName ||
+    (source ? getDefaultTrimOutputName(resolvedSourceFileName, resolvedOutputFormat, settings) : "");
   const rawResolvedOutputName = outputName.trim() || generatedOutputName;
   const resolvedOutputName = ensureTrimmedOutputName(
     rawResolvedOutputName,
     resolvedOutputFormat,
     resolvedSourceFileName,
+    settings,
   );
   const executionOutputName = resolveTrimExecutionOutputName(
     resolvedOutputName,
     resolvedOutputFormat,
     resolvedSourceFileName,
+    settings,
   );
   const stagingSettingsKey = useMemo(
     () =>
@@ -250,6 +298,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   }, [clearCompletedOutput]);
 
   const updateSource = (file: BinarySource | null) => {
+    setTrimQueued(false);
     disposeActiveOutput();
     clearCompletedRunState();
     stagedTrimWorkflowGenerationRef.current += 1;
@@ -264,6 +313,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   cancelSelectionRef.current = () => updateSource(null);
 
   const updateSettings = (nextSettings: TrimPatchFormSettings) => {
+    setTrimQueued(false);
     disposeActiveOutput();
     clearCompletedRunState();
     if (!props.settings) setInternalSettings(nextSettings);
@@ -271,6 +321,8 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   };
 
   const updateOutputFormat = (nextOutputFormat: string) => {
+    setTrimQueued(false);
+    setOutputFormatEdited(true);
     disposeActiveOutput();
     clearCompletedRunState();
     if (props.outputFormat === undefined) setInternalOutputFormat(nextOutputFormat);
@@ -388,10 +440,21 @@ function TrimPatchForm(props: TrimPatchFormProps) {
 
   const runTrim = async () => {
     if (completedOutput) {
+      setTrimQueued(false);
       await completedOutput.saveAs();
       return;
     }
     if (!source) return;
+    if (trimQueueBlocked) {
+      setTrimQueued(false);
+      return;
+    }
+    if (trimPreparationPending && !trimReady) {
+      setTrimQueued(true);
+      return;
+    }
+    if (!trimReady) return;
+    setTrimQueued(false);
     const abortController = new AbortController();
     rememberAbortController(abortController);
     setBusy(true);
@@ -400,8 +463,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     disposeActiveOutput();
     clearCompletedRunState();
     setProgress(createIndeterminateWorkflowProgress({ label: "Trimming...", role: "worker", stage: "trim" }));
-    const outputCompression =
-      resolvedOutputFormat === "zip" || resolvedOutputFormat === "7z" ? resolvedOutputFormat : "none";
+    const outputCompression = isCompressionFormat(resolvedOutputFormat) ? resolvedOutputFormat : "none";
     await stagedTrimWorkflowReadyRef.current?.catch(() => undefined);
     const trimWorkflow =
       stagedTrimWorkflowRef.current ||
@@ -516,6 +578,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
 
   const onRunClick = () => {
     if (busy) {
+      setTrimQueued(false);
       abortActiveOperation();
       return;
     }
@@ -525,6 +588,10 @@ function TrimPatchForm(props: TrimPatchFormProps) {
 
   const onConfirmTrim = () => {
     setConfirmOpen(false);
+    if (sourceStaging) {
+      setTrimQueued(true);
+      return;
+    }
     void runTrim();
   };
 
@@ -537,6 +604,28 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     },
     [abortActiveOperation, disposeActiveOutput],
   );
+
+  useEffect(() => {
+    if (!trimQueued) return;
+    if (busy || completedOutput) {
+      setTrimQueued(false);
+      return;
+    }
+    if (!source) {
+      setTrimQueued(false);
+      return;
+    }
+    if (trimQueueBlocked) {
+      setTrimQueued(false);
+      return;
+    }
+    if (trimPreparationPending) return;
+    if (!trimReady) {
+      setTrimQueued(false);
+      return;
+    }
+    void runTrim();
+  });
 
   const progressProps = toWorkflowFileProgressProps(progress);
   const waitingProgressProps = toWorkflowFileProgressProps(createWaitingWorkflowProgress());
@@ -641,13 +730,19 @@ function TrimPatchForm(props: TrimPatchFormProps) {
             }
             id="trim-builder-button-run"
             onClick={() => (completedOutput ? void runTrim() : onRunClick())}
-            progress={busy && progressProps && progress?.stage !== "input" ? progressProps : null}
+            progress={
+              trimQueued
+                ? waitingProgressProps
+                : busy && progressProps && progress?.stage !== "input"
+                  ? progressProps
+                  : null
+            }
           >
             {busy ? "Cancel" : "TRIM & DOWNLOAD"}
           </OutputRunAction>
         }
         compress={buildOutputCompressionPanel({
-          disabled,
+          disabled: outputDisabled,
           fields: trimCompressPanel?.fields,
           format: compressHeaderFormat,
           formatId: "trim-builder-select-output-compression",
@@ -658,7 +753,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
           summary: trimCompressPanel?.summary,
           timing: compressTimingText,
         })}
-        disabled={disabled}
+        disabled={outputDisabled}
         fileName={resolvedOutputName}
         fileNameId="trim-builder-output-file"
         fileNamePlaceholder="Trimmed filename (no extension)"

@@ -7,9 +7,12 @@ import {
   stripLeadingExtensionDot,
 } from "../path-utils.ts";
 import {
+  CHD_COMPRESSION_INPUT_EXTENSIONS,
   CHD_DECOMPRESSION_INPUT_EXTENSIONS,
   createDiscExtensionRegex,
+  getUnambiguousDiscCompressionInputExtensions,
   hasDiscExtension,
+  RVZ_COMPRESSION_INPUT_EXTENSIONS,
   RVZ_DECOMPRESSION_INPUT_EXTENSIONS,
   Z3DS_COMPRESSION_INPUT_EXTENSIONS,
   Z3DS_DECOMPRESSION_INPUT_EXTENSIONS,
@@ -129,10 +132,21 @@ const getZ3dsExtractedFileName = (source: ByteProbeableSource): string => {
   return replaceFileExtension(source.fileName || "input.z3ds", "cci");
 };
 
+const createAutomaticDiscSourceExtensions = (
+  compressionInputExtensions: readonly string[],
+  decompressionInputExtensions: readonly string[],
+): readonly string[] => [
+  ...getUnambiguousDiscCompressionInputExtensions(compressionInputExtensions),
+  ...decompressionInputExtensions,
+];
+
 const DISC_COMPRESSION_FORMAT_REGISTRY = {
   chd: {
     automaticParentKinds: ["chd"],
-    automaticSourceExtensions: ["chd"],
+    automaticSourceExtensions: createAutomaticDiscSourceExtensions(
+      CHD_COMPRESSION_INPUT_EXTENSIONS,
+      CHD_DECOMPRESSION_INPUT_EXTENSIONS,
+    ),
     create: "createChd",
     decompressionInputExtensions: CHD_DECOMPRESSION_INPUT_EXTENSIONS,
     extensionRegex: createDiscExtensionRegex(CHD_DECOMPRESSION_INPUT_EXTENSIONS),
@@ -154,7 +168,10 @@ const DISC_COMPRESSION_FORMAT_REGISTRY = {
   },
   rvz: {
     automaticParentKinds: ["rvz"],
-    automaticSourceExtensions: ["rvz"],
+    automaticSourceExtensions: createAutomaticDiscSourceExtensions(
+      RVZ_COMPRESSION_INPUT_EXTENSIONS,
+      RVZ_DECOMPRESSION_INPUT_EXTENSIONS,
+    ),
     create: "createRvz",
     decompressionInputExtensions: RVZ_DECOMPRESSION_INPUT_EXTENSIONS,
     extensionRegex: createDiscExtensionRegex(RVZ_DECOMPRESSION_INPUT_EXTENSIONS),
@@ -175,7 +192,10 @@ const DISC_COMPRESSION_FORMAT_REGISTRY = {
   },
   z3ds: {
     automaticParentKinds: ["z3ds"],
-    automaticSourceExtensions: [...Z3DS_COMPRESSION_INPUT_EXTENSIONS, ...Z3DS_DECOMPRESSION_INPUT_EXTENSIONS],
+    automaticSourceExtensions: createAutomaticDiscSourceExtensions(
+      Z3DS_COMPRESSION_INPUT_EXTENSIONS,
+      Z3DS_DECOMPRESSION_INPUT_EXTENSIONS,
+    ),
     create: "createZ3ds",
     decompressionInputExtensions: Z3DS_DECOMPRESSION_INPUT_EXTENSIONS,
     extensionRegex: createDiscExtensionRegex(Z3DS_DECOMPRESSION_INPUT_EXTENSIONS),

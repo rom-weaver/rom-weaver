@@ -5,7 +5,7 @@ import {
 } from "../../presentation/workflow-presentation.ts";
 import { isVfsFileRef } from "../../storage/vfs/source-ref.ts";
 import type { JsonValue, ProgressEvent as SharedProgressEvent } from "../../types/runtime.ts";
-import type { ApplyWorkflowOptions, ProgressEvent } from "../../types/workflow-runtime.ts";
+import type { ApplyWorkflowOptions, CreateWorkflowOptions, ProgressEvent } from "../../types/workflow-runtime.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import { resolveCompressionLevels } from "../compression/compression-settings.ts";
 import OutputCompressionManager from "../compression/output-compression-manager.ts";
@@ -33,6 +33,7 @@ import { createPatchedOutputPlan, type PatchedOutputPlan } from "./patched-outpu
 
 const DEFAULT_CHD_CREATE_CD_CODECS = "cdlz,cdzl,cdfl";
 const DEFAULT_CHD_CREATE_DVD_CODECS = "lzma,zlib,huff,flac";
+type OutputWorkflowOptions = ApplyWorkflowOptions | CreateWorkflowOptions;
 
 const hasDiscCompressionMetadata = (source: PatchFileInstance | null | undefined) =>
   !!(
@@ -45,23 +46,23 @@ const hasDiscCompressionMetadata = (source: PatchFileInstance | null | undefined
     source?._z3dsSourceFileName
   );
 
-const getOutputCompression = (options: ApplyWorkflowOptions | undefined, source?: PatchFileInstance | null) => {
+const getOutputCompression = (options: OutputWorkflowOptions | undefined, source?: PatchFileInstance | null) => {
   if (options?.output?.compression !== undefined && options.output.compression !== null)
     return options.output.compression;
   return hasDiscCompressionMetadata(source) ? "auto" : "7z";
 };
-const getCompressionProfile = (options: ApplyWorkflowOptions | undefined) =>
+const getCompressionProfile = (options: OutputWorkflowOptions | undefined) =>
   options?.output?.container?.profile || "max";
-const getWorkerThreads = (options: ApplyWorkflowOptions | undefined) => options?.workers?.threads;
-const getLogLevel = (options: ApplyWorkflowOptions | undefined) => options?.logging?.level;
-const getContainerSettings = (options: ApplyWorkflowOptions | undefined) => options?.output?.container || {};
-const getRequestedOutputName = (options: ApplyWorkflowOptions | undefined) => {
+const getWorkerThreads = (options: OutputWorkflowOptions | undefined) => options?.workers?.threads;
+const getLogLevel = (options: OutputWorkflowOptions | undefined) => options?.logging?.level;
+const getContainerSettings = (options: OutputWorkflowOptions | undefined) => options?.output?.container || {};
+const getRequestedOutputName = (options: OutputWorkflowOptions | undefined) => {
   const outputName = options?.output?.outputName;
   return typeof outputName === "string" ? outputName.trim() : "";
 };
 
 const traceOutputName = (
-  options: ApplyWorkflowOptions | undefined,
+  options: OutputWorkflowOptions | undefined,
   message: string,
   details: Record<string, unknown>,
 ) => {
@@ -124,7 +125,7 @@ const createRuntimeDiscOutputFiles = async (
   compression: string,
   patchedRom: PatchFileInstance,
   outputPlan: PatchedOutputPlan,
-  options: ApplyWorkflowOptions | undefined,
+  options: OutputWorkflowOptions | undefined,
   runtime?: WorkflowRuntime,
 ): Promise<PatchFileInstance[] | null> => {
   type RuntimeCompressionCreateRequest = Parameters<NonNullable<WorkflowRuntime["compression"]["create"]>>[0];
@@ -183,6 +184,48 @@ const createRuntimeDiscOutputFiles = async (
   const result = await runtime.compression.create(request);
   const output = "output" in result ? result.output : result;
   return [await createPatchFileFromRuntimeOutput(output, outputPlan.finalOutputFileName)];
+};
+
+const createSingleFileDiscOutput = async ({
+  compression,
+  outputFile,
+  options,
+  runtime,
+}: {
+  compression: "chd" | "rvz" | "z3ds";
+  outputFile: PatchFileInstance;
+  options: OutputWorkflowOptions | undefined;
+  runtime?: WorkflowRuntime;
+}): Promise<PatchFileInstance | null> => {
+  const archiveSettings = getContainerSettings(options);
+  const levels = resolveCompressionLevels({
+    compressionProfile: getCompressionProfile(options),
+    sevenZipCodec: archiveSettings.sevenZipCodec,
+    sevenZipLevel: archiveSettings.sevenZipLevel,
+    z3dsCompressionLevel: archiveSettings.z3dsCompressionLevel,
+    zipCodec: archiveSettings.zipCodec,
+    zipLevel: archiveSettings.zipLevel,
+  });
+  const outputPlan = createPatchedOutputPlan({
+    chdOutputMode: "auto",
+    compressionFormat: compression,
+    compressionSettings: levels,
+    patchedFileName: getRequestedOutputName(options) || outputFile.fileName || "output.bin",
+    replaceCuePatchFileName: (cueText: string, outputName: string) => replaceCuePatchFileName(cueText, outputName),
+    resolveChdCodecMode: (_fileName: string, mode: string | null) =>
+      mode === "auto" ? getChdAutoCreateMode(outputFile) : mode,
+    resolveChdCompressionCodecs: (mode: string | null) =>
+      getDefaultChdCompressionCodecs(mode, getCompressionProfile(options)),
+    romFile: outputFile,
+    rvzOptions: {},
+    z3dsOptions: {
+      compressionLevel: levels.z3dsCompressionLevel,
+    },
+  });
+  const outputs = await createRuntimeDiscOutputFiles(compression, outputFile, outputPlan, options, runtime);
+  if (!outputs?.[0]) return null;
+  await Promise.resolve(getPatchFileCleanup(outputFile)?.()).catch(() => undefined);
+  return outputs[0];
 };
 
 const buildOutputFiles = async (
@@ -299,7 +342,7 @@ const createArchiveEntryFromPatchFile = (
 const getArchiveTrackExtension = (file: PatchFileInstance, fallbackFileName: string) => {
   const extension = typeof file.getExtension === "function" ? file.getExtension() : "";
   if (extension) return extension;
-  const match = String(fallbackFileName || "").match(/\.([^.\/?#]+)(?:[?#].*)?$/);
+  const match = String(fallbackFileName || "").match(/\.([^./?#]+)(?:[?#].*)?$/);
   return match?.[1] || "bin";
 };
 
@@ -493,4 +536,4 @@ const buildSessionOutputFiles = async (
   };
 };
 
-export { buildSessionOutputFiles };
+export { buildSessionOutputFiles, createRuntimeDiscOutputFiles, createSingleFileDiscOutput };

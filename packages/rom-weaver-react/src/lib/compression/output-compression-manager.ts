@@ -24,6 +24,7 @@ import {
   DISC_COMPRESSION_INPUT_EXTENSIONS,
   DISC_INPUT_EXTENSIONS,
   hasDiscExtension,
+  hasUnambiguousDiscCompressionInputExtension,
   RVZ_COMPRESSION_INPUT_EXTENSIONS,
   RVZ_DECOMPRESSION_INPUT_EXTENSIONS,
   Z3DS_COMPRESSION_INPUT_EXTENSIONS,
@@ -252,6 +253,12 @@ const OutputCompressionManager = (() => {
     hasDiscExtension(RVZ_COMPRESSION_INPUT_EXTENSIONS, _getExtension(source));
   const _isZ3dsCompressionInput = (source: CompressionSource | null | undefined) =>
     hasDiscExtension(Z3DS_COMPRESSION_INPUT_EXTENSIONS, _getExtension(source));
+  const _isUnambiguousChdCompressionInput = (source: CompressionSource | null | undefined) =>
+    hasUnambiguousDiscCompressionInputExtension(CHD_COMPRESSION_INPUT_EXTENSIONS, _getExtension(source));
+  const _isUnambiguousRvzCompressionInput = (source: CompressionSource | null | undefined) =>
+    hasUnambiguousDiscCompressionInputExtension(RVZ_COMPRESSION_INPUT_EXTENSIONS, _getExtension(source));
+  const _isUnambiguousZ3dsCompressionInput = (source: CompressionSource | null | undefined) =>
+    hasUnambiguousDiscCompressionInputExtension(Z3DS_COMPRESSION_INPUT_EXTENSIONS, _getExtension(source));
   const _resolveOutputCompression = (
     source: CompressionSource | null | undefined,
     options?: OutputCompressionOptions,
@@ -262,11 +269,11 @@ const OutputCompressionManager = (() => {
     if (_hasChdSourceMetadata(source)) return OUTPUT_COMPRESSION.CHD;
     if (_hasRvzSourceMetadata(source)) return OUTPUT_COMPRESSION.RVZ;
     if (_hasZ3dsSourceMetadata(source)) return OUTPUT_COMPRESSION.Z3DS;
-    if (_isZ3dsCompressionInput(source)) return OUTPUT_COMPRESSION.Z3DS;
+    if (_isUnambiguousZ3dsCompressionInput(source)) return OUTPUT_COMPRESSION.Z3DS;
     if (_isZ3dsSource(source)) return OUTPUT_COMPRESSION.Z3DS;
-    if (_isChdCompressionInput(source)) return OUTPUT_COMPRESSION.CHD;
+    if (_isUnambiguousChdCompressionInput(source)) return OUTPUT_COMPRESSION.CHD;
     if (_isChdSource(source)) return OUTPUT_COMPRESSION.CHD;
-    if (_isRvzCompressionInput(source)) return OUTPUT_COMPRESSION.RVZ;
+    if (_isUnambiguousRvzCompressionInput(source)) return OUTPUT_COMPRESSION.RVZ;
     if (_isRvzSource(source)) return OUTPUT_COMPRESSION.RVZ;
     return OUTPUT_COMPRESSION.SEVEN_ZIP;
   };
