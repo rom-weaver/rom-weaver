@@ -75,13 +75,7 @@ impl NativeCodecBackend {
     }
 
     fn encode_thread_capability(&self) -> ThreadCapability {
-        match self.kind {
-            NativeCodecKind::Deflate
-            | NativeCodecKind::Zstd
-            | NativeCodecKind::Lzma2
-            | NativeCodecKind::Bzip2 => ThreadCapability::parallel(None),
-            NativeCodecKind::Store => ThreadCapability::single_threaded(),
-        }
+        ThreadCapability::single_threaded()
     }
 
     fn decode_thread_capability(&self) -> ThreadCapability {
@@ -124,49 +118,55 @@ impl NativeCodecBackend {
         Ok(batch)
     }
 
-    fn encode_with_libarchive(
+    fn encode_with_native_writer(
         &self,
         request: &CodecOperationRequest,
         level: i32,
-        execution: &mut ThreadExecution,
     ) -> Result<u64> {
         let input_len = fs::metadata(&request.input)?.len();
         let mut source = BufReader::new(File::open(&request.input)?);
-        let archive_name = request
-            .input
-            .file_name()
-            .and_then(|value| value.to_str())
-            .filter(|value| !value.is_empty())
-            .unwrap_or("data");
-
-        let thread_count = Some(execution.effective_threads.max(1));
-        let mut archive = libarchive_open_write_archive(
-            self.descriptor.name,
-            self.kind,
-            &request.output,
-            level,
-            thread_count,
-        )?;
-        let result = (|| -> Result<u64> {
-            libarchive_write_raw_entry_from_reader(
-                &mut archive,
-                self.descriptor.name,
-                archive_name,
-                input_len,
-                &mut source,
-                Self::LIBARCHIVE_IO_BUFFER_BYTES,
-            )?;
-            Ok(input_len)
-        })();
-
-        match (
-            result,
-            libarchive_close_write_archive(archive, self.descriptor.name),
-        ) {
-            (Ok(bytes), Ok(())) => Ok(bytes),
-            (Err(error), _) => Err(error),
-            (Ok(_), Err(error)) => Err(error),
+        let output = BufWriter::new(NonVectoredWriter::new(File::create(&request.output)?));
+        match self.kind {
+            NativeCodecKind::Deflate => {
+                let mut encoder = GzEncoder::new(output, FlateCompression::new(level as u32));
+                io::copy(&mut source, &mut encoder)?;
+                let mut output = encoder.finish()?;
+                output.flush()?;
+            }
+            NativeCodecKind::Zstd => {
+                let mut encoder = ZstdEncoder::new(output, level).map_err(|error| {
+                    RomWeaverError::Validation(format!("zstd encode init failed: {error}"))
+                })?;
+                io::copy(&mut source, &mut encoder)?;
+                let mut output = encoder.finish().map_err(|error| {
+                    RomWeaverError::Validation(format!("zstd encode finalize failed: {error}"))
+                })?;
+                output.flush()?;
+            }
+            NativeCodecKind::Lzma2 => {
+                let mut encoder = XzWriter::new(output, XzOptions::with_preset(level as u32))
+                    .map_err(|error| {
+                        RomWeaverError::Validation(format!("xz encode init failed: {error}"))
+                    })?;
+                io::copy(&mut source, &mut encoder)?;
+                let mut output = encoder.finish().map_err(|error| {
+                    RomWeaverError::Validation(format!("xz encode finalize failed: {error}"))
+                })?;
+                output.flush()?;
+            }
+            NativeCodecKind::Bzip2 => {
+                let mut encoder = BzEncoder::new(output, Bzip2Compression::new(level as u32));
+                io::copy(&mut source, &mut encoder)?;
+                let mut output = encoder.finish()?;
+                output.flush()?;
+            }
+            NativeCodecKind::Store => {
+                return Err(RomWeaverError::Validation(
+                    "store codec does not use native compression writers".to_string(),
+                ));
+            }
         }
+        Ok(input_len)
     }
 
     fn decode_with_libarchive(&self, request: &CodecOperationRequest) -> Result<u64> {
@@ -281,7 +281,7 @@ impl NativeCodecBackend {
                         self.descriptor.name
                     ))
                 })?;
-                self.encode_with_libarchive(request, resolved_level, execution)?
+                self.encode_with_native_writer(request, resolved_level)?
             }
         };
         Ok(bytes)
@@ -353,63 +353,6 @@ impl NativeCodecBackend {
     }
 }
 
-fn libarchive_open_write_archive(
-    codec_name: &str,
-    kind: NativeCodecKind,
-    output: &Path,
-    level: i32,
-    thread_count: Option<usize>,
-) -> Result<WriteArchive> {
-    let mut archive = WriteArchive::new(&format!("{codec_name} encode failed"))?;
-    let setup_result = (|| -> Result<()> {
-        archive.set_format(
-            WriteFormat::Raw,
-            &format!("{codec_name} encode failed while selecting raw format"),
-        )?;
-
-        let filter = libarchive_write_filter(kind)?;
-        archive.add_filter(
-            filter,
-            &format!(
-                "{codec_name} encode failed while enabling {} filter",
-                filter.module_name().unwrap_or("no-op")
-            ),
-        )?;
-
-        let module = filter.module_name().ok_or_else(|| {
-            RomWeaverError::Validation("store codec does not use libarchive filters".to_string())
-        })?;
-        archive.set_filter_option(
-            module,
-            "compression-level",
-            &level.to_string(),
-            &format!("{codec_name} encode failed while setting {module}:compression-level={level}"),
-        )?;
-        if let Some(threads) = thread_count {
-            archive.try_set_filter_option(
-                module,
-                "threads",
-                &threads.to_string(),
-                &format!("{codec_name} encode failed while setting {module}:threads={threads}"),
-            )?;
-        }
-
-        archive.open_filename(
-            output,
-            "codec output",
-            &format!(
-                "{codec_name} encode failed while opening output `{}`",
-                output.display()
-            ),
-        )?;
-        Ok(())
-    })();
-
-    setup_result?;
-
-    Ok(archive)
-}
-
 fn libarchive_open_read_archive(
     codec_name: &str,
     kind: NativeCodecKind,
@@ -445,18 +388,6 @@ fn libarchive_open_read_archive(
     Ok(archive)
 }
 
-fn libarchive_write_filter(kind: NativeCodecKind) -> Result<WriteFilter> {
-    match kind {
-        NativeCodecKind::Deflate => Ok(WriteFilter::Gzip),
-        NativeCodecKind::Zstd => Ok(WriteFilter::Zstd),
-        NativeCodecKind::Lzma2 => Ok(WriteFilter::Xz),
-        NativeCodecKind::Bzip2 => Ok(WriteFilter::Bzip2),
-        NativeCodecKind::Store => Err(RomWeaverError::Validation(
-            "store codec does not use libarchive filters".to_string(),
-        )),
-    }
-}
-
 fn libarchive_read_filter(kind: NativeCodecKind) -> Result<ReadFilter> {
     match kind {
         NativeCodecKind::Deflate => Ok(ReadFilter::Gzip),
@@ -478,40 +409,6 @@ fn libarchive_read_filter_name(filter: ReadFilter) -> &'static str {
     }
 }
 
-fn libarchive_write_raw_entry_from_reader<R: Read>(
-    archive: &mut WriteArchive,
-    codec_name: &str,
-    entry_name: &str,
-    input_len: u64,
-    source: &mut R,
-    buffer_bytes: usize,
-) -> Result<()> {
-    archive.start_entry(
-        EntrySpec {
-            pathname: entry_name,
-            file_type: EntryFileType::Regular,
-            perm: 0o644,
-            size: input_len,
-        },
-        &format!("{codec_name} encode failed while writing raw entry header"),
-    )?;
-
-    let mut buffer = vec![0u8; buffer_bytes];
-    loop {
-        let read = source.read(&mut buffer)?;
-        if read == 0 {
-            break;
-        }
-        archive.write_data_all(
-            &buffer[..read],
-            &format!("{codec_name} encode failed while writing payload data"),
-            ZeroWriteBehavior::Complete,
-        )?;
-    }
-
-    archive.finish_entry(&format!("{codec_name} encode failed while finalizing entry"))
-}
-
 fn libarchive_read_entry_to_writer<W: Write>(
     archive: &mut ReadArchive,
     codec_name: &str,
@@ -522,13 +419,6 @@ fn libarchive_read_entry_to_writer<W: Write>(
         output,
         buffer_bytes,
         &format!("{codec_name} decode failed while reading payload data"),
-    )
-}
-
-fn libarchive_close_write_archive(archive: WriteArchive, codec_name: &str) -> Result<()> {
-    archive.close(
-        &format!("{codec_name} encode failed while closing writer"),
-        &format!("{codec_name} encode failed while freeing writer"),
     )
 }
 

@@ -5,7 +5,12 @@ license.workspace = true
 rust-version.workspace = true
 version.workspace = true
 
+[features]
+default = []
+write-archives = ["rom-weaver-libarchive-sys/write-archives"]
+write-extra = ["write-archives", "rom-weaver-libarchive-sys/write-extra"]
+
 [dependencies]
 akv = "0.1.0"
 rom-weaver-core = { path = "../rom-weaver-core" }
-rom-weaver-libarchive-sys.workspace = true
+rom-weaver-libarchive-sys = { workspace = true, default-features = false }

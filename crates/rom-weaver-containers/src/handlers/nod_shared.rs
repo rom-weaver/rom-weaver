@@ -541,21 +541,6 @@ impl NodHandlerCore {
         Ok(output_bytes)
     }
 
-    fn validate_u8_level(&self, codec: &str, level: i32) -> Result<u8> {
-        if level < 0 {
-            return Err(RomWeaverError::Validation(format!(
-                "{} codec `{codec}` requires a non-negative level",
-                self.format_name()
-            )));
-        }
-        u8::try_from(level).map_err(|_| {
-            RomWeaverError::Validation(format!(
-                "{} codec `{codec}` level `{level}` is too large",
-                self.format_name()
-            ))
-        })
-    }
-
     fn validate_i8_level(&self, codec: &str, level: i32) -> Result<i8> {
         i8::try_from(level).map_err(|_| {
             RomWeaverError::Validation(format!(
@@ -565,39 +550,11 @@ impl NodHandlerCore {
         })
     }
 
-    fn reject_store_level_error(&self) -> RomWeaverError {
-        RomWeaverError::Validation(format!(
-            "{} codec `store` does not accept --level",
-            self.format_name()
-        ))
-    }
-
     fn unsupported_codec_error(&self, codec_name: &str, supported_clause: &str) -> RomWeaverError {
         RomWeaverError::Validation(format!(
             "unsupported {} codec `{codec_name}`; {supported_clause}",
             self.format_name()
         ))
-    }
-
-    fn resolve_store_only_compression(
-        &self,
-        codec: Option<&str>,
-        level: Option<i32>,
-    ) -> Result<NodCompression> {
-        match parse_requested_codec(codec) {
-            RequestedCodec::Unspecified | RequestedCodec::Known(CanonicalCodec::Store) => {
-                if level.is_some() {
-                    return Err(self.reject_store_level_error());
-                }
-                Ok(NodCompression::None)
-            }
-            RequestedCodec::Known(codec) => {
-                Err(self.unsupported_codec_error(codec.name(), "supported codec is store"))
-            }
-            RequestedCodec::Unknown(name) => {
-                Err(self.unsupported_codec_error(&name, "supported codec is store"))
-            }
-        }
     }
 }
 /* jscpd:ignore-end */

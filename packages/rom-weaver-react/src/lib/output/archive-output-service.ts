@@ -32,7 +32,7 @@ type CompressionTrace<TValue> = (
 ) => Promise<TValue>;
 type ArchiveTrace = (message: string, details: Record<string, unknown>) => void;
 
-const ZIP_COMPRESSED_EXTENSION_REGEX = /\.(zip|zipx)$/i;
+const ZIP_COMPRESSED_EXTENSION_REGEX = /\.zip$/i;
 const SEVEN_ZIP_EXTENSION_REGEX = /\.7z$/i;
 
 const getArchiveOutputCompression = (

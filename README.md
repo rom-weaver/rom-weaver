@@ -141,25 +141,25 @@ Notes:
 | Format    | Aliases                                  | Extensions                                   | Probe | Extract | Create |
 | --------- | ---------------------------------------- | -------------------------------------------- | ------- | ------- | ------ |
 | `zip`     | none                                     | `.zip`                                       | yes     | yes     | yes    |
-| `zipx`    | none                                     | `.zipx`                                      | yes     | yes     | yes    |
+| `zipx`    | none                                     | `.zipx`                                      | yes     | yes     | no     |
 | `7z`      | `7zip`                                   | `.7z`                                        | yes     | yes     | yes    |
 | `rar`     | none                                     | `.rar`                                       | yes     | yes     | no     |
-| `tar`     | none                                     | `.tar`                                       | yes     | yes     | yes    |
-| `tar.gz`  | `tgz`                                    | `.tar.gz`, `.tgz`                            | yes     | yes     | yes    |
-| `tar.bz2` | `tbz2`                                   | `.tar.bz2`, `.tbz2`                          | yes     | yes     | yes    |
-| `tar.xz`  | `txz`                                    | `.tar.xz`, `.txz`                            | yes     | yes     | yes    |
-| `gz`      | `gzip`                                   | `.gz`                                        | yes     | yes     | yes    |
-| `bz2`     | `bzip2`                                  | `.bz2`                                       | yes     | yes     | yes    |
-| `xz`      | `lzma`, `lzma2`                          | `.xz`                                        | yes     | yes     | yes    |
-| `zst`     | `zstd`, `zstandard`                      | `.zst`                                       | yes     | yes     | yes    |
-| `cso`     | `ciso`                                   | `.cso`, `.ciso`                              | yes     | yes     | yes    |
+| `tar`     | none                                     | `.tar`                                       | yes     | yes     | no     |
+| `tar.gz`  | `tgz`                                    | `.tar.gz`, `.tgz`                            | yes     | yes     | no     |
+| `tar.bz2` | `tbz2`                                   | `.tar.bz2`, `.tbz2`                          | yes     | yes     | no     |
+| `tar.xz`  | `txz`                                    | `.tar.xz`, `.txz`                            | yes     | yes     | no     |
+| `gz`      | `gzip`                                   | `.gz`                                        | yes     | yes     | no     |
+| `bz2`     | `bzip2`                                  | `.bz2`                                       | yes     | yes     | no     |
+| `xz`      | `lzma`, `lzma2`                          | `.xz`                                        | yes     | yes     | no     |
+| `zst`     | `zstd`, `zstandard`                      | `.zst`                                       | yes     | yes     | no     |
+| `cso`     | `ciso`                                   | `.cso`, `.ciso`                              | yes     | yes     | no     |
 | `pbp`     | none                                     | `.pbp`                                       | yes     | yes     | no     |
 | `chd`     | `chd-cd`, `chd-dvd`, `chd-raw`, `chd-hd` | `.chd`                                       | yes     | yes     | yes    |
 | `gcz`     | none                                     | `.gcz`                                       | yes     | yes     | no     |
-| `wia`     | none                                     | `.wia`                                       | yes     | yes     | yes    |
-| `tgc`     | none                                     | `.tgc`                                       | yes     | yes     | yes    |
+| `wia`     | none                                     | `.wia`                                       | yes     | yes     | no     |
+| `tgc`     | none                                     | `.tgc`                                       | yes     | yes     | no     |
 | `nfs`     | none                                     | `.nfs`                                       | yes     | yes     | no     |
-| `wbfs`    | none                                     | `.wbfs`                                      | yes     | yes     | yes    |
+| `wbfs`    | none                                     | `.wbfs`                                      | yes     | yes     | no     |
 | `rvz`     | none                                     | `.rvz`                                       | yes     | yes     | yes    |
 | `z3ds`    | `3ds`                                    | `.z3ds`, `.zcci`, `.zcxi`, `.zcia`, `.z3dsx` | yes     | yes     | yes    |
 | `xiso`    | none                                     | `.xiso`, `.xiso.iso`                         | no      | no      | no     |
@@ -172,23 +172,17 @@ Notes:
 - `extract --split-bin` is CHD-only (ignored for non-CHD input).
 - CHD parent/differential workflows are supported when a parent CHD is supplied by the caller.
 - CHD create accepts full MAME-style codec lists; Rust-native encoding emits CHD-compatible payloads for `zstd`, `zlib`, `lzma`, `huff`, `flac`, `cdzs`, `cdzl`, `cdlz`, `cdfl`, and `avhuff` (aliases `huffman` and `avhu` are accepted).
+- `zipx` and `zst` are probe/extract inputs only. `compress --format zip --codec zstd` writes ZIP-compatible `.zip` output.
 
 ## Create-Time Codec Support
 
-| Output format(s)     | Supported `--codec` values                                                                   |
-| -------------------- | -------------------------------------------------------------------------------------------- |
-| `zip`, `zipx`        | `store`, `deflate`, `bzip2`, `zstd`                                                          |
-| `7z`                 | `lzma2` (default), `lzma`                                                                    |
-| `tar`                | `store` (or omit)                                                                            |
-| `tar.gz`, `gz`       | `gzip` / `deflate`                                                                           |
-| `tar.bz2`, `bz2`     | `bzip2`                                                                                      |
-| `tar.xz`, `xz`       | `xz` / `lzma` / `lzma2`                                                                      |
-| `zst`                | `zstd`                                                                                       |
-| `cso`, `tgc`, `wbfs` | `store` only                                                                                 |
-| `wia`                | `store`, `bzip2`, `lzma`, `lzma2`, `zstd`                                                    |
-| `rvz`                | `store`, `zstd`, `bzip2`, `lzma`, `lzma2`                                                    |
-| `z3ds`               | `zstd` only                                                                                  |
-| `chd`                | `store`, `zlib`, `zstd`, `lzma`, `huff` (`huffman` alias), `flac`, `cdlz`, `cdzl`, `cdzs`, `cdfl`, `avhuff` (`avhu` alias) |
+| Output format(s) | Supported `--codec` values                                                                   |
+| ---------------- | -------------------------------------------------------------------------------------------- |
+| `zip`            | `store`, `deflate`, `zstd`                                                                   |
+| `7z`             | `lzma2` only                                                                                 |
+| `rvz`            | `zstd` only                                                                                  |
+| `z3ds`           | `zstd` only                                                                                  |
+| `chd`            | `store`, `zlib`, `zstd`, `lzma`, `huff` (`huffman` alias), `flac`, `cdlz`, `cdzl`, `cdzs`, `cdfl`, `avhuff` (`avhu` alias) |
 
 ## Compression Level Profiles
 

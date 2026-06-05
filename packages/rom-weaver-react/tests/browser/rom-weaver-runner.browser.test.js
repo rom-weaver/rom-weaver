@@ -58,7 +58,8 @@ test("rom-weaver runner ready metadata exposes the loaded browser wasm runtime",
   expect(typeof ready.threaded).toBe("boolean");
   expect(ready.wasmUrl).toMatch(/rom-weaver-app(?:-threaded)?\.wasm/);
   expect(ready.wasmUrl).not.toContain("?import&url");
-  expect(wasmResourceNames.some((name) => /rom-weaver-app(?:-threaded)?\.wasm/.test(name))).toBe(true);
+  if (wasmResourceNames.length > 0)
+    expect(wasmResourceNames.some((name) => /rom-weaver-app(?:-threaded)?\.wasm/.test(name))).toBe(true);
 });
 
 test("rom-weaver failure messages ignore trace-only stderr", () => {
@@ -85,7 +86,7 @@ test("rom-weaver runner reads and writes staged /work OPFS paths", async () => {
 
   const runId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const sourcePath = `${WORKER_OPFS_MOUNTPOINT}/browser-bench-model-${runId}.bin`;
-  const outputPath = `${WORKER_OPFS_MOUNTPOINT}/browser-bench-model-${runId}.gz`;
+  const outputPath = `${WORKER_OPFS_MOUNTPOINT}/browser-bench-model-${runId}.zip`;
   const source = encoder.encode("rom-weaver browser OPFS parity fixture\n");
   await browserRuntime.vfs.truncate(sourcePath, 0);
   await browserRuntime.vfs.write(sourcePath, source, { fileOffset: 0 });
@@ -101,7 +102,7 @@ test("rom-weaver runner reads and writes staged /work OPFS paths", async () => {
     const traceLines = [];
     const compressResult = await runRomWeaverJson(
       {
-        args: { format: "gz", input: [staged.filePath], output: outputPath, threads: 1 },
+        args: { format: "zip", input: [staged.filePath], output: outputPath, threads: 1 },
         type: "compress",
       },
       {

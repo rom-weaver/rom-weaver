@@ -44,7 +44,7 @@ fn rvz_compress_and_extract_round_trips() {
             "--output",
             rvz_path.path().to_str().expect("path"),
             "--codec",
-            "lzma2",
+            "zstd",
             "--threads",
             "8",
             "--json",
@@ -94,7 +94,7 @@ fn rvz_compress_and_extract_round_trips() {
 }
 
 #[test]
-fn rvz_compress_store_ignores_level_profile() {
+fn rvz_compress_rejects_non_zstd_codec() {
     let temp = setup_temp_dir();
     let iso_bytes = build_test_gamecube_iso(0x4000);
     fs::write(temp.child("disc.iso").path(), &iso_bytes).expect("iso fixture");
@@ -113,18 +113,18 @@ fn rvz_compress_store_ignores_level_profile() {
             "min",
             "--json",
         ],
-        0,
+        1,
     );
 
     let json = parse_single_json_line(&output);
     assert_eq!(json["command"], "compress");
     assert_eq!(json["family"], "container");
     assert_eq!(json["format"], "rvz");
-    assert_eq!(json["status"], "succeeded");
+    assert_eq!(json["status"], "failed");
     assert!(json["label"]
         .as_str()
         .expect("label")
-        .contains("codec=store"));
+        .contains("supported codec is zstd"));
 }
 
 #[test]

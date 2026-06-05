@@ -10,9 +10,8 @@ mod tests {
     };
 
     use super::{
-        CSO_DEFAULT_BLOCK_BYTES, ChdCodec, ContainerCreateRequest, ContainerRegistry, SEVEN_Z,
-        SelectionMatcher, SevenZContainerHandler, SevenZMethod, Z3dsContainerHandler,
-        ZipContainerHandler,
+        ChdCodec, ContainerCreateRequest, ContainerRegistry, SEVEN_Z, SelectionMatcher,
+        SevenZContainerHandler, SevenZMethod, Z3dsContainerHandler, ZipContainerHandler,
     };
     use chd::{
         header::Header,
@@ -29,11 +28,13 @@ mod tests {
             ProcessOptions as NodProcessOptions,
         },
     };
-    use rom_weaver_codecs::CanonicalCodec;
     use rom_weaver_core::{
         CancellationToken, ContainerHandlerOperations, NoopProgressSink, OperationContext,
         ThreadBudget, ThreadCapability, ThreadExecution,
     };
+    use rom_weaver_codecs::encode_xz_preset;
+
+    const TEST_CSO_BLOCK_BYTES: usize = 2 * 1024;
 
     fn test_temp_root() -> PathBuf {
         #[cfg(target_family = "wasm")]
@@ -122,6 +123,22 @@ mod tests {
             file.write_all(&chunk[..len]).expect("write fixture chunk");
             remaining -= len;
         }
+    }
+
+    fn write_tar_fixture(input_dir: &Path, archive_path: &Path, xz_level: Option<u32>) {
+        let mut tar_bytes = Vec::new();
+        {
+            let mut builder = tar::Builder::new(&mut tar_bytes);
+            builder
+                .append_dir_all("payload", input_dir)
+                .expect("append tar fixture directory");
+            builder.finish().expect("finish tar fixture");
+        }
+        let bytes = match xz_level {
+            Some(level) => encode_xz_preset(&tar_bytes, level).expect("xz encode tar fixture"),
+            None => tar_bytes,
+        };
+        fs::write(archive_path, bytes).expect("write tar fixture");
     }
 
     fn assert_files_equal(left: &Path, right: &Path) {
@@ -372,6 +389,35 @@ mod tests {
                 .expect("write wia header");
         }
         destination.flush().expect("flush wia fixture");
+    }
+
+    fn assert_extract_only_create_rejected(format: &str, output_extension: &str) {
+        let temp_dir = temp_dir_path(&format!("{format}-extract-only-create"));
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input_path = temp_dir.join("payload.bin");
+        fs::write(&input_path, b"payload").expect("write fixture");
+
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name(format).expect("container handler");
+        let error = handler
+            .create(
+                &ContainerCreateRequest {
+                    inputs: vec![input_path],
+                    output: temp_dir.join(format!("payload.{output_extension}")),
+                    format: format.to_string(),
+                    codec: None,
+                    level: None,
+                    parent: None,
+                },
+                &test_context(&temp_dir, 1),
+            )
+            .expect_err("extract-only create should be rejected");
+        assert!(
+            error.to_string().contains("extract-only"),
+            "unexpected error for {format}: {error}"
+        );
+
+        let _ = fs::remove_dir_all(temp_dir);
     }
 
     const TEST_PBP_SECTOR_BYTES: usize = 0x930;
@@ -659,56 +705,56 @@ mod tests {
     }
 
     #[test]
-    fn wbfs_capabilities_support_create_and_extract() {
+    fn wbfs_capabilities_are_extract_only() {
         let registry = ContainerRegistry::new();
         let handler = registry.find_by_name("wbfs").expect("wbfs handler");
         let capabilities = handler.capabilities();
         assert!(capabilities.probe_details);
         assert!(capabilities.extract);
-        assert!(capabilities.create);
+        assert!(!capabilities.create);
         assert_eq!(
             capabilities.extract_threads,
             ThreadCapability::parallel(None)
         );
         assert_eq!(
             capabilities.create_threads,
-            ThreadCapability::parallel(None)
+            ThreadCapability::single_threaded()
         );
     }
 
     #[test]
-    fn wia_capabilities_support_create_and_extract() {
+    fn wia_capabilities_are_extract_only() {
         let registry = ContainerRegistry::new();
         let handler = registry.find_by_name("wia").expect("wia handler");
         let capabilities = handler.capabilities();
         assert!(capabilities.probe_details);
         assert!(capabilities.extract);
-        assert!(capabilities.create);
+        assert!(!capabilities.create);
         assert_eq!(
             capabilities.extract_threads,
             ThreadCapability::parallel(None)
         );
         assert_eq!(
             capabilities.create_threads,
-            ThreadCapability::parallel(None)
+            ThreadCapability::single_threaded()
         );
     }
 
     #[test]
-    fn tgc_capabilities_support_create_and_extract() {
+    fn tgc_capabilities_are_extract_only() {
         let registry = ContainerRegistry::new();
         let handler = registry.find_by_name("tgc").expect("tgc handler");
         let capabilities = handler.capabilities();
         assert!(capabilities.probe_details);
         assert!(capabilities.extract);
-        assert!(capabilities.create);
+        assert!(!capabilities.create);
         assert_eq!(
             capabilities.extract_threads,
             ThreadCapability::parallel(None)
         );
         assert_eq!(
             capabilities.create_threads,
-            ThreadCapability::parallel(None)
+            ThreadCapability::single_threaded()
         );
     }
 
@@ -731,20 +777,20 @@ mod tests {
     }
 
     #[test]
-    fn cso_capabilities_support_create_and_extract() {
+    fn cso_capabilities_are_extract_only() {
         let registry = ContainerRegistry::new();
         let handler = registry.find_by_name("cso").expect("cso handler");
         let capabilities = handler.capabilities();
         assert!(capabilities.probe_details);
         assert!(capabilities.extract);
-        assert!(capabilities.create);
+        assert!(!capabilities.create);
         assert_eq!(
             capabilities.extract_threads,
             expected_parallel_or_single_for_wasm_threads()
         );
         assert_eq!(
             capabilities.create_threads,
-            expected_parallel_or_single_for_wasm_threads()
+            ThreadCapability::single_threaded()
         );
     }
 
@@ -905,19 +951,28 @@ mod tests {
                 let handler = registry.find_by_name(format).expect("archive handler");
                 let archive_path =
                     temp_dir.join(format!("payload-{}.{}", format.replace('.', "-"), format));
-                handler
-                    .create(
-                        &ContainerCreateRequest {
-                            inputs: vec![input_dir.clone()],
-                            output: archive_path.clone(),
-                            format: format.to_string(),
-                            codec: codec.map(str::to_string),
-                            level,
-                            parent: None,
-                        },
-                        &context,
-                    )
-                    .expect("create archive");
+                let create_request = ContainerCreateRequest {
+                    inputs: vec![input_dir.clone()],
+                    output: archive_path.clone(),
+                    format: format.to_string(),
+                    codec: codec.map(str::to_string),
+                    level,
+                    parent: None,
+                };
+                match format {
+                    "tar" | "tar.xz" => {
+                        write_tar_fixture(
+                            &input_dir,
+                            &create_request.output,
+                            level.map(|value| value as u32),
+                        );
+                    }
+                    _ => {
+                        handler
+                            .create(&create_request, &context)
+                            .expect("create archive");
+                    }
+                }
 
                 let entries = handler
                     .list_entries(
@@ -944,7 +999,7 @@ mod tests {
     }
 
     #[test]
-    fn seven_z_parse_codec_supports_libarchive_codec_set() {
+    fn seven_z_parse_codec_supports_lzma2_only() {
         let temp_dir = temp_dir_path("seven-z-codec-parse");
         fs::create_dir_all(&temp_dir).expect("temp dir");
         let execution = test_context(&temp_dir, 8).plan_threads(ThreadCapability::parallel(None));
@@ -953,13 +1008,6 @@ mod tests {
         let cases = [
             (None, None, SevenZMethod::Lzma2),
             (Some("lzma2"), Some(6), SevenZMethod::Lzma2),
-            (Some("lzma"), Some(6), SevenZMethod::Lzma),
-            (Some("store"), None, SevenZMethod::Store),
-            (Some("zstd"), Some(6), SevenZMethod::Zstd),
-            (Some("zstd"), Some(22), SevenZMethod::Zstd),
-            (Some("deflate"), Some(6), SevenZMethod::Deflate),
-            (Some("bzip2"), Some(6), SevenZMethod::Bzip2),
-            (Some("ppmd"), Some(6), SevenZMethod::Ppmd),
         ];
         for (codec, level, expected_method) in cases {
             let method = handler
@@ -968,57 +1016,23 @@ mod tests {
             assert_eq!(method, expected_method);
         }
 
-        let store_error = handler
-            .parse_codec(Some("store"), Some(6), &execution)
-            .expect_err("store level should fail");
-        assert!(store_error.to_string().contains("does not accept --level"));
         let level_error = handler
-            .parse_codec(Some("zstd"), Some(23), &execution)
+            .parse_codec(Some("lzma2"), Some(10), &execution)
             .expect_err("out-of-range level should fail");
         assert!(level_error.to_string().contains("out of range"));
-        let unsupported_error = handler
-            .parse_codec(Some("lz4"), Some(6), &execution)
-            .expect_err("unsupported codec should fail");
-        assert!(
-            unsupported_error.to_string().contains(
-                "supported codecs are lzma2, lzma, store, zstd, deflate, bzip2, and ppmd"
-            )
-        );
+        for codec in ["lzma", "store", "zstd", "deflate", "bzip2", "ppmd", "lz4"] {
+            let unsupported_error = handler
+                .parse_codec(Some(codec), Some(6), &execution)
+                .expect_err("unsupported codec should fail");
+            assert!(
+                unsupported_error
+                    .to_string()
+                    .contains("supported codec is lzma2"),
+                "unexpected error for codec `{codec}`: {unsupported_error}"
+            );
+        }
 
         let _ = fs::remove_dir_all(temp_dir);
-    }
-
-    #[test]
-    fn seven_z_libarchive_method_names_cover_supported_codecs() {
-        for (codec, method_name) in [
-            (CanonicalCodec::Store, "copy"),
-            (CanonicalCodec::Deflate, "deflate"),
-            (CanonicalCodec::Bzip2, "bzip2"),
-            (CanonicalCodec::Lzma, "lzma1"),
-            (CanonicalCodec::Lzma2, "lzma2"),
-            (CanonicalCodec::Zstd, "zstd"),
-            (CanonicalCodec::Ppmd, "ppmd"),
-        ] {
-            assert_eq!(
-                SevenZContainerHandler::libarchive_method_name(codec),
-                Some(method_name),
-                "codec `{}` should route through libarchive",
-                codec.name()
-            );
-        }
-
-        for codec in [
-            CanonicalCodec::Lz4,
-            CanonicalCodec::Brotli,
-            CanonicalCodec::Huffman,
-        ] {
-            assert_eq!(
-                SevenZContainerHandler::libarchive_method_name(codec),
-                None,
-                "codec `{}` should not claim libarchive support",
-                codec.name()
-            );
-        }
     }
 
     #[test]
@@ -1069,21 +1083,21 @@ mod tests {
         fs::write(&input_path, vec![0xCD; 256 * 1024]).expect("fixture");
 
         let registry = ContainerRegistry::new();
-        let handler = registry.find_by_name("zipx").expect("zipx handler");
+        let handler = registry.find_by_name("zip").expect("zip handler");
 
         handler
             .create(
                 &ContainerCreateRequest {
                     inputs: vec![input_path],
-                    output: temp_dir.join("payload.zipx"),
-                    format: "zipx".to_string(),
+                    output: temp_dir.join("payload.zip"),
+                    format: "zip".to_string(),
                     codec: Some("zstd".to_string()),
                     level: Some(22),
                     parent: None,
                 },
                 &test_context(&temp_dir, 4),
             )
-            .expect("zipx create at level 22");
+            .expect("zip zstd create at level 22");
 
         let _ = fs::remove_dir_all(temp_dir);
     }
@@ -1096,21 +1110,21 @@ mod tests {
         fs::write(&input_path, vec![0xAB; 512 * 1024]).expect("fixture");
 
         let registry = ContainerRegistry::new();
-        let handler = registry.find_by_name("zipx").expect("zipx handler");
+        let handler = registry.find_by_name("zip").expect("zip handler");
 
         let report = handler
             .create(
                 &ContainerCreateRequest {
                     inputs: vec![input_path],
-                    output: temp_dir.join("payload.zipx"),
-                    format: "zipx".to_string(),
+                    output: temp_dir.join("payload.zip"),
+                    format: "zip".to_string(),
                     codec: Some("zstd".to_string()),
                     level: Some(19),
                     parent: None,
                 },
                 &test_context(&temp_dir, 8),
             )
-            .expect("zipx create");
+            .expect("zip zstd create");
         let execution = report.thread_execution.expect("thread execution");
         assert_execution_parallel_when_available(&execution, &ThreadCapability::parallel(None), 8);
 
@@ -1130,7 +1144,7 @@ mod tests {
         let registry = ContainerRegistry::new();
         let handler = registry.find_by_name("zip").expect("zip handler");
 
-        for codec in ["lzma", "lz4"] {
+        for codec in ["lzma2", "lzma", "bzip2", "lz4"] {
             let archive_path = temp_dir.join(format!("payload-{codec}.zip"));
             let error = handler
                 .create(
@@ -1148,7 +1162,7 @@ mod tests {
             assert!(
                 error
                     .to_string()
-                    .contains("supported codecs are store, deflate, bzip2, and zstd"),
+                    .contains("supported codecs are store, deflate, and zstd"),
                 "unexpected error for codec `{codec}`: {error}"
             );
         }
@@ -1157,147 +1171,169 @@ mod tests {
     }
 
     #[test]
-    fn tar_capabilities_report_parallel_threads() {
+    fn tar_capabilities_are_extract_only() {
         let registry = ContainerRegistry::new();
         let handler = registry.find_by_name("tar").expect("tar handler");
         let capabilities = handler.capabilities();
         assert!(capabilities.probe_details);
         assert!(capabilities.extract);
-        assert!(capabilities.create);
+        assert!(!capabilities.create);
         assert_eq!(
             capabilities.extract_threads,
             expected_regular_archive_extract_thread_capability()
         );
         assert_eq!(
             capabilities.create_threads,
-            ThreadCapability::parallel(None)
+            ThreadCapability::single_threaded()
         );
     }
 
     #[test]
-    fn tar_xz_capabilities_report_parallel_threads() {
+    fn tar_xz_capabilities_are_extract_only() {
         let registry = ContainerRegistry::new();
         let handler = registry.find_by_name("tar.xz").expect("tar.xz handler");
         let capabilities = handler.capabilities();
         assert!(capabilities.probe_details);
         assert!(capabilities.extract);
-        assert!(capabilities.create);
+        assert!(!capabilities.create);
         assert_eq!(
             capabilities.extract_threads,
             expected_regular_archive_extract_thread_capability()
         );
         assert_eq!(
             capabilities.create_threads,
-            ThreadCapability::parallel(None)
+            ThreadCapability::single_threaded()
         );
     }
 
     #[test]
-    fn tar_gz_capabilities_report_parallel_threads() {
+    fn tar_gz_capabilities_are_extract_only() {
         let registry = ContainerRegistry::new();
         let handler = registry.find_by_name("tar.gz").expect("tar.gz handler");
         let capabilities = handler.capabilities();
         assert!(capabilities.probe_details);
         assert!(capabilities.extract);
-        assert!(capabilities.create);
+        assert!(!capabilities.create);
         assert_eq!(
             capabilities.extract_threads,
             expected_regular_archive_extract_thread_capability()
         );
         assert_eq!(
             capabilities.create_threads,
-            ThreadCapability::parallel(None)
+            ThreadCapability::single_threaded()
         );
     }
 
     #[test]
-    fn tar_bz2_capabilities_report_parallel_threads() {
+    fn tar_bz2_capabilities_are_extract_only() {
         let registry = ContainerRegistry::new();
         let handler = registry.find_by_name("tar.bz2").expect("tar.bz2 handler");
         let capabilities = handler.capabilities();
         assert!(capabilities.probe_details);
         assert!(capabilities.extract);
-        assert!(capabilities.create);
+        assert!(!capabilities.create);
         assert_eq!(
             capabilities.extract_threads,
             expected_regular_archive_extract_thread_capability()
         );
         assert_eq!(
             capabilities.create_threads,
-            ThreadCapability::parallel(None)
+            ThreadCapability::single_threaded()
         );
     }
 
     #[test]
-    fn gz_stream_capabilities_report_parallel_threads() {
+    fn gz_stream_capabilities_are_extract_only() {
         let registry = ContainerRegistry::new();
         let handler = registry.find_by_name("gz").expect("gz handler");
         let capabilities = handler.capabilities();
         assert!(capabilities.probe_details);
         assert!(capabilities.extract);
-        assert!(capabilities.create);
+        assert!(!capabilities.create);
         assert_eq!(
             capabilities.extract_threads,
             ThreadCapability::parallel(None)
         );
         assert_eq!(
             capabilities.create_threads,
-            ThreadCapability::parallel(None)
+            ThreadCapability::single_threaded()
         );
     }
 
     #[test]
-    fn bz2_stream_capabilities_report_parallel_threads() {
+    fn bz2_stream_capabilities_are_extract_only() {
         let registry = ContainerRegistry::new();
         let handler = registry.find_by_name("bz2").expect("bz2 handler");
         let capabilities = handler.capabilities();
         assert!(capabilities.probe_details);
         assert!(capabilities.extract);
-        assert!(capabilities.create);
+        assert!(!capabilities.create);
         assert_eq!(
             capabilities.extract_threads,
             ThreadCapability::parallel(None)
         );
         assert_eq!(
             capabilities.create_threads,
-            ThreadCapability::parallel(None)
+            ThreadCapability::single_threaded()
         );
     }
 
     #[test]
-    fn zst_stream_capabilities_report_parallel_threads() {
+    fn zst_stream_capabilities_are_extract_only() {
         let registry = ContainerRegistry::new();
         let handler = registry.find_by_name("zst").expect("zst handler");
         let capabilities = handler.capabilities();
         assert!(capabilities.probe_details);
         assert!(capabilities.extract);
-        assert!(capabilities.create);
+        assert!(!capabilities.create);
         assert_eq!(
             capabilities.extract_threads,
             ThreadCapability::parallel(None)
         );
         assert_eq!(
             capabilities.create_threads,
-            ThreadCapability::parallel(None)
+            ThreadCapability::single_threaded()
         );
     }
 
     #[test]
-    fn xz_stream_capabilities_report_parallel_create_threads() {
+    fn xz_stream_capabilities_are_extract_only() {
         let registry = ContainerRegistry::new();
         let handler = registry.find_by_name("xz").expect("xz handler");
         let capabilities = handler.capabilities();
         assert!(capabilities.probe_details);
         assert!(capabilities.extract);
-        assert!(capabilities.create);
+        assert!(!capabilities.create);
         assert_eq!(
             capabilities.extract_threads,
             ThreadCapability::parallel(None)
         );
         assert_eq!(
             capabilities.create_threads,
-            ThreadCapability::parallel(None)
+            ThreadCapability::single_threaded()
         );
+    }
+
+    #[test]
+    fn extract_only_formats_reject_direct_create() {
+        for (format, output_extension) in [
+            ("zipx", "zipx"),
+            ("tar", "tar"),
+            ("tar.gz", "tar.gz"),
+            ("tar.bz2", "tar.bz2"),
+            ("tar.xz", "tar.xz"),
+            ("gz", "gz"),
+            ("bz2", "bz2"),
+            ("xz", "xz"),
+            ("zst", "zst"),
+            ("cso", "cso"),
+            ("nfs", "nfs"),
+            ("wia", "wia"),
+            ("tgc", "tgc"),
+            ("wbfs", "wbfs"),
+        ] {
+            assert_extract_only_create_rejected(format, output_extension);
+        }
     }
 
     #[test]
@@ -1448,598 +1484,6 @@ mod tests {
     }
 
     #[test]
-    fn tar_gz_runtime_threads_match_capabilities_for_create_and_extract() {
-        run_with_large_stack("tar-gz-thread-parity", || {
-            let temp_dir = temp_dir_path("tar-gz-thread-parity");
-            fs::create_dir_all(&temp_dir).expect("temp dir");
-            let input_dir = temp_dir.join("input");
-            fs::create_dir_all(&input_dir).expect("input dir");
-            for index in 0..6 {
-                let path = input_dir.join(format!("blob-{index}.bin"));
-                let content = (0..(512 * 1024))
-                    .map(|offset| (offset as u8).wrapping_mul(5).wrapping_add(index as u8))
-                    .collect::<Vec<_>>();
-                fs::write(path, content).expect("write fixture");
-            }
-            let archive_path = temp_dir.join("payload.tar.gz");
-            let output_dir = temp_dir.join("out");
-
-            let registry = ContainerRegistry::new();
-            let handler = registry.find_by_name("tar.gz").expect("tar.gz handler");
-            let capabilities = handler.capabilities();
-            let create_report = handler
-                .create(
-                    &ContainerCreateRequest {
-                        inputs: vec![input_dir.clone()],
-                        output: archive_path.clone(),
-                        format: "tar.gz".to_string(),
-                        codec: None,
-                        level: None,
-                        parent: None,
-                    },
-                    &test_context(&temp_dir, 8),
-                )
-                .expect("create tar.gz");
-            let create_execution = create_report.thread_execution.expect("thread execution");
-            assert_execution_matches_capability(
-                &create_execution,
-                &capabilities.create_threads,
-                8,
-            );
-
-            let extract_report = handler
-                .extract(
-                    &rom_weaver_core::ContainerExtractRequest {
-                        source: archive_path,
-                        out_dir: output_dir.clone(),
-                        selections: Vec::new(),
-                        kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
-                        split_bin: false,
-                        ignore_common_files: false,
-                        overwrite: true,
-                        parent: None,
-                    },
-                    &test_context(&temp_dir, 8),
-                )
-                .expect("extract tar.gz");
-            let extract_execution = extract_report.thread_execution.expect("thread execution");
-            assert_execution_parallel_when_available(
-                &extract_execution,
-                &capabilities.extract_threads,
-                8,
-            );
-
-            for index in 0..6 {
-                let path = output_dir.join(format!("input/blob-{index}.bin"));
-                let content = fs::read(path).expect("read extracted file");
-                let expected = (0..(512 * 1024))
-                    .map(|offset| (offset as u8).wrapping_mul(5).wrapping_add(index as u8))
-                    .collect::<Vec<_>>();
-                assert_eq!(content, expected);
-            }
-
-            let _ = fs::remove_dir_all(temp_dir);
-        });
-    }
-
-    #[test]
-    fn tar_bz2_runtime_threads_match_capabilities_for_create_and_extract() {
-        run_with_large_stack("tar-bz2-thread-parity", || {
-            let temp_dir = temp_dir_path("tar-bz2-thread-parity");
-            fs::create_dir_all(&temp_dir).expect("temp dir");
-            let input_dir = temp_dir.join("input");
-            fs::create_dir_all(&input_dir).expect("input dir");
-            for index in 0..6 {
-                let path = input_dir.join(format!("blob-{index}.bin"));
-                let content = (0..(512 * 1024))
-                    .map(|offset| (offset as u8).wrapping_mul(9).wrapping_add(index as u8))
-                    .collect::<Vec<_>>();
-                fs::write(path, content).expect("write fixture");
-            }
-            let archive_path = temp_dir.join("payload.tar.bz2");
-            let output_dir = temp_dir.join("out");
-
-            let registry = ContainerRegistry::new();
-            let handler = registry.find_by_name("tar.bz2").expect("tar.bz2 handler");
-            let capabilities = handler.capabilities();
-            let create_report = handler
-                .create(
-                    &ContainerCreateRequest {
-                        inputs: vec![input_dir.clone()],
-                        output: archive_path.clone(),
-                        format: "tar.bz2".to_string(),
-                        codec: None,
-                        level: None,
-                        parent: None,
-                    },
-                    &test_context(&temp_dir, 8),
-                )
-                .expect("create tar.bz2");
-            let create_execution = create_report.thread_execution.expect("thread execution");
-            assert_execution_parallel_when_available(
-                &create_execution,
-                &capabilities.create_threads,
-                8,
-            );
-
-            let extract_report = handler
-                .extract(
-                    &rom_weaver_core::ContainerExtractRequest {
-                        source: archive_path,
-                        out_dir: output_dir.clone(),
-                        selections: Vec::new(),
-                        kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
-                        split_bin: false,
-                        ignore_common_files: false,
-                        overwrite: true,
-                        parent: None,
-                    },
-                    &test_context(&temp_dir, 8),
-                )
-                .expect("extract tar.bz2");
-            let extract_execution = extract_report.thread_execution.expect("thread execution");
-            assert_execution_parallel_when_available(
-                &extract_execution,
-                &capabilities.extract_threads,
-                8,
-            );
-
-            for index in 0..6 {
-                let path = output_dir.join(format!("input/blob-{index}.bin"));
-                let content = fs::read(path).expect("read extracted file");
-                let expected = (0..(512 * 1024))
-                    .map(|offset| (offset as u8).wrapping_mul(9).wrapping_add(index as u8))
-                    .collect::<Vec<_>>();
-                assert_eq!(content, expected);
-            }
-
-            let _ = fs::remove_dir_all(temp_dir);
-        });
-    }
-
-    #[test]
-    fn tar_runtime_threads_match_capabilities_for_create_and_extract() {
-        run_with_large_stack("tar-thread-parity", || {
-            let temp_dir = temp_dir_path("tar-thread-parity");
-            fs::create_dir_all(&temp_dir).expect("temp dir");
-            let input_dir = temp_dir.join("input");
-            fs::create_dir_all(&input_dir).expect("input dir");
-            for index in 0..8 {
-                let path = input_dir.join(format!("blob-{index}.bin"));
-                let content = (0..(256 * 1024))
-                    .map(|offset| (offset as u8).wrapping_mul(7).wrapping_add(index as u8))
-                    .collect::<Vec<_>>();
-                fs::write(path, content).expect("write fixture");
-            }
-            let archive_path = temp_dir.join("payload.tar");
-            let output_dir = temp_dir.join("out");
-
-            let registry = ContainerRegistry::new();
-            let handler = registry.find_by_name("tar").expect("tar handler");
-            let capabilities = handler.capabilities();
-            let create_report = handler
-                .create(
-                    &ContainerCreateRequest {
-                        inputs: vec![input_dir.clone()],
-                        output: archive_path.clone(),
-                        format: "tar".to_string(),
-                        codec: None,
-                        level: None,
-                        parent: None,
-                    },
-                    &test_context(&temp_dir, 8),
-                )
-                .expect("create tar");
-
-            let create_execution = create_report.thread_execution.expect("thread execution");
-            assert_execution_parallel_when_available(
-                &create_execution,
-                &capabilities.create_threads,
-                8,
-            );
-
-            let extract_report = handler
-                .extract(
-                    &rom_weaver_core::ContainerExtractRequest {
-                        source: archive_path,
-                        out_dir: output_dir.clone(),
-                        selections: Vec::new(),
-                        kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
-                        split_bin: false,
-                        ignore_common_files: false,
-                        overwrite: true,
-                        parent: None,
-                    },
-                    &test_context(&temp_dir, 8),
-                )
-                .expect("extract tar");
-
-            let extract_execution = extract_report.thread_execution.expect("thread execution");
-            assert_execution_parallel_when_available(
-                &extract_execution,
-                &capabilities.extract_threads,
-                8,
-            );
-
-            for index in 0..8 {
-                let path = output_dir.join(format!("input/blob-{index}.bin"));
-                let content = fs::read(path).expect("read extracted file");
-                let expected = (0..(256 * 1024))
-                    .map(|offset| (offset as u8).wrapping_mul(7).wrapping_add(index as u8))
-                    .collect::<Vec<_>>();
-                assert_eq!(content, expected);
-            }
-
-            let _ = fs::remove_dir_all(temp_dir);
-        });
-    }
-
-    #[test]
-    fn tar_xz_runtime_threads_match_capabilities_for_create_and_extract() {
-        run_with_large_stack("tar-xz-thread-parity", || {
-            let temp_dir = temp_dir_path("tar-xz-thread-parity");
-            fs::create_dir_all(&temp_dir).expect("temp dir");
-            let input_dir = temp_dir.join("input");
-            fs::create_dir_all(&input_dir).expect("input dir");
-            for index in 0..6 {
-                let path = input_dir.join(format!("blob-{index}.bin"));
-                let content = (0..(512 * 1024))
-                    .map(|offset| (offset as u8).wrapping_mul(3).wrapping_add(index as u8))
-                    .collect::<Vec<_>>();
-                fs::write(path, content).expect("write fixture");
-            }
-            let archive_path = temp_dir.join("payload.tar.xz");
-            let output_dir = temp_dir.join("out");
-
-            let registry = ContainerRegistry::new();
-            let handler = registry.find_by_name("tar.xz").expect("tar.xz handler");
-            let capabilities = handler.capabilities();
-            let create_report = handler
-                .create(
-                    &ContainerCreateRequest {
-                        inputs: vec![input_dir.clone()],
-                        output: archive_path.clone(),
-                        format: "tar.xz".to_string(),
-                        codec: None,
-                        level: None,
-                        parent: None,
-                    },
-                    &test_context(&temp_dir, 8),
-                )
-                .expect("create tar.xz");
-
-            let create_execution = create_report.thread_execution.expect("thread execution");
-            assert_execution_parallel_when_available(
-                &create_execution,
-                &capabilities.create_threads,
-                8,
-            );
-
-            let extract_report = handler
-                .extract(
-                    &rom_weaver_core::ContainerExtractRequest {
-                        source: archive_path,
-                        out_dir: output_dir.clone(),
-                        selections: Vec::new(),
-                        kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
-                        split_bin: false,
-                        ignore_common_files: false,
-                        overwrite: true,
-                        parent: None,
-                    },
-                    &test_context(&temp_dir, 8),
-                )
-                .expect("extract tar.xz");
-
-            let extract_execution = extract_report.thread_execution.expect("thread execution");
-            assert_execution_parallel_when_available(
-                &extract_execution,
-                &capabilities.extract_threads,
-                8,
-            );
-
-            for index in 0..6 {
-                let path = output_dir.join(format!("input/blob-{index}.bin"));
-                let content = fs::read(path).expect("read extracted file");
-                let expected = (0..(512 * 1024))
-                    .map(|offset| (offset as u8).wrapping_mul(3).wrapping_add(index as u8))
-                    .collect::<Vec<_>>();
-                assert_eq!(content, expected);
-            }
-
-            let _ = fs::remove_dir_all(temp_dir);
-        });
-    }
-
-    #[test]
-    fn gz_stream_create_runtime_threads_match_capability() {
-        let temp_dir = temp_dir_path("gz-stream-thread-parity");
-        fs::create_dir_all(&temp_dir).expect("temp dir");
-        let source_path = temp_dir.join("source.bin");
-        let archive_path = temp_dir.join("source.bin.gz");
-        let output_dir = temp_dir.join("out");
-        let payload = (0..(1024 * 1024))
-            .map(|index| (index as u8).wrapping_mul(31))
-            .collect::<Vec<_>>();
-        fs::write(&source_path, &payload).expect("write fixture");
-
-        let registry = ContainerRegistry::new();
-        let handler = registry.find_by_name("gz").expect("gz handler");
-        let capabilities = handler.capabilities();
-        let create_report = handler
-            .create(
-                &ContainerCreateRequest {
-                    inputs: vec![source_path.clone()],
-                    output: archive_path.clone(),
-                    format: "gz".to_string(),
-                    codec: None,
-                    level: None,
-                    parent: None,
-                },
-                &test_context(&temp_dir, 8),
-            )
-            .expect("create gz");
-        let create_execution = create_report.thread_execution.expect("thread execution");
-        assert_execution_matches_capability(&create_execution, &capabilities.create_threads, 8);
-
-        let extract_report = handler
-            .extract(
-                &rom_weaver_core::ContainerExtractRequest {
-                    source: archive_path,
-                    out_dir: output_dir.clone(),
-                    selections: Vec::new(),
-                        kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
-                    split_bin: false,
-                    ignore_common_files: false,
-                    overwrite: true,
-                    parent: None,
-                },
-                &test_context(&temp_dir, 8),
-            )
-            .expect("extract gz");
-        let extract_execution = extract_report.thread_execution.expect("thread execution");
-        assert_execution_parallel_when_available(
-            &extract_execution,
-            &capabilities.extract_threads,
-            8,
-        );
-
-        let extracted = fs::read(output_dir.join("source.bin")).expect("read extracted payload");
-        assert_eq!(extracted, payload);
-        let _ = fs::remove_dir_all(temp_dir);
-    }
-
-    #[test]
-    fn bz2_stream_create_runtime_threads_match_capability() {
-        let temp_dir = temp_dir_path("bz2-stream-thread-parity");
-        fs::create_dir_all(&temp_dir).expect("temp dir");
-        let source_path = temp_dir.join("source.bin");
-        let archive_path = temp_dir.join("source.bin.bz2");
-        let output_dir = temp_dir.join("out");
-        let payload = (0..(3 * 1024 * 1024))
-            .map(|index| (index as u8).wrapping_mul(37))
-            .collect::<Vec<_>>();
-        fs::write(&source_path, &payload).expect("write fixture");
-
-        let registry = ContainerRegistry::new();
-        let handler = registry.find_by_name("bz2").expect("bz2 handler");
-        let capabilities = handler.capabilities();
-        let create_report = handler
-            .create(
-                &ContainerCreateRequest {
-                    inputs: vec![source_path.clone()],
-                    output: archive_path.clone(),
-                    format: "bz2".to_string(),
-                    codec: None,
-                    level: None,
-                    parent: None,
-                },
-                &test_context(&temp_dir, 8),
-            )
-            .expect("create bz2");
-        let create_execution = create_report.thread_execution.expect("thread execution");
-        assert_execution_parallel_when_available(
-            &create_execution,
-            &capabilities.create_threads,
-            8,
-        );
-
-        let extract_report = handler
-            .extract(
-                &rom_weaver_core::ContainerExtractRequest {
-                    source: archive_path,
-                    out_dir: output_dir.clone(),
-                    selections: Vec::new(),
-                        kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
-                    split_bin: false,
-                    ignore_common_files: false,
-                    overwrite: true,
-                    parent: None,
-                },
-                &test_context(&temp_dir, 8),
-            )
-            .expect("extract bz2");
-        let extract_execution = extract_report.thread_execution.expect("thread execution");
-        assert_execution_parallel_when_available(
-            &extract_execution,
-            &capabilities.extract_threads,
-            8,
-        );
-
-        let extracted = fs::read(output_dir.join("source.bin")).expect("read extracted payload");
-        assert_eq!(extracted, payload);
-        let _ = fs::remove_dir_all(temp_dir);
-    }
-
-    #[test]
-    fn zst_stream_create_runtime_threads_match_capability() {
-        let temp_dir = temp_dir_path("zst-stream-thread-parity");
-        fs::create_dir_all(&temp_dir).expect("temp dir");
-        let source_path = temp_dir.join("source.bin");
-        let archive_path = temp_dir.join("source.bin.zst");
-        let output_dir = temp_dir.join("out");
-        let payload = (0..(1024 * 1024))
-            .map(|index| (index as u8).wrapping_mul(13))
-            .collect::<Vec<_>>();
-        fs::write(&source_path, &payload).expect("write fixture");
-
-        let registry = ContainerRegistry::new();
-        let handler = registry.find_by_name("zst").expect("zst handler");
-        let capabilities = handler.capabilities();
-        let create_report = handler
-            .create(
-                &ContainerCreateRequest {
-                    inputs: vec![source_path.clone()],
-                    output: archive_path.clone(),
-                    format: "zst".to_string(),
-                    codec: None,
-                    level: None,
-                    parent: None,
-                },
-                &test_context(&temp_dir, 8),
-            )
-            .expect("create zst");
-        let create_execution = create_report.thread_execution.expect("thread execution");
-        assert_execution_matches_capability(&create_execution, &capabilities.create_threads, 8);
-
-        let extract_report = handler
-            .extract(
-                &rom_weaver_core::ContainerExtractRequest {
-                    source: archive_path,
-                    out_dir: output_dir.clone(),
-                    selections: Vec::new(),
-                        kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
-                    split_bin: false,
-                    ignore_common_files: false,
-                    overwrite: true,
-                    parent: None,
-                },
-                &test_context(&temp_dir, 8),
-            )
-            .expect("extract zst");
-        let extract_execution = extract_report.thread_execution.expect("thread execution");
-        assert_execution_parallel_when_available(
-            &extract_execution,
-            &capabilities.extract_threads,
-            8,
-        );
-        assert!(!extract_execution.thread_fallback);
-
-        let extracted = fs::read(output_dir.join("source.bin")).expect("read extracted payload");
-        assert_eq!(extracted, payload);
-        let _ = fs::remove_dir_all(temp_dir);
-    }
-
-    #[test]
-    fn zst_stream_probe_reports_uncompressed_bytes() {
-        let temp_dir = temp_dir_path("zst-stream-probe");
-        fs::create_dir_all(&temp_dir).expect("temp dir");
-        let source_path = temp_dir.join("source.bin");
-        let archive_path = temp_dir.join("source.bin.zst");
-        let payload = (0..(512 * 1024))
-            .map(|index| (index as u8).wrapping_mul(7))
-            .collect::<Vec<_>>();
-        fs::write(&source_path, &payload).expect("write fixture");
-
-        let registry = ContainerRegistry::new();
-        let handler = registry.find_by_name("zst").expect("zst handler");
-        handler
-            .create(
-                &ContainerCreateRequest {
-                    inputs: vec![source_path.clone()],
-                    output: archive_path.clone(),
-                    format: "zst".to_string(),
-                    codec: None,
-                    level: None,
-                    parent: None,
-                },
-                &test_context(&temp_dir, 8),
-            )
-            .expect("create zst");
-
-        let report = handler
-            .probe_details(
-                &rom_weaver_core::ContainerProbeRequest {
-                    source: archive_path,
-                },
-                &test_context(&temp_dir, 8),
-            )
-            .expect("probe zst");
-        assert_eq!(report.status, rom_weaver_core::OperationStatus::Succeeded);
-        assert!(
-            report
-                .label
-                .contains(&format!("{} bytes uncompressed", payload.len())),
-            "probe label mismatch: {}",
-            report.label
-        );
-
-        let _ = fs::remove_dir_all(temp_dir);
-    }
-
-    #[test]
-    fn xz_stream_create_runtime_threads_match_capability() {
-        let temp_dir = temp_dir_path("xz-stream-thread-parity");
-        fs::create_dir_all(&temp_dir).expect("temp dir");
-        let source_path = temp_dir.join("source.bin");
-        let archive_path = temp_dir.join("source.bin.xz");
-        let output_dir = temp_dir.join("out");
-        let payload = (0..(3 * 1024 * 1024))
-            .map(|index| (index as u8).wrapping_mul(11))
-            .collect::<Vec<_>>();
-        fs::write(&source_path, &payload).expect("write fixture");
-
-        let registry = ContainerRegistry::new();
-        let handler = registry.find_by_name("xz").expect("xz handler");
-        let capabilities = handler.capabilities();
-        let create_report = handler
-            .create(
-                &ContainerCreateRequest {
-                    inputs: vec![source_path.clone()],
-                    output: archive_path.clone(),
-                    format: "xz".to_string(),
-                    codec: None,
-                    level: None,
-                    parent: None,
-                },
-                &test_context(&temp_dir, 8),
-            )
-            .expect("create xz");
-        let create_execution = create_report.thread_execution.expect("thread execution");
-        assert_execution_parallel_when_available(
-            &create_execution,
-            &capabilities.create_threads,
-            8,
-        );
-
-        let extract_report = handler
-            .extract(
-                &rom_weaver_core::ContainerExtractRequest {
-                    source: archive_path,
-                    out_dir: output_dir.clone(),
-                    selections: Vec::new(),
-                        kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
-                    split_bin: false,
-                    ignore_common_files: false,
-                    overwrite: true,
-                    parent: None,
-                },
-                &test_context(&temp_dir, 8),
-            )
-            .expect("extract xz");
-        let extract_execution = extract_report.thread_execution.expect("thread execution");
-        assert_execution_parallel_when_available(
-            &extract_execution,
-            &capabilities.extract_threads,
-            8,
-        );
-
-        let extracted = fs::read(output_dir.join("source.bin")).expect("read extracted payload");
-        assert_eq!(extracted, payload);
-        let _ = fs::remove_dir_all(temp_dir);
-    }
-
-    #[test]
     fn cso_extract_round_trips_to_iso_output() {
         let temp_dir = temp_dir_path("cso-extract");
         fs::create_dir_all(&temp_dir).expect("temp dir");
@@ -2047,7 +1491,7 @@ mod tests {
         let compressed_cso = temp_dir.join("disc.cso");
         let output_dir = temp_dir.join("out");
 
-        let source = (0..(CSO_DEFAULT_BLOCK_BYTES * 4))
+        let source = (0..(TEST_CSO_BLOCK_BYTES * 4))
             .map(|index| (index % 251) as u8)
             .collect::<Vec<_>>();
         let mut source = source;
@@ -2120,95 +1564,6 @@ mod tests {
     }
 
     #[test]
-    fn wbfs_create_and_extract_round_trip() {
-        let temp_dir = temp_dir_path("wbfs-create");
-        fs::create_dir_all(&temp_dir).expect("temp dir");
-        let input_iso = temp_dir.join("disc.iso");
-        let output_wbfs = temp_dir.join("disc.wbfs");
-        let output_dir = temp_dir.join("out");
-
-        let source = build_test_gamecube_iso(0xA000);
-        fs::write(&input_iso, &source).expect("write source fixture");
-
-        let registry = ContainerRegistry::new();
-        let handler = registry.find_by_name("wbfs").expect("wbfs handler");
-        let create_report = handler
-            .create(
-                &ContainerCreateRequest {
-                    inputs: vec![input_iso.clone()],
-                    output: output_wbfs.clone(),
-                    format: "wbfs".to_string(),
-                    codec: None,
-                    level: None,
-                    parent: None,
-                },
-                &test_context(&temp_dir, 8),
-            )
-            .expect("create wbfs");
-        assert_eq!(
-            create_report.status,
-            rom_weaver_core::OperationStatus::Succeeded
-        );
-        assert!(output_wbfs.exists());
-
-        let extract_report = handler
-            .extract(
-                &rom_weaver_core::ContainerExtractRequest {
-                    source: output_wbfs,
-                    out_dir: output_dir.clone(),
-                    selections: Vec::new(),
-                        kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
-                    split_bin: false,
-                    ignore_common_files: false,
-                    overwrite: true,
-                    parent: None,
-                },
-                &test_context(&temp_dir, 8),
-            )
-            .expect("extract wbfs");
-        assert_eq!(
-            extract_report.status,
-            rom_weaver_core::OperationStatus::Succeeded
-        );
-        let extracted = fs::read(output_dir.join("disc.iso")).expect("read extracted output");
-        assert_eq!(extracted, source);
-
-        let _ = fs::remove_dir_all(temp_dir);
-    }
-
-    #[test]
-    fn wbfs_create_rejects_compressed_codec() {
-        let temp_dir = temp_dir_path("wbfs-create-error");
-        fs::create_dir_all(&temp_dir).expect("temp dir");
-        let input_iso = temp_dir.join("disc.iso");
-        let output_wbfs = temp_dir.join("disc.wbfs");
-        let source = build_test_gamecube_iso(0x3000);
-        fs::write(&input_iso, &source).expect("write source fixture");
-
-        let registry = ContainerRegistry::new();
-        let handler = registry.find_by_name("wbfs").expect("wbfs handler");
-        let error = handler
-            .create(
-                &ContainerCreateRequest {
-                    inputs: vec![input_iso],
-                    output: output_wbfs,
-                    format: "wbfs".to_string(),
-                    codec: Some("zstd".to_string()),
-                    level: None,
-                    parent: None,
-                },
-                &test_context(&temp_dir, 1),
-            )
-            .expect_err("wbfs create should reject compressed codec");
-        assert!(
-            error.to_string().contains("unsupported wbfs codec `zstd`"),
-            "unexpected error message: {error}"
-        );
-
-        let _ = fs::remove_dir_all(temp_dir);
-    }
-
-    #[test]
     fn wia_extract_round_trips_to_iso_output() {
         let temp_dir = temp_dir_path("wia-extract");
         fs::create_dir_all(&temp_dir).expect("temp dir");
@@ -2241,221 +1596,6 @@ mod tests {
         assert_eq!(report.status, rom_weaver_core::OperationStatus::Succeeded);
         let extracted = fs::read(output_dir.join("disc.iso")).expect("read extracted output");
         assert_eq!(extracted, source);
-
-        let _ = fs::remove_dir_all(temp_dir);
-    }
-
-    #[test]
-    fn wia_create_and_extract_round_trip() {
-        let temp_dir = temp_dir_path("wia-create");
-        fs::create_dir_all(&temp_dir).expect("temp dir");
-        let input_iso = temp_dir.join("disc.iso");
-        let output_wia = temp_dir.join("disc.wia");
-        let output_dir = temp_dir.join("out");
-
-        let source = build_test_gamecube_iso(0xA000);
-        fs::write(&input_iso, &source).expect("write source fixture");
-
-        let registry = ContainerRegistry::new();
-        let handler = registry.find_by_name("wia").expect("wia handler");
-        let create_report = handler
-            .create(
-                &ContainerCreateRequest {
-                    inputs: vec![input_iso.clone()],
-                    output: output_wia.clone(),
-                    format: "wia".to_string(),
-                    codec: Some("lzma2".to_string()),
-                    level: Some(6),
-                    parent: None,
-                },
-                &test_context(&temp_dir, 8),
-            )
-            .expect("create wia");
-        assert_eq!(
-            create_report.status,
-            rom_weaver_core::OperationStatus::Succeeded
-        );
-        assert!(output_wia.exists());
-
-        let extract_report = handler
-            .extract(
-                &rom_weaver_core::ContainerExtractRequest {
-                    source: output_wia,
-                    out_dir: output_dir.clone(),
-                    selections: Vec::new(),
-                        kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
-                    split_bin: false,
-                    ignore_common_files: false,
-                    overwrite: true,
-                    parent: None,
-                },
-                &test_context(&temp_dir, 8),
-            )
-            .expect("extract wia");
-        assert_eq!(
-            extract_report.status,
-            rom_weaver_core::OperationStatus::Succeeded
-        );
-        let extracted = fs::read(output_dir.join("disc.iso")).expect("read extracted output");
-        assert_eq!(extracted, source);
-
-        let _ = fs::remove_dir_all(temp_dir);
-    }
-
-    #[test]
-    fn nfs_create_returns_clear_error() {
-        let temp_dir = temp_dir_path("nfs-create-error");
-        fs::create_dir_all(&temp_dir).expect("temp dir");
-        let input_iso = temp_dir.join("disc.iso");
-        let output_nfs = temp_dir.join("disc.nfs");
-        let source = build_test_gamecube_iso(0x3000);
-        fs::write(&input_iso, &source).expect("write source fixture");
-
-        let registry = ContainerRegistry::new();
-        let handler = registry.find_by_name("nfs").expect("nfs handler");
-        let error = handler
-            .create(
-                &ContainerCreateRequest {
-                    inputs: vec![input_iso],
-                    output: output_nfs,
-                    format: "nfs".to_string(),
-                    codec: None,
-                    level: None,
-                    parent: None,
-                },
-                &test_context(&temp_dir, 1),
-            )
-            .expect_err("nfs create should error");
-        assert!(
-            error
-                .to_string()
-                .contains("nfs compression is not supported"),
-            "unexpected error message: {error}"
-        );
-
-        let _ = fs::remove_dir_all(temp_dir);
-    }
-
-    #[test]
-    fn tgc_create_rejects_compressed_codec() {
-        let temp_dir = temp_dir_path("tgc-create-error");
-        fs::create_dir_all(&temp_dir).expect("temp dir");
-        let input_iso = temp_dir.join("disc.iso");
-        let output_tgc = temp_dir.join("disc.tgc");
-        let source = build_test_gamecube_iso(0x3000);
-        fs::write(&input_iso, &source).expect("write source fixture");
-
-        let registry = ContainerRegistry::new();
-        let handler = registry.find_by_name("tgc").expect("tgc handler");
-        let error = handler
-            .create(
-                &ContainerCreateRequest {
-                    inputs: vec![input_iso],
-                    output: output_tgc,
-                    format: "tgc".to_string(),
-                    codec: Some("zstd".to_string()),
-                    level: None,
-                    parent: None,
-                },
-                &test_context(&temp_dir, 1),
-            )
-            .expect_err("tgc create should reject compressed codec");
-        assert!(
-            error.to_string().contains("unsupported tgc codec `zstd`"),
-            "unexpected error message: {error}"
-        );
-
-        let _ = fs::remove_dir_all(temp_dir);
-    }
-
-    #[test]
-    fn cso_create_and_extract_round_trip() {
-        let temp_dir = temp_dir_path("cso-create");
-        fs::create_dir_all(&temp_dir).expect("temp dir");
-        let input_iso = temp_dir.join("disc.iso");
-        let output_cso = temp_dir.join("disc.cso");
-        let output_dir = temp_dir.join("out");
-        let mut source = (0..(CSO_DEFAULT_BLOCK_BYTES * 4))
-            .map(|index| (index % 251) as u8)
-            .collect::<Vec<_>>();
-        if let Some(last) = source.last_mut() {
-            *last = 0;
-        }
-        fs::write(&input_iso, &source).expect("write source fixture");
-
-        let registry = ContainerRegistry::new();
-        let handler = registry.find_by_name("cso").expect("cso handler");
-        let create_report = handler
-            .create(
-                &ContainerCreateRequest {
-                    inputs: vec![input_iso.clone()],
-                    output: output_cso.clone(),
-                    format: "cso".to_string(),
-                    codec: None,
-                    level: None,
-                    parent: None,
-                },
-                &test_context(&temp_dir, 8),
-            )
-            .expect("create cso");
-        assert_eq!(
-            create_report.status,
-            rom_weaver_core::OperationStatus::Succeeded
-        );
-        assert!(output_cso.exists());
-
-        let extract_report = handler
-            .extract(
-                &rom_weaver_core::ContainerExtractRequest {
-                    source: output_cso,
-                    out_dir: output_dir.clone(),
-                    selections: Vec::new(),
-                        kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
-                    split_bin: false,
-                    ignore_common_files: false,
-                    overwrite: true,
-                    parent: None,
-                },
-                &test_context(&temp_dir, 1),
-            )
-            .expect("extract cso");
-        assert_eq!(
-            extract_report.status,
-            rom_weaver_core::OperationStatus::Succeeded
-        );
-        let extracted = fs::read(output_dir.join("disc.iso")).expect("read extracted output");
-        assert_eq!(extracted, source);
-
-        let _ = fs::remove_dir_all(temp_dir);
-    }
-
-    #[test]
-    fn cso_create_rejects_compressed_codec() {
-        let temp_dir = temp_dir_path("cso-create-error");
-        fs::create_dir_all(&temp_dir).expect("temp dir");
-        let input_iso = temp_dir.join("input.iso");
-        let output_cso = temp_dir.join("output.cso");
-        fs::write(&input_iso, vec![0_u8; CSO_DEFAULT_BLOCK_BYTES]).expect("write fixture");
-
-        let registry = ContainerRegistry::new();
-        let handler = registry.find_by_name("cso").expect("cso handler");
-        let error = handler
-            .create(
-                &ContainerCreateRequest {
-                    inputs: vec![input_iso],
-                    output: output_cso,
-                    format: "cso".to_string(),
-                    codec: Some("zstd".to_string()),
-                    level: None,
-                    parent: None,
-                },
-                &test_context(&temp_dir, 1),
-            )
-            .expect_err("cso create should reject compressed codec");
-        assert!(
-            error.to_string().contains("unsupported cso codec `zstd`"),
-            "unexpected error message: {error}"
-        );
 
         let _ = fs::remove_dir_all(temp_dir);
     }
@@ -2718,7 +1858,7 @@ mod tests {
     }
 
     #[test]
-    fn cso_runtime_threads_match_capabilities_for_create_and_extract() {
+    fn cso_extract_runtime_threads_match_capability() {
         let temp_dir = temp_dir_path("cso-thread-parity");
         fs::create_dir_all(&temp_dir).expect("temp dir");
         let input_path = temp_dir.join("disc.iso");
@@ -2731,30 +1871,11 @@ mod tests {
             *last = 0;
         }
         fs::write(&input_path, &source).expect("fixture");
+        write_test_cso(&input_path, &output_path);
 
         let registry = ContainerRegistry::new();
         let handler = registry.find_by_name("cso").expect("cso handler");
         let capabilities = handler.capabilities();
-
-        let create_report = handler
-            .create(
-                &ContainerCreateRequest {
-                    inputs: vec![input_path.clone()],
-                    output: output_path.clone(),
-                    format: "cso".to_string(),
-                    codec: None,
-                    level: None,
-                    parent: None,
-                },
-                &test_context(&temp_dir, 8),
-            )
-            .expect("create cso");
-        let create_execution = create_report.thread_execution.expect("thread execution");
-        assert_execution_parallel_when_available(
-            &create_execution,
-            &capabilities.create_threads,
-            8,
-        );
 
         let extract_report = handler
             .extract(
@@ -2793,22 +1914,10 @@ mod tests {
         let output_path = temp_dir.join("source.cso");
         let output_dir = temp_dir.join("out");
         write_xorshift_fixture(&input_path, 96 * 1024 * 1024, 0x0bad_c0de);
+        write_test_cso(&input_path, &output_path);
 
         let registry = ContainerRegistry::new();
         let handler = registry.find_by_name("cso").expect("cso handler");
-        handler
-            .create(
-                &ContainerCreateRequest {
-                    inputs: vec![input_path.clone()],
-                    output: output_path.clone(),
-                    format: "cso".to_string(),
-                    codec: Some("store".to_string()),
-                    level: None,
-                    parent: None,
-                },
-                &test_context(&temp_dir, 4),
-            )
-            .expect("create cso");
 
         let extract_report = handler
             .extract(
@@ -3073,9 +2182,9 @@ mod tests {
     }
 
     #[test]
-    fn seven_z_round_trip_supports_supported_codec_set() {
-        run_with_large_stack("seven-z-expanded-codec-roundtrip", || {
-            let temp_dir = temp_dir_path("seven-z-expanded-codec-roundtrip");
+    fn seven_z_round_trip_supports_lzma2_create() {
+        run_with_large_stack("seven-z-lzma2-roundtrip", || {
+            let temp_dir = temp_dir_path("seven-z-lzma2-roundtrip");
             fs::create_dir_all(&temp_dir).expect("temp dir");
             let input_path = temp_dir.join("payload.bin");
             let source_bytes = (0..(96 * 1024))
@@ -3087,17 +2196,9 @@ mod tests {
             let handler = registry.find_by_name("7z").expect("7z handler");
             let capabilities = handler.capabilities();
 
-            for (codec, level) in [
-                ("store", None),
-                ("deflate", Some(6)),
-                ("bzip2", Some(6)),
-                ("lzma", Some(6)),
-                ("lzma2", Some(6)),
-                ("zstd", Some(6)),
-                ("ppmd", Some(6)),
-            ] {
-                let archive_path = temp_dir.join(format!("payload-{codec}.7z"));
-                let output_dir = temp_dir.join(format!("out-{codec}"));
+            for (label, codec, level) in [("default", None, None), ("lzma2", Some("lzma2"), Some(6))] {
+                let archive_path = temp_dir.join(format!("payload-{label}.7z"));
+                let output_dir = temp_dir.join(format!("out-{label}"));
 
                 let create_report = handler
                     .create(
@@ -3105,13 +2206,13 @@ mod tests {
                             inputs: vec![input_path.clone()],
                             output: archive_path.clone(),
                             format: "7z".to_string(),
-                            codec: Some(codec.to_string()),
+                            codec: codec.map(str::to_string),
                             level,
                             parent: None,
                         },
                         &test_context(&temp_dir, 8),
                     )
-                    .expect("create seven-z with codec");
+                    .expect("create seven-z with lzma2");
                 let create_execution = create_report.thread_execution.expect("thread execution");
                 assert!(
                     capabilities
@@ -3163,7 +2264,7 @@ mod tests {
         let registry = ContainerRegistry::new();
         let handler = registry.find_by_name("7z").expect("7z handler");
 
-        for codec in ["lz4", "brotli"] {
+        for codec in ["lzma", "zstd", "store", "deflate", "bzip2", "ppmd", "lz4", "brotli"] {
             let archive_path = temp_dir.join(format!("payload-{codec}.7z"));
             let error = handler
                 .create(
@@ -3179,9 +2280,7 @@ mod tests {
                 )
                 .expect_err("codec should be rejected");
             assert!(
-                error.to_string().contains(
-                    "supported codecs are lzma2, lzma, store, zstd, deflate, bzip2, and ppmd"
-                ),
+                error.to_string().contains("supported codec is lzma2"),
                 "unexpected error for codec `{codec}`: {error}"
             );
         }
@@ -3206,7 +2305,7 @@ mod tests {
                             inputs: vec![input_path],
                             output: path.clone(),
                             format: "7z".to_string(),
-                            codec: Some("store".to_string()),
+                            codec: Some("lzma2".to_string()),
                             level: None,
                             parent: None,
                         },
@@ -3298,14 +2397,14 @@ mod tests {
     }
 
     #[test]
-    fn recommend_compress_format_returns_chd_for_unrecognized_inputs() {
-        let path = temp_file_path_with_extension("recommend-chd", "bin");
+    fn recommend_compress_format_returns_7z_for_unrecognized_inputs() {
+        let path = temp_file_path_with_extension("recommend-7z", "bin");
         fs::write(&path, b"not-a-disc").expect("fixture");
 
         let registry = ContainerRegistry::new();
         let recommendation = registry.recommend_compress_format(&path);
-        assert_eq!(recommendation.format_name, "chd");
-        assert_eq!(recommendation.reason, "not-wii-gc-or-unrecognized");
+        assert_eq!(recommendation.format_name, "7z");
+        assert_eq!(recommendation.reason, "fallback-7z-lzma2");
 
         let _ = fs::remove_file(path);
     }

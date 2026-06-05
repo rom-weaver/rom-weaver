@@ -367,15 +367,15 @@ impl CliApp {
                         "rvz".to_string(),
                         format!("auto format=rvz reason={}", recommendation.reason),
                     )
-                } else if self.patch_apply_chd_auto_viable(raw_output) {
-                    (
-                        "chd".to_string(),
-                        "auto format=chd reason=viable-non-disc-output".to_string(),
-                    )
                 } else if self.patch_apply_format_supports_create("7z") {
                     (
                         "7z".to_string(),
                         "auto format=7z reason=fallback-7z-lzma2".to_string(),
+                    )
+                } else if self.patch_apply_chd_auto_viable(raw_output) {
+                    (
+                        "chd".to_string(),
+                        "auto format=chd reason=viable-non-disc-output".to_string(),
                     )
                 } else if self.patch_apply_format_supports_create(recommendation.format_name) {
                     (
@@ -413,6 +413,12 @@ impl CliApp {
             return Err(RomWeaverError::Validation(
                 "requested output format is not registered".to_string(),
             ));
+        }
+        if !capabilities.create {
+            return Err(RomWeaverError::Validation(format!(
+                "{} is extract-only; supported create formats are 7z, zip, chd, rvz, and z3ds",
+                handler.descriptor().name
+            )));
         }
 
         let mut codec = options.codec.clone();

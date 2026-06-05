@@ -15,9 +15,10 @@ clap.workspace = true
 assert_cmd.workspace = true
 assert_fs.workspace = true
 flate2.workspace = true
-nod.workspace = true
+nod = { workspace = true, features = ["compress-lzma"] }
 serde_json.workspace = true
 xdvdfs.workspace = true
+zstd.workspace = true
 
 [[bin]]
 name = "rom-weaver"

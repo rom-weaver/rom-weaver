@@ -3,16 +3,6 @@ const WBFS_NOD_CORE: NodHandlerCore = NodHandlerCore::new(&WBFS, NodFormat::Wbfs
 
 struct WbfsContainerHandler;
 
-impl WbfsContainerHandler {
-    fn resolve_create_compression(
-        &self,
-        codec: Option<&str>,
-        level: Option<i32>,
-    ) -> Result<NodCompression> {
-        WBFS_NOD_CORE.resolve_store_only_compression(codec, level)
-    }
-}
-
 impl ContainerHandlerOperations for WbfsContainerHandler {
     fn descriptor(&self) -> &'static FormatDescriptor {
         &WBFS
@@ -51,56 +41,11 @@ impl ContainerHandlerOperations for WbfsContainerHandler {
         request: &ContainerCreateRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        let input = WBFS_NOD_CORE.ensure_single_create_input(request)?;
-        let execution = context.plan_threads(ThreadCapability::parallel(None));
-        let compression =
-            self.resolve_create_compression(request.codec.as_deref(), request.level)?;
-        let options = NodFormatOptions {
-            format: NodFormat::Wbfs,
-            compression,
-            block_size: NodFormat::Wbfs.default_block_size(),
-        };
-
-        WBFS_NOD_CORE.ensure_create_output_parent(&request.output)?;
-
-        let progress_label = format!("creating `{}`", WBFS.name);
-        let emitted_progress_bucket = AtomicU8::new(0);
-        let output_bytes = WBFS_NOD_CORE.process_create_with_progress(
-            input,
-            &request.output,
-            &options,
-            &execution,
-            |processed_bytes, total| {
-                maybe_emit_container_byte_progress(
-                    context,
-                    processed_bytes,
-                    total,
-                    ContainerByteProgress {
-                        command: "compress",
-                        format: WBFS.name,
-                        stage: "create",
-                        label: &progress_label,
-                        thread_execution: Some(&execution),
-                        emitted_progress_bucket: &emitted_progress_bucket,
-                    },
-                );
-            },
-        )?;
-
-        Ok(OperationReport::succeeded(
-            OperationFamily::Container,
-            Some(WBFS.name.to_string()),
-            "create",
-            format!(
-                "created wbfs `{}` from `{}` (codec=store, block={} bytes, {} bytes)",
-                request.output.display(),
-                input.display(),
-                options.block_size,
-                output_bytes
-            ),
-            Some(100.0),
-            Some(execution),
-        ))
+        let _ = (request, context);
+        Err(RomWeaverError::Unsupported(format!(
+            "{} is extract-only; supported create formats are 7z, zip, chd, rvz, and z3ds",
+            WBFS.name
+        )))
     }
 }
 /* jscpd:ignore-end */

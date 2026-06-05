@@ -12,7 +12,7 @@ import { CHD_EXTENSION_REGEX } from "../path-utils.ts";
 const RVZ_EXTENSION_REGEX = createDiscExtensionRegex(RVZ_DECOMPRESSION_INPUT_EXTENSIONS);
 const Z3DS_EXTENSION_REGEX = /\.(zcia|zcci|zcxi|z3dsx|z3ds)$/i;
 const Z3DS_EXTENSION_PREFIX_REGEX = /^z/i;
-const ARCHIVE_EXTENSION_REGEX = /\.(7z|zip|zipx)$/i;
+const ARCHIVE_EXTENSION_REGEX = /\.(7z|zip)$/i;
 
 const getSourceExtension = (source: SourceFileLike | null | undefined, fallback?: string): string => {
   if (source && typeof source.getExtension === "function") {

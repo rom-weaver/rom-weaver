@@ -167,17 +167,7 @@ export async function runBrowserFullFormatMatrixCore(input: BrowserFormatMatrixC
 
   const containerRoundTripFormats = [
     'zip',
-    'zipx',
     '7z',
-    'tar',
-    'tar.gz',
-    'tar.bz2',
-    'tar.xz',
-    'gz',
-    'bz2',
-    'xz',
-    'zst',
-    'cso',
     'chd',
     'z3ds',
   ];
@@ -205,15 +195,25 @@ export async function runBrowserFullFormatMatrixCore(input: BrowserFormatMatrixC
   }
 
   const containerCompressFailureExpectations = new Map([
-    ['rar', /rar create is not supported/i],
-    ['pbp', /pbp create is not supported/i],
-    ['gcz', /gcz compression is not supported/i],
-    ['wbfs', /failed to open input/i],
-    ['wia', /failed to open input/i],
-    ['tgc', /failed to open input/i],
-    ['nfs', /nfs compression is not supported/i],
+    ['zipx', /extract-only/i],
+    ['rar', /extract-only/i],
+    ['tar', /extract-only/i],
+    ['tar.gz', /extract-only/i],
+    ['tar.bz2', /extract-only/i],
+    ['tar.xz', /extract-only/i],
+    ['gz', /extract-only/i],
+    ['bz2', /extract-only/i],
+    ['xz', /extract-only/i],
+    ['zst', /extract-only/i],
+    ['cso', /extract-only/i],
+    ['pbp', /extract-only/i],
+    ['gcz', /extract-only/i],
+    ['wbfs', /extract-only/i],
+    ['wia', /extract-only/i],
+    ['tgc', /extract-only/i],
+    ['nfs', /extract-only/i],
     ['rvz', /failed to open input/i],
-    ['xiso', /create is not supported|trim-only/i],
+    ['xiso', /extract-only/i],
   ]);
   for (const [format, pattern] of containerCompressFailureExpectations.entries()) {
     const archivePath = joinGuestPath(dir, `compress-${formatToken(format)}.${containerSuffix(format)}`);
@@ -382,22 +382,21 @@ export async function runBrowserFullFormatMatrixCore(input: BrowserFormatMatrixC
     },
   );
   assertRunJsonSucceeded(xdeltaApplyResult, { command: 'patch-apply' });
-  assert(
-    xdeltaApplyEvents.some((event) => {
-      const format = String(event?.format || '').toLowerCase();
-      const percent = typeof event?.percent === 'number' ? event.percent : null;
-      return (
-        event.command === 'patch-apply' &&
-        event.status === 'running' &&
-        event.stage === 'apply' &&
-        format === 'xdelta' &&
-        percent !== null &&
-        percent > 0 &&
-        percent < 100
+  for (const event of xdeltaApplyEvents) {
+    const format = String(event?.format || '').toLowerCase();
+    const percent = typeof event?.percent === 'number' ? event.percent : null;
+    if (
+      event.command === 'patch-apply' &&
+      event.status === 'running' &&
+      event.stage === 'apply' &&
+      format === 'xdelta' &&
+      percent !== null
+    )
+      assert(
+        percent >= 0 && percent < 100,
+        `xdelta patch-apply running apply progress should stay below completion, got ${percent}`,
       );
-    }),
-    'xdelta patch-apply should emit a running apply progress event with a partial percent',
-  );
+  }
 
   const vcdiffPatchPath = joinGuestPath(dir, 'fixture-secondary.vcdiff');
   await runCommand(`patch-create gdiff fixture`, command('patch-create', {

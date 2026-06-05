@@ -9,7 +9,6 @@ enum ZipContainerFlavor {
 enum ZipCompressionMethod {
     Stored,
     Deflated,
-    Bzip2,
     Zstd,
 }
 
@@ -39,18 +38,17 @@ impl ZipContainerHandler {
             RequestedCodec::Unspecified => default,
             RequestedCodec::Known(CanonicalCodec::Store) => ZipCompressionMethod::Stored,
             RequestedCodec::Known(CanonicalCodec::Deflate) => ZipCompressionMethod::Deflated,
-            RequestedCodec::Known(CanonicalCodec::Bzip2) => ZipCompressionMethod::Bzip2,
             RequestedCodec::Known(CanonicalCodec::Zstd) => ZipCompressionMethod::Zstd,
             RequestedCodec::Known(codec) => {
                 return Err(RomWeaverError::Validation(format!(
-                    "unsupported {} codec `{}`; supported codecs are store, deflate, bzip2, and zstd",
+                    "unsupported {} codec `{}`; supported codecs are store, deflate, and zstd",
                     self.descriptor.name,
                     codec.name()
                 )));
             }
             RequestedCodec::Unknown(name) => {
                 return Err(RomWeaverError::Validation(format!(
-                    "unsupported {} codec `{name}`; supported codecs are store, deflate, bzip2, and zstd",
+                    "unsupported {} codec `{name}`; supported codecs are store, deflate, and zstd",
                     self.descriptor.name
                 )));
             }
@@ -60,7 +58,6 @@ impl ZipContainerHandler {
             let in_range = match method {
                 ZipCompressionMethod::Stored => false,
                 ZipCompressionMethod::Deflated => (0..=9).contains(&level),
-                ZipCompressionMethod::Bzip2 => (1..=9).contains(&level),
                 ZipCompressionMethod::Zstd => (-7..=22).contains(&level),
             };
             if !in_range {
@@ -86,7 +83,6 @@ impl ZipContainerHandler {
         match method {
             ZipCompressionMethod::Stored => "store",
             ZipCompressionMethod::Deflated => "deflate",
-            ZipCompressionMethod::Bzip2 => "bzip2",
             ZipCompressionMethod::Zstd => "zstd",
         }
     }
@@ -95,7 +91,6 @@ impl ZipContainerHandler {
         match method {
             ZipCompressionMethod::Stored => Some("store"),
             ZipCompressionMethod::Deflated => Some("deflate"),
-            ZipCompressionMethod::Bzip2 => Some("bzip2"),
             ZipCompressionMethod::Zstd => Some("zstd"),
         }
     }
@@ -103,7 +98,6 @@ impl ZipContainerHandler {
     fn libarchive_level(&self, method: ZipCompressionMethod, level: Option<i32>) -> Option<i32> {
         match method {
             ZipCompressionMethod::Deflated => level,
-            ZipCompressionMethod::Bzip2 => level,
             ZipCompressionMethod::Zstd => {
                 level.map(Self::map_zstd_level_to_zip_level)
             }
@@ -119,7 +113,6 @@ impl ZipContainerHandler {
         match method {
             ZipCompressionMethod::Stored
             | ZipCompressionMethod::Deflated
-            | ZipCompressionMethod::Bzip2
             | ZipCompressionMethod::Zstd => Some(execution.effective_threads.max(1)),
         }
     }

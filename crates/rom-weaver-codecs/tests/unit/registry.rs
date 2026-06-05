@@ -164,8 +164,8 @@ mod tests {
         let execution = encode.thread_execution.expect("thread execution");
         assert!(capabilities.encode_threads.supports_execution(&execution));
         assert_eq!(execution.requested_threads, 8);
-        assert_eq!(execution.effective_threads, 8);
-        assert!(execution.used_parallelism);
+        assert_eq!(execution.effective_threads, 1);
+        assert!(!execution.used_parallelism);
     }
 
     fn assert_decode_runtime_threads_match_capability(
@@ -460,7 +460,7 @@ mod tests {
             let backend = registry.find_by_name(codec).expect("codec backend");
             assert_eq!(
                 backend.capabilities().encode_threads,
-                ThreadCapability::parallel(None)
+                ThreadCapability::single_threaded()
             );
         }
 

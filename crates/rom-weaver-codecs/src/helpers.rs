@@ -118,10 +118,9 @@ pub fn encode_xz_preset(payload: &[u8], level: u32) -> Result<Vec<u8>> {
     encoder
         .write_all(payload)
         .map_err(|error| RomWeaverError::Validation(format!("xz encode failed: {error}")))?;
-    encoder.flush().map_err(|error| {
-        RomWeaverError::Validation(format!("xz encode finalize failed: {error}"))
-    })?;
-    Ok(encoder.into_inner())
+    encoder
+        .finish()
+        .map_err(|error| RomWeaverError::Validation(format!("xz encode finalize failed: {error}")))
 }
 
 pub fn decode_xz_exact(payload: &[u8], expected_len: usize) -> Result<Vec<u8>> {

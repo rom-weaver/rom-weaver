@@ -5,9 +5,12 @@ use std::{
     sync::Arc,
 };
 
-use bzip2::read::MultiBzDecoder;
+use bzip2::{Compression as Bzip2Compression, read::MultiBzDecoder, write::BzEncoder};
 use flate2::{
-    read::DeflateDecoder, read::ZlibDecoder,
+    Compression as FlateCompression,
+    read::DeflateDecoder,
+    read::ZlibDecoder,
+    write::GzEncoder,
 };
 use lzma_rust2::{Lzma2Reader, LzmaReader, XzOptions, XzReader, XzWriter};
 use rayon::prelude::*;
@@ -17,11 +20,8 @@ use rom_weaver_core::{
     OperationReport, OrderedChunkWriter, Result, RomWeaverError, SharedThreadPool, ThreadCapability,
     ThreadExecution,
 };
-use rom_weaver_libarchive::{
-    EntryFileType, EntrySpec, ReadArchive, ReadFilter, WriteArchive, WriteFilter, WriteFormat,
-    ZeroWriteBehavior,
-};
-use zstd::stream::Decoder as ZstdDecoder;
+use rom_weaver_libarchive::{ReadArchive, ReadFilter};
+use zstd::stream::{Decoder as ZstdDecoder, write::Encoder as ZstdEncoder};
 
 const STORE: CodecDescriptor = FormatDescriptor {
     family: OperationFamily::Codec,

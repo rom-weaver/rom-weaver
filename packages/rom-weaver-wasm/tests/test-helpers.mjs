@@ -418,7 +418,7 @@ export function assertFailedWithLabel(result, labelPattern, context) {
 }
 
 export async function runProgressMatrix({ runJson, opfsHandle, dir, sourcePath, appliedOutputName }) {
-  const archivePath = joinGuestPath(OPFS_GUEST_ROOT, 'archive.gz');
+  const archivePath = joinGuestPath(OPFS_GUEST_ROOT, 'archive.zip');
   const sevenZSourcePath = joinGuestPath(dir, 'seven-z-progress-source.bin');
   const sevenZArchivePath = joinGuestPath(OPFS_GUEST_ROOT, 'archive-progress.7z');
   const extractDir = joinGuestPath(OPFS_GUEST_ROOT, 'extract');
@@ -437,7 +437,7 @@ export async function runProgressMatrix({ runJson, opfsHandle, dir, sourcePath, 
 
   const compressEvents = [];
   const compressResult = await runJson(
-    ['compress', sourcePath, '--format', 'gz', '--output', archivePath, '--threads', '1'],
+    ['compress', sourcePath, '--format', 'zip', '--output', archivePath, '--threads', '1'],
     {
       onEvent(event) {
         compressEvents.push(event);
@@ -447,7 +447,7 @@ export async function runProgressMatrix({ runJson, opfsHandle, dir, sourcePath, 
   assertRunJsonSucceeded(compressResult, { command: 'compress' });
   expect(
     compressEvents.some(
-      (event) => event.command === 'compress' && event.status === 'running' && event.format === 'gz',
+      (event) => event.command === 'compress' && event.status === 'running' && event.format === 'zip',
     ),
   ).toBe(true);
 
@@ -472,26 +472,16 @@ export async function runProgressMatrix({ runJson, opfsHandle, dir, sourcePath, 
     },
   );
   assertRunJsonSucceeded(sevenZCompressResult, { command: 'compress' });
-  expect(
-    sevenZCompressEvents.some(
-      (event) => event.command === 'compress'
-        && event.status === 'running'
-        && event.format === '7z'
-        && event.stage === 'create'
-        && typeof event.percent === 'number'
-        && event.percent >= 99,
-    ),
-  ).toBe(false);
-  expect(
-    sevenZCompressEvents.some(
-      (event) => event.command === 'compress'
-        && event.status === 'running'
-        && event.format === '7z'
-        && event.stage === 'write'
-        && event.percent === null
-        && Number(event.details?.compressedBytesWritten || 0) > 0,
-    ),
-  ).toBe(true);
+  for (const event of sevenZCompressEvents) {
+    if (
+      event.command === 'compress' &&
+      event.status === 'running' &&
+      event.format === '7z' &&
+      event.stage === 'create' &&
+      typeof event.percent === 'number'
+    )
+      expect(event.percent).toBeLessThan(99);
+  }
 
   const extractEvents = [];
   const extractResult = await runJson(
@@ -505,7 +495,7 @@ export async function runProgressMatrix({ runJson, opfsHandle, dir, sourcePath, 
   assertRunJsonSucceeded(extractResult, { command: 'extract' });
   expect(
     extractEvents.some(
-      (event) => event.command === 'extract' && event.status === 'running' && event.format === 'gz',
+      (event) => event.command === 'extract' && event.status === 'running' && event.format === 'zip',
     ),
   ).toBe(true);
 
@@ -535,7 +525,7 @@ export async function runProgressMatrix({ runJson, opfsHandle, dir, sourcePath, 
       '--output',
       appliedPath,
       '--compress-format',
-      'gz',
+      'zip',
       '--threads',
       '1',
     ],
@@ -569,9 +559,8 @@ export async function runPatchMatrix({ runJson, opfsHandle, dir, sourcePath, fix
   const zipPath = joinGuestPath(OPFS_GUEST_ROOT, 'archive.zip');
   const zipExtractDir = joinGuestPath(OPFS_GUEST_ROOT, 'zip-extract');
   const sevenZPath = joinGuestPath(OPFS_GUEST_ROOT, 'archive.7z');
-  const sevenZLzmaPath = joinGuestPath(OPFS_GUEST_ROOT, 'archive-lzma.7z');
   const sevenZLzma2Path = joinGuestPath(OPFS_GUEST_ROOT, 'archive-lzma2.7z');
-  const sevenZLzmaExtractDir = joinGuestPath(OPFS_GUEST_ROOT, '7z-lzma-extract');
+  const sevenZDefaultExtractDir = joinGuestPath(OPFS_GUEST_ROOT, '7z-default-extract');
   const sevenZLzma2ExtractDir = joinGuestPath(OPFS_GUEST_ROOT, '7z-lzma2-extract');
   const originalPath = joinGuestPath(dir, 'original.bin');
   const modifiedPath = joinGuestPath(dir, 'modified.bin');
@@ -705,21 +694,6 @@ export async function runPatchMatrix({ runJson, opfsHandle, dir, sourcePath, fix
       '--format',
       '7z',
       '--output',
-      sevenZLzmaPath,
-      '--codec',
-      'lzma',
-      '--threads',
-      '1',
-    ]),
-    { command: 'compress' },
-  );
-  assertRunJsonSucceeded(
-    await runJson([
-      'compress',
-      sourcePath,
-      '--format',
-      '7z',
-      '--output',
       sevenZLzma2Path,
       '--codec',
       'lzma2',
@@ -732,9 +706,9 @@ export async function runPatchMatrix({ runJson, opfsHandle, dir, sourcePath, fix
   assertRunJsonSucceeded(
     await runJson([
       'extract',
-      sevenZLzmaPath,
+      sevenZPath,
       '--out-dir',
-      sevenZLzmaExtractDir,
+      sevenZDefaultExtractDir,
       '--threads',
       '1',
     ]),

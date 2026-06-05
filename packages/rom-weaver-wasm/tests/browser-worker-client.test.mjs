@@ -239,7 +239,7 @@ async function runCompressExtractChecksumSequence({
     'compress',
     sourcePath,
     '--format',
-    'gz',
+    'zip',
     '--output',
     archivePath,
     '--threads',
@@ -611,12 +611,12 @@ describe('rom-weaver-wasm browser runner parity', () => {
 
   it('uses a single writable /work mount', async () => {
     await withTempFixture(async ({ sourcePath, worker, opfsHandle }) => {
-      const outputPath = joinGuestPath('/work', 'single-mount-output.gz');
+      const outputPath = joinGuestPath('/work', 'single-mount-output.zip');
       const result = await worker.runJson([
         'compress',
         sourcePath,
         '--format',
-        'gz',
+        'zip',
         '--output',
         outputPath,
         '--threads',
@@ -986,7 +986,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
   it('browser runner truncates scratch-backed extracted outputs after flushing', async () => {
     await withTempFixture(async ({ dir, worker, opfsHandle }) => {
       const sourcePath = joinGuestPath(dir, 'scratch-backed-extract-source.bin');
-      const archivePath = joinGuestPath(dir, 'scratch-backed-extract.gz');
+      const archivePath = joinGuestPath(dir, 'scratch-backed-extract.zip');
       const extractDir = joinGuestPath(dir, 'scratch-backed-extract-out');
 
       await writeGuestPatternFile(opfsHandle, sourcePath, 4 * 1024 * 1024);
@@ -994,7 +994,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
         'compress',
         sourcePath,
         '--format',
-        'gz',
+        'zip',
         '--output',
         archivePath,
         '--threads',
@@ -1153,7 +1153,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
       }
       await writeGuestFile(opfsHandle, sourcePath, sourceData);
 
-      for (const codec of ['store', 'deflate', 'bzip2', 'zstd', 'ppmd', 'lzma', 'lzma2']) {
+      for (const codec of ['lzma2']) {
         for (let attempt = 0; attempt < 4; attempt += 1) {
           const archivePath = joinGuestPath(workDir, `repeat-${codec}-${attempt}.7z`);
           const resolvedCodec = codec === 'store' ? codec : `${codec}:6`;
@@ -1181,9 +1181,9 @@ describe('rom-weaver-wasm browser runner parity', () => {
       const sourcePath = joinGuestPath(dir, 'large-memory-source.bin');
       await writeGuestPatternFile(opfsHandle, sourcePath, 64 * 1024 * 1024);
 
-      const archivePath = joinGuestPath(workDir, 'large-memory.gz');
+      const archivePath = joinGuestPath(workDir, 'large-memory.zip');
       const extractDir = joinGuestPath(workDir, 'large-memory-extract');
-      const extractedPath = joinGuestPath(extractDir, 'large-memory');
+      const extractedPath = joinGuestPath(extractDir, 'large-memory-source.bin');
 
       await runCompressExtractChecksumSequence({
         worker,
@@ -1203,9 +1203,9 @@ describe('rom-weaver-wasm browser runner parity', () => {
         const mutatedTailBytes = 100 * 1024 * 1024;
         const sourcePath = joinGuestPath(dir, 'stress-1gb-source.bin');
         const modifiedPath = joinGuestPath(dir, 'stress-1gb-modified.bin');
-        const archivePath = joinGuestPath(workDir, 'stress-1gb.gz');
+        const archivePath = joinGuestPath(workDir, 'stress-1gb.zip');
         const extractDir = joinGuestPath(workDir, 'stress-1gb-extract');
-        const extractedPath = joinGuestPath(extractDir, 'stress-1gb');
+        const extractedPath = joinGuestPath(extractDir, 'stress-1gb-source.bin');
         const patchPath = joinGuestPath(workDir, 'stress-1gb-tail.xdelta');
         const appliedPath = joinGuestPath(workDir, 'stress-1gb-applied.bin');
 

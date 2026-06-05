@@ -1,7 +1,9 @@
+#[cfg(feature = "write-archives")]
+use std::ffi::c_void;
 use std::{
     borrow::Cow,
     collections::BTreeSet,
-    ffi::{CStr, CString, c_void},
+    ffi::{CStr, CString},
     fs::{self, File},
     io::{self, Read, Write},
     path::Path,
@@ -16,48 +18,68 @@ pub use rom_weaver_libarchive_sys as sys;
 use sys::{
     ARCHIVE_EOF, ARCHIVE_FORMAT_7ZIP, ARCHIVE_FORMAT_BASE_MASK, ARCHIVE_FORMAT_RAR,
     ARCHIVE_FORMAT_RAR_V5, ARCHIVE_FORMAT_TAR, ARCHIVE_FORMAT_ZIP, ARCHIVE_OK, ARCHIVE_WARN,
-    archive, archive_entry_free, archive_entry_new, archive_entry_set_filetype,
-    archive_entry_set_pathname, archive_entry_set_perm, archive_entry_set_size, archive_errno,
-    archive_error_string, archive_read_close, archive_read_data, archive_read_free,
-    archive_read_new, archive_read_next_header, archive_read_open_filename,
+    archive, archive_errno, archive_error_string, archive_read_close, archive_read_data,
+    archive_read_free, archive_read_new, archive_read_next_header, archive_read_open_filename,
     archive_read_support_filter_bzip2, archive_read_support_filter_gzip,
     archive_read_support_filter_xz, archive_read_support_filter_zstd,
-    archive_read_support_format_raw, archive_write_add_filter_bzip2, archive_write_add_filter_gzip,
-    archive_write_add_filter_none, archive_write_add_filter_xz, archive_write_add_filter_zstd,
+    archive_read_support_format_raw,
+};
+#[cfg(feature = "write-archives")]
+use sys::{
+    archive_entry_free, archive_entry_new, archive_entry_set_filetype, archive_entry_set_pathname,
+    archive_entry_set_perm, archive_entry_set_size, archive_write_add_filter_none,
     archive_write_close, archive_write_data, archive_write_finish_entry, archive_write_free,
     archive_write_header, archive_write_new, archive_write_open, archive_write_open_filename,
     archive_write_set_filter_option, archive_write_set_format_7zip,
     archive_write_set_format_7zip_progress_callback, archive_write_set_format_option,
-    archive_write_set_format_pax_restricted, archive_write_set_format_raw,
     archive_write_set_format_zip,
+};
+#[cfg(feature = "write-extra")]
+use sys::{
+    archive_write_add_filter_bzip2, archive_write_add_filter_gzip, archive_write_add_filter_xz,
+    archive_write_add_filter_zstd, archive_write_set_format_pax_restricted,
+    archive_write_set_format_raw,
 };
 
 const REGULAR_ARCHIVE_READ_BLOCK_BYTES: usize = 2 * 1024 * 1024;
 
+#[cfg(feature = "write-archives")]
 #[derive(Clone, Copy, Debug)]
 pub enum WriteFormat {
     Zip,
     SevenZ,
+    #[cfg(feature = "write-extra")]
     TarPax,
+    #[cfg(feature = "write-extra")]
     Raw,
 }
 
+#[cfg(feature = "write-archives")]
 #[derive(Clone, Copy, Debug)]
 pub enum WriteFilter {
     None,
+    #[cfg(feature = "write-extra")]
     Gzip,
+    #[cfg(feature = "write-extra")]
     Bzip2,
+    #[cfg(feature = "write-extra")]
     Xz,
+    #[cfg(feature = "write-extra")]
     Zstd,
 }
 
+#[cfg(feature = "write-archives")]
 impl WriteFilter {
     pub const fn module_name(self) -> Option<&'static str> {
         match self {
             Self::None => None,
+            #[cfg(feature = "write-extra")]
             Self::Gzip => Some("gzip"),
+            #[cfg(feature = "write-extra")]
             Self::Bzip2 => Some("bzip2"),
+            #[cfg(feature = "write-extra")]
             Self::Xz => Some("xz"),
+            #[cfg(feature = "write-extra")]
             Self::Zstd => Some("zstd"),
         }
     }
@@ -113,12 +135,14 @@ pub enum SelectedRegularArchiveEntry<'a> {
     },
 }
 
+#[cfg(feature = "write-archives")]
 #[derive(Clone, Copy, Debug)]
 pub enum EntryFileType {
     Regular,
     Directory,
 }
 
+#[cfg(feature = "write-archives")]
 impl EntryFileType {
     const fn libarchive_mode(self) -> u32 {
         match self {
@@ -128,6 +152,7 @@ impl EntryFileType {
     }
 }
 
+#[cfg(feature = "write-archives")]
 #[derive(Clone, Copy, Debug)]
 pub struct EntrySpec<'a> {
     pub pathname: &'a str,
@@ -136,27 +161,32 @@ pub struct EntrySpec<'a> {
     pub size: u64,
 }
 
+#[cfg(feature = "write-archives")]
 #[derive(Clone, Copy, Debug)]
 pub enum ZeroWriteBehavior {
     Complete,
     Error,
 }
 
+#[cfg(feature = "write-archives")]
 pub struct WriteArchive {
     ptr: Option<NonNull<archive>>,
     codec_progress_callback_data: Option<Box<CodecProgressCallbackData>>,
     write_callback_data: Option<Box<WriteCallbackData>>,
 }
 
+#[cfg(feature = "write-archives")]
 struct CodecProgressCallbackData {
     on_bytes_processed: Box<dyn FnMut(u64)>,
 }
 
+#[cfg(feature = "write-archives")]
 struct WriteCallbackData {
     file: File,
     on_bytes_written: Box<dyn FnMut(u64)>,
 }
 
+#[cfg(feature = "write-archives")]
 impl WriteArchive {
     pub fn new(context: &str) -> Result<Self> {
         let ptr = unsafe { archive_write_new() };
@@ -177,7 +207,9 @@ impl WriteArchive {
             match format {
                 WriteFormat::Zip => archive_write_set_format_zip(self.as_ptr()),
                 WriteFormat::SevenZ => archive_write_set_format_7zip(self.as_ptr()),
+                #[cfg(feature = "write-extra")]
                 WriteFormat::TarPax => archive_write_set_format_pax_restricted(self.as_ptr()),
+                #[cfg(feature = "write-extra")]
                 WriteFormat::Raw => archive_write_set_format_raw(self.as_ptr()),
             }
         };
@@ -188,9 +220,13 @@ impl WriteArchive {
         let status = unsafe {
             match filter {
                 WriteFilter::None => archive_write_add_filter_none(self.as_ptr()),
+                #[cfg(feature = "write-extra")]
                 WriteFilter::Gzip => archive_write_add_filter_gzip(self.as_ptr()),
+                #[cfg(feature = "write-extra")]
                 WriteFilter::Bzip2 => archive_write_add_filter_bzip2(self.as_ptr()),
+                #[cfg(feature = "write-extra")]
                 WriteFilter::Xz => archive_write_add_filter_xz(self.as_ptr()),
+                #[cfg(feature = "write-extra")]
                 WriteFilter::Zstd => archive_write_add_filter_zstd(self.as_ptr()),
             }
         };
@@ -448,6 +484,7 @@ impl WriteArchive {
     }
 }
 
+#[cfg(feature = "write-archives")]
 unsafe extern "C" fn codec_progress_callback(client_data: *mut c_void, processed_bytes: u64) {
     if client_data.is_null() {
         return;
@@ -456,6 +493,7 @@ unsafe extern "C" fn codec_progress_callback(client_data: *mut c_void, processed
     (callback_data.on_bytes_processed)(processed_bytes);
 }
 
+#[cfg(feature = "write-archives")]
 unsafe extern "C" fn write_file_callback(
     _archive: *mut archive,
     client_data: *mut c_void,
@@ -480,6 +518,7 @@ unsafe extern "C" fn write_file_callback(
     }
 }
 
+#[cfg(feature = "write-archives")]
 impl Drop for WriteArchive {
     fn drop(&mut self) {
         if let Some(ptr) = self.ptr.take() {
@@ -1065,10 +1104,12 @@ fn normalize_archive_name_relaxed(name: &str) -> String {
         .to_string()
 }
 
+#[cfg(feature = "write-archives")]
 struct ArchiveEntry {
     ptr: NonNull<sys::archive_entry>,
 }
 
+#[cfg(feature = "write-archives")]
 impl ArchiveEntry {
     fn new(context: &str) -> Result<Self> {
         let ptr = unsafe { archive_entry_new() };
@@ -1085,6 +1126,7 @@ impl ArchiveEntry {
     }
 }
 
+#[cfg(feature = "write-archives")]
 impl Drop for ArchiveEntry {
     fn drop(&mut self) {
         unsafe { archive_entry_free(self.ptr.as_ptr()) };
@@ -1127,6 +1169,7 @@ fn error_from_archive(archive_ptr: *mut archive, context: &str) -> RomWeaverErro
     }
 }
 
+#[cfg(feature = "write-archives")]
 fn unsupported_option_error(archive_ptr: *mut archive) -> bool {
     unsafe {
         let error_ptr = archive_error_string(archive_ptr);
@@ -1140,12 +1183,14 @@ fn unsupported_option_error(archive_ptr: *mut archive) -> bool {
     }
 }
 
+#[cfg(feature = "write-archives")]
 fn optional_cstring(value: Option<&str>, label: &str, context: &str) -> Result<Option<CString>> {
     value
         .map(|value| cstring(value, label, context))
         .transpose()
 }
 
+#[cfg(feature = "write-archives")]
 fn cstring(value: &str, label: &str, context: &str) -> Result<CString> {
     CString::new(value).map_err(|_| {
         RomWeaverError::Validation(format!("{context}: {label} contained interior NUL"))
@@ -1177,7 +1222,7 @@ fn path_bytes(path: &Path) -> Cow<'_, [u8]> {
     Cow::Owned(path.to_string_lossy().as_bytes().to_vec())
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "write-archives"))]
 mod tests {
     use super::*;
     use std::{

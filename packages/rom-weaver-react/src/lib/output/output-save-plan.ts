@@ -3,7 +3,7 @@ import type { WorkflowRomFileLike as RomFileLike } from "../../types/workflow-so
 import { getBaseFileName, hasFileNameExtension, replaceFileNameExtension } from "../input/path-utils.ts";
 import { getCompressedOutputFileName } from "./output-files.ts";
 
-const ARCHIVE_OUTPUT_EXTENSION_REGEX = /\.(?:7z|zip|zipx)$/i;
+const ARCHIVE_OUTPUT_EXTENSION_REGEX = /\.(?:7z|zip)$/i;
 
 type CueOutputEntry = {
   fileName: string;

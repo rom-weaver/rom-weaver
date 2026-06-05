@@ -11,7 +11,7 @@ import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 const MIB = 1024 * 1024;
 const DEFAULT_SIZE_MIB = 8;
 const DEFAULT_LEVEL = 6;
-const DEFAULT_CODECS = ['store', 'lzma2', 'lzma', 'deflate', 'bzip2', 'ppmd'];
+const DEFAULT_CODECS = ['lzma2'];
 const DEFAULT_RUNTIMES = ['native'];
 const VALID_RUNTIMES = new Set(['native', 'wasm', '7zz']);
 const SEVENZIP_METHODS = {

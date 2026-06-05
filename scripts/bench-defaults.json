@@ -109,11 +109,23 @@
     },
     "expected_compress_skips": {
       "rar": "intentionally unsupported: rar create is not supported",
+      "zipx": "intentionally unsupported: zipx is extract-only; use zip --codec zstd",
+      "tar": "intentionally unsupported: tar create is disabled",
+      "tar.gz": "intentionally unsupported: tar.gz create is disabled",
+      "tar.bz2": "intentionally unsupported: tar.bz2 create is disabled",
+      "tar.xz": "intentionally unsupported: tar.xz create is disabled",
+      "gz": "intentionally unsupported: gz create is disabled",
+      "bz2": "intentionally unsupported: bz2 create is disabled",
+      "xz": "intentionally unsupported: xz create is disabled",
+      "zst": "intentionally unsupported: zst create is disabled",
+      "cso": "intentionally unsupported: cso create is disabled",
+      "wia": "intentionally unsupported: wia create is disabled",
+      "tgc": "intentionally unsupported: tgc create is disabled",
+      "wbfs": "intentionally unsupported: wbfs create is disabled",
       "xiso": "intentionally unsupported: xiso is trim-only and not a compress format",
       "pbp": "intentionally unsupported: pbp create is not supported",
       "gcz": "intentionally unsupported: gcz compression is not supported (use rvz)",
-      "nfs": "intentionally unsupported: nfs compression is not supported",
-      "tgc": "benchmark fixture limitation: tgc create requires a full GC disc image with readable DOL"
+      "nfs": "intentionally unsupported: nfs compression is not supported"
     },
     "expected_patch_create_skips": {
       "ips": "intentionally skipped: 128 MiB benchmark inputs exceed the IPS 24-bit offset limit",
@@ -128,26 +140,12 @@
       "wbfs",
       "tgc"
     ],
-    "compress_codec_by_format": {
-      "zipx": "zstd"
-    },
+    "compress_codec_by_format": {},
     "codec_matrix_by_format": {
-      "zip": [["store", "store"], ["deflate", "deflate"], ["bzip2", "bzip2"], ["zstd", "zstd"]],
-      "7z": [["lzma2", "lzma2"], ["lzma", "lzma"], ["store", "store"], ["zstd", "zstd:7"], ["deflate", "deflate"], ["bzip2", "bzip2"], ["ppmd", "ppmd"]],
-      "tar": [["store", "store"]],
-      "tar.gz": [["deflate", "deflate"]],
-      "tar.bz2": [["bzip2", "bzip2"]],
-      "tar.xz": [["lzma2", "lzma2"], ["lzma", "lzma"]],
-      "gz": [["deflate", "deflate"]],
-      "bz2": [["bzip2", "bzip2"]],
-      "xz": [["lzma2", "lzma2"], ["lzma", "lzma"]],
-      "zst": [["zstd", "zstd"]],
-      "cso": [["store", "store"]],
+      "zip": [["store", "store"], ["deflate", "deflate"], ["zstd", "zstd"]],
+      "7z": [["lzma2", "lzma2"]],
       "chd": [["zstd", "zstd"], ["zlib", "zlib"], ["lzma", "lzma"], ["huffman", "huffman"], ["flac", "flac"], ["store", "store"]],
-      "wia": [["store", "store"], ["zstd", "zstd"], ["bzip2", "bzip2"], ["lzma", "lzma"], ["lzma2", "lzma2"]],
-      "tgc": [["store", "store"]],
-      "wbfs": [["store", "store"]],
-      "rvz": [["store", "store"], ["zstd", "zstd"], ["bzip2", "bzip2"], ["lzma", "lzma"], ["lzma2", "lzma2"]],
+      "rvz": [["zstd", "zstd"]],
       "z3ds": [["zstd", "zstd"]]
     }
   },

@@ -140,53 +140,6 @@ fn assert_running_percent_event_in_range(
     );
 }
 
-fn assert_unique_integer_running_progress(
-    events: &[Value],
-    command: &str,
-    format: &str,
-    label_prefix: &str,
-) {
-    let mut seen = BTreeSet::new();
-    for event in events {
-        if event["command"] != command || event["status"] != "running" || event["format"] != format
-        {
-            continue;
-        }
-        if !event["label"]
-            .as_str()
-            .map(|label| label.starts_with(label_prefix))
-            .unwrap_or(false)
-        {
-            continue;
-        }
-        let Some(percent) = event["percent"].as_f64() else {
-            continue;
-        };
-        if percent <= 0.0 {
-            continue;
-        }
-        assert!(
-            (1.0..=100.0).contains(&percent),
-            "expected {command} ({format}) running percent to stay in 1..=100, got {percent}"
-        );
-        assert!(
-            (percent.fract()).abs() < f64::EPSILON,
-            "expected {command} ({format}) running percent to be an integer, got {percent}"
-        );
-        let bucket = percent as u8;
-        assert!(
-            seen.insert(bucket),
-            "expected {command} ({format}) `{label_prefix}` to emit each integer percent once; duplicate {bucket}%"
-        );
-    }
-    assert!(
-        !seen.is_empty(),
-        "expected {command} ({format}) to emit at least one running percent event"
-    );
-    assert_eq!(seen.iter().next().copied(), Some(1));
-    assert_eq!(seen.iter().next_back().copied(), Some(100));
-}
-
 fn emitted_file_entry<'a>(json: &'a Value, file_name: &str) -> &'a Value {
     json["details"]["emitted_files"]
         .as_array()

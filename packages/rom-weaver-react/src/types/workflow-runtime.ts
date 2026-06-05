@@ -153,7 +153,7 @@ type SevenZipZstdCompressionOptions = CompressionWorkflowOptions & {
   compressionProfile?: "min" | "very-low" | "low" | "medium" | "high" | "very-high" | "max";
   zipCodec?: "deflate" | "store" | "zstd";
   zipLevel?: number | string;
-  sevenZipCodec?: "lzma2" | "zstd";
+  sevenZipCodec?: "lzma2";
   sevenZipLevel?: number | string;
 };
 

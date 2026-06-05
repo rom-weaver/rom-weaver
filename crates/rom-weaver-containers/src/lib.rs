@@ -15,10 +15,6 @@ use std::{
 mod constants;
 
 use ciso::{read::CSOReader as CsoReader, split::SplitFileReader};
-use lz4_flex::frame::{
-    BlockMode as Lz4BlockMode, BlockSize as Lz4BlockSize, FrameEncoder as Lz4FrameEncoder,
-    FrameInfo as Lz4FrameInfo,
-};
 use nod::{
     common::{Compression as NodCompression, Format as NodFormat},
     read::{DiscOptions as NodDiscOptions, DiscReader as NodDiscReader},
@@ -360,6 +356,12 @@ impl ContainerHandlerOperations for RegisteredContainerHandler {
         request: &ContainerCreateRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
+        if !self.registration.capabilities.create {
+            return Err(RomWeaverError::Unsupported(format!(
+                "{} is extract-only; supported create formats are 7z, zip, chd, rvz, and z3ds",
+                request.format
+            )));
+        }
         self.inner.create(request, context)
     }
 
@@ -368,6 +370,12 @@ impl ContainerHandlerOperations for RegisteredContainerHandler {
         request: &ContainerCreateRequest,
         context: &OperationContext,
     ) -> Result<u64> {
+        if !self.registration.capabilities.create {
+            return Err(RomWeaverError::Unsupported(format!(
+                "{} is extract-only; supported create formats are 7z, zip, chd, rvz, and z3ds",
+                request.format
+            )));
+        }
         self.inner.create_dry_run_size(request, context)
     }
 }
@@ -407,7 +415,7 @@ static CONTAINER_FORMAT_REGISTRY: &[ContainerFormatRegistration] = &[
     },
     ContainerFormatRegistration {
         descriptor: &ZIPX,
-        capabilities: CREATE_AND_EXTRACT_PARALLEL,
+        capabilities: EXTRACT_ONLY_PARALLEL,
         handler: ContainerHandlerKind::Zip(ZipContainerFlavor::Zipx),
     },
     ContainerFormatRegistration {
@@ -422,47 +430,47 @@ static CONTAINER_FORMAT_REGISTRY: &[ContainerFormatRegistration] = &[
     },
     ContainerFormatRegistration {
         descriptor: &TAR,
-        capabilities: CREATE_AND_EXTRACT_PARALLEL,
+        capabilities: EXTRACT_ONLY_PARALLEL,
         handler: ContainerHandlerKind::Tar(TarCompression::None),
     },
     ContainerFormatRegistration {
         descriptor: &TAR_GZ,
-        capabilities: CREATE_AND_EXTRACT_PARALLEL,
+        capabilities: EXTRACT_ONLY_PARALLEL,
         handler: ContainerHandlerKind::Tar(TarCompression::Gzip),
     },
     ContainerFormatRegistration {
         descriptor: &TAR_BZ2,
-        capabilities: CREATE_AND_EXTRACT_PARALLEL,
+        capabilities: EXTRACT_ONLY_PARALLEL,
         handler: ContainerHandlerKind::Tar(TarCompression::Bzip2),
     },
     ContainerFormatRegistration {
         descriptor: &TAR_XZ,
-        capabilities: CREATE_AND_EXTRACT_PARALLEL,
+        capabilities: EXTRACT_ONLY_PARALLEL,
         handler: ContainerHandlerKind::Tar(TarCompression::Xz),
     },
     ContainerFormatRegistration {
         descriptor: &GZ,
-        capabilities: CREATE_AND_EXTRACT_PARALLEL,
+        capabilities: EXTRACT_ONLY_PARALLEL,
         handler: ContainerHandlerKind::Stream(StreamCompression::Gzip),
     },
     ContainerFormatRegistration {
         descriptor: &BZ2,
-        capabilities: CREATE_AND_EXTRACT_PARALLEL,
+        capabilities: EXTRACT_ONLY_PARALLEL,
         handler: ContainerHandlerKind::Stream(StreamCompression::Bzip2),
     },
     ContainerFormatRegistration {
         descriptor: &XZ,
-        capabilities: CREATE_AND_EXTRACT_PARALLEL,
+        capabilities: EXTRACT_ONLY_PARALLEL,
         handler: ContainerHandlerKind::Stream(StreamCompression::Xz),
     },
     ContainerFormatRegistration {
         descriptor: &ZST,
-        capabilities: CREATE_AND_EXTRACT_PARALLEL,
+        capabilities: EXTRACT_ONLY_PARALLEL,
         handler: ContainerHandlerKind::Stream(StreamCompression::Zstd),
     },
     ContainerFormatRegistration {
         descriptor: &CSO,
-        capabilities: CREATE_AND_EXTRACT_PARALLEL,
+        capabilities: EXTRACT_ONLY_PARALLEL,
         handler: ContainerHandlerKind::Cso,
     },
     ContainerFormatRegistration {
@@ -482,12 +490,12 @@ static CONTAINER_FORMAT_REGISTRY: &[ContainerFormatRegistration] = &[
     },
     ContainerFormatRegistration {
         descriptor: &WIA,
-        capabilities: CREATE_AND_EXTRACT_PARALLEL,
+        capabilities: EXTRACT_ONLY_PARALLEL,
         handler: ContainerHandlerKind::Wia,
     },
     ContainerFormatRegistration {
         descriptor: &TGC,
-        capabilities: CREATE_AND_EXTRACT_PARALLEL,
+        capabilities: EXTRACT_ONLY_PARALLEL,
         handler: ContainerHandlerKind::Tgc,
     },
     ContainerFormatRegistration {
@@ -497,7 +505,7 @@ static CONTAINER_FORMAT_REGISTRY: &[ContainerFormatRegistration] = &[
     },
     ContainerFormatRegistration {
         descriptor: &WBFS,
-        capabilities: CREATE_AND_EXTRACT_PARALLEL,
+        capabilities: EXTRACT_ONLY_PARALLEL,
         handler: ContainerHandlerKind::Wbfs,
     },
     ContainerFormatRegistration {
@@ -601,8 +609,8 @@ impl ContainerRegistry {
             }
         }
         CompressFormatRecommendation {
-            format_name: "chd",
-            reason: "not-wii-gc-or-unrecognized",
+            format_name: SEVEN_Z.name,
+            reason: "fallback-7z-lzma2",
         }
     }
 }
@@ -735,42 +743,18 @@ fn libarchive_open_create_archive(
             )?;
         }
 
-        if let Some(level) = config.compression_level {
-            if config.format_compression.is_some() {
-                archive.set_format_option(
-                    None,
-                    "compression-level",
-                    &level.to_string(),
-                    &format!(
-                        "{} create failed while setting format option `compression-level`",
-                        config.format_name
-                    ),
-                )?;
-            } else {
-                match config.filter {
-                    LibarchiveCreateFilter::Gzip
-                    | LibarchiveCreateFilter::Bzip2
-                    | LibarchiveCreateFilter::Xz
-                    | LibarchiveCreateFilter::Zstd => {
-                        let module = config.filter.module_name().ok_or_else(|| {
-                            RomWeaverError::Validation(format!(
-                                "{} create failed: no filter module for compression level",
-                                config.format_name
-                            ))
-                        })?;
-                        archive.set_filter_option(
-                            module,
-                            "compression-level",
-                            &level.to_string(),
-                            &format!(
-                                "{} create failed while setting {module}:compression-level={level}",
-                                config.format_name
-                            ),
-                        )?;
-                    }
-                    LibarchiveCreateFilter::None => {}
-                }
-            }
+        if let Some(level) = config.compression_level
+            && config.format_compression.is_some()
+        {
+            archive.set_format_option(
+                None,
+                "compression-level",
+                &level.to_string(),
+                &format!(
+                    "{} create failed while setting format option `compression-level`",
+                    config.format_name
+                ),
+            )?;
         }
 
         if let Some(threads) = config.format_threads
@@ -829,8 +813,6 @@ fn libarchive_create_format_name(format: LibarchiveCreateFormat) -> &'static str
     match format {
         LibarchiveCreateFormat::Zip => "zip",
         LibarchiveCreateFormat::SevenZ => "7z",
-        LibarchiveCreateFormat::TarPax => "tar",
-        LibarchiveCreateFormat::Raw => "raw",
     }
 }
 

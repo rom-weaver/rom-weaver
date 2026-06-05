@@ -156,9 +156,9 @@ const OutputCompressionManager = (() => {
     "7z": "7zip",
     zip: "zip",
   };
-  const SEVEN_ZIP_COMPRESSION_METHODS = ["lzma2", "zstd"];
+  const SEVEN_ZIP_COMPRESSION_METHODS = ["lzma2"];
   const ZIP_COMPRESSION_METHODS = ["deflate", "store", "zstd"];
-  const RVZ_COMPRESSION_METHODS = ["none", "zstd", "bzip2", "lzma", "lzma2"];
+  const RVZ_COMPRESSION_METHODS = ["zstd"];
   const COMPRESSION_PROFILES = ["min", "very-low", "low", "medium", "high", "very-high", "max"];
   const COMPRESSION_PROFILE_LEVELS = {
     standard: {
@@ -397,7 +397,6 @@ const OutputCompressionManager = (() => {
     normalizeThreadCount(options?.threads, { fallback: null });
   const _getArchiveOutputExtension = (compression: CompressionChoiceInput, options?: OutputCompressionOptions) => {
     const selected = _normalizeOutputCompression(compression);
-    if (selected === OUTPUT_COMPRESSION.ZIP && _getArchiveCodec(compression, options) === "zstd") return "zipx";
     return selected;
   };
   const _appendFileExtension = (fileName: string, extension: string | number | boolean | null | undefined): string => {
@@ -568,8 +567,7 @@ const OutputCompressionManager = (() => {
     normalizeRvzBlockSize: _normalizeRvzBlockSize,
     normalizeRvzCompression: _normalizeRvzCompression,
     normalizeRvzCompressionLevel: _normalizeRvzCompressionLevel,
-    normalizeSevenZipCodec: (value: CodecChoiceInput, fallback?: string) =>
-      _normalizeArchiveCodec(value, SEVEN_ZIP_COMPRESSION_METHODS, fallback || "lzma2", "7z"),
+    normalizeSevenZipCodec: (_value: CodecChoiceInput, _fallback?: string) => "lzma2",
     normalizeThreadCount: _normalizeThreadCount,
     normalizeZipCodec: (value: CodecChoiceInput, fallback?: string) =>
       _normalizeArchiveCodec(value, ZIP_COMPRESSION_METHODS, fallback || "deflate", "ZIP"),

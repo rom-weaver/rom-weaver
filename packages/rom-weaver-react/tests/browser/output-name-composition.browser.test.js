@@ -96,6 +96,11 @@ test("archive compression appends archive extension after explicit rom extension
   expect(OutputCompressionManager.getCompressedFileName({ fileName: "patched.sfc" }, "zip", {})).toBe(
     "patched.sfc.zip",
   );
+  expect(
+    OutputCompressionManager.getCompressedFileName({ fileName: "patched.sfc" }, "zip", {
+      zipCodec: "zstd",
+    }),
+  ).toBe("patched.sfc.zip");
 });
 
 test("apply output options preserve configured compression order and labels", () => {
@@ -108,7 +113,7 @@ test("apply output options preserve configured compression order and labels", ()
 
 test("create output options expose patch format and archive choices", () => {
   expect(createCreateOutputCompressionOptions("bps")).toEqual([
-    { label: ".bps", value: "none" },
+    { label: "None", value: "none" },
     { label: ".zip", value: "zip" },
     { label: ".7z", value: "7z" },
   ]);

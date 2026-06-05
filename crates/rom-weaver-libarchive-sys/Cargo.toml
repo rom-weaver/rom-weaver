@@ -7,6 +7,11 @@ version.workspace = true
 build = "build.rs"
 links = "archive"
 
+[features]
+default = []
+write-archives = []
+write-extra = ["write-archives"]
+
 [dependencies]
 bzip2-sys = { version = "0.1.11", features = ["static"] }
 libc = "0.2.137"

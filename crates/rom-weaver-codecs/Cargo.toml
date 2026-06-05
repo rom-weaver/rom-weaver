@@ -11,5 +11,5 @@ flate2.workspace = true
 lzma-rust2.workspace = true
 rayon.workspace = true
 rom-weaver-core = { path = "../rom-weaver-core" }
-rom-weaver-libarchive.workspace = true
+rom-weaver-libarchive = { workspace = true, default-features = false }
 zstd.workspace = true

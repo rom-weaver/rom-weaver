@@ -121,12 +121,7 @@ const normalizeApplyOutputCompression = (
   return normalizeDefaultArchive(fallback);
 };
 
-const normalizeSevenZipCodec = (value: RuntimeValue): OutputContainerSettings["sevenZipCodec"] =>
-  String(value || "")
-    .trim()
-    .toLowerCase() === "zstd"
-    ? "zstd"
-    : "lzma2";
+const normalizeSevenZipCodec = (_value: RuntimeValue): OutputContainerSettings["sevenZipCodec"] => "lzma2";
 
 const getNormalizedWorkflowSettings = (
   settings: ApplyPatchFormSettings | CreatePatchFormSettings,

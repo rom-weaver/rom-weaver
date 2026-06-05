@@ -59,7 +59,6 @@ const resolveCompressionLevels = (source?: CompressionSettingsSource | null) => 
   const rvzCompression = compressionManager.normalizeRvzCompression(settings.rvzCompression || "zstd");
   const sevenZipCodec = compressionManager.normalizeSevenZipCodec(settings.sevenZipCodec, "lzma2");
   const zipCodec = compressionManager.normalizeZipCodec(settings.zipCodec, "deflate");
-  const sevenZipMaxLevel = sevenZipCodec === "zstd" ? 22 : 9;
 
   return {
     compressionProfile: compressionProfile,
@@ -75,7 +74,7 @@ const resolveCompressionLevels = (source?: CompressionSettingsSource | null) => 
       settings.sevenZipLevel,
       compressionManager.getCompressionProfileLevel(compressionProfile, sevenZipCodec, "7z"),
       0,
-      sevenZipMaxLevel,
+      9,
     ),
     z3dsCompressionLevel:
       settings.z3dsCompressionLevel === "default"

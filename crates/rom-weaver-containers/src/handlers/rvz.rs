@@ -141,31 +141,16 @@ impl RvzContainerHandler {
                 }
                 Ok(compression)
             }
-            RequestedCodec::Known(CanonicalCodec::Store) => {
-                if level.is_some() {
-                    return Err(RVZ_NOD_CORE.reject_store_level_error());
-                }
-                Ok(NodCompression::None)
-            }
-            RequestedCodec::Known(CanonicalCodec::Bzip2) => Ok(NodCompression::Bzip2(
-                RVZ_NOD_CORE.validate_u8_level("bzip2", level.unwrap_or(0))?,
-            )),
-            RequestedCodec::Known(CanonicalCodec::Lzma) => Ok(NodCompression::Lzma(
-                RVZ_NOD_CORE.validate_u8_level("lzma", level.unwrap_or(0))?,
-            )),
-            RequestedCodec::Known(CanonicalCodec::Lzma2) => Ok(NodCompression::Lzma2(
-                RVZ_NOD_CORE.validate_u8_level("lzma2", level.unwrap_or(0))?,
-            )),
             RequestedCodec::Known(CanonicalCodec::Zstd) => Ok(NodCompression::Zstandard(
                 RVZ_NOD_CORE.validate_i8_level("zstd", level.unwrap_or(0))?,
             )),
             RequestedCodec::Known(codec) => Err(RVZ_NOD_CORE.unsupported_codec_error(
                 codec.name(),
-                "supported codecs are store, zstd, bzip2, lzma, and lzma2",
+                "supported codec is zstd",
             )),
             RequestedCodec::Unknown(name) => Err(RVZ_NOD_CORE.unsupported_codec_error(
                 &name,
-                "supported codecs are store, zstd, bzip2, lzma, and lzma2",
+                "supported codec is zstd",
             )),
         }
     }

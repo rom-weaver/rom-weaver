@@ -5,20 +5,13 @@ struct SevenZContainerHandler {
 
 #[derive(Clone)]
 struct SevenZCodecSettings {
-    codec: CanonicalCodec,
     level: u32,
     method: SevenZMethod,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum SevenZMethod {
-    Store,
     Lzma2,
-    Lzma,
-    Zstd,
-    Deflate,
-    Bzip2,
-    Ppmd,
 }
 
 impl SevenZContainerHandler {
@@ -44,78 +37,37 @@ impl SevenZContainerHandler {
         codec: Option<&str>,
         level: Option<i32>,
     ) -> Result<SevenZCodecSettings> {
-        let codec = match parse_requested_codec(codec) {
-            RequestedCodec::Unspecified => CanonicalCodec::Lzma2,
-            RequestedCodec::Known(codec) => codec,
-            RequestedCodec::Unknown(name) => {
+        match parse_requested_codec(codec) {
+            RequestedCodec::Unspecified | RequestedCodec::Known(CanonicalCodec::Lzma2) => {}
+            RequestedCodec::Known(codec) => {
                 return Err(RomWeaverError::Validation(format!(
-                    "unsupported 7z codec `{name}`; supported codecs are lzma2, lzma, store, zstd, deflate, bzip2, and ppmd"
+                    "unsupported 7z codec `{}`; supported codec is lzma2",
+                    codec.name()
                 )));
             }
-        };
-
-        if !matches!(
-            codec,
-            CanonicalCodec::Lzma2
-                | CanonicalCodec::Lzma
-                | CanonicalCodec::Store
-                | CanonicalCodec::Zstd
-                | CanonicalCodec::Deflate
-                | CanonicalCodec::Bzip2
-                | CanonicalCodec::Ppmd
-        ) {
-            return Err(RomWeaverError::Validation(format!(
-                "unsupported 7z codec `{}`; supported codecs are lzma2, lzma, store, zstd, deflate, bzip2, and ppmd",
-                codec.name()
-            )));
-        }
-
-        let level = Self::parse_level(codec, level)?;
-        if codec == CanonicalCodec::Store && level.is_some() {
-            return Err(RomWeaverError::Validation(
-                "7z codec `store` does not accept --level".into(),
-            ));
-        }
-
-        let level = level.unwrap_or(Self::DEFAULT_CODEC_LEVEL);
-        let method = match codec {
-            CanonicalCodec::Lzma2 => SevenZMethod::Lzma2,
-            CanonicalCodec::Lzma => SevenZMethod::Lzma,
-            CanonicalCodec::Store => SevenZMethod::Store,
-            CanonicalCodec::Zstd => SevenZMethod::Zstd,
-            CanonicalCodec::Deflate => SevenZMethod::Deflate,
-            CanonicalCodec::Bzip2 => SevenZMethod::Bzip2,
-            CanonicalCodec::Ppmd => SevenZMethod::Ppmd,
-            CanonicalCodec::Lz4 | CanonicalCodec::Brotli | CanonicalCodec::Huffman => {
-                return Err(RomWeaverError::Validation(
-                    format!(
-                        "unsupported 7z codec `{}`; supported codecs are lzma2, lzma, store, zstd, deflate, bzip2, and ppmd",
-                        codec.name()
-                    ),
-                ));
+            RequestedCodec::Unknown(name) => {
+                return Err(RomWeaverError::Validation(format!(
+                    "unsupported 7z codec `{name}`; supported codec is lzma2"
+                )));
             }
-        };
+        }
 
+        let level = Self::parse_level(level)?;
+        let level = level.unwrap_or(Self::DEFAULT_CODEC_LEVEL);
         Ok(SevenZCodecSettings {
-            codec,
             level,
-            method,
+            method: SevenZMethod::Lzma2,
         })
     }
 
-    fn parse_level(codec: CanonicalCodec, level: Option<i32>) -> Result<Option<u32>> {
+    fn parse_level(level: Option<i32>) -> Result<Option<u32>> {
         let Some(level) = level else {
             return Ok(None);
         };
-        let max_level = if matches!(codec, CanonicalCodec::Zstd) {
-            22
-        } else {
-            9
-        };
+        let max_level = 9;
         if !(0..=max_level).contains(&level) {
             return Err(RomWeaverError::Validation(format!(
-                "7z level `{level}` is out of range for codec `{}` (0..={max_level})",
-                codec.name()
+                "7z level `{level}` is out of range for codec `lzma2` (0..={max_level})"
             )));
         }
         Ok(Some(level as u32))
@@ -123,42 +75,7 @@ impl SevenZContainerHandler {
 
     fn method_name(method: SevenZMethod) -> &'static str {
         match method {
-            SevenZMethod::Store => "store",
             SevenZMethod::Lzma2 => "lzma2",
-            SevenZMethod::Lzma => "lzma",
-            SevenZMethod::Zstd => "zstd",
-            SevenZMethod::Deflate => "deflate",
-            SevenZMethod::Bzip2 => "bzip2",
-            SevenZMethod::Ppmd => "ppmd",
-        }
-    }
-
-    fn method_name_from_codec(codec: CanonicalCodec) -> &'static str {
-        match codec {
-            CanonicalCodec::Store => "store",
-            CanonicalCodec::Deflate => "deflate",
-            CanonicalCodec::Bzip2 => "bzip2",
-            CanonicalCodec::Lzma => "lzma",
-            CanonicalCodec::Lzma2 => "lzma2",
-            CanonicalCodec::Zstd => "zstd",
-            CanonicalCodec::Lz4 => "lz4",
-            CanonicalCodec::Brotli => "brotli",
-            CanonicalCodec::Ppmd => "ppmd",
-            CanonicalCodec::Huffman => "huffman",
-        }
-    }
-
-    fn libarchive_method_name(codec: CanonicalCodec) -> Option<&'static str> {
-        match codec {
-            CanonicalCodec::Store => Some("copy"),
-            CanonicalCodec::Deflate => Some("deflate"),
-            CanonicalCodec::Bzip2 => Some("bzip2"),
-            CanonicalCodec::Lzma => Some("lzma1"),
-            CanonicalCodec::Lzma2 => Some("lzma2"),
-            CanonicalCodec::Zstd => Some("zstd"),
-            CanonicalCodec::Ppmd => Some("ppmd"),
-            CanonicalCodec::Lz4 | CanonicalCodec::Brotli => None,
-            CanonicalCodec::Huffman => None,
         }
     }
 
@@ -170,12 +87,6 @@ impl SevenZContainerHandler {
         execution: &ThreadExecution,
         context: &OperationContext,
     ) -> Result<u64> {
-        let method_name = Self::libarchive_method_name(settings.codec).ok_or_else(|| {
-            RomWeaverError::Unsupported(format!(
-                "libarchive does not support 7z codec `{}`",
-                Self::method_name_from_codec(settings.codec)
-            ))
-        })?;
         let logical_bytes = write_archive_with_libarchive(
             request,
             entries,
@@ -185,12 +96,8 @@ impl SevenZContainerHandler {
                 format_name: self.descriptor.name,
                 format: LibarchiveCreateFormat::SevenZ,
                 filter: LibarchiveCreateFilter::None,
-                format_compression: Some(method_name),
-                compression_level: if matches!(settings.codec, CanonicalCodec::Store) {
-                    None
-                } else {
-                    Some(settings.level as i32)
-                },
+                format_compression: Some("lzma2"),
+                compression_level: Some(settings.level as i32),
                 format_threads: Some(execution.effective_threads.max(1)),
                 filter_threads: None,
                 io_buffer_bytes: LIBARCHIVE_CREATE_IO_BUFFER_BYTES,

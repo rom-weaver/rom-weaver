@@ -143,6 +143,21 @@ impl CliApp {
                 ),
             );
         }
+        if !capabilities.create {
+            return self.finish(
+                "compress",
+                OperationReport::failed(
+                    OperationFamily::Container,
+                    Some(handler.descriptor().name.to_string()),
+                    "validate",
+                    format!(
+                        "{} is extract-only; supported create formats are 7z, zip, chd, rvz, and z3ds",
+                        handler.descriptor().name
+                    ),
+                    probe_threads,
+                ),
+            );
+        }
         let create_threads = Some(context.plan_threads(capabilities.create_threads.clone()));
         self.emit_running(
             OperationLabel {

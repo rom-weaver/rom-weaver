@@ -6,7 +6,7 @@ type CompressionProfile = "high" | "low" | "max" | "medium" | "min" | "very-high
 
 type ZipCodec = "deflate" | "store" | "zstd";
 
-type SevenZipCodec = "lzma2" | "zstd";
+type SevenZipCodec = "lzma2";
 
 type StringNumber = number | string;
 

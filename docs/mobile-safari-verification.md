@@ -77,10 +77,10 @@ https://<mac-lan-ip>:5173/mobile-safari-matrix.html
 Tap **Run full matrix**. The page runs in the device browser, creates a
 temporary OPFS workspace, and exercises:
 
-- container round-trips for zip, zipx, 7z, tar, tar.gz, tar.bz2, tar.xz, gz,
-  bz2, xz, zst, cso, chd, and z3ds
-- expected unsupported/failure paths for rar, pbp, gcz, wbfs, wia, tgc, nfs,
-  rvz, and xiso
+- container round-trips for zip, 7z, chd, and z3ds
+- expected unsupported/failure paths for extract-only or invalid synthetic
+  inputs, including zipx, tar-family formats, standalone stream formats, cso,
+  rar, pbp, gcz, wbfs, wia, tgc, nfs, rvz, and xiso
 - patch create/apply coverage for the patch registry, including direct apply
   fixtures for HDiffPatch, BSP, xdelta, and VCDIFF fixture paths
 

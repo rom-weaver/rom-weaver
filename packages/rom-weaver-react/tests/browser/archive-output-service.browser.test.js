@@ -98,7 +98,7 @@ test("createSingleFileArchiveOutput derives archive and inner entry names from r
     deps: {
       getPatchFileBytes,
       hasArchiveFileName: (fileName, compression) =>
-        compression === "zip" ? /\.(zip|zipx)$/i.test(fileName) : /\.7z$/i.test(fileName),
+        compression === "zip" ? /\.zip$/i.test(fileName) : /\.7z$/i.test(fileName),
     },
     entryFile: patchFile,
     entryNameDetailKey: "patchEntryName",

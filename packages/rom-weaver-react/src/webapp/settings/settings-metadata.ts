@@ -343,13 +343,9 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     labelDataLocalize: "Compression",
     options: [
       { label: "zstd", value: "zstd" },
-      { label: "lzma", value: "lzma" },
-      { label: "lzma2", value: "lzma2" },
-      { label: "bzip2", value: "bzip2" },
-      { label: "None", value: "none" },
     ],
     validationLabel: "Compression",
-    validValues: ["none", "zstd", "bzip2", "lzma", "lzma2"],
+    validValues: ["zstd"],
   },
   rvzCompressionLevel: {
     defaultValue: "",
@@ -384,7 +380,6 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     labelDataLocalize: "Codec",
     options: [
       { label: "LZMA2 (default)", value: "lzma2" },
-      { label: "Zstandard (zstd)", value: "zstd" },
     ],
     validationLabel: "Codec",
     validValues: [...SEVEN_ZIP_COMPRESSION_METHODS],
@@ -397,14 +392,11 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     kind: "number",
     label: getSettingsLabel("sevenZipLevel"),
     labelDataLocalize: "Compression level override",
-    max: ({ settings }) => (settings.sevenZipCodec === "zstd" ? 22 : 9),
+    max: 9,
     min: 0,
     placeholder: "Uses Compression Level",
     step: 1,
-    suggestion: ({ settings }) =>
-      settings.sevenZipCodec === "zstd"
-        ? "Optional override. Blank uses the compression profile. Valid values: 0-22."
-        : "Optional override. Blank uses the compression profile. Valid values: 0-9.",
+    suggestion: "Optional override. Blank uses the compression profile. Valid values: 0-9.",
     suggestionDataLocalize: "Optional override. Blank uses the compression profile. Valid values: 0-9.",
     validationLabel: "7z compression level override",
   },
@@ -462,10 +454,10 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     options: [
       { label: "Deflate (ZIP default)", value: "deflate" },
       { label: "Store (no compression)", value: "store" },
-      { label: "Zstandard (ZIPX / .zipx)", value: "zstd" },
+      { label: "Zstandard (zstd)", value: "zstd" },
     ],
-    suggestion: "zstd writes ZIPX-compatible .zipx output.",
-    suggestionDataLocalize: "Use zstd to create ZIPX (.zipx) output.",
+    suggestion: "zstd writes ZIP-compatible .zip output.",
+    suggestionDataLocalize: "Use zstd to create ZIP (.zip) output.",
     validationLabel: "ZIP codec",
     validValues: [...ZIP_COMPRESSION_METHODS],
   },
