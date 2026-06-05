@@ -26,9 +26,17 @@ const PATCH_OUTPUT_VERIFICATION_LABELS: Record<string, string> = {
   "patch crc32": "PATCH CRC32",
 };
 
-const SectionNotice = ({ state }: { state: NoticeState }) => {
+const SectionNotice = ({ onDismiss, state }: { onDismiss?: () => void; state: NoticeState }) => {
   if (!state.visible) return null;
-  return <Notice level={state.level === "warning" ? "warn" : "error"}>{state.message}</Notice>;
+  return (
+    <Notice
+      id="rom-weaver-patch-notice-message"
+      level={state.level === "warning" ? "warn" : "error"}
+      onDismiss={state.dismissible ? onDismiss : undefined}
+    >
+      {state.message}
+    </Notice>
+  );
 };
 
 const getPatchVerificationRows = (item: PatchStackItemState) => {
@@ -227,7 +235,7 @@ const ApplyPatchListStep = ({
         label={patches.length ? "Add patch · drop or browse" : "Select patch · drop or browse"}
         onFiles={(files) => ui.providePatchInputFiles?.(files)}
       />
-      <SectionNotice state={patchNotice} />
+      <SectionNotice onDismiss={() => ui.dismissNotice?.("patchNotice")} state={patchNotice} />
     </StepSection>
   );
 };

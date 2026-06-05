@@ -27,6 +27,7 @@ type NoticeState = {
   message: string;
   level: NoticeLevel;
   visible: boolean;
+  dismissible?: boolean;
 };
 
 type PatcherSectionNoticeKey = "inputNotice" | "patchNotice" | "checksumNotice" | "outputNotice";
@@ -299,6 +300,7 @@ const createInitialDialogState = (selectionType: DialogSelectionType = "rom"): D
 const createEmptyDialogState = createInitialDialogState;
 
 const createInitialNoticeState = (): NoticeState => ({
+  dismissible: false,
   level: "error",
   message: "",
   visible: false,
@@ -374,6 +376,7 @@ const normalizeNoticeState = (
   const source = isRecord(state) ? state : {};
   const message = typeof source.message === "string" ? source.message : "";
   return {
+    dismissible: source.dismissible === true,
     level: source.level === "warning" ? "warning" : "error",
     message,
     visible: !!source.visible && message.length > 0,

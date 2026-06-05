@@ -60,6 +60,7 @@ type CompletedTrimOutput = {
   saveAs: (destination?: BrowserSaveDestination) => Promise<void>;
   size?: number;
 };
+type TrimMessagePlacement = "output" | "source";
 
 // Raw extension keeps the trimmed bytes uncompressed; zip/7z wrap the trimmed file in an archive.
 const getSourceExtension = (fileName: string) => {
@@ -153,6 +154,25 @@ const formatElapsedMs = (ms?: number) =>
 const hasSourceQueueWarning = (source: TrimWorkflowSourceState | null | undefined) =>
   !!source && (source.status === "failed" || (source.warnings?.length ?? 0) > 0);
 
+const getSourceNoticeMessage = (source: TrimWorkflowSourceState | null | undefined) => {
+  if (!source) return "";
+  const warningMessage = source.warnings
+    ?.map((warning) => warning.message)
+    .filter(Boolean)
+    .join(" ");
+  if (warningMessage) return warningMessage;
+  if (source.status === "failed") return "Source preparation failed. Choose a different ROM.";
+  return "";
+};
+
+const getSourceNoticeLevel = (source: TrimWorkflowSourceState | null | undefined) =>
+  source?.status === "failed" ? "error" : "warn";
+
+const isSourceInvalid = (source: TrimWorkflowSourceState | null | undefined) =>
+  !!source && (source.status === "failed" || (source.warnings?.length ?? 0) > 0);
+
+const isDismissibleWorkflowError = (code: string) => code !== "AMBIGUOUS_SELECTION";
+
 function TrimPatchForm(props: TrimPatchFormProps) {
   const providerSettings = useCreateSettings();
   const providerAssetBaseUrl = useRomWeaverAssetBaseUrl();
@@ -174,6 +194,8 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   const [sourceStaging, setSourceStaging] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [message, setMessage] = useState("");
+  const [messageDismissible, setMessageDismissible] = useState(false);
+  const [messagePlacement, setMessagePlacement] = useState<TrimMessagePlacement | null>(null);
   const [errorCode, setErrorCode] = useState("");
   const [sourceState, setSourceState] = useState<TrimWorkflowSourceState | null>(null);
   const { clearCompletedOutput, completedOutput, disposeActiveOutput, rememberOutputDispose, setCompletedOutput } =
@@ -197,6 +219,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
 
   const source = props.source === undefined ? internalSource : props.source;
   const settings = props.settings || internalSettings || providerSettings;
+  const settingsLanguage = (settings as { language?: string }).language;
   const traceSettingsRef = useRef(settings);
   const onErrorRef = useRef(props.onError);
   useEffect(() => {
@@ -215,6 +238,22 @@ function TrimPatchForm(props: TrimPatchFormProps) {
       details,
     );
   }, []);
+  const clearWorkflowMessage = useCallback(() => {
+    setErrorCode("");
+    setMessage("");
+    setMessageDismissible(false);
+    setMessagePlacement(null);
+  }, []);
+  const setWorkflowMessage = useCallback(
+    (placement: TrimMessagePlacement, error: Error) => {
+      const code = getErrorCode(error);
+      setErrorCode(code);
+      setMessage(formatCodedErrorForDisplay(error, createBrowserLocalizer(settingsLanguage)));
+      setMessageDismissible(isDismissibleWorkflowError(code));
+      setMessagePlacement(placement);
+    },
+    [settingsLanguage],
+  );
   const uploadDisabled = !!props.disabled || busy;
   const outputDisabled = !!props.disabled || busy;
   const trimSourceReady = !!source && sourceState?.status === "ready";
@@ -305,8 +344,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     setSourceState(null);
     if (props.source === undefined) setInternalSource(file);
     props.onSourceChange?.(file);
-    setMessage("");
-    setErrorCode("");
+    clearWorkflowMessage();
     setProgress(null);
   };
 
@@ -316,6 +354,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     setTrimQueued(false);
     disposeActiveOutput();
     clearCompletedRunState();
+    clearWorkflowMessage();
     if (!props.settings) setInternalSettings(nextSettings);
     props.onSettingsChange?.(nextSettings);
   };
@@ -327,8 +366,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     clearCompletedRunState();
     if (props.outputFormat === undefined) setInternalOutputFormat(nextOutputFormat);
     props.onOutputFormatChange?.(nextOutputFormat);
-    setMessage("");
-    setErrorCode("");
+    clearWorkflowMessage();
     setProgress(null);
   };
 
@@ -383,13 +421,19 @@ function TrimPatchForm(props: TrimPatchFormProps) {
       })
       .catch((error) => {
         if (stagedTrimWorkflowGenerationRef.current !== generation) return;
+        const normalizedError = error instanceof Error ? error : new Error(String(error));
         emitTrimFormTrace("stage.set-input.fail", {
           error,
           generation,
           input: workflow.getInput(),
           workflowId: workflow.id,
         });
-        setSourceState(workflow.getInput());
+        const nextSourceState = workflow.getInput();
+        setSourceState(nextSourceState);
+        if (getErrorCode(normalizedError) !== "WORKFLOW_SELECTION_SKIPPED" && !hasSourceQueueWarning(nextSourceState)) {
+          setWorkflowMessage("source", normalizedError);
+          onErrorRef.current?.(normalizedError);
+        }
       })
       .finally(() => {
         workflow.off("progress", handleProgress);
@@ -436,6 +480,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     source,
     sourceFileName,
     stagingSettingsKey,
+    setWorkflowMessage,
   ]);
 
   const runTrim = async () => {
@@ -458,8 +503,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     const abortController = new AbortController();
     rememberAbortController(abortController);
     setBusy(true);
-    setMessage("");
-    setErrorCode("");
+    clearWorkflowMessage();
     disposeActiveOutput();
     clearCompletedRunState();
     setProgress(createIndeterminateWorkflowProgress({ label: "Trimming...", role: "worker", stage: "trim" }));
@@ -552,18 +596,11 @@ function TrimPatchForm(props: TrimPatchFormProps) {
       const normalizedError = error instanceof Error ? error : new Error(String(error));
       const code = getErrorCode(normalizedError);
       if (code === "WORKFLOW_SELECTION_SKIPPED") {
-        setErrorCode("");
-        setMessage("");
+        clearWorkflowMessage();
         setProgress(null);
         return;
       }
-      setErrorCode(code);
-      setMessage(
-        formatCodedErrorForDisplay(
-          normalizedError,
-          createBrowserLocalizer((settings as { language?: string }).language),
-        ),
-      );
+      setWorkflowMessage("output", normalizedError);
       setProgress(null);
       clearCompletedRunState();
       onErrorRef.current?.(normalizedError);
@@ -645,6 +682,21 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   const trimTimingText = formatElapsedMs(completedTrimTimeMs ?? undefined);
   const compressTimingText = formatElapsedMs(completedCompressionTimeMs ?? undefined);
   const checksumProgress = progress?.stage === "checksum" ? progress : null;
+  const sourceNoticeMessage = getSourceNoticeMessage(sourceState);
+  const runtimeSourceNoticeVisible = !!message && messagePlacement === "source";
+  const sourceNotice = runtimeSourceNoticeVisible ? (
+    <Notice
+      id="trim-builder-source-error-message"
+      level={errorCode === "AMBIGUOUS_SELECTION" ? "warn" : "error"}
+      onDismiss={messageDismissible ? clearWorkflowMessage : undefined}
+    >
+      {message}
+    </Notice>
+  ) : sourceNoticeMessage ? (
+    <Notice id="trim-builder-source-error-message" level={getSourceNoticeLevel(sourceState)}>
+      {sourceNoticeMessage}
+    </Notice>
+  ) : null;
   const trimCompressPanel = buildCompressPanel(
     resolvedOutputFormat,
     settings as Record<string, unknown>,
@@ -705,12 +757,18 @@ function TrimPatchForm(props: TrimPatchFormProps) {
                           },
                         },
                         removeLabel: "Clear ROM",
+                        state: isSourceInvalid(sourceState)
+                          ? "bad"
+                          : sourceState?.status === "ready"
+                            ? "ok"
+                            : undefined,
                       },
                       id: "trim-input-card",
                     },
               ]
             : []
         }
+        notice={sourceNotice}
         num="01"
         title="ROM"
       />
@@ -775,8 +833,12 @@ function TrimPatchForm(props: TrimPatchFormProps) {
         }
         meta={trimTimingText ? <span className="t">{trimTimingText}</span> : undefined}
         notice={
-          message ? (
-            <Notice id="trim-builder-row-error-message" level={errorCode === "AMBIGUOUS_SELECTION" ? "warn" : "error"}>
+          message && messagePlacement === "output" ? (
+            <Notice
+              id="trim-builder-row-error-message"
+              level={errorCode === "AMBIGUOUS_SELECTION" ? "warn" : "error"}
+              onDismiss={messageDismissible ? clearWorkflowMessage : undefined}
+            >
               {message}
             </Notice>
           ) : null

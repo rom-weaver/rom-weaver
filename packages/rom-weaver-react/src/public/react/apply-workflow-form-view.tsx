@@ -19,7 +19,7 @@ import type {
 } from "./patcher-form.ts";
 import { inertUiController } from "./patcher-form-session.ts";
 import { ArchiveDialog as SharedArchiveDialog } from "./patcher-react-shared.tsx";
-import type { NoticeState, RomInputRowState } from "./patcher-ui-state.ts";
+import type { NoticeState, PatcherSectionNoticeKey, RomInputRowState } from "./patcher-ui-state.ts";
 import { toWorkflowChecksumProgressProps, toWorkflowFileProgressProps } from "./workflow-run-hooks.ts";
 
 /**
@@ -32,9 +32,17 @@ const TIMING_LABEL = (ms?: number) =>
   typeof ms === "number" && Number.isFinite(ms) ? formatTiming(createTiming(ms)) : "";
 const CHECKSUM_TIMING_LABEL = (timing?: string, prefix = "Checksum") => (timing ? `${prefix} ${timing}` : undefined);
 
-const SectionNotice = ({ state }: { state: NoticeState }) => {
+const SectionNotice = ({ id, onDismiss, state }: { id?: string; onDismiss?: () => void; state: NoticeState }) => {
   if (!state.visible) return null;
-  return <Notice level={state.level === "warning" ? "warn" : "error"}>{state.message}</Notice>;
+  return (
+    <Notice
+      id={id}
+      level={state.level === "warning" ? "warn" : "error"}
+      onDismiss={state.dismissible ? onDismiss : undefined}
+    >
+      {state.message}
+    </Notice>
+  );
 };
 
 const getHeaderFixLabel = (checked: boolean) => (checked ? "Will fix internal checksum" : "No change");
@@ -72,6 +80,7 @@ function ApplyWorkflowFormView({
     noticeController ? noticeController.getState : () => null,
   );
   const fileInputAccept = getFileInputAcceptAttributes();
+  const dismissSectionNotice = (key: PatcherSectionNoticeKey) => () => uiController.dismissNotice?.(key);
 
   const romInputs: RomInputRowState[] = uiState.romInputs;
   const patches = patchState.items;
@@ -194,8 +203,16 @@ function ApplyWorkflowFormView({
         listId="rom-weaver-list-input-stack"
         notice={
           <>
-            <SectionNotice state={uiState.inputNotice} />
-            <SectionNotice state={uiState.checksumNotice} />
+            <SectionNotice
+              id="rom-weaver-input-notice-message"
+              onDismiss={dismissSectionNotice("inputNotice")}
+              state={uiState.inputNotice}
+            />
+            <SectionNotice
+              id="rom-weaver-checksum-notice-message"
+              onDismiss={dismissSectionNotice("checksumNotice")}
+              state={uiState.checksumNotice}
+            />
           </>
         }
         num="01"
@@ -231,7 +248,11 @@ function ApplyWorkflowFormView({
         action={
           <>
             {errorNotice?.visible ? (
-              <Notice id="rom-weaver-row-error-message" level={errorNotice.level === "warning" ? "warn" : "error"}>
+              <Notice
+                id="rom-weaver-row-error-message"
+                level={errorNotice.level === "warning" ? "warn" : "error"}
+                onDismiss={errorNotice.dismissible ? () => noticeController?.dismiss?.() : undefined}
+              >
                 {errorNotice.message}
               </Notice>
             ) : null}
@@ -308,7 +329,13 @@ function ApplyWorkflowFormView({
           </InfoPopover>
         }
         meta={outputState.applyTiming ? <span className="t">{outputState.applyTiming}</span> : undefined}
-        notice={<SectionNotice state={uiState.outputNotice} />}
+        notice={
+          <SectionNotice
+            id="rom-weaver-output-notice-message"
+            onDismiss={dismissSectionNotice("outputNotice")}
+            state={uiState.outputNotice}
+          />
+        }
         num="03"
         onFileNameChange={(value) => controllers.output.setDisplayFileName(value)}
         onFormatChange={(value) => controllers.output.setOutputCompression(value)}

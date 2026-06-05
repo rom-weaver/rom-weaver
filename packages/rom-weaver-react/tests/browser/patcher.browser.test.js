@@ -953,6 +953,101 @@ test("queued staging rows show waiting progress", async () => {
   }
 });
 
+test("apply input staging errors render in the ROM section and can be dismissed", async () => {
+  const inputFiles = [new File([new Uint8Array([0, 1, 2, 3])], "game.bin", { type: "application/octet-stream" })];
+  const applyPatches = vi.fn(async () => createMockApplyResult());
+  const stageInput = vi.fn(async () => {
+    throw new Error("Input staging exploded");
+  });
+  const Harness = () => {
+    const { localNoticeController, localOutputController, localStackController, localUiController } =
+      useLocalApplyPatchFormSession({
+        applyPatches,
+        applyReady: true,
+        defaultSettings: {
+          output: {
+            compression: "zip",
+          },
+        },
+        downloadOutput: () => undefined,
+        inputs: inputFiles,
+        patches: [],
+        stageInput,
+      });
+    return createElement(ApplyWorkflowFormView, {
+      controllers: {
+        dialog: inertDialogController,
+        notice: localNoticeController,
+        output: localOutputController,
+        patchStack: localStackController,
+        ui: localUiController,
+      },
+    });
+  };
+
+  mount(createElement(Harness));
+
+  await expect
+    .poll(() => document.getElementById("rom-weaver-input-notice-message")?.textContent || "")
+    .toContain("Input staging exploded");
+  expect(document.getElementById("rom-weaver-output-notice-message")).toBeNull();
+
+  const dismissButton = document.querySelector("#rom-weaver-input-notice-message .notice-x");
+  expect(dismissButton).toBeInstanceOf(HTMLButtonElement);
+  dismissButton.click();
+  await expect.poll(() => document.getElementById("rom-weaver-input-notice-message")).toBeNull();
+});
+
+test("apply patch staging errors render in the patch section and can be dismissed", async () => {
+  const inputFiles = [new File([new Uint8Array([0, 1, 2, 3])], "game.bin", { type: "application/octet-stream" })];
+  const patchFiles = [
+    new File([new Uint8Array([0x42, 0x50, 0x53, 0x31])], "change.bps", { type: "application/octet-stream" }),
+  ];
+  const applyPatches = vi.fn(async () => createMockApplyResult());
+  const stageInput = vi.fn(async () => []);
+  const stagePatches = vi.fn(async () => {
+    throw new Error("Patch staging exploded");
+  });
+  const Harness = () => {
+    const { localNoticeController, localOutputController, localStackController, localUiController } =
+      useLocalApplyPatchFormSession({
+        applyPatches,
+        applyReady: true,
+        defaultSettings: {
+          output: {
+            compression: "zip",
+          },
+        },
+        downloadOutput: () => undefined,
+        inputs: inputFiles,
+        patches: patchFiles,
+        stageInput,
+        stagePatches,
+      });
+    return createElement(ApplyWorkflowFormView, {
+      controllers: {
+        dialog: inertDialogController,
+        notice: localNoticeController,
+        output: localOutputController,
+        patchStack: localStackController,
+        ui: localUiController,
+      },
+    });
+  };
+
+  mount(createElement(Harness));
+
+  await expect
+    .poll(() => document.getElementById("rom-weaver-patch-notice-message")?.textContent || "")
+    .toContain("Patch staging exploded");
+  expect(document.getElementById("rom-weaver-output-notice-message")).toBeNull();
+
+  const dismissButton = document.querySelector("#rom-weaver-patch-notice-message .notice-x");
+  expect(dismissButton).toBeInstanceOf(HTMLButtonElement);
+  dismissButton.click();
+  await expect.poll(() => document.getElementById("rom-weaver-patch-notice-message")).toBeNull();
+});
+
 test("adding a ROM input preserves active input progress", async () => {
   const firstInput = new File([new Uint8Array([0, 1, 2, 3])], "first.nds", {
     type: "application/octet-stream",

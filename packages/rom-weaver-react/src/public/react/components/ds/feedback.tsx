@@ -1,5 +1,6 @@
 import CircleX from "lucide-react/dist/esm/icons/circle-x.js";
 import TriangleAlert from "lucide-react/dist/esm/icons/triangle-alert.js";
+import X from "lucide-react/dist/esm/icons/x.js";
 import type { ReactNode } from "react";
 
 /**
@@ -18,17 +19,26 @@ const Notice = ({
   id,
   children,
   className,
+  dismissLabel = "Dismiss",
+  onDismiss,
 }: {
   level: NoticeLevel;
   id?: string;
   children: ReactNode;
   className?: string;
+  dismissLabel?: string;
+  onDismiss?: () => void;
 }) => {
   const Icon = level === "error" ? CircleX : TriangleAlert;
   return (
     <div className={join("notice", level, className)} id={id} role={level === "error" ? "alert" : "status"}>
       <Icon aria-hidden="true" />
-      <span>{children}</span>
+      <span className="notice-copy">{children}</span>
+      {onDismiss ? (
+        <button aria-label={dismissLabel} className="notice-x" onClick={onDismiss} title={dismissLabel} type="button">
+          <X aria-hidden="true" />
+        </button>
+      ) : null}
     </div>
   );
 };

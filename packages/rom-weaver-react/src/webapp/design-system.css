@@ -269,10 +269,15 @@
 .rw-app .validation .code { font-family: var(--rw-mono); }
 .rw-app .notice { display: flex; gap: 11px; align-items: center; margin: 0 var(--rw-sec-pad) 14px; padding: 9px 12px; border-radius: 8px; font-size: 0.896552rem; line-height: 1.45; }
 .rw-app .notice svg { width: 17px; height: 17px; flex: none; }
-.rw-app .notice span { flex: 1 1 auto; min-width: 0; }
+.rw-app .notice > .notice-copy { flex: 1 1 auto; min-width: 0; }
+.rw-app .step-body > .notice, .rw-app .outcard > .notice { margin-left: 0; margin-right: 0; }
 .rw-app .notice.error { color: var(--rw-bad); background: color-mix(in oklab, var(--rw-bad) 11%, transparent); border: 1px solid color-mix(in oklab, var(--rw-bad) 30%, var(--rw-line)); }
 .rw-app .notice.warn { color: var(--rw-ink); background: color-mix(in oklab, var(--rw-warn) 12%, var(--rw-panel)); border: 1px solid color-mix(in oklab, var(--rw-warn) 40%, var(--rw-line)); }
 .rw-app .notice.warn svg, .rw-app .notice.warn b { color: var(--rw-warn); }
+.rw-app .notice .notice-x { appearance: none; align-self: flex-start; border: 0; border-radius: 5px; background: transparent; color: currentColor; cursor: pointer; display: grid; flex: none; height: 22px; opacity: .64; padding: 0; place-items: center; width: 22px; }
+.rw-app .notice .notice-x:hover { background: color-mix(in oklab, currentColor 12%, transparent); opacity: 1; }
+.rw-app .notice .notice-x:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.rw-app .notice .notice-x svg { width: 14px; height: 14px; }
 
 /* inputs */
 .rw-app .field { display: flex; flex-direction: column; gap: 6px; }

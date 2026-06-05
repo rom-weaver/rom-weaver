@@ -116,6 +116,7 @@ type CompletedCreateOutput = {
   saveAs: (destination?: BrowserSaveDestination) => Promise<void>;
   size?: number;
 };
+type CreateMessagePlacement = "modified" | "original" | "output";
 
 const getDisplaySourceInfo = (source: CreateDisplaySourceState | null | undefined, fallback: string) =>
   toStagedInputInfo(source, fallback);
@@ -136,6 +137,25 @@ const getDisplaySourceChecksumTiming = (source: CreateDisplaySourceState | null 
 
 const hasSourceQueueWarning = (source: CreateDisplaySourceState | null | undefined) =>
   !!source && (source.status === "failed" || (source.warnings?.length ?? 0) > 0);
+
+const getSourceNoticeMessage = (source: CreateDisplaySourceState | null | undefined) => {
+  if (!source) return "";
+  const warningMessage = source.warnings
+    ?.map((warning) => warning.message)
+    .filter(Boolean)
+    .join(" ");
+  if (warningMessage) return warningMessage;
+  if (source.status === "failed") return "Source preparation failed. Choose a different ROM.";
+  return "";
+};
+
+const getSourceNoticeLevel = (source: CreateDisplaySourceState | null | undefined) =>
+  source?.status === "failed" ? "error" : "warn";
+
+const isSourceInvalid = (source: CreateDisplaySourceState | null | undefined) =>
+  !!source && (source.status === "failed" || (source.warnings?.length ?? 0) > 0);
+
+const isDismissibleWorkflowError = (code: string) => code !== "AMBIGUOUS_SELECTION";
 
 const getChecksumTimingLabel = (timing: string) => (timing ? `Checksum ${timing}` : "");
 const isChecksumProgress = (progress: WorkflowFormProgressState | null) =>
@@ -164,6 +184,8 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   const [createQueued, setCreateQueued] = useState(false);
   const [stagingRole, setStagingRole] = useState<"modified" | "original" | null>(null);
   const [message, setMessage] = useState("");
+  const [messageDismissible, setMessageDismissible] = useState(false);
+  const [messagePlacement, setMessagePlacement] = useState<CreateMessagePlacement | null>(null);
   const [originalState, setOriginalState] = useState<CreateDisplaySourceState | null>(null);
   const [modifiedState, setModifiedState] = useState<CreateDisplaySourceState | null>(null);
   const { clearCompletedOutput, completedOutput, disposeActiveOutput, rememberOutputDispose, setCompletedOutput } =
@@ -255,6 +277,22 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   const displayedOriginalFileName = displayedOriginalInfo?.fileName || originalFileName;
   const displayedModifiedFileName = displayedModifiedInfo?.fileName || modifiedFileName;
   const settingsLanguage = (settings as { language?: string }).language;
+  const clearWorkflowMessage = useCallback(() => {
+    setErrorCode("");
+    setMessage("");
+    setMessageDismissible(false);
+    setMessagePlacement(null);
+  }, []);
+  const setWorkflowMessage = useCallback(
+    (placement: CreateMessagePlacement, error: Error) => {
+      const code = getErrorCode(error);
+      setErrorCode(code);
+      setMessage(formatCodedErrorForDisplay(error, createBrowserLocalizer(settingsLanguage)));
+      setMessageDismissible(isDismissibleWorkflowError(code));
+      setMessagePlacement(placement);
+    },
+    [settingsLanguage],
+  );
   const stagingSettingsKey = useMemo(
     () =>
       createSettingsDependencyKey({
@@ -336,8 +374,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     setOriginalState(null);
     if (props.original === undefined) setInternalOriginal(file);
     props.onOriginalChange?.(file);
-    setMessage("");
-    setErrorCode("");
+    clearWorkflowMessage();
     setProgress(null);
   };
 
@@ -348,8 +385,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     setModifiedState(null);
     if (props.modified === undefined) setInternalModified(file);
     props.onModifiedChange?.(file);
-    setMessage("");
-    setErrorCode("");
+    clearWorkflowMessage();
     setProgress(null);
   };
 
@@ -365,6 +401,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     setCreateQueued(false);
     disposeActiveOutput();
     clearCompletedOutput();
+    clearWorkflowMessage();
     if (!props.settings) setInternalSettings(nextSettings);
     props.onSettingsChange?.(nextSettings);
   };
@@ -376,8 +413,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     clearCompletedOutput();
     if (!props.patchType) setInternalPatchType(nextPatchType);
     props.onPatchTypeChange?.(nextPatchType);
-    setMessage("");
-    setErrorCode("");
+    clearWorkflowMessage();
     setProgress(null);
   };
 
@@ -460,31 +496,42 @@ function CreatePatchForm(props: CreatePatchFormProps) {
       return queued;
     };
     const finishStaging = async () => {
+      let activeRole: "modified" | "original" | null = null;
       try {
         if (originalChanged && original) {
+          activeRole = "original";
           await enqueueSourceStage("original", () => activeWorkflow.setOriginal(toBrowserPublicBinarySource(original)));
           if (!isCurrentStaging()) return;
           if (isCurrentRoleStaging("original", originalGeneration)) {
             setOriginalState(activeWorkflow.getOriginal());
             clearProgressForStage("input");
           }
+          activeRole = null;
         }
         if (modifiedChanged && modified) {
+          activeRole = "modified";
           await enqueueSourceStage("modified", () => activeWorkflow.setModified(toBrowserPublicBinarySource(modified)));
           if (!isCurrentStaging()) return;
           if (isCurrentRoleStaging("modified", modifiedGeneration)) {
             setModifiedState(activeWorkflow.getModified());
             clearProgressForStage("input");
           }
+          activeRole = null;
         }
       } catch (error) {
         const normalizedError = error instanceof Error ? error : new Error(String(error));
         const code = getErrorCode(normalizedError);
         if (code === "WORKFLOW_SELECTION_SKIPPED" || !isCurrentStaging()) return;
-        setErrorCode(code);
-        setMessage(formatCodedErrorForDisplay(normalizedError, createBrowserLocalizer(settingsLanguage)));
         setOriginalState(activeWorkflow.getOriginal());
         setModifiedState(activeWorkflow.getModified());
+        const failedRole = activeRole || "output";
+        const failedSource =
+          failedRole === "original"
+            ? activeWorkflow.getOriginal()
+            : failedRole === "modified"
+              ? activeWorkflow.getModified()
+              : null;
+        if (!hasSourceQueueWarning(failedSource)) setWorkflowMessage(failedRole, normalizedError);
         props.onError?.(normalizedError);
       } finally {
         activeWorkflow.off("progress", handleProgress);
@@ -508,7 +555,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     originalSourceKey,
     props.onError,
     resolvedAssetBaseUrl,
-    settingsLanguage,
+    setWorkflowMessage,
     stagingSettingsKey,
   ]);
 
@@ -552,8 +599,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     const abortController = new AbortController();
     rememberAbortController(abortController);
     setBusy(true);
-    setMessage("");
-    setErrorCode("");
+    clearWorkflowMessage();
     disposeActiveOutput();
     clearCompletedOutput();
     setProgress(createIndeterminateWorkflowProgress({ label: "Creating patch...", role: "worker", stage: "create" }));
@@ -623,18 +669,11 @@ function CreatePatchForm(props: CreatePatchFormProps) {
       const normalizedError = error instanceof Error ? error : new Error(String(error));
       const code = getErrorCode(normalizedError);
       if (code === "WORKFLOW_SELECTION_SKIPPED") {
-        setErrorCode("");
-        setMessage("");
+        clearWorkflowMessage();
         setProgress(null);
         return;
       }
-      setErrorCode(code);
-      setMessage(
-        formatCodedErrorForDisplay(
-          normalizedError,
-          createBrowserLocalizer((settings as { language?: string }).language),
-        ),
-      );
+      setWorkflowMessage("output", normalizedError);
       setProgress(null);
       clearCompletedOutput();
       props.onError?.(normalizedError);
@@ -693,6 +732,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
 
   const renderSourceStep = ({
     num,
+    role,
     title,
     file,
     fileName,
@@ -707,6 +747,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     checksumProgress = null,
   }: {
     num: string;
+    role: "modified" | "original";
     title: string;
     file: BinarySource | null;
     fileName: string;
@@ -722,6 +763,21 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   }) => {
     const displayInfo = getDisplaySourceInfo(sourceState, fileName);
     const sourceChecksumProgress = isChecksumProgress(checksumProgress) ? checksumProgress : null;
+    const sourceNoticeMessage = getSourceNoticeMessage(sourceState);
+    const runtimeNoticeVisible = !!message && messagePlacement === role;
+    const notice = runtimeNoticeVisible ? (
+      <Notice
+        id={`patch-builder-${role}-error-message`}
+        level={errorCode === "AMBIGUOUS_SELECTION" ? "warn" : "error"}
+        onDismiss={messageDismissible ? clearWorkflowMessage : undefined}
+      >
+        {message}
+      </Notice>
+    ) : sourceNoticeMessage ? (
+      <Notice id={`patch-builder-${role}-error-message`} level={getSourceNoticeLevel(sourceState)}>
+        {sourceNoticeMessage}
+      </Notice>
+    ) : null;
     return (
       <WorkflowRomInputStep
         dropZone={{
@@ -759,12 +815,18 @@ function CreatePatchForm(props: CreatePatchFormProps) {
                           },
                         },
                         removeLabel,
+                        state: isSourceInvalid(sourceState)
+                          ? "bad"
+                          : sourceState?.status === "ready"
+                            ? "ok"
+                            : undefined,
                       },
                       id: `${num}:card`,
                     },
               ]
             : []
         }
+        notice={notice}
         num={num}
         title={title}
       />
@@ -784,6 +846,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
         onSelect: updateOriginal,
         removeLabel: "Clear original ROM",
         replaceLabel: "Replace original ROM · drop or browse",
+        role: "original",
         sourceProgress: getSourceProgress("original"),
         sourceState: originalState,
         title: "Original ROM",
@@ -799,6 +862,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
         onSelect: updateModified,
         removeLabel: "Clear modified ROM",
         replaceLabel: "Replace modified ROM · drop or browse",
+        role: "modified",
         sourceProgress: getSourceProgress("modified"),
         sourceState: modifiedState,
         title: "Modified ROM",
@@ -858,8 +922,12 @@ function CreatePatchForm(props: CreatePatchFormProps) {
         }
         meta={createTimingText ? <span className="t">{createTimingText}</span> : undefined}
         notice={
-          message ? (
-            <Notice id="patch-builder-row-error-message" level={errorCode === "AMBIGUOUS_SELECTION" ? "warn" : "error"}>
+          message && messagePlacement === "output" ? (
+            <Notice
+              id="patch-builder-row-error-message"
+              level={errorCode === "AMBIGUOUS_SELECTION" ? "warn" : "error"}
+              onDismiss={messageDismissible ? clearWorkflowMessage : undefined}
+            >
               {message}
             </Notice>
           ) : null

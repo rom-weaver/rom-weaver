@@ -1,7 +1,13 @@
 import type { ApplySettings } from "../../types/settings.ts";
 import type { ApplyWorkflowResult, ProgressEvent } from "../../types/workflow-runtime.ts";
 import type { PatcherOutputState, PatchStackItemState, PatchStackState } from "./patcher-presentation.ts";
-import type { DialogEntry, NoticeState, PatcherUiState, StoreController } from "./patcher-ui-state.ts";
+import type {
+  DialogEntry,
+  NoticeState,
+  PatcherSectionNoticeKey,
+  PatcherUiState,
+  StoreController,
+} from "./patcher-ui-state.ts";
 
 type ApplyPatchFormSettings = ApplySettings;
 type BinarySource = File | FileSystemFileHandle;
@@ -23,6 +29,7 @@ type PatcherUiController = StoreController<PatcherUiState> & {
   setOptionalPatch?: (id: string, checked: boolean) => void;
   setChecksumOverride?: (checked: boolean) => void;
   setOutputChecksumOverride?: (checked: boolean) => void;
+  dismissNotice?: (key: PatcherSectionNoticeKey) => void;
   downloadCue?: () => void;
 };
 
@@ -42,7 +49,9 @@ type PatcherOutputController = StoreController<PatcherOutputState> & {
   runPrimaryAction: () => void;
 };
 
-type NoticeController = StoreController<NoticeState>;
+type NoticeController = StoreController<NoticeState> & {
+  dismiss?: () => void;
+};
 
 type DialogController = StoreController<{ open: boolean; title: string; entries: DialogEntry[] }> & {
   selectEntry?: (entryId: string) => void;

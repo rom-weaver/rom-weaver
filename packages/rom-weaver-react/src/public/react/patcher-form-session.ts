@@ -64,7 +64,7 @@ import {
   waitForNextUiPaint,
 } from "./patcher-form-session-utils.ts";
 import { createOutputSizeSummary } from "./patcher-presentation.ts";
-import type { InputProgress, NoticeState, RomInputRowState } from "./patcher-ui-state.ts";
+import type { InputProgress, NoticeState, PatcherSectionNoticeKey, RomInputRowState } from "./patcher-ui-state.ts";
 import {
   createIndeterminateWorkflowProgress,
   createWaitingWorkflowProgress,
@@ -123,6 +123,7 @@ const useLocalApplyPatchFormSession = ({
     setRomInputs,
   } = useLocalPatcherSessionState();
   const [outputCompressionEdited, setOutputCompressionEdited] = useState(false);
+  const [failurePlacement, setFailurePlacement] = useState<"input" | "output" | "patch" | null>(null);
   const {
     busy,
     completedApplyTimeMs,
@@ -252,6 +253,23 @@ const useLocalApplyPatchFormSession = ({
     () => outputOptions.find((option) => option.value === displayedCompression)?.label,
     [displayedCompression, outputOptions],
   );
+  const formatSessionError = useCallback(
+    (error: Error) =>
+      formatCodedErrorForDisplay(error, createBrowserLocalizer((activeSettings as { language?: string }).language)),
+    [activeSettings],
+  );
+  const setSectionErrorMessage = useCallback(
+    (placement: "input" | "output" | "patch", error: Error) => {
+      setFailurePlacement(placement);
+      setErrorMessage(formatSessionError(error));
+    },
+    [formatSessionError, setErrorMessage],
+  );
+  const clearDismissibleErrors = useCallback(() => {
+    setFailurePlacement(null);
+    setErrorMessage("");
+    setOutputErrorMessage("");
+  }, [setErrorMessage, setOutputErrorMessage]);
   const outputSourceKey = useMemo(
     () =>
       JSON.stringify({
@@ -448,7 +466,10 @@ const useLocalApplyPatchFormSession = ({
     strictInputChecksumValidation && stagedPatchInfos.some((info) => info.checksumPreflightMismatch === true);
   const strictInputChecksumBlocked = hasStrictInputChecksumMismatch && !checksumOverrideChecked;
   const multiInputOutputError = getMultiInputOutputError(displayedCompression, getLogicalRomInputCount(romInputs));
-  const effectiveOutputNoticeMessage = outputErrorMessage || multiInputOutputError;
+  const inputNoticeMessage = failurePlacement === "input" ? failureMessage : "";
+  const patchNoticeMessage = failurePlacement === "patch" ? failureMessage : "";
+  const outputRuntimeNoticeMessage = outputErrorMessage || (failurePlacement === "output" ? failureMessage : "");
+  const effectiveOutputNoticeMessage = outputRuntimeNoticeMessage || multiInputOutputError;
   const applyPreparationPending =
     inputStaging ||
     patchStaging ||
@@ -541,7 +562,14 @@ const useLocalApplyPatchFormSession = ({
         label: createInertState().checksumOverride.label,
         visible: hasStrictInputChecksumMismatch,
       },
+      inputNotice: {
+        dismissible: true,
+        level: "error" as const,
+        message: inputNoticeMessage,
+        visible: !!inputNoticeMessage,
+      },
       outputNotice: {
+        dismissible: !!outputRuntimeNoticeMessage,
         level: "error" as const,
         message: effectiveOutputNoticeMessage,
         visible: !!effectiveOutputNoticeMessage,
@@ -552,6 +580,12 @@ const useLocalApplyPatchFormSession = ({
         loading: patchStaging || !!patchProgress || Object.keys(patchProgressByKey).length > 0,
         progress: null,
         valid: activePatches.length > 0,
+      },
+      patchNotice: {
+        dismissible: true,
+        level: "error" as const,
+        message: patchNoticeMessage,
+        visible: !!patchNoticeMessage,
       },
       romInfo: {
         ...createInertState().romInfo,
@@ -590,9 +624,12 @@ const useLocalApplyPatchFormSession = ({
       hasStrictInputChecksumMismatch,
       localPatcherSectionTimings,
       effectiveOutputNoticeMessage,
+      inputNoticeMessage,
+      outputRuntimeNoticeMessage,
       patchProgress,
       patchProgressByKey,
       patchStaging,
+      patchNoticeMessage,
       primaryRomInput,
       romInputs,
     ],
@@ -696,11 +733,12 @@ const useLocalApplyPatchFormSession = ({
   );
   const localNoticeState = useMemo<NoticeState>(
     () => ({
+      dismissible: true,
       level: "error",
       message: failureMessage,
-      visible: !!failureMessage,
+      visible: !!failureMessage && !failurePlacement,
     }),
-    [failureMessage],
+    [failureMessage, failurePlacement],
   );
 
   useEffect(() => {
@@ -715,20 +753,22 @@ const useLocalApplyPatchFormSession = ({
     (nextSettings: ApplyPatchFormSettings) => {
       setChecksumOverrideChecked(false);
       setApplyQueued(false);
+      clearDismissibleErrors();
       invalidateCompletedOutputState();
       if (settings === undefined) setInternalSettings(nextSettings);
       onSettingsChange?.(nextSettings);
     },
-    [invalidateCompletedOutputState, onSettingsChange, setChecksumOverrideChecked, settings],
+    [clearDismissibleErrors, invalidateCompletedOutputState, onSettingsChange, setChecksumOverrideChecked, settings],
   );
   const commitSettings = useCallback(
     (nextSettings: ApplyPatchFormSettings) => {
       setChecksumOverrideChecked(false);
       setApplyQueued(false);
+      clearDismissibleErrors();
       if (settings === undefined) setInternalSettings(nextSettings);
       onSettingsChange?.(nextSettings);
     },
-    [onSettingsChange, setChecksumOverrideChecked, settings],
+    [clearDismissibleErrors, onSettingsChange, setChecksumOverrideChecked, settings],
   );
   useEffect(() => {
     if (!outputCompressionEdited || activeCompression === effectiveActiveCompression) return;
@@ -743,6 +783,7 @@ const useLocalApplyPatchFormSession = ({
   const updatePatches = useCallback(
     (nextPatches: BinarySource[]) => {
       setChecksumOverrideChecked(false);
+      clearDismissibleErrors();
       invalidateCompletedOutputState();
       setPatchInfoByKey((current) => {
         const nextInfoByKey: Record<string, StagedInputInfo> = {};
@@ -755,7 +796,14 @@ const useLocalApplyPatchFormSession = ({
       if (patches === undefined) setInternalPatches(nextPatches);
       onPatchesChange?.(nextPatches);
     },
-    [getPatchKey, invalidateCompletedOutputState, onPatchesChange, patches, setChecksumOverrideChecked],
+    [
+      clearDismissibleErrors,
+      getPatchKey,
+      invalidateCompletedOutputState,
+      onPatchesChange,
+      patches,
+      setChecksumOverrideChecked,
+    ],
   );
   const getStableInputInfo = useCallback(
     (info: StagedInputInfo, sources: BinarySource[]) => {
@@ -841,8 +889,7 @@ const useLocalApplyPatchFormSession = ({
       });
       if (inputs === undefined) setInternalInputs(nextInputs);
       onInputsChange?.(nextInputs);
-      setErrorMessage("");
-      setOutputErrorMessage("");
+      clearDismissibleErrors();
       setProgress(null);
       setInputStaging(false);
       setRomInputs((current) => {
@@ -876,6 +923,7 @@ const useLocalApplyPatchFormSession = ({
     },
     [
       effectiveInputs.length,
+      clearDismissibleErrors,
       emitSessionTrace,
       getInputKey,
       invalidateCompletedOutputState,
@@ -949,12 +997,7 @@ const useLocalApplyPatchFormSession = ({
           if (patchStageGenerationRef.current !== generation) return;
           const normalizedError = toError(error);
           logUiError("Patch staging failed", normalizedError);
-          setErrorMessage(
-            formatCodedErrorForDisplay(
-              normalizedError,
-              createBrowserLocalizer((activeSettings as { language?: string }).language),
-            ),
-          );
+          setSectionErrorMessage("patch", normalizedError);
           onError?.(normalizedError);
         })
         .finally(() => {
@@ -966,7 +1009,7 @@ const useLocalApplyPatchFormSession = ({
           }
         });
     },
-    [activeSettings, getPatchKey, onError, stagePatches],
+    [getPatchKey, onError, setSectionErrorMessage, stagePatches],
   );
   const syncRomInput = useCallback(
     (snapshot: ApplyWorkflowStageSnapshot, previousInputs: BinarySource[] = []) => {
@@ -1216,12 +1259,7 @@ const useLocalApplyPatchFormSession = ({
             name: normalizedError.name,
           });
           logUiError("Input staging failed", normalizedError);
-          setErrorMessage(
-            formatCodedErrorForDisplay(
-              normalizedError,
-              createBrowserLocalizer((activeSettings as { language?: string }).language),
-            ),
-          );
+          setSectionErrorMessage("input", normalizedError);
           onError?.(normalizedError);
         })
         .finally(() => {
@@ -1250,7 +1288,7 @@ const useLocalApplyPatchFormSession = ({
           );
         });
     },
-    [activeSettings, emitSessionTrace, getInputKey, getStableInputInfo, mergeRomInput, onError, stageInput],
+    [emitSessionTrace, getInputKey, getStableInputInfo, mergeRomInput, onError, setSectionErrorMessage, stageInput],
   );
 
   useEffect(() => {
@@ -1335,6 +1373,25 @@ const useLocalApplyPatchFormSession = ({
         });
         updateInputs([]);
       },
+      dismissNotice: (key: PatcherSectionNoticeKey) => {
+        if (key === "inputNotice" && failurePlacement === "input") {
+          setFailurePlacement(null);
+          setErrorMessage("");
+          return;
+        }
+        if (key === "patchNotice" && failurePlacement === "patch") {
+          setFailurePlacement(null);
+          setErrorMessage("");
+          return;
+        }
+        if (key === "outputNotice") {
+          if (outputErrorMessage) setOutputErrorMessage("");
+          if (failurePlacement === "output") {
+            setFailurePlacement(null);
+            setErrorMessage("");
+          }
+        }
+      },
       getState: localUiStoreController.getState,
       providePatchInputFiles: (fileList: FileList | BinarySource[] | null) => {
         const nextPatches = Array.from(fileList || []) as BinarySource[];
@@ -1342,8 +1399,7 @@ const useLocalApplyPatchFormSession = ({
         setPatchProgress(null);
         setPatchProgressByKey({});
         setPatchStaging(false);
-        setErrorMessage("");
-        setOutputErrorMessage("");
+        clearDismissibleErrors();
         setProgress(null);
         updatePatches(nextPatches);
       },
@@ -1418,11 +1474,16 @@ const useLocalApplyPatchFormSession = ({
     }),
     [
       activeSettings,
+      clearDismissibleErrors,
       effectiveInputs,
       emitSessionTrace,
+      failurePlacement,
       localUiStoreController,
+      outputErrorMessage,
       romInputs,
       setChecksumOverrideChecked,
+      setErrorMessage,
+      setOutputErrorMessage,
       updateInputs,
       updatePatches,
       updateSettings,
@@ -1461,12 +1522,7 @@ const useLocalApplyPatchFormSession = ({
         } catch (error) {
           const normalizedError = toError(error);
           logUiError("Patch target selection failed", normalizedError);
-          setErrorMessage(
-            formatCodedErrorForDisplay(
-              normalizedError,
-              createBrowserLocalizer((activeSettings as { language?: string }).language),
-            ),
-          );
+          setSectionErrorMessage("patch", normalizedError);
           onError?.(normalizedError);
         }
       },
@@ -1479,7 +1535,7 @@ const useLocalApplyPatchFormSession = ({
       getPatchKey,
       localStackStoreController,
       onError,
-      setErrorMessage,
+      setSectionErrorMessage,
       setPatchInfoByKey,
       setPatchTarget,
       updatePatches,
@@ -1524,8 +1580,7 @@ const useLocalApplyPatchFormSession = ({
         const abortController = new AbortController();
         rememberAbortController(abortController);
         setBusy(true);
-        setErrorMessage("");
-        setOutputErrorMessage("");
+        clearDismissibleErrors();
         invalidateCompletedOutputState();
         applyExecutionTimingRef.current = {
           applyStartedAt: Date.now(),
@@ -1679,6 +1734,7 @@ const useLocalApplyPatchFormSession = ({
       },
       setDisplayFileName: (value: string) => {
         const nextOutputName = getRequestedOutputName(value);
+        clearDismissibleErrors();
         setOutputName(value);
         setOutputNameEdited(!!nextOutputName);
         if (pendingDownloadResultRef.current && hasPendingDownload) {
@@ -1722,6 +1778,7 @@ const useLocalApplyPatchFormSession = ({
       containerInputsEnabled,
       applyPatches,
       cancelActiveOperation,
+      clearDismissibleErrors,
       commitSettings,
       downloadOutput,
       effectiveInputs,
@@ -1765,10 +1822,14 @@ const useLocalApplyPatchFormSession = ({
   }, [applyQueued, applyQueueBlocked, busy, canQueueApply, canStartApply, hasPendingDownload, localOutputController]);
   const localNoticeController = useMemo(
     (): NoticeController => ({
+      dismiss: () => {
+        setFailurePlacement(null);
+        setErrorMessage("");
+      },
       getState: localNoticeStoreController.getState,
       subscribe: localNoticeStoreController.subscribe,
     }),
-    [localNoticeStoreController],
+    [localNoticeStoreController, setErrorMessage],
   );
 
   return {

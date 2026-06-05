@@ -299,6 +299,11 @@ test("create queued run cancels when source preparation warns", async () => {
     warnings: [{ code: "SOURCE_WARNING", message: "Source warning" }],
   };
   workflowMockState.originalDeferred.resolve();
+  await expect
+    .poll(() => document.getElementById("patch-builder-original-error-message")?.textContent || "")
+    .toContain("Source warning");
+  expect(document.querySelector("#patch-builder-original-error-message .notice-x")).toBeNull();
+  expect(document.getElementById("patch-builder-row-error-message")).toBeNull();
   await expect.poll(getOutputWaitingText).toBe("");
   workflowMockState.modifiedDeferred.resolve();
   await new Promise((resolve) => globalThis.setTimeout(resolve, 50));

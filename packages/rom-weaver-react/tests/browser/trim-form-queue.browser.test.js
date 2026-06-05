@@ -218,6 +218,11 @@ test("trim queued run cancels when source preparation warns", async () => {
     warnings: [{ code: "SOURCE_WARNING", message: "Source warning" }],
   };
   workflowMockState.inputDeferred.resolve();
+  await expect
+    .poll(() => document.getElementById("trim-builder-source-error-message")?.textContent || "")
+    .toContain("Source warning");
+  expect(document.querySelector("#trim-builder-source-error-message .notice-x")).toBeNull();
+  expect(document.getElementById("trim-builder-row-error-message")).toBeNull();
   await expect.poll(getOutputWaitingText).toBe("");
   await new Promise((resolve) => globalThis.setTimeout(resolve, 50));
   expect(workflowMockState.runCalls).toBe(0);
