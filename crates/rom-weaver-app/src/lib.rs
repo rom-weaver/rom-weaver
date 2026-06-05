@@ -154,7 +154,11 @@ const fn default_max_compression_level() -> CompressionLevelProfile {
 }
 
 fn default_xdelta_secondary() -> String {
-    XdeltaSecondaryMode::Lzma.to_string()
+    // No in-patch secondary compression by default (this also matches xdelta3, which only compresses
+    // when you pass `-S`). The patch's literal sections are frequently already-compressed disc assets
+    // where LZMA burns tens of seconds for a few percent, and the patch is typically re-compressed
+    // downstream anyway. Callers wanting a self-contained compressed patch can pass `lzma`.
+    XdeltaSecondaryMode::None.to_string()
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -984,9 +988,9 @@ pub struct PatchCreateCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "xdelta-secondary",
-            default_value = "lzma",
-            value_parser = ["auto", "auto-fast", "lzma", "djw", "fgk", "none"],
-            help = "xdelta secondary compression mode during patch create (default lzma matches upstream xdelta when LZMA is available; auto compares djw/lzma/fgk; auto-fast prefers speed via lzma-only plus incompressible-data skip; none disables secondary recoding)"
+            default_value = "none",
+            value_parser = ["auto", "lzma", "djw", "fgk", "none"],
+            help = "xdelta secondary compression mode during patch create (default none = no in-patch compression, matching xdelta3 without -S; lzma adds LZMA like xdelta -S lzma; djw/fgk are xdelta3's huffman coders; auto compares djw/lzma/fgk and keeps the smallest)"
         )
     )]
     #[serde(default = "default_xdelta_secondary")]

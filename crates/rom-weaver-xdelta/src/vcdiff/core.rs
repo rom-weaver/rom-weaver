@@ -1,9 +1,11 @@
 use std::{
     borrow::Cow,
+    cell::{Cell, RefCell},
     fs::{self, File, OpenOptions},
     io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write},
     path::{Path, PathBuf},
     sync::Arc,
+    time::SystemTime,
 };
 
 use oxidelta::{
@@ -23,11 +25,13 @@ use oxidelta::{
 use rayon::prelude::*;
 use rom_weaver_checksum::adler32_checksum as adler32;
 use rom_weaver_core::{
-    FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
-    PatchCapabilities, PatchChecksumValidation, PatchCreateRequest, PatchHandler, ProbeConfidence,
-    Result, RomWeaverError, ThreadCapability, XdeltaSecondaryMode,
+    FormatDescriptor, OperationContext, OperationFamily, OperationReport, OperationStatus,
+    PatchApplyRequest, PatchCapabilities, PatchChecksumValidation, PatchCreateRequest, PatchHandler,
+    ProbeConfidence, ProgressEvent, Result, RomWeaverError, SharedThreadPool, ThreadBudget,
+    ThreadCapability, ThreadExecution, XdeltaSecondaryMode,
 };
 use serde_json::json;
+use tracing::info;
 
 const VCDIFF_MAGIC_BYTES: [u8; 3] = [0xD6, 0xC3, 0xC4];
 const VCDIFF_VERSION_STANDARD: u8 = 0x00;
@@ -57,11 +61,6 @@ const XDELTA_SECONDARY_CANDIDATES: [u8; 3] = [
     XDELTA_LZMA_SECONDARY_ID,
     XDELTA_FGK_SECONDARY_ID,
 ];
-const XDELTA_AUTO_FAST_SAMPLE_BYTES_PER_SECTION: usize = 256;
-const XDELTA_AUTO_FAST_MAX_SECTIONS: usize = 512;
-const XDELTA_AUTO_FAST_MIN_SAMPLED_BYTES: usize = 32 * 1024;
-const XDELTA_AUTO_FAST_MIN_UNIQUE_RATIO: f64 = 0.93;
-const XDELTA_AUTO_FAST_MAX_REPEAT_RATIO: f64 = 0.015;
 const DJW_MAX_CODELEN: usize = 20;
 const DJW_TOTAL_CODES: usize = DJW_MAX_CODELEN + 2;
 const DJW_BASIC_CODES: usize = 5;
@@ -86,7 +85,6 @@ const DJW_ENCODE_12BASIC: [u8; 5] = [4, 5, 6, 7, 8];
 fn xdelta_secondary_candidates_for_mode(mode: XdeltaSecondaryMode) -> &'static [u8] {
     match mode {
         XdeltaSecondaryMode::Auto => &XDELTA_SECONDARY_CANDIDATES,
-        XdeltaSecondaryMode::AutoFast => &[XDELTA_LZMA_SECONDARY_ID],
         XdeltaSecondaryMode::Djw => &[XDELTA_DJW_SECONDARY_ID],
         XdeltaSecondaryMode::Fgk => &[XDELTA_FGK_SECONDARY_ID],
         XdeltaSecondaryMode::Lzma => &[XDELTA_LZMA_SECONDARY_ID],
@@ -399,14 +397,50 @@ impl PatchHandler for VcdiffPatchHandler {
             .next_path("vcdiff-create-baseline", output_extension);
         let mut secondary_candidate_paths = Vec::new();
 
+        // One monotonic 0→100 stream across whichever phases actually run, so the bar never jumps
+        // across an empty band. Secondary compression only runs for non-`none` modes; without it the
+        // diff and (for xdelta) the uncompressed-baseline write are the only heavy phases and own the
+        // bar between them.
+        let create_progress = CreateProgress::new(context, self.descriptor.name);
+        let will_run_secondary =
+            compare_secondary && !xdelta_secondary_candidates_for_mode(secondary_mode).is_empty();
+        let encode_band_end = if will_run_secondary {
+            // Leave room for the secondary recode band that follows the diff.
+            CREATE_ENCODE_BAND_END
+        } else if xdelta_app_header.is_some() {
+            // No secondary, but the uncompressed app-header baseline is still written as the output;
+            // split the bar between the diff and that write.
+            CREATE_NO_SECONDARY_ENCODE_BAND_END
+        } else {
+            // The encode writes the final patch directly (e.g. vcdiff with no app header).
+            CREATE_FINALIZE_PERCENT
+        };
+        // The uncompressed baseline is materialized either as the rare winner after the secondary
+        // recode, or as the output itself when no secondary runs; its band starts where the prior
+        // phase ended.
+        let baseline_recode_band_start = if will_run_secondary {
+            CREATE_SECONDARY_RECODE_BAND_END
+        } else {
+            encode_band_end
+        };
+
         let create_result = (|| -> Result<(ParsedPatch, rom_weaver_core::ThreadExecution)> {
-            let baseline_raw = encode_patch_with_native_streaming(
+            let encode_start = SystemTime::now();
+            let (baseline_raw, encode_execution) = encode_patch_create(
                 &request.original,
                 &request.modified,
                 &baseline_raw_path,
                 create_native_compress_options(self.descriptor, include_checksums),
+                &CreateEncodeProgress {
+                    progress: &create_progress,
+                    band_start: 0.0,
+                    band_end: encode_band_end,
+                },
             )?;
+            let encode_ms = elapsed_ms(encode_start);
+            let baseline_raw_bytes = baseline_raw.size;
             let baseline_secondary_source_path = baseline_raw.path.clone();
+            let load_start = SystemTime::now();
             let baseline_loaded_for_secondary = if compare_secondary {
                 Some(Arc::new(load_patch_for_xdelta_recode(
                     &baseline_secondary_source_path,
@@ -414,26 +448,13 @@ impl PatchHandler for VcdiffPatchHandler {
             } else {
                 None
             };
-            let mut secondary_candidates = if compare_secondary {
+            let load_ms = elapsed_ms(load_start);
+            let secondary_candidates = if compare_secondary {
                 xdelta_secondary_candidates_for_mode(secondary_mode)
             } else {
                 &[]
             };
-            let skip_auto_fast_secondary = if compare_secondary
-                && secondary_mode == XdeltaSecondaryMode::AutoFast
-                && !secondary_candidates.is_empty()
-            {
-                match baseline_loaded_for_secondary.as_ref() {
-                    Some(patch) => should_skip_secondary_for_auto_fast(patch)?,
-                    None => false,
-                }
-            } else {
-                false
-            };
-            if skip_auto_fast_secondary {
-                secondary_candidates = &[];
-            }
-            let (execution, secondary_pool) = if secondary_candidates.len() > 1 {
+            let (secondary_execution, secondary_pool) = if secondary_candidates.len() > 1 {
                 let (execution, pool) = context
                     .build_pool(ThreadCapability::parallel(Some(secondary_candidates.len())))?;
                 (execution, Some(pool))
@@ -443,92 +464,146 @@ impl PatchHandler for VcdiffPatchHandler {
                     None,
                 )
             };
-            let baseline = if xdelta_app_header.is_some() {
-                recode_loaded_patch_with_xdelta_options(
+            // Size of the uncompressed app-header baseline (the size-comparison fallback) without
+            // materializing it: for large patches a secondary candidate almost always wins, so
+            // writing the baseline would be a wasted full-patch rewrite. It is materialized lazily
+            // below only if it actually wins (or no secondary candidate ran).
+            let baseline_size = if xdelta_app_header.is_some() {
+                measure_appheader_baseline_size(
+                    baseline_loaded_for_secondary
+                        .as_ref()
+                        .expect("xdelta baseline should be loaded when app header is enabled"),
+                    xdelta_app_header
+                        .as_deref()
+                        .expect("xdelta app header should be present when comparing secondary"),
+                )?
+            } else {
+                baseline_raw.size
+            };
+
+            let secondary_start = SystemTime::now();
+            let mut best_candidate: Option<CreatedPatchCandidate> = None;
+            if compare_secondary && !secondary_candidates.is_empty() {
+                let baseline_loaded = Arc::clone(
+                    baseline_loaded_for_secondary
+                        .as_ref()
+                        .expect("xdelta baseline should be loaded when evaluating candidates"),
+                );
+                let candidate_specs = secondary_candidates
+                    .iter()
+                    .copied()
+                    .map(|secondary_id| {
+                        (
+                            secondary_id,
+                            context.temp_paths().next_path(
+                                &format!("vcdiff-create-secondary-{secondary_id}"),
+                                output_extension,
+                            ),
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                secondary_candidate_paths.extend(candidate_specs.iter().map(|(_, path)| path.clone()));
+                let app_header = xdelta_app_header.as_deref();
+                let candidate_results = if let Some(pool) = secondary_pool.as_ref() {
+                    // Candidates run concurrently on worker threads, so they can't share the
+                    // (main-thread) progress tracker; the band is reported around the batch below.
+                    let baseline_for_workers = Arc::clone(&baseline_loaded);
+                    pool.install(|| {
+                        candidate_specs
+                            .into_par_iter()
+                            .map(|(secondary_id, candidate_path)| {
+                                recode_loaded_patch_with_xdelta_options(
+                                    &baseline_for_workers,
+                                    &candidate_path,
+                                    Some(secondary_id),
+                                    app_header,
+                                    None,
+                                )
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                } else {
+                    candidate_specs
+                        .into_iter()
+                        .map(|(secondary_id, candidate_path)| {
+                            recode_loaded_patch_with_xdelta_options(
+                                &baseline_loaded,
+                                &candidate_path,
+                                Some(secondary_id),
+                                app_header,
+                                Some(&CreateRecodeProgress {
+                                    progress: &create_progress,
+                                    band_start: CREATE_ENCODE_BAND_END,
+                                    band_end: CREATE_SECONDARY_RECODE_BAND_END,
+                                }),
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                };
+
+                best_candidate = candidate_results
+                    .into_iter()
+                    .filter_map(Result::ok)
+                    .min_by_key(|candidate| candidate.size);
+                // Land on the secondary band end whichever branch ran (the parallel branch can't
+                // report per-window, and rounding can leave the sequential branch just shy).
+                create_progress.emit_overall(CREATE_SECONDARY_RECODE_BAND_END);
+            }
+            let secondary_ms = elapsed_ms(secondary_start);
+
+            // Winner is the smallest of the uncompressed baseline and the secondary candidates;
+            // ties favour the baseline. Materialize the baseline only if it actually wins.
+            let select_start = SystemTime::now();
+            let selected = match best_candidate {
+                Some(candidate) if candidate.size < baseline_size => candidate,
+                _ if xdelta_app_header.is_some() => recode_loaded_patch_with_xdelta_options(
                     baseline_loaded_for_secondary
                         .as_ref()
                         .expect("xdelta baseline should be loaded when app header is enabled"),
                     &baseline_path,
                     None,
                     xdelta_app_header.as_deref(),
-                )?
-            } else {
-                baseline_raw
+                    Some(&CreateRecodeProgress {
+                        progress: &create_progress,
+                        band_start: baseline_recode_band_start,
+                        band_end: CREATE_FINALIZE_PERCENT,
+                    }),
+                )?,
+                _ => baseline_raw,
             };
-            let selected = if compare_secondary {
-                let mut best = baseline;
-                if !secondary_candidates.is_empty() {
-                    let baseline_loaded = Arc::clone(
-                        baseline_loaded_for_secondary
-                            .as_ref()
-                            .expect("xdelta baseline should be loaded when evaluating candidates"),
-                    );
-                    let candidate_specs = secondary_candidates
-                        .iter()
-                        .copied()
-                        .map(|secondary_id| {
-                            (
-                                secondary_id,
-                                context.temp_paths().next_path(
-                                    &format!("vcdiff-create-secondary-{secondary_id}"),
-                                    output_extension,
-                                ),
-                            )
-                        })
-                        .collect::<Vec<_>>();
-                    secondary_candidate_paths
-                        .extend(candidate_specs.iter().map(|(_, path)| path.clone()));
-                    let app_header = xdelta_app_header.as_deref();
-                    let candidate_results = if let Some(pool) = secondary_pool.as_ref() {
-                        let baseline_for_workers = Arc::clone(&baseline_loaded);
-                        pool.install(|| {
-                            candidate_specs
-                                .into_par_iter()
-                                .map(|(secondary_id, candidate_path)| {
-                                    recode_loaded_patch_with_xdelta_options(
-                                        &baseline_for_workers,
-                                        &candidate_path,
-                                        Some(secondary_id),
-                                        app_header,
-                                    )
-                                })
-                                .collect::<Vec<_>>()
-                        })
-                    } else {
-                        candidate_specs
-                            .into_iter()
-                            .map(|(secondary_id, candidate_path)| {
-                                recode_loaded_patch_with_xdelta_options(
-                                    &baseline_loaded,
-                                    &candidate_path,
-                                    Some(secondary_id),
-                                    app_header,
-                                )
-                            })
-                            .collect::<Vec<_>>()
-                    };
-
-                    for candidate in candidate_results
-                        .into_iter()
-                        .filter_map(|result| result.ok())
-                    {
-                        if candidate.size < best.size {
-                            best = candidate;
-                        }
-                    }
-                }
-                best
-            } else {
-                baseline
-            };
+            let select_ms = elapsed_ms(select_start);
+            let output_bytes = selected.size;
 
             if let Some(parent) = request.output.parent() {
                 fs::create_dir_all(parent)?;
             }
-            fs::copy(&selected.path, &request.output)?;
+            // The winning patch is already a fully written temp file, so move it into place rather
+            // than copying its bytes. `rename` is O(1) when the temp dir and output share a
+            // filesystem (the common case); only a cross-mount move falls back to a full copy.
+            let finalize_start = SystemTime::now();
+            move_or_copy_file(&selected.path, &request.output)?;
+            create_progress.emit_overall(CREATE_FINALIZE_PERCENT);
 
             let mut reader = BufReader::new(File::open(&request.output)?);
-            Ok((parse_patch(&mut reader)?, execution))
+            let parsed = parse_patch(&mut reader)?;
+            let finalize_ms = elapsed_ms(finalize_start);
+            info!(
+                format = self.descriptor.name,
+                windows = parsed.windows.len(),
+                uncompressed_patch_bytes = baseline_raw_bytes,
+                output_patch_bytes = output_bytes,
+                encode_ms,
+                load_ms,
+                secondary_ms,
+                select_ms,
+                finalize_ms,
+                total_ms = encode_ms + load_ms + secondary_ms + select_ms + finalize_ms,
+                "xdelta create phase timings"
+            );
+            Ok((
+                parsed,
+                richer_thread_execution(encode_execution, secondary_execution),
+            ))
         })();
 
         for candidate_path in secondary_candidate_paths {
@@ -701,54 +776,6 @@ struct XdeltaRecodeWindowSections {
     data: Vec<u8>,
     inst: Vec<u8>,
     addr: Vec<u8>,
-}
-
-fn should_skip_secondary_for_auto_fast(baseline_patch: &LoadedXdeltaRecodePatch) -> Result<bool> {
-    let mut histogram = [0u32; 256];
-    let mut sampled_bytes = 0usize;
-    let mut sampled_sections = 0usize;
-    let mut adjacent_matches = 0usize;
-    let mut patch_reader = BufReader::new(File::open(&baseline_patch.path)?);
-
-    for window in &baseline_patch.parsed.windows {
-        for (start, len) in [
-            (window.data_start, window.data_len),
-            (window.inst_start, window.inst_len),
-            (window.addr_start, window.addr_len),
-        ] {
-            if len == 0 {
-                continue;
-            }
-            let section = read_section(&mut patch_reader, start, len)?;
-            sampled_sections += 1;
-            let sample_len = section.len().min(XDELTA_AUTO_FAST_SAMPLE_BYTES_PER_SECTION);
-            let sample = &section[..sample_len];
-            sampled_bytes += sample.len();
-            for (index, &byte) in sample.iter().enumerate() {
-                histogram[byte as usize] = histogram[byte as usize].saturating_add(1);
-                if index > 0 && byte == sample[index - 1] {
-                    adjacent_matches = adjacent_matches.saturating_add(1);
-                }
-            }
-            if sampled_sections >= XDELTA_AUTO_FAST_MAX_SECTIONS {
-                break;
-            }
-        }
-        if sampled_sections >= XDELTA_AUTO_FAST_MAX_SECTIONS {
-            break;
-        }
-    }
-
-    if sampled_bytes < XDELTA_AUTO_FAST_MIN_SAMPLED_BYTES {
-        return Ok(false);
-    }
-
-    let unique_values = histogram.iter().filter(|&&count| count > 0).count();
-    let unique_ratio = unique_values as f64 / 256.0;
-    let adjacent_total = sampled_bytes.saturating_sub(1).max(1);
-    let repeat_ratio = adjacent_matches as f64 / adjacent_total as f64;
-    Ok(unique_ratio >= XDELTA_AUTO_FAST_MIN_UNIQUE_RATIO
-        && repeat_ratio <= XDELTA_AUTO_FAST_MAX_REPEAT_RATIO)
 }
 
 fn parse_patch<R: Read + Seek>(reader: &mut R) -> Result<ParsedPatch> {
@@ -1169,12 +1196,148 @@ fn create_native_compress_options(
     }
 }
 
+/// Progress context for the create-time encode. Present only when the encode is driven by a
+/// `patch-create` command (so it can emit per-window running progress); absent for the
+/// streaming entry point used by tests, which stays single-threaded and silent.
+///
+/// Shared, monotonic progress for the whole `patch-create` operation. The encode, the optional
+/// app-header/secondary recode passes, and finalization each emit into a slice of the 0→100 range
+/// (a "band"), so the reported percentage reflects the *entire* process and only reaches 100% once
+/// the patch is finished — the percentage where it stalls also identifies the slow phase. All
+/// emission happens on the calling (main) thread, so interior mutability via `Cell`/`RefCell` is
+/// sufficient (the parallel encode never captures this).
+struct CreateProgress<'a> {
+    context: &'a OperationContext,
+    format: &'a str,
+    execution: RefCell<ThreadExecution>,
+    last_percent: Cell<i32>,
+}
+
+impl<'a> CreateProgress<'a> {
+    fn new(context: &'a OperationContext, format: &'a str) -> Self {
+        Self {
+            context,
+            format,
+            execution: RefCell::new(
+                ThreadCapability::single_threaded().negotiate(ThreadBudget::Fixed(1)),
+            ),
+            last_percent: Cell::new(-1),
+        }
+    }
+
+    /// Records the thread execution the encode negotiated so running events carry accurate counts.
+    fn set_execution(&self, execution: &ThreadExecution) {
+        *self.execution.borrow_mut() = execution.clone();
+    }
+
+    /// Maps `completed/total` work into the `[band_start, band_end]` slice of the overall range.
+    fn emit_band(&self, band_start: f64, band_end: f64, completed: u64, total: u64) {
+        let fraction = if total == 0 {
+            1.0
+        } else {
+            (completed.min(total) as f64) / (total as f64)
+        };
+        self.emit_overall(band_start + fraction * (band_end - band_start));
+    }
+
+    /// Emits a `patch-create` running event at `percent`, deduplicated to whole-percent advances so
+    /// the bar moves forward monotonically across phases.
+    fn emit_overall(&self, percent: f64) {
+        let percent = (percent.floor() as i32).clamp(0, 100);
+        if percent <= self.last_percent.get() {
+            return;
+        }
+        self.last_percent.set(percent);
+        let execution = self.execution.borrow();
+        self.context.emit(ProgressEvent {
+            command: "patch-create".to_string(),
+            family: OperationFamily::Patch,
+            format: Some(self.format.to_string()),
+            stage: "create".to_string(),
+            label: format!("creating {} patch", self.format),
+            details: None,
+            percent: Some(percent as f32),
+            requested_threads: Some(execution.requested_threads),
+            effective_threads: Some(execution.effective_threads),
+            thread_mode: Some(execution.thread_mode),
+            used_parallelism: Some(execution.used_parallelism),
+            thread_fallback: Some(execution.thread_fallback),
+            thread_fallback_reason: execution.thread_fallback_reason.clone(),
+            status: OperationStatus::Running,
+        });
+    }
+}
+
+/// Overall-range bands for each create phase. The secondary LZMA recode is the dominant single-threaded
+/// cost for large patches, so it owns the widest slice; the parallel encode is fast and owns less. The
+/// uncompressed app-header baseline is normally not materialized (its size is computed analytically),
+/// so it has no band of its own except in the rare case it wins, where it borrows the finalize slice.
+const CREATE_ENCODE_BAND_END: f64 = 35.0;
+const CREATE_SECONDARY_RECODE_BAND_END: f64 = 95.0;
+const CREATE_FINALIZE_PERCENT: f64 = 98.0;
+/// Encode band end when no secondary recode runs but the uncompressed app-header baseline is still
+/// written as the output (e.g. `--xdelta-secondary none`): the diff and that write split the bar.
+const CREATE_NO_SECONDARY_ENCODE_BAND_END: f64 = 60.0;
+
+/// The band of the overall create range a recode pass (app-header rewrite or secondary compression)
+/// occupies. Threaded through [`recode_loaded_patch_with_xdelta_options`] so it can report per-window.
+struct CreateRecodeProgress<'a> {
+    progress: &'a CreateProgress<'a>,
+    band_start: f64,
+    band_end: f64,
+}
+
+/// The band of the overall create range the window diff occupies.
+struct CreateEncodeProgress<'a> {
+    progress: &'a CreateProgress<'a>,
+    band_start: f64,
+    band_end: f64,
+}
+
+/// File inputs and window geometry shared by both window-encode loops, grouped to keep their
+/// signatures small.
+struct WindowEncodeInputs<'a> {
+    source_path: &'a Path,
+    target_path: &'a Path,
+    source_len: u64,
+    target_len: u64,
+    window_size: usize,
+    options: &'a CompressOptions,
+}
+
+/// Sequential single-threaded entry point. Produces output byte-identical to the parallel path;
+/// retained for tests that exercise the encoder without an `OperationContext`.
+#[cfg(test)]
 fn encode_patch_with_native_streaming(
     source_path: &Path,
     target_path: &Path,
     output_path: &Path,
     options: CompressOptions,
 ) -> Result<CreatedPatchCandidate> {
+    encode_patch_native(source_path, target_path, output_path, options, None)
+        .map(|(candidate, _execution)| candidate)
+}
+
+/// Create-command encode: spreads the independent VCDIFF windows across the negotiated thread
+/// budget and emits per-window running progress. Returns the resolved [`ThreadExecution`] so the
+/// operation report reflects the diff threading rather than the (often single-thread) secondary pass.
+fn encode_patch_create(
+    source_path: &Path,
+    target_path: &Path,
+    output_path: &Path,
+    options: CompressOptions,
+    progress: &CreateEncodeProgress<'_>,
+) -> Result<(CreatedPatchCandidate, ThreadExecution)> {
+    encode_patch_native(source_path, target_path, output_path, options, Some(progress))
+}
+
+fn encode_patch_native(
+    source_path: &Path,
+    target_path: &Path,
+    output_path: &Path,
+    options: CompressOptions,
+    progress: Option<&CreateEncodeProgress<'_>>,
+) -> Result<(CreatedPatchCandidate, ThreadExecution)> {
     if let Some(parent) = output_path.parent() {
         fs::create_dir_all(parent)?;
     }
@@ -1187,32 +1350,43 @@ fn encode_patch_with_native_streaming(
     }
 
     let source_len = fs::metadata(source_path)?.len();
-    let mut source = File::open(source_path)?;
-    let mut target = BufReader::with_capacity(NATIVE_CHUNK_SIZE, File::open(target_path)?);
-    let mut target_offset = 0_u64;
-    let mut target_buffer = vec![0; options.window_size.max(64)];
+    let target_len = fs::metadata(target_path)?.len();
+    let window_size = options.window_size.max(64);
 
-    loop {
-        let bytes_read = read_next_chunk(&mut target, &mut target_buffer)?;
-        if bytes_read == 0 {
-            break;
+    // Only the create path negotiates threads; the streaming entry point stays single-threaded so
+    // it never needs an `OperationContext`.
+    let (execution, pool) = match progress {
+        Some(progress) => {
+            let window_count =
+                usize::try_from(target_len.div_ceil(window_size as u64).max(1)).unwrap_or(usize::MAX);
+            let (execution, pool) = progress
+                .progress
+                .context
+                .build_pool(ThreadCapability::parallel(Some(window_count)))?;
+            progress.progress.set_execution(&execution);
+            (execution, Some(pool))
         }
+        None => (
+            ThreadCapability::single_threaded().negotiate(ThreadBudget::Fixed(1)),
+            None,
+        ),
+    };
 
-        let source_offset = target_offset.min(source_len);
-        let source_window = read_source_window(
-            &mut source,
-            source_offset,
-            target_buffer.len(),
-            source_len,
-        )?;
-        encode_native_window(
-            &mut encoder,
-            &source_window,
-            source_offset,
-            &target_buffer[..bytes_read],
-            &options,
-        )?;
-        target_offset = checked_add(target_offset, bytes_read as u64, "encoded target offset")?;
+    let inputs = WindowEncodeInputs {
+        source_path,
+        target_path,
+        source_len,
+        target_len,
+        window_size,
+        options: &options,
+    };
+    if execution.used_parallelism {
+        let pool = pool
+            .as_ref()
+            .expect("thread pool is present when parallelism is used");
+        encode_windows_parallel(&mut encoder, &inputs, pool, &execution, progress)?;
+    } else {
+        encode_windows_sequential(&mut encoder, &inputs, progress)?;
     }
 
     let writer = encoder.finish()?;
@@ -1223,10 +1397,145 @@ fn encode_patch_with_native_streaming(
         ))
     })?;
 
-    Ok(CreatedPatchCandidate {
-        path: output_path.to_path_buf(),
-        size: output.metadata()?.len(),
-    })
+    Ok((
+        CreatedPatchCandidate {
+            path: output_path.to_path_buf(),
+            size: output.metadata()?.len(),
+        },
+        execution,
+    ))
+}
+
+fn encode_windows_sequential<W: Write>(
+    encoder: &mut StreamEncoder<W>,
+    inputs: &WindowEncodeInputs<'_>,
+    progress: Option<&CreateEncodeProgress<'_>>,
+) -> Result<()> {
+    let mut source = File::open(inputs.source_path)?;
+    let mut target = BufReader::with_capacity(NATIVE_CHUNK_SIZE, File::open(inputs.target_path)?);
+    let mut target_offset = 0_u64;
+    let mut target_buffer = vec![0; inputs.window_size];
+
+    loop {
+        let bytes_read = read_next_chunk(&mut target, &mut target_buffer)?;
+        if bytes_read == 0 {
+            break;
+        }
+
+        let source_offset = target_offset.min(inputs.source_len);
+        let source_window =
+            read_source_window(&mut source, source_offset, target_buffer.len(), inputs.source_len)?;
+        let encoded = build_native_window(
+            &source_window,
+            source_offset,
+            &target_buffer[..bytes_read],
+            inputs.options,
+        )?;
+        encoder.write_raw_window(&encoded)?;
+        target_offset = checked_add(target_offset, bytes_read as u64, "encoded target offset")?;
+        if let Some(progress) = progress {
+            progress.progress.emit_band(
+                progress.band_start,
+                progress.band_end,
+                target_offset,
+                inputs.target_len,
+            );
+        }
+    }
+
+    Ok(())
+}
+
+/// Encodes the VCDIFF windows in parallel. Each window is self-contained (its own source window,
+/// address cache, and section bytes), so the heavy diff/match work fans out across the pool while
+/// the assembled window bytes are written back in order. Source/target reads stay on the calling
+/// thread (OPFS-safe in wasm) and only `effective_threads` windows are buffered at a time to keep
+/// peak memory bounded.
+fn encode_windows_parallel<W: Write>(
+    encoder: &mut StreamEncoder<W>,
+    inputs: &WindowEncodeInputs<'_>,
+    pool: &SharedThreadPool,
+    execution: &ThreadExecution,
+    progress: Option<&CreateEncodeProgress<'_>>,
+) -> Result<()> {
+    let mut source = File::open(inputs.source_path)?;
+    let mut target = BufReader::with_capacity(NATIVE_CHUNK_SIZE, File::open(inputs.target_path)?);
+    let mut target_offset = 0_u64;
+    let batch_size = execution.effective_threads.max(1);
+
+    loop {
+        let mut batch: Vec<(u64, Vec<u8>, Vec<u8>)> = Vec::with_capacity(batch_size);
+        for _ in 0..batch_size {
+            let mut target_buffer = vec![0; inputs.window_size];
+            let bytes_read = read_next_chunk(&mut target, &mut target_buffer)?;
+            if bytes_read == 0 {
+                break;
+            }
+            let source_offset = target_offset.min(inputs.source_len);
+            let source_window =
+                read_source_window(&mut source, source_offset, target_buffer.len(), inputs.source_len)?;
+            batch.push((source_offset, source_window, target_buffer));
+            target_offset = checked_add(target_offset, bytes_read as u64, "encoded target offset")?;
+        }
+        if batch.is_empty() {
+            break;
+        }
+
+        let encoded_windows = pool.install(|| {
+            batch
+                .into_par_iter()
+                .map(|(source_offset, source_window, target_window)| {
+                    build_native_window(&source_window, source_offset, &target_window, inputs.options)
+                })
+                .collect::<Result<Vec<Vec<u8>>>>()
+        })?;
+        for encoded in &encoded_windows {
+            encoder.write_raw_window(encoded)?;
+        }
+        if let Some(progress) = progress {
+            progress.progress.emit_band(
+                progress.band_start,
+                progress.band_end,
+                target_offset,
+                inputs.target_len,
+            );
+        }
+    }
+
+    Ok(())
+}
+
+/// Create runs two independently parallelizable phases (the window diff and the secondary-candidate
+/// comparison); the report should describe whichever fanned out widest, so pick the execution with
+/// more effective threads (`used_parallelism` tracks `effective_threads > 1`, so this also reports
+/// parallelism whenever either phase used it).
+fn richer_thread_execution(a: ThreadExecution, b: ThreadExecution) -> ThreadExecution {
+    if b.effective_threads > a.effective_threads {
+        b
+    } else {
+        a
+    }
+}
+
+/// Milliseconds elapsed since `start`, saturating to 0 if the clock went backwards. Used for the
+/// per-phase create timing log; `SystemTime` is the wasm-supported clock in this runtime.
+fn elapsed_ms(start: SystemTime) -> u64 {
+    start
+        .elapsed()
+        .map(|elapsed| u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX))
+        .unwrap_or(0)
+}
+
+/// Moves `from` onto `to`, preferring a metadata-only `rename`. Cross-filesystem renames fail with
+/// an error (e.g. `EXDEV`), so fall back to a byte copy in that case. The source temp file is
+/// consumed on the fast path; the caller's best-effort temp cleanup tolerates its absence.
+fn move_or_copy_file(from: &Path, to: &Path) -> Result<()> {
+    if fs::rename(from, to).is_ok() {
+        return Ok(());
+    }
+    fs::copy(from, to)?;
+    let _ = fs::remove_file(from);
+    Ok(())
 }
 
 fn read_next_chunk(reader: &mut BufReader<File>, buffer: &mut Vec<u8>) -> Result<usize> {
@@ -1261,13 +1570,15 @@ fn read_source_window(
     Ok(bytes)
 }
 
-fn encode_native_window<W: Write>(
-    encoder: &mut StreamEncoder<W>,
+/// Encodes a single VCDIFF window into its assembled section bytes. Pure and self-contained (no
+/// shared encoder state), so it can run on a worker thread; the caller writes the returned bytes to
+/// the stream encoder in window order.
+fn build_native_window(
     source: &[u8],
     source_offset: u64,
     target: &[u8],
     options: &CompressOptions,
-) -> Result<()> {
+) -> Result<Vec<u8>> {
     let source_window = if source.is_empty() {
         None
     } else {
@@ -1301,9 +1612,7 @@ fn encode_native_window<W: Write>(
     let mut window = WindowEncoder::new(source_window, options.checksum);
     emit_native_instructions(&mut window, target, &instructions);
     let sections = window.finish_sections(Some(target));
-    let encoded = assemble_native_sections(sections, options)?;
-    encoder.write_raw_window(&encoded)?;
-    Ok(())
+    assemble_native_sections(sections, options)
 }
 
 fn assemble_native_sections(
@@ -1385,6 +1694,7 @@ fn recode_patch_with_xdelta_options(
         output_path,
         secondary_compressor_id,
         app_header,
+        None,
     )
 }
 
@@ -1404,6 +1714,7 @@ fn recode_loaded_patch_with_xdelta_options(
     output_path: &Path,
     secondary_compressor_id: Option<u8>,
     app_header: Option<&[u8]>,
+    progress: Option<&CreateRecodeProgress<'_>>,
 ) -> Result<CreatedPatchCandidate> {
     ensure_supported_secondary_compressor(secondary_compressor_id)?;
     if secondary_compressor_id.is_some() && baseline_patch.parsed.secondary_compressor_id.is_some()
@@ -1441,8 +1752,9 @@ fn recode_loaded_patch_with_xdelta_options(
         recoded.write_all(header)?;
     }
 
+    let total_windows = baseline_patch.parsed.windows.len() as u64;
     let mut patch_reader = BufReader::new(File::open(&baseline_patch.path)?);
-    for window in &baseline_patch.parsed.windows {
+    for (window_index, window) in baseline_patch.parsed.windows.iter().enumerate() {
         let sections = read_xdelta_recode_window_sections(&mut patch_reader, window)?;
         let (data_out, data_comp, inst_out, inst_comp, addr_out, addr_comp) =
             if let Some(encoders) = lzma_encoders.as_mut() {
@@ -1504,6 +1816,14 @@ fn recode_loaded_patch_with_xdelta_options(
         recoded.write_all(&data_out)?;
         recoded.write_all(&inst_out)?;
         recoded.write_all(&addr_out)?;
+        if let Some(progress) = progress {
+            progress.progress.emit_band(
+                progress.band_start,
+                progress.band_end,
+                window_index as u64 + 1,
+                total_windows,
+            );
+        }
     }
 
     recoded.flush()?;
@@ -1534,6 +1854,57 @@ fn recode_window_section(
         }
         None => Ok((Cow::Borrowed(section), original_compressed)),
     }
+}
+
+/// Computes, from window metadata alone (no I/O), the exact byte size the uncompressed app-header
+/// baseline patch would have if materialized by [`recode_loaded_patch_with_xdelta_options`] with no
+/// secondary compressor. The uncompressed recode keeps every section's length, so each window's size
+/// is fully determined by the parsed metadata. This lets `create` compare the baseline against the
+/// secondary candidates without writing it — a full-patch rewrite that a candidate almost always
+/// makes redundant. `create_xdelta_appheader_baseline_size_matches_materialized` guards the formula
+/// against serialization drift.
+fn measure_appheader_baseline_size(
+    baseline_patch: &LoadedXdeltaRecodePatch,
+    app_header: &[u8],
+) -> Result<u64> {
+    // File header: magic (3) + version (1) + flags (1) + app-header length varint + app-header bytes.
+    // No secondary id is written for the uncompressed baseline.
+    let mut total = checked_add(
+        5,
+        checked_add(
+            varint_len(app_header.len() as u64) as u64,
+            app_header.len() as u64,
+            "app-header baseline file header size",
+        )?,
+        "app-header baseline file header size",
+    )?;
+    for window in &baseline_patch.parsed.windows {
+        let delta_len =
+            recoded_delta_len(window, window.data_len, window.inst_len, window.addr_len)?;
+        // win_indicator (1) + delta length varint + the delta encoding itself.
+        let mut window_len = checked_add(
+            1,
+            checked_add(
+                varint_len(delta_len) as u64,
+                delta_len,
+                "app-header baseline window size",
+            )?,
+            "app-header baseline window size",
+        )?;
+        if window.source_kind.is_some() {
+            window_len = checked_add(
+                window_len,
+                checked_add(
+                    varint_len(window.source_segment_size) as u64,
+                    varint_len(window.source_segment_position) as u64,
+                    "app-header baseline window source size",
+                )?,
+                "app-header baseline window size",
+            )?;
+        }
+        total = checked_add(total, window_len, "app-header baseline size")?;
+    }
+    Ok(total)
 }
 
 fn recoded_delta_len(

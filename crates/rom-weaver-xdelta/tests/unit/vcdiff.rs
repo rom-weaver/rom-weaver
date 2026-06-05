@@ -937,43 +937,6 @@ mod tests {
     }
 
     #[test]
-    fn create_xdelta_patch_mode_auto_fast_skips_secondary_for_high_entropy_input() {
-        let (input, expected) = generated_high_entropy_source_and_target();
-
-        let temp = create_temp_dir();
-        let input_path = temp.join("input.bin");
-        let modified_path = temp.join("modified.bin");
-        let patch_path = temp.join("update.xdelta");
-        fs::write(&input_path, &input).expect("write input");
-        fs::write(&modified_path, &expected).expect("write modified");
-
-        let handler = VcdiffPatchHandler::new(&crate::XDELTA);
-        let report = handler
-            .create(
-                &PatchCreateRequest {
-                    original: input_path,
-                    modified: modified_path,
-                    output: patch_path.clone(),
-                    format: "xdelta".into(),
-                },
-                &test_context_with_threads(8)
-                    .with_xdelta_secondary_mode(rom_weaver_core::XdeltaSecondaryMode::AutoFast),
-            )
-            .expect("create xdelta patch");
-        assert_eq!(report.status, rom_weaver_core::OperationStatus::Succeeded);
-        assert!(
-            !report
-                .thread_execution
-                .expect("thread execution")
-                .used_parallelism
-        );
-
-        let patch = fs::read(&patch_path).expect("read patch");
-        let parsed = parse_patch(&mut Cursor::new(&patch)).expect("parse created patch");
-        assert_eq!(parsed.secondary_compressor_id, None);
-    }
-
-    #[test]
     fn create_vcdiff_patch_from_empty_source_round_trips() {
         let input = Vec::new();
         let expected = b"streamed-from-empty-source".repeat(1024);
@@ -1077,6 +1040,114 @@ mod tests {
         let execution = report.thread_execution.expect("thread execution");
         assert!(!execution.used_parallelism);
         assert_eq!(fs::read(output_path).expect("read output"), expected);
+    }
+
+    #[test]
+    fn create_xdelta_parallel_window_encode_matches_sequential_bytes() {
+        let (input, expected) = generated_large_streaming_source_and_target();
+
+        let temp = create_temp_dir();
+        let input_path = temp.join("input.bin");
+        let modified_path = temp.join("modified.bin");
+        fs::write(&input_path, &input).expect("write input");
+        fs::write(&modified_path, &expected).expect("write modified");
+
+        let handler = VcdiffPatchHandler::new(&crate::XDELTA);
+        let request = |output: &Path| PatchCreateRequest {
+            original: input_path.clone(),
+            modified: modified_path.clone(),
+            output: output.to_path_buf(),
+            format: "xdelta".into(),
+        };
+
+        let sequential_path = temp.join("sequential.xdelta");
+        let sequential_report = handler
+            .create(&request(&sequential_path), &test_context_with_threads(1))
+            .expect("create sequential xdelta patch");
+        assert!(
+            !sequential_report
+                .thread_execution
+                .expect("sequential thread execution")
+                .used_parallelism
+        );
+
+        let parallel_path = temp.join("parallel.xdelta");
+        let parallel_report = handler
+            .create(&request(&parallel_path), &test_context_with_threads(4))
+            .expect("create parallel xdelta patch");
+        let parallel_execution = parallel_report
+            .thread_execution
+            .expect("parallel thread execution");
+        assert!(
+            parallel_execution.used_parallelism,
+            "multi-window create with a multi-thread budget should fan the window diff out"
+        );
+        assert!(parallel_execution.effective_threads >= 2);
+
+        let sequential_bytes = fs::read(&sequential_path).expect("read sequential patch");
+        let parallel_bytes = fs::read(&parallel_path).expect("read parallel patch");
+        assert_eq!(
+            sequential_bytes, parallel_bytes,
+            "parallel window encode must produce byte-identical output to the sequential encode"
+        );
+
+        let parsed = parse_patch(&mut Cursor::new(&parallel_bytes)).expect("parse parallel patch");
+        assert!(parsed.windows.len() >= 2);
+
+        let output_path = temp.join("output.bin");
+        handler
+            .apply(
+                &PatchApplyRequest {
+                    input: input_path,
+                    patches: vec![parallel_path],
+                    output: output_path.clone(),
+                },
+                &test_context_with_threads(4),
+            )
+            .expect("apply parallel xdelta patch");
+        assert_eq!(fs::read(output_path).expect("read output"), expected);
+    }
+
+    #[test]
+    fn create_xdelta_appheader_baseline_size_matches_materialized() {
+        let (input, expected) = generated_large_streaming_source_and_target();
+
+        let temp = create_temp_dir();
+        let input_path = temp.join("input.bin");
+        let modified_path = temp.join("modified.bin");
+        fs::write(&input_path, &input).expect("write input");
+        fs::write(&modified_path, &expected).expect("write modified");
+
+        let baseline_raw_path = temp.join("baseline-raw.xdelta");
+        encode_patch_with_native_streaming(
+            &input_path,
+            &modified_path,
+            &baseline_raw_path,
+            create_native_compress_options(&crate::XDELTA, true),
+        )
+        .expect("encode baseline raw");
+        let loaded = load_patch_for_xdelta_recode(&baseline_raw_path).expect("load baseline raw");
+        assert!(
+            loaded.parsed.windows.len() >= 2,
+            "expected a multi-window baseline for the size check"
+        );
+        let app_header = build_default_xdelta_app_header(&input_path, &modified_path);
+
+        let materialized_path = temp.join("baseline-appheader.xdelta");
+        let materialized = recode_loaded_patch_with_xdelta_options(
+            &loaded,
+            &materialized_path,
+            None,
+            Some(&app_header),
+            None,
+        )
+        .expect("materialize app-header baseline");
+        let measured =
+            measure_appheader_baseline_size(&loaded, &app_header).expect("measure app-header baseline");
+        assert_eq!(
+            measured, materialized.size,
+            "analytic app-header baseline size must match the materialized file size"
+        );
     }
 
     #[test]
@@ -1708,30 +1779,6 @@ mod tests {
         }
 
         source[128_000..128_000 + b"SOURCE-ONLY-DATA".len()].copy_from_slice(b"SOURCE-ONLY-DATA");
-
-        (source, target)
-    }
-
-    fn generated_high_entropy_source_and_target() -> (Vec<u8>, Vec<u8>) {
-        let len = 2 * 1024 * 1024;
-        let mut state = 0xA5A5_5A5A_DEAD_BEEFu64;
-        let mut source = Vec::with_capacity(len);
-        for _ in 0..len {
-            state ^= state >> 12;
-            state ^= state << 25;
-            state ^= state >> 27;
-            let value = state.wrapping_mul(0x2545_F491_4F6C_DD1Du64);
-            source.push((value >> 56) as u8);
-        }
-        let mut target = Vec::with_capacity(len);
-        state = 0x1234_5678_9ABC_DEF0u64;
-        for _ in 0..len {
-            state ^= state >> 12;
-            state ^= state << 25;
-            state ^= state >> 27;
-            let value = state.wrapping_mul(0x2545_F491_4F6C_DD1Du64);
-            target.push((value >> 56) as u8);
-        }
 
         (source, target)
     }

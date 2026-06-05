@@ -15,7 +15,6 @@ pub enum PatchChecksumValidation {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum XdeltaSecondaryMode {
     Auto,
-    AutoFast,
     Djw,
     Fgk,
     #[default]
@@ -27,7 +26,6 @@ impl fmt::Display for XdeltaSecondaryMode {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Auto => formatter.write_str("auto"),
-            Self::AutoFast => formatter.write_str("auto-fast"),
             Self::Djw => formatter.write_str("djw"),
             Self::Fgk => formatter.write_str("fgk"),
             Self::Lzma => formatter.write_str("lzma"),
@@ -42,13 +40,12 @@ impl FromStr for XdeltaSecondaryMode {
     fn from_str(value: &str) -> Result<Self> {
         match value.trim().to_ascii_lowercase().as_str() {
             "auto" => Ok(Self::Auto),
-            "auto-fast" => Ok(Self::AutoFast),
             "djw" => Ok(Self::Djw),
             "fgk" => Ok(Self::Fgk),
             "lzma" => Ok(Self::Lzma),
             "none" => Ok(Self::None),
             _ => Err(RomWeaverError::Validation(format!(
-                "invalid xdelta secondary mode `{value}`; expected one of: auto, auto-fast, lzma, djw, fgk, none"
+                "invalid xdelta secondary mode `{value}`; expected one of: auto, lzma, djw, fgk, none"
             ))),
         }
     }
