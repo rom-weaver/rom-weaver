@@ -20,6 +20,11 @@ declare global {
     };
     ROM_WEAVER_BROWSER_DIAGNOSTICS?: import("./browser-runtime-diagnostics.ts").BrowserRuntimeDiagnosticsApi;
     ROM_WEAVER_MOBILE_SAFARI_DIAGNOSTICS?: import("./browser-runtime-diagnostics.ts").BrowserRuntimeDiagnosticsApi;
+    ROM_WEAVER_SERVICE_WORKER?: {
+      forceCacheAndReload: () => Promise<boolean>;
+      getState: () => import("./pwa/service-worker-cache-state.ts").ServiceWorkerCacheState;
+      refreshCacheVersion: () => void;
+    };
     __ROM_WEAVER_ERUDA_INITIALIZED__?: boolean;
     eruda?: {
       init: () => void;

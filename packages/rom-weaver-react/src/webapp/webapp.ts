@@ -133,6 +133,14 @@ const serviceWorkerClient = createPwaServiceWorkerClient({
   window: typeof window === "undefined" ? undefined : window,
 });
 
+if (typeof window !== "undefined") {
+  window.ROM_WEAVER_SERVICE_WORKER = {
+    forceCacheAndReload: () => serviceWorkerClient.forceCacheAndReload(),
+    getState: () => serviceWorkerClient.getState(),
+    refreshCacheVersion: () => serviceWorkerClient.refreshCacheVersion(),
+  };
+}
+
 if (FORCE_HTTPS_HOSTS.indexOf(location.hostname) !== -1 && location.protocol === "http:")
   location.href = window.location.href.replace("http:", "https:");
 else serviceWorkerClient.initialize();

@@ -7,7 +7,8 @@ const SOURCE_OR_NODE_MODULES_PATH_REGEX = /\/(src|node_modules)\//;
 const SOURCE_MODULE_EXTENSION_REGEX = /\.(?:[cm]?js|jsx|ts|tsx|css)$/i;
 
 import { cacheNames, setCacheNameDetails } from "workbox-core";
-import { cleanupOutdatedCaches, matchPrecache, precacheAndRoute } from "workbox-precaching";
+import type { WorkboxPlugin } from "workbox-core/types.js";
+import { addPlugins, cleanupOutdatedCaches, matchPrecache, precacheAndRoute } from "workbox-precaching";
 import { registerRoute } from "workbox-routing";
 import { APP_BUILD_VERSION, RESOLVED_APP_BUILD_VERSION } from "./build-version.ts";
 
@@ -43,7 +44,18 @@ setCacheNameDetails({
 
 const PRECACHE_NAME = cacheNames.precache;
 const RUNTIME_CACHE_NAME = cacheNames.runtime;
+const SW_LOG_PREFIX = "[rom-weaver-sw]";
 let coepCredentialless = true;
+
+const logServiceWorker = (message: string, details?: Record<string, unknown>) => {
+  if (details) console.info(SW_LOG_PREFIX, message, details);
+  else console.info(SW_LOG_PREFIX, message);
+};
+
+const formatError = (error: unknown) => {
+  if (error instanceof Error) return `${error.name}: ${error.message}`;
+  return String(error);
+};
 
 const isSameOriginRequest = (url: URL) => url.origin === self.location.origin;
 
@@ -90,6 +102,12 @@ const withCrossOriginIsolationHeaders = (response: Response | undefined | null) 
   });
 };
 
+const crossOriginIsolationPrecachePlugin: WorkboxPlugin = {
+  async handlerWillRespond({ response }) {
+    return withCrossOriginIsolationHeaders(response) || response;
+  },
+};
+
 const toCredentiallessNoCorsRequest = (request: Request) => {
   if (!coepCredentialless || request.mode !== "no-cors") return request;
   return new Request(request, { credentials: "omit" });
@@ -124,16 +142,35 @@ registerRoute(
   async ({ request, url }) => {
     try {
       return await fetchAndUpdateCache(request);
-    } catch (_err) {
-      return (await matchCachedResponse(request, url)) || Response.error();
+    } catch (err) {
+      const cachedResponse = await matchCachedResponse(request, url);
+      logServiceWorker("network-first request failed", {
+        cached: Boolean(cachedResponse),
+        error: formatError(err),
+        mode: request.mode,
+        url: url.href,
+      });
+      return cachedResponse || Response.error();
     }
   },
 );
 
+logServiceWorker("script initialized", {
+  coepCredentialless,
+  precacheName: PRECACHE_NAME,
+  precacheVersion: PRECACHE_VERSION,
+  runtimeCacheName: RUNTIME_CACHE_NAME,
+});
+
+addPlugins([crossOriginIsolationPrecachePlugin]);
 precacheAndRoute(self.__WB_MANIFEST);
 cleanupOutdatedCaches();
 
 self.addEventListener("install", () => {
+  logServiceWorker("install event; calling skipWaiting", {
+    precacheName: PRECACHE_NAME,
+    precacheVersion: PRECACHE_VERSION,
+  });
   self.skipWaiting();
 });
 
@@ -147,8 +184,22 @@ self.addEventListener("activate", (event) => {
             cacheName.startsWith(`precache-${PRECACHE_ID}-`) && !cacheName.endsWith(`-${PRECACHE_VERSION}`),
         ),
       )
-      .then((cachesToDelete) => Promise.all(cachesToDelete.map((cacheName) => caches.delete(cacheName))))
-      .then(() => self.clients.claim()),
+      .then((cachesToDelete) => {
+        logServiceWorker("activate event; deleting old precaches", {
+          cachesToDelete,
+          count: cachesToDelete.length,
+          precacheVersion: PRECACHE_VERSION,
+        });
+        return Promise.all(cachesToDelete.map((cacheName) => caches.delete(cacheName)));
+      })
+      .then(() => self.clients.claim())
+      .then(() => {
+        logServiceWorker("activate event; clients claimed", {
+          coepCredentialless,
+          precacheName: PRECACHE_NAME,
+          runtimeCacheName: RUNTIME_CACHE_NAME,
+        });
+      }),
   );
 });
 
@@ -156,12 +207,16 @@ self.addEventListener("message", (event) => {
   if (!event.data) return;
 
   if (event.data.action === "skip-waiting") {
+    logServiceWorker("message received; calling skipWaiting");
     self.skipWaiting();
     return;
   }
 
   if (event.data.action === COI_COEP_CREDENTIALLESS_ACTION) {
     coepCredentialless = event.data.value !== false;
+    logServiceWorker("message received; updated COEP mode", {
+      coepCredentialless,
+    });
     return;
   }
 
@@ -174,6 +229,7 @@ self.addEventListener("message", (event) => {
     precacheVersion: PRECACHE_VERSION,
   };
 
+  logServiceWorker("message received; reporting cache version", response);
   if (event.ports?.[0]) event.ports[0].postMessage(response);
   else if (event.source && "postMessage" in event.source) event.source.postMessage(response);
 });

@@ -41,13 +41,15 @@ const MIME_TYPES = {
   ".webp": "image/webp",
 };
 
-const SECURITY_HEADERS = {
+const BASE_SECURITY_HEADERS = {
   "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+  Expires: "0",
+  Pragma: "no-cache",
+};
+const CROSS_ORIGIN_ISOLATION_HEADERS = {
   "Cross-Origin-Embedder-Policy": "require-corp",
   "Cross-Origin-Opener-Policy": "same-origin",
   "Cross-Origin-Resource-Policy": "same-origin",
-  Expires: "0",
-  Pragma: "no-cache",
 };
 
 const parseArguments = (argv) => {
@@ -55,6 +57,7 @@ const parseArguments = (argv) => {
   const options = {
     host: process.env.HOST || "0.0.0.0",
     mode: "dev",
+    noCoopCoep: false,
     open: false,
     port: null,
   };
@@ -84,6 +87,10 @@ const parseArguments = (argv) => {
       options.open = true;
       continue;
     }
+    if (arg === "--no-coop-coep") {
+      options.noCoopCoep = true;
+      continue;
+    }
     if (arg === "--help" || arg === "-h") {
       options.help = true;
       continue;
@@ -99,17 +106,25 @@ const parseArguments = (argv) => {
 };
 
 const printUsage = () => {
-  console.log("Usage: node scripts/dev-server.mjs [dev|preview] [--host 0.0.0.0] [--port 5173] [--open]");
+  console.log(
+    "Usage: node scripts/dev-server.mjs [dev|preview] [--host 0.0.0.0] [--port 5173] [--open] [--no-coop-coep]",
+  );
 };
 
-const setSecurityHeaders = (res) => {
-  for (const name of Object.keys(SECURITY_HEADERS)) {
-    res.setHeader(name, SECURITY_HEADERS[name]);
+const getSecurityHeaders = ({ crossOriginIsolation = true } = {}) => ({
+  ...BASE_SECURITY_HEADERS,
+  ...(crossOriginIsolation ? CROSS_ORIGIN_ISOLATION_HEADERS : {}),
+});
+
+const setSecurityHeaders = (res, options) => {
+  const headers = getSecurityHeaders(options);
+  for (const name of Object.keys(headers)) {
+    res.setHeader(name, headers[name]);
   }
 };
 
-const send = (res, status, headers, body) => {
-  setSecurityHeaders(res);
+const send = (res, status, headers, body, securityOptions) => {
+  setSecurityHeaders(res, securityOptions);
   res.writeHead(status, headers || {});
   res.end(body);
 };
@@ -215,9 +230,9 @@ const getRedirectHost = (req, port) => {
   return hostHeader;
 };
 
-const handleRedirect = (req, res, port) => {
+const handleRedirect = (req, res, port, securityOptions) => {
   if (req.method !== "GET" && req.method !== "HEAD") {
-    send(res, 405, { Allow: "GET, HEAD" }, "Method Not Allowed");
+    send(res, 405, { Allow: "GET, HEAD" }, "Method Not Allowed", securityOptions);
     return;
   }
   const location = `https://${getRedirectHost(req, port)}${req.url || "/"}`;
@@ -230,6 +245,7 @@ const handleRedirect = (req, res, port) => {
       Location: location,
     },
     req.method === "HEAD" ? null : `Redirecting to ${location}\n`,
+    securityOptions,
   );
 };
 
@@ -334,19 +350,21 @@ const openBrowser = (targetUrl) => {
   child.unref();
 };
 
-const printUrls = (title, port, lanAddresses, certificatePath) => {
+const printUrls = (title, port, lanAddresses, certificatePath, { crossOriginIsolation = true } = {}) => {
   console.log(title);
   console.log(`  https://localhost:${port}/`);
   for (const address of lanAddresses) {
     console.log(`  https://${address}:${port}/`);
   }
   console.log(`Plain HTTP on port ${port} redirects to HTTPS on the same port.`);
+  if (!crossOriginIsolation) console.log("COOP/COEP/CORP headers disabled; service worker must provide them.");
   console.log(`Self-signed certificate: ${certificatePath}`);
 };
 
 const startDevServer = async (options) => {
   const lanAddresses = getLanAddresses();
   const certificate = ensureCertificate(lanAddresses);
+  const securityOptions = { crossOriginIsolation: !options.noCoopCoep };
   let viteServer = null;
   const httpsServer = https.createServer(
     {
@@ -354,16 +372,22 @@ const startDevServer = async (options) => {
       key: certificate.key,
     },
     (req, res) => {
-      setSecurityHeaders(res);
+      setSecurityHeaders(res, securityOptions);
       if (!viteServer) {
-        send(res, 503, { "Content-Type": "text/plain; charset=utf-8" }, "Vite dev server is starting");
+        send(
+          res,
+          503,
+          { "Content-Type": "text/plain; charset=utf-8" },
+          "Vite dev server is starting",
+          securityOptions,
+        );
         return;
       }
       viteServer.middlewares(req, res);
     },
   );
   const httpRedirectServer = http.createServer((req, res) => {
-    handleRedirect(req, res, options.port);
+    handleRedirect(req, res, options.port, securityOptions);
   });
   const portMuxServer = createPortMuxServer(httpsServer, httpRedirectServer);
 
@@ -373,7 +397,7 @@ const startDevServer = async (options) => {
       configFile: path.join(ROOT_DIR, "vite.config.mjs"),
       root: ROOT_DIR,
       server: {
-        headers: SECURITY_HEADERS,
+        headers: getSecurityHeaders(securityOptions),
         hmr: {
           protocol: "wss",
           server: httpsServer,
@@ -391,7 +415,7 @@ const startDevServer = async (options) => {
     throw err;
   }
   installShutdown([portMuxServer, httpsServer, httpRedirectServer], viteServer);
-  printUrls("RomWeaver React Vite dev server:", options.port, lanAddresses, certificate.paths.cert);
+  printUrls("RomWeaver React Vite dev server:", options.port, lanAddresses, certificate.paths.cert, securityOptions);
   if (options.open) openBrowser(getLocalUrl(options.port));
 };
 
@@ -466,9 +490,9 @@ const readPreviewBrotliFile = (resolvedPath, sourceData, req, callback) => {
   });
 };
 
-const handlePreviewRequest = (distDir, req, res) => {
+const handlePreviewRequest = (distDir, req, res, securityOptions) => {
   if (req.method !== "GET" && req.method !== "HEAD") {
-    send(res, 405, { Allow: "GET, HEAD" }, "Method Not Allowed");
+    send(res, 405, { Allow: "GET, HEAD" }, "Method Not Allowed", securityOptions);
     return;
   }
 
@@ -476,12 +500,12 @@ const handlePreviewRequest = (distDir, req, res) => {
   try {
     filePath = resolveDistRequestPath(distDir, req.url);
   } catch (_err) {
-    send(res, 400, { "Content-Type": "text/plain; charset=utf-8" }, "Bad Request");
+    send(res, 400, { "Content-Type": "text/plain; charset=utf-8" }, "Bad Request", securityOptions);
     return;
   }
 
   if (!filePath) {
-    send(res, 403, { "Content-Type": "text/plain; charset=utf-8" }, "Forbidden");
+    send(res, 403, { "Content-Type": "text/plain; charset=utf-8" }, "Forbidden", securityOptions);
     return;
   }
 
@@ -490,7 +514,7 @@ const handlePreviewRequest = (distDir, req, res) => {
   const allowFallback = acceptHeader.includes("text/html") || !path.extname(filePath);
   readPreviewFile(filePath, fallbackPath, allowFallback, (readError, resolvedPath, data) => {
     if (readError) {
-      send(res, 404, { "Content-Type": "text/plain; charset=utf-8" }, "Not Found");
+      send(res, 404, { "Content-Type": "text/plain; charset=utf-8" }, "Not Found", securityOptions);
       return;
     }
     readPreviewBrotliFile(resolvedPath, data, req, (_brotliError, brotliFile) => {
@@ -505,6 +529,7 @@ const handlePreviewRequest = (distDir, req, res) => {
           ...(encoded ? { "Content-Encoding": "br", Vary: "Accept-Encoding" } : {}),
         },
         req.method === "HEAD" ? null : encoded ? brotliFile.data : data,
+        securityOptions,
       );
     });
   });
@@ -517,23 +542,24 @@ const startPreviewServer = async (options) => {
 
   const lanAddresses = getLanAddresses();
   const certificate = ensureCertificate(lanAddresses);
+  const securityOptions = { crossOriginIsolation: !options.noCoopCoep };
   const httpsServer = https.createServer(
     {
       cert: certificate.cert,
       key: certificate.key,
     },
     (req, res) => {
-      handlePreviewRequest(distDir, req, res);
+      handlePreviewRequest(distDir, req, res, securityOptions);
     },
   );
   const httpRedirectServer = http.createServer((req, res) => {
-    handleRedirect(req, res, options.port);
+    handleRedirect(req, res, options.port, securityOptions);
   });
   const portMuxServer = createPortMuxServer(httpsServer, httpRedirectServer);
 
   await listen(portMuxServer, options.port, options.host);
   installShutdown([portMuxServer, httpsServer, httpRedirectServer], null);
-  printUrls("RomWeaver React Vite preview server:", options.port, lanAddresses, certificate.paths.cert);
+  printUrls("RomWeaver React Vite preview server:", options.port, lanAddresses, certificate.paths.cert, securityOptions);
   if (options.open) openBrowser(getLocalUrl(options.port));
 };
 
