@@ -18,6 +18,8 @@ import type { LogLevel } from "../../types/logging.ts";
 import type { CompressionListResult } from "../../types/workflow-runtime.ts";
 import type {
   RuntimePatchApplyWorkerInput,
+  RuntimePatchCreateCandidatesWorkerInput,
+  RuntimePatchCreateFormatCandidates,
   RuntimePatchCreateWorkerInput,
   RuntimePatchValidateWorkerInput,
   RuntimePatchWorkerProgress,
@@ -1161,6 +1163,74 @@ const invokeRomWeaverPatchApplyWorker = async (
   };
 };
 
+const readPatchCreateFormatCandidates = (result: RomWeaverRunJsonResult): RuntimePatchCreateFormatCandidates => {
+  const terminal = getTerminalEvent(result);
+  const details = asRecord(terminal ? getRomWeaverRunEventDetails(terminal) : null);
+  const candidates = asRecord(details?.patch_create_format_candidates);
+  const rawFormats = Array.isArray(candidates?.formats) ? candidates.formats : [];
+  const formats = rawFormats
+    .map((value) => (typeof value === "string" ? value.trim().toLowerCase() : ""))
+    .filter((value) => !!value);
+  const defaultFormat =
+    (typeof candidates?.default === "string" ? candidates.default.trim().toLowerCase() : "") ||
+    (terminal ? String(getRomWeaverRunEventFormat(terminal) || "").trim().toLowerCase() : "") ||
+    formats[0] ||
+    "bps";
+  const rawLimits = asRecord(candidates?.limits);
+  const limits: Record<string, number> = {};
+  if (rawLimits) {
+    for (const [key, value] of Object.entries(rawLimits)) {
+      if (typeof value === "number" && Number.isFinite(value)) limits[key] = value;
+    }
+  }
+  return {
+    defaultFormat,
+    formats: formats.length ? formats : [defaultFormat],
+    ...(Object.keys(limits).length ? { limits } : {}),
+    ...(asRecord(candidates?.source_values) ? { sourceValues: asRecord(candidates?.source_values) || undefined } : {}),
+  };
+};
+
+const invokeRomWeaverCreatePatchCandidatesWorker = async (
+  input: RuntimePatchCreateCandidatesWorkerInput,
+  onProgress?: (progress: RuntimePatchWorkerProgress) => void,
+  onLog?: (log: WorkflowRuntimeLog) => void,
+): Promise<RuntimePatchCreateFormatCandidates> => {
+  const threadArg = toThreadBudget(input.workerThreads);
+  const command: RomWeaverCommand = {
+    args: {
+      args: {
+        modified: input.modifiedFilePath,
+        original: input.originalFilePath,
+        ...(threadArg ? { threads: threadArg } : {}),
+      },
+      type: "create-candidates",
+    },
+    type: "patch",
+  };
+  emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson patch-create-candidates dispatch", {
+    command,
+    modifiedFileName: input.modifiedFileName,
+    modifiedFilePath: input.modifiedFilePath,
+    originalFileName: input.originalFileName,
+    originalFilePath: input.originalFilePath,
+    threadArg,
+  });
+  const result = await runRomWeaverJson(
+    command,
+    toRomWeaverOptions({
+      logLevel: input.logLevel,
+      onEvent: (event) => {
+        const progress = toSimpleProgress(event);
+        if (progress) onProgress?.(progress);
+      },
+      onLog,
+    }),
+  );
+  ensureRomWeaverSuccess(result, "Patch create candidate selection failed");
+  return readPatchCreateFormatCandidates(result);
+};
+
 const invokeRomWeaverCreatePatchWorker = async (
   input: RuntimePatchCreateWorkerInput,
   onProgress?: (progress: RuntimePatchWorkerProgress) => void,
@@ -1404,6 +1474,7 @@ const runRomWeaverChecksumWorker = async (
 
 export {
   invokeRomWeaverCompressionCreateWorker,
+  invokeRomWeaverCreatePatchCandidatesWorker,
   invokeRomWeaverCreatePatchWorker,
   invokeRomWeaverExtractWorker,
   invokeRomWeaverPatchApplyWorker,

@@ -217,6 +217,22 @@ type RuntimePatchCreateWorkerInput = {
   workerThreads?: number | string | null;
 };
 
+type RuntimePatchCreateCandidatesWorkerInput = {
+  logLevel?: LogLevel;
+  modifiedFileName: string;
+  modifiedFilePath: string;
+  originalFileName: string;
+  originalFilePath: string;
+  workerThreads?: number | string | null;
+};
+
+type RuntimePatchCreateFormatCandidates = {
+  defaultFormat: string;
+  formats: string[];
+  limits?: Record<string, number>;
+  sourceValues?: Record<string, unknown>;
+};
+
 type RuntimeTrimWorkerInput = {
   extension?: string;
   logLevel?: LogLevel;
@@ -315,6 +331,14 @@ type WorkflowRuntimePatch = {
     onLog?: (log: WorkflowRuntimeLog) => void;
     onProgress?: (progress: WorkflowCreatePatchProgress) => void;
   }) => Promise<CreatePatchResult>;
+  createPatchCandidates?: (input: {
+    original: SourceRef;
+    modified: SourceRef;
+    workerThreads?: number | string | null;
+    logLevel?: LogLevel;
+    onLog?: (log: WorkflowRuntimeLog) => void;
+    onProgress?: (progress: WorkflowCreatePatchProgress) => void;
+  }) => Promise<RuntimePatchCreateFormatCandidates>;
 };
 
 type WorkflowRuntimeTrim = {
@@ -404,6 +428,8 @@ export type {
   RuntimeDiscHooks,
   RuntimeDiscProgress,
   RuntimePatchApplyWorkerInput,
+  RuntimePatchCreateCandidatesWorkerInput,
+  RuntimePatchCreateFormatCandidates,
   RuntimePatchCreateWorkerInput,
   RuntimePatchValidateWorkerInput,
   RuntimePatchWorkerProgress,

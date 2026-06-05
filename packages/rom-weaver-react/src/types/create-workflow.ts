@@ -21,6 +21,8 @@ type CreateWorkflowSourceState = {
   selectedCandidateId?: string;
   size?: number;
   sourceSize?: number;
+  checksums?: Record<string, string>;
+  checksumTimeMs?: number;
   decompressionTimeMs?: number;
   wasDecompressed?: boolean;
   warnings: WorkflowWarning[];

@@ -9,6 +9,8 @@ import type {
   RuntimeDiscExtractRvzInput,
   RuntimeDiscExtractZ3dsInput,
   RuntimePatchApplyWorkerInput,
+  RuntimePatchCreateCandidatesWorkerInput,
+  RuntimePatchCreateFormatCandidates,
   RuntimePatchCreateWorkerInput,
   RuntimePatchValidateWorkerInput,
   RuntimePatchWorkerProgress,
@@ -72,6 +74,11 @@ type PatchRuntimeAdapter = {
     onProgress: ((progress: RuntimePatchWorkerProgress) => void) | undefined,
     onLog: Parameters<NonNullable<WorkflowRuntime["patch"]["createPatch"]>>[0]["onLog"],
   ) => Promise<Parameters<RuntimeWorkerIo["createWorkerOutput"]>[0]>;
+  invokeCreatePatchCandidatesWorker: (
+    input: RuntimePatchCreateCandidatesWorkerInput,
+    onProgress: ((progress: RuntimePatchWorkerProgress) => void) | undefined,
+    onLog: Parameters<NonNullable<WorkflowRuntime["patch"]["createPatchCandidates"]>>[0]["onLog"],
+  ) => Promise<RuntimePatchCreateFormatCandidates>;
   invokeValidatePatchWorker: (
     input: RuntimePatchValidateWorkerInput,
     onProgress: ((progress: RuntimePatchWorkerProgress) => void) | undefined,
@@ -305,6 +312,45 @@ const createSharedPatchRuntime = (adapter: PatchRuntimeAdapter): WorkflowRuntime
         format,
         output: await adapter.workerIo.createWorkerOutput(result, outputName, adapter.workerOutputFailureMessage),
       };
+    } finally {
+      await cleanupWorkerSources(workerSources);
+    }
+  },
+  createPatchCandidates: async ({ original, modified, workerThreads, logLevel, onLog, onProgress }) => {
+    const traceContext = { logLevel, onLog };
+    const workerSources = await adapter.workerIo.stageSources([
+      {
+        fallbackFileName: "original.bin",
+        pathBucket: "input",
+        pathPrefix: "create-patch-candidates-original",
+        scope: "create-patch",
+        source: original,
+        trace: traceContext,
+      },
+      {
+        fallbackFileName: "modified.bin",
+        pathBucket: "input",
+        pathPrefix: "create-patch-candidates-modified",
+        scope: "create-patch",
+        source: modified,
+        trace: traceContext,
+      },
+    ]);
+    try {
+      const [originalSource, modifiedSource] = workerSources;
+      if (!(originalSource && modifiedSource)) throw new Error("Create patch candidate inputs were not staged");
+      return await adapter.invokeCreatePatchCandidatesWorker(
+        {
+          logLevel,
+          modifiedFileName: modifiedSource.fileName,
+          modifiedFilePath: modifiedSource.filePath,
+          originalFileName: originalSource.fileName,
+          originalFilePath: originalSource.filePath,
+          workerThreads: workerThreads ?? undefined,
+        },
+        onProgress ? forwardCreatePatchProgress(onProgress) : undefined,
+        onLog,
+      );
     } finally {
       await cleanupWorkerSources(workerSources);
     }

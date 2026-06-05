@@ -32,7 +32,7 @@ type RuntimeCompressionEntryInput = {
 };
 
 type ProgressEvent = {
-  stage: "input" | "apply" | "output";
+  stage: "input" | "apply" | "create" | "output";
   label: string;
   message?: string;
   percent?: number | null;

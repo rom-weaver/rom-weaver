@@ -30,7 +30,7 @@ const FILE_QUERY_OR_HASH_REGEX = /[?#].*$/;
 type JsonObject = { [key: string]: JsonValue };
 type CreateSourceInput = PatchFileInstance | SourceRef;
 
-const getCreateFormat = (options: CreatePatchInput["options"]) => options?.format || "ips";
+const getCreateFormat = (options: CreatePatchInput["options"]) => options?.format || "bps";
 const getCreateLogLevel = (options: CreatePatchInput["options"]) => options?.logging?.level;
 const getCreateWorkerThreads = (options: CreatePatchInput["options"]) => options?.workers?.threads;
 const getCreateMetadata = (options: CreatePatchInput["options"]): JsonObject =>
@@ -150,22 +150,24 @@ const runCreateWorkflow = async (
   const createPatchCapability = runtime.patch.createPatch;
   const shouldUseWorkerCreate = !!createPatchCapability;
   const original = await prepareCreateSource(input.original, "original", input.selectedOriginalEntryName);
-  const requestedFileName =
-    getCreateOutputName(options) ||
-    deps.getDefaultCreatePatchOutputFileName(getCreateSourceFileName(original, "original.bin", deps), format);
-  const compression = getArchiveOutputCompression(getCreateCompression(options), "create patch");
-  const rawPatchFileName =
-    compression !== "none" && deps.hasArchiveFileName(requestedFileName, compression)
-      ? deps.getDefaultCreatePatchOutputFileName(getCreateSourceFileName(original, "original.bin", deps), format)
-      : requestedFileName;
 
   if (shouldUseWorkerCreate) {
     deps.reportProgress(options, {
       label: "Creating patch...",
       percent: null,
-      stage: "apply",
+      stage: "create",
     });
     const modified = await prepareCreateSource(input.modified, "modified", input.selectedModifiedEntryName);
+    const defaultPatchFileName = deps.getDefaultCreatePatchOutputFileName(
+      getCreateSourceFileName(modified, "modified.bin", deps),
+      format,
+    );
+    const requestedFileName = getCreateOutputName(options) || defaultPatchFileName;
+    const compression = getArchiveOutputCompression(getCreateCompression(options), "create patch");
+    const rawPatchFileName =
+      compression !== "none" && deps.hasArchiveFileName(requestedFileName, compression)
+        ? defaultPatchFileName
+        : requestedFileName;
     const result = await traceWorkflowStageBlock(
       options,
       "create",
@@ -181,7 +183,7 @@ const runCreateWorkflow = async (
             deps.reportProgress(options, {
               label: typeof progress.label === "string" && progress.label ? progress.label : "Creating patch...",
               percent: getProgressEventPercent(progress),
-              stage: "apply",
+              stage: "create",
             }),
           original: original as SourceRef,
           outputName: rawPatchFileName,

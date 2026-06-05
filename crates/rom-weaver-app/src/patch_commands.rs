@@ -1,5 +1,274 @@
+const CREATE_PATCH_IPS_SIZE_LIMIT_BYTES: u64 = 16 * 1024 * 1024;
+const CREATE_PATCH_ARCHIVE_DEFAULT_LIMIT_BYTES: u64 = 64 * 1024 * 1024;
+const CREATE_PATCH_BPS_DEFAULT_LIMIT_BYTES: u64 = 128 * 1024 * 1024;
+const CREATE_PATCH_LEGACY_SIZE_LIMIT_BYTES: u64 = 256 * 1024 * 1024;
+
+const SMALL_CREATE_PATCH_FORMATS: &[&str] = &[
+    "bps", "xdelta", "aps", "bdf", "ebp", "ips", "pmsr", "ppf", "rup", "ups",
+];
+const MEDIUM_CREATE_PATCH_FORMATS: &[&str] =
+    &["bps", "xdelta", "aps", "bdf", "pmsr", "ppf", "rup", "ups"];
+const MID_LARGE_CREATE_PATCH_FORMATS: &[&str] =
+    &["xdelta", "bps", "aps", "bdf", "pmsr", "ppf", "rup", "ups"];
+const LARGE_CREATE_PATCH_FORMATS: &[&str] = &["xdelta", "ppf"];
+const CREATE_PATCH_ARCHIVE_DEFAULT_EXTENSIONS: &[&str] = &[
+    ".7z",
+    ".apk",
+    ".br",
+    ".brotli",
+    ".bz2",
+    ".bzip2",
+    ".cbz",
+    ".epub",
+    ".gz",
+    ".gzip",
+    ".jar",
+    ".lz",
+    ".lz4",
+    ".lz5",
+    ".lzip",
+    ".lzma",
+    ".r00",
+    ".rar",
+    ".tar",
+    ".tar.br",
+    ".tar.brotli",
+    ".tar.bz2",
+    ".tar.gz",
+    ".tar.lz",
+    ".tar.lz4",
+    ".tar.lz5",
+    ".tar.lzip",
+    ".tar.lzma",
+    ".tar.xz",
+    ".tar.zst",
+    ".tar.zstd",
+    ".taz",
+    ".tbz",
+    ".tbz2",
+    ".tbr",
+    ".tgz",
+    ".tlz",
+    ".tlz4",
+    ".tlz5",
+    ".tpz",
+    ".txz",
+    ".tzst",
+    ".tzstd",
+    ".xpi",
+    ".xz",
+    ".z",
+    ".z01",
+    ".zip",
+    ".zipx",
+    ".zst",
+    ".zstd",
+];
+const CREATE_PATCH_SPECIAL_COMPRESSION_EXTENSIONS: &[&str] = &[
+    ".chd", ".rvz", ".gcz", ".wia", ".z3ds", ".z3dsx", ".zcci", ".zcia", ".zcxi",
+];
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct PatchCreateInputSizes {
+    original: u64,
+    modified: u64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct PatchCreateSourceInfo {
+    archive: bool,
+    size: u64,
+    special_compression: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct PatchCreateInputInfo {
+    original: PatchCreateSourceInfo,
+    modified: PatchCreateSourceInfo,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct PatchCreateFormatCandidates {
+    formats: &'static [&'static str],
+    default_format: &'static str,
+}
+
+fn normalize_create_patch_format(format: &str) -> String {
+    let normalized = format.trim().to_ascii_lowercase();
+    match normalized.as_str() {
+        "vcdiff" | "xdelta3" => "xdelta".to_string(),
+        "mod" => "pmsr".to_string(),
+        "bdf/bsdiff40" | "bsdiff" | "bsdiff40" => "bdf".to_string(),
+        other => other.to_string(),
+    }
+}
+
+fn max_create_patch_input_size(sizes: PatchCreateInputSizes) -> u64 {
+    sizes.original.max(sizes.modified)
+}
+
+fn create_patch_input_sizes(info: &PatchCreateInputInfo) -> PatchCreateInputSizes {
+    PatchCreateInputSizes {
+        original: info.original.size,
+        modified: info.modified.size,
+    }
+}
+
+fn create_patch_formats_for_sizes(sizes: PatchCreateInputSizes) -> &'static [&'static str] {
+    let max_size = max_create_patch_input_size(sizes);
+    if max_size > CREATE_PATCH_LEGACY_SIZE_LIMIT_BYTES {
+        return LARGE_CREATE_PATCH_FORMATS;
+    }
+    if max_size >= CREATE_PATCH_BPS_DEFAULT_LIMIT_BYTES {
+        return MID_LARGE_CREATE_PATCH_FORMATS;
+    }
+    if max_size >= CREATE_PATCH_IPS_SIZE_LIMIT_BYTES {
+        return MEDIUM_CREATE_PATCH_FORMATS;
+    }
+    SMALL_CREATE_PATCH_FORMATS
+}
+
+fn create_patch_source_matches_extension(path: &Path, extensions: &[&str]) -> bool {
+    let normalized_path = path.to_string_lossy().to_ascii_lowercase();
+    extensions
+        .iter()
+        .any(|extension| normalized_path.ends_with(extension))
+}
+
+fn create_patch_default_format_for_sources(info: &PatchCreateInputInfo) -> &'static str {
+    let sources = [&info.original, &info.modified];
+    if sources.iter().any(|source| source.special_compression)
+        || sources.iter().any(|source| {
+            source.archive && source.size > CREATE_PATCH_ARCHIVE_DEFAULT_LIMIT_BYTES
+        })
+    {
+        return "xdelta";
+    }
+    if max_create_patch_input_size(create_patch_input_sizes(info)) < CREATE_PATCH_BPS_DEFAULT_LIMIT_BYTES
+    {
+        "bps"
+    } else {
+        "xdelta"
+    }
+}
+
+fn create_patch_format_candidates_for_sources(info: &PatchCreateInputInfo) -> PatchCreateFormatCandidates {
+    PatchCreateFormatCandidates {
+        formats: create_patch_formats_for_sizes(create_patch_input_sizes(info)),
+        default_format: create_patch_default_format_for_sources(info),
+    }
+}
+
+fn create_patch_format_size_error_message(
+    format: &str,
+    sizes: PatchCreateInputSizes,
+) -> Option<String> {
+    let normalized_format = normalize_create_patch_format(format);
+    let max_size = max_create_patch_input_size(sizes);
+    if matches!(normalized_format.as_str(), "ips" | "ips32" | "ebp")
+        && max_size >= CREATE_PATCH_IPS_SIZE_LIMIT_BYTES
+    {
+        return Some(format!(
+            "Create inputs at or above 16 MiB should use BPS, xdelta, or another large-capable patch type; selected patch type: {normalized_format}"
+        ));
+    }
+    if max_size > CREATE_PATCH_LEGACY_SIZE_LIMIT_BYTES
+        && !matches!(normalized_format.as_str(), "xdelta" | "ppf")
+    {
+        return Some(format!(
+            "Create inputs above 256 MiB require xdelta or PPF patches; selected patch type: {normalized_format}"
+        ));
+    }
+    None
+}
+
 /* jscpd:ignore-start */
 impl CliApp {
+    fn inspect_patch_create_input_sizes(
+        &self,
+        command: &str,
+        format: Option<String>,
+        original: &Path,
+        modified: &Path,
+        thread_execution: Option<ThreadExecution>,
+    ) -> std::result::Result<PatchCreateInputSizes, Box<OperationReport>> {
+        let original_size = match fs::metadata(original) {
+            Ok(metadata) => metadata.len(),
+            Err(error) => {
+                return Err(Box::new(OperationReport::failed(
+                    OperationFamily::Patch,
+                    format,
+                    "validate",
+                    format!(
+                        "failed to inspect {command} original input `{}`: {error}",
+                        original.display()
+                    ),
+                    thread_execution,
+                )));
+            }
+        };
+        let modified_size = match fs::metadata(modified) {
+            Ok(metadata) => metadata.len(),
+            Err(error) => {
+                return Err(Box::new(OperationReport::failed(
+                    OperationFamily::Patch,
+                    format,
+                    "validate",
+                    format!(
+                        "failed to inspect {command} modified input `{}`: {error}",
+                        modified.display()
+                    ),
+                    thread_execution,
+                )));
+            }
+        };
+        Ok(PatchCreateInputSizes {
+            original: original_size,
+            modified: modified_size,
+        })
+    }
+
+    fn inspect_patch_create_input_info(
+        &self,
+        command: &str,
+        format: Option<String>,
+        original: &Path,
+        modified: &Path,
+        thread_execution: Option<ThreadExecution>,
+    ) -> std::result::Result<PatchCreateInputInfo, Box<OperationReport>> {
+        let sizes = self.inspect_patch_create_input_sizes(
+            command,
+            format,
+            original,
+            modified,
+            thread_execution,
+        )?;
+        Ok(PatchCreateInputInfo {
+            original: PatchCreateSourceInfo {
+                archive: create_patch_source_matches_extension(
+                    original,
+                    CREATE_PATCH_ARCHIVE_DEFAULT_EXTENSIONS,
+                ),
+                size: sizes.original,
+                special_compression: create_patch_source_matches_extension(
+                    original,
+                    CREATE_PATCH_SPECIAL_COMPRESSION_EXTENSIONS,
+                ),
+            },
+            modified: PatchCreateSourceInfo {
+                archive: create_patch_source_matches_extension(
+                    modified,
+                    CREATE_PATCH_ARCHIVE_DEFAULT_EXTENSIONS,
+                ),
+                size: sizes.modified,
+                special_compression: create_patch_source_matches_extension(
+                    modified,
+                    CREATE_PATCH_SPECIAL_COMPRESSION_EXTENSIONS,
+                ),
+            },
+        })
+    }
+
     fn run_patch_apply(&self, args: PatchApplyCommand) -> AppRunOutcome {
         trace!(
             input = %args.input.display(),
@@ -1494,6 +1763,87 @@ impl CliApp {
         self.finish("patch-validate", report)
     }
 
+    fn run_patch_create_candidates(&self, args: PatchCreateCandidatesCommand) -> AppRunOutcome {
+        trace!(
+            original = %args.original.display(),
+            modified = %args.modified.display(),
+            threads = %args.threads,
+            "starting patch-create-candidates command"
+        );
+        let context = self.context(args.threads);
+        let probe_threads = Some(context.plan_threads(ThreadCapability::single_threaded()));
+        if let Some(report) = self.require_existing_path(
+            "patch-create-candidates",
+            OperationFamily::Patch,
+            None,
+            &args.original,
+            probe_threads.clone(),
+        ) {
+            return self.finish("patch-create-candidates", report);
+        }
+        if let Some(report) = self.require_existing_path(
+            "patch-create-candidates",
+            OperationFamily::Patch,
+            None,
+            &args.modified,
+            probe_threads.clone(),
+        ) {
+            return self.finish("patch-create-candidates", report);
+        }
+        let input_info = match self.inspect_patch_create_input_info(
+            "patch-create-candidates",
+            None,
+            &args.original,
+            &args.modified,
+            probe_threads.clone(),
+        ) {
+            Ok(input_info) => input_info,
+            Err(report) => return self.finish("patch-create-candidates", *report),
+        };
+        let sizes = create_patch_input_sizes(&input_info);
+        let candidates = create_patch_format_candidates_for_sources(&input_info);
+        let formats = candidates.formats.to_vec();
+        let mut report = OperationReport::succeeded(
+            OperationFamily::Patch,
+            Some(candidates.default_format.to_string()),
+            "recommend",
+            format!(
+                "recommended patch create format {}; candidates={}",
+                candidates.default_format,
+                formats.join(",")
+            ),
+            Some(100.0),
+            Some(context.plan_threads(ThreadCapability::single_threaded())),
+        );
+        report.details = Some(json!({
+            "patch_create_format_candidates": {
+                "default": candidates.default_format,
+                "formats": formats,
+                "limits": {
+                    "archive_default_size_bytes": CREATE_PATCH_ARCHIVE_DEFAULT_LIMIT_BYTES,
+                    "bps_default_size_bytes": CREATE_PATCH_BPS_DEFAULT_LIMIT_BYTES,
+                    "ips_size_limit_bytes": CREATE_PATCH_IPS_SIZE_LIMIT_BYTES,
+                    "legacy_size_limit_bytes": CREATE_PATCH_LEGACY_SIZE_LIMIT_BYTES,
+                },
+                "source_values": {
+                    "original": {
+                        "path": args.original.display().to_string(),
+                        "archive": input_info.original.archive,
+                        "size": sizes.original,
+                        "special_compression": input_info.original.special_compression,
+                    },
+                    "modified": {
+                        "path": args.modified.display().to_string(),
+                        "archive": input_info.modified.archive,
+                        "size": sizes.modified,
+                        "special_compression": input_info.modified.special_compression,
+                    },
+                },
+            }
+        }));
+        self.finish("patch-create-candidates", report)
+    }
+
     fn run_patch_create(&self, args: PatchCreateCommand) -> AppRunOutcome {
         trace!(
             original = %args.original.display(),
@@ -1529,10 +1879,11 @@ impl CliApp {
                 PatchChecksumValidation::Strict
             })
             .with_xdelta_secondary_mode(xdelta_secondary_mode);
+        let requested_format = normalize_create_patch_format(&args.format);
         if let Some(report) = self.require_existing_path(
             "patch-create",
             OperationFamily::Patch,
-            Some(args.format.clone()),
+            Some(requested_format.clone()),
             &args.original,
             probe_threads.clone(),
         ) {
@@ -1541,14 +1892,13 @@ impl CliApp {
         if let Some(report) = self.require_existing_path(
             "patch-create",
             OperationFamily::Patch,
-            Some(args.format.clone()),
+            Some(requested_format.clone()),
             &args.modified,
             probe_threads.clone(),
         ) {
             return self.finish("patch-create", report);
         }
 
-        let requested_format = args.format;
         let Some(handler) = self.patches.find_by_name(&requested_format) else {
             let label = explicitly_unsupported_patch_reason_for_name(&requested_format)
                 .map(|reason| {
@@ -1568,6 +1918,30 @@ impl CliApp {
                 ),
             );
         };
+        let sizes = match self.inspect_patch_create_input_sizes(
+            "patch-create",
+            Some(handler.descriptor().name.to_string()),
+            &args.original,
+            &args.modified,
+            probe_threads.clone(),
+        ) {
+            Ok(sizes) => sizes,
+            Err(report) => return self.finish("patch-create", *report),
+        };
+        if let Some(label) =
+            create_patch_format_size_error_message(handler.descriptor().name, sizes)
+        {
+            return self.finish(
+                "patch-create",
+                OperationReport::failed(
+                    OperationFamily::Patch,
+                    Some(handler.descriptor().name.to_string()),
+                    "validate",
+                    label,
+                    probe_threads,
+                ),
+            );
+        }
 
         let request = PatchCreateRequest {
             original: args.original,

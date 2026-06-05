@@ -9,6 +9,7 @@ import type { ApplyResult, CreateResult, TrimResult } from "../../types/public.t
 import type { ApplySettings, CompressionFormat, CreateSettings, WorkerSettings } from "../../types/settings.ts";
 import type { BrowserSourceRef } from "../../types/source.ts";
 import type { TrimWorkflowSourceState } from "../../types/trim-workflow.ts";
+import type { RuntimePatchCreateFormatCandidates } from "../../types/workflow-runtime-adapter.ts";
 import type { WorkflowOptions } from "../../types/workflow-public.ts";
 import { createPublicSourcesValidator, createPublicSourceValidator } from "../shared/public-source-validation.ts";
 import { configureBrowserAssetBaseUrl } from "./browser-asset-base.ts";
@@ -20,6 +21,13 @@ const assertPublicSources = createPublicSourcesValidator<BrowserSourceRef>(
 );
 type BrowserRuntimePreloadOptions = {
   workerThreads?: WorkerSettings["threads"] | null;
+};
+type BrowserCreatePatchFormatCandidatesInput = {
+  assetBaseUrl?: string;
+  original: BrowserSourceRef;
+  modified: BrowserSourceRef;
+  workerThreads?: WorkerSettings["threads"] | null;
+  settings?: Partial<CreateSettings>;
 };
 
 const runtimePreloadKeys = new Set<string>();
@@ -57,6 +65,26 @@ const preloadBrowserRuntime = (options: BrowserRuntimePreloadOptions = {}) => {
       runtimePreloadKeys.delete(preloadKey);
     })
     .then(() => undefined);
+};
+
+const getCreatePatchFormatCandidates = async ({
+  assetBaseUrl,
+  modified,
+  original,
+  settings,
+  workerThreads,
+}: BrowserCreatePatchFormatCandidatesInput): Promise<RuntimePatchCreateFormatCandidates> => {
+  configureBrowserAssetBaseUrl(assetBaseUrl);
+  assertPublicSources([original, modified]);
+  const candidates = await browserRuntime.patch.createPatchCandidates?.({
+    logLevel: settings?.logging?.level,
+    modified,
+    onLog: settings?.logging?.sink,
+    original,
+    workerThreads: workerThreads ?? settings?.workers?.threads,
+  });
+  if (!candidates) throw new Error("Create patch candidate selection is unavailable");
+  return candidates;
 };
 
 abstract class BrowserWorkflowBase<TResult, TController extends BrowserWorkflowController<TResult>> {
@@ -129,10 +157,8 @@ class CreateWorkflow extends BrowserWorkflowBase<
   }
 }
 
-export type {
-  BrowserSaveDestination,
-  PublicOutput,
-} from "../../types/output.ts";
+export type { BrowserSaveDestination, PublicOutput } from "../../types/output.ts";
+export type { BrowserCreatePatchFormatCandidatesInput, RuntimePatchCreateFormatCandidates };
 export type { ProgressSink, WorkflowProgress } from "../../types/progress.ts";
 export type {
   ApplyResult,
@@ -241,4 +267,4 @@ class TrimWorkflow extends BrowserWorkflowBase<
   }
 }
 
-export { ApplyWorkflow, CreateWorkflow, preloadBrowserRuntime, TrimWorkflow };
+export { ApplyWorkflow, CreateWorkflow, getCreatePatchFormatCandidates, preloadBrowserRuntime, TrimWorkflow };

@@ -27,7 +27,7 @@ export type ChecksumCommand = { source: string, algo: Array<string>, select?: Ar
 
 export type CompressCommand = { input: Array<string>, format?: string, output: string, codec?: Array<string>, level?: CompressionLevelProfile, threads?: ThreadBudget, };
 
-export type TrimCommand = { source: Array<string>, output?: string, extension?: string, in_place?: boolean, dry_run?: boolean, revert?: boolean, recursive?: boolean, threads?: ThreadBudget, };
+export type TrimCommand = { source: Array<string>, output?: string, extension?: string, in_place?: boolean, dry_run?: boolean, revert?: boolean, recursive?: boolean, rom_filter?: boolean, no_extract?: boolean, revert_marker?: boolean, threads?: ThreadBudget, };
 
 export type BatchHeaderFixerCommand = { source: Array<string>, output?: string, extension?: string, in_place?: boolean, dry_run?: boolean, recursive?: boolean, threads?: ThreadBudget, };
 
@@ -35,9 +35,11 @@ export type PatchApplyCommand = { input: string, select?: Array<string>, rom_fil
 
 export type PatchValidateCommand = { input: string, select?: Array<string>, rom_filter?: boolean, patch_filter?: boolean, no_extract?: boolean, no_ignore?: boolean, patches: Array<string>, checksum_cache?: Array<string>, validate_with_checksums?: Array<string>, validate_with_size?: bigint, validate_with_min_size?: bigint, strip_header?: boolean, ignore_checksum_validation?: boolean, threads?: ThreadBudget, };
 
+export type PatchCreateCandidatesCommand = { original: string, modified: string, threads?: ThreadBudget, };
+
 export type PatchCreateCommand = { original: string, modified: string, format: string, output: string, ignore_checksum_validation?: boolean, threads?: ThreadBudget, xdelta_secondary?: string, };
 
-export type PatchCommands = { "type": "apply", "args": PatchApplyCommand } | { "type": "validate", "args": PatchValidateCommand } | { "type": "create", "args": PatchCreateCommand };
+export type PatchCommands = { "type": "apply", "args": PatchApplyCommand } | { "type": "validate", "args": PatchValidateCommand } | { "type": "create-candidates", "args": PatchCreateCandidatesCommand } | { "type": "create", "args": PatchCreateCommand };
 
 export type Commands = { "type": "probe", "args": ProbeCommand } | { "type": "list", "args": ListCommand } | { "type": "extract", "args": ExtractCommand } | { "type": "checksum", "args": ChecksumCommand } | { "type": "compress", "args": CompressCommand } | { "type": "trim", "args": TrimCommand } | { "type": "batch-header-fixer", "args": BatchHeaderFixerCommand } | { "type": "patch", "args": PatchCommands };
 

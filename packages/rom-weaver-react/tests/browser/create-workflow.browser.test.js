@@ -1,4 +1,8 @@
 import { expect, test } from "vitest";
+import {
+  CREATE_IPS_SIZE_LIMIT_BYTES,
+  CREATE_LEGACY_PATCH_SIZE_LIMIT_BYTES,
+} from "../../src/lib/create/patch-format-limits.ts";
 import { CreateWorkflow } from "../../src/platform/browser/browser-api.ts";
 import { browserRuntime } from "../../src/platform/browser/workflow-runtime.ts";
 
@@ -10,6 +14,22 @@ const makeModifiedBytes = () => {
   bytes[9] = 0xbb;
   bytes[15] = 0xcc;
   return bytes;
+};
+const ORIGINAL_CHECKSUMS = {
+  crc32: "cecee288",
+  md5: "1ac1ef01e96caf1be0d329331a4fc2a8",
+  sha1: "56178b86a57fac22899a9964185c2cc96e7da589",
+};
+const MODIFIED_CHECKSUMS = {
+  crc32: "efc84b01",
+  md5: "9417a3d9e55d8c586b3b750d64b2f9ec",
+  sha1: "63dec8064d395c1ca14b482ea8055ca77ee6cda1",
+};
+
+const createSizeOnlyFile = (name, size) => {
+  const file = new File([new Uint8Array([0])], name, { type: "application/octet-stream" });
+  Object.defineProperty(file, "size", { configurable: true, value: size });
+  return file;
 };
 
 const createZipFile = async (entryName, bytes, outputName) => {
@@ -98,6 +118,10 @@ test("create workflow supports raw and zip output compression", async () => {
   try {
     await rawWorkflow.setOriginal(original);
     await rawWorkflow.setModified(modified);
+    expect(rawWorkflow.getOriginal()?.checksums).toEqual(ORIGINAL_CHECKSUMS);
+    expect(rawWorkflow.getModified()?.checksums).toEqual(MODIFIED_CHECKSUMS);
+    expect(rawWorkflow.getOriginal()?.checksumTimeMs).toEqual(expect.any(Number));
+    expect(rawWorkflow.getModified()?.checksumTimeMs).toEqual(expect.any(Number));
     const rawResult = await rawWorkflow.run();
     expect(rawResult.output.fileName).toBe("change.ips");
     expect(rawResult.sizeSummary?.rawSize).toBe(rawResult.output.size);
@@ -123,5 +147,73 @@ test("create workflow supports raw and zip output compression", async () => {
     await zipResult.output.dispose();
   } finally {
     await zipWorkflow.dispose();
+  }
+});
+
+test("create workflow defaults output names to the modified source", async () => {
+  const original = new File([makeOriginalBytes()], "original.bin", { type: "application/octet-stream" });
+  const modified = new File([makeModifiedBytes()], "modified.bin", { type: "application/octet-stream" });
+  const rawWorkflow = createTraceWorkflow({
+    compression: "none",
+  }).workflow;
+  try {
+    await rawWorkflow.setOriginal(original);
+    await rawWorkflow.setModified(modified);
+    const rawResult = await rawWorkflow.run();
+    expect(rawResult.output.fileName).toBe("modified.ips");
+    await rawResult.output.dispose();
+  } finally {
+    await rawWorkflow.dispose();
+  }
+
+  const zipWorkflow = createTraceWorkflow({
+    compression: "zip",
+  }).workflow;
+  try {
+    await zipWorkflow.setOriginal(original);
+    await zipWorkflow.setModified(modified);
+    const zipResult = await zipWorkflow.run();
+    expect(zipResult.output.fileName).toBe("modified.ips.zip");
+    await zipResult.output.dispose();
+  } finally {
+    await zipWorkflow.dispose();
+  }
+});
+
+test("create workflow steers IPS-family formats away from 16 MiB and larger inputs", async () => {
+  const workflow = createTraceWorkflow({
+    compression: "none",
+    outputName: "change.ips",
+  }).workflow;
+  try {
+    await workflow.setOriginal(createSizeOnlyFile("large-original.nds", CREATE_IPS_SIZE_LIMIT_BYTES));
+    await workflow.setModified(createSizeOnlyFile("large-modified.nds", 1));
+    await workflow.setPatchType("ips");
+
+    await expect(workflow.run()).rejects.toMatchObject({
+      code: "UNSUPPORTED_FORMAT",
+      message: expect.stringContaining("at or above 16 MiB"),
+    });
+  } finally {
+    await workflow.dispose();
+  }
+});
+
+test("create workflow limits over-256 MiB inputs to xdelta and ppf", async () => {
+  const workflow = createTraceWorkflow({
+    compression: "none",
+    outputName: "change.bps",
+  }).workflow;
+  try {
+    await workflow.setOriginal(createSizeOnlyFile("large-original.nds", CREATE_LEGACY_PATCH_SIZE_LIMIT_BYTES + 1));
+    await workflow.setModified(createSizeOnlyFile("large-modified.nds", 1));
+    await workflow.setPatchType("bps");
+
+    await expect(workflow.run()).rejects.toMatchObject({
+      code: "UNSUPPORTED_FORMAT",
+      message: expect.stringContaining("xdelta or PPF"),
+    });
+  } finally {
+    await workflow.dispose();
   }
 });

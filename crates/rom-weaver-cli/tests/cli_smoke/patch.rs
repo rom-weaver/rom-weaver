@@ -900,7 +900,296 @@ fn patch_create_warns_for_identical_ips_inputs() {
 }
 
 #[test]
-fn patch_create_can_ignore_classic_ips_flips_size_limit() {
+fn patch_create_candidates_default_to_bps_for_small_inputs() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.bin");
+    let modified = temp.child("new.bin");
+    fs::write(original.path(), b"hello old world").expect("fixture");
+    fs::write(modified.path(), b"hello new world").expect("fixture");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch",
+            "create-candidates",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "patch-create-candidates");
+    assert_eq!(json["family"], "patch");
+    assert_eq!(json["format"], "bps");
+    assert_eq!(json["status"], "succeeded");
+    let candidates = &json["details"]["patch_create_format_candidates"];
+    assert_eq!(candidates["default"], "bps");
+    let formats = candidates["formats"].as_array().expect("formats array");
+    assert_eq!(
+        formats
+            .iter()
+            .map(|value| value.as_str().expect("format"))
+            .collect::<Vec<_>>(),
+        vec![
+            "bps", "xdelta", "aps", "bdf", "ebp", "ips", "pmsr", "ppf", "rup", "ups",
+        ]
+    );
+    assert_eq!(candidates["source_values"]["original"]["size"], 15);
+    assert_eq!(candidates["source_values"]["modified"]["size"], 15);
+}
+
+#[test]
+fn patch_create_candidates_default_to_xdelta_for_special_compression_inputs() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.chd");
+    let modified = temp.child("new.bin");
+    fs::write(original.path(), b"compressed disc").expect("fixture");
+    fs::write(modified.path(), b"raw disc").expect("fixture");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch",
+            "create-candidates",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "patch-create-candidates");
+    assert_eq!(json["format"], "xdelta");
+    assert_eq!(json["status"], "succeeded");
+    let candidates = &json["details"]["patch_create_format_candidates"];
+    assert_eq!(candidates["default"], "xdelta");
+    assert_eq!(candidates["source_values"]["original"]["special_compression"], true);
+    assert_eq!(candidates["source_values"]["modified"]["special_compression"], false);
+}
+
+#[test]
+fn patch_create_candidates_default_to_xdelta_for_archives_above_64_mib() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.zip");
+    let modified = temp.child("new.bin");
+    let len = 64 * 1024 * 1024 + 1;
+    write_sparse_bytes(original.path(), len, 0, &[0]);
+    fs::write(modified.path(), b"raw rom").expect("fixture");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch",
+            "create-candidates",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "patch-create-candidates");
+    assert_eq!(json["format"], "xdelta");
+    assert_eq!(json["status"], "succeeded");
+    let candidates = &json["details"]["patch_create_format_candidates"];
+    assert_eq!(candidates["default"], "xdelta");
+    assert_eq!(candidates["limits"]["archive_default_size_bytes"], 64 * 1024 * 1024);
+    assert_eq!(candidates["source_values"]["original"]["archive"], true);
+    assert_eq!(candidates["source_values"]["original"]["size"], len);
+}
+
+#[test]
+fn patch_create_candidates_default_to_xdelta_from_128_mib() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.bin");
+    let modified = temp.child("new.bin");
+    let len = 128 * 1024 * 1024;
+    write_sparse_bytes(original.path(), len, 0, &[0]);
+    write_sparse_bytes(modified.path(), len, 0, &[1]);
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch",
+            "create-candidates",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "patch-create-candidates");
+    assert_eq!(json["format"], "xdelta");
+    assert_eq!(json["status"], "succeeded");
+    let candidates = &json["details"]["patch_create_format_candidates"];
+    assert_eq!(candidates["default"], "xdelta");
+    assert_eq!(
+        candidates["formats"]
+            .as_array()
+            .expect("formats array")
+            .iter()
+            .map(|value| value.as_str().expect("format"))
+            .collect::<Vec<_>>(),
+        vec!["xdelta", "bps", "aps", "bdf", "pmsr", "ppf", "rup", "ups"]
+    );
+}
+
+#[test]
+fn patch_create_candidates_default_to_xdelta_above_256_mib_while_allowing_ppf() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.bin");
+    let modified = temp.child("new.bin");
+    let len = 256 * 1024 * 1024 + 1;
+    write_sparse_bytes(original.path(), len, 0, &[0]);
+    write_sparse_bytes(modified.path(), len, 0, &[1]);
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch",
+            "create-candidates",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "patch-create-candidates");
+    assert_eq!(json["format"], "xdelta");
+    assert_eq!(json["status"], "succeeded");
+    let candidates = &json["details"]["patch_create_format_candidates"];
+    assert_eq!(candidates["default"], "xdelta");
+    assert_eq!(
+        candidates["formats"]
+            .as_array()
+            .expect("formats array")
+            .iter()
+            .map(|value| value.as_str().expect("format"))
+            .collect::<Vec<_>>(),
+        vec!["xdelta", "ppf"]
+    );
+    assert_eq!(
+        candidates["limits"]["legacy_size_limit_bytes"],
+        256 * 1024 * 1024
+    );
+}
+
+#[test]
+fn patch_create_allows_ppf_above_256_mib_when_requested() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.bin");
+    let modified = temp.child("new.bin");
+    let patch = temp.child("output.ppf");
+    let len = 256 * 1024 * 1024 + 1;
+    write_sparse_bytes(original.path(), len, len - 1, &[0]);
+    write_sparse_bytes(modified.path(), len, len - 1, &[1]);
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch",
+            "create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--format",
+            "ppf",
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--threads",
+            "1",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "patch-create");
+    assert_eq!(json["format"], "PPF");
+    assert_eq!(json["status"], "succeeded");
+    assert!(fs::read(patch.path()).expect("patch").starts_with(b"PPF30"));
+}
+
+#[test]
+fn patch_create_rejects_non_xdelta_ppf_formats_above_256_mib() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.bin");
+    let modified = temp.child("new.bin");
+    let patch = temp.child("output.bps");
+    let len = 256 * 1024 * 1024 + 1;
+    write_sparse_bytes(original.path(), len, 0, &[0]);
+    write_sparse_bytes(modified.path(), len, 0, &[1]);
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch",
+            "create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--format",
+            "bps",
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "patch-create");
+    assert_eq!(json["format"], "BPS");
+    assert_eq!(json["status"], "failed");
+    assert!(json["label"]
+        .as_str()
+        .expect("label")
+        .contains("above 256 MiB"));
+}
+
+#[test]
+fn patch_create_rejects_classic_ips_at_size_limit_even_when_validation_ignored() {
     let temp = setup_temp_dir();
     let original = temp.child("old.bin");
     let modified = temp.child("new.bin");
@@ -937,7 +1226,7 @@ fn patch_create_can_ignore_classic_ips_flips_size_limit() {
     assert!(strict_json["label"]
         .as_str()
         .expect("label")
-        .contains("exceeds the Flips-compatible 16 MiB limit"));
+        .contains("at or above 16 MiB"));
 
     let ignored_output = Command::cargo_bin("rom-weaver")
         .expect("binary")
@@ -956,7 +1245,7 @@ fn patch_create_can_ignore_classic_ips_flips_size_limit() {
             "--json",
         ])
         .assert()
-        .code(0)
+        .code(1)
         .get_output()
         .stdout
         .clone();
@@ -964,11 +1253,11 @@ fn patch_create_can_ignore_classic_ips_flips_size_limit() {
     let ignored_json = parse_single_json_line(&ignored_output);
     assert_eq!(ignored_json["command"], "patch-create");
     assert_eq!(ignored_json["format"], "IPS");
-    assert_eq!(ignored_json["status"], "succeeded");
-    assert_eq!(
-        fs::read(patch.path()).expect("patch"),
-        b"PATCH\x00\x00\x00\x00\x01ZEOF"
-    );
+    assert_eq!(ignored_json["status"], "failed");
+    assert!(ignored_json["label"]
+        .as_str()
+        .expect("label")
+        .contains("at or above 16 MiB"));
 }
 
 #[test]
@@ -1011,12 +1300,11 @@ fn patch_create_reports_pds_as_explicitly_unsupported() {
 }
 
 #[test]
-fn patch_create_succeeds_for_ips32_and_round_trips() {
+fn patch_create_rejects_ips32_at_large_size() {
     let temp = setup_temp_dir();
     let original = temp.child("old.bin");
     let modified = temp.child("new.bin");
     let patch = temp.child("output.ips32");
-    let output = temp.child("output.bin");
     write_sparse_bytes(original.path(), 0x0100_0002, 0x0100_0000, b"ab");
     write_sparse_bytes(modified.path(), 0x0100_0002, 0x0100_0000, b"aZ");
 
@@ -1037,7 +1325,7 @@ fn patch_create_succeeds_for_ips32_and_round_trips() {
             "--json",
         ])
         .assert()
-        .code(0)
+        .code(1)
         .get_output()
         .stdout
         .clone();
@@ -1046,45 +1334,11 @@ fn patch_create_succeeds_for_ips32_and_round_trips() {
     assert_eq!(create_json["command"], "patch-create");
     assert_eq!(create_json["family"], "patch");
     assert_eq!(create_json["format"], "IPS32");
-    assert_eq!(create_json["requested_threads"], 8);
-    let effective_threads = create_json["effective_threads"]
-        .as_u64()
-        .expect("effective_threads");
-    assert!((1..=8).contains(&effective_threads));
-    assert_eq!(create_json["used_parallelism"], effective_threads > 1);
-    assert_eq!(create_json["status"], "succeeded");
-
-    let patch_bytes = fs::read(patch.path()).expect("patch");
-    assert!(patch_bytes.starts_with(b"IPS32"));
-    assert!(patch_bytes.ends_with(b"EEOF"));
-
-    let apply_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
-            "patch", "apply",
-            "--input",
-            original.path().to_str().expect("path"),
-            "--patch",
-            patch.path().to_str().expect("path"),
-            "--output",
-            output.path().to_str().expect("path"),
-            "--no-compress",
-            "--ignore-checksum-validation",
-            "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
-
-    let apply_json = parse_single_json_line(&apply_output);
-    assert_eq!(apply_json["command"], "patch-apply");
-    assert_eq!(apply_json["family"], "patch");
-    assert_eq!(apply_json["format"], "IPS32");
-    assert_eq!(apply_json["status"], "succeeded");
-    assert_eq!(fs::read(output.path()).expect("output")[0x0100_0000], b'a');
-    assert_eq!(fs::read(output.path()).expect("output")[0x0100_0001], b'Z');
+    assert_eq!(create_json["status"], "failed");
+    assert!(create_json["label"]
+        .as_str()
+        .expect("label")
+        .contains("at or above 16 MiB"));
 }
 
 #[test]
@@ -1738,11 +1992,11 @@ fn patch_create_succeeds_for_solid_and_round_trips() {
 }
 
 #[test]
-fn patch_create_succeeds_for_vcdiff_and_round_trips() {
+fn patch_create_treats_vcdiff_as_xdelta_and_round_trips() {
     let temp = setup_temp_dir();
     let original = temp.child("old.bin");
     let modified = temp.child("new.bin");
-    let patch = temp.child("update.vcdiff");
+    let patch = temp.child("update.xdelta");
     let output = temp.child("output.bin");
     fs::write(original.path(), b"hello old world").expect("fixture");
     fs::write(modified.path(), b"hello new world").expect("fixture");
@@ -1772,7 +2026,7 @@ fn patch_create_succeeds_for_vcdiff_and_round_trips() {
     let create_json = parse_single_json_line(&create_output);
     assert_eq!(create_json["command"], "patch-create");
     assert_eq!(create_json["family"], "patch");
-    assert_eq!(create_json["format"], "VCDIFF");
+    assert_eq!(create_json["format"], "xdelta");
     assert_eq!(create_json["requested_threads"], 8);
     assert_eq!(create_json["effective_threads"], 1);
     assert_eq!(create_json["used_parallelism"], false);
@@ -1799,7 +2053,7 @@ fn patch_create_succeeds_for_vcdiff_and_round_trips() {
 
     let apply_json = parse_single_json_line(&apply_output);
     assert_eq!(apply_json["command"], "patch-apply");
-    assert_eq!(apply_json["format"], "VCDIFF");
+    assert_eq!(apply_json["format"], "xdelta");
     assert_eq!(apply_json["status"], "succeeded");
     assert_eq!(
         fs::read(output.path()).expect("output"),

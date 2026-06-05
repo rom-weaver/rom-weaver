@@ -2827,6 +2827,7 @@ function collectRequestInputPaths(request) {
       pushPathValues(values, args.source);
       break;
     case 'patch-create':
+    case 'patch-create-candidates':
       pushPathValue(values, args.original);
       pushPathValue(values, args.modified);
       break;

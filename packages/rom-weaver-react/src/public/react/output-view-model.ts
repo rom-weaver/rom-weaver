@@ -1,4 +1,5 @@
 import OutputCompressionManager from "../../lib/compression/output-compression-manager.ts";
+import { getCreatePatchFormatsForSizes } from "../../lib/create/patch-format-limits.ts";
 import { classifyPatcherInput } from "../../lib/input/input-classification.ts";
 import { buildPatchedOutputBaseName } from "../../lib/output/output-name-composition.ts";
 import { formatByteSize, formatPercentFixed } from "../../presentation/workflow-presentation.ts";
@@ -34,10 +35,14 @@ type ParsedPatchNameLike = {
 };
 type GeneratedOutputBinarySource = string | Blob | File | FileSystemFileHandle;
 type GeneratedOutputSource = GeneratedOutputBinarySource | GeneratedPatchNameSource | null | undefined;
+type CreatePatchFormatOptions = {
+  candidateFormats?: readonly string[] | null;
+  modifiedSize?: number | null;
+  originalSize?: number | null;
+};
 
 const EXTENSION_REGEX = /\.([^./\\\s]+)$/;
 const FILE_NAME_SEPARATOR_REGEX = /[/\\]+/;
-const CREATE_PATCH_FORMATS = ["aps", "bdf", "bps", "ebp", "ips", "pmsr", "ppf", "rup", "ups", "vcdiff", "xdelta"];
 
 const getFileNameWithoutExtension = (fileName: string) =>
   getBaseFileName(fileName).replace(EXTENSION_REGEX, "") || getBaseFileName(fileName);
@@ -177,13 +182,30 @@ const createCreateOutputCompressionOptions = (patchType: string): OutputOption[]
   ...createOutputOptions(["zip", "7z"]),
 ];
 
-const createCreatePatchFormatOptions = (): OutputOption[] =>
-  CREATE_PATCH_FORMATS.map((value) => ({ label: `.${value}`, value }));
+const createCreatePatchFormatOptions = (options: CreatePatchFormatOptions = {}): OutputOption[] => {
+  const candidateFormats = Array.isArray(options.candidateFormats)
+    ? options.candidateFormats.map((value) => String(value || "").trim().toLowerCase()).filter((value) => !!value)
+    : [];
+  const formats = candidateFormats.length
+    ? Array.from(new Set(candidateFormats))
+    : getCreatePatchFormatsForSizes(options.originalSize, options.modifiedSize);
+  return formats.map((value) => ({ label: `.${value}`, value }));
+};
 
-const createTrimOutputOptions = (rawExtension: string): OutputOption[] => [
-  { label: `.${normalizeExtensionValue(rawExtension, "raw")}`, value: normalizeExtensionValue(rawExtension, "raw") },
-  ...createOutputOptions(["zip", "7z"]),
-];
+const uniqueOutputOptions = (options: OutputOption[]): OutputOption[] => {
+  const seen = new Set<string>();
+  return options.filter((option) => {
+    if (seen.has(option.value)) return false;
+    seen.add(option.value);
+    return true;
+  });
+};
+
+const createTrimOutputOptions = (rawExtension: string): OutputOption[] =>
+  uniqueOutputOptions([
+    { label: `.${normalizeExtensionValue(rawExtension, "raw")}`, value: normalizeExtensionValue(rawExtension, "raw") },
+    ...createOutputOptions(["chd", "rvz", "z3ds", "zip", "7z"]),
+  ]);
 
 const formatLabeledByteSize = (label: string, value?: number | null) => {
   const formattedSize = formatByteSize(value);

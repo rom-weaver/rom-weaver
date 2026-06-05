@@ -6,6 +6,11 @@ import type { CreateSettings, PatchFormat } from "../../types/settings.ts";
 import type { WorkflowOptions, WorkflowWarning } from "../../types/workflow-controller.ts";
 import type { CreatePatchInput, CreateWorkflowOptions } from "../../types/workflow-runtime.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
+import {
+  createPatchFormatSupportsCreateSizes,
+  getCreatePatchFormatSizeErrorMessage,
+  normalizeCreatePatchFormat,
+} from "../create/patch-format-limits.ts";
 import { createWorkflowDeps, runCreateWorkflow } from "../create/workflow.ts";
 import { RomWeaverError, throwIfAborted, withAbortSignal } from "../errors.ts";
 import { getFileNameWithoutExtension } from "../input/path-utils.ts";
@@ -24,6 +29,17 @@ import {
   type SharedRomStagedSource,
   StagedRomSourceController,
 } from "./staged-rom-source.ts";
+import {
+  calculateStandardInputChecksumsForFile,
+  getAssetDecompressionTimeMs,
+  getAssetParentCompressions,
+  getAssetSourceSize,
+  getInputAssetChecksums,
+  getPatchFilePrecomputedChecksums,
+  getPrimaryInputAsset,
+  isChecksummableInputAsset,
+  type StandardWorkflowChecksums,
+} from "./staged-source-checksums.ts";
 import { WorkflowController } from "./workflow-controller.ts";
 import { traceWorkflowControllerEvent } from "./workflow-tracing.ts";
 
@@ -31,6 +47,7 @@ type SourceValidator<TSource> = (sources: TSource | TSource[] | undefined) => vo
 type SourceRole = "modified" | "original";
 type SourceStatus = CreateWorkflowSourceState["status"];
 type ParentCompression = CreateWorkflowParentCompression;
+type CreateWorkflowChecksums = StandardWorkflowChecksums;
 type InternalSourceState = {
   id: string;
   fileName?: string;
@@ -40,6 +57,8 @@ type InternalSourceState = {
   selectedCandidateId?: string;
   size?: number;
   sourceSize?: number;
+  checksums?: CreateWorkflowChecksums;
+  checksumTimeMs?: number;
   decompressionTimeMs?: number;
   wasDecompressed?: boolean;
   warnings: WorkflowWarning[];
@@ -67,6 +86,8 @@ const cloneSourceState = (state: InternalSourceState | null | undefined) =>
   state
     ? ({
         candidates: state.candidates.map(cloneCandidate),
+        checksums: state.checksums ? cloneValue(state.checksums) : undefined,
+        checksumTimeMs: state.checksumTimeMs,
         decompressionTimeMs: state.decompressionTimeMs,
         fileName: state.fileName,
         id: state.id,
@@ -201,6 +222,13 @@ class CreateWorkflowController<TSource, TDestination> extends WorkflowController
       const patchType = this.getPatchType();
       if (!SUPPORTED_CREATE_PATCH_TYPES.has(patchType))
         throw new RomWeaverError("UNSUPPORTED_FORMAT", `Unsupported patch type: ${patchType}`);
+      if (!createPatchFormatSupportsCreateSizes(patchType, original.state.size, modified.state.size)) {
+        throw new RomWeaverError(
+          "UNSUPPORTED_FORMAT",
+          getCreatePatchFormatSizeErrorMessage(patchType, original.state.size, modified.state.size) ||
+            `Unsupported patch type for create input sizes: ${patchType}`,
+        );
+      }
       this.getOutputCompression();
       const outputName = this.outputName.trim();
       if (!outputName) throw new RomWeaverError("INVALID_SETTINGS", "Output name is required");
@@ -321,6 +349,56 @@ class CreateWorkflowController<TSource, TDestination> extends WorkflowController
   private async finalizeSourceStableState(session: SourceSession<TSource>) {
     const selected = this.getSelectedSourceOwner(session);
     if (!(selected && session.view.state.status === "ready" && selected.preparedInputAssets?.[0]?.file)) return;
+    const checksumStages = session.synthetic ? session.stages : [selected];
+    for (let index = 0; index < checksumStages.length; index += 1) {
+      const stage = checksumStages[index] as StagedSource<TSource> | undefined;
+      if (!(stage && stage.state.status === "ready" && stage.preparedInputAssets?.[0]?.file)) continue;
+      const assets = stage.preparedInputAssets || [];
+      for (let assetIndex = 0; assetIndex < assets.length; assetIndex += 1) {
+        const asset = assets[assetIndex];
+        if (!(asset?.file && isChecksummableInputAsset(asset))) continue;
+        if (asset.checksums) continue;
+        const precomputed = getPatchFilePrecomputedChecksums(asset.file);
+        if (precomputed) {
+          asset.checksums = precomputed;
+          asset.checksumTimeMs = 0;
+          continue;
+        }
+        const checksumFileName = asset.fileName || stage.state.fileName || stage.state.id;
+        const checksumStartedAt = Date.now();
+        const checksumResult = await calculateStandardInputChecksumsForFile({
+          emitProgress: (event) => this.emitProgress(event),
+          file: asset.file,
+          logLevel: this.settings.logging?.level,
+          onLog: this.settings.logging?.sink,
+          progressId: session.synthetic
+            ? `${this.id}:${stage.state.id}:${index}:${assetIndex}`
+            : `${this.id}:${stage.state.id}:${assetIndex}`,
+          role: stage.state.role,
+          runtime: this.runtime,
+          state: {
+            decompressionTimeMs: getAssetDecompressionTimeMs(asset, stage.state.decompressionTimeMs),
+            fileName: checksumFileName,
+            id: stage.state.id,
+            order: assetIndex,
+            parentCompressions: getAssetParentCompressions(asset, stage.parentCompressions),
+            size: asset.size,
+            sourceSize: getAssetSourceSize(asset, stage.state.sourceSize),
+            wasDecompressed: asset.preparation?.wasDecompressed ?? stage.state.wasDecompressed,
+          },
+          workflow: "create",
+        });
+        asset.checksums = checksumResult.checksums;
+        asset.romProbe = checksumResult.romProbe;
+        asset.checksumTimeMs = Date.now() - checksumStartedAt;
+      }
+      const primaryAsset = getPrimaryInputAsset(assets);
+      const primaryChecksums = getInputAssetChecksums(primaryAsset);
+      if (primaryChecksums) {
+        stage.state.checksums = primaryChecksums;
+        stage.state.checksumTimeMs = primaryAsset?.checksumTimeMs;
+      }
+    }
     if (session.synthetic) this.syncSourceSessionView(session);
   }
 
@@ -346,7 +424,7 @@ class CreateWorkflowController<TSource, TDestination> extends WorkflowController
   }
 
   private getPatchType() {
-    return String(this.patchType || this.settings.format || "ips");
+    return normalizeCreatePatchFormat(String(this.patchType || this.settings.format || "bps"));
   }
 
   private getOutputCompression() {
@@ -358,9 +436,11 @@ class CreateWorkflowController<TSource, TDestination> extends WorkflowController
   }
 
   private buildAutomaticOutputName() {
+    const modified = this.getModified();
     const original = this.getOriginal();
-    if (!original?.fileName) return this.outputName;
-    const baseName = getFileNameWithoutExtension(original.fileName) || "patch";
+    const sourceFileName = modified?.fileName || original?.fileName;
+    if (!sourceFileName) return this.outputName;
+    const baseName = getFileNameWithoutExtension(sourceFileName) || "patch";
     return `${baseName}.${this.getPatchType()}`;
   }
 
@@ -396,7 +476,7 @@ class CreateWorkflowController<TSource, TDestination> extends WorkflowController
         onProgress: (progress) => {
           let stage = getPreparationProgressStage(progress);
           if (progress.stage === "output") stage = "compress";
-          else if (progress.stage === "apply") stage = "create";
+          else if (progress.stage === "create") stage = "create";
           let fallbackLabel = "Preparing input...";
           if (stage === "compress") fallbackLabel = "Compressing output...";
           else if (stage === "create") fallbackLabel = "Creating patch...";

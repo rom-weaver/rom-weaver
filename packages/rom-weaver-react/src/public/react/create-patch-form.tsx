@@ -1,6 +1,7 @@
 import Download from "lucide-react/dist/esm/icons/download.js";
 import GitCompare from "lucide-react/dist/esm/icons/git-compare.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { getPreferredCreatePatchFormat } from "../../lib/create/patch-format-limits.ts";
 import { appendFileNameExtension, hasFileNameExtension } from "../../lib/input/path-utils.ts";
 import { resolveAutomaticSelection } from "../../lib/input/selection.ts";
 import { createTiming, formatTiming } from "../../lib/progress/timing.ts";
@@ -9,6 +10,8 @@ import {
   type BrowserSaveDestination,
   type CreateSettings,
   CreateWorkflow,
+  getCreatePatchFormatCandidates,
+  type RuntimePatchCreateFormatCandidates,
 } from "../../platform/browser/browser-api.ts";
 import { formatCodedErrorForDisplay, getErrorCode } from "../../presentation/errors.ts";
 import { createBrowserLocalizer } from "../../presentation/localization/index.ts";
@@ -100,6 +103,9 @@ const getCompletedDownloadMeta = ({
 });
 
 type CreateDisplaySourceState = CreateWorkflowSourceState;
+type CreatePatchFormatCandidateState = RuntimePatchCreateFormatCandidates & {
+  key: string;
+};
 type CompletedCreateOutput = {
   compression: "7z" | "none" | "zip";
   fileName: string;
@@ -126,6 +132,9 @@ const getDisplaySourceChecksumTiming = (source: CreateDisplaySourceState | null 
     (source as (CreateDisplaySourceState & { checksumTimeMs?: number }) | null | undefined)?.checksumTimeMs,
   );
 
+const hasSourceQueueWarning = (source: CreateDisplaySourceState | null | undefined) =>
+  !!source && (source.status === "failed" || (source.warnings?.length ?? 0) > 0);
+
 const getChecksumTimingLabel = (timing: string) => (timing ? `Checksum ${timing}` : "");
 const isChecksumProgress = (progress: WorkflowFormProgressState | null) =>
   !!progress && /checksum/i.test(`${progress.label} ${progress.message}`);
@@ -144,7 +153,13 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     mergeSettingsWithOutput(providerSettings, props.defaultSettings),
   );
   const [internalPatchType, setInternalPatchType] = useState(props.defaultPatchType || "bps");
+  const [patchTypeManuallySelected, setPatchTypeManuallySelected] = useState(
+    () => props.patchType !== undefined || !!props.defaultPatchType,
+  );
+  const [createPatchFormatCandidates, setCreatePatchFormatCandidates] =
+    useState<CreatePatchFormatCandidateState | null>(null);
   const [busy, setBusy] = useState(false);
+  const [createQueued, setCreateQueued] = useState(false);
   const [stagingRole, setStagingRole] = useState<"modified" | "original" | null>(null);
   const [message, setMessage] = useState("");
   const [originalState, setOriginalState] = useState<CreateDisplaySourceState | null>(null);
@@ -170,27 +185,48 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   const original = props.original === undefined ? internalOriginal : props.original;
   const modified = props.modified === undefined ? internalModified : props.modified;
   const settings = props.settings || internalSettings || providerSettings;
-  const patchType = props.patchType || internalPatchType;
-  const disabled = !!props.disabled || busy || !!stagingRole;
+  const originalSourceKey = useMemo(
+    () => (original ? getBinarySourceListStableIds([original])[0] || "" : ""),
+    [original],
+  );
+  const modifiedSourceKey = useMemo(
+    () => (modified ? getBinarySourceListStableIds([modified])[0] || "" : ""),
+    [modified],
+  );
+  const candidateWorkerThreads = props.workerThreads ?? settings.workers?.threads;
+  const patchFormatCandidateKey = `${originalSourceKey}\n${modifiedSourceKey}\n${String(candidateWorkerThreads ?? "")}`;
+  const activePatchFormatCandidates =
+    createPatchFormatCandidates?.key === patchFormatCandidateKey ? createPatchFormatCandidates : null;
+  const requestedPatchType = props.patchType || internalPatchType;
+  const patchType = getPreferredCreatePatchFormat({
+    automaticFormatSelection: props.patchType === undefined && !patchTypeManuallySelected,
+    candidateDefaultFormat: activePatchFormatCandidates?.defaultFormat,
+    candidateFormats: activePatchFormatCandidates?.formats,
+    modifiedSize: modifiedState?.size,
+    originalSize: originalState?.size,
+    requestedFormat: requestedPatchType,
+  });
   const uploadDisabled = !!props.disabled || busy;
-  const actionDisabled =
-    !!props.disabled ||
-    !!stagingRole ||
-    !(
-      busy ||
-      completedOutput ||
-      (original && modified && originalState?.status === "ready" && modifiedState?.status === "ready")
-    );
+  const outputDisabled = !!props.disabled || busy;
+  const createInputsSelected = !!(original && modified);
+  const createSourcesReady =
+    createInputsSelected && originalState?.status === "ready" && modifiedState?.status === "ready";
+  const createPreparationPending =
+    !!stagingRole || progress?.stage === "input" || (createInputsSelected && !(originalState && modifiedState));
+  const createQueueBlocked =
+    !!message || !!errorCode || hasSourceQueueWarning(originalState) || hasSourceQueueWarning(modifiedState);
+  const canStartCreate = createSourcesReady && !createPreparationPending;
+  const canQueueCreate = createInputsSelected;
+  const actionDisabled = !!props.disabled || createQueued || !(busy || completedOutput || canQueueCreate);
   const configuredOutputName = getCreateSettingsOutputName(props.settings || props.defaultSettings || providerSettings);
   const originalFileName = getReactBinarySourceFileName(original, "Original ROM");
   const modifiedFileName = getReactBinarySourceFileName(modified, "Modified ROM");
   const displayedOriginalInfo = getDisplaySourceInfo(originalState, originalFileName);
   const displayedModifiedInfo = getDisplaySourceInfo(modifiedState, modifiedFileName);
-  const generatedOutputName =
-    configuredOutputName ||
-    getDefaultCreateOutputName(
-      displayedOriginalInfo?.fileName ? new File([], displayedOriginalInfo.fileName) : original,
-    );
+  const generatedOutputSource = displayedModifiedInfo?.fileName
+    ? new File([], displayedModifiedInfo.fileName)
+    : modified || (displayedOriginalInfo?.fileName ? new File([], displayedOriginalInfo.fileName) : original);
+  const generatedOutputName = configuredOutputName || getDefaultCreateOutputName(generatedOutputSource);
   const resolvedOutputName = outputName.trim() || generatedOutputName;
   const executionOutputName = resolveCreateExecutionOutputName(resolvedOutputName, patchType);
   const createCompression = (() => {
@@ -200,18 +236,18 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     return normalized === "7z" ? "7z" : normalized === "none" ? "none" : "zip";
   })();
   const createCompressionOptions = useMemo(() => createCreateOutputCompressionOptions(patchType), [patchType]);
-  const patchFormatOptions = useMemo(() => createCreatePatchFormatOptions(), []);
+  const patchFormatOptions = useMemo(
+    () =>
+      createCreatePatchFormatOptions({
+        candidateFormats: activePatchFormatCandidates?.formats,
+        modifiedSize: modifiedState?.size,
+        originalSize: originalState?.size,
+      }),
+    [activePatchFormatCandidates?.formats, modifiedState?.size, originalState?.size],
+  );
   const displayedOriginalFileName = displayedOriginalInfo?.fileName || originalFileName;
   const displayedModifiedFileName = displayedModifiedInfo?.fileName || modifiedFileName;
   const settingsLanguage = (settings as { language?: string }).language;
-  const originalSourceKey = useMemo(
-    () => (original ? getBinarySourceListStableIds([original])[0] || "" : ""),
-    [original],
-  );
-  const modifiedSourceKey = useMemo(
-    () => (modified ? getBinarySourceListStableIds([modified])[0] || "" : ""),
-    [modified],
-  );
   const stagingSettingsKey = useMemo(
     () =>
       createSettingsDependencyKey({
@@ -245,11 +281,49 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   }, [stagingSettings]);
 
   useEffect(() => {
+    setCreatePatchFormatCandidates(null);
+    if (!(original && modified && originalSourceKey && modifiedSourceKey)) return;
+    const key = patchFormatCandidateKey;
+    let cancelled = false;
+    void getCreatePatchFormatCandidates({
+      ...(resolvedAssetBaseUrl ? { assetBaseUrl: resolvedAssetBaseUrl } : {}),
+      modified: toBrowserPublicBinarySource(modified),
+      original: toBrowserPublicBinarySource(original),
+      settings: {
+        logging: settings.logging,
+        workers: settings.workers,
+      },
+      workerThreads: props.workerThreads,
+    })
+      .then((candidates) => {
+        if (cancelled) return;
+        setCreatePatchFormatCandidates({ ...candidates, key });
+      })
+      .catch(() => {
+        if (!cancelled) setCreatePatchFormatCandidates(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    modified,
+    modifiedSourceKey,
+    original,
+    originalSourceKey,
+    patchFormatCandidateKey,
+    props.workerThreads,
+    resolvedAssetBaseUrl,
+    settings.logging,
+    settings.workers,
+  ]);
+
+  useEffect(() => {
     if (props.settings !== undefined) return;
     setInternalSettings(mergeSettingsWithOutput(providerSettings, props.defaultSettings));
   }, [props.defaultSettings, props.settings, providerSettings]);
 
   const updateOriginal = (file: BinarySource | null) => {
+    setCreateQueued(false);
     disposeActiveOutput();
     clearCompletedOutput();
     stagedCreateWorkflowGenerationRef.current += 1;
@@ -263,6 +337,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   };
 
   const updateModified = (file: BinarySource | null) => {
+    setCreateQueued(false);
     disposeActiveOutput();
     clearCompletedOutput();
     stagedCreateWorkflowGenerationRef.current += 1;
@@ -284,6 +359,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   };
 
   const updateSettings = (nextSettings: CreatePatchFormSettings) => {
+    setCreateQueued(false);
     disposeActiveOutput();
     clearCompletedOutput();
     if (!props.settings) setInternalSettings(nextSettings);
@@ -291,6 +367,8 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   };
 
   const updatePatchType = (nextPatchType: string) => {
+    setCreateQueued(false);
+    setPatchTypeManuallySelected(true);
     disposeActiveOutput();
     clearCompletedOutput();
     if (!props.patchType) setInternalPatchType(nextPatchType);
@@ -421,14 +499,26 @@ function CreatePatchForm(props: CreatePatchFormProps) {
 
   const runCreate = async () => {
     if (busy) {
+      setCreateQueued(false);
       abortActiveOperation();
       return;
     }
     if (completedOutput) {
+      setCreateQueued(false);
       await completedOutput.saveAs();
       return;
     }
+    if (createQueueBlocked) {
+      setCreateQueued(false);
+      return;
+    }
+    if (canQueueCreate && createPreparationPending && !canStartCreate) {
+      setCreateQueued(true);
+      return;
+    }
+    if (!canStartCreate) return;
     if (!(original && modified)) return;
+    setCreateQueued(false);
     const abortController = new AbortController();
     rememberAbortController(abortController);
     setBusy(true);
@@ -517,6 +607,28 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     },
     [abortActiveOperation, disposeActiveOutput],
   );
+
+  useEffect(() => {
+    if (!createQueued) return;
+    if (busy || completedOutput) {
+      setCreateQueued(false);
+      return;
+    }
+    if (!canQueueCreate) {
+      setCreateQueued(false);
+      return;
+    }
+    if (createQueueBlocked) {
+      setCreateQueued(false);
+      return;
+    }
+    if (createPreparationPending) return;
+    if (!canStartCreate) {
+      setCreateQueued(false);
+      return;
+    }
+    void runCreate();
+  });
 
   const progressProps = toWorkflowFileProgressProps(progress);
   const waitingProgressProps = toWorkflowFileProgressProps(createWaitingWorkflowProgress());
@@ -652,13 +764,19 @@ function CreatePatchForm(props: CreatePatchFormProps) {
             }
             id="patch-builder-button-create"
             onClick={() => void runCreate()}
-            progress={busy && progressProps && progress?.role !== "input" ? progressProps : null}
+            progress={
+              createQueued
+                ? waitingProgressProps
+                : busy && progressProps && progress?.role !== "input"
+                  ? progressProps
+                  : null
+            }
           >
             {busy ? "Cancel" : "CREATE & DOWNLOAD PATCH"}
           </OutputRunAction>
         }
         compress={buildOutputCompressionPanel({
-          disabled,
+          disabled: outputDisabled,
           fields: createCompressPanel?.fields,
           format: getOutputCompressionFormatLabel(createCompression, createCompressionOptions),
           formatId: "patch-builder-select-output-compression",
@@ -672,7 +790,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
             }),
           summary: createCompression === "none" ? undefined : createCompressPanel?.summary,
         })}
-        disabled={disabled}
+        disabled={outputDisabled}
         fileName={resolvedOutputName}
         fileNameId="patch-builder-output-file"
         fileNamePlaceholder="Patch filename"

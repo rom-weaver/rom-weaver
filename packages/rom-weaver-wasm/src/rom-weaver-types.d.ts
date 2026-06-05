@@ -26,6 +26,7 @@ export type {
   ProbeCommand,
   PatchApplyCommand,
   PatchCommands,
+  PatchCreateCandidatesCommand,
   PatchCreateCommand,
   PatchValidateCommand,
   RomWeaverCommand,

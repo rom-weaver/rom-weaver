@@ -1,5 +1,12 @@
 import { expect, test } from "vitest";
 import OutputCompressionManager from "../../src/lib/compression/output-compression-manager.ts";
+import {
+  CREATE_BPS_DEFAULT_LIMIT_BYTES,
+  CREATE_IPS_SIZE_LIMIT_BYTES,
+  CREATE_LEGACY_PATCH_SIZE_LIMIT_BYTES,
+  getPreferredCreatePatchFormat,
+  normalizeCreatePatchFormat,
+} from "../../src/lib/create/patch-format-limits.ts";
 import { buildPatchedOutputBaseName } from "../../src/lib/output/output-name-composition.ts";
 import { createPatchedRomSavePlan } from "../../src/lib/output/output-save-plan.ts";
 import {
@@ -106,23 +113,80 @@ test("create output options expose patch format and archive choices", () => {
     { label: ".7z", value: "7z" },
   ]);
   expect(createCreatePatchFormatOptions().map((option) => option.value)).toEqual([
+    "bps",
+    "xdelta",
     "aps",
     "bdf",
-    "bps",
     "ebp",
     "ips",
     "pmsr",
     "ppf",
     "rup",
     "ups",
-    "vcdiff",
-    "xdelta",
   ]);
+  expect(
+    createCreatePatchFormatOptions({ originalSize: CREATE_IPS_SIZE_LIMIT_BYTES }).map((option) => option.value),
+  ).toEqual(["bps", "xdelta", "aps", "bdf", "pmsr", "ppf", "rup", "ups"]);
+  expect(
+    createCreatePatchFormatOptions({ originalSize: CREATE_BPS_DEFAULT_LIMIT_BYTES }).map((option) => option.value),
+  ).toEqual(["xdelta", "bps", "aps", "bdf", "pmsr", "ppf", "rup", "ups"]);
+  expect(
+    createCreatePatchFormatOptions({ originalSize: CREATE_LEGACY_PATCH_SIZE_LIMIT_BYTES + 1 }).map(
+      (option) => option.value,
+    ),
+  ).toEqual(["xdelta", "ppf"]);
+  expect(createCreatePatchFormatOptions({ candidateFormats: ["xdelta", "bps"] }).map((option) => option.value)).toEqual([
+    "xdelta",
+    "bps",
+  ]);
+});
+
+test("create format policy steers defaults by size", () => {
+  expect(normalizeCreatePatchFormat("vcdiff")).toBe("xdelta");
+  expect(getPreferredCreatePatchFormat({ requestedFormat: "bps" })).toBe("bps");
+  expect(
+    getPreferredCreatePatchFormat({
+      automaticFormatSelection: true,
+      originalSize: CREATE_BPS_DEFAULT_LIMIT_BYTES,
+      requestedFormat: "bps",
+    }),
+  ).toBe("xdelta");
+  expect(
+    getPreferredCreatePatchFormat({
+      automaticFormatSelection: false,
+      originalSize: CREATE_BPS_DEFAULT_LIMIT_BYTES,
+      requestedFormat: "bps",
+    }),
+  ).toBe("bps");
+  expect(
+    getPreferredCreatePatchFormat({
+      originalSize: 40 * 1024 * 1024,
+      requestedFormat: "bps",
+    }),
+  ).toBe("bps");
+  expect(
+    getPreferredCreatePatchFormat({
+      candidateDefaultFormat: "xdelta",
+      candidateFormats: ["xdelta", "bps"],
+      requestedFormat: "bps",
+    }),
+  ).toBe("xdelta");
+  expect(
+    getPreferredCreatePatchFormat({
+      automaticFormatSelection: false,
+      candidateDefaultFormat: "xdelta",
+      candidateFormats: ["xdelta", "bps"],
+      requestedFormat: "bps",
+    }),
+  ).toBe("bps");
 });
 
 test("trim output options keep raw source extension alongside archive choices", () => {
   expect(createTrimOutputOptions("nds")).toEqual([
     { label: ".nds", value: "nds" },
+    { label: ".chd", value: "chd" },
+    { label: ".rvz", value: "rvz" },
+    { label: ".z3ds", value: "z3ds" },
     { label: ".zip", value: "zip" },
     { label: ".7z", value: "7z" },
   ]);

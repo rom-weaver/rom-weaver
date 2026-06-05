@@ -6,6 +6,7 @@ import { replaceCuePatchFileName } from "../../lib/input/disc-file-utils.ts";
 import { getFileNameWithoutExtension, getPathBaseName, isCompressionLevelProfile } from "../../lib/path-utils.ts";
 import {
   invokeRomWeaverCompressionCreateWorker,
+  invokeRomWeaverCreatePatchCandidatesWorker,
   invokeRomWeaverCreatePatchWorker,
   invokeRomWeaverExtractWorker,
   invokeRomWeaverPatchApplyWorker,
@@ -1472,6 +1473,8 @@ const createBrowserPatchRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime["
       invokeRomWeaverCreatePatchWorker(input, onProgress, onLog, (outputPath) =>
         removeBrowserVfsOutputPaths([outputPath], [input.originalFilePath, input.modifiedFilePath]),
       ),
+    invokeCreatePatchCandidatesWorker: (input, onProgress, onLog) =>
+      invokeRomWeaverCreatePatchCandidatesWorker(input, onProgress, onLog),
     invokeValidatePatchWorker: (input, onProgress, onLog) =>
       invokeRomWeaverPatchValidateWorker(input, onProgress, onLog),
     workerIo,

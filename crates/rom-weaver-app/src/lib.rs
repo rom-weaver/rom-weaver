@@ -89,6 +89,15 @@ pub enum PatchCommands {
         )
     )]
     Validate(PatchValidateCommand),
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        command(
+            name = "create-candidates",
+            about = "List recommended patch-create formats for an original/modified input pair",
+            long_about = "List recommended patch-create formats for an original/modified input pair.\n\nThe result includes the ranked candidate formats and the default format the create UI should select for the supplied inputs."
+        )
+    )]
+    CreateCandidates(PatchCreateCandidatesCommand),
     Create(PatchCreateCommand),
 }
 
@@ -983,6 +992,20 @@ pub struct PatchCreateCommand {
     #[serde(default = "default_xdelta_secondary")]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub xdelta_secondary: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(Args))]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+pub struct PatchCreateCandidatesCommand {
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long))]
+    pub original: PathBuf,
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long))]
+    pub modified: PathBuf,
+    #[cfg_attr(not(target_arch = "wasm32"), arg(long, default_value = "auto"))]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub threads: ThreadBudget,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

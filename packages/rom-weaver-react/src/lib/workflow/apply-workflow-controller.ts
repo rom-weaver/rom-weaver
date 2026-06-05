@@ -39,10 +39,8 @@ import {
   cloneCandidate,
   cloneValue,
   cloneWarning,
-  createChecksumSource,
   createWorkflowId,
   createWorkflowProgress,
-  DEFAULT_CHECKSUMS,
   getPreparationProgressStage,
   getSourceFileName,
   getSourceSize,
@@ -54,6 +52,17 @@ import {
   type SharedRomStagedSource,
   StagedRomSourceController,
 } from "./staged-rom-source.ts";
+import {
+  calculateStandardInputChecksumsForFile,
+  cloneChecksumRomProbe,
+  getAssetDecompressionTimeMs,
+  getAssetParentCompressions,
+  getAssetSourceSize,
+  getInputAssetChecksums,
+  getPatchFilePrecomputedChecksums,
+  getPrimaryInputAsset,
+  isChecksummableInputAsset,
+} from "./staged-source-checksums.ts";
 import { WorkflowController } from "./workflow-controller.ts";
 import { traceWorkflowControllerEvent } from "./workflow-tracing.ts";
 
@@ -94,17 +103,6 @@ type StagedSource<TSource> = SharedRomStagedSource<TSource, InternalSourceState>
   outputLabel?: string;
 };
 type InputSession<TSource> = SharedRomSourceSession<TSource, InternalSourceState>;
-const getPatchFilePrecomputedChecksums = (file: PatchFileInstance | undefined): ApplyWorkflowChecksums | undefined => {
-  const checksums = (file as (PatchFileInstance & { checksums?: unknown }) | undefined)?.checksums;
-  if (!isRecord(checksums)) return undefined;
-  const out: ApplyWorkflowChecksums = {};
-  for (const algorithm of DEFAULT_CHECKSUMS) {
-    const value = checksums[algorithm];
-    if (typeof value !== "string" || !value.trim()) return undefined;
-    out[algorithm] = value.trim().toLowerCase();
-  }
-  return out;
-};
 const toNormalizedCrc32 = (value: unknown): string | undefined => {
   if (typeof value === "number" && Number.isFinite(value)) return (value >>> 0).toString(16).padStart(8, "0");
   if (typeof value !== "string") return undefined;
@@ -126,15 +124,6 @@ const clonePatchChecksumPreflight = (
 
 const clonePatchValidation = (validation: InternalPatchValidation | undefined): InternalPatchValidation | undefined =>
   validation ? { ...validation } : undefined;
-
-const cloneChecksumRomProbe = (romProbe: ChecksumRomProbe | undefined): ChecksumRomProbe | undefined =>
-  romProbe
-    ? {
-        trim: {
-          ...romProbe.trim,
-        },
-      }
-    : undefined;
 
 const PATCH_OUTPUT_LABEL_PATTERN = /\[([^\]]+)\](?:\.[^.]+)?\d*$/;
 const PATCH_TARGET_SELECTION_ERROR_CODES = new Set(["AMBIGUOUS_SELECTION", "PATCH_TARGET_MISMATCH"]);
@@ -235,34 +224,6 @@ const cloneResolvedInputState = (
   sourceSize: state.sourceSize,
   wasDecompressed: state.wasDecompressed,
 });
-
-const isChecksummableInputAsset = (asset: InputAsset) => asset.kind !== "cue";
-
-const getInputAssetChecksums = (asset: InputAsset | undefined): ApplyWorkflowChecksums | undefined => {
-  if (!asset) return undefined;
-  return asset.checksums || getPatchFilePrecomputedChecksums(asset.file);
-};
-
-const getAssetParentCompressions = (
-  asset: InputAsset,
-  fallback: ApplyWorkflowParentCompression[],
-): ApplyWorkflowParentCompression[] =>
-  (asset.preparation?.parentCompressions || fallback).map((entry) => ({
-    ...entry,
-  }));
-
-const getAssetDecompressionTimeMs = (asset: InputAsset, fallback?: number) =>
-  typeof asset.preparation?.decompressionTimeMs === "number" && Number.isFinite(asset.preparation.decompressionTimeMs)
-    ? asset.preparation.decompressionTimeMs
-    : fallback;
-
-const getAssetSourceSize = (asset: InputAsset, fallback?: number) =>
-  typeof asset.preparation?.sourceSize === "number" && Number.isFinite(asset.preparation.sourceSize)
-    ? asset.preparation.sourceSize
-    : fallback;
-
-const getPrimaryInputAsset = (assets: InputAsset[]) =>
-  assets.find((asset) => asset.patchable) || assets.find(isChecksummableInputAsset) || assets[0];
 
 const cloneResolvedInputAssetState = (
   asset: InputAsset,
@@ -1280,9 +1241,17 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
         }
         const checksumFileName = getPreparedAssetFileName(asset, stage.state.fileName);
         const checksumStartedAt = Date.now();
-        const checksumResult = await this.calculateChecksumsForFile(
-          asset.file,
-          {
+        const checksumResult = await calculateStandardInputChecksumsForFile({
+          emitProgress: (event) => this.emitProgress(event),
+          file: asset.file,
+          logLevel: this.settings.logging?.level,
+          onLog: this.settings.logging?.sink,
+          progressId: session.synthetic
+            ? `${this.id}:${stage.state.id}:${index}:${assetIndex}`
+            : `${this.id}:${stage.state.id}:${assetIndex}`,
+          role: "input",
+          runtime: this.runtime,
+          state: {
             ...stage.state,
             decompressionTimeMs: getAssetDecompressionTimeMs(asset, stage.state.decompressionTimeMs),
             fileName: checksumFileName,
@@ -1292,9 +1261,8 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
             sourceSize: getAssetSourceSize(asset, stage.state.sourceSize),
             wasDecompressed: asset.preparation?.wasDecompressed ?? stage.state.wasDecompressed,
           },
-          "input",
-          session.synthetic ? `${stage.state.id}:${index}:${assetIndex}` : `${stage.state.id}:${assetIndex}`,
-        );
+          workflow: "apply",
+        });
         asset.checksums = checksumResult.checksums;
         asset.romProbe = checksumResult.romProbe;
         asset.checksumTimeMs = Date.now() - checksumStartedAt;
@@ -1309,69 +1277,6 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
     }
     if (session.synthetic) this.syncInputSessionView();
     return !!(selected && session.view.state.status === "ready" && selected.preparedInputAssets?.[0]?.file);
-  }
-
-  private async calculateChecksumsForFile(
-    file: PatchFileInstance,
-    state: Pick<InternalSourceState, "fileName" | "id"> & {
-      decompressionTimeMs?: number;
-      order?: number;
-      parentCompressions?: ApplyWorkflowParentCompression[];
-      size?: number;
-      sourceSize?: number;
-      wasDecompressed?: boolean;
-    },
-    role: WorkflowProgress["role"],
-    progressId = state.id,
-  ): Promise<{ checksums: ApplyWorkflowChecksums; romProbe?: ChecksumRomProbe }> {
-    if (!this.runtime.checksum.calculate) return { checksums: {} };
-    const progressDetails = {
-      decompressionTimeMs: state.decompressionTimeMs,
-      fileName: state.fileName,
-      order: state.order,
-      parentCompressions: state.parentCompressions?.map((entry) => ({
-        ...entry,
-      })),
-      size: state.size,
-      sourceId: state.id,
-      sourceSize: state.sourceSize,
-      wasDecompressed: state.wasDecompressed,
-    };
-    this.emitProgress({
-      details: progressDetails,
-      id: `${this.id}:${progressId}:checksum`,
-      label: "Calculating checksums...",
-      percent: null,
-      role,
-      stage: "checksum",
-      workflow: "apply",
-    });
-    const result = await this.runtime.checksum.calculate({
-      algorithms: [...DEFAULT_CHECKSUMS],
-      logLevel: this.settings.logging?.level,
-      onLog: this.settings.logging?.sink,
-      onProgress: (progress) =>
-        this.emitProgress({
-          details: progressDetails,
-          id: `${this.id}:${progressId}:checksum`,
-          label: String(progress.label || progress.message || "Calculating checksums..."),
-          percent: typeof progress.percent === "number" && Number.isFinite(progress.percent) ? progress.percent : null,
-          role,
-          stage: "checksum",
-          workflow: "apply",
-        }),
-      source: createChecksumSource(file, state.fileName) as never,
-    });
-    return {
-      checksums: {
-        crc32: Number(result.crc32 || 0)
-          .toString(16)
-          .padStart(8, "0"),
-        md5: result.md5 || "",
-        sha1: result.sha1 || "",
-      },
-      romProbe: cloneChecksumRomProbe(result.romProbe),
-    };
   }
 
   private getPreparedInputAssets(): InputAsset[] {

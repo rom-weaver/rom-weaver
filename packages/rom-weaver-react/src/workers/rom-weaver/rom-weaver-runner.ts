@@ -50,7 +50,7 @@ type RomWeaverCommandBranch =
   | { type: "compress"; args: { input?: unknown } }
   | { type: "batch-header-fixer" | "trim"; args: { source?: unknown } }
   | { type: "patch-apply" | "patch-validate"; args: { input?: unknown; patches?: unknown } }
-  | { type: "patch-create"; args: { original?: unknown; modified?: unknown } }
+  | { type: "patch-create" | "patch-create-candidates"; args: { original?: unknown; modified?: unknown } }
   | { type: string; args: Record<string, unknown> };
 
 let browserWasmUrlPromise: Promise<string> | null = null;
@@ -153,6 +153,7 @@ const collectReferencedVirtualFilePaths = (
       pushPathValues(paths, branch.args.patches);
       break;
     case "patch-create":
+    case "patch-create-candidates":
       pushPathValue(paths, branch.args.original);
       pushPathValue(paths, branch.args.modified);
       break;
