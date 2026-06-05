@@ -4,9 +4,9 @@
   "scope": "./",
   "icons": [
     {
-      "src": "src/assets/app/logo.png",
+      "src": "logo.webp",
       "sizes": "1254x1254",
-      "type": "image/png"
+      "type": "image/webp"
     }
   ],
   "start_url": "./index.html",

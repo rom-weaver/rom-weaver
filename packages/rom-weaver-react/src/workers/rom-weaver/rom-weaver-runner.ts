@@ -7,6 +7,10 @@ import type {
   RomWeaverRunJsonResult,
   RomWeaverRunRequest,
 } from "rom-weaver-wasm";
+import browserWasmUrl from "rom-weaver-wasm/rom-weaver-app.wasm?url";
+import { createBrowserWorkerClient } from "rom-weaver-wasm/workers/browser-client";
+import browserRunnerWorkerUrl from "rom-weaver-wasm/workers/browser-runner-worker?worker&url";
+import browserThreadWorkerUrl from "rom-weaver-wasm/workers/browser-wasi-thread-worker?worker&url";
 import { type BrowserVirtualFile, getActiveBrowserVirtualFiles } from "../protocol/browser-virtual-files.ts";
 import { isBrowserRuntime } from "../shared/runtime-env.ts";
 import { WORKER_OPFS_MOUNTPOINT } from "../shared/worker-storage/storage-layout.ts";
@@ -53,8 +57,6 @@ type RomWeaverCommandBranch =
   | { type: "patch-create" | "patch-create-candidates"; args: { original?: unknown; modified?: unknown } }
   | { type: string; args: Record<string, unknown> };
 
-let browserWasmUrlPromise: Promise<string> | null = null;
-let browserThreadWorkerUrlPromise: Promise<string> | null = null;
 let browserThreadedRunnerPromise: Promise<RomWeaverRunner> | null = null;
 
 const describeVirtualFilesForTrace = (files: BrowserVirtualFile[]) => {
@@ -179,29 +181,11 @@ const selectActiveVirtualFilesForRun = (
   return activeVirtualFiles.filter((file) => referencedPaths.has(file.path));
 };
 
-const readWasmUrlModuleDefault = (module: { default?: unknown }, fallback: string) => {
-  const candidate = module.default;
-  if (typeof candidate === "string" && candidate.trim()) return candidate;
-  return fallback;
-};
+const resolveBrowserWasmUrl = async () => browserWasmUrl;
 
-const resolveBrowserWasmUrl = async () => {
-  if (!browserWasmUrlPromise) {
-    browserWasmUrlPromise = import("rom-weaver-wasm/rom-weaver-app.wasm?url")
-      .then((module) => readWasmUrlModuleDefault(module, "rom-weaver-wasm/rom-weaver-app.wasm"))
-      .catch(() => "rom-weaver-wasm/rom-weaver-app.wasm");
-  }
-  return browserWasmUrlPromise;
-};
+const resolveBrowserThreadWorkerUrl = async () => browserThreadWorkerUrl;
 
-const resolveBrowserThreadWorkerUrl = async () => {
-  if (!browserThreadWorkerUrlPromise) {
-    browserThreadWorkerUrlPromise = import("rom-weaver-wasm/workers/browser-wasi-thread-worker?worker&url")
-      .then((module) => readWasmUrlModuleDefault(module, "rom-weaver-wasm/workers/browser-wasi-thread-worker"))
-      .catch(() => "rom-weaver-wasm/workers/browser-wasi-thread-worker");
-  }
-  return browserThreadWorkerUrlPromise;
-};
+const resolveBrowserRunnerWorkerUrl = async () => browserRunnerWorkerUrl;
 
 const canUseThreadedBrowserWasm = (root: typeof globalThis = globalThis) => {
   return typeof root.SharedArrayBuffer === "function" && root.crossOriginIsolated === true;
@@ -239,8 +223,8 @@ const createBrowserRunnerInitOptions = (
 };
 
 const createBrowserRunner = async (options?: { workerThreads?: RuntimeValue }): Promise<RomWeaverRunner> => {
-  const { createBrowserWorkerClient } = await import("rom-weaver-wasm/workers/browser-client");
-  const client = createBrowserWorkerClient() as unknown as RomWeaverWorkerClient;
+  const runnerWorkerUrl = await resolveBrowserRunnerWorkerUrl();
+  const client = createBrowserWorkerClient({ workerUrl: runnerWorkerUrl }) as unknown as RomWeaverWorkerClient;
   const wasmAsset = await resolveBrowserWasmAsset();
   const ready = await client.init(createBrowserRunnerInitOptions(wasmAsset, options));
   const selectedWasmUrl = wasmAsset.wasmUrl ?? ready.wasmUrl ?? "";

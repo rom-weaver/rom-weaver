@@ -10,6 +10,7 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import zlib from "node:zlib";
 import { createServer as createViteServer } from "vite";
 
 const WILDCARD_HOST_REGEX = /^0\.0\.0\.0(?::\d+)?$/;
@@ -19,6 +20,8 @@ const ROOT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."
 const DEFAULT_DEV_PORT = 5173;
 const DEFAULT_PREVIEW_PORT = 4173;
 const CERT_VALID_DAYS = parseInt(process.env.DEV_CERT_DAYS || "30", 10);
+const DYNAMIC_BROTLI_MAX_BYTES = 256 * 1024;
+const DYNAMIC_BROTLI_TYPES = new Set([".css", ".html", ".js", ".json", ".mjs", ".svg"]);
 const MIME_TYPES = {
   ".css": "text/css; charset=utf-8",
   ".gif": "image/gif",
@@ -35,6 +38,7 @@ const MIME_TYPES = {
   ".txt": "text/plain; charset=utf-8",
   ".wasm": "application/wasm",
   ".webmanifest": "application/manifest+json; charset=utf-8",
+  ".webp": "image/webp",
 };
 
 const SECURITY_HEADERS = {
@@ -393,6 +397,11 @@ const startDevServer = async (options) => {
 
 const getContentType = (filePath) => MIME_TYPES[path.extname(filePath).toLowerCase()] || "application/octet-stream";
 
+const acceptsBrotli = (req) => /\bbr\b/i.test(String(req.headers["accept-encoding"] || ""));
+
+const canCompressBrotliOnTheFly = (filePath, data) =>
+  data.byteLength <= DYNAMIC_BROTLI_MAX_BYTES && DYNAMIC_BROTLI_TYPES.has(path.extname(filePath).toLowerCase());
+
 const resolveDistRequestPath = (distDir, requestUrl) => {
   const parsed = new URL(requestUrl || "/", "https://localhost");
   const decodedPath = decodeURIComponent(parsed.pathname || "/");
@@ -428,6 +437,35 @@ const readPreviewFile = (filePath, fallbackPath, allowFallback, callback) => {
   });
 };
 
+const readPreviewBrotliFile = (resolvedPath, sourceData, req, callback) => {
+  if (!acceptsBrotli(req) || resolvedPath.endsWith(".br")) {
+    callback(null, null);
+    return;
+  }
+  const brotliPath = `${resolvedPath}.br`;
+  fs.readFile(brotliPath, (readError, brotliData) => {
+    if (readError) {
+      if (!canCompressBrotliOnTheFly(resolvedPath, sourceData)) {
+        callback(null, null);
+        return;
+      }
+      zlib.brotliCompress(
+        sourceData,
+        { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 6 } },
+        (compressError, compressed) => {
+          if (compressError || compressed.byteLength >= sourceData.byteLength) {
+            callback(null, null);
+            return;
+          }
+          callback(null, { data: compressed, path: brotliPath });
+        },
+      );
+      return;
+    }
+    callback(null, { data: brotliData, path: brotliPath });
+  });
+};
+
 const handlePreviewRequest = (distDir, req, res) => {
   if (req.method !== "GET" && req.method !== "HEAD") {
     send(res, 405, { Allow: "GET, HEAD" }, "Method Not Allowed");
@@ -455,15 +493,20 @@ const handlePreviewRequest = (distDir, req, res) => {
       send(res, 404, { "Content-Type": "text/plain; charset=utf-8" }, "Not Found");
       return;
     }
-    send(
-      res,
-      200,
-      {
-        "Cache-Control": path.basename(resolvedPath) === "index.html" ? "no-cache" : "public, max-age=31536000, immutable",
-        "Content-Type": getContentType(resolvedPath),
-      },
-      req.method === "HEAD" ? null : data,
-    );
+    readPreviewBrotliFile(resolvedPath, data, req, (_brotliError, brotliFile) => {
+      const encoded = Boolean(brotliFile);
+      send(
+        res,
+        200,
+        {
+          "Cache-Control":
+            path.basename(resolvedPath) === "index.html" ? "no-cache" : "public, max-age=31536000, immutable",
+          "Content-Type": getContentType(resolvedPath),
+          ...(encoded ? { "Content-Encoding": "br", Vary: "Accept-Encoding" } : {}),
+        },
+        req.method === "HEAD" ? null : encoded ? brotliFile.data : data,
+      );
+    });
   });
 };
 

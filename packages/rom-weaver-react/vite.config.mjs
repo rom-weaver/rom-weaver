@@ -1,7 +1,9 @@
+import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
+import zlib from "node:zlib";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
@@ -28,13 +30,15 @@ const linkedDependencyAllowRoots = [
 ].filter((entry) => entry !== null && !entry.startsWith(repoRoot));
 
 const rootManifestSourcePath = path.join(rootDir, "src", "assets", "app", "root", "manifest.json");
+const packagedWasmPath = path.join(rootDir, "..", "rom-weaver-wasm", "rom-weaver-app.wasm");
+const packagedWasmBrotliPath = `${packagedWasmPath}.br`;
 const rootStaticAssetSources = {
   "/apple-touch-icon.png": path.join(rootDir, "src", "assets", "app", "root", "apple-touch-icon.png"),
   "/favicon.ico": path.join(rootDir, "src", "assets", "app", "root", "favicon.ico"),
-  "/logo.png": path.join(rootDir, "src", "assets", "app", "logo.png"),
+  "/logo.webp": path.join(rootDir, "src", "assets", "app", "logo.webp"),
   "/manifest.json": rootManifestSourcePath,
 };
-const staticAppAssetSourceDir = path.join(rootDir, "src", "assets", "app");
+const brotliAssetExtensions = new Set([".css", ".html", ".js", ".json", ".mjs", ".svg", ".wasm"]);
 const securityHeaders = {
   "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
   "Cross-Origin-Embedder-Policy": "require-corp",
@@ -89,30 +93,42 @@ const suppressNestedWorkerFactoryBundling = () => {
   };
 };
 
-const serveRootStaticAssets = () => ({
-  apply: "serve",
-  configureServer(server) {
-    server.middlewares.use((req, res, next) => {
-      const requestPath = req.url ? req.url.split("?")[0] : "";
-      const sourcePath = rootStaticAssetSources[requestPath];
-      if (!sourcePath) {
-        next();
+const setRootStaticAssetContentType = (requestPath, res) => {
+  if (requestPath.endsWith(".json")) res.setHeader("Content-Type", "application/json; charset=utf-8");
+  else if (requestPath.endsWith(".png")) res.setHeader("Content-Type", "image/png");
+  else if (requestPath.endsWith(".webp")) res.setHeader("Content-Type", "image/webp");
+  else if (requestPath.endsWith(".svg")) res.setHeader("Content-Type", "image/svg+xml");
+  else if (requestPath.endsWith(".ico")) res.setHeader("Content-Type", "image/x-icon");
+};
+
+const applyRootStaticAssetMiddleware = (middlewares) => {
+  middlewares.use((req, res, next) => {
+    const requestPath = req.url ? req.url.split("?")[0] : "";
+    const sourcePath = rootStaticAssetSources[requestPath];
+    if (!sourcePath) {
+      next();
+      return;
+    }
+    fs.readFile(sourcePath, (err, source) => {
+      if (err) {
+        next(err);
         return;
       }
-      fs.readFile(sourcePath, (err, source) => {
-        if (err) {
-          next(err);
-          return;
-        }
-        res.statusCode = 200;
-        if (requestPath.endsWith(".json")) res.setHeader("Content-Type", "application/json; charset=utf-8");
-        else if (requestPath.endsWith(".png")) res.setHeader("Content-Type", "image/png");
-        else if (requestPath.endsWith(".svg")) res.setHeader("Content-Type", "image/svg+xml");
-        else if (requestPath.endsWith(".ico")) res.setHeader("Content-Type", "image/x-icon");
-        res.setHeader("Cache-Control", "no-cache");
-        res.end(source);
-      });
+      res.statusCode = 200;
+      setRootStaticAssetContentType(requestPath, res);
+      res.setHeader("Cache-Control", "no-cache");
+      res.end(source);
     });
+  });
+};
+
+const serveRootStaticAssets = () => ({
+  apply: "serve",
+  configurePreviewServer(server) {
+    applyRootStaticAssetMiddleware(server.middlewares);
+  },
+  configureServer(server) {
+    applyRootStaticAssetMiddleware(server.middlewares);
   },
   name: "rom-weaver-root-static-assets",
 });
@@ -122,17 +138,42 @@ const copyFile = (from, to) => {
   fs.copyFileSync(from, to);
 };
 
-const copyDirectory = (from, to, filter) => {
-  if (!fs.existsSync(from)) return;
-  const entries = fs.readdirSync(from, { withFileTypes: true });
-  for (const entry of entries) {
-    const sourcePath = path.join(from, entry.name);
-    const targetPath = path.join(to, entry.name);
+const sha256File = (filePath) => crypto.createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
+
+const packagedBrotliPathForDistAsset = (filePath) => {
+  if (path.extname(filePath) !== ".wasm") return null;
+  if (!(fs.existsSync(packagedWasmPath) && fs.existsSync(packagedWasmBrotliPath))) return null;
+  if (sha256File(filePath) !== sha256File(packagedWasmPath)) return null;
+  return packagedWasmBrotliPath;
+};
+
+const writeBrotliAsset = (filePath) => {
+  const brotliPath = `${filePath}.br`;
+  const precompressedPath = packagedBrotliPathForDistAsset(filePath);
+  if (precompressedPath) {
+    copyFile(precompressedPath, brotliPath);
+    return;
+  }
+
+  const source = fs.readFileSync(filePath);
+  const compressed = zlib.brotliCompressSync(source, {
+    params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 11 },
+  });
+  if (compressed.byteLength >= source.byteLength) return;
+  fs.writeFileSync(brotliPath, compressed);
+};
+
+const writeBrotliAssetsInDirectory = (directory) => {
+  if (!fs.existsSync(directory)) return;
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const filePath = path.join(directory, entry.name);
     if (entry.isDirectory()) {
-      copyDirectory(sourcePath, targetPath, filter);
-    } else if (!filter || filter(sourcePath)) {
-      copyFile(sourcePath, targetPath);
+      writeBrotliAssetsInDirectory(filePath);
+      continue;
     }
+    if (entry.name.endsWith(".br")) continue;
+    if (!brotliAssetExtensions.has(path.extname(entry.name).toLowerCase())) continue;
+    writeBrotliAsset(filePath);
   }
 };
 
@@ -154,16 +195,25 @@ const writeWebappStaticAssets = () => {
         }
         copyFile(rootStaticAssetSources[assetPath], outputPath);
       }
-      copyDirectory(
-        staticAppAssetSourceDir,
-        path.join(distDir, "assets", "app"),
-        (filePath) => /\.(png|svg|jpe?g|webp)$/i.test(filePath) && !/[/\\]root[/\\]/.test(filePath),
-      );
     },
     configResolved(config) {
       outDir = config.build.outDir;
     },
     name: "rom-weaver-static-assets",
+  };
+};
+
+const writePreviewBrotliAssets = () => {
+  let outDir = "dist";
+  return {
+    apply: "build",
+    closeBundle() {
+      writeBrotliAssetsInDirectory(path.resolve(rootDir, outDir));
+    },
+    configResolved(config) {
+      outDir = config.build.outDir;
+    },
+    name: "rom-weaver-preview-brotli-assets",
   };
 };
 
@@ -240,7 +290,7 @@ export default defineConfig(({ command }) => {
           globPatterns: [
             "index.html",
             "manifest.json",
-            "logo.png",
+            "logo.webp",
             "favicon.ico",
             "apple-touch-icon.png",
             "assets/**/*.{css,js,mjs,json,png,svg,jpg,jpeg,webp,woff2,wasm}",
@@ -260,6 +310,7 @@ export default defineConfig(({ command }) => {
         srcDir: "src/webapp",
         strategies: "injectManifest",
       }),
+      writePreviewBrotliAssets(),
     ],
     preview: {
       headers: securityHeaders,

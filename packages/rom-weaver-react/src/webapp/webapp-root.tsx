@@ -3,7 +3,6 @@ import RotateCcw from "lucide-react/dist/esm/icons/rotate-ccw.js";
 import Save from "lucide-react/dist/esm/icons/save.js";
 import Scissors from "lucide-react/dist/esm/icons/scissors.js";
 import { useEffect, useState } from "react";
-import logoUrl from "../assets/app/logo.png";
 import { preloadBrowserRuntime } from "../platform/browser/browser-api.ts";
 import { ApplyBandaidIcon } from "../public/react/components/apply-bandaid-icon.tsx";
 import { ConfirmDialog, Modal } from "../public/react/components/ds/index.ts";
@@ -20,6 +19,7 @@ const WORKFLOW_TABS = [
   { icon: <GitCompare aria-hidden="true" />, id: "creator", label: "Create" },
   { icon: <Scissors aria-hidden="true" />, id: "trim", label: "Trim" },
 ];
+const ROOT_LOGO_URL = "./logo.webp";
 
 function WebappRoot({ state, serviceWorkerCache, pageUpdate, confirmationDialog, actions }: WebappRootProps) {
   const [updateDismissed, setUpdateDismissed] = useState(false);
@@ -34,7 +34,7 @@ function WebappRoot({ state, serviceWorkerCache, pageUpdate, confirmationDialog,
         <div className="app">
           <Topbar
             currentTab={state.currentView}
-            logoSrc={logoUrl}
+            logoSrc={ROOT_LOGO_URL}
             onOpenSettings={actions.onOpenSettings}
             onSelectTab={(id) => actions.onSelectView(id as WebappRootProps["state"]["currentView"])}
             tabs={WORKFLOW_TABS}
