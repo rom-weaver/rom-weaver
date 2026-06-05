@@ -1980,6 +1980,9 @@ class BrowserVirtualRandomAccessFile {
     this.ioStats = createRandomAccessFileIoStats();
     this.supportsDirectWasmRead = true;
     this.closed = false;
+    // Set once a proxy read times out: the producer may still own a slot, so the proxy stops
+    // recycling slots and fails fast instead of risking a stale-data read on a reused slot.
+    this.proxyFailed = false;
   }
 
   readAt(offset, dst) {
@@ -2097,6 +2100,7 @@ class BrowserVirtualRandomAccessFile {
       );
     }
     let slot = null;
+    let abandonedSlot = false;
     try {
       slot = this.acquireProxySlot();
       if (shouldTrace) {
@@ -2126,6 +2130,10 @@ class BrowserVirtualRandomAccessFile {
         if (state === VIRTUAL_FILE_PROXY_STATE_DONE) break;
         const result = waitForAtomicsStateChange(slot.control, 0, state, { deadline });
         if (result === 'timed-out') {
+          // The producer may still own this slot (mid read). Poison the proxy and do not recycle
+          // the slot below, so a stale producer completion can never satisfy a later request.
+          abandonedSlot = true;
+          this.proxyFailed = true;
           throw new Error(`virtual file read timed out for ${this.proxy.id}`);
         }
       }
@@ -2146,7 +2154,7 @@ class BrowserVirtualRandomAccessFile {
       );
       throw error;
     } finally {
-      if (slot) this.releaseProxySlot(slot);
+      if (slot && !abandonedSlot) this.releaseProxySlot(slot);
     }
   }
 
@@ -2155,6 +2163,9 @@ class BrowserVirtualRandomAccessFile {
   }
 
   acquireProxySlot() {
+    if (this.proxyFailed) {
+      throw new Error(`virtual file proxy is no longer usable for ${this.proxy.id}`);
+    }
     const deadline = createWaitDeadline(VIRTUAL_FILE_PROXY_SLOT_ACQUIRE_TIMEOUT_MS);
     while (true) {
       for (const slot of this.slots) {
@@ -2181,6 +2192,7 @@ class BrowserVirtualRandomAccessFile {
       }
       const waitResult = waitForAtomicsStateChange(first.control, 0, state, { deadline });
       if (waitResult === 'timed-out') {
+        this.proxyFailed = true;
         throw new Error(`virtual file read slot acquisition timed out for ${this.proxy.id}`);
       }
     }

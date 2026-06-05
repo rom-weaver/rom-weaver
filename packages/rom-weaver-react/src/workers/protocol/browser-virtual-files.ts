@@ -40,7 +40,10 @@ const CONTROL_STATUS_INDEX = 5;
 const CONTROL_LENGTH = 6;
 const CONTROL_STATE_REQUESTED = 1;
 const CONTROL_STATE_DONE = 2;
-const CONTROL_STATE_READING = 3;
+// Distinct from the WASM consumer's transient LOCKED slot-acquire state (control-word value 3),
+// so the producer's in-flight marker can never alias the consumer's, and the ownership check in
+// respondToVirtualFileRead is unambiguous.
+const CONTROL_STATE_READING = 4;
 const CONTROL_STATUS_ERROR = 1;
 const CONTROL_STATUS_OK = 0;
 let virtualFileId = 0;
@@ -243,22 +246,30 @@ const respondToVirtualFileRead = async (
   control: Int32Array,
   data: Uint8Array,
 ): Promise<void> => {
+  let bytes: Uint8Array | null = null;
+  let bytesRead = 0;
+  let status = CONTROL_STATUS_OK;
   try {
     const offset =
       (Atomics.load(control, CONTROL_OFFSET_LOW_INDEX) >>> 0) +
       (Atomics.load(control, CONTROL_OFFSET_HIGH_INDEX) >>> 0) * 2 ** 32;
     const length = Math.max(0, Math.min(Atomics.load(control, CONTROL_LENGTH_INDEX), data.byteLength));
-    const bytes = await readVirtualSource(source, offset, length);
-    data.set(bytes.subarray(0, length));
-    Atomics.store(control, CONTROL_BYTES_READ_INDEX, Math.min(bytes.byteLength, length));
-    Atomics.store(control, CONTROL_STATUS_INDEX, CONTROL_STATUS_OK);
+    bytes = await readVirtualSource(source, offset, length);
+    bytesRead = Math.min(bytes.byteLength, length);
   } catch (_error) {
-    Atomics.store(control, CONTROL_BYTES_READ_INDEX, 0);
-    Atomics.store(control, CONTROL_STATUS_INDEX, CONTROL_STATUS_ERROR);
-  } finally {
-    Atomics.store(control, CONTROL_STATE_INDEX, CONTROL_STATE_DONE);
-    Atomics.notify(control, CONTROL_STATE_INDEX, 1);
+    status = CONTROL_STATUS_ERROR;
+    bytes = null;
+    bytesRead = 0;
   }
+  // Only publish if this pump still owns the slot (state READING). If the consumer abandoned the
+  // request (read timeout) the slot is no longer READING, so discard rather than copy stale bytes
+  // into the shared buffer where a later request that reused the slot could read them.
+  if (Atomics.load(control, CONTROL_STATE_INDEX) !== CONTROL_STATE_READING) return;
+  if (bytes && bytesRead > 0) data.set(bytes.subarray(0, bytesRead));
+  Atomics.store(control, CONTROL_BYTES_READ_INDEX, bytesRead);
+  Atomics.store(control, CONTROL_STATUS_INDEX, status);
+  Atomics.store(control, CONTROL_STATE_INDEX, CONTROL_STATE_DONE);
+  Atomics.notify(control, CONTROL_STATE_INDEX, 1);
 };
 
 const readVirtualSource = async (
