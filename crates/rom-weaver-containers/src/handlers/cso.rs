@@ -285,6 +285,33 @@ impl CsoContainerHandler {
         })
     }
 
+    fn decode_extract_tasks_ordered<Decode, WriteChunk>(
+        tasks: &[CsoExtractTask],
+        effective_threads: usize,
+        decode: Decode,
+        mut write_chunk: WriteChunk,
+    ) -> Result<()>
+    where
+        Decode: Fn(CsoExtractTask) -> Result<CsoDecodedExtractChunk> + Sync,
+        WriteChunk: FnMut(CsoDecodedExtractChunk, u64) -> Result<()>,
+    {
+        ordered_streaming_compress(
+            tasks,
+            effective_threads,
+            OrderedStreamingMessages {
+                worker_closed: "cso extract workers ended before all chunks were consumed",
+                result_closed: "cso extract pipeline ended before all chunks were produced",
+            },
+            |_, task| Ok(task.clone()),
+            || (),
+            |_, _, task| {
+                let task_len = task.len;
+                decode(task).map(|chunk| (task_len, chunk))
+            },
+            |_, (task_len, chunk)| write_chunk(chunk, task_len),
+        )
+    }
+
 }
 
 impl ContainerHandlerOperations for CsoContainerHandler {
@@ -358,7 +385,7 @@ impl ContainerHandlerOperations for CsoContainerHandler {
         let logical_bytes = reader.file_size();
         let tasks = self.build_extract_tasks(logical_bytes);
         let extract_capability = ThreadCapability::parallel(Some(tasks.len().max(1)));
-        let (execution, pool) = context.build_pool(extract_capability)?;
+        let execution = context.plan_threads(extract_capability);
         let extract_progress_label = format!("extracting `{}`", self.descriptor.name);
         let extract_progress_bytes = Arc::new(AtomicU64::new(0));
         let extract_progress_bucket = Arc::new(AtomicU8::new(0));
@@ -428,45 +455,25 @@ impl ContainerHandlerOperations for CsoContainerHandler {
                     source.display()
                 ))
             })?);
-            let batch_size = bounded_items_for_threads(execution.effective_threads);
-            for task_batch in tasks.chunks(batch_size) {
-                let mut chunks = pool.install(|| {
-                    task_batch
-                        .par_iter()
-                        .map(|task| {
-                            self.decode_extract_task_from_buffer(
-                                &source,
-                                Arc::clone(&source_bytes),
-                                task,
-                            )
-                            .map(|chunk| (task.len, chunk))
-                        })
-                        .collect::<Result<Vec<_>>>()
-                })?;
-                chunks.sort_by_key(|(_, chunk)| chunk.index);
-                for (task_len, chunk) in chunks {
-                    write_chunk(chunk, task_len)?;
-                }
-            }
-            Ok(())
+            Self::decode_extract_tasks_ordered(
+                &tasks,
+                execution.effective_threads,
+                |task| {
+                    self.decode_extract_task_from_buffer(
+                        &source,
+                        Arc::clone(&source_bytes),
+                        &task,
+                    )
+                },
+                &mut write_chunk,
+            )
         } else if execution.used_parallelism {
-            let batch_size = bounded_items_for_threads(execution.effective_threads);
-            for task_batch in tasks.chunks(batch_size) {
-                let mut chunks = pool.install(|| {
-                    task_batch
-                        .par_iter()
-                        .map(|task| {
-                            self.decode_extract_task(&source, task)
-                                .map(|chunk| (task.len, chunk))
-                        })
-                        .collect::<Result<Vec<_>>>()
-                })?;
-                chunks.sort_by_key(|(_, chunk)| chunk.index);
-                for (task_len, chunk) in chunks {
-                    write_chunk(chunk, task_len)?;
-                }
-            }
-            Ok(())
+            Self::decode_extract_tasks_ordered(
+                &tasks,
+                execution.effective_threads,
+                |task| self.decode_extract_task(&source, &task),
+                &mut write_chunk,
+            )
         } else {
             tasks.iter().try_for_each(|task| {
                 let chunk = self.decode_extract_task(&source, task)?;
