@@ -67,6 +67,10 @@ const CREATE_PATCH_ARCHIVE_DEFAULT_EXTENSIONS: &[&str] = &[
 const CREATE_PATCH_SPECIAL_COMPRESSION_EXTENSIONS: &[&str] = &[
     ".chd", ".rvz", ".gcz", ".wia", ".z3ds", ".z3dsx", ".zcci", ".zcia", ".zcxi",
 ];
+const LIBRETRO_PATCH_ORDER_EXTENSIONS: &[&str] = &[
+    ".ips", ".ups", ".bps", ".aps", ".rup", ".ppf", ".ebp", ".bdf", ".bsp",
+    ".bspatch", ".mod", ".xdelta", ".delta", ".dat", ".vcdiff",
+];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct PatchCreateInputSizes {
@@ -79,6 +83,18 @@ struct PatchCreateSourceInfo {
     archive: bool,
     size: u64,
     special_compression: bool,
+}
+
+#[derive(Debug, Default)]
+struct DiscoveredPatchApplySidecars {
+    patches: Vec<PathBuf>,
+    cleanup_paths: Vec<PathBuf>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct ResolvedSidecarPatchEntry {
+    entry: ContainerListEntry,
+    order: u32,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -269,6 +285,214 @@ impl CliApp {
         })
     }
 
+    fn archive_entry_directory(entry_name: &str) -> &str {
+        entry_name.rsplit_once('/').map(|(dir, _)| dir).unwrap_or("")
+    }
+
+    fn archive_entry_file_name(entry_name: &str) -> &str {
+        entry_name.rsplit('/').next().unwrap_or(entry_name)
+    }
+
+    fn archive_entry_stem(entry_name: &str) -> &str {
+        let file_name = Self::archive_entry_file_name(entry_name);
+        file_name.rsplit_once('.').map(|(stem, _)| stem).unwrap_or(file_name)
+    }
+
+    fn strip_bracket_label_suffix(value: &str) -> &str {
+        let Some(end) = value.strip_suffix(']') else {
+            return value.trim();
+        };
+        let Some((base, _label)) = end.rsplit_once('[') else {
+            return value.trim();
+        };
+        base.trim_end()
+    }
+
+    fn parse_libretro_patch_file_name(file_name: &str) -> Option<(&str, u32)> {
+        let lower = file_name.to_ascii_lowercase();
+        let mut best: Option<(usize, usize, u32)> = None;
+        for extension in LIBRETRO_PATCH_ORDER_EXTENSIONS {
+            let Some(extension_start) = lower.rfind(extension) else {
+                continue;
+            };
+            if extension_start == 0 {
+                continue;
+            }
+            let suffix = &lower[extension_start + extension.len()..];
+            if !suffix.bytes().all(|byte| byte.is_ascii_digit()) {
+                continue;
+            }
+            let order = if suffix.is_empty() {
+                0
+            } else {
+                suffix.parse::<u32>().ok()?
+            };
+            let extension_len = extension.len();
+            if best
+                .map(|(best_start, best_len, _)| {
+                    extension_len > best_len
+                        || (extension_len == best_len && extension_start > best_start)
+                })
+                .unwrap_or(true)
+            {
+                best = Some((extension_start, extension_len, order));
+            }
+        }
+        let (extension_start, _, order) = best?;
+        Some((Self::strip_bracket_label_suffix(&file_name[..extension_start]), order))
+    }
+
+    fn entry_matches_libretro_sidecar(rom_entry: &str, patch_entry: &str) -> Option<u32> {
+        if Self::archive_entry_directory(rom_entry) != Self::archive_entry_directory(patch_entry)
+        {
+            return None;
+        }
+        let patch_file_name = Self::archive_entry_file_name(patch_entry);
+        let (patch_base, order) = Self::parse_libretro_patch_file_name(patch_file_name)?;
+        if patch_base == Self::archive_entry_file_name(rom_entry)
+            || patch_base == Self::archive_entry_stem(rom_entry)
+        {
+            Some(order)
+        } else {
+            None
+        }
+    }
+
+    fn selected_libretro_rom_entry(
+        archive_path: &Path,
+        select: &[String],
+        entries: &[ContainerListEntry],
+    ) -> Result<Option<ContainerListEntry>> {
+        let mut matcher = SelectionMatcher::new(select);
+        let selected = entries
+            .iter()
+            .filter(|entry| is_rom_filter_candidate_name(&entry.path))
+            .filter(|entry| matcher.matches(&entry.path))
+            .cloned()
+            .collect::<Vec<_>>();
+        matcher.ensure_all_matched()?;
+        match selected.len() {
+            0 => Ok(None),
+            1 => Ok(selected.into_iter().next()),
+            _ => {
+                let choices = selected
+                    .iter()
+                    .map(|entry| format!("`{}`", entry.path))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                Err(RomWeaverError::Validation(format!(
+                    "patch apply input sidecar discovery is ambiguous for `{}`; ROM candidates: {choices}. Pass --select <pattern> to choose one payload",
+                    archive_path.display()
+                )))
+            }
+        }
+    }
+
+    fn discover_patch_apply_sidecars(
+        &self,
+        input: &Path,
+        select: &[String],
+        no_ignore: bool,
+        context: &OperationContext,
+    ) -> Result<DiscoveredPatchApplySidecars> {
+        let Some(handler) = self.containers.probe(input) else {
+            return Ok(DiscoveredPatchApplySidecars::default());
+        };
+        if handler.descriptor().matches_name("xiso") || !handler.capabilities().extract {
+            return Ok(DiscoveredPatchApplySidecars::default());
+        }
+
+        let probe_request = ContainerProbeRequest {
+            source: input.to_path_buf(),
+        };
+        handler.probe_details(&probe_request, context)?;
+        let listed_entries = handler.list_entries(&probe_request, context)?;
+        let entries = listed_entries
+            .into_iter()
+            .map(|entry| ContainerListEntry {
+                path: normalize_archive_name(&entry),
+                size: None,
+            })
+            .filter(|entry| !entry.path.is_empty())
+            .filter(|entry| no_ignore || !should_ignore_common_container_file(&entry.path))
+            .collect::<Vec<_>>();
+        let Some(rom_entry) = Self::selected_libretro_rom_entry(input, select, &entries)? else {
+            return Ok(DiscoveredPatchApplySidecars::default());
+        };
+
+        let mut sidecars = entries
+            .iter()
+            .filter(|entry| is_patch_filter_candidate_name(&entry.path))
+            .filter_map(|entry| {
+                let order = Self::entry_matches_libretro_sidecar(&rom_entry.path, &entry.path)?;
+                Some(ResolvedSidecarPatchEntry {
+                    entry: entry.clone(),
+                    order,
+                })
+            })
+            .collect::<Vec<_>>();
+        sidecars.sort_by(|left, right| {
+            left.order
+                .cmp(&right.order)
+                .then_with(|| left.entry.path.cmp(&right.entry.path))
+        });
+        if sidecars.is_empty() {
+            return Ok(DiscoveredPatchApplySidecars::default());
+        }
+
+        let out_dir = context
+            .temp_paths()
+            .next_path("patch-apply-sidecar-patch-extract", None);
+        fs::create_dir_all(&out_dir)?;
+        self.emit_running(
+            OperationLabel {
+                command: "patch-apply",
+                family: OperationFamily::Patch,
+                format: Some(handler.descriptor().name),
+            },
+            "prepare",
+            format!(
+                "extracting {} RetroArch sidecar patch file(s) from `{}`",
+                sidecars.len(),
+                input.display()
+            ),
+            None,
+            Some(context.plan_threads(handler.capabilities().extract_threads)),
+        );
+        let selections = sidecars
+            .iter()
+            .map(|sidecar| sidecar.entry.path.clone())
+            .collect::<Vec<_>>();
+        let request = ContainerExtractRequest {
+            source: input.to_path_buf(),
+            selections: Vec::new(),
+            kind_filter: Self::archive_entry_kind_filter(false, true),
+            out_dir: out_dir.clone(),
+            split_bin: false,
+            ignore_common_files: !no_ignore,
+            overwrite: true,
+            parent: None,
+        };
+        handler.extract(&request, context)?;
+        let selected_names = selections.into_iter().collect::<BTreeSet<_>>();
+        let patches = self
+            .collect_checksum_extract_candidates(&out_dir)?
+            .into_iter()
+            .filter(|candidate| selected_names.contains(&candidate.display_name))
+            .map(|candidate| candidate.source)
+            .collect::<Vec<_>>();
+        if patches.len() != selected_names.len() {
+            return Err(RomWeaverError::Validation(format!(
+                "failed to extract all RetroArch sidecar patches from `{}`",
+                input.display()
+            )));
+        }
+        Ok(DiscoveredPatchApplySidecars {
+            patches,
+            cleanup_paths: vec![out_dir],
+        })
+    }
+
     fn run_patch_apply(&self, args: PatchApplyCommand) -> AppRunOutcome {
         trace!(
             input = %args.input.display(),
@@ -299,7 +523,7 @@ impl CliApp {
             patch_filter,
             no_extract,
             no_ignore,
-            patches,
+            mut patches,
             output,
             no_compress,
             compress_format,
@@ -313,7 +537,8 @@ impl CliApp {
             ignore_checksum_validation,
             threads,
         } = args;
-        let input_kind_filter = Self::archive_entry_kind_filter(rom_filter, false);
+        let discover_implicit_patches = patches.is_empty() && !no_extract;
+        let input_kind_filter = Self::archive_entry_kind_filter(rom_filter || discover_implicit_patches, false);
         let patch_kind_filter = Self::archive_entry_kind_filter(false, patch_filter);
         let context =
             self.context(threads)
@@ -386,6 +611,40 @@ impl CliApp {
         ) {
             return self.finish("patch-apply", report);
         }
+        let discovered_sidecars = if discover_implicit_patches {
+            match self.discover_patch_apply_sidecars(&input, &select, no_ignore, &context) {
+                Ok(discovered) => discovered,
+                Err(error) => {
+                    return self.finish(
+                        "patch-apply",
+                        OperationReport::failed(
+                            OperationFamily::Patch,
+                            None,
+                            "prepare",
+                            error.to_string(),
+                            probe_threads.clone(),
+                        ),
+                    );
+                }
+            }
+        } else {
+            DiscoveredPatchApplySidecars::default()
+        };
+        if patches.is_empty() {
+            patches = discovered_sidecars.patches.clone();
+        }
+        if patches.is_empty() {
+            return self.finish(
+                "patch-apply",
+                OperationReport::failed(
+                    OperationFamily::Patch,
+                    None,
+                    "validate",
+                    "patch apply requires at least one --patch file or RetroArch-style sidecar patch inside the input archive".to_string(),
+                    probe_threads.clone(),
+                ),
+            );
+        }
         for patch_path in &patches {
             if let Some(report) = self.require_existing_path(
                 "patch-apply",
@@ -441,6 +700,7 @@ impl CliApp {
             None
         };
         let mut temp_paths = cleanup_paths;
+        temp_paths.extend(discovered_sidecars.cleanup_paths);
         let mut resolved_patches = Vec::with_capacity(patches.len());
         let mut extracted_patch_notes = Vec::new();
         for (index, patch_path) in patches.iter().enumerate() {

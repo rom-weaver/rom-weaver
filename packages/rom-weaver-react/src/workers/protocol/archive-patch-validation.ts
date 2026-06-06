@@ -5,7 +5,7 @@ import { filterPatchEntries, getBlobSource } from "./archive-shared-utils.ts";
 
 const BPS_EXTENSION_REGEX = /\.bps\d*$/i;
 const PATCH_EXTENSION_DIGIT_SUFFIX_REGEX =
-  /\.(ips|ups|bps|aps|rup|ppf|ebp|bdf|bspatch|mod|xdelta|delta|dat|vcdiff)\d*$/i;
+  /\.(ips|ups|bps|aps|rup|ppf|ebp|bdf|bsp|bspatch|mod|xdelta|delta|dat|vcdiff)\d*$/i;
 
 type Awaitable<T> = T | Promise<T>;
 type ArchiveByteSource = ArrayBufferLike | Uint8Array | ArrayBufferView;

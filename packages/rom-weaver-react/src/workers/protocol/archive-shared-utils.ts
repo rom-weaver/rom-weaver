@@ -97,7 +97,7 @@ const WRAPPED_ARCHIVE_TYPE_VALUES = [
 ];
 const WRAPPED_ARCHIVE_TYPES = new Set(WRAPPED_ARCHIVE_TYPE_VALUES);
 
-const FILTER_PATCHES = /\.(ips|ups|bps|aps|rup|ppf|ebp|bdf|bspatch|mod|xdelta|delta|dat|vcdiff)\d*$/i;
+const FILTER_PATCHES = /\.(ips|ups|bps|aps|rup|ppf|ebp|bdf|bsp|bspatch|mod|xdelta|delta|dat|vcdiff)\d*$/i;
 const ARCHIVE_EXTENSION_ALIASES: Record<string, string> = {
   a: ARCHIVE_TYPES.AR,
   brotli: ARCHIVE_TYPES.BROTLI,

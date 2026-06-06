@@ -36,11 +36,11 @@ impl SelectionPattern {
     }
 
     fn matches(&self, entry_name: &str) -> bool {
+        if entry_name == self.requested || entry_name.starts_with(&format!("{}/", self.requested)) {
+            return true;
+        }
         match &self.kind {
-            SelectionPatternKind::ExactOrPrefix => {
-                entry_name == self.requested
-                    || entry_name.starts_with(&format!("{}/", self.requested))
-            }
+            SelectionPatternKind::ExactOrPrefix => false,
             SelectionPatternKind::Wildcard(pattern) => pattern.matches(entry_name),
         }
     }
@@ -315,6 +315,13 @@ mod tests {
             SelectionMatcher::new(&["content".to_string(), "disc.iso".to_string()]);
         assert!(selections.matches("content/track01.bin"));
         assert!(selections.matches("disc.iso"));
+        assert!(selections.ensure_all_matched().is_ok());
+    }
+
+    #[test]
+    fn selection_matcher_preserves_bracketed_exact_matches() {
+        let mut selections = SelectionMatcher::new(&["bundle/game [Hack].bps".to_string()]);
+        assert!(selections.matches("bundle/game [Hack].bps"));
         assert!(selections.ensure_all_matched().is_ok());
     }
 

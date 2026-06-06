@@ -29,6 +29,7 @@ const PATCH_FILTER_FILE_EXTENSIONS: &[&str] = &[
     ".bsdiff",
     ".bsdiff40",
     ".bsp",
+    ".bspatch",
     ".mod",
     ".pmsr",
     ".dldi",
@@ -251,12 +252,12 @@ mod tests {
             "update.dat",
             "update.hpatchz",
             "update.bsp",
+            "update.bspatch",
             "update.pds",
             "nested/UPDATE.BPS",
         ] {
             assert!(is_patch_filter_candidate_name(name), "{name}");
         }
-        assert!(!is_patch_filter_candidate_name("update.bspatch"));
         assert!(!is_patch_filter_candidate_name("game.nes"));
     }
 

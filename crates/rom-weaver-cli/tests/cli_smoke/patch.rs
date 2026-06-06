@@ -2208,6 +2208,73 @@ fn patch_apply_auto_extracts_single_payload_by_default() {
 }
 
 #[test]
+fn patch_apply_discovers_libretro_sidecar_patches_inside_input_archive() {
+    let temp = setup_temp_dir();
+    let original = temp.child("game.bin");
+    let modified = temp.child("game-modified.bin");
+    let patch = temp.child("game [Hack].bps");
+    let archive = temp.child("softpatch.tar.gz");
+    let output = temp.child("output.bin");
+    fs::write(original.path(), b"hello old world").expect("fixture");
+    fs::write(modified.path(), b"hello new world").expect("fixture");
+
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch",
+            "create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--format",
+            "bps",
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    write_tar_gz_fixture(
+        &[
+            (original.path(), "bundle/game.bin"),
+            (patch.path(), "bundle/game [Hack].bps"),
+            (patch.path(), "bundle/other.bps"),
+        ],
+        archive.path(),
+    );
+
+    let apply_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch",
+            "apply",
+            "--input",
+            archive.path().to_str().expect("path"),
+            "--output",
+            output.path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let apply_json = parse_single_json_line(&apply_output);
+    assert_eq!(apply_json["command"], "patch-apply");
+    assert_eq!(apply_json["family"], "patch");
+    assert_eq!(apply_json["format"], "BPS");
+    assert_eq!(apply_json["status"], "succeeded");
+    assert_eq!(
+        fs::read(output.path()).expect("output"),
+        fs::read(modified.path()).expect("modified")
+    );
+}
+
+#[test]
 fn patch_apply_no_extract_uses_raw_container_bytes() {
     let temp = setup_temp_dir();
     let original = temp.child("old.bin");
@@ -3349,38 +3416,42 @@ fn patch_create_succeeds_for_bdf_and_round_trips() {
 fn patch_apply_succeeds_for_valid_bsp_patch() {
     let temp = setup_temp_dir();
     let original = temp.child("old.bin");
-    let patch = temp.child("update.bsp");
-    let output = temp.child("output.bin");
     fs::write(original.path(), [0x01, 0x02, 0x03]).expect("fixture");
-    fs::write(patch.path(), [0x18, 0xFF, 0x06, 0x00, 0x00, 0x00, 0x00]).expect("fixture");
 
-    let apply_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
-            "patch", "apply",
-            "--input",
-            original.path().to_str().expect("path"),
-            "--patch",
-            patch.path().to_str().expect("path"),
-            "--output",
-            output.path().to_str().expect("path"),
-            "--no-compress",
-            "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+    for extension in ["bsp", "bspatch"] {
+        let patch = temp.child(format!("update.{extension}"));
+        let output = temp.child(format!("output-{extension}.bin"));
+        fs::write(patch.path(), [0x18, 0xFF, 0x06, 0x00, 0x00, 0x00, 0x00]).expect("fixture");
 
-    let apply_json = parse_single_json_line(&apply_output);
-    assert_eq!(apply_json["command"], "patch-apply");
-    assert_eq!(apply_json["format"], "BSP");
-    assert_eq!(apply_json["status"], "succeeded");
-    assert_eq!(
-        fs::read(output.path()).expect("output"),
-        vec![0xFF, 0x02, 0x03]
-    );
+        let apply_output = Command::cargo_bin("rom-weaver")
+            .expect("binary")
+            .args([
+                "patch",
+                "apply",
+                "--input",
+                original.path().to_str().expect("path"),
+                "--patch",
+                patch.path().to_str().expect("path"),
+                "--output",
+                output.path().to_str().expect("path"),
+                "--no-compress",
+                "--json",
+            ])
+            .assert()
+            .code(0)
+            .get_output()
+            .stdout
+            .clone();
+
+        let apply_json = parse_single_json_line(&apply_output);
+        assert_eq!(apply_json["command"], "patch-apply");
+        assert_eq!(apply_json["format"], "BSP");
+        assert_eq!(apply_json["status"], "succeeded");
+        assert_eq!(
+            fs::read(output.path()).expect("output"),
+            vec![0xFF, 0x02, 0x03]
+        );
+    }
 }
 
 #[test]

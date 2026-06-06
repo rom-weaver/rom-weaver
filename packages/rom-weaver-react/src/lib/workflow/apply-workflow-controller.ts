@@ -22,9 +22,14 @@ import {
   resolveAutomaticCompressionFormat,
 } from "../compression/container-format-registry.ts";
 import { RomWeaverError, throwIfAborted, toRomWeaverError, withAbortSignal } from "../errors.ts";
-import { getPatchFileCleanup, getPatchFileExternalSource } from "../input/binary-service.ts";
+import {
+  getPatchFileBlob,
+  getPatchFileBytes,
+  getPatchFileCleanup,
+  getPatchFileExternalSource,
+} from "../input/binary-service.ts";
 import { getInputPreparationMetrics, type InputAsset, type InputParentCompression } from "../input/input-assets.ts";
-import { prepareInputFile } from "../input/input-preparation-service.ts";
+import { prepareAutoPatchInputs, prepareInputFile } from "../input/input-preparation-service.ts";
 import {
   appendFileNameExtension,
   getBaseFileName,
@@ -419,6 +424,10 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
     return this.patches.map((patch) => clonePatchState(patch.state, patch.parentCompressions));
   }
 
+  getPatchSources(): TSource[] {
+    return this.patches.map((patch) => patch.source);
+  }
+
   async setInput(input: TSource | TSource[]): Promise<void> {
     return this.mutate("setInput", async () => {
       this.trace("input.set.start", {
@@ -459,6 +468,7 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
           hasChecksums: !!this.inputSession.view.state.checksums,
           status: this.inputSession.view.state.status,
         });
+        await this.discoverImplicitPatches();
         await this.refreshPatchReadiness();
         this.recomputeOutputState();
         this.trace("input.set.finish", {
@@ -515,6 +525,63 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
         throw error;
       }
     });
+  }
+
+  private createImplicitPatchSource(patchFile: PatchFileInstance): TSource {
+    const fileName = patchFile.fileName || "patch.bin";
+    if (typeof File !== "undefined") {
+      const blob = getPatchFileBlob(patchFile);
+      if (blob) return new File([blob], fileName, { type: "application/octet-stream" }) as TSource;
+      return new File([new Uint8Array(getPatchFileBytes(patchFile))], fileName, {
+        type: "application/octet-stream",
+      }) as TSource;
+    }
+    return patchFile as unknown as TSource;
+  }
+
+  private async discoverImplicitPatches(): Promise<void> {
+    if (this.patches.length || !this.inputs.length) return;
+    const options = this.createExecutionOptions();
+    const discovered: PatchFileInstance[] = [];
+    for (const source of this.inputs) {
+      try {
+        discovered.push(...(await prepareAutoPatchInputs(source as never, options, this.runtime)));
+      } catch (error) {
+        this.trace("patch.implicit.discovery-failed", { error });
+      }
+    }
+    if (!discovered.length) return;
+
+    this.trace("patch.implicit.discovered", {
+      patchCount: discovered.length,
+      patches: discovered.map((patch) => patch.fileName || "patch.bin"),
+    });
+
+    for (const patchFile of discovered) {
+      const stage = this.createInitialSource("patch", this.createImplicitPatchSource(patchFile), this.patches.length);
+      stage.preparedPatchFile = patchFile;
+      stage.outputLabel =
+        (patchFile as PatchFileInstance & { _generatedPatchName?: string })._generatedPatchName ||
+        createPatchOutputLabel(patchFile.fileName) ||
+        stage.outputLabel;
+      this.applyPreparedPatchMetadata(stage, {
+        decompressionTimeMs: 0,
+        file: patchFile,
+        parentCompressions: [],
+        sourceSize: patchFile.fileSize,
+        wasDecompressed: true,
+      });
+      this.addDirectCandidate(stage, "patch", stage.index, stage.state.id);
+      stage.state.selectedCandidateId = stage.state.candidates[0]?.id;
+      if (stage.outputLabel)
+        (
+          stage.preparedPatchFile as PatchFileInstance & {
+            _generatedPatchName?: string;
+          }
+        )._generatedPatchName = stage.outputLabel;
+      await this.evaluatePatchReadiness(stage);
+      this.patches.push(stage);
+    }
   }
 
   async clearPatches(): Promise<void> {

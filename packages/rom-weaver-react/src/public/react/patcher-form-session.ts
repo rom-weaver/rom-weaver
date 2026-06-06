@@ -1140,6 +1140,31 @@ const useLocalApplyPatchFormSession = ({
             valid: true,
           });
         },
+        onImplicitPatches: (patches, infos = []) => {
+          if (inputStageGenerationRef.current !== generation) {
+            emitSessionTrace("stageInput implicit patches ignored", {
+              currentGeneration: inputStageGenerationRef.current,
+              generation,
+              reason: "stale-generation",
+            });
+            return;
+          }
+          if (!patches.length) return;
+          emitSessionTrace("stageInput implicit patches", {
+            generation,
+            patchCount: patches.length,
+            patches: patches.map((patch, index) => getBinarySourceFileName(patch, `Patch ${index + 1}`)),
+          });
+          updatePatches(patches);
+          setPatchInfoByKey(
+            Object.fromEntries(
+              patches.map((patch, index) => [
+                getPatchKey(patch, patches),
+                infos[index] || { fileName: getBinarySourceFileName(patch, `Patch ${index + 1}`) },
+              ]),
+            ),
+          );
+        },
         onProgress: (event) => {
           const details = getProgressDetails(event);
           if (
@@ -1330,7 +1355,17 @@ const useLocalApplyPatchFormSession = ({
           );
         });
     },
-    [emitSessionTrace, getInputKey, getStableInputInfo, mergeRomInput, onError, setSectionErrorMessage, stageInput],
+    [
+      emitSessionTrace,
+      getInputKey,
+      getPatchKey,
+      getStableInputInfo,
+      mergeRomInput,
+      onError,
+      setSectionErrorMessage,
+      stageInput,
+      updatePatches,
+    ],
   );
 
   useEffect(() => {

@@ -220,6 +220,10 @@ class ApplyWorkflow extends BrowserWorkflowBase<
     return this.controller.getPatches();
   }
 
+  getPatchSources(): BrowserSourceRef[] {
+    return this.controller.getPatchSources();
+  }
+
   setSettings(settings: Partial<ApplySettings>): Promise<void> {
     return this.controller.setSettings(settings);
   }

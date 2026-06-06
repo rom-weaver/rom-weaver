@@ -10,6 +10,7 @@ import { getErrorCode } from "../../presentation/errors.ts";
 import type { ApplyWorkflowInputState, ApplyWorkflowPatchState } from "../../types/apply-workflow.ts";
 import type { CompressionFormat } from "../../types/settings.ts";
 import type { ApplyWorkflowResult, ProgressEvent } from "../../types/workflow-runtime.ts";
+import type { StagedInputInfo } from "./apply-session-types.ts";
 import { ApplyWorkflowFormView } from "./apply-workflow-form-view.tsx";
 import { useCandidateSelection } from "./candidate-selection.tsx";
 import {
@@ -310,6 +311,13 @@ const summarizeApplyWorkflowSource = (source: BinarySource, fallback: string) =>
 
 const summarizeApplyWorkflowSources = (sources: BinarySource[], fallbackPrefix: string) =>
   sources.map((source, index) => summarizeApplyWorkflowSource(source, `${fallbackPrefix} ${index + 1}`));
+
+const isReactBinarySource = (source: unknown): source is BinarySource =>
+  (typeof File !== "undefined" && source instanceof File) ||
+  (!!source &&
+    typeof source === "object" &&
+    (source as { kind?: unknown }).kind === "file" &&
+    typeof (source as { getFile?: unknown }).getFile === "function");
 
 const getSelectedFileCandidatePath = (
   candidates: ApplyWorkflowInputState["candidates"],
@@ -680,7 +688,10 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         handlers.onInputState?.(input);
         handlers.onPatchState?.(patches);
         if (input?.checksums) handlers.onChecksumReady?.(input);
-        setApplyReady(!getWorkflowReadinessError(input, patches) && patches.length === snapshot.patches.length);
+        setApplyReady(
+          !getWorkflowReadinessError(input, patches) &&
+            (snapshot.patches.length ? patches.length === snapshot.patches.length : patches.length > 0),
+        );
         emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow finish", {
           hasChecksums: !!input?.checksums,
           inputStatus: input?.status,
@@ -846,6 +857,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           sourceSize?: number;
           wasDecompressed?: boolean;
         }) => void;
+        onImplicitPatches?: (patches: BinarySource[], infos?: Array<StagedInputInfo | null | undefined>) => void;
         onProgress: (event: ProgressEvent) => void;
         onState: (info: {
           archiveName?: string;
@@ -881,8 +893,27 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
             if (emitted.workflowProgress.role === "input") handlers.onProgress(emitted.progressEvent);
           },
         },
-        async ({ input: stagedInput }) => {
+        async ({ input: stagedInput, workflow }) => {
           const infos = toStagedInputInfos(stagedInput, input.inputs);
+          if (!input.patches.length) {
+            const implicitPatchSources = workflow.getPatchSources().filter(isReactBinarySource);
+            if (implicitPatchSources.length) {
+              const inputLabelById = new Map(infos.map((entry) => [entry.id || "", entry.fileName || "Input"]));
+              const implicitPatchInfos = workflow.getPatches().map((patch, index) => {
+                const targetName =
+                  patch?.targetInputFileName ||
+                  (patch?.targetInputId ? inputLabelById.get(patch.targetInputId) : undefined) ||
+                  "None selected";
+                return toPatchStageInfo(
+                  patch,
+                  getReactBinarySourceFileName(implicitPatchSources[index] || null, `Patch ${index + 1}`),
+                  index,
+                  `Target: ${targetName}`,
+                );
+              });
+              handlers.onImplicitPatches?.(implicitPatchSources, implicitPatchInfos);
+            }
+          }
           emitApplyWorkflowTrace(input.options, "stageInput callback finish", {
             infoCount: infos.length,
             infos,

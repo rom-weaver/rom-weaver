@@ -120,6 +120,7 @@ type LocalApplyPatchFormSessionOptions = Pick<
     input: ApplyWorkflowStageSnapshot,
     handlers: {
       onChecksum: (info: StagedInputInfo) => void;
+      onImplicitPatches?: (patches: BinarySource[], infos?: Array<StagedInputInfo | null | undefined>) => void;
       onProgress: (event: ProgressEvent) => void;
       onState: (info: StagedInputInfo) => void;
     },

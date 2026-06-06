@@ -19,6 +19,7 @@ const PATCH_FILE_EXTENSIONS = [
   "ppf",
   "ebp",
   "bdf",
+  "bsp",
   "bspatch",
   "mod",
   "xdelta",

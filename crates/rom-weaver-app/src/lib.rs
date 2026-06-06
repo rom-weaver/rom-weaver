@@ -21,8 +21,10 @@ use rom_weaver_core::{
     ContainerProbeRequest, NoninteractivePrompter, OperationContext, OperationFamily,
     OperationReport, OperationStatus, PatchApplyRequest, PatchChecksumValidation,
     PatchCreateRequest, PatchValidateRequest, ProbeConfidence, ProgressEvent, ProgressSink,
-    PromptCandidate, Result, RomWeaverError, Selection, SelectionPrompter, ThreadBudget,
-    ThreadCapability, ThreadExecution, XdeltaSecondaryMode, should_ignore_common_container_file,
+    PromptCandidate, Result, RomWeaverError, Selection, SelectionMatcher, SelectionPrompter,
+    ThreadBudget, ThreadCapability, ThreadExecution, XdeltaSecondaryMode,
+    is_patch_filter_candidate_name, is_rom_filter_candidate_name, normalize_archive_name,
+    should_ignore_common_container_file,
 };
 // The selection-input parser moved to core; the app keeps a thin wrapper only so the existing unit
 // test in `tests.rs` can exercise it through `CliApp`.
@@ -714,10 +716,11 @@ pub struct PatchApplyCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "patch",
-            required = true,
-            help = "Patch file(s) to apply in order; repeat --patch for each step"
+            help = "Patch file(s) to apply in order; repeat --patch for each step. If omitted, patch apply discovers RetroArch-style sidecar patches inside the input archive."
         )
     )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub patches: Vec<PathBuf>,
     #[cfg_attr(not(target_arch = "wasm32"), arg(long))]
     pub output: PathBuf,

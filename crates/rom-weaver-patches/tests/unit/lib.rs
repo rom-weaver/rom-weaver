@@ -389,16 +389,16 @@ fn probe_routes_mod_extension_to_mod_handler() {
 #[test]
 fn probe_routes_bsp_extension_to_bsp_handler() {
     let registry = PatchRegistry::new();
-    let handler = registry.probe(Path::new("update.bsp")).expect("bsp probe");
-    assert_eq!(handler.descriptor().name, "BSP");
+    for path in ["update.bsp", "update.bspatch"] {
+        let handler = registry.probe(Path::new(path)).expect("bsp probe");
+        assert_eq!(handler.descriptor().name, "BSP");
+    }
 }
 
 #[test]
-fn probe_does_not_route_bspatch_extensions() {
+fn probe_does_not_route_bspatch40_extension() {
     let registry = PatchRegistry::new();
-    for path in ["update.bspatch", "update.bspatch40"] {
-        assert!(registry.probe(Path::new(path)).is_none());
-    }
+    assert!(registry.probe(Path::new("update.bspatch40")).is_none());
 }
 
 #[test]
@@ -410,11 +410,9 @@ fn probe_does_not_route_pds_extensions() {
 }
 
 #[test]
-fn find_by_name_does_not_route_bspatch_aliases() {
+fn find_by_name_does_not_route_bspatch40_alias() {
     let registry = PatchRegistry::new();
-    for alias in ["bspatch", "bspatch40"] {
-        assert!(registry.find_by_name(alias).is_none());
-    }
+    assert!(registry.find_by_name("bspatch40").is_none());
 }
 
 #[test]
@@ -477,8 +475,10 @@ fn find_by_name_routes_hdiff_aliases_to_hdiff_handler() {
 #[test]
 fn find_by_name_routes_bsp_name_to_bsp_handler() {
     let registry = PatchRegistry::new();
-    let handler = registry.find_by_name("bsp").expect("bsp name");
-    assert_eq!(handler.descriptor().name, "BSP");
+    for alias in ["bsp", "bspatch"] {
+        let handler = registry.find_by_name(alias).expect("bsp name");
+        assert_eq!(handler.descriptor().name, "BSP");
+    }
 }
 
 #[test]

@@ -217,8 +217,8 @@ const BDF_BSDIFF40: FormatDescriptor = FormatDescriptor {
 const BSP: FormatDescriptor = FormatDescriptor {
     family: OperationFamily::Patch,
     name: "BSP",
-    aliases: &[],
-    extensions: &[".bsp"],
+    aliases: &["bspatch"],
+    extensions: &[".bsp", ".bspatch"],
 };
 const MOD: FormatDescriptor = FormatDescriptor {
     family: OperationFamily::Patch,
