@@ -140,6 +140,25 @@ const getZ3dsExtractedFileName = (source: ByteProbeableSource): string => {
   return replaceFileNameExtension(source.fileName || "input.z3ds", getZ3dsExtractedExtension(source));
 };
 
+const normalizeZ3dsExtractedFileName = (
+  fileName: string | number | boolean | null | undefined,
+  source: ByteProbeableSource,
+): string => {
+  const normalizedFileName = String(fileName || "").trim();
+  const extractedExtension = getFileNameExtension(getZ3dsExtractedFileName(source));
+  if (!(normalizedFileName && extractedExtension)) return getZ3dsExtractedFileName(source);
+  return replaceFileNameExtension(normalizedFileName, extractedExtension);
+};
+
+const normalizeDiscExtractedFileName = (
+  format: DiscCompressionFormat,
+  fileName: string | number | boolean | null | undefined,
+  source: ByteProbeableSource,
+): string => {
+  if (format === "z3ds") return normalizeZ3dsExtractedFileName(fileName, source);
+  return String(fileName || "").trim() || getDiscExtractedFileName(format, source);
+};
+
 const createAutomaticDiscSourceExtensions = (
   compressionInputExtensions: readonly string[],
   decompressionInputExtensions: readonly string[],
@@ -355,5 +374,6 @@ export {
   hasDiscCompressionFormatExtension,
   isCompressionFormat,
   isDiscCompressionFormat,
+  normalizeDiscExtractedFileName,
   resolveAutomaticCompressionFormat,
 };

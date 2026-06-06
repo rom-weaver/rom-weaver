@@ -11,7 +11,6 @@ import { CHD_EXTENSION_REGEX } from "../path-utils.ts";
 
 const RVZ_EXTENSION_REGEX = createDiscExtensionRegex(RVZ_DECOMPRESSION_INPUT_EXTENSIONS);
 const Z3DS_EXTENSION_REGEX = /\.(zcia|zcci|zcxi|z3dsx|z3ds)$/i;
-const Z3DS_EXTENSION_PREFIX_REGEX = /^z/i;
 const ARCHIVE_EXTENSION_REGEX = /\.(7z|zip)$/i;
 
 const getSourceExtension = (source: SourceFileLike | null | undefined, fallback?: string): string => {
@@ -137,20 +136,33 @@ const getRvzIntermediateFileName = (fileName: string, source: SourceFileLike | n
   return fileName;
 };
 
+const getZ3dsDecompressedExtensionForMagic = (magic: string | null | undefined): string | null => {
+  if (magic === "CIA\u0000") return "cia";
+  if (magic === "NCSD") return "cci";
+  if (magic === "NCCH") return "cxi";
+  if (magic === "3DSX") return "3dsx";
+  return null;
+};
+
+const getZ3dsDecompressedSourceExtension = (source: SourceFileLike | null | undefined): string => {
+  const sourceExtension = getSourceExtension(source, "");
+  if (sourceExtension === "zcia") return "cia";
+  if (sourceExtension === "zcci") return "cci";
+  if (sourceExtension === "zcxi") return "cxi";
+  if (sourceExtension === "z3dsx") return "3dsx";
+  const magicExtension = getZ3dsDecompressedExtensionForMagic(source?._z3dsUnderlyingMagic);
+  if (sourceExtension === "z3ds") return magicExtension || "3ds";
+  return sourceExtension || magicExtension || "3ds";
+};
+
 const getZ3dsIntermediateFileName = (fileName: string, source: SourceFileLike | null | undefined): string => {
   if (!source) return fileName;
+  const sourceExtension = getZ3dsDecompressedSourceExtension(source);
   if (!hasFileNameExtension(fileName)) {
-    const sourceExtension = getSourceExtension(source, "");
-    return replaceFileNameExtension(fileName, sourceExtension || "cia");
+    return replaceFileNameExtension(fileName, sourceExtension);
   }
   if (Z3DS_EXTENSION_REGEX.test(fileName)) {
-    const sourceExtension = getSourceExtension(source, "");
-    if (sourceExtension && !Z3DS_EXTENSION_PREFIX_REGEX.test(sourceExtension))
-      return replaceFileNameExtension(fileName, sourceExtension);
-    if (source?._z3dsUnderlyingMagic === "NCSD") return replaceFileNameExtension(fileName, "cci");
-    if (source?._z3dsUnderlyingMagic === "NCCH") return replaceFileNameExtension(fileName, "cxi");
-    if (source?._z3dsUnderlyingMagic === "3DSX") return replaceFileNameExtension(fileName, "3dsx");
-    return replaceFileNameExtension(fileName, "cia");
+    return replaceFileNameExtension(fileName, sourceExtension);
   }
   return fileName;
 };

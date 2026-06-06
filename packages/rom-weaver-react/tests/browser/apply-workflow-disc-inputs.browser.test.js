@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
 import { ApplyWorkflow } from "../../src/platform/browser/browser-api.ts";
+import { browserRuntime } from "../../src/platform/browser/workflow-runtime.ts";
 
 const RAW_ROM = "tests/fixtures/archive_sources/game.bin";
 const RAW_PATCH = "tests/fixtures/archive_sources/change.ips";
@@ -11,6 +12,33 @@ const loadFixtureFile = async (filePath, type = "application/octet-stream") => {
   if (!response.ok) throw new Error(`Failed to load fixture ${filePath}`);
   const bytes = await response.arrayBuffer();
   return new File([bytes], filePath.split("/").pop() || "input.bin", { type });
+};
+
+const createZcciFixtureFile = async () => {
+  const sourceBytes = new Uint8Array(64 * 1024);
+  sourceBytes.set([0x4e, 0x43, 0x53, 0x44], 0);
+  for (let index = 4; index < sourceBytes.length; index += 1) sourceBytes[index] = index % 251;
+  const source = new File([sourceBytes], "source.cci", { type: "application/octet-stream" });
+  const result = await browserRuntime.compression.create?.({
+    fileName: source.name,
+    format: "z3ds",
+    options: {
+      workerThreads: 1,
+    },
+    outputName: "game.zcci",
+    source: {
+      fileName: source.name,
+      source,
+    },
+  });
+  const output = result?.output;
+  if (!output) throw new Error("ZCCI fixture compression did not return output");
+  try {
+    const blob = await browserRuntime.publicOutput.getBlob(output);
+    return new File([blob], "game.zcci", { type: "application/octet-stream" });
+  } finally {
+    await output.dispose().catch(() => undefined);
+  }
 };
 
 const readUint16Le = (bytes, offset) => bytes[offset] | (bytes[offset + 1] << 8);
@@ -84,6 +112,31 @@ test("apply workflow resolves RVZ inputs to extracted names during staging", asy
     const checksumIndex = progressEvents.findIndex((event) => event.role === "input" && event.stage === "checksum");
     expect(lastExtractIndex).toBeGreaterThanOrEqual(0);
     expect(checksumIndex).toBe(-1);
+  } finally {
+    await workflow.dispose();
+  }
+});
+
+test("apply workflow resolves ZCCI inputs to extracted CCI names during staging", async () => {
+  const progressEvents = [];
+  const workflow = new ApplyWorkflow({
+    settings: {
+      workers: {
+        threads: 1,
+      },
+    },
+  });
+  workflow.on("progress", (event) => progressEvents.push(event));
+  try {
+    await workflow.setInput(await createZcciFixtureFile());
+    const input = workflow.getInput();
+    expect(input?.fileName).toBe("game.cci");
+    expect(input?.wasDecompressed).toBe(true);
+    expect(input?.parentCompressions?.map((entry) => entry.fileName) || []).toContain("game.zcci");
+    expect(input?.parentCompressions?.map((entry) => entry.fileName) || []).not.toContain("game.z3ds");
+    expect(progressEvents.map((event) => `${event.label || ""} ${event.message || ""}`).join("\n")).not.toMatch(
+      /game\.z3ds/i,
+    );
   } finally {
     await workflow.dispose();
   }

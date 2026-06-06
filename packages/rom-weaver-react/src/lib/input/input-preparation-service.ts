@@ -8,6 +8,7 @@ import type { SourceRef } from "../../types/source.ts";
 import type { ApplyWorkflowOptions, CreateWorkflowOptions } from "../../types/workflow-runtime.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import type { PatchFileInstance } from "../../workers/protocol/patch-engine.ts";
+import { DISC_DECOMPRESSION_INPUT_EXTENSIONS } from "../compression/disc-format-support.ts";
 import { emitTraceLog } from "../logging.ts";
 import { getFileNameExtension, replaceFileNameExtension } from "../path-utils.ts";
 import { isCueEntryFileName, parseCueFileReferences } from "./archive.ts";
@@ -51,7 +52,7 @@ type InputPreparationRuntime = Pick<WorkflowRuntime, "name"> & {
   workerIo?: WorkflowRuntime["workerIo"];
 };
 
-const DISC_DECOMPRESSION_EXTENSIONS = new Set(["chd", "rvz", "z3ds"]);
+const DISC_DECOMPRESSION_EXTENSIONS = new Set(DISC_DECOMPRESSION_INPUT_EXTENSIONS);
 const DISC_MAGIC_PREFIXES = [
   { extension: "chd", magic: [0x4d, 0x43, 0x6f, 0x6d, 0x70, 0x72, 0x48, 0x44] },
   { extension: "rvz", magic: [0x52, 0x56, 0x5a, 0x00] },

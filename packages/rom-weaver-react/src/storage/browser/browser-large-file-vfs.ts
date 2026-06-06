@@ -90,14 +90,22 @@ const createBrowserLargeFileVfs = (options: BrowserLargeFileVfsOptions = {}): La
       }
     }
     if (!fileHandle) throw new Error(`Browser VFS output is not available: ${fileName}`);
-    const file = await fileHandle.getFile();
+    let cachedOutputFile: File | null = null;
+    const getOutputFile = async (): Promise<File> => {
+      if (cachedOutputFile) return cachedOutputFile;
+      cachedOutputFile = await fileHandle.getFile();
+      return cachedOutputFile;
+    };
+    const knownSize = typeof input.size === "number" && Number.isFinite(input.size) ? input.size : null;
+    const initialFile = knownSize === null ? await getOutputFile() : null;
     return {
       checksums: input.checksums,
       dispose: async () => undefined,
       fileName,
-      mediaType: input.mediaType || file.type || undefined,
+      mediaType: input.mediaType || initialFile?.type || undefined,
       path: normalizedPath,
       saveAs: async (destination) => {
+        const file = await getOutputFile();
         const destinationFileHandle = getDestinationFileHandle(destination);
         if (!destinationFileHandle) {
           const destinationFileName = getDestinationFileName(destination);
@@ -107,7 +115,7 @@ const createBrowserLargeFileVfs = (options: BrowserLargeFileVfsOptions = {}): La
         }
         await writeBlobToFileHandle(destinationFileHandle, file);
       },
-      size: typeof input.size === "number" ? input.size : file.size,
+      size: knownSize ?? initialFile?.size ?? 0,
       timing: input.timing,
       vfs,
     };

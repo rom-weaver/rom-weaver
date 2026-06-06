@@ -1,6 +1,7 @@
 import {
   DISC_COMPRESSION_FORMAT_REGISTRY,
   getDiscExtractedFileName,
+  normalizeDiscExtractedFileName,
 } from "../../lib/compression/container-format-registry.ts";
 import { replaceCuePatchFileName } from "../../lib/input/disc-file-utils.ts";
 import { getFileNameWithoutExtension, getPathBaseName, isCompressionLevelProfile } from "../../lib/path-utils.ts";
@@ -197,6 +198,44 @@ const normalizeDiscEntryNameForSource = (entryName: string, stagedFileName: stri
     sourceFileName,
   )[0];
   return String(normalized?.fileName || entryName || "");
+};
+
+const normalizeZ3dsListEntriesForSource = <TEntry extends { fileName?: string; filename?: string; name?: string }>(
+  entries: TEntry[],
+  sourceFileName: string,
+): TEntry[] =>
+  entries.map((entry) => {
+    const entryName = String(entry.fileName || entry.filename || entry.name || "").trim();
+    if (!entryName) return entry;
+    const normalizedName = normalizeDiscExtractedFileName("z3ds", entryName, { fileName: sourceFileName });
+    if (normalizedName === entryName) return entry;
+    return {
+      ...entry,
+      fileName: normalizedName,
+      filename: normalizedName,
+      name: getPathBaseName(normalizedName, normalizedName),
+    };
+  });
+
+const replaceProgressSourceLabel = <TProgress extends { label?: string; message?: string }>(
+  progress: TProgress,
+  sourcePath: string,
+  displayFileName: string,
+): TProgress => {
+  const displayName = getPathBaseName(displayFileName, displayFileName);
+  if (!displayName) return progress;
+  const sourceName = getPathBaseName(sourcePath, sourcePath);
+  const replaceSource = (value: string | undefined) => {
+    const normalized = String(value || "");
+    if (!normalized) return value;
+    let next = normalized;
+    if (sourcePath) next = next.replaceAll(sourcePath, displayName);
+    if (sourceName && sourceName !== displayName) next = next.replaceAll(sourceName, displayName);
+    return next === normalized ? value : next;
+  };
+  const label = replaceSource(progress.label);
+  const message = replaceSource(progress.message);
+  return label === progress.label && message === progress.message ? progress : { ...progress, label, message };
 };
 
 const annotateChdListEntries = <
@@ -1317,9 +1356,12 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
     });
     try {
       const outDirPath = getPathDirectory(workerSource.filePath);
-      const actualOutputFileName = getDiscExtractedFileName("z3ds", { fileName });
+      const sourceFileName = fileName || workerSource.fileName || Z3DS_DISC_FORMAT.fallbackFileName;
+      const displaySourceFileName = sourceFileName;
+      const actualOutputFileName = getDiscExtractedFileName("z3ds", { fileName: sourceFileName });
+      const stagedSourceFileName = getPathDerivedFileName(workerSource.filePath, sourceFileName);
       const stagedOutputFileName = getDiscExtractedFileName("z3ds", {
-        fileName: getPathDerivedFileName(workerSource.filePath, workerSource.fileName || fileName),
+        fileName: stagedSourceFileName,
       });
       const listed = await runRomWeaverListWorker(
         {
@@ -1329,8 +1371,12 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
         undefined,
         onLog,
       ).catch(() => null);
+      const listedEntries = normalizeZ3dsListEntriesForSource(
+        normalizeDiscListEntries(listed?.entries || [], stagedSourceFileName, sourceFileName),
+        sourceFileName,
+      );
       const preseedPaths =
-        listed?.entries
+        listedEntries
           .flatMap((entry) =>
             getBrowserExtractOutputPathCandidates(
               outDirPath,
@@ -1339,7 +1385,7 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
           )
           .filter((entry) => !!entry) || [];
       const listedOutputFileName = getPathBaseName(
-        String(listed?.entries?.[0]?.fileName || listed?.entries?.[0]?.filename || listed?.entries?.[0]?.name || ""),
+        String(listedEntries[0]?.fileName || listedEntries[0]?.filename || listedEntries[0]?.name || ""),
       );
       // Prefer the container handler's authoritative extracted entry name (it maps the source
       // extension, e.g. `.zcci` -> `.cci`) so the saved/displayed name matches the file actually
@@ -1365,7 +1411,9 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
           sourcePath: workerSource.filePath,
           workerThreads: threads,
         },
-        onProgress,
+        onProgress
+          ? (progress) => onProgress(replaceProgressSourceLabel(progress, workerSource.filePath, displaySourceFileName))
+          : undefined,
         onLog,
       );
       const primaryFile = await selectPreferredExtractedFile({
@@ -1450,7 +1498,12 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
         onProgress,
         onLog,
       );
-      return normalizeDiscListEntries(result.entries, workerSource.fileName, fileName);
+      const sourceFileName = fileName || workerSource.fileName || Z3DS_DISC_FORMAT.fallbackFileName;
+      const stagedSourceFileName = getPathDerivedFileName(workerSource.filePath, sourceFileName);
+      return normalizeZ3dsListEntriesForSource(
+        normalizeDiscListEntries(result.entries, stagedSourceFileName, sourceFileName),
+        sourceFileName,
+      );
     } finally {
       await workerSource.cleanup().catch(() => undefined);
     }

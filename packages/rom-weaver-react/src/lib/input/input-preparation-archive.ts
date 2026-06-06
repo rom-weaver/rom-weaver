@@ -5,13 +5,13 @@ import type { ApplyWorkflowOptions, CreateWorkflowOptions } from "../../types/wo
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import { createArchiveSourceBlob } from "../archive-utils.ts";
 import { RomWeaverError } from "../errors.ts";
+import { getPathBaseName } from "../path-utils.ts";
 import { createPatchFileFromPublicOutput } from "../runtime/public-output-bin-file.ts";
 import { findArchiveEntryByFileName, findCueBinEntry, isCueEntryFileName, parseCueFileReferences } from "./archive.ts";
 import type { PatchFileInstance } from "./binary-service.ts";
 import {
   attachPatchFileCleanup,
   attachPatchFileSourceRef,
-  createBlobBackedPatchFile,
   createPatchFile,
   decodeUtf8,
   getPatchFileBlob,
@@ -42,7 +42,12 @@ import {
   type InputPreparationRuntime,
   resolveInputPreparationRuntime,
 } from "./input-preparation-compression.ts";
-import { getBaseFileName, getDirectoryPath, normalizeArchiveEntryName } from "./path-utils.ts";
+import {
+  getBaseFileName,
+  getDirectoryPath,
+  normalizeArchiveEntryName,
+  replaceFileNameExtension,
+} from "./path-utils.ts";
 import { applySidecarPatchOutputLabel, resolveSidecarPatchEntries } from "./sidecar-patch-resolution.ts";
 
 type ArchiveEntryLike = {
@@ -101,8 +106,8 @@ type NestedArchiveOptions = {
 };
 const NESTED_ARCHIVE_SELECTION_PREFIX = "nested:";
 const PATH_BACKED_COMPRESSION_FORMATS = new Set(["chd", "rvz", "z3ds"]);
-const SYNC_READ_ARCHIVE_ENTRY_REGEX =
-  /\.(?:cue|ips|ups|bps|aps|rup|ppf|ebp|bdf|bspatch|mod|xdelta|delta|dat|vcdiff)\d*$/i;
+const SYNC_READ_ARCHIVE_ENTRY_REGEX = /\.(?:cue|ips|ups|bps|aps|rup|ppf|ebp|bdf|bsp|mod|xdelta|delta|dat|vcdiff)\d*$/i;
+const Z3DS_GENERIC_EXTENSION_REGEX = /\.z3ds$/i;
 const validatedPatchArchiveEntriesByFile = new WeakMap<PatchFileInstance, ValidatedPatchArchiveEntryCache>();
 const patchArchiveValidationCleanupAttached = new WeakSet<PatchFileInstance>();
 
@@ -369,6 +374,38 @@ const getKnownDecompressionTimeMs = (entries: InputParentCompression[]): number 
   return found ? total : undefined;
 };
 
+const getZ3dsCompressedExtensionForExtractedFileName = (
+  fileName: string | number | boolean | null | undefined,
+): string | null => {
+  const normalizedFileName = getBaseFileName(fileName).toLowerCase();
+  if (/\.cia$/i.test(normalizedFileName)) return "zcia";
+  if (/\.cci$/i.test(normalizedFileName)) return "zcci";
+  if (/\.cxi$/i.test(normalizedFileName)) return "zcxi";
+  if (/\.3dsx$/i.test(normalizedFileName)) return "z3dsx";
+  if (/\.3ds$/i.test(normalizedFileName)) return "z3ds";
+  return null;
+};
+
+const getZ3dsOutputPathFileName = (
+  output: { fileName?: string; filePath?: string; path?: string },
+  fallbackFileName: string,
+): string => {
+  const outputPathFileName = getBaseFileName(output.path || output.filePath || "");
+  if (outputPathFileName && getZ3dsCompressedExtensionForExtractedFileName(outputPathFileName)) {
+    return outputPathFileName;
+  }
+  return fallbackFileName;
+};
+
+const getDisplayedParentCompressionFileName = (source: PatchFileInstance, output: PatchFileInstance): string => {
+  const sourceFileName = source.fileName || "input.bin";
+  if (getCompressionFormat(source) !== "z3ds" || !Z3DS_GENERIC_EXTENSION_REGEX.test(sourceFileName))
+    return sourceFileName;
+  const extractedFileName = output.fileName || getBaseFileName(output.filePath || "");
+  const compressedExtension = getZ3dsCompressedExtensionForExtractedFileName(extractedFileName);
+  return compressedExtension ? replaceFileNameExtension(sourceFileName, compressedExtension) : sourceFileName;
+};
+
 const createParentCompressionStep = (
   source: PatchFileInstance,
   output: PatchFileInstance,
@@ -376,7 +413,7 @@ const createParentCompressionStep = (
 ): InputParentCompression => ({
   decompressionTimeMs,
   depth: 0,
-  fileName: source.fileName || "input.bin",
+  fileName: getDisplayedParentCompressionFileName(source, output),
   kind: getCompressionFormat(source),
   outputSize: typeof output.fileSize === "number" && Number.isFinite(output.fileSize) ? output.fileSize : undefined,
   sourceSize: typeof source.fileSize === "number" && Number.isFinite(source.fileSize) ? source.fileSize : undefined,
@@ -552,7 +589,9 @@ const extractCompressionEntries = async (
       const isDiscExtractionOutput = isPathBackedCompressionOutput && !isCueEntryFileName(selectedEntryFileName);
       const shouldMaterializeForSyncRead = SYNC_READ_ARCHIVE_ENTRY_REGEX.test(selectedEntryFileName);
       const resolvedFileName = isPathBackedCompressionOutput
-        ? selectedEntryFileName
+        ? compressionFormat === "z3ds"
+          ? getZ3dsOutputPathFileName(output, selectedEntryFileName)
+          : selectedEntryFileName
         : output.fileName || selectedEntryFileName;
       const binFile = await createPatchFileFromPublicOutput(output, resolvedFileName, {
         materializeBlob: shouldMaterializeForSyncRead,
@@ -1588,9 +1627,17 @@ const prepareAutoPatchInputs = async (
   for (const sidecarPatch of sidecarPatches) {
     const entryName = sidecarPatch.entry.filename;
     if (!entryName) continue;
-    const patchFile = await extractArchiveEntry(archiveFile, entryName, undefined, options, runtime, [], {
-      patchFilter: true,
-    });
+    const patchFile = await extractArchiveEntry(
+      archiveFile,
+      entryName,
+      getPathBaseName(entryName),
+      options,
+      runtime,
+      [],
+      {
+        patchFilter: true,
+      },
+    );
     applySidecarPatchOutputLabel(patchFile, sidecarPatch.outputLabel);
     patchFiles.push(patchFile);
   }
