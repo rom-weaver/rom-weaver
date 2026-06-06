@@ -4,6 +4,7 @@ import { createElement } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { getBrowserStorageEstimateState } from "../storage/browser/browser-storage-estimate.ts";
+import { markRomWeaverRunnerStale } from "../workers/rom-weaver/rom-weaver-runner.ts";
 import { configureLogger, createLogger } from "./logging.ts";
 import { createEmptyVitePageUpdateState, createVitePageUpdateState, getPageUpdateState } from "./page-update-state.ts";
 import { createPwaServiceWorkerClient } from "./pwa/pwa-service-worker-client.ts";
@@ -248,11 +249,13 @@ const reloadPendingUpdate = async (): Promise<boolean> => {
 };
 
 import.meta.hot?.on("rom-weaver:reload-available", (payload) => {
+  markRomWeaverRunnerStale();
   vitePageUpdateState = createVitePageUpdateState(payload);
   renderWebappRootIfReady();
 });
 import.meta.hot?.on("vite:beforeFullReload", (payload) => {
   // Defer full reload to the in-app update guard.
+  markRomWeaverRunnerStale();
   deferViteReload({ label: payload?.path, source: "vite" });
 });
 

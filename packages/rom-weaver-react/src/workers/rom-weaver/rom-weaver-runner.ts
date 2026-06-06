@@ -59,6 +59,8 @@ type RomWeaverCommandBranch =
   | { type: string; args: Record<string, unknown> };
 
 let browserThreadedRunnerPromise: Promise<RomWeaverRunner> | null = null;
+let browserThreadedRunnerStale = false;
+let activeRunnerRunCount = 0;
 
 const describeVirtualFilesForTrace = (files: BrowserVirtualFile[]) => {
   let directCount = 0;
@@ -249,6 +251,7 @@ const createBrowserRunner = async (options?: { workerThreads?: RuntimeValue }): 
 
 const createRomWeaverRunner = async (options?: { workerThreads?: RuntimeValue }) => {
   if (!isBrowserRuntime()) throw new Error("rom-weaver wasm runner is only available in browser runtimes");
+  if (browserThreadedRunnerStale && activeRunnerRunCount === 0) await resetRomWeaverRunner();
   const workerThreads = options?.workerThreads;
   if (!browserThreadedRunnerPromise)
     browserThreadedRunnerPromise = createBrowserRunner({ workerThreads }).catch((error) => {
@@ -263,6 +266,7 @@ const resetRomWeaverRunner = async () => {
     (entry): entry is Promise<RomWeaverRunner> => !!entry,
   );
   browserThreadedRunnerPromise = null;
+  browserThreadedRunnerStale = false;
   if (!activeRunnerPromises.length) return;
   const disposedRunners = new Set<RomWeaverRunner>();
   for (const activeRunnerPromise of activeRunnerPromises) {
@@ -271,6 +275,11 @@ const resetRomWeaverRunner = async () => {
     disposedRunners.add(runner);
     await runner.dispose?.().catch(() => undefined);
   }
+};
+
+const markRomWeaverRunnerStale = () => {
+  browserThreadedRunnerStale = true;
+  if (activeRunnerRunCount === 0) void resetRomWeaverRunner();
 };
 
 const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: RomWeaverRunnerRunJsonOptions) => {
@@ -305,7 +314,13 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
   );
   const runner = await createRomWeaverRunner();
   emitRunnerTraceLine(options, `runJson dispatch mode=${runner.ready.mode} threaded=${String(runner.ready.threaded)}`);
-  return runner.runJson(commandOrRequest, runOptions);
+  activeRunnerRunCount += 1;
+  try {
+    return await runner.runJson(commandOrRequest, runOptions);
+  } finally {
+    activeRunnerRunCount = Math.max(0, activeRunnerRunCount - 1);
+    if (activeRunnerRunCount === 0 && browserThreadedRunnerStale) void resetRomWeaverRunner();
+  }
 };
 
 const warmupRomWeaverRunner = async (workerThreads?: RuntimeValue) => {
@@ -439,6 +454,7 @@ export type {
 export {
   getRomWeaverFailureMessage,
   getRomWeaverRunnerMetadata,
+  markRomWeaverRunnerStale,
   resetRomWeaverRunner,
   runRomWeaverJson,
   warmupRomWeaverRunner,
