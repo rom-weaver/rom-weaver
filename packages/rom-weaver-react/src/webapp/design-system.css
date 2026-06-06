@@ -6,7 +6,7 @@
    ─────────────────────────────────────────────────────────────── */
 
 :root {
-  --rw-accent:    #e08234;
+  --rw-accent:    #d9690f;
   --rw-accent-ink:#1c1206;
   --rw-ctl: 40px;
   --rw-sec-pad: 16px;   /* section horizontal padding (card edges align here) */
@@ -25,7 +25,6 @@
 }
 :root[data-theme="light"] {
   color-scheme: light;
-  --rw-accent:#ed7518;
   --rw-bg:#e6e9ef; --rw-panel:#ffffff; --rw-panel-2:#f4f6f9; --rw-inset:#eef1f5;
   --rw-line:#d3d8e0; --rw-line-soft:#e2e6ec; --rw-line-strong:#b6bdc9;
   --rw-ink:#161b22; --rw-ink-soft:#4a525d; --rw-ink-mut:#6c7480;
