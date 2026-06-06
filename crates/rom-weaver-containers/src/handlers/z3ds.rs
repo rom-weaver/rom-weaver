@@ -290,7 +290,7 @@ thread_local! {
     /// per frame is pure overhead. Caching one compressor per thread reuses the workspace across
     /// every frame the thread handles. Keyed by level so a level change rebuilds it; each
     /// `compress` call is independent (one frame in, one frame out), so reuse never changes output
-    /// bytes. Lives across both the scoped-thread (read-on-main) and rayon (native) create paths.
+    /// bytes. Lives across the scoped-thread create path.
     static Z3DS_THREAD_COMPRESSOR: std::cell::RefCell<Option<(i32, ZstdCompressor<'static>)>> =
         const { std::cell::RefCell::new(None) };
 }
@@ -544,6 +544,33 @@ impl Z3dsContainerHandler {
         self.extract_chunk_from_reader(payload_reader, seek_table, task)
     }
 
+    fn decode_extract_tasks_ordered<Decode, WriteChunk>(
+        tasks: &[Z3dsExtractTask],
+        effective_threads: usize,
+        decode: Decode,
+        mut write_chunk: WriteChunk,
+    ) -> Result<()>
+    where
+        Decode: Fn(Z3dsExtractTask) -> Result<Z3dsDecodedExtractChunk> + Sync,
+        WriteChunk: FnMut(Z3dsDecodedExtractChunk, u64) -> Result<()>,
+    {
+        ordered_streaming_compress(
+            tasks,
+            effective_threads,
+            OrderedStreamingMessages {
+                worker_closed: "z3ds extract workers ended before all chunks were consumed",
+                result_closed: "z3ds extract pipeline ended before all chunks were produced",
+            },
+            |_, task| Ok(task.clone()),
+            || (),
+            |_, _, task| {
+                let task_len = task.len;
+                decode(task).map(|chunk| (task_len, chunk))
+            },
+            |_, (task_len, chunk)| write_chunk(chunk, task_len),
+        )
+    }
+
     fn build_create_tasks(&self, total_len: u64) -> Result<Vec<Z3dsCreateTask>> {
         if total_len == 0 {
             return Ok(Vec::new());
@@ -789,8 +816,7 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
         fs::create_dir_all(&request.out_dir)?;
         let output_path = request.out_dir.join(&output_name);
 
-        let (execution, pool) =
-            context.build_pool(ThreadCapability::parallel(Some(tasks.len().max(1))))?;
+        let execution = context.plan_threads(ThreadCapability::parallel(Some(tasks.len().max(1))));
         let extract_progress_label = format!("extracting `{}`", Z3DS.name);
         let extract_progress_bytes = Arc::new(AtomicU64::new(0));
         let extract_progress_bucket = Arc::new(AtomicU8::new(0));
@@ -869,52 +895,34 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
                 }
                 let payload = payload.as_slice();
 
-                let batch_size = bounded_items_for_threads(execution.effective_threads);
-                for task_batch in tasks.chunks(batch_size) {
-                    let mut chunks = pool.install(|| {
-                        task_batch
-                            .par_iter()
-                            .map(|task| {
-                                let reader = Z3dsPayloadReader::new(
-                                    io::Cursor::new(payload),
-                                    0,
-                                    header.compressed_size,
-                                )?;
-                                self.extract_chunk_from_reader(reader, &seek_table, task)
-                                    .map(|chunk| (task.len, chunk))
-                            })
-                            .collect::<Result<Vec<_>>>()
-                    })?;
-                    chunks.sort_by_key(|(_, chunk)| chunk.index);
-                    for (task_len, chunk) in chunks {
-                        write_chunk(chunk, task_len)?;
-                    }
-                }
-                Ok(())
+                Self::decode_extract_tasks_ordered(
+                    &tasks,
+                    execution.effective_threads,
+                    |task| {
+                        let reader = Z3dsPayloadReader::new(
+                            io::Cursor::new(payload),
+                            0,
+                            header.compressed_size,
+                        )?;
+                        self.extract_chunk_from_reader(reader, &seek_table, &task)
+                    },
+                    &mut write_chunk,
+                )
             } else if execution.used_parallelism {
-                let batch_size = bounded_items_for_threads(execution.effective_threads);
-                for task_batch in tasks.chunks(batch_size) {
-                    let mut chunks = pool.install(|| {
-                        task_batch
-                            .par_iter()
-                            .map(|task| {
-                                self.extract_chunk_task(
-                                    &source,
-                                    payload_start,
-                                    header.compressed_size,
-                                    &seek_table,
-                                    task,
-                                )
-                                .map(|chunk| (task.len, chunk))
-                            })
-                            .collect::<Result<Vec<_>>>()
-                    })?;
-                    chunks.sort_by_key(|(_, chunk)| chunk.index);
-                    for (task_len, chunk) in chunks {
-                        write_chunk(chunk, task_len)?;
-                    }
-                }
-                Ok(())
+                Self::decode_extract_tasks_ordered(
+                    &tasks,
+                    execution.effective_threads,
+                    |task| {
+                        self.extract_chunk_task(
+                            &source,
+                            payload_start,
+                            header.compressed_size,
+                            &seek_table,
+                            &task,
+                        )
+                    },
+                    &mut write_chunk,
+                )
             } else {
                 for task in &tasks {
                     let chunk = self.extract_chunk_task(
@@ -977,11 +985,8 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
         let level = self.resolve_level(request.codec.as_deref(), request.level)?;
         let input_size = fs::metadata(input_path)?.len();
         let create_tasks = self.build_create_tasks(input_size)?;
-        // Plan threads without yet spawning a rayon pool: the read-on-main (browser) path drives
-        // its own `thread::scope` workers via `ordered_streaming_compress`, so building a rayon
-        // pool here too would double-book the bounded wasm worker pool (rayon's idle workers hold
-        // slots the scoped workers then wait forever for — a deadlock at high thread counts). Only
-        // the native `par_iter` branch needs the rayon pool, so it builds one there.
+        // Plan threads without building a shared pool: the scoped pipeline owns exactly the worker
+        // threads it needs, which avoids double-booking the bounded wasm worker pool.
         let execution =
             context.plan_threads(ThreadCapability::parallel(Some(create_tasks.len().max(1))));
         let create_progress_label = format!("creating `{}`", Z3DS.name);
@@ -1045,11 +1050,11 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
                 // Single threaded-reader/parallel-compressor pipeline for every target. The calling
                 // thread reads each frame and hands it to `std::thread::scope` workers that run zstd
                 // in parallel, reading ahead up to `inflight` frames and draining compressed frames
-                // in order. Reading on one thread (rather than a rayon worker per frame) is required
-                // in the browser — only the main OPFS runner can open the source — and costs nothing
-                // on native because create is compression-bound, so the reader stays ahead of the
-                // compressors. It also keeps the worker count exactly `effective_threads`, so it
-                // never double-books the bounded wasm thread pool the way an extra rayon pool would.
+                // in order. Reading on one thread is required in the browser — only the main OPFS
+                // runner can open the source — and costs nothing on native because create is
+                // compression-bound, so the reader stays ahead of the compressors. It also keeps
+                // the worker count exactly `effective_threads`, so it never double-books the
+                // bounded wasm thread pool.
                 let create_progress_bytes = Arc::clone(&create_progress_bytes);
                 let create_progress_bucket = Arc::clone(&create_progress_bucket);
                 let mut input = BufReader::new(File::open(input_path)?);
