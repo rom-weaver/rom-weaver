@@ -13,7 +13,7 @@ export type ThreadExecution = { requested_threads: number, effective_threads: nu
 
 export type JsonValue = number | string | boolean | Array<JsonValue> | { [key in string]: JsonValue } | null;
 
-export type ProgressEvent = { command: string, family: OperationFamily, format: string | null, stage: string, label: string, details: JsonValue | null, percent: number | null, requested_threads: number | null, effective_threads: number | null, thread_mode: ThreadMode | null, used_parallelism: boolean | null, thread_fallback: boolean | null, thread_fallback_reason?: string | null, status: OperationStatus, };
+export type ProgressEvent = { command: string, family: OperationFamily, format: string | null, stage: string, label: string, details: JsonValue | null, percent: number | null, requested_threads: number | null, effective_threads: number | null, thread_mode: ThreadMode | null, used_parallelism: boolean | null, thread_fallback: boolean | null, thread_fallback_reason?: string | null, elapsed_ms?: number | null, status: OperationStatus, };
 
 export type CompressionLevelProfile = "min" | "very-low" | "low" | "medium" | "high" | "very-high" | "max";
 

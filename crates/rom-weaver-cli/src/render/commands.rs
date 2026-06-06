@@ -17,6 +17,7 @@ pub fn render_success(surface: &Surface, event: &ProgressEvent) {
         "patch-create-candidates" => render_candidates(surface, event),
         _ => render_details_or_label(surface, event),
     }
+    render_elapsed(surface, event);
 }
 
 fn label_line(surface: &Surface, event: &ProgressEvent) {
@@ -142,6 +143,31 @@ fn render_details_or_label(surface: &Surface, event: &ProgressEvent) {
         Some(details) if details.is_object() => render_object(surface, details),
         _ => label_line(surface, event),
     }
+}
+
+fn render_elapsed(surface: &Surface, event: &ProgressEvent) {
+    let Some(elapsed_ms) = event.elapsed_ms else {
+        return;
+    };
+    surface.note(&format!("elapsed: {}", format_elapsed_ms(elapsed_ms)));
+}
+
+fn format_elapsed_ms(elapsed_ms: u32) -> String {
+    if elapsed_ms < 1_000 {
+        return format!("{elapsed_ms}ms");
+    }
+    if elapsed_ms < 60_000 {
+        return format!("{:.1}s", elapsed_ms as f64 / 1_000.0);
+    }
+    let total_seconds = elapsed_ms / 1_000;
+    let seconds = total_seconds % 60;
+    let total_minutes = total_seconds / 60;
+    if total_minutes < 60 {
+        return format!("{total_minutes}m {seconds:02}s");
+    }
+    let minutes = total_minutes % 60;
+    let hours = total_minutes / 60;
+    format!("{hours}h {minutes:02}m {seconds:02}s")
 }
 
 /// Render a JSON object as key/values, flattening nested objects with dotted keys and joining

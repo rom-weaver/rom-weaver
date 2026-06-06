@@ -346,6 +346,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
       const terminal = result.events.at(-1);
       expect(terminal.status).toBe('succeeded');
       expect(terminal.command).toBe('checksum');
+      expect(terminal.elapsed_ms).toEqual(expect.any(Number));
     });
   });
 

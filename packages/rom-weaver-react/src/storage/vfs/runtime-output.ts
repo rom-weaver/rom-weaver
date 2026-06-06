@@ -55,6 +55,7 @@ const createRuntimeOutputFromVfs = async (
     cleanup?: () => Promise<void> | void;
     mediaType?: string;
     size?: number;
+    timing?: PublicOutput["timing"];
   } = {},
 ): Promise<PublicOutput> => createRuntimeOutputRef(vfs.createOutputRef(filePath, fileName, options), options.cleanup);
 

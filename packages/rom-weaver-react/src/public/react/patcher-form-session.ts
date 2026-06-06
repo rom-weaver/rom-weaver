@@ -1698,15 +1698,26 @@ const useLocalApplyPatchFormSession = ({
           const completedAt = Date.now();
           const applyStartedAt = applyExecutionTimingRef.current.applyStartedAt;
           const compressionStartedAt = applyExecutionTimingRef.current.compressionStartedAt;
-          const resolvedApplyTimeMs =
+          const reportedApplyTimeMs =
+            typeof result.sizeSummary?.applyTimeMs === "number" && Number.isFinite(result.sizeSummary.applyTimeMs)
+              ? Math.max(0, Math.round(result.sizeSummary.applyTimeMs))
+              : null;
+          const reportedCompressionTimeMs =
+            typeof result.sizeSummary?.compressionTimeMs === "number" &&
+            Number.isFinite(result.sizeSummary.compressionTimeMs)
+              ? Math.max(0, Math.round(result.sizeSummary.compressionTimeMs))
+              : null;
+          const fallbackApplyTimeMs =
             typeof applyStartedAt === "number"
               ? Math.max(
                   0,
                   (typeof compressionStartedAt === "number" ? compressionStartedAt : completedAt) - applyStartedAt,
                 )
               : null;
+          const resolvedApplyTimeMs = reportedApplyTimeMs ?? fallbackApplyTimeMs;
           const resolvedCompressionTimeMs =
-            typeof compressionStartedAt === "number" ? Math.max(0, completedAt - compressionStartedAt) : null;
+            reportedCompressionTimeMs ??
+            (typeof compressionStartedAt === "number" ? Math.max(0, completedAt - compressionStartedAt) : null);
           setCompletedApplyTimeMs(resolvedApplyTimeMs);
           setCompletedCompressionTimeMs(resolvedCompressionTimeMs);
           setProgress({

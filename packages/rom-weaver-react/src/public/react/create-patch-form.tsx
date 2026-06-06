@@ -659,12 +659,23 @@ function CreatePatchForm(props: CreatePatchFormProps) {
       const result = (await createWorkflow.run()) as BrowserCreateResult;
       const completedAt = Date.now();
       const { compressionStartedAt, createStartedAt } = createExecutionTimingRef.current;
-      const createTimeMs =
+      const reportedCreateTimeMs =
+        typeof result.sizeSummary?.createTimeMs === "number" && Number.isFinite(result.sizeSummary.createTimeMs)
+          ? Math.max(0, Math.round(result.sizeSummary.createTimeMs))
+          : undefined;
+      const reportedCompressionTimeMs =
+        typeof result.sizeSummary?.compressionTimeMs === "number" &&
+        Number.isFinite(result.sizeSummary.compressionTimeMs)
+          ? Math.max(0, Math.round(result.sizeSummary.compressionTimeMs))
+          : undefined;
+      const fallbackCreateTimeMs =
         typeof createStartedAt === "number"
           ? Math.max(0, (compressionStartedAt ?? completedAt) - createStartedAt)
           : undefined;
+      const createTimeMs = reportedCreateTimeMs ?? fallbackCreateTimeMs;
       const compressionTimeMs =
-        typeof compressionStartedAt === "number" ? Math.max(0, completedAt - compressionStartedAt) : undefined;
+        reportedCompressionTimeMs ??
+        (typeof compressionStartedAt === "number" ? Math.max(0, completedAt - compressionStartedAt) : undefined);
       rememberOutputDispose(result.output.dispose);
       setCompletedOutput({
         compression: createCompression,

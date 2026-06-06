@@ -66,6 +66,8 @@ pub struct ProgressEvent {
     pub thread_fallback: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub thread_fallback_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub elapsed_ms: Option<u32>,
     pub status: OperationStatus,
 }
 
@@ -94,6 +96,7 @@ pub fn emit_container_running_progress(
         thread_fallback: thread_execution.map(|value| value.thread_fallback),
         thread_fallback_reason: thread_execution
             .and_then(|value| value.thread_fallback_reason.clone()),
+        elapsed_ms: None,
         status: OperationStatus::Running,
     });
 }

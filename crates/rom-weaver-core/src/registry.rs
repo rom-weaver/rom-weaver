@@ -150,6 +150,7 @@ impl OperationReport {
             thread_fallback: thread_execution.map(|value| value.thread_fallback),
             thread_fallback_reason: thread_execution
                 .and_then(|value| value.thread_fallback_reason.clone()),
+            elapsed_ms: None,
             status: self.status,
         }
     }

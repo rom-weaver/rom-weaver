@@ -77,6 +77,7 @@ const createBrowserLargeFileVfs = (options: BrowserLargeFileVfsOptions = {}): La
       cleanup?: () => Promise<void> | void;
       mediaType?: string;
       size?: number;
+      timing?: VfsOutputRef["timing"];
     } = {},
   ): Promise<VfsOutputRef> => {
     const normalizedPath = normalizeAbsoluteVfsPath(filePath, rootPath);
@@ -107,6 +108,7 @@ const createBrowserLargeFileVfs = (options: BrowserLargeFileVfsOptions = {}): La
         await writeBlobToFileHandle(destinationFileHandle, file);
       },
       size: typeof input.size === "number" ? input.size : file.size,
+      timing: input.timing,
       vfs,
     };
   };

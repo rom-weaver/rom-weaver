@@ -6,7 +6,7 @@ use std::{
     path::{Path, PathBuf},
     process::ExitCode,
     sync::{Arc, OnceLock},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Instant, SystemTime, UNIX_EPOCH},
 };
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -1068,6 +1068,7 @@ impl RomWeaverApp {
         reporter: Arc<dyn ProgressSink>,
         prompter: Arc<dyn SelectionPrompter>,
     ) -> AppRunOutcome {
+        let reporter = Arc::new(TimingProgressSink::new(reporter));
         let app = CliApp::new(
             reporter,
             prompter,
@@ -1237,6 +1238,31 @@ impl ProgressSink for JsonProgressSink {
             }
             Err(error) => eprintln!("failed to serialize progress event: {error}"),
         }
+    }
+}
+
+struct TimingProgressSink {
+    inner: Arc<dyn ProgressSink>,
+    started_at: Instant,
+}
+
+impl TimingProgressSink {
+    fn new(inner: Arc<dyn ProgressSink>) -> Self {
+        Self {
+            inner,
+            started_at: Instant::now(),
+        }
+    }
+
+    fn elapsed_ms(&self) -> u32 {
+        self.started_at.elapsed().as_millis().min(u32::MAX as u128) as u32
+    }
+}
+
+impl ProgressSink for TimingProgressSink {
+    fn emit(&self, mut event: ProgressEvent) {
+        event.elapsed_ms.get_or_insert_with(|| self.elapsed_ms());
+        self.inner.emit(event);
     }
 }
 

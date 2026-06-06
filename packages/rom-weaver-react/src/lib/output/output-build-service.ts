@@ -34,6 +34,11 @@ import { createPatchedOutputPlan, type PatchedOutputPlan } from "./patched-outpu
 const DEFAULT_CHD_CREATE_CD_CODECS = "cdlz,cdzl,cdfl";
 const DEFAULT_CHD_CREATE_DVD_CODECS = "lzma,zlib,huff,flac";
 type OutputWorkflowOptions = ApplyWorkflowOptions | CreateWorkflowOptions;
+type RuntimeTimedPatchFile = PatchFileInstance & {
+  _runtimeTiming?: {
+    elapsedMs?: unknown;
+  } | null;
+};
 
 const hasDiscCompressionMetadata = (source: PatchFileInstance | null | undefined) =>
   !!(
@@ -387,12 +392,30 @@ const assertOutputSizeLimit = (rawOutputSize: number, options: ApplyWorkflowOpti
   }
 };
 
+const getPatchFileRuntimeTimingMs = (file: PatchFileInstance | undefined): number | undefined => {
+  const elapsedMs = (file as RuntimeTimedPatchFile | undefined)?._runtimeTiming?.elapsedMs;
+  if (typeof elapsedMs !== "number" || !Number.isFinite(elapsedMs) || elapsedMs < 0) return undefined;
+  return Math.round(elapsedMs);
+};
+
+const getPatchFilesRuntimeTimingMs = (files: PatchFileInstance[]): number | undefined => {
+  let total = 0;
+  let hasTiming = false;
+  for (const file of files) {
+    const elapsedMs = getPatchFileRuntimeTimingMs(file);
+    if (elapsedMs === undefined) continue;
+    total += elapsedMs;
+    hasTiming = true;
+  }
+  return hasTiming ? total : undefined;
+};
+
 const buildSessionOutputFiles = async (
   assets: InputAsset[],
   patchedById: Map<string, PatchFileInstance>,
   options: ApplyWorkflowOptions | undefined,
   runtime?: WorkflowRuntime,
-): Promise<{ files: PatchFileInstance[]; rawOutputSize: number }> => {
+): Promise<{ compressionTimeMs?: number; files: PatchFileInstance[]; rawOutputSize: number }> => {
   const outputAssets = assets.map((asset) => {
     const patched = patchedById.get(asset.id);
     const file = patched ? patched : clonePatchFile(asset.file);
@@ -419,6 +442,7 @@ const buildSessionOutputFiles = async (
     if (compression === "none") return { files: [onlyFile], rawOutputSize: onlyFile.fileSize };
     const builtFiles = await buildOutputFiles(onlyOutput.asset.file, onlyFile, options, runtime);
     return {
+      compressionTimeMs: getPatchFilesRuntimeTimingMs(builtFiles),
       files: builtFiles,
       rawOutputSize: onlyFile.fileSize,
     };
@@ -449,6 +473,7 @@ const buildSessionOutputFiles = async (
     ];
     await runPatchFileCleanups(outputAssetCleanups);
     return {
+      compressionTimeMs: getPatchFilesRuntimeTimingMs(files),
       files,
       rawOutputSize,
     };
@@ -466,6 +491,7 @@ const buildSessionOutputFiles = async (
     ];
     await runPatchFileCleanups(outputAssetCleanups);
     return {
+      compressionTimeMs: getPatchFilesRuntimeTimingMs(files),
       files,
       rawOutputSize,
     };
@@ -513,9 +539,11 @@ const buildSessionOutputFiles = async (
       source,
     });
     const output = "output" in result ? result.output : result;
+    const file = await createPatchFileFromRuntimeOutput(output, `${baseName}.chd`);
     await runPatchFileCleanups(outputAssetCleanups);
     return {
-      files: [await createPatchFileFromRuntimeOutput(output, `${baseName}.chd`)],
+      compressionTimeMs: getPatchFileRuntimeTimingMs(file),
+      files: [file],
       rawOutputSize,
     };
   }
@@ -531,6 +559,7 @@ const buildSessionOutputFiles = async (
   ];
   await runPatchFileCleanups(outputAssetCleanups);
   return {
+    compressionTimeMs: getPatchFilesRuntimeTimingMs(files),
     files,
     rawOutputSize,
   };

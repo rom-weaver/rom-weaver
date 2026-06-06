@@ -39,6 +39,13 @@ const getCreateCompression = (options: CreatePatchInput["options"]) => options?.
 const getCreateOutputName = (options: CreatePatchInput["options"]) => options?.output?.outputName;
 const { traceWorkflowStage, traceWorkflowStageBlock } = createWorkflowTracer("create");
 
+const getOutputTimingMs = (output: CreatePatchResult["output"] | undefined): number | undefined => {
+  const elapsedMs = output?.timing?.elapsedMs;
+  return typeof elapsedMs === "number" && Number.isFinite(elapsedMs) && elapsedMs >= 0
+    ? Math.round(elapsedMs)
+    : undefined;
+};
+
 const createClassificationSource = (
   source: SourceRef,
   deps: Pick<CreateWorkflowDeps, "getNamedSource" | "getNamedSourceFileName">,
@@ -194,11 +201,13 @@ const runCreateWorkflow = async (
     if (compression === "none") return result;
     const patchFile = await createPatchFileFromPublicOutput(result.output, rawPatchFileName);
     const output = await createCompressedPatchOutput(patchFile);
+    const compressionTimeMs = getOutputTimingMs(output);
     return {
       format,
       output,
       sizeSummary: {
         ...(result.sizeSummary || {}),
+        ...(compressionTimeMs === undefined ? {} : { compressionTimeMs }),
         outputSize: output.size,
         rawSize: patchFile.fileSize,
       },

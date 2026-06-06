@@ -5,6 +5,9 @@ import type { ApplySettings, CreateSettings, PatchFormat } from "./settings.ts";
 import type { BrowserSourceRef, SourceRef } from "./source.ts";
 
 type WorkflowSizeSummary = {
+  applyTimeMs?: number;
+  compressionTimeMs?: number;
+  createTimeMs?: number;
   inputCompressedSize?: number;
   inputDecompressionTimeMs?: number;
   inputSize?: number;
@@ -12,6 +15,7 @@ type WorkflowSizeSummary = {
   patchCompressedSize?: number;
   patchSize?: number;
   rawSize?: number;
+  trimTimeMs?: number;
 };
 
 type SelectedInputInfo = {

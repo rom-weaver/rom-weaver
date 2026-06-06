@@ -1500,6 +1500,10 @@ fn json_mode_emits_running_progress_before_terminal_status() {
     let terminal = events.last().expect("terminal event");
     assert_eq!(terminal["command"], "checksum");
     assert_eq!(terminal["status"], "succeeded");
+    assert!(
+        terminal["elapsed_ms"].as_u64().is_some(),
+        "expected terminal event to include elapsed_ms: {terminal}"
+    );
 }
 
 #[test]
@@ -1640,6 +1644,10 @@ fn extract_progress_text_reports_elapsed_and_files() {
     assert!(
         stdout.contains("1 file(s) written"),
         "expected file count in summary, got: {stdout}"
+    );
+    assert!(
+        stdout.contains("elapsed: "),
+        "expected elapsed timing in summary, got: {stdout}"
     );
 }
 

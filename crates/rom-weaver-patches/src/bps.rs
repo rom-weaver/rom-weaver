@@ -535,6 +535,7 @@ impl<'a> BpsApplyProgress<'a> {
             used_parallelism: None,
             thread_fallback: None,
             thread_fallback_reason: None,
+            elapsed_ms: None,
             status: OperationStatus::Running,
         });
     }
@@ -1002,6 +1003,7 @@ impl<'a> BpsCreateProgress<'a> {
             used_parallelism: None,
             thread_fallback: None,
             thread_fallback_reason: None,
+            elapsed_ms: None,
             status: OperationStatus::Running,
         });
     }

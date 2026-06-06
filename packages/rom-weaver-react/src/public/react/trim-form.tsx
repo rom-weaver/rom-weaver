@@ -578,12 +578,23 @@ function TrimPatchForm(props: TrimPatchFormProps) {
       const result = (await trimWorkflow.run()) as BrowserTrimResult;
       const completedAt = Date.now();
       const { compressionStartedAt, trimStartedAt } = trimExecutionTimingRef.current;
-      const trimTimeMs =
+      const reportedTrimTimeMs =
+        typeof result.sizeSummary?.trimTimeMs === "number" && Number.isFinite(result.sizeSummary.trimTimeMs)
+          ? Math.max(0, Math.round(result.sizeSummary.trimTimeMs))
+          : null;
+      const reportedCompressionTimeMs =
+        typeof result.sizeSummary?.compressionTimeMs === "number" &&
+        Number.isFinite(result.sizeSummary.compressionTimeMs)
+          ? Math.max(0, Math.round(result.sizeSummary.compressionTimeMs))
+          : null;
+      const fallbackTrimTimeMs =
         typeof trimStartedAt === "number"
           ? Math.max(0, (typeof compressionStartedAt === "number" ? compressionStartedAt : completedAt) - trimStartedAt)
           : null;
+      const trimTimeMs = reportedTrimTimeMs ?? fallbackTrimTimeMs;
       const compressionTimeMs =
-        typeof compressionStartedAt === "number" ? Math.max(0, completedAt - compressionStartedAt) : null;
+        reportedCompressionTimeMs ??
+        (typeof compressionStartedAt === "number" ? Math.max(0, completedAt - compressionStartedAt) : null);
       emitTrimFormTrace("run.finish", {
         compressionTimeMs,
         outputName: result.output.fileName,

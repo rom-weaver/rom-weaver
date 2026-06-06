@@ -52,6 +52,12 @@ type PublicOutputWithApplySummary = ApplyWorkflowResult["output"] & {
   _applySummary?: InternalWorkerApplySummary;
 };
 
+const getTimingElapsedMs = (timing: InternalWorkerApplySummary["timing"] | undefined) => {
+  if (!timing || typeof timing.elapsedMs !== "number" || !Number.isFinite(timing.elapsedMs) || timing.elapsedMs < 0)
+    return undefined;
+  return Math.round(timing.elapsedMs);
+};
+
 const getApplyLogLevel = (options: PatchInput["options"]) => options?.logging?.level;
 const getApplyWorkerThreads = (options: PatchInput["options"]) => options?.workers?.threads;
 const getApplyPatchTargets = (options: PatchInput["options"]) => options?.patchTargets;
@@ -396,6 +402,8 @@ const runApplyWorkflow = async (
   const patchTargets = input.patchTargets || getApplyPatchTargets(options);
   const targets: InputAsset[] = [];
   const patchedById = new Map<string, PatchFileInstance>();
+  let applyTimeMs = 0;
+  let hasApplyTimeMs = false;
   if (patches.length) {
     deps.reportProgress(options, {
       label: "Applying patch...",
@@ -466,6 +474,11 @@ const runApplyWorkflow = async (
               },
               patches: selectedPatches,
             })) as PublicOutputWithApplySummary;
+            const workerApplyTimeMs = getTimingElapsedMs(workerOutput._applySummary?.timing);
+            if (workerApplyTimeMs !== undefined) {
+              applyTimeMs += workerApplyTimeMs;
+              hasApplyTimeMs = true;
+            }
             const canReuseWorkerOutputPath = !!(
               workerOutput &&
               typeof workerOutput === "object" &&
@@ -521,7 +534,11 @@ const runApplyWorkflow = async (
     });
   }
 
-  const { files: outputFiles, rawOutputSize } = await traceWorkflowStageBlock(
+  const {
+    compressionTimeMs,
+    files: outputFiles,
+    rawOutputSize,
+  } = await traceWorkflowStageBlock(
     options,
     "output.materialization",
     "output",
@@ -566,6 +583,8 @@ const runApplyWorkflow = async (
           inputCompressedSize: inputCompressedSize || preparedInputMetrics.inputSourceSize || preparedInputSize,
           inputDecompressionTimeMs: preparedInputMetrics.inputDecompressionTimeMs,
           inputSize: preparedInputSize,
+          ...(hasApplyTimeMs ? { applyTimeMs } : {}),
+          ...(compressionTimeMs === undefined ? {} : { compressionTimeMs }),
           outputSize: outputs[0].size || 0,
           patchCompressedSize: patchCompressedSize || patchSize,
           patchSize,

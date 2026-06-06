@@ -1,3 +1,4 @@
+import type { RuntimeTiming } from "../../types/output.ts";
 import type { AbsoluteVfsPath } from "./path.ts";
 
 type VfsFileRef = {
@@ -15,6 +16,7 @@ type VfsOutputRef = {
   path: AbsoluteVfsPath;
   saveAs: (destination?: unknown) => Promise<void>;
   size: number;
+  timing?: RuntimeTiming | null;
   vfs: LargeFileVfs;
 };
 
@@ -34,6 +36,7 @@ type LargeFileVfs = {
       cleanup?: () => Promise<void> | void;
       mediaType?: string;
       size?: number;
+      timing?: RuntimeTiming | null;
     },
   ) => Promise<VfsOutputRef>;
   normalizePath: (path: string) => AbsoluteVfsPath;

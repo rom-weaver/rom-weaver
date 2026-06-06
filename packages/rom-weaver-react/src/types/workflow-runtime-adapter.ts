@@ -77,6 +77,7 @@ type RuntimeWorkerOutput = {
   patchFileName?: string;
   patchFilePath?: string;
   size?: number;
+  timing?: PublicOutput["timing"];
 };
 
 type RuntimeWorkerIo = {

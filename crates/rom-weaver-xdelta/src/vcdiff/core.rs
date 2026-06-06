@@ -1263,6 +1263,7 @@ impl<'a> CreateProgress<'a> {
             used_parallelism: Some(execution.used_parallelism),
             thread_fallback: Some(execution.thread_fallback),
             thread_fallback_reason: execution.thread_fallback_reason.clone(),
+            elapsed_ms: None,
             status: OperationStatus::Running,
         });
     }

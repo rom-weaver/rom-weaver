@@ -2,6 +2,7 @@ import type { InputAsset } from "../lib/input/input-assets.ts";
 import type { VfsOutputRef } from "../storage/vfs/types.ts";
 import type { ParsedPatchLike, PatchFileInstance } from "../workers/protocol/patch-engine.ts";
 import type { LogLevel, LogRecord } from "./logging.ts";
+import type { RuntimeTiming } from "./output.ts";
 import type { CandidateSelectionRequest } from "./selection.ts";
 import type { ApplySettings, CreateSettings } from "./settings.ts";
 import type { SourceRef } from "./source.ts";
@@ -101,6 +102,8 @@ type TrimResult = {
     inputSize?: number;
     outputSize?: number;
     rawSize?: number;
+    compressionTimeMs?: number;
+    trimTimeMs?: number;
   };
 };
 
@@ -108,6 +111,7 @@ type PublicOutput = VfsOutputRef & {
   checksums?: Record<string, string>;
   chdCuePath?: string;
   cleanup?: () => Promise<void> | void;
+  timing?: RuntimeTiming | null;
 };
 
 type CompressionEntryInfo = {
@@ -207,6 +211,8 @@ type ApplyWorkflowResult = {
   output: PublicOutput;
   outputs: PublicOutput[];
   sizeSummary?: {
+    applyTimeMs?: number;
+    compressionTimeMs?: number;
     inputCompressedSize?: number;
     inputDecompressionTimeMs?: number;
     inputSize: number;
@@ -237,6 +243,8 @@ type CreatePatchResult = {
   output: PublicOutput;
   format: string;
   sizeSummary?: {
+    compressionTimeMs?: number;
+    createTimeMs?: number;
     outputSize?: number;
     rawSize?: number;
   };

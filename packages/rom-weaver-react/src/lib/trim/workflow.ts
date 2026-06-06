@@ -39,6 +39,13 @@ const getTrimCompression = (options: TrimWorkflowOptions | undefined) => options
 const getTrimOutputName = (options: TrimWorkflowOptions | undefined) => options?.output?.outputName;
 const { traceWorkflowStage, traceWorkflowStageBlock } = createWorkflowTracer("trim");
 
+const getOutputTimingMs = (output: TrimResult["output"] | undefined): number | undefined => {
+  const elapsedMs = output?.timing?.elapsedMs;
+  return typeof elapsedMs === "number" && Number.isFinite(elapsedMs) && elapsedMs >= 0
+    ? Math.round(elapsedMs)
+    : undefined;
+};
+
 const isArchiveOutputCompression = (compression: CompressionFormat): compression is "7z" | "zip" =>
   compression === "7z" || compression === "zip";
 
@@ -254,7 +261,7 @@ const runTrimWorkflow = async (
     () => ({ worker: true }),
   );
   const rawSize = result.sizeSummary?.outputSize ?? result.output.size;
-  if (compression === "none")
+  if (compression === "none") {
     return {
       ...result,
       sizeSummary: {
@@ -264,12 +271,15 @@ const runTrimWorkflow = async (
         rawSize,
       },
     };
+  }
   const trimmedFile = await createPatchFileFromPublicOutput(result.output, rawTrimFileName);
   const output = await createCompressedTrimOutput(trimmedFile, compression);
+  const compressionTimeMs = getOutputTimingMs(output);
   return {
     output,
     sizeSummary: {
       ...(result.sizeSummary || {}),
+      ...(compressionTimeMs === undefined ? {} : { compressionTimeMs }),
       inputSize,
       outputSize: output.size,
       rawSize: trimmedFile.fileSize,

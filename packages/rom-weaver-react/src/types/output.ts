@@ -1,5 +1,10 @@
 type OutputStorageKind = "blob" | "file" | "opfs";
 
+type RuntimeTiming = {
+  elapsedMs?: number;
+  elapsedSeconds?: number;
+};
+
 type SaveDestination =
   | string
   | FileSystemFileHandle
@@ -17,8 +22,9 @@ type PublicOutput<TDestination> = {
   saveAs: (destination?: TDestination) => Promise<void>;
   size?: number;
   storage: OutputStorageKind;
+  timing?: RuntimeTiming | null;
 };
 
 type BrowserSaveDestination = SaveDestination;
 
-export type { BrowserSaveDestination, OutputStorageKind, PublicOutput, SaveDestination };
+export type { BrowserSaveDestination, OutputStorageKind, PublicOutput, RuntimeTiming, SaveDestination };

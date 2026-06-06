@@ -165,6 +165,14 @@ const attachApplySummary = <TOutput extends PublicOutput>(
   summary: InternalPatchApplySummary | null,
 ) => (summary ? Object.assign(output, { _applySummary: summary }) : output);
 
+const getTimingElapsedMs = (timing: PublicOutput["timing"] | InternalPatchApplySummary["timing"] | undefined) => {
+  if (!timing || typeof timing !== "object") return undefined;
+  const elapsedMs = timing.elapsedMs;
+  return typeof elapsedMs === "number" && Number.isFinite(elapsedMs) && elapsedMs >= 0
+    ? Math.round(elapsedMs)
+    : undefined;
+};
+
 const createSharedPatchRuntime = (adapter: PatchRuntimeAdapter): WorkflowRuntime["patch"] => ({
   applyPatch: async ({ input, patches, options, logLevel, onLog, onProgress }) => {
     const traceContext = { logLevel, onLog };
@@ -308,9 +316,13 @@ const createSharedPatchRuntime = (adapter: PatchRuntimeAdapter): WorkflowRuntime
         onProgress ? forwardCreatePatchProgress(onProgress) : undefined,
         onLog,
       );
+      const createTimeMs = getTimingElapsedMs(result.timing);
       return {
         format,
         output: await adapter.workerIo.createWorkerOutput(result, outputName, adapter.workerOutputFailureMessage),
+        sizeSummary: {
+          ...(createTimeMs === undefined ? {} : { createTimeMs }),
+        },
       };
     } finally {
       await cleanupWorkerSources(workerSources);
@@ -470,12 +482,16 @@ const createSharedTrimRuntime = (adapter: TrimRuntimeAdapter): WorkflowRuntime["
         onProgress ? forwardCreatePatchProgress(onProgress) : undefined,
         onLog,
       );
+      const trimTimeMs = getTimingElapsedMs(result.timing);
       return {
         output: await adapter.workerIo.createWorkerOutput(
           result,
           result.fileName || outputName || "trimmed.bin",
           adapter.workerOutputFailureMessage,
         ),
+        sizeSummary: {
+          ...(trimTimeMs === undefined ? {} : { trimTimeMs }),
+        },
       };
     } finally {
       await workerSource.cleanup().catch(() => undefined);

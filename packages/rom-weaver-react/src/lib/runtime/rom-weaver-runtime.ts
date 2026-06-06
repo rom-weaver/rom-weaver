@@ -30,6 +30,7 @@ import type {
 } from "../../types/workflow-runtime-adapter.ts";
 import {
   getRomWeaverRunEventDetails,
+  getRomWeaverRunEventElapsedMs,
   getRomWeaverRunEventFormat,
   getRomWeaverRunEventLabel,
   getRomWeaverRunEventPercent,
@@ -351,6 +352,20 @@ const getTerminalEvent = (result: RomWeaverRunJsonResult): RomWeaverRunJsonEvent
     if (event && isRomWeaverTerminalRunEvent(event)) return event;
   }
   return getLastEvent(result);
+};
+
+const createRuntimeTiming = (elapsedMs: unknown) => {
+  if (typeof elapsedMs !== "number" || !Number.isFinite(elapsedMs) || elapsedMs < 0) return undefined;
+  const normalizedMs = Math.round(elapsedMs);
+  return {
+    elapsedMs: normalizedMs,
+    elapsedSeconds: normalizedMs / 1000,
+  };
+};
+
+const getRunResultTiming = (result: RomWeaverRunJsonResult) => {
+  const terminal = getTerminalEvent(result);
+  return terminal ? createRuntimeTiming(getRomWeaverRunEventElapsedMs(terminal)) : undefined;
 };
 
 const asRecord = (value: unknown): Record<string, unknown> | null =>
@@ -733,6 +748,7 @@ const invokeRomWeaverCompressionCreateWorker = async (
     fileName: input.outputFileName,
     filePath: emitted?.path || outputPath,
     size: emitted?.sizeBytes,
+    timing: getRunResultTiming(result),
   };
 };
 
@@ -1161,10 +1177,12 @@ const invokeRomWeaverPatchApplyWorker = async (
       rom: {
         fileName: input.romFileName || getPathBaseName(input.romFilePath, "input.bin"),
       },
+      timing: getRunResultTiming(result),
     },
     fileName: outputFileName,
     filePath: emitted?.path || outputPath,
     size: emitted?.sizeBytes,
+    timing: getRunResultTiming(result),
   };
 };
 
@@ -1295,6 +1313,7 @@ const invokeRomWeaverCreatePatchWorker = async (
     fileName: outputFileName,
     filePath: emitted?.path || outputPath,
     size: emitted?.sizeBytes,
+    timing: getRunResultTiming(result),
   };
 };
 
@@ -1353,6 +1372,7 @@ const invokeRomWeaverTrimWorker = async (
     fileName: outputFileName,
     filePath: emitted?.path || outputPath,
     size: emitted?.sizeBytes,
+    timing: getRunResultTiming(result),
   };
 };
 

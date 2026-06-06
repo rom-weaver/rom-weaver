@@ -250,6 +250,7 @@ const createBrowserRuntimeVfsIo = ({
           checksums: result.checksums,
           cleanup,
           size: result.outputRef?.size || result.size,
+          timing: result.timing,
         });
       }
       throw new Error(failureMessage || "Worker did not return browser output");
