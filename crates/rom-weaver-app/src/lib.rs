@@ -18,11 +18,16 @@ use rom_weaver_containers::{CompressFormatRecommendation, ContainerRegistry};
 use rom_weaver_core::{
     ArchiveEntryKindFilter, CancellationToken, ChecksumEngine, ChecksumRequest,
     ContainerCreateRequest, ContainerExtractRequest, ContainerHandler, ContainerListEntry,
-    ContainerProbeRequest, OperationContext, OperationFamily, OperationReport, OperationStatus,
-    PatchApplyRequest, PatchChecksumValidation, PatchCreateRequest, PatchValidateRequest,
-    ProbeConfidence, ProgressEvent, ProgressSink, Result, RomWeaverError, ThreadBudget,
+    ContainerProbeRequest, NoninteractivePrompter, OperationContext, OperationFamily,
+    OperationReport, OperationStatus, PatchApplyRequest, PatchChecksumValidation,
+    PatchCreateRequest, PatchValidateRequest, ProbeConfidence, ProgressEvent, ProgressSink,
+    PromptCandidate, Result, RomWeaverError, Selection, SelectionPrompter, ThreadBudget,
     ThreadCapability, ThreadExecution, XdeltaSecondaryMode, should_ignore_common_container_file,
 };
+// The selection-input parser moved to core; the app keeps a thin wrapper only so the existing unit
+// test in `tests.rs` can exercise it through `CliApp`.
+#[cfg(test)]
+use rom_weaver_core::{ParsedSelectionInput, parse_selection_input};
 use rom_weaver_libarchive::{
     ReadFilter as LibarchiveReadFilter, list_regular_archive_file_entries, with_raw_stream_reader,
     with_regular_archive_file_entry_reader,
@@ -1061,9 +1066,11 @@ impl RomWeaverApp {
         command: Commands,
         options: AppRunOptions,
         reporter: Arc<dyn ProgressSink>,
+        prompter: Arc<dyn SelectionPrompter>,
     ) -> AppRunOutcome {
         let app = CliApp::new(
             reporter,
+            prompter,
             options.emit_progress_events,
             options.interactive_selection_enabled,
         );
@@ -1090,15 +1097,27 @@ impl RunCommandOptions {
     }
 }
 
+/// Entrypoint for headless callers (wasm). Always emits the JSON event stream and never prompts,
+/// so the worker that parses stdout sees a clean machine-readable stream.
 pub fn run_request(request: RomWeaverRunRequest, stdout_is_tty: bool) -> ExitCode {
     let output = request.output;
     run_command(
         request.command,
         RunCommandOptions::from_output(output, stdout_is_tty),
+        Arc::new(JsonProgressSink),
+        Arc::new(NoninteractivePrompter),
     )
 }
 
-pub fn run_command(command: Commands, options: RunCommandOptions) -> ExitCode {
+/// Run one command with caller-provided terminal IO. The front-end injects the `reporter` (JSON or
+/// a human renderer) and the `prompter` (stdin-backed or non-interactive), so this crate stays free
+/// of presentation concerns.
+pub fn run_command(
+    command: Commands,
+    options: RunCommandOptions,
+    reporter: Arc<dyn ProgressSink>,
+    prompter: Arc<dyn SelectionPrompter>,
+) -> ExitCode {
     init_trace_logging(options.trace, options.json);
     trace!(
         json = options.json,
@@ -1107,11 +1126,6 @@ pub fn run_command(command: Commands, options: RunCommandOptions) -> ExitCode {
         command = ?command,
         "running rom-weaver command"
     );
-    let reporter: Arc<dyn ProgressSink> = if options.json {
-        Arc::new(StdoutReporter::json())
-    } else {
-        Arc::new(StdoutReporter::text())
-    };
     let outcome = RomWeaverApp::run(
         command,
         AppRunOptions {
@@ -1119,6 +1133,7 @@ pub fn run_command(command: Commands, options: RunCommandOptions) -> ExitCode {
             interactive_selection_enabled: options.interactive_selection_enabled,
         },
         reporter,
+        prompter,
     );
     ExitCode::from(outcome.exit_code)
 }
@@ -1208,77 +1223,26 @@ fn trim_non_empty(value: String) -> Option<String> {
     }
 }
 
-enum OutputMode {
-    Json,
-    Text,
-}
+/// Progress sink that serializes each event to a stdout JSON line. Used by the wasm entrypoint
+/// (whose worker parses the JSON stream) and by the native CLI's `--json` mode. Human-readable
+/// rendering lives in the front-end crates, not here.
+pub struct JsonProgressSink;
 
-struct StdoutReporter {
-    mode: OutputMode,
-}
-
-impl StdoutReporter {
-    fn json() -> Self {
-        Self {
-            mode: OutputMode::Json,
-        }
-    }
-
-    fn text() -> Self {
-        Self {
-            mode: OutputMode::Text,
-        }
-    }
-}
-
-impl ProgressSink for StdoutReporter {
+impl ProgressSink for JsonProgressSink {
     fn emit(&self, event: ProgressEvent) {
-        match self.mode {
-            OutputMode::Json => match serde_json::to_string(&event) {
-                Ok(serialized) => {
-                    println!("{serialized}");
-                    let _ = io::Write::flush(&mut io::stdout());
-                }
-                Err(error) => eprintln!("failed to serialize progress event: {error}"),
-            },
-            OutputMode::Text => {
-                let format = event.format.as_deref().unwrap_or("-");
-                let threads = match (
-                    event.requested_threads,
-                    event.effective_threads,
-                    event.used_parallelism,
-                    event.thread_mode,
-                ) {
-                    (
-                        Some(requested),
-                        Some(effective),
-                        Some(used_parallelism),
-                        Some(thread_mode),
-                    ) => {
-                        format!(
-                            " requested_threads={requested} effective_threads={effective} thread_mode={thread_mode:?} used_parallelism={used_parallelism}"
-                        )
-                    }
-                    _ => String::new(),
-                };
-                println!(
-                    "[{}] family={:?} format={} stage={} status={:?} label={}{}",
-                    event.command,
-                    event.family,
-                    format,
-                    event.stage,
-                    event.status,
-                    event.label,
-                    threads,
-                );
+        match serde_json::to_string(&event) {
+            Ok(serialized) => {
+                println!("{serialized}");
                 let _ = io::Write::flush(&mut io::stdout());
             }
+            Err(error) => eprintln!("failed to serialize progress event: {error}"),
         }
     }
 }
 
 struct CliApp {
     reporter: Arc<dyn ProgressSink>,
+    prompter: Arc<dyn SelectionPrompter>,
     emit_progress_events: bool,
     interactive_selection_enabled: bool,
     containers: ContainerRegistry,
@@ -1787,23 +1751,10 @@ struct ChecksumExtractCandidate {
     ignored: bool,
 }
 
-#[derive(Clone, Debug)]
-struct SelectionPromptCandidate {
-    value: String,
-    label: String,
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct FileSnapshot {
     size_bytes: u64,
     modified_unix_nanos: Option<u128>,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum ParsedSelectionInput {
-    Cancelled,
-    Selected(usize),
-    Invalid,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

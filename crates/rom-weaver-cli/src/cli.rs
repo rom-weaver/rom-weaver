@@ -2,11 +2,20 @@ use std::process::ExitCode;
 
 #[cfg(not(target_arch = "wasm32"))]
 use std::io::{self, IsTerminal};
+#[cfg(not(target_arch = "wasm32"))]
+use std::sync::Arc;
 
 #[cfg(not(target_arch = "wasm32"))]
 use clap::Parser;
 #[cfg(not(target_arch = "wasm32"))]
-use rom_weaver_app::{Commands, RomWeaverRunOutputOptions, RomWeaverRunRequest, run_request};
+use rom_weaver_app::{
+    Commands, JsonProgressSink, RomWeaverRunOutputOptions, RunCommandOptions, run_command,
+};
+#[cfg(not(target_arch = "wasm32"))]
+use rom_weaver_core::{NoninteractivePrompter, ProgressSink, SelectionPrompter};
+
+#[cfg(not(target_arch = "wasm32"))]
+use crate::render::{HumanReporter, HumanStyle, StdinPrompter};
 
 #[derive(Debug)]
 #[cfg(not(target_arch = "wasm32"))]
@@ -64,18 +73,12 @@ struct Cli {
 
 #[cfg(not(target_arch = "wasm32"))]
 impl Cli {
-    fn into_run_request(self) -> RomWeaverRunRequest {
-        let output = RomWeaverRunOutputOptions {
+    fn output_options(&self, interactive: bool) -> RomWeaverRunOutputOptions {
+        RomWeaverRunOutputOptions {
             json: self.json,
             progress: progress_override(self.progress, self.no_progress),
             trace: self.trace,
-            interactive_selection_enabled: !self.json
-                && io::stdin().is_terminal()
-                && io::stderr().is_terminal(),
-        };
-        RomWeaverRunRequest {
-            command: self.command,
-            output,
+            interactive_selection_enabled: interactive,
         }
     }
 }
@@ -93,8 +96,29 @@ fn progress_override(progress: bool, no_progress: bool) -> Option<bool> {
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn main_entry() -> ExitCode {
-    let request = Cli::parse().into_run_request();
-    run_request(request, io::stdout().is_terminal())
+    let cli = Cli::parse();
+    let stdout_is_tty = io::stdout().is_terminal();
+    // Interactive prompting needs a terminal on both stdin (to read) and stderr (to draw), and is
+    // meaningless when emitting JSON.
+    let interactive = !cli.json && io::stdin().is_terminal() && io::stderr().is_terminal();
+    let options = RunCommandOptions::from_output(cli.output_options(interactive), stdout_is_tty);
+
+    // `--json` passes the event stream straight through; otherwise render for humans — richly when
+    // stdout is a terminal, plainly when piped.
+    let reporter: Arc<dyn ProgressSink> = if cli.json {
+        Arc::new(JsonProgressSink)
+    } else if stdout_is_tty {
+        Arc::new(HumanReporter::new(HumanStyle::Rich))
+    } else {
+        Arc::new(HumanReporter::new(HumanStyle::Simple))
+    };
+    let prompter: Arc<dyn SelectionPrompter> = if interactive {
+        Arc::new(StdinPrompter::new())
+    } else {
+        Arc::new(NoninteractivePrompter)
+    };
+
+    run_command(cli.command, options, reporter, prompter)
 }
 
 #[cfg(target_arch = "wasm32")]

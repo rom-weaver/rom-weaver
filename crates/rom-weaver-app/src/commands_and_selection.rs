@@ -37,11 +37,13 @@ struct ChecksumStreamOptions<'a> {
 impl CliApp {
     fn new(
         reporter: Arc<dyn ProgressSink>,
+        prompter: Arc<dyn SelectionPrompter>,
         emit_progress_events: bool,
         interactive_selection_enabled: bool,
     ) -> Self {
         Self {
             reporter,
+            prompter,
             emit_progress_events,
             interactive_selection_enabled,
             containers: ContainerRegistry::new(),
@@ -2151,7 +2153,7 @@ impl CliApp {
 
         let prompt_candidates = unique_entries
             .iter()
-            .map(|entry| SelectionPromptCandidate {
+            .map(|entry| PromptCandidate {
                 value: entry.clone(),
                 label: entry.clone(),
             })
@@ -2187,7 +2189,7 @@ impl CliApp {
         };
         let prompt_candidates = candidates
             .iter()
-            .map(|candidate| SelectionPromptCandidate {
+            .map(|candidate| PromptCandidate {
                 value: candidate.display_name.clone(),
                 label: if ignored_only && candidate.ignored {
                     format!("{} [ignored by default]", candidate.display_name)
@@ -2219,57 +2221,25 @@ impl CliApp {
             .to_string()
     }
 
+    #[cfg(test)]
     fn parse_selection_input(input: &str, candidate_count: usize) -> ParsedSelectionInput {
-        let trimmed = input.trim();
-        if trimmed.eq_ignore_ascii_case("q")
-            || trimmed.eq_ignore_ascii_case("quit")
-            || trimmed.eq_ignore_ascii_case("exit")
-        {
-            return ParsedSelectionInput::Cancelled;
-        }
-        if let Ok(parsed) = trimmed.parse::<usize>()
-            && (1..=candidate_count).contains(&parsed)
-        {
-            return ParsedSelectionInput::Selected(parsed - 1);
-        }
-        ParsedSelectionInput::Invalid
+        parse_selection_input(input, candidate_count)
     }
 
+    /// Resolve a selection by delegating the terminal IO to the injected prompter. The control flow
+    /// (candidate building, retries) stays here; only the rendering and stdin read live in the
+    /// front-end's [`SelectionPrompter`].
     fn prompt_for_selection(
         &self,
         heading: &str,
-        candidates: &[SelectionPromptCandidate],
+        candidates: &[PromptCandidate],
     ) -> Result<Option<usize>> {
         if !self.interactive_selection_enabled || candidates.is_empty() {
             return Ok(None);
         }
-        eprintln!("{heading}");
-        for (index, candidate) in candidates.iter().enumerate() {
-            eprintln!("  {}. {}", index + 1, candidate.label);
-        }
-        eprintln!(
-            "Enter a number between 1 and {}, or `q` to cancel.",
-            candidates.len()
-        );
-
-        loop {
-            eprint!("selection> ");
-            io::stderr().flush()?;
-            let mut input = String::new();
-            let bytes_read = io::stdin().read_line(&mut input)?;
-            if bytes_read == 0 {
-                return Ok(None);
-            }
-            let trimmed = input.trim();
-            match Self::parse_selection_input(trimmed, candidates.len()) {
-                ParsedSelectionInput::Cancelled => return Ok(None),
-                ParsedSelectionInput::Selected(index) => return Ok(Some(index)),
-                ParsedSelectionInput::Invalid => {}
-            }
-            eprintln!(
-                "invalid selection `{trimmed}`. Enter 1..{} or `q`.",
-                candidates.len()
-            );
+        match self.prompter.select(heading, candidates) {
+            Selection::Selected(index) => Ok(Some(index)),
+            Selection::Cancelled => Ok(None),
         }
     }
 

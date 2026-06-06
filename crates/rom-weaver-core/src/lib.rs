@@ -4,6 +4,7 @@ mod context;
 mod error;
 mod io;
 mod progress;
+mod prompt;
 mod registry;
 mod selection;
 mod threads;
@@ -29,6 +30,10 @@ pub use progress::{
     ContainerByteProgress, NoopProgressSink, OperationFamily, OperationStatus, ProgressEvent,
     ProgressSink, RecordingProgressSink, emit_container_running_progress,
     maybe_emit_container_byte_progress,
+};
+pub use prompt::{
+    NoninteractivePrompter, ParsedSelectionInput, PromptCandidate, Selection, SelectionPrompter,
+    parse_selection_input,
 };
 pub use registry::{
     ChecksumCapabilities, ChecksumEngine, ChecksumRequest, CodecBackend, CodecCapabilities,

@@ -668,35 +668,22 @@ impl CliApp {
             )));
         }
 
-        eprintln!(
+        let heading = format!(
             "About to repack `{}` in place. This rewrites the archive and preserves {} other file(s):",
             archive.display(),
             others.len()
         );
-        for other in others.iter().take(10) {
-            let name = other
-                .strip_prefix(repack_root)
-                .unwrap_or(other)
-                .display();
-            eprintln!("  - {name}");
-        }
-        if others.len() > 10 {
-            eprintln!("  ... and {} more", others.len() - 10);
-        }
-        loop {
-            eprint!("Continue? [y/N] ");
-            io::stderr().flush()?;
-            let mut input = String::new();
-            let bytes_read = io::stdin().read_line(&mut input)?;
-            if bytes_read == 0 {
-                return Ok(false);
-            }
-            match input.trim().to_ascii_lowercase().as_str() {
-                "y" | "yes" => return Ok(true),
-                "" | "n" | "no" => return Ok(false),
-                _ => eprintln!("Please answer `y` or `n`."),
-            }
-        }
+        let detail_lines = others
+            .iter()
+            .map(|other| {
+                other
+                    .strip_prefix(repack_root)
+                    .unwrap_or(other)
+                    .display()
+                    .to_string()
+            })
+            .collect::<Vec<_>>();
+        Ok(self.prompter.confirm(&heading, &detail_lines))
     }
 
     /// Rebuild `archive` from the trimmed contents staged in `repack_root`, writing to a temporary

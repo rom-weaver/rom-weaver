@@ -1518,13 +1518,17 @@ fn non_json_default_suppresses_running_progress_without_tty() {
         .assert()
         .code(0)
         .get_output()
-        .stdout
         .clone();
 
-    let text = String::from_utf8(output).expect("utf8 stdout");
-    assert!(!text.contains("status=Running"));
-    assert!(text.contains("[checksum]"));
-    assert!(text.contains("status=Succeeded"));
+    let stdout = String::from_utf8(output.stdout).expect("utf8 stdout");
+    let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
+    // Default human output renders the result table on stdout...
+    assert!(stdout.contains("CRC32"), "expected checksum result on stdout, got: {stdout}");
+    // ...and suppresses running progress without a tty or --progress.
+    assert!(
+        !stderr.contains('%'),
+        "expected no running progress without a tty, got: {stderr}"
+    );
 }
 
 #[test]
@@ -1544,13 +1548,17 @@ fn progress_flag_enables_running_progress_without_json() {
         .assert()
         .code(0)
         .get_output()
-        .stdout
         .clone();
 
-    let text = String::from_utf8(output).expect("utf8 stdout");
-    assert!(text.contains("[checksum]"));
-    assert!(text.contains("status=Running"));
-    assert!(text.contains("status=Succeeded"));
+    let stdout = String::from_utf8(output.stdout).expect("utf8 stdout");
+    let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
+    // `--progress` forces running progress even without a tty; it is drawn on stderr...
+    assert!(
+        stderr.contains('%'),
+        "expected --progress to emit running progress on stderr, got: {stderr}"
+    );
+    // ...while the final result still renders on stdout.
+    assert!(stdout.contains("CRC32"), "expected checksum result on stdout, got: {stdout}");
 }
 
 #[test]
@@ -1618,14 +1626,21 @@ fn extract_progress_text_reports_elapsed_and_files() {
         .assert()
         .code(0)
         .get_output()
-        .stdout
         .clone();
 
-    let text = String::from_utf8(output).expect("utf8 stdout");
-    assert!(text.contains("[extract]"));
-    assert!(text.contains("status=Succeeded"));
-    assert!(text.contains("sample.zip"));
-    assert!(text.contains("1 file(s)"));
+    let stdout = String::from_utf8(output.stdout).expect("utf8 stdout");
+    let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
+    // `--progress` draws running progress on stderr...
+    assert!(
+        stderr.contains('%'),
+        "expected extract progress on stderr, got: {stderr}"
+    );
+    // ...and the summary table on stdout lists the extracted file and count.
+    assert!(stdout.contains("sample.bin"), "expected extracted file in summary, got: {stdout}");
+    assert!(
+        stdout.contains("1 file(s) written"),
+        "expected file count in summary, got: {stdout}"
+    );
 }
 
 #[test]
@@ -1665,11 +1680,14 @@ fn extract_no_overwrite_fails_when_output_exists() {
         .assert()
         .code(1)
         .get_output()
-        .stdout
+        .stderr
         .clone();
 
-    let text = String::from_utf8(output).expect("utf8 stdout");
-    assert!(text.contains("refusing to overwrite existing output"));
+    let text = String::from_utf8(output).expect("utf8 stderr");
+    assert!(
+        text.contains("refusing to overwrite existing output"),
+        "expected overwrite error on stderr, got: {text}"
+    );
 }
 
 #[test]
