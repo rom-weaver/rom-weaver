@@ -209,6 +209,13 @@ struct Z3dsCompressedFrame {
     compressed: Vec<u8>,
 }
 
+#[derive(Debug, Default)]
+struct Z3dsCreateTotals {
+    compressed_frame_bytes: u64,
+    uncompressed_bytes: u64,
+    frame_count: usize,
+}
+
 impl<R: Read + Seek> Z3dsPayloadReader<R> {
     fn new(mut inner: R, start: u64, len: u64) -> io::Result<Self> {
         inner.seek(SeekFrom::Start(start))?;
@@ -274,6 +281,18 @@ impl<R: Read + Seek> Seek for Z3dsPayloadReader<R> {
 /// can exercise the main-thread reader path.
 fn container_reads_source_on_main_thread() -> bool {
     rom_weaver_core::reads_source_on_main_thread(crate::constants::MAIN_THREAD_READER_ENV)
+}
+
+thread_local! {
+    /// Per-worker reusable zstd compression context, keyed by level. `zstd::bulk::compress` builds
+    /// and frees a fresh `CCtx` (and its match-finder workspace) on every call; a z3ds create fans
+    /// hundreds-to-thousands of frames across a handful of workers, so re-allocating that workspace
+    /// per frame is pure overhead. Caching one compressor per thread reuses the workspace across
+    /// every frame the thread handles. Keyed by level so a level change rebuilds it; each
+    /// `compress` call is independent (one frame in, one frame out), so reuse never changes output
+    /// bytes. Lives across both the scoped-thread (read-on-main) and rayon (native) create paths.
+    static Z3DS_THREAD_COMPRESSOR: std::cell::RefCell<Option<(i32, ZstdCompressor<'static>)>> =
+        const { std::cell::RefCell::new(None) };
 }
 
 impl Z3dsContainerHandler {
@@ -405,19 +424,55 @@ impl Z3dsContainerHandler {
         Ok(metadata)
     }
 
-    fn build_extract_tasks(&self, total_len: u64) -> Result<Vec<Z3dsExtractTask>> {
-        if total_len == 0 {
+    /// Group the seekable frames into frame-aligned extract tasks.
+    ///
+    /// Every task starts exactly on a frame boundary (`frame_start_decomp`), so the decoder seeks
+    /// straight to a frame start and decompresses zero bytes it then discards — unlike a fixed
+    /// byte-grid, which would force a worker landing mid-frame to re-inflate that frame's prefix.
+    /// Deriving boundaries from the seek table (rather than the create-time frame constant) keeps
+    /// extract optimal for archives written with any frame size, including older 256 KiB ones.
+    ///
+    /// Task span is [`Z3DS_EXTRACT_MAX_CHUNK_BYTES`] for large archives but shrinks so the count
+    /// reaches roughly `requested_threads * Z3DS_EXTRACT_TASKS_PER_THREAD`; otherwise a mid-size
+    /// file would collapse into a handful of big tasks and leave most requested threads idle.
+    fn build_extract_tasks(
+        &self,
+        seek_table: &ZeekstdSeekTable,
+        requested_threads: usize,
+    ) -> Result<Vec<Z3dsExtractTask>> {
+        let frame_count = seek_table.num_frames();
+        if frame_count == 0 {
             return Ok(Vec::new());
         }
 
+        let desired_tasks = requested_threads
+            .max(1)
+            .saturating_mul(Z3DS_EXTRACT_TASKS_PER_THREAD)
+            .max(1) as u64;
+        let by_thread_budget = seek_table.size_decomp().div_ceil(desired_tasks).max(1);
+        let target = by_thread_budget.min(Z3DS_EXTRACT_MAX_CHUNK_BYTES as u64);
         let mut tasks = Vec::new();
-        let chunk_len = Z3DS_EXTRACT_CHUNK_BYTES as u64;
-        let mut offset = 0_u64;
         let mut index = 0_usize;
-        while offset < total_len {
-            let len = (total_len - offset).min(chunk_len);
-            tasks.push(Z3dsExtractTask { index, offset, len });
-            offset = offset.saturating_add(len);
+        let mut frame = 0_u32;
+        while frame < frame_count {
+            let offset = seek_table
+                .frame_start_decomp(frame)
+                .map_err(|error| self.map_zstd_error("extract frame start", error))?;
+            let mut end = offset;
+            while frame < frame_count {
+                end = seek_table
+                    .frame_end_decomp(frame)
+                    .map_err(|error| self.map_zstd_error("extract frame end", error))?;
+                frame += 1;
+                if end.saturating_sub(offset) >= target {
+                    break;
+                }
+            }
+            tasks.push(Z3dsExtractTask {
+                index,
+                offset,
+                len: end.saturating_sub(offset),
+            });
             index += 1;
         }
         Ok(tasks)
@@ -426,13 +481,18 @@ impl Z3dsContainerHandler {
     fn extract_chunk_from_reader<R: Read + Seek>(
         &self,
         payload_reader: R,
+        seek_table: &ZeekstdSeekTable,
         task: &Z3dsExtractTask,
     ) -> Result<Z3dsDecodedExtractChunk> {
         let extract_end = task
             .offset
             .checked_add(task.len)
             .ok_or_else(|| RomWeaverError::Validation("z3ds extract offset overflowed".into()))?;
-        let mut decompressor = ZeekstdDecoder::new(payload_reader)
+        // Inject the already-parsed seek table instead of letting the decoder re-read and re-parse
+        // it from the source for every task (the trailing table is identical for all of them).
+        let mut decompressor = ZeekstdDecodeOptions::new(payload_reader)
+            .seek_table(seek_table.clone())
+            .into_decoder()
             .map_err(|error| self.map_zstd_error("extract initialize", error))?;
         decompressor
             .set_offset(task.offset)
@@ -445,9 +505,7 @@ impl Z3dsContainerHandler {
             RomWeaverError::Validation("z3ds extract chunk size exceeded supported range".into())
         })?;
         let mut output = Vec::with_capacity(capacity);
-        let buffer_len = usize::try_from(task.len.min(Z3DS_EXTRACT_CHUNK_BYTES as u64))
-            .unwrap_or(Z3DS_EXTRACT_CHUNK_BYTES)
-            .max(1);
+        let buffer_len = capacity.clamp(1, Z3DS_DECODE_BUFFER_BYTES);
         let mut buffer = vec![0_u8; buffer_len];
         let mut written = 0_u64;
         while written < task.len {
@@ -478,11 +536,12 @@ impl Z3dsContainerHandler {
         source: &Path,
         payload_start: u64,
         compressed_size: u64,
+        seek_table: &ZeekstdSeekTable,
         task: &Z3dsExtractTask,
     ) -> Result<Z3dsDecodedExtractChunk> {
         let source_file = File::open(source)?;
         let payload_reader = Z3dsPayloadReader::new(source_file, payload_start, compressed_size)?;
-        self.extract_chunk_from_reader(payload_reader, task)
+        self.extract_chunk_from_reader(payload_reader, seek_table, task)
     }
 
     fn build_create_tasks(&self, total_len: u64) -> Result<Vec<Z3dsCreateTask>> {
@@ -526,8 +585,19 @@ impl Z3dsContainerHandler {
         task: &Z3dsCreateTask,
         data: Vec<u8>,
     ) -> Result<Z3dsCompressedFrame> {
-        let compressed = zstd_compress(&data, level)
-            .map_err(|error| RomWeaverError::Validation(format!("z3ds create failed: {error}")))?;
+        let compressed = Z3DS_THREAD_COMPRESSOR.with(|cell| -> Result<Vec<u8>> {
+            let mut slot = cell.borrow_mut();
+            if !matches!(slot.as_ref(), Some((cached, _)) if *cached == level) {
+                let compressor = ZstdCompressor::new(level).map_err(|error| {
+                    RomWeaverError::Validation(format!("z3ds compressor init failed: {error}"))
+                })?;
+                *slot = Some((level, compressor));
+            }
+            let (_, compressor) = slot.as_mut().expect("z3ds compressor initialized above");
+            compressor
+                .compress(&data)
+                .map_err(|error| RomWeaverError::Validation(format!("z3ds create failed: {error}")))
+        })?;
         let compressed_size = u32::try_from(compressed.len()).map_err(|_| {
             RomWeaverError::Validation("z3ds compressed chunk exceeded 4 GiB".into())
         })?;
@@ -543,17 +613,49 @@ impl Z3dsContainerHandler {
         })
     }
 
+    /// Stream one finished frame straight to the output and record it in the running seek table,
+    /// updating the running totals. Frames must arrive in `index` order (the streaming pipeline and
+    /// the sequential path both deliver them ordered), which lets create avoid buffering the entire
+    /// compressed file in memory before writing — critical under the browser's wasm memory cap.
+    fn write_create_frame(
+        &self,
+        output: &mut BufWriter<File>,
+        seek_table: &mut ZeekstdSeekTable,
+        totals: &mut Z3dsCreateTotals,
+        frame: Z3dsCompressedFrame,
+    ) -> Result<()> {
+        if frame.index != totals.frame_count {
+            return Err(RomWeaverError::Validation(format!(
+                "z3ds frame {} arrived out of order (expected {})",
+                frame.index, totals.frame_count
+            )));
+        }
+        let copied = u64::try_from(frame.compressed.len()).map_err(|_| {
+            RomWeaverError::Validation("z3ds compressed frame length overflowed".into())
+        })?;
+        if copied != u64::from(frame.compressed_size) {
+            return Err(RomWeaverError::Validation(format!(
+                "z3ds frame {} buffered {} bytes but expected {} bytes",
+                frame.index, copied, frame.compressed_size
+            )));
+        }
+        output.write_all(&frame.compressed)?;
+        seek_table
+            .log_frame(frame.compressed_size, frame.decompressed_size)
+            .map_err(|error| self.map_zstd_error("seek table build", error))?;
+        totals.compressed_frame_bytes = totals.compressed_frame_bytes.saturating_add(copied);
+        totals.uncompressed_bytes = totals
+            .uncompressed_bytes
+            .saturating_add(u64::from(frame.decompressed_size));
+        totals.frame_count += 1;
+        Ok(())
+    }
+
     fn write_seek_table(
         &self,
         output: &mut BufWriter<File>,
-        frames: &[Z3dsCompressedFrame],
+        seek_table: ZeekstdSeekTable,
     ) -> Result<u64> {
-        let mut seek_table = ZeekstdSeekTable::new();
-        for frame in frames {
-            seek_table
-                .log_frame(frame.compressed_size, frame.decompressed_size)
-                .map_err(|error| self.map_zstd_error("seek table build", error))?;
-        }
         let mut serializer = seek_table.into_serializer();
         let seek_table_bytes = u64::try_from(serializer.encoded_len())
             .map_err(|_| RomWeaverError::Validation("z3ds seek table size overflowed".into()))?;
@@ -669,7 +771,20 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
 
         let payload_start = header.payload_offset();
         drop(file);
-        let tasks = self.build_extract_tasks(header.uncompressed_size)?;
+        // Parse the seekable frame table once on this (main) thread. `SeekTable::from_seekable`
+        // only reads the trailing table, not the payload, so it is cheap; every worker then shares
+        // this parse instead of re-reading and re-parsing the table for each chunk it decodes.
+        let seek_table = {
+            let mut table_reader = Z3dsPayloadReader::new(
+                File::open(&request.source)?,
+                payload_start,
+                header.compressed_size,
+            )?;
+            ZeekstdSeekTable::from_seekable(&mut table_reader)
+                .map_err(|error| self.map_zstd_error("extract seek table", error))?
+        };
+        let tasks =
+            self.build_extract_tasks(&seek_table, context.thread_budget().requested_threads())?;
 
         fs::create_dir_all(&request.out_dir)?;
         let output_path = request.out_dir.join(&output_name);
@@ -756,7 +871,7 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
                                     0,
                                     header.compressed_size,
                                 )?;
-                                self.extract_chunk_from_reader(reader, task)
+                                self.extract_chunk_from_reader(reader, &seek_table, task)
                                     .map(|chunk| (task.len, chunk))
                             })
                             .collect::<Result<Vec<_>>>()
@@ -778,6 +893,7 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
                                     &source,
                                     payload_start,
                                     header.compressed_size,
+                                    &seek_table,
                                     task,
                                 )
                                 .map(|chunk| (task.len, chunk))
@@ -796,6 +912,7 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
                         &source,
                         payload_start,
                         header.compressed_size,
+                        &seek_table,
                         task,
                     )?;
                     write_chunk(chunk, task.len)?;
@@ -842,8 +959,13 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
         let level = self.resolve_level(request.codec.as_deref(), request.level)?;
         let input_size = fs::metadata(input_path)?.len();
         let create_tasks = self.build_create_tasks(input_size)?;
-        let (execution, pool) =
-            context.build_pool(ThreadCapability::parallel(Some(create_tasks.len().max(1))))?;
+        // Plan threads without yet spawning a rayon pool: the read-on-main (browser) path drives
+        // its own `thread::scope` workers via `ordered_streaming_compress`, so building a rayon
+        // pool here too would double-book the bounded wasm worker pool (rayon's idle workers hold
+        // slots the scoped workers then wait forever for — a deadlock at high thread counts). Only
+        // the native `par_iter` branch needs the rayon pool, so it builds one there.
+        let execution =
+            context.plan_threads(ThreadCapability::parallel(Some(create_tasks.len().max(1))));
         let create_progress_label = format!("creating `{}`", Z3DS.name);
         let create_progress_bytes = Arc::new(AtomicU64::new(0));
         let create_progress_bucket = Arc::new(AtomicU8::new(0));
@@ -866,89 +988,79 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
         })?;
 
         let source = input_path.clone();
-        let compress_result = if execution.used_parallelism
-            && container_reads_source_on_main_thread()
-        {
-            // Read-on-main pipeline (browser/wasm): the OPFS source is owned by the main runner
-            // thread, so all reads happen here while worker threads run zstd compression in
-            // parallel. The main thread reads ahead up to `inflight` frames, then drains
-            // compressed frames as they complete; ordering is restored by sorting on `index`
-            // before the write phase, so the output bytes are identical to the native path.
-            let create_progress_bytes = Arc::clone(&create_progress_bytes);
-            let create_progress_bucket = Arc::clone(&create_progress_bucket);
-            let mut input = BufReader::new(File::open(input_path)?);
-            input.seek(SeekFrom::Start(0))?;
-            let mut frames = Vec::with_capacity(create_tasks.len());
+        let mut header = Z3dsFileHeader {
+            underlying_magic,
+            metadata_size,
+            compressed_size: 0,
+            uncompressed_size: 0,
+        };
+        let mut totals = Z3dsCreateTotals::default();
 
-            ordered_streaming_compress(
-                &create_tasks,
-                execution.effective_threads,
-                OrderedStreamingMessages {
-                    worker_closed: "z3ds compression workers ended before all frames were consumed",
-                    result_closed: "z3ds compression pipeline ended before all frames were produced",
-                },
-                |_, task| {
-                    let read_len = usize::try_from(task.len).map_err(|_| {
-                        RomWeaverError::Validation(
-                            "z3ds create chunk size exceeded supported range".into(),
-                        )
-                    })?;
-                    let mut data = vec![0_u8; read_len];
-                    input.read_exact(&mut data)?;
-                    if input_size > 0 {
-                        let completed = create_progress_bytes
-                            .fetch_add(task.len, Ordering::Relaxed)
-                            .saturating_add(task.len)
-                            .min(input_size);
-                        maybe_emit_container_byte_progress(
-                            context,
-                            completed,
-                            input_size,
-                            ContainerByteProgress {
-                                command: "compress",
-                                format: Z3DS.name,
-                                stage: "create",
-                                label: &create_progress_label,
-                                thread_execution: Some(&execution),
-                                emitted_progress_bucket: create_progress_bucket.as_ref(),
-                            },
-                        );
-                    }
-                    Ok((task.index, task.len, data))
-                },
-                || (),
-                |_, _, (index, len, data)| {
-                    let task = Z3dsCreateTask {
-                        index,
-                        offset: 0,
-                        len,
-                    };
-                    self.compress_frame_bytes(level, &task, data)
-                },
-                |_, frame| {
-                    frames.push(frame);
-                    Ok(())
-                },
-            )?;
+        // Build the archive by streaming: write the header + metadata, then append each compressed
+        // frame to the output (and log it in the seek table) the instant it is produced, in order.
+        // Buffering every frame until the end held the whole compressed file (hundreds of MiB) in
+        // memory at once, which on top of the concurrent zstd contexts overflowed the browser's
+        // 1 GiB wasm linear-memory cap on large high-level jobs. Streaming bounds peak memory to the
+        // read-ahead window plus the worker contexts. On any error the partial output is removed.
+        let build: Result<()> = (|| {
+            if let Some(parent) = request.output.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            // Large write buffer: streaming frames to disk interleaves the writes with the
+            // coordinator thread's read-ahead, so batching them into a few big writes (instead of
+            // the default 8 KiB BufWriter's thousands of small ones) keeps the reader feeding the
+            // compressors at fast levels. 4 MiB is negligible against the wasm memory budget.
+            let mut output = BufWriter::with_capacity(
+                4 * 1024 * 1024,
+                File::create(&request.output)?,
+            );
+            let mut seek_table = ZeekstdSeekTable::new();
+            header.write_to(output.get_mut())?;
+            if !metadata.is_empty() {
+                output.write_all(&metadata)?;
+            }
+            if metadata_aligned > metadata.len() {
+                output.write_all(&vec![0_u8; metadata_aligned - metadata.len()])?;
+            }
 
-            Ok(frames)
-        } else if execution.used_parallelism {
-            let progress_context = context.clone();
-            let progress_execution = execution.clone();
-            let create_progress_bytes = Arc::clone(&create_progress_bytes);
-            let create_progress_bucket = Arc::clone(&create_progress_bucket);
-            pool.install(|| {
-                create_tasks
-                    .par_iter()
-                    .map(|task| {
-                        let frame = self.compress_create_task(&source, level, task)?;
+            if execution.used_parallelism {
+                // Single threaded-reader/parallel-compressor pipeline for every target. The calling
+                // thread reads each frame and hands it to `std::thread::scope` workers that run zstd
+                // in parallel, reading ahead up to `inflight` frames and draining compressed frames
+                // in order. Reading on one thread (rather than a rayon worker per frame) is required
+                // in the browser — only the main OPFS runner can open the source — and costs nothing
+                // on native because create is compression-bound, so the reader stays ahead of the
+                // compressors. It also keeps the worker count exactly `effective_threads`, so it
+                // never double-books the bounded wasm thread pool the way an extra rayon pool would.
+                let create_progress_bytes = Arc::clone(&create_progress_bytes);
+                let create_progress_bucket = Arc::clone(&create_progress_bucket);
+                let mut input = BufReader::new(File::open(input_path)?);
+                input.seek(SeekFrom::Start(0))?;
+
+                ordered_streaming_compress(
+                    &create_tasks,
+                    execution.effective_threads,
+                    OrderedStreamingMessages {
+                        worker_closed:
+                            "z3ds compression workers ended before all frames were consumed",
+                        result_closed:
+                            "z3ds compression pipeline ended before all frames were produced",
+                    },
+                    |_, task| {
+                        let read_len = usize::try_from(task.len).map_err(|_| {
+                            RomWeaverError::Validation(
+                                "z3ds create chunk size exceeded supported range".into(),
+                            )
+                        })?;
+                        let mut data = vec![0_u8; read_len];
+                        input.read_exact(&mut data)?;
                         if input_size > 0 {
                             let completed = create_progress_bytes
                                 .fetch_add(task.len, Ordering::Relaxed)
                                 .saturating_add(task.len)
                                 .min(input_size);
                             maybe_emit_container_byte_progress(
-                                &progress_context,
+                                context,
                                 completed,
                                 input_size,
                                 ContainerByteProgress {
@@ -956,19 +1068,28 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
                                     format: Z3DS.name,
                                     stage: "create",
                                     label: &create_progress_label,
-                                    thread_execution: Some(&progress_execution),
+                                    thread_execution: Some(&execution),
                                     emitted_progress_bucket: create_progress_bucket.as_ref(),
                                 },
                             );
                         }
-                        Ok(frame)
-                    })
-                    .collect::<Result<Vec<_>>>()
-            })
-        } else {
-            create_tasks
-                .iter()
-                .map(|task| {
+                        Ok((task.index, task.len, data))
+                    },
+                    || (),
+                    |_, _, (index, len, data)| {
+                        let task = Z3dsCreateTask {
+                            index,
+                            offset: 0,
+                            len,
+                        };
+                        self.compress_frame_bytes(level, &task, data)
+                    },
+                    |_, frame| {
+                        self.write_create_frame(&mut output, &mut seek_table, &mut totals, frame)
+                    },
+                )?;
+            } else {
+                for task in &create_tasks {
                     let frame = self.compress_create_task(&source, level, task)?;
                     if input_size > 0 {
                         let completed = create_progress_bytes
@@ -989,63 +1110,22 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
                             },
                         );
                     }
-                    Ok(frame)
-                })
-                .collect::<Result<Vec<_>>>()
-        };
-        let mut frames = compress_result?;
-
-        frames.sort_by_key(|frame| frame.index);
-
-        let output_init: Result<(BufWriter<File>, Z3dsFileHeader)> = (|| {
-            if let Some(parent) = request.output.parent() {
-                fs::create_dir_all(parent)?;
+                    self.write_create_frame(&mut output, &mut seek_table, &mut totals, frame)?;
+                }
             }
-            let mut output = BufWriter::new(File::create(&request.output)?);
-            let header = Z3dsFileHeader {
-                underlying_magic,
-                metadata_size,
-                compressed_size: 0,
-                uncompressed_size: 0,
-            };
+
+            let seek_table_bytes = self.write_seek_table(&mut output, seek_table)?;
+            output.flush()?;
+            header.compressed_size = totals.compressed_frame_bytes.saturating_add(seek_table_bytes);
+            header.uncompressed_size = totals.uncompressed_bytes;
             header.write_to(output.get_mut())?;
-
-            if !metadata.is_empty() {
-                output.write_all(&metadata)?;
-            }
-            if metadata_aligned > metadata.len() {
-                let padding = vec![0_u8; metadata_aligned - metadata.len()];
-                output.write_all(&padding)?;
-            }
-            Ok((output, header))
+            output.flush()?;
+            Ok(())
         })();
-        let (mut output, mut header) = output_init?;
-
-        let mut compressed_frame_bytes = 0_u64;
-        let mut uncompressed_bytes = 0_u64;
-        for frame in &frames {
-            let copied = u64::try_from(frame.compressed.len()).map_err(|_| {
-                RomWeaverError::Validation("z3ds compressed frame length overflowed".into())
-            })?;
-            if copied != u64::from(frame.compressed_size) {
-                return Err(RomWeaverError::Validation(format!(
-                    "z3ds frame {} buffered {} bytes but expected {} bytes",
-                    frame.index, copied, frame.compressed_size
-                )));
-            }
-            output.write_all(&frame.compressed)?;
-            compressed_frame_bytes = compressed_frame_bytes.saturating_add(copied);
-            uncompressed_bytes =
-                uncompressed_bytes.saturating_add(u64::from(frame.decompressed_size));
+        if let Err(error) = build {
+            let _ = fs::remove_file(&request.output);
+            return Err(error);
         }
-
-        let seek_table_bytes = self.write_seek_table(&mut output, &frames)?;
-
-        output.flush()?;
-        header.compressed_size = compressed_frame_bytes.saturating_add(seek_table_bytes);
-        header.uncompressed_size = uncompressed_bytes;
-        header.write_to(output.get_mut())?;
-        output.flush()?;
 
         Ok(OperationReport::succeeded(
             OperationFamily::Container,
@@ -1058,7 +1138,7 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
                 level,
                 Z3DS_DEFAULT_FRAME_SIZE_BYTES,
                 header.compressed_size,
-                frames.len()
+                totals.frame_count
             ),
             Some(100.0),
             Some(execution),

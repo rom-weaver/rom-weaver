@@ -55,14 +55,15 @@ use tracing::trace;
 use xdvdfs::{
     blockdev::OffsetWrapper as XdvdfsOffsetWrapper, write::fs::XDVDFSFilesystem as XdvdfsFilesystem,
 };
-use zeekstd::{Decoder as ZeekstdDecoder, SeekTable as ZeekstdSeekTable};
-use zstd::bulk::compress as zstd_compress;
+use zeekstd::{DecodeOptions as ZeekstdDecodeOptions, SeekTable as ZeekstdSeekTable};
+use zstd::bulk::Compressor as ZstdCompressor;
 
 use constants::{
     LIBARCHIVE_CREATE_IO_BUFFER_BYTES, LIBARCHIVE_CREATE_ZSTD_IO_BUFFER_BYTES,
     LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES, PARALLEL_COORDINATOR_STACK_SIZE_BYTES,
-    Z3DS_DEFAULT_COMPRESSION_LEVEL, Z3DS_DEFAULT_FRAME_SIZE_BYTES, Z3DS_EXTRACT_CHUNK_BYTES,
-    Z3DS_MAX_COMPRESSION_LEVEL, Z3DS_MIN_COMPRESSION_LEVEL, copy_progress_buffer_size,
+    Z3DS_DECODE_BUFFER_BYTES, Z3DS_DEFAULT_COMPRESSION_LEVEL, Z3DS_DEFAULT_FRAME_SIZE_BYTES,
+    Z3DS_EXTRACT_MAX_CHUNK_BYTES, Z3DS_EXTRACT_TASKS_PER_THREAD, Z3DS_MAX_COMPRESSION_LEVEL,
+    Z3DS_MIN_COMPRESSION_LEVEL, copy_progress_buffer_size,
 };
 
 fn ensure_extract_output_available(output_path: &Path, overwrite: bool) -> Result<()> {
