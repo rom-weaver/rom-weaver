@@ -2,6 +2,7 @@
 /node_modules/
 /.tmp/
 /rom-weaver/
+.claude/
 **/__pycache__/
 
 # Generated wasm artifacts
