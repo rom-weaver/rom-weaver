@@ -1205,6 +1205,7 @@ impl CliApp {
                 match Self::validate_patch_apply_expected_checksums(
                     &raw_ready_output,
                     &expected_output_checksums,
+                    &BTreeMap::new(),
                     "output",
                     &context,
                 ) {
