@@ -28,6 +28,7 @@ import { ConfirmDialog } from "./components/ds/modal.tsx";
 import { OutputRunAction, WorkflowOutputStep } from "./components/ds/workflow-output-step.tsx";
 import { WorkflowRomInputStep } from "./components/ds/workflow-rom-input-step.tsx";
 import { buildCompressPanel } from "./compress-options.ts";
+import { TRIM_INPUT_HINT } from "./input-helper-text.ts";
 import { createCompressionTypeOptions, createTrimOutputOptions } from "./output-view-model.ts";
 import type { BinarySource } from "./patcher-form.ts";
 import type { CandidateSelectionPrompt, TrimPatchFormProps, TrimPatchFormSettings } from "./public-types.ts";
@@ -738,7 +739,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
         dropZone={{
           big: !source,
           disabled: uploadDisabled,
-          hint: source ? undefined : "archives are extracted",
+          hint: source ? undefined : `trim-supported ROMs · ${TRIM_INPUT_HINT}`,
           label: source ? "Replace ROM · drop or browse" : "Select ROM · drop or browse",
           onFiles: (files) => updateSource(files[0] ?? null),
         }}

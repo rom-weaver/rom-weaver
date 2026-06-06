@@ -5,6 +5,7 @@ import { FileProgress, Notice } from "./components/ds/feedback.tsx";
 import { FileCard } from "./components/ds/file-card.tsx";
 import { DropZone, InfoPopover, StepSection } from "./components/ds/layout.tsx";
 import { getFileInputAcceptAttributes } from "./file-input-accept";
+import { PATCH_INPUT_HINT } from "./input-helper-text.ts";
 import type { PatcherStackController, PatcherUiController } from "./patcher-form.ts";
 import type { PatchStackItemState } from "./patcher-presentation.ts";
 import type { NoticeState, PatcherUiState } from "./patcher-ui-state.ts";
@@ -232,7 +233,7 @@ const ApplyPatchListStep = ({
       <DropZone
         accept={fileInputAccept.patch}
         big={patches.length === 0}
-        hint={patches.length === 0 ? "compressed & archived patches are accepted" : undefined}
+        hint={patches.length === 0 ? PATCH_INPUT_HINT : undefined}
         inputId="rom-weaver-input-file-patch"
         label={patches.length ? "Add patch · drop or browse" : "Select patch · drop or browse"}
         onFiles={(files) => ui.providePatchInputFiles?.(files)}

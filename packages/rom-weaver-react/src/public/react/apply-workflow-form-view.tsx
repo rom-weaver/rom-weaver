@@ -8,6 +8,7 @@ import { WorkflowOutputStep } from "./components/ds/workflow-output-step.tsx";
 import { WorkflowRomInputStep } from "./components/ds/workflow-rom-input-step.tsx";
 import { PatcherPrimaryAction } from "./components/patcher-output-controls.tsx";
 import { getFileInputAcceptAttributes } from "./file-input-accept";
+import { ROM_INPUT_HINT } from "./input-helper-text.ts";
 import { createCompressionTypeOptions } from "./output-view-model.ts";
 import type {
   DialogController,
@@ -117,7 +118,7 @@ function ApplyWorkflowFormView({
         dropZone={{
           accept: fileInputAccept.rom,
           big: romInputs.length === 0,
-          hint: romInputs.length === 0 ? ".sfc, .nes, .gba, .iso, .chd, .rvz, .z3ds, .zip, .7z, .rar…" : undefined,
+          hint: romInputs.length === 0 ? ROM_INPUT_HINT : undefined,
           inputId: "rom-weaver-input-file-rom",
           label: romInputs.length ? "Add another ROM · drop or browse" : "Select ROM · drop or browse",
           onFiles: (files) => uiController.provideRomInputFiles?.(files),

@@ -24,6 +24,7 @@ import { InfoPopover } from "./components/ds/layout.tsx";
 import { OutputRunAction, WorkflowOutputStep } from "./components/ds/workflow-output-step.tsx";
 import { WorkflowRomInputStep } from "./components/ds/workflow-rom-input-step.tsx";
 import { buildCompressPanel } from "./compress-options.ts";
+import { ROM_INPUT_HINT } from "./input-helper-text.ts";
 import { getBinarySourceListStableIds } from "./input-session-helpers.ts";
 import { createCreateOutputCompressionOptions, createCreatePatchFormatOptions } from "./output-view-model.ts";
 import type { BinarySource } from "./patcher-form.ts";
@@ -865,7 +866,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
         emptyLabel: "Select original ROM · drop or browse",
         file: original,
         fileName: displayedOriginalFileName,
-        hint: "the unmodified original · archives are extracted",
+        hint: `unmodified original · ${ROM_INPUT_HINT}`,
         num: "01",
         onClear: () => updateOriginal(null),
         onSelect: updateOriginal,
@@ -881,7 +882,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
         emptyLabel: "Select modified ROM · drop or browse",
         file: modified,
         fileName: displayedModifiedFileName,
-        hint: "your edited / hacked ROM · archives are extracted",
+        hint: `edited ROM · ${ROM_INPUT_HINT}`,
         num: "02",
         onClear: () => updateModified(null),
         onSelect: updateModified,
