@@ -716,12 +716,6 @@ impl CliApp {
             extracted_archives,
             cleanup_paths,
         } = resolved_input;
-        let outer_container_format = if compression_options.enabled && compression_options.auto_mode
-        {
-            self.detect_patch_apply_outer_container_format(&input, &context)
-        } else {
-            None
-        };
         let mut temp_paths = cleanup_paths;
         temp_paths.extend(discovered_sidecars.cleanup_paths);
         let mut resolved_patches = Vec::with_capacity(patches.len());
@@ -1233,9 +1227,7 @@ impl CliApp {
             if report.status == OperationStatus::Succeeded && compression_options.enabled {
                 let compression_plan = match self.resolve_patch_apply_compression_plan(
                     &output,
-                    &raw_ready_output,
                     &resolved_input,
-                    outer_container_format.as_deref(),
                     &compression_options,
                 ) {
                     Ok(plan) => plan,
@@ -1329,15 +1321,21 @@ impl CliApp {
                 } else {
                     ""
                 };
+                let warning_note = compression_plan
+                    .warning
+                    .as_deref()
+                    .map(|warning| format!("; warning: {warning}"))
+                    .unwrap_or_default();
                 report.stage = "compress".to_string();
                 report.label = format!(
-                    "{}; patch output compressed as {} (codec={}, path=`{}`; {}){}",
+                    "{}; patch output compressed as {} (codec={}, path=`{}`; {}){}{}",
                     report.label,
                     compression_plan.format,
                     codec_label,
                     compression_plan.output_path.display(),
-                    compression_plan.auto_note,
-                    extension_note
+                    compression_plan.note,
+                    extension_note,
+                    warning_note
                 );
                 terminal_output_path = compression_plan.output_path;
             }
@@ -2110,12 +2108,84 @@ impl CliApp {
         self.finish("patch-create-candidates", report)
     }
 
+    /// Resolve the patch format for `patch create` from an explicit `--format` and/or the output
+    /// extension, mirroring [`CliApp::resolve_container_output_format`]: the extension is
+    /// authoritative when no flag is given; an explicit flag wins (with a warning) when it disagrees
+    /// with the extension; and an extensionless output with no flag is an error. The resolved name
+    /// is normalized via [`normalize_create_patch_format`]; capability/registration checks stay in
+    /// the caller so the existing patch-create error messages are reused.
+    fn resolve_patch_create_format(
+        &self,
+        flag: Option<&str>,
+        output: &Path,
+    ) -> Result<FormatResolution> {
+        let extension_display = output
+            .extension()
+            .and_then(|value| value.to_str())
+            .map(|value| format!(".{value}"));
+        let extension_handler = self.patches.find_by_output_extension(output);
+
+        if let Some(flag) = flag {
+            let normalized = normalize_create_patch_format(flag);
+            let flag_canonical = self
+                .patches
+                .find_by_name(&normalized)
+                .map(|handler| handler.descriptor().name.to_string());
+            let warning = match &extension_display {
+                None => None,
+                Some(extension) => {
+                    let extension_name = extension_handler
+                        .as_ref()
+                        .map(|handler| handler.descriptor().name);
+                    let matches = match (&flag_canonical, extension_name) {
+                        (Some(flag_name), Some(extension_name)) => {
+                            flag_name.eq_ignore_ascii_case(extension_name)
+                        }
+                        _ => false,
+                    };
+                    if matches {
+                        None
+                    } else {
+                        Some(format!(
+                            "output extension `{extension}` does not match --format `{flag}`; writing `{normalized}`"
+                        ))
+                    }
+                }
+            };
+            return Ok(FormatResolution {
+                note: format!("explicit format={normalized}"),
+                format: normalized,
+                warning,
+            });
+        }
+
+        let Some(extension_display) = extension_display else {
+            return Err(RomWeaverError::Validation(
+                "output has no file extension; pass --format <name> or use a supported patch extension"
+                    .to_string(),
+            ));
+        };
+        match extension_handler {
+            Some(handler) => {
+                let resolved = handler.descriptor().name.to_string();
+                Ok(FormatResolution {
+                    note: format!("format={resolved} from output extension"),
+                    format: resolved,
+                    warning: None,
+                })
+            }
+            None => Err(RomWeaverError::Validation(format!(
+                "output extension `{extension_display}` is not a supported patch format; pass --format <name> or use a supported extension"
+            ))),
+        }
+    }
+
     fn run_patch_create(&self, args: PatchCreateCommand) -> AppRunOutcome {
         trace!(
             original = %args.original.display(),
             modified = %args.modified.display(),
             output = %args.output.display(),
-            format = %args.format,
+            format = ?args.format,
             ignore_checksum_validation = args.ignore_checksum_validation,
             threads = %args.threads,
             xdelta_secondary = %args.xdelta_secondary,
@@ -2130,7 +2200,7 @@ impl CliApp {
                     "patch-create",
                     OperationReport::failed(
                         OperationFamily::Patch,
-                        Some(args.format.clone()),
+                        args.format.clone(),
                         "validate",
                         error.to_string(),
                         probe_threads.clone(),
@@ -2145,7 +2215,32 @@ impl CliApp {
                 PatchChecksumValidation::Strict
             })
             .with_xdelta_secondary_mode(xdelta_secondary_mode);
-        let requested_format = normalize_create_patch_format(&args.format);
+        let resolution = match self.resolve_patch_create_format(args.format.as_deref(), &args.output)
+        {
+            Ok(resolution) => resolution,
+            Err(error) => {
+                return self.finish(
+                    "patch-create",
+                    OperationReport::failed(
+                        OperationFamily::Patch,
+                        args.format.clone(),
+                        "validate",
+                        error.to_string(),
+                        probe_threads,
+                    ),
+                );
+            }
+        };
+        let requested_format = resolution.format;
+        let format_warning = resolution.warning;
+        if let Some(warning) = format_warning.as_deref() {
+            warn!(
+                command = "patch-create",
+                format = %requested_format,
+                output = %args.output.display(),
+                "{warning}"
+            );
+        }
         if let Some(report) = self.require_existing_path(
             "patch-create",
             OperationFamily::Patch,
@@ -2243,6 +2338,12 @@ impl CliApp {
                 Some(context.plan_threads(ThreadCapability::single_threaded())),
             ),
         };
+        let mut report = report;
+        if report.status == OperationStatus::Succeeded
+            && let Some(warning) = format_warning.as_deref()
+        {
+            report.label = format!("{}; warning: {warning}", report.label);
+        }
         self.finish("patch-create", report)
     }
 

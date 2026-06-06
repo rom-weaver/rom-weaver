@@ -322,7 +322,7 @@ fn compress_rejects_unregistered_output_format() {
 }
 
 #[test]
-fn compress_auto_mode_uses_7z_fallback_for_unrecognized_iso() {
+fn compress_without_format_infers_7z_from_output_extension() {
     let temp = setup_temp_dir();
     let source_path = temp.child("source.iso");
     let payload = (0..(256 * 1024))
@@ -351,13 +351,39 @@ fn compress_auto_mode_uses_7z_fallback_for_unrecognized_iso() {
     assert_eq!(json["family"], "container");
     assert_eq!(json["format"], "7z");
     assert_eq!(json["status"], "succeeded");
-    let label = json["label"].as_str().expect("label");
-    assert!(label.contains("auto format=7z"));
-    assert!(label.contains("reason=fallback-7z-lzma2"));
+    assert!(output_path.path().exists());
 }
 
 #[test]
-fn compress_without_format_auto_selects_rvz_for_disc_like_inputs() {
+fn compress_without_format_infers_zip_from_output_extension() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("source.bin").path(), b"payload").expect("fixture");
+    let output_path = temp.child("out.zip");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("source.bin").path().to_str().expect("path"),
+            "--output",
+            output_path.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "compress");
+    assert_eq!(json["format"], "zip");
+    assert_eq!(json["status"], "succeeded");
+    assert!(output_path.path().exists());
+}
+
+#[test]
+fn compress_without_format_infers_rvz_from_output_extension_for_iso_inputs() {
     let temp = setup_temp_dir();
     fs::write(
         temp.child("source.iso").path(),
@@ -386,14 +412,11 @@ fn compress_without_format_auto_selects_rvz_for_disc_like_inputs() {
     assert_eq!(json["family"], "container");
     assert_eq!(json["format"], "rvz");
     assert_eq!(json["status"], "succeeded");
-    let label = json["label"].as_str().expect("label");
-    assert!(label.contains("auto format=rvz"));
-    assert!(label.contains("reason=wii-gc-disc"));
     assert!(output_path.path().exists());
 }
 
 #[test]
-fn compress_without_format_auto_selects_rvz_for_wbfs_inputs() {
+fn compress_without_format_infers_rvz_from_output_extension_for_wbfs_inputs() {
     let temp = setup_temp_dir();
     let source_iso = temp.child("source.iso");
     fs::write(source_iso.path(), build_test_gamecube_iso(512 * 1024)).expect("fixture");
@@ -421,14 +444,11 @@ fn compress_without_format_auto_selects_rvz_for_wbfs_inputs() {
     assert_eq!(json["family"], "container");
     assert_eq!(json["format"], "rvz");
     assert_eq!(json["status"], "succeeded");
-    let label = json["label"].as_str().expect("label");
-    assert!(label.contains("auto format=rvz"));
-    assert!(label.contains("reason=wii-gc-disc"));
     assert!(output_path.path().exists());
 }
 
 #[test]
-fn compress_without_format_auto_selects_rvz_for_wia_inputs() {
+fn compress_without_format_infers_rvz_from_output_extension_for_wia_inputs() {
     let temp = setup_temp_dir();
     let source_iso = temp.child("source.iso");
     fs::write(source_iso.path(), build_test_gamecube_iso(512 * 1024)).expect("fixture");
@@ -456,14 +476,108 @@ fn compress_without_format_auto_selects_rvz_for_wia_inputs() {
     assert_eq!(json["family"], "container");
     assert_eq!(json["format"], "rvz");
     assert_eq!(json["status"], "succeeded");
-    let label = json["label"].as_str().expect("label");
-    assert!(label.contains("auto format=rvz"));
-    assert!(label.contains("reason=wii-gc-disc"));
     assert!(output_path.path().exists());
 }
 
 #[test]
-fn compress_with_explicit_auto_format_selects_rvz_for_disc_like_inputs() {
+fn compress_format_flag_overrides_mismatched_extension_with_warning() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("source.bin").path(), b"payload").expect("fixture");
+    // Name the output `.zip` but force 7z: the flag wins and the misleading name is warned about.
+    let output_path = temp.child("out.zip");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("source.bin").path().to_str().expect("path"),
+            "--format",
+            "7z",
+            "--output",
+            output_path.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "compress");
+    assert_eq!(json["format"], "7z");
+    assert_eq!(json["status"], "succeeded");
+    let label = json["label"].as_str().expect("label");
+    assert!(label.contains("warning"));
+    assert!(label.contains("does not match"));
+    // The output keeps the exact name the user requested.
+    assert!(output_path.path().exists());
+}
+
+#[test]
+fn compress_without_format_rejects_extensionless_output() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("source.bin").path(), b"payload").expect("fixture");
+    let output_path = temp.child("out");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("source.bin").path().to_str().expect("path"),
+            "--output",
+            output_path.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "compress");
+    assert_eq!(json["status"], "failed");
+    assert!(json["label"]
+        .as_str()
+        .expect("label")
+        .contains("output has no file extension"));
+    assert!(!output_path.path().exists());
+}
+
+#[test]
+fn compress_without_format_rejects_extract_only_output_extension() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("source.bin").path(), b"payload").expect("fixture");
+    let output_path = temp.child("out.cso");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("source.bin").path().to_str().expect("path"),
+            "--output",
+            output_path.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .stdout
+        .clone();
+
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "compress");
+    assert_eq!(json["status"], "failed");
+    assert!(json["label"]
+        .as_str()
+        .expect("label")
+        .contains("extract-only"));
+    assert!(!output_path.path().exists());
+}
+
+#[test]
+fn compress_rejects_auto_format_keyword() {
     let temp = setup_temp_dir();
     fs::write(
         temp.child("source.iso").path(),
@@ -472,6 +586,7 @@ fn compress_with_explicit_auto_format_selects_rvz_for_disc_like_inputs() {
     .expect("fixture");
     let output_path = temp.child("out.rvz");
 
+    // `auto` is no longer a supported format; it resolves to no registered handler.
     let output = Command::cargo_bin("rom-weaver")
         .expect("binary")
         .args([
@@ -484,7 +599,7 @@ fn compress_with_explicit_auto_format_selects_rvz_for_disc_like_inputs() {
             "--json",
         ])
         .assert()
-        .code(0)
+        .code(1)
         .get_output()
         .stdout
         .clone();
@@ -492,61 +607,24 @@ fn compress_with_explicit_auto_format_selects_rvz_for_disc_like_inputs() {
     let json = parse_single_json_line(&output);
     assert_eq!(json["command"], "compress");
     assert_eq!(json["family"], "container");
-    assert_eq!(json["format"], "rvz");
-    assert_eq!(json["status"], "succeeded");
-    let label = json["label"].as_str().expect("label");
-    assert!(label.contains("auto format=rvz"));
-    assert!(label.contains("reason=wii-gc-disc"));
-    assert!(output_path.path().exists());
+    assert_eq!(json["status"], "failed");
+    assert!(json["label"]
+        .as_str()
+        .expect("label")
+        .contains("requested output format is not registered"));
 }
 
 #[test]
-fn compress_without_format_auto_uses_7z_fallback_for_non_disc_inputs() {
-    let temp = setup_temp_dir();
-    let payload = (0..(256 * 1024))
-        .map(|index| ((index * 13) % 251) as u8)
-        .collect::<Vec<_>>();
-    fs::write(temp.child("source.bin").path(), payload).expect("fixture");
-    let output_path = temp.child("out.7z");
-
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
-            "compress",
-            temp.child("source.bin").path().to_str().expect("path"),
-            "--output",
-            output_path.path().to_str().expect("path"),
-            "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
-
-    let json = parse_single_json_line(&output);
-    assert_eq!(json["command"], "compress");
-    assert_eq!(json["family"], "container");
-    assert_eq!(json["format"], "7z");
-    assert_eq!(json["status"], "succeeded");
-    let label = json["label"].as_str().expect("label");
-    assert!(label.contains("auto format=7z"));
-    assert!(label.contains("reason=fallback-7z-lzma2"));
-    assert!(output_path.path().exists());
-}
-
-#[test]
-fn compress_auto_mode_rejects_multiple_inputs_without_explicit_format() {
+fn compress_without_format_rejects_unsupported_output_extension() {
     let temp = setup_temp_dir();
     fs::write(temp.child("source-a.bin").path(), b"a").expect("fixture");
-    fs::write(temp.child("source-b.bin").path(), b"b").expect("fixture");
 
+    // `.auto` matches no registered container; with no --format this is an error.
     let output = Command::cargo_bin("rom-weaver")
         .expect("binary")
         .args([
             "compress",
             temp.child("source-a.bin").path().to_str().expect("path"),
-            temp.child("source-b.bin").path().to_str().expect("path"),
             "--output",
             temp.child("out.auto").path().to_str().expect("path"),
             "--json",
@@ -560,11 +638,9 @@ fn compress_auto_mode_rejects_multiple_inputs_without_explicit_format() {
     let json = parse_single_json_line(&output);
     assert_eq!(json["command"], "compress");
     assert_eq!(json["family"], "container");
-    assert_eq!(json["format"], "auto");
-    assert_eq!(json["stage"], "validate");
     assert_eq!(json["status"], "failed");
     let label = json["label"].as_str().expect("label");
-    assert!(label.contains("requires exactly one input file"));
+    assert!(label.contains("is not a supported format"));
     assert!(label.contains("--format"));
 }
 

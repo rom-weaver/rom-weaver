@@ -40,7 +40,7 @@ use rom_weaver_patches::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
-use tracing::trace;
+use tracing::{trace, warn};
 #[cfg(not(target_arch = "wasm32"))]
 use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 #[cfg(feature = "typescript-types")]
@@ -453,7 +453,13 @@ pub struct ChecksumCommand {
 pub struct CompressCommand {
     #[cfg_attr(not(target_arch = "wasm32"), arg(required = true))]
     pub input: Vec<PathBuf>,
-    #[cfg_attr(not(target_arch = "wasm32"), arg(long))]
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            help = "Output container format (derived from the output extension when omitted; required when the output has no recognizable extension; overrides the extension with a warning when they disagree)"
+        )
+    )]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
     pub format: Option<String>,
     #[cfg_attr(not(target_arch = "wasm32"), arg(long))]
@@ -738,7 +744,7 @@ pub struct PatchApplyCommand {
         not(target_arch = "wasm32"),
         arg(
             long = "compress-format",
-            help = "Patch-output compression container format (default: auto). Use `auto` to force auto selection."
+            help = "Patch-output compression container format (derived from the output extension when omitted; required when the output has no recognizable extension; overrides the extension with a warning when they disagree). Use --no-compress to write raw patched bytes."
         )
     )]
     #[cfg_attr(feature = "typescript-types", ts(optional))]
@@ -993,8 +999,16 @@ pub struct PatchCreateCommand {
     pub original: PathBuf,
     #[cfg_attr(not(target_arch = "wasm32"), arg(long))]
     pub modified: PathBuf,
-    #[cfg_attr(not(target_arch = "wasm32"), arg(long))]
-    pub format: String,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long,
+            help = "Patch format (derived from the output extension when omitted; required when the output has no recognizable patch extension)"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional))]
+    pub format: Option<String>,
     #[cfg_attr(not(target_arch = "wasm32"), arg(long))]
     pub output: PathBuf,
     #[cfg_attr(
@@ -1817,7 +1831,6 @@ enum ProfileCodecKind {
 #[derive(Clone, Debug)]
 struct PatchApplyCompressionOptions {
     enabled: bool,
-    auto_mode: bool,
     requested_format: Option<String>,
     codec: Option<String>,
     level: Option<i32>,
@@ -1831,7 +1844,18 @@ struct PatchApplyCompressionPlan {
     level: Option<i32>,
     output_path: PathBuf,
     extension_appended: bool,
-    auto_note: String,
+    note: String,
+    warning: Option<String>,
+}
+
+/// Outcome of resolving an output format from an explicit flag and/or the output extension. Used
+/// for both container formats ([`CliApp::resolve_container_output_format`]) and patch formats
+/// ([`CliApp::resolve_patch_create_format`]).
+#[derive(Clone, Debug)]
+struct FormatResolution {
+    format: String,
+    note: String,
+    warning: Option<String>,
 }
 
 struct PatchApplyFinalizeResult {

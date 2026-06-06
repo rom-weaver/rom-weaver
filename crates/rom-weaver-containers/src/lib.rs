@@ -593,6 +593,19 @@ impl ContainerRegistry {
             .cloned()
     }
 
+    /// Resolve a handler purely from an output path's extension, without opening the file.
+    ///
+    /// Unlike [`Self::probe`], this never reads the file (the output usually does not exist yet
+    /// when a format is being chosen). Returns the first registered handler whose descriptor
+    /// extensions match `path`; capability checks (create vs extract-only) are left to the caller
+    /// so it can surface the right error.
+    pub fn find_by_output_extension(&self, path: &Path) -> Option<Arc<dyn ContainerHandler>> {
+        self.handlers
+            .iter()
+            .find(|handler| handler.descriptor().matches_path(path))
+            .cloned()
+    }
+
     pub fn recommend_compress_format(&self, path: &Path) -> CompressFormatRecommendation {
         let options = NodDiscOptions {
             preloader_threads: 0,

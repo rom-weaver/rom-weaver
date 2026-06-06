@@ -69,6 +69,22 @@ fn registry_contains_planned_formats() {
 }
 
 #[test]
+fn find_by_output_extension_resolves_by_extension_only() {
+    let registry = PatchRegistry::new();
+    let resolved_name = |path: &str| {
+        registry
+            .find_by_output_extension(std::path::Path::new(path))
+            .map(|handler| handler.descriptor().name)
+    };
+    assert_eq!(resolved_name("patch.bps"), Some("BPS"));
+    // xdelta registers several output extensions.
+    assert_eq!(resolved_name("patch.xdelta"), Some("xdelta"));
+    // Unknown / extensionless names resolve to nothing.
+    assert_eq!(resolved_name("patch.unknownext"), None);
+    assert_eq!(resolved_name("patch"), None);
+}
+
+#[test]
 fn aps_is_wired_to_supported_handler() {
     let registry = PatchRegistry::new();
     let handler = registry.find_by_name("aps").expect("aps handler");

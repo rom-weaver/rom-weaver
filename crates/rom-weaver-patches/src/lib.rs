@@ -405,6 +405,18 @@ impl PatchRegistry {
             .cloned()
     }
 
+    /// Resolve a handler purely from an output path's extension, without opening the file.
+    ///
+    /// Used when choosing the patch format for `patch create` from the output filename. Returns
+    /// the first registered handler whose descriptor extensions match `path`; the caller checks
+    /// create capability so it can surface the right error for apply-only formats.
+    pub fn find_by_output_extension(&self, path: &Path) -> Option<Arc<dyn PatchHandler>> {
+        self.handlers
+            .iter()
+            .find(|handler| handler.descriptor().matches_path(path))
+            .cloned()
+    }
+
     fn probe_ambiguous_ips_by_signature(&self, path: &Path) -> Option<Arc<dyn PatchHandler>> {
         let bytes = read_signature_prefix(path, 5)?;
 

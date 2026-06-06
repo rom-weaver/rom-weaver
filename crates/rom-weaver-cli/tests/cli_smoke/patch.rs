@@ -320,7 +320,7 @@ fn patch_apply_reports_pds_as_explicitly_unsupported() {
 }
 
 #[test]
-fn patch_apply_defaults_to_compressed_output_and_appends_extension() {
+fn patch_apply_compresses_with_explicit_format_and_appends_extension() {
     let temp = setup_temp_dir();
     let original = temp.child("old.bin");
     let modified = temp.child("new.bin");
@@ -347,6 +347,8 @@ fn patch_apply_defaults_to_compressed_output_and_appends_extension() {
         .assert()
         .code(0);
 
+    // Extensionless output requires an explicit --compress-format; the container extension is then
+    // appended to the output name.
     let apply_output = Command::cargo_bin("rom-weaver")
         .expect("binary")
         .args([
@@ -357,6 +359,8 @@ fn patch_apply_defaults_to_compressed_output_and_appends_extension() {
             patch.path().to_str().expect("path"),
             "--output",
             output_base.path().to_str().expect("path"),
+            "--compress-format",
+            "7z",
             "--json",
         ])
         .assert()
@@ -371,7 +375,7 @@ fn patch_apply_defaults_to_compressed_output_and_appends_extension() {
     assert_eq!(apply_json["status"], "succeeded");
     let apply_label = apply_json["label"].as_str().expect("label");
     assert!(apply_label.contains("patch output compressed as 7z"));
-    assert!(apply_label.contains("auto format=7z reason=fallback-7z-lzma2"));
+    assert!(apply_label.contains("explicit format=7z"));
 
     let compressed_path = temp.child("patched-output.7z");
     let emitted = apply_json["details"]["emitted_files"]
@@ -472,13 +476,13 @@ fn patch_apply_z3ds_compression_uses_matching_container_suffix() {
 }
 
 #[test]
-fn patch_apply_auto_prefers_outer_input_container_format() {
+fn patch_apply_infers_zip_from_output_extension() {
     let temp = setup_temp_dir();
     let original = temp.child("old.bin");
     let modified = temp.child("new.bin");
     let patch = temp.child("update.bps");
     let input_zip = temp.child("input.zip");
-    let output_base = temp.child("patched-out");
+    let output_base = temp.child("patched-out.zip");
 
     fs::write(original.path(), b"hello old world").expect("fixture");
     fs::write(modified.path(), b"hello new world").expect("fixture");
@@ -539,11 +543,10 @@ fn patch_apply_auto_prefers_outer_input_container_format() {
     assert_eq!(apply_json["status"], "succeeded");
     let apply_label = apply_json["label"].as_str().expect("label");
     assert!(apply_label.contains("patch output compressed as zip"));
-    assert!(apply_label.contains("auto format=zip reason=outer-input-container"));
+    assert!(apply_label.contains("format=zip from output extension"));
 
     let compressed_path = temp.child("patched-out.zip");
     assert!(compressed_path.path().exists());
-    assert!(!output_base.path().exists());
 
     let out_dir = temp.child("extract");
     Command::cargo_bin("rom-weaver")
@@ -561,6 +564,133 @@ fn patch_apply_auto_prefers_outer_input_container_format() {
         read_single_file_bytes(out_dir.path()),
         fs::read(modified.path()).expect("modified")
     );
+}
+
+fn make_bps_patch_fixture(temp: &assert_fs::TempDir) -> (assert_fs::fixture::ChildPath, assert_fs::fixture::ChildPath) {
+    let original = temp.child("old.bin");
+    let modified = temp.child("new.bin");
+    let patch = temp.child("update.bps");
+    fs::write(original.path(), b"hello old world").expect("fixture");
+    fs::write(modified.path(), b"hello new world").expect("fixture");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch", "create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--format",
+            "bps",
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+    (original, patch)
+}
+
+#[test]
+fn patch_apply_rejects_extensionless_output_without_format() {
+    let temp = setup_temp_dir();
+    let (original, patch) = make_bps_patch_fixture(&temp);
+    let output_base = temp.child("patched-output");
+
+    let apply_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch", "apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output_base.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .stdout
+        .clone();
+    let apply_json = parse_single_json_line(&apply_output);
+    assert_eq!(apply_json["command"], "patch-apply");
+    assert_eq!(apply_json["status"], "failed");
+    let label = apply_json["label"].as_str().expect("label");
+    assert!(label.contains("output has no file extension"));
+    assert!(label.contains("--no-compress"));
+}
+
+#[test]
+fn patch_apply_compress_format_overrides_mismatched_extension_with_warning() {
+    let temp = setup_temp_dir();
+    let (original, patch) = make_bps_patch_fixture(&temp);
+    // Name the output `.zip` but force 7z: the flag wins, the file keeps its exact name, and the
+    // mismatch is warned about.
+    let output_base = temp.child("patched.zip");
+
+    let apply_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch", "apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output_base.path().to_str().expect("path"),
+            "--compress-format",
+            "7z",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let apply_json = parse_single_json_line(&apply_output);
+    assert_eq!(apply_json["command"], "patch-apply");
+    assert_eq!(apply_json["status"], "succeeded");
+    let label = apply_json["label"].as_str().expect("label");
+    assert!(label.contains("patch output compressed as 7z"));
+    assert!(label.contains("warning"));
+    assert!(label.contains("does not match"));
+    // Output keeps the exact requested name; no extension is appended.
+    assert!(output_base.path().exists());
+    assert!(!temp.child("patched.zip.7z").path().exists());
+}
+
+#[test]
+fn patch_apply_rejects_extract_only_output_extension() {
+    let temp = setup_temp_dir();
+    let (original, patch) = make_bps_patch_fixture(&temp);
+    let output_base = temp.child("patched.cso");
+
+    let apply_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch", "apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            output_base.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .stdout
+        .clone();
+    let apply_json = parse_single_json_line(&apply_output);
+    assert_eq!(apply_json["command"], "patch-apply");
+    assert_eq!(apply_json["status"], "failed");
+    assert!(apply_json["label"]
+        .as_str()
+        .expect("label")
+        .contains("extract-only"));
 }
 
 #[test]
@@ -6138,4 +6268,113 @@ fn probe_reports_pds_as_explicitly_unsupported() {
         .as_str()
         .expect("label")
         .contains("explicitly not supported"));
+}
+
+#[test]
+fn patch_create_infers_format_from_output_extension() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.bin");
+    let modified = temp.child("new.bin");
+    let patch = temp.child("update.bps");
+    fs::write(original.path(), b"hello old world").expect("fixture");
+    fs::write(modified.path(), b"hello new world").expect("fixture");
+
+    // No --format: the `.bps` output extension determines the patch format.
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch", "create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "patch-create");
+    assert_eq!(json["format"], "BPS");
+    assert_eq!(json["status"], "succeeded");
+    assert!(patch.path().exists());
+}
+
+#[test]
+fn patch_create_rejects_extensionless_output_without_format() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.bin");
+    let modified = temp.child("new.bin");
+    let patch = temp.child("update");
+    fs::write(original.path(), b"hello old world").expect("fixture");
+    fs::write(modified.path(), b"hello new world").expect("fixture");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch", "create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .stdout
+        .clone();
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "patch-create");
+    assert_eq!(json["status"], "failed");
+    assert!(json["label"]
+        .as_str()
+        .expect("label")
+        .contains("output has no file extension"));
+    assert!(!patch.path().exists());
+}
+
+#[test]
+fn patch_create_format_flag_overrides_mismatched_extension_with_warning() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.bin");
+    let modified = temp.child("new.bin");
+    // Name the output `.ips` but force bps: the flag wins and the mismatch is warned about.
+    let patch = temp.child("update.ips");
+    fs::write(original.path(), b"hello old world").expect("fixture");
+    fs::write(modified.path(), b"hello new world").expect("fixture");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch", "create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--format",
+            "bps",
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["command"], "patch-create");
+    assert_eq!(json["format"], "BPS");
+    assert_eq!(json["status"], "succeeded");
+    let label = json["label"].as_str().expect("label");
+    assert!(label.contains("warning"));
+    assert!(label.contains("does not match"));
+    assert!(patch.path().exists());
 }

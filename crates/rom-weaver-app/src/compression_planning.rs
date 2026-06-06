@@ -277,7 +277,6 @@ impl CliApp {
             }
             return Ok(PatchApplyCompressionOptions {
                 enabled: false,
-                auto_mode: false,
                 requested_format: None,
                 codec: None,
                 level: None,
@@ -293,19 +292,13 @@ impl CliApp {
                         "--compress-format cannot be empty".to_string(),
                     ));
                 }
-                if trimmed.eq_ignore_ascii_case("auto") {
-                    None
-                } else {
-                    Some(trimmed.to_string())
-                }
+                Some(trimmed.to_string())
             }
             None => None,
         };
-        let auto_mode = requested_format.is_none();
         let (codec, level) = Self::resolve_codec_level(compress_codec, "--compress-codec")?;
         Ok(PatchApplyCompressionOptions {
             enabled: true,
-            auto_mode,
             requested_format,
             codec,
             level,
@@ -313,36 +306,81 @@ impl CliApp {
         })
     }
 
-    fn detect_patch_apply_outer_container_format(
+    /// Resolve a container output format from an explicit format flag and/or the output path's
+    /// extension, per the precedence in the plan: the extension is authoritative when no flag is
+    /// given; an explicit flag wins (with a warning) when it disagrees with the extension; and an
+    /// extensionless output with no flag is an error. Capability checks (extract-only, registered)
+    /// are left to the caller so the existing per-command error messages are reused.
+    fn resolve_container_output_format(
         &self,
-        source: &Path,
-        context: &OperationContext,
-    ) -> Option<String> {
-        let handler = self.containers.probe(source)?;
-        if !handler.capabilities().create {
-            return None;
+        flag: Option<&str>,
+        output: &Path,
+        flag_label: &str,
+        raw_output_hint: &str,
+    ) -> Result<FormatResolution> {
+        let extension_display = output
+            .extension()
+            .and_then(|value| value.to_str())
+            .map(|value| format!(".{value}"));
+        let extension_handler = self.containers.find_by_output_extension(output);
+
+        if let Some(flag) = flag {
+            let flag_canonical = self
+                .containers
+                .find_by_name(flag)
+                .map(|handler| handler.descriptor().name.to_string());
+            let warning = match &extension_display {
+                None => None,
+                Some(extension) => {
+                    let extension_name = extension_handler
+                        .as_ref()
+                        .map(|handler| handler.descriptor().name);
+                    let matches = match (&flag_canonical, extension_name) {
+                        (Some(flag_name), Some(extension_name)) => {
+                            flag_name.eq_ignore_ascii_case(extension_name)
+                        }
+                        _ => false,
+                    };
+                    if matches {
+                        None
+                    } else {
+                        Some(format!(
+                            "output extension `{extension}` does not match {flag_label} `{flag}`; writing `{flag}`"
+                        ))
+                    }
+                }
+            };
+            return Ok(FormatResolution {
+                format: flag.to_string(),
+                note: format!("explicit format={flag}"),
+                warning,
+            });
         }
-        if matches!(handler.probe(source), ProbeConfidence::Extension)
-            && handler
-                .probe_details(
-                    &ContainerProbeRequest {
-                        source: source.to_path_buf(),
-                    },
-                    context,
-                )
-                .is_err()
-        {
-            return None;
+
+        let Some(extension_display) = extension_display else {
+            return Err(RomWeaverError::Validation(format!(
+                "output has no file extension; pass {flag_label} <name> or use a supported extension{raw_output_hint}"
+            )));
+        };
+        match extension_handler {
+            Some(handler) => {
+                let resolved = handler.descriptor().name.to_string();
+                Ok(FormatResolution {
+                    note: format!("format={resolved} from output extension"),
+                    format: resolved,
+                    warning: None,
+                })
+            }
+            None => Err(RomWeaverError::Validation(format!(
+                "output extension `{extension_display}` is not a supported format; pass {flag_label} <name> or use a supported extension{raw_output_hint}"
+            ))),
         }
-        Some(handler.descriptor().name.to_string())
     }
 
     fn resolve_patch_apply_compression_plan(
         &self,
         requested_output: &Path,
-        raw_output: &Path,
         extension_source: &Path,
-        outer_container_format: Option<&str>,
         options: &PatchApplyCompressionOptions,
     ) -> Result<PatchApplyCompressionPlan> {
         if !options.enabled {
@@ -351,60 +389,14 @@ impl CliApp {
             ));
         }
 
-        let (resolved_format, auto_note) = if options.auto_mode {
-            if let Some(format_name) = outer_container_format
-                && self.patch_apply_format_supports_create(format_name)
-            {
-                (
-                    format_name.to_string(),
-                    format!("auto format={format_name} reason=outer-input-container"),
-                )
-            } else {
-                let recommendation = self.containers.recommend_compress_format(raw_output);
-                if recommendation.format_name.eq_ignore_ascii_case("rvz")
-                    && self.patch_apply_format_supports_create("rvz")
-                {
-                    (
-                        "rvz".to_string(),
-                        format!("auto format=rvz reason={}", recommendation.reason),
-                    )
-                } else if self.patch_apply_format_supports_create("7z") {
-                    (
-                        "7z".to_string(),
-                        "auto format=7z reason=fallback-7z-lzma2".to_string(),
-                    )
-                } else if self.patch_apply_chd_auto_viable(raw_output) {
-                    (
-                        "chd".to_string(),
-                        "auto format=chd reason=viable-non-disc-output".to_string(),
-                    )
-                } else if self.patch_apply_format_supports_create(recommendation.format_name) {
-                    (
-                        recommendation.format_name.to_string(),
-                        format!(
-                            "auto format={} reason={}",
-                            recommendation.format_name, recommendation.reason
-                        ),
-                    )
-                } else {
-                    return Err(RomWeaverError::Validation(
-                        "no registered container format can compress patch output".to_string(),
-                    ));
-                }
-            }
-        } else {
-            let explicit_format = options.requested_format.clone().ok_or_else(|| {
-                RomWeaverError::Validation(
-                    "internal validation error: explicit patch-output compression mode requires --compress-format".to_string(),
-                )
-            })?;
-            (
-                explicit_format.clone(),
-                format!("explicit format={explicit_format}"),
-            )
-        };
+        let resolution = self.resolve_container_output_format(
+            options.requested_format.as_deref(),
+            requested_output,
+            "--compress-format",
+            "; or pass --no-compress to write raw patched bytes",
+        )?;
 
-        let Some(handler) = self.containers.find_by_name(&resolved_format) else {
+        let Some(handler) = self.containers.find_by_name(&resolution.format) else {
             return Err(RomWeaverError::Validation(
                 "requested output format is not registered".to_string(),
             ));
@@ -421,6 +413,7 @@ impl CliApp {
                 handler.descriptor().name
             )));
         }
+        let resolved_format = handler.descriptor().name.to_string();
 
         let mut codec = options.codec.clone();
         if codec.is_none() && resolved_format.eq_ignore_ascii_case("7z") {
@@ -433,52 +426,37 @@ impl CliApp {
             options.profile,
         );
 
-        let (output_path, extension_appended) = Self::append_output_extension_if_missing(
-            requested_output,
-            handler.descriptor().extensions,
-            Some(extension_source),
-        );
+        // Only append the container extension when the user gave an extensionless output name. A
+        // name that already carries an extension (matching, or an explicit --compress-format that
+        // deliberately mismatches) is written exactly as requested.
+        let (output_path, extension_appended) = if requested_output.extension().is_none() {
+            Self::append_output_extension_if_missing(
+                requested_output,
+                handler.descriptor().extensions,
+                Some(extension_source),
+            )
+        } else {
+            (requested_output.to_path_buf(), false)
+        };
+
+        if let Some(warning) = resolution.warning.as_deref() {
+            warn!(
+                command = "patch-apply",
+                format = %resolved_format,
+                output = %output_path.display(),
+                "{warning}"
+            );
+        }
+
         Ok(PatchApplyCompressionPlan {
             format: resolved_format,
             codec,
             level,
             output_path,
             extension_appended,
-            auto_note,
+            note: resolution.note,
+            warning: resolution.warning,
         })
-    }
-
-    fn patch_apply_format_supports_create(&self, format_name: &str) -> bool {
-        self.containers
-            .find_by_name(format_name)
-            .is_some_and(|handler| handler.capabilities().create)
-    }
-
-    fn patch_apply_chd_auto_viable(&self, source: &Path) -> bool {
-        if !self.patch_apply_format_supports_create("chd") {
-            return false;
-        }
-        let Ok(metadata) = fs::metadata(source) else {
-            return false;
-        };
-        if !metadata.is_file() {
-            return false;
-        }
-        let logical_bytes = metadata.len();
-        // Prevent a known backend abort path for very small CHD inputs.
-        if logical_bytes <= 4096 {
-            return false;
-        }
-
-        let extension = source
-            .extension()
-            .and_then(|value| value.to_str())
-            .map(str::to_ascii_lowercase);
-        match extension.as_deref() {
-            Some("iso") => logical_bytes % 2048 == 0,
-            Some("img") | Some("ima") => logical_bytes % 512 == 0,
-            _ => true,
-        }
     }
 
     fn append_output_extension_if_missing(

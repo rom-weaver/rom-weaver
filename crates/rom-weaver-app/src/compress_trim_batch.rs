@@ -37,13 +37,6 @@ impl CliApp {
             }
             None => None,
         };
-        let requested_or_auto_format = requested_format
-            .clone()
-            .unwrap_or_else(|| "auto".to_string());
-        let auto_mode = requested_format
-            .as_deref()
-            .map(|value| value.eq_ignore_ascii_case("auto"))
-            .unwrap_or(true);
 
         let context = self.context(threads);
         let probe_threads = Some(context.plan_threads(ThreadCapability::single_threaded()));
@@ -51,49 +44,46 @@ impl CliApp {
             if let Some(report) = self.require_existing_path(
                 "compress",
                 OperationFamily::Container,
-                Some(requested_or_auto_format.clone()),
+                requested_format.clone(),
                 input,
                 probe_threads.clone(),
             ) {
                 return self.finish("compress", report);
             }
         }
-        if auto_mode && input.len() != 1 {
-            return self.finish(
-                "compress",
-                OperationReport::failed(
-                    OperationFamily::Container,
-                    Some("auto".to_string()),
-                    "validate",
-                    "auto format selection requires exactly one input file; pass --format <name> when compressing multiple inputs",
-                    probe_threads,
-                ),
-            );
-        }
-        let (resolved_format, auto_label_suffix) = if auto_mode {
-            let recommendation = self.containers.recommend_compress_format(&input[0]);
-            (
-                recommendation.format_name.to_string(),
-                Some(format!(
-                    "auto format={} reason={}",
-                    recommendation.format_name, recommendation.reason
-                )),
-            )
-        } else {
-            let Some(explicit_format) = requested_format.clone() else {
+        // The output format is derived from the output filename's extension; an explicit --format
+        // overrides it (with a warning when they disagree) and is required when the output has no
+        // extension. There is no auto selection.
+        let resolution = match self.resolve_container_output_format(
+            requested_format.as_deref(),
+            &output,
+            "--format",
+            "",
+        ) {
+            Ok(resolution) => resolution,
+            Err(error) => {
                 return self.finish(
                     "compress",
                     OperationReport::failed(
                         OperationFamily::Container,
-                        None,
+                        requested_format.clone(),
                         "validate",
-                        "internal validation error: explicit compression mode requires --format",
+                        error.to_string(),
                         probe_threads,
                     ),
                 );
-            };
-            (explicit_format, None)
+            }
         };
+        let resolved_format = resolution.format;
+        let format_warning = resolution.warning;
+        if let Some(warning) = format_warning.as_deref() {
+            warn!(
+                command = "compress",
+                format = %resolved_format,
+                output = %output.display(),
+                "{warning}"
+            );
+        }
         let (codec, explicit_level) = match Self::resolve_codec_level(codec, "--codec") {
             Ok(value) => value,
             Err(error) => {
@@ -109,8 +99,6 @@ impl CliApp {
                 );
             }
         };
-        let codec = if auto_mode { None } else { codec };
-        let explicit_level = if auto_mode { None } else { explicit_level };
         let level = Self::resolve_compression_level_for_profile(
             &resolved_format,
             Self::primary_codec_name(codec.as_deref()),
@@ -205,9 +193,9 @@ impl CliApp {
             )
         });
         if report.status == OperationStatus::Succeeded
-            && let Some(auto_label_suffix) = auto_label_suffix
+            && let Some(warning) = format_warning.as_deref()
         {
-            report.label = format!("{}; {auto_label_suffix}", report.label);
+            report.label = format!("{}; warning: {warning}", report.label);
         }
         if report.status == OperationStatus::Succeeded {
             self.emit_running(

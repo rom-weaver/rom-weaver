@@ -615,6 +615,25 @@ mod tests {
     }
 
     #[test]
+    fn find_by_output_extension_resolves_by_extension_only() {
+        let registry = ContainerRegistry::new();
+        let resolved_name = |path: &str| {
+            registry
+                .find_by_output_extension(std::path::Path::new(path))
+                .map(|handler| handler.descriptor().name)
+        };
+        // Create-capable container.
+        assert_eq!(resolved_name("game.zip"), Some("zip"));
+        // A z3ds variant extension maps to the z3ds handler.
+        assert_eq!(resolved_name("game.zcia"), Some("z3ds"));
+        // Extract-only containers still resolve; the create capability is the caller's concern.
+        assert_eq!(resolved_name("disc.cso"), Some("cso"));
+        // Unknown / non-container extensions and extensionless names resolve to nothing.
+        assert_eq!(resolved_name("rom.gba"), None);
+        assert_eq!(resolved_name("rom"), None);
+    }
+
+    #[test]
     fn z3ds_extract_name_maps_to_matching_uncompressed_extension() {
         let handler = Z3dsContainerHandler;
         assert_eq!(
