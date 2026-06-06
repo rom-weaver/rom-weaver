@@ -239,6 +239,10 @@
 .rw-app .cks-rows { margin-top: 9px; display: flex; flex-direction: column; gap: 2px; }
 .rw-app .ropts { margin-top: 9px; display: flex; flex-wrap: wrap; gap: 8px 16px; padding: 0 2px; }
 .rw-app .ropts .opt { font-size: 0.8rem; }
+.rw-app .popt-row { display: grid; grid-template-columns: 96px 1fr; align-items: center; gap: 8px; margin-top: 6px; }
+.rw-app .popt-label { font-size: 0.8rem; color: var(--rw-ink-2, var(--rw-ink)); }
+.rw-app .popt-input { height: 28px; font-family: var(--rw-mono); font-size: 0.82rem; }
+.rw-app .popt-check { margin-top: 8px; font-size: 0.8rem; }
 .rw-app .ck { margin: 0; display: grid; grid-template-columns: 96px 1fr auto; align-items: center; gap: 8px; min-height: 30px; padding: 4px 8px; border-radius: 5px; background: var(--rw-panel-2); cursor: pointer; transition: background .12s; overflow: hidden; }
 .rw-app .ck:hover { background: color-mix(in oklab, var(--rw-accent) 8%, var(--rw-panel-2)); }
 .rw-app .ck:hover .copy { color: var(--rw-accent); }

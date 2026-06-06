@@ -97,6 +97,12 @@ type InternalSourceState = {
   requirements?: InternalPatchRequirements;
   checksumPreflight?: InternalPatchChecksumPreflight;
   patchValidation?: InternalPatchValidation;
+  /** User-pasted checksum (raw hex) to validate the patch target input before apply. */
+  validateInputChecksum?: string;
+  /** User-pasted checksum (raw hex) to validate the patched output after apply. */
+  validateOutputChecksum?: string;
+  /** User toggle for PPF undo-aware apply; `undefined` means "default on for PPF patches". */
+  ppfUndo?: boolean;
   role: SourceRole;
 };
 type InternalCandidate<TSource> = SharedInternalCandidate<TSource, InternalSourceState>;
@@ -191,6 +197,7 @@ const clonePatchState = (
   id: state.id,
   parentCompressions: parentCompressions.map((entry) => ({ ...entry })),
   patchValidation: clonePatchValidation(state.patchValidation),
+  ppfUndo: state.ppfUndo,
   requirements: clonePatchRequirements(state.requirements),
   selectedCandidateId: state.selectedCandidateId,
   size: state.size,
@@ -198,6 +205,8 @@ const clonePatchState = (
   status: state.status,
   targetInputFileName: state.targetInputFileName,
   targetInputId: state.targetInputId,
+  validateInputChecksum: state.validateInputChecksum,
+  validateOutputChecksum: state.validateOutputChecksum,
   warnings: state.warnings.map(cloneWarning),
   wasDecompressed: state.wasDecompressed,
 });
@@ -675,6 +684,30 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
       if (!target) throw new RomWeaverError("SELECTION_NOT_FOUND", `Patch target was not found: ${targetInputId}`);
       this.assignPatchTarget(stage, target);
       await this.evaluatePatchReadiness(stage);
+      this.recomputeOutputState();
+    });
+  }
+
+  async setPatchOption(
+    index: number,
+    option: {
+      ppfUndo?: boolean;
+      validateInputChecksum?: string;
+      validateOutputChecksum?: string;
+    },
+  ): Promise<void> {
+    return this.mutate("setPatchOption", async () => {
+      const stage = this.patches[index];
+      if (!stage) throw new RomWeaverError("INVALID_INPUT", `Patch ${index + 1} was not found`);
+      if ("ppfUndo" in option) stage.state.ppfUndo = option.ppfUndo;
+      if ("validateInputChecksum" in option) {
+        const value = option.validateInputChecksum?.trim();
+        stage.state.validateInputChecksum = value ? value : undefined;
+      }
+      if ("validateOutputChecksum" in option) {
+        const value = option.validateOutputChecksum?.trim();
+        stage.state.validateOutputChecksum = value ? value : undefined;
+      }
       this.recomputeOutputState();
     });
   }
@@ -1725,6 +1758,11 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
       options: this.createExecutionOptions(onProgress),
       parsedPatches: this.patches.map((patch) => patch.parsedPatch).filter(Boolean) as ParsedPatchLike[],
       patches: this.patches.map((patch) => patch.source) as never,
+      patchOptions: this.patches.map((patch) => ({
+        ppfUndo: patch.state.requirements?.format === "PPF" ? patch.state.ppfUndo !== false : false,
+        validateInputChecksum: patch.state.validateInputChecksum,
+        validateOutputChecksum: patch.state.validateOutputChecksum,
+      })),
       patchTargets: this.patches.map((patch) => patch.state.targetInputId || "auto"),
       preparedInputAssets: this.getPreparedInputAssets(),
       preparedPatchFiles: this.patches.map((patch) => patch.preparedPatchFile).filter(Boolean) as PatchFileInstance[],

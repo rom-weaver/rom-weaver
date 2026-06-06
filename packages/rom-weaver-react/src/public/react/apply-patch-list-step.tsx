@@ -104,6 +104,69 @@ const PatchInfo = ({ item }: { item: PatchStackItemState }) => {
   );
 };
 
+const CHECKSUM_HINT = "Paste a CRC32, MD5, or SHA1 hex digest";
+
+const PatchOptions = ({
+  index,
+  item,
+  patchStack,
+}: {
+  index: number;
+  item: PatchStackItemState;
+  patchStack: PatcherStackController;
+}) => {
+  const setOption = patchStack.setPatchOption;
+  if (!setOption) return null;
+  const ppfUndoChecked = item.ppfUndo !== false;
+  return (
+    <ChecksumList defaultOpen={false} label="Options" sublabel={item.format || undefined}>
+      <div className="popt-row">
+        <label className="popt-label" htmlFor={`rom-weaver-patch-validate-input-${index}`}>
+          Validate input
+        </label>
+        <input
+          className="input popt-input"
+          defaultValue={item.validateInputChecksum || ""}
+          disabled={item.optionsDisabled}
+          id={`rom-weaver-patch-validate-input-${index}`}
+          key={`validate-input:${item.key ?? index}`}
+          onBlur={(event) => setOption(index, { validateInputChecksum: event.currentTarget.value })}
+          placeholder={CHECKSUM_HINT}
+          spellCheck={false}
+          type="text"
+        />
+      </div>
+      <div className="popt-row">
+        <label className="popt-label" htmlFor={`rom-weaver-patch-validate-output-${index}`}>
+          Validate output
+        </label>
+        <input
+          className="input popt-input"
+          defaultValue={item.validateOutputChecksum || ""}
+          disabled={item.optionsDisabled}
+          id={`rom-weaver-patch-validate-output-${index}`}
+          key={`validate-output:${item.key ?? index}`}
+          onBlur={(event) => setOption(index, { validateOutputChecksum: event.currentTarget.value })}
+          placeholder={CHECKSUM_HINT}
+          spellCheck={false}
+          type="text"
+        />
+      </div>
+      {item.showPpfUndo ? (
+        <label className="opt popt-check" title="Safely re-apply over an already-patched ROM using the PPF undo data">
+          <input
+            checked={ppfUndoChecked}
+            disabled={item.optionsDisabled}
+            onChange={(event) => setOption(index, { ppfUndo: event.currentTarget.checked })}
+            type="checkbox"
+          />
+          PPF undo (safe re-apply)
+        </label>
+      ) : null}
+    </ChecksumList>
+  );
+};
+
 const ApplyPatchListStep = ({
   patchInput,
   patchNotice,
@@ -193,6 +256,7 @@ const ApplyPatchListStep = ({
               }
             >
               <PatchInfo item={item} />
+              <PatchOptions index={index} item={item} patchStack={patchStack} />
             </FileCard>
           ),
         )}

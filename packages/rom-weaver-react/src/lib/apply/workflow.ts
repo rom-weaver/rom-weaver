@@ -154,6 +154,27 @@ const resolveWorkerApplyOutputName = (options: PatchInput["options"], asset: Inp
   return sourceExtension ? replaceFileNameExtension(outputName, sourceExtension) : outputName;
 };
 
+/**
+ * Converts a user-pasted hex checksum into a `algorithm=hex` entry, auto-detecting the
+ * algorithm by hex length (crc32/md5/sha1/sha256). Returns undefined for invalid input.
+ */
+const checksumEntryFromHex = (value: string | undefined): string | undefined => {
+  if (typeof value !== "string") return undefined;
+  const hex = value.trim().toLowerCase().replace(/^0x/, "");
+  if (!/^[0-9a-f]+$/.test(hex)) return undefined;
+  const algorithm =
+    hex.length === 8
+      ? "crc32"
+      : hex.length === 32
+        ? "md5"
+        : hex.length === 40
+          ? "sha1"
+          : hex.length === 64
+            ? "sha256"
+            : undefined;
+  return algorithm ? `${algorithm}=${hex}` : undefined;
+};
+
 const createWorkerApplyOptions = (options: PatchInput["options"], outputName?: string) => ({
   addHeader: !!options?.compatibility?.addHeader,
   appendOutputSuffix: !!options?.output?.suffix,
@@ -444,8 +465,9 @@ const runApplyWorkflow = async (
         "output",
         async () =>
           await (async () => {
-            const selectedPatches = assetPatches.map((patch) => {
-              const patchIndex = patches.indexOf(patch);
+            const patchIndices = assetPatches.map((patch) => patches.indexOf(patch));
+            const selectedPatches = assetPatches.map((patch, localIndex) => {
+              const patchIndex = patchIndices[localIndex] ?? patches.indexOf(patch);
               const patchFile = patchFiles[patchIndex];
               if (!patchFile) throw new Error("Patch worker source was not found");
               return {
@@ -454,6 +476,19 @@ const runApplyWorkflow = async (
                 patchFormat: getParsedPatchFormatHint(patch),
               };
             });
+            // Aggregate per-patch user options across this target's chain: the input
+            // checksum belongs to the first patch (the chain input), the output checksum to
+            // the last patch (the final result), and undo-aware applies if any patch wants it.
+            const patchOptions = Array.isArray(input.patchOptions) ? input.patchOptions : [];
+            const firstPatchOptions = patchOptions[patchIndices[0] ?? -1];
+            const lastPatchOptions = patchOptions[patchIndices[patchIndices.length - 1] ?? -1];
+            const validateWithChecksums = [checksumEntryFromHex(firstPatchOptions?.validateInputChecksum)].filter(
+              (entry): entry is string => !!entry,
+            );
+            const validateWithOutputChecksums = [checksumEntryFromHex(lastPatchOptions?.validateOutputChecksum)].filter(
+              (entry): entry is string => !!entry,
+            );
+            const ppfUndoAware = patchIndices.some((patchIndex) => patchOptions[patchIndex]?.ppfUndo === true);
             const workerOutput = (await applyPatchInRuntime({
               input: toWorkerSourceRef(asset.file, asset.fileName || "input.bin"),
               logLevel: getApplyLogLevel(options),
@@ -467,10 +502,13 @@ const runApplyWorkflow = async (
                 }),
               options: {
                 ...createWorkerApplyOptions(options, workerOutputName),
+                ...(ppfUndoAware ? { ppfUndoAware: true } : {}),
                 requireOutputChecksumMatch:
                   typeof options.validation?.requireOutputChecksumMatch === "boolean"
                     ? options.validation.requireOutputChecksumMatch
                     : false,
+                ...(validateWithChecksums.length ? { validateWithChecksums } : {}),
+                ...(validateWithOutputChecksums.length ? { validateWithOutputChecksums } : {}),
               },
               patches: selectedPatches,
             })) as PublicOutputWithApplySummary;

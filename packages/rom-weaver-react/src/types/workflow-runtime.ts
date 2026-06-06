@@ -60,10 +60,21 @@ type ApplyWorkflowOptions = ApplySettings &
     sidecarPatchOutputLabels?: Record<number, string>;
   };
 
+/** Per-patch options the user can set in the patch "Options" panel, aligned by patch index. */
+type PatchApplyUserOptions = {
+  /** Raw hex checksum to validate the target input before apply (algorithm auto-detected by length). */
+  validateInputChecksum?: string;
+  /** Raw hex checksum to validate the patched output after apply (algorithm auto-detected by length). */
+  validateOutputChecksum?: string;
+  /** Enable PPF undo-aware apply for this patch (only meaningful for PPF patches). */
+  ppfUndo?: boolean;
+};
+
 type PatchInput = {
   inputs: Array<SourceRef> | SourceRef;
   patches?: Array<SourceRef> | SourceRef;
   patchTargets?: Array<"auto" | string>;
+  patchOptions?: PatchApplyUserOptions[];
   preparedInputAssets?: InputAsset[];
   preparedPatchFiles?: PatchFileInstance[];
   parsedPatches?: ParsedPatchLike[];
@@ -266,6 +277,7 @@ export type {
   CreatePatchResult,
   CreateWorkflowOptions,
   JsonValue,
+  PatchApplyUserOptions,
   PatchInput,
   ProgressEvent,
   PublicOutput,

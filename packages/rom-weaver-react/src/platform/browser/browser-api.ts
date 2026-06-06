@@ -239,6 +239,13 @@ class ApplyWorkflow extends BrowserWorkflowBase<
   setPatchTarget(index: number, targetInputId: string | "auto"): Promise<void> {
     return this.controller.setPatchTarget(index, targetInputId);
   }
+
+  setPatchOption(
+    index: number,
+    option: { ppfUndo?: boolean; validateInputChecksum?: string; validateOutputChecksum?: string },
+  ): Promise<void> {
+    return this.controller.setPatchOption(index, option);
+  }
 }
 
 class TrimWorkflow extends BrowserWorkflowBase<

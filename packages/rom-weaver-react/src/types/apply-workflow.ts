@@ -94,6 +94,12 @@ type ApplyWorkflowPatchState = {
     targetInputId?: string;
     validationKey?: string;
   };
+  /** User-pasted checksum (raw hex) to validate the patch target input before apply. */
+  validateInputChecksum?: string;
+  /** User-pasted checksum (raw hex) to validate the patched output after apply. */
+  validateOutputChecksum?: string;
+  /** User toggle for PPF undo-aware apply; `undefined` means "default on for PPF patches". */
+  ppfUndo?: boolean;
 };
 
 type ApplyWorkflowProgressKind = WorkflowProgress["stage"];

@@ -39,6 +39,10 @@ type PatcherStackController = StoreController<PatchStackState> & {
   moveItem: (index: number, direction: number) => void;
   removeItem: (index: number) => void;
   setPatchTarget?: (index: number, targetInputId: string) => void;
+  setPatchOption?: (
+    index: number,
+    option: { ppfUndo?: boolean; validateInputChecksum?: string; validateOutputChecksum?: string },
+  ) => void;
 };
 
 type PatcherOutputController = StoreController<PatcherOutputState> & {

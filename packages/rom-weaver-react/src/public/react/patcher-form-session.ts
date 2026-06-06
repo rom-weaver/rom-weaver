@@ -118,6 +118,7 @@ const useLocalApplyPatchFormSession = ({
   stageInput,
   stagePatches,
   setPatchTarget,
+  setPatchOption,
 }: LocalApplyPatchFormSessionOptions) => {
   const [internalInputs, setInternalInputs] = useState(defaultInputs);
   const [internalPatches, setInternalPatches] = useState(defaultPatches);
@@ -696,12 +697,18 @@ const useLocalApplyPatchFormSession = ({
           detailText: patchInfo?.targetLabel || "",
           fileName: patchInfo?.fileName || getBinarySourceFileName(patch, `Patch ${index + 1}`),
           fileSize: patchInfo?.size ?? patchInfo?.sourceSize ?? getBinarySourceSize(patch) ?? undefined,
+          format: patchInfo?.format,
           index: index + 1,
           key,
+          optionsDisabled: disabled || busy || patchStaging,
+          ppfUndo: patchInfo?.ppfUndo,
           progress: patchProgressByKey[key] || null,
+          showPpfUndo: patchInfo?.format === "PPF",
           targetDisabled: disabled || busy || patchStaging || targetOptions.length < 2,
           targetOptions,
           targetValue: patchInfo?.targetInputId || (targetOptions.length === 1 ? targetOptions[0]?.value : ""),
+          validateInputChecksum: patchInfo?.validateInputChecksum || "",
+          validateOutputChecksum: patchInfo?.validateOutputChecksum || "",
           validationActualValue: patchInfo?.validationActualValue || "",
           validationLabel: patchInfo?.validationLabel || "",
           validationMessage: patchInfo?.validationMessage || "",
@@ -1582,6 +1589,31 @@ const useLocalApplyPatchFormSession = ({
       removeItem: (index: number) => {
         updatePatches(activePatches.filter((_patch, patchIndex) => patchIndex !== index));
       },
+      setPatchOption: async (
+        index: number,
+        option: { ppfUndo?: boolean; validateInputChecksum?: string; validateOutputChecksum?: string },
+      ) => {
+        if (!setPatchOption) return;
+        try {
+          const snapshot = createStageSnapshot();
+          const infos = await setPatchOption(snapshot, index, option);
+          setPatchInfoByKey((current) => {
+            const next = { ...current };
+            for (const info of infos) {
+              if (!info) continue;
+              const patch = typeof info.order === "number" ? snapshot.patches[info.order] : undefined;
+              const key = patch ? getPatchKey(patch, snapshot.patches) : info.id;
+              if (key) next[key] = info;
+            }
+            return next;
+          });
+        } catch (error) {
+          const normalizedError = toError(error);
+          logUiError("Patch option update failed", normalizedError);
+          setSectionErrorMessage("patch", normalizedError);
+          onError?.(normalizedError);
+        }
+      },
       setPatchTarget: async (index: number, targetInputId: string) => {
         if (!setPatchTarget) return;
         try {
@@ -1615,6 +1647,7 @@ const useLocalApplyPatchFormSession = ({
       onError,
       setSectionErrorMessage,
       setPatchInfoByKey,
+      setPatchOption,
       setPatchTarget,
       updatePatches,
     ],

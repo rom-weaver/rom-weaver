@@ -182,13 +182,17 @@ const toPatchStageInfo = (
     checksumTiming: validation.checksumTiming,
     decompressionTimeMs: patch.decompressionTimeMs,
     fileName,
+    format: patch.requirements?.format,
     id: patch.id,
     order,
     parentCompressions: patch.parentCompressions,
+    ppfUndo: patch.ppfUndo,
     size: patch.size,
     sourceSize: patch.sourceSize,
     targetInputId: patch.targetInputId,
     targetLabel,
+    validateInputChecksum: patch.validateInputChecksum,
+    validateOutputChecksum: patch.validateOutputChecksum,
     validationActualValue: validation.validationActualValue,
     validationLabel: validation.validationLabel,
     validationMessage: validation.validationMessage,
@@ -1015,6 +1019,51 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     [withPreparedWorkflow],
   );
 
+  const setPatchOption = useCallback(
+    async (
+      input: ApplyWorkflowSessionInput,
+      patchIndex: number,
+      option: { ppfUndo?: boolean; validateInputChecksum?: string; validateOutputChecksum?: string },
+    ) => {
+      const originalNames = input.patches.map((patch, index) =>
+        getReactBinarySourceFileName(patch, `Patch ${index + 1}`),
+      );
+      return withPreparedWorkflow(
+        input,
+        {
+          selection: {
+            promptInputSelection: false,
+            promptPatchSelection: false,
+          },
+        },
+        async ({ input: stagedInput, workflow }) => {
+          await workflow.setPatchOption(patchIndex, option);
+          const refreshedInput = workflow.getInput();
+          const refreshedPatches = workflow.getPatches();
+          const inputLabelById = new Map(
+            toStagedInputInfos(refreshedInput || stagedInput, input.inputs).map((entry) => [
+              entry.id || "",
+              entry.fileName || "Input",
+            ]),
+          );
+          return refreshedPatches.map((patch, index) => {
+            const targetName =
+              patch?.targetInputFileName ||
+              (patch?.targetInputId ? inputLabelById.get(patch.targetInputId) : undefined) ||
+              "None selected";
+            return toPatchStageInfo(
+              patch,
+              originalNames[index] || `Patch ${index + 1}`,
+              index,
+              `Target: ${targetName}`,
+            );
+          });
+        },
+      );
+    },
+    [withPreparedWorkflow],
+  );
+
   const { localUiController, localStackController, localOutputController, localNoticeController } =
     useLocalApplyPatchFormSession({
       ...propsWithSettings,
@@ -1027,6 +1076,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       resolvedOutputCompression,
       resolvedOutputName,
       resolvedOutputNameKey,
+      setPatchOption,
       setPatchTarget,
       stageInput,
       stagePatches,

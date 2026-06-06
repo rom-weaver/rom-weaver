@@ -58,7 +58,7 @@ const FixesPanel = ({
   defaultOpen = false,
   headerSummary,
   headerValue = "No change",
-  label = "Fixes",
+  label = "Options",
   lead,
   romInfoText,
   trim,

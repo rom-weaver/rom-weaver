@@ -1072,11 +1072,19 @@ const invokeRomWeaverPatchApplyWorker = async (
     outputFileName,
     input.patchFiles.map((patch) => patch.patchFilePath),
   );
+  const applyOptionRecord = asRecord(input.options);
   const removeHeader = Boolean((input.options as { removeHeader?: unknown } | undefined)?.removeHeader);
   const addHeader = Boolean((input.options as { addHeader?: unknown } | undefined)?.addHeader);
   const repairChecksum = Boolean((input.options as { fixChecksum?: unknown } | undefined)?.fixChecksum);
   const ignoreChecksumValidation =
     (input.options as { requireInputChecksumMatch?: unknown } | undefined)?.requireInputChecksumMatch !== true;
+  const validateWithChecksums = normalizePatchValidationChecksumEntries(
+    applyOptionRecord?.validateWithChecksums ?? applyOptionRecord?.validate_with_checksums,
+  );
+  const validateWithOutputChecksums = normalizePatchValidationChecksumEntries(
+    applyOptionRecord?.validateWithOutputChecksums ?? applyOptionRecord?.validate_with_output_checksums,
+  );
+  const ppfUndoAware = Boolean(applyOptionRecord?.ppfUndoAware ?? applyOptionRecord?.ppf_undo_aware);
   const requestedThreadArg = toThreadBudget((input.options as { workerThreads?: unknown } | undefined)?.workerThreads);
   const { forceSingleThreadReason, forcedSingleThread, hasBpsPatch, hasXdeltaPatch, threadArg } =
     resolvePatchApplyThreadArg(requestedThreadArg, input.patchFiles);
@@ -1094,10 +1102,13 @@ const invokeRomWeaverPatchApplyWorker = async (
         output: outputPath,
         patch_filter: true,
         patches: input.patchFiles.map((patch) => patch.patchFilePath),
+        ...(ppfUndoAware ? { ppf_undo_aware: true } : {}),
         repair_checksum: repairChecksum,
         rom_filter: true,
         strip_header: removeHeader,
         ...(threadArg ? { threads: threadArg } : {}),
+        ...(validateWithChecksums.length ? { validate_with_checksums: validateWithChecksums } : {}),
+        ...(validateWithOutputChecksums.length ? { validate_with_output_checksums: validateWithOutputChecksums } : {}),
       },
       type: "apply",
     },

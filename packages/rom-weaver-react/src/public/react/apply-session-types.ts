@@ -37,6 +37,10 @@ type StagedInputInfo = {
   validationState?: string;
   validationValues?: string[];
   checksumPreflightMismatch?: boolean;
+  format?: string;
+  ppfUndo?: boolean;
+  validateInputChecksum?: string;
+  validateOutputChecksum?: string;
 };
 
 type ApplyWorkflowStageSnapshot = {
@@ -135,6 +139,11 @@ type LocalApplyPatchFormSessionOptions = Pick<
     input: ApplyWorkflowStageSnapshot,
     patchIndex: number,
     targetInputId: string,
+  ) => Promise<Array<StagedInputInfo | null | undefined>>;
+  setPatchOption?: (
+    input: ApplyWorkflowStageSnapshot,
+    patchIndex: number,
+    option: { ppfUndo?: boolean; validateInputChecksum?: string; validateOutputChecksum?: string },
   ) => Promise<Array<StagedInputInfo | null | undefined>>;
 };
 

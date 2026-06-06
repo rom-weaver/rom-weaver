@@ -70,6 +70,18 @@ type PatchStackItemState = {
   targetDisabled?: boolean;
   targetOptions?: PatchTargetOption[];
   targetValue?: string;
+  /** Detected patch format (e.g. "PPF", "IPS"); drives format-specific options. */
+  format?: string;
+  /** Whether the PPF undo-aware checkbox should be shown (PPF patches only). */
+  showPpfUndo?: boolean;
+  /** Current PPF undo-aware toggle; `undefined` means the default (on for PPF). */
+  ppfUndo?: boolean;
+  /** User-pasted checksum (raw hex) used to validate the target input before apply. */
+  validateInputChecksum?: string;
+  /** User-pasted checksum (raw hex) used to validate the patched output after apply. */
+  validateOutputChecksum?: string;
+  /** Disables the Options inputs while the patch stack is busy/staging. */
+  optionsDisabled?: boolean;
   canMoveUp: boolean;
   canMoveDown: boolean;
   canRemove: boolean;
