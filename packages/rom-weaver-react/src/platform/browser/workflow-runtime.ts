@@ -1321,7 +1321,6 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
       const stagedOutputFileName = getDiscExtractedFileName("z3ds", {
         fileName: getPathDerivedFileName(workerSource.filePath, workerSource.fileName || fileName),
       });
-      const outputFileName = outputName || actualOutputFileName;
       const listed = await runRomWeaverListWorker(
         {
           logLevel,
@@ -1342,6 +1341,10 @@ const createBrowserDiscRuntime = (workerIo: RuntimeWorkerIo): DiscRuntimeAdapter
       const listedOutputFileName = getPathBaseName(
         String(listed?.entries?.[0]?.fileName || listed?.entries?.[0]?.filename || listed?.entries?.[0]?.name || ""),
       );
+      // Prefer the container handler's authoritative extracted entry name (it maps the source
+      // extension, e.g. `.zcci` -> `.cci`) so the saved/displayed name matches the file actually
+      // written, instead of the request-filename guess that falls back to `.3ds`.
+      const outputFileName = outputName || listedOutputFileName || actualOutputFileName;
       const outputPath = joinPath(outDirPath, listedOutputFileName || stagedOutputFileName || actualOutputFileName);
       if (outputName) preseedPaths.push(...getBrowserExtractOutputPathCandidates(outDirPath, outputName));
       if (stagedOutputFileName)
