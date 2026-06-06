@@ -258,19 +258,7 @@ fn checksum_auto_extract_stream_container_uses_streamed_hashing() {
     fs::write(temp.child("game.bin").path(), &payload).expect("payload fixture");
 
     let compressed = temp.child("game.bin.gz");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
-            "compress",
-            temp.child("game.bin").path().to_str().expect("path"),
-            "--format",
-            "gz",
-            "--output",
-            compressed.path().to_str().expect("path"),
-            "--json",
-        ])
-        .assert()
-        .code(0);
+    write_gzip_fixture(temp.child("game.bin").path(), compressed.path());
 
     let expected_payload = checksum_value(temp.child("game.bin").path(), "sha1");
     let output = Command::cargo_bin("rom-weaver")
@@ -322,19 +310,7 @@ fn checksum_stream_container_falls_back_when_nested_extract_is_required() {
         .code(0);
 
     let outer = temp.child("inner.zip.gz");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
-            "compress",
-            inner.path().to_str().expect("path"),
-            "--format",
-            "gz",
-            "--output",
-            outer.path().to_str().expect("path"),
-            "--json",
-        ])
-        .assert()
-        .code(0);
+    write_gzip_fixture(inner.path(), outer.path());
 
     let expected = checksum_value(temp.child("game.bin").path(), "sha1");
     let output = Command::cargo_bin("rom-weaver")
@@ -371,19 +347,7 @@ fn checksum_auto_extract_tar_stream_uses_streamed_hashing() {
     fs::write(temp.child("game.bin").path(), &payload).expect("payload fixture");
 
     let archive = temp.child("game.tar.gz");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
-            "compress",
-            temp.child("game.bin").path().to_str().expect("path"),
-            "--format",
-            "tar.gz",
-            "--output",
-            archive.path().to_str().expect("path"),
-            "--json",
-        ])
-        .assert()
-        .code(0);
+    write_tar_gz_fixture(&[(temp.child("game.bin").path(), "game.bin")], archive.path());
 
     let expected_payload = checksum_value(temp.child("game.bin").path(), "sha1");
     let output = Command::cargo_bin("rom-weaver")
@@ -421,20 +385,13 @@ fn checksum_tar_stream_rom_filter_selects_rom_payload() {
     fs::write(temp.child("update.bps").path(), SIMPLE_BPS_PATCH).expect("patch fixture");
 
     let archive = temp.child("mixed.tar.gz");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
-            "compress",
-            temp.child("game.bin").path().to_str().expect("path"),
-            temp.child("update.bps").path().to_str().expect("path"),
-            "--format",
-            "tar.gz",
-            "--output",
-            archive.path().to_str().expect("path"),
-            "--json",
-        ])
-        .assert()
-        .code(0);
+    write_tar_gz_fixture(
+        &[
+            (temp.child("game.bin").path(), "game.bin"),
+            (temp.child("update.bps").path(), "update.bps"),
+        ],
+        archive.path(),
+    );
 
     let expected_payload = checksum_value(temp.child("game.bin").path(), "sha1");
     let output = Command::cargo_bin("rom-weaver")
@@ -486,19 +443,7 @@ fn checksum_tar_stream_falls_back_when_nested_extract_is_required() {
         .code(0);
 
     let archive = temp.child("inner.tar.gz");
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
-            "compress",
-            inner.path().to_str().expect("path"),
-            "--format",
-            "tar.gz",
-            "--output",
-            archive.path().to_str().expect("path"),
-            "--json",
-        ])
-        .assert()
-        .code(0);
+    write_tar_gz_fixture(&[(inner.path(), "inner.zip")], archive.path());
 
     let expected = checksum_value(temp.child("game.bin").path(), "sha1");
     let output = Command::cargo_bin("rom-weaver")

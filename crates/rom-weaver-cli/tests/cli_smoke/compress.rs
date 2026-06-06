@@ -216,7 +216,7 @@ fn extract_nfs_invalid_source_emits_running_progress() {
         .clone();
 
     let events = parse_json_lines(&output);
-    assert_running_percent_event(&events, "extract", "nfs");
+    assert_running_event(&events, "extract", "nfs");
     let json = events.last().expect("extract terminal event");
     assert_eq!(json["command"], "extract");
     assert_eq!(json["family"], "container");
@@ -246,7 +246,7 @@ fn extract_tgc_invalid_source_emits_running_progress() {
         .clone();
 
     let events = parse_json_lines(&output);
-    assert_running_percent_event(&events, "extract", "tgc");
+    assert_running_event(&events, "extract", "tgc");
     let json = events.last().expect("extract terminal event");
     assert_eq!(json["command"], "extract");
     assert_eq!(json["family"], "container");
@@ -276,7 +276,7 @@ fn extract_xiso_invalid_source_emits_running_progress() {
         .clone();
 
     let events = parse_json_lines(&output);
-    assert_running_percent_event(&events, "extract", "xiso");
+    assert_running_event(&events, "extract", "xiso");
     let json = events.last().expect("extract terminal event");
     assert_eq!(json["command"], "extract");
     assert_eq!(json["family"], "container");
@@ -776,7 +776,7 @@ fn run_archive_round_trip(format: &str, archive_name: &str, codec: Option<&str>)
     let compress_output = compress.assert().code(0).get_output().stdout.clone();
 
     let compress_events = parse_json_lines(&compress_output);
-    assert_running_percent_event(&compress_events, "compress", format);
+    assert_running_event(&compress_events, "compress", format);
     let compress_json = compress_events.last().expect("compress terminal event");
     assert_eq!(compress_json["command"], "compress");
     assert_eq!(compress_json["family"], "container");

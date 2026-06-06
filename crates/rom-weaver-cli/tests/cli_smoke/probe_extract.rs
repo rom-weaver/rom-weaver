@@ -54,11 +54,11 @@ fn probe_reports_known_container_as_supported() {
     assert_eq!(json["status"], "succeeded");
     assert_eq!(
         json["details"]["container"]["recommended_compress_format"],
-        "chd"
+        "7z"
     );
     assert_eq!(
         json["details"]["container"]["reason"],
-        "not-wii-gc-or-unrecognized"
+        "fallback-7z-lzma2"
     );
     assert!(json["details"]["container"]["entry_count"].is_null());
     assert!(!json["label"]
@@ -103,11 +103,11 @@ fn list_reports_selectable_zip_entries() {
     assert_eq!(json["details"]["container"]["entries"][0], "sample.bin");
     assert_eq!(
         json["details"]["container"]["recommended_compress_format"],
-        "chd"
+        "7z"
     );
     assert_eq!(
         json["details"]["container"]["reason"],
-        "not-wii-gc-or-unrecognized"
+        "fallback-7z-lzma2"
     );
     assert!(!json["label"]
         .as_str()

@@ -705,8 +705,7 @@ fn libarchive_open_create_archive(
             config.format,
             &format!(
                 "{} create failed while selecting {} format",
-                config.format_name,
-                libarchive_create_format_name(config.format)
+                config.format_name, config.format_name
             ),
         )?;
 
@@ -807,13 +806,6 @@ fn libarchive_open_create_archive(
     setup_result?;
 
     Ok(archive)
-}
-
-fn libarchive_create_format_name(format: LibarchiveCreateFormat) -> &'static str {
-    match format {
-        LibarchiveCreateFormat::Zip => "zip",
-        LibarchiveCreateFormat::SevenZ => "7z",
-    }
 }
 
 fn libarchive_write_archive_entry<F>(

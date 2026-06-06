@@ -17,6 +17,7 @@ assert_fs.workspace = true
 flate2.workspace = true
 nod = { workspace = true, features = ["compress-lzma"] }
 serde_json.workspace = true
+tar.workspace = true
 xdvdfs.workspace = true
 zstd.workspace = true
 

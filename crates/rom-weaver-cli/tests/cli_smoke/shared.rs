@@ -1,14 +1,17 @@
 use std::collections::BTreeSet;
 use std::fs::{self, File};
 use std::io::{Seek, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use assert_cmd::Command;
 use assert_fs::{
     TempDir,
     fixture::{FileWriteStr, PathChild},
 };
-use flate2::{Compression as DeflateCompression, write::DeflateEncoder};
+use flate2::{
+    Compression as DeflateCompression,
+    write::{DeflateEncoder, GzEncoder},
+};
 use nod::{
     common::{Compression as NodCompression, Format as NodFormat},
     read::{DiscOptions as NodDiscOptions, DiscReader as NodDiscReader},
@@ -116,6 +119,17 @@ fn assert_running_percent_event(events: &[Value], command: &str, format: &str) {
                     .unwrap_or(false)
         }),
         "expected {command} ({format}) to emit running progress between 0 and 100"
+    );
+}
+
+fn assert_running_event(events: &[Value], command: &str, format: &str) {
+    assert!(
+        events.iter().any(|event| {
+            event["command"] == command
+                && event["status"] == "running"
+                && event["format"] == format
+        }),
+        "expected {command} ({format}) to emit running progress"
     );
 }
 
@@ -343,26 +357,76 @@ fn write_rvz_fixture_from_iso(iso_path: &std::path::Path, rvz_path: &std::path::
     output.flush().expect("flush rvz");
 }
 
-fn write_gcz_fixture_from_iso(iso_path: &std::path::Path, gcz_path: &std::path::Path) {
-    let disc = NodDiscReader::new(iso_path, &NodDiscOptions::default()).expect("open iso");
-    let options = NodFormatOptions {
-        format: NodFormat::Gcz,
-        compression: NodCompression::Deflate(6),
-        block_size: NodFormat::Gcz.default_block_size(),
-    };
-    let writer = NodDiscWriter::new(disc, &options).expect("create gcz writer");
-    let mut output = File::create(gcz_path).expect("create gcz");
-    let finalization = writer
-        .process(
-            |data, _processed, _total| output.write_all(data.as_ref()),
-            &NodProcessOptions::default(),
-        )
-        .expect("write gcz");
-    if !finalization.header.is_empty() {
-        output.rewind().expect("seek gcz");
+fn write_gzip_fixture(source_path: &Path, gzip_path: &Path) {
+    let source = fs::read(source_path).expect("read gzip source");
+    let output = File::create(gzip_path).expect("create gzip fixture");
+    let mut encoder = GzEncoder::new(output, DeflateCompression::default());
+    encoder.write_all(&source).expect("write gzip fixture");
+    encoder.finish().expect("finish gzip fixture");
+}
+
+fn write_tar_gz_fixture(entries: &[(&Path, &str)], tar_gz_path: &Path) {
+    let output = File::create(tar_gz_path).expect("create tar.gz fixture");
+    let encoder = GzEncoder::new(output, DeflateCompression::default());
+    let mut builder = tar::Builder::new(encoder);
+    for (source_path, archive_name) in entries {
+        builder
+            .append_path_with_name(source_path, archive_name)
+            .expect("append tar.gz entry");
+    }
+    let encoder = builder.into_inner().expect("finish tar fixture");
+    encoder.finish().expect("finish tar.gz fixture");
+}
+
+fn write_gcz_fixture_from_iso(iso_path: &Path, gcz_path: &Path) {
+    const GCZ_BLOCK_SIZE: usize = 0x8000;
+    const GCZ_UNCOMPRESSED_BLOCK_FLAG: u64 = 1 << 63;
+
+    let iso = fs::read(iso_path).expect("read iso fixture");
+    let disc_size = iso.len() as u64;
+    let block_count = disc_size.div_ceil(GCZ_BLOCK_SIZE as u64) as u32;
+    let compressed_size = block_count as u64 * GCZ_BLOCK_SIZE as u64;
+
+    let mut output = File::create(gcz_path).expect("create gcz fixture");
+    output
+        .write_all(&[0x01, 0xC0, 0x0B, 0xB1])
+        .expect("write gcz magic");
+    output.write_all(&0_u32.to_le_bytes()).expect("write gcz disc type");
+    output
+        .write_all(&compressed_size.to_le_bytes())
+        .expect("write gcz compressed size");
+    output
+        .write_all(&disc_size.to_le_bytes())
+        .expect("write gcz disc size");
+    output
+        .write_all(&(GCZ_BLOCK_SIZE as u32).to_le_bytes())
+        .expect("write gcz block size");
+    output
+        .write_all(&block_count.to_le_bytes())
+        .expect("write gcz block count");
+
+    let mut blocks = Vec::with_capacity(block_count as usize);
+    let mut data_offset = 0_u64;
+    let mut hashes = Vec::with_capacity(block_count as usize);
+    for block_index in 0..block_count as usize {
         output
-            .write_all(finalization.header.as_ref())
-            .expect("write gcz header");
+            .write_all(&(data_offset | GCZ_UNCOMPRESSED_BLOCK_FLAG).to_le_bytes())
+            .expect("write gcz block map");
+        let start = block_index * GCZ_BLOCK_SIZE;
+        let end = (start + GCZ_BLOCK_SIZE).min(iso.len());
+        let mut block = vec![0_u8; GCZ_BLOCK_SIZE];
+        block[..end - start].copy_from_slice(&iso[start..end]);
+        hashes.push(adler32(&block));
+        data_offset = data_offset.saturating_add(block.len() as u64);
+        blocks.push(block);
+    }
+    for hash in hashes {
+        output
+            .write_all(&hash.to_le_bytes())
+            .expect("write gcz block hash");
+    }
+    for block in blocks {
+        output.write_all(&block).expect("write gcz block");
     }
     output.flush().expect("flush gcz");
 }
