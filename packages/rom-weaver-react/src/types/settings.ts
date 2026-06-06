@@ -2,6 +2,8 @@ type PatchFormat = "aps" | "bdf" | "bps" | "ebp" | "ips" | "pmsr" | "ppf" | "rup
 
 type CompressionFormat = "7z" | "chd" | "none" | "rvz" | "z3ds" | "zip";
 
+type DefaultCompression = "auto" | "7z/special" | "zip/special" | "special only" | "7z only" | "zip only" | "none";
+
 type CompressionProfile = "high" | "low" | "max" | "medium" | "min" | "very-high" | "very-low";
 
 type ZipCodec = "deflate" | "store" | "zstd";
@@ -36,11 +38,10 @@ type LoggingSettings = {
 };
 
 type CommonSettings = {
-  defaultArchive?: "7z" | "none" | "zip";
+  defaultCompression?: DefaultCompression;
   input?: InputSettings;
   limits?: DecompressionLimits;
   logging?: LoggingSettings;
-  specialCompression?: boolean;
   storage?: StorageSettings;
   workers?: WorkerSettings;
 };
@@ -103,6 +104,7 @@ export type {
   CompressionSettings,
   CreateSettings,
   DecompressionLimits,
+  DefaultCompression,
   InputSettings,
   LoggingSettings,
   OutputSettings,

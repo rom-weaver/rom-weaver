@@ -17,7 +17,18 @@ type RomWeaverSettingsContextValue = {
 const RomWeaverSettingsContext = createContext<RomWeaverSettingsContextValue>({ settings: {} });
 const APPLY_OUTPUT_COMPRESSION_VALUES = new Set(["auto", "7z", "chd", "none", "rvz", "z3ds", "zip"]);
 const CREATE_OUTPUT_COMPRESSION_VALUES = new Set(["7z", "none", "zip"]);
+const DEFAULT_COMPRESSION_VALUES = new Set([
+  "auto",
+  "7z/special",
+  "zip/special",
+  "special only",
+  "7z only",
+  "zip only",
+  "none",
+]);
 type SettingsRecord = Record<string, RuntimeValue | undefined>;
+type DefaultCompressionMode = NonNullable<ApplyWorkflowSettings["defaultCompression"]>;
+type ArchiveDefaultCompression = "7z" | "none" | "zip";
 type OutputContainerSettings = NonNullable<NonNullable<ApplyWorkflowSettings["output"]>["container"]>;
 type ApplyCompatibilitySettings = NonNullable<ApplyWorkflowSettings["compatibility"]>;
 type ApplyLoggingSettings = NonNullable<ApplyWorkflowSettings["logging"]>;
@@ -77,7 +88,7 @@ const useApplySettings = () => {
   return useMemo(() => toApplyWorkflowSettings(settings as ApplyPatchFormSettings), [settings]);
 };
 
-const normalizeDefaultArchive = (value: RuntimeValue): "7z" | "none" | "zip" => {
+const normalizeLegacyDefaultArchive = (value: RuntimeValue): ArchiveDefaultCompression => {
   const normalized = String(value || "")
     .trim()
     .toLowerCase();
@@ -85,16 +96,51 @@ const normalizeDefaultArchive = (value: RuntimeValue): "7z" | "none" | "zip" => 
   return normalized === "7z" ? "7z" : "zip";
 };
 
+const defaultCompressionFromLegacySettings = (settings: SettingsRecord): DefaultCompressionMode => {
+  const defaultArchive = normalizeLegacyDefaultArchive(settings.defaultArchive);
+  const specialCompression = typeof settings.specialCompression === "boolean" ? settings.specialCompression : true;
+  if (!specialCompression) {
+    if (defaultArchive === "7z") return "7z only";
+    if (defaultArchive === "none") return "none";
+    return "zip only";
+  }
+  if (defaultArchive === "7z") return "7z/special";
+  if (defaultArchive === "none") return "special only";
+  return "zip/special";
+};
+
+const normalizeDefaultCompression = (value: RuntimeValue, fallback: DefaultCompressionMode = "auto") => {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase();
+  return DEFAULT_COMPRESSION_VALUES.has(normalized) ? (normalized as DefaultCompressionMode) : fallback;
+};
+
+const getDefaultCompressionMode = (settings: RuntimeValue | undefined): DefaultCompressionMode => {
+  const source = toRecord(settings);
+  if (source.defaultCompression !== undefined) return normalizeDefaultCompression(source.defaultCompression);
+  return defaultCompressionFromLegacySettings(source);
+};
+
+const getDefaultCompressionArchive = (mode: DefaultCompressionMode): ArchiveDefaultCompression => {
+  if (mode === "7z/special" || mode === "7z only") return "7z";
+  if (mode === "none" || mode === "special only") return "none";
+  return "zip";
+};
+
+const allowsDefaultCompressionSpecial = (mode: DefaultCompressionMode): boolean =>
+  mode === "auto" || mode === "7z/special" || mode === "zip/special" || mode === "special only";
+
 const normalizeCreateOutputCompression = (
   value: RuntimeValue,
-  fallback: RuntimeValue,
+  fallbackMode: DefaultCompressionMode,
 ): NonNullable<CreateWorkflowSettings["output"]>["compression"] => {
   const normalized = String(value || "")
     .trim()
     .toLowerCase();
   if (CREATE_OUTPUT_COMPRESSION_VALUES.has(normalized))
     return normalized as NonNullable<CreateWorkflowSettings["output"]>["compression"];
-  return normalizeDefaultArchive(fallback);
+  return getDefaultCompressionArchive(fallbackMode);
 };
 
 const isRecord = (value: RuntimeValue | undefined): value is SettingsRecord =>
@@ -111,14 +157,13 @@ const readFirstDefined = (...values: Array<RuntimeValue | undefined>) => {
 
 const normalizeApplyOutputCompression = (
   value: RuntimeValue,
-  fallback: RuntimeValue,
-): NonNullable<ApplyWorkflowSettings["output"]>["compression"] => {
+): NonNullable<ApplyWorkflowSettings["output"]>["compression"] | undefined => {
   const normalized = String(value || "")
     .trim()
     .toLowerCase();
   if (APPLY_OUTPUT_COMPRESSION_VALUES.has(normalized))
     return normalized as NonNullable<ApplyWorkflowSettings["output"]>["compression"];
-  return normalizeDefaultArchive(fallback);
+  return undefined;
 };
 
 const normalizeSevenZipCodec = (_value: RuntimeValue): OutputContainerSettings["sevenZipCodec"] => "lzma2";
@@ -151,12 +196,7 @@ const getNormalizedWorkflowSettings = (
     },
     output: {
       ...output,
-      compression: readFirstDefined(
-        output.compression,
-        source.defaultArchive,
-        source.compressionFormat,
-        compressionSettings.format,
-      ),
+      compression: readFirstDefined(output.compression, source.compressionFormat, compressionSettings.format),
       container: {
         ...outputContainer,
         profile: readFirstDefined(outputContainer.profile, source.compressionProfile, compressionSettings.profile) as
@@ -211,17 +251,15 @@ const toApplyWorkflowSettings = (
   workerThreads?: RuntimeValue,
 ): ApplyWorkflowSettings => {
   const normalized = getNormalizedWorkflowSettings(settings, workerThreads);
+  const defaultCompression = getDefaultCompressionMode(settings as RuntimeValue);
   return {
     ...settings,
     compatibility: normalized.compatibility,
-    defaultArchive: normalizeDefaultArchive((settings as SettingsRecord).defaultArchive),
+    defaultCompression,
     logging: normalized.logging,
     output: {
       ...normalized.output,
-      compression: normalizeApplyOutputCompression(
-        normalized.output.compression,
-        (settings as SettingsRecord).defaultArchive,
-      ),
+      compression: normalizeApplyOutputCompression(normalized.output.compression),
     },
     validation: normalized.validation,
     workers: normalized.workers,
@@ -234,16 +272,14 @@ const toCreateWorkflowSettings = (
   workerThreads?: RuntimeValue,
 ): CreateWorkflowSettings => {
   const normalized = getNormalizedWorkflowSettings(settings, workerThreads);
+  const defaultCompression = getDefaultCompressionMode(settings as RuntimeValue);
   return {
     ...settings,
-    defaultArchive: normalizeDefaultArchive((settings as SettingsRecord).defaultArchive),
+    defaultCompression,
     logging: normalized.logging,
     output: {
       ...normalized.output,
-      compression: normalizeCreateOutputCompression(
-        normalized.output.compression,
-        (settings as SettingsRecord).defaultArchive,
-      ),
+      compression: normalizeCreateOutputCompression(normalized.output.compression, defaultCompression),
       outputName,
     },
     workers: normalized.workers,
@@ -265,9 +301,12 @@ const useCreateSettings = () => {
 };
 
 export {
+  allowsDefaultCompressionSpecial,
   getCreateSettingsOutputName,
+  getDefaultCompressionArchive,
+  getDefaultCompressionMode,
   normalizeCreateOutputCompression,
-  normalizeDefaultArchive,
+  normalizeDefaultCompression,
   RomWeaverSettingsProvider,
   toApplyWorkflowSettings,
   toCreateWorkflowSettings,

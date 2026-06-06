@@ -15,8 +15,7 @@ import {
 const LOCAL_STORAGE_SETTINGS_ID = "rom-weaver-settings";
 
 type SettingsState = {
-  defaultArchive: string;
-  specialCompression: boolean;
+  defaultCompression: string;
   language: string;
   logLevel: string;
   fixChecksum: boolean;
@@ -137,8 +136,7 @@ function getDefaultLanguage(): string {
 }
 
 const SETTINGS_FIELD_ORDER = [
-  "defaultArchive",
-  "specialCompression",
+  "defaultCompression",
   "language",
   "logLevel",
   "fixChecksum",
@@ -225,20 +223,24 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     validationLabel: "Level",
     validValues: [...COMPRESSION_PROFILES],
   },
-  defaultArchive: {
-    defaultValue: "zip",
-    id: "settings-default-archive",
-    key: "defaultArchive",
+  defaultCompression: {
+    defaultValue: "auto",
+    id: "settings-default-compression",
+    key: "defaultCompression",
     kind: "select",
-    label: "Default archive",
+    label: "Default compression",
     options: [
-      { label: "Raw", value: "none" },
-      { label: ".zip", value: "zip" },
-      { label: ".7z", value: "7z" },
+      { label: "Auto", value: "auto" },
+      { label: ".7z or special", value: "7z/special" },
+      { label: ".zip or special", value: "zip/special" },
+      { label: "Special only", value: "special only" },
+      { label: ".7z only", value: "7z only" },
+      { label: ".zip only", value: "zip only" },
+      { label: "None", value: "none" },
     ],
-    suggestion: "Default: .zip",
-    validationLabel: "Default archive",
-    validValues: ["none", "zip", "7z"],
+    suggestion: "Default: Auto",
+    validationLabel: "Default compression",
+    validValues: ["auto", "7z/special", "zip/special", "special only", "7z only", "zip only", "none"],
   },
   erudaDevTools: {
     defaultValue: false,
@@ -341,9 +343,7 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     kind: "select",
     label: getSettingsLabel("rvzCompression"),
     labelDataLocalize: "Compression",
-    options: [
-      { label: "zstd", value: "zstd" },
-    ],
+    options: [{ label: "zstd", value: "zstd" }],
     validationLabel: "Compression",
     validValues: ["zstd"],
   },
@@ -378,9 +378,7 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     kind: "select",
     label: getSettingsLabel("sevenZipCodec"),
     labelDataLocalize: "Codec",
-    options: [
-      { label: "LZMA2 (default)", value: "lzma2" },
-    ],
+    options: [{ label: "LZMA2 (default)", value: "lzma2" }],
     validationLabel: "Codec",
     validValues: [...SEVEN_ZIP_COMPRESSION_METHODS],
   },
@@ -399,16 +397,6 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     suggestion: "Optional override. Blank uses the compression profile. Valid values: 0-9.",
     suggestionDataLocalize: "Optional override. Blank uses the compression profile. Valid values: 0-9.",
     validationLabel: "7z compression level override",
-  },
-  specialCompression: {
-    defaultValue: true,
-    id: "settings-special-compression",
-    key: "specialCompression",
-    kind: "checkbox",
-    label: "Use Special Compression (rvz, chd, z3ds, etc)",
-    suggestion:
-      "When enabled, special output formats like CHD, RVZ, and Z3DS are chosen automatically when the input supports them.",
-    validationLabel: "Special compression",
   },
   workerThreads: {
     defaultValue: "auto",
@@ -509,6 +497,7 @@ const LANGUAGE_OPTIONS = Array.isArray(SETTINGS_FIELD_METADATA.language.options)
   : [];
 const SETTINGS_VALID_LANGUAGES = getSettingsChoiceValues("language");
 const SETTINGS_VALID_LOG_LEVELS = getSettingsChoiceValues("logLevel");
+const SETTINGS_VALID_DEFAULT_COMPRESSION = getSettingsChoiceValues("defaultCompression");
 const SETTINGS_VALID_OUTPUT_COMPRESSION = getSettingsChoiceValues("compressionFormat");
 const SETTINGS_VALID_CHD_OUTPUT_MODES = getSettingsChoiceValues("chdOutputMode");
 const SETTINGS_VALID_CHD_CREATECD_CODECS = getSettingsChoiceValues("chdCreateCdCodecs");
@@ -559,15 +548,29 @@ const resolveSettingsFieldBooleanValue = (
   return typeof value === "function" ? value({ settings, uiState }) : value;
 };
 
-const getSettingsUiState = (source: SettingsDraftState): SettingsUiState => ({
-  chdEnabled: source.compressionFormat === "auto" || source.compressionFormat === "chd",
-  compressionProfileIndex: getCompressionProfileIndex(SETTINGS_VALID_COMPRESSION_PROFILES, source.compressionProfile),
-  compressionProfileLabel: getCompressionProfileLabel(source.compressionProfile),
-  rvzEnabled: source.compressionFormat === "auto" || source.compressionFormat === "rvz",
-  sevenZipEnabled: source.compressionFormat === "auto" || source.compressionFormat === "7z",
-  workerThreadsEnabled: canUseThreadedWasm(),
-  zipEnabled: source.compressionFormat === "auto" || source.compressionFormat === "zip",
-});
+const getSettingsUiState = (source: SettingsDraftState): SettingsUiState => {
+  const defaultCompression = normalizeChoiceSetting(
+    source.defaultCompression,
+    SETTINGS_VALID_DEFAULT_COMPRESSION,
+    "auto",
+  );
+  const specialEnabled =
+    defaultCompression === "auto" ||
+    defaultCompression === "7z/special" ||
+    defaultCompression === "zip/special" ||
+    defaultCompression === "special only";
+  return {
+    chdEnabled: specialEnabled || source.compressionFormat === "chd",
+    compressionProfileIndex: getCompressionProfileIndex(SETTINGS_VALID_COMPRESSION_PROFILES, source.compressionProfile),
+    compressionProfileLabel: getCompressionProfileLabel(source.compressionProfile),
+    rvzEnabled: specialEnabled || source.compressionFormat === "rvz",
+    sevenZipEnabled:
+      defaultCompression === "auto" || defaultCompression === "7z/special" || defaultCompression === "7z only",
+    workerThreadsEnabled: canUseThreadedWasm(),
+    zipEnabled:
+      defaultCompression === "auto" || defaultCompression === "zip/special" || defaultCompression === "zip only",
+  };
+};
 
 const getSettingsFieldPlaceholder = (
   fieldKey: SettingsFieldKey,
@@ -663,6 +666,7 @@ export {
   SETTINGS_VALID_CHD_CREATEDVD_CODECS,
   SETTINGS_VALID_CHD_OUTPUT_MODES,
   SETTINGS_VALID_COMPRESSION_PROFILES,
+  SETTINGS_VALID_DEFAULT_COMPRESSION,
   SETTINGS_VALID_LANGUAGES,
   SETTINGS_VALID_LOG_LEVELS,
   SETTINGS_VALID_OUTPUT_COMPRESSION,

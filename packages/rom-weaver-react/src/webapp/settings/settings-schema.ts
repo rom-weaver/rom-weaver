@@ -74,7 +74,6 @@ const storedStringSchema = v.string();
 const storedBooleanSchema = v.boolean();
 const storedStringOrNumberSchema = v.union([v.string(), v.number()]);
 const BOOLEAN_SETTINGS_FIELDS = [
-  "specialCompression",
   "fixChecksum",
   "rvzScrub",
   "erudaDevTools",
@@ -84,7 +83,7 @@ const HIDDEN_DEFAULT_SETTINGS_FIELDS = [
   "chdOutputMode",
 ] as const satisfies readonly SettingsFieldKey[];
 const ALWAYS_VALIDATE_CHOICE_FIELDS = [
-  "defaultArchive",
+  "defaultCompression",
   "language",
   "logLevel",
   "compressionProfile",
@@ -134,6 +133,28 @@ const normalizeChoiceField = <K extends SettingsFieldKey>(
   fallback: SettingsState[K],
 ): SettingsState[K] =>
   normalizeChoiceSetting(value, getFieldChoiceValues(fieldKey), String(fallback)) as SettingsState[K];
+
+const normalizeLegacyDefaultArchive = (value: unknown): "7z" | "none" | "zip" => {
+  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (normalized === "7z" || normalized === "none") return normalized;
+  return "zip";
+};
+
+const defaultCompressionFromLegacySettings = (
+  defaultArchiveValue: unknown,
+  specialCompressionValue: unknown,
+): SettingsState["defaultCompression"] => {
+  const defaultArchive = normalizeLegacyDefaultArchive(defaultArchiveValue);
+  const specialCompression = typeof specialCompressionValue === "boolean" ? specialCompressionValue : true;
+  if (!specialCompression) {
+    if (defaultArchive === "7z") return "7z only";
+    if (defaultArchive === "none") return "none";
+    return "zip only";
+  }
+  if (defaultArchive === "7z") return "7z/special";
+  if (defaultArchive === "none") return "special only";
+  return "zip/special";
+};
 
 const normalizeCodecSetting = (
   fieldKey: SettingsFieldKey,
@@ -456,6 +477,7 @@ const readGroupedStoredSettings = (source: Record<string, unknown>): Record<stri
     chdCreateDvdCodecs: compression.chdCreateDvdCodecs,
     compressionProfile: compression.profile,
     defaultArchive: commonSettings.defaultArchive,
+    defaultCompression: commonSettings.defaultCompression,
     erudaDevTools: commonSettings.erudaDevTools,
     fixChecksum: patch.fixChecksum,
     language: commonSettings.language,
@@ -514,12 +536,20 @@ const loadSettings = (storage?: StorageLike): SettingsState => {
     const logLevel = readStoredField(storedStringSchema, loadedSettings.logLevel);
     if (logLevel !== undefined) settings.logLevel = normalizeChoiceField("logLevel", logLevel, settings.logLevel);
 
-    const defaultArchive = readStoredField(storedStringSchema, loadedSettings.defaultArchive);
-    if (defaultArchive !== undefined)
-      settings.defaultArchive = normalizeChoiceField("defaultArchive", defaultArchive, settings.defaultArchive);
-
-    const specialCompression = readStoredField(storedBooleanSchema, loadedSettings.specialCompression);
-    if (specialCompression !== undefined) settings.specialCompression = specialCompression;
+    const defaultCompression = readStoredField(storedStringSchema, loadedSettings.defaultCompression);
+    if (defaultCompression === undefined) {
+      const defaultArchive = readStoredField(storedStringSchema, loadedSettings.defaultArchive);
+      const specialCompression = readStoredField(storedBooleanSchema, loadedSettings.specialCompression);
+      if (defaultArchive !== undefined || specialCompression !== undefined) {
+        settings.defaultCompression = defaultCompressionFromLegacySettings(defaultArchive, specialCompression);
+      }
+    } else {
+      settings.defaultCompression = normalizeChoiceField(
+        "defaultCompression",
+        defaultCompression,
+        settings.defaultCompression,
+      );
+    }
 
     const fixChecksum = readStoredField(storedBooleanSchema, loadedSettings.fixChecksum);
     if (fixChecksum !== undefined) settings.fixChecksum = fixChecksum;
@@ -642,7 +672,7 @@ const serializeSettingsForStorage = (source?: SettingsState | null): string | nu
     version: SETTINGS_STORAGE_VERSION,
   };
   const storeSetting = <K extends SettingsFieldKey>(fieldKey: K, value: SettingsState[K]) => {
-    if (fieldKey === "defaultArchive" || fieldKey === "specialCompression") {
+    if (fieldKey === "defaultCompression") {
       (storedSettings.common as Record<string, unknown>)[fieldKey] = value;
       return;
     }
@@ -753,7 +783,7 @@ const buildSettingsForWebapp = (source?: SettingsState | null, extraSettings?: R
       chdOutputMode: getSettingsFieldDefaultValue("chdOutputMode"),
       compressionFormat: getSettingsFieldDefaultValue("compressionFormat"),
       compressionProfile: settings.compressionProfile,
-      defaultArchive: settings.defaultArchive,
+      defaultCompression: settings.defaultCompression,
       fixChecksum: settings.fixChecksum,
       language: settings.language,
       logLevel: settings.logLevel,
@@ -765,7 +795,6 @@ const buildSettingsForWebapp = (source?: SettingsState | null, extraSettings?: R
       rvzScrub: settings.rvzScrub,
       sevenZipCodec: settings.sevenZipCodec,
       sevenZipLevel: compressionLevels.sevenZipLevel,
-      specialCompression: settings.specialCompression,
       workerThreads: settings.workerThreads,
       z3dsCompressionLevel: compressionLevels.z3dsCompressionLevel,
       zipCodec: settings.zipCodec,
@@ -787,9 +816,18 @@ const normalizeRuntimeSharedSettingsSource = (source?: Record<string, unknown> |
 
   if (typeof source.language === "string")
     settings.language = normalizeChoiceField("language", source.language, settings.language);
-  if (typeof source.defaultArchive === "string")
-    settings.defaultArchive = normalizeChoiceField("defaultArchive", source.defaultArchive, settings.defaultArchive);
-  if (typeof source.specialCompression === "boolean") settings.specialCompression = source.specialCompression;
+  if (typeof source.defaultCompression === "string") {
+    settings.defaultCompression = normalizeChoiceField(
+      "defaultCompression",
+      source.defaultCompression,
+      settings.defaultCompression,
+    );
+  } else if (typeof source.defaultArchive === "string" || typeof source.specialCompression === "boolean") {
+    settings.defaultCompression = defaultCompressionFromLegacySettings(
+      source.defaultArchive,
+      source.specialCompression,
+    );
+  }
   if (typeof source.logLevel === "string")
     settings.logLevel = normalizeChoiceField("logLevel", source.logLevel, settings.logLevel);
   if (typeof source.fixChecksum === "boolean") settings.fixChecksum = source.fixChecksum;

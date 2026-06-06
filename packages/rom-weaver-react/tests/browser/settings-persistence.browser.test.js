@@ -4,6 +4,7 @@ import {
   LOCAL_STORAGE_SETTINGS_ID,
   loadSettings,
   SETTINGS_PANEL_FIELD_ORDER,
+  SETTINGS_STORAGE_VERSION,
   serializeSettingsForStorage,
 } from "../../src/webapp/settings/settings-state.ts";
 
@@ -22,7 +23,7 @@ test("settings persistence round-trips every visible settings field", () => {
     chdCreateCdCodecs: "cdzs:5,cdlz:6,cdfl:7",
     chdCreateDvdCodecs: "zstd:12,lzma:7,zlib:6,huff,flac:5",
     compressionProfile: "medium",
-    defaultArchive: "7z",
+    defaultCompression: "7z only",
     erudaDevTools: true,
     fixChecksum: true,
     language: "fr",
@@ -35,7 +36,6 @@ test("settings persistence round-trips every visible settings field", () => {
     rvzScrub: true,
     sevenZipCodec: "lzma2",
     sevenZipLevel: 8,
-    specialCompression: false,
     workerThreads: 2,
     z3dsCompressionLevel: 12,
     zipCodec: "zstd",
@@ -46,8 +46,7 @@ test("settings persistence round-trips every visible settings field", () => {
   expect(serializedSettings).not.toBeNull();
 
   const storedSettings = JSON.parse(serializedSettings);
-  expect(storedSettings.common.defaultArchive).toBe("7z");
-  expect(storedSettings.common.specialCompression).toBe(false);
+  expect(storedSettings.common.defaultCompression).toBe("7z only");
 
   const storage = createMemoryStorage();
   storage.setItem(LOCAL_STORAGE_SETTINGS_ID, serializedSettings);
@@ -63,4 +62,20 @@ test("settings persistence round-trips every visible settings field", () => {
   );
 
   expect(roundTrippedFields).toEqual(expectedFields);
+});
+
+test("legacy default archive settings load as default compression modes", () => {
+  const storage = createMemoryStorage();
+  storage.setItem(
+    LOCAL_STORAGE_SETTINGS_ID,
+    JSON.stringify({
+      common: {
+        defaultArchive: "7z",
+        specialCompression: false,
+      },
+      version: SETTINGS_STORAGE_VERSION,
+    }),
+  );
+
+  expect(loadSettings(storage).defaultCompression).toBe("7z only");
 });

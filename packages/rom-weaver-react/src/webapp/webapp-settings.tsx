@@ -41,7 +41,7 @@ const settingsPanelSections: Array<{ fields: SettingsFieldKey[]; title: string }
   { fields: ["language", "logLevel", "erudaDevTools"], title: "General" },
   { fields: ["fixChecksum"], title: "Fixes" },
   { fields: ["requireInputChecksumMatch", "requireOutputChecksumMatch"], title: "Verification" },
-  { fields: ["defaultArchive", "specialCompression", "compressionProfile", "workerThreads"], title: "Compression" },
+  { fields: ["defaultCompression", "compressionProfile", "workerThreads"], title: "Compression" },
   { fields: ["zipCodec", "zipLevel"], title: "ZIP" },
   { fields: ["sevenZipCodec", "sevenZipLevel"], title: "7z" },
   { fields: ["rvzCompression", "rvzCompressionLevel", "rvzBlockSize"], title: "RVZ" },
