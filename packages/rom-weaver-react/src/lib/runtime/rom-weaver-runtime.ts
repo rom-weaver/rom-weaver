@@ -8,6 +8,7 @@ import type {
   RomWeaverRunJsonEvent,
   ThreadBudget,
 } from "rom-weaver-wasm";
+import { getDefaultBrowserThreadCount } from "../../platform/shared/compression-options.ts";
 import { withBrowserOutputStorageFailureContext } from "../../storage/browser/browser-output-storage-guard.ts";
 import {
   formatBrowserStorageEstimateState,
@@ -102,7 +103,11 @@ const toThreadBudget = (value: unknown, fallback: ThreadBudget | null = null): T
   if (typeof value !== "string") return fallback;
   const normalized = value.trim().toLowerCase();
   if (!normalized) return fallback;
-  if (normalized === "auto") return "auto";
+  // Resolve "auto" to the host's core count here instead of forwarding the literal string. The wasm
+  // worker's "auto" fallback is a fixed default (4), so leaving it unresolved would cap the browser
+  // well below the available cores; passing an explicit count lets compress/extract use every core,
+  // matching the resolved value shown by the settings placeholder.
+  if (normalized === "auto") return getDefaultBrowserThreadCount();
   const parsed = Number.parseInt(normalized, 10);
   return Number.isFinite(parsed) && parsed >= 1 ? parsed : fallback;
 };
@@ -1173,7 +1178,11 @@ const readPatchCreateFormatCandidates = (result: RomWeaverRunJsonResult): Runtim
     .filter((value) => !!value);
   const defaultFormat =
     (typeof candidates?.default === "string" ? candidates.default.trim().toLowerCase() : "") ||
-    (terminal ? String(getRomWeaverRunEventFormat(terminal) || "").trim().toLowerCase() : "") ||
+    (terminal
+      ? String(getRomWeaverRunEventFormat(terminal) || "")
+          .trim()
+          .toLowerCase()
+      : "") ||
     formats[0] ||
     "bps";
   const rawLimits = asRecord(candidates?.limits);

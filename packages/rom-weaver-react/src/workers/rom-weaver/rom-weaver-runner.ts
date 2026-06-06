@@ -11,6 +11,7 @@ import browserWasmUrl from "rom-weaver-wasm/rom-weaver-app.wasm?url";
 import { createBrowserWorkerClient } from "rom-weaver-wasm/workers/browser-client";
 import browserRunnerWorkerUrl from "rom-weaver-wasm/workers/browser-runner-worker?worker&url";
 import browserThreadWorkerUrl from "rom-weaver-wasm/workers/browser-wasi-thread-worker?worker&url";
+import { getDefaultBrowserThreadCount } from "../../platform/shared/compression-options.ts";
 import { type BrowserVirtualFile, getActiveBrowserVirtualFiles } from "../protocol/browser-virtual-files.ts";
 import { isBrowserRuntime } from "../shared/runtime-env.ts";
 import { WORKER_OPFS_MOUNTPOINT } from "../shared/worker-storage/storage-layout.ts";
@@ -200,9 +201,11 @@ const resolveBrowserWasmAsset = async (): Promise<BrowserWasmAssetSelection> => 
 };
 
 const normalizeRunnerDefaultThreads = (workerThreads?: RuntimeValue) => {
-  if (workerThreads === undefined || workerThreads === null) return undefined;
+  // Seed the thread-worker warm-up pool with the same count "auto" resolves to at run time
+  // (max(4, hardwareConcurrency)) so the first command does not have to spawn extra worker shells.
+  if (workerThreads === undefined || workerThreads === null) return getDefaultBrowserThreadCount();
   const raw = String(workerThreads).trim();
-  if (!raw || raw.toLowerCase() === "auto") return undefined;
+  if (!raw || raw.toLowerCase() === "auto") return getDefaultBrowserThreadCount();
   const parsed = Number.parseInt(raw, 10);
   if (!Number.isInteger(parsed) || parsed <= 0) return undefined;
   return parsed;
