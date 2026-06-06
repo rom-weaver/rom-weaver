@@ -62,6 +62,17 @@ const PROFILE_LEVEL_MAP: CompressFieldLevelMapRow[] = PROFILE_LABELS.map((profil
   zstd: ZSTD_PROFILE_LEVELS[index] ?? 22,
 }));
 
+const COMPRESSION_PROFILE_FIELD_INFO: CompressFieldInfo = {
+  items: [
+    "This profile controls codec levels unless a codec list includes an explicit codec:level entry.",
+    "The standard column applies to 7z LZMA2, ZIP Deflate, ZIP zstd, zlib, cdlz, and cdzl.",
+    "The zstd column applies to RVZ, z3ds, CHD zstd, and CD zstd.",
+  ],
+  levelMap: PROFILE_LEVEL_MAP,
+  summary: "Profile to numeric compression-level mapping.",
+  title: getSettingsLabel("compressionProfile"),
+};
+
 const FIELD_INFO: Record<string, CompressFieldInfo> = {
   chdCreateCdCodecs: {
     items: [
@@ -79,16 +90,7 @@ const FIELD_INFO: Record<string, CompressFieldInfo> = {
     ],
     title: getSettingsLabel("chdCreateDvdCodecs"),
   },
-  compressionProfile: {
-    items: [
-      "This profile controls codec levels unless a codec list includes an explicit codec:level entry.",
-      "The standard column applies to 7z LZMA2, ZIP Deflate, ZIP zstd, zlib, cdlz, and cdzl.",
-      "The zstd column applies to RVZ, z3ds, CHD zstd, and CD zstd.",
-    ],
-    levelMap: PROFILE_LEVEL_MAP,
-    summary: "Profile to numeric compression-level mapping.",
-    title: getSettingsLabel("compressionProfile"),
-  },
+  compressionProfile: COMPRESSION_PROFILE_FIELD_INFO,
   rvzBlockSize: {
     items: ["Default: 131072.", "Valid values: 1-2147483647."],
     title: getSettingsLabel("rvzBlockSize"),
@@ -106,7 +108,6 @@ const FIELD_INFO: Record<string, CompressFieldInfo> = {
     title: getSettingsLabel("zipCodec"),
   },
 };
-const COMPRESSION_PROFILE_FIELD_INFO = FIELD_INFO.compressionProfile;
 
 const OUTPUT_FORMAT_INFO: CompressFieldInfo = {
   items: [
