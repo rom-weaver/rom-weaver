@@ -81,11 +81,7 @@ const openSyncAccessHandle = async (fileHandle: FileSystemFileHandle): Promise<F
 // FileSystemSyncAccessHandle.write() may write fewer bytes than requested (the spec permits a
 // short count, e.g. under quota pressure). Loop until the whole buffer lands, failing fast if a
 // write makes no forward progress so a partial write can't silently corrupt the staged file.
-const writeAllToSyncAccessHandle = (
-  accessHandle: FileSystemSyncAccessHandle,
-  bytes: Uint8Array,
-  position: number,
-) => {
+const writeAllToSyncAccessHandle = (accessHandle: FileSystemSyncAccessHandle, bytes: Uint8Array, position: number) => {
   let written = 0;
   while (written < bytes.byteLength) {
     const chunk = written === 0 ? bytes : bytes.subarray(written);
