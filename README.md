@@ -277,7 +277,7 @@ Known header detection is built into probe/checksum/patch apply flows, including
 
 - input and patch paths both support auto-extract payload resolution
 - input pre-validation via `--validate-with-checksum ALGO=HEX`
-- cache seeding via `--checksum-cache ALGO=HEX`
+- trusted checksum hints via `--checksum-cache ALGO=HEX`
 - header operations: `--strip-header`, `--add-header`
 - post-apply repair: `--repair-checksum`
 - default-on output compression

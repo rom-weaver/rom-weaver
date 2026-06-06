@@ -12,9 +12,7 @@ use std::{
 #[cfg(not(target_arch = "wasm32"))]
 use clap::{ArgAction, Args, Subcommand, ValueEnum};
 use rom_weaver_checksum::checksum_reader_values_with_progress;
-use rom_weaver_checksum::{
-    NativeChecksumEngine, checksum_file_values, seed_checksum_file_cache, supported_algorithms,
-};
+use rom_weaver_checksum::{NativeChecksumEngine, checksum_file_values, supported_algorithms};
 use rom_weaver_codecs::{CanonicalCodec, RequestedCodec, parse_requested_codec};
 use rom_weaver_containers::{CompressFormatRecommendation, ContainerRegistry};
 use rom_weaver_core::{
@@ -762,7 +760,7 @@ pub struct PatchApplyCommand {
         arg(
             long = "checksum-cache",
             value_name = "ALGO=HEX",
-            help = "Seed effective patch input checksum cache before apply; repeat for multiple algorithms (for example: --checksum-cache crc32=1234abcd)"
+            help = "Provide trusted effective patch input checksum values for validation without recomputing; repeat for multiple algorithms (for example: --checksum-cache crc32=1234abcd)"
         )
     )]
     #[serde(default)]
@@ -895,7 +893,7 @@ pub struct PatchValidateCommand {
         arg(
             long = "checksum-cache",
             value_name = "ALGO=HEX",
-            help = "Seed effective patch input checksum cache before validation; repeat for multiple algorithms (for example: --checksum-cache crc32=1234abcd)"
+            help = "Provide trusted effective patch input checksum values for validation without recomputing; repeat for multiple algorithms (for example: --checksum-cache crc32=1234abcd)"
         )
     )]
     #[serde(default)]

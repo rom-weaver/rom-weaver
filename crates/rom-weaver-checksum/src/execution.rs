@@ -701,17 +701,6 @@ fn map_range(source: &Path, range: &ResolvedRange) -> Option<MappedRange> {
     Some(MappedRange { bytes })
 }
 
-fn cache_hit_execution(budget: ThreadBudget) -> ThreadExecution {
-    ThreadExecution {
-        requested_threads: budget.requested_threads(),
-        effective_threads: 1,
-        thread_mode: budget.mode(),
-        used_parallelism: false,
-        thread_fallback: false,
-        thread_fallback_reason: None,
-    }
-}
-
 fn tuned_chunk_size(range_len: u64, worker_count: usize) -> usize {
     let worker_count = worker_count.max(1) as u64;
     let suggested = (range_len / (worker_count * TARGET_CHUNKS_PER_WORKER)).max(1);

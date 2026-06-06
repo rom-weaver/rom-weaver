@@ -554,33 +554,6 @@ impl CliApp {
             } else {
                 resolved_input.clone()
             };
-            if !cached_input_checksums.is_empty() {
-                self.emit_running(
-                    OperationLabel {
-                        command: "patch-apply",
-                        family: OperationFamily::Patch,
-                        format: None,
-                    },
-                    "prepare",
-                    format!(
-                        "seeding {} requested input checksum cache value(s)",
-                        cached_input_checksums.len()
-                    ),
-                    None,
-                    Some(context.plan_threads(ThreadCapability::single_threaded())),
-                );
-                if let Err(error) =
-                    seed_checksum_file_cache(&apply_input, &cached_input_checksums, &context)
-                {
-                    return OperationReport::failed(
-                        OperationFamily::Patch,
-                        None,
-                        "prepare",
-                        error.to_string(),
-                        Some(context.plan_threads(ThreadCapability::single_threaded())),
-                    );
-                }
-            }
             if !expected_input_checksums.is_empty() {
                 self.emit_running(
                     OperationLabel {
@@ -599,6 +572,7 @@ impl CliApp {
                 match Self::validate_patch_apply_expected_checksums(
                     &apply_input,
                     &expected_input_checksums,
+                    &cached_input_checksums,
                     "input",
                     &context,
                 ) {
@@ -1446,33 +1420,6 @@ impl CliApp {
                     }
                 }
             }
-            if !cached_input_checksums.is_empty() {
-                self.emit_running(
-                    OperationLabel {
-                        command: "patch-validate",
-                        family: OperationFamily::Patch,
-                        format: None,
-                    },
-                    "prepare",
-                    format!(
-                        "seeding {} requested input checksum cache value(s)",
-                        cached_input_checksums.len()
-                    ),
-                    None,
-                    Some(context.plan_threads(ThreadCapability::single_threaded())),
-                );
-                if let Err(error) =
-                    seed_checksum_file_cache(&validate_input, &cached_input_checksums, &context)
-                {
-                    return OperationReport::failed(
-                        OperationFamily::Patch,
-                        None,
-                        "prepare",
-                        error.to_string(),
-                        Some(context.plan_threads(ThreadCapability::single_threaded())),
-                    );
-                }
-            }
             if !expected_input_checksums.is_empty() {
                 self.emit_running(
                     OperationLabel {
@@ -1491,6 +1438,7 @@ impl CliApp {
                 match Self::validate_patch_apply_expected_checksums(
                     &validate_input,
                     &expected_input_checksums,
+                    &cached_input_checksums,
                     "input",
                     &context,
                 ) {
@@ -2062,6 +2010,7 @@ impl CliApp {
     fn validate_patch_apply_expected_checksums(
         source: &Path,
         expected: &BTreeMap<String, String>,
+        checksum_hints: &BTreeMap<String, String>,
         scope: &str,
         context: &OperationContext,
     ) -> Result<String> {
@@ -2069,10 +2018,19 @@ impl CliApp {
             return Ok(String::new());
         }
 
-        let algorithms = expected.keys().map(String::as_str).collect::<Vec<&str>>();
-        let actual = checksum_file_values(source, &algorithms, context)?;
+        let algorithms = expected
+            .keys()
+            .filter(|algorithm| !checksum_hints.contains_key(*algorithm))
+            .map(String::as_str)
+            .collect::<Vec<&str>>();
+        let actual = if algorithms.is_empty() {
+            BTreeMap::new()
+        } else {
+            checksum_file_values(source, &algorithms, context)?
+        };
         for (algorithm, expected_value) in expected {
-            let Some(actual_value) = actual.get(algorithm) else {
+            let Some(actual_value) = checksum_hints.get(algorithm).or_else(|| actual.get(algorithm))
+            else {
                 return Err(RomWeaverError::Validation(format!(
                     "checksum engine did not return `{algorithm}` while validating {scope} checksums"
                 )));

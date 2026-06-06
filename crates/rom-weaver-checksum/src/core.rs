@@ -2,9 +2,8 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     fmt::Write as _,
     fs::{self, File},
-    io::{self, BufReader, Read, Seek, SeekFrom, Write},
-    path::{Path, PathBuf},
-    time::{SystemTime, UNIX_EPOCH},
+    io::{self, Read, Seek, SeekFrom},
+    path::Path,
 };
 
 #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
@@ -22,10 +21,9 @@ use md5::{Digest as Md5Digest, Md5};
 use rayon::prelude::*;
 use rom_weaver_core::{
     CancellationToken, ChecksumCapabilities, ChecksumEngine, ChecksumRequest, OperationContext,
-    OperationFamily, OperationReport, Result, RomWeaverError, SharedThreadPool, ThreadBudget,
-    ThreadCapability, ThreadExecution,
+    OperationFamily, OperationReport, Result, RomWeaverError, SharedThreadPool, ThreadCapability,
+    ThreadExecution,
 };
-use serde::{Deserialize, Serialize};
 use sha1::Sha1;
 use sha2::{Digest as Sha2Digest, Sha256};
 use tracing::trace;
@@ -33,8 +31,6 @@ use tracing::trace;
 const SUPPORTED_ALGORITHMS: &[&str] = &[
     "crc32", "md5", "sha1", "sha256", "blake3", "crc32c", "crc16", "adler32",
 ];
-const CACHE_SCHEMA_VERSION: u32 = 1;
-const CACHE_DIR_NAME: &str = "cache/checksums-v1";
 const MAX_EAGER_MAP_RANGE_BYTES: u64 = 32 * 1024 * 1024;
 const MIN_CHUNK_SIZE: usize = 256 * 1024;
 const MAX_CHUNK_SIZE: usize = 4 * 1024 * 1024;
@@ -66,7 +62,6 @@ pub struct NativeChecksumEngine;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ChecksumValues {
     pub execution: ThreadExecution,
-    pub cached_count: usize,
     pub values: BTreeMap<String, String>,
 }
 
@@ -438,7 +433,7 @@ impl NativeChecksumEngine {
             OperationFamily::Checksum,
             Some(self.name().to_string()),
             stage,
-            render_label(&algorithms, &computed.values, &range, computed.cached_count),
+            render_label(&algorithms, &computed.values, &range),
             Some(100.0),
             Some(computed.execution),
         ))
@@ -503,30 +498,11 @@ where
 
     Ok(ChecksumValues {
         execution,
-        cached_count: 0,
         values: states
             .into_iter()
             .map(|(algorithm, state)| (algorithm.name().to_string(), state.finalize()))
             .collect(),
     })
-}
-
-pub fn seed_checksum_file_cache(
-    source: &Path,
-    algorithms: &BTreeMap<String, String>,
-    context: &OperationContext,
-) -> Result<()> {
-    if algorithms.is_empty() {
-        return Ok(());
-    }
-
-    let range = ResolvedRange::from_request(source, None, None)?;
-    let fingerprint = SourceFingerprint::from_path(source)?;
-    let cache = ChecksumCache::new(context.temp_root());
-    let mut cached = cache.load(&fingerprint, &range).unwrap_or_default();
-    cached.extend(algorithms.clone());
-    cache.store(&fingerprint, &range, &cached)?;
-    Ok(())
 }
 
 pub fn crc32_bytes(bytes: &[u8]) -> u32 {
@@ -731,32 +707,6 @@ impl ResolvedRange {
     }
 }
 
-#[derive(Clone, Debug)]
-struct SourceFingerprint {
-    canonical_path: PathBuf,
-    file_len: u64,
-    modified_ns: u128,
-}
-
-impl SourceFingerprint {
-    fn from_path(path: &Path) -> Result<Self> {
-        let metadata = fs::metadata(path)?;
-        let canonical_path = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-        let modified_ns = metadata
-            .modified()
-            .ok()
-            .and_then(|modified| modified.duration_since(UNIX_EPOCH).ok())
-            .map(|duration| duration.as_nanos())
-            .unwrap_or_default();
-
-        Ok(Self {
-            canonical_path,
-            file_len: metadata.len(),
-            modified_ns,
-        })
-    }
-}
-
 struct MappedRange {
     bytes: Vec<u8>,
 }
@@ -764,95 +714,6 @@ struct MappedRange {
 impl MappedRange {
     fn bytes(&self) -> &[u8] {
         self.bytes.as_slice()
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct CacheEntry {
-    version: u32,
-    source: String,
-    file_len: u64,
-    modified_ns: u128,
-    start: u64,
-    len: u64,
-    algorithms: BTreeMap<String, String>,
-}
-
-struct ChecksumCache {
-    root: PathBuf,
-}
-
-impl ChecksumCache {
-    fn new(temp_root: &Path) -> Self {
-        Self {
-            root: temp_root.join(CACHE_DIR_NAME),
-        }
-    }
-
-    fn load(
-        &self,
-        fingerprint: &SourceFingerprint,
-        range: &ResolvedRange,
-    ) -> Option<BTreeMap<String, String>> {
-        let path = self.entry_path(fingerprint, range);
-        let reader = BufReader::new(File::open(path).ok()?);
-        let entry = serde_json::from_reader::<_, CacheEntry>(reader).ok()?;
-        if entry.version != CACHE_SCHEMA_VERSION {
-            return None;
-        }
-        Some(entry.algorithms)
-    }
-
-    fn store(
-        &self,
-        fingerprint: &SourceFingerprint,
-        range: &ResolvedRange,
-        algorithms: &BTreeMap<String, String>,
-    ) -> io::Result<()> {
-        fs::create_dir_all(&self.root)?;
-
-        let path = self.entry_path(fingerprint, range);
-        let entry = CacheEntry {
-            version: CACHE_SCHEMA_VERSION,
-            source: fingerprint.canonical_path.display().to_string(),
-            file_len: fingerprint.file_len,
-            modified_ns: fingerprint.modified_ns,
-            start: range.start,
-            len: range.len,
-            algorithms: algorithms.clone(),
-        };
-        let payload = serde_json::to_vec(&entry)?;
-
-        let unique = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|duration| duration.as_nanos())
-            .unwrap_or_default();
-        let temp_path = path.with_extension(format!("{unique}.tmp"));
-        {
-            let mut file = File::create(&temp_path)?;
-            file.write_all(&payload)?;
-        }
-
-        if fs::rename(&temp_path, &path).is_err() {
-            let _ = fs::remove_file(&path);
-            fs::rename(&temp_path, &path)?;
-        }
-        Ok(())
-    }
-
-    fn entry_path(&self, fingerprint: &SourceFingerprint, range: &ResolvedRange) -> PathBuf {
-        let key = format!(
-            "{}\u{0}{}\u{0}{}\u{0}{}\u{0}{}",
-            fingerprint.canonical_path.display(),
-            fingerprint.file_len,
-            fingerprint.modified_ns,
-            range.start,
-            range.len
-        );
-        let mut digest = Sha1::new();
-        digest.update(key.as_bytes());
-        let file_name = format!("{}.json", hex_encode(&digest.finalize()));
-        self.root.join(file_name)
     }
 }
 

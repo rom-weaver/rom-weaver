@@ -37,52 +37,26 @@ where
     );
     let algorithms = resolve_algorithms(&request.algorithms)?;
     let range = ResolvedRange::from_request(&request.source, request.start, request.length)?;
-    let fingerprint = SourceFingerprint::from_path(&request.source)?;
-    let cache = ChecksumCache::new(context.temp_root());
+    if algorithms.is_empty() {
+        return Ok(ChecksumValues {
+            execution: context.plan_threads(ThreadCapability::single_threaded()),
+            values: BTreeMap::new(),
+        });
+    }
 
-    let mut cached_results = cache.load(&fingerprint, &range).unwrap_or_default();
-    let missing_algorithms = algorithms
-        .iter()
-        .copied()
-        .filter(|algorithm| !cached_results.contains_key(algorithm.name()))
-        .collect::<Vec<_>>();
-
-    let cached_count = algorithms.len().saturating_sub(missing_algorithms.len());
+    let plan = plan_checksum(&algorithms, &range);
     trace!(
-    source = %request.source.display(),
-    total_algorithms = algorithms.len(),
-    missing_algorithms = missing_algorithms.len(),
-    cached_algorithms = cached_count,
-    "resolved checksum cache coverage"
+        source = %request.source.display(),
+        mode = ?plan.mode,
+        capability = ?plan.capability,
+        "selected checksum execution plan"
     );
-    let execution = if missing_algorithms.is_empty() {
-        trace!(source = %request.source.display(), "checksum cache hit for all algorithms");
-        cache_hit_execution(context.thread_budget())
-    } else {
-        let plan = plan_checksum(&missing_algorithms, &range);
-        trace!(
-            source = %request.source.display(),
-            mode = ?plan.mode,
-            capability = ?plan.capability,
-            "selected checksum execution plan"
-        );
-        let (execution, computed) = execute_plan(
-            &request.source,
-            &range,
-            &missing_algorithms,
-            context,
-            &plan,
-            on_progress,
-        )?;
-        cached_results.extend(computed);
-        let _ = cache.store(&fingerprint, &range, &cached_results);
-        execution
-    };
+    let (execution, values) =
+        execute_plan(&request.source, &range, &algorithms, context, &plan, on_progress)?;
 
     Ok(ChecksumValues {
         execution,
-        cached_count,
-        values: cached_results,
+        values,
     })
 }
 

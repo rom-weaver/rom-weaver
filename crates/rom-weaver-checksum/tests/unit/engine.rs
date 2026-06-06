@@ -597,7 +597,7 @@ mod tests {
     }
 
     #[test]
-    fn checksum_cache_hits_on_repeat_requests() {
+    fn checksum_requests_do_not_write_on_disk_cache() {
         let temp = TestDir::new();
         let source = temp.path().join("sample.bin");
         fs::write(&source, b"hello world").expect("fixture");
@@ -615,22 +615,27 @@ mod tests {
                 &checksum_context(temp.path(), ThreadBudget::Fixed(4)),
             )
             .expect("first report");
+        let second_context = checksum_context(temp.path(), ThreadBudget::Fixed(4));
         let second = NativeChecksumEngine
             .checksum_file(
                 &request,
-                &checksum_context(temp.path(), ThreadBudget::Fixed(4)),
+                &second_context,
             )
             .expect("second report");
 
         assert!(!first.label.contains("cache=hit"));
-        assert!(second.label.contains("cache=hit"));
-        let execution = second.thread_execution.expect("thread execution");
-        assert_eq!(execution.effective_threads, 1);
-        assert!(!execution.used_parallelism);
+        assert!(!first.label.contains("cache=partial"));
+        assert!(!second.label.contains("cache=hit"));
+        assert!(!second.label.contains("cache=partial"));
+        assert!(
+            !temp.path().join("op/cache/checksums-v1").exists(),
+            "checksum operations should not persist on-disk cache files"
+        );
+        assert!(second.thread_execution.is_some());
     }
 
     #[test]
-    fn checksum_cache_invalidates_when_source_changes() {
+    fn checksum_recomputes_when_source_changes() {
         let temp = TestDir::new();
         let source = temp.path().join("sample.bin");
         fs::write(&source, b"hello world").expect("fixture");
@@ -660,6 +665,7 @@ mod tests {
 
         assert_ne!(first.label, second.label);
         assert!(!second.label.contains("cache=hit"));
+        assert!(!second.label.contains("cache=partial"));
     }
 
     #[test]

@@ -3103,7 +3103,7 @@ fn patch_apply_fails_on_mismatched_validate_with_checksum_value() {
 }
 
 #[test]
-fn patch_apply_uses_checksum_cache_for_validation() {
+fn patch_apply_uses_checksum_cache_hint_for_validation() {
     let temp = setup_temp_dir();
     let original = temp.child("old.bin");
     let modified = temp.child("new.bin");
