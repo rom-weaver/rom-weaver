@@ -192,6 +192,7 @@ function ApplyWorkflowFormView({
                   progress: toWorkflowChecksumProgressProps(checksumProgress),
                   timing: CHECKSUM_TIMING_LABEL(romInput.info.checksumTiming),
                 },
+                showFixes: romInput.kind !== "cue",
                 showInfo: romInput.kind !== "cue",
               },
               removeLabel: romInputs.length > 1 ? "Remove ROM input" : "Clear ROM input",

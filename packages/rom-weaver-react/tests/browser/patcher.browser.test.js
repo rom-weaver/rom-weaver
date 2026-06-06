@@ -789,6 +789,7 @@ test("direct CUE plus BIN upload hides CUE row checksums", async () => {
   await expect.poll(() => getChecksums(getRow("direct-disc.bin")).crc32, { timeout: 30000 }).toMatch(/^[0-9a-f]{8}$/i);
 
   expect(getChecksums(getRow("direct-disc.cue"))).toEqual({ crc32: "", md5: "", sha1: "" });
+  expect(getRow("direct-disc.cue")?.textContent || "").not.toContain("Fixes");
   expect(getChecksums(getRow("direct-disc.bin")).md5).toMatch(/^[0-9a-f]{32}$/i);
   expect(getChecksums(getRow("direct-disc.bin")).sha1).toMatch(/^[0-9a-f]{40}$/i);
 });

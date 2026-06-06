@@ -88,7 +88,10 @@ const Level = ({ level, depth, last }: { level: ExtractionLevel; depth: number; 
   </div>
 );
 
+const isCueLevel = (level: ExtractionLevel) => /\.cue$/i.test(level.name);
+
 const formatRatio = (first: ExtractionLevel, last: ExtractionLevel) => {
+  if (isCueLevel(last)) return "";
   if (!(first.sizeBytes && last.sizeBytes)) return "";
   const ratio = Math.round((first.sizeBytes / last.sizeBytes) * 100);
   return Number.isFinite(ratio) ? ` (${ratio}%)` : "";
