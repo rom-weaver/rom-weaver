@@ -2,6 +2,8 @@ const CREATE_PATCH_IPS_SIZE_LIMIT_BYTES: u64 = 16 * 1024 * 1024;
 const CREATE_PATCH_ARCHIVE_DEFAULT_LIMIT_BYTES: u64 = 64 * 1024 * 1024;
 const CREATE_PATCH_BPS_DEFAULT_LIMIT_BYTES: u64 = 128 * 1024 * 1024;
 const CREATE_PATCH_LEGACY_SIZE_LIMIT_BYTES: u64 = 256 * 1024 * 1024;
+const CREATE_PATCH_DEFAULT_FORMAT: &str = "bps";
+const CREATE_PATCH_LARGE_DEFAULT_FORMAT: &str = "xdelta";
 
 const SMALL_CREATE_PATCH_FORMATS: &[&str] = &[
     "bps", "xdelta", "aps", "bdf", "ebp", "ips", "pmsr", "ppf", "rup", "ups",
@@ -71,6 +73,44 @@ const LIBRETRO_PATCH_ORDER_EXTENSIONS: &[&str] = &[
     ".ips", ".ups", ".bps", ".aps", ".rup", ".ppf", ".ebp", ".bdf", ".bsp",
     ".bspatch", ".mod", ".xdelta", ".delta", ".dat", ".vcdiff",
 ];
+const CREATE_PATCH_FORMAT_ALIASES: &[(&str, &str)] = &[
+    ("vcdiff", "xdelta"),
+    ("xdelta3", "xdelta"),
+    ("mod", "pmsr"),
+    ("bdf/bsdiff40", "bdf"),
+    ("bsdiff", "bdf"),
+    ("bsdiff40", "bdf"),
+];
+
+pub struct PatchCreateFormatPolicyMetadata {
+    pub archive_default_size_limit_bytes: u64,
+    pub bps_default_size_limit_bytes: u64,
+    pub default_format: &'static str,
+    pub ips_size_limit_bytes: u64,
+    pub large_default_format: &'static str,
+    pub legacy_size_limit_bytes: u64,
+    pub aliases: &'static [(&'static str, &'static str)],
+    pub small_formats: &'static [&'static str],
+    pub medium_formats: &'static [&'static str],
+    pub mid_large_formats: &'static [&'static str],
+    pub large_formats: &'static [&'static str],
+}
+
+pub fn patch_create_format_policy_metadata() -> PatchCreateFormatPolicyMetadata {
+    PatchCreateFormatPolicyMetadata {
+        archive_default_size_limit_bytes: CREATE_PATCH_ARCHIVE_DEFAULT_LIMIT_BYTES,
+        bps_default_size_limit_bytes: CREATE_PATCH_BPS_DEFAULT_LIMIT_BYTES,
+        default_format: CREATE_PATCH_DEFAULT_FORMAT,
+        ips_size_limit_bytes: CREATE_PATCH_IPS_SIZE_LIMIT_BYTES,
+        large_default_format: CREATE_PATCH_LARGE_DEFAULT_FORMAT,
+        legacy_size_limit_bytes: CREATE_PATCH_LEGACY_SIZE_LIMIT_BYTES,
+        aliases: CREATE_PATCH_FORMAT_ALIASES,
+        small_formats: SMALL_CREATE_PATCH_FORMATS,
+        medium_formats: MEDIUM_CREATE_PATCH_FORMATS,
+        mid_large_formats: MID_LARGE_CREATE_PATCH_FORMATS,
+        large_formats: LARGE_CREATE_PATCH_FORMATS,
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct PatchCreateInputSizes {
@@ -111,11 +151,12 @@ struct PatchCreateFormatCandidates {
 
 fn normalize_create_patch_format(format: &str) -> String {
     let normalized = format.trim().to_ascii_lowercase();
-    match normalized.as_str() {
-        "vcdiff" | "xdelta3" => "xdelta".to_string(),
-        "mod" => "pmsr".to_string(),
-        "bdf/bsdiff40" | "bsdiff" | "bsdiff40" => "bdf".to_string(),
-        other => other.to_string(),
+    match CREATE_PATCH_FORMAT_ALIASES
+        .iter()
+        .find(|(alias, _canonical)| normalized == *alias)
+    {
+        Some((_alias, canonical)) => (*canonical).to_string(),
+        None => normalized,
     }
 }
 
@@ -158,13 +199,13 @@ fn create_patch_default_format_for_sources(info: &PatchCreateInputInfo) -> &'sta
             source.archive && source.size > CREATE_PATCH_ARCHIVE_DEFAULT_LIMIT_BYTES
         })
     {
-        return "xdelta";
+        return CREATE_PATCH_LARGE_DEFAULT_FORMAT;
     }
     if max_create_patch_input_size(create_patch_input_sizes(info)) < CREATE_PATCH_BPS_DEFAULT_LIMIT_BYTES
     {
-        "bps"
+        CREATE_PATCH_DEFAULT_FORMAT
     } else {
-        "xdelta"
+        CREATE_PATCH_LARGE_DEFAULT_FORMAT
     }
 }
 

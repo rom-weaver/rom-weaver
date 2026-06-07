@@ -1,3 +1,5 @@
+import { ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY } from "rom-weaver-wasm/format-metadata";
+
 import type { CreateWorkflowParentCompression, CreateWorkflowSourceState } from "../../types/create-workflow.ts";
 import type { WorkflowProgress } from "../../types/progress.ts";
 import type { CreateResult, SelectedInputInfo } from "../../types/public.ts";
@@ -67,19 +69,9 @@ type InternalSourceState = {
 type StagedSource<TSource> = SharedRomStagedSource<TSource, InternalSourceState>;
 type SourceSession<TSource> = SharedRomSourceSession<TSource, InternalSourceState>;
 
-const SUPPORTED_CREATE_PATCH_TYPES = new Set<PatchFormat | string>([
-  "aps",
-  "bdf",
-  "bps",
-  "ebp",
-  "ips",
-  "pmsr",
-  "ppf",
-  "rup",
-  "ups",
-  "vcdiff",
-  "xdelta",
-]);
+const SUPPORTED_CREATE_PATCH_TYPES = new Set<PatchFormat | string>(
+  ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.supportedCreateFormats,
+);
 const CREATE_OUTPUT_FORMATS = new Set(["7z", "none", "zip"]);
 
 const cloneSourceState = (state: InternalSourceState | null | undefined) =>

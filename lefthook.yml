@@ -5,6 +5,8 @@ pre-commit:
       run: cargo fmt --check
     rust-clippy:
       run: cargo clippy --workspace --all-targets -- -D warnings
+    rust-typegen:
+      run: cargo run -p rom-weaver-typegen -- --check
     wasm-threaded-check:
       run: 'RUSTFLAGS="${RUSTFLAGS:-} -D warnings" scripts/wasm/with-wasi-env.sh cargo check -p rom-weaver-containers --target wasm32-wasip1-threads --lib'
     whitespace:

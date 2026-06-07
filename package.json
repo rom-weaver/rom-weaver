@@ -6,7 +6,9 @@
     "prepare": "lefthook install",
     "hooks:install": "lefthook install",
     "hooks:run": "lefthook run pre-commit --force",
-    "hooks:validate": "lefthook validate"
+    "hooks:validate": "lefthook validate",
+    "typegen": "cargo run -p rom-weaver-typegen -- --write",
+    "typegen:check": "cargo run -p rom-weaver-typegen -- --check"
   },
   "devDependencies": {
     "lefthook": "2.1.8"

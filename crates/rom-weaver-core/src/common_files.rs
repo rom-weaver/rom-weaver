@@ -1,10 +1,10 @@
-const COMMON_CONTAINER_FILE_EXTENSIONS: &[&str] = &[
+pub const COMMON_CONTAINER_FILE_EXTENSIONS: &[&str] = &[
     ".txt", ".nfo", ".diz", ".rtf", ".doc", ".docx", ".xls", ".xlsx", ".htm", ".html", ".pdf",
     ".jpg", ".jpeg", ".gif", ".png", ".bmp", ".webp", ".sfv", ".md5", ".sha1", ".sha256",
     ".sha512", ".crc", ".log", ".json",
 ];
 
-const PATCH_FILTER_FILE_EXTENSIONS: &[&str] = &[
+pub const PATCH_FILTER_FILE_EXTENSIONS: &[&str] = &[
     ".ips",
     ".ips32",
     ".solid",
@@ -37,7 +37,7 @@ const PATCH_FILTER_FILE_EXTENSIONS: &[&str] = &[
     ".pds",
 ];
 
-const ROM_FILTER_FILE_EXTENSIONS: &[&str] = &[
+pub const ROM_FILTER_FILE_EXTENSIONS: &[&str] = &[
     ".cue",
     ".iso",
     ".img",
@@ -104,7 +104,7 @@ const ROM_FILTER_FILE_EXTENSIONS: &[&str] = &[
     ".xiso.iso",
 ];
 
-const CONTAINER_FILTER_FILE_EXTENSIONS: &[&str] = &[
+pub const CONTAINER_FILTER_FILE_EXTENSIONS: &[&str] = &[
     ".zip",
     ".zipx",
     ".7z",

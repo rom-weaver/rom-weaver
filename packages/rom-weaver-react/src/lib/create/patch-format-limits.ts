@@ -1,3 +1,5 @@
+import { ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY } from "rom-weaver-wasm/format-metadata";
+
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 
 type CreatePatchFormatPreferenceInput = {
@@ -10,42 +12,23 @@ type CreatePatchFormatPreferenceInput = {
 };
 type CreatePatchFormatList = readonly [string, ...string[]];
 
-const CREATE_IPS_SIZE_LIMIT_BYTES = 16 * 1024 * 1024;
-const CREATE_BPS_DEFAULT_LIMIT_BYTES = 128 * 1024 * 1024;
-const CREATE_LEGACY_PATCH_SIZE_LIMIT_BYTES = 256 * 1024 * 1024;
-const CREATE_PATCH_DEFAULT_FORMAT = "bps";
-const CREATE_PATCH_LARGE_DEFAULT_FORMAT = "xdelta";
+const CREATE_IPS_SIZE_LIMIT_BYTES = ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.limits.ipsSizeLimitBytes;
+const CREATE_BPS_DEFAULT_LIMIT_BYTES = ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.limits.bpsDefaultSizeBytes;
+const CREATE_LEGACY_PATCH_SIZE_LIMIT_BYTES = ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.limits.legacySizeLimitBytes;
+const CREATE_PATCH_DEFAULT_FORMAT = ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.defaultFormat;
+const CREATE_PATCH_LARGE_DEFAULT_FORMAT = ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.largeDefaultFormat;
+const CREATE_PATCH_FORMAT_ALIASES = ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.aliases as Readonly<Record<string, string>>;
 
-const SMALL_CREATE_PATCH_FORMATS: CreatePatchFormatList = [
-  "bps",
-  "xdelta",
-  "aps",
-  "bdf",
-  "ebp",
-  "ips",
-  "pmsr",
-  "ppf",
-  "rup",
-  "ups",
-];
-const MEDIUM_CREATE_PATCH_FORMATS: CreatePatchFormatList = ["bps", "xdelta", "aps", "bdf", "pmsr", "ppf", "rup", "ups"];
-const MID_LARGE_CREATE_PATCH_FORMATS: CreatePatchFormatList = [
-  "xdelta",
-  "bps",
-  "aps",
-  "bdf",
-  "pmsr",
-  "ppf",
-  "rup",
-  "ups",
-];
-const LARGE_CREATE_PATCH_FORMATS: CreatePatchFormatList = ["xdelta", "ppf"];
+const SMALL_CREATE_PATCH_FORMATS: CreatePatchFormatList = ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.formats.small;
+const MEDIUM_CREATE_PATCH_FORMATS: CreatePatchFormatList = ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.formats.medium;
+const MID_LARGE_CREATE_PATCH_FORMATS: CreatePatchFormatList = ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.formats.midLarge;
+const LARGE_CREATE_PATCH_FORMATS: CreatePatchFormatList = ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.formats.large;
 
 const normalizeCreatePatchFormat = (format: string | null | undefined) => {
   const normalized = String(format || "")
     .trim()
     .toLowerCase();
-  return normalized === "vcdiff" ? "xdelta" : normalized;
+  return CREATE_PATCH_FORMAT_ALIASES[normalized] || normalized;
 };
 
 const getFiniteCreateSourceSize = (size?: number | null) =>

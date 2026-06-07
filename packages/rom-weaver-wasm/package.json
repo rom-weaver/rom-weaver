@@ -22,6 +22,10 @@
       "types": "./src/index.d.ts",
       "import": "./src/index.mjs"
     },
+    "./format-metadata": {
+      "types": "./src/generated/rom-weaver-format-metadata.ts",
+      "import": "./src/generated/rom-weaver-format-metadata.ts"
+    },
     "./browser-opfs": {
       "types": "./src/rom-weaver-browser-opfs-api.d.ts",
       "import": "./src/rom-weaver-browser-opfs-api.ts"

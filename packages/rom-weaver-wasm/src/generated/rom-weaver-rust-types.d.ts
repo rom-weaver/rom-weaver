@@ -19,7 +19,7 @@ export type CompressionLevelProfile = "min" | "very-low" | "low" | "medium" | "h
 
 export type ProbeCommand = { source: string, select?: Array<string>, rom_filter?: boolean, patch_filter?: boolean, no_extract?: boolean, no_ignore?: boolean, };
 
-export type ListCommand = { source: string, select?: Array<string>, rom_filter?: boolean, patch_filter?: boolean, no_ignore?: boolean, };
+export type ListCommand = { source: string, select?: Array<string>, rom_filter?: boolean, patch_filter?: boolean, no_ignore?: boolean, split_bin?: boolean, };
 
 export type ExtractCommand = { source: string, select?: Array<string>, rom_filter?: boolean, patch_filter?: boolean, out_dir: string, split_bin?: boolean, no_ignore?: boolean, no_nested_extract?: boolean, no_overwrite?: boolean, checksum?: Array<string>, threads?: ThreadBudget, };
 
@@ -31,7 +31,7 @@ export type TrimCommand = { source: Array<string>, output?: string, extension?: 
 
 export type BatchHeaderFixerCommand = { source: Array<string>, output?: string, extension?: string, in_place?: boolean, dry_run?: boolean, recursive?: boolean, threads?: ThreadBudget, };
 
-export type PatchApplyCommand = { input: string, select?: Array<string>, rom_filter?: boolean, patch_filter?: boolean, no_extract?: boolean, no_ignore?: boolean, patches: Array<string>, output: string, no_compress?: boolean, compress_format?: string, compress_codec?: Array<string>, compress_level?: CompressionLevelProfile, checksum_cache?: Array<string>, validate_with_checksums?: Array<string>, strip_header?: boolean, add_header?: boolean, repair_checksum?: boolean, ignore_checksum_validation?: boolean, threads?: ThreadBudget, };
+export type PatchApplyCommand = { input: string, select?: Array<string>, rom_filter?: boolean, patch_filter?: boolean, no_extract?: boolean, no_ignore?: boolean, patches?: Array<string>, output: string, no_compress?: boolean, compress_format?: string, compress_codec?: Array<string>, compress_level?: CompressionLevelProfile, checksum_cache?: Array<string>, validate_with_checksums?: Array<string>, strip_header?: boolean, add_header?: boolean, repair_checksum?: boolean, ignore_checksum_validation?: boolean, validate_with_output_checksums?: Array<string>, ppf_undo_aware?: boolean, threads?: ThreadBudget, };
 
 export type PatchValidateCommand = { input: string, select?: Array<string>, rom_filter?: boolean, patch_filter?: boolean, no_extract?: boolean, no_ignore?: boolean, patches: Array<string>, checksum_cache?: Array<string>, validate_with_checksums?: Array<string>, validate_with_size?: bigint, validate_with_min_size?: bigint, strip_header?: boolean, ignore_checksum_validation?: boolean, threads?: ThreadBudget, };
 

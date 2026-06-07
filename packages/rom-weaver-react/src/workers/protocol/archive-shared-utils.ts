@@ -1,3 +1,5 @@
+import { ROM_WEAVER_FILE_FILTERS } from "rom-weaver-wasm/format-metadata";
+
 import { getFileNameExtension, getFileNameWithoutExtension, stripFileNameQuery } from "../../lib/path-utils.ts";
 import { hasReadableBytes, toUint8Array } from "../../storage/shared/binary/binary-source-utils.ts";
 import type { BlobLike } from "./archive-source-types.ts";
@@ -97,7 +99,13 @@ const WRAPPED_ARCHIVE_TYPE_VALUES = [
 ];
 const WRAPPED_ARCHIVE_TYPES = new Set(WRAPPED_ARCHIVE_TYPE_VALUES);
 
-const FILTER_PATCHES = /\.(ips|ups|bps|aps|rup|ppf|ebp|bdf|bsp|bspatch|mod|xdelta|delta|dat|vcdiff)\d*$/i;
+const REGEX_SPECIAL_CHARACTER_PATTERN = /[\\^$.*+?()[\]{}|]/g;
+const escapeRegexSegment = (value: string) => value.replace(REGEX_SPECIAL_CHARACTER_PATTERN, "\\$&");
+const stripLeadingExtensionDot = (extension: string) => extension.replace(/^\./, "");
+const createPatchFilterRegex = (extensions: readonly string[]) =>
+  new RegExp(`\\.(${extensions.map(stripLeadingExtensionDot).map(escapeRegexSegment).join("|")})\\d*$`, "i");
+
+const FILTER_PATCHES = createPatchFilterRegex(ROM_WEAVER_FILE_FILTERS.patchExtensions);
 const ARCHIVE_EXTENSION_ALIASES: Record<string, string> = {
   a: ARCHIVE_TYPES.AR,
   brotli: ARCHIVE_TYPES.BROTLI,
