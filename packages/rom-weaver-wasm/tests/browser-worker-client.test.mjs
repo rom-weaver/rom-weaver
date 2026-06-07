@@ -1371,9 +1371,9 @@ describe('rom-weaver-wasm browser runner parity', () => {
 
   it('runner typed input normalization rejects invalid command objects', async () => {
     await withTempFixture(async ({ worker }) => {
-      const result = await worker.run({ type: 'definitely-not-a-command', args: {} });
-      expect(result.exitCode).not.toBe(0);
-      expect(result.ok).toBe(false);
+      await expect(
+        worker.run({ type: 'definitely-not-a-command', args: {} }),
+      ).rejects.toThrow(/typed command has unsupported type/i);
 
       await expect(
         worker.run({ args: {} }),
