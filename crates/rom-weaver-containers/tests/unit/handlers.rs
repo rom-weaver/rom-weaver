@@ -2164,9 +2164,9 @@ mod tests {
             let input_path = temp_dir.join("payload.bin");
             let archive_path = temp_dir.join("payload.7z");
             let output_dir = temp_dir.join("out");
-            // 4 MiB so the encoder splits into several seeded LZMA2 blocks and
-            // the size-aware thread cap still reports parallel (> 1).
-            let source_bytes = (0..(4 * 1024 * 1024))
+            // Above the 16 MiB split threshold so the encoder splits into
+            // seeded LZMA2 blocks and the thread cap still reports parallel (>1).
+            let source_bytes = (0..(20 * 1024 * 1024))
                 .map(|index| (index % 251) as u8)
                 .collect::<Vec<_>>();
             fs::write(&input_path, &source_bytes).expect("fixture");
@@ -2297,20 +2297,22 @@ mod tests {
             let archive_path = temp_dir.join("multi.7z");
             let output_dir = temp_dir.join("out");
 
-            // A 1.25 MiB block repeated to 6 MiB: each repeat is further than one
-            // 1 MiB worker block, so the encoder must reference across block
-            // boundaries. That only round-trips byte-for-byte if every later
-            // block's seed (preset) dictionary is wired correctly and the blocks
-            // concatenate into one valid LZMA2 stream (no spurious dict reset).
+            // A 1.25 MiB block repeated to 24 MiB (above the 16 MiB split
+            // threshold): each repeat is further than one worker block, so the
+            // encoder must reference across block boundaries. That only
+            // round-trips byte-for-byte if every later block's seed (preset)
+            // dictionary is wired correctly and the blocks concatenate into one
+            // valid LZMA2 stream (no spurious dict reset).
+            let total_len = 24 * 1024 * 1024;
             let block_len = 1280 * 1024usize;
             let block = (0..block_len)
                 .map(|index| (index.wrapping_mul(2654435761) >> 11) as u8)
                 .collect::<Vec<u8>>();
-            let mut source_bytes = Vec::with_capacity(6 * 1024 * 1024);
-            while source_bytes.len() < 6 * 1024 * 1024 {
+            let mut source_bytes = Vec::with_capacity(total_len);
+            while source_bytes.len() < total_len {
                 source_bytes.extend_from_slice(&block);
             }
-            source_bytes.truncate(6 * 1024 * 1024);
+            source_bytes.truncate(total_len);
             fs::write(&input_path, &source_bytes).expect("fixture");
 
             let registry = ContainerRegistry::new();

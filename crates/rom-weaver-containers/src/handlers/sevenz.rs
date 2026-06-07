@@ -109,21 +109,22 @@ impl SevenZContainerHandler {
     }
 }
 
-/// Smallest LZMA2 worker block; mirrors `LZMA2_MT_MIN_CHUNK_SIZE` in
-/// `archive_write_set_format_7zip.c`.
-const LZMA2_MT_MIN_BLOCK_BYTES: u64 = 1 << 20;
+/// Files at or below this stay single-threaded for best ratio and smooth
+/// progress; mirrors `LZMA2_MT_SPLIT_THRESHOLD` in the C writer.
+const LZMA2_MT_SPLIT_THRESHOLD_BYTES: u64 = 16 << 20;
+/// Smallest parallel block; mirrors `LZMA2_MT_MIN_CHUNK_SIZE` in the C writer.
+const LZMA2_MT_MIN_CHUNK_BYTES: u64 = 1 << 20;
 
 /// Estimate how many LZMA2 worker blocks the 7z encoder will actually run — the
-/// real parallelism ceiling. Because the encoder splits a file into seeded
-/// blocks floored at the minimum chunk, the achievable job count is
-/// `ceil(total / min_block)`; the core budget caps it further. This keeps the
-/// reported `effective_threads` honest instead of advertising every core for a
-/// file that only yields one block. Mirrors the block split in the C writer.
+/// real parallelism ceiling. Files at or below the split threshold run as a
+/// single block; larger files split into `ceil(total / min_chunk)` blocks,
+/// capped further by the core and memory budgets. Keeps the reported
+/// `effective_threads` honest. Mirrors the block split in the C writer.
 fn lzma2_achievable_blocks(total_bytes: u64) -> usize {
-    if total_bytes == 0 {
+    if total_bytes <= LZMA2_MT_SPLIT_THRESHOLD_BYTES {
         return 1;
     }
-    usize::try_from(total_bytes.div_ceil(LZMA2_MT_MIN_BLOCK_BYTES).max(1)).unwrap_or(usize::MAX)
+    usize::try_from(total_bytes.div_ceil(LZMA2_MT_MIN_CHUNK_BYTES).max(1)).unwrap_or(usize::MAX)
 }
 
 fn sum_input_file_bytes(entries: &[ArchiveInputEntry]) -> u64 {
@@ -187,10 +188,11 @@ pub(crate) fn lzma2_threads_for_budget(total_bytes: u64, level: u32, budget_byte
 
 fn lzma2_memory_thread_cap(total_bytes: u64, level: u32) -> usize {
     // On wasm the budget is a slice of the linear-memory ceiling (~2 GiB, never
-    // shrinks), so keep it conservative; native falls back here only when RAM
-    // can't be queried.
+    // shrinks). Workers plus the base heap, thread stacks, and input must stay
+    // under that ceiling, so cap workers at 1 GiB; native falls back here only
+    // when RAM can't be queried.
     #[cfg(target_family = "wasm")]
-    const FALLBACK_BUDGET_BYTES: u64 = 1536 * 1024 * 1024;
+    const FALLBACK_BUDGET_BYTES: u64 = 1024 * 1024 * 1024;
     #[cfg(not(target_family = "wasm"))]
     const FALLBACK_BUDGET_BYTES: u64 = 2 * 1024 * 1024 * 1024;
     // `ROM_WEAVER_7Z_MEM_BUDGET_MB` overrides the auto budget for constrained or
