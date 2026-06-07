@@ -581,3 +581,76 @@ impl NodHandlerCore {
     }
 }
 /* jscpd:ignore-end */
+
+/// Generate an extract-only NOD container handler that forwards every operation to a shared
+/// [`NodHandlerCore`]. The five GameCube/Wii compressed formats (GCZ/WBFS/TGC/NFS/WIA) decode
+/// identically; only the descriptor, [`NodFormat`] variant, and the `create` rejection message
+/// differ.
+///
+/// The four-argument form rejects `create` with the standard "extract-only" message. The
+/// five-argument form takes a `RomWeaverError` expression for formats whose CLI guidance differs
+/// (GCZ points at `--format rvz`; NFS explains it is decompress-only).
+macro_rules! nod_extract_only_handler {
+    ($core:ident, $handler:ident, $descriptor:expr, $format:expr $(,)?) => {
+        nod_extract_only_handler!(
+            $core,
+            $handler,
+            $descriptor,
+            $format,
+            RomWeaverError::Unsupported(format!(
+                "{} is extract-only; supported create formats are 7z, zip, chd, rvz, and z3ds",
+                $descriptor.name
+            ))
+        );
+    };
+    ($core:ident, $handler:ident, $descriptor:expr, $format:expr, $create_error:expr $(,)?) => {
+        const $core: NodHandlerCore = NodHandlerCore::new($descriptor, $format);
+
+        pub(crate) struct $handler;
+
+        impl ContainerHandlerOperations for $handler {
+            fn descriptor(&self) -> &'static FormatDescriptor {
+                $descriptor
+            }
+
+            fn probe(&self, source: &Path) -> ProbeConfidence {
+                $core.probe(source)
+            }
+
+            fn probe_details(
+                &self,
+                request: &ContainerProbeRequest,
+                context: &OperationContext,
+            ) -> Result<OperationReport> {
+                $core.probe_details(request, context)
+            }
+
+            fn list_entries(
+                &self,
+                request: &ContainerProbeRequest,
+                _context: &OperationContext,
+            ) -> Result<Vec<String>> {
+                Ok($core.list_entries(&request.source))
+            }
+
+            fn extract(
+                &self,
+                request: &ContainerExtractRequest,
+                context: &OperationContext,
+            ) -> Result<OperationReport> {
+                $core.extract_with_standard_copy(request, context)
+            }
+
+            fn create(
+                &self,
+                request: &ContainerCreateRequest,
+                context: &OperationContext,
+            ) -> Result<OperationReport> {
+                let _ = (request, context);
+                Err($create_error)
+            }
+        }
+    };
+}
+
+pub(crate) use nod_extract_only_handler;
