@@ -119,6 +119,25 @@ export interface RomWeaverWorkerSelectRequestMessage {
   control: ArrayBufferLike;
 }
 
+/**
+ * Layout of the `control` Int32Array backing a {@link RomWeaverWorkerSelectRequestMessage} handshake.
+ * Slot 0 is the readiness flag the runner worker blocks on; slot 1 carries the chosen index. The
+ * runner stores {@link SELECT_REQUEST_PENDING} then waits; the main thread writes the index and sets
+ * the flag to {@link SELECT_REQUEST_READY} before `Atomics.notify`.
+ */
+export const SELECT_REQUEST_CONTROL_LENGTH = 2;
+export const SELECT_REQUEST_READY_INDEX = 0;
+export const SELECT_REQUEST_RESULT_INDEX = 1;
+export const SELECT_REQUEST_PENDING = 0;
+export const SELECT_REQUEST_READY = 1;
+/** Sentinel result index meaning "no selection" — cancelled, timed out, or no handler registered. */
+export const SELECT_REQUEST_CANCEL_INDEX = -1;
+/**
+ * Upper bound the runner worker stays blocked waiting for the main thread to resolve a selection
+ * prompt. On expiry the host selection callback cancels so an unanswered prompt can never deadlock.
+ */
+export const SELECT_REQUEST_TIMEOUT_MS = 5 * 60 * 1000;
+
 export type RomWeaverWorkerResponse =
   | RomWeaverWorkerReadyMessage
   | RomWeaverWorkerResultMessage

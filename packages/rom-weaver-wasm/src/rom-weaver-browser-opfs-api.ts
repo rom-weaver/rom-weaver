@@ -15,6 +15,10 @@ import {
   normalizeGuestPath,
 } from './rom-weaver-runtime-utils.ts';
 import {
+  normalizeDefaultThreads,
+  resolveBrowserDefaultThreads,
+} from './workers/browser-thread-budget.ts';
+import {
   BrowserMemoryRandomAccessFile,
   BrowserOpfsRandomAccessFile,
   BrowserVirtualRandomAccessFile,
@@ -3802,37 +3806,11 @@ function normalizePositiveInteger(value, fallback, label) {
   return parsed;
 }
 
-function resolveBrowserDefaultThreads(root = globalThis) {
-  const hardwareConcurrency = Number(root?.navigator?.hardwareConcurrency);
-  if (Number.isFinite(hardwareConcurrency) && hardwareConcurrency > 0) {
-    return Math.max(1, Math.min(DEFAULT_BROWSER_THREAD_COUNT, Math.floor(hardwareConcurrency)));
-  }
-  return DEFAULT_BROWSER_THREAD_COUNT;
-}
-
 function resolveConfiguredDefaultThreads(options, fallback) {
   if (options && Object.hasOwn(options, 'defaultThreads')) {
     return normalizeDefaultThreads(options.defaultThreads);
   }
   return fallback;
-}
-
-function normalizeDefaultThreads(value) {
-  if (
-    value === undefined
-    || value === null
-    || value === false
-    || value === 0
-    || value === '0'
-    || value === 'off'
-  ) {
-    return null;
-  }
-  const parsed = Number.parseInt(String(value), 10);
-  if (!Number.isInteger(parsed) || parsed <= 0) {
-    throw new TypeError(`defaultThreads must be a positive integer; received: ${value}`);
-  }
-  return Math.max(1, Math.min(MAX_BROWSER_THREAD_POOL_SIZE, parsed));
 }
 
 function browserThreadRequestOptions(defaultThreads = DEFAULT_BROWSER_THREAD_COUNT) {

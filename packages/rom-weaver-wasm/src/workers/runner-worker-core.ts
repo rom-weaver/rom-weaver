@@ -11,14 +11,18 @@ import type {
   RomWeaverWorkerErrorContext,
   RomWeaverWorkerSerializedError,
 } from '../rom-weaver-types.d.ts';
+import {
+  SELECT_REQUEST_CANCEL_INDEX,
+  SELECT_REQUEST_CONTROL_LENGTH,
+  SELECT_REQUEST_PENDING,
+  SELECT_REQUEST_READY_INDEX,
+  SELECT_REQUEST_RESULT_INDEX,
+  SELECT_REQUEST_TIMEOUT_MS,
+} from './worker-protocol.ts';
 import type {
   RomWeaverWorkerRequest,
   RomWeaverWorkerResponse,
 } from './worker-protocol.ts';
-
-// Upper bound the worker stays blocked waiting for the main thread to resolve a selection prompt.
-// On expiry the host selection callback cancels so an unanswered prompt can never deadlock the run.
-const SELECT_REQUEST_TIMEOUT_MS = 5 * 60 * 1000;
 
 type RunnerWorkerInitResult = {
   mode: 'browser-opfs';
@@ -120,13 +124,20 @@ export function createRunnerWorkerMessageQueue({ postMessage, initRunner }: Runn
           // while the main thread resolves the choice via the worker client's selection handler.
           // Returns the chosen 0-based index, or -1 to cancel (also on timeout / no handler).
           hostSelect(request: string): number {
-            const control = new Int32Array(new SharedArrayBuffer(8));
-            Atomics.store(control, 0, 0);
-            Atomics.store(control, 1, -1);
+            const control = new Int32Array(
+              new SharedArrayBuffer(SELECT_REQUEST_CONTROL_LENGTH * Int32Array.BYTES_PER_ELEMENT),
+            );
+            Atomics.store(control, SELECT_REQUEST_READY_INDEX, SELECT_REQUEST_PENDING);
+            Atomics.store(control, SELECT_REQUEST_RESULT_INDEX, SELECT_REQUEST_CANCEL_INDEX);
             postMessage({ type: 'selectRequest', requestId, request, control: control.buffer });
-            const waited = Atomics.wait(control, 0, 0, SELECT_REQUEST_TIMEOUT_MS);
-            if (waited === 'timed-out') return -1;
-            return Atomics.load(control, 1);
+            const waited = Atomics.wait(
+              control,
+              SELECT_REQUEST_READY_INDEX,
+              SELECT_REQUEST_PENDING,
+              SELECT_REQUEST_TIMEOUT_MS,
+            );
+            if (waited === 'timed-out') return SELECT_REQUEST_CANCEL_INDEX;
+            return Atomics.load(control, SELECT_REQUEST_RESULT_INDEX);
           },
           onEvent(event: RomWeaverRunJsonEvent) {
             postMessage({ type: 'event', requestId, event });

@@ -1,4 +1,8 @@
 import {
+  normalizeDefaultThreads,
+  resolveBrowserDefaultThreads,
+} from './browser-thread-budget.ts';
+import {
   createBrowserWorkerTransport,
   RomWeaverWorkerClientCore,
 } from './worker-client-core.ts';
@@ -25,9 +29,6 @@ type BrowserWorkerReadyResult = {
   threaded: boolean;
   wasmUrl: string | null;
 };
-
-const DEFAULT_BROWSER_THREAD_COUNT = 4;
-const MAX_BROWSER_THREAD_COUNT = 64;
 
 export function createBrowserWorkerClient(options: BrowserWorkerClientOptions = {}) {
   options = options ?? {};
@@ -99,30 +100,4 @@ export class BrowserRomWeaverWorkerClient extends RomWeaverWorkerClientCore {
     this._shutdown('worker terminated');
     this._terminateWorker();
   }
-}
-
-function resolveBrowserDefaultThreads(root: typeof globalThis = globalThis) {
-  const hardwareConcurrency = Number(root?.navigator?.hardwareConcurrency);
-  if (Number.isFinite(hardwareConcurrency) && hardwareConcurrency > 0) {
-    return Math.max(1, Math.min(DEFAULT_BROWSER_THREAD_COUNT, Math.floor(hardwareConcurrency)));
-  }
-  return DEFAULT_BROWSER_THREAD_COUNT;
-}
-
-function normalizeDefaultThreads(value: RomWeaverDefaultThreads) {
-  if (
-    value === undefined
-    || value === null
-    || value === false
-    || value === 0
-    || value === '0'
-    || value === 'off'
-  ) {
-    return null;
-  }
-  const parsed = Number.parseInt(String(value), 10);
-  if (!Number.isInteger(parsed) || parsed <= 0) {
-    throw new TypeError(`defaultThreads must be a positive integer; received: ${value}`);
-  }
-  return Math.max(1, Math.min(MAX_BROWSER_THREAD_COUNT, parsed));
 }

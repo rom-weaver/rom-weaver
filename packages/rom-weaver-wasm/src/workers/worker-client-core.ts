@@ -14,6 +14,12 @@ import type {
   RomWeaverWorkerErrorKind,
   RomWeaverWorkerSerializedError,
 } from '../rom-weaver-types.d.ts';
+import {
+  SELECT_REQUEST_CANCEL_INDEX,
+  SELECT_REQUEST_READY,
+  SELECT_REQUEST_READY_INDEX,
+  SELECT_REQUEST_RESULT_INDEX,
+} from './worker-protocol.ts';
 import type { RomWeaverWorkerResponse } from './worker-protocol.ts';
 
 type WorkerStreamHandlers<TEvent = RomWeaverRunJsonEvent, TTraceEvent = unknown> = Pick<
@@ -226,19 +232,23 @@ export class RomWeaverWorkerClientCore {
         // registered selection handler (or cancel) and wake it with Atomics.notify.
         const control = new Int32Array(message.control as ArrayBufferLike);
         const respond = (index: number) => {
-          Atomics.store(control, 1, Number.isInteger(index) ? index : -1);
-          Atomics.store(control, 0, 1);
-          Atomics.notify(control, 0);
+          Atomics.store(
+            control,
+            SELECT_REQUEST_RESULT_INDEX,
+            Number.isInteger(index) ? index : SELECT_REQUEST_CANCEL_INDEX,
+          );
+          Atomics.store(control, SELECT_REQUEST_READY_INDEX, SELECT_REQUEST_READY);
+          Atomics.notify(control, SELECT_REQUEST_READY_INDEX);
         };
         const handler = this._onSelect;
         if (typeof handler !== 'function') {
-          respond(-1);
+          respond(SELECT_REQUEST_CANCEL_INDEX);
           return;
         }
         Promise.resolve()
           .then(() => handler(message.request))
-          .then((index) => respond(typeof index === 'number' ? index : -1))
-          .catch(() => respond(-1));
+          .then((index) => respond(typeof index === 'number' ? index : SELECT_REQUEST_CANCEL_INDEX))
+          .catch(() => respond(SELECT_REQUEST_CANCEL_INDEX));
         return;
       }
       case 'error':
