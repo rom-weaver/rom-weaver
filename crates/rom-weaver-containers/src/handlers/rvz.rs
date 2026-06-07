@@ -1,9 +1,61 @@
 /* jscpd:ignore-start */
 const RVZ_NOD_CORE: NodHandlerCore = NodHandlerCore::new(&RVZ, NodFormat::Rvz);
+const RVZ_INITIAL_EXTRACT_PROGRESS_DIVISOR: u64 = 1000;
+const RVZ_INITIAL_EXTRACT_PROGRESS_MAX_PERCENT: f32 = 0.1;
 
 struct RvzContainerHandler;
 
 impl RvzContainerHandler {
+    fn extract_read_buffer_size(
+        default_buffer_size: usize,
+        total_bytes: u64,
+        bytes_written: u64,
+    ) -> usize {
+        if bytes_written != 0 || total_bytes < RVZ_INITIAL_EXTRACT_PROGRESS_DIVISOR {
+            return default_buffer_size;
+        }
+        (total_bytes / RVZ_INITIAL_EXTRACT_PROGRESS_DIVISOR)
+            .max(1)
+            .min(default_buffer_size as u64) as usize
+    }
+
+    fn maybe_emit_extract_progress(
+        context: &OperationContext,
+        total_bytes: u64,
+        bytes_written: u64,
+        last_emitted_percent: &mut f32,
+        emitted_initial_zero: &mut bool,
+        execution: &ThreadExecution,
+    ) {
+        if total_bytes == 0 || bytes_written == 0 {
+            return;
+        }
+
+        let percent = ((bytes_written.min(total_bytes) as f32 / total_bytes as f32) * 100.0)
+            .clamp(0.0, 100.0);
+        if percent >= 100.0 {
+            return;
+        }
+
+        let should_emit_initial_zero = !*emitted_initial_zero
+            && percent <= RVZ_INITIAL_EXTRACT_PROGRESS_MAX_PERCENT;
+        if should_emit_initial_zero || percent - *last_emitted_percent >= 1.0 {
+            *last_emitted_percent = percent;
+            if should_emit_initial_zero {
+                *emitted_initial_zero = true;
+            }
+            emit_container_running_progress(
+                context,
+                "extract",
+                RVZ.name,
+                "extract",
+                format!("extracting rvz ({percent:.0}%)"),
+                percent,
+                Some(execution),
+            );
+        }
+    }
+
     fn open_disc(&self, source: &Path) -> Result<NodDiscReader> {
         self.open_disc_with_threads(source, 0)
     }
@@ -31,10 +83,10 @@ impl RvzContainerHandler {
         }
     }
 
-    fn copy_extract_with_progress<R: Read, W: Write>(
+    fn copy_extract_with_progress<R: Read>(
         &self,
         reader: &mut R,
-        writer: &mut W,
+        writer: &mut BufWriter<File>,
         total_bytes: u64,
         context: &OperationContext,
         execution: &ThreadExecution,
@@ -43,19 +95,43 @@ impl RvzContainerHandler {
 
         let mut bytes_written = 0_u64;
         let mut last_emitted_percent = -1.0_f32;
-        let mut checksum = create_extract_checksum(context)?;
+        let mut emitted_initial_zero = false;
+        let checksum_algorithm_count =
+            StreamingChecksum::requested_algorithm_count(context.extract_checksum_algorithms())?;
 
-        emit_container_running_progress(
-            context,
-            "extract",
-            RVZ.name,
-            "extract",
-            "extracting rvz",
-            0.0,
-            Some(execution),
-        );
+        let first_read_size =
+            Self::extract_read_buffer_size(buffer_size, total_bytes, bytes_written);
+        let mut first_buffer = vec![0_u8; first_read_size];
+        let first_bytes_read = reader.read(&mut first_buffer)?;
+        if first_bytes_read > 0 {
+            writer.write_all(&first_buffer[..first_bytes_read])?;
+            bytes_written = bytes_written.saturating_add(first_bytes_read as u64);
+            Self::maybe_emit_extract_progress(
+                context,
+                total_bytes,
+                bytes_written,
+                &mut last_emitted_percent,
+                &mut emitted_initial_zero,
+                execution,
+            );
+            if total_bytes > 0 {
+                writer.get_ref().set_len(total_bytes)?;
+            }
+        }
 
-        if checksum.is_some() {
+        let mut checksum = if checksum_algorithm_count == 0 {
+            None
+        } else {
+            create_extract_checksum(context)?
+        };
+        if first_bytes_read > 0
+            && let Some(checksum) = checksum.as_mut()
+        {
+            first_buffer.truncate(first_bytes_read);
+            checksum.update_owned(first_buffer)?;
+        }
+
+        if first_bytes_read > 0 && checksum.is_some() {
             loop {
                 let mut buffer = vec![0_u8; buffer_size];
                 let bytes_read = reader.read(&mut buffer)?;
@@ -68,28 +144,16 @@ impl RvzContainerHandler {
                     checksum.update_owned(buffer)?;
                 }
                 bytes_written = bytes_written.saturating_add(bytes_read as u64);
-
-                if total_bytes == 0 {
-                    continue;
-                }
-
-                let percent = ((bytes_written.min(total_bytes) as f32 / total_bytes as f32)
-                    * 100.0)
-                    .clamp(0.0, 100.0);
-                if percent < 100.0 && percent - last_emitted_percent >= 1.0 {
-                    last_emitted_percent = percent;
-                    emit_container_running_progress(
-                        context,
-                        "extract",
-                        RVZ.name,
-                        "extract",
-                        format!("extracting rvz ({percent:.0}%)"),
-                        percent,
-                        Some(execution),
-                    );
-                }
+                Self::maybe_emit_extract_progress(
+                    context,
+                    total_bytes,
+                    bytes_written,
+                    &mut last_emitted_percent,
+                    &mut emitted_initial_zero,
+                    execution,
+                );
             }
-        } else {
+        } else if first_bytes_read > 0 {
             let mut buffer = vec![0_u8; buffer_size];
             loop {
                 let bytes_read = reader.read(&mut buffer)?;
@@ -98,26 +162,14 @@ impl RvzContainerHandler {
                 }
                 writer.write_all(&buffer[..bytes_read])?;
                 bytes_written = bytes_written.saturating_add(bytes_read as u64);
-
-                if total_bytes == 0 {
-                    continue;
-                }
-
-                let percent = ((bytes_written.min(total_bytes) as f32 / total_bytes as f32)
-                    * 100.0)
-                    .clamp(0.0, 100.0);
-                if percent < 100.0 && percent - last_emitted_percent >= 1.0 {
-                    last_emitted_percent = percent;
-                    emit_container_running_progress(
-                        context,
-                        "extract",
-                        RVZ.name,
-                        "extract",
-                        format!("extracting rvz ({percent:.0}%)"),
-                        percent,
-                        Some(execution),
-                    );
-                }
+                Self::maybe_emit_extract_progress(
+                    context,
+                    total_bytes,
+                    bytes_written,
+                    &mut last_emitted_percent,
+                    &mut emitted_initial_zero,
+                    execution,
+                );
             }
         }
 
@@ -186,6 +238,14 @@ impl ContainerHandlerOperations for RvzContainerHandler {
         Ok(RVZ_NOD_CORE.list_entries(&request.source))
     }
 
+    fn list_entry_records(
+        &self,
+        request: &ContainerProbeRequest,
+        _context: &OperationContext,
+    ) -> Result<Vec<ContainerListEntry>> {
+        RVZ_NOD_CORE.list_entry_records_for_probe(&request.source)
+    }
+
     fn extract(
         &self,
         request: &ContainerExtractRequest,
@@ -197,7 +257,6 @@ impl ContainerHandlerOperations for RvzContainerHandler {
             })?;
         let mut output_file = self.create_extract_output(&plan.output_path, request.overwrite)?;
         if plan.disc_size > 0 {
-            output_file.set_len(plan.disc_size)?;
             output_file.seek(SeekFrom::Start(0))?;
         }
         let mut output = BufWriter::new(output_file);
