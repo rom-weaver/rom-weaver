@@ -1,0 +1,25 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "src/index.mjs",
+    "src/browser-format-matrix.ts",
+    "src/workers/browser-runner-worker.ts",
+    "src/workers/browser-wasi-thread-worker.ts",
+    "src/workers/browser-worker-client.ts",
+    "scripts/sync-dist.mjs",
+    "tests/*.test.mjs",
+    "tests/*.bench.mjs",
+    "vitest.browser.config.mjs"
+  ],
+  "project": [
+    "src/**/*.{js,mjs,cjs,jsx,ts,tsx,mts,cts}",
+    "tests/**/*.{js,mjs,cjs,jsx,ts,tsx,mts,cts}",
+    "scripts/**/*.mjs",
+    "*.mjs"
+  ],
+  "ignoreDependencies": ["@vitest/browser"],
+  "rules": {
+    "exports": "off",
+    "types": "off"
+  }
+}

@@ -144,22 +144,6 @@ export function createJsonLineParser<TEvent = RomWeaverRunJsonEvent>(
   };
 }
 
-export function parseJsonLines<TEvent = RomWeaverRunJsonEvent>(
-  text: string,
-  options: ParseJsonLinesOptions<TEvent> = {},
-): ParseJsonLinesResult<TEvent> {
-  const parser = createJsonLineParser(options);
-
-  for (const line of text.split(/\r?\n/)) {
-    parser.pushLine(line);
-  }
-
-  return {
-    events: parser.events,
-    nonJsonLines: parser.nonJsonLines,
-  };
-}
-
 export function createTraceJsonLineParser<TTraceEvent = unknown>(
   options: ParseTraceJsonLinesOptions<TTraceEvent> = {},
 ): TraceJsonLineParser<TTraceEvent> {
@@ -187,21 +171,5 @@ export function createTraceJsonLineParser<TTraceEvent = unknown>(
         onTraceNonJsonLine?.(line);
       }
     },
-  };
-}
-
-export function parseTraceJsonLines<TTraceEvent = unknown>(
-  text: string,
-  options: ParseTraceJsonLinesOptions<TTraceEvent> = {},
-): ParseTraceJsonLinesResult<TTraceEvent> {
-  const parser = createTraceJsonLineParser(options);
-
-  for (const line of text.split(/\r?\n/)) {
-    parser.pushLine(line);
-  }
-
-  return {
-    traceEvents: parser.traceEvents,
-    traceNonJsonLines: parser.traceNonJsonLines,
   };
 }

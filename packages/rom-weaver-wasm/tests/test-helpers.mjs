@@ -27,7 +27,7 @@ export function toTypedRunInput(input) {
   return Array.isArray(input) ? commandArgsToRunRequest(input) : input;
 }
 
-export function wrapTypedTestWorker(worker) {
+function wrapTypedTestWorker(worker) {
   return new Proxy(worker, {
     get(target, property, receiver) {
       if (property === 'run') {
@@ -109,7 +109,7 @@ export async function withTempFixture(run, options = {}) {
   }
 }
 
-export function getTerminalEvent(result) {
+function getTerminalEvent(result) {
   const failureMessage = [
     `exitCode=${result?.exitCode}`,
     `ok=${result?.ok}`,
@@ -409,7 +409,7 @@ function errorStack(error) {
   return '';
 }
 
-export function assertFailedWithLabel(result, labelPattern, context) {
+function assertFailedWithLabel(result, labelPattern, context) {
   expect(result.ok, `${context} should fail in the current wasm matrix`).toBe(false);
   expect(result.exitCode, `${context} should not exit with code 0`).not.toBe(0);
   const terminal = getTerminalEvent(result);
@@ -893,7 +893,7 @@ async function getGuestFileHandle(rootHandle, guestPath, { create = false } = {}
   return parentHandle.getFileHandle(fileName, { create });
 }
 
-export async function ensureGuestFile(rootHandle, guestPath) {
+async function ensureGuestFile(rootHandle, guestPath) {
   await getGuestFileHandle(rootHandle, guestPath, { create: true });
 }
 

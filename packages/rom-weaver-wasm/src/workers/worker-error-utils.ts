@@ -47,7 +47,7 @@ export function resolveWorkerErrorKind(
   return 'unknown';
 }
 
-export function readWorkerContextFields(input: unknown): RomWeaverWorkerErrorContext {
+function readWorkerContextFields(input: unknown): RomWeaverWorkerErrorContext {
   if (!input || typeof input !== 'object') {
     return {};
   }
