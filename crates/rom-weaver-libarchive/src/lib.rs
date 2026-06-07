@@ -31,8 +31,8 @@ use sys::{
     archive_write_close, archive_write_data, archive_write_finish_entry, archive_write_free,
     archive_write_header, archive_write_new, archive_write_open, archive_write_open_filename,
     archive_write_set_filter_option, archive_write_set_format_7zip,
-    archive_write_set_format_7zip_progress_callback, archive_write_set_format_option,
-    archive_write_set_format_zip,
+    archive_write_set_format_7zip_progress_callback, archive_write_set_format_7zip_size_hint,
+    archive_write_set_format_option, archive_write_set_format_zip,
 };
 #[cfg(feature = "write-extra")]
 use sys::{
@@ -349,6 +349,16 @@ impl WriteArchive {
         self.check_status(status, context)?;
         self.codec_progress_callback_data = Some(callback_data);
         Ok(())
+    }
+
+    /// Hint the total uncompressed bytes that will be written so the 7z LZMA2
+    /// dictionary can be reduced to fit the data instead of allocating a window
+    /// larger than the input can reference.
+    /// Must be called after the 7z format is selected and before writing data.
+    pub fn set_7zip_size_hint(&mut self, uncompressed_bytes: u64, context: &str) -> Result<()> {
+        let status =
+            unsafe { archive_write_set_format_7zip_size_hint(self.as_ptr(), uncompressed_bytes) };
+        self.check_status(status, context)
     }
 
     pub fn open_file_with_write_callback<F>(

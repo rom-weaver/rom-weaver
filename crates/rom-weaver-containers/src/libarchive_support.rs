@@ -55,6 +55,7 @@ pub(crate) struct LibarchiveCreateConfig {
 fn libarchive_open_create_archive(
     output: &Path,
     config: LibarchiveCreateConfig,
+    total_uncompressed_bytes: u64,
     on_codec_bytes_processed: Option<Box<dyn FnMut(u64)>>,
     on_compressed_bytes_written: Option<Box<dyn FnMut(u64)>>,
 ) -> Result<WriteArchive> {
@@ -67,6 +68,18 @@ fn libarchive_open_create_archive(
                 config.format_name, config.format_name
             ),
         )?;
+
+        if let LibarchiveCreateFormat::SevenZ = config.format
+            && total_uncompressed_bytes > 0
+        {
+            archive.set_7zip_size_hint(
+                total_uncompressed_bytes,
+                &format!(
+                    "{} create failed while setting 7z size hint",
+                    config.format_name
+                ),
+            )?;
+        }
 
         if let Some(on_codec_bytes_processed) = on_codec_bytes_processed
             && let LibarchiveCreateFormat::SevenZ = config.format
@@ -355,6 +368,7 @@ pub(crate) fn write_archive_with_libarchive(
     let mut archive = libarchive_open_create_archive(
         &request.output,
         config,
+        total_input_bytes,
         on_codec_bytes_processed,
         Some(Box::new(on_compressed_bytes_written)),
     )?;

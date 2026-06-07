@@ -40,7 +40,7 @@ use rom_weaver_core::{
     OrderedStreamingMessages, ProbeConfidence, Result, RomWeaverError, SelectionMatcher,
     ThreadCapability, ThreadExecution, bounded_items_for_threads, create_extract_output_file,
     emit_container_running_progress, file_starts_with, maybe_emit_container_byte_progress,
-    ordered_streaming_compress,
+    ordered_streaming_compress, physical_memory_bytes,
 };
 use rom_weaver_libarchive::{
     ReadFilter as LibarchiveReadFilter, RegularArchiveProbeFormat as LibarchiveProbeFormat,
@@ -108,6 +108,8 @@ mod sevenz;
 pub(crate) use sevenz::SevenZContainerHandler;
 #[cfg(test)]
 pub(crate) use sevenz::SevenZMethod;
+#[cfg(test)]
+pub(crate) use sevenz::lzma2_threads_for_budget;
 
 #[path = "handlers/rar.rs"]
 mod rar;

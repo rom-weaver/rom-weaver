@@ -2164,7 +2164,9 @@ mod tests {
             let input_path = temp_dir.join("payload.bin");
             let archive_path = temp_dir.join("payload.7z");
             let output_dir = temp_dir.join("out");
-            let source_bytes = (0..(64 * 1024))
+            // 4 MiB so the encoder splits into several seeded LZMA2 blocks and
+            // the size-aware thread cap still reports parallel (> 1).
+            let source_bytes = (0..(4 * 1024 * 1024))
                 .map(|index| (index % 251) as u8)
                 .collect::<Vec<_>>();
             fs::write(&input_path, &source_bytes).expect("fixture");
@@ -2225,6 +2227,151 @@ mod tests {
 
             let _ = fs::remove_dir_all(temp_dir);
         });
+    }
+
+    #[test]
+    fn seven_z_small_input_reports_single_thread() {
+        run_with_large_stack("seven-z-small-single-thread", || {
+            let temp_dir = temp_dir_path("seven-z-small-single-thread");
+            fs::create_dir_all(&temp_dir).expect("temp dir");
+            let input_path = temp_dir.join("small.bin");
+            let archive_path = temp_dir.join("small.7z");
+            let output_dir = temp_dir.join("out");
+            // Below one LZMA2 worker block (1 MiB): only a single block is
+            // possible, so the reported thread count must be 1 even though 8
+            // were requested. This is the size-aware accounting the cap adds.
+            let source_bytes = (0..(64 * 1024))
+                .map(|index| (index % 251) as u8)
+                .collect::<Vec<_>>();
+            fs::write(&input_path, &source_bytes).expect("fixture");
+
+            let registry = ContainerRegistry::new();
+            let handler = registry.find_by_name("7z").expect("7z handler");
+            let create_report = handler
+                .create(
+                    &ContainerCreateRequest {
+                        inputs: vec![input_path.clone()],
+                        output: archive_path.clone(),
+                        format: "7z".to_string(),
+                        codec: Some("lzma2".to_string()),
+                        level: Some(6),
+                        parent: None,
+                    },
+                    &test_context(&temp_dir, 8),
+                )
+                .expect("create seven-z");
+
+            let execution = create_report.thread_execution.expect("thread execution");
+            assert_eq!(execution.requested_threads, 8);
+            assert_eq!(execution.effective_threads, 1);
+            assert!(!execution.used_parallelism);
+
+            handler
+                .extract(
+                    &rom_weaver_core::ContainerExtractRequest {
+                        source: archive_path.clone(),
+                        out_dir: output_dir.clone(),
+                        selections: Vec::new(),
+                        kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                        split_bin: false,
+                        ignore_common_files: false,
+                        overwrite: true,
+                        parent: None,
+                    },
+                    &test_context(&temp_dir, 8),
+                )
+                .expect("extract seven-z");
+            let extracted = fs::read(output_dir.join("small.bin")).expect("read extracted");
+            assert_eq!(extracted, source_bytes);
+
+            let _ = fs::remove_dir_all(temp_dir);
+        });
+    }
+
+    #[test]
+    fn seven_z_multi_block_seeded_create_round_trips() {
+        run_with_large_stack("seven-z-multi-block", || {
+            let temp_dir = temp_dir_path("seven-z-multi-block");
+            fs::create_dir_all(&temp_dir).expect("temp dir");
+            let input_path = temp_dir.join("multi.bin");
+            let archive_path = temp_dir.join("multi.7z");
+            let output_dir = temp_dir.join("out");
+
+            // A 1.25 MiB block repeated to 6 MiB: each repeat is further than one
+            // 1 MiB worker block, so the encoder must reference across block
+            // boundaries. That only round-trips byte-for-byte if every later
+            // block's seed (preset) dictionary is wired correctly and the blocks
+            // concatenate into one valid LZMA2 stream (no spurious dict reset).
+            let block_len = 1280 * 1024usize;
+            let block = (0..block_len)
+                .map(|index| (index.wrapping_mul(2654435761) >> 11) as u8)
+                .collect::<Vec<u8>>();
+            let mut source_bytes = Vec::with_capacity(6 * 1024 * 1024);
+            while source_bytes.len() < 6 * 1024 * 1024 {
+                source_bytes.extend_from_slice(&block);
+            }
+            source_bytes.truncate(6 * 1024 * 1024);
+            fs::write(&input_path, &source_bytes).expect("fixture");
+
+            let registry = ContainerRegistry::new();
+            let handler = registry.find_by_name("7z").expect("7z handler");
+            let create_report = handler
+                .create(
+                    &ContainerCreateRequest {
+                        inputs: vec![input_path.clone()],
+                        output: archive_path.clone(),
+                        format: "7z".to_string(),
+                        codec: Some("lzma2".to_string()),
+                        level: Some(6),
+                        parent: None,
+                    },
+                    &test_context(&temp_dir, 8),
+                )
+                .expect("create seven-z");
+
+            let execution = create_report.thread_execution.expect("thread execution");
+            // 6 MiB yields several seeded blocks, so it must report parallel.
+            assert!(execution.effective_threads > 1);
+            assert!(execution.used_parallelism);
+
+            handler
+                .extract(
+                    &rom_weaver_core::ContainerExtractRequest {
+                        source: archive_path.clone(),
+                        out_dir: output_dir.clone(),
+                        selections: Vec::new(),
+                        kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                        split_bin: false,
+                        ignore_common_files: false,
+                        overwrite: true,
+                        parent: None,
+                    },
+                    &test_context(&temp_dir, 8),
+                )
+                .expect("extract seven-z");
+            let extracted = fs::read(output_dir.join("multi.bin")).expect("read extracted");
+            assert_eq!(extracted.len(), source_bytes.len());
+            assert_eq!(extracted, source_bytes);
+
+            let _ = fs::remove_dir_all(temp_dir);
+        });
+    }
+
+    #[test]
+    fn seven_z_memory_budget_scales_thread_cap() {
+        // 64 MiB at level 9 uses a 64 MiB dictionary, ~768 MiB per seeded worker,
+        // so the worker count tracks the budget: a 1 GiB host collapses to a
+        // single encoder (7-Zip-like footprint), larger budgets allow more.
+        let total = 64 * 1024 * 1024;
+        let gib = 1024 * 1024 * 1024;
+        assert_eq!(super::lzma2_threads_for_budget(total, 9, gib), 1);
+        assert_eq!(super::lzma2_threads_for_budget(total, 9, 2 * gib), 2);
+        assert_eq!(super::lzma2_threads_for_budget(total, 9, 4 * gib), 5);
+        // Never zero, even with no budget.
+        assert_eq!(super::lzma2_threads_for_budget(total, 9, 0), 1);
+        // A tiny input reduces the dictionary, so the same budget allows many
+        // more workers (cheap per-worker memory).
+        assert!(super::lzma2_threads_for_budget(1024 * 1024, 9, gib) > 10);
     }
 
     #[test]

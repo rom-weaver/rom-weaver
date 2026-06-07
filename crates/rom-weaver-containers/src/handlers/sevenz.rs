@@ -109,6 +109,101 @@ impl SevenZContainerHandler {
     }
 }
 
+/// Smallest LZMA2 worker block; mirrors `LZMA2_MT_MIN_CHUNK_SIZE` in
+/// `archive_write_set_format_7zip.c`.
+const LZMA2_MT_MIN_BLOCK_BYTES: u64 = 1 << 20;
+
+/// Estimate how many LZMA2 worker blocks the 7z encoder will actually run — the
+/// real parallelism ceiling. Because the encoder splits a file into seeded
+/// blocks floored at the minimum chunk, the achievable job count is
+/// `ceil(total / min_block)`; the core budget caps it further. This keeps the
+/// reported `effective_threads` honest instead of advertising every core for a
+/// file that only yields one block. Mirrors the block split in the C writer.
+fn lzma2_achievable_blocks(total_bytes: u64) -> usize {
+    if total_bytes == 0 {
+        return 1;
+    }
+    usize::try_from(total_bytes.div_ceil(LZMA2_MT_MIN_BLOCK_BYTES).max(1)).unwrap_or(usize::MAX)
+}
+
+fn sum_input_file_bytes(entries: &[ArchiveInputEntry]) -> u64 {
+    let mut total = 0u64;
+    for entry in entries {
+        if !entry.is_dir
+            && let Ok(metadata) = std::fs::metadata(&entry.source)
+        {
+            total = total.saturating_add(metadata.len());
+        }
+    }
+    total
+}
+
+/// liblzma preset dictionary size for a 0..=9 level (matches `lzma_lzma_preset`).
+fn lzma2_preset_dict_bytes(level: u32) -> u64 {
+    match level {
+        0 => 256 << 10,
+        1 => 1 << 20,
+        2 => 2 << 20,
+        3 | 4 => 4 << 20,
+        5 | 6 => 8 << 20,
+        7 => 16 << 20,
+        8 => 32 << 20,
+        _ => 64 << 20,
+    }
+}
+
+/// Round up to the smallest representable LZMA2 dictionary (`2^n` or `3*2^(n-1)`),
+/// capped at `cap` — mirrors `lzma_reduce_dict_size` in the C writer.
+fn lzma2_round_up_dict(size: u64, cap: u64) -> u64 {
+    for b in 0u32..=40 {
+        let candidate = (2u64 | u64::from(b & 1)) << (b / 2 + 11);
+        if candidate >= size {
+            return candidate.min(cap);
+        }
+    }
+    cap
+}
+
+/// Dictionary the encoder will use after reducing the preset to fit the data.
+fn lzma2_effective_dict_bytes(total_bytes: u64, level: u32) -> u64 {
+    let preset = lzma2_preset_dict_bytes(level);
+    if total_bytes == 0 {
+        return preset;
+    }
+    lzma2_round_up_dict(total_bytes.min(preset), preset)
+}
+
+/// Cap the worker count so peak memory fits a fraction of system RAM. Each seeded
+/// block runs its own full-dictionary encoder (~12x the dictionary including the
+/// seed copy and buffers), so on a memory-constrained host this collapses toward
+/// a single encoder (close to single-thread 7-Zip), while a large host keeps more
+/// workers. Falls back to a 2 GiB budget when RAM can't be queried.
+pub(crate) fn lzma2_threads_for_budget(total_bytes: u64, level: u32, budget_bytes: u64) -> usize {
+    let per_worker = lzma2_effective_dict_bytes(total_bytes, level)
+        .saturating_mul(12)
+        .max(1);
+    usize::try_from((budget_bytes / per_worker).max(1)).unwrap_or(usize::MAX)
+}
+
+fn lzma2_memory_thread_cap(total_bytes: u64, level: u32) -> usize {
+    // On wasm the budget is a slice of the linear-memory ceiling (~2 GiB, never
+    // shrinks), so keep it conservative; native falls back here only when RAM
+    // can't be queried.
+    #[cfg(target_family = "wasm")]
+    const FALLBACK_BUDGET_BYTES: u64 = 1536 * 1024 * 1024;
+    #[cfg(not(target_family = "wasm"))]
+    const FALLBACK_BUDGET_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+    // `ROM_WEAVER_7Z_MEM_BUDGET_MB` overrides the auto budget for constrained or
+    // shared hosts; otherwise use half of physical RAM, or a fixed fallback.
+    let budget = std::env::var("ROM_WEAVER_7Z_MEM_BUDGET_MB")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .map(|mb| mb.saturating_mul(1024 * 1024))
+        .or_else(|| physical_memory_bytes().map(|ram| ram / 2))
+        .unwrap_or(FALLBACK_BUDGET_BYTES);
+    lzma2_threads_for_budget(total_bytes, level, budget)
+}
+
 impl ContainerHandlerOperations for SevenZContainerHandler {
     fn descriptor(&self) -> &'static FormatDescriptor {
         self.descriptor
@@ -176,9 +271,17 @@ impl ContainerHandlerOperations for SevenZContainerHandler {
         request: &ContainerCreateRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        let execution = context.plan_threads(ThreadCapability::parallel(None));
         let settings = self.resolve_codec_settings(request.codec.as_deref(), request.level)?;
         let entries = collect_archive_inputs(&request.inputs)?;
+        // Cap planned threads at both the blocks the encoder can actually run and
+        // what fits the system memory budget, so the reported parallelism is real
+        // and peak RAM scales down on smaller machines.
+        let total_bytes = sum_input_file_bytes(&entries);
+        let achievable = lzma2_achievable_blocks(total_bytes)
+            .min(lzma2_memory_thread_cap(total_bytes, settings.level))
+            .max(1);
+        let execution =
+            context.plan_threads(ThreadCapability::parallel(Some(achievable)));
         let logical_bytes =
             self.create_with_libarchive(request, &entries, &settings, &execution, context)?;
 
