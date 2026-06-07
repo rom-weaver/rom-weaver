@@ -1,5 +1,10 @@
 /* jscpd:ignore-start */
-struct XisoContainerHandler;
+use super::*;
+
+type XisoSourceDevice = XdvdfsOffsetWrapper<BufReader<File>, io::Error>;
+type XisoSourceFilesystem = XdvdfsFilesystem<io::Error, XisoSourceDevice>;
+
+pub(crate) struct XisoContainerHandler;
 
 impl XisoContainerHandler {
     fn open_source_filesystem(&self, source_path: &Path) -> Result<XisoSourceFilesystem> {

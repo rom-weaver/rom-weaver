@@ -1,4 +1,6 @@
 /* jscpd:ignore-start */
+use super::*;
+
 #[derive(Clone, Debug)]
 struct PbpIsoIndexEntry {
     offset: u64,
@@ -61,7 +63,7 @@ struct PbpDiscDecodedChunk {
     data: Vec<u8>,
 }
 
-struct PbpContainerHandler;
+pub(crate) struct PbpContainerHandler;
 
 impl PbpContainerHandler {
     const PBP_HEADER_SIZE: usize = 0x28;
@@ -1122,7 +1124,4 @@ impl ContainerHandlerOperations for PbpContainerHandler {
         ))
     }
 }
-
-type XisoSourceDevice = XdvdfsOffsetWrapper<BufReader<File>, io::Error>;
-type XisoSourceFilesystem = XdvdfsFilesystem<io::Error, XisoSourceDevice>;
 /* jscpd:ignore-end */

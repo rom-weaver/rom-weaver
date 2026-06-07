@@ -91,17 +91,25 @@ include!("handlers/zip.rs");
 
 include!("handlers/tar.rs");
 
-include!("handlers/stream.rs");
+#[path = "handlers/stream.rs"]
+mod stream;
+pub(crate) use stream::{StreamCompression, StreamContainerHandler};
 
 include!("handlers/cso.rs");
 
 include!("handlers/sevenz.rs");
 
-include!("handlers/rar.rs");
+#[path = "handlers/rar.rs"]
+mod rar;
+pub(crate) use rar::RarContainerHandler;
 
-include!("handlers/pbp.rs");
+#[path = "handlers/pbp.rs"]
+mod pbp;
+pub(crate) use pbp::PbpContainerHandler;
 
-include!("handlers/xiso.rs");
+#[path = "handlers/xiso.rs"]
+mod xiso;
+pub(crate) use xiso::XisoContainerHandler;
 
 #[path = "handlers/nod_shared.rs"]
 mod nod_shared;

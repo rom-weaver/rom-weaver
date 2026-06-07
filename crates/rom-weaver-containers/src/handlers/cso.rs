@@ -1,4 +1,6 @@
 /* jscpd:ignore-start */
+const CSO_EXTRACT_TASK_BYTES: u64 = 8 * 1024 * 1024;
+
 #[derive(Clone, Debug)]
 struct CsoExtractTask {
     index: usize,

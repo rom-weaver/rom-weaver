@@ -1,19 +1,24 @@
 /* jscpd:ignore-start */
+use super::*;
+
 #[derive(Clone, Copy, Debug)]
-enum StreamCompression {
+pub(crate) enum StreamCompression {
     Gzip,
     Bzip2,
     Xz,
     Zstd,
 }
 
-struct StreamContainerHandler {
+pub(crate) struct StreamContainerHandler {
     descriptor: &'static FormatDescriptor,
     compression: StreamCompression,
 }
 
 impl StreamContainerHandler {
-    const fn new(descriptor: &'static FormatDescriptor, compression: StreamCompression) -> Self {
+    pub(crate) const fn new(
+        descriptor: &'static FormatDescriptor,
+        compression: StreamCompression,
+    ) -> Self {
         Self {
             descriptor,
             compression,
@@ -260,6 +265,4 @@ impl ContainerHandlerOperations for StreamContainerHandler {
         )))
     }
 }
-
-const CSO_EXTRACT_TASK_BYTES: u64 = 8 * 1024 * 1024;
 /* jscpd:ignore-end */

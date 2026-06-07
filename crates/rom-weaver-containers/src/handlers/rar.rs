@@ -1,11 +1,12 @@
 /* jscpd:ignore-start */
+use super::*;
 
-struct RarContainerHandler {
+pub(crate) struct RarContainerHandler {
     descriptor: &'static FormatDescriptor,
 }
 
 impl RarContainerHandler {
-    const fn new(descriptor: &'static FormatDescriptor) -> Self {
+    pub(crate) const fn new(descriptor: &'static FormatDescriptor) -> Self {
         Self { descriptor }
     }
 }
@@ -16,7 +17,11 @@ impl ContainerHandlerOperations for RarContainerHandler {
     }
 
     fn probe(&self, source: &Path) -> ProbeConfidence {
-        probe_regular_archive_with_libarchive(source, self.descriptor.name, LibarchiveProbeFormat::Rar)
+        probe_regular_archive_with_libarchive(
+            source,
+            self.descriptor.name,
+            LibarchiveProbeFormat::Rar,
+        )
     }
 
     fn probe_details(
