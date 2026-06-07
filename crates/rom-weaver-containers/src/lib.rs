@@ -103,19 +103,33 @@ include!("handlers/pbp.rs");
 
 include!("handlers/xiso.rs");
 
-include!("handlers/nod_shared.rs");
+#[path = "handlers/nod_shared.rs"]
+mod nod_shared;
+pub(crate) use nod_shared::NodHandlerCore;
 
-include!("handlers/gcz.rs");
+#[path = "handlers/gcz.rs"]
+mod gcz;
+pub(crate) use gcz::GczContainerHandler;
 
-include!("handlers/wia.rs");
+#[path = "handlers/wia.rs"]
+mod wia;
+pub(crate) use wia::WiaContainerHandler;
 
-include!("handlers/tgc.rs");
+#[path = "handlers/tgc.rs"]
+mod tgc;
+pub(crate) use tgc::TgcContainerHandler;
 
-include!("handlers/nfs.rs");
+#[path = "handlers/nfs.rs"]
+mod nfs;
+pub(crate) use nfs::NfsContainerHandler;
 
-include!("handlers/wbfs.rs");
+#[path = "handlers/wbfs.rs"]
+mod wbfs;
+pub(crate) use wbfs::WbfsContainerHandler;
 
-include!("handlers/rvz.rs");
+#[path = "handlers/rvz.rs"]
+mod rvz;
+pub(crate) use rvz::RvzContainerHandler;
 
 include!("handlers/z3ds.rs");
 

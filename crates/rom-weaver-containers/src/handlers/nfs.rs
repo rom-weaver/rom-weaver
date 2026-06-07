@@ -1,7 +1,9 @@
 /* jscpd:ignore-start */
+use super::*;
+
 const NFS_NOD_CORE: NodHandlerCore = NodHandlerCore::new(&NFS, NodFormat::Nfs);
 
-struct NfsContainerHandler;
+pub(crate) struct NfsContainerHandler;
 
 impl ContainerHandlerOperations for NfsContainerHandler {
     fn descriptor(&self) -> &'static FormatDescriptor {

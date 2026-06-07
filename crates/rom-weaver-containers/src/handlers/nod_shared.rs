@@ -1,16 +1,18 @@
 /* jscpd:ignore-start */
+use super::*;
+
 #[derive(Clone, Copy)]
-struct NodHandlerCore {
+pub(crate) struct NodHandlerCore {
     descriptor: &'static FormatDescriptor,
     nod_format: NodFormat,
 }
 
-struct NodExtractPlan {
-    execution: ThreadExecution,
-    disc: NodDiscReader,
-    disc_size: u64,
-    compression_label: String,
-    output_path: PathBuf,
+pub(crate) struct NodExtractPlan {
+    pub(crate) execution: ThreadExecution,
+    pub(crate) disc: NodDiscReader,
+    pub(crate) disc_size: u64,
+    pub(crate) compression_label: String,
+    pub(crate) output_path: PathBuf,
 }
 
 #[cfg(target_family = "wasm")]
@@ -67,7 +69,7 @@ impl NodHandlerCore {
     #[cfg(target_family = "wasm")]
     const MAX_WASM_PRELOADER_THREADS: usize = 4;
 
-    const fn new(descriptor: &'static FormatDescriptor, nod_format: NodFormat) -> Self {
+    pub(crate) const fn new(descriptor: &'static FormatDescriptor, nod_format: NodFormat) -> Self {
         Self {
             descriptor,
             nod_format,
@@ -131,7 +133,11 @@ impl NodHandlerCore {
         })
     }
 
-    fn open_disc(&self, source: &Path, preloader_threads: usize) -> Result<NodDiscReader> {
+    pub(crate) fn open_disc(
+        &self,
+        source: &Path,
+        preloader_threads: usize,
+    ) -> Result<NodDiscReader> {
         self.open_disc_with(source, preloader_threads, |path, options| {
             self.open_disc_from_path_or_stream(path, options)
         })
@@ -200,14 +206,14 @@ impl NodHandlerCore {
         }
     }
 
-    fn probe(&self, source: &Path) -> ProbeConfidence {
+    pub(crate) fn probe(&self, source: &Path) -> ProbeConfidence {
         if self.detect_disc_format(source) == Some(self.nod_format) {
             return ProbeConfidence::Signature;
         }
         ProbeConfidence::Extension
     }
 
-    fn probe_details_with(
+    pub(crate) fn probe_details_with(
         &self,
         request: &ContainerProbeRequest,
         context: &OperationContext,
@@ -248,23 +254,24 @@ impl NodHandlerCore {
         ))
     }
 
-    fn probe_details(
+    pub(crate) fn probe_details(
         &self,
         request: &ContainerProbeRequest,
         context: &OperationContext,
     ) -> Result<OperationReport> {
-        self.probe_details_with(request, context, |source| {
-            self.open_disc_for_probe(source)
-        })
+        self.probe_details_with(request, context, |source| self.open_disc_for_probe(source))
     }
 
-    fn list_entries(&self, source: &Path) -> Vec<String> {
+    pub(crate) fn list_entries(&self, source: &Path) -> Vec<String> {
         vec![self.extract_name(source)]
     }
 
     /// Enumerate the single decompressed output and its disc size using only the disc metadata
     /// (no block decode), so input discovery can list the produced file without a full extract.
-    fn list_entry_records_for_probe(&self, source: &Path) -> Result<Vec<ContainerListEntry>> {
+    pub(crate) fn list_entry_records_for_probe(
+        &self,
+        source: &Path,
+    ) -> Result<Vec<ContainerListEntry>> {
         let disc = self.open_disc_for_probe(source)?;
         let meta = self.validate_meta(source, &disc)?;
         let disc_size = meta.disc_size.unwrap_or_else(|| disc.disc_size());
@@ -283,7 +290,7 @@ impl NodHandlerCore {
         format!("{stem}.iso")
     }
 
-    fn prepare_extract_with(
+    pub(crate) fn prepare_extract_with(
         &self,
         request: &ContainerExtractRequest,
         context: &OperationContext,
@@ -351,7 +358,7 @@ impl NodHandlerCore {
         })
     }
 
-    fn extract_with_standard_copy(
+    pub(crate) fn extract_with_standard_copy(
         &self,
         request: &ContainerExtractRequest,
         context: &OperationContext,
@@ -387,7 +394,7 @@ impl NodHandlerCore {
         ))
     }
 
-    fn extracted_report(
+    pub(crate) fn extracted_report(
         &self,
         source: &Path,
         output_path: &Path,
@@ -413,7 +420,7 @@ impl NodHandlerCore {
         )
     }
 
-    fn ensure_single_create_input<'a>(
+    pub(crate) fn ensure_single_create_input<'a>(
         &self,
         request: &'a ContainerCreateRequest,
     ) -> Result<&'a Path> {
@@ -426,14 +433,14 @@ impl NodHandlerCore {
         Ok(request.inputs[0].as_path())
     }
 
-    fn ensure_create_output_parent(&self, output: &Path) -> Result<()> {
+    pub(crate) fn ensure_create_output_parent(&self, output: &Path) -> Result<()> {
         if let Some(parent) = output.parent() {
             fs::create_dir_all(parent)?;
         }
         Ok(())
     }
 
-    fn process_create_with_progress<F>(
+    pub(crate) fn process_create_with_progress<F>(
         &self,
         input: &Path,
         output_path: &Path,
@@ -496,7 +503,7 @@ impl NodHandlerCore {
         Ok(fs::metadata(output_path)?.len())
     }
 
-    fn process_create_dry_run_size_with_progress<F>(
+    pub(crate) fn process_create_dry_run_size_with_progress<F>(
         &self,
         input: &Path,
         options: &NodFormatOptions,
@@ -553,7 +560,7 @@ impl NodHandlerCore {
         Ok(output_bytes)
     }
 
-    fn validate_i8_level(&self, codec: &str, level: i32) -> Result<i8> {
+    pub(crate) fn validate_i8_level(&self, codec: &str, level: i32) -> Result<i8> {
         i8::try_from(level).map_err(|_| {
             RomWeaverError::Validation(format!(
                 "{} codec `{codec}` level `{level}` is out of range",
@@ -562,7 +569,11 @@ impl NodHandlerCore {
         })
     }
 
-    fn unsupported_codec_error(&self, codec_name: &str, supported_clause: &str) -> RomWeaverError {
+    pub(crate) fn unsupported_codec_error(
+        &self,
+        codec_name: &str,
+        supported_clause: &str,
+    ) -> RomWeaverError {
         RomWeaverError::Validation(format!(
             "unsupported {} codec `{codec_name}`; {supported_clause}",
             self.format_name()

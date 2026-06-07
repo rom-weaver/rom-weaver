@@ -1,7 +1,9 @@
 /* jscpd:ignore-start */
+use super::*;
+
 const WIA_NOD_CORE: NodHandlerCore = NodHandlerCore::new(&WIA, NodFormat::Wia);
 
-struct WiaContainerHandler;
+pub(crate) struct WiaContainerHandler;
 
 impl ContainerHandlerOperations for WiaContainerHandler {
     fn descriptor(&self) -> &'static FormatDescriptor {

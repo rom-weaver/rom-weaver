@@ -1,7 +1,9 @@
 /* jscpd:ignore-start */
+use super::*;
+
 const TGC_NOD_CORE: NodHandlerCore = NodHandlerCore::new(&TGC, NodFormat::Tgc);
 
-struct TgcContainerHandler;
+pub(crate) struct TgcContainerHandler;
 
 impl ContainerHandlerOperations for TgcContainerHandler {
     fn descriptor(&self) -> &'static FormatDescriptor {

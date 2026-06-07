@@ -1,7 +1,9 @@
 /* jscpd:ignore-start */
+use super::*;
+
 const GCZ_NOD_CORE: NodHandlerCore = NodHandlerCore::new(&GCZ, NodFormat::Gcz);
 
-struct GczContainerHandler;
+pub(crate) struct GczContainerHandler;
 
 impl ContainerHandlerOperations for GczContainerHandler {
     fn descriptor(&self) -> &'static FormatDescriptor {

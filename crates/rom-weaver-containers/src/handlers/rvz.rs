@@ -1,12 +1,14 @@
 /* jscpd:ignore-start */
+use super::*;
+
 const RVZ_NOD_CORE: NodHandlerCore = NodHandlerCore::new(&RVZ, NodFormat::Rvz);
 const RVZ_INITIAL_EXTRACT_PROGRESS_DIVISOR: u64 = 1000;
 const RVZ_INITIAL_EXTRACT_PROGRESS_MAX_PERCENT: f32 = 0.1;
 
-struct RvzContainerHandler;
+pub(crate) struct RvzContainerHandler;
 
 impl RvzContainerHandler {
-    fn extract_read_buffer_size(
+    pub(crate) fn extract_read_buffer_size(
         default_buffer_size: usize,
         total_bytes: u64,
         bytes_written: u64,
@@ -37,8 +39,8 @@ impl RvzContainerHandler {
             return;
         }
 
-        let should_emit_initial_zero = !*emitted_initial_zero
-            && percent <= RVZ_INITIAL_EXTRACT_PROGRESS_MAX_PERCENT;
+        let should_emit_initial_zero =
+            !*emitted_initial_zero && percent <= RVZ_INITIAL_EXTRACT_PROGRESS_MAX_PERCENT;
         if should_emit_initial_zero || percent - *last_emitted_percent >= 1.0 {
             *last_emitted_percent = percent;
             if should_emit_initial_zero {
@@ -196,14 +198,12 @@ impl RvzContainerHandler {
             RequestedCodec::Known(CanonicalCodec::Zstd) => Ok(NodCompression::Zstandard(
                 RVZ_NOD_CORE.validate_i8_level("zstd", level.unwrap_or(0))?,
             )),
-            RequestedCodec::Known(codec) => Err(RVZ_NOD_CORE.unsupported_codec_error(
-                codec.name(),
-                "supported codec is zstd",
-            )),
-            RequestedCodec::Unknown(name) => Err(RVZ_NOD_CORE.unsupported_codec_error(
-                &name,
-                "supported codec is zstd",
-            )),
+            RequestedCodec::Known(codec) => {
+                Err(RVZ_NOD_CORE.unsupported_codec_error(codec.name(), "supported codec is zstd"))
+            }
+            RequestedCodec::Unknown(name) => {
+                Err(RVZ_NOD_CORE.unsupported_codec_error(&name, "supported codec is zstd"))
+            }
         }
     }
 }

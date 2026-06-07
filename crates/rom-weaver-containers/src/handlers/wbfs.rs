@@ -1,7 +1,9 @@
 /* jscpd:ignore-start */
+use super::*;
+
 const WBFS_NOD_CORE: NodHandlerCore = NodHandlerCore::new(&WBFS, NodFormat::Wbfs);
 
-struct WbfsContainerHandler;
+pub(crate) struct WbfsContainerHandler;
 
 impl ContainerHandlerOperations for WbfsContainerHandler {
     fn descriptor(&self) -> &'static FormatDescriptor {
