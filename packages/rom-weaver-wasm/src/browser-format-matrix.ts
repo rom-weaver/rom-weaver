@@ -1,4 +1,8 @@
 import { createBrowserWorkerClient } from './workers/browser-worker-client.ts';
+import {
+  createRomWeaverCommand,
+  getRomWeaverCommandLabel,
+} from './rom-weaver-command.ts';
 import type {
   RomWeaverBrowserOpfsRunOptions,
   RomWeaverCommand,
@@ -174,7 +178,7 @@ export async function runBrowserFullFormatMatrixCore(input: BrowserFormatMatrixC
   for (const format of containerRoundTripFormats) {
     const archivePath = joinGuestPath(dir, `roundtrip-${formatToken(format)}.${containerSuffix(format)}`);
     assertRunJsonSucceeded(
-      await runCommand(`compress ${format}`, command('compress', {
+      await runCommand(`compress ${format}`, createRomWeaverCommand('compress', {
         format,
         input: [archiveSourcePath],
         output: archivePath,
@@ -185,7 +189,7 @@ export async function runBrowserFullFormatMatrixCore(input: BrowserFormatMatrixC
 
     const extractDir = joinGuestPath(dir, `roundtrip-${formatToken(format)}-extract`);
     assertRunJsonSucceeded(
-      await runCommand(`extract ${format}`, command('extract', {
+      await runCommand(`extract ${format}`, createRomWeaverCommand('extract', {
         out_dir: extractDir,
         source: archivePath,
         threads: 1,
@@ -217,7 +221,7 @@ export async function runBrowserFullFormatMatrixCore(input: BrowserFormatMatrixC
   ]);
   for (const [format, pattern] of containerCompressFailureExpectations.entries()) {
     const archivePath = joinGuestPath(dir, `compress-${formatToken(format)}.${containerSuffix(format)}`);
-    const compressResult = await runCommand(`compress unsupported ${format}`, command('compress', {
+    const compressResult = await runCommand(`compress unsupported ${format}`, createRomWeaverCommand('compress', {
       format,
       input: [archiveSourcePath],
       output: archivePath,
@@ -245,7 +249,7 @@ export async function runBrowserFullFormatMatrixCore(input: BrowserFormatMatrixC
     const badSourcePath = joinGuestPath(dir, `extract-${formatToken(format)}.${containerSuffix(format)}`);
     await writeGuestFile(opfsHandle, badSourcePath, toBytes('not-a-real-container'));
     const outDir = joinGuestPath(dir, `extract-${formatToken(format)}-out`);
-    const extractResult = await runCommand(`extract invalid ${format}`, command('extract', {
+    const extractResult = await runCommand(`extract invalid ${format}`, createRomWeaverCommand('extract', {
       out_dir: outDir,
       source: badSourcePath,
       threads: 1,
@@ -312,7 +316,7 @@ export async function runBrowserFullFormatMatrixCore(input: BrowserFormatMatrixC
     const extension = patchExtension(format);
     assert(typeof extension === 'string', `missing patch extension for ${format}`);
     const patchPath = joinGuestPath(dir, `patch-${format}.${extension}`);
-    const createResult = await runCommand(`patch-create ${format}`, command('patch-create', {
+    const createResult = await runCommand(`patch-create ${format}`, createRomWeaverCommand('patch-create', {
       format,
       modified: modifiedPath,
       original: originalPath,
@@ -399,7 +403,7 @@ export async function runBrowserFullFormatMatrixCore(input: BrowserFormatMatrixC
   }
 
   const vcdiffPatchPath = joinGuestPath(dir, 'fixture-secondary.vcdiff');
-  await runCommand(`patch-create gdiff fixture`, command('patch-create', {
+  await runCommand(`patch-create gdiff fixture`, createRomWeaverCommand('patch-create', {
     format: 'gdiff',
     modified: fixtures.vcdiffTargetPath,
     original: fixtures.vcdiffSourcePath,
@@ -485,7 +489,7 @@ async function runPatchApplyNoCompress(
   { inputPath, patchPath, outputPath }: { inputPath: string; outputPath: string; patchPath: string },
   runOptions: BrowserFormatMatrixRunOptions | undefined = undefined,
 ) {
-  return runCommand(`patch-apply ${pathBasename(patchPath)}`, command('patch-apply', {
+  return runCommand(`patch-apply ${pathBasename(patchPath)}`, createRomWeaverCommand('patch-apply', {
     input: inputPath,
     no_compress: true,
     output: outputPath,
@@ -512,19 +516,6 @@ async function runCreatedPatchApply(
     patchPath,
   });
   return { applyPath, applyResult };
-}
-
-function command(type: string, args: Record<string, unknown>): RomWeaverCommand {
-  if (type === 'patch-apply' || type === 'patch-create' || type === 'patch-validate') {
-    return {
-      args: {
-        args,
-        type: type.slice('patch-'.length),
-      },
-      type: 'patch',
-    } as RomWeaverCommand;
-  }
-  return { args, type } as RomWeaverCommand;
 }
 
 function createMatrixState({
@@ -560,7 +551,7 @@ async function runMatrixCommand(
   options: BrowserFormatMatrixRunOptions = {},
 ) {
   const startedAt = now();
-  const commandLabel = matrixCommandLabel(typedCommand);
+  const commandLabel = getRomWeaverCommandLabel(typedCommand);
   state.addStep({
     command: commandLabel,
     name,
@@ -595,14 +586,6 @@ async function runMatrixCommand(
     });
     throw error;
   }
-}
-
-function matrixCommandLabel(command: RomWeaverCommand): string {
-  if (command.type === 'patch') {
-    const patchType = typeof command.args?.type === 'string' ? command.args.type.trim() : '';
-    return patchType ? `patch-${patchType}` : 'patch';
-  }
-  return command.type;
 }
 
 function getTerminalEvent(result: BrowserFormatMatrixRunJsonResult): RomWeaverRunJsonEvent {

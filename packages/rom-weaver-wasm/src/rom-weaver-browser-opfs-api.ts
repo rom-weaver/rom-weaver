@@ -1,6 +1,14 @@
 // @ts-nocheck
 import * as wasiShim from '@bjorn3/browser_wasi_shim';
 import {
+  clampRomWeaverBrowserThreadRequest,
+  collectRomWeaverRunInputPaths,
+  normalizeRomWeaverRunRequest,
+  readRomWeaverRequestedThreadCount,
+  readRomWeaverRunRequestCommand,
+  withRomWeaverDefaultThreads,
+} from './rom-weaver-command.ts';
+import {
   createJsonLineParser,
   createTraceJsonLineParser,
   createWasmEnvImports,
@@ -25,7 +33,6 @@ import type {
   RomWeaverBrowserOpfsOptions,
   RomWeaverBrowserOpfsRunOptions,
   RomWeaverBrowserSyncAccessMode,
-  RomWeaverCommand,
   RomWeaverDefaultThreads,
   RomWeaverEnv,
   RomWeaverRunInput,
@@ -108,14 +115,6 @@ const DEFAULT_BROWSER_RAYON_GLOBAL_THREADS = DEFAULT_BROWSER_THREAD_COUNT;
 const MAX_BROWSER_RAYON_GLOBAL_THREADS = 8;
 const ATOMICS_WAIT_SLICE_MS = 100;
 const ATOMICS_WAIT_TIMEOUT_MS = 8000;
-const THREAD_AWARE_COMMANDS = new Set([
-  'batch-header-fixer',
-  'checksum',
-  'compress',
-  'extract',
-  'patch',
-  'trim',
-]);
 const MAX_WASI_THREAD_ID = 0x1fffffff;
 const THREAD_ID_COUNTER_INDEX = 0;
 const THREAD_ID_COUNTER_INITIAL = 43;
@@ -209,14 +208,14 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
       runOptions: BrowserOpfsRunOptions = {},
     ): Promise<RomWeaverRunResult> {
       const runDefaultThreads = resolveConfiguredDefaultThreads(runOptions, baseDefaultThreads);
-      const request = withBrowserThreadLimit(
-        withDefaultThreadRequest(
-          normalizeRunRequest(commandOrRequest, readRunOutputOverrides(runOptions)),
+      const request = clampRomWeaverBrowserThreadRequest(
+        withRomWeaverDefaultThreads(
+          normalizeRomWeaverRunRequest(commandOrRequest, readRunOutputOverrides(runOptions)),
           runDefaultThreads,
         ),
-        runDefaultThreads ?? resolveBrowserDefaultThreads(),
+        browserThreadRequestOptions(runDefaultThreads ?? resolveBrowserDefaultThreads()),
       );
-      const command = readRunRequestCommand(request);
+      const command = readRomWeaverRunRequestCommand(request);
       const trace = createRunTrace(runOptions);
       trace(
         `[browser-opfs] run start command=${formatCommandForTrace(command)} threaded=${threaded} wasm=${basenameForTrace(wasmUrl)}`,
@@ -430,11 +429,11 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
       runOptions: BrowserOpfsRunOptions & RomWeaverRunJsonOptions<TEvent, TTraceEvent> = {},
     ): Promise<RomWeaverRunJsonResult<TEvent, TTraceEvent>> {
       const trace = createRunTrace(runOptions);
-      const request = normalizeRunRequest(commandOrRequest, {
+      const request = normalizeRomWeaverRunRequest(commandOrRequest, {
         ...readRunOutputOverrides(runOptions),
         json: true,
       });
-      trace(`[browser-opfs] runJson start command=${formatCommandForTrace(readRunRequestCommand(request))}`);
+      trace(`[browser-opfs] runJson start command=${formatCommandForTrace(readRomWeaverRunRequestCommand(request))}`);
       const parsed = createJsonLineParser<TEvent>({
         onEvent: runOptions.onEvent,
         onNonJsonLine: runOptions.onNonJsonLine,
@@ -673,67 +672,6 @@ function resolveBrowserGlobalRayonThreads(requestedThreadCount) {
   return Math.max(1, Math.min(MAX_BROWSER_RAYON_GLOBAL_THREADS, requestedThreadCount));
 }
 
-function normalizeRunRequest(commandOrRequest, outputOverrides = {}) {
-  if (!commandOrRequest || typeof commandOrRequest !== 'object') {
-    throw new TypeError('rom-weaver run requires a typed command or run request object');
-  }
-  const hasRequestShape = Object.hasOwn(commandOrRequest, 'command');
-  const command = normalizeRunCommand(hasRequestShape ? commandOrRequest.command : commandOrRequest);
-  const baseOutput = hasRequestShape && commandOrRequest.output && typeof commandOrRequest.output === 'object'
-    ? commandOrRequest.output
-    : {};
-  const output = normalizeRunOutputOptions({
-    ...baseOutput,
-    ...outputOverrides,
-  });
-  return { command, output };
-}
-
-function normalizeRunCommand(command) {
-  if (!command || typeof command !== 'object') {
-    throw new TypeError('rom-weaver typed command must be an object');
-  }
-  const type = typeof command.type === 'string' ? command.type.trim() : '';
-  if (!type) {
-    throw new TypeError('rom-weaver typed command requires a string `type` field');
-  }
-  if (type === 'patch') {
-    const patchCommand = command.args;
-    if (!patchCommand || typeof patchCommand !== 'object' || Array.isArray(patchCommand)) {
-      throw new TypeError('rom-weaver patch command requires an object `args` payload');
-    }
-    const patchType = typeof patchCommand.type === 'string' ? patchCommand.type.trim() : '';
-    if (!patchType) {
-      throw new TypeError('rom-weaver patch command requires a string nested `type` field');
-    }
-    const patchArgs = patchCommand.args && typeof patchCommand.args === 'object' && !Array.isArray(patchCommand.args)
-      ? { ...patchCommand.args }
-      : {};
-    return {
-      args: {
-        args: patchArgs,
-        type: patchType,
-      },
-      type,
-    };
-  }
-  const args = command.args && typeof command.args === 'object' && !Array.isArray(command.args)
-    ? { ...command.args }
-    : {};
-  return { type, args };
-}
-
-function normalizeRunOutputOptions(output) {
-  const normalized = {};
-  if (output?.json !== undefined) normalized.json = Boolean(output.json);
-  if (output?.trace !== undefined) normalized.trace = Boolean(output.trace);
-  if (typeof output?.progress === 'boolean') normalized.progress = output.progress;
-  if (output?.interactive_selection_enabled !== undefined) {
-    normalized.interactive_selection_enabled = Boolean(output.interactive_selection_enabled);
-  }
-  return normalized;
-}
-
 function readRunOutputOverrides(runOptions) {
   const output = {};
   if (typeof runOptions?.json === 'boolean') output.json = runOptions.json;
@@ -746,25 +684,6 @@ function readRunOutputOverrides(runOptions) {
     output.interactive_selection_enabled = runOptions.interactive_selection_enabled;
   }
   return output;
-}
-
-function readRunRequestCommand(request) {
-  return request?.command ?? null;
-}
-
-function readCommandArgs(command) {
-  if (command?.type === 'patch') {
-    return command?.args?.args && typeof command.args.args === 'object' ? command.args.args : {};
-  }
-  return command?.args && typeof command.args === 'object' ? command.args : {};
-}
-
-function readCommandTypeForSwitch(command) {
-  if (command?.type === 'patch') {
-    const patchType = typeof command?.args?.type === 'string' ? command.args.type.trim() : '';
-    return patchType ? `patch-${patchType}` : 'patch';
-  }
-  return typeof command?.type === 'string' ? command.type : 'unknown';
 }
 
 function serializeRunRequestForStdin(request) {
@@ -2306,61 +2225,9 @@ async function syncMountedInputPathsFromOpfs({
 }
 
 function collectMountedInputPaths(request, knownInputPaths) {
-  const values = collectRequestInputPaths(request);
-  pushPathValues(values, normalizeKnownInputPaths(knownInputPaths));
-  return [...new Set(values.map((value) => String(value)))];
-}
-
-function collectRequestInputPaths(request) {
-  const command = readRunRequestCommand(request);
-  const commandType = readCommandTypeForSwitch(command);
-  const args = readCommandArgs(command);
-  const values = [];
-
-  switch (commandType) {
-    case 'checksum':
-    case 'extract':
-    case 'probe':
-    case 'list':
-      pushPathValue(values, args.source);
-      break;
-    case 'compress':
-      pushPathValues(values, args.input);
-      break;
-    case 'trim':
-    case 'batch-header-fixer':
-      pushPathValues(values, args.source);
-      break;
-    case 'patch-create':
-    case 'patch-create-candidates':
-      pushPathValue(values, args.original);
-      pushPathValue(values, args.modified);
-      break;
-    case 'patch-apply':
-    case 'patch-validate':
-      pushPathValue(values, args.input);
-      pushPathValues(values, args.patches);
-      break;
-    default:
-      break;
-  }
-
-  return [...new Set(values.map((value) => String(value)))];
-}
-
-function pushPathValues(out, value) {
-  if (Array.isArray(value)) {
-    for (const entry of value) pushPathValue(out, entry);
-    return;
-  }
-  pushPathValue(out, value);
-}
-
-function pushPathValue(out, value) {
-  if (typeof value !== 'string') return;
-  const path = value.trim();
-  if (path.length === 0 || path.startsWith('-')) return;
-  out.push(path);
+  return collectRomWeaverRunInputPaths(request, {
+    knownInputPaths: normalizeKnownInputPaths(knownInputPaths),
+  });
 }
 
 async function hydrateMountedInputPathFromOpfs({ mount, relativeParts, rootHandle }) {
@@ -3684,29 +3551,10 @@ function resolveBrowserThreadPoolSizeFromCount(requestedThreadCount) {
 }
 
 function parseRequestedThreadCount(request) {
-  const command = readRunRequestCommand(request);
-  const args = readCommandArgs(command);
-  return parseThreadBudgetCount(args.threads);
-}
-
-function parseThreadBudgetCount(value) {
-  if (value === undefined || value === null) return null;
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    const parsed = Math.floor(value);
-    return parsed > 0 ? Math.min(parsed, MAX_BROWSER_THREAD_POOL_SIZE) : null;
-  }
-  if (typeof value === 'bigint') {
-    if (value <= 0n) return null;
-    const max = BigInt(MAX_BROWSER_THREAD_POOL_SIZE);
-    return Number(value > max ? max : value);
-  }
-  if (typeof value !== 'string') return null;
-  const raw = value.trim();
-  if (!raw) return null;
-  if (raw.toLowerCase() === 'auto') return DEFAULT_BROWSER_THREAD_COUNT;
-  const parsed = Number.parseInt(raw, 10);
-  if (!Number.isInteger(parsed) || parsed <= 0) return null;
-  return Math.min(parsed, MAX_BROWSER_THREAD_POOL_SIZE);
+  return readRomWeaverRequestedThreadCount(
+    request,
+    browserThreadRequestOptions(DEFAULT_BROWSER_THREAD_COUNT),
+  );
 }
 
 function wrapThreadFailure(tid, error) {
@@ -3987,76 +3835,12 @@ function normalizeDefaultThreads(value) {
   return Math.max(1, Math.min(MAX_BROWSER_THREAD_POOL_SIZE, parsed));
 }
 
-function withDefaultThreadRequest(request, defaultThreads) {
-  if (!defaultThreads) return request;
-  const command = readRunRequestCommand(request);
-  if (!command || !THREAD_AWARE_COMMANDS.has(command.type)) return request;
-  const args = readCommandArgs(command);
-  if (Object.hasOwn(args, 'threads') && args.threads !== undefined && args.threads !== null) {
-    return request;
-  }
-  return replaceRunRequestCommandArgs(request, {
-    ...args,
-    threads: defaultThreads,
-  });
-}
-
-function withBrowserThreadLimit(request, defaultThreads = DEFAULT_BROWSER_THREAD_COUNT) {
-  const command = readRunRequestCommand(request);
-  if (!command || !THREAD_AWARE_COMMANDS.has(command.type)) return request;
-  const args = readCommandArgs(command);
-  if (!Object.hasOwn(args, 'threads') || args.threads === undefined || args.threads === null) {
-    return request;
-  }
-  const clamped = clampBrowserThreadBudgetValue(args.threads, defaultThreads);
-  if (Object.is(clamped, args.threads)) return request;
-  return replaceRunRequestCommandArgs(request, {
-    ...args,
-    threads: clamped,
-  });
-}
-
-function replaceRunRequestCommandArgs(request, args) {
-  const command = readRunRequestCommand(request);
-  const nextCommand = command?.type === 'patch'
-    ? {
-        ...command,
-        args: {
-          ...command.args,
-          args,
-        },
-      }
-    : {
-        ...command,
-        args,
-      };
+function browserThreadRequestOptions(defaultThreads = DEFAULT_BROWSER_THREAD_COUNT) {
   return {
-    ...request,
-    command: nextCommand,
+    autoThreads: DEFAULT_BROWSER_THREAD_COUNT,
+    defaultThreads,
+    maxThreads: MAX_BROWSER_THREAD_POOL_SIZE,
   };
-}
-
-function clampBrowserThreadBudgetValue(value, defaultThreads = DEFAULT_BROWSER_THREAD_COUNT) {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    const parsed = Math.floor(value);
-    return parsed > 0 ? Math.min(parsed, MAX_BROWSER_THREAD_POOL_SIZE) : value;
-  }
-  if (typeof value === 'bigint') {
-    if (value <= 0n) return value;
-    const max = BigInt(MAX_BROWSER_THREAD_POOL_SIZE);
-    return Number(value > max ? max : value);
-  }
-  const raw = String(value ?? '').trim();
-  if (raw.toLowerCase() === 'auto') {
-    const parsedDefault = Number.parseInt(String(defaultThreads), 10);
-    if (Number.isInteger(parsedDefault) && parsedDefault > 0) {
-      return Math.min(parsedDefault, MAX_BROWSER_THREAD_POOL_SIZE);
-    }
-    return DEFAULT_BROWSER_THREAD_COUNT;
-  }
-  const parsed = Number.parseInt(raw, 10);
-  if (!Number.isInteger(parsed) || parsed <= 0) return value;
-  return Math.min(parsed, MAX_BROWSER_THREAD_POOL_SIZE);
 }
 
 function assertThreadedWasmRuntimeSupported({ wasmUrl }) {

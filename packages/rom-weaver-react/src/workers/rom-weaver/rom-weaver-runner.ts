@@ -5,8 +5,8 @@ import type {
   RomWeaverRunJsonEvent,
   RomWeaverRunJsonOptions,
   RomWeaverRunJsonResult,
-  RomWeaverRunRequest,
 } from "rom-weaver-wasm";
+import { collectRomWeaverRunInputPaths, readRomWeaverRunInputCommand } from "rom-weaver-wasm";
 import browserWasmUrl from "rom-weaver-wasm/rom-weaver-app.wasm?url";
 import { createBrowserWorkerClient } from "rom-weaver-wasm/workers/browser-client";
 import browserRunnerWorkerUrl from "rom-weaver-wasm/workers/browser-runner-worker?worker&url";
@@ -51,14 +51,6 @@ type BrowserWasmAssetSelection = {
   wasmUrl?: string;
 };
 
-type RomWeaverCommandBranch =
-  | { type: "checksum" | "extract" | "probe" | "list"; args: { source?: unknown } }
-  | { type: "compress"; args: { input?: unknown } }
-  | { type: "batch-header-fixer" | "trim"; args: { source?: unknown } }
-  | { type: "patch-apply" | "patch-validate"; args: { input?: unknown; patches?: unknown } }
-  | { type: "patch-create" | "patch-create-candidates"; args: { original?: unknown; modified?: unknown } }
-  | { type: string; args: Record<string, unknown> };
-
 let browserThreadedRunnerPromise: Promise<RomWeaverRunner> | null = null;
 let browserThreadedRunnerStale = false;
 let activeRunnerRunCount = 0;
@@ -91,84 +83,15 @@ const emitRunnerTraceLine = (options: RomWeaverRunnerRunJsonOptions | undefined,
   options?.onTraceNonJsonLine?.(`[browser-runner] ${message}`);
 };
 
-const readRunCommand = (commandOrRequest: RomWeaverRunInput): RomWeaverCommand =>
-  isRomWeaverRunRequest(commandOrRequest) ? commandOrRequest.command : commandOrRequest;
-
-const readCommandBranch = (command: RomWeaverCommand): RomWeaverCommandBranch => {
-  if (command.type === "patch") {
-    const patchCommand = command.args;
-    const patchArgs: Record<string, unknown> =
-      patchCommand && typeof patchCommand === "object" && "args" in patchCommand && patchCommand.args
-        ? patchCommand.args
-        : {};
-    return {
-      args: patchArgs,
-      type: `patch-${String((patchCommand as { type?: unknown })?.type || "").trim()}`,
-    };
-  }
-  return {
-    args: command.args,
-    type: command.type,
-  };
-};
-
-const pushPathValue = (out: Set<string>, value: unknown) => {
-  if (typeof value !== "string") return;
-  const path = value.trim();
-  if (!path || path.startsWith("-")) return;
-  out.add(path);
-};
-
-const pushPathValues = (out: Set<string>, value: unknown) => {
-  if (Array.isArray(value)) {
-    for (const entry of value) pushPathValue(out, entry);
-    return;
-  }
-  pushPathValue(out, value);
-};
-
-const throwUnhandledRomWeaverCommand = (commandType: string): never => {
-  throw new Error(`Unhandled rom-weaver command type: ${commandType || "unknown"}`);
-};
-
 const collectReferencedVirtualFilePaths = (
   commandOrRequest: RomWeaverRunInput,
   options?: RomWeaverRunnerRunJsonOptions,
 ) => {
-  const paths = new Set<string>();
-  const command = readRunCommand(commandOrRequest);
-  const branch = readCommandBranch(command);
-
-  switch (branch.type) {
-    case "checksum":
-    case "extract":
-    case "probe":
-    case "list":
-      pushPathValue(paths, branch.args.source);
-      break;
-    case "compress":
-      pushPathValues(paths, branch.args.input);
-      break;
-    case "batch-header-fixer":
-    case "trim":
-      pushPathValues(paths, branch.args.source);
-      break;
-    case "patch-apply":
-    case "patch-validate":
-      pushPathValue(paths, branch.args.input);
-      pushPathValues(paths, branch.args.patches);
-      break;
-    case "patch-create":
-    case "patch-create-candidates":
-      pushPathValue(paths, branch.args.original);
-      pushPathValue(paths, branch.args.modified);
-      break;
-    default:
-      throwUnhandledRomWeaverCommand(branch.type);
-  }
-
-  pushPathValues(paths, options?.knownInputPaths);
-  return paths;
+  return new Set(
+    collectRomWeaverRunInputPaths(commandOrRequest, {
+      knownInputPaths: options?.knownInputPaths,
+    }),
+  );
 };
 
 const selectActiveVirtualFilesForRun = (
@@ -176,7 +99,7 @@ const selectActiveVirtualFilesForRun = (
   commandOrRequest: RomWeaverRunInput,
   options?: RomWeaverRunnerRunJsonOptions,
 ) => {
-  const command = readRunCommand(commandOrRequest);
+  const command = readRomWeaverRunInputCommand(commandOrRequest);
   const referencedPaths = collectReferencedVirtualFilePaths(commandOrRequest, options);
   if (command.type === "compress" && [...referencedPaths].some((path) => /\.cue$/i.test(path))) {
     return activeVirtualFiles;
@@ -362,19 +285,14 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
   try {
     return await dispatchRun();
   } catch (error) {
-    if (!isRunnerOutOfMemoryError(error)) throw error;
     // A long-lived worker can exhaust its (only-ever-growing) wasm heap after several heavy ops and
-    // fail a later run with an out-of-memory error. A freshly spawned worker starts on a clean heap,
-    // so recycle the exhausted one and retry the run exactly once. Skip when another run is in flight
-    // — resetting disposes the shared worker and would abort that sibling run — but mark it stale so
-    // it recycles once idle.
-    if (activeRunnerRunCount > 0) {
-      markRomWeaverRunnerStale();
-      throw error;
+    // fail a later run with an out-of-memory error. Flag the exhausted worker stale so the next
+    // dispatch recycles it onto a clean heap, then surface the error rather than retrying the run.
+    if (isRunnerOutOfMemoryError(error)) {
+      emitRunnerTraceLine(options, "runJson out-of-memory; flagging worker stale for recycle on next dispatch");
+      browserThreadedRunnerStale = true;
     }
-    emitRunnerTraceLine(options, "runJson out-of-memory; recycling worker and retrying once");
-    await resetRomWeaverRunner();
-    return await dispatchRun();
+    throw error;
   }
 };
 
@@ -419,18 +337,12 @@ const getResourceName = (urlLike: string) => {
 };
 
 const formatCommandForTrace = (commandOrRequest: RomWeaverRunInput) => {
-  const command: RomWeaverCommand = isRomWeaverRunRequest(commandOrRequest)
-    ? commandOrRequest.command
-    : commandOrRequest;
+  const command: RomWeaverCommand = readRomWeaverRunInputCommand(commandOrRequest);
   try {
     return JSON.stringify(command);
   } catch (_err) {
     return String(command.type || "unknown");
   }
-};
-
-const isRomWeaverRunRequest = (value: RomWeaverRunInput): value is RomWeaverRunRequest => {
-  return "command" in value && Boolean(value.command);
 };
 
 const getErrorMessage = (value: unknown) => {

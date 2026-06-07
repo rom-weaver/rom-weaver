@@ -1,5 +1,6 @@
 import { expect } from 'vitest';
 import { runBrowserFullFormatMatrixCore } from '../src/browser-format-matrix.ts';
+import { createRomWeaverCommand } from '../src/rom-weaver-command.ts';
 import { createBrowserWorkerClient } from '../src/workers/browser-worker-client.ts';
 
 const OPFS_GUEST_ROOT = '/work';
@@ -309,9 +310,12 @@ function locateCommand(args) {
 
 function createCommandRequest(command, subcommand) {
   if (command === 'patch') {
-    return { type: 'patch', args: { type: subcommand, args: {} } };
+    if (subcommand === 'apply' || subcommand === 'create' || subcommand === 'validate') {
+      return createRomWeaverCommand(`patch-${subcommand}`, {});
+    }
+    throw new Error(`unsupported patch subcommand in test args: ${subcommand || '(missing)'}`);
   }
-  return { type: command, args: {} };
+  return createRomWeaverCommand(command, {});
 }
 
 function parseCommandTokens(args, commandIndex) {
