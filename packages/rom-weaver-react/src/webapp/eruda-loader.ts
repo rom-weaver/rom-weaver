@@ -1,16 +1,15 @@
+import type { Eruda } from "eruda";
+
 (() => {
-  const ERUDA_URL = "https://cdn.jsdelivr.net/npm/eruda@3.4.3/eruda.min.js";
-  const ERUDA_INITIALIZED_FLAG = "__ROM_WEAVER_ERUDA_INITIALIZED__";
   const LOCAL_STORAGE_SETTINGS_ID = "rom-weaver-settings";
   const SETTINGS_STORAGE_VERSION = 5;
+  const ERUDA_TOOLS = ["console", "elements", "network", "resources", "sources", "info", "settings"];
 
   let erudaEnabled = false;
   let erudaScriptLoading = false;
+  let erudaLoadPromise: Promise<void> | null = null;
   let openErudaWhenReady = false;
   let erudaPanelOpen = false;
-  const addErudaScript = (script: HTMLScriptElement) => {
-    document.head.insertBefore(script, document.head.firstChild);
-  };
   const isRecord = (value: unknown): value is Record<string, unknown> =>
     !!value && typeof value === "object" && !Array.isArray(value);
   const readStoredErudaEnabled = (rawSettings: string | null): boolean => {
@@ -41,7 +40,7 @@
     if (!(erudaEnabled && window.eruda)) return;
     if (!window.__ROM_WEAVER_ERUDA_INITIALIZED__) {
       window.__ROM_WEAVER_ERUDA_INITIALIZED__ = true;
-      window.eruda.init();
+      window.eruda.init({ tool: ERUDA_TOOLS });
       console.log("Mobile dev tools initialized");
     }
     scheduleHideFloatingErudaButton();
@@ -125,30 +124,36 @@
       initEruda();
       return;
     }
-    if (erudaScriptLoading) return;
+    if (erudaLoadPromise) return;
     erudaScriptLoading = true;
 
-    const script = document.createElement("script");
-    script.src = ERUDA_URL;
-    script.crossOrigin = "anonymous";
-    script.onload = () => {
-      erudaScriptLoading = false;
-      initEruda();
-      if (openErudaWhenReady) showEruda();
-    };
-    script.onerror = () => {
-      erudaScriptLoading = false;
-      openErudaWhenReady = false;
-      console.error(`Failed to load mobile dev tools from ${ERUDA_URL}`);
-    };
-    addErudaScript(script);
+    erudaLoadPromise = import("eruda")
+      .then((module) => {
+        window.eruda = module.default as Eruda;
+        initEruda();
+        if (openErudaWhenReady) showEruda();
+      })
+      .catch((err: unknown) => {
+        openErudaWhenReady = false;
+        console.error("Failed to load bundled mobile dev tools", err);
+      })
+      .finally(() => {
+        erudaScriptLoading = false;
+        erudaLoadPromise = null;
+      });
   };
   const openEruda = () => {
+    if (!erudaEnabled) return;
     openErudaWhenReady = true;
     loadEruda();
     showEruda();
   };
   const toggleEruda = () => {
+    if (!erudaEnabled) {
+      openErudaWhenReady = false;
+      setErudaPanelOpen(false);
+      return;
+    }
     if (erudaScriptLoading && openErudaWhenReady) {
       openErudaWhenReady = false;
       setErudaPanelOpen(false);
@@ -190,16 +195,5 @@
   syncErudaPanelOpenState();
 
   if (!shouldEnableEruda()) return;
-
-  if (document.readyState === "loading" && document.currentScript) {
-    erudaEnabled = true;
-    window.ROM_WEAVER_ERUDA_ENABLED = true;
-    document.write(`<script crossorigin="anonymous" src="${ERUDA_URL}"></script>`);
-    document.write(
-      `<script>(function(){function h(){var r=document.getElementById("eruda");var s=r&&r.shadowRoot;var b=s&&s.querySelector(".eruda-entry-btn");if(b)b.style.display="none";}if(window.eruda&&!window.${ERUDA_INITIALIZED_FLAG}){window.${ERUDA_INITIALIZED_FLAG}=true;window.eruda.init();console.log("Mobile dev tools initialized");}h();requestAnimationFrame(h);setTimeout(h,50);setTimeout(h,250);}());</script>`,
-    );
-    return;
-  }
-
   loadEruda();
 })();

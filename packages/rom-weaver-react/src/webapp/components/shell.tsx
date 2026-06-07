@@ -22,8 +22,7 @@ const join = (...values: Array<string | false | null | undefined>) => values.fil
 type WorkflowTab = { id: string; label: string; icon: ReactNode };
 const MOBILE_DEVTOOLS_STATE_EVENT = "rom-weaver:mobile-devtools-state";
 
-const readMobileDevToolsOpen = () =>
-  typeof window !== "undefined" && window.ROM_WEAVER_ERUDA_PANEL_OPEN === true;
+const readMobileDevToolsOpen = () => typeof window !== "undefined" && window.ROM_WEAVER_ERUDA_PANEL_OPEN === true;
 
 const WorkflowTabs = ({
   tabs,
@@ -118,6 +117,7 @@ const MobileDevToolsButton = ({ onToggleMobileDevTools }: { onToggleMobileDevToo
 
 const Topbar = ({
   logoSrc,
+  mobileDevToolsEnabled,
   tabs,
   currentTab,
   onCopyConsoleLogs,
@@ -126,6 +126,7 @@ const Topbar = ({
   onOpenSettings,
 }: {
   logoSrc?: string;
+  mobileDevToolsEnabled: boolean;
   tabs: WorkflowTab[];
   currentTab: string;
   onCopyConsoleLogs: () => Promise<void | string>;
@@ -144,8 +145,12 @@ const Topbar = ({
     <WorkflowTabs current={currentTab} onSelect={onSelectTab} tabs={tabs} />
     <span className="spacer" />
     <ThemeToggle />
-    <ConsoleLogCopyButton onCopyConsoleLogs={onCopyConsoleLogs} />
-    <MobileDevToolsButton onToggleMobileDevTools={onToggleMobileDevTools} />
+    {mobileDevToolsEnabled ? (
+      <>
+        <ConsoleLogCopyButton onCopyConsoleLogs={onCopyConsoleLogs} />
+        <MobileDevToolsButton onToggleMobileDevTools={onToggleMobileDevTools} />
+      </>
+    ) : null}
     <button aria-label="Settings" className="iconbtn" onClick={onOpenSettings} title="Settings" type="button">
       <Settings aria-hidden="true" />
     </button>

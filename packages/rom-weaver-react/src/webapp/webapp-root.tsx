@@ -35,6 +35,7 @@ function WebappRoot({ state, serviceWorkerCache, pageUpdate, confirmationDialog,
           <Topbar
             currentTab={state.currentView}
             logoSrc={ROOT_LOGO_URL}
+            mobileDevToolsEnabled={state.settings.mobileDevTools === true}
             onCopyConsoleLogs={actions.onCopyConsoleLogs}
             onOpenSettings={actions.onOpenSettings}
             onSelectTab={(id) => actions.onSelectView(id as WebappRootProps["state"]["currentView"])}

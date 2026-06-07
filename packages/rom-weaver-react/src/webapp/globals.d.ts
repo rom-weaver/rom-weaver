@@ -38,7 +38,7 @@ declare global {
     };
     __ROM_WEAVER_ERUDA_INITIALIZED__?: boolean;
     eruda?: {
-      init: () => void;
+      init: (options?: { tool?: string[] }) => void;
       destroy?: () => void;
       hide?: () => void;
       show?: (tool?: string) => void;

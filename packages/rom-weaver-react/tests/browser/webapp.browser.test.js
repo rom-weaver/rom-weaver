@@ -60,6 +60,7 @@ const createNoopActions = () => ({
   onCancelConfirmation: () => undefined,
   onCloseSettings: () => undefined,
   onConfirmConfirmation: () => undefined,
+  onCopyConsoleLogs: () => Promise.resolve(),
   onCreatorModifiedChange: () => undefined,
   onCreatorOriginalChange: () => undefined,
   onCreatorPatchTypeChange: () => undefined,
@@ -73,6 +74,7 @@ const createNoopActions = () => ({
   onRestoreDefaults: () => undefined,
   onSaveClose: () => undefined,
   onSelectView: () => undefined,
+  onToggleMobileDevTools: () => undefined,
 });
 
 const createServiceWorkerCacheState = () => ({
@@ -83,12 +85,12 @@ const createServiceWorkerCacheState = () => ({
   updateTitle: "",
 });
 
-const createWebappState = () => ({
+const createWebappState = (settings = getDefaultSettings()) => ({
   creatorSession: createEmptyCreatorSessionState(),
   currentView: "patcher",
-  draftSettings: getDefaultSettings(),
+  draftSettings: settings,
   patcherSession: createEmptyPatcherSessionState(),
-  settings: getDefaultSettings(),
+  settings,
   settingsDialogOpen: false,
   startup: {
     message: "",
@@ -97,16 +99,16 @@ const createWebappState = () => ({
   validation: createEmptyValidationState(),
 });
 
-function WebappRootHarness() {
+function WebappRootHarness({ settings } = {}) {
   const props = useMemo(
     () => ({
       actions: createNoopActions(),
       confirmationDialog: createEmptyConfirmationDialogState(),
       pageUpdate: createEmptyPageUpdateState(),
       serviceWorkerCache: createServiceWorkerCacheState(),
-      state: createWebappState(),
+      state: createWebappState(settings),
     }),
-    [],
+    [settings],
   );
   return createElement(WebappRoot, props);
 }
@@ -114,11 +116,11 @@ function WebappRootHarness() {
 let mountedRoot = null;
 let rootElement = null;
 
-const mountWebappRoot = () => {
+const mountWebappRoot = (options = {}) => {
   mountedRoot?.unmount?.();
   mountedRoot = null;
   const root = createRoot(rootElement);
-  root.render(createElement(WebappRootHarness));
+  root.render(createElement(WebappRootHarness, options));
   mountedRoot = root;
 };
 
@@ -162,4 +164,14 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
 
   await waitForInputStackFile("game.bin");
   await expect.element(page.getByText(CRC32_TEXT_REGEX)).toBeInTheDocument();
+});
+
+test("WebappRoot only shows mobile dev tools controls when enabled", async () => {
+  mountWebappRoot();
+  await expect.element(page.getByRole("button", { name: "Mobile dev tools" })).not.toBeInTheDocument();
+  await expect.element(page.getByRole("button", { name: "Copy console logs" })).not.toBeInTheDocument();
+
+  mountWebappRoot({ settings: { ...getDefaultSettings(), mobileDevTools: true } });
+  await expect.element(page.getByRole("button", { name: "Mobile dev tools" })).toBeInTheDocument();
+  await expect.element(page.getByRole("button", { name: "Copy console logs" })).toBeInTheDocument();
 });
