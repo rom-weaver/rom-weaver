@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
+import { stripCompressionCodecLevelOverrides } from "../../../../lib/compression/codec-fields.ts";
 import { InfoToggle } from "../../../../presentation/react/info-toggle.tsx";
 import { type CompressField, type CompressFieldInfo, OUTPUT_FORMAT_INFO } from "../../compress-options.ts";
+import { CodecCombobox } from "./codec-combobox.tsx";
 import { type FormatOption, type OutputCompressPanel, OutputField } from "./output-card.tsx";
 
 /**
@@ -56,50 +58,82 @@ const CompressPanelBody = ({
   disabled,
 }: {
   fields: CompressField[];
-  onChange: (key: string, value: string) => void;
+  onChange: (key: string, value: string, updates?: Record<string, string>) => void;
   disabled?: boolean;
-}) => (
-  <>
-    {fields.map((field) =>
-      field.kind === "select" ? (
-        <OutputField
-          key={field.key}
-          label={field.label}
-          labelInfo={<FieldInfoToggle info={field.info} label={field.label} />}
-        >
-          <select
-            aria-label={field.label}
-            className="select"
-            disabled={disabled}
-            onChange={(event) => onChange(field.key, event.currentTarget.value)}
-            value={field.value}
+}) => {
+  const handleChange = (field: CompressField, value: string) => {
+    const updates: Record<string, string> = { [field.key]: value };
+    if (field.kind === "select" && field.key === "compressionProfile") {
+      for (const codecField of fields) {
+        if (codecField.kind !== "codec") continue;
+        const strippedValue = stripCompressionCodecLevelOverrides(codecField.value);
+        if (strippedValue !== codecField.value) updates[codecField.key] = strippedValue;
+      }
+    }
+    onChange(field.key, value, updates);
+  };
+
+  return (
+    <>
+      {fields.map((field) =>
+        field.kind === "select" ? (
+          <OutputField
+            key={field.key}
+            label={field.label}
+            labelInfo={<FieldInfoToggle info={field.info} label={field.label} />}
           >
-            {field.options.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </OutputField>
-      ) : (
-        <OutputField
-          key={field.key}
-          label={field.label}
-          labelInfo={<FieldInfoToggle info={field.info} label={field.label} />}
-        >
-          <input
-            aria-label={field.label}
-            className={field.mono ? "input mono" : "input"}
-            disabled={disabled}
-            onChange={(event) => onChange(field.key, event.currentTarget.value)}
-            placeholder={field.placeholder}
-            value={field.value}
-          />
-        </OutputField>
-      ),
-    )}
-  </>
-);
+            <select
+              aria-label={field.label}
+              className="select"
+              disabled={disabled}
+              onChange={(event) => handleChange(field, event.currentTarget.value)}
+              value={field.value}
+            >
+              {field.options.map((option) => (
+                <option disabled={option.disabled} key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </OutputField>
+        ) : field.kind === "codec" ? (
+          <OutputField
+            key={field.key}
+            label={field.label}
+            labelInfo={<FieldInfoToggle info={field.info} label={field.label} />}
+          >
+            <CodecCombobox
+              ariaLabel={field.label}
+              disabled={disabled}
+              inputClassName={field.mono ? "input mono" : "input"}
+              label={field.label}
+              multiple={field.multiple}
+              onChange={(value) => handleChange(field, value)}
+              options={field.options}
+              placeholder={field.placeholder}
+              value={field.value}
+            />
+          </OutputField>
+        ) : (
+          <OutputField
+            key={field.key}
+            label={field.label}
+            labelInfo={<FieldInfoToggle info={field.info} label={field.label} />}
+          >
+            <input
+              aria-label={field.label}
+              className={field.mono ? "input mono" : "input"}
+              disabled={disabled}
+              onChange={(event) => handleChange(field, event.currentTarget.value)}
+              placeholder={field.placeholder}
+              value={field.value}
+            />
+          </OutputField>
+        ),
+      )}
+    </>
+  );
+};
 
 type OutputCompressionPanelConfig = {
   disabled?: boolean;
@@ -110,7 +144,7 @@ type OutputCompressionPanelConfig = {
   formatLabel?: string;
   formatOptions?: FormatOption[];
   formatValue?: string;
-  onFieldChange?: (key: string, value: string) => void;
+  onFieldChange?: (key: string, value: string, updates?: Record<string, string>) => void;
   onFormatChange?: (value: string) => void;
   summary?: ReactNode;
   timing?: ReactNode;

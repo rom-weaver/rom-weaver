@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import { isCompressionCodecFieldKey } from "../lib/compression/codec-fields.ts";
+import { CodecCombobox } from "../public/react/components/ds/codec-combobox.tsx";
 import { CompressInfoContent } from "../public/react/components/ds/compress-panel.tsx";
 import { COMPRESSION_PROFILE_FIELD_INFO } from "../public/react/compress-options.ts";
 import { InfoToggle } from "./components/info-toggle.tsx";
@@ -188,6 +190,22 @@ const FieldControl = ({ fieldKey, draftSettings, uiState, validation, onDraftCha
   const inputType = field.kind === "number" && fieldKey !== "workerThreads" ? "number" : "text";
   const placeholder = getFieldPlaceholder(fieldKey, draftSettings, uiState);
   const value = getFieldValue(fieldKey, draftSettings);
+  if (field.kind === "text" && isCompressionCodecFieldKey(fieldKey)) {
+    return (
+      <CodecCombobox
+        disabled={disabled}
+        forceInvalid={validation.invalidFields.includes(field.id)}
+        id={field.id}
+        inputClassName={value === "" && placeholder ? "input mono settings-placeholder-value" : "input mono"}
+        label={field.label || fieldKey}
+        multiple={fieldKey === "chdCreateCdCodecs" || fieldKey === "chdCreateDvdCodecs"}
+        onChange={(nextValue) => onDraftChange(fieldKey, nextValue)}
+        options={field.codecOptions || []}
+        placeholder={placeholder}
+        value={value}
+      />
+    );
+  }
   return (
     <input
       className={value === "" && placeholder ? "input mono settings-placeholder-value" : "input mono"}

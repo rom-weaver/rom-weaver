@@ -1848,10 +1848,10 @@ const useLocalApplyPatchFormSession = ({
           },
         });
       },
-      setOutputCompressOption: (key: string, value: string) => {
+      setOutputCompressOption: (key: string, value: string, updates?: Record<string, string>) => {
         // Per-job override of a flat compression setting (zipCodec, compressionProfile, …)
         // the run already reads; leaves the persisted Settings untouched.
-        updateSettings({ ...activeSettings, [key]: value });
+        updateSettings({ ...activeSettings, ...(updates || { [key]: value }) });
       },
       subscribe: localOutputStoreController.subscribe,
     }),

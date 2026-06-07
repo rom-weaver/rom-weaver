@@ -839,7 +839,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
           formatId: "trim-builder-select-output-compression",
           formatOptions: compressFormatOptions,
           formatValue: resolvedOutputFormat,
-          onFieldChange: (key, value) => updateSettings({ ...settings, [key]: value }),
+          onFieldChange: (key, value, updates) => updateSettings({ ...settings, ...(updates || { [key]: value }) }),
           onFormatChange: updateOutputFormat,
           summary: trimCompressPanel?.summary,
           timing: compressTimingText,

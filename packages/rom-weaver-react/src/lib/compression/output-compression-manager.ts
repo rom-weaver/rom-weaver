@@ -361,12 +361,11 @@ const OutputCompressionManager = (() => {
   const _getCompressionProfileLevel = (
     profile: CompressionProfileInput,
     codec: CodecChoiceInput,
-    compression?: CompressionChoiceInput,
+    _compression?: CompressionChoiceInput,
   ) => {
     const normalizedProfile = _normalizeCompressionProfile(profile, "max");
-    const selected = compression ? _normalizeOutputCompression(compression) : "";
     const levelSet =
-      selected !== OUTPUT_COMPRESSION.ZIP && String(codec || "").toLowerCase() === "zstd"
+      String(codec || "").toLowerCase() === "zstd"
         ? COMPRESSION_PROFILE_LEVELS.zstd
         : COMPRESSION_PROFILE_LEVELS.standard;
     return levelSet[normalizedProfile];

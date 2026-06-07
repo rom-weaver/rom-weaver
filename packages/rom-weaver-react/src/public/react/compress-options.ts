@@ -8,6 +8,12 @@
  * editing here simply overrides Settings for this one job.
  */
 
+import {
+  type CompressionCodecOption,
+  getCompressionCodecLevelMax,
+  getCompressionCodecOptions,
+  hasCompressionCodecLevelOverride,
+} from "../../lib/compression/codec-fields.ts";
 import { getChdAutoCreateMode } from "../../lib/input/rom-specific-file-utils.ts";
 import { getSettingsLabel } from "../../presentation/settings.ts";
 
@@ -20,7 +26,7 @@ type SourceLike = {
   getExtension?: () => string;
 };
 
-type CompressFieldOption = { value: string; label: string };
+type CompressFieldOption = { value: string; label: string; disabled?: boolean };
 type CompressFieldLevelMapRow = { profile: string; standard: number; zstd: number };
 type CompressFieldInfo = {
   title: string;
@@ -36,6 +42,17 @@ type CompressField =
       label: string;
       value: string;
       options: CompressFieldOption[];
+      info?: CompressFieldInfo;
+    }
+  | {
+      kind: "codec";
+      key: string;
+      label: string;
+      value: string;
+      options: CompressionCodecOption[];
+      multiple?: boolean;
+      placeholder?: string;
+      mono?: boolean;
       info?: CompressFieldInfo;
     }
   | {
@@ -65,13 +82,14 @@ const PROFILE_LEVEL_MAP: CompressFieldLevelMapRow[] = PROFILE_LABELS.map((profil
 const COMPRESSION_PROFILE_FIELD_INFO: CompressFieldInfo = {
   items: [
     "This profile controls codec levels unless a codec list includes an explicit codec:level entry.",
-    "The standard column applies to 7z LZMA2, ZIP Deflate, ZIP zstd, zlib, cdlz, and cdzl.",
-    "The zstd column applies to RVZ, z3ds, CHD zstd, and CD zstd.",
+    "The standard column applies to 7z LZMA2, ZIP Deflate, zlib, cdlz, and cdzl.",
+    "The zstd column applies to ZIP zstd, RVZ, z3ds, CHD zstd, and CD zstd.",
   ],
   levelMap: PROFILE_LEVEL_MAP,
   summary: "Profile to numeric compression-level mapping.",
   title: getSettingsLabel("compressionProfile"),
 };
+const OVERRIDDEN_PROFILE_VALUE = "__overridden";
 
 const FIELD_INFO: Record<string, CompressFieldInfo> = {
   chdCreateCdCodecs: {
@@ -123,6 +141,12 @@ const str = (settings: SettingsLike, key: string, fallback = ""): string => {
   return value === undefined || value === null || value === "" ? fallback : String(value);
 };
 
+const editableStr = (settings: SettingsLike, key: string, fallback = ""): string => {
+  if (!Object.hasOwn(settings, key)) return fallback;
+  const value = settings[key];
+  return value === undefined || value === null ? fallback : String(value);
+};
+
 /** Normalize a stored compression-profile value to its scale index (defaults to Max). */
 const profileIndex = (settings: SettingsLike): number => {
   const raw = str(settings, "compressionProfile", "max").toLowerCase();
@@ -132,14 +156,46 @@ const profileIndex = (settings: SettingsLike): number => {
   return byLabel >= 0 ? byLabel : PROFILE_VALUES.length - 1;
 };
 
-const levelField = (settings: SettingsLike): CompressField => ({
+const getProfileOptions = (overridden: boolean): CompressFieldOption[] => [
+  ...(overridden ? [{ disabled: true, label: "Overridden", value: OVERRIDDEN_PROFILE_VALUE }] : []),
+  ...PROFILE_LABELS.map((label, index) => ({ label, value: PROFILE_VALUES[index] as string })),
+];
+
+const levelField = (settings: SettingsLike, overridden = false): CompressField => ({
   info: FIELD_INFO.compressionProfile,
   key: "compressionProfile",
   kind: "select",
   label: getSettingsLabel("compressionProfile"),
-  options: PROFILE_LABELS.map((label, index) => ({ label, value: PROFILE_VALUES[index] as string })),
-  value: PROFILE_VALUES[profileIndex(settings)] as string,
+  options: getProfileOptions(overridden),
+  value: overridden ? OVERRIDDEN_PROFILE_VALUE : (PROFILE_VALUES[profileIndex(settings)] as string),
 });
+
+const CODEC_ENTRY_REGEX = /^([a-z0-9_+-]+)(?::(\d+))?$/;
+
+const getProfileLevelForCodec = (settings: SettingsLike, maxLevel: number): number => {
+  const index = profileIndex(settings);
+  const profileLevels = maxLevel > 9 ? ZSTD_PROFILE_LEVELS : STANDARD_PROFILE_LEVELS;
+  const profileLevel = profileLevels[index] ?? maxLevel;
+  return Math.max(0, Math.min(maxLevel, profileLevel));
+};
+
+const codecProfileSummary = (fieldKey: string, codecSummary: string, settings: SettingsLike): string => {
+  if (!codecSummary) return "";
+  return codecSummary
+    .split(",")
+    .map((rawEntry) => {
+      const entry = rawEntry.trim().toLowerCase();
+      if (!entry) return "";
+      const match = entry.match(CODEC_ENTRY_REGEX);
+      if (!match) return entry;
+      const codec = match[1] || "";
+      if (match[2] !== undefined) return `${codec}:${match[2]}`;
+      const maxLevel = getCompressionCodecLevelMax(fieldKey, codec);
+      return maxLevel === null ? codec : `${codec}:${getProfileLevelForCodec(settings, maxLevel)}`;
+    })
+    .filter(Boolean)
+    .join(",");
+};
 
 /** Build the compress-panel model for a normalized output format, or null when the format isn't compressed. */
 const resolveChdPanelMode = (settings: SettingsLike, source?: unknown): "cd" | "dvd" | null => {
@@ -152,53 +208,63 @@ const resolveChdPanelMode = (settings: SettingsLike, source?: unknown): "cd" | "
 
 const buildCompressPanel = (format: string, settings: SettingsLike, source?: unknown): CompressPanelModel | null => {
   const normalized = String(format || "").toLowerCase();
-  const level = levelField(settings);
-  const levelSummary = PROFILE_LABELS[profileIndex(settings)] ?? "Max";
 
   if (normalized === "zip") {
-    const codec = str(settings, "zipCodec", "deflate");
+    const codec = editableStr(settings, "zipCodec", "deflate");
+    const codecSummary = codec || "deflate";
+    const levelOverridden = hasCompressionCodecLevelOverride(codec);
+    const level = levelField(settings, levelOverridden);
     return {
       fields: [
         {
           info: FIELD_INFO.zipCodec,
           key: "zipCodec",
-          kind: "text",
+          kind: "codec",
           label: getSettingsLabel("zipCodec"),
-          placeholder: "deflate:9",
+          options: getCompressionCodecOptions("zipCodec"),
+          placeholder: "deflate",
           value: codec,
         },
         level,
       ],
-      summary: `${codec || "deflate"} · ${levelSummary}`,
+      summary: codecProfileSummary("zipCodec", codecSummary, settings),
     };
   }
   if (normalized === "7z") {
-    const codec = str(settings, "sevenZipCodec", "lzma2");
+    const codec = editableStr(settings, "sevenZipCodec", "lzma2");
+    const codecSummary = codec || "lzma2";
+    const levelOverridden = hasCompressionCodecLevelOverride(codec);
+    const level = levelField(settings, levelOverridden);
     return {
       fields: [
         {
           info: FIELD_INFO.sevenZipCodec,
           key: "sevenZipCodec",
-          kind: "text",
+          kind: "codec",
           label: getSettingsLabel("sevenZipCodec"),
-          placeholder: "lzma2:9",
+          options: getCompressionCodecOptions("sevenZipCodec"),
+          placeholder: "lzma2",
           value: codec,
         },
         level,
       ],
-      summary: `${codec || "lzma2"} · ${levelSummary}`,
+      summary: codecProfileSummary("sevenZipCodec", codecSummary, settings),
     };
   }
   if (normalized === "rvz") {
-    const codec = str(settings, "rvzCodec", str(settings, "rvzCompression", "zstd"));
+    const codec = editableStr(settings, "rvzCodec", editableStr(settings, "rvzCompression", "zstd"));
+    const codecSummary = codec || "zstd";
+    const levelOverridden = hasCompressionCodecLevelOverride(codec);
+    const level = levelField(settings, levelOverridden);
     return {
       fields: [
         {
           info: FIELD_INFO.rvzCodec,
           key: "rvzCodec",
-          kind: "text",
+          kind: "codec",
           label: getSettingsLabel("rvzCodec"),
-          placeholder: "zstd:22",
+          options: getCompressionCodecOptions("rvzCodec"),
+          placeholder: "zstd",
           value: codec,
         },
         {
@@ -212,38 +278,44 @@ const buildCompressPanel = (format: string, settings: SettingsLike, source?: unk
         },
         level,
       ],
-      summary: `${codec || "zstd"} · ${levelSummary}`,
+      summary: codecProfileSummary("rvzCodec", codecSummary, settings),
     };
   }
   if (normalized === "chd") {
     const mode = resolveChdPanelMode(settings, source);
-    const cd = str(settings, "chdCreateCdCodecs", "cdlz,cdzl,cdfl");
-    const dvd = str(settings, "chdCreateDvdCodecs", "lzma,zlib,huff,flac");
+    const cd = editableStr(settings, "chdCreateCdCodecs", "cdlz,cdzl,cdfl");
+    const dvd = editableStr(settings, "chdCreateDvdCodecs", "lzma,zlib,huff,flac");
     const codecKey = mode === "cd" ? "chdCreateCdCodecs" : "chdCreateDvdCodecs";
     const codecValue = mode === "cd" ? cd : mode === "dvd" ? dvd : "";
+    const codecSummary = codecValue || (mode === "cd" ? "cdlz,cdzl,cdfl" : mode === "dvd" ? "lzma,zlib,huff,flac" : "");
+    const levelOverridden = hasCompressionCodecLevelOverride(codecValue);
+    const level = levelField(settings, levelOverridden);
     return {
       fields: [
         {
           info: FIELD_INFO[codecKey],
           key: codecKey,
-          kind: "text",
+          kind: "codec",
           label:
             codecKey === "chdCreateCdCodecs"
               ? getSettingsLabel("chdCreateCdCodecs")
               : getSettingsLabel("chdCreateDvdCodecs"),
           mono: true,
-          placeholder: mode === "cd" ? "cdlz:9,cdzl:9,cdfl:8" : "lzma:9,zlib:9,huff,flac:8",
+          multiple: true,
+          options: getCompressionCodecOptions(codecKey),
+          placeholder: mode === "cd" ? "cdlz,cdzl,cdfl" : "lzma,zlib,huff,flac",
           value: codecValue,
         },
         level,
       ],
-      summary: codecValue ? `${codecValue} · ${levelSummary}` : levelSummary,
+      summary: codecProfileSummary(codecKey, codecSummary, settings),
     };
   }
   if (normalized === "z3ds") {
+    const level = levelField(settings);
     return {
       fields: [level],
-      summary: levelSummary,
+      summary: `zstd:${getProfileLevelForCodec(settings, 22)}`,
     };
   }
   return null;
@@ -258,4 +330,5 @@ export {
   type CompressFieldOption,
   type CompressPanelModel,
   OUTPUT_FORMAT_INFO,
+  OVERRIDDEN_PROFILE_VALUE,
 };

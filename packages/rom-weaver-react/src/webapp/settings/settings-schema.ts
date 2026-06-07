@@ -1,6 +1,6 @@
 import * as v from "valibot";
+import { getCompressionCodecLevelMax } from "../../lib/compression/codec-fields.ts";
 import {
-  CHD_CODEC_LEVEL_MAX,
   getChdCodecsForMode,
   normalizeArchiveCompressionLevelForFormat,
   normalizeBrowserThreadCount,
@@ -153,14 +153,7 @@ const defaultCompressionFromLegacySettings = (
 };
 
 const getCodecLevelMax = (fieldKey: SettingsFieldKey, codec: string): number | null => {
-  if (fieldKey === "rvzCodec") return codec === "zstd" ? 22 : null;
-  if (fieldKey === "sevenZipCodec") return codec === "lzma2" ? 9 : null;
-  if (fieldKey === "zipCodec") {
-    if (codec === "deflate") return 9;
-    if (codec === "zstd") return 22;
-    return null;
-  }
-  return CHD_CODEC_LEVEL_MAX[codec] ?? null;
+  return getCompressionCodecLevelMax(fieldKey, codec);
 };
 
 const getCodecValidationMessage = (fieldKey: SettingsFieldKey, validCodecs: readonly string[]): string => {

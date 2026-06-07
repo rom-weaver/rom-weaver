@@ -1,3 +1,8 @@
+import {
+  type CompressionCodecOption,
+  getCompressionCodecOptions,
+  getCompressionCodecValues,
+} from "../../lib/compression/codec-fields.ts";
 import { getBrowserLocaleCandidates, negotiateLocale } from "../../presentation/localization/index.ts";
 import { getSettingsLabel } from "../../presentation/settings.ts";
 import { LOG_LEVELS } from "../../types/logging.ts";
@@ -8,8 +13,6 @@ import {
   getCompressionProfileIndex,
   getCompressionProfileLabel,
   getDefaultBrowserThreadCount,
-  SEVEN_ZIP_COMPRESSION_METHODS,
-  ZIP_COMPRESSION_METHODS,
 } from "./settings-compression.ts";
 
 const LOCAL_STORAGE_SETTINGS_ID = "rom-weaver-settings";
@@ -99,6 +102,7 @@ type SettingsFieldMetadata<K extends SettingsFieldKey = SettingsFieldKey> = {
   labelDataLocalize?: string;
   layout?: "default" | "large";
   validationLabel?: string;
+  codecOptions?: CompressionCodecOption[];
   options?: SettingsChoiceOption[];
   validValues?: string[];
   placeholder?: DynamicSettingsText;
@@ -170,6 +174,7 @@ const SETTINGS_LEVEL_OVERRIDE_FIELD_SET = new Set<SettingsFieldKey>(SETTINGS_LEV
 
 const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<K> } = {
   chdCreateCdCodecs: {
+    codecOptions: getCompressionCodecOptions("chdCreateCdCodecs"),
     defaultValue: "cdlz,cdzl,cdfl",
     disabled: ({ uiState }) => !uiState.chdEnabled,
     id: "settings-chd-createcd-codecs",
@@ -183,9 +188,9 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     suggestionDataLocalize:
       "Valid values: cdzs, cdlz, cdzl, cdfl. Optional levels: cdzs[:0-22], cdlz[:0-9], cdzl[:0-9], cdfl[:0-8]",
     validationLabel: "Create CD codecs",
-    validValues: ["cdzs", "cdlz", "cdzl", "cdfl"],
   },
   chdCreateDvdCodecs: {
+    codecOptions: getCompressionCodecOptions("chdCreateDvdCodecs"),
     defaultValue: "lzma,zlib,huff,flac",
     disabled: ({ uiState }) => !uiState.chdEnabled,
     id: "settings-chd-createdvd-codecs",
@@ -199,7 +204,6 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     suggestionDataLocalize:
       "Valid values: zstd, lzma, zlib, huff, flac. Optional levels: zstd[:0-22], lzma[:0-9], zlib[:0-9], huff, flac[:0-8]",
     validationLabel: "Create DVD codecs",
-    validValues: ["zstd", "lzma", "zlib", "huff", "flac"],
   },
   chdOutputMode: {
     defaultValue: "auto",
@@ -346,6 +350,7 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     validationLabel: "RVZ block size",
   },
   rvzCodec: {
+    codecOptions: getCompressionCodecOptions("rvzCodec"),
     defaultValue: "zstd",
     disabled: ({ uiState }) => !uiState.rvzEnabled,
     id: "settings-rvz-codec",
@@ -357,7 +362,6 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     suggestion: "Default: zstd. Optional level: zstd[:0-22].",
     suggestionDataLocalize: "Default: zstd. Optional level: zstd[:0-22].",
     validationLabel: "RVZ codec",
-    validValues: ["zstd"],
   },
   rvzCompressionLevel: {
     defaultValue: "",
@@ -383,6 +387,7 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     kind: "hidden",
   },
   sevenZipCodec: {
+    codecOptions: getCompressionCodecOptions("sevenZipCodec"),
     defaultValue: "lzma2",
     id: "settings-7z-codec",
     key: "sevenZipCodec",
@@ -393,7 +398,6 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     suggestion: "Default: lzma2. Optional level: lzma2[:0-9].",
     suggestionDataLocalize: "Default: lzma2. Optional level: lzma2[:0-9].",
     validationLabel: "7z codec",
-    validValues: [...SEVEN_ZIP_COMPRESSION_METHODS],
   },
   sevenZipLevel: {
     defaultValue: "",
@@ -445,6 +449,7 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     validationLabel: "Z3DS compression level override",
   },
   zipCodec: {
+    codecOptions: getCompressionCodecOptions("zipCodec"),
     defaultValue: "deflate",
     disabled: ({ uiState }) => !uiState.zipEnabled,
     id: "settings-zip-codec",
@@ -458,7 +463,6 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     suggestionDataLocalize:
       "Default: deflate. Valid values: deflate, store, zstd. Optional levels: deflate[:0-9], zstd[:0-22]. Store does not use a level.",
     validationLabel: "ZIP codec",
-    validValues: [...ZIP_COMPRESSION_METHODS],
   },
   zipLevel: {
     defaultValue: "",
@@ -488,6 +492,7 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
 
 const getSettingsChoiceValues = <K extends SettingsFieldKey>(fieldKey: K): string[] => {
   const field = SETTINGS_FIELD_METADATA[fieldKey];
+  if (Array.isArray(field.codecOptions)) return getCompressionCodecValues(fieldKey);
   if (Array.isArray(field.validValues)) return [...field.validValues];
   if (Array.isArray(field.options)) return field.options.map((option) => option.value);
   return [];

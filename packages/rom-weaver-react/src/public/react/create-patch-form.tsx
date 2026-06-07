@@ -923,7 +923,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
           formatId: "patch-builder-select-output-compression",
           formatOptions: createCompressionOptions,
           formatValue: createCompression,
-          onFieldChange: (key, value) => updateSettings({ ...settings, [key]: value }),
+          onFieldChange: (key, value, updates) => updateSettings({ ...settings, ...(updates || { [key]: value }) }),
           onFormatChange: (value) =>
             updateSettings({
               ...settings,
