@@ -1,16 +1,9 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "entry": [
-    "src/index.tsx",
-    "src/webapp/main.tsx",
     "src/webapp/cache-service-worker.ts",
     "src/webapp/mobile-safari-matrix.ts",
-    "scripts/check-browser-compat.mjs",
-    "scripts/dev-server.mjs",
-    "scripts/verify-service-worker-no-coop-coep.mjs",
     "scripts/version.mjs",
-    "vite.config.mjs",
-    "vitest.browser.config.mjs",
     "vitest.config.base.mjs"
   ],
   "project": [

@@ -47,8 +47,9 @@
   "scripts": {
     "prepare:dist": "node ./scripts/sync-dist.mjs",
     "prepack": "npm run check",
-    "check": "npm run check:types && node --check ./src/index.mjs",
+    "check": "npm run check:types && node --check ./src/index.mjs && npm run lint:knip",
     "check:types": "tsc -p tsconfig.json --noEmit",
+    "lint:knip": "knip --no-progress",
     "test": "npm run test:browser",
     "test:browser": "vitest --config ./vitest.browser.config.mjs run",
     "test:browser:bench": "ROM_WEAVER_WASM_BENCH=1 vitest --config ./vitest.browser.config.mjs bench",
@@ -60,6 +61,7 @@
     "@bjorn3/browser_wasi_shim": "^0.4.2",
     "@vitest/browser": "^4.1.7",
     "@vitest/browser-playwright": "^4.1.7",
+    "knip": "^6.16.1",
     "playwright": "^1.60.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.7"
