@@ -17,6 +17,7 @@ const WILDCARD_HOST_REGEX = /^0\.0\.0\.0(?::\d+)?$/;
 const PARENT_DIRECTORY_PREFIX_REGEX = /^(\.\.[/\\])+/;
 
 const ROOT_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const BIND_HOST = "0.0.0.0";
 const DEFAULT_DEV_PORT = 5173;
 const DEFAULT_PREVIEW_PORT = 4173;
 const CERT_VALID_DAYS = parseInt(process.env.DEV_CERT_DAYS || "30", 10);
@@ -55,7 +56,7 @@ const CROSS_ORIGIN_ISOLATION_HEADERS = {
 const parseArguments = (argv) => {
   const args = argv.slice();
   const options = {
-    host: process.env.HOST || "0.0.0.0",
+    invalid: false,
     mode: "dev",
     noCoopCoep: false,
     open: false,
@@ -68,11 +69,14 @@ const parseArguments = (argv) => {
     const arg = args.shift();
     if (arg === "--") continue;
     if (arg === "--host") {
-      options.host = args.shift() || options.host;
+      if (args[0] && !args[0].startsWith("-")) args.shift();
+      options.help = true;
+      options.invalid = true;
       continue;
     }
-    if (arg.startsWith("--host=")) {
-      options.host = arg.slice("--host=".length) || options.host;
+    if (arg.startsWith("--host=") || arg === "-H") {
+      options.help = true;
+      options.invalid = true;
       continue;
     }
     if (arg === "--port" || arg === "-p") {
@@ -96,9 +100,13 @@ const parseArguments = (argv) => {
       continue;
     }
     options.help = true;
+    options.invalid = true;
   }
 
-  if (options.mode !== "dev" && options.mode !== "preview") options.help = true;
+  if (options.mode !== "dev" && options.mode !== "preview") {
+    options.help = true;
+    options.invalid = true;
+  }
   if (!Number.isFinite(options.port)) options.port = parseInt(process.env.PORT || "", 10);
   if (!Number.isFinite(options.port)) options.port = options.mode === "preview" ? DEFAULT_PREVIEW_PORT : DEFAULT_DEV_PORT;
 
@@ -107,7 +115,7 @@ const parseArguments = (argv) => {
 
 const printUsage = () => {
   console.log(
-    "Usage: node scripts/dev-server.mjs [dev|preview] [--host 0.0.0.0] [--port 5173] [--open] [--no-coop-coep]",
+    "Usage: node scripts/dev-server.mjs [dev|preview] [--port 5173] [--open] [--no-coop-coep]\nThe server always listens on all available network interfaces.",
   );
 };
 
@@ -295,7 +303,6 @@ const closeNodeServer = (server) =>
 const formatStartupError = (error, options) => {
   if (!error || error.code !== "EADDRINUSE") return error?.stack ? error.stack : String(error || "Unknown error");
 
-  const host = options?.host || "0.0.0.0";
   const port = Number.isFinite(options?.port) ? options.port : "unknown";
   const nextPort = Number.isFinite(options?.port) ? options.port + 1 : "YOUR_PORT";
   const mode = options?.mode === "preview" ? "preview" : "dev";
@@ -303,7 +310,7 @@ const formatStartupError = (error, options) => {
     process.platform === "win32" ? `  netstat -ano | findstr :${port}` : `  lsof -nP -iTCP:${port} -sTCP:LISTEN`;
 
   return [
-    `Port ${port} on ${host} is already in use.`,
+    `Port ${port} on ${BIND_HOST} is already in use.`,
     "Use one of these fixes:",
     `  1) Stop the process holding the port (${suggestion.trim()}).`,
     `  2) Start on another port: npm run ${mode} -- --port ${nextPort}`,
@@ -391,7 +398,7 @@ const startDevServer = async (options) => {
   });
   const portMuxServer = createPortMuxServer(httpsServer, httpRedirectServer);
 
-  await listen(portMuxServer, options.port, options.host);
+  await listen(portMuxServer, options.port, BIND_HOST);
   try {
     viteServer = await createViteServer({
       configFile: path.join(ROOT_DIR, "vite.config.mjs"),
@@ -402,7 +409,7 @@ const startDevServer = async (options) => {
           protocol: "wss",
           server: httpsServer,
         },
-        host: options.host,
+        host: BIND_HOST,
         https: false,
         middlewareMode: { server: httpsServer },
         open: false,
@@ -557,7 +564,7 @@ const startPreviewServer = async (options) => {
   });
   const portMuxServer = createPortMuxServer(httpsServer, httpRedirectServer);
 
-  await listen(portMuxServer, options.port, options.host);
+  await listen(portMuxServer, options.port, BIND_HOST);
   installShutdown([portMuxServer, httpsServer, httpRedirectServer], null);
   printUrls("RomWeaver React Vite preview server:", options.port, lanAddresses, certificate.paths.cert, securityOptions);
   if (options.open) openBrowser(getLocalUrl(options.port));
@@ -566,7 +573,7 @@ const startPreviewServer = async (options) => {
 const options = parseArguments(process.argv.slice(2));
 if (options.help) {
   printUsage();
-  process.exit(options.mode === "dev" || options.mode === "preview" ? 0 : 1);
+  process.exit(options.invalid ? 1 : 0);
 }
 
 try {
