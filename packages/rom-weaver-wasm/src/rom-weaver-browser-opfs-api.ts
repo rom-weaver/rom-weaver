@@ -1443,7 +1443,19 @@ function directWasiFileWrite({
 }
 
 class BrowserOpfsMount {
-  [key: string]: any;
+  contents: Map<string, any>;
+  directoryHandle: FileSystemDirectoryHandleLike;
+  mountPath: string;
+  ownedFiles: any[];
+  scratchDirectoryHandle: FileSystemDirectoryHandleLike | null;
+  scratchFiles: any[];
+  scratchPool: any[];
+  syncAccessMode: RomWeaverBrowserSyncAccessMode | undefined;
+  trace: TraceLine | null;
+  virtualOnly: boolean;
+  virtualRestores: any[] | null;
+  writableRoots: string[];
+  writableRootsKey: string;
 
   static async create({
     directoryHandle,
@@ -1647,7 +1659,7 @@ class BrowserOpfsMount {
       if (!(entry instanceof wasiShim.Directory)) {
         throw new Error(`Browser OPFS output parent is not a directory: ${guestPath}`);
       }
-      directoryHandle = await directoryHandle.getDirectoryHandle(part, { create: true });
+      directoryHandle = await directoryHandle.getDirectoryHandle(part, { create: true }) as FileSystemDirectoryHandleLike;
       entries = entry.contents;
     }
 
@@ -1714,7 +1726,7 @@ class BrowserOpfsMount {
 }
 
 class PreparedWasiPreopenDirectory extends wasiShim.PreopenDirectory {
-  [key: string]: any;
+  mount: BrowserOpfsMount;
 
   constructor(mount: BrowserOpfsMount, options: { preopenName?: string } = {}) {
     super(options.preopenName ?? mount.mountPath, mount.contents);
@@ -1824,7 +1836,12 @@ class PreparedWasiPreopenDirectory extends wasiShim.PreopenDirectory {
 }
 
 class WasiRandomAccessFileInode extends wasiShim.Inode {
-  [key: string]: any;
+  closeOnLastFdClose: boolean;
+  file: any;
+  declare ino: any;
+  openRefCount: number;
+  readonly: boolean;
+  scratchBacked: boolean;
 
   constructor(file, options: {
     closeOnLastFdClose?: boolean;
@@ -1913,7 +1930,12 @@ function emitWasiReadErrorTrace(scope, rawValue, retCode) {
 }
 
 class OpenWasiRandomAccessFile extends wasiShim.Fd {
-  [key: string]: any;
+  closed: boolean;
+  inode: WasiRandomAccessFileInode;
+  position: bigint;
+  writeBuffer: Uint8Array | null;
+  writeBufferLength: number;
+  writeBufferStart: bigint;
 
   constructor(inode) {
     super();

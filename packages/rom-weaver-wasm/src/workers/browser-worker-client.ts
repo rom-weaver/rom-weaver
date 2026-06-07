@@ -67,17 +67,14 @@ export class BrowserRomWeaverWorkerClient extends RomWeaverWorkerClientCore {
   }
 
   override async run(commandOrRequest: RomWeaverRunInput, options: RomWeaverBrowserOpfsRunOptions = {}): Promise<RomWeaverRunResult> {
-    return super.run(commandOrRequest, options as RomWeaverBrowserOpfsRunOptions & Record<string, unknown>);
+    return super.run(commandOrRequest, options);
   }
 
   override async runJson<TEvent = RomWeaverRunJsonEvent, TTraceEvent = unknown>(
     commandOrRequest: RomWeaverRunInput,
     options: RomWeaverRunJsonOptions<TEvent, TTraceEvent> & RomWeaverBrowserOpfsRunOptions = {},
   ): Promise<RomWeaverRunJsonResult<TEvent, TTraceEvent>> {
-    return super.runJson(
-      commandOrRequest,
-      options as RomWeaverRunJsonOptions<TEvent, TTraceEvent> & Record<string, unknown>,
-    );
+    return super.runJson(commandOrRequest, options);
   }
 
   _createInitOptions(options: RomWeaverBrowserOpfsOptions) {
@@ -92,7 +89,7 @@ export class BrowserRomWeaverWorkerClient extends RomWeaverWorkerClientCore {
     return this._send<BrowserWorkerReadyResult>({
       type: 'init',
       mode: 'browser-opfs',
-      options: options as Record<string, unknown>,
+      options,
     });
   }
 

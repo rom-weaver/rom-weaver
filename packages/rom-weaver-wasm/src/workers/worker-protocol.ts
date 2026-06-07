@@ -1,9 +1,10 @@
 import type {
+  RomWeaverBrowserOpfsOptions,
+  RomWeaverBrowserOpfsRunOptions,
   RomWeaverRunInput,
   RomWeaverRunJsonEvent,
   RomWeaverRunJsonOptions,
   RomWeaverRunJsonResult,
-  RomWeaverRunOptions,
   RomWeaverRunResult,
   RomWeaverWorkerSerializedError,
 } from '../rom-weaver-types.d.ts';
@@ -21,23 +22,35 @@ export const WORKER_RESPONSE_TYPES = [
   'error',
 ] as const;
 
+export interface RomWeaverWorkerStreamChannelOptions {
+  __streamBroadcastChannelName?: string;
+  __streamRequestId?: number;
+}
+
+export type RomWeaverWorkerInitOptions = RomWeaverBrowserOpfsOptions;
+
+export type RomWeaverWorkerRunOptions =
+  RomWeaverBrowserOpfsRunOptions
+  & RomWeaverWorkerStreamChannelOptions;
+
 export interface RomWeaverWorkerInitRequest {
   type: 'init';
   requestId?: number;
   mode?: 'browser-opfs';
-  options?: Record<string, unknown>;
+  options?: RomWeaverWorkerInitOptions;
 }
 
 export interface RomWeaverWorkerRunRequest {
   type: 'run';
   requestId?: number;
   request: RomWeaverRunInput;
-  options?: RomWeaverRunOptions & Record<string, unknown>;
+  options?: RomWeaverWorkerRunOptions;
 }
 
 export type RomWeaverWorkerRunJsonOptions<TEvent = RomWeaverRunJsonEvent, TTraceEvent = unknown> =
   Omit<RomWeaverRunJsonOptions<TEvent, TTraceEvent>, 'onEvent' | 'onNonJsonLine' | 'onTraceEvent' | 'onTraceNonJsonLine'>
-  & Record<string, unknown>;
+  & RomWeaverBrowserOpfsRunOptions
+  & RomWeaverWorkerStreamChannelOptions;
 
 export interface RomWeaverWorkerRunJsonRequest {
   type: 'runJson';

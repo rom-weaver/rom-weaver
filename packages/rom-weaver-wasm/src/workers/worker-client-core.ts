@@ -1,4 +1,3 @@
-// @ts-nocheck
 import {
   readWorkerErrorContext,
   resolveWorkerErrorKind,
@@ -8,7 +7,6 @@ import type {
   RomWeaverRunJsonEvent,
   RomWeaverRunJsonOptions,
   RomWeaverRunJsonResult,
-  RomWeaverRunOptions,
   RomWeaverRunResult,
   RomWeaverWorkerError,
   RomWeaverWorkerErrorKind,
@@ -20,7 +18,13 @@ import {
   SELECT_REQUEST_READY_INDEX,
   SELECT_REQUEST_RESULT_INDEX,
 } from './worker-protocol.ts';
-import type { RomWeaverWorkerResponse } from './worker-protocol.ts';
+import type {
+  RomWeaverWorkerRequest,
+  RomWeaverWorkerResponse,
+  RomWeaverWorkerRunJsonOptions,
+  RomWeaverWorkerRunOptions,
+  RomWeaverWorkerStreamMessage,
+} from './worker-protocol.ts';
 
 type WorkerStreamHandlers<TEvent = RomWeaverRunJsonEvent, TTraceEvent = unknown> = Pick<
   RomWeaverRunJsonOptions<TEvent, TTraceEvent>,
@@ -47,14 +51,6 @@ type WorkerTransport = {
   toError: (event: unknown) => Error;
   toExitError?: (code: unknown) => Error | undefined;
   toMessageError?: (event: unknown) => Error;
-};
-
-type WorkerRequestPayload = {
-  options?: Record<string, unknown>;
-  request?: RomWeaverRunInput;
-  requestId?: number;
-  type: 'run' | 'runJson' | 'dispose' | 'init';
-  [key: string]: unknown;
 };
 
 export class RomWeaverWorkerClientCore {
@@ -92,13 +88,13 @@ export class RomWeaverWorkerClientCore {
     this._onSelect = handler;
   }
 
-  run(request: RomWeaverRunInput, options: RomWeaverRunOptions & Record<string, unknown> = {}) {
+  run(request: RomWeaverRunInput, options: RomWeaverWorkerRunOptions = {}) {
     return this._send<RomWeaverRunResult>({ type: 'run', request, options });
   }
 
   runJson<TEvent = RomWeaverRunJsonEvent, TTraceEvent = unknown>(
     request: RomWeaverRunInput,
-    options: RomWeaverRunJsonOptions<TEvent, TTraceEvent> & Record<string, unknown> = {},
+    options: RomWeaverRunJsonOptions<TEvent, TTraceEvent> & RomWeaverWorkerRunOptions = {},
   ) {
     const {
       onEvent,
@@ -107,8 +103,9 @@ export class RomWeaverWorkerClientCore {
       onTraceNonJsonLine,
       ...runOptions
     } = options ?? {};
+    const workerOptions: RomWeaverWorkerRunJsonOptions<unknown, unknown> = runOptions;
     return this._send(
-      { type: 'runJson', request, options: runOptions },
+      { type: 'runJson', request, options: workerOptions },
       { onEvent, onNonJsonLine, onTraceEvent, onTraceNonJsonLine },
     ) as Promise<RomWeaverRunJsonResult<TEvent, TTraceEvent>>;
   }
@@ -118,7 +115,7 @@ export class RomWeaverWorkerClientCore {
   }
 
   protected _send<TResponse = unknown>(
-    payload: WorkerRequestPayload,
+    payload: RomWeaverWorkerRequest,
     handlers: WorkerStreamHandlers<any, any> = {},
   ): Promise<TResponse> {
     if (this._disposed) {
@@ -181,8 +178,8 @@ export class RomWeaverWorkerClientCore {
   }
 
   _onMessage(rawMessage: Event) {
-    const message = this._transport.readMessage(rawMessage) as (RomWeaverWorkerResponse & Record<string, any>) | null;
-    if (!message || typeof message !== 'object') {
+    const message = this._transport.readMessage(rawMessage);
+    if (!isWorkerResponseMessage(message)) {
       return;
     }
 
@@ -379,7 +376,31 @@ export function createBrowserWorkerTransport() {
   };
 }
 
-function createWorkerStreamChannel({ handlers, payload, requestId }) {
+function isWorkerResponseMessage(value: unknown): value is RomWeaverWorkerResponse {
+  if (!value || typeof value !== 'object') return false;
+  const type = (value as { type?: unknown }).type;
+  return typeof type === 'string';
+}
+
+function isWorkerStreamMessage(value: unknown): value is RomWeaverWorkerStreamMessage {
+  if (!isWorkerResponseMessage(value)) return false;
+  return (
+    value.type === 'event'
+    || value.type === 'nonJsonLine'
+    || value.type === 'traceEvent'
+    || value.type === 'traceNonJsonLine'
+  );
+}
+
+function createWorkerStreamChannel({
+  handlers,
+  payload,
+  requestId,
+}: {
+  handlers: WorkerStreamHandlers<any, any>;
+  payload: RomWeaverWorkerRequest;
+  requestId: number;
+}) {
   if (
     payload?.type !== 'runJson'
     || typeof BroadcastChannel !== 'function'
@@ -392,7 +413,7 @@ function createWorkerStreamChannel({ handlers, payload, requestId }) {
   const channel = new BroadcastChannel(name);
   channel.onmessage = (event) => {
     const message = event?.data;
-    if (!message || typeof message !== 'object' || message.requestId !== requestId) return;
+    if (!isWorkerStreamMessage(message) || message.requestId !== requestId) return;
     try {
       dispatchStreamMessage(handlers, message);
     } catch {
@@ -422,7 +443,10 @@ function hasAnyStreamHandler(handlers) {
   );
 }
 
-function dispatchStreamMessage(handlers, message) {
+function dispatchStreamMessage(
+  handlers: WorkerStreamHandlers<any, any>,
+  message: RomWeaverWorkerStreamMessage,
+) {
   switch (message.type) {
     case 'event':
       handlers.onEvent?.(message.event);

@@ -8,6 +8,7 @@ import type {
 import type {
   RomWeaverRunJsonEvent,
   RomWeaverRunJsonOptions,
+  RomWeaverRunJsonResult,
   RomWeaverWorkerErrorContext,
   RomWeaverWorkerSerializedError,
 } from '../rom-weaver-types.d.ts';
@@ -20,8 +21,10 @@ import {
   SELECT_REQUEST_TIMEOUT_MS,
 } from './worker-protocol.ts';
 import type {
+  RomWeaverWorkerInitOptions,
   RomWeaverWorkerRequest,
   RomWeaverWorkerResponse,
+  RomWeaverWorkerRunJsonOptions,
 } from './worker-protocol.ts';
 
 type RunnerWorkerInitResult = {
@@ -30,11 +33,13 @@ type RunnerWorkerInitResult = {
 };
 
 type RunnerWorkerMessageQueueOptions = {
-  initRunner: (input: { mode?: string; options: Record<string, unknown> }) => Promise<RunnerWorkerInitResult>;
+  initRunner: (input: { mode?: string; options: RomWeaverWorkerInitOptions }) => Promise<RunnerWorkerInitResult>;
   postMessage: (message: RomWeaverWorkerResponse) => void;
 };
 
-type RunnerWorkerRunOptions = RomWeaverRunJsonOptions<RomWeaverRunJsonEvent, unknown> & Record<string, unknown>;
+type RunnerWorkerRunOptions =
+  RomWeaverRunJsonOptions<RomWeaverRunJsonEvent, unknown>
+  & RomWeaverWorkerRunJsonOptions<RomWeaverRunJsonEvent, unknown>;
 type AnyRecord = Record<string, any>;
 type AnyWorkerRequest = RomWeaverWorkerRequest & AnyRecord;
 
@@ -157,7 +162,7 @@ export function createRunnerWorkerMessageQueue({ postMessage, initRunner }: Runn
           runOptions,
           `[runner-worker] runJson invoking runner command=${formatCommandForTrace(readPayloadCommand(request))}`,
         );
-        let result;
+        let result: RomWeaverRunJsonResult<RomWeaverRunJsonEvent, unknown>;
         try {
           result = await runner.runJson(request, runOptions);
         } catch (error) {
