@@ -25,6 +25,7 @@ import { OutputRunAction, WorkflowOutputStep } from "./components/ds/workflow-ou
 import { WorkflowRomInputStep } from "./components/ds/workflow-rom-input-step.tsx";
 import { buildCompressPanel } from "./compress-options.ts";
 import { ROM_INPUT_HINT } from "./input-helper-text.ts";
+import { useInputSelectionHandler } from "./input-selection-handler.ts";
 import { getBinarySourceListStableIds } from "./input-session-helpers.ts";
 import { createCreateOutputCompressionOptions, createCreatePatchFormatOptions } from "./output-view-model.ts";
 import type { BinarySource } from "./patcher-form.ts";
@@ -180,6 +181,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   const { candidateSelectionDialog, selectFile } = useCandidateSelection({
     onCancelSelection: (request) => cancelSelectionRef.current(request),
   });
+  useInputSelectionHandler(selectFile);
   const [internalOriginal, setInternalOriginal] = useState<BinarySource | null>(props.defaultOriginal || null);
   const [internalModified, setInternalModified] = useState<BinarySource | null>(props.defaultModified || null);
   const [internalSettings, setInternalSettings] = useState<CreatePatchFormSettings>(() =>

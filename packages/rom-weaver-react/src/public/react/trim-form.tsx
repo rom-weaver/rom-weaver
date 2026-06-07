@@ -29,6 +29,7 @@ import { OutputRunAction, WorkflowOutputStep } from "./components/ds/workflow-ou
 import { WorkflowRomInputStep } from "./components/ds/workflow-rom-input-step.tsx";
 import { buildCompressPanel } from "./compress-options.ts";
 import { TRIM_INPUT_HINT } from "./input-helper-text.ts";
+import { useInputSelectionHandler } from "./input-selection-handler.ts";
 import { createCompressionTypeOptions, createTrimOutputOptions } from "./output-view-model.ts";
 import type { BinarySource } from "./patcher-form.ts";
 import type { CandidateSelectionPrompt, TrimPatchFormProps, TrimPatchFormSettings } from "./public-types.ts";
@@ -190,6 +191,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   const { candidateSelectionDialog, selectFile } = useCandidateSelection({
     onCancelSelection: (request) => cancelSelectionRef.current(request),
   });
+  useInputSelectionHandler(selectFile);
   const [internalSource, setInternalSource] = useState<BinarySource | null>(props.defaultSource || null);
   const [internalSettings, setInternalSettings] = useState<TrimPatchFormSettings>(() =>
     mergeSettingsWithOutput(providerSettings, props.defaultSettings),

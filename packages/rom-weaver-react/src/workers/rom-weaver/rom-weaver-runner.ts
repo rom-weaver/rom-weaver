@@ -24,6 +24,7 @@ type RomWeaverRunnerRunJsonResult = RomWeaverRunJsonResult<RomWeaverRunJsonEvent
 type RomWeaverWorkerClient = {
   init: (...args: unknown[]) => Promise<RomWeaverRunnerReadyMetadata>;
   dispose?: () => Promise<void>;
+  terminate?: () => void;
   runJson: (
     commandOrRequest: RomWeaverRunInput,
     options?: RomWeaverRunnerRunJsonOptions,
@@ -227,9 +228,27 @@ const createBrowserRunnerInitOptions = (
   };
 };
 
+/** Resolves a mid-run candidate selection request `{heading, candidates:[{value,label}]}` to a
+ * 0-based index (or a negative value to cancel). Runs on the main thread. */
+type InputSelectionHandler = (request: string) => number | Promise<number>;
+
+let inputSelectionHandler: InputSelectionHandler | undefined;
+
+/** Register the UI selection handler invoked when the wasm app needs the user to pick an input
+ * candidate. When unset, selection is cancelled (returns -1) — the app always registers a handler. */
+const setInputSelectionHandler = (handler?: InputSelectionHandler) => {
+  inputSelectionHandler = handler;
+};
+
+const resolveInputSelection: InputSelectionHandler = (request) =>
+  inputSelectionHandler ? inputSelectionHandler(request) : -1;
+
 const createBrowserRunner = async (options?: { workerThreads?: RuntimeValue }): Promise<RomWeaverRunner> => {
   const runnerWorkerUrl = await resolveBrowserRunnerWorkerUrl();
   const client = createBrowserWorkerClient({ workerUrl: runnerWorkerUrl }) as unknown as RomWeaverWorkerClient;
+  (client as { setSelectionHandler?: (handler: InputSelectionHandler) => void }).setSelectionHandler?.(
+    resolveInputSelection,
+  );
   const wasmAsset = await resolveBrowserWasmAsset();
   const ready = await client.init(createBrowserRunnerInitOptions(wasmAsset, options));
   const selectedWasmUrl = wasmAsset.wasmUrl ?? ready.wasmUrl ?? "";
@@ -242,7 +261,11 @@ const createBrowserRunner = async (options?: { workerThreads?: RuntimeValue }): 
   });
   return {
     dispose: async () => {
+      // Gracefully release the worker's resources (OPFS sync access handles, thread pool) first,
+      // then terminate the Worker thread itself. `dispose()` alone leaves the worker — and its wasm
+      // linear memory, which only ever grows — alive, so recycling it would leak the grown heap.
       await client.dispose?.().catch(() => undefined);
+      client.terminate?.();
     },
     ready,
     runJson: (commandOrRequest, options) => client.runJson(commandOrRequest, options),
@@ -282,6 +305,11 @@ const markRomWeaverRunnerStale = () => {
   if (activeRunnerRunCount === 0) void resetRomWeaverRunner();
 };
 
+// The wasm runner's linear memory only ever grows, so the browser surfaces an exhausted heap as a
+// `RangeError: Out of memory`. Detect it so we can recycle the worker onto a clean heap.
+const isRunnerOutOfMemoryError = (error: unknown): boolean =>
+  error instanceof Error && error.name === "RangeError" && /out of memory/i.test(error.message);
+
 const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: RomWeaverRunnerRunJsonOptions) => {
   const activeVirtualFiles = getActiveBrowserVirtualFiles();
   const scopedActiveVirtualFiles = selectActiveVirtualFilesForRun(activeVirtualFiles, commandOrRequest, options);
@@ -304,6 +332,11 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
   if (!Object.hasOwn(runOptions, "invalidateMountCacheAfterRun")) {
     runOptions.invalidateMountCacheAfterRun = defaultInvalidateMountCacheAfterRun;
   }
+  // Let the app prompt (via the host selection callback) when a container has multiple selectable
+  // entries and no explicit selection. Commands that pass an explicit `--select` never reach it.
+  if (!Object.hasOwn(runOptions, "interactiveSelectionEnabled")) {
+    (runOptions as { interactiveSelectionEnabled?: boolean }).interactiveSelectionEnabled = true;
+  }
   emitRunnerTraceLine(
     options,
     `runJson preparing command=${formatCommandForTrace(commandOrRequest)} activeVirtualFiles=${JSON.stringify(
@@ -312,14 +345,36 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
       describeVirtualFilesForTrace(scopedActiveVirtualFiles),
     )} configuredVirtualFiles=${Array.isArray(configuredVirtualFiles) ? configuredVirtualFiles.length : 0} invalidateMountCacheAfterRun=${String(runOptions.invalidateMountCacheAfterRun)}`,
   );
-  const runner = await createRomWeaverRunner();
-  emitRunnerTraceLine(options, `runJson dispatch mode=${runner.ready.mode} threaded=${String(runner.ready.threaded)}`);
-  activeRunnerRunCount += 1;
+  const dispatchRun = async () => {
+    const runner = await createRomWeaverRunner();
+    emitRunnerTraceLine(
+      options,
+      `runJson dispatch mode=${runner.ready.mode} threaded=${String(runner.ready.threaded)}`,
+    );
+    activeRunnerRunCount += 1;
+    try {
+      return await runner.runJson(commandOrRequest, runOptions);
+    } finally {
+      activeRunnerRunCount = Math.max(0, activeRunnerRunCount - 1);
+      if (activeRunnerRunCount === 0 && browserThreadedRunnerStale) void resetRomWeaverRunner();
+    }
+  };
   try {
-    return await runner.runJson(commandOrRequest, runOptions);
-  } finally {
-    activeRunnerRunCount = Math.max(0, activeRunnerRunCount - 1);
-    if (activeRunnerRunCount === 0 && browserThreadedRunnerStale) void resetRomWeaverRunner();
+    return await dispatchRun();
+  } catch (error) {
+    if (!isRunnerOutOfMemoryError(error)) throw error;
+    // A long-lived worker can exhaust its (only-ever-growing) wasm heap after several heavy ops and
+    // fail a later run with an out-of-memory error. A freshly spawned worker starts on a clean heap,
+    // so recycle the exhausted one and retry the run exactly once. Skip when another run is in flight
+    // — resetting disposes the shared worker and would abort that sibling run — but mark it stale so
+    // it recycles once idle.
+    if (activeRunnerRunCount > 0) {
+      markRomWeaverRunnerStale();
+      throw error;
+    }
+    emitRunnerTraceLine(options, "runJson out-of-memory; recycling worker and retrying once");
+    await resetRomWeaverRunner();
+    return await dispatchRun();
   }
 };
 
@@ -457,5 +512,6 @@ export {
   markRomWeaverRunnerStale,
   resetRomWeaverRunner,
   runRomWeaverJson,
+  setInputSelectionHandler,
   warmupRomWeaverRunner,
 };

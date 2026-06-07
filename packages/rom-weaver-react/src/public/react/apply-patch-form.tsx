@@ -13,6 +13,7 @@ import type { ApplyWorkflowResult, ProgressEvent } from "../../types/workflow-ru
 import type { StagedInputInfo } from "./apply-session-types.ts";
 import { ApplyWorkflowFormView } from "./apply-workflow-form-view.tsx";
 import { useCandidateSelection } from "./candidate-selection.tsx";
+import { useInputSelectionHandler } from "./input-selection-handler.ts";
 import {
   getBinarySourceFileName,
   getBinarySourceListStableIds,
@@ -435,6 +436,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const mutationQueueRef = useRef(Promise.resolve<void>(undefined));
   const selectFileRef = useRef(selectFile);
   selectFileRef.current = selectFile;
+  useInputSelectionHandler(selectFile);
   const lastInputsRef = useRef<BinarySource[]>([]);
   const lastPatchOrderRef = useRef("");
   const forcePatchWorkflowRefreshRef = useRef(false);
