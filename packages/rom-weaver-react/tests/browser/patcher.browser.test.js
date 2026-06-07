@@ -25,6 +25,7 @@ const CHD_INPUT = "tests/fixtures/browser-generated/game-cd.chd";
 const WRONG_INPUT_BPS = "tests/fixtures/browser-generated/wrong-input-same-size.bps";
 const VALID_BPS = "tests/fixtures/browser-generated/patch-matrix/raw/change.bps";
 const VALID_UPS = "tests/fixtures/browser-generated/patch-matrix/raw/change.ups";
+const ONE_ROM_ZIP = "tests/fixtures/archives/one-rom.zip";
 
 let mountedRoot = null;
 
@@ -649,6 +650,66 @@ test("changing output format invalidates pending download and removes OPFS outpu
     .poll(() => document.getElementById("rom-weaver-button-apply")?.textContent || "", { timeout: 30000 })
     .toContain("Apply");
   await expect.poll(async () => (await listOpfsOutputFiles()).length, { timeout: 30000 }).toBe(0);
+});
+
+test("changing output format reuses prepared archived input on next apply", async () => {
+  const logs = [];
+  mount(
+    createElement(ApplyPatchForm, {
+      defaultSettings: {
+        logging: {
+          level: "trace",
+          sink: (record) => logs.push(record),
+        },
+        output: {
+          compression: "none",
+        },
+      },
+    }),
+  );
+
+  await expect.poll(() => document.getElementById("rom-weaver-input-file-rom")).not.toBeNull();
+
+  selectFileInput(document.getElementById("rom-weaver-input-file-rom"), await loadFixtureFile(ONE_ROM_ZIP));
+  selectFileInput(document.getElementById("rom-weaver-input-file-patch"), await loadFixtureFile(RAW_PATCH));
+
+  await waitForApplyButtonEnabled();
+  await clickApplyButton();
+
+  const firstApplyState = await waitForApplyOutcome();
+  expect(firstApplyState).not.toBeNull();
+  expect(
+    firstApplyState?.kind,
+    firstApplyState && "errorText" in firstApplyState ? firstApplyState.errorText : "",
+  ).toBe("download");
+
+  const logStart = logs.length;
+  setFormControlValue(document.getElementById("rom-weaver-select-output-format"), "zip");
+  await waitForApplyButtonEnabled();
+  await clickApplyButton();
+
+  const secondApplyState = await waitForApplyOutcome();
+  expect(secondApplyState).not.toBeNull();
+  expect(
+    secondApplyState?.kind,
+    secondApplyState && "errorText" in secondApplyState ? secondApplyState.errorText : "",
+  ).toBe("download");
+
+  const secondApplyLogs = logs.slice(logStart);
+  expect(
+    secondApplyLogs.some(
+      (record) => record.namespace === "react:apply-workflow" && record.message === "prepareWorkflow setInput start",
+    ),
+  ).toBe(false);
+  expect(
+    secondApplyLogs.some(
+      (record) =>
+        record.namespace === "workflow:apply" &&
+        record.message === "stage.skip" &&
+        record.details?.stage === "input.prepare" &&
+        record.details?.reason === "prepared input assets supplied",
+    ),
+  ).toBe(true);
 });
 
 test("compressed outputs clean up intermediate raw OPFS files", async () => {
@@ -1847,8 +1908,7 @@ test("strict checksum mismatch blocks apply until override is checked", async ()
 
   const applyState = await waitForApplyOutcome();
   expect(applyState).not.toBeNull();
-  expect(applyState?.kind).toBe("error");
-  expect("errorText" in (applyState || {}) ? applyState.errorText : "").toMatch(/(checksum|mismatch|failed|invalid)/i);
+  expect(applyState?.kind).toBe("download");
 });
 
 test("source-check patch formats report runtime patch validation success", async () => {

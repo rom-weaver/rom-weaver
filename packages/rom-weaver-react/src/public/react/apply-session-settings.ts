@@ -11,16 +11,15 @@ const createStageSettingsKey = ({
   settings,
   workerThreads,
 }: {
-  containerInputsEnabled: boolean;
+  containerInputsEnabled?: boolean;
   settings: ApplyPatchFormSettings;
   workerThreads?: number | string;
-}) =>
-  JSON.stringify(
+}) => {
+  const input = { ...settings.input };
+  if (containerInputsEnabled !== undefined) input.containerInputsEnabled = containerInputsEnabled;
+  return JSON.stringify(
     {
-      input: {
-        ...settings.input,
-        containerInputsEnabled,
-      },
+      input,
       limits: settings.limits,
       workers: {
         ...settings.workers,
@@ -29,5 +28,6 @@ const createStageSettingsKey = ({
     },
     (_key, value) => (typeof value === "function" ? "[function]" : value),
   );
+};
 
 export { createStageSettingsKey, getLegacyCompressionWorkerThreads };

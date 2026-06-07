@@ -10,6 +10,7 @@ import { getErrorCode } from "../../presentation/errors.ts";
 import type { ApplyWorkflowInputState, ApplyWorkflowPatchState } from "../../types/apply-workflow.ts";
 import type { CompressionFormat } from "../../types/settings.ts";
 import type { ApplyWorkflowResult, ProgressEvent } from "../../types/workflow-runtime.ts";
+import { createStageSettingsKey } from "./apply-session-settings.ts";
 import type { StagedInputInfo } from "./apply-session-types.ts";
 import { ApplyWorkflowFormView } from "./apply-workflow-form-view.tsx";
 import { useCandidateSelection } from "./candidate-selection.tsx";
@@ -63,9 +64,10 @@ type ApplyWorkflowPrepareHandlers = {
 };
 
 type ApplyWorkflowSyncState = {
+  executionSettingsKey: string;
   inputs: BinarySource[];
   patches: BinarySource[];
-  settingsKey: string;
+  preparationSettingsKey: string;
 };
 
 const PATCH_OUTPUT_LABEL_PATTERN = /\[([^\]]+)\](?:\.[^.]+)?\d*$/;
@@ -287,6 +289,13 @@ const createBaseApplyWorkflowSettings = (
 const createWorkflowSettingsKey = (settings: Partial<ApplyPatchFormSettings>) =>
   JSON.stringify(settings, (_key, value) => (typeof value === "function" ? "[function]" : value));
 
+const createWorkflowPreparationSettingsKey = (settings: ApplyPatchFormSettings) =>
+  createStageSettingsKey({
+    containerInputsEnabled: settings.input?.containerInputsEnabled,
+    settings,
+    workerThreads: settings.workers?.threads,
+  });
+
 const createWorkflowOutputOverridesKey = (snapshot: ApplyWorkflowSessionInput) =>
   JSON.stringify({
     compression: snapshot.options.output?.compression || "auto",
@@ -442,9 +451,10 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const forcePatchWorkflowRefreshRef = useRef(false);
   const workflowRef = useRef<ApplyWorkflow | null>(null);
   const workflowSyncRef = useRef<ApplyWorkflowSyncState>({
+    executionSettingsKey: "",
     inputs: [],
     patches: [],
-    settingsKey: "",
+    preparationSettingsKey: "",
   });
   const workflowOutputOverridesKeyRef = useRef("");
   const prepareHandlersRef = useRef<ApplyWorkflowPrepareHandlers | null>(null);
@@ -522,7 +532,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   const resetWorkflow = useCallback(() => {
     const workflow = workflowRef.current;
     workflowRef.current = null;
-    workflowSyncRef.current = { inputs: [], patches: [], settingsKey: "" };
+    workflowSyncRef.current = { executionSettingsKey: "", inputs: [], patches: [], preparationSettingsKey: "" };
     workflowOutputOverridesKeyRef.current = "";
     prepareHandlersRef.current = null;
     void workflow?.dispose();
@@ -578,11 +588,12 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       snapshot: ApplyWorkflowSessionInput,
       baseSettings: ReturnType<typeof createBaseApplyWorkflowSettings>,
       baseSettingsChanged: boolean,
+      options: { baseSettingsApplied?: boolean } = {},
     ) => {
       const outputOverridesKey = createWorkflowOutputOverridesKey(snapshot);
       const outputOverridesChanged = workflowOutputOverridesKeyRef.current !== outputOverridesKey;
       if (!(baseSettingsChanged || outputOverridesChanged)) return;
-      if (!baseSettingsChanged) await workflow.setSettings(baseSettings);
+      if (!options.baseSettingsApplied) await workflow.setSettings(baseSettings);
       await applyOutputOverrides(workflow, snapshot);
       workflowOutputOverridesKeyRef.current = outputOverridesKey;
     },
@@ -614,20 +625,24 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       workflow.on("progress", handleProgress);
       try {
         const baseSettings = createBaseApplyWorkflowSettings(snapshot.options, props.workerThreads);
-        const settingsKey = createWorkflowSettingsKey(baseSettings);
+        const executionSettingsKey = createWorkflowSettingsKey(baseSettings);
+        const preparationSettingsKey = createWorkflowPreparationSettingsKey(baseSettings);
         const previousSync = workflowSyncRef.current;
-        const settingsChanged = previousSync.settingsKey !== settingsKey;
-        const inputsChanged = settingsChanged || !sameBinarySourceLists(previousSync.inputs, snapshot.inputs);
+        const executionSettingsChanged = previousSync.executionSettingsKey !== executionSettingsKey;
+        const preparationSettingsChanged = previousSync.preparationSettingsKey !== preparationSettingsKey;
+        const inputsChanged =
+          preparationSettingsChanged || !sameBinarySourceLists(previousSync.inputs, snapshot.inputs);
         const patchesChanged =
           forcePatchWorkflowRefreshRef.current ||
-          settingsChanged ||
+          preparationSettingsChanged ||
           !sameBinarySourceLists(previousSync.patches, snapshot.patches);
         emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow diff", {
+          executionSettingsChanged,
           inputsChanged,
           patchesChanged,
-          settingsChanged,
+          preparationSettingsChanged,
         });
-        if (settingsChanged) {
+        if (executionSettingsChanged) {
           emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow setSettings start");
           await workflow.setSettings(baseSettings);
           emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow setSettings finish");
@@ -677,11 +692,14 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           }
         }
 
-        await syncWorkflowOutputOverrides(workflow, snapshot, baseSettings, settingsChanged);
+        await syncWorkflowOutputOverrides(workflow, snapshot, baseSettings, executionSettingsChanged, {
+          baseSettingsApplied: executionSettingsChanged,
+        });
         workflowSyncRef.current = {
+          executionSettingsKey,
           inputs: snapshot.inputs.slice(),
           patches: snapshot.patches.slice(),
-          settingsKey,
+          preparationSettingsKey,
         };
         forcePatchWorkflowRefreshRef.current = false;
 
@@ -785,11 +803,13 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       return queueMutation(async () => {
         syncSelectionRefs(input);
         const baseSettings = createBaseApplyWorkflowSettings(input.options, props.workerThreads);
-        const settingsKey = createWorkflowSettingsKey(baseSettings);
+        const executionSettingsKey = createWorkflowSettingsKey(baseSettings);
+        const preparationSettingsKey = createWorkflowPreparationSettingsKey(baseSettings);
         const previousSync = workflowSyncRef.current;
         const workflow = workflowRef.current;
         const workflowPrepared =
           !!workflow &&
+          previousSync.preparationSettingsKey === preparationSettingsKey &&
           sameBinarySourceLists(previousSync.inputs, input.inputs) &&
           sameBinarySourceLists(previousSync.patches, input.patches) &&
           !forcePatchWorkflowRefreshRef.current;
@@ -813,12 +833,12 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         const handleProgress = (event: WorkflowProgress) => prepareHandlersRef.current?.onProgress?.(event);
         workflow.on("progress", handleProgress);
         try {
-          const settingsChanged = previousSync.settingsKey !== settingsKey;
-          await syncWorkflowOutputOverrides(workflow, input, baseSettings, settingsChanged);
-          if (settingsChanged) {
+          const executionSettingsChanged = previousSync.executionSettingsKey !== executionSettingsKey;
+          await syncWorkflowOutputOverrides(workflow, input, baseSettings, executionSettingsChanged);
+          if (executionSettingsChanged) {
             workflowSyncRef.current = {
               ...previousSync,
-              settingsKey,
+              executionSettingsKey,
             };
           }
           return await runPreparedWorkflow({
