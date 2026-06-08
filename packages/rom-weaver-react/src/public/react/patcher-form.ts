@@ -46,6 +46,7 @@ type PatcherStackController = StoreController<PatchStackState> & {
 };
 
 type PatcherOutputController = StoreController<PatcherOutputState> & {
+  cancelPrimaryAction?: () => void;
   setDisplayFileName: (value: string) => void;
   setOutputCompression: (value: string) => void;
   /** Apply a per-job compression override (settings key → value) from the output Options panel. */

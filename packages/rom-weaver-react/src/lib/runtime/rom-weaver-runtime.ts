@@ -41,7 +41,7 @@ import { getRomWeaverFailureMessage, runRomWeaverJson } from "../../workers/rom-
 import { getFileNameParts, getPathBaseName, isCompressionLevelProfile } from "../path-utils.ts";
 
 type RomWeaverRunJsonOptions = BaseRomWeaverRunJsonOptions<RomWeaverRunJsonEvent, RuntimeValue> &
-  RomWeaverBrowserOpfsRunOptions;
+  RomWeaverBrowserOpfsRunOptions & { signal?: AbortSignal };
 type RomWeaverRunJsonResult = BaseRomWeaverRunJsonResult<RomWeaverRunJsonEvent, RuntimeValue>;
 
 const CHECKSUM_PAIR_REGEX = /([a-z0-9_-]+)=([0-9a-f]+)/gi;
@@ -242,6 +242,7 @@ const toRomWeaverOptions = (input: {
   onLog?: (log: WorkflowRuntimeLog) => void;
   preopenOutputPaths?: string[];
   scratchFilePoolSize?: number | null;
+  signal?: AbortSignal;
   syncAccessMode?: string;
   virtualFiles?: RuntimeValue[];
   virtualOnlyMounts?: boolean;
@@ -261,6 +262,7 @@ const toRomWeaverOptions = (input: {
       if (!message) return;
       emitRuntimeLog(input.onLog, "trace", message);
     },
+    signal: input.signal,
   };
   if (traceEnabled) {
     options.env = {
@@ -685,6 +687,7 @@ const invokeRomWeaverCompressionCreateWorker = async (
     outputFileName: string;
     outputPath: string;
     preopenOutputPaths?: string[];
+    signal?: AbortSignal;
     virtualFiles?: RuntimeValue[];
     workerThreads?: number | string | null;
   },
@@ -744,6 +747,7 @@ const invokeRomWeaverCompressionCreateWorker = async (
       },
       onLog,
       preopenOutputPaths: input.preopenOutputPaths,
+      signal: input.signal,
       virtualFiles: input.virtualFiles,
     }),
   );
@@ -774,6 +778,7 @@ const invokeRomWeaverExtractWorker = async (
     patchFilter?: boolean;
     checksumAlgorithms?: string[];
     sourcePath: string;
+    signal?: AbortSignal;
     splitBin?: boolean;
     workerThreads?: number | string | null;
     /** When false, let the Rust core recursively descend nested containers in this one extract
@@ -837,6 +842,7 @@ const invokeRomWeaverExtractWorker = async (
       onLog,
       preopenOutputPaths: input.preopenOutputPaths,
       scratchFilePoolSize: input.scratchFilePoolSize,
+      signal: input.signal,
     }),
   );
   if (!(result.ok && result.exitCode === 0)) {
@@ -859,6 +865,7 @@ const runRomWeaverListWorker = async (
     romFilter?: boolean;
     patchFilter?: boolean;
     sourcePath: string;
+    signal?: AbortSignal;
   },
   onProgress?: (progress: { label?: string; message?: string; percent?: number | null }) => void,
   onLog?: (log: WorkflowRuntimeLog) => void,
@@ -889,6 +896,7 @@ const runRomWeaverListWorker = async (
           if (progress) onProgress?.(progress);
         },
         onLog,
+        signal: input.signal,
       }),
     );
   const result = await runList();
@@ -905,6 +913,7 @@ const runRomWeaverProbePatchWorker = async (
     logLevel?: LogLevel | string;
     patchFilter?: boolean;
     sourcePath: string;
+    signal?: AbortSignal;
   },
   onProgress?: (progress: { label?: string; message?: string; percent?: number | null }) => void,
   onLog?: (log: WorkflowRuntimeLog) => void,
@@ -932,6 +941,7 @@ const runRomWeaverProbePatchWorker = async (
         if (progress) onProgress?.(progress);
       },
       onLog,
+      signal: input.signal,
     }),
   );
   if (!(result.ok && result.exitCode === 0)) {
@@ -1059,6 +1069,7 @@ const invokeRomWeaverPatchValidateWorker = async (
       },
       onLog,
       scratchFilePoolSize,
+      signal: input.signal,
       syncAccessMode,
       virtualOnlyMounts,
     }),
@@ -1154,22 +1165,30 @@ const invokeRomWeaverPatchApplyWorker = async (
   }
   await onBeforeRun?.(outputPath);
 
-  const result = await runRomWeaverJson(
-    command,
-    toRomWeaverOptions({
-      defaultThreads: disableDefaultThreadArgInjection ? 0 : undefined,
-      invalidateMountCacheBeforeRun: true,
-      logLevel: input.logLevel,
-      onEvent: (event) => {
-        const progress = toSimpleProgress(event);
-        if (progress) onProgress?.(progress);
-      },
-      onLog,
-      scratchFilePoolSize,
-      syncAccessMode,
-      virtualOnlyMounts,
-    }),
-  );
+  let result: RomWeaverRunJsonResult;
+  try {
+    result = await runRomWeaverJson(
+      command,
+      toRomWeaverOptions({
+        defaultThreads: disableDefaultThreadArgInjection ? 0 : undefined,
+        invalidateMountCacheBeforeRun: true,
+        logLevel: input.logLevel,
+        onEvent: (event) => {
+          const progress = toSimpleProgress(event);
+          if (progress) onProgress?.(progress);
+        },
+        onLog,
+        preopenOutputPaths: [outputPath],
+        scratchFilePoolSize,
+        signal: input.signal,
+        syncAccessMode,
+        virtualOnlyMounts,
+      }),
+    );
+  } catch (error) {
+    if (input.signal?.aborted) await Promise.resolve(onBeforeRun?.(outputPath)).catch(() => undefined);
+    throw error;
+  }
   if (!(result.ok && result.exitCode === 0)) {
     const failureMessage = await appendBrowserStorageContext(getRomWeaverFailureMessage(result, "Patch apply failed"));
     const traceContext = isTraceEnabled(input.logLevel)
@@ -1280,6 +1299,7 @@ const invokeRomWeaverCreatePatchCandidatesWorker = async (
         if (progress) onProgress?.(progress);
       },
       onLog,
+      signal: input.signal,
     }),
   );
   ensureRomWeaverSuccess(result, "Patch create candidate selection failed");
@@ -1323,17 +1343,25 @@ const invokeRomWeaverCreatePatchWorker = async (
   });
   await onBeforeRun?.(outputPath);
 
-  const result = await runRomWeaverJson(
-    command,
-    toRomWeaverOptions({
-      logLevel: input.logLevel,
-      onEvent: (event) => {
-        const progress = toSimpleProgress(event);
-        if (progress) onProgress?.(progress);
-      },
-      onLog,
-    }),
-  );
+  let result: RomWeaverRunJsonResult;
+  try {
+    result = await runRomWeaverJson(
+      command,
+      toRomWeaverOptions({
+        logLevel: input.logLevel,
+        onEvent: (event) => {
+          const progress = toSimpleProgress(event);
+          if (progress) onProgress?.(progress);
+        },
+        onLog,
+        preopenOutputPaths: [outputPath],
+        signal: input.signal,
+      }),
+    );
+  } catch (error) {
+    if (input.signal?.aborted) await Promise.resolve(onBeforeRun?.(outputPath)).catch(() => undefined);
+    throw error;
+  }
   ensureRomWeaverSuccess(result, "Patch create failed");
 
   const emitted = getEmittedFileDetails(result);
@@ -1382,17 +1410,25 @@ const invokeRomWeaverTrimWorker = async (
   });
   await onBeforeRun?.(outputPath);
 
-  const result = await runRomWeaverJson(
-    command,
-    toRomWeaverOptions({
-      logLevel: input.logLevel,
-      onEvent: (event) => {
-        const progress = toSimpleProgress(event);
-        if (progress) onProgress?.(progress);
-      },
-      onLog,
-    }),
-  );
+  let result: RomWeaverRunJsonResult;
+  try {
+    result = await runRomWeaverJson(
+      command,
+      toRomWeaverOptions({
+        logLevel: input.logLevel,
+        onEvent: (event) => {
+          const progress = toSimpleProgress(event);
+          if (progress) onProgress?.(progress);
+        },
+        onLog,
+        preopenOutputPaths: [outputPath],
+        signal: input.signal,
+      }),
+    );
+  } catch (error) {
+    if (input.signal?.aborted) await Promise.resolve(onBeforeRun?.(outputPath)).catch(() => undefined);
+    throw error;
+  }
   ensureRomWeaverSuccess(result, "Trim failed");
 
   const emitted = getEmittedFileDetails(result);

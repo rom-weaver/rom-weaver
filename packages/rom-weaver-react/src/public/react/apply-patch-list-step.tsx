@@ -205,8 +205,10 @@ const ApplyPatchListStep = ({
         {patches.map((item, index) =>
           item.progress ? (
             <FileProgress
+              cancelLabel="Cancel patch staging"
               id={`rom-weaver-progress-patch-${index}`}
               key={item.key ?? `${index}:${item.fileName}`}
+              onCancel={() => patchStack.removeItem(index)}
               {...toWorkflowFileProgressProps(item.progress)!}
             />
           ) : (

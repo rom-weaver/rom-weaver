@@ -189,6 +189,7 @@ const createArchiveOutput = async ({
     outputName,
     sevenZipCodec: levels.sevenZipCodec as SevenZipZstdCompressionOptions["sevenZipCodec"],
     sevenZipLevel: levels.sevenZipLevel,
+    signal: options?.signal,
     workerThreads: getWorkerThreads(options),
     zipCodec: zipCodec as SevenZipZstdCompressionOptions["zipCodec"],
     zipLevel,

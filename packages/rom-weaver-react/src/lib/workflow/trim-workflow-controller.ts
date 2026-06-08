@@ -352,6 +352,7 @@ class TrimWorkflowController<TSource, TDestination> extends WorkflowController<{
         compression: this.getOutputCompression(),
         outputName: this.normalizeOutputName(this.outputName || this.settings.output?.outputName || ""),
       },
+      signal: this.abortController.signal,
       workers: cloneValue(this.settings.workers || {}),
     };
   }

@@ -475,6 +475,24 @@ const useLocalApplyPatchFormSession = ({
     disposeActiveOutputCleanup();
   }, [clearPendingDownload, disposeActiveOutputCleanup]);
 
+  const clearActiveApplyProgress = useCallback(() => {
+    setProgress(null);
+    setPatchProgress(null);
+    setPatchProgressByKey({});
+    setRomInputs((current) =>
+      current.map((entry) =>
+        entry.progress || entry.loading
+          ? createRomInputRow({
+              ...entry,
+              disabled: disabledRef.current,
+              loading: false,
+              progress: null,
+            })
+          : entry,
+      ),
+    );
+  }, [setPatchProgress, setPatchProgressByKey, setProgress, setRomInputs]);
+
   const invalidateCompletedOutputState = useCallback(() => {
     disposeActiveOutput();
     resetCompletedOutputState();
@@ -669,7 +687,7 @@ const useLocalApplyPatchFormSession = ({
     () => ({
       applyButton: {
         disabled: disabled || !(busy || hasPendingDownload || canQueueApply),
-        label: busy ? "Cancel" : hasPendingDownload ? "Download output" : "Apply & download",
+        label: hasPendingDownload ? "Download output" : "Apply & download",
         loading: busy || applyQueued,
         progress: hasPendingDownload
           ? null
@@ -1618,10 +1636,22 @@ const useLocalApplyPatchFormSession = ({
   );
   const localOutputController = useMemo(
     () => ({
+      cancelPrimaryAction: () => {
+        setApplyQueued(false);
+        if (busy) {
+          cancelActiveOperation();
+          clearActiveApplyProgress();
+          disposeActiveOutput();
+          return;
+        }
+        clearActiveApplyProgress();
+      },
       getState: localOutputStoreController.getState,
       runPrimaryAction: async () => {
         if (busy) {
+          setApplyQueued(false);
           cancelActiveOperation();
+          clearActiveApplyProgress();
           return;
         }
         const pendingDownloadResult = pendingDownloadResultRef.current;
@@ -1674,6 +1704,7 @@ const useLocalApplyPatchFormSession = ({
                 containerInputsEnabled,
               },
               onProgress: (event) => {
+                if (abortController.signal.aborted) return;
                 const details = getProgressDetails(event);
                 if (details.stage === "compress" && applyExecutionTimingRef.current.compressionStartedAt === null) {
                   const now = Date.now();
@@ -1798,6 +1829,11 @@ const useLocalApplyPatchFormSession = ({
           onApplyComplete?.(result);
         } catch (error) {
           const normalizedError = toError(error);
+          if (abortController.signal.aborted && getErrorCode(normalizedError) === "CANCELLED") {
+            resetCompletedOutputState();
+            clearActiveApplyProgress();
+            return;
+          }
           logUiError("Apply workflow failed", normalizedError);
           setOutputErrorMessage(
             formatCodedErrorForDisplay(
@@ -1813,8 +1849,7 @@ const useLocalApplyPatchFormSession = ({
             applyStartedAt: null,
             compressionStartedAt: null,
           };
-          setPatchProgress(null);
-          setPatchProgressByKey({});
+          clearActiveApplyProgress();
           setBusy(false);
         }
       },
@@ -1860,12 +1895,15 @@ const useLocalApplyPatchFormSession = ({
       activeSettings,
       applyPreparationPending,
       applyQueueBlocked,
+      applyQueued,
       automaticResolvedOutputName,
       containerInputsEnabled,
       applyPatches,
       cancelActiveOperation,
+      clearActiveApplyProgress,
       clearDismissibleErrors,
       commitSettings,
+      disposeActiveOutput,
       downloadOutput,
       effectiveInputs,
       getPatchKey,
@@ -1889,8 +1927,10 @@ const useLocalApplyPatchFormSession = ({
       pendingDownloadFileName,
       rememberAbortController,
       rememberActiveOutputCleanup,
+      resetCompletedOutputState,
       setPendingDownloadReadyFileName,
       setChecksumOverrideChecked,
+      setProgress,
     ],
   );
   useEffect(() => {

@@ -47,6 +47,7 @@ type WorkflowRuntimeHooks = {
   onLog?: (record: Pick<LogRecord, "details" | "level" | "message" | "namespace" | "timestamp">) => void;
   onProgress?: (event: ProgressEvent) => void;
   onCandidatesFound?: (request: CandidateSelectionRequest) => void;
+  signal?: AbortSignal;
   trace?: {
     operationId?: string | null;
     workflow?: "apply" | "create" | "trim";
@@ -147,6 +148,7 @@ type CompressionWorkflowOptions = {
   extractChecksumAlgorithms?: string[];
   onLog?: (record: Pick<LogRecord, "details" | "level" | "message" | "namespace" | "timestamp">) => void;
   onProgress?: (event: ProgressEvent) => void;
+  signal?: AbortSignal;
 };
 
 type CompressionListInput = {

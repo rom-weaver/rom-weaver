@@ -194,6 +194,7 @@ const runCreateWorkflow = async (
             }),
           original: original as SourceRef,
           outputName: rawPatchFileName,
+          signal: options.signal,
           workerThreads: getCreateWorkerThreads(options),
         }),
       () => ({ patchType: format, worker: true }),

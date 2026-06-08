@@ -565,6 +565,7 @@ const getDescendPreopenOutputPaths = async ({
   logLevel,
   onLog,
   outDirPath,
+  signal,
 }: {
   archivePath: string;
   fileName: string;
@@ -572,6 +573,7 @@ const getDescendPreopenOutputPaths = async ({
   logLevel?: unknown;
   onLog?: (log: WorkflowRuntimeLog) => void;
   outDirPath: string;
+  signal?: AbortSignal;
 }): Promise<string[]> => {
   const normalizedFormat = String(format || "")
     .trim()
@@ -580,6 +582,7 @@ const getDescendPreopenOutputPaths = async ({
   const listed = await runRomWeaverListWorker(
     {
       logLevel: logLevel as Parameters<typeof runRomWeaverListWorker>[0]["logLevel"],
+      signal,
       sourcePath: archivePath,
     },
     undefined,
@@ -735,6 +738,7 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
               outputFileName,
               outputPath,
               preopenOutputPaths: [outputPath],
+              signal: workflowInput.options?.signal,
               workerThreads: workflowInput.options?.workerThreads,
             },
             forwardArchiveProgress("output", workflowInput.options?.onProgress),
@@ -772,6 +776,7 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
           logLevel: workflowInput.options?.logLevel,
           onLog: workflowInput.options?.onLog,
           outDirPath,
+          signal: workflowInput.options?.signal,
         });
         await removeBrowserVfsOutputPaths(preopenOutputPaths, [archive.filePath]);
         const extractChecksumAlgorithms = Array.isArray(workflowInput.options?.extractChecksumAlgorithms)
@@ -794,6 +799,7 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
             preopenOutputPaths,
             romFilter: workflowInput.options?.romFilter,
             select: selectedEntries,
+            signal: workflowInput.options?.signal,
             sourcePath: archive.filePath,
             splitBin: workflowInput.format === "chd" && workflowInput.options?.chdSplitBin !== false,
             workerThreads: workflowInput.options?.workerThreads,
@@ -852,6 +858,7 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
                 patchFilter: workflowInput.options?.patchFilter,
                 romFilter: workflowInput.options?.romFilter,
                 select: [entryName],
+                signal: workflowInput.options?.signal,
                 sourcePath: archive.filePath,
                 workerThreads: workflowInput.options?.workerThreads,
               },
@@ -941,6 +948,7 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
           logLevel: workflowInput.options?.logLevel,
           patchFilter: workflowInput.options?.patchFilter,
           romFilter: workflowInput.options?.romFilter,
+          signal: workflowInput.options?.signal,
           sourcePath: archive.filePath,
         },
         forwardArchiveProgress("input", workflowInput.options?.onProgress),
@@ -966,6 +974,7 @@ const createBrowserRomSpecificRuntime = (workerIo: RuntimeWorkerIo): RomSpecific
     logLevel,
     onLog,
     onProgress,
+    signal,
   }) => {
     const workerInput = await workerIo.stageSource({
       fallbackFileName: fileName || "input.bin",
@@ -1035,6 +1044,7 @@ const createBrowserRomSpecificRuntime = (workerIo: RuntimeWorkerIo): RomSpecific
           outputFileName,
           outputPath,
           preopenOutputPaths: [outputPath],
+          signal,
           workerThreads: threads,
         },
         onProgress,
@@ -1060,6 +1070,7 @@ const createBrowserRomSpecificRuntime = (workerIo: RuntimeWorkerIo): RomSpecific
     logLevel,
     onLog,
     onProgress,
+    signal,
   }) =>
     workerIo.runPathWorkerToOutput({
       failureMessage: "RVZ compression worker did not return browser output",
@@ -1082,6 +1093,7 @@ const createBrowserRomSpecificRuntime = (workerIo: RuntimeWorkerIo): RomSpecific
             outputFileName,
             outputPath,
             preopenOutputPaths: [outputPath],
+            signal,
             workerThreads: threads,
           },
           onProgress,
@@ -1093,7 +1105,17 @@ const createBrowserRomSpecificRuntime = (workerIo: RuntimeWorkerIo): RomSpecific
       source,
       trace: { logLevel, onLog },
     }),
-  createZ3ds: async ({ source, fileName, outputName, threads, z3dsCompressionLevel, logLevel, onLog, onProgress }) =>
+  createZ3ds: async ({
+    source,
+    fileName,
+    outputName,
+    threads,
+    z3dsCompressionLevel,
+    logLevel,
+    onLog,
+    onProgress,
+    signal,
+  }) =>
     workerIo.runPathWorkerToOutput({
       failureMessage: "Z3DS compression worker did not return browser output",
       fallbackFileName: fileName || "input.3ds",
@@ -1115,6 +1137,7 @@ const createBrowserRomSpecificRuntime = (workerIo: RuntimeWorkerIo): RomSpecific
             outputFileName,
             outputPath,
             preopenOutputPaths: [outputPath],
+            signal,
             workerThreads: threads,
           },
           onProgress,
@@ -1126,7 +1149,18 @@ const createBrowserRomSpecificRuntime = (workerIo: RuntimeWorkerIo): RomSpecific
       source,
       trace: { logLevel, onLog },
     }),
-  extractChd: async ({ source, fileName, outputName, mode, splitBin, threads, logLevel, onLog, onProgress }) => {
+  extractChd: async ({
+    source,
+    fileName,
+    outputName,
+    mode,
+    splitBin,
+    threads,
+    logLevel,
+    onLog,
+    onProgress,
+    signal,
+  }) => {
     const workerSource = await workerIo.stageSource({
       fallbackFileName: fileName,
       pathPrefix: CHD_ROM_SPECIFIC_FORMAT.pathPrefix.extract,
@@ -1164,6 +1198,7 @@ const createBrowserRomSpecificRuntime = (workerIo: RuntimeWorkerIo): RomSpecific
         const listed = await runRomWeaverListWorker(
           {
             logLevel,
+            signal,
             sourcePath: workerSource.filePath,
           },
           undefined,
@@ -1221,6 +1256,7 @@ const createBrowserRomSpecificRuntime = (workerIo: RuntimeWorkerIo): RomSpecific
                   : CHD_CD_OUTPUT_SCRATCH_FILE_POOL_SIZE
                 : undefined,
             select: [],
+            signal,
             sourcePath: workerSource.filePath,
             splitBin: shouldSplitBin,
             workerThreads: threads,
@@ -1318,7 +1354,7 @@ const createBrowserRomSpecificRuntime = (workerIo: RuntimeWorkerIo): RomSpecific
       await workerSource.cleanup().catch(() => undefined);
     }
   },
-  extractRvz: async ({ source, fileName, outputName, threads, logLevel, onLog, onProgress }) => {
+  extractRvz: async ({ source, fileName, outputName, threads, logLevel, onLog, onProgress, signal }) => {
     const stageRvzSource = () =>
       workerIo.stageSource({
         fallbackFileName: fileName,
@@ -1349,6 +1385,7 @@ const createBrowserRomSpecificRuntime = (workerIo: RuntimeWorkerIo): RomSpecific
       const listed = await runRomWeaverListWorker(
         {
           logLevel,
+          signal,
           sourcePath: workerSource.filePath,
         },
         undefined,
@@ -1397,6 +1434,7 @@ const createBrowserRomSpecificRuntime = (workerIo: RuntimeWorkerIo): RomSpecific
           preopenOutputPaths,
           scratchFilePoolSize: 1,
           select: [],
+          signal,
           sourcePath: workerSource.filePath,
           workerThreads: threads,
         },
@@ -1438,7 +1476,7 @@ const createBrowserRomSpecificRuntime = (workerIo: RuntimeWorkerIo): RomSpecific
       await workerSource.cleanup().catch(() => undefined);
     }
   },
-  extractZ3ds: async ({ source, fileName, outputName, threads, logLevel, onLog, onProgress }) => {
+  extractZ3ds: async ({ source, fileName, outputName, threads, logLevel, onLog, onProgress, signal }) => {
     const workerSource = await workerIo.stageSource({
       fallbackFileName: fileName,
       pathPrefix: Z3DS_ROM_SPECIFIC_FORMAT.pathPrefix.extract,
@@ -1458,6 +1496,7 @@ const createBrowserRomSpecificRuntime = (workerIo: RuntimeWorkerIo): RomSpecific
       const listed = await runRomWeaverListWorker(
         {
           logLevel,
+          signal,
           sourcePath: workerSource.filePath,
         },
         undefined,
@@ -1503,6 +1542,7 @@ const createBrowserRomSpecificRuntime = (workerIo: RuntimeWorkerIo): RomSpecific
           preopenOutputPaths,
           scratchFilePoolSize: 1,
           select: [],
+          signal,
           sourcePath: workerSource.filePath,
           workerThreads: threads,
         },
@@ -1538,7 +1578,7 @@ const createBrowserRomSpecificRuntime = (workerIo: RuntimeWorkerIo): RomSpecific
       await workerSource.cleanup().catch(() => undefined);
     }
   },
-  listChd: async ({ source, fileName, logLevel, onLog, onProgress }) => {
+  listChd: async ({ source, fileName, logLevel, onLog, onProgress, signal }) => {
     const workerSource = await workerIo.stageSource({
       fallbackFileName: fileName,
       pathPrefix: CHD_ROM_SPECIFIC_FORMAT.pathPrefix.extract,
@@ -1550,6 +1590,7 @@ const createBrowserRomSpecificRuntime = (workerIo: RuntimeWorkerIo): RomSpecific
       const result = await runRomWeaverListWorker(
         {
           logLevel,
+          signal,
           sourcePath: workerSource.filePath,
         },
         onProgress,
@@ -1576,7 +1617,7 @@ const createBrowserRomSpecificRuntime = (workerIo: RuntimeWorkerIo): RomSpecific
       ),
     },
   ],
-  listZ3ds: async ({ source, fileName, logLevel, onLog, onProgress }) => {
+  listZ3ds: async ({ source, fileName, logLevel, onLog, onProgress, signal }) => {
     const workerSource = await workerIo.stageSource({
       fallbackFileName: fileName,
       pathPrefix: Z3DS_ROM_SPECIFIC_FORMAT.pathPrefix.extract,
@@ -1588,6 +1629,7 @@ const createBrowserRomSpecificRuntime = (workerIo: RuntimeWorkerIo): RomSpecific
       const result = await runRomWeaverListWorker(
         {
           logLevel,
+          signal,
           sourcePath: workerSource.filePath,
         },
         onProgress,
@@ -1633,7 +1675,7 @@ const createBrowserPatchRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime["
   });
   return {
     ...sharedPatchRuntime,
-    probePatch: async ({ patch, patchFileName, logLevel, onLog, onProgress }) => {
+    probePatch: async ({ patch, patchFileName, logLevel, onLog, onProgress, signal }) => {
       const workerSource = await workerIo.stageSource({
         fallbackFileName: patchFileName || "patch.bin",
         pathBucket: "patches",
@@ -1647,6 +1689,7 @@ const createBrowserPatchRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime["
           {
             logLevel,
             patchFilter: true,
+            signal,
             sourcePath: workerSource.filePath,
           },
           onProgress,

@@ -9,6 +9,7 @@ import { ProgressActionButton } from "./progress-action-button.tsx";
 type OutputController = {
   subscribe: (listener: () => void) => () => void;
   getState: () => PatcherOutputState;
+  cancelPrimaryAction?: () => void;
   setDisplayFileName: (value: string) => void;
   setOutputCompression: (value: string) => void;
   runPrimaryAction: () => void;
@@ -129,11 +130,13 @@ function PatcherPrimaryAction({ controller }: { controller: OutputController }) 
 
   return (
     <ProgressActionButton
+      cancelLabel="Cancel apply"
       disabled={state.applyButton.disabled}
       icon={<ApplyBandaidIcon className={`${buttonClasses.icon} apply-button-icon`} />}
       id="rom-weaver-button-apply"
       label={state.applyButton.label}
       loading={state.applyButton.loading}
+      onCancel={controller.cancelPrimaryAction}
       onClick={() => controller.runPrimaryAction()}
       progress={state.applyButton.progress}
       progressId="rom-weaver-progress-apply"

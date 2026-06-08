@@ -796,7 +796,6 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           return normalizeApplyResult(result);
         } finally {
           abortSignal?.removeEventListener("abort", abortWorkflow);
-          if (abortSignal?.aborted) resetWorkflow();
         }
       };
 
@@ -857,7 +856,6 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
       props.onApplyComplete,
       props.workerThreads,
       queueMutation,
-      resetWorkflow,
       syncSelectionRefs,
       syncWorkflowOutputOverrides,
       prepareWorkflow,

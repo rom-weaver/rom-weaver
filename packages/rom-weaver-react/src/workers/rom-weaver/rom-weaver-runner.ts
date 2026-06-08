@@ -18,7 +18,7 @@ import { WORKER_OPFS_MOUNTPOINT } from "../shared/worker-storage/storage-layout.
 import { getRomWeaverRunEventLabel, isRomWeaverFailedRunEvent } from "./rom-weaver-run-events.ts";
 
 type RomWeaverRunnerRunJsonOptions = RomWeaverRunJsonOptions<RomWeaverRunJsonEvent, RuntimeValue> &
-  RomWeaverBrowserOpfsRunOptions;
+  RomWeaverBrowserOpfsRunOptions & { signal?: AbortSignal };
 type RomWeaverRunnerRunJsonResult = RomWeaverRunJsonResult<RomWeaverRunJsonEvent, RuntimeValue>;
 
 type RomWeaverWorkerClient = {
@@ -44,6 +44,7 @@ type RomWeaverRunner = {
     commandOrRequest: RomWeaverRunInput,
     options?: RomWeaverRunnerRunJsonOptions,
   ) => Promise<RomWeaverRunnerRunJsonResult>;
+  terminate?: () => void;
 };
 
 type BrowserWasmAssetSelection = {
@@ -192,6 +193,7 @@ const createBrowserRunner = async (options?: { workerThreads?: RuntimeValue }): 
     },
     ready,
     runJson: (commandOrRequest, options) => client.runJson(commandOrRequest, options),
+    terminate: () => client.terminate?.(),
   };
 };
 
@@ -207,7 +209,7 @@ const createRomWeaverRunner = async (options?: { workerThreads?: RuntimeValue })
   return browserThreadedRunnerPromise;
 };
 
-const resetRomWeaverRunner = async () => {
+const resetRomWeaverRunner = async (options: { terminate?: boolean } = {}) => {
   const activeRunnerPromises = [browserThreadedRunnerPromise].filter(
     (entry): entry is Promise<RomWeaverRunner> => !!entry,
   );
@@ -219,7 +221,8 @@ const resetRomWeaverRunner = async () => {
     const runner = await activeRunnerPromise.catch(() => null);
     if (!runner || disposedRunners.has(runner)) continue;
     disposedRunners.add(runner);
-    await runner.dispose?.().catch(() => undefined);
+    if (options.terminate) runner.terminate?.();
+    else await runner.dispose?.().catch(() => undefined);
   }
 };
 
@@ -233,11 +236,18 @@ const markRomWeaverRunnerStale = () => {
 const isRunnerOutOfMemoryError = (error: unknown): boolean =>
   error instanceof Error && error.name === "RangeError" && /out of memory/i.test(error.message);
 
+const createRunnerAbortError = () => {
+  const error = new Error("Workflow was cancelled") as Error & { code?: string };
+  error.name = "AbortError";
+  error.code = "CANCELLED";
+  return error;
+};
+
 const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: RomWeaverRunnerRunJsonOptions) => {
+  const { signal, ...runOptionOverrides } = options || {};
   const activeVirtualFiles = getActiveBrowserVirtualFiles();
   const scopedActiveVirtualFiles = selectActiveVirtualFilesForRun(activeVirtualFiles, commandOrRequest, options);
-  const configuredVirtualFiles = options?.virtualFiles;
-  const runOptionOverrides = { ...(options || {}) };
+  const configuredVirtualFiles = runOptionOverrides.virtualFiles;
   // Cached OPFS mounts hold sync access handles; release them before UI-side VFS writes/downloads.
   const defaultInvalidateMountCacheAfterRun = true;
   const runOptions: RomWeaverRunnerRunJsonOptions =
@@ -269,7 +279,9 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
     )} configuredVirtualFiles=${Array.isArray(configuredVirtualFiles) ? configuredVirtualFiles.length : 0} invalidateMountCacheAfterRun=${String(runOptions.invalidateMountCacheAfterRun)}`,
   );
   const dispatchRun = async () => {
+    if (signal?.aborted) throw createRunnerAbortError();
     const runner = await createRomWeaverRunner();
+    if (signal?.aborted) throw createRunnerAbortError();
     emitRunnerTraceLine(
       options,
       `runJson dispatch mode=${runner.ready.mode} threaded=${String(runner.ready.threaded)}`,
@@ -282,8 +294,44 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
       if (activeRunnerRunCount === 0 && browserThreadedRunnerStale) void resetRomWeaverRunner();
     }
   };
+  const dispatchRunWithAbort = () => {
+    if (!signal) return dispatchRun();
+    if (signal.aborted) {
+      emitRunnerTraceLine(options, "runJson aborted before dispatch; terminating active runner");
+      browserThreadedRunnerStale = true;
+      void resetRomWeaverRunner({ terminate: true });
+      return Promise.reject(createRunnerAbortError());
+    }
+    return new Promise<RomWeaverRunnerRunJsonResult>((resolve, reject) => {
+      let settled = false;
+      const abortRun = () => {
+        if (settled) return;
+        settled = true;
+        signal.removeEventListener("abort", abortRun);
+        emitRunnerTraceLine(options, "runJson aborted; terminating active runner");
+        browserThreadedRunnerStale = true;
+        void resetRomWeaverRunner({ terminate: true });
+        reject(createRunnerAbortError());
+      };
+      signal.addEventListener("abort", abortRun, { once: true });
+      dispatchRun().then(
+        (result) => {
+          if (settled) return;
+          settled = true;
+          signal.removeEventListener("abort", abortRun);
+          resolve(result);
+        },
+        (error) => {
+          if (settled) return;
+          settled = true;
+          signal.removeEventListener("abort", abortRun);
+          reject(error);
+        },
+      );
+    });
+  };
   try {
-    return await dispatchRun();
+    return await dispatchRunWithAbort();
   } catch (error) {
     // A long-lived worker can exhaust its (only-ever-growing) wasm heap after several heavy ops and
     // fail a later run with an out-of-memory error. Flag the exhausted worker stale so the next

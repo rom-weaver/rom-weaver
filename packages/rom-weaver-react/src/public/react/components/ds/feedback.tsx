@@ -78,6 +78,8 @@ const InlineProgress = ({
   indeterminate,
   tight,
   id,
+  onCancel,
+  cancelLabel = "Cancel operation",
 }: {
   label: ReactNode;
   value?: ReactNode;
@@ -85,13 +87,22 @@ const InlineProgress = ({
   indeterminate?: boolean;
   tight?: boolean;
   id?: string;
+  onCancel?: () => void;
+  cancelLabel?: string;
 }) => (
-  <div className={join("iprog", tight && "tight")} id={id}>
-    <div className="lab">
-      <span>{label}</span>
-      {value ? <span className="v">{value}</span> : null}
+  <div className={join("iprog-wrap", onCancel && "cancelable")} id={id}>
+    <div className={join("iprog", tight && "tight")}>
+      <div className="lab">
+        <span>{label}</span>
+        {value ? <span className="v">{value}</span> : null}
+      </div>
+      <ProgressTrack indeterminate={indeterminate} percent={percent} />
     </div>
-    <ProgressTrack indeterminate={indeterminate} percent={percent} />
+    {onCancel ? (
+      <button aria-label={cancelLabel} className="progress-cancel" onClick={onCancel} title={cancelLabel} type="button">
+        <X aria-hidden="true" />
+      </button>
+    ) : null}
   </div>
 );
 

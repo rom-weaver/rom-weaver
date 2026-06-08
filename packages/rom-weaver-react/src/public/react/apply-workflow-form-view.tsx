@@ -148,7 +148,12 @@ function ApplyWorkflowFormView({
             return {
               id: romInput.id,
               progress: {
+                cancelLabel: romInputs.length > 1 ? "Cancel ROM input staging" : "Cancel ROM staging",
                 id: `rom-weaver-progress-rom-${index}`,
+                onCancel: () => {
+                  if (romInputs.length === 1 && uiController.clearRomInput) uiController.clearRomInput();
+                  else uiController.removeRomInput?.(romInput.id);
+                },
                 ...toWorkflowFileProgressProps(rowProgress)!,
               },
             };

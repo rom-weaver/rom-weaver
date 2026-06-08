@@ -123,6 +123,7 @@ type RuntimeRomSpecificHooks = {
   logLevel?: LogLevel;
   onLog?: (log: WorkflowRuntimeLog) => void;
   onProgress?: (progress: RuntimeRomSpecificProgress) => void;
+  signal?: AbortSignal;
   threads?: number | string | null;
 };
 
@@ -196,6 +197,7 @@ type RuntimePatchApplyWorkerInput = {
   patchFiles: Array<{ patchFileName: string; patchFilePath: string; patchFormat?: string }>;
   romFileName: string;
   romFilePath: string;
+  signal?: AbortSignal;
 };
 
 type RuntimePatchValidateWorkerInput = {
@@ -204,6 +206,7 @@ type RuntimePatchValidateWorkerInput = {
   patchFiles: Array<{ patchFileName: string; patchFilePath: string; patchFormat?: string }>;
   romFileName: string;
   romFilePath: string;
+  signal?: AbortSignal;
 };
 
 type RuntimePatchCreateWorkerInput = {
@@ -215,6 +218,7 @@ type RuntimePatchCreateWorkerInput = {
   originalFileName: string;
   originalFilePath: string;
   outputName: string;
+  signal?: AbortSignal;
   workerThreads?: number | string | null;
 };
 
@@ -224,6 +228,7 @@ type RuntimePatchCreateCandidatesWorkerInput = {
   modifiedFilePath: string;
   originalFileName: string;
   originalFilePath: string;
+  signal?: AbortSignal;
   workerThreads?: number | string | null;
 };
 
@@ -238,6 +243,7 @@ type RuntimeTrimWorkerInput = {
   extension?: string;
   logLevel?: LogLevel;
   outputName: string;
+  signal?: AbortSignal;
   sourceFileName: string;
   sourceFilePath: string;
   workerThreads?: number | string | null;
@@ -281,6 +287,7 @@ type WorkflowRuntimePatch = {
     logLevel?: LogLevel;
     onLog?: (log: WorkflowRuntimeLog) => void;
     onProgress?: (progress: WorkflowCreatePatchProgress) => void;
+    signal?: AbortSignal;
   }) => Promise<PublicOutput>;
   validatePatch?: (input: {
     input: SourceRef;
@@ -298,6 +305,7 @@ type WorkflowRuntimePatch = {
     logLevel?: LogLevel;
     onLog?: (log: WorkflowRuntimeLog) => void;
     onProgress?: (progress: WorkflowCreatePatchProgress) => void;
+    signal?: AbortSignal;
   }) => Promise<{
     message?: string;
     status: "passed";
@@ -308,6 +316,7 @@ type WorkflowRuntimePatch = {
     logLevel?: LogLevel;
     onLog?: (log: WorkflowRuntimeLog) => void;
     onProgress?: (progress: WorkflowRuntimeProgress) => void;
+    signal?: AbortSignal;
   }) => Promise<{
     format?: string | null;
     minimum_source_size?: number | null;
@@ -331,6 +340,7 @@ type WorkflowRuntimePatch = {
     logLevel?: LogLevel;
     onLog?: (log: WorkflowRuntimeLog) => void;
     onProgress?: (progress: WorkflowCreatePatchProgress) => void;
+    signal?: AbortSignal;
   }) => Promise<CreatePatchResult>;
   createPatchCandidates?: (input: {
     original: SourceRef;
@@ -339,6 +349,7 @@ type WorkflowRuntimePatch = {
     logLevel?: LogLevel;
     onLog?: (log: WorkflowRuntimeLog) => void;
     onProgress?: (progress: WorkflowCreatePatchProgress) => void;
+    signal?: AbortSignal;
   }) => Promise<RuntimePatchCreateFormatCandidates>;
 };
 
@@ -351,6 +362,7 @@ type WorkflowRuntimeTrim = {
     logLevel?: LogLevel;
     onLog?: (log: WorkflowRuntimeLog) => void;
     onProgress?: (progress: WorkflowCreatePatchProgress) => void;
+    signal?: AbortSignal;
   }) => Promise<TrimResult>;
 };
 

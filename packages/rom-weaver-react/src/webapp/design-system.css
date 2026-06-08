@@ -381,10 +381,20 @@
 .rw-app .track.indet .bar::after { display: none; }
 .rw-app .iprog { margin-top: 10px; }
 .rw-app .iprog .lab { display: flex; justify-content: space-between; gap: 10px; font-size: 0.827586rem; color: var(--rw-ink-soft); margin-bottom: 6px; }
+.rw-app .iprog .lab > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rw-app .iprog .lab .v { font-family: var(--rw-mono); color: var(--rw-accent); white-space: nowrap; }
+.rw-app .iprog-wrap.cancelable { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.rw-app .iprog-wrap.cancelable .iprog { flex: 1 1 auto; min-width: 0; }
 .rw-app .iprog.tight { margin-top: 8px; }
 .rw-app .fileprog { margin-top: 8px; padding: 9px 8px; border: 1px solid var(--rw-line); border-radius: 6px; background: var(--rw-inset); }
 .rw-app .fileprog .iprog { margin-top: 0; }
+.rw-app .fileprog.rom-weaver-has-progress { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.rw-app .fileprog.rom-weaver-has-progress .iprog { flex: 1 1 auto; min-width: 0; }
+.rw-app .progress-cancel { appearance: none; flex: 0 0 30px; width: 30px; height: 30px; display: inline-grid; place-items: center; border: 1px solid var(--rw-line); border-radius: 6px; background: var(--rw-panel-2); color: var(--rw-ink-mut); cursor: pointer; transition: background .12s, border-color .12s, color .12s, transform .08s; }
+.rw-app .progress-cancel:hover { background: color-mix(in oklab, var(--rw-bad) 9%, var(--rw-panel-2)); border-color: color-mix(in oklab, var(--rw-bad) 38%, var(--rw-line)); color: var(--rw-bad); }
+.rw-app .progress-cancel:active { transform: translateY(1px); }
+.rw-app .progress-cancel:focus-visible { outline: 2px solid var(--rw-accent); outline-offset: 2px; }
+.rw-app .progress-cancel svg { width: 15px; height: 15px; }
 @media (prefers-reduced-motion: reduce) { .rw-app .bar::after, .rw-app .track.indet .bar { animation: none; } }
 
 /* inline help popovers */

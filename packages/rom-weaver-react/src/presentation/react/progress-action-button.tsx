@@ -1,3 +1,4 @@
+import X from "lucide-react/dist/esm/icons/x.js";
 import type { ReactNode } from "react";
 import { cx } from "../tailwind-classes.ts";
 import type { createProgressViewModel } from "../workflow-presentation.ts";
@@ -18,6 +19,8 @@ type ProgressActionButtonProps = {
   title?: string;
   icon?: ReactNode;
   loading?: boolean;
+  onCancel?: () => void;
+  cancelLabel?: string;
   progressId?: string;
 };
 
@@ -50,6 +53,8 @@ function ProgressActionButton({
   title,
   icon,
   loading,
+  onCancel,
+  cancelLabel = "Cancel operation",
   progressId,
 }: ProgressActionButtonProps) {
   const progressLabelParts = progress ? formatProgressLabelParts(progress) : null;
@@ -83,6 +88,17 @@ function ProgressActionButton({
             <div className="bar" style={{ width: isIndeterminate ? undefined : `${determinatePercent}%` }} />
           </div>
         </div>
+        {onCancel ? (
+          <button
+            aria-label={cancelLabel}
+            className="progress-cancel"
+            onClick={onCancel}
+            title={cancelLabel}
+            type="button"
+          >
+            <X aria-hidden="true" />
+          </button>
+        ) : null}
       </div>
     );
   }

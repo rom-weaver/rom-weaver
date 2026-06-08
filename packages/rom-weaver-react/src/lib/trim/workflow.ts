@@ -255,6 +255,7 @@ const runTrimWorkflow = async (
             stage: "apply",
           }),
         outputName: rawTrimFileName,
+        signal: options.signal,
         source: source as SourceRef,
         workerThreads: getTrimWorkerThreads(options),
       }),

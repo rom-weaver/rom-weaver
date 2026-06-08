@@ -163,6 +163,8 @@ const isDismissibleWorkflowError = (code: string) => code !== "AMBIGUOUS_SELECTI
 const getChecksumTimingLabel = (timing: string) => (timing ? `Checksum ${timing}` : "");
 const isChecksumProgress = (progress: WorkflowFormProgressState | null) =>
   !!progress && /checksum/i.test(`${progress.label} ${progress.message}`);
+const isUserRequestedCancellation = (error: unknown, signal: AbortSignal) =>
+  signal.aborted && getErrorCode(error) === "CANCELLED";
 
 type InternalCreatePatchFormProps = CreatePatchFormProps & {
   createWorkflow?: typeof CreateWorkflow;
@@ -340,6 +342,21 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     stagingSettingsRef.current = stagingSettings;
   }, [stagingSettings]);
 
+  const resetStagedCreateWorkflow = useCallback(() => {
+    stagedCreateWorkflowGenerationRef.current += 1;
+    sourceStageQueueRef.current = Promise.resolve(undefined);
+    const workflow = stagedCreateWorkflowRef.current;
+    stagedCreateWorkflowRef.current = null;
+    stagedCreateWorkflowSyncRef.current = {
+      modifiedKey: "",
+      originalKey: "",
+      settingsKey: "",
+    };
+    workflow?.dispose().catch(() => undefined);
+    setStagingRole(null);
+    clearProgressForStage("input");
+  }, [clearProgressForStage]);
+
   useEffect(() => {
     setCreatePatchFormatCandidates(null);
     if (!(original && modified && originalSourceKey && modifiedSourceKey)) return;
@@ -403,6 +420,13 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     props.onModifiedChange?.(file);
     clearWorkflowMessage();
     setProgress(null);
+  };
+
+  const cancelSourceStaging = (role: "modified" | "original") => {
+    setCreateQueued(false);
+    resetStagedCreateWorkflow();
+    if (role === "original") updateOriginal(null);
+    else updateModified(null);
   };
 
   cancelSelectionRef.current = (request) => {
@@ -696,6 +720,12 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     } catch (error) {
       const normalizedError = error instanceof Error ? error : new Error(String(error));
       const code = getErrorCode(normalizedError);
+      if (isUserRequestedCancellation(normalizedError, abortController.signal)) {
+        clearWorkflowMessage();
+        setProgress(null);
+        clearCompletedOutput();
+        return;
+      }
       if (code === "WORKFLOW_SELECTION_SKIPPED") {
         clearWorkflowMessage();
         setProgress(null);
@@ -746,11 +776,28 @@ function CreatePatchForm(props: CreatePatchFormProps) {
 
   const progressProps = toWorkflowFileProgressProps(progress);
   const waitingProgressProps = toWorkflowFileProgressProps(createWaitingWorkflowProgress());
+  const cancelCreateOutputProgress = () => {
+    setCreateQueued(false);
+    if (busy) {
+      abortActiveOperation();
+      disposeActiveOutput();
+      clearCompletedOutput();
+      return;
+    }
+    setProgress(null);
+  };
   const getSourceProgress = (role: "modified" | "original") => {
-    if (stagingRole === role && progressProps && progress && !isChecksumProgress(progress)) return progressProps;
+    const cancelProps = {
+      cancelLabel: role === "original" ? "Cancel original ROM staging" : "Cancel modified ROM staging",
+      onCancel: () => cancelSourceStaging(role),
+    };
+    if (stagingRole === role && progressProps && progress && !isChecksumProgress(progress))
+      return { ...progressProps, ...cancelProps };
     const file = role === "original" ? original : modified;
     const sourceState = role === "original" ? originalState : modifiedState;
-    return file && !sourceState && stagingRole ? waitingProgressProps : null;
+    return file && !sourceState && stagingRole && waitingProgressProps
+      ? { ...waitingProgressProps, ...cancelProps }
+      : null;
   };
   const getSourceChecksumProgress = (role: "modified" | "original") =>
     stagingRole === role && progress && isChecksumProgress(progress) ? progress : null;
@@ -908,12 +955,22 @@ function CreatePatchForm(props: CreatePatchFormProps) {
             progress={
               createQueued
                 ? waitingProgressProps
+                  ? {
+                      ...waitingProgressProps,
+                      cancelLabel: "Cancel queued create",
+                      onCancel: cancelCreateOutputProgress,
+                    }
+                  : null
                 : busy && progressProps && progress?.role !== "input"
-                  ? progressProps
+                  ? {
+                      ...progressProps,
+                      cancelLabel: "Cancel patch creation",
+                      onCancel: cancelCreateOutputProgress,
+                    }
                   : null
             }
           >
-            {busy ? "Cancel" : "CREATE & DOWNLOAD PATCH"}
+            CREATE & DOWNLOAD PATCH
           </OutputRunAction>
         }
         compress={buildOutputCompressionPanel({

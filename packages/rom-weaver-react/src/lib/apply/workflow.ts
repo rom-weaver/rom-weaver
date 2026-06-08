@@ -511,6 +511,7 @@ const runApplyWorkflow = async (
                 ...(validateWithOutputChecksums.length ? { validateWithOutputChecksums } : {}),
               },
               patches: selectedPatches,
+              signal: options.signal,
             })) as PublicOutputWithApplySummary;
             const workerApplyTimeMs = getTimingElapsedMs(workerOutput._applySummary?.timing);
             if (workerApplyTimeMs !== undefined) {

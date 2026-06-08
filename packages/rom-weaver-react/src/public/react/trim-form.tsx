@@ -176,6 +176,8 @@ const isSourceInvalid = (source: TrimWorkflowSourceState | null | undefined) =>
   !!source && (source.status === "failed" || (source.warnings?.length ?? 0) > 0);
 
 const isDismissibleWorkflowError = (code: string) => code !== "AMBIGUOUS_SELECTION";
+const isUserRequestedCancellation = (error: unknown, signal: AbortSignal) =>
+  signal.aborted && getErrorCode(error) === "CANCELLED";
 
 type InternalTrimPatchFormProps = TrimPatchFormProps & {
   trimWorkflow?: typeof TrimWorkflow;
@@ -361,6 +363,18 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     props.onSourceChange?.(file);
     clearWorkflowMessage();
     setProgress(null);
+  };
+
+  const cancelSourceStaging = () => {
+    setTrimQueued(false);
+    stagedTrimWorkflowGenerationRef.current += 1;
+    const workflow = stagedTrimWorkflowRef.current;
+    stagedTrimWorkflowRef.current = null;
+    stagedTrimWorkflowReadyRef.current = null;
+    workflow?.dispose().catch(() => undefined);
+    setSourceStaging(false);
+    clearProgressForStage("input");
+    updateSource(null);
   };
 
   cancelSelectionRef.current = () => updateSource(null);
@@ -622,6 +636,12 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     } catch (error) {
       const normalizedError = error instanceof Error ? error : new Error(String(error));
       const code = getErrorCode(normalizedError);
+      if (isUserRequestedCancellation(normalizedError, abortController.signal)) {
+        clearWorkflowMessage();
+        setProgress(null);
+        clearCompletedRunState();
+        return;
+      }
       if (code === "WORKFLOW_SELECTION_SKIPPED") {
         clearWorkflowMessage();
         setProgress(null);
@@ -693,9 +713,26 @@ function TrimPatchForm(props: TrimPatchFormProps) {
 
   const progressProps = toWorkflowFileProgressProps(progress);
   const waitingProgressProps = toWorkflowFileProgressProps(createWaitingWorkflowProgress());
+  const cancelTrimOutputProgress = () => {
+    setTrimQueued(false);
+    if (busy) {
+      abortActiveOperation();
+      disposeActiveOutput();
+      clearCompletedRunState();
+      return;
+    }
+    setProgress(null);
+  };
   const showInputProgress =
     sourceStaging || (busy && progressProps && progress?.stage === "input" && progress.role === "input");
-  const inputProgressProps = showInputProgress ? progressProps || waitingProgressProps : null;
+  const inputProgressProps =
+    showInputProgress && (progressProps || waitingProgressProps)
+      ? {
+          ...(progressProps || waitingProgressProps)!,
+          cancelLabel: "Cancel ROM staging",
+          onCancel: cancelSourceStaging,
+        }
+      : null;
 
   const rawExtensionOption = rawOutputFormat;
   const formatOptions = useMemo(
@@ -824,12 +861,22 @@ function TrimPatchForm(props: TrimPatchFormProps) {
             progress={
               trimQueued
                 ? waitingProgressProps
+                  ? {
+                      ...waitingProgressProps,
+                      cancelLabel: "Cancel queued trim",
+                      onCancel: cancelTrimOutputProgress,
+                    }
+                  : null
                 : busy && progressProps && progress?.stage !== "input"
-                  ? progressProps
+                  ? {
+                      ...progressProps,
+                      cancelLabel: "Cancel trim",
+                      onCancel: cancelTrimOutputProgress,
+                    }
                   : null
             }
           >
-            {busy ? "Cancel" : "TRIM & DOWNLOAD"}
+            TRIM & DOWNLOAD
           </OutputRunAction>
         }
         compress={buildOutputCompressionPanel({

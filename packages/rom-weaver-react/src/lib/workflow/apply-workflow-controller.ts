@@ -294,10 +294,10 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
   readonly id: string;
   protected readonly runtime: WorkflowRuntime;
   protected readonly validateSources?: SourceValidator<TSource>;
-  private readonly abortController = new AbortController();
   private readonly constructorSignal?: AbortSignal;
   private readonly selectFile?: WorkflowOptions<ApplySettings>["selectFile"];
   private readonly inputStages: StagedRomSourceController<TSource, InternalSourceState>;
+  private abortController = new AbortController();
   private disposed = false;
   private progressSequence = 0;
   private nextCandidateSequence = 0;
@@ -750,10 +750,13 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
   private async mutate<TValue>(_operation: string, callback: () => Promise<TValue>): Promise<TValue> {
     const execute = async () => {
       this.assertCanStartOperation();
+      const operationSignal = this.abortController.signal;
       try {
         return await callback();
       } catch (error) {
         throw toRomWeaverError(error);
+      } finally {
+        this.rearmAbortController(operationSignal);
       }
     };
     const previousMutation = this.mutationQueue;
@@ -773,6 +776,12 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
     if (this.disposed) throw new RomWeaverError("WORKFLOW_DISPOSED", "Workflow has been disposed");
     throwIfAborted(this.abortController.signal);
     throwIfAborted(this.constructorSignal);
+  }
+
+  private rearmAbortController(operationSignal: AbortSignal): void {
+    if (!operationSignal.aborted || this.abortController.signal !== operationSignal) return;
+    if (this.disposed || this.constructorSignal?.aborted) return;
+    this.abortController = new AbortController();
   }
 
   private createInitialSource(
@@ -1368,6 +1377,7 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
             requirements: stage.state.requirements,
           },
         ],
+        signal: this.abortController.signal,
       });
       stage.state.patchValidation = {
         message: result.message || "Patch validation passed",
@@ -1448,6 +1458,7 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
         outputName:
           getApplyExecutionOutputName(this.outputState, this.settings, this.getInput()?.fileName) || output.outputName,
       },
+      signal: this.abortController.signal,
       validation: cloneValue(this.settings.validation || {}),
       workers: cloneValue(this.settings.workers || {}),
     };

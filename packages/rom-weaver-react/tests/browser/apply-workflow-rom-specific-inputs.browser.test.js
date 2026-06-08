@@ -5,6 +5,7 @@ import { browserRuntime } from "../../src/platform/browser/workflow-runtime.ts";
 const RAW_ROM = "tests/fixtures/archive_sources/game.bin";
 const RAW_PATCH = "tests/fixtures/archive_sources/change.ips";
 const ONE_PATCH_7Z = "tests/fixtures/archives/one-patch.7z";
+const ONE_ROM_ZIP = "tests/fixtures/archives/one-rom.zip";
 const MULTI_PATCH_ZIP = "tests/fixtures/archives/multi-patch.zip";
 
 const loadFixtureFile = async (filePath, type = "application/octet-stream") => {
@@ -222,6 +223,36 @@ test("RVZ staging emits list then extract trace events", async () => {
     expect(workerTraceLines.length).toBeGreaterThan(0);
     expect(workerTraceLines.some((line) => line.includes('command="extract"'))).toBe(true);
     expect(workerTraceLines.some((line) => line.includes("scratch=1"))).toBe(true);
+  } finally {
+    await workflow.dispose();
+  }
+});
+
+test("apply workflow abort preserves staged input for the next run", async () => {
+  const { workflow, logs } = createTraceWorkflow();
+  try {
+    await workflow.setOutputFormat("none");
+    await workflow.setInput(await loadFixtureFile(ONE_ROM_ZIP, "application/zip"));
+
+    const pendingRun = workflow.run();
+    workflow.abort();
+    await expect(pendingRun).rejects.toMatchObject({ code: "CANCELLED" });
+
+    const logStart = logs.length;
+    const result = await workflow.run();
+    await result.output.dispose();
+
+    const secondRunLogs = logs.slice(logStart);
+    expect(secondRunLogs.some((record) => String(record?.message || "") === "input.archive.extract.start")).toBe(false);
+    expect(
+      secondRunLogs.some(
+        (record) =>
+          record?.namespace === "workflow:apply" &&
+          record?.message === "stage.skip" &&
+          record?.details?.stage === "input.prepare" &&
+          record?.details?.reason === "prepared input assets supplied",
+      ),
+    ).toBe(true);
   } finally {
     await workflow.dispose();
   }

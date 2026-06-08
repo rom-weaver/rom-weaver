@@ -181,7 +181,7 @@ const getTimingElapsedMs = (timing: PublicOutput["timing"] | InternalPatchApplyS
 };
 
 const createSharedPatchRuntime = (adapter: PatchRuntimeAdapter): WorkflowRuntime["patch"] => ({
-  applyPatch: async ({ input, patches, options, logLevel, onLog, onProgress }) => {
+  applyPatch: async ({ input, patches, options, logLevel, onLog, onProgress, signal }) => {
     const traceContext = { logLevel, onLog };
     const stageStartedAt = Date.now();
     traceRuntimePatchApply(traceContext, "patch.apply.stage.start", {
@@ -242,6 +242,7 @@ const createSharedPatchRuntime = (adapter: PatchRuntimeAdapter): WorkflowRuntime
             patchFormat: patches[0]?.patchFormat,
             romFileName: inputSource.fileName,
             romFilePath: inputSource.filePath,
+            signal,
           },
           onProgress ? forwardCreatePatchProgress(onProgress) : undefined,
           onLog,
@@ -285,6 +286,7 @@ const createSharedPatchRuntime = (adapter: PatchRuntimeAdapter): WorkflowRuntime
     logLevel,
     onLog,
     onProgress,
+    signal,
   }) => {
     const traceContext = { logLevel, onLog };
     const workerSources = await adapter.workerIo.stageSources([
@@ -318,6 +320,7 @@ const createSharedPatchRuntime = (adapter: PatchRuntimeAdapter): WorkflowRuntime
           originalFileName: originalSource.fileName,
           originalFilePath: originalSource.filePath,
           outputName,
+          signal,
           workerThreads: workerThreads ?? undefined,
         },
         onProgress ? forwardCreatePatchProgress(onProgress) : undefined,
@@ -335,7 +338,7 @@ const createSharedPatchRuntime = (adapter: PatchRuntimeAdapter): WorkflowRuntime
       await cleanupWorkerSources(workerSources);
     }
   },
-  createPatchCandidates: async ({ original, modified, workerThreads, logLevel, onLog, onProgress }) => {
+  createPatchCandidates: async ({ original, modified, workerThreads, logLevel, onLog, onProgress, signal }) => {
     const traceContext = { logLevel, onLog };
     const workerSources = await adapter.workerIo.stageSources([
       {
@@ -365,6 +368,7 @@ const createSharedPatchRuntime = (adapter: PatchRuntimeAdapter): WorkflowRuntime
           modifiedFilePath: modifiedSource.filePath,
           originalFileName: originalSource.fileName,
           originalFilePath: originalSource.filePath,
+          signal,
           workerThreads: workerThreads ?? undefined,
         },
         onProgress ? forwardCreatePatchProgress(onProgress) : undefined,
@@ -374,7 +378,7 @@ const createSharedPatchRuntime = (adapter: PatchRuntimeAdapter): WorkflowRuntime
       await cleanupWorkerSources(workerSources);
     }
   },
-  validatePatch: async ({ input, patches, options, logLevel, onLog, onProgress }) => {
+  validatePatch: async ({ input, patches, options, logLevel, onLog, onProgress, signal }) => {
     const traceContext = { logLevel, onLog };
     const workerSources = await adapter.workerIo.stageSources([
       {
@@ -413,6 +417,7 @@ const createSharedPatchRuntime = (adapter: PatchRuntimeAdapter): WorkflowRuntime
           patchFiles: toPatchWorkerFiles(patchSources, patches),
           romFileName: inputSource.fileName,
           romFilePath: inputSource.filePath,
+          signal,
         },
         onProgress ? forwardCreatePatchProgress(onProgress) : undefined,
         onLog,
@@ -466,7 +471,7 @@ type TrimRuntimeAdapter = {
 };
 
 const createSharedTrimRuntime = (adapter: TrimRuntimeAdapter): WorkflowRuntime["trim"] => ({
-  trim: async ({ source, extension, outputName, workerThreads, logLevel, onLog, onProgress }) => {
+  trim: async ({ source, extension, outputName, workerThreads, logLevel, onLog, onProgress, signal }) => {
     const traceContext = { logLevel, onLog };
     const workerSource = await adapter.workerIo.stageSource({
       fallbackFileName: "input.bin",
@@ -482,6 +487,7 @@ const createSharedTrimRuntime = (adapter: TrimRuntimeAdapter): WorkflowRuntime["
           extension,
           logLevel,
           outputName,
+          signal,
           sourceFileName: workerSource.fileName,
           sourceFilePath: workerSource.filePath,
           workerThreads: workerThreads ?? undefined,

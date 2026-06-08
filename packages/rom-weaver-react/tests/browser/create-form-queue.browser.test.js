@@ -76,6 +76,8 @@ class MockCreateWorkflow {
 
   abort() {
     this.aborted = true;
+    const error = Object.assign(new Error("Workflow was cancelled"), { code: "CANCELLED" });
+    this.runReject?.(error);
   }
 
   dispose() {
@@ -119,7 +121,9 @@ class MockCreateWorkflow {
 
   run() {
     workflowMockState.runCalls += 1;
-    return new Promise(() => undefined);
+    return new Promise((_resolve, reject) => {
+      this.runReject = reject;
+    });
   }
 
   setModified(source) {
@@ -245,6 +249,62 @@ test("create output edits stay enabled while queued and cancel the queued run", 
   workflowMockState.modifiedDeferred.resolve();
   await new Promise((resolve) => globalThis.setTimeout(resolve, 50));
   expect(workflowMockState.runCalls).toBe(0);
+});
+
+test("create queued output cancel button clears the queued run", async () => {
+  mount(
+    createElement(
+      CreatePatchForm,
+      withCreateWorkflowMock({
+        defaultModified: new File([new Uint8Array([0, 1, 2, 4])], "modified.bin"),
+        defaultOriginal: new File([new Uint8Array([0, 1, 2, 3])], "original.bin"),
+      }),
+    ),
+  );
+
+  await expect.poll(() => document.querySelectorAll(".fileprog").length).toBeGreaterThan(0);
+  await queueCreate();
+
+  const cancelButton = document.querySelector("button[aria-label='Cancel queued create']");
+  expect(cancelButton).toBeInstanceOf(HTMLButtonElement);
+  expect(cancelButton.textContent).toBe("");
+  cancelButton.click();
+  await expect.poll(getOutputWaitingText).toBe("");
+
+  workflowMockState.originalDeferred.resolve();
+  workflowMockState.modifiedDeferred.resolve();
+  await new Promise((resolve) => globalThis.setTimeout(resolve, 50));
+  expect(workflowMockState.runCalls).toBe(0);
+});
+
+test("create active output cancel button aborts the workflow without an error notice", async () => {
+  mount(
+    createElement(
+      CreatePatchForm,
+      withCreateWorkflowMock({
+        defaultModified: new File([new Uint8Array([0, 1, 2, 4])], "modified.bin"),
+        defaultOriginal: new File([new Uint8Array([0, 1, 2, 3])], "original.bin"),
+      }),
+    ),
+  );
+
+  workflowMockState.originalDeferred.resolve();
+  workflowMockState.modifiedDeferred.resolve();
+  await expect.poll(() => workflowMockState.instances[0]?.getOriginal()?.status).toBe("ready");
+  await expect.poll(() => workflowMockState.instances[0]?.getModified()?.status).toBe("ready");
+
+  const createButton = document.getElementById("patch-builder-button-create");
+  expect(createButton).toBeInstanceOf(HTMLButtonElement);
+  createButton.click();
+  await expect.poll(() => workflowMockState.runCalls).toBe(1);
+
+  const cancelButton = document.querySelector("button[aria-label='Cancel patch creation']");
+  expect(cancelButton).toBeInstanceOf(HTMLButtonElement);
+  cancelButton.click();
+
+  await expect.poll(() => workflowMockState.instances[0]?.aborted).toBe(true);
+  await expect.poll(getOutputWaitingText).toBe("");
+  expect(document.getElementById("patch-builder-output-error-message")).toBeNull();
 });
 
 test("replacing the modified ROM keeps the prepared original ROM", async () => {

@@ -65,6 +65,7 @@ const inertOutputController: PatcherOutputController = {
     resolvedOutputName: "",
     sizeSummary: createOutputSizeSummary(),
   }),
+  cancelPrimaryAction: () => undefined,
   runPrimaryAction: () => undefined,
   setDisplayFileName: () => undefined,
   setOutputCompression: () => undefined,

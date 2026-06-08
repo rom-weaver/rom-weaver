@@ -459,6 +459,7 @@ class CreateWorkflowController<TSource, TDestination> extends WorkflowController
         outputName: this.outputName || this.settings.output?.outputName,
       },
       patch: this.settings.patch?.metadata ? { metadata: cloneValue(this.settings.patch.metadata) } : undefined,
+      signal: this.abortController.signal,
       workers: cloneValue(this.settings.workers || {}),
     };
   }

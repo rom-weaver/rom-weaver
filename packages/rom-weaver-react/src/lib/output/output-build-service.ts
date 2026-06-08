@@ -144,6 +144,7 @@ const createRuntimeRomSpecificOutputFiles = async (
     logLevel: getLogLevel(options),
     onLog: options?.onLog,
     onProgress: (progress: ProgressEvent) => reportProgress(options, progress),
+    signal: options?.signal,
     workerThreads: getWorkerThreads(options),
   };
   let request: RuntimeCompressionCreateRequest;
@@ -539,6 +540,7 @@ const buildSessionOutputFiles = async (
             percent: getProgressEventPercent(progress),
             stage: "output",
           }),
+        signal: options?.signal,
         workerThreads: getWorkerThreads(options),
       },
       outputName: `${baseName}.chd`,

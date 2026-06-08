@@ -59,6 +59,8 @@ class MockTrimWorkflow {
 
   abort() {
     this.aborted = true;
+    const error = Object.assign(new Error("Workflow was cancelled"), { code: "CANCELLED" });
+    this.runReject?.(error);
   }
 
   dispose() {
@@ -98,7 +100,9 @@ class MockTrimWorkflow {
 
   run() {
     workflowMockState.runCalls += 1;
-    return new Promise(() => undefined);
+    return new Promise((_resolve, reject) => {
+      this.runReject = reject;
+    });
   }
 
   setInput(source) {
@@ -201,6 +205,54 @@ test("trim output edits stay enabled while queued and cancel the queued run", as
   workflowMockState.inputDeferred.resolve();
   await new Promise((resolve) => globalThis.setTimeout(resolve, 50));
   expect(workflowMockState.runCalls).toBe(0);
+});
+
+test("trim queued output cancel button clears the queued run", async () => {
+  mount(
+    createElement(
+      TrimPatchForm,
+      withTrimWorkflowMock({ defaultSource: new File([new Uint8Array([0, 1, 2, 3])], "game.bin") }),
+    ),
+  );
+
+  await expect.poll(() => document.querySelectorAll(".fileprog").length).toBeGreaterThan(0);
+  await queueTrim();
+
+  const cancelButton = document.querySelector("button[aria-label='Cancel queued trim']");
+  expect(cancelButton).toBeInstanceOf(HTMLButtonElement);
+  expect(cancelButton.textContent).toBe("");
+  cancelButton.click();
+  await expect.poll(getOutputWaitingText).toBe("");
+
+  workflowMockState.inputDeferred.resolve();
+  await new Promise((resolve) => globalThis.setTimeout(resolve, 50));
+  expect(workflowMockState.runCalls).toBe(0);
+});
+
+test("trim active output cancel button aborts the workflow without an error notice", async () => {
+  mount(
+    createElement(
+      TrimPatchForm,
+      withTrimWorkflowMock({ defaultSource: new File([new Uint8Array([0, 1, 2, 3])], "game.bin") }),
+    ),
+  );
+
+  workflowMockState.inputDeferred.resolve();
+  await expect.poll(() => workflowMockState.instances[0]?.getInput()?.status).toBe("ready");
+
+  const trimButton = document.getElementById("trim-builder-button-run");
+  expect(trimButton).toBeInstanceOf(HTMLButtonElement);
+  trimButton.click();
+  await confirmTrim();
+  await expect.poll(() => workflowMockState.runCalls).toBe(1);
+
+  const cancelButton = document.querySelector("button[aria-label='Cancel trim']");
+  expect(cancelButton).toBeInstanceOf(HTMLButtonElement);
+  cancelButton.click();
+
+  await expect.poll(() => workflowMockState.instances[0]?.aborted).toBe(true);
+  await expect.poll(getOutputWaitingText).toBe("");
+  expect(document.getElementById("trim-builder-row-error-message")).toBeNull();
 });
 
 test("trim queued run cancels when source preparation warns", async () => {
