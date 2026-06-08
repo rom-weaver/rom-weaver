@@ -8,6 +8,7 @@ import {
 import type { LogRecord } from "../../types/logging.ts";
 import type { WorkerStorageBucket } from "../shared/worker-storage/storage-layout.ts";
 import { getWorkerStorageBucketPath, WORKER_OPFS_MOUNTPOINT } from "../shared/worker-storage/storage-layout.ts";
+import { requestBrowserOpfsStorage } from "./browser-opfs-worker-client.ts";
 import { registerBrowserVirtualFile } from "./browser-virtual-files.ts";
 import { getManagedOpfsFileHandle } from "./opfs-path.ts";
 
@@ -68,6 +69,9 @@ const RESERVED_FILE_CHARS_REGEX = /[:*?"<>|]+/g;
 const EDGE_WHITESPACE_OR_UNDERSCORES_REGEX = /^[_\s]+|[_\s]+$/g;
 const TRAILING_SLASHES_REGEX = /\/+$/;
 const allocatedVirtualInputPaths = new Set<string>();
+// Inputs at or below this size are copied into OPFS up front; larger inputs stay on the zero-copy
+// virtual-Blob path. See the trade-off note at the use site in createBrowserOpfsSourceRef.
+const STAGE_INPUT_TO_OPFS_MAX_BYTES = 400 * 1024 * 1024;
 
 const getBrowserSourceTraceKind = (source: unknown) => {
   if (typeof File !== "undefined" && source instanceof File) return "file";
@@ -228,6 +232,66 @@ const createBrowserOpfsSourceRef = async (
 
   const virtualFileName = normalizeVirtualFileName(fileName || fallbackFileName, fallbackFileName || "input.bin");
   const virtualPath = createVirtualInputPath(options, virtualFileName);
+
+  // Trade-off: small inputs are copied into OPFS up front; large inputs stay on the virtual-Blob path.
+  //
+  // The virtual-Blob path is zero-copy, but it hands every wasm decode thread a reference to the same
+  // File-backed Blob, and each thread reads it synchronously with FileReaderSync. On Safari, concurrent
+  // FileReaderSync reads of one file-backed Blob serialize at the file layer, so the decode threads
+  // starve waiting on each other (measured ~10x throughput gap between the fastest and the stalled
+  // threads on a 4-thread RVZ extract). Copying the input into OPFS once lets each thread read it back
+  // through its own SyncAccessHandle, which removes that contention, and keeps the bytes off the
+  // JS/wasm heap (important on memory-constrained Safari/iOS).
+  //
+  // The cost is one up-front read + write. OPFS writes run ~2.7 GiB/s, so the Blob read dominates and
+  // the staging time is small relative to the contention it removes. We only pay it below the
+  // threshold: above it a full staged copy would cost too much I/O and OPFS storage for large discs,
+  // and the per-read contention is a smaller share of a long-running job, so the zero-copy virtual-Blob
+  // path wins there. Staging failures fall back to the virtual-Blob path so input handling stays robust.
+  const stageBytes = typeof virtualSize === "number" && Number.isFinite(virtualSize) ? virtualSize : virtualSource.size;
+  if (stageBytes <= STAGE_INPUT_TO_OPFS_MAX_BYTES) {
+    const staged = await requestBrowserOpfsStorage({
+      action: "stage",
+      file: virtualSource,
+      fileName: virtualFileName,
+      filePath: virtualPath,
+      mountPoint: options.mountPoint,
+    }).catch((error: unknown) => {
+      emitBrowserSourceRefTrace(options.trace, "input OPFS staging threw, using virtual blob", {
+        error: error instanceof Error ? error.message : String(error),
+        filePath: virtualPath,
+      });
+      return null;
+    });
+    if (staged?.success) {
+      const stagedPath = staged.filePath ?? virtualPath;
+      emitBrowserSourceRefTrace(options.trace, "staged input to OPFS", {
+        fileName: virtualFileName,
+        filePath: stagedPath,
+        size: staged.size ?? stageBytes,
+      });
+      return {
+        cleanup: async () => {
+          await requestBrowserOpfsStorage({ action: "cleanup", filePaths: [stagedPath] }).catch(() => undefined);
+          releaseVirtualInputPath(virtualPath);
+        },
+        fileName: virtualFileName,
+        filePath: stagedPath,
+        kind: "path",
+        size: staged.size ?? stageBytes,
+        storageKind: "opfs",
+      };
+    }
+    if (staged) {
+      emitBrowserSourceRefTrace(options.trace, "input OPFS staging failed, using virtual blob", {
+        error: staged.error?.message,
+        filePath: virtualPath,
+      });
+    }
+    // Drop any partial OPFS file so it can't shadow the virtual registration below.
+    await requestBrowserOpfsStorage({ action: "cleanup", filePaths: [virtualPath] }).catch(() => undefined);
+  }
+
   emitBrowserSourceRefTrace(options.trace, "registering virtual input", {
     fileName: virtualFileName,
     size: virtualSize,
