@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import {
   normalizeChdCodecArgs,
+  resolveCompressionCreateThreadArg,
   resolvePatchApplyThreadArg,
   selectRomWeaverOutputPath,
 } from "../../src/lib/runtime/rom-weaver-runtime.ts";
@@ -48,6 +49,83 @@ test("resolvePatchApplyThreadArg preserves configured thread count for non-xdelt
     forcedSingleThread: false,
     hasXdeltaPatch: false,
     threadArg: "4",
+  });
+});
+
+test("resolveCompressionCreateThreadArg caps zip zstd max to one browser thread for 256 MiB inputs", () => {
+  const totalBytes = 256 * 1024 * 1024;
+  const result = resolveCompressionCreateThreadArg({
+    codecs: ["zstd:22"],
+    format: "zip",
+    totalBytes,
+    workerThreads: 4,
+  });
+
+  expect(result).toMatchObject({
+    forcedSingleThread: true,
+    forceSingleThreadReason: "zip-zstd-browser-memory",
+    requestedThreadArg: 4,
+    threadArg: 1,
+    threadCap: 1,
+    zipZstdLevel: 22,
+  });
+});
+
+test("resolveCompressionCreateThreadArg forces one thread when zip zstd max would otherwise use browser defaults", () => {
+  const result = resolveCompressionCreateThreadArg({
+    codecs: ["zstd"],
+    format: "zip",
+    levelProfile: "max",
+    totalBytes: 256 * 1024 * 1024,
+  });
+
+  expect(result).toMatchObject({
+    forcedSingleThread: true,
+    requestedThreadArg: null,
+    threadArg: 1,
+    threadCap: 1,
+    zipZstdLevel: 22,
+  });
+});
+
+test("resolveCompressionCreateThreadArg uses negative zstd min profile level", () => {
+  const result = resolveCompressionCreateThreadArg({
+    codecs: ["zstd"],
+    format: "zip",
+    levelProfile: "min",
+    totalBytes: 256 * 1024 * 1024,
+    workerThreads: 8,
+  });
+
+  expect(result.zipZstdLevel).toBe(-7);
+  expect(result.threadArg).toBe(8);
+  expect(result.threadCap).toBeGreaterThanOrEqual(8);
+});
+
+test("resolveCompressionCreateThreadArg preserves requested zip zstd threads when the browser cap allows them", () => {
+  const result = resolveCompressionCreateThreadArg({
+    codecs: ["zstd:3"],
+    format: "zip",
+    totalBytes: 256 * 1024 * 1024,
+    workerThreads: 8,
+  });
+
+  expect(result.threadArg).toBe(8);
+  expect(result.threadCap).toBeGreaterThanOrEqual(8);
+});
+
+test("resolveCompressionCreateThreadArg leaves non-zstd archive thread requests unchanged", () => {
+  expect(
+    resolveCompressionCreateThreadArg({
+      codecs: ["deflate:9"],
+      format: "zip",
+      totalBytes: 256 * 1024 * 1024,
+      workerThreads: 4,
+    }),
+  ).toMatchObject({
+    forcedSingleThread: false,
+    threadArg: 4,
+    threadCap: null,
   });
 });
 

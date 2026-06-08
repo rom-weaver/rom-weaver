@@ -1,8 +1,18 @@
+import { ROM_WEAVER_CREATE_CONTAINER_FORMATS } from "rom-weaver-wasm/format-metadata";
 import {
   type CompressionCodecOption,
+  getCompressionCodecLevelMax,
   getCompressionCodecOptions,
   getCompressionCodecValues,
 } from "../../lib/compression/codec-fields.ts";
+import {
+  COMPRESSION_DEFAULTS,
+  COMPRESSION_PROFILE_LABELS,
+  COMPRESSION_PROFILE_LEVELS,
+  getGeneratedCompressionCodecFieldDefault,
+  getGeneratedCompressionCodecLevelMax,
+  getGeneratedCompressionCodecLevelMin,
+} from "../../lib/compression/compression-metadata.ts";
 import { getBrowserLocaleCandidates, negotiateLocale } from "../../presentation/localization/index.ts";
 import { getSettingsLabel } from "../../presentation/settings.ts";
 import { LOG_LEVELS } from "../../types/logging.ts";
@@ -171,38 +181,75 @@ const SETTINGS_LEVEL_OVERRIDE_FIELDS = [
   "zipLevel",
 ] as const satisfies readonly SettingsFieldKey[];
 const SETTINGS_LEVEL_OVERRIDE_FIELD_SET = new Set<SettingsFieldKey>(SETTINGS_LEVEL_OVERRIDE_FIELDS);
+const STANDARD_CODEC_MIN_LEVEL = COMPRESSION_PROFILE_LEVELS.standard.min;
+const STANDARD_CODEC_MAX_LEVEL = COMPRESSION_PROFILE_LEVELS.standard.max;
+const ZSTD_CODEC_MIN_LEVEL = COMPRESSION_PROFILE_LEVELS.zstd.min;
+const ZSTD_CODEC_MAX_LEVEL = COMPRESSION_PROFILE_LEVELS.zstd.max;
+const normalizeCodecName = (codec: string | null | undefined): string =>
+  (String(codec || "").split(":")[0] || "").trim().toLowerCase();
+const formatLevelRange = (min: number, max: number): string => `${min}..${max}`;
+const getCodecMinLevel = (codec: string | null | undefined, fallback: number): number =>
+  getGeneratedCompressionCodecLevelMin(normalizeCodecName(codec)) ?? fallback;
+const getCodecMaxLevel = (codec: string | null | undefined, fallback: number): number =>
+  getGeneratedCompressionCodecLevelMax(normalizeCodecName(codec)) ?? fallback;
+const codecLevelRange = (
+  codec: string | null | undefined,
+  minFallback = STANDARD_CODEC_MIN_LEVEL,
+  maxFallback = STANDARD_CODEC_MAX_LEVEL,
+): string => formatLevelRange(getCodecMinLevel(codec, minFallback), getCodecMaxLevel(codec, maxFallback));
+const codecValuesText = (fieldKey: string): string =>
+  getCompressionCodecOptions(fieldKey)
+    .map((option) => option.value)
+    .join(", ");
+const codecLevelRangeText = (fieldKey: string): string =>
+  getCompressionCodecOptions(fieldKey)
+    .map((option) =>
+      option.maxLevel === null
+        ? option.value
+        : `${option.value}[:${formatLevelRange(option.minLevel ?? 0, option.maxLevel)}]`,
+    )
+    .join(", ");
+const codecDefaultPlaceholderText = (fieldKey: string): string =>
+  getGeneratedCompressionCodecFieldDefault(fieldKey)
+    .split(",")
+    .map((codec) => {
+      const normalized = normalizeCodecName(codec);
+      const maxLevel = getCompressionCodecLevelMax(fieldKey, normalized);
+      return maxLevel === null ? normalized : `${normalized}:${maxLevel}`;
+    })
+    .filter(Boolean)
+    .join(",");
+const ZIP_ZSTD_CODEC =
+  getCompressionCodecOptions("zipCodec").find((option) => option.value === "zstd")?.value ||
+  COMPRESSION_DEFAULTS.zipCodec;
 
 const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<K> } = {
   chdCreateCdCodecs: {
     codecOptions: getCompressionCodecOptions("chdCreateCdCodecs"),
-    defaultValue: "cdlz,cdzl,cdfl",
+    defaultValue: COMPRESSION_DEFAULTS.chdCreateCdCodecs,
     disabled: ({ uiState }) => !uiState.chdEnabled,
     id: "settings-chd-createcd-codecs",
     key: "chdCreateCdCodecs",
     kind: "text",
     label: getSettingsLabel("chdCreateCdCodecs"),
     labelDataLocalize: "Create CD codecs",
-    placeholder: "cdlz:9,cdzl:9,cdfl:8",
-    suggestion:
-      "Valid values: cdzs, cdlz, cdzl, cdfl. Optional levels: cdzs[:0-22], cdlz[:0-9], cdzl[:0-9], cdfl[:0-8]",
-    suggestionDataLocalize:
-      "Valid values: cdzs, cdlz, cdzl, cdfl. Optional levels: cdzs[:0-22], cdlz[:0-9], cdzl[:0-9], cdfl[:0-8]",
+    placeholder: codecDefaultPlaceholderText("chdCreateCdCodecs"),
+    suggestion: `Valid values: ${codecValuesText("chdCreateCdCodecs")}. Optional levels: ${codecLevelRangeText("chdCreateCdCodecs")}`,
+    suggestionDataLocalize: `Valid values: ${codecValuesText("chdCreateCdCodecs")}. Optional levels: ${codecLevelRangeText("chdCreateCdCodecs")}`,
     validationLabel: "Create CD codecs",
   },
   chdCreateDvdCodecs: {
     codecOptions: getCompressionCodecOptions("chdCreateDvdCodecs"),
-    defaultValue: "lzma,zlib,huff,flac",
+    defaultValue: COMPRESSION_DEFAULTS.chdCreateDvdCodecs,
     disabled: ({ uiState }) => !uiState.chdEnabled,
     id: "settings-chd-createdvd-codecs",
     key: "chdCreateDvdCodecs",
     kind: "text",
     label: getSettingsLabel("chdCreateDvdCodecs"),
     labelDataLocalize: "Create DVD codecs",
-    placeholder: "lzma:9,zlib:9,huff,flac:8",
-    suggestion:
-      "Valid values: zstd, lzma, zlib, huff, flac. Optional levels: zstd[:0-22], lzma[:0-9], zlib[:0-9], huff, flac[:0-8]",
-    suggestionDataLocalize:
-      "Valid values: zstd, lzma, zlib, huff, flac. Optional levels: zstd[:0-22], lzma[:0-9], zlib[:0-9], huff, flac[:0-8]",
+    placeholder: codecDefaultPlaceholderText("chdCreateDvdCodecs"),
+    suggestion: `Valid values: ${codecValuesText("chdCreateDvdCodecs")}. Optional levels: ${codecLevelRangeText("chdCreateDvdCodecs")}`,
+    suggestionDataLocalize: `Valid values: ${codecValuesText("chdCreateDvdCodecs")}. Optional levels: ${codecLevelRangeText("chdCreateDvdCodecs")}`,
     validationLabel: "Create DVD codecs",
   },
   chdOutputMode: {
@@ -217,7 +264,7 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     id: "settings-output-compression",
     key: "compressionFormat",
     kind: "hidden",
-    validValues: ["auto", "chd", "rvz", "z3ds", "7z", "zip", "none"],
+    validValues: ["auto", ...ROM_WEAVER_CREATE_CONTAINER_FORMATS, "none"],
   },
   compressionProfile: {
     defaultValue: "max",
@@ -228,10 +275,16 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     labelDataLocalize: "Level",
     max: COMPRESSION_PROFILES.length - 1,
     min: 0,
-    scaleLabels: ["Min", "Very Low", "Low", "Medium", "High", "Very High", "Max"],
+    scaleLabels: [...COMPRESSION_PROFILE_LABELS],
     step: 1,
-    suggestion: "Default: Max. zstd levels: 0-22. Other codec levels: 0-9.",
-    suggestionDataLocalize: "Default: Max. zstd levels: 0-22. Other codec levels: 0-9.",
+    suggestion: `Default: Max. zstd levels: ${formatLevelRange(
+      ZSTD_CODEC_MIN_LEVEL,
+      ZSTD_CODEC_MAX_LEVEL,
+    )}. Other codec levels: ${formatLevelRange(STANDARD_CODEC_MIN_LEVEL, STANDARD_CODEC_MAX_LEVEL)}.`,
+    suggestionDataLocalize: `Default: Max. zstd levels: ${formatLevelRange(
+      ZSTD_CODEC_MIN_LEVEL,
+      ZSTD_CODEC_MAX_LEVEL,
+    )}. Other codec levels: ${formatLevelRange(STANDARD_CODEC_MIN_LEVEL, STANDARD_CODEC_MAX_LEVEL)}.`,
     validationLabel: "Level",
     validValues: [...COMPRESSION_PROFILES],
   },
@@ -335,7 +388,7 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     layout: "large",
   },
   rvzBlockSize: {
-    defaultValue: 131072,
+    defaultValue: COMPRESSION_DEFAULTS.rvzBlockSize,
     disabled: ({ uiState }) => !uiState.rvzEnabled,
     id: "settings-rvz-block-size",
     key: "rvzBlockSize",
@@ -345,22 +398,30 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     max: 2147483647,
     min: 1,
     step: 1,
-    suggestion: "Default: 131072",
+    suggestion: `Default: ${COMPRESSION_DEFAULTS.rvzBlockSize}`,
     suggestionDataLocalize: "Valid values: 1-2147483647",
     validationLabel: "RVZ block size",
   },
   rvzCodec: {
     codecOptions: getCompressionCodecOptions("rvzCodec"),
-    defaultValue: "zstd",
+    defaultValue: COMPRESSION_DEFAULTS.rvzCodec,
     disabled: ({ uiState }) => !uiState.rvzEnabled,
     id: "settings-rvz-codec",
     key: "rvzCodec",
     kind: "text",
     label: "RVZ codec",
     labelDataLocalize: "RVZ codec",
-    placeholder: "zstd:22",
-    suggestion: "Default: zstd. Optional level: zstd[:0-22].",
-    suggestionDataLocalize: "Default: zstd. Optional level: zstd[:0-22].",
+    placeholder: `${COMPRESSION_DEFAULTS.rvzCodec}:${getCodecMaxLevel(COMPRESSION_DEFAULTS.rvzCodec, ZSTD_CODEC_MAX_LEVEL)}`,
+    suggestion: `Default: ${COMPRESSION_DEFAULTS.rvzCodec}. Optional level: ${COMPRESSION_DEFAULTS.rvzCodec}[:${codecLevelRange(
+      COMPRESSION_DEFAULTS.rvzCodec,
+      ZSTD_CODEC_MIN_LEVEL,
+      ZSTD_CODEC_MAX_LEVEL,
+    )}].`,
+    suggestionDataLocalize: `Default: ${COMPRESSION_DEFAULTS.rvzCodec}. Optional level: ${COMPRESSION_DEFAULTS.rvzCodec}[:${codecLevelRange(
+      COMPRESSION_DEFAULTS.rvzCodec,
+      ZSTD_CODEC_MIN_LEVEL,
+      ZSTD_CODEC_MAX_LEVEL,
+    )}].`,
     validationLabel: "RVZ codec",
   },
   rvzCompressionLevel: {
@@ -371,12 +432,20 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     kind: "number",
     label: getSettingsLabel("rvzCompressionLevel"),
     labelDataLocalize: "Compression level override",
-    max: 22,
-    min: 0,
+    max: getCodecMaxLevel(COMPRESSION_DEFAULTS.rvzCodec, ZSTD_CODEC_MAX_LEVEL),
+    min: getCodecMinLevel(COMPRESSION_DEFAULTS.rvzCodec, ZSTD_CODEC_MIN_LEVEL),
     placeholder: "Uses Compression Level",
     step: 1,
-    suggestion: "Optional override. Blank uses the compression profile. Valid values: 0-22.",
-    suggestionDataLocalize: "Optional override. Blank uses the compression profile. Valid values: 0-22.",
+    suggestion: `Optional override. Blank uses the compression profile. Valid values: ${codecLevelRange(
+      COMPRESSION_DEFAULTS.rvzCodec,
+      ZSTD_CODEC_MIN_LEVEL,
+      ZSTD_CODEC_MAX_LEVEL,
+    )}.`,
+    suggestionDataLocalize: `Optional override. Blank uses the compression profile. Valid values: ${codecLevelRange(
+      COMPRESSION_DEFAULTS.rvzCodec,
+      ZSTD_CODEC_MIN_LEVEL,
+      ZSTD_CODEC_MAX_LEVEL,
+    )}.`,
     validationLabel: "RVZ compression level override",
   },
   rvzScrub: {
@@ -388,15 +457,26 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
   },
   sevenZipCodec: {
     codecOptions: getCompressionCodecOptions("sevenZipCodec"),
-    defaultValue: "lzma2",
+    defaultValue: COMPRESSION_DEFAULTS.sevenZipCodec,
     id: "settings-7z-codec",
     key: "sevenZipCodec",
     kind: "text",
     label: getSettingsLabel("sevenZipCodec"),
     labelDataLocalize: "7z codec",
-    placeholder: "lzma2:9",
-    suggestion: "Default: lzma2. Optional level: lzma2[:0-9].",
-    suggestionDataLocalize: "Default: lzma2. Optional level: lzma2[:0-9].",
+    placeholder: `${COMPRESSION_DEFAULTS.sevenZipCodec}:${getCodecMaxLevel(
+      COMPRESSION_DEFAULTS.sevenZipCodec,
+      STANDARD_CODEC_MAX_LEVEL,
+    )}`,
+    suggestion: `Default: ${COMPRESSION_DEFAULTS.sevenZipCodec}. Optional level: ${COMPRESSION_DEFAULTS.sevenZipCodec}[:${codecLevelRange(
+      COMPRESSION_DEFAULTS.sevenZipCodec,
+      STANDARD_CODEC_MIN_LEVEL,
+      STANDARD_CODEC_MAX_LEVEL,
+    )}].`,
+    suggestionDataLocalize: `Default: ${COMPRESSION_DEFAULTS.sevenZipCodec}. Optional level: ${COMPRESSION_DEFAULTS.sevenZipCodec}[:${codecLevelRange(
+      COMPRESSION_DEFAULTS.sevenZipCodec,
+      STANDARD_CODEC_MIN_LEVEL,
+      STANDARD_CODEC_MAX_LEVEL,
+    )}].`,
     validationLabel: "7z codec",
   },
   sevenZipLevel: {
@@ -407,12 +487,20 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     kind: "number",
     label: getSettingsLabel("sevenZipLevel"),
     labelDataLocalize: "Compression level override",
-    max: 9,
-    min: 0,
+    max: getCodecMaxLevel(COMPRESSION_DEFAULTS.sevenZipCodec, STANDARD_CODEC_MAX_LEVEL),
+    min: getCodecMinLevel(COMPRESSION_DEFAULTS.sevenZipCodec, STANDARD_CODEC_MIN_LEVEL),
     placeholder: "Uses Compression Level",
     step: 1,
-    suggestion: "Optional override. Blank uses the compression profile. Valid values: 0-9.",
-    suggestionDataLocalize: "Optional override. Blank uses the compression profile. Valid values: 0-9.",
+    suggestion: `Optional override. Blank uses the compression profile. Valid values: ${codecLevelRange(
+      COMPRESSION_DEFAULTS.sevenZipCodec,
+      STANDARD_CODEC_MIN_LEVEL,
+      STANDARD_CODEC_MAX_LEVEL,
+    )}.`,
+    suggestionDataLocalize: `Optional override. Blank uses the compression profile. Valid values: ${codecLevelRange(
+      COMPRESSION_DEFAULTS.sevenZipCodec,
+      STANDARD_CODEC_MIN_LEVEL,
+      STANDARD_CODEC_MAX_LEVEL,
+    )}.`,
     validationLabel: "7z compression level override",
   },
   workerThreads: {
@@ -440,52 +528,79 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     kind: "number",
     label: getSettingsLabel("z3dsCompressionLevel"),
     labelDataLocalize: "Compression level override",
-    max: 22,
-    min: 0,
+    max: getCodecMaxLevel(COMPRESSION_DEFAULTS.z3dsCodec, ZSTD_CODEC_MAX_LEVEL),
+    min: getCodecMinLevel(COMPRESSION_DEFAULTS.z3dsCodec, ZSTD_CODEC_MIN_LEVEL),
     placeholder: "Uses Compression Level",
     step: 1,
-    suggestion: "Optional override. Blank uses the compression profile. Valid values: 0-22.",
-    suggestionDataLocalize: "Optional override. Blank uses the compression profile. Valid values: 0-22.",
+    suggestion: `Optional override. Blank uses the compression profile. Valid values: ${codecLevelRange(
+      COMPRESSION_DEFAULTS.z3dsCodec,
+      ZSTD_CODEC_MIN_LEVEL,
+      ZSTD_CODEC_MAX_LEVEL,
+    )}.`,
+    suggestionDataLocalize: `Optional override. Blank uses the compression profile. Valid values: ${codecLevelRange(
+      COMPRESSION_DEFAULTS.z3dsCodec,
+      ZSTD_CODEC_MIN_LEVEL,
+      ZSTD_CODEC_MAX_LEVEL,
+    )}.`,
     validationLabel: "Z3DS compression level override",
   },
   zipCodec: {
     codecOptions: getCompressionCodecOptions("zipCodec"),
-    defaultValue: "deflate",
+    defaultValue: COMPRESSION_DEFAULTS.zipCodec,
     disabled: ({ uiState }) => !uiState.zipEnabled,
     id: "settings-zip-codec",
     key: "zipCodec",
     kind: "text",
     label: getSettingsLabel("zipCodec"),
     labelDataLocalize: "ZIP codec",
-    placeholder: "zstd:22",
-    suggestion:
-      "Default: deflate. Valid values: deflate, store, zstd. Optional levels: deflate[:0-9], zstd[:0-22]. Store does not use a level.",
-    suggestionDataLocalize:
-      "Default: deflate. Valid values: deflate, store, zstd. Optional levels: deflate[:0-9], zstd[:0-22]. Store does not use a level.",
+    placeholder: `${ZIP_ZSTD_CODEC}:${getCodecMaxLevel(ZIP_ZSTD_CODEC, ZSTD_CODEC_MAX_LEVEL)}`,
+    suggestion: `Default: ${COMPRESSION_DEFAULTS.zipCodec}. Valid values: ${codecValuesText("zipCodec")}. Optional levels: ${codecLevelRangeText(
+      "zipCodec",
+    )}. Store does not use a level.`,
+    suggestionDataLocalize: `Default: ${COMPRESSION_DEFAULTS.zipCodec}. Valid values: ${codecValuesText("zipCodec")}. Optional levels: ${codecLevelRangeText(
+      "zipCodec",
+    )}. Store does not use a level.`,
     validationLabel: "ZIP codec",
   },
   zipLevel: {
     defaultValue: "",
-    disabled: ({ settings, uiState }) => !uiState.zipEnabled || settings.zipCodec === "store",
+    disabled: ({ settings, uiState }) =>
+      !uiState.zipEnabled || normalizeCodecName(String(settings.zipCodec)) === "store",
     id: "settings-zip-level",
     key: "zipLevel",
     kind: "number",
     label: getSettingsLabel("zipLevel"),
     labelDataLocalize: "ZIP compression level override",
-    max: ({ settings }) => (settings.zipCodec === "zstd" ? 22 : 9),
-    min: 0,
+    max: ({ settings }) => getCodecMaxLevel(String(settings.zipCodec), STANDARD_CODEC_MAX_LEVEL),
+    min: ({ settings }) => getCodecMinLevel(String(settings.zipCodec), STANDARD_CODEC_MIN_LEVEL),
     placeholder: "Uses Compression Level",
     step: 1,
     suggestion: ({ settings }) =>
-      settings.zipCodec === "store"
+      normalizeCodecName(String(settings.zipCodec)) === "store"
         ? "Unused for Store. Blank uses the compression profile."
-        : settings.zipCodec === "zstd"
-          ? "Optional override. Blank uses the compression profile. Valid values: 0-22."
-          : "Optional override. Blank uses the compression profile. Valid values: 0-9.",
+        : normalizeCodecName(String(settings.zipCodec)) === "zstd"
+          ? `Optional override. Blank uses the compression profile. Valid values: ${codecLevelRange(
+              "zstd",
+              ZSTD_CODEC_MIN_LEVEL,
+              ZSTD_CODEC_MAX_LEVEL,
+            )}.`
+          : `Optional override. Blank uses the compression profile. Valid values: ${codecLevelRange(
+              String(settings.zipCodec),
+              STANDARD_CODEC_MIN_LEVEL,
+              STANDARD_CODEC_MAX_LEVEL,
+            )}.`,
     suggestionDataLocalize: ({ settings }) =>
-      settings.zipCodec === "zstd"
-        ? "Optional override. Blank uses the compression profile. Valid values: 0-22."
-        : "Optional override. Blank uses the compression profile. Valid values: 0-9.",
+      normalizeCodecName(String(settings.zipCodec)) === "zstd"
+        ? `Optional override. Blank uses the compression profile. Valid values: ${codecLevelRange(
+            "zstd",
+            ZSTD_CODEC_MIN_LEVEL,
+            ZSTD_CODEC_MAX_LEVEL,
+          )}.`
+        : `Optional override. Blank uses the compression profile. Valid values: ${codecLevelRange(
+            String(settings.zipCodec),
+            STANDARD_CODEC_MIN_LEVEL,
+            STANDARD_CODEC_MAX_LEVEL,
+          )}.`,
     validationLabel: "ZIP compression level override",
   },
 };

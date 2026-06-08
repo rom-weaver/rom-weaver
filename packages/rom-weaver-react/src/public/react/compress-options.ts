@@ -11,9 +11,19 @@
 import {
   type CompressionCodecOption,
   getCompressionCodecLevelMax,
+  getCompressionCodecLevelMin,
   getCompressionCodecOptions,
   hasCompressionCodecLevelOverride,
 } from "../../lib/compression/codec-fields.ts";
+import { parseCompressionCodecEntry } from "../../lib/compression/codec-parser.ts";
+import {
+  COMPRESSION_DEFAULTS,
+  COMPRESSION_PROFILE_LABELS,
+  COMPRESSION_PROFILE_LEVELS,
+  COMPRESSION_PROFILE_NAMES,
+  getGeneratedCompressionCodecLevelMax,
+  getGeneratedCompressionCodecLevelMin,
+} from "../../lib/compression/compression-metadata.ts";
 import { getChdAutoCreateMode } from "../../lib/input/rom-specific-file-utils.ts";
 import { getSettingsLabel } from "../../presentation/settings.ts";
 
@@ -68,16 +78,28 @@ type CompressField =
 type CompressPanelModel = { summary: string; fields: CompressField[] };
 
 // Compression-profile scale (shared "Level" control), index 0..6.
-const PROFILE_LABELS = ["Min", "Very Low", "Low", "Medium", "High", "Very High", "Max"] as const;
-const PROFILE_VALUES = ["min", "very-low", "low", "medium", "high", "very-high", "max"] as const;
-
-const STANDARD_PROFILE_LEVELS = [0, 2, 3, 5, 7, 8, 9] as const;
-const ZSTD_PROFILE_LEVELS = [0, 4, 7, 11, 15, 19, 22] as const;
-const PROFILE_LEVEL_MAP: CompressFieldLevelMapRow[] = PROFILE_LABELS.map((profile, index) => ({
-  profile,
-  standard: STANDARD_PROFILE_LEVELS[index] ?? 9,
-  zstd: ZSTD_PROFILE_LEVELS[index] ?? 22,
+const PROFILE_LABELS = [...COMPRESSION_PROFILE_LABELS];
+const PROFILE_VALUES = [...COMPRESSION_PROFILE_NAMES];
+const PROFILE_LEVEL_MAP: CompressFieldLevelMapRow[] = PROFILE_VALUES.map((profileValue, index) => ({
+  profile: PROFILE_LABELS[index] || profileValue,
+  standard: COMPRESSION_PROFILE_LEVELS.standard[profileValue],
+  zstd: COMPRESSION_PROFILE_LEVELS.zstd[profileValue],
 }));
+const STANDARD_PROFILE_MAX = COMPRESSION_PROFILE_LEVELS.standard.max;
+const ZSTD_PROFILE_MIN = COMPRESSION_PROFILE_LEVELS.zstd.min;
+const ZSTD_PROFILE_MAX = COMPRESSION_PROFILE_LEVELS.zstd.max;
+const CHD_CD_DEFAULT_CODECS = COMPRESSION_DEFAULTS.chdCreateCdCodecs;
+const CHD_DVD_DEFAULT_CODECS = COMPRESSION_DEFAULTS.chdCreateDvdCodecs;
+const codecValuesText = (fieldKey: string): string =>
+  getCompressionCodecOptions(fieldKey)
+    .map((option) => option.value)
+    .join(", ");
+const codecLevelRangesText = (fieldKey: string): string =>
+  getCompressionCodecOptions(fieldKey)
+    .map((option) =>
+      option.maxLevel === null ? option.value : `${option.value} ${option.minLevel ?? 0}..${option.maxLevel}`,
+    )
+    .join(", ");
 
 const COMPRESSION_PROFILE_FIELD_INFO: CompressFieldInfo = {
   items: [
@@ -94,35 +116,46 @@ const OVERRIDDEN_PROFILE_VALUE = "__overridden";
 const FIELD_INFO: Record<string, CompressFieldInfo> = {
   chdCreateCdCodecs: {
     items: [
-      "Valid values: cdzs, cdlz, cdzl, cdfl.",
-      "Optional levels: cdzs 0-22, cdlz 0-9, cdzl 0-9, cdfl 0-8.",
+      `Valid values: ${codecValuesText("chdCreateCdCodecs")}.`,
+      `Optional levels: ${codecLevelRangesText("chdCreateCdCodecs")}.`,
       "Entries without a level use the Level profile.",
     ],
     title: getSettingsLabel("chdCreateCdCodecs"),
   },
   chdCreateDvdCodecs: {
     items: [
-      "Valid values: zstd, lzma, zlib, huff, flac.",
-      "Optional levels: zstd 0-22, lzma 0-9, zlib 0-9, flac 0-8.",
+      `Valid values: ${codecValuesText("chdCreateDvdCodecs")}.`,
+      `Optional levels: ${codecLevelRangesText("chdCreateDvdCodecs")}.`,
       "huff has no level. Entries without a level use the Level profile.",
     ],
     title: getSettingsLabel("chdCreateDvdCodecs"),
   },
   compressionProfile: COMPRESSION_PROFILE_FIELD_INFO,
   rvzBlockSize: {
-    items: ["Default: 131072.", "Valid values: 1-2147483647."],
+    items: [`Default: ${COMPRESSION_DEFAULTS.rvzBlockSize}.`, "Valid values: 1-2147483647."],
     title: getSettingsLabel("rvzBlockSize"),
   },
   rvzCodec: {
-    items: ["Default: zstd.", "Optional level: zstd:0 through zstd:22."],
+    items: [
+      `Default: ${COMPRESSION_DEFAULTS.rvzCodec}.`,
+      `Optional level: ${COMPRESSION_DEFAULTS.rvzCodec}:${
+        getGeneratedCompressionCodecLevelMin(COMPRESSION_DEFAULTS.rvzCodec) ?? ZSTD_PROFILE_MIN
+      } through ${COMPRESSION_DEFAULTS.rvzCodec}:${
+        getGeneratedCompressionCodecLevelMax(COMPRESSION_DEFAULTS.rvzCodec) ?? ZSTD_PROFILE_MAX
+      }.`,
+    ],
     title: getSettingsLabel("rvzCodec"),
   },
   sevenZipCodec: {
-    items: ["7z output currently uses LZMA2."],
+    items: [`7z output currently uses ${codecValuesText("sevenZipCodec").toUpperCase()}.`],
     title: getSettingsLabel("sevenZipCodec"),
   },
   zipCodec: {
-    items: ["zstd writes ZIP-compatible .zip output.", "Store keeps files uncompressed and ignores Level."],
+    items: [
+      `Valid values: ${codecValuesText("zipCodec")}.`,
+      "zstd writes ZIP-compatible .zip output.",
+      "Store keeps files uncompressed and ignores Level.",
+    ],
     title: getSettingsLabel("zipCodec"),
   },
 };
@@ -170,13 +203,13 @@ const levelField = (settings: SettingsLike, overridden = false): CompressField =
   value: overridden ? OVERRIDDEN_PROFILE_VALUE : (PROFILE_VALUES[profileIndex(settings)] as string),
 });
 
-const CODEC_ENTRY_REGEX = /^([a-z0-9_+-]+)(?::(\d+))?$/;
-
-const getProfileLevelForCodec = (settings: SettingsLike, maxLevel: number): number => {
+const getProfileLevelForCodec = (settings: SettingsLike, minLevel: number, maxLevel: number): number => {
   const index = profileIndex(settings);
-  const profileLevels = maxLevel > 9 ? ZSTD_PROFILE_LEVELS : STANDARD_PROFILE_LEVELS;
-  const profileLevel = profileLevels[index] ?? maxLevel;
-  return Math.max(0, Math.min(maxLevel, profileLevel));
+  const profile = PROFILE_VALUES[index] || "max";
+  const profileLevels =
+    maxLevel > STANDARD_PROFILE_MAX ? COMPRESSION_PROFILE_LEVELS.zstd : COMPRESSION_PROFILE_LEVELS.standard;
+  const profileLevel = profileLevels[profile] ?? maxLevel;
+  return Math.max(minLevel, Math.min(maxLevel, profileLevel));
 };
 
 const codecProfileSummary = (fieldKey: string, codecSummary: string, settings: SettingsLike): string => {
@@ -186,12 +219,13 @@ const codecProfileSummary = (fieldKey: string, codecSummary: string, settings: S
     .map((rawEntry) => {
       const entry = rawEntry.trim().toLowerCase();
       if (!entry) return "";
-      const match = entry.match(CODEC_ENTRY_REGEX);
-      if (!match) return entry;
-      const codec = match[1] || "";
-      if (match[2] !== undefined) return `${codec}:${match[2]}`;
+      const parsed = parseCompressionCodecEntry(entry);
+      if (!parsed) return entry;
+      const codec = parsed.codec;
+      if (parsed.hasLevel) return `${codec}:${parsed.levelText}`;
       const maxLevel = getCompressionCodecLevelMax(fieldKey, codec);
-      return maxLevel === null ? codec : `${codec}:${getProfileLevelForCodec(settings, maxLevel)}`;
+      const minLevel = getCompressionCodecLevelMin(fieldKey, codec) ?? 0;
+      return maxLevel === null ? codec : `${codec}:${getProfileLevelForCodec(settings, minLevel, maxLevel)}`;
     })
     .filter(Boolean)
     .join(",");
@@ -210,8 +244,8 @@ const buildCompressPanel = (format: string, settings: SettingsLike, source?: unk
   const normalized = String(format || "").toLowerCase();
 
   if (normalized === "zip") {
-    const codec = editableStr(settings, "zipCodec", "deflate");
-    const codecSummary = codec || "deflate";
+    const codec = editableStr(settings, "zipCodec", COMPRESSION_DEFAULTS.zipCodec);
+    const codecSummary = codec || COMPRESSION_DEFAULTS.zipCodec;
     const levelOverridden = hasCompressionCodecLevelOverride(codec);
     const level = levelField(settings, levelOverridden);
     return {
@@ -222,7 +256,7 @@ const buildCompressPanel = (format: string, settings: SettingsLike, source?: unk
           kind: "codec",
           label: getSettingsLabel("zipCodec"),
           options: getCompressionCodecOptions("zipCodec"),
-          placeholder: "deflate",
+          placeholder: COMPRESSION_DEFAULTS.zipCodec,
           value: codec,
         },
         level,
@@ -231,8 +265,8 @@ const buildCompressPanel = (format: string, settings: SettingsLike, source?: unk
     };
   }
   if (normalized === "7z") {
-    const codec = editableStr(settings, "sevenZipCodec", "lzma2");
-    const codecSummary = codec || "lzma2";
+    const codec = editableStr(settings, "sevenZipCodec", COMPRESSION_DEFAULTS.sevenZipCodec);
+    const codecSummary = codec || COMPRESSION_DEFAULTS.sevenZipCodec;
     const levelOverridden = hasCompressionCodecLevelOverride(codec);
     const level = levelField(settings, levelOverridden);
     return {
@@ -243,7 +277,7 @@ const buildCompressPanel = (format: string, settings: SettingsLike, source?: unk
           kind: "codec",
           label: getSettingsLabel("sevenZipCodec"),
           options: getCompressionCodecOptions("sevenZipCodec"),
-          placeholder: "lzma2",
+          placeholder: COMPRESSION_DEFAULTS.sevenZipCodec,
           value: codec,
         },
         level,
@@ -252,8 +286,8 @@ const buildCompressPanel = (format: string, settings: SettingsLike, source?: unk
     };
   }
   if (normalized === "rvz") {
-    const codec = editableStr(settings, "rvzCodec", editableStr(settings, "rvzCompression", "zstd"));
-    const codecSummary = codec || "zstd";
+    const codec = editableStr(settings, "rvzCodec", COMPRESSION_DEFAULTS.rvzCodec);
+    const codecSummary = codec || COMPRESSION_DEFAULTS.rvzCodec;
     const levelOverridden = hasCompressionCodecLevelOverride(codec);
     const level = levelField(settings, levelOverridden);
     return {
@@ -264,7 +298,7 @@ const buildCompressPanel = (format: string, settings: SettingsLike, source?: unk
           kind: "codec",
           label: getSettingsLabel("rvzCodec"),
           options: getCompressionCodecOptions("rvzCodec"),
-          placeholder: "zstd",
+          placeholder: COMPRESSION_DEFAULTS.rvzCodec,
           value: codec,
         },
         {
@@ -273,7 +307,7 @@ const buildCompressPanel = (format: string, settings: SettingsLike, source?: unk
           kind: "text",
           label: getSettingsLabel("rvzBlockSize"),
           mono: true,
-          placeholder: "131072",
+          placeholder: String(COMPRESSION_DEFAULTS.rvzBlockSize),
           value: str(settings, "rvzBlockSize"),
         },
         level,
@@ -283,11 +317,12 @@ const buildCompressPanel = (format: string, settings: SettingsLike, source?: unk
   }
   if (normalized === "chd") {
     const mode = resolveChdPanelMode(settings, source);
-    const cd = editableStr(settings, "chdCreateCdCodecs", "cdlz,cdzl,cdfl");
-    const dvd = editableStr(settings, "chdCreateDvdCodecs", "lzma,zlib,huff,flac");
+    const cd = editableStr(settings, "chdCreateCdCodecs", CHD_CD_DEFAULT_CODECS);
+    const dvd = editableStr(settings, "chdCreateDvdCodecs", CHD_DVD_DEFAULT_CODECS);
     const codecKey = mode === "cd" ? "chdCreateCdCodecs" : "chdCreateDvdCodecs";
     const codecValue = mode === "cd" ? cd : mode === "dvd" ? dvd : "";
-    const codecSummary = codecValue || (mode === "cd" ? "cdlz,cdzl,cdfl" : mode === "dvd" ? "lzma,zlib,huff,flac" : "");
+    const codecSummary =
+      codecValue || (mode === "cd" ? CHD_CD_DEFAULT_CODECS : mode === "dvd" ? CHD_DVD_DEFAULT_CODECS : "");
     const levelOverridden = hasCompressionCodecLevelOverride(codecValue);
     const level = levelField(settings, levelOverridden);
     return {
@@ -303,7 +338,7 @@ const buildCompressPanel = (format: string, settings: SettingsLike, source?: unk
           mono: true,
           multiple: true,
           options: getCompressionCodecOptions(codecKey),
-          placeholder: mode === "cd" ? "cdlz,cdzl,cdfl" : "lzma,zlib,huff,flac",
+          placeholder: mode === "cd" ? CHD_CD_DEFAULT_CODECS : CHD_DVD_DEFAULT_CODECS,
           value: codecValue,
         },
         level,
@@ -313,9 +348,11 @@ const buildCompressPanel = (format: string, settings: SettingsLike, source?: unk
   }
   if (normalized === "z3ds") {
     const level = levelField(settings);
+    const z3dsMaxLevel = getGeneratedCompressionCodecLevelMax(COMPRESSION_DEFAULTS.z3dsCodec) ?? ZSTD_PROFILE_MAX;
+    const z3dsMinLevel = getGeneratedCompressionCodecLevelMin(COMPRESSION_DEFAULTS.z3dsCodec) ?? ZSTD_PROFILE_MIN;
     return {
       fields: [level],
-      summary: `zstd:${getProfileLevelForCodec(settings, 22)}`,
+      summary: `${COMPRESSION_DEFAULTS.z3dsCodec}:${getProfileLevelForCodec(settings, z3dsMinLevel, z3dsMaxLevel)}`,
     };
   }
   return null;

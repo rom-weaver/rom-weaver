@@ -79,6 +79,12 @@ test("codec combobox opens with expected codec suggestions before typing", async
   await input.fill("zstd:22");
   expect(getInput()?.getAttribute("aria-invalid")).toBeNull();
 
+  await input.fill("zstd:-7");
+  expect(getInput()?.getAttribute("aria-invalid")).toBeNull();
+
+  await input.fill("zstd:-8");
+  expect(getInput()?.getAttribute("aria-invalid")).toBe("true");
+
   await input.fill("zstd:23");
   expect(getInput()?.getAttribute("aria-invalid")).toBe("true");
 });
@@ -99,6 +105,12 @@ test("codec combobox replaces the active token in multi-codec lists", async () =
 
   await input.fill("cdlz:9,cdfl:8");
   expect(getInput()?.getAttribute("aria-invalid")).toBeNull();
+
+  await input.fill("cdzs:-7,cdlz:9");
+  expect(getInput()?.getAttribute("aria-invalid")).toBeNull();
+
+  await input.fill("cdzs:-8");
+  expect(getInput()?.getAttribute("aria-invalid")).toBe("true");
 
   await input.fill("cdlz:10");
   expect(getInput()?.getAttribute("aria-invalid")).toBe("true");
@@ -158,6 +170,8 @@ test("compress panel keeps cleared codec values editable", () => {
   expect(buildCompressPanel("7z", { compressionProfile: "high", sevenZipCodec: "lzma2" })?.summary).toBe("lzma2:7");
   expect(buildCompressPanel("rvz", { compressionProfile: "max", rvzCodec: "zstd" })?.summary).toBe("zstd:22");
   expect(buildCompressPanel("z3ds", { compressionProfile: "max" })?.summary).toBe("zstd:22");
+  expect(buildCompressPanel("zip", { compressionProfile: "min", zipCodec: "zstd" })?.summary).toBe("zstd:-7");
+  expect(buildCompressPanel("z3ds", { compressionProfile: "min" })?.summary).toBe("zstd:-7");
 });
 
 test("compress panel shows codec level overrides and clears them when level changes", async () => {
@@ -169,6 +183,9 @@ test("compress panel shows codec level overrides and clears them when level chan
   expect(zstdProfileLevelField?.value).toBe("max");
   expect(zstdProfilePanel?.summary).toBe("zstd:22");
   expect(resolveCompressionLevels({ compressionProfile: "max", zipCodec: "zstd" }).zipLevel).toBe(22);
+  expect(resolveCompressionLevels({ compressionProfile: "min", zipCodec: "zstd" }).zipLevel).toBe(-7);
+  expect(resolveCompressionLevels({ compressionProfile: "min", rvzCodec: "zstd" }).rvzCompressionLevel).toBe(-7);
+  expect(resolveCompressionLevels({ compressionProfile: "min" }).z3dsCompressionLevel).toBe(-7);
 
   const zipPanel = buildCompressPanel("zip", {
     compressionProfile: "max",

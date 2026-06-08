@@ -20,7 +20,7 @@ const COPY_PROGRESS_MAX_BUFFER_BYTES: u64 = 4 * 1024 * 1024;
 /// from the seek table, so changing it stays backward compatible with already-created archives.
 pub(crate) const Z3DS_DEFAULT_FRAME_SIZE_BYTES: usize = 1024 * 1024;
 pub(crate) const Z3DS_DEFAULT_COMPRESSION_LEVEL: i32 = 3;
-pub(crate) const Z3DS_MIN_COMPRESSION_LEVEL: i32 = 0;
+pub(crate) const Z3DS_MIN_COMPRESSION_LEVEL: i32 = -7;
 pub(crate) const Z3DS_MAX_COMPRESSION_LEVEL: i32 = 22;
 /// Upper bound on the decompressed span handed to each extract worker. Tasks are built from whole
 /// frames (always frame-aligned, so no worker re-decodes a prefix it discards) and grow up to this

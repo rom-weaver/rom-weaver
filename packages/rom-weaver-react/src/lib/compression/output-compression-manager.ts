@@ -1,15 +1,30 @@
-const COMPRESSION_CODEC_LEVEL_ENTRY_REGEX = /^([a-z0-9_+-]+)(?::(\d+))?$/;
-
 /*
  * OutputCompressionManager.js
  * Shared compressed output settings for RomWeaver.
  */
 
 import {
+  type ROM_WEAVER_COMPRESSION_METADATA,
+  ROM_WEAVER_CREATE_CONTAINER_FORMATS,
+} from "rom-weaver-wasm/format-metadata";
+import {
   getSourceExtension,
   getSourceFileName,
   replaceFileExtension,
 } from "../../storage/shared/binary/source-file-utils.ts";
+import { parseCompressionCodecEntry } from "./codec-parser.ts";
+import {
+  COMPRESSION_DEFAULTS,
+  COMPRESSION_PROFILE_NAMES,
+  COMPRESSION_PROFILE_LEVELS as GENERATED_COMPRESSION_PROFILE_LEVELS,
+  type GeneratedCompressionProfile,
+  getGeneratedCompressionCodecFieldCodecs,
+  getGeneratedCompressionCodecLevelMax,
+  getGeneratedCompressionCodecLevelMin,
+  getGeneratedCompressionCodecProfileKind,
+  getGeneratedCompressionProfileLevel,
+  normalizeGeneratedCompressionProfile,
+} from "./compression-metadata.ts";
 import {
   getChdCodecLevelMax,
   getDefaultThreadCount,
@@ -31,9 +46,11 @@ import {
   Z3DS_DECOMPRESSION_INPUT_EXTENSIONS,
 } from "./rom-specific-format-support.ts";
 
-type OutputCompressionValue = "auto" | "chd" | "rvz" | "z3ds" | "7z" | "zip" | "none";
-type CompressionProfile = "min" | "very-low" | "low" | "medium" | "high" | "very-high" | "max";
-type ArchiveCodec = "lzma2" | "zstd" | "deflate" | "store";
+type OutputCompressionValue = "auto" | (typeof ROM_WEAVER_CREATE_CONTAINER_FORMATS)[number] | "none";
+type CompressionProfile = GeneratedCompressionProfile;
+type ArchiveCodec =
+  | (typeof ROM_WEAVER_COMPRESSION_METADATA)["codecFields"]["zipCodec"]["codecs"][number]
+  | (typeof ROM_WEAVER_COMPRESSION_METADATA)["codecFields"]["sevenZipCodec"]["codecs"][number];
 type Z3dsUnderlyingMagic = "CIA\u0000" | "NCSD" | "NCCH" | "3DSX";
 type CompressionSourceInput =
   | CompressionSource
@@ -150,36 +167,22 @@ const OutputCompressionManager = (() => {
     SEVEN_ZIP: "7z",
     Z3DS: "z3ds",
     ZIP: "zip",
-  };
+  } satisfies Record<string, OutputCompressionValue>;
+  const OUTPUT_COMPRESSION_VALUES = new Set<string>([
+    OUTPUT_COMPRESSION.AUTO,
+    ...ROM_WEAVER_CREATE_CONTAINER_FORMATS,
+    OUTPUT_COMPRESSION.NONE,
+  ]);
   const RAW_DISC_INPUT_EXTENSIONS = ROM_SPECIFIC_COMPRESSION_INPUT_EXTENSIONS;
   const ARCHIVE_FORMATS: Partial<Record<OutputCompressionValue, string>> = {
     "7z": "7zip",
     zip: "zip",
   };
-  const SEVEN_ZIP_COMPRESSION_METHODS = ["lzma2"];
-  const ZIP_COMPRESSION_METHODS = ["deflate", "store", "zstd"];
-  const RVZ_COMPRESSION_METHODS = ["zstd"];
-  const COMPRESSION_PROFILES = ["min", "very-low", "low", "medium", "high", "very-high", "max"];
-  const COMPRESSION_PROFILE_LEVELS = {
-    standard: {
-      high: 7,
-      low: 3,
-      max: 9,
-      medium: 5,
-      min: 0,
-      "very-high": 8,
-      "very-low": 2,
-    },
-    zstd: {
-      high: 15,
-      low: 7,
-      max: 22,
-      medium: 11,
-      min: 0,
-      "very-high": 19,
-      "very-low": 4,
-    },
-  };
+  const SEVEN_ZIP_COMPRESSION_METHODS = getGeneratedCompressionCodecFieldCodecs("sevenZipCodec");
+  const ZIP_COMPRESSION_METHODS = getGeneratedCompressionCodecFieldCodecs("zipCodec");
+  const RVZ_COMPRESSION_METHODS = getGeneratedCompressionCodecFieldCodecs("rvzCodec");
+  const COMPRESSION_PROFILES = [...COMPRESSION_PROFILE_NAMES];
+  const COMPRESSION_PROFILE_LEVELS = GENERATED_COMPRESSION_PROFILE_LEVELS;
 
   const _getFileName = (source: Parameters<typeof getSourceFileName>[0]) =>
     getSourceFileName(source, {
@@ -201,16 +204,7 @@ const OutputCompressionManager = (() => {
 
   const _normalizeOutputCompression = (value: CompressionChoiceInput): OutputCompressionValue => {
     const normalized = String(value || OUTPUT_COMPRESSION.AUTO).toLowerCase();
-    if (
-      normalized === OUTPUT_COMPRESSION.AUTO ||
-      normalized === OUTPUT_COMPRESSION.CHD ||
-      normalized === OUTPUT_COMPRESSION.RVZ ||
-      normalized === OUTPUT_COMPRESSION.Z3DS ||
-      normalized === OUTPUT_COMPRESSION.SEVEN_ZIP ||
-      normalized === OUTPUT_COMPRESSION.ZIP ||
-      normalized === OUTPUT_COMPRESSION.NONE
-    )
-      return normalized as OutputCompressionValue;
+    if (OUTPUT_COMPRESSION_VALUES.has(normalized)) return normalized as OutputCompressionValue;
     throw new Error(`Unsupported output compression: ${value}`);
   };
 
@@ -321,16 +315,27 @@ const OutputCompressionManager = (() => {
   };
 
   const _normalizeCompressionLevel = (value: string | number | null | undefined, fallback?: number) =>
-    _normalizeIntegerOption(value, { defaultValue: 9, fallback, label: "compression level", max: 9 });
+    _normalizeIntegerOption(value, {
+      defaultValue: COMPRESSION_PROFILE_LEVELS.standard.max,
+      fallback,
+      label: "compression level",
+      max: getGeneratedCompressionCodecLevelMax("deflate") ?? COMPRESSION_PROFILE_LEVELS.standard.max,
+    });
 
   const _normalizeZstdCompressionLevel = (value: string | number | null | undefined, fallback?: number) =>
-    _normalizeIntegerOption(value, { defaultValue: 9, fallback, label: "zstd compression level", max: 22 });
+    _normalizeIntegerOption(value, {
+      defaultValue: COMPRESSION_PROFILE_LEVELS.zstd.max,
+      fallback,
+      label: "zstd compression level",
+      max: getGeneratedCompressionCodecLevelMax("zstd") ?? COMPRESSION_PROFILE_LEVELS.zstd.max,
+      min: getGeneratedCompressionCodecLevelMin("zstd") ?? COMPRESSION_PROFILE_LEVELS.zstd.min,
+    });
   const _normalizeArchiveCompressionLevel = (
     codec: string | null | undefined,
     value: string | number | null | undefined,
     fallback?: number,
   ) =>
-    String(codec || "").toLowerCase() === "zstd"
+    getGeneratedCompressionCodecProfileKind(codec) === "zstd"
       ? _normalizeZstdCompressionLevel(value, fallback)
       : _normalizeCompressionLevel(value, fallback);
   const _normalizeArchiveCompressionLevelForFormat = (
@@ -346,29 +351,14 @@ const OutputCompressionManager = (() => {
   const _normalizeCompressionProfile = (
     value: CompressionProfileInput,
     fallback?: CompressionProfile | string,
-  ): CompressionProfile => {
-    const normalized = String(value || fallback || "max")
-      .trim()
-      .toLowerCase();
-    if (COMPRESSION_PROFILES.indexOf(normalized as CompressionProfile) !== -1) return normalized as CompressionProfile;
-    const normalizedFallback = String(fallback || "max")
-      .trim()
-      .toLowerCase();
-    return COMPRESSION_PROFILES.indexOf(normalizedFallback as CompressionProfile) === -1
-      ? "max"
-      : (normalizedFallback as CompressionProfile);
-  };
+  ): CompressionProfile => normalizeGeneratedCompressionProfile(value, fallback);
   const _getCompressionProfileLevel = (
     profile: CompressionProfileInput,
     codec: CodecChoiceInput,
     _compression?: CompressionChoiceInput,
   ) => {
     const normalizedProfile = _normalizeCompressionProfile(profile, "max");
-    const levelSet =
-      String(codec || "").toLowerCase() === "zstd"
-        ? COMPRESSION_PROFILE_LEVELS.zstd
-        : COMPRESSION_PROFILE_LEVELS.standard;
-    return levelSet[normalizedProfile];
+    return getGeneratedCompressionProfileLevel(normalizedProfile, codec);
   };
   const _normalizeArchiveCodec = (value: CodecChoiceInput, validCodecs: string[], fallback: string, label: string) => {
     const normalized = String(value || fallback || "")
@@ -388,9 +378,14 @@ const OutputCompressionManager = (() => {
     options = options || {};
     const selected = _normalizeOutputCompression(compression);
     if (selected === OUTPUT_COMPRESSION.SEVEN_ZIP)
-      return _normalizeArchiveCodec(options.sevenZipCodec, SEVEN_ZIP_COMPRESSION_METHODS, "lzma2", "7z");
+      return _normalizeArchiveCodec(
+        options.sevenZipCodec,
+        SEVEN_ZIP_COMPRESSION_METHODS,
+        COMPRESSION_DEFAULTS.sevenZipCodec,
+        "7z",
+      );
     if (selected === OUTPUT_COMPRESSION.ZIP)
-      return _normalizeArchiveCodec(options.zipCodec, ZIP_COMPRESSION_METHODS, "deflate", "ZIP");
+      return _normalizeArchiveCodec(options.zipCodec, ZIP_COMPRESSION_METHODS, COMPRESSION_DEFAULTS.zipCodec, "ZIP");
     return null;
   };
   const _getArchiveThreadsOption = (options?: OutputCompressionOptions) =>
@@ -423,12 +418,22 @@ const OutputCompressionManager = (() => {
     const selected = _normalizeOutputCompression(compression);
     if (selected === OUTPUT_COMPRESSION.SEVEN_ZIP) {
       const codec = _getArchiveCodec(compression, options);
-      return _normalizeArchiveCompressionLevelForFormat(selected, codec, options.sevenZipLevel, 9);
+      return _normalizeArchiveCompressionLevelForFormat(
+        selected,
+        codec,
+        options.sevenZipLevel,
+        _getCompressionProfileLevel(options.compressionProfile, codec, selected),
+      );
     }
     if (selected === OUTPUT_COMPRESSION.ZIP) {
       const codec = _getArchiveCodec(compression, options);
       if (codec === "store") return null;
-      const level = _normalizeArchiveCompressionLevelForFormat(selected, codec, options.zipLevel, 9);
+      const level = _normalizeArchiveCompressionLevelForFormat(
+        selected,
+        codec,
+        options.zipLevel,
+        _getCompressionProfileLevel(options.compressionProfile, codec, selected),
+      );
       return level;
     }
     return null;
@@ -471,7 +476,7 @@ const OutputCompressionManager = (() => {
     });
 
   const _normalizeRvzCompression = (compression: CodecChoiceInput) => {
-    const normalized = String(compression || "zstd")
+    const normalized = String(compression || COMPRESSION_DEFAULTS.rvzCodec)
       .trim()
       .toLowerCase();
     if (RVZ_COMPRESSION_METHODS.indexOf(normalized) !== -1) return normalized;
@@ -479,11 +484,17 @@ const OutputCompressionManager = (() => {
   };
 
   const _normalizeRvzCompressionLevel = (value: string | number | null | undefined, fallback?: number) =>
-    _normalizeIntegerOption(value, { defaultValue: 19, fallback, label: "RVZ compression level", max: 22 });
+    _normalizeIntegerOption(value, {
+      defaultValue: COMPRESSION_DEFAULTS.rvzCompressionLevel,
+      fallback,
+      label: "RVZ compression level",
+      max: getGeneratedCompressionCodecLevelMax(COMPRESSION_DEFAULTS.rvzCodec) ?? COMPRESSION_PROFILE_LEVELS.zstd.max,
+      min: getGeneratedCompressionCodecLevelMin(COMPRESSION_DEFAULTS.rvzCodec) ?? COMPRESSION_PROFILE_LEVELS.zstd.min,
+    });
 
   const _normalizeRvzBlockSize = (value: string | number | null | undefined, fallback?: number) =>
     _normalizeIntegerOption(value, {
-      defaultValue: 131072,
+      defaultValue: COMPRESSION_DEFAULTS.rvzBlockSize,
       fallback,
       label: "RVZ block size",
       max: Number.MAX_SAFE_INTEGER,
@@ -500,20 +511,16 @@ const OutputCompressionManager = (() => {
     return normalizedCodecs
       .split(",")
       .map((entry) => {
-        const match = String(entry || "").match(COMPRESSION_CODEC_LEVEL_ENTRY_REGEX);
-        if (!match) return entry;
+        const parsed = parseCompressionCodecEntry(entry);
+        if (!parsed) return entry;
 
-        const codec = match[1] || "";
-        if (match[2] !== undefined) return entry;
+        const codec = parsed.codec;
+        if (parsed.hasLevel) return entry;
 
         const maxLevel = getChdCodecLevelMax(codec);
         if (maxLevel === null) return codec;
 
-        const profileLevel = _getCompressionProfileLevel(
-          compressionProfile,
-          codec === "cdzs" ? "zstd" : codec,
-          codec === "cdzs" ? "" : "",
-        );
+        const profileLevel = _getCompressionProfileLevel(compressionProfile, codec, codec === "cdzs" ? "" : "");
         return `${codec}:${Math.max(0, Math.min(maxLevel, profileLevel))}`;
       })
       .join(",");
@@ -567,10 +574,15 @@ const OutputCompressionManager = (() => {
     normalizeRvzCompression: _normalizeRvzCompression,
     normalizeRvzCompressionLevel: _normalizeRvzCompressionLevel,
     normalizeSevenZipCodec: (value: CodecChoiceInput, fallback?: string) =>
-      _normalizeArchiveCodec(value, SEVEN_ZIP_COMPRESSION_METHODS, fallback || "lzma2", "7z"),
+      _normalizeArchiveCodec(
+        value,
+        SEVEN_ZIP_COMPRESSION_METHODS,
+        fallback || COMPRESSION_DEFAULTS.sevenZipCodec,
+        "7z",
+      ),
     normalizeThreadCount: _normalizeThreadCount,
     normalizeZipCodec: (value: CodecChoiceInput, fallback?: string) =>
-      _normalizeArchiveCodec(value, ZIP_COMPRESSION_METHODS, fallback || "deflate", "ZIP"),
+      _normalizeArchiveCodec(value, ZIP_COMPRESSION_METHODS, fallback || COMPRESSION_DEFAULTS.zipCodec, "ZIP"),
     normalizeZstdCompressionLevel: _normalizeZstdCompressionLevel,
     OUTPUT_COMPRESSION: OUTPUT_COMPRESSION,
     ROM_SPECIFIC_INPUT_EXTENSIONS: ROM_SPECIFIC_INPUT_EXTENSIONS,

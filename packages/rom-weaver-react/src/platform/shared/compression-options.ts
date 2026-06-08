@@ -1,6 +1,10 @@
-const CODEC_WITH_OPTIONAL_LEVEL_REGEX = /^([a-z0-9_+-]+)(?::(\d+))?$/;
-const CODEC_NAME_CAPTURE_REGEX = /^([a-z0-9_+-]+)$/;
-const CODEC_NAME_REGEX = /^[a-z0-9_+-]+$/;
+import { parseCompressionCodecEntry } from "../../lib/compression/codec-parser.ts";
+import {
+  getGeneratedCompressionCodecFieldCodecs,
+  getGeneratedCompressionCodecLevelMax,
+  getGeneratedCompressionCodecLevelMin,
+} from "../../lib/compression/compression-metadata.ts";
+
 const INTEGER_STRING_REGEX = /^-?\d+$/;
 
 type NavigatorRoot = {
@@ -47,16 +51,30 @@ const throwCodecError = (codec: string, options: CodecListOptions): never => {
   throw new Error(options.failureMessage || `Unsupported ${options.label || "codec"}: ${codec}`);
 };
 
-const CHD_CODEC_LEVEL_MAX: Record<string, number> = {
-  cdfl: 8,
-  cdlz: 9,
-  cdzl: 9,
-  cdzs: 22,
-  flac: 8,
-  lzma: 9,
-  zlib: 9,
-  zstd: 22,
-};
+const CHD_CODEC_LEVEL_MAX = Object.freeze(
+  Object.fromEntries(
+    [
+      ...new Set([
+        ...getGeneratedCompressionCodecFieldCodecs("chdCreateCdCodecs"),
+        ...getGeneratedCompressionCodecFieldCodecs("chdCreateDvdCodecs"),
+      ]),
+    ]
+      .map((codec) => [codec, getGeneratedCompressionCodecLevelMax(codec)] as const)
+      .filter((entry): entry is readonly [string, number] => entry[1] !== null),
+  ),
+) as Record<string, number>;
+const CHD_CODEC_LEVEL_MIN = Object.freeze(
+  Object.fromEntries(
+    [
+      ...new Set([
+        ...getGeneratedCompressionCodecFieldCodecs("chdCreateCdCodecs"),
+        ...getGeneratedCompressionCodecFieldCodecs("chdCreateDvdCodecs"),
+      ]),
+    ]
+      .map((codec) => [codec, getGeneratedCompressionCodecLevelMin(codec)] as const)
+      .filter((entry): entry is readonly [string, number] => entry[1] !== null),
+  ),
+) as Record<string, number>;
 
 const canUseThreadedWasm = (root?: NavigatorRoot | null): boolean => {
   const runtimeRoot = root || (typeof globalThis === "undefined" ? null : (globalThis as NavigatorRoot));
@@ -113,27 +131,24 @@ const normalizeCodecList = (codecs: CodecLevelInput, options?: CodecListOptions)
 
   for (const item of normalized) {
     const codecValue = item || "";
-    const match = options.allowLevels
-      ? codecValue.match(CODEC_WITH_OPTIONAL_LEVEL_REGEX)
-      : codecValue.match(CODEC_NAME_CAPTURE_REGEX);
-    if (!match) throwCodecError(codecValue, options);
-
-    const codec = match?.[1] || "";
-    if (typeof options.isValidCodec === "function" && !options.isValidCodec(codec)) throwCodecError(codec, options);
-    const levelText = match?.[2];
-    if (levelText !== undefined) {
-      const level = parseInt(levelText, 10);
-      if (
-        !Number.isFinite(level) ||
-        (typeof options.isValidLevel === "function" && !options.isValidLevel(codec, level))
-      ) {
-        if (typeof options.getLevelErrorMessage === "function")
-          throw new Error(options.getLevelErrorMessage(codec, level));
-        throw new Error(options.failureMessage || `Unsupported ${options.label || "codec"} level: ${codecValue}`);
+    const parsed = parseCompressionCodecEntry(codecValue, { allowLevel: options.allowLevels === true });
+    if (parsed) {
+      const codec = parsed.codec;
+      if (typeof options.isValidCodec === "function" && !options.isValidCodec(codec)) throwCodecError(codec, options);
+      if (parsed.hasLevel) {
+        const level = parsed.level ?? Number.NaN;
+        if (
+          !Number.isFinite(level) ||
+          (typeof options.isValidLevel === "function" && !options.isValidLevel(codec, level))
+        ) {
+          if (typeof options.getLevelErrorMessage === "function")
+            throw new Error(options.getLevelErrorMessage(codec, level));
+          throw new Error(options.failureMessage || `Unsupported ${options.label || "codec"} level: ${codecValue}`);
+        }
       }
+    } else {
+      throwCodecError(codecValue, options);
     }
-
-    if (!CODEC_NAME_REGEX.test(codec)) throwCodecError(codec, options);
   }
   return normalized.join(",");
 };
@@ -187,9 +202,15 @@ const getChdCodecLevelMax = (codec: string | null | undefined): number | null =>
   return CHD_CODEC_LEVEL_MAX[normalizedCodec] ?? null;
 };
 
+const getChdCodecLevelMin = (codec: string | null | undefined): number | null => {
+  const normalizedCodec = String(codec || "").toLowerCase();
+  return CHD_CODEC_LEVEL_MIN[normalizedCodec] ?? null;
+};
+
 const isValidChdCodecLevel = (codec: string, level: number): boolean => {
+  const minLevel = getChdCodecLevelMin(codec);
   const maxLevel = getChdCodecLevelMax(codec);
-  return maxLevel !== null && level >= 0 && level <= maxLevel;
+  return minLevel !== null && maxLevel !== null && level >= minLevel && level <= maxLevel;
 };
 
 const normalizeBrowserThreadCount = (
@@ -210,8 +231,10 @@ const normalizeBrowserThreadCount = (
 
 export {
   CHD_CODEC_LEVEL_MAX,
+  CHD_CODEC_LEVEL_MIN,
   canUseThreadedWasm,
   getChdCodecLevelMax,
+  getChdCodecLevelMin,
   getDefaultBrowserThreadCount,
   getDefaultThreadCount,
   isValidChdCodecLevel,

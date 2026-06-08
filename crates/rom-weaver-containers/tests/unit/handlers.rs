@@ -29,11 +29,11 @@ mod tests {
             ProcessOptions as NodProcessOptions,
         },
     };
+    use rom_weaver_codecs::encode_xz_preset;
     use rom_weaver_core::{
         CancellationToken, ContainerHandlerOperations, NoopProgressSink, OperationContext,
         ThreadBudget, ThreadCapability, ThreadExecution,
     };
-    use rom_weaver_codecs::encode_xz_preset;
 
     const TEST_CSO_BLOCK_BYTES: usize = 2 * 1024;
 
@@ -905,7 +905,7 @@ mod tests {
                     source: archive_path.clone(),
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
-                        kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                    kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
                     split_bin: false,
                     ignore_common_files: false,
                     overwrite: true,
@@ -1041,7 +1041,9 @@ mod tests {
             .parse_codec(Some("lzma2"), Some(10), &execution)
             .expect_err("out-of-range level should fail");
         assert!(level_error.to_string().contains("out of range"));
-        for codec in ["lzma", "store", "zstd", "deflate", "bzip2", "ppmd", "lz4"] {
+        for codec in [
+            "lzma", "xz", "store", "zstd", "deflate", "bzip2", "ppmd", "lz4",
+        ] {
             let unsupported_error = handler
                 .parse_codec(Some(codec), Some(6), &execution)
                 .expect_err("unsupported codec should fail");
@@ -1097,8 +1099,8 @@ mod tests {
     }
 
     #[test]
-    fn zip_create_accepts_zstd_level_22() {
-        let temp_dir = temp_dir_path("zip-zstd-level-22");
+    fn zip_create_accepts_zstd_range_edges() {
+        let temp_dir = temp_dir_path("zip-zstd-level-edges");
         fs::create_dir_all(&temp_dir).expect("temp dir");
         let input_path = temp_dir.join("payload.bin");
         fs::write(&input_path, vec![0xCD; 256 * 1024]).expect("fixture");
@@ -1106,26 +1108,52 @@ mod tests {
         let registry = ContainerRegistry::new();
         let handler = registry.find_by_name("zip").expect("zip handler");
 
-        handler
-            .create(
-                &ContainerCreateRequest {
-                    inputs: vec![input_path],
-                    output: temp_dir.join("payload.zip"),
-                    format: "zip".to_string(),
-                    codec: Some("zstd".to_string()),
-                    level: Some(22),
-                    parent: None,
-                },
-                &test_context(&temp_dir, 4),
-            )
-            .expect("zip zstd create at level 22");
+        for level in [-7, 22] {
+            let create_report = handler
+                .create(
+                    &ContainerCreateRequest {
+                        inputs: vec![input_path.clone()],
+                        output: temp_dir.join(format!("payload-{level}.zip")),
+                        format: "zip".to_string(),
+                        codec: Some("zstd".to_string()),
+                        level: Some(level),
+                        parent: None,
+                    },
+                    &test_context(&temp_dir, 4),
+                )
+                .unwrap_or_else(|error| panic!("zip zstd create at level {level}: {error}"));
+            let create_execution = create_report
+                .thread_execution
+                .as_ref()
+                .expect("thread execution");
+            let compression = create_report
+                .details
+                .as_ref()
+                .and_then(|details| details.get("compression"))
+                .and_then(|details| details.as_object())
+                .expect("compression details");
+            assert_eq!(
+                compression.get("codec").and_then(|value| value.as_str()),
+                Some("zstd")
+            );
+            assert_eq!(
+                compression.get("level").and_then(|value| value.as_i64()),
+                Some(i64::from(level))
+            );
+            assert_eq!(
+                compression
+                    .get("effective_threads")
+                    .and_then(|value| value.as_u64()),
+                Some(create_execution.effective_threads as u64)
+            );
+        }
 
         let _ = fs::remove_dir_all(temp_dir);
     }
 
     #[test]
-    fn zip_create_keeps_requested_threads_for_single_file() {
-        let temp_dir = temp_dir_path("zip-single-file-threads");
+    fn zip_zstd_create_single_threads_small_input() {
+        let temp_dir = temp_dir_path("zip-zstd-small-input-threads");
         fs::create_dir_all(&temp_dir).expect("temp dir");
         let input_path = temp_dir.join("payload.bin");
         fs::write(&input_path, vec![0xAB; 512 * 1024]).expect("fixture");
@@ -1147,7 +1175,9 @@ mod tests {
             )
             .expect("zip zstd create");
         let execution = report.thread_execution.expect("thread execution");
-        assert_execution_parallel_when_available(&execution, &ThreadCapability::parallel(None), 8);
+        assert_execution_matches_capability(&execution, &ThreadCapability::parallel(Some(1)), 8);
+        assert_eq!(execution.effective_threads, 1);
+        assert!(!execution.used_parallelism);
 
         let _ = fs::remove_dir_all(temp_dir);
     }
@@ -1165,7 +1195,7 @@ mod tests {
         let registry = ContainerRegistry::new();
         let handler = registry.find_by_name("zip").expect("zip handler");
 
-        for codec in ["lzma2", "lzma", "bzip2", "lz4"] {
+        for codec in ["lzma2", "lzma", "zlib", "gzip", "gz", "bzip2", "lz4"] {
             let archive_path = temp_dir.join(format!("payload-{codec}.zip"));
             let error = handler
                 .create(
@@ -1530,7 +1560,7 @@ mod tests {
                     source: compressed_cso,
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
-                        kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                    kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
                     split_bin: false,
                     ignore_common_files: false,
                     overwrite: true,
@@ -1567,7 +1597,7 @@ mod tests {
                     source: compressed_wbfs,
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
-                        kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                    kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
                     split_bin: false,
                     ignore_common_files: false,
                     overwrite: true,
@@ -1604,7 +1634,7 @@ mod tests {
                     source: compressed_wia,
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
-                        kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                    kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
                     split_bin: false,
                     ignore_common_files: false,
                     overwrite: true,
@@ -1668,7 +1698,7 @@ mod tests {
                     source: source_path,
                     out_dir: out_dir.clone(),
                     selections: Vec::new(),
-                        kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                    kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
                     split_bin: false,
                     ignore_common_files: false,
                     overwrite: true,
@@ -1729,7 +1759,7 @@ mod tests {
                     source: source_path.clone(),
                     out_dir: selected_cue_dir.clone(),
                     selections: vec!["multi.disc02.cue".to_string()],
-                        kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                    kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
                     split_bin: false,
                     ignore_common_files: false,
                     overwrite: true,
@@ -1754,7 +1784,7 @@ mod tests {
                     source: source_path,
                     out_dir: selected_glob_dir.clone(),
                     selections: vec!["multi.disc0?.bin".to_string()],
-                        kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                    kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
                     split_bin: false,
                     ignore_common_files: false,
                     overwrite: true,
@@ -1795,7 +1825,7 @@ mod tests {
                     source: source_path,
                     out_dir: temp_dir.join("out"),
                     selections: vec!["single.missing.cue".to_string()],
-                        kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                    kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
                     split_bin: false,
                     ignore_common_files: false,
                     overwrite: true,
@@ -1909,7 +1939,7 @@ mod tests {
                     source: output_path,
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
-                        kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                    kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
                     split_bin: false,
                     ignore_common_files: false,
                     overwrite: true,
@@ -1951,7 +1981,7 @@ mod tests {
                     source: output_path,
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
-                        kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                    kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
                     split_bin: false,
                     ignore_common_files: false,
                     overwrite: true,
@@ -1986,7 +2016,7 @@ mod tests {
                     source: source_path,
                     out_dir: out_dir.clone(),
                     selections: Vec::new(),
-                        kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                    kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
                     split_bin: false,
                     ignore_common_files: false,
                     overwrite: true,
@@ -2094,6 +2124,52 @@ mod tests {
     }
 
     #[test]
+    fn z3ds_create_accepts_zstd_level_minus_7() {
+        let temp_dir = temp_dir_path("z3ds-zstd-level-minus-7");
+        fs::create_dir_all(&temp_dir).expect("temp dir");
+        let input_path = temp_dir.join("disc.3ds");
+        let output_path = temp_dir.join("disc.z3ds");
+        let source = (0..65_536)
+            .map(|index| (index % 223) as u8)
+            .collect::<Vec<_>>();
+        fs::write(&input_path, source).expect("fixture");
+
+        let registry = ContainerRegistry::new();
+        let handler = registry.find_by_name("z3ds").expect("z3ds handler");
+        let report = handler
+            .create(
+                &ContainerCreateRequest {
+                    inputs: vec![input_path],
+                    output: output_path.clone(),
+                    format: "z3ds".to_string(),
+                    codec: Some("zstd".to_string()),
+                    level: Some(-7),
+                    parent: None,
+                },
+                &test_context(&temp_dir, 8),
+            )
+            .expect("z3ds create at level -7");
+
+        let compression = report
+            .details
+            .as_ref()
+            .and_then(|details| details.get("compression"))
+            .and_then(|details| details.as_object())
+            .expect("compression details");
+        assert_eq!(
+            compression.get("codec").and_then(|value| value.as_str()),
+            Some("zstd")
+        );
+        assert_eq!(
+            compression.get("level").and_then(|value| value.as_i64()),
+            Some(-7)
+        );
+        assert!(output_path.exists());
+
+        let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
     fn z3ds_extract_runtime_threads_match_capability_with_single_chunk_input() {
         let temp_dir = temp_dir_path("z3ds-extract-thread-parity");
         fs::create_dir_all(&temp_dir).expect("temp dir");
@@ -2131,7 +2207,7 @@ mod tests {
                     source: archive_path,
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
-                        kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                    kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
                     split_bin: false,
                     ignore_common_files: false,
                     overwrite: true,
@@ -2377,6 +2453,21 @@ mod tests {
     }
 
     #[test]
+    fn zip_zstd_memory_budget_scales_thread_cap() {
+        let total = 256 * 1024 * 1024;
+        let gib = 1024 * 1024 * 1024;
+
+        // Level 22's default MT job is larger than this input, so extra zstd
+        // workers add memory pressure without useful parallel jobs.
+        assert_eq!(super::zstd_threads_for_budget(total, 22, gib), 1);
+        assert_eq!(super::zstd_threads_for_budget(total, 22, 8 * gib), 1);
+        // Lower levels have much smaller windows/job buffers and can still use
+        // useful parallelism under the same budget.
+        assert!(super::zstd_threads_for_budget(total, 3, gib) >= 8);
+        assert_eq!(super::zstd_threads_for_budget(total, 3, 0), 1);
+    }
+
+    #[test]
     fn seven_z_round_trip_supports_lzma2_create() {
         run_with_large_stack("seven-z-lzma2-roundtrip", || {
             let temp_dir = temp_dir_path("seven-z-lzma2-roundtrip");
@@ -2391,7 +2482,9 @@ mod tests {
             let handler = registry.find_by_name("7z").expect("7z handler");
             let capabilities = handler.capabilities();
 
-            for (label, codec, level) in [("default", None, None), ("lzma2", Some("lzma2"), Some(6))] {
+            for (label, codec, level) in
+                [("default", None, None), ("lzma2", Some("lzma2"), Some(6))]
+            {
                 let archive_path = temp_dir.join(format!("payload-{label}.7z"));
                 let output_dir = temp_dir.join(format!("out-{label}"));
 
@@ -2408,11 +2501,34 @@ mod tests {
                         &test_context(&temp_dir, 8),
                     )
                     .expect("create seven-z with lzma2");
-                let create_execution = create_report.thread_execution.expect("thread execution");
+                let create_execution = create_report
+                    .thread_execution
+                    .as_ref()
+                    .expect("thread execution");
+                let compression = create_report
+                    .details
+                    .as_ref()
+                    .and_then(|details| details.get("compression"))
+                    .and_then(|details| details.as_object())
+                    .expect("compression details");
+                assert_eq!(
+                    compression.get("codec").and_then(|value| value.as_str()),
+                    Some("lzma2")
+                );
+                assert_eq!(
+                    compression.get("level").and_then(|value| value.as_i64()),
+                    Some(level.unwrap_or(6) as i64)
+                );
+                assert_eq!(
+                    compression
+                        .get("effective_threads")
+                        .and_then(|value| value.as_u64()),
+                    Some(create_execution.effective_threads as u64)
+                );
                 assert!(
                     capabilities
                         .create_threads
-                        .supports_execution(&create_execution)
+                        .supports_execution(create_execution)
                 );
 
                 let extract_report = handler
@@ -2421,7 +2537,7 @@ mod tests {
                             source: archive_path,
                             out_dir: output_dir.clone(),
                             selections: Vec::new(),
-                        kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                            kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
                             split_bin: false,
                             ignore_common_files: false,
                             overwrite: true,
@@ -2430,11 +2546,36 @@ mod tests {
                         &test_context(&temp_dir, 8),
                     )
                     .expect("extract seven-z with codec");
-                let extract_execution = extract_report.thread_execution.expect("thread execution");
+                let extract_execution = extract_report
+                    .thread_execution
+                    .as_ref()
+                    .expect("thread execution");
+                let extraction = extract_report
+                    .details
+                    .as_ref()
+                    .and_then(|details| details.get("extraction"))
+                    .and_then(|details| details.as_object())
+                    .expect("extraction details");
+                assert_eq!(
+                    extraction.get("files").and_then(|value| value.as_u64()),
+                    Some(1)
+                );
+                assert_eq!(
+                    extraction
+                        .get("written_bytes")
+                        .and_then(|value| value.as_u64()),
+                    Some(source_bytes.len() as u64)
+                );
+                assert_eq!(
+                    extraction
+                        .get("effective_threads")
+                        .and_then(|value| value.as_u64()),
+                    Some(extract_execution.effective_threads as u64)
+                );
                 assert!(
                     capabilities
                         .extract_threads
-                        .supports_execution(&extract_execution)
+                        .supports_execution(extract_execution)
                 );
 
                 let extracted =
@@ -2459,7 +2600,9 @@ mod tests {
         let registry = ContainerRegistry::new();
         let handler = registry.find_by_name("7z").expect("7z handler");
 
-        for codec in ["lzma", "zstd", "store", "deflate", "bzip2", "ppmd", "lz4", "brotli"] {
+        for codec in [
+            "lzma", "zstd", "store", "deflate", "bzip2", "ppmd", "lz4", "brotli",
+        ] {
             let archive_path = temp_dir.join(format!("payload-{codec}.7z"));
             let error = handler
                 .create(
@@ -2486,61 +2629,60 @@ mod tests {
     #[test]
     fn probe_prefers_signature_over_mismatched_extension() {
         run_with_large_stack("probe-prefers-signature", || {
-                let temp_dir = temp_dir_path("seven-z-signature");
-                fs::create_dir_all(&temp_dir).expect("temp dir");
-                let input_path = temp_dir.join("payload.bin");
-                let path = temp_dir.join("payload.zip");
-                fs::write(&input_path, [1, 2, 3, 4]).expect("fixture");
+            let temp_dir = temp_dir_path("seven-z-signature");
+            fs::create_dir_all(&temp_dir).expect("temp dir");
+            let input_path = temp_dir.join("payload.bin");
+            let path = temp_dir.join("payload.zip");
+            fs::write(&input_path, [1, 2, 3, 4]).expect("fixture");
 
-                let registry = ContainerRegistry::new();
-                let seven_z = registry.find_by_name("7z").expect("7z handler");
-                seven_z
-                    .create(
-                        &ContainerCreateRequest {
-                            inputs: vec![input_path],
-                            output: path.clone(),
-                            format: "7z".to_string(),
-                            codec: Some("lzma2".to_string()),
-                            level: None,
-                            parent: None,
-                        },
-                        &test_context(&temp_dir, 2),
-                    )
-                    .expect("create 7z archive");
-                let handler = registry.probe(&path).expect("7z probe");
-                assert_eq!(handler.descriptor().name, "7z");
+            let registry = ContainerRegistry::new();
+            let seven_z = registry.find_by_name("7z").expect("7z handler");
+            seven_z
+                .create(
+                    &ContainerCreateRequest {
+                        inputs: vec![input_path],
+                        output: path.clone(),
+                        format: "7z".to_string(),
+                        codec: Some("lzma2".to_string()),
+                        level: None,
+                        parent: None,
+                    },
+                    &test_context(&temp_dir, 2),
+                )
+                .expect("create 7z archive");
+            let handler = registry.probe(&path).expect("7z probe");
+            assert_eq!(handler.descriptor().name, "7z");
 
-                let _ = fs::remove_dir_all(temp_dir);
+            let _ = fs::remove_dir_all(temp_dir);
         });
     }
 
     #[test]
     fn probe_routes_unknown_extension_with_chd_signature_to_chd_handler() {
         run_with_large_stack("probe-chd-signature", || {
-                let path = temp_file_path_with_extension("chd-signature", "bin");
-                fs::write(&path, b"MComprHD\0\0\0\0").expect("fixture");
+            let path = temp_file_path_with_extension("chd-signature", "bin");
+            fs::write(&path, b"MComprHD\0\0\0\0").expect("fixture");
 
-                let registry = ContainerRegistry::new();
-                let handler = registry.probe(&path).expect("chd probe");
-                assert_eq!(handler.descriptor().name, "chd");
+            let registry = ContainerRegistry::new();
+            let handler = registry.probe(&path).expect("chd probe");
+            assert_eq!(handler.descriptor().name, "chd");
 
-                let _ = fs::remove_file(path);
+            let _ = fs::remove_file(path);
         });
     }
 
     #[test]
     fn probe_routes_pbp_signature_even_with_wrong_extension() {
         run_with_large_stack("probe-pbp-signature", || {
-                let path = temp_file_path_with_extension("pbp-signature", "bin");
-                let pbp_bytes =
-                    build_test_pbp_fixture(vec![("SLUS00001", build_test_pbp_iso(64, 17))]);
-                fs::write(&path, pbp_bytes).expect("fixture");
+            let path = temp_file_path_with_extension("pbp-signature", "bin");
+            let pbp_bytes = build_test_pbp_fixture(vec![("SLUS00001", build_test_pbp_iso(64, 17))]);
+            fs::write(&path, pbp_bytes).expect("fixture");
 
-                let registry = ContainerRegistry::new();
-                let handler = registry.probe(&path).expect("pbp probe");
-                assert_eq!(handler.descriptor().name, "pbp");
+            let registry = ContainerRegistry::new();
+            let handler = registry.probe(&path).expect("pbp probe");
+            assert_eq!(handler.descriptor().name, "pbp");
 
-                let _ = fs::remove_file(path);
+            let _ = fs::remove_file(path);
         });
     }
 
@@ -2757,8 +2899,7 @@ mod tests {
             bytes[511] = 0xAA;
             let entry_offset = 446;
             bytes[entry_offset + 4] = 0x83;
-            bytes[entry_offset + 8..entry_offset + 12]
-                .copy_from_slice(&1_u32.to_le_bytes());
+            bytes[entry_offset + 8..entry_offset + 12].copy_from_slice(&1_u32.to_le_bytes());
             bytes[entry_offset + 12..entry_offset + 16]
                 .copy_from_slice(&u32::try_from(sectors - 1).expect("sectors").to_le_bytes());
             fs::write(path, &bytes).expect("write mbr disk");
@@ -3063,7 +3204,7 @@ mod tests {
                     source: archive_path,
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
-                        kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                    kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
                     split_bin: false,
                     ignore_common_files: false,
                     overwrite: true,
@@ -3230,7 +3371,7 @@ mod tests {
                     source: archive_path.clone(),
                     out_dir: temp_dir.join("out"),
                     selections: Vec::new(),
-                        kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                    kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
                     split_bin: false,
                     ignore_common_files: false,
                     overwrite: true,
@@ -3299,7 +3440,7 @@ mod tests {
                     source: child_chd.clone(),
                     out_dir: out_without_parent,
                     selections: Vec::new(),
-                        kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                    kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
                     split_bin: false,
                     ignore_common_files: false,
                     overwrite: true,
@@ -3320,7 +3461,7 @@ mod tests {
                     source: child_chd,
                     out_dir: out_with_parent.clone(),
                     selections: Vec::new(),
-                        kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                    kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
                     split_bin: false,
                     ignore_common_files: false,
                     overwrite: true,
@@ -3567,7 +3708,7 @@ mod tests {
                     source: archive_path.clone(),
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
-                        kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                    kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
                     split_bin: false,
                     ignore_common_files: false,
                     overwrite: true,
@@ -3615,7 +3756,7 @@ mod tests {
                     source: archive_path.clone(),
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
-                        kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                    kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
                     split_bin: false,
                     ignore_common_files: false,
                     overwrite: true,
@@ -3739,7 +3880,7 @@ mod tests {
                     source: archive_path,
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
-                        kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                    kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
                     split_bin: false,
                     ignore_common_files: false,
                     overwrite: true,
@@ -3855,7 +3996,7 @@ mod tests {
                     source: archive_path,
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
-                        kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                    kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
                     split_bin: false,
                     ignore_common_files: false,
                     overwrite: true,
@@ -3904,7 +4045,7 @@ mod tests {
                     source: archive_path,
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
-                        kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                    kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
                     split_bin: false,
                     ignore_common_files: false,
                     overwrite: true,
@@ -3962,7 +4103,7 @@ mod tests {
                     source: archive_path,
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
-                        kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                    kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
                     split_bin: false,
                     ignore_common_files: false,
                     overwrite: true,
@@ -4018,7 +4159,7 @@ mod tests {
                     source: archive_path,
                     out_dir: output_dir.clone(),
                     selections: Vec::new(),
-                        kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
+                    kind_filter: rom_weaver_core::ArchiveEntryKindFilter::default(),
                     split_bin: false,
                     ignore_common_files: false,
                     overwrite: true,

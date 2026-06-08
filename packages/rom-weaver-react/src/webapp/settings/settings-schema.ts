@@ -1,5 +1,5 @@
 import * as v from "valibot";
-import { getCompressionCodecLevelMax } from "../../lib/compression/codec-fields.ts";
+import { getCompressionCodecLevelMax, getCompressionCodecLevelMin } from "../../lib/compression/codec-fields.ts";
 import {
   getChdCodecsForMode,
   normalizeArchiveCompressionLevelForFormat,
@@ -41,9 +41,8 @@ const SETTINGS_STORAGE_VERSION = 5;
 
 type RuntimeSharedSettings = Omit<
   SettingsState,
-  "mobileDevTools" | "rvzCodec" | "rvzCompressionLevel" | "z3dsCompressionLevel" | "sevenZipLevel" | "zipLevel"
+  "mobileDevTools" | "rvzCompressionLevel" | "z3dsCompressionLevel" | "sevenZipLevel" | "zipLevel"
 > & {
-  rvzCompression: string;
   rvzCompressionLevel: number;
   z3dsCompressionLevel: number | "default";
   sevenZipLevel: number;
@@ -130,36 +129,21 @@ const normalizeChoiceField = <K extends SettingsFieldKey>(
 ): SettingsState[K] =>
   normalizeChoiceSetting(value, getFieldChoiceValues(fieldKey), String(fallback)) as SettingsState[K];
 
-const normalizeLegacyDefaultArchive = (value: unknown): "7z" | "none" | "zip" => {
-  const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
-  if (normalized === "7z" || normalized === "none") return normalized;
-  return "zip";
-};
-
-const defaultCompressionFromLegacySettings = (
-  defaultArchiveValue: unknown,
-  specialCompressionValue: unknown,
-): SettingsState["defaultCompression"] => {
-  const defaultArchive = normalizeLegacyDefaultArchive(defaultArchiveValue);
-  const specialCompression = typeof specialCompressionValue === "boolean" ? specialCompressionValue : true;
-  if (!specialCompression) {
-    if (defaultArchive === "7z") return "7z only";
-    if (defaultArchive === "none") return "none";
-    return "zip only";
-  }
-  if (defaultArchive === "7z") return "7z/special";
-  if (defaultArchive === "none") return "special only";
-  return "zip/special";
-};
+const formatLevelRange = (min: number, max: number): string => `${min}..${max}`;
 
 const getCodecLevelMax = (fieldKey: SettingsFieldKey, codec: string): number | null => {
   return getCompressionCodecLevelMax(fieldKey, codec);
 };
 
+const getCodecLevelMin = (fieldKey: SettingsFieldKey, codec: string): number | null => {
+  return getCompressionCodecLevelMin(fieldKey, codec);
+};
+
 const getCodecValidationMessage = (fieldKey: SettingsFieldKey, validCodecs: readonly string[]): string => {
   const levelHints = validCodecs.map((codec) => {
     const maxLevel = getCodecLevelMax(fieldKey, codec);
-    return maxLevel === null ? codec : `${codec}[:0-${maxLevel}]`;
+    const minLevel = getCodecLevelMin(fieldKey, codec) ?? 0;
+    return maxLevel === null ? codec : `${codec}[:${formatLevelRange(minLevel, maxLevel)}]`;
   });
   return `valid values: ${validCodecs.join(", ")}. Optional levels: ${levelHints.join(", ")}.`;
 };
@@ -173,7 +157,8 @@ const createCodecListOptions = (
   isValidCodec: (codec) => validCodecs.indexOf(codec) !== -1,
   isValidLevel: (codec, level) => {
     const maxLevel = getCodecLevelMax(fieldKey, codec);
-    return maxLevel !== null && level >= 0 && level <= maxLevel;
+    const minLevel = getCodecLevelMin(fieldKey, codec) ?? 0;
+    return maxLevel !== null && level >= minLevel && level <= maxLevel;
   },
 });
 
@@ -343,16 +328,17 @@ const normalizeIntegerSetting = (
   settings: SettingsState = validation.settings,
 ): number => {
   const { max, min } = getNumericFieldRange(fieldKey, settings);
+  const rangeText = formatLevelRange(min, max);
   const parsedValue = v.safeParse(storedStringOrNumberSchema, value);
   try {
     return parseIntegerInRange(parsedValue.success ? parsedValue.output : value, {
-      failureMessage: getFieldValidationMessage(fieldKey, `valid values: ${min}-${max}.`),
+      failureMessage: getFieldValidationMessage(fieldKey, `valid values: ${rangeText}.`),
       max,
       min,
       requireExactString: true,
     }) as number;
   } catch {
-    validation.messages.push(getFieldValidationMessage(fieldKey, `valid values: ${min}-${max}.`));
+    validation.messages.push(getFieldValidationMessage(fieldKey, `valid values: ${rangeText}.`));
     validation.invalidFields.push(getSettingsFieldId(fieldKey));
     return normalizeIntegerInRange(value, {
       fallback: min,
@@ -430,7 +416,6 @@ const readGroupedStoredSettings = (source: Record<string, unknown>): Record<stri
     chdCreateCdCodecs: compression.chdCreateCdCodecs,
     chdCreateDvdCodecs: compression.chdCreateDvdCodecs,
     compressionProfile: compression.profile,
-    defaultArchive: commonSettings.defaultArchive,
     defaultCompression: commonSettings.defaultCompression,
     fixChecksum: patch.fixChecksum,
     language: commonSettings.language,
@@ -439,12 +424,11 @@ const readGroupedStoredSettings = (source: Record<string, unknown>): Record<stri
     requireInputChecksumMatch: validation.requireInputChecksumMatch,
     requireOutputChecksumMatch: validation.requireOutputChecksumMatch,
     rvzBlockSize: compression.rvzBlockSize,
-    rvzCodec: compression.rvzCodec ?? compression.rvzCompression,
+    rvzCodec: compression.rvzCodec,
     rvzCompressionLevel: compression.rvzCompressionLevel,
     rvzScrub: compression.rvzScrub,
     sevenZipCodec: compression.sevenZipCodec,
     sevenZipLevel: compression.sevenZipLevel,
-    specialCompression: commonSettings.specialCompression,
     workerThreads: compression.workerThreads,
     z3dsCompressionLevel: compression.z3dsCompressionLevel,
     zipCodec: compression.zipCodec,
@@ -491,13 +475,7 @@ const loadSettings = (storage?: StorageLike): SettingsState => {
     if (logLevel !== undefined) settings.logLevel = normalizeChoiceField("logLevel", logLevel, settings.logLevel);
 
     const defaultCompression = readStoredField(storedStringSchema, loadedSettings.defaultCompression);
-    if (defaultCompression === undefined) {
-      const defaultArchive = readStoredField(storedStringSchema, loadedSettings.defaultArchive);
-      const specialCompression = readStoredField(storedBooleanSchema, loadedSettings.specialCompression);
-      if (defaultArchive !== undefined || specialCompression !== undefined) {
-        settings.defaultCompression = defaultCompressionFromLegacySettings(defaultArchive, specialCompression);
-      }
-    } else {
+    if (defaultCompression !== undefined) {
       settings.defaultCompression = normalizeChoiceField(
         "defaultCompression",
         defaultCompression,
@@ -536,9 +514,7 @@ const loadSettings = (storage?: StorageLike): SettingsState => {
         true,
       );
 
-    const rvzCodec =
-      readStoredField(storedStringSchema, loadedSettings.rvzCodec) ??
-      readStoredField(storedStringSchema, loadedSettings.rvzCompression);
+    const rvzCodec = readStoredField(storedStringSchema, loadedSettings.rvzCodec);
     if (rvzCodec !== undefined)
       settings.rvzCodec = normalizeStoredCodecSetting("rvzCodec", rvzCodec, settings.rvzCodec, true);
 
@@ -711,7 +687,7 @@ const buildSettingsForWebapp = (source?: SettingsState | null, extraSettings?: R
       requireInputChecksumMatch: settings.requireInputChecksumMatch !== false,
       requireOutputChecksumMatch: settings.requireOutputChecksumMatch !== false,
       rvzBlockSize: settings.rvzBlockSize,
-      rvzCompression: compressionLevels.rvzCompression,
+      rvzCodec: compressionLevels.rvzCodec,
       rvzCompressionLevel: compressionLevels.rvzCompressionLevel,
       rvzScrub: settings.rvzScrub,
       sevenZipCodec: compressionLevels.sevenZipCodec,
@@ -742,11 +718,6 @@ const normalizeRuntimeSharedSettingsSource = (source?: Record<string, unknown> |
       "defaultCompression",
       source.defaultCompression,
       settings.defaultCompression,
-    );
-  } else if (typeof source.defaultArchive === "string" || typeof source.specialCompression === "boolean") {
-    settings.defaultCompression = defaultCompressionFromLegacySettings(
-      source.defaultArchive,
-      source.specialCompression,
     );
   }
   if (typeof source.logLevel === "string")
@@ -789,14 +760,8 @@ const normalizeRuntimeSharedSettingsSource = (source?: Record<string, unknown> |
             settings.chdCreateDvdCodecs,
             true,
           );
-  const sourceRvzCodec =
-    typeof source.rvzCodec === "string"
-      ? source.rvzCodec
-      : typeof source.rvzCompression === "string"
-        ? source.rvzCompression
-        : undefined;
-  if (sourceRvzCodec !== undefined)
-    settings.rvzCompression = normalizeStoredCodecSetting("rvzCodec", sourceRvzCodec, settings.rvzCompression, true);
+  if (typeof source.rvzCodec === "string")
+    settings.rvzCodec = normalizeStoredCodecSetting("rvzCodec", source.rvzCodec, settings.rvzCodec, true);
   if (typeof source.rvzCompressionLevel === "number" || typeof source.rvzCompressionLevel === "string")
     settings.rvzCompressionLevel = normalizeIntegerField(
       "rvzCompressionLevel",
@@ -864,7 +829,7 @@ const normalizeRuntimeSharedSettingsSource = (source?: Record<string, unknown> |
     );
 
   const compressionLevels = resolveCompressionLevels(settings);
-  settings.rvzCompression = compressionLevels.rvzCompression;
+  settings.rvzCodec = compressionLevels.rvzCodec;
   settings.rvzCompressionLevel = Number(compressionLevels.rvzCompressionLevel);
   settings.sevenZipCodec = compressionLevels.sevenZipCodec;
   settings.sevenZipLevel = Number(compressionLevels.sevenZipLevel);
@@ -889,7 +854,7 @@ const normalizeRuntimeSettingsUpdate = (
   if (Object.hasOwn(sanitizedUpdate, "compressionProfile")) {
     const derivedLevels = resolveCompressionLevels({
       compressionProfile: nextSettings.compressionProfile,
-      rvzCompression: nextSettings.rvzCompression,
+      rvzCodec: nextSettings.rvzCodec,
       rvzCompressionLevel: "",
       sevenZipCodec: nextSettings.sevenZipCodec,
       sevenZipLevel: "",

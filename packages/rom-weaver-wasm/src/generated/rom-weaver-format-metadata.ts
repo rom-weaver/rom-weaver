@@ -445,6 +445,215 @@ export const ROM_WEAVER_PATCH_FORMATS = [
   }
 ] as const;
 
+export const ROM_WEAVER_COMPRESSION_METADATA = {
+  "codecFields": {
+    "chdCreateCdCodecs": {
+      "allowMultiple": true,
+      "codecs": [
+        "cdzs",
+        "cdlz",
+        "cdzl",
+        "cdfl"
+      ],
+      "defaultCodec": null,
+      "defaultCodecs": "cdlz,cdzl,cdfl"
+    },
+    "chdCreateDvdCodecs": {
+      "allowMultiple": true,
+      "codecs": [
+        "zstd",
+        "lzma",
+        "zlib",
+        "huff",
+        "flac"
+      ],
+      "defaultCodec": null,
+      "defaultCodecs": "lzma,zlib,huff,flac"
+    },
+    "rvzCodec": {
+      "allowMultiple": false,
+      "codecs": [
+        "zstd"
+      ],
+      "defaultCodec": "zstd",
+      "defaultCodecs": null
+    },
+    "sevenZipCodec": {
+      "allowMultiple": false,
+      "codecs": [
+        "lzma2"
+      ],
+      "defaultCodec": "lzma2",
+      "defaultCodecs": null
+    },
+    "zipCodec": {
+      "allowMultiple": false,
+      "codecs": [
+        "deflate",
+        "store",
+        "zstd"
+      ],
+      "defaultCodec": "deflate",
+      "defaultCodecs": null
+    }
+  },
+  "codecs": {
+    "avhuff": {
+      "aliases": [
+        "avhu"
+      ],
+      "level": null,
+      "profileKind": "none"
+    },
+    "cdfl": {
+      "aliases": [],
+      "level": {
+        "max": 8,
+        "min": 0
+      },
+      "profileKind": "standard"
+    },
+    "cdlz": {
+      "aliases": [],
+      "level": {
+        "max": 9,
+        "min": 0
+      },
+      "profileKind": "standard"
+    },
+    "cdzl": {
+      "aliases": [],
+      "level": {
+        "max": 9,
+        "min": 0
+      },
+      "profileKind": "standard"
+    },
+    "cdzs": {
+      "aliases": [],
+      "level": {
+        "max": 22,
+        "min": -7
+      },
+      "profileKind": "zstd"
+    },
+    "deflate": {
+      "aliases": [],
+      "level": {
+        "max": 9,
+        "min": 0
+      },
+      "profileKind": "standard"
+    },
+    "flac": {
+      "aliases": [],
+      "level": {
+        "max": 8,
+        "min": 0
+      },
+      "profileKind": "standard"
+    },
+    "huff": {
+      "aliases": [
+        "huffman"
+      ],
+      "level": null,
+      "profileKind": "none"
+    },
+    "lzma": {
+      "aliases": [],
+      "level": {
+        "max": 9,
+        "min": 0
+      },
+      "profileKind": "standard"
+    },
+    "lzma2": {
+      "aliases": [],
+      "level": {
+        "max": 9,
+        "min": 0
+      },
+      "profileKind": "standard"
+    },
+    "store": {
+      "aliases": [],
+      "level": null,
+      "profileKind": "none"
+    },
+    "zlib": {
+      "aliases": [],
+      "level": {
+        "max": 9,
+        "min": 0
+      },
+      "profileKind": "standard"
+    },
+    "zstd": {
+      "aliases": [],
+      "level": {
+        "max": 22,
+        "min": -7
+      },
+      "profileKind": "zstd"
+    }
+  },
+  "defaults": {
+    "chdCreateCdCodecs": "cdlz,cdzl,cdfl",
+    "chdCreateDvdCodecs": "lzma,zlib,huff,flac",
+    "rvzBlockSize": 131072,
+    "rvzCodec": "zstd",
+    "rvzCompressionLevel": 19,
+    "sevenZipCodec": "lzma2",
+    "z3dsCodec": "zstd",
+    "zipCodec": "deflate"
+  },
+  "profiles": [
+    {
+      "label": "Min",
+      "name": "min",
+      "standardLevel": 0,
+      "zstdLevel": -7
+    },
+    {
+      "label": "Very Low",
+      "name": "very-low",
+      "standardLevel": 2,
+      "zstdLevel": 4
+    },
+    {
+      "label": "Low",
+      "name": "low",
+      "standardLevel": 3,
+      "zstdLevel": 7
+    },
+    {
+      "label": "Medium",
+      "name": "medium",
+      "standardLevel": 5,
+      "zstdLevel": 11
+    },
+    {
+      "label": "High",
+      "name": "high",
+      "standardLevel": 7,
+      "zstdLevel": 15
+    },
+    {
+      "label": "Very High",
+      "name": "very-high",
+      "standardLevel": 8,
+      "zstdLevel": 19
+    },
+    {
+      "label": "Max",
+      "name": "max",
+      "standardLevel": 9,
+      "zstdLevel": 22
+    }
+  ]
+} as const;
+
 export const ROM_WEAVER_FILE_FILTERS = {
   "containerExtensions": [
     ".zip",
@@ -1246,6 +1455,7 @@ export const ROM_WEAVER_CREATE_CONTAINER_FORMATS = [
 ] as const;
 
 export const ROM_WEAVER_FORMAT_METADATA = {
+  compression: ROM_WEAVER_COMPRESSION_METADATA,
   containerFormatAliases: ROM_WEAVER_CONTAINER_FORMAT_ALIASES,
   containerFormats: ROM_WEAVER_CONTAINER_FORMATS,
   createContainerFormats: ROM_WEAVER_CREATE_CONTAINER_FORMATS,

@@ -72,6 +72,15 @@ fn compression_profile_defaults_to_max_levels() {
             "zst",
             None,
             None,
+            CompressionLevelProfile::Min,
+        ),
+        Some(-7)
+    );
+    assert_eq!(
+        CliApp::resolve_compression_level_for_profile(
+            "zst",
+            None,
+            None,
             CompressionLevelProfile::Max,
         ),
         Some(22)
@@ -97,6 +106,15 @@ fn compression_profile_respects_codec_types() {
             CompressionLevelProfile::Max,
         ),
         None
+    );
+    assert_eq!(
+        CliApp::resolve_compression_level_for_profile(
+            "chd",
+            Some("cdzs"),
+            None,
+            CompressionLevelProfile::Min,
+        ),
+        Some(-7)
     );
     assert_eq!(
         CliApp::resolve_compression_level_for_profile(
@@ -133,6 +151,15 @@ fn compression_profile_respects_codec_types() {
             CompressionLevelProfile::VeryHigh,
         ),
         Some(8)
+    );
+    assert_eq!(
+        CliApp::resolve_compression_level_for_profile(
+            "zst",
+            Some("zstd"),
+            None,
+            CompressionLevelProfile::Min,
+        ),
+        Some(-7)
     );
     assert_eq!(
         CliApp::resolve_compression_level_for_profile(
@@ -311,6 +338,11 @@ fn resolve_codec_level_supports_codec_level_syntax() {
     .expect("codec:level should parse");
     assert_eq!(codec.as_deref(), Some("cdzs+cdzl+cdfl"));
     assert_eq!(level, Some(19));
+
+    let (codec, level) = CliApp::resolve_codec_level(vec!["cdzs:-7,cdzl".to_string()], "--codec")
+        .expect("negative codec:level should parse");
+    assert_eq!(codec.as_deref(), Some("cdzs+cdzl"));
+    assert_eq!(level, Some(-7));
 }
 
 #[test]

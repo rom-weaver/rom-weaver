@@ -79,6 +79,18 @@ pub(crate) fn collect_archive_inputs(inputs: &[PathBuf]) -> Result<Vec<ArchiveIn
     Ok(entries)
 }
 
+pub(crate) fn sum_input_file_bytes(entries: &[ArchiveInputEntry]) -> u64 {
+    let mut total = 0u64;
+    for entry in entries {
+        if !entry.is_dir
+            && let Ok(metadata) = fs::metadata(&entry.source)
+        {
+            total = total.saturating_add(metadata.len());
+        }
+    }
+    total
+}
+
 fn collect_archive_inputs_from_path(
     source: &Path,
     root: &Path,

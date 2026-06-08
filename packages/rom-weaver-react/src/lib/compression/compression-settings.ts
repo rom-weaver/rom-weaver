@@ -1,13 +1,19 @@
 import { parseIntegerInRange } from "../compression/compression-option-utils.ts";
 import OutputCompressionManager from "../compression/output-compression-manager.ts";
+import { parseCompressionCodecEntry } from "./codec-parser.ts";
+import {
+  COMPRESSION_DEFAULTS,
+  COMPRESSION_PROFILE_LEVELS,
+  getGeneratedCompressionCodecLevelMax,
+  getGeneratedCompressionCodecLevelMin,
+  getGeneratedCompressionProfileLabel,
+} from "./compression-metadata.ts";
 
 const compressionManager = OutputCompressionManager;
-const CODEC_WITH_OPTIONAL_LEVEL_REGEX = /^([a-z0-9_+-]+)(?::(\d+))?$/;
 
 type CompressionSettingsSource = {
   compressionProfile?: string | null;
   rvzCodec?: string | null;
-  rvzCompression?: string | null;
   rvzCompressionLevel?: string | number | null;
   z3dsCompressionLevel?: string | number | "default" | null;
   sevenZipCodec?: string | null;
@@ -26,26 +32,21 @@ const parseCodecLevel = (
   fallback: string,
   normalizeCodec: (codec: string | null | undefined, fallback?: string) => string,
 ): ParsedCodecLevel => {
-  const raw = String(value || "")
-    .trim()
-    .toLowerCase();
-  const match = raw.match(CODEC_WITH_OPTIONAL_LEVEL_REGEX);
-  if (!match) return { codec: normalizeCodec(value, fallback), level: null };
+  const parsed = parseCompressionCodecEntry(value);
+  if (!parsed) return { codec: normalizeCodec(value, fallback), level: null };
   return {
-    codec: normalizeCodec(match[1] || fallback, fallback),
-    level: match[2] === undefined ? null : parseInt(match[2], 10),
+    codec: normalizeCodec(parsed.codec || fallback, fallback),
+    level: parsed.level,
   };
 };
 
 const parseRvzCodecLevel = (value: string | null | undefined): ParsedCodecLevel => {
-  const raw = String(value || "")
-    .trim()
-    .toLowerCase();
-  const match = raw.match(CODEC_WITH_OPTIONAL_LEVEL_REGEX);
-  if (!match) return { codec: compressionManager.normalizeRvzCompression(value || "zstd"), level: null };
+  const parsed = parseCompressionCodecEntry(value);
+  if (!parsed)
+    return { codec: compressionManager.normalizeRvzCompression(value || COMPRESSION_DEFAULTS.rvzCodec), level: null };
   return {
-    codec: compressionManager.normalizeRvzCompression(match[1] || "zstd"),
-    level: match[2] === undefined ? null : parseInt(match[2], 10),
+    codec: compressionManager.normalizeRvzCompression(parsed.codec || COMPRESSION_DEFAULTS.rvzCodec),
+    level: parsed.level,
   };
 };
 
@@ -62,14 +63,7 @@ const getCompressionProfileFromIndex = (
 };
 
 const getCompressionProfileLabel = (profile: string | null | undefined): string => {
-  const normalized = compressionManager.normalizeCompressionProfile(profile, "max");
-  if (normalized === "min") return "Min";
-  if (normalized === "very-low") return "Very Low";
-  if (normalized === "low") return "Low";
-  if (normalized === "medium") return "Medium";
-  if (normalized === "high") return "High";
-  if (normalized === "very-high") return "Very High";
-  return "Max";
+  return getGeneratedCompressionProfileLabel(profile);
 };
 
 const getOptionalCompressionLevel = (
@@ -91,51 +85,66 @@ const getOptionalCompressionLevel = (
 const resolveCompressionLevels = (source?: CompressionSettingsSource | null) => {
   const settings = source || {};
   const compressionProfile = compressionManager.normalizeCompressionProfile(settings.compressionProfile, "max");
-  const rvzCodecSetting = parseRvzCodecLevel(settings.rvzCodec ?? settings.rvzCompression);
+  const rvzCodecSetting = parseRvzCodecLevel(settings.rvzCodec);
   const sevenZipCodecSetting = parseCodecLevel(
     settings.sevenZipCodec,
-    "lzma2",
+    COMPRESSION_DEFAULTS.sevenZipCodec,
     compressionManager.normalizeSevenZipCodec,
   );
-  const zipCodecSetting = parseCodecLevel(settings.zipCodec, "deflate", compressionManager.normalizeZipCodec);
-  const rvzCompression = rvzCodecSetting.codec;
+  const zipCodecSetting = parseCodecLevel(
+    settings.zipCodec,
+    COMPRESSION_DEFAULTS.zipCodec,
+    compressionManager.normalizeZipCodec,
+  );
+  const rvzCodec = rvzCodecSetting.codec;
   const sevenZipCodec = sevenZipCodecSetting.codec;
   const zipCodec = zipCodecSetting.codec;
-  const zipLevelMax = zipCodec === "zstd" ? 22 : 9;
+  const rvzLevelMax = getGeneratedCompressionCodecLevelMax(rvzCodec) ?? COMPRESSION_PROFILE_LEVELS.zstd.max;
+  const rvzLevelMin = getGeneratedCompressionCodecLevelMin(rvzCodec) ?? COMPRESSION_PROFILE_LEVELS.zstd.min;
+  const sevenZipLevelMax =
+    getGeneratedCompressionCodecLevelMax(sevenZipCodec) ?? COMPRESSION_PROFILE_LEVELS.standard.max;
+  const sevenZipLevelMin =
+    getGeneratedCompressionCodecLevelMin(sevenZipCodec) ?? COMPRESSION_PROFILE_LEVELS.standard.min;
+  const z3dsLevelMax =
+    getGeneratedCompressionCodecLevelMax(COMPRESSION_DEFAULTS.z3dsCodec) ?? COMPRESSION_PROFILE_LEVELS.zstd.max;
+  const z3dsLevelMin =
+    getGeneratedCompressionCodecLevelMin(COMPRESSION_DEFAULTS.z3dsCodec) ?? COMPRESSION_PROFILE_LEVELS.zstd.min;
+  const zipLevelMax = getGeneratedCompressionCodecLevelMax(zipCodec) ?? COMPRESSION_PROFILE_LEVELS.standard.max;
+  const zipLevelMin = getGeneratedCompressionCodecLevelMin(zipCodec) ?? COMPRESSION_PROFILE_LEVELS.standard.min;
 
   return {
     compressionProfile: compressionProfile,
-    rvzCompression: rvzCompression,
+    rvzCodec: rvzCodec,
     rvzCompressionLevel: getOptionalCompressionLevel(
       rvzCodecSetting.level ?? settings.rvzCompressionLevel,
-      compressionManager.getCompressionProfileLevel(compressionProfile, rvzCompression),
-      0,
-      22,
+      compressionManager.getCompressionProfileLevel(compressionProfile, rvzCodec),
+      rvzLevelMin,
+      rvzLevelMax,
     ),
     sevenZipCodec: sevenZipCodec,
     sevenZipLevel: getOptionalCompressionLevel(
       sevenZipCodecSetting.level ?? settings.sevenZipLevel,
       compressionManager.getCompressionProfileLevel(compressionProfile, sevenZipCodec, "7z"),
-      0,
-      9,
+      sevenZipLevelMin,
+      sevenZipLevelMax,
     ),
     z3dsCompressionLevel:
       settings.z3dsCompressionLevel === "default"
         ? "default"
         : getOptionalCompressionLevel(
             settings.z3dsCompressionLevel,
-            compressionManager.getCompressionProfileLevel(compressionProfile, "zstd"),
-            0,
-            22,
+            compressionManager.getCompressionProfileLevel(compressionProfile, COMPRESSION_DEFAULTS.z3dsCodec),
+            z3dsLevelMin,
+            z3dsLevelMax,
           ),
     zipCodec: zipCodec,
     zipLevel:
       zipCodec === "store"
-        ? 9
+        ? COMPRESSION_PROFILE_LEVELS.standard.max
         : getOptionalCompressionLevel(
             zipCodecSetting.level ?? settings.zipLevel,
             compressionManager.getCompressionProfileLevel(compressionProfile, zipCodec, "zip"),
-            0,
+            zipLevelMin,
             zipLevelMax,
           ),
   };

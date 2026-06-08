@@ -29,10 +29,7 @@ use rom_weaver_chd::ChdCodec;
 #[cfg(test)]
 use rom_weaver_chd::ChdContainerHandler;
 use rom_weaver_checksum::StreamingChecksum;
-use rom_weaver_codecs::{
-    CanonicalCodec, RequestedCodec, decode_deflate_into_buffer, normalize_codec_label,
-    parse_requested_codec,
-};
+use rom_weaver_codecs::{decode_deflate_into_buffer, normalize_codec_label};
 use rom_weaver_core::{
     ContainerByteProgress, ContainerCreateRequest, ContainerExtractRequest,
     ContainerHandlerOperations, ContainerListEntry, ContainerProbeRequest, FormatDescriptor,
@@ -46,13 +43,14 @@ use rom_weaver_libarchive::{
     ReadFilter as LibarchiveReadFilter, RegularArchiveProbeFormat as LibarchiveProbeFormat,
     WriteFilter as LibarchiveCreateFilter, WriteFormat as LibarchiveCreateFormat,
 };
+use serde_json::{Map, Value, json};
 use xdvdfs::{
     blockdev::OffsetWrapper as XdvdfsOffsetWrapper, write::fs::XDVDFSFilesystem as XdvdfsFilesystem,
 };
 use zeekstd::{DecodeOptions as ZeekstdDecodeOptions, SeekTable as ZeekstdSeekTable};
 use zstd::bulk::Compressor as ZstdCompressor;
 
-use archive_entries::{ArchiveInputEntry, collect_archive_inputs};
+use archive_entries::{ArchiveInputEntry, collect_archive_inputs, sum_input_file_bytes};
 use constants::{
     LIBARCHIVE_CREATE_IO_BUFFER_BYTES, LIBARCHIVE_CREATE_ZSTD_IO_BUFFER_BYTES,
     LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES, Z3DS_DECODE_BUFFER_BYTES, Z3DS_DEFAULT_COMPRESSION_LEVEL,
@@ -69,7 +67,8 @@ use formats::SEVEN_Z;
 pub use formats::{
     CompressFormatRecommendation, ContainerCapabilitiesMetadata, ContainerDefaultOutputMetadata,
     ContainerFormatMetadata, ContainerOutputExtensionStrategy, ContainerRegistry,
-    ContainerThreadCapabilityMetadata, container_format_metadata,
+    ContainerThreadCapabilityMetadata, container_format_metadata, extract_only_create_error,
+    extract_only_create_validation_message,
 };
 use formats::{GCZ, NFS, PBP, RVZ, TGC, WBFS, WIA, XISO, Z3DS};
 use libarchive_support::{
@@ -87,8 +86,119 @@ const ZSTD_SIGNATURE: [u8; 4] = [0x28, 0xB5, 0x2F, 0xFD];
 const CSO_SIGNATURE: [u8; 4] = [b'C', b'I', b'S', b'O'];
 const PBP_SIGNATURE: [u8; 4] = [0x00, b'P', b'B', b'P'];
 
+fn supported_codec_clause(supported_codecs: &[&str]) -> String {
+    match supported_codecs {
+        [] => "no codecs are supported".to_string(),
+        [codec] => format!("supported codec is {codec}"),
+        [first, second] => format!("supported codecs are {first} and {second}"),
+        [first @ .., last] => format!("supported codecs are {}, and {last}", first.join(", ")),
+    }
+}
+
+fn unsupported_create_codec_error(
+    format_name: &str,
+    codec_name: &str,
+    supported_codecs: &[&str],
+) -> RomWeaverError {
+    RomWeaverError::Validation(format!(
+        "unsupported {format_name} codec `{codec_name}`; {}",
+        supported_codec_clause(supported_codecs)
+    ))
+}
+
+fn resolve_create_codec<'a>(
+    format_name: &str,
+    codec: Option<&str>,
+    supported_codecs: &'a [&'a str],
+    default_codec: &'a str,
+) -> Result<&'a str> {
+    let Some(codec_name) = codec
+        .map(str::trim)
+        .filter(|codec| !codec.is_empty())
+        .map(str::to_ascii_lowercase)
+    else {
+        return Ok(default_codec);
+    };
+
+    supported_codecs
+        .iter()
+        .copied()
+        .find(|supported_codec| *supported_codec == codec_name)
+        .ok_or_else(|| unsupported_create_codec_error(format_name, &codec_name, supported_codecs))
+}
+
+fn operation_report_details(report: &mut OperationReport) -> Map<String, Value> {
+    match report.details.take() {
+        Some(Value::Object(map)) => map,
+        _ => Map::new(),
+    }
+}
+
+fn insert_thread_execution_details(details: &mut Map<String, Value>, execution: &ThreadExecution) {
+    details.insert(
+        "requested_threads".to_string(),
+        json!(execution.requested_threads),
+    );
+    details.insert(
+        "effective_threads".to_string(),
+        json!(execution.effective_threads),
+    );
+    details.insert("thread_mode".to_string(), json!(execution.thread_mode));
+    details.insert(
+        "used_parallelism".to_string(),
+        json!(execution.used_parallelism),
+    );
+    details.insert(
+        "thread_fallback".to_string(),
+        json!(execution.thread_fallback),
+    );
+    if let Some(reason) = &execution.thread_fallback_reason {
+        details.insert("thread_fallback_reason".to_string(), json!(reason));
+    }
+}
+
+fn attach_compression_details(
+    mut report: OperationReport,
+    codec: impl Into<String>,
+    level: Option<i32>,
+    logical_bytes: u64,
+    execution: &ThreadExecution,
+) -> OperationReport {
+    let mut details = operation_report_details(&mut report);
+    let mut compression = Map::new();
+    compression.insert("codec".to_string(), json!(codec.into()));
+    if let Some(level) = level {
+        compression.insert("level".to_string(), json!(level));
+    }
+    compression.insert("logical_bytes".to_string(), json!(logical_bytes));
+    insert_thread_execution_details(&mut compression, execution);
+    details.insert("compression".to_string(), Value::Object(compression));
+    report.details = Some(Value::Object(details));
+    report
+}
+
+fn attach_extraction_details(
+    mut report: OperationReport,
+    entry_count: usize,
+    file_count: usize,
+    written_bytes: u64,
+    execution: &ThreadExecution,
+) -> OperationReport {
+    let mut details = operation_report_details(&mut report);
+    let mut extraction = Map::new();
+    extraction.insert("entries".to_string(), json!(entry_count));
+    extraction.insert("files".to_string(), json!(file_count));
+    extraction.insert("written_bytes".to_string(), json!(written_bytes));
+    insert_thread_execution_details(&mut extraction, execution);
+    details.insert("extraction".to_string(), Value::Object(extraction));
+    report.details = Some(Value::Object(details));
+    report
+}
+
 #[path = "handlers/zip.rs"]
 mod zip;
+#[cfg(test)]
+pub(crate) use zip::zstd_threads_for_budget;
 pub(crate) use zip::{ZipContainerFlavor, ZipContainerHandler};
 
 #[path = "handlers/tar.rs"]

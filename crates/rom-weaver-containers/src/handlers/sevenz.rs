@@ -17,6 +17,7 @@ pub(crate) enum SevenZMethod {
 }
 
 impl SevenZContainerHandler {
+    const SUPPORTED_CODECS: &[&str] = &["lzma2"];
     const DEFAULT_CODEC_LEVEL: u32 = 6;
 
     pub(crate) const fn new(descriptor: &'static FormatDescriptor) -> Self {
@@ -39,21 +40,7 @@ impl SevenZContainerHandler {
         codec: Option<&str>,
         level: Option<i32>,
     ) -> Result<SevenZCodecSettings> {
-        match parse_requested_codec(codec) {
-            RequestedCodec::Unspecified | RequestedCodec::Known(CanonicalCodec::Lzma2) => {}
-            RequestedCodec::Known(codec) => {
-                return Err(RomWeaverError::Validation(format!(
-                    "unsupported 7z codec `{}`; supported codec is lzma2",
-                    codec.name()
-                )));
-            }
-            RequestedCodec::Unknown(name) => {
-                return Err(RomWeaverError::Validation(format!(
-                    "unsupported 7z codec `{name}`; supported codec is lzma2"
-                )));
-            }
-        }
-
+        let _ = resolve_create_codec(self.descriptor.name, codec, Self::SUPPORTED_CODECS, "lzma2")?;
         let level = Self::parse_level(level)?;
         let level = level.unwrap_or(Self::DEFAULT_CODEC_LEVEL);
         Ok(SevenZCodecSettings {
@@ -127,18 +114,6 @@ fn lzma2_achievable_blocks(total_bytes: u64) -> usize {
         return 1;
     }
     usize::try_from(total_bytes.div_ceil(LZMA2_MT_MIN_CHUNK_BYTES).max(1)).unwrap_or(usize::MAX)
-}
-
-fn sum_input_file_bytes(entries: &[ArchiveInputEntry]) -> u64 {
-    let mut total = 0u64;
-    for entry in entries {
-        if !entry.is_dir
-            && let Ok(metadata) = std::fs::metadata(&entry.source)
-        {
-            total = total.saturating_add(metadata.len());
-        }
-    }
-    total
 }
 
 /// liblzma preset dictionary size for a 0..=9 level (matches `lzma_lzma_preset`).
@@ -284,12 +259,11 @@ impl ContainerHandlerOperations for SevenZContainerHandler {
         let achievable = lzma2_achievable_blocks(total_bytes)
             .min(lzma2_memory_thread_cap(total_bytes, settings.level))
             .max(1);
-        let execution =
-            context.plan_threads(ThreadCapability::parallel(Some(achievable)));
+        let execution = context.plan_threads(ThreadCapability::parallel(Some(achievable)));
         let logical_bytes =
             self.create_with_libarchive(request, &entries, &settings, &execution, context)?;
 
-        Ok(OperationReport::succeeded(
+        let report = OperationReport::succeeded(
             OperationFamily::Container,
             Some(self.descriptor.name.to_string()),
             "create",
@@ -301,7 +275,14 @@ impl ContainerHandlerOperations for SevenZContainerHandler {
                 logical_bytes
             ),
             Some(100.0),
-            Some(execution),
+            Some(execution.clone()),
+        );
+        Ok(attach_compression_details(
+            report,
+            Self::method_name(settings.method),
+            Some(settings.level as i32),
+            logical_bytes,
+            &execution,
         ))
     }
 }

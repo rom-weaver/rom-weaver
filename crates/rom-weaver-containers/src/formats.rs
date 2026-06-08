@@ -431,10 +431,7 @@ impl ContainerHandlerOperations for RegisteredContainerHandler {
         context: &rom_weaver_core::OperationContext,
     ) -> Result<OperationReport> {
         if !self.registration.capabilities.create {
-            return Err(RomWeaverError::Unsupported(format!(
-                "{} is extract-only; supported create formats are 7z, zip, chd, rvz, and z3ds",
-                request.format
-            )));
+            return Err(extract_only_create_error(&request.format));
         }
         self.inner.create(request, context)
     }
@@ -445,10 +442,7 @@ impl ContainerHandlerOperations for RegisteredContainerHandler {
         context: &rom_weaver_core::OperationContext,
     ) -> Result<u64> {
         if !self.registration.capabilities.create {
-            return Err(RomWeaverError::Unsupported(format!(
-                "{} is extract-only; supported create formats are 7z, zip, chd, rvz, and z3ds",
-                request.format
-            )));
+            return Err(extract_only_create_error(&request.format));
         }
         self.inner.create_dry_run_size(request, context)
     }
@@ -633,6 +627,29 @@ pub fn container_format_metadata() -> Vec<ContainerFormatMetadata> {
         .iter()
         .map(ContainerFormatRegistration::metadata)
         .collect()
+}
+
+pub fn supported_create_format_names() -> Vec<&'static str> {
+    CONTAINER_FORMAT_REGISTRY
+        .iter()
+        .filter(|registration| registration.capabilities.create)
+        .map(|registration| registration.descriptor.name)
+        .collect()
+}
+
+pub fn supported_create_formats_text() -> String {
+    supported_create_format_names().join(", ")
+}
+
+pub fn extract_only_create_validation_message(format_name: &str) -> String {
+    format!(
+        "{format_name} is extract-only; supported create formats are {}",
+        supported_create_formats_text()
+    )
+}
+
+pub fn extract_only_create_error(format_name: &str) -> RomWeaverError {
+    RomWeaverError::Unsupported(extract_only_create_validation_message(format_name))
 }
 
 pub struct ContainerRegistry {

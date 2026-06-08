@@ -298,6 +298,8 @@ thread_local! {
 }
 
 impl Z3dsContainerHandler {
+    const SUPPORTED_CODECS: &[&str] = &["zstd"];
+
     fn align_16(size: usize) -> usize {
         let rem = size % 16;
         if rem == 0 { size } else { size + (16 - rem) }
@@ -379,18 +381,9 @@ impl Z3dsContainerHandler {
             )));
         }
 
-        match parse_requested_codec(codec) {
-            RequestedCodec::Unspecified | RequestedCodec::Known(CanonicalCodec::Zstd) => Ok(level),
-            RequestedCodec::Known(CanonicalCodec::Store) => Err(RomWeaverError::Validation(
-                "z3ds does not support uncompressed output; use zstd".into(),
-            )),
-            RequestedCodec::Known(codec) => Err(RomWeaverError::Validation(format!(
-                "unsupported z3ds codec `{}`; supported codec is zstd",
-                codec.name()
-            ))),
-            RequestedCodec::Unknown(name) => Err(RomWeaverError::Validation(format!(
-                "unsupported z3ds codec `{name}`; supported codec is zstd"
-            ))),
+        match resolve_create_codec(Z3DS.name, codec, Self::SUPPORTED_CODECS, "zstd")? {
+            "zstd" => Ok(level),
+            _ => unreachable!("validated z3ds create codec"),
         }
     }
 
@@ -981,8 +974,9 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
                 header.uncompressed_size
             ),
             Some(100.0),
-            Some(execution),
+            Some(execution.clone()),
         );
+        let report = attach_extraction_details(report, 1, 1, header.uncompressed_size, &execution);
         Ok(attach_extract_checksum_details(report, output_checksums))
     }
 
@@ -1164,7 +1158,7 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
             return Err(error);
         }
 
-        Ok(OperationReport::succeeded(
+        let report = OperationReport::succeeded(
             OperationFamily::Container,
             Some(Z3DS.name.to_string()),
             "create",
@@ -1178,7 +1172,14 @@ impl ContainerHandlerOperations for Z3dsContainerHandler {
                 totals.frame_count
             ),
             Some(100.0),
-            Some(execution),
+            Some(execution.clone()),
+        );
+        Ok(attach_compression_details(
+            report,
+            "zstd",
+            Some(level),
+            header.uncompressed_size,
+            &execution,
         ))
     }
 }

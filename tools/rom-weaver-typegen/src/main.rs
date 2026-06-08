@@ -4,7 +4,7 @@ use rom_weaver_app::{
     BatchHeaderFixerCommand, ChecksumCommand, Commands, CompressCommand, CompressionLevelProfile,
     ExtractCommand, ListCommand, PatchApplyCommand, PatchCommands, PatchCreateCandidatesCommand,
     PatchCreateCommand, PatchValidateCommand, ProbeCommand, RomWeaverRunOutputOptions,
-    RomWeaverRunRequest, TrimCommand, patch_create_format_policy_metadata,
+    RomWeaverRunRequest, TrimCommand, compression_metadata, patch_create_format_policy_metadata,
 };
 use rom_weaver_containers::{
     ContainerDefaultOutputMetadata, ContainerFormatMetadata, ContainerOutputExtensionStrategy,
@@ -174,12 +174,16 @@ fn export_decl<T: TS>(config: &ts_rs::Config) -> String {
 
 fn render_metadata() -> String {
     format!(
-        "{METADATA_HEADER}{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n",
+        "{METADATA_HEADER}{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n",
         render_ts_const(
             "ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY",
             create_patch_format_policy_value()
         ),
         render_ts_const("ROM_WEAVER_PATCH_FORMATS", patch_formats_value()),
+        render_ts_const(
+            "ROM_WEAVER_COMPRESSION_METADATA",
+            compression_metadata_value()
+        ),
         render_ts_const("ROM_WEAVER_FILE_FILTERS", file_filters_value()),
         render_ts_const("ROM_WEAVER_CONTAINER_FORMATS", container_formats_value()),
         render_ts_const(
@@ -190,7 +194,7 @@ fn render_metadata() -> String {
             "ROM_WEAVER_CREATE_CONTAINER_FORMATS",
             create_container_formats_value()
         ),
-        "export const ROM_WEAVER_FORMAT_METADATA = {\n  containerFormatAliases: ROM_WEAVER_CONTAINER_FORMAT_ALIASES,\n  containerFormats: ROM_WEAVER_CONTAINER_FORMATS,\n  createContainerFormats: ROM_WEAVER_CREATE_CONTAINER_FORMATS,\n  createPatchFormatPolicy: ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY,\n  fileFilters: ROM_WEAVER_FILE_FILTERS,\n  patchFormats: ROM_WEAVER_PATCH_FORMATS,\n} as const;",
+        "export const ROM_WEAVER_FORMAT_METADATA = {\n  compression: ROM_WEAVER_COMPRESSION_METADATA,\n  containerFormatAliases: ROM_WEAVER_CONTAINER_FORMAT_ALIASES,\n  containerFormats: ROM_WEAVER_CONTAINER_FORMATS,\n  createContainerFormats: ROM_WEAVER_CREATE_CONTAINER_FORMATS,\n  createPatchFormatPolicy: ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY,\n  fileFilters: ROM_WEAVER_FILE_FILTERS,\n  patchFormats: ROM_WEAVER_PATCH_FORMATS,\n} as const;",
     )
 }
 
@@ -353,6 +357,62 @@ fn file_filters_value() -> Value {
         "containerExtensions": CONTAINER_FILTER_FILE_EXTENSIONS,
         "patchExtensions": PATCH_FILTER_FILE_EXTENSIONS,
         "romExtensions": ROM_FILTER_FILE_EXTENSIONS,
+    })
+}
+
+fn compression_metadata_value() -> Value {
+    let metadata = compression_metadata();
+    let mut codecs = Map::new();
+    for codec in metadata.codecs {
+        codecs.insert(
+            codec.name.to_string(),
+            json!({
+                "aliases": codec.aliases,
+                "level": codec
+                    .level
+                    .map(|level| json!({ "min": level.min, "max": level.max }))
+                    .unwrap_or(Value::Null),
+                "profileKind": codec.profile_kind,
+            }),
+        );
+    }
+
+    let mut codec_fields = Map::new();
+    for field in metadata.codec_fields {
+        codec_fields.insert(
+            field.name.to_string(),
+            json!({
+                "allowMultiple": field.allow_multiple,
+                "codecs": field.codecs,
+                "defaultCodec": field.default_codec,
+                "defaultCodecs": field.default_codecs,
+            }),
+        );
+    }
+
+    json!({
+        "codecFields": Value::Object(codec_fields),
+        "codecs": Value::Object(codecs),
+        "defaults": {
+            "chdCreateCdCodecs": metadata.defaults.chd_create_cd_codecs,
+            "chdCreateDvdCodecs": metadata.defaults.chd_create_dvd_codecs,
+            "rvzBlockSize": metadata.defaults.rvz_block_size,
+            "rvzCodec": metadata.defaults.rvz_codec,
+            "rvzCompressionLevel": metadata.defaults.rvz_compression_level,
+            "sevenZipCodec": metadata.defaults.seven_zip_codec,
+            "zipCodec": metadata.defaults.zip_codec,
+            "z3dsCodec": metadata.defaults.z3ds_codec,
+        },
+        "profiles": metadata
+            .profiles
+            .iter()
+            .map(|profile| json!({
+                "label": profile.label,
+                "name": profile.name,
+                "standardLevel": profile.standard_level,
+                "zstdLevel": profile.zstd_level,
+            }))
+            .collect::<Vec<_>>(),
     })
 }
 

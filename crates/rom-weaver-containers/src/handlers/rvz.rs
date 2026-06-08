@@ -8,6 +8,8 @@ const RVZ_INITIAL_EXTRACT_PROGRESS_MAX_PERCENT: f32 = 0.1;
 pub(crate) struct RvzContainerHandler;
 
 impl RvzContainerHandler {
+    const SUPPORTED_CODECS: &[&str] = &["zstd"];
+
     pub(crate) fn extract_read_buffer_size(
         default_buffer_size: usize,
         total_bytes: u64,
@@ -186,8 +188,9 @@ impl RvzContainerHandler {
         codec: Option<&str>,
         level: Option<i32>,
     ) -> Result<NodCompression> {
-        match parse_requested_codec(codec) {
-            RequestedCodec::Unspecified => {
+        let explicit_codec = codec.map(str::trim).is_some_and(|codec| !codec.is_empty());
+        match resolve_create_codec(RVZ.name, codec, Self::SUPPORTED_CODECS, "zstd")? {
+            "zstd" if !explicit_codec => {
                 let mut compression = NodFormat::Rvz.default_compression();
                 if let Some(level) = level {
                     compression =
@@ -195,15 +198,10 @@ impl RvzContainerHandler {
                 }
                 Ok(compression)
             }
-            RequestedCodec::Known(CanonicalCodec::Zstd) => Ok(NodCompression::Zstandard(
+            "zstd" => Ok(NodCompression::Zstandard(
                 RVZ_NOD_CORE.validate_i8_level("zstd", level.unwrap_or(0))?,
             )),
-            RequestedCodec::Known(codec) => {
-                Err(RVZ_NOD_CORE.unsupported_codec_error(codec.name(), "supported codec is zstd"))
-            }
-            RequestedCodec::Unknown(name) => {
-                Err(RVZ_NOD_CORE.unsupported_codec_error(&name, "supported codec is zstd"))
-            }
+            _ => unreachable!("validated rvz create codec"),
         }
     }
 }
@@ -303,6 +301,12 @@ impl ContainerHandlerOperations for RvzContainerHandler {
             compression,
             block_size: NodFormat::Rvz.default_block_size(),
         };
+        let input_bytes = fs::metadata(input)?.len();
+        let compression_label = normalize_codec_label(&options.compression.to_string());
+        let compression_level = match &options.compression {
+            NodCompression::Zstandard(level) => Some(i32::from(*level)),
+            _ => None,
+        };
 
         RVZ_NOD_CORE.ensure_create_output_parent(&request.output)?;
 
@@ -329,7 +333,7 @@ impl ContainerHandlerOperations for RvzContainerHandler {
             },
         )?;
 
-        Ok(OperationReport::succeeded(
+        let report = OperationReport::succeeded(
             OperationFamily::Container,
             Some(RVZ.name.to_string()),
             "create",
@@ -337,12 +341,19 @@ impl ContainerHandlerOperations for RvzContainerHandler {
                 "created rvz `{}` from `{}` (codec={}, block={} bytes, {} bytes)",
                 request.output.display(),
                 input.display(),
-                normalize_codec_label(&options.compression.to_string()),
+                compression_label,
                 options.block_size,
                 output_bytes
             ),
             Some(100.0),
-            Some(execution),
+            Some(execution.clone()),
+        );
+        Ok(attach_compression_details(
+            report,
+            compression_label,
+            compression_level,
+            input_bytes,
+            &execution,
         ))
     }
 

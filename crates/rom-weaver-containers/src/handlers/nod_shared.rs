@@ -552,17 +552,6 @@ impl NodHandlerCore {
             ))
         })
     }
-
-    pub(crate) fn unsupported_codec_error(
-        &self,
-        codec_name: &str,
-        supported_clause: &str,
-    ) -> RomWeaverError {
-        RomWeaverError::Validation(format!(
-            "unsupported {} codec `{codec_name}`; {supported_clause}",
-            self.format_name()
-        ))
-    }
 }
 /* jscpd:ignore-end */
 
