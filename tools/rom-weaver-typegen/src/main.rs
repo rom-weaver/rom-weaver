@@ -15,6 +15,7 @@ use rom_weaver_core::{
     PATCH_FILTER_FILE_EXTENSIONS, ProgressEvent, ROM_FILTER_FILE_EXTENSIONS, ThreadBudget,
     ThreadExecution, ThreadMode,
 };
+use rom_weaver_patches::PatchRegistry;
 use serde_json::{Map, Value, json};
 use ts_rs::TS;
 
@@ -173,11 +174,12 @@ fn export_decl<T: TS>(config: &ts_rs::Config) -> String {
 
 fn render_metadata() -> String {
     format!(
-        "{METADATA_HEADER}{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n",
+        "{METADATA_HEADER}{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n",
         render_ts_const(
             "ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY",
             create_patch_format_policy_value()
         ),
+        render_ts_const("ROM_WEAVER_PATCH_FORMATS", patch_formats_value()),
         render_ts_const("ROM_WEAVER_FILE_FILTERS", file_filters_value()),
         render_ts_const("ROM_WEAVER_CONTAINER_FORMATS", container_formats_value()),
         render_ts_const(
@@ -188,7 +190,7 @@ fn render_metadata() -> String {
             "ROM_WEAVER_CREATE_CONTAINER_FORMATS",
             create_container_formats_value()
         ),
-        "export const ROM_WEAVER_FORMAT_METADATA = {\n  containerFormatAliases: ROM_WEAVER_CONTAINER_FORMAT_ALIASES,\n  containerFormats: ROM_WEAVER_CONTAINER_FORMATS,\n  createContainerFormats: ROM_WEAVER_CREATE_CONTAINER_FORMATS,\n  createPatchFormatPolicy: ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY,\n  fileFilters: ROM_WEAVER_FILE_FILTERS,\n} as const;",
+        "export const ROM_WEAVER_FORMAT_METADATA = {\n  containerFormatAliases: ROM_WEAVER_CONTAINER_FORMAT_ALIASES,\n  containerFormats: ROM_WEAVER_CONTAINER_FORMATS,\n  createContainerFormats: ROM_WEAVER_CREATE_CONTAINER_FORMATS,\n  createPatchFormatPolicy: ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY,\n  fileFilters: ROM_WEAVER_FILE_FILTERS,\n  patchFormats: ROM_WEAVER_PATCH_FORMATS,\n} as const;",
     )
 }
 
@@ -298,6 +300,52 @@ fn create_patch_format_policy_value() -> Value {
             metadata.large_formats,
         ]),
     })
+}
+
+fn patch_formats_value() -> Value {
+    Value::Array(
+        PatchRegistry::new()
+            .handlers()
+            .iter()
+            .map(|handler| {
+                let descriptor = handler.descriptor();
+                let capabilities = handler.capabilities();
+                json!({
+                    "aliases": descriptor.aliases,
+                    "capabilities": {
+                        "apply": capabilities.apply,
+                        "create": capabilities.create,
+                        "parse": capabilities.parse,
+                        "threadedDiff": capabilities.threaded_diff,
+                        "threadedOutput": capabilities.threaded_output,
+                        "threadedScan": capabilities.threaded_scan,
+                    },
+                    "extensions": descriptor.extensions,
+                    "label": descriptor.name,
+                    "name": patch_format_command_name(descriptor.name, descriptor.aliases),
+                })
+            })
+            .collect(),
+    )
+}
+
+fn patch_format_command_name(name: &str, aliases: &[&str]) -> String {
+    let normalized_name = name.trim().to_ascii_lowercase();
+    if is_patch_command_token(&normalized_name) {
+        return normalized_name;
+    }
+    aliases
+        .iter()
+        .map(|alias| alias.trim().to_ascii_lowercase())
+        .find(|alias| is_patch_command_token(alias))
+        .unwrap_or(normalized_name)
+}
+
+fn is_patch_command_token(value: &str) -> bool {
+    !value.is_empty()
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
 }
 
 fn file_filters_value() -> Value {

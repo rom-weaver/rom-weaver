@@ -70,6 +70,381 @@ export const ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY = {
   ]
 } as const;
 
+export const ROM_WEAVER_PATCH_FORMATS = [
+  {
+    "aliases": [],
+    "capabilities": {
+      "apply": true,
+      "create": true,
+      "parse": true,
+      "threadedDiff": true,
+      "threadedOutput": true,
+      "threadedScan": false
+    },
+    "extensions": [
+      ".ips"
+    ],
+    "label": "IPS",
+    "name": "ips"
+  },
+  {
+    "aliases": [],
+    "capabilities": {
+      "apply": true,
+      "create": true,
+      "parse": true,
+      "threadedDiff": true,
+      "threadedOutput": true,
+      "threadedScan": false
+    },
+    "extensions": [
+      ".ips32"
+    ],
+    "label": "IPS32",
+    "name": "ips32"
+  },
+  {
+    "aliases": [
+      "solidpatch",
+      "solid-patch"
+    ],
+    "capabilities": {
+      "apply": true,
+      "create": true,
+      "parse": true,
+      "threadedDiff": true,
+      "threadedOutput": true,
+      "threadedScan": false
+    },
+    "extensions": [
+      ".solid"
+    ],
+    "label": "SOLID",
+    "name": "solid"
+  },
+  {
+    "aliases": [],
+    "capabilities": {
+      "apply": true,
+      "create": true,
+      "parse": true,
+      "threadedDiff": false,
+      "threadedOutput": true,
+      "threadedScan": false
+    },
+    "extensions": [
+      ".bps"
+    ],
+    "label": "BPS",
+    "name": "bps"
+  },
+  {
+    "aliases": [],
+    "capabilities": {
+      "apply": true,
+      "create": true,
+      "parse": true,
+      "threadedDiff": true,
+      "threadedOutput": true,
+      "threadedScan": false
+    },
+    "extensions": [
+      ".ups"
+    ],
+    "label": "UPS",
+    "name": "ups"
+  },
+  {
+    "aliases": [
+      "vcdiff"
+    ],
+    "capabilities": {
+      "apply": true,
+      "create": true,
+      "parse": true,
+      "threadedDiff": true,
+      "threadedOutput": true,
+      "threadedScan": false
+    },
+    "extensions": [
+      ".vcdiff"
+    ],
+    "label": "VCDIFF",
+    "name": "vcdiff"
+  },
+  {
+    "aliases": [
+      "xdelta3"
+    ],
+    "capabilities": {
+      "apply": true,
+      "create": true,
+      "parse": true,
+      "threadedDiff": true,
+      "threadedOutput": true,
+      "threadedScan": false
+    },
+    "extensions": [
+      ".xdelta",
+      ".delta",
+      ".dat"
+    ],
+    "label": "xdelta",
+    "name": "xdelta"
+  },
+  {
+    "aliases": [
+      "gdiff"
+    ],
+    "capabilities": {
+      "apply": true,
+      "create": true,
+      "parse": true,
+      "threadedDiff": true,
+      "threadedOutput": true,
+      "threadedScan": false
+    },
+    "extensions": [
+      ".gdiff",
+      ".gdf"
+    ],
+    "label": "GDIFF",
+    "name": "gdiff"
+  },
+  {
+    "aliases": [
+      "hdiffpatch",
+      "hpatchz",
+      "hdiff",
+      "hpatch"
+    ],
+    "capabilities": {
+      "apply": true,
+      "create": false,
+      "parse": true,
+      "threadedDiff": false,
+      "threadedOutput": true,
+      "threadedScan": false
+    },
+    "extensions": [
+      ".hdiff",
+      ".hpatchz"
+    ],
+    "label": "HDiffPatch/HPatchZ",
+    "name": "hdiffpatch"
+  },
+  {
+    "aliases": [],
+    "capabilities": {
+      "apply": true,
+      "create": true,
+      "parse": true,
+      "threadedDiff": true,
+      "threadedOutput": true,
+      "threadedScan": false
+    },
+    "extensions": [
+      ".aps"
+    ],
+    "label": "APS",
+    "name": "aps"
+  },
+  {
+    "aliases": [
+      "aps-gba"
+    ],
+    "capabilities": {
+      "apply": true,
+      "create": true,
+      "parse": true,
+      "threadedDiff": true,
+      "threadedOutput": true,
+      "threadedScan": false
+    },
+    "extensions": [
+      ".apsgba"
+    ],
+    "label": "APSGBA",
+    "name": "apsgba"
+  },
+  {
+    "aliases": [
+      "ninja1"
+    ],
+    "capabilities": {
+      "apply": false,
+      "create": false,
+      "parse": false,
+      "threadedDiff": false,
+      "threadedOutput": false,
+      "threadedScan": false
+    },
+    "extensions": [],
+    "label": "NINJA1",
+    "name": "ninja1"
+  },
+  {
+    "aliases": [],
+    "capabilities": {
+      "apply": true,
+      "create": true,
+      "parse": true,
+      "threadedDiff": true,
+      "threadedOutput": true,
+      "threadedScan": false
+    },
+    "extensions": [
+      ".rup"
+    ],
+    "label": "RUP",
+    "name": "rup"
+  },
+  {
+    "aliases": [],
+    "capabilities": {
+      "apply": true,
+      "create": true,
+      "parse": true,
+      "threadedDiff": true,
+      "threadedOutput": true,
+      "threadedScan": false
+    },
+    "extensions": [
+      ".ppf"
+    ],
+    "label": "PPF",
+    "name": "ppf"
+  },
+  {
+    "aliases": [
+      "ffp",
+      "fireflower"
+    ],
+    "capabilities": {
+      "apply": true,
+      "create": true,
+      "parse": true,
+      "threadedDiff": true,
+      "threadedOutput": true,
+      "threadedScan": false
+    },
+    "extensions": [
+      ".pat",
+      ".ffp"
+    ],
+    "label": "PAT",
+    "name": "pat"
+  },
+  {
+    "aliases": [],
+    "capabilities": {
+      "apply": true,
+      "create": true,
+      "parse": true,
+      "threadedDiff": true,
+      "threadedOutput": true,
+      "threadedScan": false
+    },
+    "extensions": [
+      ".ebp"
+    ],
+    "label": "EBP",
+    "name": "ebp"
+  },
+  {
+    "aliases": [
+      "bdf",
+      "bsdiff",
+      "bsdiff40"
+    ],
+    "capabilities": {
+      "apply": true,
+      "create": true,
+      "parse": true,
+      "threadedDiff": true,
+      "threadedOutput": true,
+      "threadedScan": false
+    },
+    "extensions": [
+      ".bdf",
+      ".bsdiff",
+      ".bsdiff40"
+    ],
+    "label": "BDF/BSDIFF40",
+    "name": "bdf"
+  },
+  {
+    "aliases": [
+      "bspatch"
+    ],
+    "capabilities": {
+      "apply": true,
+      "create": false,
+      "parse": true,
+      "threadedDiff": false,
+      "threadedOutput": true,
+      "threadedScan": false
+    },
+    "extensions": [
+      ".bsp",
+      ".bspatch"
+    ],
+    "label": "BSP",
+    "name": "bsp"
+  },
+  {
+    "aliases": [
+      "pmsr"
+    ],
+    "capabilities": {
+      "apply": true,
+      "create": true,
+      "parse": true,
+      "threadedDiff": true,
+      "threadedOutput": true,
+      "threadedScan": false
+    },
+    "extensions": [
+      ".mod",
+      ".pmsr"
+    ],
+    "label": "MOD",
+    "name": "mod"
+  },
+  {
+    "aliases": [],
+    "capabilities": {
+      "apply": true,
+      "create": true,
+      "parse": true,
+      "threadedDiff": true,
+      "threadedOutput": true,
+      "threadedScan": false
+    },
+    "extensions": [
+      ".dldi"
+    ],
+    "label": "DLDI",
+    "name": "dldi"
+  },
+  {
+    "aliases": [],
+    "capabilities": {
+      "apply": true,
+      "create": true,
+      "parse": true,
+      "threadedDiff": true,
+      "threadedOutput": true,
+      "threadedScan": false
+    },
+    "extensions": [
+      ".dps"
+    ],
+    "label": "DPS",
+    "name": "dps"
+  }
+] as const;
+
 export const ROM_WEAVER_FILE_FILTERS = {
   "containerExtensions": [
     ".zip",
@@ -876,4 +1251,5 @@ export const ROM_WEAVER_FORMAT_METADATA = {
   createContainerFormats: ROM_WEAVER_CREATE_CONTAINER_FORMATS,
   createPatchFormatPolicy: ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY,
   fileFilters: ROM_WEAVER_FILE_FILTERS,
+  patchFormats: ROM_WEAVER_PATCH_FORMATS,
 } as const;

@@ -20,45 +20,104 @@ type WorkerProgressCallback = (progress: WorkerProgressEvent) => void;
 
 type PatchFileEntry = WorkflowPatchFileEntry<BrowserWorkerFile>;
 
-type WorkerRequestData = WorkerRuntimeRecord & {
-  action: string;
-  archiveEntryName?: string;
-  archiveFileName?: string;
-  chdFile?: BrowserWorkerFile;
-  chdFileName?: string;
-  chdFilePath?: string;
-  chdCreateMode?: string;
-  chdInputFileName?: string;
-  chdMode?: string;
-  chdOutputFileName?: string;
-  compressionCodecs?: string | string[] | Record<string, string | number> | null;
-  fileName?: string;
-  filePaths?: string[];
-  imageFile?: BrowserWorkerFile;
-  imageFilePath?: string;
-  imageFiles?: Array<{ file?: BrowserWorkerFile; fileName?: string; filePath?: string }>;
-  kind?: CompressionWorkerKind;
+type WorkerRequestBase<TAction extends string> = {
+  action: TAction;
   logLevel?: string;
-  format?: string;
-  metadata?: Record<string, WorkerRuntimeValue>;
-  mode?: string;
-  modifiedFile?: BrowserWorkerFile;
-  modifiedFileName?: string;
-  modifiedFilePath?: string;
-  options?: Record<string, WorkerRuntimeValue>;
-  originalFile?: BrowserWorkerFile;
-  originalFileName?: string;
-  originalFilePath?: string;
-  operation?: CompressionWorkerOperation;
-  outputName?: string;
+  requestId: WorkerRequestId;
+  workerKind: WorkerKind;
+};
+
+type WorkerRequestOptions = Record<string, WorkerRuntimeValue>;
+type WorkerRequestMetadata = Record<string, WorkerRuntimeValue>;
+type WorkerRomSpecificMetadata = Record<string, string | number | boolean | Uint8Array | null | undefined>;
+type WorkerCodecSelection = string | string[] | Record<string, string | number> | null;
+type WorkerImageFileEntry = {
+  file?: BrowserWorkerFile;
+  fileName?: string;
+  filePath?: string;
+};
+
+type WorkerPatchApplyRequestData = WorkerRequestBase<"apply"> & {
+  options?: WorkerRequestOptions;
   patchFile?: BrowserWorkerFile;
   patchFileName?: string;
   patchFilePath?: string;
-  patchFiles?: PatchFileEntry[];
-  requestId: WorkerRequestId;
+  patchFiles: PatchFileEntry[];
   romFile?: BrowserWorkerFile;
-  romFilePath?: string;
   romFileName?: string;
+  romFilePath: string;
+};
+
+type WorkerPatchValidateRequestData = WorkerRequestBase<"validate-patch"> & {
+  options?: WorkerRequestOptions;
+  patchFiles: PatchFileEntry[];
+  romFileName?: string;
+  romFilePath: string;
+};
+
+type WorkerPatchParseRequestData = WorkerRequestBase<"parse-patch"> & {
+  patchFile?: BrowserWorkerFile;
+  patchFileName?: string;
+  patchFilePath: string;
+};
+
+type WorkerPatchCreateCandidatesRequestData = WorkerRequestBase<"create-patch-candidates"> & {
+  modifiedFile?: BrowserWorkerFile;
+  modifiedFileName: string;
+  modifiedFilePath: string;
+  originalFile?: BrowserWorkerFile;
+  originalFileName: string;
+  originalFilePath: string;
+  workerThreads?: string | number | null;
+};
+
+type WorkerPatchCreateRequestData = WorkerRequestBase<"create-patch"> & {
+  format: string;
+  metadata?: WorkerRequestMetadata;
+  modifiedFile?: BrowserWorkerFile;
+  modifiedFileName: string;
+  modifiedFilePath: string;
+  originalFile?: BrowserWorkerFile;
+  originalFileName: string;
+  originalFilePath: string;
+  outputName: string;
+  workerThreads?: string | number | null;
+};
+
+type WorkerChecksumRequestData = WorkerRequestBase<"checksum"> & {
+  checksumAlgorithms: string[];
+  checksumStartOffset?: number;
+  fileName?: string;
+  filePath: string;
+  fileSize?: number;
+};
+
+type WorkerCompressionRequestBase<
+  TAction extends "create" | "extract" | "list" | "warmup",
+  TOperation extends CompressionWorkerOperation,
+> = WorkerRequestBase<TAction> & {
+  kind: CompressionWorkerKind;
+  operation: TOperation;
+};
+
+type WorkerCompressionCreateRequestData = WorkerCompressionRequestBase<"create", "create"> & {
+  chdCreateMode?: string;
+  chdFile?: BrowserWorkerFile;
+  chdFileName?: string;
+  chdFilePath?: string;
+  chdInputFileName?: string;
+  chdMode?: string;
+  chdOutputFileName?: string;
+  compressionCodecs?: WorkerCodecSelection;
+  fileName?: string;
+  filePaths: string[];
+  format: string;
+  imageFile?: BrowserWorkerFile;
+  imageFilePath?: string;
+  imageFiles?: WorkerImageFileEntry[];
+  metadata?: WorkerRequestMetadata;
+  mode?: string;
+  outputName: string;
   rvzBlockSize?: string | number | null;
   rvzCompression?: string;
   rvzCompressionLevel?: string | number | null;
@@ -70,15 +129,79 @@ type WorkerRequestData = WorkerRuntimeRecord & {
   rvzSourceFileName?: string;
   threads?: string | number | null;
   workerThreads?: string | number | null;
-  workerKind: WorkerKind;
   z3dsCompressionLevel?: string | number | null;
   z3dsFile?: BrowserWorkerFile;
   z3dsFileName?: string;
   z3dsFilePath?: string;
-  z3dsMetadata?: Record<string, string | number | boolean | Uint8Array | null | undefined> | null;
+  z3dsMetadata?: WorkerRomSpecificMetadata | null;
   z3dsSourceFileName?: string;
   z3dsUnderlyingMagic?: string;
 };
+
+type WorkerCompressionExtractRequestData = WorkerCompressionRequestBase<"extract", "extract"> & {
+  archiveEntryName?: string;
+  archiveFileName?: string;
+  chdFile?: BrowserWorkerFile;
+  chdFileName?: string;
+  chdFilePath?: string;
+  chdMode?: string;
+  fileName?: string;
+  filePaths?: string[];
+  outputName?: string;
+  rvzFile?: BrowserWorkerFile;
+  rvzFileName?: string;
+  rvzFilePath?: string;
+  rvzMode?: string;
+  threads?: string | number | null;
+  workerThreads?: string | number | null;
+  z3dsFile?: BrowserWorkerFile;
+  z3dsFileName?: string;
+  z3dsFilePath?: string;
+};
+
+type WorkerCompressionListRequestData = WorkerCompressionRequestBase<"list", "list"> & {
+  archiveFileName?: string;
+  chdFile?: BrowserWorkerFile;
+  chdFileName?: string;
+  chdFilePath?: string;
+  fileName?: string;
+  filePaths?: string[];
+  rvzFile?: BrowserWorkerFile;
+  rvzFileName?: string;
+  rvzFilePath?: string;
+  z3dsFile?: BrowserWorkerFile;
+  z3dsFileName?: string;
+  z3dsFilePath?: string;
+};
+
+type WorkerCompressionWarmupRequestData = WorkerCompressionRequestBase<"warmup", "warmup"> & {
+  workerThreads?: string | number | null;
+};
+
+type WorkerCleanupRequestData = WorkerRequestBase<"cleanup"> & {
+  filePaths: string[];
+};
+
+type WorkerTrimRequestData = WorkerRequestBase<"trim"> & {
+  fileName?: string;
+  filePath: string;
+  outputName?: string;
+  workerThreads?: string | number | null;
+};
+
+type WorkerRequestData =
+  | WorkerChecksumRequestData
+  | WorkerCleanupRequestData
+  | WorkerCompressionCreateRequestData
+  | WorkerCompressionExtractRequestData
+  | WorkerCompressionListRequestData
+  | WorkerCompressionWarmupRequestData
+  | WorkerPatchApplyRequestData
+  | WorkerPatchCreateCandidatesRequestData
+  | WorkerPatchCreateRequestData
+  | WorkerPatchParseRequestData
+  | WorkerPatchValidateRequestData
+  | WorkerTrimRequestData;
 
 type WorkerResultFile = WorkerRuntimeRecord & {
   _archiveEntryName?: string;

@@ -1868,6 +1868,7 @@ dependencies = [
  "rom-weaver-app",
  "rom-weaver-containers",
  "rom-weaver-core",
+ "rom-weaver-patches",
  "serde_json",
  "ts-rs",
 ]

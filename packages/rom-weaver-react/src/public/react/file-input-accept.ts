@@ -1,4 +1,4 @@
-import { SUPPORTED_ARCHIVE_EXTENSION_VALUES } from "../../lib/input/archive-type-utils.ts";
+import { ROM_WEAVER_FILE_FILTERS } from "rom-weaver-wasm/format-metadata";
 
 const SAFARI_USER_AGENT_REGEX = /Safari/;
 const CHROME_USER_AGENT_REGEX = /Chrome/;
@@ -10,28 +10,16 @@ type FileInputAcceptEnvironment = {
   platform?: string;
 };
 
-const PATCH_FILE_EXTENSIONS = [
-  "ips",
-  "ups",
-  "bps",
-  "aps",
-  "rup",
-  "ppf",
-  "ebp",
-  "bdf",
-  "bsp",
-  "bspatch",
-  "mod",
-  "xdelta",
-  "delta",
-  "dat",
-  "vcdiff",
-];
-const PATCH_INPUT_ACCEPT = [
+const stripLeadingExtensionDot = (extension: string) => extension.replace(/^\./, "");
+const unique = <TValue>(values: readonly TValue[]) => [...new Set(values)];
+
+const PATCH_FILE_EXTENSIONS = ROM_WEAVER_FILE_FILTERS.patchExtensions.map(stripLeadingExtensionDot);
+const PATCH_FILE_EXTENSION_VARIANTS = unique([
   ...PATCH_FILE_EXTENSIONS,
   ...PATCH_FILE_EXTENSIONS.map((extension) => `${extension}1`),
-  ...SUPPORTED_ARCHIVE_EXTENSION_VALUES,
-]
+]);
+const ARCHIVE_FILE_EXTENSIONS = ROM_WEAVER_FILE_FILTERS.containerExtensions.map(stripLeadingExtensionDot);
+const PATCH_INPUT_ACCEPT = [...PATCH_FILE_EXTENSION_VARIANTS, ...ARCHIVE_FILE_EXTENSIONS]
   .map((extension) => `.${extension}`)
   .join(",");
 
@@ -48,10 +36,9 @@ const FILE_ONLY_MIME_TYPES = [
   "application/x-xz",
   "application/zstd",
 ];
-const FILE_ONLY_ACCEPT = [
-  ...FILE_ONLY_MIME_TYPES,
-  ...SUPPORTED_ARCHIVE_EXTENSION_VALUES.map((extension) => `.${extension}`),
-].join(", ");
+const FILE_ONLY_ACCEPT = [...FILE_ONLY_MIME_TYPES, ...ARCHIVE_FILE_EXTENSIONS.map((extension) => `.${extension}`)].join(
+  ", ",
+);
 
 const getNavigatorAcceptEnvironment = (): FileInputAcceptEnvironment => {
   if (typeof navigator === "undefined") return {};

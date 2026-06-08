@@ -1,5 +1,10 @@
 import { createBrowserWorkerClient } from './workers/browser-worker-client.ts';
 import {
+  ROM_WEAVER_CONTAINER_FORMATS,
+  ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY,
+  ROM_WEAVER_PATCH_FORMATS,
+} from './generated/rom-weaver-format-metadata.ts';
+import {
   createRomWeaverCommand,
   getRomWeaverCommandLabel,
 } from './rom-weaver-command.ts';
@@ -98,6 +103,30 @@ const DEFAULT_HDIFF_FIXTURE_URLS = {
   source: new URL('../../../crates/rom-weaver-patches/tests/fixtures/hdiffpatch/source.bin', import.meta.url),
   target: new URL('../../../crates/rom-weaver-patches/tests/fixtures/hdiffpatch/target.bin', import.meta.url),
 };
+const PATCH_CREATE_FORMAT_ALIASES = ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.aliases as Readonly<Record<string, string>>;
+const CONTAINER_CREATE_SPECIAL_FAILURE_EXPECTATIONS = new Map<string, RegExp>([
+  ['rvz', /failed to open input/i],
+]);
+const BROWSER_FORMAT_MATRIX_CONTAINER_ROUND_TRIP_FORMATS = ROM_WEAVER_CONTAINER_FORMATS
+  .filter((format) => format.capabilities.create && !CONTAINER_CREATE_SPECIAL_FAILURE_EXPECTATIONS.has(format.name))
+  .map((format) => format.name);
+const CONTAINER_SUFFIX_BY_FORMAT: ReadonlyMap<string, string> = new Map(
+  ROM_WEAVER_CONTAINER_FORMATS.map((format) => [
+    format.name,
+    stripLeadingExtensionDot(format.extensions[0] ?? `.${format.name}`),
+  ]),
+);
+const PATCH_EXTENSION_BY_FORMAT = createPatchExtensionMap();
+export const BROWSER_FORMAT_MATRIX_PATCH_FORMATS = createBrowserFormatMatrixPatchFormats();
+
+export function getBrowserFormatMatrixMetadataCoverage() {
+  return {
+    containerCompressFailureFormats: Array.from(createContainerCompressFailureExpectations().keys()),
+    containerFormats: ROM_WEAVER_CONTAINER_FORMATS.map((format) => format.name),
+    containerRoundTripFormats: BROWSER_FORMAT_MATRIX_CONTAINER_ROUND_TRIP_FORMATS,
+    patchFormats: BROWSER_FORMAT_MATRIX_PATCH_FORMATS,
+  };
+}
 
 export async function runBrowserFullFormatMatrix(options: BrowserFormatMatrixOptions = {}) {
   const root = await navigator.storage.getDirectory();
@@ -169,12 +198,7 @@ export async function runBrowserFullFormatMatrixCore(input: BrowserFormatMatrixC
   archiveSource[archiveSource.length - 1] = 0;
   await writeGuestFile(opfsHandle, archiveSourcePath, archiveSource);
 
-  const containerRoundTripFormats = [
-    'zip',
-    '7z',
-    'chd',
-    'z3ds',
-  ];
+  const containerRoundTripFormats = BROWSER_FORMAT_MATRIX_CONTAINER_ROUND_TRIP_FORMATS;
   for (const format of containerRoundTripFormats) {
     const archivePath = joinGuestPath(dir, `roundtrip-${formatToken(format)}.${containerSuffix(format)}`);
     assertRunJsonSucceeded(
@@ -198,27 +222,7 @@ export async function runBrowserFullFormatMatrixCore(input: BrowserFormatMatrixC
     );
   }
 
-  const containerCompressFailureExpectations = new Map([
-    ['zipx', /extract-only/i],
-    ['rar', /extract-only/i],
-    ['tar', /extract-only/i],
-    ['tar.gz', /extract-only/i],
-    ['tar.bz2', /extract-only/i],
-    ['tar.xz', /extract-only/i],
-    ['gz', /extract-only/i],
-    ['bz2', /extract-only/i],
-    ['xz', /extract-only/i],
-    ['zst', /extract-only/i],
-    ['cso', /extract-only/i],
-    ['pbp', /extract-only/i],
-    ['gcz', /extract-only/i],
-    ['wbfs', /extract-only/i],
-    ['wia', /extract-only/i],
-    ['tgc', /extract-only/i],
-    ['nfs', /extract-only/i],
-    ['rvz', /failed to open input/i],
-    ['xiso', /extract-only/i],
-  ]);
+  const containerCompressFailureExpectations = createContainerCompressFailureExpectations();
   for (const [format, pattern] of containerCompressFailureExpectations.entries()) {
     const archivePath = joinGuestPath(dir, `compress-${formatToken(format)}.${containerSuffix(format)}`);
     const compressResult = await runCommand(`compress unsupported ${format}`, createRomWeaverCommand('compress', {
@@ -270,42 +274,21 @@ export async function runBrowserFullFormatMatrixCore(input: BrowserFormatMatrixC
   await writeGuestFile(opfsHandle, originalPath, original);
   await writeGuestFile(opfsHandle, modifiedPath, modified);
 
-  const patchFormats = [
-    'ips',
-    'ips32',
-    'solid',
-    'bps',
-    'ups',
-    'vcdiff',
-    'xdelta',
-    'gdiff',
-    'hdiffpatch',
-    'aps',
-    'apsgba',
-    'ninja1',
-    'rup',
-    'ppf',
-    'pat',
-    'ebp',
-    'bdf',
-    'bsp',
-    'mod',
-    'dldi',
-    'dps',
-  ];
+  const patchFormats = BROWSER_FORMAT_MATRIX_PATCH_FORMATS;
 
   const applyFailureExpectations = new Map([
     ['apsgba', /i\/o error: unsupported|source rom checksum mismatch|validation failed/i],
     ['ppf', /i\/o error: unsupported|source rom checksum mismatch|validation failed/i],
     ['pat', /i\/o error: unsupported|source rom checksum mismatch|validation failed/i],
-    ['mod', /i\/o error: unsupported|source rom checksum mismatch|validation failed/i],
+    ['pmsr', /i\/o error: unsupported|source rom checksum mismatch|validation failed/i],
     ['dps', /i\/o error: unsupported|source rom checksum mismatch|validation failed/i],
   ]);
-  const createUnsupportedExpectations = new Map([
+  const createUnsupportedExpectationPatterns = new Map([
     ['hdiffpatch', /creation is disabled/i],
     ['ninja1', /not currently supported/i],
     ['bsp', /creation is not implemented/i],
   ]);
+  const createUnsupportedExpectations = createPatchCreateUnsupportedExpectations(createUnsupportedExpectationPatterns);
   const createFailureExpectations = new Map([
     ['aps', /i\/o error: unsupported|validation failed/i],
     ['bdf', /i\/o error: unsupported|validation failed/i],
@@ -798,48 +781,81 @@ async function removeFixtureDirectory(rootHandle: FileSystemDirectoryHandle, dir
   }
 }
 
+function createContainerCompressFailureExpectations() {
+  const expectations = new Map<string, RegExp>();
+  for (const format of ROM_WEAVER_CONTAINER_FORMATS) {
+    if (BROWSER_FORMAT_MATRIX_CONTAINER_ROUND_TRIP_FORMATS.includes(format.name)) continue;
+    expectations.set(format.name, CONTAINER_CREATE_SPECIAL_FAILURE_EXPECTATIONS.get(format.name) ?? /extract-only/i);
+  }
+  return expectations;
+}
+
+function createBrowserFormatMatrixPatchFormats() {
+  const formats: string[] = [];
+  const seen = new Set<string>();
+  for (const format of ROM_WEAVER_PATCH_FORMATS) {
+    const normalized = normalizePatchCreateFormat(format.name);
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    formats.push(normalized);
+  }
+  return formats;
+}
+
+function createPatchCreateUnsupportedExpectations(patterns: ReadonlyMap<string, RegExp>) {
+  const expectations = new Map<string, RegExp>();
+  for (const format of ROM_WEAVER_PATCH_FORMATS) {
+    const normalized = normalizePatchCreateFormat(format.name);
+    if (format.capabilities.create || expectations.has(normalized)) continue;
+    const pattern = patterns.get(normalized);
+    assert(pattern, `missing patch-create unsupported expectation for ${normalized}`);
+    expectations.set(normalized, pattern);
+  }
+  return expectations;
+}
+
+function createPatchExtensionMap() {
+  const map = new Map<string, string>();
+  for (const format of ROM_WEAVER_PATCH_FORMATS) {
+    setPatchExtension(map, format.name, format.extensions);
+    for (const alias of format.aliases) setPatchExtension(map, alias, format.extensions);
+  }
+  for (const [alias, canonical] of Object.entries(PATCH_CREATE_FORMAT_ALIASES)) {
+    map.set(alias, map.get(canonical) ?? map.get(alias) ?? alias);
+  }
+  return map;
+}
+
+function setPatchExtension(map: Map<string, string>, format: string, extensions: readonly string[]) {
+  const normalized = normalizeFormatName(format);
+  if (!normalized || map.has(normalized)) return;
+  const matchingExtension = extensions.find((extension) => stripLeadingExtensionDot(extension) === normalized);
+  map.set(normalized, stripLeadingExtensionDot(matchingExtension ?? extensions[0] ?? `.${normalized}`));
+}
+
+function normalizeFormatName(value: string) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function normalizePatchCreateFormat(value: string) {
+  const normalized = normalizeFormatName(value);
+  return PATCH_CREATE_FORMAT_ALIASES[normalized] ?? normalized;
+}
+
+function stripLeadingExtensionDot(extension: string) {
+  return extension.replace(/^\./, '');
+}
+
 function formatToken(value: string) {
   return value.replace(/[^a-z0-9]+/gi, '-');
 }
 
 function containerSuffix(format: string) {
-  switch (format) {
-    case 'tar.gz':
-      return 'tar.gz';
-    case 'tar.bz2':
-      return 'tar.bz2';
-    case 'tar.xz':
-      return 'tar.xz';
-    default:
-      return format;
-  }
+  return CONTAINER_SUFFIX_BY_FORMAT.get(format) ?? format;
 }
 
 function patchExtension(format: string) {
-  const map: Record<string, string> = {
-    aps: 'aps',
-    apsgba: 'apsgba',
-    bdf: 'bsdiff',
-    bps: 'bps',
-    bsp: 'bsp',
-    dldi: 'dldi',
-    dps: 'dps',
-    ebp: 'ebp',
-    gdiff: 'gdiff',
-    hdiffpatch: 'hpatchz',
-    ips: 'ips',
-    ips32: 'ips32',
-    mod: 'mod',
-    ninja1: 'n1',
-    pat: 'pat',
-    ppf: 'ppf',
-    rup: 'rup',
-    solid: 'solid',
-    ups: 'ups',
-    vcdiff: 'vcdiff',
-    xdelta: 'xdelta',
-  };
-  return map[format];
+  return PATCH_EXTENSION_BY_FORMAT.get(format);
 }
 
 export function summarizeBrowserFormatMatrixResult(result: Partial<BrowserFormatMatrixSummary> | null | undefined) {
