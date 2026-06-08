@@ -65,10 +65,6 @@ impl nod::read::DiscStream for ReopenablePathDiscStream {
 }
 
 impl NodHandlerCore {
-    const MAX_PRELOADER_THREADS: usize = 4;
-    #[cfg(target_family = "wasm")]
-    const MAX_WASM_PRELOADER_THREADS: usize = 4;
-
     pub(crate) const fn new(descriptor: &'static FormatDescriptor, nod_format: NodFormat) -> Self {
         Self {
             descriptor,
@@ -89,21 +85,9 @@ impl NodHandlerCore {
     }
 
     fn negotiated_preloader_threads(&self, execution: &ThreadExecution) -> usize {
-        // `nod` examples and tooling default this to 4; larger values add startup cost and
-        // provide diminishing returns for sequential extract/create reads.
-        let negotiated = self
-            .negotiated_threads(execution)
-            .min(Self::MAX_PRELOADER_THREADS);
-        #[cfg(target_family = "wasm")]
-        {
-            // Worker reuse keeps browser WASI startup bounded, so let RVZ use the same preloader
-            // fanout as native while still respecting the negotiated worker-thread budget.
-            return negotiated.min(Self::MAX_WASM_PRELOADER_THREADS);
-        }
-        #[cfg(not(target_family = "wasm"))]
-        {
-            negotiated
-        }
+        // Preloader fanout follows the full negotiated worker-thread budget; worker reuse keeps
+        // browser WASI startup bounded, so no separate native/wasm cap is applied.
+        self.negotiated_threads(execution)
     }
 
     fn read_options(&self, preloader_threads: usize) -> NodDiscOptions {
