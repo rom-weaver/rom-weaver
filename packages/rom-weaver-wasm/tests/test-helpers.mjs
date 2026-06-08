@@ -147,10 +147,6 @@ export function assertRunJsonSucceeded(result, options = {}) {
 }
 
 function commandArgsToRunRequest(args) {
-  if (args.length === 0) {
-    return { type: 'stream-test', args: {} };
-  }
-
   const { command, index: commandIndex, subcommand } = locateCommand(args);
   const parsed = parseCommandTokens(args, commandIndex);
   const output = {};
@@ -314,6 +310,9 @@ function createCommandRequest(command, subcommand) {
       return createRomWeaverCommand(`patch-${subcommand}`, {});
     }
     throw new Error(`unsupported patch subcommand in test args: ${subcommand || '(missing)'}`);
+  }
+  if (!['probe', 'list', 'compress', 'extract', 'checksum'].includes(command)) {
+    return { type: command, args: {} };
   }
   return createRomWeaverCommand(command, {});
 }

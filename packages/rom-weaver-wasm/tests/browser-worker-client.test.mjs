@@ -453,12 +453,18 @@ describe('rom-weaver-wasm browser runner parity', () => {
 
   it('runJson streams stdout events before the wasm process completes', async () => {
     const module = await WebAssembly.compile(STREAMING_WASI_MODULE_BYTES);
-    await withTempFixture(async ({ worker }) => {
+    await withTempFixture(async ({ sourcePath, worker }) => {
       let resolveFirstEvent;
       const firstEvent = new Promise((resolve) => {
         resolveFirstEvent = resolve;
       });
-      const resultPromise = worker.runJson([], {
+      const resultPromise = worker.runJson([
+        'checksum',
+        sourcePath,
+        '--algo',
+        'crc32',
+        '--no-extract',
+      ], {
         onEvent(event) {
           if (event?.command === 'stream-test' && event.status === 'running') {
             resolveFirstEvent(event);
@@ -631,10 +637,9 @@ describe('rom-weaver-wasm browser runner parity', () => {
 
   it('run reports typed request errors for unknown commands', async () => {
     await withTempFixture(async ({ worker }) => {
-      const result = await worker.run(['definitely-not-a-command']);
-      expect(result.exitCode).not.toBe(0);
-      expect(result.ok).toBe(false);
-      expect(result.stderr).toMatch(/unknown variant `definitely-not-a-command`/i);
+      await expect(worker.run(['definitely-not-a-command']))
+        .rejects
+        .toThrow(/typed command has unsupported.*type/i);
     });
   });
 
@@ -1373,7 +1378,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
     await withTempFixture(async ({ worker }) => {
       await expect(
         worker.run({ type: 'definitely-not-a-command', args: {} }),
-      ).rejects.toThrow(/typed command has unsupported type/i);
+      ).rejects.toThrow(/typed command has unsupported.*type/i);
 
       await expect(
         worker.run({ args: {} }),

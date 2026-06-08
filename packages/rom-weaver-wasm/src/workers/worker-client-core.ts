@@ -31,10 +31,16 @@ type WorkerStreamHandlers<TEvent = RomWeaverRunJsonEvent, TTraceEvent = unknown>
   'onEvent' | 'onNonJsonLine' | 'onTraceEvent' | 'onTraceNonJsonLine'
 >;
 
-type PendingRequest = Required<WorkerStreamHandlers<any, any>> & {
+type PendingRequest = {
+  onEvent: ((event: any) => void) | null;
+  onNonJsonLine: ((line: string) => void) | null;
+  onTraceEvent: ((event: any) => void) | null;
+  onTraceNonJsonLine: ((line: string) => void) | null;
   reject: (error: unknown) => void;
   resolve: (value: unknown) => void;
 };
+
+type TraceRecord = Record<string, unknown>;
 
 type WorkerTransport = {
   offError: (worker: Worker, listener: EventListener) => void;
@@ -184,7 +190,10 @@ export class RomWeaverWorkerClientCore {
     }
 
     const requestId = message.requestId;
-    const pending = this._pending.get(requestId);
+    const pending = typeof requestId === 'number' ? this._pending.get(requestId) : undefined;
+    const deletePending = () => {
+      if (typeof requestId === 'number') this._pending.delete(requestId);
+    };
 
     switch (message.type) {
       case 'event':
@@ -200,7 +209,7 @@ export class RomWeaverWorkerClientCore {
         pending?.onTraceNonJsonLine?.(message.line);
         return;
       case 'ready':
-        this._pending.delete(requestId);
+        deletePending();
         emitPendingTrace(
           pending,
           `[worker-client] ready requestId=${requestId} mode=${message.mode ?? ''} threaded=${Boolean(message.threaded)}`,
@@ -212,12 +221,12 @@ export class RomWeaverWorkerClientCore {
         });
         return;
       case 'disposed':
-        this._pending.delete(requestId);
+        deletePending();
         emitPendingTrace(pending, `[worker-client] disposed requestId=${requestId}`);
         pending?.resolve({ disposed: true });
         return;
       case 'result':
-        this._pending.delete(requestId);
+        deletePending();
         emitPendingTrace(
           pending,
           `[worker-client] result requestId=${requestId} operation=${message.operation ?? ''} ${summarizeWorkerResult(message.result)}`,
@@ -249,7 +258,7 @@ export class RomWeaverWorkerClientCore {
         return;
       }
       case 'error':
-        this._pending.delete(requestId);
+        deletePending();
         if (!pending && (requestId === null || requestId === undefined)) {
           this._rejectAllPending(deserializeError(message.error), 'worker unscoped error');
           return;
@@ -316,7 +325,7 @@ export class RomWeaverWorkerClientCore {
   }
 }
 
-export function createBrowserWorkerTransport() {
+export function createBrowserWorkerTransport(): WorkerTransport {
   return {
     postMessage(worker, message) {
       worker.postMessage(message);
@@ -340,21 +349,22 @@ export function createBrowserWorkerTransport() {
       worker.removeEventListener('messageerror', listener);
     },
     readMessage(event) {
-      return event.data;
+      return (event as MessageEvent).data;
     },
     toError(event) {
-      if (event?.error instanceof Error) {
-        return event.error;
+      const errorEvent = event as ErrorEvent | null | undefined;
+      if (errorEvent?.error instanceof Error) {
+        return errorEvent.error;
       }
       const messageParts = [];
-      if (typeof event?.message === 'string' && event.message.trim().length > 0) {
-        messageParts.push(event.message.trim());
+      if (typeof errorEvent?.message === 'string' && errorEvent.message.trim().length > 0) {
+        messageParts.push(errorEvent.message.trim());
       }
-      if (typeof event?.filename === 'string' && event.filename.trim().length > 0) {
+      if (typeof errorEvent?.filename === 'string' && errorEvent.filename.trim().length > 0) {
         const location = [
-          event.filename,
-          Number.isFinite(event?.lineno) ? String(event.lineno) : null,
-          Number.isFinite(event?.colno) ? String(event.colno) : null,
+          errorEvent.filename,
+          Number.isFinite(errorEvent?.lineno) ? String(errorEvent.lineno) : null,
+          Number.isFinite(errorEvent?.colno) ? String(errorEvent.colno) : null,
         ]
           .filter(Boolean)
           .join(':');
@@ -365,8 +375,12 @@ export function createBrowserWorkerTransport() {
       return new Error(messageParts.join(' ') || 'worker error');
     },
     toMessageError(event) {
-      const message = typeof event?.message === 'string' && event.message.trim().length > 0
-        ? event.message.trim()
+      const errorEvent = event as MessageEvent | ErrorEvent | null | undefined;
+      const message = errorEvent
+        && 'message' in errorEvent
+        && typeof errorEvent.message === 'string'
+        && errorEvent.message.trim().length > 0
+        ? errorEvent.message.trim()
         : 'worker messageerror';
       return new Error(message);
     },
@@ -434,7 +448,7 @@ function createWorkerStreamChannel({
   };
 }
 
-function hasAnyStreamHandler(handlers) {
+function hasAnyStreamHandler(handlers: WorkerStreamHandlers<any, any> | null | undefined): boolean {
   return Boolean(
     typeof handlers?.onEvent === 'function'
       || typeof handlers?.onNonJsonLine === 'function'
@@ -465,7 +479,7 @@ function dispatchStreamMessage(
   }
 }
 
-function emitClientTrace(handlers, line) {
+function emitClientTrace(handlers: WorkerStreamHandlers<any, any> | null | undefined, line: string): void {
   const onTraceNonJsonLine = typeof handlers?.onTraceNonJsonLine === 'function'
     ? handlers.onTraceNonJsonLine
     : null;
@@ -477,7 +491,7 @@ function emitClientTrace(handlers, line) {
   }
 }
 
-function emitPendingTrace(pending, line) {
+function emitPendingTrace(pending: PendingRequest | undefined, line: string): void {
   const onTraceNonJsonLine = typeof pending?.onTraceNonJsonLine === 'function'
     ? pending.onTraceNonJsonLine
     : null;
@@ -489,9 +503,9 @@ function emitPendingTrace(pending, line) {
   }
 }
 
-function summarizeRequestPayload(payload) {
+function summarizeRequestPayload(payload: RomWeaverWorkerRequest): string {
   const type = String(payload?.type ?? 'unknown');
-  const options = payload?.options && typeof payload.options === 'object' ? payload.options : {};
+  const options = readPayloadOptions(payload);
   const stream = typeof options.__streamBroadcastChannelName === 'string';
   const virtualFiles = summarizeVirtualFiles(options.virtualFiles);
   return [
@@ -502,112 +516,124 @@ function summarizeRequestPayload(payload) {
   ].join(' ');
 }
 
-function readPayloadCommand(payload) {
-  const request = payload?.request;
-  if (!request || typeof request !== 'object') return null;
-  return request.command && typeof request.command === 'object' ? request.command : request;
+function readPayloadOptions(payload: RomWeaverWorkerRequest): TraceRecord {
+  if (!('options' in payload) || !payload.options || typeof payload.options !== 'object') return {};
+  return payload.options as TraceRecord;
 }
 
-function summarizeWorkerResult(result) {
+function readPayloadCommand(payload: RomWeaverWorkerRequest): unknown {
+  if (!('request' in payload)) return null;
+  const request = payload.request;
+  if (!request || typeof request !== 'object') return null;
+  const record = request as TraceRecord;
+  return record.command && typeof record.command === 'object' ? record.command : request;
+}
+
+function summarizeWorkerResult(result: unknown): string {
   if (!result || typeof result !== 'object') return 'result=unknown';
+  const record = result as TraceRecord;
   const parts = [];
-  if (Object.hasOwn(result, 'ok')) parts.push(`ok=${Boolean(result.ok)}`);
-  if (Object.hasOwn(result, 'exitCode')) parts.push(`exitCode=${String(result.exitCode)}`);
-  if (Array.isArray(result.events)) parts.push(`events=${result.events.length}`);
-  if (Array.isArray(result.nonJsonLines)) parts.push(`nonJsonLines=${result.nonJsonLines.length}`);
-  if (Array.isArray(result.traceEvents)) parts.push(`traceEvents=${result.traceEvents.length}`);
-  if (Array.isArray(result.traceNonJsonLines)) {
-    parts.push(`traceNonJsonLines=${result.traceNonJsonLines.length}`);
+  if (Object.hasOwn(record, 'ok')) parts.push(`ok=${Boolean(record.ok)}`);
+  if (Object.hasOwn(record, 'exitCode')) parts.push(`exitCode=${String(record.exitCode)}`);
+  if (Array.isArray(record.events)) parts.push(`events=${record.events.length}`);
+  if (Array.isArray(record.nonJsonLines)) parts.push(`nonJsonLines=${record.nonJsonLines.length}`);
+  if (Array.isArray(record.traceEvents)) parts.push(`traceEvents=${record.traceEvents.length}`);
+  if (Array.isArray(record.traceNonJsonLines)) {
+    parts.push(`traceNonJsonLines=${record.traceNonJsonLines.length}`);
   }
   return parts.length > 0 ? parts.join(' ') : 'result=object';
 }
 
-function summarizeSerializedError(error) {
+function summarizeSerializedError(error: unknown): string {
   if (!error || typeof error !== 'object') return `error=${String(error)}`;
+  const record = error as Partial<RomWeaverWorkerSerializedError>;
   return [
-    `name=${String(error.name ?? 'Error')}`,
-    `kind=${String(error.kind ?? '')}`,
-    `message=${truncateForTrace(error.message ?? '')}`,
+    `name=${String(record.name ?? 'Error')}`,
+    `kind=${String(record.kind ?? '')}`,
+    `message=${truncateForTrace(record.message ?? '')}`,
   ].join(' ');
 }
 
-function summarizeVirtualFiles(value) {
+function summarizeVirtualFiles(value: unknown): string {
   if (!Array.isArray(value) || value.length === 0) return 'count=0';
   let proxyCount = 0;
   let directCount = 0;
   let totalBytes = 0;
   for (const entry of value) {
-    const source = entry?.source ?? entry?.file ?? entry?.blob ?? entry?.bytes ?? entry?.data ?? entry?.proxy;
-    const proxy = entry?.proxy ?? (isTraceVirtualFileProxy(source) ? source : null);
+    const record = entry && typeof entry === 'object' ? entry as TraceRecord : {};
+    const source = record.source ?? record.file ?? record.blob ?? record.bytes ?? record.data ?? record.proxy;
+    const proxy = record.proxy ?? (isTraceVirtualFileProxy(source) ? source : null);
     if (isTraceVirtualFileProxy(proxy)) {
       proxyCount += 1;
       totalBytes += Number(proxy.size) || 0;
       continue;
     }
     directCount += 1;
-    totalBytes += Number(source?.size ?? source?.byteLength ?? 0) || 0;
+    const sourceRecord = source && typeof source === 'object' ? source as TraceRecord : {};
+    totalBytes += Number(sourceRecord.size ?? sourceRecord.byteLength ?? 0) || 0;
   }
   return `count=${value.length},proxy=${proxyCount},direct=${directCount},bytes=${totalBytes}`;
 }
 
-function isTraceVirtualFileProxy(value) {
+function isTraceVirtualFileProxy(value: unknown): value is { id: string; size: unknown; slots: unknown[] } {
   return Boolean(
     value
       && typeof value === 'object'
-      && typeof value.id === 'string'
-      && Array.isArray(value.slots)
-      && Number.isFinite(Number(value.size)),
+      && typeof (value as TraceRecord).id === 'string'
+      && Array.isArray((value as TraceRecord).slots)
+      && Number.isFinite(Number((value as TraceRecord).size)),
   );
 }
 
-function formatCommandForTrace(command) {
+function formatCommandForTrace(command: unknown): string {
   if (!command || typeof command !== 'object') return 'unknown';
   try {
     return truncateForTrace(JSON.stringify(toTraceValue(command)));
   } catch {
-    return String(command?.type ?? 'unknown');
+    return String((command as TraceRecord).type ?? 'unknown');
   }
 }
 
-function toTraceValue(value) {
+function toTraceValue(value: unknown): unknown {
   if (typeof value === 'string') return basenameForTrace(value);
   if (Array.isArray(value)) return value.map((entry) => toTraceValue(entry));
   if (!value || typeof value !== 'object') return value;
-  const out = {};
+  const out: TraceRecord = {};
   for (const [key, entry] of Object.entries(value)) out[key] = toTraceValue(entry);
   return out;
 }
 
-function basenameForTrace(value) {
+function basenameForTrace(value: unknown): string {
   const text = String(value ?? '');
   if (!text.includes('/')) return text;
   return text.slice(text.lastIndexOf('/') + 1) || text;
 }
 
-function formatErrorForTrace(error) {
+function formatErrorForTrace(error: unknown): string {
   if (error instanceof Error) return `${error.name}:${truncateForTrace(error.message)}`;
   return truncateForTrace(String(error));
 }
 
-function truncateForTrace(value, maxLength = 180) {
+function truncateForTrace(value: unknown, maxLength = 180): string {
   const text = String(value ?? '');
   if (text.length <= maxLength) return text;
   return `${text.slice(0, maxLength - 1)}...`;
 }
 
-function deserializeError(error): RomWeaverWorkerError {
+function deserializeError(error: unknown): RomWeaverWorkerError {
+  const record = error && typeof error === 'object' ? error as Partial<RomWeaverWorkerSerializedError> : null;
   const out = new Error(
-    error && typeof error.message === 'string' ? error.message : 'worker request failed',
+    record && typeof record.message === 'string' ? record.message : 'worker request failed',
   ) as RomWeaverWorkerError;
 
-  if (error && typeof error.name === 'string') {
-    out.name = error.name;
+  if (record && typeof record.name === 'string') {
+    out.name = record.name;
   }
-  if (error && typeof error.stack === 'string') {
-    out.stack = error.stack;
+  if (record && typeof record.stack === 'string') {
+    out.stack = record.stack;
   }
-  if (error && 'cause' in error && error.cause !== undefined) {
-    out.cause = deserializeErrorCause(error.cause);
+  if (record && record.cause !== undefined) {
+    out.cause = deserializeErrorCause(record.cause);
   }
 
   out.kind = resolveErrorKind(error, out.name, out.message, 'unknown');
@@ -619,17 +645,18 @@ function deserializeError(error): RomWeaverWorkerError {
   return out;
 }
 
-function deserializeErrorCause(value) {
+function deserializeErrorCause(value: unknown): unknown {
   if (value === null || value === undefined || typeof value !== 'object') return value;
+  const record = value as Partial<RomWeaverWorkerSerializedError>;
   const causeError = new Error(
-    typeof value.message === 'string' ? value.message : 'caused by error',
+    typeof record.message === 'string' ? record.message : 'caused by error',
   );
-  if (typeof value.name === 'string') causeError.name = value.name;
-  if (typeof value.stack === 'string') causeError.stack = value.stack;
+  if (typeof record.name === 'string') causeError.name = record.name;
+  if (typeof record.stack === 'string') causeError.stack = record.stack;
   return causeError;
 }
 
-function toWorkerError(error, fallbackKind) {
+function toWorkerError(error: unknown, fallbackKind: RomWeaverWorkerErrorKind): RomWeaverWorkerError {
   if (error instanceof Error) {
     const workerError = error as RomWeaverWorkerError;
     workerError.kind = resolveErrorKind(error, error.name, error.message, fallbackKind);
@@ -649,10 +676,15 @@ function toWorkerError(error, fallbackKind) {
   return out;
 }
 
-function resolveErrorKind(error, name, message, fallbackKind) {
+function resolveErrorKind(
+  error: unknown,
+  name: string,
+  message: string,
+  fallbackKind: RomWeaverWorkerErrorKind,
+): RomWeaverWorkerErrorKind {
   return resolveWorkerErrorKind(error, name, message, fallbackKind);
 }
 
-function readErrorContext(error) {
+function readErrorContext(error: unknown) {
   return readWorkerErrorContext(error);
 }
