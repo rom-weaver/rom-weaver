@@ -105,8 +105,9 @@ const ExtractionTree = ({ levels, timing }: { levels: ExtractionLevel[]; timing?
   const last = levels[levels.length - 1];
   if (!last) return null;
 
-  // Non-nested: just the file name.
-  if (levels.length === 1) {
+  // Raw, non-extracted inputs stay compact. Prepared single-level inputs still
+  // show the extract summary so timing and metadata remain visible.
+  if (levels.length === 1 && !timing) {
     return (
       <div className="chain">
         <div className="lvl d0 last">
@@ -118,7 +119,11 @@ const ExtractionTree = ({ levels, timing }: { levels: ExtractionLevel[]; timing?
 
   const first = levels[0];
   const sizeText =
-    first?.sizeLabel && last.sizeLabel ? `${first.sizeLabel} → ${last.sizeLabel}${formatRatio(first, last)}` : "";
+    levels.length === 1
+      ? (last.sizeLabel ?? "")
+      : first?.sizeLabel && last.sizeLabel
+        ? `${first.sizeLabel} → ${last.sizeLabel}${formatRatio(first, last)}`
+        : "";
 
   return (
     <>

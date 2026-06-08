@@ -54,3 +54,28 @@ test("extraction tree keeps ratio for ROM extraction outputs", async () => {
 
   await expect.poll(() => document.querySelector(".ext-size")?.textContent || "").toBe("1.0 KB \u2192 100 B (1000%)");
 });
+
+test("extraction tree keeps extract metadata for prepared single-level inputs", async () => {
+  mount(
+    createElement(ExtractionTree, {
+      levels: [{ name: "game.iso", sizeBytes: 4096, sizeLabel: "4.1 KB" }],
+      timing: "1.2 s",
+    }),
+  );
+
+  await expect.poll(() => document.querySelector(".extract-d .lab")?.textContent || "").toBe("Extract");
+  expect(document.querySelector(".extract-d .ext-size")?.textContent || "").toBe("4.1 KB");
+  expect(document.querySelector(".extract-d .tm")?.textContent || "").toContain("1.2 s");
+  expect(document.querySelector(".extract-d .cks-rows .fn")?.textContent || "").toBe("game.iso");
+});
+
+test("extraction tree stays compact for raw single-file inputs", async () => {
+  mount(
+    createElement(ExtractionTree, {
+      levels: [{ name: "game.bin", sizeBytes: 4096, sizeLabel: "4.1 KB" }],
+    }),
+  );
+
+  await expect.poll(() => document.querySelector(".chain .fn")?.textContent || "").toBe("game.bin");
+  expect(document.querySelector(".extract-d")).toBeNull();
+});
