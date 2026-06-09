@@ -1,10 +1,13 @@
 import type { SetStateAction } from "react";
 import { getFileNameExtension as getSharedFileNameExtension, hasFileNameExtension } from "../../lib/path-utils.ts";
 import { createTiming, formatTiming } from "../../lib/progress/timing.ts";
+import { getErrorCode } from "../../presentation/errors.ts";
 import { formatPercentFixed } from "../../presentation/workflow-presentation.ts";
 import type { RomInputRowState } from "./patcher-ui-state.ts";
 
 const getPublicOutputSize = (output: { size?: number }) => output.size || 0;
+
+const isWorkflowDisposedError = (error: unknown) => getErrorCode(error) === "WORKFLOW_DISPOSED";
 
 const waitForNextUiPaint = () =>
   new Promise<void>((resolve) => {
@@ -92,6 +95,7 @@ export {
   getMultiInputOutputError,
   getPublicOutputSize,
   getRequestedOutputName,
+  isWorkflowDisposedError,
   resolveLocalStateUpdate,
   resolvePendingDownloadFileName,
   toError,
