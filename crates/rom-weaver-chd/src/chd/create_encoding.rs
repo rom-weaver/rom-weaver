@@ -17,6 +17,16 @@ pub(super) const CD_ECC_LOW: [u8; 256] = build_cd_ecc_low_table();
 pub(super) const CD_ECC_HIGH: [u8; 256] = build_cd_ecc_high_table();
 pub(super) const CRC16_IBM3740_TABLE: [u16; 256] = build_crc16_ibm3740_table();
 
+std::thread_local! {
+    /// Per-worker zstd compressor reused across hunks. At high levels the optimal-parser
+    /// workspace is the dominant per-hunk cost; allocating one context per thread (instead of
+    /// per `zstd_append` call - twice per CD hunk for the sector and subcode streams) keeps that
+    /// cost off the hot path. The compression level is re-applied each call so pooled browser
+    /// workers stay correct across operations.
+    static CD_ZSTD_COMPRESSOR: std::cell::RefCell<Option<zstd::bulk::Compressor<'static>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
 #[derive(Default)]
 pub(super) struct ChdCompressionScratch {
     cd: CdHunkScratch,
@@ -1014,21 +1024,40 @@ impl ChdContainerHandler {
     }
 
     pub(super) fn zstd_append(
-        output: Vec<u8>,
+        mut output: Vec<u8>,
         input: &[u8],
         compression_level: i32,
         label: &str,
     ) -> Result<Vec<u8>> {
-        let mut encoder =
-            zstd::stream::write::Encoder::new(output, compression_level).map_err(|error| {
+        // One-shot (bulk) compression pledges the source size so zstd shrinks the window log and
+        // match tables to fit this hunk. A streaming encoder leaves the window at the level's
+        // default (windowLog 27 / ~128 MiB workspace at level 22), which - multiplied across the
+        // create thread pool - overruns the wasm memory cap and trips a concurrent memory.grow
+        // out-of-bounds in the browser. The compressed data is identical for a sub-window input;
+        // only the frame header differs, and it stays a valid, chdman-decodable zstd frame. The
+        // compressor is reused per worker thread so the level-22 workspace is allocated once
+        // rather than per hunk.
+        let compressed = CD_ZSTD_COMPRESSOR.with(|cell| {
+            let mut slot = cell.borrow_mut();
+            if slot.is_none() {
+                *slot = Some(
+                    zstd::bulk::Compressor::new(compression_level).map_err(|error| {
+                        RomWeaverError::Validation(format!("{label} compression failed: {error}"))
+                    })?,
+                );
+            }
+            let compressor = slot.as_mut().expect("compressor initialized above");
+            compressor
+                .set_compression_level(compression_level)
+                .map_err(|error| {
+                    RomWeaverError::Validation(format!("{label} compression failed: {error}"))
+                })?;
+            compressor.compress(input).map_err(|error| {
                 RomWeaverError::Validation(format!("{label} compression failed: {error}"))
-            })?;
-        encoder.write_all(input).map_err(|error| {
-            RomWeaverError::Validation(format!("{label} compression failed: {error}"))
+            })
         })?;
-        encoder.finish().map_err(|error| {
-            RomWeaverError::Validation(format!("{label} compression failed: {error}"))
-        })
+        output.extend_from_slice(&compressed);
+        Ok(output)
     }
 
     pub(super) fn chd_zlib_compression(compression_level: i32) -> GzipCompression {
