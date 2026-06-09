@@ -309,6 +309,7 @@ impl CliApp {
 
             let mut stripped_header = None;
             let mut stripped_header_match = None;
+            let mut normalized_from_order = None;
             let mut checksum_verification_labels = Vec::new();
             let apply_input = if strip_header {
                 self.emit_running(
@@ -344,6 +345,41 @@ impl CliApp {
                 }
             } else {
                 resolved_input.clone()
+            };
+            let apply_input = if repair_checksum {
+                let normalized_path = context
+                    .temp_paths()
+                    .next_path("patch-apply-input-z64", Some("bin"));
+                match Self::normalize_n64_to_big_endian_to_temp(&apply_input, &normalized_path) {
+                    Ok(Some(order)) => {
+                        self.emit_running(
+                            OperationLabel {
+                                command: "patch-apply",
+                                family: OperationFamily::Patch,
+                                format: None,
+                            },
+                            "compat",
+                            "normalizing N64 byte order for header repair",
+                            None,
+                            Some(context.plan_threads(ThreadCapability::single_threaded())),
+                        );
+                        normalized_from_order = Some(order);
+                        temp_paths.push(normalized_path.clone());
+                        normalized_path
+                    }
+                    Ok(None) => apply_input,
+                    Err(error) => {
+                        return OperationReport::failed(
+                            OperationFamily::Patch,
+                            None,
+                            "compat",
+                            error.to_string(),
+                            Some(context.plan_threads(ThreadCapability::single_threaded())),
+                        );
+                    }
+                }
+            } else {
+                apply_input
             };
             if !expected_input_checksums.is_empty() {
                 self.emit_running(
@@ -381,7 +417,8 @@ impl CliApp {
             }
 
             let patch_count = resolved_patches.len();
-            let requires_compat_finalize = add_header || repair_checksum || patch_count > 1;
+            let requires_compat_finalize =
+                add_header || repair_checksum || normalized_from_order.is_some() || patch_count > 1;
             let needs_staged_output = requires_compat_finalize || compression_options.enabled;
             let staged_output = if needs_staged_output {
                 if compression_options.enabled {
@@ -634,6 +671,7 @@ impl CliApp {
                     stripped_header.as_deref(),
                     repair_checksum,
                     Some(&resolved_input),
+                    normalized_from_order,
                 ) {
                     Ok(finalized) => {
                         raw_ready_output = finalized_output_path;

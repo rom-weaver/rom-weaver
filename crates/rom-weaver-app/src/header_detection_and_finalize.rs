@@ -157,6 +157,7 @@ impl CliApp {
         stripped_header: Option<&[u8]>,
         repair_checksum: bool,
         repair_hint_path: Option<&Path>,
+        restore_n64_order: Option<N64ByteOrder>,
     ) -> Result<PatchApplyFinalizeResult> {
         let header_bytes = if add_header {
             Some(stripped_header.unwrap_or(&[0_u8; ROM_HEADER_BYTES]))
@@ -164,8 +165,18 @@ impl CliApp {
             None
         };
 
-        if repair_checksum {
+        if let Some(order) = restore_n64_order {
+            Self::rewrite_n64_byte_order(
+                staged_output,
+                final_output,
+                N64ByteOrder::BigEndian,
+                order,
+            )?;
+        } else {
             Self::copy_with_optional_header(staged_output, final_output, header_bytes)?;
+        }
+
+        if repair_checksum {
             let repair_outcome =
                 Self::repair_checksum_file_in_place(final_output, repair_hint_path)?;
             let repair_warning = if repair_outcome.repaired_profiles.is_empty() {
@@ -189,7 +200,6 @@ impl CliApp {
             });
         }
 
-        Self::copy_with_optional_header(staged_output, final_output, header_bytes)?;
         Ok(PatchApplyFinalizeResult {
             repaired_profiles: Vec::new(),
             repair_warning: None,

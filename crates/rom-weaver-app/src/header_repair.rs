@@ -530,6 +530,60 @@ impl CliApp {
         Self::write_all_at(file, offset, &bytes)
     }
 
+    pub(super) fn detect_n64_byte_order_path(path: &Path) -> Result<Option<N64ByteOrder>> {
+        let mut file = File::open(path)?;
+        let file_len = usize::try_from(file.metadata()?.len()).unwrap_or(usize::MAX);
+        Self::detect_n64_byte_order_file(&mut file, file_len)
+    }
+
+    pub(super) fn rewrite_n64_byte_order(
+        input: &Path,
+        output: &Path,
+        from: N64ByteOrder,
+        to: N64ByteOrder,
+    ) -> Result<()> {
+        let input_len = fs::metadata(input)?.len();
+        if input_len % 4 != 0 {
+            return Err(RomWeaverError::Validation(format!(
+                "cannot normalize N64 byte order for `{}`: length {input_len} is not a multiple of 4",
+                input.display()
+            )));
+        }
+        if let Some(parent) = output.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let mut reader = BufReader::new(File::open(input)?);
+        let mut writer = BufWriter::new(File::create(output)?);
+        let mut word = [0_u8; 4];
+        loop {
+            match reader.read_exact(&mut word) {
+                Ok(()) => {
+                    Self::transform_n64_word(&mut word, from);
+                    Self::transform_n64_word(&mut word, to);
+                    writer.write_all(&word)?;
+                }
+                Err(error) if error.kind() == io::ErrorKind::UnexpectedEof => break,
+                Err(error) => return Err(error.into()),
+            }
+        }
+        writer.flush()?;
+        Ok(())
+    }
+
+    pub(super) fn normalize_n64_to_big_endian_to_temp(
+        input: &Path,
+        output: &Path,
+    ) -> Result<Option<N64ByteOrder>> {
+        let Some(order) = Self::detect_n64_byte_order_path(input)? else {
+            return Ok(None);
+        };
+        if order == N64ByteOrder::BigEndian {
+            return Ok(None);
+        }
+        Self::rewrite_n64_byte_order(input, output, order, N64ByteOrder::BigEndian)?;
+        Ok(Some(order))
+    }
+
     pub(super) fn repair_atari_7800_header_file(
         file: &mut File,
         file_len: usize,

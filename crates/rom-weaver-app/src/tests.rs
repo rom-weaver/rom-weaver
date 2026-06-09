@@ -13,7 +13,7 @@ use rom_weaver_core::{
 use serde_json::json;
 
 use super::selection_resolution::SelectionResolutionOptions;
-use super::{CliApp, CompressionLevelProfile, ParsedSelectionInput};
+use super::{CliApp, CompressionLevelProfile, N64ByteOrder, ParsedSelectionInput};
 
 static TEST_CONTAINER_DESCRIPTOR: FormatDescriptor = FormatDescriptor {
     family: OperationFamily::Container,
@@ -579,4 +579,135 @@ fn resolve_codec_level_rejects_conflicting_levels() {
         CliApp::resolve_codec_level(vec!["cdzs:19".to_string(), "cdzl:9".to_string()], "--codec")
             .expect_err("conflicting codec levels should fail");
     assert!(error.to_string().contains("conflicting codec levels"));
+}
+
+static REPAIR_TEST_FILE_COUNTER: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(0);
+
+fn write_repair_test_file(name: &str, bytes: &[u8]) -> PathBuf {
+    let nonce = REPAIR_TEST_FILE_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let path =
+        std::env::temp_dir().join(format!("rw-repair-{}-{nonce}-{name}", std::process::id()));
+    std::fs::write(&path, bytes).expect("write repair fixture");
+    path
+}
+
+fn n64_byte_swapped(bytes: &[u8]) -> Vec<u8> {
+    let mut swapped = bytes.to_vec();
+    for word in swapped.chunks_exact_mut(4) {
+        word.swap(0, 1);
+        word.swap(2, 3);
+    }
+    swapped
+}
+
+fn n64_little_endian(bytes: &[u8]) -> Vec<u8> {
+    let mut little_endian = bytes.to_vec();
+    for word in little_endian.chunks_exact_mut(4) {
+        word.reverse();
+    }
+    little_endian
+}
+
+#[test]
+fn header_repair_normalizes_v64_input_to_z64() {
+    let z64: [u8; 16] = [
+        0x80, 0x37, 0x12, 0x40, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a,
+        0x0b,
+    ];
+    let v64 = n64_byte_swapped(&z64);
+
+    let v64_path = write_repair_test_file("input.v64", &v64);
+    let normalized_path = write_repair_test_file("normalized.z64", &[]);
+
+    let detected = CliApp::normalize_n64_to_big_endian_to_temp(&v64_path, &normalized_path)
+        .expect("normalize N64 byte order");
+
+    assert_eq!(detected, Some(N64ByteOrder::ByteSwapped));
+    assert_eq!(
+        std::fs::read(&normalized_path).expect("read normalized output"),
+        z64.to_vec()
+    );
+
+    let _ = std::fs::remove_file(v64_path);
+    let _ = std::fs::remove_file(normalized_path);
+}
+
+#[test]
+fn header_repair_normalizes_n64_input_to_z64() {
+    let z64: [u8; 16] = [
+        0x80, 0x37, 0x12, 0x40, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a,
+        0x0b,
+    ];
+    let n64 = n64_little_endian(&z64);
+
+    let n64_path = write_repair_test_file("input.n64", &n64);
+    let normalized_path = write_repair_test_file("normalized.z64", &[]);
+
+    let detected = CliApp::normalize_n64_to_big_endian_to_temp(&n64_path, &normalized_path)
+        .expect("normalize N64 byte order");
+
+    assert_eq!(detected, Some(N64ByteOrder::LittleEndian));
+    assert_eq!(
+        std::fs::read(&normalized_path).expect("read normalized output"),
+        z64.to_vec()
+    );
+
+    let _ = std::fs::remove_file(n64_path);
+    let _ = std::fs::remove_file(normalized_path);
+}
+
+#[test]
+fn header_repair_leaves_z64_input_in_place() {
+    let z64: [u8; 8] = [0x80, 0x37, 0x12, 0x40, 0xde, 0xad, 0xbe, 0xef];
+
+    let z64_path = write_repair_test_file("input.z64", &z64);
+    let normalized_path = write_repair_test_file("normalized.z64", &[]);
+
+    let detected = CliApp::normalize_n64_to_big_endian_to_temp(&z64_path, &normalized_path)
+        .expect("normalize N64 byte order");
+
+    assert_eq!(detected, None);
+    assert_eq!(
+        std::fs::read(&z64_path).expect("read z64 input"),
+        z64.to_vec()
+    );
+    assert_eq!(
+        std::fs::read(&normalized_path).expect("read untouched temp output"),
+        Vec::<u8>::new()
+    );
+
+    let _ = std::fs::remove_file(z64_path);
+    let _ = std::fs::remove_file(normalized_path);
+}
+
+#[test]
+fn header_repair_finalize_restores_original_n64_order() {
+    let z64: [u8; 16] = [
+        0x80, 0x37, 0x12, 0x40, 0xde, 0xad, 0xbe, 0xef, 0x10, 0x32, 0x54, 0x76, 0x98, 0xba, 0xdc,
+        0xfe,
+    ];
+    let expected_v64 = n64_byte_swapped(&z64);
+
+    let staged_path = write_repair_test_file("staged.z64", &z64);
+    let output_path = write_repair_test_file("output.v64", &[]);
+
+    CliApp::finalize_patch_apply_output(
+        &staged_path,
+        &output_path,
+        false,
+        None,
+        false,
+        None,
+        Some(N64ByteOrder::ByteSwapped),
+    )
+    .expect("restore N64 byte order");
+
+    assert_eq!(
+        std::fs::read(&output_path).expect("read restored output"),
+        expected_v64
+    );
+
+    let _ = std::fs::remove_file(staged_path);
+    let _ = std::fs::remove_file(output_path);
 }
