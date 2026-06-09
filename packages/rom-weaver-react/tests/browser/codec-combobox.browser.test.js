@@ -2,7 +2,7 @@ import { createElement, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { beforeEach, expect, test } from "vitest";
 import { page } from "vitest/browser";
-import { getCompressionCodecOptions } from "../../src/lib/compression/codec-fields.ts";
+import { getCompressionCodecOptions, getCompressionCodecSuggestions } from "../../src/lib/compression/codec-fields.ts";
 import { resolveCompressionLevels } from "../../src/lib/compression/compression-settings.ts";
 import OutputCompressionManager from "../../src/lib/compression/output-compression-manager.ts";
 import { CodecCombobox } from "../../src/public/react/components/ds/codec-combobox.tsx";
@@ -23,6 +23,7 @@ function Harness({ fieldKey, initialValue = "", label, multiple = false }) {
     multiple,
     onChange: setValue,
     options: getCompressionCodecOptions(fieldKey),
+    suggestions: getCompressionCodecSuggestions(fieldKey),
     value,
   });
 }
@@ -37,6 +38,7 @@ function ObstructedHarness() {
       label: "ZIP codec",
       onChange: setValue,
       options: getCompressionCodecOptions("zipCodec"),
+      suggestions: getCompressionCodecSuggestions("zipCodec"),
       value,
     }),
     createElement(
@@ -89,6 +91,52 @@ test("codec combobox opens with expected codec suggestions before typing", async
   expect(getInput()?.getAttribute("aria-invalid")).toBe("true");
 });
 
+test("chd codec combobox lists zstd and lzma presets before individual codecs", async () => {
+  mountCombobox({
+    fieldKey: "chdCreateCdCodecs",
+    initialValue: "cdlz,",
+    label: "Create CD codecs",
+    multiple: true,
+  });
+
+  const cdInput = page.getByRole("combobox", { name: "Create CD codecs" });
+  await cdInput.click();
+
+  expect(optionTexts()).toEqual([
+    "zstd preset: cdzs,cdzl,cdfl",
+    "lzma preset: cdlz,cdzl,cdfl",
+    "cdzs",
+    "cdlz",
+    "cdzl",
+    "cdfl",
+  ]);
+
+  await page.getByRole("option", { name: "zstd preset: cdzs,cdzl,cdfl" }).click();
+  await expect.poll(() => getInput()?.value).toBe("cdzs,cdzl,cdfl");
+
+  await cdInput.fill("lzma");
+  await expect.poll(optionTexts).toEqual(["lzma preset: cdlz,cdzl,cdfl"]);
+
+  mountCombobox({
+    fieldKey: "chdCreateDvdCodecs",
+    label: "Create DVD codecs",
+    multiple: true,
+  });
+
+  const dvdInput = page.getByRole("combobox", { name: "Create DVD codecs" });
+  await dvdInput.click();
+
+  expect(optionTexts()).toEqual([
+    "zstd preset: zstd,zlib,huff,flac",
+    "lzma preset: lzma,zlib,huff,flac",
+    "zstd",
+    "lzma",
+    "zlib",
+    "huff",
+    "flac",
+  ]);
+});
+
 test("codec combobox replaces the active token in multi-codec lists", async () => {
   mountCombobox({
     fieldKey: "chdCreateCdCodecs",
@@ -99,7 +147,7 @@ test("codec combobox replaces the active token in multi-codec lists", async () =
 
   const input = page.getByRole("combobox", { name: "Create CD codecs" });
   await input.click();
-  await page.getByRole("option", { name: "cdfl" }).click();
+  await page.getByRole("option", { exact: true, name: "cdfl" }).click();
 
   await expect.poll(() => getInput()?.value).toBe("cdlz,cdfl");
 

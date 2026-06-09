@@ -13,6 +13,7 @@ import {
   getCompressionCodecLevelMax,
   getCompressionCodecLevelMin,
   getCompressionCodecOptions,
+  getCompressionCodecSuggestions,
   hasCompressionCodecLevelOverride,
 } from "../../lib/compression/codec-fields.ts";
 import { parseCompressionCodecEntry } from "../../lib/compression/codec-parser.ts";
@@ -60,6 +61,7 @@ type CompressField =
       label: string;
       value: string;
       options: CompressionCodecOption[];
+      suggestions?: CompressionCodecOption[];
       multiple?: boolean;
       placeholder?: string;
       mono?: boolean;
@@ -339,6 +341,7 @@ const buildCompressPanel = (format: string, settings: SettingsLike, source?: unk
           multiple: true,
           options: getCompressionCodecOptions(codecKey),
           placeholder: mode === "cd" ? CHD_CD_DEFAULT_CODECS : CHD_DVD_DEFAULT_CODECS,
+          suggestions: getCompressionCodecSuggestions(codecKey),
           value: codecValue,
         },
         level,

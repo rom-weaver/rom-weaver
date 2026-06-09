@@ -202,6 +202,7 @@ const FieldControl = ({ fieldKey, draftSettings, uiState, validation, onDraftCha
         onChange={(nextValue) => onDraftChange(fieldKey, nextValue)}
         options={field.codecOptions || []}
         placeholder={placeholder}
+        suggestions={field.codecSuggestions}
         value={value}
       />
     );

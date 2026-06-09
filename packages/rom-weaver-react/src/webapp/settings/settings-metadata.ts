@@ -3,6 +3,7 @@ import {
   type CompressionCodecOption,
   getCompressionCodecLevelMax,
   getCompressionCodecOptions,
+  getCompressionCodecSuggestions,
   getCompressionCodecValues,
 } from "../../lib/compression/codec-fields.ts";
 import {
@@ -113,6 +114,7 @@ type SettingsFieldMetadata<K extends SettingsFieldKey = SettingsFieldKey> = {
   layout?: "default" | "large";
   validationLabel?: string;
   codecOptions?: CompressionCodecOption[];
+  codecSuggestions?: CompressionCodecOption[];
   options?: SettingsChoiceOption[];
   validValues?: string[];
   placeholder?: DynamicSettingsText;
@@ -226,6 +228,7 @@ const ZIP_ZSTD_CODEC =
 const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<K> } = {
   chdCreateCdCodecs: {
     codecOptions: getCompressionCodecOptions("chdCreateCdCodecs"),
+    codecSuggestions: getCompressionCodecSuggestions("chdCreateCdCodecs"),
     defaultValue: COMPRESSION_DEFAULTS.chdCreateCdCodecs,
     disabled: ({ uiState }) => !uiState.chdEnabled,
     id: "settings-chd-createcd-codecs",
@@ -240,6 +243,7 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
   },
   chdCreateDvdCodecs: {
     codecOptions: getCompressionCodecOptions("chdCreateDvdCodecs"),
+    codecSuggestions: getCompressionCodecSuggestions("chdCreateDvdCodecs"),
     defaultValue: COMPRESSION_DEFAULTS.chdCreateDvdCodecs,
     disabled: ({ uiState }) => !uiState.chdEnabled,
     id: "settings-chd-createdvd-codecs",

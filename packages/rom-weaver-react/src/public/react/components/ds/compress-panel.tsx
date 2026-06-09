@@ -111,6 +111,7 @@ const CompressPanelBody = ({
               onChange={(value) => handleChange(field, value)}
               options={field.options}
               placeholder={field.placeholder}
+              suggestions={field.suggestions}
               value={field.value}
             />
           </OutputField>

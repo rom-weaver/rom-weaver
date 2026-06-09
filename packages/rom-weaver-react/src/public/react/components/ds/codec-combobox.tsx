@@ -16,6 +16,7 @@ type CodecComboboxProps = {
   onChange: (value: string) => void;
   options: readonly CompressionCodecOption[];
   placeholder?: string;
+  suggestions?: readonly CompressionCodecOption[];
   value: string;
 };
 
@@ -77,6 +78,10 @@ const applyCodecSelection = (
   };
 };
 
+const getSuggestionValue = (option: CompressionCodecOption): string => option.value;
+const getSuggestionSearchText = (option: CompressionCodecOption): string =>
+  `${option.label} ${option.value} ${option.searchText || ""}`.toLowerCase();
+
 const CodecCombobox = ({
   ariaLabel,
   disabled,
@@ -88,6 +93,7 @@ const CodecCombobox = ({
   onChange,
   options,
   placeholder,
+  suggestions,
   value,
 }: CodecComboboxProps) => {
   const generatedId = useId();
@@ -107,17 +113,18 @@ const CodecCombobox = ({
     label: label || "Codec",
   });
   const invalid = !!forceInvalid || !validation.valid;
+  const suggestionOptions = suggestions || options;
 
-  const filteredOptions = useMemo(() => {
-    if (!filtering) return [...options];
+  const filteredSuggestions = useMemo(() => {
+    if (!filtering) return [...suggestionOptions];
     const query = activeToken.query;
-    if (!query) return [...options];
-    return options.filter((option) => option.value.includes(query));
-  }, [activeToken.query, filtering, options]);
+    if (!query) return [...suggestionOptions];
+    return suggestionOptions.filter((option) => getSuggestionSearchText(option).includes(query));
+  }, [activeToken.query, filtering, suggestionOptions]);
 
   useEffect(() => {
     setActiveIndex(0);
-  }, [activeToken.query, options]);
+  }, [activeToken.query, suggestionOptions]);
 
   const updateDropdownFrame = (measuredHeight?: number) => {
     const rect = inputRef.current?.getBoundingClientRect();
@@ -147,7 +154,7 @@ const CodecCombobox = ({
     const maxHeight = Math.min(DROPDOWN_MAX_HEIGHT, availableSpace);
     const estimatedContentHeight = Math.max(
       OPTION_ROW_HEIGHT + OPTION_LIST_CHROME_HEIGHT,
-      filteredOptions.length * OPTION_ROW_HEIGHT + OPTION_LIST_CHROME_HEIGHT,
+      filteredSuggestions.length * OPTION_ROW_HEIGHT + OPTION_LIST_CHROME_HEIGHT,
     );
     const contentHeight = Math.min(DROPDOWN_MAX_HEIGHT, measuredHeight ?? estimatedContentHeight);
     const placementHeight = Math.min(maxHeight, contentHeight);
@@ -209,7 +216,7 @@ const CodecCombobox = ({
     if (!open) return undefined;
     const frame = requestAnimationFrame(updateDropdownFrame);
     return () => cancelAnimationFrame(frame);
-  }, [open, filteredOptions.length]);
+  }, [open, filteredSuggestions.length]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -231,7 +238,10 @@ const CodecCombobox = ({
   }, [open]);
 
   const selectOption = (option: CompressionCodecOption) => {
-    const next = applyCodecSelection(value, cursor, multiple, option.value);
+    const selectedValue = getSuggestionValue(option);
+    const next = option.replaceValue
+      ? { cursor: selectedValue.length, value: selectedValue }
+      : applyCodecSelection(value, cursor, multiple, selectedValue);
     onChange(next.value);
     setCursor(next.cursor);
     setFiltering(false);
@@ -247,12 +257,12 @@ const CodecCombobox = ({
       setOpen(false);
       return;
     }
-    if (!filteredOptions.length) return;
+    if (!filteredSuggestions.length) return;
 
     if (event.key === "ArrowDown") {
       event.preventDefault();
       setOpen(true);
-      setActiveIndex((index) => Math.min(filteredOptions.length - 1, index + 1));
+      setActiveIndex((index) => Math.min(filteredSuggestions.length - 1, index + 1));
       return;
     }
     if (event.key === "ArrowUp") {
@@ -264,13 +274,15 @@ const CodecCombobox = ({
     if (event.key === "Enter" && open) {
       event.preventDefault();
       selectOption(
-        filteredOptions[Math.max(0, Math.min(activeIndex, filteredOptions.length - 1))] as CompressionCodecOption,
+        filteredSuggestions[
+          Math.max(0, Math.min(activeIndex, filteredSuggestions.length - 1))
+        ] as CompressionCodecOption,
       );
     }
   };
 
-  const visible = open && !disabled && filteredOptions.length > 0;
-  const clampedActiveIndex = Math.max(0, Math.min(activeIndex, filteredOptions.length - 1));
+  const visible = open && !disabled && filteredSuggestions.length > 0;
+  const clampedActiveIndex = Math.max(0, Math.min(activeIndex, filteredSuggestions.length - 1));
 
   useEffect(() => {
     if (!visible) return undefined;
@@ -279,7 +291,7 @@ const CodecCombobox = ({
       if (measuredHeight) updateDropdownFrame(measuredHeight);
     });
     return () => cancelAnimationFrame(frame);
-  }, [visible, filteredOptions.length]);
+  }, [visible, filteredSuggestions.length]);
 
   const dropdownStyle: CSSProperties | undefined = dropdownFrame
     ? {
@@ -299,12 +311,12 @@ const CodecCombobox = ({
       role="listbox"
       style={dropdownStyle}
     >
-      {filteredOptions.map((option, index) => (
+      {filteredSuggestions.map((option, index) => (
         <div
           aria-selected={index === clampedActiveIndex}
           className={index === clampedActiveIndex ? "codec-combobox-option active" : "codec-combobox-option"}
           id={`${listboxId}-${index}`}
-          key={option.value}
+          key={`${option.label}-${option.value}`}
           onMouseDown={(event) => {
             event.preventDefault();
             selectOption(option);

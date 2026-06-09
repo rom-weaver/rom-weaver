@@ -19,6 +19,8 @@ type CompressionCodecOption = {
   label: string;
   maxLevel: number | null;
   minLevel: number | null;
+  replaceValue?: boolean;
+  searchText?: string;
 };
 
 type CompressionCodecValidation = {
@@ -33,12 +35,37 @@ const codecOption = (value: string): CompressionCodecOption => ({
   value,
 });
 
+const codecPresetOption = (label: string, value: string, searchText: string): CompressionCodecOption => ({
+  label,
+  maxLevel: null,
+  minLevel: null,
+  replaceValue: true,
+  searchText,
+  value,
+});
+
+const CHD_CODEC_PRESETS: Partial<Record<CompressionCodecFieldKey, CompressionCodecOption[]>> = {
+  chdCreateCdCodecs: [
+    codecPresetOption("zstd preset: cdzs,cdzl,cdfl", "cdzs,cdzl,cdfl", "zstd cdzs cdzl cdfl"),
+    codecPresetOption("lzma preset: cdlz,cdzl,cdfl", "cdlz,cdzl,cdfl", "lzma cdlz cdzl cdfl"),
+  ],
+  chdCreateDvdCodecs: [
+    codecPresetOption("zstd preset: zstd,zlib,huff,flac", "zstd,zlib,huff,flac", "zstd zlib huff flac"),
+    codecPresetOption("lzma preset: lzma,zlib,huff,flac", "lzma,zlib,huff,flac", "lzma zlib huff flac"),
+  ],
+};
+
 const isCompressionCodecFieldKey = (fieldKey: string): fieldKey is CompressionCodecFieldKey =>
   isGeneratedCompressionCodecFieldKey(fieldKey);
 
 const getCompressionCodecOptions = (fieldKey: string): CompressionCodecOption[] =>
   isCompressionCodecFieldKey(fieldKey)
     ? getGeneratedCompressionCodecFieldCodecs(fieldKey).map((codec) => codecOption(codec))
+    : [];
+
+const getCompressionCodecSuggestions = (fieldKey: string): CompressionCodecOption[] =>
+  isCompressionCodecFieldKey(fieldKey)
+    ? [...(CHD_CODEC_PRESETS[fieldKey] ?? []), ...getCompressionCodecOptions(fieldKey)]
     : [];
 
 const getCompressionCodecValues = (fieldKey: string): string[] =>
@@ -113,6 +140,7 @@ export {
   getCompressionCodecLevelMax,
   getCompressionCodecLevelMin,
   getCompressionCodecOptions,
+  getCompressionCodecSuggestions,
   getCompressionCodecValues,
   hasCompressionCodecLevelOverride,
   isCompressionCodecFieldKey,
