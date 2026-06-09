@@ -17,7 +17,7 @@ type WorkflowRomInputStepItem = {
 
 type WorkflowRomInputStepProps = Omit<ComponentProps<typeof StepSection>, "children"> & {
   afterItems?: ReactNode;
-  dropZone: ComponentProps<typeof DropZone>;
+  dropZone?: ComponentProps<typeof DropZone> | null;
   items: WorkflowRomInputStepItem[];
   listId?: string;
   notice?: ReactNode;
@@ -52,7 +52,7 @@ const WorkflowRomInputStep = ({
         </div>
       ) : null}
       {afterItems ? <div className="workflow-step-after-items">{afterItems}</div> : null}
-      <DropZone {...dropZone} />
+      {dropZone ? <DropZone {...dropZone} /> : null}
       {notice}
     </StepSection>
   );

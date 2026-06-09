@@ -32,6 +32,17 @@ import { toWorkflowChecksumProgressProps, toWorkflowFileProgressProps } from "./
 const TIMING_LABEL = (ms?: number) =>
   typeof ms === "number" && Number.isFinite(ms) ? formatTiming(createTiming(ms)) : "";
 const CHECKSUM_TIMING_LABEL = (timing?: string, prefix = "Checksum") => (timing ? `${prefix} ${timing}` : undefined);
+const DISC_PART_FILE_NAME_REGEX = /\.(?:bin|cue)$/i;
+
+const isDiscPartRomInput = (romInput: RomInputRowState) =>
+  romInput.kind === "cue" ||
+  romInput.kind === "track" ||
+  !!romInput.groupId ||
+  romInput.splitBinAvailable === true ||
+  DISC_PART_FILE_NAME_REGEX.test(romInput.info.fileName || "");
+
+const shouldShowRomDropZone = (romInputs: RomInputRowState[]) =>
+  romInputs.length === 0 || romInputs.some(isDiscPartRomInput);
 
 const SectionNotice = ({ id, onDismiss, state }: { id?: string; onDismiss?: () => void; state: NoticeState }) => {
   if (!state.visible) return null;
@@ -87,6 +98,7 @@ function ApplyWorkflowFormView({
   const patches = patchState.items;
   const compressHeaderFormat = getOutputCompressionFormatLabel(outputState.compressionFormat, outputState.options);
   const compressionTypeOptions = createCompressionTypeOptions(outputState.options, "none");
+  const showRomDropZone = shouldShowRomDropZone(romInputs);
 
   if (startup.status === "error") {
     return (
@@ -115,14 +127,18 @@ function ApplyWorkflowFormView({
             </label>
           ) : null
         }
-        dropZone={{
-          accept: fileInputAccept.rom,
-          big: romInputs.length === 0,
-          hint: romInputs.length === 0 ? ROM_INPUT_HINT : undefined,
-          inputId: "rom-weaver-input-file-rom",
-          label: romInputs.length ? "Add another ROM · drop or browse" : "Select ROM · drop or browse",
-          onFiles: (files) => uiController.provideRomInputFiles?.(files),
-        }}
+        dropZone={
+          showRomDropZone
+            ? {
+                accept: fileInputAccept.rom,
+                big: romInputs.length === 0,
+                hint: romInputs.length === 0 ? ROM_INPUT_HINT : undefined,
+                inputId: "rom-weaver-input-file-rom",
+                label: romInputs.length ? "Add another part for this ROM" : "Select ROM · drop or browse",
+                onFiles: (files) => uiController.provideRomInputFiles?.(files),
+              }
+            : null
+        }
         id="rom-weaver-row-file-rom"
         info={
           <InfoPopover title="Input handling">

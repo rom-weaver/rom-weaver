@@ -53,6 +53,34 @@ const createStaticController = (state, methods = {}) => ({
   ...methods,
 });
 
+const createRomInputRowState = (overrides = {}) => {
+  const emptyState = createEmptyPatcherUiState();
+  const { info: infoOverrides = {}, ...rowOverrides } = overrides;
+  return {
+    ...emptyState.romInput,
+    disabled: false,
+    groupId: "",
+    id: "rom-input-1",
+    info: {
+      archiveName: "",
+      checksumsExpanded: true,
+      checksumTiming: "",
+      crc32: "",
+      fileName: "game.nds",
+      md5: "",
+      romInfo: "",
+      sha1: "",
+      validationPhase: "idle",
+      ...infoOverrides,
+    },
+    kind: "rom",
+    loading: false,
+    order: 0,
+    valid: true,
+    ...rowOverrides,
+  };
+};
+
 const fileNameFromPath = (filePath) => filePath.replace(POSIX_DIRECTORY_PREFIX_REGEX, "");
 
 const loadFixtureFile = async (filePath, type = "application/octet-stream") => {
@@ -1077,6 +1105,71 @@ test("split-bin checkbox renders only when CHD split-bin is available", async ()
   expect(splitBinCheckbox.checked).toBe(true);
   splitBinCheckbox.click();
   expect(setChdSplitBin).toHaveBeenCalledWith(false);
+});
+
+test("ROM part dropzone hides after a non-disc ROM", async () => {
+  const state = createEmptyPatcherUiState();
+  state.romInputs = [createRomInputRowState({ info: { fileName: "game.nds" } })];
+  mount(
+    createElement(ApplyWorkflowFormView, {
+      controllers: {
+        dialog: inertDialogController,
+        output: inertOutputController,
+        patchStack: inertStackController,
+        ui: createStaticController(state),
+      },
+    }),
+  );
+
+  await expect
+    .poll(() => document.getElementById("rom-weaver-list-input-stack")?.textContent || "")
+    .toContain("game.nds");
+  expect(document.getElementById("rom-weaver-input-file-rom")).toBeNull();
+});
+
+test("ROM part dropzone stays available for disc-style inputs", async () => {
+  const state = createEmptyPatcherUiState();
+  state.romInputs = [
+    createRomInputRowState({
+      info: { fileName: "direct-disc.bin" },
+    }),
+  ];
+  mount(
+    createElement(ApplyWorkflowFormView, {
+      controllers: {
+        dialog: inertDialogController,
+        output: inertOutputController,
+        patchStack: inertStackController,
+        ui: createStaticController(state),
+      },
+    }),
+  );
+
+  await expect
+    .poll(() => document.getElementById("rom-weaver-input-file-rom")?.getAttribute("aria-label") || "")
+    .toBe("Add another part for this ROM");
+
+  const chdState = createEmptyPatcherUiState();
+  chdState.romInputs = [
+    createRomInputRowState({
+      info: { fileName: "game.iso" },
+      splitBinAvailable: true,
+    }),
+  ];
+  mount(
+    createElement(ApplyWorkflowFormView, {
+      controllers: {
+        dialog: inertDialogController,
+        output: inertOutputController,
+        patchStack: inertStackController,
+        ui: createStaticController(chdState),
+      },
+    }),
+  );
+
+  await expect
+    .poll(() => document.getElementById("rom-weaver-input-file-rom")?.getAttribute("aria-label") || "")
+    .toBe("Add another part for this ROM");
 });
 
 test("queued staging rows show waiting progress", async () => {
