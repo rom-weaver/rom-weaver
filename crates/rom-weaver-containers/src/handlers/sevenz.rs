@@ -103,6 +103,11 @@ impl SevenZContainerHandler {
 const LZMA2_MT_SPLIT_THRESHOLD_BYTES: u64 = 4 << 20;
 /// Smallest parallel block; mirrors `LZMA2_MT_MIN_CHUNK_SIZE` in the C writer.
 const LZMA2_MT_MIN_CHUNK_BYTES: u64 = 1 << 20;
+/// Browser liblzma's raw encoder vtables become unstable with higher concurrent
+/// level-9 jobs under WASI threads; keep real parallelism without entering the
+/// trap-prone range.
+#[cfg(target_family = "wasm")]
+const LZMA2_MT_WASM_MAX_THREADS: usize = 2;
 
 /// Estimate how many LZMA2 worker blocks the 7z encoder will actually run — the
 /// real parallelism ceiling. Files at or below the split threshold run as a
@@ -151,16 +156,47 @@ fn lzma2_effective_dict_bytes(total_bytes: u64, level: u32) -> u64 {
     lzma2_round_up_dict(total_bytes.min(preset), preset)
 }
 
+#[cfg(target_family = "wasm")]
+fn lzma2_budget_max_threads() -> Option<usize> {
+    Some(LZMA2_MT_WASM_MAX_THREADS)
+}
+
+#[cfg(not(target_family = "wasm"))]
+fn lzma2_budget_max_threads() -> Option<usize> {
+    None
+}
+
+fn lzma2_worker_budget_bytes(total_bytes: u64, level: u32) -> u64 {
+    lzma2_effective_dict_bytes(total_bytes, level)
+        .saturating_mul(12)
+        .max(1)
+}
+
+pub(crate) fn lzma2_threads_for_budget_with_limits(
+    total_bytes: u64,
+    level: u32,
+    budget_bytes: u64,
+    max_threads: Option<usize>,
+) -> usize {
+    let per_worker = lzma2_worker_budget_bytes(total_bytes, level);
+    let budget_threads = usize::try_from((budget_bytes / per_worker).max(1)).unwrap_or(usize::MAX);
+    max_threads
+        .map(|limit| budget_threads.min(limit.max(1)))
+        .unwrap_or(budget_threads)
+}
+
 /// Cap the worker count so peak memory fits a fraction of system RAM. Each seeded
 /// block runs its own full-dictionary encoder (~12x the dictionary including the
 /// seed copy and buffers), so on a memory-constrained host this collapses toward
 /// a single encoder (close to single-thread 7-Zip), while a large host keeps more
-/// workers. Falls back to a 2 GiB budget when RAM can't be queried.
+/// workers.
 pub(crate) fn lzma2_threads_for_budget(total_bytes: u64, level: u32, budget_bytes: u64) -> usize {
-    let per_worker = lzma2_effective_dict_bytes(total_bytes, level)
-        .saturating_mul(12)
-        .max(1);
-    usize::try_from((budget_bytes / per_worker).max(1)).unwrap_or(usize::MAX)
+    lzma2_threads_for_budget_with_limits(
+        total_bytes,
+        level,
+        budget_bytes,
+        lzma2_budget_max_threads(),
+    )
 }
 
 fn lzma2_memory_thread_cap(total_bytes: u64, level: u32) -> usize {

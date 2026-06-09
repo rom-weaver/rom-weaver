@@ -2453,6 +2453,37 @@ mod tests {
     }
 
     #[test]
+    fn seven_z_level9_small_inputs_reduce_dict_under_wasm_budget() {
+        let large_total = 96 * 1024 * 1024;
+        let reduced_dict_total = 32 * 1024 * 1024;
+        let gib = 1024 * 1024 * 1024;
+        let wasm_max_threads = Some(2);
+
+        assert_eq!(
+            super::lzma2_threads_for_budget_with_limits(large_total, 9, gib, wasm_max_threads),
+            1
+        );
+        assert_eq!(
+            super::lzma2_threads_for_budget_with_limits(
+                reduced_dict_total,
+                9,
+                gib,
+                wasm_max_threads
+            ),
+            2
+        );
+        assert_eq!(
+            super::lzma2_threads_for_budget_with_limits(
+                reduced_dict_total,
+                9,
+                4 * gib,
+                wasm_max_threads
+            ),
+            2
+        );
+    }
+
+    #[test]
     fn zip_zstd_memory_budget_scales_thread_cap() {
         let total = 256 * 1024 * 1024;
         let gib = 1024 * 1024 * 1024;

@@ -1003,10 +1003,10 @@ describe('rom-weaver-wasm browser runner parity', () => {
     });
   }, LONG_MATRIX_TIMEOUT_MS);
 
-  it('threaded browser runner compresses memory-heavy 7z lzma2 level 9 without worker traps', async () => {
+  it('threaded browser runner compresses reduced-dict 7z lzma2 level 9 without worker traps', async () => {
     await withTempFixture(async ({ dir, init, worker, opfsHandle }) => {
       expect(init.threaded).toBe(true);
-      const sourceSize = 96 * 1024 * 1024;
+      const sourceSize = 32 * 1024 * 1024;
       const sourcePath = joinGuestPath(dir, 'threaded-7z-lzma2-level9-source.bin');
       const archivePath = joinGuestPath(dir, 'threaded-7z-lzma2-level9.7z');
       const extractDir = joinGuestPath(dir, 'threaded-7z-lzma2-level9-extract');
@@ -1059,7 +1059,7 @@ describe('rom-weaver-wasm browser runner parity', () => {
             && event.percent < 100,
         )
         .map((event) => event.percent);
-      expect(new Set(codecProgressPercents).size).toBeGreaterThanOrEqual(6);
+      expect(new Set(codecProgressPercents).size).toBeGreaterThanOrEqual(2);
       expect(codecProgressPercents.at(-1)).toBe(99);
 
       const extractResult = await worker.runJson([

@@ -282,6 +282,10 @@ pub(crate) fn write_archive_with_libarchive(
     let emitted_codec_progress_bucket = Arc::new(AtomicU8::new(0));
     let codec_progress_context = context.clone();
     let codec_progress_bucket = Arc::clone(&emitted_codec_progress_bucket);
+    let final_codec_progress_bucket = Arc::clone(&emitted_codec_progress_bucket);
+    let final_codec_progress_context = context.clone();
+    let final_codec_progress_execution = execution.clone();
+    let final_codec_progress_format = config.format_name;
     let codec_progress_execution = execution.clone();
     let codec_progress_format = config.format_name;
     let on_codec_bytes_processed: Option<Box<dyn FnMut(u64)>> =
@@ -499,10 +503,47 @@ pub(crate) fn write_archive_with_libarchive(
         result,
         libarchive_close_create_archive(archive, config.format_name),
     ) {
-        (Ok(bytes), Ok(())) => Ok(bytes),
+        (Ok(bytes), Ok(())) => {
+            emit_final_7zip_codec_progress(
+                &final_codec_progress_context,
+                final_codec_progress_format,
+                &final_codec_progress_execution,
+                &final_codec_progress_bucket,
+            );
+            Ok(bytes)
+        }
         (Err(error), _) => Err(error),
         (Ok(_), Err(error)) => Err(error),
     }
+}
+
+fn emit_final_7zip_codec_progress(
+    context: &OperationContext,
+    format: &str,
+    execution: &ThreadExecution,
+    emitted_bucket: &AtomicU8,
+) {
+    loop {
+        let previous = emitted_bucket.load(Ordering::Relaxed);
+        if previous == 0 || previous >= 99 {
+            return;
+        }
+        if emitted_bucket
+            .compare_exchange(previous, 99, Ordering::Relaxed, Ordering::Relaxed)
+            .is_ok()
+        {
+            break;
+        }
+    }
+    emit_container_running_progress(
+        context,
+        "compress",
+        format,
+        "create",
+        format!("compressing `{format}`"),
+        99.0,
+        Some(execution),
+    );
 }
 
 pub(crate) fn libarchive_open_read_stream(
