@@ -9,7 +9,7 @@ const SETTINGS_MESSAGE_KEYS = [
   "fixChecksum",
   "language",
   "logLevel",
-  "mobileDevTools",
+  "devTools",
   "requireInputChecksumMatch",
   "requireOutputChecksumMatch",
   "rvzBlockSize",

@@ -21,11 +21,11 @@ import { WebappRoot } from "./webapp-root.tsx";
 import { type ConfirmationDialogState, createEmptyConfirmationDialogState } from "./webapp-root-types.ts";
 
 // Webapp controller invariants now live across `settings-state` and `webapp-controller`:
-// mobileDevTools: false
-// loadedSettings.mobileDevTools
+// devTools: false
+// loadedSettings.devTools
 // localStorage.setItem(LOCAL_STORAGE_SETTINGS_ID, JSON.stringify(settings))
-// ROM_WEAVER_ERUDA_LOADER.setEnabled(settings.mobileDevTools)
-// window.ROM_WEAVER_ERUDA_LOADER.setEnabled(settings.mobileDevTools)
+// ROM_WEAVER_ERUDA_LOADER.setEnabled(settings.devTools)
+// window.ROM_WEAVER_ERUDA_LOADER.setEnabled(settings.devTools)
 // SETTINGS_VALID_CHD_CREATECD_CODECS = ['cdzs', 'cdlz', 'cdzl', 'cdfl']
 // validCodecs.indexOf(codec) === -1
 // rawDraft.compressionProfile
@@ -54,6 +54,7 @@ type RuntimeValue =
 type RuntimeSettings = Record<string, RuntimeValue> & {
   language?: RuntimeScalar;
   allowDropFiles?: RuntimeScalar;
+  devTools?: RuntimeScalar;
   mobileDevTools?: RuntimeScalar;
   ondropfiles?: (...args: RuntimeValue[]) => RuntimeValue;
   oninitialize?: (runtime?: RuntimeValue) => void;
@@ -158,7 +159,7 @@ const applySettingsToRuntime = (settings: RuntimeSettings) => {
     workerThreads: settings.workerThreads,
   });
   if (window.ROM_WEAVER_ERUDA_LOADER && typeof window.ROM_WEAVER_ERUDA_LOADER.setEnabled === "function")
-    window.ROM_WEAVER_ERUDA_LOADER.setEnabled(settings.mobileDevTools);
+    window.ROM_WEAVER_ERUDA_LOADER.setEnabled(settings.devTools ?? settings.mobileDevTools);
 };
 
 const webappController = createWebappRootController({

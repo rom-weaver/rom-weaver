@@ -21,8 +21,30 @@ const join = (...values: Array<string | false | null | undefined>) => values.fil
 
 type WorkflowTab = { id: string; label: string; icon: ReactNode };
 const MOBILE_DEVTOOLS_STATE_EVENT = "rom-weaver:mobile-devtools-state";
+const MOBILE_DEVTOOLS_MEDIA_QUERY = "(pointer: coarse), (max-width: 767px)";
 
 const readMobileDevToolsOpen = () => typeof window !== "undefined" && window.ROM_WEAVER_ERUDA_PANEL_OPEN === true;
+const readMobileDevToolsAvailable = () =>
+  typeof window !== "undefined" &&
+  typeof window.matchMedia === "function" &&
+  window.matchMedia(MOBILE_DEVTOOLS_MEDIA_QUERY).matches;
+
+const useMobileDevToolsAvailable = () => {
+  const [available, setAvailable] = useState(readMobileDevToolsAvailable);
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return undefined;
+    const media = window.matchMedia(MOBILE_DEVTOOLS_MEDIA_QUERY);
+    const syncAvailable = () => setAvailable(media.matches);
+    syncAvailable();
+    if (typeof media.addEventListener === "function") {
+      media.addEventListener("change", syncAvailable);
+      return () => media.removeEventListener("change", syncAvailable);
+    }
+    media.addListener?.(syncAvailable);
+    return () => media.removeListener?.(syncAvailable);
+  }, []);
+  return available;
+};
 
 const WorkflowTabs = ({
   tabs,
@@ -116,8 +138,8 @@ const MobileDevToolsButton = ({ onToggleMobileDevTools }: { onToggleMobileDevToo
 };
 
 const Topbar = ({
+  devToolsEnabled,
   logoSrc,
-  mobileDevToolsEnabled,
   tabs,
   currentTab,
   onCopyConsoleLogs,
@@ -125,37 +147,38 @@ const Topbar = ({
   onToggleMobileDevTools,
   onOpenSettings,
 }: {
+  devToolsEnabled: boolean;
   logoSrc?: string;
-  mobileDevToolsEnabled: boolean;
   tabs: WorkflowTab[];
   currentTab: string;
   onCopyConsoleLogs: () => Promise<void | string>;
   onSelectTab: (id: string) => void;
   onToggleMobileDevTools: () => void;
   onOpenSettings: () => void;
-}) => (
-  <header className="topbar">
-    <span className="wordmark">
-      {logoSrc ? <img alt="" className="logo" src={logoSrc} /> : null}
-      <span className="wm-text">
-        rom<span className="hy">-</span>
-        <b>weaver</b>
+}) => {
+  const mobileDevToolsAvailable = useMobileDevToolsAvailable();
+  return (
+    <header className="topbar">
+      <span className="wordmark">
+        {logoSrc ? <img alt="" className="logo" src={logoSrc} /> : null}
+        <span className="wm-text">
+          rom<span className="hy">-</span>
+          <b>weaver</b>
+        </span>
       </span>
-    </span>
-    <WorkflowTabs current={currentTab} onSelect={onSelectTab} tabs={tabs} />
-    <span className="spacer" />
-    <ThemeToggle />
-    {mobileDevToolsEnabled ? (
-      <>
-        <ConsoleLogCopyButton onCopyConsoleLogs={onCopyConsoleLogs} />
+      <WorkflowTabs current={currentTab} onSelect={onSelectTab} tabs={tabs} />
+      <span className="spacer" />
+      <ThemeToggle />
+      {devToolsEnabled ? <ConsoleLogCopyButton onCopyConsoleLogs={onCopyConsoleLogs} /> : null}
+      {devToolsEnabled && mobileDevToolsAvailable ? (
         <MobileDevToolsButton onToggleMobileDevTools={onToggleMobileDevTools} />
-      </>
-    ) : null}
-    <button aria-label="Settings" className="iconbtn" onClick={onOpenSettings} title="Settings" type="button">
-      <Settings aria-hidden="true" />
-    </button>
-  </header>
-);
+      ) : null}
+      <button aria-label="Settings" className="iconbtn" onClick={onOpenSettings} title="Settings" type="button">
+        <Settings aria-hidden="true" />
+      </button>
+    </header>
+  );
+};
 
 /** Update-available / wake-lock notice bar. `onReload` shows the reload action; `warn` styles it amber. */
 const Banner = ({

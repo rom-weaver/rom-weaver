@@ -1,6 +1,6 @@
 import { createElement, useMemo } from "react";
 import { createRoot } from "react-dom/client";
-import { beforeEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test } from "vitest";
 import { page } from "vitest/browser";
 import { createEmptyPageUpdateState } from "../../src/webapp/page-update-state.ts";
 import { getDefaultSettings } from "../../src/webapp/settings/settings-state.ts";
@@ -16,6 +16,7 @@ const POSIX_DIRECTORY_PREFIX_REGEX = /^.*\//;
 const MULTI_ROM_ZIP = "tests/fixtures/archives/multi-rom.zip";
 const ONE_ROM_ZIP = "tests/fixtures/archives/one-rom.zip";
 const CRC32_TEXT_REGEX = /^[0-9a-f]{8}$/i;
+const originalMatchMedia = window.matchMedia;
 
 const fileNameFromPath = (filePath) => filePath.replace(POSIX_DIRECTORY_PREFIX_REGEX, "");
 
@@ -85,6 +86,25 @@ const createServiceWorkerCacheState = () => ({
   updateTitle: "",
 });
 
+const createMatchMediaResult = (query, matches) => ({
+  addEventListener: () => undefined,
+  addListener: () => undefined,
+  dispatchEvent: () => false,
+  matches,
+  media: query,
+  onchange: null,
+  removeEventListener: () => undefined,
+  removeListener: () => undefined,
+});
+
+const setMobileDevToolsViewport = (matches) => {
+  window.matchMedia = (query) => {
+    if (query.includes("pointer: coarse") || query.includes("max-width: 767px"))
+      return createMatchMediaResult(query, matches);
+    return originalMatchMedia ? originalMatchMedia.call(window, query) : createMatchMediaResult(query, false);
+  };
+};
+
 const createWebappState = (settings = getDefaultSettings()) => ({
   creatorSession: createEmptyCreatorSessionState(),
   currentView: "patcher",
@@ -133,6 +153,10 @@ beforeEach(() => {
   document.body.replaceChildren(rootElement);
 });
 
+afterEach(() => {
+  window.matchMedia = originalMatchMedia;
+});
+
 test("WebappRoot mounts the full workflow shell and stages archive inputs", async () => {
   mountWebappRoot();
 
@@ -166,12 +190,18 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
   await expect.element(page.getByText(CRC32_TEXT_REGEX)).toBeInTheDocument();
 });
 
-test("WebappRoot only shows mobile dev tools controls when enabled", async () => {
+test("WebappRoot shows dev tools copy logs on desktop and Eruda only on mobile", async () => {
   mountWebappRoot();
   await expect.element(page.getByRole("button", { name: "Mobile dev tools" })).not.toBeInTheDocument();
   await expect.element(page.getByRole("button", { name: "Copy console logs" })).not.toBeInTheDocument();
 
-  mountWebappRoot({ settings: { ...getDefaultSettings(), mobileDevTools: true } });
-  await expect.element(page.getByRole("button", { name: "Mobile dev tools" })).toBeInTheDocument();
+  setMobileDevToolsViewport(false);
+  mountWebappRoot({ settings: { ...getDefaultSettings(), devTools: true } });
   await expect.element(page.getByRole("button", { name: "Copy console logs" })).toBeInTheDocument();
+  await expect.element(page.getByRole("button", { name: "Mobile dev tools" })).not.toBeInTheDocument();
+
+  setMobileDevToolsViewport(true);
+  mountWebappRoot({ settings: { ...getDefaultSettings(), devTools: true } });
+  await expect.element(page.getByRole("button", { name: "Copy console logs" })).toBeInTheDocument();
+  await expect.element(page.getByRole("button", { name: "Mobile dev tools" })).toBeInTheDocument();
 });

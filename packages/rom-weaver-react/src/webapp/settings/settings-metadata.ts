@@ -49,7 +49,7 @@ type SettingsState = {
   zipCodec: string;
   zipLevel: number | "";
   workerThreads: number | "auto";
-  mobileDevTools: boolean;
+  devTools: boolean;
 };
 
 type NumericDraftValue = number | "" | string;
@@ -171,7 +171,7 @@ const SETTINGS_FIELD_ORDER = [
   "zipCodec",
   "zipLevel",
   "workerThreads",
-  "mobileDevTools",
+  "devTools",
 ] as const satisfies readonly SettingsFieldKey[];
 
 const SETTINGS_LEVEL_OVERRIDE_FIELDS = [
@@ -309,6 +309,15 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     validationLabel: "Container Preference",
     validValues: ["7z/special", "zip/special", "special only", "7z only", "zip only", "none"],
   },
+  devTools: {
+    defaultValue: false,
+    id: "settings-dev-tools",
+    key: "devTools",
+    kind: "checkbox",
+    label: getSettingsLabel("devTools"),
+    labelDataLocalize: "Enable dev tools",
+    layout: "large",
+  },
   fixChecksum: {
     defaultValue: false,
     id: "settings-fix-checksum",
@@ -359,15 +368,6 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     suggestion: "Default: Warnings. Debug and Trace include detailed workflow progress.",
     validationLabel: "Log level",
     validValues: [...LOG_LEVELS],
-  },
-  mobileDevTools: {
-    defaultValue: false,
-    id: "settings-mobile-dev-tools",
-    key: "mobileDevTools",
-    kind: "checkbox",
-    label: getSettingsLabel("mobileDevTools"),
-    labelDataLocalize: "Enable mobile dev tools",
-    layout: "large",
   },
   requireInputChecksumMatch: {
     defaultValue: true,

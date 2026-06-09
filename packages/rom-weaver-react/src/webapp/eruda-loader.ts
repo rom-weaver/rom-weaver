@@ -4,7 +4,9 @@ import type { Eruda } from "eruda";
   const LOCAL_STORAGE_SETTINGS_ID = "rom-weaver-settings";
   const SETTINGS_STORAGE_VERSION = 5;
   const ERUDA_TOOLS = ["console", "elements", "network", "resources", "sources", "info", "settings"];
+  const MOBILE_ERUDA_QUERY = "(pointer: coarse), (max-width: 767px)";
 
+  let devToolsEnabled = false;
   let erudaEnabled = false;
   let erudaScriptLoading = false;
   let erudaLoadPromise: Promise<void> | null = null;
@@ -17,7 +19,7 @@ import type { Eruda } from "eruda";
     const settings = JSON.parse(rawSettings) as unknown;
     if (!isRecord(settings) || settings.version !== SETTINGS_STORAGE_VERSION) return false;
     const commonSettings = isRecord(settings.common) ? settings.common : null;
-    return commonSettings?.mobileDevTools === true;
+    return (commonSettings?.devTools ?? commonSettings?.mobileDevTools) === true;
   };
 
   const readStoredErudaSetting = (): boolean => {
@@ -29,7 +31,10 @@ import type { Eruda } from "eruda";
       return false;
     }
   };
-  const shouldEnableEruda = () => readStoredErudaSetting();
+  const mobileErudaMedia = typeof window.matchMedia === "function" ? window.matchMedia(MOBILE_ERUDA_QUERY) : null;
+  const canUseEruda = () =>
+    mobileErudaMedia?.matches === true ||
+    (mobileErudaMedia === null && typeof window.innerWidth === "number" && window.innerWidth <= 767);
   const setErudaPanelOpen = (open: boolean) => {
     erudaPanelOpen = open;
     window.ROM_WEAVER_ERUDA_PANEL_OPEN = open;
@@ -175,9 +180,13 @@ import type { Eruda } from "eruda";
     else if (typeof window.eruda.hide === "function") window.eruda.hide();
     window.__ROM_WEAVER_ERUDA_INITIALIZED__ = false;
   };
-  const setErudaEnabled = (enabled: RuntimeValue) => {
-    if (enabled) loadEruda();
+  const syncErudaAvailability = () => {
+    if (devToolsEnabled && canUseEruda()) loadEruda();
     else unloadEruda();
+  };
+  const setErudaEnabled = (enabled: RuntimeValue) => {
+    devToolsEnabled = !!enabled;
+    syncErudaAvailability();
   };
 
   window.ROM_WEAVER_ERUDA_LOADER = {
@@ -192,8 +201,10 @@ import type { Eruda } from "eruda";
     },
     toggle: toggleEruda,
   };
+  if (typeof mobileErudaMedia?.addEventListener === "function")
+    mobileErudaMedia.addEventListener("change", syncErudaAvailability);
+  else if (typeof mobileErudaMedia?.addListener === "function") mobileErudaMedia.addListener(syncErudaAvailability);
   syncErudaPanelOpenState();
-
-  if (!shouldEnableEruda()) return;
-  loadEruda();
+  devToolsEnabled = readStoredErudaSetting();
+  syncErudaAvailability();
 })();

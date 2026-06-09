@@ -28,10 +28,10 @@ test("settings persistence round-trips every visible settings field", () => {
     chdCreateDvdCodecs: "zstd:12,lzma:7,zlib:6,huff,flac:5",
     compressionProfile: "medium",
     defaultCompression: "7z only",
+    devTools: true,
     fixChecksum: true,
     language: "fr",
     logLevel: "debug",
-    mobileDevTools: true,
     requireInputChecksumMatch: false,
     requireOutputChecksumMatch: false,
     rvzBlockSize: 262144,
@@ -51,7 +51,7 @@ test("settings persistence round-trips every visible settings field", () => {
 
   const storedSettings = JSON.parse(serializedSettings);
   expect(storedSettings.common.defaultCompression).toBe("7z only");
-  expect(storedSettings.common.mobileDevTools).toBe(true);
+  expect(storedSettings.common.devTools).toBe(true);
   expect(storedSettings.apply.compression.rvzCodec).toBe("zstd:7");
   expect(storedSettings.apply.compression.rvzCompressionLevel).toBeUndefined();
   expect(storedSettings.apply.compression.sevenZipLevel).toBeUndefined();
@@ -79,6 +79,21 @@ test("settings persistence round-trips every visible settings field", () => {
   );
 
   expect(roundTrippedFields).toEqual(expectedFields);
+});
+
+test("old mobile dev tools settings load as dev tools", () => {
+  const storage = createMemoryStorage();
+  storage.setItem(
+    LOCAL_STORAGE_SETTINGS_ID,
+    JSON.stringify({
+      common: {
+        mobileDevTools: true,
+      },
+      version: SETTINGS_STORAGE_VERSION,
+    }),
+  );
+
+  expect(loadSettings(storage).devTools).toBe(true);
 });
 
 test("old default archive settings are ignored", () => {
