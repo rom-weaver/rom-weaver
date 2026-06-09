@@ -262,6 +262,19 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
           writableRoots,
         },
       });
+      // A run can fail before wasi.start (e.g. an OPFS fd-build error) after the thread-pool command
+      // has already selected and dispatched its shells. Those shells stay stamped with currentCommand
+      // until the command is shut down, so without a guaranteed teardown a failed run permanently
+      // wedges the pool and later runs throw "worker N is already busy". command.shutdown() (reached
+      // via waitForWorkers) is idempotent, so draining once here is safe even on the success path,
+      // which has already drained by the time this finally runs.
+      let threadSpawnerDrained = false;
+      const drainThreadSpawnerOnce = async () => {
+        if (threadSpawnerDrained) return;
+        threadSpawnerDrained = true;
+        await threadSpawner.ready.catch(() => {});
+        await threadSpawner.waitForWorkers().catch(() => {});
+      };
       trace(
         `[browser-opfs] build wasi fds start mounts=${runtimeMounts.length} syncAccess=${resolvedSyncAccessMode} scratch=${resolvedMainScratchFilePoolSize}`,
       );
@@ -290,6 +303,11 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
         runCloseables: closeables,
         trace,
         virtualOnlyMounts: resolvedVirtualOnlyMounts,
+      }).catch(async (error) => {
+        // fd-build aborted after the pool command already claimed shells; release them so the
+        // failure cannot wedge the pool for the next run, then surface the original error.
+        await drainThreadSpawnerOnce();
+        throw error;
       });
       trace(`[browser-opfs] build wasi fds done fds=${fds.length} mounts=${mounts.length}`);
 
@@ -324,6 +342,7 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
         }
         trace('[browser-opfs] waitForWorkers start');
         await threadSpawner.waitForWorkers();
+        threadSpawnerDrained = true;
         trace('[browser-opfs] waitForWorkers done');
         traceFlushOpenWasiFileDescriptors(trace, wasi.fds, '[browser-opfs] flush fd write buffers');
         traceDirectWasiFileIoStats(trace, wasi, '[browser-opfs] direct file io');
@@ -363,6 +382,9 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
         };
       } finally {
         trace(`[browser-opfs] cleanup start succeeded=${runSucceeded}`);
+        // Drain before tearing down mounts (mirrors the success path's waitForWorkers→flush order) so
+        // pool workers release their OPFS handles before the mount handles are closed.
+        await drainThreadSpawnerOnce();
         closeSyncFiles(closeables);
         await cleanupBrowserOpfsMounts(mounts);
         if (!runSucceeded || runOptions.invalidateMountCacheAfterRun) await mountCache.invalidateMounts(mounts);
