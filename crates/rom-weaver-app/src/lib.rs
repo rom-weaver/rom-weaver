@@ -763,6 +763,10 @@ mod patch_create;
 mod patch_validate;
 pub use patch_commands::{PatchCreateFormatPolicyMetadata, patch_create_format_policy_metadata};
 
+#[path = "patch_filename_checksum.rs"]
+mod patch_filename_checksum;
+use patch_filename_checksum::{embed_checksum_in_filename, parse_filename_requirements};
+
 mod command_args;
 pub use command_args::{
     BatchHeaderFixerCommand, ChecksumCommand, CompressCommand, ExtractCommand, ListCommand,

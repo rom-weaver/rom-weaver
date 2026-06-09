@@ -485,6 +485,75 @@ impl CliApp {
         file_name.to_string()
     }
 
+    /// Merge input requirements parsed from a patch file name (`<algo>:<hex>`
+    /// checksum tokens, bracket-enclosed bare checksums, and `bytes:`/`size:`
+    /// size tokens) into the caller's expected requirements. Returns a failure
+    /// report when a parsed value conflicts with one the caller already
+    /// requested explicitly.
+    pub(super) fn merge_filename_requirements(
+        &self,
+        command: &'static str,
+        patch_path: &Path,
+        patch_name: &str,
+        expected_input_checksums: &mut BTreeMap<String, String>,
+        expected_input_size: &mut Option<u64>,
+        probe_threads: Option<ThreadExecution>,
+    ) -> Option<OperationReport> {
+        let requirements = parse_filename_requirements(patch_name);
+        for (algorithm, hex) in requirements.checksums {
+            match expected_input_checksums.get(&algorithm) {
+                Some(existing) if existing != &hex => {
+                    return Some(OperationReport::failed(
+                        OperationFamily::Patch,
+                        None,
+                        "validate",
+                        format!(
+                            "patch file name requires input {algorithm} {hex} but --validate-with-checksum expects {existing}"
+                        ),
+                        probe_threads,
+                    ));
+                }
+                Some(_) => {}
+                None => {
+                    trace!(
+                        command,
+                        patch = %patch_path.display(),
+                        algorithm = %algorithm,
+                        checksum = %hex,
+                        "parsed input checksum requirement from patch file name"
+                    );
+                    expected_input_checksums.insert(algorithm, hex);
+                }
+            }
+        }
+        if let Some(size) = requirements.size {
+            match expected_input_size {
+                Some(existing) if *existing != size => {
+                    return Some(OperationReport::failed(
+                        OperationFamily::Patch,
+                        None,
+                        "validate",
+                        format!(
+                            "patch file name requires input size {size} byte(s) but {existing} byte(s) was already requested"
+                        ),
+                        probe_threads,
+                    ));
+                }
+                Some(_) => {}
+                None => {
+                    trace!(
+                        command,
+                        patch = %patch_path.display(),
+                        size,
+                        "parsed input size requirement from patch file name"
+                    );
+                    *expected_input_size = Some(size);
+                }
+            }
+        }
+        None
+    }
+
     pub(super) fn parse_patch_apply_checksum_values(
         values: &[String],
         flag_name: &str,

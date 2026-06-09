@@ -891,6 +891,16 @@ pub struct PatchCreateCommand {
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
     pub ignore_checksum_validation: bool,
+    #[cfg_attr(
+        not(target_arch = "wasm32"),
+        arg(
+            long = "checksum-name",
+            help = "Embed the original ROM crc32 into the output patch file name (as `[crc32:HEX]`) so patch apply can validate the input ROM; most useful for formats that carry no embedded checksum"
+        )
+    )]
+    #[serde(default)]
+    #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]
+    pub checksum_name: bool,
     #[cfg_attr(not(target_arch = "wasm32"), arg(long, default_value = "auto"))]
     #[serde(default)]
     #[cfg_attr(feature = "typescript-types", ts(optional, as = "Option<_>"))]

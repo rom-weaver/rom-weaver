@@ -39,7 +39,7 @@ export type PatchValidateCommand = { input: string, select?: Array<string>, rom_
 
 export type PatchCreateCandidatesCommand = { original: string, modified: string, threads?: ThreadBudget, };
 
-export type PatchCreateCommand = { original: string, modified: string, format?: string, output: string, ignore_checksum_validation?: boolean, threads?: ThreadBudget, xdelta_secondary?: string, };
+export type PatchCreateCommand = { original: string, modified: string, format?: string, output: string, ignore_checksum_validation?: boolean, checksum_name?: boolean, threads?: ThreadBudget, xdelta_secondary?: string, };
 
 export type PatchCommands = { "type": "apply", "args": PatchApplyCommand } | { "type": "validate", "args": PatchValidateCommand } | { "type": "create-candidates", "args": PatchCreateCandidatesCommand } | { "type": "create", "args": PatchCreateCommand };
 

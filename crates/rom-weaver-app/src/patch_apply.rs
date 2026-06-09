@@ -105,7 +105,7 @@ impl CliApp {
                     );
                 }
             };
-        let expected_input_checksums = match Self::parse_patch_apply_checksum_values(
+        let mut expected_input_checksums = match Self::parse_patch_apply_checksum_values(
             &validate_with_checksums,
             "--validate-with-checksum",
         ) {
@@ -194,6 +194,22 @@ impl CliApp {
             ) {
                 return self.finish("patch-apply", report);
             }
+        }
+
+        let mut expected_input_size: Option<u64> = None;
+        if !ignore_checksum_validation
+            && let Some(first_patch) = patches.first()
+            && let Some(patch_name) = first_patch.file_name().and_then(|name| name.to_str())
+            && let Some(report) = self.merge_filename_requirements(
+                "patch-apply",
+                first_patch,
+                patch_name,
+                &mut expected_input_checksums,
+                &mut expected_input_size,
+                probe_threads.clone(),
+            )
+        {
+            return self.finish("patch-apply", report);
         }
 
         let resolved_input = match self.resolve_source_with_auto_extract(
@@ -434,6 +450,20 @@ impl CliApp {
             } else {
                 apply_input
             };
+            if let Some(expected_size) = expected_input_size {
+                match Self::validate_patch_input_size(&apply_input, Some(expected_size), None) {
+                    Ok(label) => checksum_verification_labels.push(label),
+                    Err(error) => {
+                        return OperationReport::failed(
+                            OperationFamily::Patch,
+                            None,
+                            "validate",
+                            error.to_string(),
+                            Some(context.plan_threads(ThreadCapability::single_threaded())),
+                        );
+                    }
+                }
+            }
             if !expected_input_checksums.is_empty() {
                 self.emit_running(
                     OperationLabel {

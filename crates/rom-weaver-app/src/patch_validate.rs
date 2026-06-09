@@ -67,7 +67,7 @@ impl CliApp {
                     );
                 }
             };
-        let expected_input_checksums = match Self::parse_patch_apply_checksum_values(
+        let mut expected_input_checksums = match Self::parse_patch_apply_checksum_values(
             &validate_with_checksums,
             "--validate-with-checksum",
         ) {
@@ -85,6 +85,21 @@ impl CliApp {
                 );
             }
         };
+        let mut effective_expected_size = validate_with_size;
+        if !ignore_checksum_validation
+            && let Some(first_patch) = patches.first()
+            && let Some(patch_name) = first_patch.file_name().and_then(|name| name.to_str())
+            && let Some(report) = self.merge_filename_requirements(
+                "patch-validate",
+                first_patch,
+                patch_name,
+                &mut expected_input_checksums,
+                &mut effective_expected_size,
+                probe_threads.clone(),
+            )
+        {
+            return self.finish("patch-validate", report);
+        }
         if let Some(report) = self.require_existing_path(
             "patch-validate",
             OperationFamily::Patch,
@@ -299,10 +314,10 @@ impl CliApp {
             } else {
                 validate_input
             };
-            if validate_with_size.is_some() || validate_with_min_size.is_some() {
+            if effective_expected_size.is_some() || validate_with_min_size.is_some() {
                 match Self::validate_patch_input_size(
                     &validate_input,
-                    validate_with_size,
+                    effective_expected_size,
                     validate_with_min_size,
                 ) {
                     Ok(label) => validation_labels.push(label),
@@ -599,7 +614,7 @@ impl CliApp {
                     "patch_count": patch_count,
                     "source_values": {
                         "minimum_size": validate_with_min_size,
-                        "size": validate_with_size,
+                        "size": effective_expected_size,
                         "checksums": expected_input_checksums,
                     },
                     "status": "passed",

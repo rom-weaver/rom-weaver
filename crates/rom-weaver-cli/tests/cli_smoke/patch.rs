@@ -6378,3 +6378,246 @@ fn patch_create_format_flag_overrides_mismatched_extension_with_warning() {
     assert!(label.contains("does not match"));
     assert!(patch.path().exists());
 }
+
+#[test]
+fn patch_create_checksum_name_embeds_crc32_and_apply_validates_input() {
+    let temp = setup_temp_dir();
+    let original = temp.child("old.bin");
+    let modified = temp.child("new.bin");
+    let patch = temp.child("hack.ips");
+    fs::write(original.path(), b"abcdefgh").expect("fixture");
+    fs::write(modified.path(), b"a1XYZf!!!").expect("fixture");
+
+    let create_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch", "create",
+            "--original",
+            original.path().to_str().expect("path"),
+            "--modified",
+            modified.path().to_str().expect("path"),
+            "--format",
+            "ips",
+            "--output",
+            patch.path().to_str().expect("path"),
+            "--checksum-name",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let create_json = parse_single_json_line(&create_output);
+    assert_eq!(create_json["status"], "succeeded");
+    let emitted = create_json["details"]["emitted_files"]
+        .as_array()
+        .expect("emitted_files array");
+    let file_name = emitted[0]["file_name"].as_str().expect("file_name");
+    assert!(
+        file_name.starts_with("hack [crc32:") && file_name.ends_with("].ips"),
+        "unexpected checksum-name output: {file_name}"
+    );
+    let token_start = file_name.find("[crc32:").expect("token") + "[crc32:".len();
+    let crc = &file_name[token_start..token_start + 8];
+    assert!(crc.bytes().all(|byte| byte.is_ascii_hexdigit()));
+    let named_patch = temp.child(file_name);
+    assert!(named_patch.path().exists());
+
+    // Applying to the correct ROM validates the file-name crc32 and succeeds.
+    let ok_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch", "apply",
+            "--input",
+            original.path().to_str().expect("path"),
+            "--patch",
+            named_patch.path().to_str().expect("path"),
+            "--output",
+            temp.child("ok.bin").path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let ok_json = parse_single_json_line(&ok_output);
+    assert_eq!(ok_json["status"], "succeeded");
+    assert!(ok_json["label"]
+        .as_str()
+        .expect("label")
+        .contains("input checksum(s) verified"));
+    assert_eq!(
+        fs::read(temp.child("ok.bin").path()).expect("output"),
+        fs::read(modified.path()).expect("modified")
+    );
+
+    // Applying to the wrong ROM is rejected before patching by the file-name crc32.
+    let wrong = temp.child("wrong.bin");
+    fs::write(wrong.path(), b"ABCDEFGH").expect("fixture");
+    let bad_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch", "apply",
+            "--input",
+            wrong.path().to_str().expect("path"),
+            "--patch",
+            named_patch.path().to_str().expect("path"),
+            "--output",
+            temp.child("bad.bin").path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .stdout
+        .clone();
+    let bad_json = parse_single_json_line(&bad_output);
+    assert_eq!(bad_json["status"], "failed");
+    assert!(bad_json["label"]
+        .as_str()
+        .expect("label")
+        .contains("input checksum mismatch for crc32"));
+
+    // `--ignore-checksum-validation` skips the file-name requirement entirely.
+    let ignored_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch", "apply",
+            "--input",
+            wrong.path().to_str().expect("path"),
+            "--patch",
+            named_patch.path().to_str().expect("path"),
+            "--output",
+            temp.child("ignored.bin").path().to_str().expect("path"),
+            "--ignore-checksum-validation",
+            "--no-compress",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let ignored_json = parse_single_json_line(&ignored_output);
+    assert_eq!(ignored_json["status"], "succeeded");
+}
+
+#[test]
+fn patch_apply_validates_bare_enclosed_crc32_from_patch_name() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("input.bin").path(), b"abcdefgh").expect("fixture");
+    let patch_bytes = build_ips_patch(
+        vec![TestIpsRecord::Literal {
+            offset: 2,
+            data: b"XYZ".to_vec(),
+        }],
+        Some(8),
+    );
+
+    // Learn the input crc32 by letting create embed a labelled token, then reuse
+    // the value in a bare, bracket-enclosed patch name (No-Intro style).
+    let labeled = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch", "create",
+            "--original",
+            temp.child("input.bin").path().to_str().expect("path"),
+            "--modified",
+            temp.child("input.bin").path().to_str().expect("path"),
+            "--format",
+            "ips",
+            "--output",
+            temp.child("probe.ips").path().to_str().expect("path"),
+            "--checksum-name",
+            "--ignore-checksum-validation",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let labeled_json = parse_single_json_line(&labeled);
+    let probe_name = labeled_json["details"]["emitted_files"][0]["file_name"]
+        .as_str()
+        .expect("file_name");
+    let token_start = probe_name.find("[crc32:").expect("token") + "[crc32:".len();
+    let crc = probe_name[token_start..token_start + 8].to_string();
+
+    let bare_patch = temp.child(format!("Cool Hack ({crc}).ips"));
+    fs::write(bare_patch.path(), &patch_bytes).expect("fixture");
+
+    let apply_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch", "apply",
+            "--input",
+            temp.child("input.bin").path().to_str().expect("path"),
+            "--patch",
+            bare_patch.path().to_str().expect("path"),
+            "--output",
+            temp.child("bare-out.bin").path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+    let apply_json = parse_single_json_line(&apply_output);
+    assert_eq!(apply_json["status"], "succeeded");
+    assert!(apply_json["label"]
+        .as_str()
+        .expect("label")
+        .contains("input checksum(s) verified"));
+    assert_eq!(
+        fs::read(temp.child("bare-out.bin").path()).expect("output"),
+        b"abXYZfgh"
+    );
+}
+
+#[test]
+fn patch_apply_validates_size_requirement_from_patch_name() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("input.bin").path(), b"abcdefgh").expect("fixture");
+    let patch_bytes = build_ips_patch(
+        vec![TestIpsRecord::Literal {
+            offset: 2,
+            data: b"XYZ".to_vec(),
+        }],
+        Some(8),
+    );
+    // The input is 8 bytes; encode a mismatching size requirement in the name.
+    let patch = temp.child("hack [size:4096].ips");
+    fs::write(patch.path(), &patch_bytes).expect("fixture");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "patch", "apply",
+            "--input",
+            temp.child("input.bin").path().to_str().expect("path"),
+            "--patch",
+            patch.path().to_str().expect("path"),
+            "--output",
+            temp.child("out.bin").path().to_str().expect("path"),
+            "--no-compress",
+            "--json",
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .stdout
+        .clone();
+    let json = parse_single_json_line(&output);
+    assert_eq!(json["status"], "failed");
+    assert!(json["label"]
+        .as_str()
+        .expect("label")
+        .contains("input size mismatch"));
+}

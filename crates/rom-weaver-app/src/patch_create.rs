@@ -359,6 +359,7 @@ impl CliApp {
             output = %args.output.display(),
             format = ?args.format,
             ignore_checksum_validation = args.ignore_checksum_validation,
+            checksum_name = args.checksum_name,
             threads = %args.threads,
             xdelta_secondary = %args.xdelta_secondary,
             "starting patch-create command"
@@ -476,10 +477,41 @@ impl CliApp {
             );
         }
 
+        let mut create_output = args.output;
+        if args.checksum_name {
+            match checksum_file_values(&args.original, &["crc32"], &context) {
+                Ok(values) => {
+                    if let Some(crc32) = values.get("crc32") {
+                        let embedded = embed_checksum_in_filename(&create_output, "crc32", crc32);
+                        if embedded != create_output {
+                            trace!(
+                                output = %embedded.display(),
+                                crc32 = %crc32,
+                                "embedded source crc32 into patch file name"
+                            );
+                        }
+                        create_output = embedded;
+                    }
+                }
+                Err(error) => {
+                    return self.finish(
+                        "patch-create",
+                        OperationReport::failed(
+                            OperationFamily::Patch,
+                            Some(handler.descriptor().name.to_string()),
+                            "validate",
+                            error.to_string(),
+                            probe_threads,
+                        ),
+                    );
+                }
+            }
+        }
+
         let request = PatchCreateRequest {
             original: args.original,
             modified: args.modified,
-            output: args.output,
+            output: create_output.clone(),
             format: handler.descriptor().name.to_string(),
         };
         self.emit_running(
@@ -515,6 +547,9 @@ impl CliApp {
             && let Some(warning) = format_warning.as_deref()
         {
             report.label = format!("{}; warning: {warning}", report.label);
+        }
+        if report.status == OperationStatus::Succeeded && args.checksum_name {
+            report = Self::attach_emitted_files_details(report, vec![create_output.clone()], None);
         }
         self.finish("patch-create", report)
     }
