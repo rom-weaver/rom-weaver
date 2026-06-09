@@ -12,18 +12,22 @@ const workflowMockState = {
   originalSetCalls: 0,
   originalStateOverrides: {},
   runCalls: 0,
+  runDeferred: null,
 };
 
 let mountedRoot = null;
 
 const createDeferred = () => {
   let resolve;
-  const promise = new Promise((promiseResolve) => {
+  let reject;
+  const promise = new Promise((promiseResolve, promiseReject) => {
     resolve = promiseResolve;
+    reject = promiseReject;
   });
   return {
     promise,
-    resolve: () => resolve(),
+    reject: (error) => reject(error),
+    resolve: (value) => resolve(value),
   };
 };
 
@@ -121,8 +125,23 @@ class MockCreateWorkflow {
 
   run() {
     workflowMockState.runCalls += 1;
-    return new Promise((_resolve, reject) => {
+    return new Promise((resolve, reject) => {
       this.runReject = reject;
+      workflowMockState.runDeferred.promise.then(() => {
+        resolve({
+          output: {
+            dispose: () => Promise.resolve(),
+            fileName: this.outputName || "change.bps",
+            saveAs: () => Promise.resolve(),
+            size: 4,
+          },
+          sizeSummary: {
+            createTimeMs: 1,
+            outputSize: 4,
+            rawSize: 4,
+          },
+        });
+      });
     });
   }
 
@@ -202,6 +221,7 @@ beforeEach(() => {
   workflowMockState.originalDeferred = createDeferred();
   workflowMockState.originalSetCalls = 0;
   workflowMockState.originalStateOverrides = {};
+  workflowMockState.runDeferred = createDeferred();
   workflowMockState.runCalls = 0;
 });
 
@@ -339,6 +359,53 @@ test("replacing the modified ROM keeps the prepared original ROM", async () => {
 
   workflowMockState.modifiedDeferred.resolve();
   await expect.poll(() => document.body.textContent || "").toContain("modified-v2.bin");
+});
+
+test("create output edits after completion reuse prepared sources", async () => {
+  mount(
+    createElement(
+      CreatePatchForm,
+      withCreateWorkflowMock({
+        defaultModified: new File([new Uint8Array([0, 1, 2, 4])], "modified.bin"),
+        defaultOriginal: new File([new Uint8Array([0, 1, 2, 3])], "original.bin"),
+      }),
+    ),
+  );
+
+  workflowMockState.originalDeferred.resolve();
+  workflowMockState.modifiedDeferred.resolve();
+  await expect.poll(() => document.body.textContent || "").toContain("original.bin");
+  await expect.poll(() => document.body.textContent || "").toContain("modified.bin");
+  await expect.poll(() => workflowMockState.originalSetCalls).toBe(1);
+  await expect.poll(() => workflowMockState.modifiedSetCalls).toBe(1);
+
+  const firstCreateButton = document.getElementById("patch-builder-button-create");
+  expect(firstCreateButton).toBeInstanceOf(HTMLButtonElement);
+  firstCreateButton.click();
+  await expect.poll(() => workflowMockState.runCalls).toBe(1);
+  workflowMockState.runDeferred.resolve();
+  await expect
+    .poll(() => document.getElementById("patch-builder-button-create")?.textContent.toUpperCase() || "")
+    .toContain("DOWNLOAD");
+
+  workflowMockState.runDeferred = createDeferred();
+  const outputCompression = document.getElementById("patch-builder-select-output-compression");
+  const patchFormat = document.getElementById("patch-builder-select-patch-type");
+  expect(outputCompression).toBeInstanceOf(HTMLSelectElement);
+  expect(patchFormat).toBeInstanceOf(HTMLSelectElement);
+  setFormControlValue(outputCompression, "7z");
+  setFormControlValue(patchFormat, "xdelta");
+  await new Promise((resolve) => globalThis.setTimeout(resolve, 50));
+  expect(workflowMockState.originalSetCalls).toBe(1);
+  expect(workflowMockState.modifiedSetCalls).toBe(1);
+
+  const createButton = document.getElementById("patch-builder-button-create");
+  expect(createButton).toBeInstanceOf(HTMLButtonElement);
+  await expect.poll(() => createButton.textContent || "").toContain("CREATE");
+  createButton.click();
+  await expect.poll(() => workflowMockState.runCalls).toBe(2);
+  expect(workflowMockState.originalSetCalls).toBe(1);
+  expect(workflowMockState.modifiedSetCalls).toBe(1);
 });
 
 test("create queued run cancels when source preparation warns", async () => {

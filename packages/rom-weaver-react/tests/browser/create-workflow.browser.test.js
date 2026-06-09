@@ -103,6 +103,30 @@ test("create workflow extracts archived original and modified inputs before patc
     expect(createDispatch?.details?.originalFilePath).not.toMatch(/\.zip$/i);
     expect(createDispatch?.details?.modifiedFilePath).toMatch(/modified\.bin$/i);
     expect(createDispatch?.details?.modifiedFilePath).not.toMatch(/\.zip$/i);
+    const extractDispatchCount = logs.filter(
+      (entry) => String(entry?.message || "") === "runJson extract dispatch",
+    ).length;
+
+    await workflow.setSettings({
+      format: "ips",
+      logging: {
+        level: "trace",
+        sink: (record) => logs.push(record || {}),
+      },
+      output: {
+        compression: "zip",
+        outputName: "change.zip",
+      },
+      workers: {
+        threads: 1,
+      },
+    });
+    const secondResult = await workflow.run();
+    expect(secondResult.output.fileName).toBe("change.zip");
+    await secondResult.output.dispose();
+    expect(logs.filter((entry) => String(entry?.message || "") === "runJson extract dispatch")).toHaveLength(
+      extractDispatchCount,
+    );
   } finally {
     await workflow.dispose();
   }

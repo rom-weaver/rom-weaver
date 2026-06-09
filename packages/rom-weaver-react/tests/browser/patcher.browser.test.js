@@ -866,6 +866,68 @@ test("changing output format reuses prepared archived input on next apply", asyn
   ).toBe(true);
 });
 
+test("changing patch after completion reuses prepared archived input on next apply", async () => {
+  const logs = [];
+  mount(
+    createElement(ApplyPatchForm, {
+      defaultSettings: {
+        logging: {
+          level: "trace",
+          sink: (record) => logs.push(record),
+        },
+        output: {
+          compression: "none",
+        },
+      },
+    }),
+  );
+
+  await expect.poll(() => document.getElementById("rom-weaver-input-file-rom")).not.toBeNull();
+
+  selectFileInput(document.getElementById("rom-weaver-input-file-rom"), await loadFixtureFile(ONE_ROM_ZIP));
+  const initialPatch = await loadFixtureFile(RAW_PATCH);
+  selectFileInput(document.getElementById("rom-weaver-input-file-patch"), initialPatch);
+
+  await waitForApplyButtonEnabled();
+  await clickApplyButton();
+
+  const firstApplyState = await waitForApplyOutcome();
+  expect(
+    firstApplyState?.kind,
+    firstApplyState && "errorText" in firstApplyState ? firstApplyState.errorText : "",
+  ).toBe("download");
+
+  const replacementPatch = new File([await initialPatch.arrayBuffer()], "change-v2.ips", {
+    type: "application/octet-stream",
+  });
+  const logStart = logs.length;
+  selectFileInput(document.getElementById("rom-weaver-input-file-patch"), replacementPatch);
+  await waitForApplyButtonEnabled();
+  await clickApplyButton();
+
+  const secondApplyState = await waitForApplyOutcome();
+  expect(
+    secondApplyState?.kind,
+    secondApplyState && "errorText" in secondApplyState ? secondApplyState.errorText : "",
+  ).toBe("download");
+
+  const secondApplyLogs = logs.slice(logStart);
+  expect(
+    secondApplyLogs.some(
+      (record) => record.namespace === "react:apply-workflow" && record.message === "prepareWorkflow setInput start",
+    ),
+  ).toBe(false);
+  expect(
+    secondApplyLogs.some(
+      (record) =>
+        record.namespace === "workflow:apply" &&
+        record.message === "stage.skip" &&
+        record.details?.stage === "input.prepare" &&
+        record.details?.reason === "prepared input assets supplied",
+    ),
+  ).toBe(true);
+});
+
 test("compressed outputs clean up intermediate raw OPFS files", async () => {
   await clearOpfsOutputDirectory();
   mount(

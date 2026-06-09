@@ -5,21 +5,26 @@ import { TrimPatchForm } from "../../src/public/react/trim-form.tsx";
 
 const workflowMockState = {
   inputDeferred: null,
+  inputSetCalls: 0,
   inputStateOverrides: {},
   instances: [],
   runCalls: 0,
+  runDeferred: null,
 };
 
 let mountedRoot = null;
 
 const createDeferred = () => {
   let resolve;
-  const promise = new Promise((promiseResolve) => {
+  let reject;
+  const promise = new Promise((promiseResolve, promiseReject) => {
     resolve = promiseResolve;
+    reject = promiseReject;
   });
   return {
     promise,
-    resolve: () => resolve(),
+    reject: (error) => reject(error),
+    resolve: (value) => resolve(value),
   };
 };
 
@@ -100,12 +105,29 @@ class MockTrimWorkflow {
 
   run() {
     workflowMockState.runCalls += 1;
-    return new Promise((_resolve, reject) => {
+    return new Promise((resolve, reject) => {
       this.runReject = reject;
+      workflowMockState.runDeferred.promise.then(() => {
+        resolve({
+          output: {
+            dispose: () => Promise.resolve(),
+            fileName: this.outputName || "game (trimmed).bin",
+            saveAs: () => Promise.resolve(),
+            size: 4,
+          },
+          sizeSummary: {
+            inputSize: 4,
+            outputSize: 4,
+            rawSize: 4,
+            trimTimeMs: 1,
+          },
+        });
+      });
     });
   }
 
   setInput(source) {
+    workflowMockState.inputSetCalls += 1;
     this.emitProgress("Preparing ROM...");
     return workflowMockState.inputDeferred.promise.then(() => {
       this.input = {
@@ -160,8 +182,10 @@ beforeEach(() => {
   mountedRoot = null;
   document.body.innerHTML = '<div id="app"></div>';
   workflowMockState.inputDeferred = createDeferred();
+  workflowMockState.inputSetCalls = 0;
   workflowMockState.inputStateOverrides = {};
   workflowMockState.instances = [];
+  workflowMockState.runDeferred = createDeferred();
   workflowMockState.runCalls = 0;
 });
 
@@ -253,6 +277,47 @@ test("trim active output cancel button aborts the workflow without an error noti
   await expect.poll(() => workflowMockState.instances[0]?.aborted).toBe(true);
   await expect.poll(getOutputWaitingText).toBe("");
   expect(document.getElementById("trim-builder-row-error-message")).toBeNull();
+});
+
+test("trim output edits after completion reuse prepared source", async () => {
+  mount(
+    createElement(
+      TrimPatchForm,
+      withTrimWorkflowMock({ defaultSource: new File([new Uint8Array([0, 1, 2, 3])], "game.bin") }),
+    ),
+  );
+
+  workflowMockState.inputDeferred.resolve();
+  await expect.poll(() => workflowMockState.instances[0]?.getInput()?.status).toBe("ready");
+  await expect.poll(() => workflowMockState.inputSetCalls).toBe(1);
+
+  const firstTrimButton = document.getElementById("trim-builder-button-run");
+  expect(firstTrimButton).toBeInstanceOf(HTMLButtonElement);
+  firstTrimButton.click();
+  await confirmTrim();
+  await expect.poll(() => workflowMockState.runCalls).toBe(1);
+  workflowMockState.runDeferred.resolve();
+  await expect
+    .poll(() => document.getElementById("trim-builder-button-run")?.textContent.toUpperCase() || "")
+    .toContain("DOWNLOAD");
+
+  workflowMockState.runDeferred = createDeferred();
+  const outputFormat = document.getElementById("trim-builder-select-output-format");
+  const outputCompression = document.getElementById("trim-builder-select-output-compression");
+  expect(outputFormat).toBeInstanceOf(HTMLSelectElement);
+  expect(outputCompression).toBeInstanceOf(HTMLSelectElement);
+  setFormControlValue(outputFormat, "zip");
+  setFormControlValue(outputCompression, "7z");
+  await new Promise((resolve) => globalThis.setTimeout(resolve, 50));
+  expect(workflowMockState.inputSetCalls).toBe(1);
+
+  const trimButton = document.getElementById("trim-builder-button-run");
+  expect(trimButton).toBeInstanceOf(HTMLButtonElement);
+  await expect.poll(() => trimButton.textContent || "").toContain("TRIM");
+  trimButton.click();
+  await confirmTrim();
+  await expect.poll(() => workflowMockState.runCalls).toBe(2);
+  expect(workflowMockState.inputSetCalls).toBe(1);
 });
 
 test("trim queued run cancels when source preparation warns", async () => {
