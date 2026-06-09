@@ -1,3 +1,4 @@
+use super::selection_resolution::SelectionExtract;
 use super::*;
 /// The mode/operation settings for a single trim operation, grouped so `trim_file` takes one
 /// request descriptor instead of four positional flags.

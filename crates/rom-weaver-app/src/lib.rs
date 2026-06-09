@@ -1636,16 +1636,6 @@ const NDS_DOWNLOAD_PLAY_CERT_MAGIC: [u8; 2] = [0x61, 0x63];
 const NDS_DOWNLOAD_PLAY_CERT_SIZE_BYTES: u64 = 0x88;
 const TRIM_BINARY_SCAN_CHUNK_BYTES: usize = 128 * 1024;
 const XISO_TRIM_TEMP_SUFFIX: &str = "rom-weaver-trim-xiso.tmp";
-const EMITTED_ARCHIVE_EXTENSIONS: &[&str] = &[
-    ".7z", ".zip", ".zipx", ".tar", ".tgz", ".tar.gz", ".tbz2", ".tar.bz2", ".txz", ".tar.xz",
-    ".zst", ".zstd", ".gz", ".bz2", ".xz", ".chd", ".rvz", ".gcz", ".wbfs", ".wia", ".cso",
-    ".ciso", ".rar", ".pbp", ".z3d", ".z3ds",
-];
-const EMITTED_ROM_EXTENSIONS: &[&str] = &[
-    ".iso", ".img", ".bin", ".gdi", ".nds", ".dsi", ".srl", ".gba", ".3ds", ".3dsx", ".app",
-    ".cci", ".cia", ".cxi", ".n64", ".z64", ".v64", ".nes", ".fds", ".sfc", ".smc", ".gen", ".md",
-    ".gb", ".gbc", ".pce", ".a78", ".lnx", ".msx",
-];
 const HEADER_FIXER_SUPPORTED_EXTENSIONS: &[&str] = &[
     "a78", "lnx", "nes", "fds", "smc", "sfc", "gb", "gbc", "gba", "gen", "md", "sms", "gg", "bin",
     "z64", "n64", "v64", "nds", "dsi", "srl", "pce", "tg16", "vb", "vboy", "ngp", "ngc", "mx1",
@@ -1835,54 +1825,11 @@ impl TrimInputKind {
     }
 }
 
-#[derive(Debug)]
-struct ResolvedChecksumSource {
-    source: PathBuf,
-    extracted_archives: usize,
-    cleanup_paths: Vec<PathBuf>,
-}
-
-#[derive(Clone, Copy, Debug)]
-struct AutoExtractResolutionLabels<'a> {
-    command: &'a str,
-    family: OperationFamily,
-    format: Option<&'a str>,
-    source_label: &'a str,
-    temp_prefix: &'a str,
-}
-
-#[derive(Clone, Copy, Debug)]
-struct AutoExtractResolutionOptions {
-    no_extract: bool,
-    no_ignore: bool,
-    kind_filter: ArchiveEntryKindFilter,
-    mode: AutoExtractMode,
-}
-
-#[derive(Clone, Copy, Debug)]
-struct AutoExtractResolutionFlags {
-    no_extract: bool,
-    no_ignore: bool,
-    kind_filter: ArchiveEntryKindFilter,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum AutoExtractMode {
-    Recursive,
-    SingleStep,
-}
-
 #[derive(Clone, Debug)]
 struct ChecksumExtractCandidate {
     source: PathBuf,
     display_name: String,
     ignored: bool,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct FileSnapshot {
-    size_bytes: u64,
-    modified_unix_nanos: Option<u128>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1948,7 +1895,23 @@ enum N64ByteOrder {
 
 #[path = "commands_and_selection.rs"]
 mod commands_and_selection;
-use commands_and_selection::*;
+
+#[path = "source_resolution.rs"]
+mod source_resolution;
+use source_resolution::*;
+
+#[path = "checksum_streaming.rs"]
+mod checksum_streaming;
+
+#[path = "selection_resolution.rs"]
+mod selection_resolution;
+
+#[path = "output_details.rs"]
+mod output_details;
+
+#[path = "extract_progress.rs"]
+mod extract_progress;
+use extract_progress::*;
 
 #[path = "compress_trim_batch.rs"]
 mod compress_trim_batch;

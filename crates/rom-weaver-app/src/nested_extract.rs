@@ -1,3 +1,4 @@
+use super::selection_resolution::SelectionResolutionOptions;
 use super::*;
 /// The result of descending nested archives during a single `extract` command.
 pub(super) struct NestedExtractOutcome {

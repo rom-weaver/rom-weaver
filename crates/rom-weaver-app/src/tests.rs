@@ -261,7 +261,7 @@ fn z3ds_extension_append_uses_hint_when_output_has_no_extension() {
 fn emitted_rom_extensions_cover_3ds_family_inputs() {
     for extension in [".3ds", ".3dsx", ".app", ".cci", ".cia", ".cxi"] {
         assert!(
-            super::EMITTED_ROM_EXTENSIONS.contains(&extension),
+            super::output_details::EMITTED_ROM_EXTENSIONS.contains(&extension),
             "missing {extension}"
         );
     }
