@@ -1,3 +1,10 @@
+import type {
+  PatchApplyCommand,
+  PatchCreateCandidatesCommand,
+  PatchCreateCommand,
+  PatchValidateCommand,
+  ThreadBudget,
+} from "rom-weaver-wasm";
 import type { LargeFileVfs } from "../storage/vfs/types.ts";
 import type { ChecksumResult } from "./checksum.ts";
 import type { LogLevel, LogRecord } from "./logging.ts";
@@ -124,7 +131,7 @@ type RuntimeRomSpecificHooks = {
   onLog?: (log: WorkflowRuntimeLog) => void;
   onProgress?: (progress: RuntimeRomSpecificProgress) => void;
   signal?: AbortSignal;
-  threads?: number | string | null;
+  threads?: RuntimeThreadBudgetInput;
 };
 
 type RuntimeRomSpecificCreateChdInput = RuntimeRomSpecificHooks & {
@@ -188,9 +195,48 @@ type RuntimePatchWorkerProgress = {
   total?: string | number | boolean | null;
 };
 
+type RuntimeThreadBudgetInput = ThreadBudget | string | number | null;
+
+type RuntimePatchValidationRequirement = {
+  minimumSourceSize?: string | number | null;
+  minimum_source_size?: string | number | null;
+  sourceCrc32?: string | number | null;
+  sourceSize?: string | number | null;
+  source_crc32?: string | number | null;
+  source_size?: string | number | null;
+};
+
+type RuntimeChecksumCacheInput =
+  | PatchValidateCommand["checksum_cache"]
+  | Record<string, string | number | null | undefined>;
+
+type RuntimePatchApplyOptions = Partial<Omit<PatchApplyCommand, "input" | "output" | "patches">> & {
+  addHeader?: PatchApplyCommand["add_header"];
+  appendOutputSuffix?: boolean;
+  fixChecksum?: PatchApplyCommand["repair_checksum"];
+  outputExtension?: string | null | undefined;
+  outputName?: string | null | undefined;
+  ppfUndoAware?: PatchApplyCommand["ppf_undo_aware"];
+  removeHeader?: PatchApplyCommand["strip_header"];
+  requireInputChecksumMatch?: boolean;
+  requireOutputChecksumMatch?: boolean;
+  validateWithChecksums?: PatchApplyCommand["validate_with_checksums"];
+  validateWithOutputChecksums?: PatchApplyCommand["validate_with_output_checksums"];
+  workerThreads?: RuntimeThreadBudgetInput;
+};
+
+type RuntimePatchValidateOptions = Partial<Omit<PatchValidateCommand, "input" | "patches">> & {
+  checksumCache?: RuntimeChecksumCacheInput;
+  ignoreChecksumValidation?: PatchValidateCommand["ignore_checksum_validation"];
+  removeHeader?: PatchValidateCommand["strip_header"];
+  validateWithChecksums?: PatchValidateCommand["validate_with_checksums"];
+  validationRequirements?: RuntimePatchValidationRequirement | RuntimePatchValidationRequirement[];
+  workerThreads?: RuntimeThreadBudgetInput;
+};
+
 type RuntimePatchApplyWorkerInput = {
   logLevel?: LogLevel;
-  options?: JsonObject;
+  options?: RuntimePatchApplyOptions;
   patchFormat?: string;
   patchFileName?: string;
   patchFilePath?: string;
@@ -202,7 +248,7 @@ type RuntimePatchApplyWorkerInput = {
 
 type RuntimePatchValidateWorkerInput = {
   logLevel?: LogLevel;
-  options?: JsonObject;
+  options?: RuntimePatchValidateOptions;
   patchFiles: Array<{ patchFileName: string; patchFilePath: string; patchFormat?: string }>;
   romFileName: string;
   romFilePath: string;
@@ -210,26 +256,26 @@ type RuntimePatchValidateWorkerInput = {
 };
 
 type RuntimePatchCreateWorkerInput = {
-  format: string;
+  format: NonNullable<PatchCreateCommand["format"]>;
   logLevel?: LogLevel;
   metadata: Record<string, JsonValue>;
   modifiedFileName: string;
-  modifiedFilePath: string;
+  modifiedFilePath: PatchCreateCommand["modified"];
   originalFileName: string;
-  originalFilePath: string;
-  outputName: string;
+  originalFilePath: PatchCreateCommand["original"];
+  outputName: PatchCreateCommand["output"];
   signal?: AbortSignal;
-  workerThreads?: number | string | null;
+  workerThreads?: RuntimeThreadBudgetInput;
 };
 
 type RuntimePatchCreateCandidatesWorkerInput = {
   logLevel?: LogLevel;
   modifiedFileName: string;
-  modifiedFilePath: string;
+  modifiedFilePath: PatchCreateCandidatesCommand["modified"];
   originalFileName: string;
-  originalFilePath: string;
+  originalFilePath: PatchCreateCandidatesCommand["original"];
   signal?: AbortSignal;
-  workerThreads?: number | string | null;
+  workerThreads?: RuntimeThreadBudgetInput;
 };
 
 type RuntimePatchCreateFormatCandidates = {
@@ -246,7 +292,7 @@ type RuntimeTrimWorkerInput = {
   signal?: AbortSignal;
   sourceFileName: string;
   sourceFilePath: string;
-  workerThreads?: number | string | null;
+  workerThreads?: RuntimeThreadBudgetInput;
 };
 
 type WorkflowRuntimeOutput = {
@@ -283,7 +329,7 @@ type WorkflowRuntimePatch = {
       patchFileName?: string;
       patchFormat?: string;
     }>;
-    options?: JsonObject;
+    options?: RuntimePatchApplyOptions;
     logLevel?: LogLevel;
     onLog?: (log: WorkflowRuntimeLog) => void;
     onProgress?: (progress: WorkflowCreatePatchProgress) => void;
@@ -301,7 +347,7 @@ type WorkflowRuntimePatch = {
         sourceSize?: number;
       };
     }>;
-    options?: JsonObject;
+    options?: RuntimePatchValidateOptions;
     logLevel?: LogLevel;
     onLog?: (log: WorkflowRuntimeLog) => void;
     onProgress?: (progress: WorkflowCreatePatchProgress) => void;
@@ -333,10 +379,10 @@ type WorkflowRuntimePatch = {
   createPatch?: (input: {
     original: SourceRef;
     modified: SourceRef;
-    format: string;
+    format: NonNullable<PatchCreateCommand["format"]>;
     metadata: JsonObject;
-    outputName: string;
-    workerThreads?: number | string | null;
+    outputName: PatchCreateCommand["output"];
+    workerThreads?: RuntimeThreadBudgetInput;
     logLevel?: LogLevel;
     onLog?: (log: WorkflowRuntimeLog) => void;
     onProgress?: (progress: WorkflowCreatePatchProgress) => void;
@@ -345,7 +391,7 @@ type WorkflowRuntimePatch = {
   createPatchCandidates?: (input: {
     original: SourceRef;
     modified: SourceRef;
-    workerThreads?: number | string | null;
+    workerThreads?: RuntimeThreadBudgetInput;
     logLevel?: LogLevel;
     onLog?: (log: WorkflowRuntimeLog) => void;
     onProgress?: (progress: WorkflowCreatePatchProgress) => void;
@@ -358,7 +404,7 @@ type WorkflowRuntimeTrim = {
     source: SourceRef;
     extension?: string;
     outputName: string;
-    workerThreads?: number | string | null;
+    workerThreads?: RuntimeThreadBudgetInput;
     logLevel?: LogLevel;
     onLog?: (log: WorkflowRuntimeLog) => void;
     onProgress?: (progress: WorkflowCreatePatchProgress) => void;
@@ -408,7 +454,7 @@ type WorkflowRuntimePreload = {
   preloadCapability?: (
     capability: WorkflowCapability,
     emit: (event: WorkflowRuntimePreloadEvent) => void,
-    options?: { workerThreads?: number | string | null },
+    options?: { workerThreads?: RuntimeThreadBudgetInput },
   ) => Promise<void>;
 };
 
@@ -432,11 +478,14 @@ export type {
   RuntimeArchiveCreateInput,
   RuntimeCompressionExtractInput,
   RuntimeCompressionListInput,
+  RuntimePatchApplyOptions,
   RuntimePatchApplyWorkerInput,
   RuntimePatchCreateCandidatesWorkerInput,
   RuntimePatchCreateFormatCandidates,
   RuntimePatchCreateWorkerInput,
+  RuntimePatchValidateOptions,
   RuntimePatchValidateWorkerInput,
+  RuntimePatchValidationRequirement,
   RuntimePatchWorkerProgress,
   RuntimePublicOutputAdapter,
   RuntimeRomSpecificCreateChdInput,
@@ -447,6 +496,7 @@ export type {
   RuntimeRomSpecificExtractZ3dsInput,
   RuntimeRomSpecificHooks,
   RuntimeRomSpecificProgress,
+  RuntimeThreadBudgetInput,
   RuntimeTrimWorkerInput,
   RuntimeWorkerIo,
   RuntimeWorkerOutput,

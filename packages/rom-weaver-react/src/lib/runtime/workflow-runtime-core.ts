@@ -406,9 +406,14 @@ const createSharedPatchRuntime = (adapter: PatchRuntimeAdapter): WorkflowRuntime
         patchCount: patchSources.length,
         patches: patchSources.map((source, index) => summarizeRuntimeWorkerPathSource(source, index)),
       });
+      const validationRequirements = patches
+        .map((patch) => patch.requirements)
+        .filter((requirements): requirements is NonNullable<(typeof patches)[number]["requirements"]> =>
+          Boolean(requirements),
+        );
       const validationOptions = {
         ...(options || {}),
-        validationRequirements: patches.map((patch) => patch.requirements || null),
+        ...(validationRequirements.length ? { validationRequirements } : {}),
       };
       return await adapter.invokeValidatePatchWorker(
         {

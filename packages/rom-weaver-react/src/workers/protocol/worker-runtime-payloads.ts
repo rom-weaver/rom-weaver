@@ -1,14 +1,30 @@
+import type {
+  ChecksumCommand,
+  CompressCommand,
+  ExtractCommand,
+  ListCommand,
+  PatchCreateCandidatesCommand,
+  PatchCreateCommand,
+  RomWeaverJsonValue,
+  RomWeaverProgressEvent,
+  TrimCommand,
+} from "rom-weaver-wasm";
 import type { WorkerKind } from "../../types/worker-messages.ts";
+import type {
+  RuntimePatchApplyOptions,
+  RuntimePatchValidateOptions,
+  RuntimeThreadBudgetInput,
+} from "../../types/workflow-runtime-adapter.ts";
 import type { PatchFileEntry as WorkflowPatchFileEntry } from "../../types/workflow-source.ts";
 import type { BrowserWorkerFile, CompressionWorkerKind, CompressionWorkerOperation } from "./worker-protocol.ts";
 
 type WorkerRequestId = string;
-type WorkerRuntimeValue = string | number | boolean | object | null | undefined;
+type WorkerRuntimeValue = RomWeaverJsonValue | object | undefined;
 type WorkerRuntimeRecord = {
   [key: string]: WorkerRuntimeValue;
 };
 
-type WorkerProgressEvent = {
+type WorkerProgressEvent = Partial<RomWeaverProgressEvent> & {
   label?: string;
   percent?: number | null;
   resolvedFileName?: string;
@@ -27,10 +43,9 @@ type WorkerRequestBase<TAction extends string> = {
   workerKind: WorkerKind;
 };
 
-type WorkerRequestOptions = Record<string, WorkerRuntimeValue>;
-type WorkerRequestMetadata = Record<string, WorkerRuntimeValue>;
+type WorkerRequestMetadata = Record<string, RomWeaverJsonValue | undefined>;
 type WorkerRomSpecificMetadata = Record<string, string | number | boolean | Uint8Array | null | undefined>;
-type WorkerCodecSelection = string | string[] | Record<string, string | number> | null;
+type WorkerCodecSelection = CompressCommand["codec"] | string | Record<string, string | number> | null;
 type WorkerImageFileEntry = {
   file?: BrowserWorkerFile;
   fileName?: string;
@@ -38,7 +53,7 @@ type WorkerImageFileEntry = {
 };
 
 type WorkerPatchApplyRequestData = WorkerRequestBase<"apply"> & {
-  options?: WorkerRequestOptions;
+  options?: RuntimePatchApplyOptions;
   patchFile?: BrowserWorkerFile;
   patchFileName?: string;
   patchFilePath?: string;
@@ -49,7 +64,7 @@ type WorkerPatchApplyRequestData = WorkerRequestBase<"apply"> & {
 };
 
 type WorkerPatchValidateRequestData = WorkerRequestBase<"validate-patch"> & {
-  options?: WorkerRequestOptions;
+  options?: RuntimePatchValidateOptions;
   patchFiles: PatchFileEntry[];
   romFileName?: string;
   romFilePath: string;
@@ -63,32 +78,32 @@ type WorkerPatchParseRequestData = WorkerRequestBase<"parse-patch"> & {
 
 type WorkerPatchCreateCandidatesRequestData = WorkerRequestBase<"create-patch-candidates"> & {
   modifiedFile?: BrowserWorkerFile;
-  modifiedFileName: string;
-  modifiedFilePath: string;
+  modifiedFileName: PatchCreateCandidatesCommand["modified"];
+  modifiedFilePath: PatchCreateCandidatesCommand["modified"];
   originalFile?: BrowserWorkerFile;
-  originalFileName: string;
-  originalFilePath: string;
-  workerThreads?: string | number | null;
+  originalFileName: PatchCreateCandidatesCommand["original"];
+  originalFilePath: PatchCreateCandidatesCommand["original"];
+  workerThreads?: RuntimeThreadBudgetInput;
 };
 
 type WorkerPatchCreateRequestData = WorkerRequestBase<"create-patch"> & {
-  format: string;
+  format: NonNullable<PatchCreateCommand["format"]>;
   metadata?: WorkerRequestMetadata;
   modifiedFile?: BrowserWorkerFile;
-  modifiedFileName: string;
-  modifiedFilePath: string;
+  modifiedFileName: PatchCreateCommand["modified"];
+  modifiedFilePath: PatchCreateCommand["modified"];
   originalFile?: BrowserWorkerFile;
-  originalFileName: string;
-  originalFilePath: string;
-  outputName: string;
-  workerThreads?: string | number | null;
+  originalFileName: PatchCreateCommand["original"];
+  originalFilePath: PatchCreateCommand["original"];
+  outputName: PatchCreateCommand["output"];
+  workerThreads?: RuntimeThreadBudgetInput;
 };
 
 type WorkerChecksumRequestData = WorkerRequestBase<"checksum"> & {
-  checksumAlgorithms: string[];
+  checksumAlgorithms: ChecksumCommand["algo"];
   checksumStartOffset?: number;
   fileName?: string;
-  filePath: string;
+  filePath: ChecksumCommand["source"];
   fileSize?: number;
 };
 
@@ -110,26 +125,26 @@ type WorkerCompressionCreateRequestData = WorkerCompressionRequestBase<"create",
   chdOutputFileName?: string;
   compressionCodecs?: WorkerCodecSelection;
   fileName?: string;
-  filePaths: string[];
-  format: string;
+  filePaths: CompressCommand["input"];
+  format: NonNullable<CompressCommand["format"]>;
   imageFile?: BrowserWorkerFile;
   imageFilePath?: string;
   imageFiles?: WorkerImageFileEntry[];
   metadata?: WorkerRequestMetadata;
   mode?: string;
-  outputName: string;
-  rvzBlockSize?: string | number | null;
+  outputName: CompressCommand["output"];
+  rvzBlockSize?: RuntimeThreadBudgetInput;
   rvzCodec?: string;
-  rvzCompressionLevel?: string | number | null;
+  rvzCompressionLevel?: RuntimeThreadBudgetInput;
   rvzFile?: BrowserWorkerFile;
   rvzFileName?: string;
   rvzFilePath?: string;
   rvzMode?: string;
   rvzScrub?: boolean | string | number | null;
   rvzSourceFileName?: string;
-  threads?: string | number | null;
-  workerThreads?: string | number | null;
-  z3dsCompressionLevel?: string | number | null;
+  threads?: RuntimeThreadBudgetInput;
+  workerThreads?: RuntimeThreadBudgetInput;
+  z3dsCompressionLevel?: RuntimeThreadBudgetInput;
   z3dsFile?: BrowserWorkerFile;
   z3dsFileName?: string;
   z3dsFilePath?: string;
@@ -139,33 +154,33 @@ type WorkerCompressionCreateRequestData = WorkerCompressionRequestBase<"create",
 };
 
 type WorkerCompressionExtractRequestData = WorkerCompressionRequestBase<"extract", "extract"> & {
-  archiveEntryName?: string;
+  archiveEntryName?: NonNullable<ExtractCommand["select"]>[number];
   archiveFileName?: string;
   chdFile?: BrowserWorkerFile;
   chdFileName?: string;
   chdFilePath?: string;
   chdMode?: string;
   fileName?: string;
-  filePaths?: string[];
-  outputName?: string;
+  filePaths?: ExtractCommand["select"];
+  outputName?: ExtractCommand["out_dir"];
   rvzFile?: BrowserWorkerFile;
   rvzFileName?: string;
   rvzFilePath?: string;
   rvzMode?: string;
-  threads?: string | number | null;
-  workerThreads?: string | number | null;
+  threads?: RuntimeThreadBudgetInput;
+  workerThreads?: RuntimeThreadBudgetInput;
   z3dsFile?: BrowserWorkerFile;
   z3dsFileName?: string;
   z3dsFilePath?: string;
 };
 
 type WorkerCompressionListRequestData = WorkerCompressionRequestBase<"list", "list"> & {
-  archiveFileName?: string;
+  archiveFileName?: ListCommand["source"];
   chdFile?: BrowserWorkerFile;
   chdFileName?: string;
   chdFilePath?: string;
   fileName?: string;
-  filePaths?: string[];
+  filePaths?: ListCommand["select"];
   rvzFile?: BrowserWorkerFile;
   rvzFileName?: string;
   rvzFilePath?: string;
@@ -175,7 +190,7 @@ type WorkerCompressionListRequestData = WorkerCompressionRequestBase<"list", "li
 };
 
 type WorkerCompressionWarmupRequestData = WorkerCompressionRequestBase<"warmup", "warmup"> & {
-  workerThreads?: string | number | null;
+  workerThreads?: RuntimeThreadBudgetInput;
 };
 
 type WorkerCleanupRequestData = WorkerRequestBase<"cleanup"> & {
@@ -184,9 +199,9 @@ type WorkerCleanupRequestData = WorkerRequestBase<"cleanup"> & {
 
 type WorkerTrimRequestData = WorkerRequestBase<"trim"> & {
   fileName?: string;
-  filePath: string;
-  outputName?: string;
-  workerThreads?: string | number | null;
+  filePath: TrimCommand["source"][number];
+  outputName?: TrimCommand["output"];
+  workerThreads?: RuntimeThreadBudgetInput;
 };
 
 type WorkerRequestData =

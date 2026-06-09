@@ -43,6 +43,10 @@ type RomWeaverTopLevelCommandBranch = {
 
 export type RomWeaverCommandLabel = RomWeaverTopLevelCommandType | RomWeaverPatchCommandLabel;
 export type RomWeaverCommandBranch = RomWeaverTopLevelCommandBranch | RomWeaverPatchCommandBranch;
+export type RomWeaverCommandBranchArgs<TType extends RomWeaverCommandLabel> = Extract<
+  RomWeaverCommandBranch,
+  { type: TType }
+>['args'];
 
 export type RomWeaverCommandInputPathOptions = {
   knownInputPaths?: Iterable<unknown> | null | undefined;
@@ -54,9 +58,9 @@ export type RomWeaverBrowserThreadRequestOptions = {
   maxThreads?: number | null | undefined;
 };
 
-export function createRomWeaverCommand(
-  type: RomWeaverCommandLabel,
-  args: Record<string, unknown>,
+export function createRomWeaverCommand<TType extends RomWeaverCommandLabel>(
+  type: TType,
+  args: RomWeaverCommandBranchArgs<TType>,
 ): RomWeaverCommand {
   switch (type) {
     case 'probe':
