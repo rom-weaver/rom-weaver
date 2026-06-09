@@ -6,6 +6,7 @@ import {
   resolveAutomaticCompressionFormat,
 } from "../../lib/compression/container-format-registry.ts";
 import OutputCompressionManager from "../../lib/compression/output-compression-manager.ts";
+import { emitTraceLog } from "../../lib/logging.ts";
 import { createTiming, formatTiming } from "../../lib/progress/timing.ts";
 import { formatCodedErrorForDisplay, getErrorCode } from "../../presentation/errors.ts";
 import { createBrowserLocalizer } from "../../presentation/localization/index.ts";
@@ -68,7 +69,6 @@ import {
   getMultiInputOutputError,
   getPublicOutputSize,
   getRequestedOutputName,
-  isTraceLoggingEnabled,
   resolvePendingDownloadFileName,
   toError,
   waitForNextUiPaint,
@@ -208,16 +208,16 @@ const useLocalApplyPatchFormSession = ({
   const activePatches = patches === undefined ? internalPatches : patches;
   const activeSettings = settings === undefined ? internalSettings : settings;
   const emitSessionTrace = useCallback(
-    (message: string, details?: Record<string, unknown>) => {
-      if (!isTraceLoggingEnabled(activeSettings)) return;
-      activeSettings.logging?.sink?.({
-        ...(details ? { details } : {}),
-        level: "trace",
+    (message: string, details?: Record<string, unknown>) =>
+      emitTraceLog(
+        {
+          logLevel: activeSettings.logging?.level,
+          namespace: "ui:apply-session",
+          onLog: activeSettings.logging?.sink,
+        },
         message,
-        namespace: "ui:apply-session",
-        timestamp: new Date().toISOString(),
-      });
-    },
+        details,
+      ),
     [activeSettings],
   );
   const defaultCompressionMode = getDefaultCompressionMode(activeSettings);

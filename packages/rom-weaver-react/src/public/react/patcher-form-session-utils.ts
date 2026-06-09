@@ -2,7 +2,6 @@ import type { SetStateAction } from "react";
 import { getFileNameExtension as getSharedFileNameExtension, hasFileNameExtension } from "../../lib/path-utils.ts";
 import { createTiming, formatTiming } from "../../lib/progress/timing.ts";
 import { formatPercentFixed } from "../../presentation/workflow-presentation.ts";
-import type { ApplyPatchFormSettings } from "./patcher-form.ts";
 import type { RomInputRowState } from "./patcher-ui-state.ts";
 
 const getPublicOutputSize = (output: { size?: number }) => output.size || 0;
@@ -15,9 +14,6 @@ const waitForNextUiPaint = () =>
     }
     globalThis.setTimeout(() => resolve(), 0);
   });
-
-const isTraceLoggingEnabled = (settings: ApplyPatchFormSettings) =>
-  String(settings.logging?.level || "").toLowerCase() === "trace";
 
 const resolveLocalStateUpdate = <T>(current: T, update: SetStateAction<T>): T =>
   typeof update === "function" ? (update as (current: T) => T)(current) : update;
@@ -96,7 +92,6 @@ export {
   getMultiInputOutputError,
   getPublicOutputSize,
   getRequestedOutputName,
-  isTraceLoggingEnabled,
   resolveLocalStateUpdate,
   resolvePendingDownloadFileName,
   toError,

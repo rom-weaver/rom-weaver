@@ -31,6 +31,7 @@ import {
   type RomSpecificCompressionFormat,
   type RomSpecificCompressionFormatRegistration,
 } from "../compression/container-format-registry.ts";
+import { emitTraceLog } from "../logging.ts";
 import { getPathBaseName } from "../path-utils.ts";
 import { getNamedSourceFileName, toWorkerMetadata } from "./source-normalization.ts";
 import { createCompressionExtractResult } from "./workflow-runtime-worker-helpers.ts";
@@ -139,16 +140,7 @@ const traceRuntimePatchApply = (
   context: RuntimePatchTraceContext,
   message: string,
   details: Record<string, unknown> = {},
-) => {
-  if (context.logLevel !== "trace") return;
-  context.onLog?.({
-    details,
-    level: "trace",
-    message,
-    namespace: "runtime:patch",
-    timestamp: new Date().toISOString(),
-  });
-};
+) => emitTraceLog({ logLevel: context.logLevel, namespace: "runtime:patch", onLog: context.onLog }, message, details);
 
 const summarizeRuntimeWorkerPathSource = (source: RuntimeWorkerPathSource | undefined, index?: number) =>
   source

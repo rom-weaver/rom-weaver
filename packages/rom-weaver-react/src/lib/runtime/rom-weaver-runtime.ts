@@ -41,6 +41,7 @@ import {
 } from "../../workers/rom-weaver/rom-weaver-run-events.ts";
 import { getRomWeaverFailureMessage, runRomWeaverJson } from "../../workers/rom-weaver/rom-weaver-runner.ts";
 import { parseCompressionCodecEntry } from "../compression/codec-parser.ts";
+import { emitTraceLog } from "../logging.ts";
 import { getFileNameParts, getPathBaseName, isCompressionLevelProfile } from "../path-utils.ts";
 
 type RomWeaverRunJsonOptions = BaseRomWeaverRunJsonOptions<RomWeaverRunJsonEvent, RuntimeValue> &
@@ -432,10 +433,7 @@ const emitRuntimeTrace = (
   },
   message: string,
   details?: Record<string, unknown>,
-) => {
-  if (!isTraceEnabled(input.logLevel)) return;
-  emitRuntimeLog(input.onLog, "trace", message, details);
-};
+) => emitTraceLog({ logLevel: input.logLevel, namespace: "runtime:rom-weaver", onLog: input.onLog }, message, details);
 
 const getTraceMessage = (value: unknown): string => {
   if (typeof value === "string") return value.trim();
