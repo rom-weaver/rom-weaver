@@ -197,7 +197,7 @@ fn migrated_payload_paths_avoid_full_buffer_reads() {
             allowlist_fragments: &[],
         },
         GuardTarget {
-            relative_path: "packages/rom-weaver-wasm/src/rom-weaver-browser-opfs-api.ts",
+            relative_path: "packages/rom-weaver-wasm/src/browser-opfs-mounts.ts",
             forbidden: &["new wasiShim.File(new Uint8Array())"],
             allowlist_fragments: &[],
         },

@@ -2,7 +2,7 @@ import {
   __disposeRomWeaverBrowserThreadMountCache,
   __primeRomWeaverBrowserThreadRuntime,
   __runRomWeaverBrowserWasiThread,
-} from '../rom-weaver-browser-opfs-api.ts';
+} from '../browser-opfs-wasi-thread-runtime.ts';
 
 let shellBusy = false;
 
