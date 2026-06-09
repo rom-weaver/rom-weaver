@@ -43,9 +43,15 @@ type AtomicsWaitAsync = NonNullable<AtomicsWithWaitAsync["waitAsync"]>;
 
 const activeVirtualFiles = new Map<string, BrowserVirtualFile>();
 const VIRTUAL_FILE_MIN_CHUNK_SIZE = 256 * 1024;
-const VIRTUAL_FILE_MAX_CHUNK_SIZE = 2 * 1024 * 1024;
+// Safari pays a high fixed per-call cost on Blob.slice().arrayBuffer(), so fewer/larger reads win.
+// The chunk ceiling caps a single transfer; the per-file SAB budget caps total in-flight bytes and
+// therefore the slot count. At a 16 MiB budget a large input gets the full 4 slots even at the 4 MiB
+// ceiling (4 x 4 MiB), versus the old 4 MiB budget which throttled large inputs to 2 x 2 MiB and
+// halved read pipelining. SAB is standalone (not wasm linear memory); 16 MiB/file stays well clear
+// of the wasm memory cap for the typical one-or-two concurrent inputs.
+const VIRTUAL_FILE_MAX_CHUNK_SIZE = 4 * 1024 * 1024;
 const VIRTUAL_FILE_MAX_SLOT_COUNT = 4;
-const VIRTUAL_FILE_MAX_TOTAL_SAB_BYTES_PER_FILE = 4 * 1024 * 1024;
+const VIRTUAL_FILE_MAX_TOTAL_SAB_BYTES_PER_FILE = 16 * 1024 * 1024;
 // Control-word layout and slot states are imported from rom-weaver-wasm/browser-virtual-file-protocol
 // (aliased above to this file's CONTROL_* vocabulary) so the producer and the WASM consumer can never
 // disagree on the wire format. CONTROL_STATE_READING (the producer's in-flight marker) is deliberately
