@@ -2,10 +2,11 @@ import type { WorkflowProgress, WorkflowProgressRole, WorkflowProgressStage } fr
 import type { SelectionCandidate } from "../../types/selection.ts";
 import type { WorkflowWarning } from "../../types/workflow-controller.ts";
 import type { PatchFileInstance } from "../../workers/protocol/patch-engine.ts";
+import { STANDARD_CHECKSUM_ALGORITHMS } from "../checksum-algorithms.ts";
 import { getPatchFileSourceAccess } from "../input/binary-service.ts";
 import { getBaseFileName } from "../input/path-utils.ts";
 
-const DEFAULT_CHECKSUMS = ["crc32", "md5", "sha1"] as const;
+const DEFAULT_CHECKSUMS = STANDARD_CHECKSUM_ALGORITHMS;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === "object" && !ArrayBuffer.isView(value);
