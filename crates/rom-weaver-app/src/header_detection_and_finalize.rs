@@ -1,5 +1,6 @@
+use super::*;
 impl CliApp {
-    fn append_compress_recommendation_label(
+    pub(super) fn append_compress_recommendation_label(
         base: &str,
         recommendation: &CompressFormatRecommendation,
     ) -> String {
@@ -9,7 +10,7 @@ impl CliApp {
         )
     }
 
-    fn known_header_candidates_for_path(path: &Path) -> Vec<KnownRomHeader> {
+    pub(super) fn known_header_candidates_for_path(path: &Path) -> Vec<KnownRomHeader> {
         let mut candidates = Vec::with_capacity(KnownRomHeader::ALL.len());
         let extension_with_dot = path
             .extension()
@@ -32,7 +33,7 @@ impl CliApp {
         candidates
     }
 
-    fn detect_known_rom_header_from_prefix(
+    pub(super) fn detect_known_rom_header_from_prefix(
         path: &Path,
         prefix: &[u8],
     ) -> Option<KnownRomHeaderMatch> {
@@ -47,7 +48,7 @@ impl CliApp {
         None
     }
 
-    fn detect_known_rom_header(path: &Path) -> Result<Option<KnownRomHeaderMatch>> {
+    pub(super) fn detect_known_rom_header(path: &Path) -> Result<Option<KnownRomHeaderMatch>> {
         let mut source = BufReader::new(File::open(path)?);
         let mut prefix = vec![0_u8; ROM_HEADER_SCAN_BYTES];
         let bytes_read = source.read(&mut prefix)?;
@@ -55,7 +56,7 @@ impl CliApp {
         Ok(Self::detect_known_rom_header_from_prefix(path, &prefix))
     }
 
-    fn has_extension(path: &Path, expected: &[&str]) -> bool {
+    pub(super) fn has_extension(path: &Path, expected: &[&str]) -> bool {
         let Some(extension) = path.extension().and_then(|value| value.to_str()) else {
             return false;
         };
@@ -64,7 +65,10 @@ impl CliApp {
             .any(|candidate| extension.eq_ignore_ascii_case(candidate))
     }
 
-    fn detect_size_based_copier_header(path: &Path, input_len: u64) -> Option<KnownRomHeaderMatch> {
+    pub(super) fn detect_size_based_copier_header(
+        path: &Path,
+        input_len: u64,
+    ) -> Option<KnownRomHeaderMatch> {
         if input_len <= ROM_HEADER_BYTES as u64 {
             return None;
         }
@@ -87,7 +91,7 @@ impl CliApp {
         None
     }
 
-    fn detect_strippable_rom_header(path: &Path) -> Result<KnownRomHeaderMatch> {
+    pub(super) fn detect_strippable_rom_header(path: &Path) -> Result<KnownRomHeaderMatch> {
         let input_len = fs::metadata(path)?.len();
         let mut source = BufReader::new(File::open(path)?);
         let probe_len =
@@ -122,7 +126,10 @@ impl CliApp {
         Ok(header_match)
     }
 
-    fn strip_header_to_temp(input: &Path, stripped_path: &Path) -> Result<StripHeaderResult> {
+    pub(super) fn strip_header_to_temp(
+        input: &Path,
+        stripped_path: &Path,
+    ) -> Result<StripHeaderResult> {
         let header_match = Self::detect_strippable_rom_header(input)?;
         let header_len = header_match.stripped_bytes().unwrap_or(ROM_HEADER_BYTES);
         if let Some(parent) = stripped_path.parent() {
@@ -143,7 +150,7 @@ impl CliApp {
         })
     }
 
-    fn finalize_patch_apply_output(
+    pub(super) fn finalize_patch_apply_output(
         staged_output: &Path,
         final_output: &Path,
         add_header: bool,
@@ -159,7 +166,8 @@ impl CliApp {
 
         if repair_checksum {
             Self::copy_with_optional_header(staged_output, final_output, header_bytes)?;
-            let repair_outcome = Self::repair_checksum_file_in_place(final_output, repair_hint_path)?;
+            let repair_outcome =
+                Self::repair_checksum_file_in_place(final_output, repair_hint_path)?;
             let repair_warning = if repair_outcome.repaired_profiles.is_empty() {
                 if repair_outcome.matched_without_changes.is_empty() {
                     Some(
@@ -188,7 +196,7 @@ impl CliApp {
         })
     }
 
-    fn copy_with_optional_header(
+    pub(super) fn copy_with_optional_header(
         source: &Path,
         destination: &Path,
         header: Option<&[u8]>,
@@ -206,7 +214,7 @@ impl CliApp {
         Ok(())
     }
 
-    fn record_header_repair_status(
+    pub(super) fn record_header_repair_status(
         outcome: &mut HeaderRepairOutcome,
         profile: &'static str,
         status: HeaderRepairStatus,
@@ -217,5 +225,4 @@ impl CliApp {
             HeaderRepairStatus::Repaired => outcome.repaired_profiles.push(profile),
         }
     }
-
 }

@@ -5,9 +5,16 @@ import {
 } from "../../presentation/workflow-presentation.ts";
 import { isVfsFileRef } from "../../storage/vfs/source-ref.ts";
 import type { JsonValue, ProgressEvent as SharedProgressEvent } from "../../types/runtime.ts";
+import type { CompressionOptionValue } from "../../types/workflow-compression.ts";
 import type { ApplyWorkflowOptions, CreateWorkflowOptions, ProgressEvent } from "../../types/workflow-runtime.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
+import { COMPRESSION_DEFAULTS } from "../compression/compression-metadata.ts";
 import { resolveCompressionLevels } from "../compression/compression-settings.ts";
+import {
+  isArchiveCompressionFormat,
+  isRomSpecificCompressionFormat,
+  type RomSpecificCompressionFormat,
+} from "../compression/container-format-registry.ts";
 import OutputCompressionManager from "../compression/output-compression-manager.ts";
 import type { PatchFileInstance } from "../input/binary-service.ts";
 import {
@@ -31,9 +38,10 @@ import {
 } from "./archive-output-service.ts";
 import { createPatchedOutputPlan, type PatchedOutputPlan } from "./patched-output-plan.ts";
 
-const DEFAULT_CHD_CREATE_CD_CODECS = "cdlz,cdzl,cdfl";
-const DEFAULT_CHD_CREATE_DVD_CODECS = "lzma,zlib,huff,flac";
 type OutputWorkflowOptions = ApplyWorkflowOptions | CreateWorkflowOptions;
+type OutputContainerSettings = NonNullable<NonNullable<OutputWorkflowOptions["output"]>["container"]> &
+  Record<string, unknown>;
+type ResolvedCompressionLevels = ReturnType<typeof resolveCompressionLevels>;
 type RuntimeTimedPatchFile = PatchFileInstance & {
   _runtimeTiming?: {
     elapsedMs?: unknown;
@@ -60,7 +68,8 @@ const getCompressionProfile = (options: OutputWorkflowOptions | undefined) =>
   options?.output?.container?.profile || "max";
 const getWorkerThreads = (options: OutputWorkflowOptions | undefined) => options?.workers?.threads;
 const getLogLevel = (options: OutputWorkflowOptions | undefined) => options?.logging?.level;
-const getContainerSettings = (options: OutputWorkflowOptions | undefined) => options?.output?.container || {};
+const getContainerSettings = (options: OutputWorkflowOptions | undefined): OutputContainerSettings =>
+  options?.output?.container || {};
 const getRequestedOutputName = (options: OutputWorkflowOptions | undefined) => {
   const outputName = options?.output?.outputName;
   return typeof outputName === "string" ? outputName.trim() : "";
@@ -81,12 +90,38 @@ const traceOutputName = (
   });
 };
 
-const getDefaultChdCompressionCodecs = (mode: string | null | undefined, compressionProfile: string) =>
-  OutputCompressionManager.getChdCodecsForMode(mode, {
-    chdCreateCdCodecs: DEFAULT_CHD_CREATE_CD_CODECS,
-    chdCreateDvdCodecs: DEFAULT_CHD_CREATE_DVD_CODECS,
-    compressionProfile,
+const getStringOption = (value: unknown, fallback: string): string =>
+  typeof value === "string" && value.trim() ? value : fallback;
+
+const getChdCompressionCodecs = (mode: string | null | undefined, options: OutputWorkflowOptions | undefined) => {
+  const archiveSettings = getContainerSettings(options);
+  return OutputCompressionManager.getChdCodecsForMode(mode, {
+    chdCreateCdCodecs: getStringOption(archiveSettings.chdCreateCdCodecs, COMPRESSION_DEFAULTS.chdCreateCdCodecs),
+    chdCreateDvdCodecs: getStringOption(archiveSettings.chdCreateDvdCodecs, COMPRESSION_DEFAULTS.chdCreateDvdCodecs),
+    compressionProfile: String(getCompressionProfile(options)),
   });
+};
+
+const setCompressionOption = (
+  options: Record<string, CompressionOptionValue>,
+  key: string,
+  value: CompressionOptionValue | undefined,
+) => {
+  if (value !== undefined) options[key] = value;
+};
+
+const getRvzOptions = (
+  archiveSettings: OutputContainerSettings,
+  levels: ResolvedCompressionLevels,
+): Record<string, CompressionOptionValue> => {
+  const options: Record<string, CompressionOptionValue> = {
+    rvzCodec: levels.rvzCodec,
+    rvzCompressionLevel: levels.rvzCompressionLevel,
+  };
+  setCompressionOption(options, "rvzBlockSize", archiveSettings.rvzBlockSize as CompressionOptionValue | undefined);
+  setCompressionOption(options, "rvzScrub", archiveSettings.rvzScrub as CompressionOptionValue | undefined);
+  return options;
+};
 
 const collectPatchFileCleanups = (files: PatchFileInstance[]): Array<() => Promise<void> | void> => {
   const seen = new Set<() => Promise<void> | void>();
@@ -136,7 +171,7 @@ const createRuntimeRomSpecificOutputFiles = async (
   type RuntimeCompressionCreateRequest = Parameters<NonNullable<WorkflowRuntime["compression"]["create"]>>[0];
 
   if (!runtime?.compression.create) return null;
-  if (compression !== "chd" && compression !== "rvz" && compression !== "z3ds") return null;
+  if (!isRomSpecificCompressionFormat(compression)) return null;
 
   const inputFileName = outputPlan.inputFileName || patchedRom.fileName || "patched.bin";
   const source = createRuntimeSourceFromPatchFile(patchedRom, inputFileName);
@@ -167,7 +202,7 @@ const createRuntimeRomSpecificOutputFiles = async (
       options: runtimeOptions,
       outputName: outputPlan.finalOutputFileName,
       rvzBlockSize: outputPlan.rvzOptions?.rvzBlockSize as string | number | null | undefined,
-      rvzCompression: outputPlan.rvzOptions?.rvzCompression as string | null | undefined,
+      rvzCodec: outputPlan.rvzOptions?.rvzCodec as string | null | undefined,
       rvzCompressionLevel: outputPlan.rvzOptions?.rvzCompressionLevel as string | number | null | undefined,
       rvzMode: outputPlan.rvzMode,
       rvzScrub: outputPlan.rvzOptions?.rvzScrub as boolean | string | number | null | undefined,
@@ -198,32 +233,33 @@ const createSingleFileRomSpecificOutput = async ({
   options,
   runtime,
 }: {
-  compression: "chd" | "rvz" | "z3ds";
+  compression: RomSpecificCompressionFormat;
   outputFile: PatchFileInstance;
   options: OutputWorkflowOptions | undefined;
   runtime?: WorkflowRuntime;
 }): Promise<PatchFileInstance | null> => {
   const archiveSettings = getContainerSettings(options);
   const levels = resolveCompressionLevels({
-    compressionProfile: getCompressionProfile(options),
-    sevenZipCodec: archiveSettings.sevenZipCodec,
-    sevenZipLevel: archiveSettings.sevenZipLevel,
-    z3dsCompressionLevel: archiveSettings.z3dsCompressionLevel,
-    zipCodec: archiveSettings.zipCodec,
-    zipLevel: archiveSettings.zipLevel,
+    compressionProfile: String(getCompressionProfile(options)),
+    rvzCodec: archiveSettings.rvzCodec as string | null | undefined,
+    rvzCompressionLevel: archiveSettings.rvzCompressionLevel as string | number | null | undefined,
+    sevenZipCodec: archiveSettings.sevenZipCodec as string | null | undefined,
+    sevenZipLevel: archiveSettings.sevenZipLevel as string | number | null | undefined,
+    z3dsCompressionLevel: archiveSettings.z3dsCompressionLevel as string | number | "default" | null | undefined,
+    zipCodec: archiveSettings.zipCodec as string | null | undefined,
+    zipLevel: archiveSettings.zipLevel as string | number | null | undefined,
   });
   const outputPlan = createPatchedOutputPlan({
-    chdOutputMode: "auto",
+    chdOutputMode: (archiveSettings.chdOutputMode as string | null | undefined) || "auto",
     compressionFormat: compression,
     compressionSettings: levels,
     patchedFileName: getRequestedOutputName(options) || outputFile.fileName || "output.bin",
     replaceCuePatchFileName: (cueText: string, outputName: string) => replaceCuePatchFileName(cueText, outputName),
     resolveChdCodecMode: (_fileName: string, mode: string | null) =>
       mode === "auto" ? getChdAutoCreateMode(outputFile) : mode,
-    resolveChdCompressionCodecs: (mode: string | null) =>
-      getDefaultChdCompressionCodecs(mode, getCompressionProfile(options)),
+    resolveChdCompressionCodecs: (mode: string | null) => getChdCompressionCodecs(mode, options),
     romFile: outputFile,
-    rvzOptions: {},
+    rvzOptions: getRvzOptions(archiveSettings, levels),
     z3dsOptions: {
       compressionLevel: levels.z3dsCompressionLevel,
     },
@@ -248,30 +284,31 @@ const buildOutputFiles = async (
 
   const archiveSettings = getContainerSettings(options);
   const levels = resolveCompressionLevels({
-    compressionProfile: getCompressionProfile(options),
-    sevenZipCodec: archiveSettings.sevenZipCodec,
-    sevenZipLevel: archiveSettings.sevenZipLevel,
-    z3dsCompressionLevel: archiveSettings.z3dsCompressionLevel,
-    zipCodec: archiveSettings.zipCodec,
-    zipLevel: archiveSettings.zipLevel,
+    compressionProfile: String(getCompressionProfile(options)),
+    rvzCodec: archiveSettings.rvzCodec as string | null | undefined,
+    rvzCompressionLevel: archiveSettings.rvzCompressionLevel as string | number | null | undefined,
+    sevenZipCodec: archiveSettings.sevenZipCodec as string | null | undefined,
+    sevenZipLevel: archiveSettings.sevenZipLevel as string | number | null | undefined,
+    z3dsCompressionLevel: archiveSettings.z3dsCompressionLevel as string | number | "default" | null | undefined,
+    zipCodec: archiveSettings.zipCodec as string | null | undefined,
+    zipLevel: archiveSettings.zipLevel as string | number | null | undefined,
   });
   const outputPlan = createPatchedOutputPlan({
-    chdOutputMode: "auto",
+    chdOutputMode: (archiveSettings.chdOutputMode as string | null | undefined) || "auto",
     compressionFormat: compression,
     compressionSettings: levels,
     patchedFileName: patchedRom.fileName,
     replaceCuePatchFileName: (cueText: string, outputName: string) => replaceCuePatchFileName(cueText, outputName),
     resolveChdCodecMode: (_fileName: string, mode: string | null) =>
       mode === "auto" ? getChdAutoCreateMode(patchedRom) : mode,
-    resolveChdCompressionCodecs: (mode: string | null) =>
-      getDefaultChdCompressionCodecs(mode, getCompressionProfile(options)),
+    resolveChdCompressionCodecs: (mode: string | null) => getChdCompressionCodecs(mode, options),
     romFile,
-    rvzOptions: {},
+    rvzOptions: getRvzOptions(archiveSettings, levels),
     z3dsOptions: {
       compressionLevel: levels.z3dsCompressionLevel,
     },
   });
-  if (compression === "zip" || compression === "7z") {
+  if (isArchiveCompressionFormat(compression)) {
     const archiveEntryFileName =
       "archiveEntryFileName" in outputPlan && typeof outputPlan.archiveEntryFileName === "string"
         ? outputPlan.archiveEntryFileName
@@ -518,7 +555,7 @@ const buildSessionOutputFiles = async (
       };
     });
     const result = await runtime.compression.create({
-      compressionCodecs: getDefaultChdCompressionCodecs("cd", getCompressionProfile(options)),
+      compressionCodecs: getChdCompressionCodecs("cd", options),
       fileName: cueOutput.asset.fileName,
       format: "chd",
       imageFiles,

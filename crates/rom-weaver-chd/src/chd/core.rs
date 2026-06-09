@@ -35,6 +35,7 @@
         const CHD_V5_HEADER_SHA1_OFFSET: u64 = 84;
         const CHD_V5_HEADER_PARENT_SHA1_OFFSET: u64 = 104;
         const CHD_SHA1_BYTES: usize = 20;
+        const SUPPORTED_CODEC_CLAUSE: &str = "supported codecs are store, zlib, zstd, lzma, huff (alias: huffman), flac, cdlz, cdzl, cdzs, cdfl, and avhuff (alias: avhu)";
         const HUFFMAN_SMALL_TREE_BITS: [u8; 5] = [1, 7, 0, 1, 7];
         const AVHUFF_DELTA_TREE_SYMBOLS: usize = 256 + 16;
         const AVHUFF_DELTA_TREE_BITS: u8 = 5;
@@ -471,14 +472,18 @@
                 RequestedCodec::Known(CanonicalCodec::Lzma)
                 | RequestedCodec::Known(CanonicalCodec::Lzma2) => Ok(ChdCodec::LZMA),
                 RequestedCodec::Known(CanonicalCodec::Huffman) => Ok(ChdCodec::HUFFMAN),
-                RequestedCodec::Known(codec) => Err(RomWeaverError::Validation(format!(
-                    "unsupported chd codec `{}`; supported codecs are store, zlib, zstd, lzma, huff (alias: huffman), flac, cdlz, cdzl, cdzs, cdfl, and avhuff (alias: avhu)",
-                    codec.name()
-                ))),
-                RequestedCodec::Unknown(name) => Err(RomWeaverError::Validation(format!(
-                    "unsupported chd codec `{name}`; supported codecs are store, zlib, zstd, lzma, huff (alias: huffman), flac, cdlz, cdzl, cdzs, cdfl, and avhuff (alias: avhu)"
-                ))),
+                RequestedCodec::Known(codec) => {
+                    Err(Self::unsupported_codec_error(codec.name()))
+                }
+                RequestedCodec::Unknown(name) => Err(Self::unsupported_codec_error(&name)),
             }
+        }
+
+        fn unsupported_codec_error(codec_name: &str) -> RomWeaverError {
+            RomWeaverError::Validation(format!(
+                "unsupported chd codec `{codec_name}`; {}",
+                Self::SUPPORTED_CODEC_CLAUSE
+            ))
         }
 
         fn resolve_compression_level(&self, codec: ChdCodec, level: Option<i32>) -> Result<i32> {

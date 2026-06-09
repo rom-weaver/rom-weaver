@@ -150,6 +150,54 @@ test("create workflow supports raw and zip output compression", async () => {
   }
 });
 
+test("create workflow caps zip zstd max output to one browser thread before dispatch", async () => {
+  const original = new File([makeOriginalBytes()], "original.bin", { type: "application/octet-stream" });
+  const modified = new File([makeModifiedBytes()], "modified.bin", { type: "application/octet-stream" });
+  const { logs, workflow } = createTraceWorkflow(
+    {
+      compression: "zip",
+      container: {
+        zipCodec: "zstd",
+        zipLevel: 22,
+      },
+      outputName: "change.zip",
+    },
+    4,
+  );
+  try {
+    await workflow.setOriginal(original);
+    await workflow.setModified(modified);
+    const result = await workflow.run();
+    expect(result.output.fileName).toBe("change.zip");
+    await result.output.dispose();
+
+    const capLog = logs.find(
+      (entry) => String(entry?.message || "") === "runJson compress normalized browser thread cap",
+    );
+    expect(capLog?.details).toMatchObject({
+      format: "zip",
+      requestedThreadArg: 4,
+      threadArg: 1,
+      threadCap: 1,
+      zipZstdLevel: 22,
+    });
+
+    const compressDispatch = logs.find((entry) => String(entry?.message || "") === "runJson compress dispatch");
+    expect(compressDispatch?.details).toMatchObject({
+      command: {
+        args: {
+          threads: 1,
+        },
+        type: "compress",
+      },
+      format: "zip",
+      threadArg: 1,
+    });
+  } finally {
+    await workflow.dispose();
+  }
+});
+
 test("create workflow supports 7z output compression with auto browser threads", async () => {
   const original = new File([makeOriginalBytes()], "original.bin", { type: "application/octet-stream" });
   const modified = new File([makeModifiedBytes()], "modified.bin", { type: "application/octet-stream" });

@@ -1,3 +1,8 @@
+import type { ROM_WEAVER_COMPRESSION_METADATA } from "rom-weaver-wasm/format-metadata";
+import type {
+  ArchiveCompressionFormat,
+  RomSpecificCompressionFormat,
+} from "../lib/compression/container-format-registry.ts";
 import type { InputAsset } from "../lib/input/input-assets.ts";
 import type { VfsOutputRef } from "../storage/vfs/types.ts";
 import type { ParsedPatchLike, PatchFileInstance } from "../workers/protocol/patch-engine.ts";
@@ -9,6 +14,9 @@ import type { SourceRef } from "./source.ts";
 import type { ChdCompressionCodecs } from "./workflow-compression.ts";
 
 type JsonPrimitive = string | number | boolean | null;
+type CompressionProfile = (typeof ROM_WEAVER_COMPRESSION_METADATA)["profiles"][number]["name"];
+type ZipCodec = (typeof ROM_WEAVER_COMPRESSION_METADATA)["codecFields"]["zipCodec"]["codecs"][number];
+type SevenZipCodec = (typeof ROM_WEAVER_COMPRESSION_METADATA)["codecFields"]["sevenZipCodec"]["codecs"][number];
 type JsonValue =
   | JsonPrimitive
   | JsonValue[]
@@ -170,26 +178,26 @@ type CompressionExtractInput = {
 };
 
 type SevenZipZstdCompressionOptions = CompressionWorkflowOptions & {
-  compression?: "zip" | "7z";
+  compression?: ArchiveCompressionFormat;
   outputName?: string;
-  compressionProfile?: "min" | "very-low" | "low" | "medium" | "high" | "very-high" | "max";
-  zipCodec?: "deflate" | "store" | "zstd";
+  compressionProfile?: CompressionProfile;
+  zipCodec?: ZipCodec;
   zipLevel?: number | string;
-  sevenZipCodec?: "lzma2";
+  sevenZipCodec?: SevenZipCodec;
   sevenZipLevel?: number | string;
 };
 
 type CompressionCreateInput =
   | {
       entries: CompressionEntryInput[];
-      format?: "7z" | "zip";
+      format?: ArchiveCompressionFormat;
       options?: SevenZipZstdCompressionOptions;
     }
   | {
       source: SourceRef;
       fileName: string;
       outputName: string;
-      format: "chd" | "rvz" | "z3ds";
+      format: RomSpecificCompressionFormat;
       imageFiles?: Array<{
         source: SourceRef;
         fileName?: string;
@@ -199,7 +207,7 @@ type CompressionCreateInput =
       cueFilePath?: string | null;
       compressionCodecs?: ChdCompressionCodecs | null;
       rvzBlockSize?: string | number | null;
-      rvzCompression?: string | null;
+      rvzCodec?: string | null;
       rvzCompressionLevel?: string | number | null;
       rvzMode?: string | null;
       rvzScrub?: boolean | string | number | null;

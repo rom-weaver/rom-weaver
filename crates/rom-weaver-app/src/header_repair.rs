@@ -1,5 +1,6 @@
+use super::*;
 impl CliApp {
-    fn repair_checksum_file_in_place(
+    pub(super) fn repair_checksum_file_in_place(
         path: &Path,
         hint_path: Option<&Path>,
     ) -> Result<HeaderRepairOutcome> {
@@ -121,17 +122,20 @@ impl CliApp {
         Ok(outcome)
     }
 
-    fn repair_snes_checksum_file(file: &mut File, file_len: usize) -> Result<HeaderRepairStatus> {
+    pub(super) fn repair_snes_checksum_file(
+        file: &mut File,
+        file_len: usize,
+    ) -> Result<HeaderRepairStatus> {
         if file_len <= ROM_HEADER_BYTES {
             return Ok(HeaderRepairStatus::NotMatched);
         }
 
-        let copier_offset = if file_len as u64 % SNES_COPIER_HEADER_MODULUS == ROM_HEADER_BYTES as u64
-        {
-            ROM_HEADER_BYTES
-        } else {
-            0
-        };
+        let copier_offset =
+            if file_len as u64 % SNES_COPIER_HEADER_MODULUS == ROM_HEADER_BYTES as u64 {
+                ROM_HEADER_BYTES
+            } else {
+                0
+            };
         let rom_size = file_len.saturating_sub(copier_offset);
         if rom_size == 0 {
             return Ok(HeaderRepairStatus::NotMatched);
@@ -157,8 +161,7 @@ impl CliApp {
             return Ok(HeaderRepairStatus::NotMatched);
         }
 
-        let old_complement_bytes =
-            Self::read_vec_at(file, checksum_complement_offset as u64, 2)?;
+        let old_complement_bytes = Self::read_vec_at(file, checksum_complement_offset as u64, 2)?;
         let old_checksum_bytes = Self::read_vec_at(file, checksum_offset as u64, 2)?;
         let old_complement = u16::from_le_bytes([old_complement_bytes[0], old_complement_bytes[1]]);
         let old_checksum = u16::from_le_bytes([old_checksum_bytes[0], old_checksum_bytes[1]]);
@@ -213,7 +216,11 @@ impl CliApp {
         }
     }
 
-    fn is_valid_snes_title_file(file: &mut File, offset: usize, file_len: usize) -> Result<bool> {
+    pub(super) fn is_valid_snes_title_file(
+        file: &mut File,
+        offset: usize,
+        file_len: usize,
+    ) -> Result<bool> {
         if offset + 21 > file_len {
             return Ok(false);
         }
@@ -225,7 +232,7 @@ impl CliApp {
         Ok(printable_count >= 10)
     }
 
-    fn repair_nes_header_padding_file(
+    pub(super) fn repair_nes_header_padding_file(
         file: &mut File,
         file_len: usize,
     ) -> Result<HeaderRepairStatus> {
@@ -256,7 +263,10 @@ impl CliApp {
         }
     }
 
-    fn validate_fds_header_file(file: &mut File, file_len: usize) -> Result<HeaderRepairStatus> {
+    pub(super) fn validate_fds_header_file(
+        file: &mut File,
+        file_len: usize,
+    ) -> Result<HeaderRepairStatus> {
         if file_len < 16 {
             return Ok(HeaderRepairStatus::NotMatched);
         }
@@ -268,7 +278,7 @@ impl CliApp {
         }
     }
 
-    fn repair_gba_header_checksum_file(
+    pub(super) fn repair_gba_header_checksum_file(
         file: &mut File,
         file_len: usize,
     ) -> Result<HeaderRepairStatus> {
@@ -294,7 +304,7 @@ impl CliApp {
         }
     }
 
-    fn repair_sega_genesis_checksum_file(
+    pub(super) fn repair_sega_genesis_checksum_file(
         file: &mut File,
         file_len: usize,
     ) -> Result<HeaderRepairStatus> {
@@ -319,7 +329,7 @@ impl CliApp {
         }
     }
 
-    fn repair_game_boy_checksum_file(
+    pub(super) fn repair_game_boy_checksum_file(
         file: &mut File,
         file_len: usize,
     ) -> Result<HeaderRepairStatus> {
@@ -353,7 +363,7 @@ impl CliApp {
         }
     }
 
-    fn repair_sms_tmr_checksum_file(
+    pub(super) fn repair_sms_tmr_checksum_file(
         file: &mut File,
         file_len: usize,
     ) -> Result<HeaderRepairStatus> {
@@ -413,7 +423,10 @@ impl CliApp {
         }
     }
 
-    fn repair_n64_checksum_file(file: &mut File, file_len: usize) -> Result<HeaderRepairStatus> {
+    pub(super) fn repair_n64_checksum_file(
+        file: &mut File,
+        file_len: usize,
+    ) -> Result<HeaderRepairStatus> {
         if file_len < 0x101000 {
             return Ok(HeaderRepairStatus::NotMatched);
         }
@@ -441,7 +454,7 @@ impl CliApp {
             t6 = t6.wrapping_add(d);
             t3 ^= d;
 
-            let shift = d & 0x1F ;
+            let shift = d & 0x1F;
             let rotated = if shift == 0 { d } else { d.rotate_left(shift) };
 
             t5 = t5.wrapping_add(rotated);
@@ -465,7 +478,7 @@ impl CliApp {
         }
     }
 
-    fn detect_n64_byte_order_file(
+    pub(super) fn detect_n64_byte_order_file(
         file: &mut File,
         file_len: usize,
     ) -> Result<Option<N64ByteOrder>> {
@@ -484,7 +497,7 @@ impl CliApp {
         }
     }
 
-    fn transform_n64_word(bytes: &mut [u8; 4], order: N64ByteOrder) {
+    pub(super) fn transform_n64_word(bytes: &mut [u8; 4], order: N64ByteOrder) {
         match order {
             N64ByteOrder::BigEndian => {}
             N64ByteOrder::LittleEndian => bytes.reverse(),
@@ -495,14 +508,18 @@ impl CliApp {
         }
     }
 
-    fn read_n64_word_normalized(file: &mut File, offset: u64, order: N64ByteOrder) -> Result<u32> {
+    pub(super) fn read_n64_word_normalized(
+        file: &mut File,
+        offset: u64,
+        order: N64ByteOrder,
+    ) -> Result<u32> {
         let mut bytes = [0u8; 4];
         Self::read_exact_at(file, offset, &mut bytes)?;
         Self::transform_n64_word(&mut bytes, order);
         Ok(u32::from_be_bytes(bytes))
     }
 
-    fn write_n64_word_original_order(
+    pub(super) fn write_n64_word_original_order(
         file: &mut File,
         offset: u64,
         value: u32,
@@ -513,7 +530,7 @@ impl CliApp {
         Self::write_all_at(file, offset, &bytes)
     }
 
-    fn repair_atari_7800_header_file(
+    pub(super) fn repair_atari_7800_header_file(
         file: &mut File,
         file_len: usize,
     ) -> Result<HeaderRepairStatus> {
@@ -540,7 +557,7 @@ impl CliApp {
         }
     }
 
-    fn repair_atari_lynx_header_file(
+    pub(super) fn repair_atari_lynx_header_file(
         file: &mut File,
         file_len: usize,
     ) -> Result<HeaderRepairStatus> {
@@ -572,7 +589,7 @@ impl CliApp {
         }
     }
 
-    fn repair_neo_geo_pocket_header_file(
+    pub(super) fn repair_neo_geo_pocket_header_file(
         file: &mut File,
         file_len: usize,
     ) -> Result<HeaderRepairStatus> {
@@ -598,7 +615,10 @@ impl CliApp {
         }
     }
 
-    fn repair_msx_header_file(file: &mut File, file_len: usize) -> Result<HeaderRepairStatus> {
+    pub(super) fn repair_msx_header_file(
+        file: &mut File,
+        file_len: usize,
+    ) -> Result<HeaderRepairStatus> {
         if file_len < 16 {
             return Ok(HeaderRepairStatus::NotMatched);
         }
@@ -621,7 +641,7 @@ impl CliApp {
         }
     }
 
-    fn repair_nintendo_ds_header_crc_file(
+    pub(super) fn repair_nintendo_ds_header_crc_file(
         file: &mut File,
         file_len: usize,
     ) -> Result<HeaderRepairStatus> {
@@ -642,7 +662,7 @@ impl CliApp {
         }
     }
 
-    fn repair_pce_copier_header(
+    pub(super) fn repair_pce_copier_header(
         repaired_len: usize,
         extension: Option<&str>,
     ) -> HeaderRepairStatus {
@@ -659,7 +679,7 @@ impl CliApp {
         HeaderRepairStatus::Repaired
     }
 
-    fn repair_virtual_boy_header_file(
+    pub(super) fn repair_virtual_boy_header_file(
         file: &mut File,
         file_len: usize,
         extension: Option<&str>,
@@ -688,7 +708,7 @@ impl CliApp {
         }
     }
 
-    fn validate_atari_jaguar_header_file(
+    pub(super) fn validate_atari_jaguar_header_file(
         file_len: usize,
         extension: Option<&str>,
     ) -> HeaderRepairStatus {
@@ -702,7 +722,7 @@ impl CliApp {
         }
     }
 
-    fn validate_colecovision_header_file(
+    pub(super) fn validate_colecovision_header_file(
         file: &mut File,
         file_len: usize,
         extension: Option<&str>,
@@ -721,7 +741,7 @@ impl CliApp {
         }
     }
 
-    fn validate_watara_supervision_header_file(
+    pub(super) fn validate_watara_supervision_header_file(
         file_len: usize,
         extension: Option<&str>,
     ) -> HeaderRepairStatus {
@@ -735,7 +755,7 @@ impl CliApp {
         }
     }
 
-    fn validate_intellivision_header_file(
+    pub(super) fn validate_intellivision_header_file(
         file_len: usize,
         extension: Option<&str>,
     ) -> HeaderRepairStatus {
@@ -749,7 +769,11 @@ impl CliApp {
         }
     }
 
-    fn remove_prefix_in_place(file: &mut File, prefix: usize, file_len: usize) -> Result<usize> {
+    pub(super) fn remove_prefix_in_place(
+        file: &mut File,
+        prefix: usize,
+        file_len: usize,
+    ) -> Result<usize> {
         if prefix == 0 {
             return Ok(file_len);
         }
@@ -775,25 +799,25 @@ impl CliApp {
         Ok(write_pos as usize)
     }
 
-    fn read_exact_at(file: &mut File, offset: u64, output: &mut [u8]) -> Result<()> {
+    pub(super) fn read_exact_at(file: &mut File, offset: u64, output: &mut [u8]) -> Result<()> {
         file.seek(SeekFrom::Start(offset))?;
         file.read_exact(output)?;
         Ok(())
     }
 
-    fn write_all_at(file: &mut File, offset: u64, bytes: &[u8]) -> Result<()> {
+    pub(super) fn write_all_at(file: &mut File, offset: u64, bytes: &[u8]) -> Result<()> {
         file.seek(SeekFrom::Start(offset))?;
         file.write_all(bytes)?;
         Ok(())
     }
 
-    fn read_vec_at(file: &mut File, offset: u64, len: usize) -> Result<Vec<u8>> {
+    pub(super) fn read_vec_at(file: &mut File, offset: u64, len: usize) -> Result<Vec<u8>> {
         let mut output = vec![0u8; len];
         Self::read_exact_at(file, offset, output.as_mut_slice())?;
         Ok(output)
     }
 
-    fn sum_range_with_zeroed(
+    pub(super) fn sum_range_with_zeroed(
         file: &mut File,
         start: usize,
         end: usize,
@@ -813,12 +837,9 @@ impl CliApp {
             Self::read_exact_at(file, cursor, &mut buffer[..chunk_len])?;
             for (index, value) in buffer[..chunk_len].iter().enumerate() {
                 let absolute = cursor + index as u64;
-                if zeroed_ranges
-                    .iter()
-                    .any(|(range_start, range_end)| {
-                        absolute >= *range_start as u64 && absolute < *range_end as u64
-                    })
-                {
+                if zeroed_ranges.iter().any(|(range_start, range_end)| {
+                    absolute >= *range_start as u64 && absolute < *range_end as u64
+                }) {
                     continue;
                 }
                 sum = sum.wrapping_add(u32::from(*value));
@@ -829,7 +850,7 @@ impl CliApp {
         Ok(sum)
     }
 
-    fn sum_sega_words(file: &mut File, start: usize, end: usize) -> Result<u32> {
+    pub(super) fn sum_sega_words(file: &mut File, start: usize, end: usize) -> Result<u32> {
         if end <= start {
             return Ok(0);
         }

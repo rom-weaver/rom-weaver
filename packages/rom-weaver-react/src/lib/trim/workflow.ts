@@ -16,7 +16,10 @@ import type { DirectSource, SourceRef } from "../../types/source.ts";
 import type { CreateWorkflowDeps, PatchFileInstance } from "../../types/workflow-internal.ts";
 import type { TrimInput, TrimResult, TrimWorkflowOptions } from "../../types/workflow-runtime.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
-import { isRomSpecificCompressionFormat } from "../compression/container-format-registry.ts";
+import {
+  isArchiveCompressionFormat,
+  isRomSpecificCompressionFormat,
+} from "../compression/container-format-registry.ts";
 import OutputCompressionManager from "../compression/output-compression-manager.ts";
 import { createWorkflowDeps } from "../create/workflow.ts";
 import { createSingleFileArchiveOutput, hasArchiveFileName } from "../output/archive-output-service.ts";
@@ -45,9 +48,6 @@ const getOutputTimingMs = (output: TrimResult["output"] | undefined): number | u
     ? Math.round(elapsedMs)
     : undefined;
 };
-
-const isArchiveOutputCompression = (compression: CompressionFormat): compression is "7z" | "zip" =>
-  compression === "7z" || compression === "zip";
 
 const getTrimOutputCompression = (
   options: TrimWorkflowOptions | undefined,
@@ -178,7 +178,7 @@ const runTrimWorkflow = async (
       traceWorkflowStage(options, "stage.skip", "compress", "output", { reason: "output compression disabled" });
       return deps.toPublicOutput(trimmedFile, runtime);
     }
-    if (isArchiveOutputCompression(compression)) {
+    if (isArchiveCompressionFormat(compression)) {
       return createSingleFileArchiveOutput({
         compression,
         deps,

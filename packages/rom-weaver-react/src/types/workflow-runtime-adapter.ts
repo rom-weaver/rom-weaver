@@ -142,7 +142,7 @@ type RuntimeRomSpecificCreateRvzInput = RuntimeRomSpecificHooks & {
   fileName?: RuntimeRomSpecificCreateInputBase["fileName"];
   outputName: RuntimeRomSpecificCreateInputBase["outputName"];
   rvzBlockSize?: RuntimeRomSpecificCreateInputBase["rvzBlockSize"];
-  rvzCompression?: RuntimeRomSpecificCreateInputBase["rvzCompression"];
+  rvzCodec?: RuntimeRomSpecificCreateInputBase["rvzCodec"];
   rvzCompressionLevel?: RuntimeRomSpecificCreateInputBase["rvzCompressionLevel"];
   rvzMode?: RuntimeRomSpecificCreateInputBase["rvzMode"];
   rvzScrub?: RuntimeRomSpecificCreateInputBase["rvzScrub"];

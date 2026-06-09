@@ -15,6 +15,7 @@ const createRuntime = (outputBytes = new Uint8Array([0x50, 0x4b, 0x03, 0x04])) =
         calls.push(input);
         input.options?.onProgress?.({
           details: { phase: "pack" },
+          effective_threads: 1,
           label: "Packing",
           percent: 40,
           stage: "read",
@@ -83,10 +84,36 @@ test("createArchiveOutput builds runtime archive create requests and reports pro
         runtimeStage: "read",
         stage: "compress",
       }),
+      label: "Packing ZIP - 1 thread",
       percent: 40,
       stage: "output",
     }),
   );
+});
+
+test("createArchiveOutput uses normalized container codec settings", async () => {
+  const { calls, runtime } = createRuntime();
+
+  await createArchiveOutput({
+    compression: "zip",
+    entries: [{ data: new Uint8Array([1, 2, 3]), filename: "inner.bin" }],
+    options: {
+      output: {
+        container: {
+          profile: "max",
+          zipCodec: "zstd",
+        },
+      },
+    },
+    outputName: "bundle.zip",
+    runtime,
+  });
+
+  expect(calls[0].options).toMatchObject({
+    compressionProfile: "max",
+    zipCodec: "zstd",
+    zipLevel: 22,
+  });
 });
 
 test("createSingleFileArchiveOutput derives archive and inner entry names from requested output", async () => {

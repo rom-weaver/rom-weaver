@@ -13,8 +13,9 @@ use std::{
 use clap::{ArgAction, Args, Subcommand, ValueEnum};
 use rom_weaver_checksum::checksum_reader_values_with_progress;
 use rom_weaver_checksum::{NativeChecksumEngine, checksum_file_values, supported_algorithms};
-use rom_weaver_codecs::{CanonicalCodec, RequestedCodec, parse_requested_codec};
-use rom_weaver_containers::{CompressFormatRecommendation, ContainerRegistry};
+use rom_weaver_containers::{
+    CompressFormatRecommendation, ContainerRegistry, extract_only_create_validation_message,
+};
 use rom_weaver_core::{
     ArchiveEntryKindFilter, CancellationToken, ChecksumEngine, ChecksumRequest,
     ContainerCreateRequest, ContainerExtractRequest, ContainerHandler, ContainerListEntry,
@@ -1945,14 +1946,33 @@ enum N64ByteOrder {
     ByteSwapped,
 }
 
-include!("commands_and_selection.rs");
-include!("compress_trim_batch.rs");
-include!("patch_commands.rs");
-include!("compression_planning.rs");
-include!("trim_and_probe_details.rs");
-include!("header_detection_and_finalize.rs");
-include!("header_repair.rs");
-include!("nested_extract.rs");
+#[path = "commands_and_selection.rs"]
+mod commands_and_selection;
+use commands_and_selection::*;
+
+#[path = "compress_trim_batch.rs"]
+mod compress_trim_batch;
+
+#[path = "patch_commands.rs"]
+mod patch_commands;
+pub use patch_commands::{PatchCreateFormatPolicyMetadata, patch_create_format_policy_metadata};
+
+#[path = "compression_planning.rs"]
+mod compression_planning;
+use compression_planning::*;
+
+#[path = "trim_and_probe_details.rs"]
+mod trim_and_probe_details;
+use trim_and_probe_details::*;
+
+#[path = "header_detection_and_finalize.rs"]
+mod header_detection_and_finalize;
+
+#[path = "header_repair.rs"]
+mod header_repair;
+
+#[path = "nested_extract.rs"]
+mod nested_extract;
 
 struct ProgressFilterReporter {
     inner: Arc<dyn ProgressSink>,

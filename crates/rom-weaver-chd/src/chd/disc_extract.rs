@@ -1118,14 +1118,20 @@ impl ChdContainerHandler {
             )
         };
 
+        let file_count = produced_outputs.len();
+        let written_bytes = produced_outputs
+            .iter()
+            .filter_map(|path| fs::metadata(path).ok().map(|metadata| metadata.len()))
+            .sum::<u64>();
         let report = OperationReport::succeeded(
             OperationFamily::Container,
             Some(CHD.name.to_string()),
             "extract",
             label,
             Some(100.0),
-            Some(execution),
+            Some(execution.clone()),
         );
+        let report = attach_extraction_details(report, file_count, file_count, written_bytes, &execution);
         Ok(attach_extract_checksum_details(report, output_checksums))
     }
 
@@ -1359,14 +1365,20 @@ impl ChdContainerHandler {
             )
         };
 
+        let file_count = produced_outputs.len();
+        let written_bytes = produced_outputs
+            .iter()
+            .filter_map(|path| fs::metadata(path).ok().map(|metadata| metadata.len()))
+            .sum::<u64>();
         let report = OperationReport::succeeded(
             OperationFamily::Container,
             Some(CHD.name.to_string()),
             "extract",
             label,
             Some(100.0),
-            Some(execution),
+            Some(execution.clone()),
         );
+        let report = attach_extraction_details(report, file_count, file_count, written_bytes, &execution);
         Ok(attach_extract_checksum_details(report, output_checksums))
     }
 }

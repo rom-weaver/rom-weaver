@@ -38,6 +38,16 @@ const createBrowserLargeFileVfs = (options: BrowserLargeFileVfsOptions = {}): La
   const navigatorObject = options.navigatorObject || globalThis.navigator;
   const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+  // Per-path read cache. The WASM input read path issues many small reads against the same
+  // staged file; without this every read re-walks the OPFS directory tree (one async handle
+  // lookup per path segment) and re-snapshots the File via getFile(). On Safari those calls
+  // dominate the read cost. A cached File is a point-in-time snapshot, so every local mutation
+  // (write/truncate/remove) MUST invalidate the entry or a later read could serve stale bytes.
+  const readCache = new Map<string, { file: File; fileHandle: FileSystemFileHandle }>();
+  const invalidateReadCache = (normalizedPath: string) => {
+    readCache.delete(normalizedPath);
+  };
+
   const getRootDirectory = async () => {
     const directory = await navigatorObject?.storage?.getDirectory?.();
     if (!directory) throw new Error("Browser OPFS is not available");
@@ -127,8 +137,6 @@ const createBrowserLargeFileVfs = (options: BrowserLargeFileVfsOptions = {}): La
     normalizePath: (filePath) => normalizeAbsoluteVfsPath(filePath, rootPath),
     read: async (filePath, buffer, options) => {
       const normalizedPath = normalizeAbsoluteVfsPath(filePath, rootPath);
-      const fileHandle = await resolveFileHandle(normalizedPath, false);
-      if (!fileHandle) return 0;
       const target = toUint8Array(buffer);
       const bufferOffset =
         typeof options?.bufferOffset === "number" && options.bufferOffset > 0 ? Math.floor(options.bufferOffset) : 0;
@@ -139,12 +147,19 @@ const createBrowserLargeFileVfs = (options: BrowserLargeFileVfsOptions = {}): La
           ? Math.max(0, Math.min(Math.floor(options.length), target.byteLength - bufferOffset))
           : Math.max(0, target.byteLength - bufferOffset);
       if (!length) return 0;
-      const blob = await fileHandle.getFile();
-      const bytes = new Uint8Array(await blob.slice(fileOffset, fileOffset + length).arrayBuffer());
+      let cached = readCache.get(normalizedPath);
+      if (!cached) {
+        const fileHandle = await resolveFileHandle(normalizedPath, false);
+        if (!fileHandle) return 0;
+        cached = { file: await fileHandle.getFile(), fileHandle };
+        readCache.set(normalizedPath, cached);
+      }
+      const bytes = new Uint8Array(await cached.file.slice(fileOffset, fileOffset + length).arrayBuffer());
       target.set(bytes, bufferOffset);
       return bytes.byteLength;
     },
     remove: async (filePath) => {
+      invalidateReadCache(normalizeAbsoluteVfsPath(filePath, rootPath));
       const directory = await getRootDirectory();
       const relativePath = getVfsRelativePath(filePath, rootPath);
       const segments = relativePath ? relativePath.split("/") : [];
@@ -175,6 +190,7 @@ const createBrowserLargeFileVfs = (options: BrowserLargeFileVfsOptions = {}): La
     },
     truncate: async (filePath, size) => {
       const normalizedPath = normalizeAbsoluteVfsPath(filePath, rootPath);
+      invalidateReadCache(normalizedPath);
       const response = await requestBrowserOpfsStorage({
         action: "truncate",
         filePath: normalizedPath,
@@ -185,6 +201,7 @@ const createBrowserLargeFileVfs = (options: BrowserLargeFileVfsOptions = {}): La
     },
     write: async (filePath, bytes, options) => {
       const normalizedPath = normalizeAbsoluteVfsPath(filePath, rootPath);
+      invalidateReadCache(normalizedPath);
       const data = toUint8Array(bytes);
       const payload = new Uint8Array(data.byteLength);
       payload.set(data);

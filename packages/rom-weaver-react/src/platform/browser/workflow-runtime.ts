@@ -1,5 +1,7 @@
+import { COMPRESSION_DEFAULTS } from "../../lib/compression/compression-metadata.ts";
 import {
   getRomSpecificExtractedFileName,
+  isRomSpecificCompressionFormat,
   normalizeRomSpecificExtractedFileName,
   ROM_SPECIFIC_COMPRESSION_FORMAT_REGISTRY,
 } from "../../lib/compression/container-format-registry.ts";
@@ -578,7 +580,7 @@ const getDescendPreopenOutputPaths = async ({
   const normalizedFormat = String(format || "")
     .trim()
     .toLowerCase();
-  if (!["chd", "rvz", "z3ds"].includes(normalizedFormat)) return [];
+  if (!isRomSpecificCompressionFormat(normalizedFormat)) return [];
   const listed = await runRomWeaverListWorker(
     {
       logLevel: logLevel as Parameters<typeof runRomWeaverListWorker>[0]["logLevel"],
@@ -699,6 +701,15 @@ const stageBrowserCompressionEntries = async (
   }
 };
 
+const sumBrowserVfsPathBytes = async (paths: string[]): Promise<number> => {
+  let total = 0;
+  for (const filePath of paths) {
+    const stat = await browserVfs.stat(filePath).catch(() => null);
+    total += toSizeByteCount(stat?.size) ?? 0;
+  }
+  return total;
+};
+
 const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<WorkflowRuntime["compression"]> => ({
   create: async (workflowInput) => {
     if (!("entries" in workflowInput)) throw new Error("archive runtime received non-archive create input");
@@ -710,6 +721,7 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
       const level = format === "zip" ? workflowInput.options?.zipLevel : workflowInput.options?.sevenZipLevel;
       const levelProfile = toLevelProfile(level);
       const codecEntries = withCodecLevel(codec, level);
+      const inputTotalBytes = await sumBrowserVfsPathBytes(staged.inputPaths);
       const fallbackOutputPathSource = staged.stagedEntries[0]?.filePath || `${WORKER_OPFS_MOUNTPOINT}/archive.bin`;
       const outputFileName = workflowInput.options?.outputName || (format === "zip" ? "archive.zip" : "archive.7z");
       const outputPath = selectRomWeaverOutputPath(fallbackOutputPathSource, outputFileName, staged.inputPaths);
@@ -720,6 +732,7 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
         ),
         format,
         inputPaths: staged.inputPaths,
+        inputTotalBytes,
         outputFileName,
         outputPath,
       });
@@ -739,6 +752,7 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
               outputPath,
               preopenOutputPaths: [outputPath],
               signal: workflowInput.options?.signal,
+              totalBytes: inputTotalBytes,
               workerThreads: workflowInput.options?.workerThreads,
             },
             forwardArchiveProgress("output", workflowInput.options?.onProgress),
@@ -1064,7 +1078,7 @@ const createBrowserRomSpecificRuntime = (workerIo: RuntimeWorkerIo): RomSpecific
     source,
     fileName,
     outputName,
-    rvzCompression,
+    rvzCodec,
     rvzCompressionLevel,
     threads,
     logLevel,
@@ -1081,7 +1095,7 @@ const createBrowserRomSpecificRuntime = (workerIo: RuntimeWorkerIo): RomSpecific
         const outputFileName = outputName || "output.rvz";
         const outputPath = selectRomWeaverOutputPath(workerSource.filePath, outputFileName, [workerSource.filePath]);
         await removeBrowserVfsOutputPaths([outputPath], [workerSource.filePath]);
-        const codecs = withCodecLevel(rvzCompression || "zstd", rvzCompressionLevel);
+        const codecs = withCodecLevel(rvzCodec || COMPRESSION_DEFAULTS.rvzCodec, rvzCompressionLevel);
         const result = await invokeRomWeaverCompressionCreateWorker(
           {
             codecs,
@@ -1125,7 +1139,7 @@ const createBrowserRomSpecificRuntime = (workerIo: RuntimeWorkerIo): RomSpecific
         const outputFileName = outputName || "output.z3ds";
         const outputPath = selectRomWeaverOutputPath(workerSource.filePath, outputFileName, [workerSource.filePath]);
         await removeBrowserVfsOutputPaths([outputPath], [workerSource.filePath]);
-        const codecs = withCodecLevel("zstd", z3dsCompressionLevel);
+        const codecs = withCodecLevel(COMPRESSION_DEFAULTS.z3dsCodec, z3dsCompressionLevel);
         const result = await invokeRomWeaverCompressionCreateWorker(
           {
             codecs,

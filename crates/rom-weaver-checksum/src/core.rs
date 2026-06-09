@@ -1,8 +1,11 @@
+use super::{
+    compute_checksum_values, compute_checksum_values_with_progress, hex_encode, render_label,
+    resolve_algorithms, tuned_chunk_size,
+};
 use std::{
-    collections::{BTreeMap, BTreeSet},
-    fmt::Write as _,
+    collections::BTreeMap,
     fs::{self, File},
-    io::{self, Read, Seek, SeekFrom},
+    io::Read,
     path::Path,
 };
 
@@ -14,48 +17,46 @@ use std::{
 
 use adler2::Adler32;
 use blake3::Hasher as Blake3Hasher;
-use crc16::{State as Crc16State, ARC};
-use crc32c::{crc32c_append, crc32c_combine};
+use crc16::{ARC, State as Crc16State};
+use crc32c::crc32c_append;
 use crc32fast::Hasher as Crc32Hasher;
 use md5::{Digest as Md5Digest, Md5};
-use rayon::prelude::*;
 use rom_weaver_core::{
-    CancellationToken, ChecksumCapabilities, ChecksumEngine, ChecksumRequest, OperationContext,
-    OperationFamily, OperationReport, Result, RomWeaverError, SharedThreadPool, ThreadCapability,
-    ThreadExecution,
+    ChecksumCapabilities, ChecksumEngine, ChecksumRequest, OperationContext, OperationFamily,
+    OperationReport, Result, RomWeaverError, ThreadCapability, ThreadExecution,
 };
 use sha1::Sha1;
 use sha2::{Digest as Sha2Digest, Sha256};
 use tracing::trace;
 
-const SUPPORTED_ALGORITHMS: &[&str] = &[
+pub(super) const SUPPORTED_ALGORITHMS: &[&str] = &[
     "crc32", "md5", "sha1", "sha256", "blake3", "crc32c", "crc16", "adler32",
 ];
-const MAX_EAGER_MAP_RANGE_BYTES: u64 = 32 * 1024 * 1024;
-const MIN_CHUNK_SIZE: usize = 256 * 1024;
-const MAX_CHUNK_SIZE: usize = 4 * 1024 * 1024;
-const TARGET_CHUNKS_PER_WORKER: u64 = 8;
-const FANOUT_PARALLEL_THRESHOLD: u64 = 8 * 1024 * 1024;
-const CRC32_PARALLEL_THRESHOLD: u64 = 32 * 1024 * 1024;
-const CRC32_PARALLEL_MIN_BYTES_PER_THREAD: u64 = 16 * 1024 * 1024;
-const CRC32_PARALLEL_MAX_THREADS: usize = 4;
-const CRC32C_PARALLEL_THRESHOLD: u64 = 32 * 1024 * 1024;
-const CRC32C_PARALLEL_MIN_BYTES_PER_THREAD: u64 = 16 * 1024 * 1024;
-const CRC32C_PARALLEL_MAX_THREADS: usize = 4;
-const CRC16_PARALLEL_THRESHOLD: u64 = 32 * 1024 * 1024;
-const CRC16_PARALLEL_MIN_BYTES_PER_THREAD: u64 = 16 * 1024 * 1024;
-const CRC16_PARALLEL_MAX_THREADS: usize = 4;
-const ADLER32_PARALLEL_THRESHOLD: u64 = 32 * 1024 * 1024;
-const ADLER32_PARALLEL_MIN_BYTES_PER_THREAD: u64 = 16 * 1024 * 1024;
-const ADLER32_PARALLEL_MAX_THREADS: usize = 4;
-const BLAKE3_PARALLEL_THRESHOLD: u64 = 32 * 1024 * 1024;
-const BLAKE3_PARALLEL_MIN_BYTES_PER_THREAD: u64 = 16 * 1024 * 1024;
-const BLAKE3_PARALLEL_MAX_THREADS: usize = 8;
-const ADLER32_MODULO: u64 = 65_521;
-const CRC16_GF2_DIM: usize = 16;
-const CRC16_ARC_REFLECTED_POLY: u16 = 0xA001;
-const CRC16_CCITT_POLYNOMIAL: u16 = 0x1021;
-const MD5_IO_BUFFER_SIZE: usize = 64 * 1024;
+pub(super) const MAX_EAGER_MAP_RANGE_BYTES: u64 = 32 * 1024 * 1024;
+pub(super) const MIN_CHUNK_SIZE: usize = 256 * 1024;
+pub(super) const MAX_CHUNK_SIZE: usize = 4 * 1024 * 1024;
+pub(super) const TARGET_CHUNKS_PER_WORKER: u64 = 8;
+pub(super) const FANOUT_PARALLEL_THRESHOLD: u64 = 8 * 1024 * 1024;
+pub(super) const CRC32_PARALLEL_THRESHOLD: u64 = 32 * 1024 * 1024;
+pub(super) const CRC32_PARALLEL_MIN_BYTES_PER_THREAD: u64 = 16 * 1024 * 1024;
+pub(super) const CRC32_PARALLEL_MAX_THREADS: usize = 4;
+pub(super) const CRC32C_PARALLEL_THRESHOLD: u64 = 32 * 1024 * 1024;
+pub(super) const CRC32C_PARALLEL_MIN_BYTES_PER_THREAD: u64 = 16 * 1024 * 1024;
+pub(super) const CRC32C_PARALLEL_MAX_THREADS: usize = 4;
+pub(super) const CRC16_PARALLEL_THRESHOLD: u64 = 32 * 1024 * 1024;
+pub(super) const CRC16_PARALLEL_MIN_BYTES_PER_THREAD: u64 = 16 * 1024 * 1024;
+pub(super) const CRC16_PARALLEL_MAX_THREADS: usize = 4;
+pub(super) const ADLER32_PARALLEL_THRESHOLD: u64 = 32 * 1024 * 1024;
+pub(super) const ADLER32_PARALLEL_MIN_BYTES_PER_THREAD: u64 = 16 * 1024 * 1024;
+pub(super) const ADLER32_PARALLEL_MAX_THREADS: usize = 4;
+pub(super) const BLAKE3_PARALLEL_THRESHOLD: u64 = 32 * 1024 * 1024;
+pub(super) const BLAKE3_PARALLEL_MIN_BYTES_PER_THREAD: u64 = 16 * 1024 * 1024;
+pub(super) const BLAKE3_PARALLEL_MAX_THREADS: usize = 8;
+pub(super) const ADLER32_MODULO: u64 = 65_521;
+pub(super) const CRC16_GF2_DIM: usize = 16;
+pub(super) const CRC16_ARC_REFLECTED_POLY: u16 = 0xA001;
+pub(super) const CRC16_CCITT_POLYNOMIAL: u16 = 0x1021;
+pub(super) const MD5_IO_BUFFER_SIZE: usize = 64 * 1024;
 
 pub struct NativeChecksumEngine;
 
@@ -69,14 +70,14 @@ pub struct StreamingChecksum {
     inner: StreamingChecksumInner,
 }
 
-enum StreamingChecksumInner {
+pub(super) enum StreamingChecksumInner {
     #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     Async(Vec<AsyncStreamingChecksumWorker>),
     Sync(Vec<(Algorithm, HasherState)>),
 }
 
 #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
-struct AsyncStreamingChecksumWorker {
+pub(super) struct AsyncStreamingChecksumWorker {
     handle: thread::JoinHandle<BTreeMap<String, String>>,
     sender: Option<mpsc::SyncSender<Arc<[u8]>>>,
 }
@@ -110,7 +111,8 @@ impl StreamingChecksum {
 
         #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
         {
-            let execution = context.plan_threads(ThreadCapability::parallel(Some(algorithms.len())));
+            let execution =
+                context.plan_threads(ThreadCapability::parallel(Some(algorithms.len())));
             if execution.used_parallelism
                 && execution.effective_threads > 1
                 && let Some(checksum) =
@@ -122,7 +124,7 @@ impl StreamingChecksum {
         }
     }
 
-    fn from_algorithms_sync(algorithms: Vec<Algorithm>) -> Self {
+    pub(super) fn from_algorithms_sync(algorithms: Vec<Algorithm>) -> Self {
         Self {
             inner: StreamingChecksumInner::Sync(
                 algorithms
@@ -134,7 +136,10 @@ impl StreamingChecksum {
     }
 
     #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
-    fn try_from_algorithms_async(algorithms: Vec<Algorithm>, worker_count: usize) -> Option<Self> {
+    pub(super) fn try_from_algorithms_async(
+        algorithms: Vec<Algorithm>,
+        worker_count: usize,
+    ) -> Option<Self> {
         let worker_algorithms = partition_streaming_algorithms(&algorithms, worker_count);
         let mut workers: Vec<AsyncStreamingChecksumWorker> = Vec::new();
         for algorithms in worker_algorithms {
@@ -232,7 +237,7 @@ impl StreamingChecksum {
 }
 
 #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
-fn send_streaming_checksum_chunk(
+pub(super) fn send_streaming_checksum_chunk(
     workers: &mut [AsyncStreamingChecksumWorker],
     chunk: Arc<[u8]>,
 ) -> Result<()> {
@@ -252,7 +257,7 @@ fn send_streaming_checksum_chunk(
 }
 
 #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
-fn partition_streaming_algorithms(
+pub(super) fn partition_streaming_algorithms(
     algorithms: &[Algorithm],
     worker_count: usize,
 ) -> Vec<Vec<Algorithm>> {
@@ -283,7 +288,7 @@ impl ChecksumProgress {
     }
 }
 
-struct ChecksumProgressTracker<'a> {
+pub(super) struct ChecksumProgressTracker<'a> {
     total_bytes: u64,
     processed_bytes: u64,
     next_percent: u64,
@@ -291,7 +296,7 @@ struct ChecksumProgressTracker<'a> {
 }
 
 impl<'a> ChecksumProgressTracker<'a> {
-    fn new(total_bytes: u64, callback: &'a mut dyn FnMut(ChecksumProgress)) -> Self {
+    pub(super) fn new(total_bytes: u64, callback: &'a mut dyn FnMut(ChecksumProgress)) -> Self {
         Self {
             total_bytes,
             processed_bytes: 0,
@@ -300,7 +305,7 @@ impl<'a> ChecksumProgressTracker<'a> {
         }
     }
 
-    fn advance(&mut self, delta_bytes: u64) {
+    pub(super) fn advance(&mut self, delta_bytes: u64) {
         if self.total_bytes == 0 {
             return;
         }
@@ -311,7 +316,7 @@ impl<'a> ChecksumProgressTracker<'a> {
         self.maybe_emit();
     }
 
-    fn finish(&mut self) {
+    pub(super) fn finish(&mut self) {
         if self.total_bytes == 0 {
             return;
         }
@@ -319,7 +324,7 @@ impl<'a> ChecksumProgressTracker<'a> {
         self.maybe_emit();
     }
 
-    fn maybe_emit(&mut self) {
+    pub(super) fn maybe_emit(&mut self) {
         if self.total_bytes == 0 {
             return;
         }
@@ -401,7 +406,7 @@ impl NativeChecksumEngine {
         self.run_checksum_with_progress(request, context, stage, on_progress)
     }
 
-    fn run_checksum(
+    pub(super) fn run_checksum(
         &self,
         request: &ChecksumRequest,
         context: &OperationContext,
@@ -411,7 +416,7 @@ impl NativeChecksumEngine {
         self.run_checksum_with_progress(request, context, stage, &mut noop_progress)
     }
 
-    fn run_checksum_with_progress<F>(
+    pub(super) fn run_checksum_with_progress<F>(
         &self,
         request: &ChecksumRequest,
         context: &OperationContext,
@@ -473,7 +478,8 @@ where
 {
     let algorithms = resolve_algorithms(algorithms)?;
     let execution = context.plan_threads(ThreadCapability::single_threaded());
-    let chunk_size = tuned_chunk_size(MAX_EAGER_MAP_RANGE_BYTES, execution.effective_threads).max(1);
+    let chunk_size =
+        tuned_chunk_size(MAX_EAGER_MAP_RANGE_BYTES, execution.effective_threads).max(1);
     let mut buffer = vec![0u8; chunk_size];
     let mut states = algorithms
         .iter()
@@ -547,7 +553,7 @@ pub fn md5_file(path: &Path) -> Result<[u8; 16]> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-enum Algorithm {
+pub(super) enum Algorithm {
     Crc32,
     Md5,
     Sha1,
@@ -559,7 +565,7 @@ enum Algorithm {
 }
 
 impl Algorithm {
-    fn parse(value: &str) -> Option<Self> {
+    pub(super) fn parse(value: &str) -> Option<Self> {
         match value.trim().to_ascii_lowercase().as_str() {
             "crc32" => Some(Self::Crc32),
             "md5" => Some(Self::Md5),
@@ -573,7 +579,7 @@ impl Algorithm {
         }
     }
 
-    fn name(self) -> &'static str {
+    pub(super) fn name(self) -> &'static str {
         match self {
             Self::Crc32 => "crc32",
             Self::Md5 => "md5",
@@ -587,7 +593,7 @@ impl Algorithm {
     }
 }
 
-enum HasherState {
+pub(super) enum HasherState {
     Crc32(Crc32Hasher),
     Md5(Md5),
     Sha1(Sha1),
@@ -599,7 +605,7 @@ enum HasherState {
 }
 
 impl HasherState {
-    fn new(algorithm: Algorithm) -> Self {
+    pub(super) fn new(algorithm: Algorithm) -> Self {
         match algorithm {
             Algorithm::Crc32 => Self::Crc32(Crc32Hasher::new()),
             Algorithm::Md5 => Self::Md5(Md5::new()),
@@ -612,7 +618,7 @@ impl HasherState {
         }
     }
 
-    fn update(&mut self, bytes: &[u8]) {
+    pub(super) fn update(&mut self, bytes: &[u8]) {
         match self {
             Self::Crc32(state) => state.update(bytes),
             Self::Md5(state) => state.update(bytes),
@@ -627,7 +633,7 @@ impl HasherState {
         }
     }
 
-    fn finalize(self) -> String {
+    pub(super) fn finalize(self) -> String {
         match self {
             Self::Crc32(state) => format!("{:08x}", state.finalize()),
             Self::Md5(state) => hex_encode(&state.finalize()),
@@ -641,12 +647,12 @@ impl HasherState {
     }
 }
 
-struct WorkerBatch {
+pub(super) struct WorkerBatch {
     states: Vec<(Algorithm, HasherState)>,
 }
 
 impl WorkerBatch {
-    fn new(algorithms: Vec<Algorithm>) -> Self {
+    pub(super) fn new(algorithms: Vec<Algorithm>) -> Self {
         Self {
             states: algorithms
                 .into_iter()
@@ -655,13 +661,13 @@ impl WorkerBatch {
         }
     }
 
-    fn update(&mut self, bytes: &[u8]) {
+    pub(super) fn update(&mut self, bytes: &[u8]) {
         for (_, state) in &mut self.states {
             state.update(bytes);
         }
     }
 
-    fn into_results(self) -> BTreeMap<String, String> {
+    pub(super) fn into_results(self) -> BTreeMap<String, String> {
         self.states
             .into_iter()
             .map(|(algorithm, state)| (algorithm.name().to_string(), state.finalize()))
@@ -670,15 +676,19 @@ impl WorkerBatch {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct ResolvedRange {
-    start: u64,
-    len: u64,
-    file_len: u64,
-    explicit: bool,
+pub(super) struct ResolvedRange {
+    pub(super) start: u64,
+    pub(super) len: u64,
+    pub(super) file_len: u64,
+    pub(super) explicit: bool,
 }
 
 impl ResolvedRange {
-    fn from_request(source: &Path, start: Option<u64>, length: Option<u64>) -> Result<Self> {
+    pub(super) fn from_request(
+        source: &Path,
+        start: Option<u64>,
+        length: Option<u64>,
+    ) -> Result<Self> {
         let metadata = fs::metadata(source)?;
         let file_len = metadata.len();
         let start = start.unwrap_or(0);
@@ -706,23 +716,23 @@ impl ResolvedRange {
         })
     }
 
-    fn end(&self) -> u64 {
+    pub(super) fn end(&self) -> u64 {
         self.start + self.len
     }
 }
 
-struct MappedRange {
-    bytes: Vec<u8>,
+pub(super) struct MappedRange {
+    pub(super) bytes: Vec<u8>,
 }
 
 impl MappedRange {
-    fn bytes(&self) -> &[u8] {
+    pub(super) fn bytes(&self) -> &[u8] {
         self.bytes.as_slice()
     }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum ChecksumMode {
+pub(super) enum ChecksumMode {
     Sequential,
     ParallelFanout,
     ParallelCrc32,
@@ -733,20 +743,20 @@ enum ChecksumMode {
 }
 
 #[derive(Clone, Debug)]
-struct ChecksumPlan {
-    mode: ChecksumMode,
-    capability: ThreadCapability,
+pub(super) struct ChecksumPlan {
+    pub(super) mode: ChecksumMode,
+    pub(super) capability: ThreadCapability,
 }
 
 impl ChecksumPlan {
-    fn sequential() -> Self {
+    pub(super) fn sequential() -> Self {
         Self {
             mode: ChecksumMode::Sequential,
             capability: ThreadCapability::single_threaded(),
         }
     }
 
-    fn parallel(mode: ChecksumMode, max_threads: usize) -> Self {
+    pub(super) fn parallel(mode: ChecksumMode, max_threads: usize) -> Self {
         Self {
             mode,
             capability: ThreadCapability::parallel(Some(max_threads.max(1))),

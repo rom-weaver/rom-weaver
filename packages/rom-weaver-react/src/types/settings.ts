@@ -1,4 +1,7 @@
-import type { ROM_WEAVER_CREATE_CONTAINER_FORMATS } from "rom-weaver-wasm/format-metadata";
+import type {
+  ROM_WEAVER_COMPRESSION_METADATA,
+  ROM_WEAVER_CREATE_CONTAINER_FORMATS,
+} from "rom-weaver-wasm/format-metadata";
 
 type PatchFormat = "aps" | "bdf" | "bps" | "ebp" | "ips" | "pmsr" | "ppf" | "rup" | "ups" | "vcdiff" | "xdelta";
 
@@ -6,11 +9,11 @@ type CompressionFormat = (typeof ROM_WEAVER_CREATE_CONTAINER_FORMATS)[number] | 
 
 type DefaultCompression = "auto" | "7z/special" | "zip/special" | "special only" | "7z only" | "zip only" | "none";
 
-type CompressionProfile = "high" | "low" | "max" | "medium" | "min" | "very-high" | "very-low";
+type CompressionProfile = (typeof ROM_WEAVER_COMPRESSION_METADATA)["profiles"][number]["name"];
 
-type ZipCodec = "deflate" | "store" | "zstd";
+type ZipCodec = (typeof ROM_WEAVER_COMPRESSION_METADATA)["codecFields"]["zipCodec"]["codecs"][number];
 
-type SevenZipCodec = "lzma2";
+type SevenZipCodec = (typeof ROM_WEAVER_COMPRESSION_METADATA)["codecFields"]["sevenZipCodec"]["codecs"][number];
 
 type StringNumber = number | string;
 
@@ -66,8 +69,15 @@ type PatchTransformSettings = {
 };
 
 type CompressionSettings = {
+  chdCreateCdCodecs?: string;
+  chdCreateDvdCodecs?: string;
+  chdOutputMode?: "auto" | "cd" | "dvd" | string;
   format?: "auto" | CompressionFormat;
   profile?: CompressionProfile;
+  rvzBlockSize?: StringNumber;
+  rvzCodec?: string;
+  rvzCompressionLevel?: StringNumber;
+  rvzScrub?: boolean | string | number;
   sevenZipCodec?: SevenZipCodec;
   sevenZipLevel?: StringNumber;
   workerThreads?: StringNumber;

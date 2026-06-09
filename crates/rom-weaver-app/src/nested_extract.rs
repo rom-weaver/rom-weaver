@@ -1,16 +1,17 @@
+use super::*;
 /// The result of descending nested archives during a single `extract` command.
-struct NestedExtractOutcome {
+pub(super) struct NestedExtractOutcome {
     /// Number of nested containers that were extracted.
-    count: usize,
+    pub(super) count: usize,
     /// Normalized canonical paths of every container we descended into (the intermediate archives).
-    descended: HashSet<String>,
+    pub(super) descended: HashSet<String>,
     /// `emitted_files` detail objects (with checksums when requested) for every file produced by the
     /// nested levels, in extraction order.
-    emitted_details: Vec<Value>,
+    pub(super) emitted_details: Vec<Value>,
 }
 
 impl CliApp {
-    fn require_existing_path(
+    pub(super) fn require_existing_path(
         &self,
         _command: &str,
         family: OperationFamily,
@@ -31,7 +32,7 @@ impl CliApp {
         }
     }
 
-    fn finish(&self, command: &str, report: OperationReport) -> AppRunOutcome {
+    pub(super) fn finish(&self, command: &str, report: OperationReport) -> AppRunOutcome {
         trace!(
             command,
             family = ?report.family,
@@ -50,7 +51,7 @@ impl CliApp {
         }
     }
 
-    fn extract_nested_archives(
+    pub(super) fn extract_nested_archives(
         &self,
         root_source: &Path,
         root_candidates: &[PathBuf],
@@ -263,7 +264,7 @@ impl CliApp {
         })
     }
 
-    fn enqueue_nested_candidate(
+    pub(super) fn enqueue_nested_candidate(
         &self,
         path: &Path,
         depth: usize,
@@ -296,7 +297,7 @@ impl CliApp {
         }
     }
 
-    fn enqueue_nested_candidates(
+    pub(super) fn enqueue_nested_candidates(
         &self,
         root: &Path,
         depth: usize,
@@ -348,7 +349,10 @@ impl CliApp {
         Ok(())
     }
 
-    fn should_probe_nested_candidate(path: &Path, kind_filter: ArchiveEntryKindFilter) -> bool {
+    pub(super) fn should_probe_nested_candidate(
+        path: &Path,
+        kind_filter: ArchiveEntryKindFilter,
+    ) -> bool {
         if kind_filter.disabled() {
             return true;
         }
@@ -358,7 +362,7 @@ impl CliApp {
         }
     }
 
-    fn next_nested_out_dir(&self, source: &Path) -> PathBuf {
+    pub(super) fn next_nested_out_dir(&self, source: &Path) -> PathBuf {
         let parent = source
             .parent()
             .map(Path::to_path_buf)
@@ -384,7 +388,7 @@ impl CliApp {
         unreachable!("nested output directory search is unbounded");
     }
 
-    fn nested_base_name(&self, file_name: &str) -> String {
+    pub(super) fn nested_base_name(&self, file_name: &str) -> String {
         let file_name_lower = file_name.to_ascii_lowercase();
         let mut longest_extension = 0usize;
         for handler in self.containers.handlers() {

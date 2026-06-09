@@ -1,4 +1,5 @@
-fn xdelta_djw_compress(section: &[u8], section_kind: DjwSectionKind) -> Result<Vec<u8>> {
+use super::*;
+pub(super) fn xdelta_djw_compress(section: &[u8], section_kind: DjwSectionKind) -> Result<Vec<u8>> {
     if section.is_empty() {
         return Err(RomWeaverError::Validation(
             "xdelta djw secondary encoder requires non-empty input".into(),
@@ -38,7 +39,7 @@ fn xdelta_djw_compress(section: &[u8], section_kind: DjwSectionKind) -> Result<V
     Ok(writer.finish())
 }
 
-fn djw_select_groups_and_sector_size(
+pub(super) fn djw_select_groups_and_sector_size(
     input_size: usize,
     section_kind: DjwSectionKind,
 ) -> Result<(usize, usize)> {
@@ -107,7 +108,7 @@ fn djw_select_groups_and_sector_size(
     Ok((groups, sector_size))
 }
 
-fn xdelta_djw_compress_multi_group(
+pub(super) fn xdelta_djw_compress_multi_group(
     section: &[u8],
     groups: usize,
     sector_size: usize,
@@ -209,7 +210,7 @@ fn xdelta_djw_compress_multi_group(
     Ok(writer.finish())
 }
 
-fn djw_seed_group_frequencies(groups: usize) -> Vec<[u32; DJW_ALPHABET_SIZE]> {
+pub(super) fn djw_seed_group_frequencies(groups: usize) -> Vec<[u32; DJW_ALPHABET_SIZE]> {
     let mut frequencies = vec![[0u32; DJW_ALPHABET_SIZE]; groups];
     for (group_index, group_frequencies) in frequencies.iter_mut().enumerate() {
         let start = (group_index * DJW_ALPHABET_SIZE) / groups;
@@ -221,7 +222,7 @@ fn djw_seed_group_frequencies(groups: usize) -> Vec<[u32; DJW_ALPHABET_SIZE]> {
     frequencies
 }
 
-fn djw_smooth_group_frequencies(
+pub(super) fn djw_smooth_group_frequencies(
     group_frequencies: &mut [[u32; DJW_ALPHABET_SIZE]],
     real_frequencies: &[u32; DJW_ALPHABET_SIZE],
 ) {
@@ -234,9 +235,9 @@ fn djw_smooth_group_frequencies(
     }
 }
 
-type DjwGroupCodeTables = (Vec<Vec<u8>>, Vec<Vec<usize>>);
+pub(super) type DjwGroupCodeTables = (Vec<Vec<u8>>, Vec<Vec<usize>>);
 
-fn djw_build_group_code_tables(
+pub(super) fn djw_build_group_code_tables(
     group_frequencies: &[[u32; DJW_ALPHABET_SIZE]],
     real_frequencies: &[u32; DJW_ALPHABET_SIZE],
 ) -> Result<DjwGroupCodeTables> {
@@ -257,7 +258,7 @@ fn djw_build_group_code_tables(
     Ok((lengths, codes))
 }
 
-fn djw_choose_best_sector_groups(
+pub(super) fn djw_choose_best_sector_groups(
     section: &[u8],
     sector_size: usize,
     group_lengths: &[Vec<u8>],
@@ -304,7 +305,7 @@ fn djw_choose_best_sector_groups(
     Ok(())
 }
 
-fn djw_rebuild_group_frequencies(
+pub(super) fn djw_rebuild_group_frequencies(
     section: &[u8],
     sector_size: usize,
     selected_groups: &[u8],
@@ -330,7 +331,7 @@ fn djw_rebuild_group_frequencies(
     Ok(())
 }
 
-fn xdelta_fgk_compress(section: &[u8]) -> Result<Vec<u8>> {
+pub(super) fn xdelta_fgk_compress(section: &[u8]) -> Result<Vec<u8>> {
     let mut state = FgkState::new(DJW_ALPHABET_SIZE)?;
     let mut writer = DjwBitWriter::new();
 
@@ -346,14 +347,14 @@ fn xdelta_fgk_compress(section: &[u8]) -> Result<Vec<u8>> {
 }
 
 #[derive(Default)]
-struct DjwBitWriter {
+pub(super) struct DjwBitWriter {
     output: Vec<u8>,
     current_byte: u8,
     current_mask: u16,
 }
 
 impl DjwBitWriter {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         Self {
             output: Vec::new(),
             current_byte: 0,
@@ -361,7 +362,7 @@ impl DjwBitWriter {
         }
     }
 
-    fn write_bit(&mut self, bit: u8) -> Result<()> {
+    pub(super) fn write_bit(&mut self, bit: u8) -> Result<()> {
         if bit > 1 {
             return Err(RomWeaverError::Validation(
                 "xdelta secondary encoder received a non-bit value".into(),
@@ -380,7 +381,7 @@ impl DjwBitWriter {
         Ok(())
     }
 
-    fn write_bits(&mut self, bit_count: usize, value: usize) -> Result<()> {
+    pub(super) fn write_bits(&mut self, bit_count: usize, value: usize) -> Result<()> {
         if bit_count == 0 || bit_count >= usize::BITS as usize {
             return Err(RomWeaverError::Validation(
                 "xdelta secondary encoder invalid bit width".into(),
@@ -404,7 +405,7 @@ impl DjwBitWriter {
         Ok(())
     }
 
-    fn finish(mut self) -> Vec<u8> {
+    pub(super) fn finish(mut self) -> Vec<u8> {
         if self.current_mask != 1 {
             self.output.push(self.current_byte);
         }
@@ -412,16 +413,16 @@ impl DjwBitWriter {
     }
 }
 
-const XZ_MAGIC_BYTES: &[u8; 6] = b"\xFD7zXZ\0";
-const XDELTA_LZMA_PRESET: u32 = 3;
+pub(super) const XZ_MAGIC_BYTES: &[u8; 6] = b"\xFD7zXZ\0";
+pub(super) const XDELTA_LZMA_PRESET: u32 = 3;
 
 #[derive(Clone, Default)]
-struct XdeltaLzmaFeed {
+pub(super) struct XdeltaLzmaFeed {
     pending: std::rc::Rc<std::cell::RefCell<std::collections::VecDeque<u8>>>,
 }
 
 impl XdeltaLzmaFeed {
-    fn push(&self, bytes: &[u8]) {
+    pub(super) fn push(&self, bytes: &[u8]) {
         self.pending.borrow_mut().extend(bytes.iter().copied());
     }
 }
@@ -439,19 +440,19 @@ impl Read for XdeltaLzmaFeed {
     }
 }
 
-struct XdeltaLzmaSectionDecoder {
+pub(super) struct XdeltaLzmaSectionDecoder {
     feed: XdeltaLzmaFeed,
     decoder: lzma_rust2::XzReader<XdeltaLzmaFeed>,
 }
 
 impl XdeltaLzmaSectionDecoder {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         let feed = XdeltaLzmaFeed::default();
         let decoder = lzma_rust2::XzReader::new(feed.clone(), false);
         Self { feed, decoder }
     }
 
-    fn decode(&mut self, payload: &[u8], expected_size: usize) -> Result<Vec<u8>> {
+    pub(super) fn decode(&mut self, payload: &[u8], expected_size: usize) -> Result<Vec<u8>> {
         self.feed.push(payload);
         let mut output = vec![0u8; expected_size];
         self.decoder.read_exact(&mut output).map_err(|error| {
@@ -461,14 +462,14 @@ impl XdeltaLzmaSectionDecoder {
     }
 }
 
-struct XdeltaLzmaSectionDecoders {
+pub(super) struct XdeltaLzmaSectionDecoders {
     data: XdeltaLzmaSectionDecoder,
     inst: XdeltaLzmaSectionDecoder,
     addr: XdeltaLzmaSectionDecoder,
 }
 
 impl XdeltaLzmaSectionDecoders {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         Self {
             data: XdeltaLzmaSectionDecoder::new(),
             inst: XdeltaLzmaSectionDecoder::new(),
@@ -476,7 +477,7 @@ impl XdeltaLzmaSectionDecoders {
         }
     }
 
-    fn decode_sections(
+    pub(super) fn decode_sections(
         &mut self,
         data: &[u8],
         inst: &[u8],
@@ -502,7 +503,7 @@ impl XdeltaLzmaSectionDecoders {
     }
 }
 
-struct XdeltaLzmaSectionEncoder {
+pub(super) struct XdeltaLzmaSectionEncoder {
     stream: liblzma_sys::lzma_stream,
     _options: Box<liblzma_sys::lzma_options_lzma>,
     _filters: [liblzma_sys::lzma_filter; 2],
@@ -510,7 +511,7 @@ struct XdeltaLzmaSectionEncoder {
 }
 
 impl XdeltaLzmaSectionEncoder {
-    fn new() -> Result<Self> {
+    pub(super) fn new() -> Result<Self> {
         use liblzma_sys as lzma_sys;
 
         let mut stream = unsafe { std::mem::zeroed::<lzma_sys::lzma_stream>() };
@@ -557,7 +558,7 @@ impl XdeltaLzmaSectionEncoder {
         })
     }
 
-    fn encode<'a>(&mut self, section: &'a [u8]) -> Result<(Cow<'a, [u8]>, bool)> {
+    pub(super) fn encode<'a>(&mut self, section: &'a [u8]) -> Result<(Cow<'a, [u8]>, bool)> {
         if section.len() < XDELTA_SECONDARY_MIN_INPUT {
             return Ok((Cow::Borrowed(section), false));
         }
@@ -572,7 +573,7 @@ impl XdeltaLzmaSectionEncoder {
         Ok((Cow::Owned(candidate), true))
     }
 
-    fn encode_sync_flush(&mut self, section: &[u8]) -> Result<()> {
+    pub(super) fn encode_sync_flush(&mut self, section: &[u8]) -> Result<()> {
         use liblzma_sys as lzma_sys;
 
         self.stream.next_in = section.as_ptr();
@@ -614,7 +615,7 @@ impl Drop for XdeltaLzmaSectionEncoder {
     }
 }
 
-fn lzma_status_name(status: liblzma_sys::lzma_ret) -> &'static str {
+pub(super) fn lzma_status_name(status: liblzma_sys::lzma_ret) -> &'static str {
     use liblzma_sys as lzma_sys;
 
     match status {
@@ -631,14 +632,14 @@ fn lzma_status_name(status: liblzma_sys::lzma_ret) -> &'static str {
     }
 }
 
-struct XdeltaLzmaSectionEncoders {
+pub(super) struct XdeltaLzmaSectionEncoders {
     data: XdeltaLzmaSectionEncoder,
     inst: XdeltaLzmaSectionEncoder,
     addr: XdeltaLzmaSectionEncoder,
 }
 
 impl XdeltaLzmaSectionEncoders {
-    fn new() -> Result<Self> {
+    pub(super) fn new() -> Result<Self> {
         Ok(Self {
             data: XdeltaLzmaSectionEncoder::new()?,
             inst: XdeltaLzmaSectionEncoder::new()?,
@@ -646,20 +647,20 @@ impl XdeltaLzmaSectionEncoders {
         })
     }
 
-    fn encode_data<'a>(&mut self, section: &'a [u8]) -> Result<(Cow<'a, [u8]>, bool)> {
+    pub(super) fn encode_data<'a>(&mut self, section: &'a [u8]) -> Result<(Cow<'a, [u8]>, bool)> {
         self.data.encode(section)
     }
 
-    fn encode_inst<'a>(&mut self, section: &'a [u8]) -> Result<(Cow<'a, [u8]>, bool)> {
+    pub(super) fn encode_inst<'a>(&mut self, section: &'a [u8]) -> Result<(Cow<'a, [u8]>, bool)> {
         self.inst.encode(section)
     }
 
-    fn encode_addr<'a>(&mut self, section: &'a [u8]) -> Result<(Cow<'a, [u8]>, bool)> {
+    pub(super) fn encode_addr<'a>(&mut self, section: &'a [u8]) -> Result<(Cow<'a, [u8]>, bool)> {
         self.addr.encode(section)
     }
 }
 
-fn xdelta_lzma_section_has_stream_header(section: &[u8]) -> bool {
+pub(super) fn xdelta_lzma_section_has_stream_header(section: &[u8]) -> bool {
     let Ok((_, prefix_len)) = decode_varint_raw(section) else {
         return false;
     };
@@ -668,7 +669,7 @@ fn xdelta_lzma_section_has_stream_header(section: &[u8]) -> bool {
         .is_some_and(|payload| payload.starts_with(XZ_MAGIC_BYTES))
 }
 
-fn window_win_indicator(window: &WindowIndex) -> u8 {
+pub(super) fn window_win_indicator(window: &WindowIndex) -> u8 {
     let mut win_indicator = match window.source_kind {
         Some(WindowSourceKind::Source) => WIN_SOURCE,
         Some(WindowSourceKind::Target) => WIN_TARGET,
@@ -680,7 +681,7 @@ fn window_win_indicator(window: &WindowIndex) -> u8 {
     win_indicator
 }
 
-fn encode_varint_raw(bytes: &mut Vec<u8>, mut value: u64) {
+pub(super) fn encode_varint_raw(bytes: &mut Vec<u8>, mut value: u64) {
     if value == 0 {
         bytes.push(0);
         return;
@@ -698,7 +699,7 @@ fn encode_varint_raw(bytes: &mut Vec<u8>, mut value: u64) {
     }
 }
 
-fn decode_varint_raw(bytes: &[u8]) -> Result<(u64, usize)> {
+pub(super) fn decode_varint_raw(bytes: &[u8]) -> Result<(u64, usize)> {
     let mut value = 0u64;
     for (index, byte) in bytes.iter().copied().enumerate() {
         value = value
@@ -717,7 +718,7 @@ fn decode_varint_raw(bytes: &[u8]) -> Result<(u64, usize)> {
     ))
 }
 
-fn decode_window_with_native_engine<R: Read + Seek>(
+pub(super) fn decode_window_with_native_engine<R: Read + Seek>(
     patch_reader: &mut R,
     window: &WindowIndex,
     secondary_compressor_id: Option<u8>,
@@ -735,7 +736,7 @@ fn decode_window_with_native_engine<R: Read + Seek>(
     )
 }
 
-fn decode_window_with_xdelta_lzma_sections<R: Read + Seek>(
+pub(super) fn decode_window_with_xdelta_lzma_sections<R: Read + Seek>(
     patch_reader: &mut R,
     window: &WindowIndex,
     decoders: &mut XdeltaLzmaSectionDecoders,
@@ -760,7 +761,7 @@ fn decode_window_with_xdelta_lzma_sections<R: Read + Seek>(
     )
 }
 
-fn decode_native_window_sections(
+pub(super) fn decode_native_window_sections(
     window: &WindowIndex,
     data: &[u8],
     inst: &[u8],
@@ -808,7 +809,7 @@ fn decode_native_window_sections(
     Ok(decoded)
 }
 
-fn read_window_sections<R: Read + Seek>(
+pub(super) fn read_window_sections<R: Read + Seek>(
     patch_reader: &mut R,
     window: &WindowIndex,
     secondary_compressor_id: Option<u8>,
@@ -846,7 +847,7 @@ fn read_window_sections<R: Read + Seek>(
     })
 }
 
-fn decode_xdelta_lzma_section_with_state(
+pub(super) fn decode_xdelta_lzma_section_with_state(
     section: &[u8],
     compressed: bool,
     decoder: &mut XdeltaLzmaSectionDecoder,
@@ -874,13 +875,13 @@ fn decode_xdelta_lzma_section_with_state(
 }
 
 #[derive(Clone, Copy)]
-struct DjwBitState {
-    cur_byte: u8,
-    cur_mask: u16,
+pub(super) struct DjwBitState {
+    pub(super) cur_byte: u8,
+    pub(super) cur_mask: u16,
 }
 
 impl DjwBitState {
-    fn decode_init() -> Self {
+    pub(super) fn decode_init() -> Self {
         Self {
             cur_byte: 0,
             cur_mask: 0x100,
@@ -889,10 +890,10 @@ impl DjwBitState {
 }
 
 #[derive(Clone)]
-struct DjwDecodeTable {
-    inorder: Vec<u8>,
-    base: Vec<usize>,
-    limit: Vec<usize>,
-    min_len: usize,
-    max_len: usize,
+pub(super) struct DjwDecodeTable {
+    pub(super) inorder: Vec<u8>,
+    pub(super) base: Vec<usize>,
+    pub(super) limit: Vec<usize>,
+    pub(super) min_len: usize,
+    pub(super) max_len: usize,
 }

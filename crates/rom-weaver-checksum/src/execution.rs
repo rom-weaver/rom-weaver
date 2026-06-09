@@ -1,5 +1,6 @@
+use super::*;
 /* jscpd:ignore-start */
-fn compute_sequential(
+pub(super) fn compute_sequential(
     mapped: Option<&MappedRange>,
     source: &Path,
     range: &ResolvedRange,
@@ -15,7 +16,7 @@ fn compute_sequential(
     compute_sequential_stream(source, range, algorithms, execution, cancel, progress)
 }
 
-fn compute_sequential_mapped(
+pub(super) fn compute_sequential_mapped(
     bytes: &[u8],
     algorithms: &[Algorithm],
     execution: &ThreadExecution,
@@ -43,7 +44,7 @@ fn compute_sequential_mapped(
         .collect())
 }
 
-fn compute_sequential_stream(
+pub(super) fn compute_sequential_stream(
     source: &Path,
     range: &ResolvedRange,
     algorithms: &[Algorithm],
@@ -88,13 +89,13 @@ fn compute_sequential_stream(
 }
 
 #[derive(Clone, Copy)]
-struct ChecksumSourceRef<'a> {
-    mapped: Option<&'a MappedRange>,
-    source: &'a Path,
-    range: &'a ResolvedRange,
+pub(super) struct ChecksumSourceRef<'a> {
+    pub(super) mapped: Option<&'a MappedRange>,
+    pub(super) source: &'a Path,
+    pub(super) range: &'a ResolvedRange,
 }
 
-fn compute_parallel_fanout(
+pub(super) fn compute_parallel_fanout(
     source_ref: ChecksumSourceRef<'_>,
     algorithms: &[Algorithm],
     pool: &SharedThreadPool,
@@ -124,7 +125,7 @@ fn compute_parallel_fanout(
     )
 }
 
-fn compute_parallel_fanout_mapped(
+pub(super) fn compute_parallel_fanout_mapped(
     bytes: &[u8],
     algorithms: &[Algorithm],
     pool: &SharedThreadPool,
@@ -156,7 +157,7 @@ fn compute_parallel_fanout_mapped(
     Ok(results)
 }
 
-fn compute_parallel_fanout_stream(
+pub(super) fn compute_parallel_fanout_stream(
     source: &Path,
     range: &ResolvedRange,
     algorithms: &[Algorithm],
@@ -206,7 +207,7 @@ fn compute_parallel_fanout_stream(
     Ok(results)
 }
 
-fn compute_parallel_crc32(
+pub(super) fn compute_parallel_crc32(
     mapped: Option<&MappedRange>,
     source: &Path,
     range: &ResolvedRange,
@@ -238,7 +239,7 @@ fn compute_parallel_crc32(
     )
 }
 
-fn compute_parallel_crc32c(
+pub(super) fn compute_parallel_crc32c(
     mapped: Option<&MappedRange>,
     source: &Path,
     range: &ResolvedRange,
@@ -266,7 +267,7 @@ fn compute_parallel_crc32c(
     )
 }
 
-fn compute_parallel_crc16(
+pub(super) fn compute_parallel_crc16(
     mapped: Option<&MappedRange>,
     source: &Path,
     range: &ResolvedRange,
@@ -298,7 +299,7 @@ fn compute_parallel_crc16(
     )
 }
 
-fn compute_parallel_adler32(
+pub(super) fn compute_parallel_adler32(
     mapped: Option<&MappedRange>,
     source: &Path,
     range: &ResolvedRange,
@@ -326,7 +327,7 @@ fn compute_parallel_adler32(
     )
 }
 
-fn compute_parallel_blake3(
+pub(super) fn compute_parallel_blake3(
     mapped: Option<&MappedRange>,
     source: &Path,
     range: &ResolvedRange,
@@ -381,14 +382,14 @@ fn compute_parallel_blake3(
     Ok(results)
 }
 
-struct ChunkedChecksumOps<'a, PartialFn, CombineFn, FormatFn> {
+pub(super) struct ChunkedChecksumOps<'a, PartialFn, CombineFn, FormatFn> {
     algorithm_name: &'a str,
     compute_partial: PartialFn,
     combine_partials: CombineFn,
     format_combined: FormatFn,
 }
 
-fn compute_parallel_chunked_checksum<T, C, PartialFn, CombineFn, FormatFn>(
+pub(super) fn compute_parallel_chunked_checksum<T, C, PartialFn, CombineFn, FormatFn>(
     source_ref: ChecksumSourceRef<'_>,
     pool: &SharedThreadPool,
     execution: &ThreadExecution,
@@ -431,7 +432,7 @@ where
     ))
 }
 
-fn collect_parallel_partials_mapped<T, F>(
+pub(super) fn collect_parallel_partials_mapped<T, F>(
     bytes: &[u8],
     chunk_size: usize,
     pool: &SharedThreadPool,
@@ -454,7 +455,7 @@ where
     Ok(partials)
 }
 
-fn collect_parallel_partials_stream<T, F>(
+pub(super) fn collect_parallel_partials_stream<T, F>(
     source: &Path,
     range: &ResolvedRange,
     chunk_size: usize,
@@ -495,13 +496,13 @@ where
     Ok(partials)
 }
 
-fn single_checksum_result(name: &str, value: String) -> BTreeMap<String, String> {
+pub(super) fn single_checksum_result(name: &str, value: String) -> BTreeMap<String, String> {
     let mut results = BTreeMap::new();
     results.insert(name.to_string(), value);
     results
 }
 
-fn combine_crc32_partials(partials: Vec<Result<Crc32Hasher>>) -> Result<Crc32Hasher> {
+pub(super) fn combine_crc32_partials(partials: Vec<Result<Crc32Hasher>>) -> Result<Crc32Hasher> {
     let mut partials = partials.into_iter();
     let mut combined = match partials.next() {
         Some(partial) => partial?,
@@ -513,7 +514,7 @@ fn combine_crc32_partials(partials: Vec<Result<Crc32Hasher>>) -> Result<Crc32Has
     Ok(combined)
 }
 
-fn combine_crc32c_partials(partials: Vec<Result<(u32, usize)>>) -> Result<u32> {
+pub(super) fn combine_crc32c_partials(partials: Vec<Result<(u32, usize)>>) -> Result<u32> {
     let mut partials = partials.into_iter();
     let (mut combined, _) = match partials.next() {
         Some(partial) => partial?,
@@ -526,7 +527,7 @@ fn combine_crc32c_partials(partials: Vec<Result<(u32, usize)>>) -> Result<u32> {
     Ok(combined)
 }
 
-fn gf2_matrix_times_u16(mat: &[u16; CRC16_GF2_DIM], mut vec: u16) -> u16 {
+pub(super) fn gf2_matrix_times_u16(mat: &[u16; CRC16_GF2_DIM], mut vec: u16) -> u16 {
     let mut sum = 0u16;
     let mut idx = 0usize;
     while vec > 0 {
@@ -539,13 +540,13 @@ fn gf2_matrix_times_u16(mat: &[u16; CRC16_GF2_DIM], mut vec: u16) -> u16 {
     sum
 }
 
-fn gf2_matrix_square_u16(square: &mut [u16; CRC16_GF2_DIM], mat: &[u16; CRC16_GF2_DIM]) {
+pub(super) fn gf2_matrix_square_u16(square: &mut [u16; CRC16_GF2_DIM], mat: &[u16; CRC16_GF2_DIM]) {
     for n in 0..CRC16_GF2_DIM {
         square[n] = gf2_matrix_times_u16(mat, mat[n]);
     }
 }
 
-fn crc16_arc_combine(mut crc1: u16, crc2: u16, mut len2: usize) -> u16 {
+pub(super) fn crc16_arc_combine(mut crc1: u16, crc2: u16, mut len2: usize) -> u16 {
     let mut row = 1u16;
     let mut even = [0u16; CRC16_GF2_DIM];
     let mut odd = [0u16; CRC16_GF2_DIM];
@@ -586,7 +587,7 @@ fn crc16_arc_combine(mut crc1: u16, crc2: u16, mut len2: usize) -> u16 {
     crc1 ^ crc2
 }
 
-fn combine_crc16_partials(partials: Vec<Result<(u16, usize)>>) -> Result<u16> {
+pub(super) fn combine_crc16_partials(partials: Vec<Result<(u16, usize)>>) -> Result<u16> {
     let mut partials = partials.into_iter();
     let (mut combined, _) = match partials.next() {
         Some(partial) => partial?,
@@ -605,7 +606,7 @@ pub fn adler32_checksum(bytes: &[u8]) -> u32 {
     state.checksum()
 }
 
-fn adler32_combine(adler1: u32, adler2: u32, len2: usize) -> u32 {
+pub(super) fn adler32_combine(adler1: u32, adler2: u32, len2: usize) -> u32 {
     if len2 == 0 {
         return adler1;
     }
@@ -623,7 +624,7 @@ fn adler32_combine(adler1: u32, adler2: u32, len2: usize) -> u32 {
     ((b as u32) << 16) | (a as u32)
 }
 
-fn combine_adler32_partials(partials: Vec<Result<(u32, usize)>>) -> Result<u32> {
+pub(super) fn combine_adler32_partials(partials: Vec<Result<(u32, usize)>>) -> Result<u32> {
     let mut partials = partials.into_iter();
     let (mut combined, _) = match partials.next() {
         Some(partial) => partial?,
@@ -636,7 +637,10 @@ fn combine_adler32_partials(partials: Vec<Result<(u32, usize)>>) -> Result<u32> 
     Ok(combined)
 }
 
-fn partition_algorithms(algorithms: &[Algorithm], worker_count: usize) -> Vec<Vec<Algorithm>> {
+pub(super) fn partition_algorithms(
+    algorithms: &[Algorithm],
+    worker_count: usize,
+) -> Vec<Vec<Algorithm>> {
     let mut groups = vec![Vec::new(); worker_count];
     for (index, algorithm) in algorithms.iter().copied().enumerate() {
         groups[index % worker_count].push(algorithm);
@@ -647,36 +651,36 @@ fn partition_algorithms(algorithms: &[Algorithm], worker_count: usize) -> Vec<Ve
         .collect()
 }
 
-fn parallel_crc32_max_threads(range_len: u64) -> usize {
+pub(super) fn parallel_crc32_max_threads(range_len: u64) -> usize {
     ((range_len / CRC32_PARALLEL_MIN_BYTES_PER_THREAD) as usize)
         .clamp(1, CRC32_PARALLEL_MAX_THREADS)
 }
 
-fn parallel_crc32c_max_threads(range_len: u64) -> usize {
+pub(super) fn parallel_crc32c_max_threads(range_len: u64) -> usize {
     ((range_len / CRC32C_PARALLEL_MIN_BYTES_PER_THREAD) as usize)
         .clamp(1, CRC32C_PARALLEL_MAX_THREADS)
 }
 
-fn parallel_crc16_max_threads(range_len: u64) -> usize {
+pub(super) fn parallel_crc16_max_threads(range_len: u64) -> usize {
     ((range_len / CRC16_PARALLEL_MIN_BYTES_PER_THREAD) as usize)
         .clamp(1, CRC16_PARALLEL_MAX_THREADS)
 }
 
-fn parallel_adler32_max_threads(range_len: u64) -> usize {
+pub(super) fn parallel_adler32_max_threads(range_len: u64) -> usize {
     ((range_len / ADLER32_PARALLEL_MIN_BYTES_PER_THREAD) as usize)
         .clamp(1, ADLER32_PARALLEL_MAX_THREADS)
 }
 
-fn parallel_blake3_max_threads(range_len: u64) -> usize {
+pub(super) fn parallel_blake3_max_threads(range_len: u64) -> usize {
     ((range_len / BLAKE3_PARALLEL_MIN_BYTES_PER_THREAD) as usize)
         .clamp(1, BLAKE3_PARALLEL_MAX_THREADS)
 }
 
-fn crc32_parallel_chunk_size(range_len: u64, worker_count: usize) -> u64 {
+pub(super) fn crc32_parallel_chunk_size(range_len: u64, worker_count: usize) -> u64 {
     range_len.div_ceil(worker_count.max(1) as u64).max(1)
 }
 
-fn map_range(source: &Path, range: &ResolvedRange) -> Option<MappedRange> {
+pub(super) fn map_range(source: &Path, range: &ResolvedRange) -> Option<MappedRange> {
     if range.file_len == 0 || range.len == 0 {
         return None;
     }
@@ -701,7 +705,7 @@ fn map_range(source: &Path, range: &ResolvedRange) -> Option<MappedRange> {
     Some(MappedRange { bytes })
 }
 
-fn tuned_chunk_size(range_len: u64, worker_count: usize) -> usize {
+pub(super) fn tuned_chunk_size(range_len: u64, worker_count: usize) -> usize {
     let worker_count = worker_count.max(1) as u64;
     let suggested = (range_len / (worker_count * TARGET_CHUNKS_PER_WORKER)).max(1);
     suggested.clamp(MIN_CHUNK_SIZE as u64, MAX_CHUNK_SIZE as u64) as usize

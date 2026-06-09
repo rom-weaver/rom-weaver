@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { resolveAutomaticCompressionFormat } from "../../lib/compression/container-format-registry.ts";
+import {
+  CREATE_ARCHIVE_COMPRESSION_FORMATS,
+  CREATE_ROM_SPECIFIC_COMPRESSION_FORMATS,
+  isRomSpecificCompressionFormat,
+  resolveAutomaticCompressionFormat,
+} from "../../lib/compression/container-format-registry.ts";
 import OutputCompressionManager from "../../lib/compression/output-compression-manager.ts";
 import { createTiming, formatTiming } from "../../lib/progress/timing.ts";
 import { formatCodedErrorForDisplay, getErrorCode } from "../../presentation/errors.ts";
@@ -85,8 +90,14 @@ import {
 const createSettingsIdentityKey = (settings: ApplyPatchFormSettings) =>
   JSON.stringify(settings, (_key, value) => (typeof value === "function" ? "[function]" : value));
 
+const DEFAULT_COMPRESSION_OPTIONS = [
+  "none",
+  ...CREATE_ARCHIVE_COMPRESSION_FORMATS,
+  ...CREATE_ROM_SPECIFIC_COMPRESSION_FORMATS,
+];
+
 const isSpecialOutputCompression = (compression: CompressionFormat | string | null | undefined) =>
-  compression === "chd" || compression === "rvz" || compression === "z3ds";
+  isRomSpecificCompressionFormat(compression);
 
 const isWorkflowDisposedError = (error: unknown) => getErrorCode(error) === "WORKFLOW_DISPOSED";
 
@@ -100,7 +111,7 @@ const useLocalApplyPatchFormSession = ({
   disabled = false,
   workerThreads,
   containerInputsEnabled = true,
-  compressionOptions = ["none", "7z", "zip", "chd", "rvz", "z3ds"],
+  compressionOptions = DEFAULT_COMPRESSION_OPTIONS,
   onInputsChange,
   onPatchesChange,
   onSettingsChange,

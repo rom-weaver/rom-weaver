@@ -1,88 +1,56 @@
-use std::{
-    borrow::Cow,
-    cell::{Cell, RefCell},
-    fs::{self, File, OpenOptions},
-    io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write},
-    path::{Path, PathBuf},
-    sync::Arc,
-    time::SystemTime,
-};
+use super::*;
 
-use oxidelta::{
-    compress::{
-        encoder::CompressOptions,
-        pipeline,
-        secondary::{self, SecondaryCompression},
-    },
-    hash::{config, matching::MatchEngine},
-    vcdiff::{
-        code_table::Instruction,
-        decoder::{self as oxidelta_decoder, DecodeError as OxideltaDecodeError},
-        encoder::{SourceWindow, StreamEncoder, WindowEncoder, WindowSections},
-        header::{WindowHeader as OxideltaWindowHeader, VCD_ADLER32, VCD_SOURCE, VCD_TARGET},
-    },
-};
-use rayon::prelude::*;
-use rom_weaver_checksum::adler32_checksum as adler32;
-use rom_weaver_core::{
-    FormatDescriptor, OperationContext, OperationFamily, OperationReport, OperationStatus,
-    PatchApplyRequest, PatchCapabilities, PatchChecksumValidation, PatchCreateRequest, PatchHandler,
-    ProbeConfidence, ProgressEvent, Result, RomWeaverError, SharedThreadPool, ThreadBudget,
-    ThreadCapability, ThreadExecution, XdeltaSecondaryMode,
-};
-use serde_json::json;
-use tracing::info;
+pub(super) const VCDIFF_MAGIC_BYTES: [u8; 3] = [0xD6, 0xC3, 0xC4];
+pub(super) const VCDIFF_VERSION_STANDARD: u8 = 0x00;
 
-const VCDIFF_MAGIC_BYTES: [u8; 3] = [0xD6, 0xC3, 0xC4];
-const VCDIFF_VERSION_STANDARD: u8 = 0x00;
+pub(super) const HDR_SECONDARY: u8 = 0x01;
+pub(super) const HDR_CODE_TABLE: u8 = 0x02;
+pub(super) const HDR_APP_HEADER: u8 = 0x04;
+pub(super) const HDR_KNOWN_MASK: u8 = HDR_SECONDARY | HDR_CODE_TABLE | HDR_APP_HEADER;
 
-const HDR_SECONDARY: u8 = 0x01;
-const HDR_CODE_TABLE: u8 = 0x02;
-const HDR_APP_HEADER: u8 = 0x04;
-const HDR_KNOWN_MASK: u8 = HDR_SECONDARY | HDR_CODE_TABLE | HDR_APP_HEADER;
+pub(super) const WIN_SOURCE: u8 = 0x01;
+pub(super) const WIN_TARGET: u8 = 0x02;
+pub(super) const WIN_CHECKSUM: u8 = 0x04;
+pub(super) const WIN_KNOWN_MASK: u8 = WIN_SOURCE | WIN_TARGET | WIN_CHECKSUM;
 
-const WIN_SOURCE: u8 = 0x01;
-const WIN_TARGET: u8 = 0x02;
-const WIN_CHECKSUM: u8 = 0x04;
-const WIN_KNOWN_MASK: u8 = WIN_SOURCE | WIN_TARGET | WIN_CHECKSUM;
-
-const DELTA_DATA_COMP: u8 = 0x01;
-const DELTA_INST_COMP: u8 = 0x02;
-const DELTA_ADDR_COMP: u8 = 0x04;
-const DELTA_KNOWN_MASK: u8 = DELTA_DATA_COMP | DELTA_INST_COMP | DELTA_ADDR_COMP;
-const NATIVE_CHUNK_SIZE: usize = 64 * 1024;
-const XDELTA_SECONDARY_MIN_INPUT: usize = 10;
-const XDELTA_SECONDARY_MIN_SAVINGS: usize = 2;
-const XDELTA_DJW_SECONDARY_ID: u8 = 1;
-const XDELTA_LZMA_SECONDARY_ID: u8 = 2;
-const XDELTA_FGK_SECONDARY_ID: u8 = 16;
-const XDELTA_SECONDARY_CANDIDATES: [u8; 3] = [
+pub(super) const DELTA_DATA_COMP: u8 = 0x01;
+pub(super) const DELTA_INST_COMP: u8 = 0x02;
+pub(super) const DELTA_ADDR_COMP: u8 = 0x04;
+pub(super) const DELTA_KNOWN_MASK: u8 = DELTA_DATA_COMP | DELTA_INST_COMP | DELTA_ADDR_COMP;
+pub(super) const NATIVE_CHUNK_SIZE: usize = 64 * 1024;
+pub(super) const XDELTA_SECONDARY_MIN_INPUT: usize = 10;
+pub(super) const XDELTA_SECONDARY_MIN_SAVINGS: usize = 2;
+pub(super) const XDELTA_DJW_SECONDARY_ID: u8 = 1;
+pub(super) const XDELTA_LZMA_SECONDARY_ID: u8 = 2;
+pub(super) const XDELTA_FGK_SECONDARY_ID: u8 = 16;
+pub(super) const XDELTA_SECONDARY_CANDIDATES: [u8; 3] = [
     XDELTA_DJW_SECONDARY_ID,
     XDELTA_LZMA_SECONDARY_ID,
     XDELTA_FGK_SECONDARY_ID,
 ];
-const DJW_MAX_CODELEN: usize = 20;
-const DJW_TOTAL_CODES: usize = DJW_MAX_CODELEN + 2;
-const DJW_BASIC_CODES: usize = 5;
-const DJW_RUN_CODES: usize = 2;
-const DJW_EXTRA_12OFFSET: usize = DJW_BASIC_CODES + DJW_RUN_CODES;
-const DJW_EXTRA_CODE_BITS: usize = 4;
-const DJW_MAX_GROUPS: usize = 8;
-const DJW_GROUP_BITS: usize = 3;
-const DJW_SECTORSZ_MULT: usize = 5;
-const DJW_SECTORSZ_BITS: usize = 5;
-const DJW_SECTORSZ_MAX: usize = (1 << DJW_SECTORSZ_BITS) * DJW_SECTORSZ_MULT;
-const DJW_MAX_CLCLEN: usize = 15;
-const DJW_CLCLEN_BITS: usize = 4;
-const DJW_MAX_GBCLEN: usize = 7;
-const DJW_GBCLEN_BITS: usize = 3;
-const DJW_RUN_1: usize = 1;
-const DJW_ALPHABET_SIZE: usize = 256;
+pub(super) const DJW_MAX_CODELEN: usize = 20;
+pub(super) const DJW_TOTAL_CODES: usize = DJW_MAX_CODELEN + 2;
+pub(super) const DJW_BASIC_CODES: usize = 5;
+pub(super) const DJW_RUN_CODES: usize = 2;
+pub(super) const DJW_EXTRA_12OFFSET: usize = DJW_BASIC_CODES + DJW_RUN_CODES;
+pub(super) const DJW_EXTRA_CODE_BITS: usize = 4;
+pub(super) const DJW_MAX_GROUPS: usize = 8;
+pub(super) const DJW_GROUP_BITS: usize = 3;
+pub(super) const DJW_SECTORSZ_MULT: usize = 5;
+pub(super) const DJW_SECTORSZ_BITS: usize = 5;
+pub(super) const DJW_SECTORSZ_MAX: usize = (1 << DJW_SECTORSZ_BITS) * DJW_SECTORSZ_MULT;
+pub(super) const DJW_MAX_CLCLEN: usize = 15;
+pub(super) const DJW_CLCLEN_BITS: usize = 4;
+pub(super) const DJW_MAX_GBCLEN: usize = 7;
+pub(super) const DJW_GBCLEN_BITS: usize = 3;
+pub(super) const DJW_RUN_1: usize = 1;
+pub(super) const DJW_ALPHABET_SIZE: usize = 256;
 
-const DJW_ENCODE_12EXTRA: [u8; 15] = [9, 10, 3, 11, 2, 12, 13, 1, 14, 15, 16, 17, 18, 19, 20];
-const DJW_ENCODE_12BASIC: [u8; 5] = [4, 5, 6, 7, 8];
+pub(super) const DJW_ENCODE_12EXTRA: [u8; 15] =
+    [9, 10, 3, 11, 2, 12, 13, 1, 14, 15, 16, 17, 18, 19, 20];
+pub(super) const DJW_ENCODE_12BASIC: [u8; 5] = [4, 5, 6, 7, 8];
 
-fn xdelta_secondary_candidates_for_mode(mode: XdeltaSecondaryMode) -> &'static [u8] {
+pub(super) fn xdelta_secondary_candidates_for_mode(mode: XdeltaSecondaryMode) -> &'static [u8] {
     match mode {
         XdeltaSecondaryMode::Auto => &XDELTA_SECONDARY_CANDIDATES,
         XdeltaSecondaryMode::Djw => &[XDELTA_DJW_SECONDARY_ID],
@@ -92,7 +60,10 @@ fn xdelta_secondary_candidates_for_mode(mode: XdeltaSecondaryMode) -> &'static [
     }
 }
 
-fn require_single_patch_file<'a>(patches: &'a [PathBuf], format_name: &str) -> Result<&'a PathBuf> {
+pub(super) fn require_single_patch_file<'a>(
+    patches: &'a [PathBuf],
+    format_name: &str,
+) -> Result<&'a PathBuf> {
     if patches.len() != 1 {
         return Err(RomWeaverError::Validation(format!(
             "{format_name} apply expects exactly one patch file"
@@ -209,7 +180,8 @@ impl PatchHandler for VcdiffPatchHandler {
         let validate_checksums =
             context.patch_checksum_validation() == PatchChecksumValidation::Strict;
         let input_len = std::fs::metadata(&request.input)?.len();
-        let uses_xdelta_lzma_sections = patch.secondary_compressor_id == Some(XDELTA_LZMA_SECONDARY_ID)
+        let uses_xdelta_lzma_sections = patch.secondary_compressor_id
+            == Some(XDELTA_LZMA_SECONDARY_ID)
             && patch_uses_xdelta_lzma_sections(&patch, &patch_path)?;
 
         if uses_xdelta_lzma_sections {
@@ -502,7 +474,8 @@ impl PatchHandler for VcdiffPatchHandler {
                         )
                     })
                     .collect::<Vec<_>>();
-                secondary_candidate_paths.extend(candidate_specs.iter().map(|(_, path)| path.clone()));
+                secondary_candidate_paths
+                    .extend(candidate_specs.iter().map(|(_, path)| path.clone()));
                 let app_header = xdelta_app_header.as_deref();
                 let candidate_results = if let Some(pool) = secondary_pool.as_ref() {
                     // Candidates run concurrently on worker threads, so they can't share the
@@ -651,54 +624,54 @@ impl PatchHandler for VcdiffPatchHandler {
 }
 
 #[derive(Debug)]
-struct ParsedPatch {
-    secondary_compressor_id: Option<u8>,
-    custom_code_table: Option<CustomCodeTableInfo>,
-    app_header: Option<Vec<u8>>,
-    windows: Vec<WindowIndex>,
+pub(super) struct ParsedPatch {
+    pub(super) secondary_compressor_id: Option<u8>,
+    pub(super) custom_code_table: Option<CustomCodeTableInfo>,
+    pub(super) app_header: Option<Vec<u8>>,
+    pub(super) windows: Vec<WindowIndex>,
 }
 
 #[derive(Debug)]
-struct CustomCodeTableInfo {
-    near_size: u8,
-    same_size: u8,
-    data_len: u64,
+pub(super) struct CustomCodeTableInfo {
+    pub(super) near_size: u8,
+    pub(super) same_size: u8,
+    pub(super) data_len: u64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum WindowSourceKind {
+pub(super) enum WindowSourceKind {
     Source,
     Target,
 }
 
 #[derive(Clone, Copy)]
-enum DjwSectionKind {
+pub(super) enum DjwSectionKind {
     Data,
     Inst,
     Addr,
 }
 
 #[derive(Clone, Debug)]
-struct WindowIndex {
-    source_kind: Option<WindowSourceKind>,
-    source_segment_size: u64,
-    source_segment_position: u64,
-    target_window_size: u64,
-    delta_indicator: u8,
-    checksum: Option<u32>,
-    data_start: u64,
-    data_len: u64,
-    inst_start: u64,
-    inst_len: u64,
-    addr_start: u64,
-    addr_len: u64,
-    output_offset: u64,
+pub(super) struct WindowIndex {
+    pub(super) source_kind: Option<WindowSourceKind>,
+    pub(super) source_segment_size: u64,
+    pub(super) source_segment_position: u64,
+    pub(super) target_window_size: u64,
+    pub(super) delta_indicator: u8,
+    pub(super) checksum: Option<u32>,
+    pub(super) data_start: u64,
+    pub(super) data_len: u64,
+    pub(super) inst_start: u64,
+    pub(super) inst_len: u64,
+    pub(super) addr_start: u64,
+    pub(super) addr_len: u64,
+    pub(super) output_offset: u64,
 }
 
 impl WindowIndex {}
 
 impl ParsedPatch {
-    fn minimum_source_size(&self) -> Result<Option<u64>> {
+    pub(super) fn minimum_source_size(&self) -> Result<Option<u64>> {
         self.windows
             .iter()
             .filter(|window| matches!(window.source_kind, Some(WindowSourceKind::Source)))
@@ -712,14 +685,14 @@ impl ParsedPatch {
             })
     }
 
-    fn target_size(&self) -> Result<u64> {
+    pub(super) fn target_size(&self) -> Result<u64> {
         self.windows.iter().try_fold(0, |total, window| {
             checked_add(total, window.target_window_size, "patch target size")
         })
     }
 }
 
-fn read_source_segment<R: Read + Seek>(
+pub(super) fn read_source_segment<R: Read + Seek>(
     reader: &mut R,
     segment_position: u64,
     segment_size: u64,
@@ -745,14 +718,14 @@ fn read_source_segment<R: Read + Seek>(
 }
 
 #[derive(Clone, Debug)]
-struct WindowTask {
+pub(super) struct WindowTask {
     index: usize,
     window: WindowIndex,
     temp_path: PathBuf,
 }
 
 #[derive(Debug)]
-struct DecodedWindow {
+pub(super) struct DecodedWindow {
     index: usize,
     output_offset: u64,
     len: u64,
@@ -760,25 +733,25 @@ struct DecodedWindow {
 }
 
 #[derive(Debug)]
-struct CreatedPatchCandidate {
-    path: PathBuf,
-    size: u64,
+pub(super) struct CreatedPatchCandidate {
+    pub(super) path: PathBuf,
+    pub(super) size: u64,
 }
 
 #[derive(Debug)]
-struct LoadedXdeltaRecodePatch {
-    parsed: ParsedPatch,
-    path: PathBuf,
+pub(super) struct LoadedXdeltaRecodePatch {
+    pub(super) parsed: ParsedPatch,
+    pub(super) path: PathBuf,
 }
 
 #[derive(Debug)]
-struct XdeltaRecodeWindowSections {
-    data: Vec<u8>,
-    inst: Vec<u8>,
-    addr: Vec<u8>,
+pub(super) struct XdeltaRecodeWindowSections {
+    pub(super) data: Vec<u8>,
+    pub(super) inst: Vec<u8>,
+    pub(super) addr: Vec<u8>,
 }
 
-fn parse_patch<R: Read + Seek>(reader: &mut R) -> Result<ParsedPatch> {
+pub(super) fn parse_patch<R: Read + Seek>(reader: &mut R) -> Result<ParsedPatch> {
     reader.seek(SeekFrom::Start(0))?;
 
     let mut magic = [0; 4];
@@ -866,7 +839,7 @@ fn parse_patch<R: Read + Seek>(reader: &mut R) -> Result<ParsedPatch> {
     })
 }
 
-fn read_window_index<R: Read + Seek>(
+pub(super) fn read_window_index<R: Read + Seek>(
     reader: &mut R,
     output_offset: u64,
 ) -> Result<Option<WindowIndex>> {
@@ -964,7 +937,7 @@ fn read_window_index<R: Read + Seek>(
     }))
 }
 
-fn decode_window_task(
+pub(super) fn decode_window_task(
     task: &WindowTask,
     patch_path: &Path,
     input_path: &Path,
@@ -1010,7 +983,7 @@ fn decode_window_task(
     })
 }
 
-fn apply_windows_with_xdelta_lzma_sections(
+pub(super) fn apply_windows_with_xdelta_lzma_sections(
     patch: &ParsedPatch,
     patch_path: &Path,
     input_path: &Path,
@@ -1078,7 +1051,7 @@ fn apply_windows_with_xdelta_lzma_sections(
     Ok(())
 }
 
-fn apply_windows_with_target_sources(
+pub(super) fn apply_windows_with_target_sources(
     patch: &ParsedPatch,
     patch_path: &Path,
     input_path: &Path,
@@ -1145,11 +1118,14 @@ fn apply_windows_with_target_sources(
     Ok(())
 }
 
-fn is_xdelta_descriptor(descriptor: &FormatDescriptor) -> bool {
+pub(super) fn is_xdelta_descriptor(descriptor: &FormatDescriptor) -> bool {
     descriptor.name.eq_ignore_ascii_case("xdelta")
 }
 
-fn patch_uses_xdelta_lzma_sections(patch: &ParsedPatch, patch_path: &Path) -> Result<bool> {
+pub(super) fn patch_uses_xdelta_lzma_sections(
+    patch: &ParsedPatch,
+    patch_path: &Path,
+) -> Result<bool> {
     let mut patch_reader = BufReader::new(File::open(patch_path)?);
     for window in &patch.windows {
         for (compressed, start, len) in [
@@ -1179,7 +1155,7 @@ fn patch_uses_xdelta_lzma_sections(patch: &ParsedPatch, patch_path: &Path) -> Re
     Ok(false)
 }
 
-fn create_native_compress_options(
+pub(super) fn create_native_compress_options(
     descriptor: &FormatDescriptor,
     include_checksums: bool,
 ) -> CompressOptions {
@@ -1206,7 +1182,7 @@ fn create_native_compress_options(
 /// the patch is finished — the percentage where it stalls also identifies the slow phase. All
 /// emission happens on the calling (main) thread, so interior mutability via `Cell`/`RefCell` is
 /// sufficient (the parallel encode never captures this).
-struct CreateProgress<'a> {
+pub(super) struct CreateProgress<'a> {
     context: &'a OperationContext,
     format: &'a str,
     execution: RefCell<ThreadExecution>,
@@ -1214,7 +1190,7 @@ struct CreateProgress<'a> {
 }
 
 impl<'a> CreateProgress<'a> {
-    fn new(context: &'a OperationContext, format: &'a str) -> Self {
+    pub(super) fn new(context: &'a OperationContext, format: &'a str) -> Self {
         Self {
             context,
             format,
@@ -1226,12 +1202,12 @@ impl<'a> CreateProgress<'a> {
     }
 
     /// Records the thread execution the encode negotiated so running events carry accurate counts.
-    fn set_execution(&self, execution: &ThreadExecution) {
+    pub(super) fn set_execution(&self, execution: &ThreadExecution) {
         *self.execution.borrow_mut() = execution.clone();
     }
 
     /// Maps `completed/total` work into the `[band_start, band_end]` slice of the overall range.
-    fn emit_band(&self, band_start: f64, band_end: f64, completed: u64, total: u64) {
+    pub(super) fn emit_band(&self, band_start: f64, band_end: f64, completed: u64, total: u64) {
         let fraction = if total == 0 {
             1.0
         } else {
@@ -1242,7 +1218,7 @@ impl<'a> CreateProgress<'a> {
 
     /// Emits a `patch-create` running event at `percent`, deduplicated to whole-percent advances so
     /// the bar moves forward monotonically across phases.
-    fn emit_overall(&self, percent: f64) {
+    pub(super) fn emit_overall(&self, percent: f64) {
         let percent = (percent.floor() as i32).clamp(0, 100);
         if percent <= self.last_percent.get() {
             return;
@@ -1273,23 +1249,23 @@ impl<'a> CreateProgress<'a> {
 /// cost for large patches, so it owns the widest slice; the parallel encode is fast and owns less. The
 /// uncompressed app-header baseline is normally not materialized (its size is computed analytically),
 /// so it has no band of its own except in the rare case it wins, where it borrows the finalize slice.
-const CREATE_ENCODE_BAND_END: f64 = 35.0;
-const CREATE_SECONDARY_RECODE_BAND_END: f64 = 95.0;
-const CREATE_FINALIZE_PERCENT: f64 = 98.0;
+pub(super) const CREATE_ENCODE_BAND_END: f64 = 35.0;
+pub(super) const CREATE_SECONDARY_RECODE_BAND_END: f64 = 95.0;
+pub(super) const CREATE_FINALIZE_PERCENT: f64 = 98.0;
 /// Encode band end when no secondary recode runs but the uncompressed app-header baseline is still
 /// written as the output (e.g. `--xdelta-secondary none`): the diff and that write split the bar.
-const CREATE_NO_SECONDARY_ENCODE_BAND_END: f64 = 60.0;
+pub(super) const CREATE_NO_SECONDARY_ENCODE_BAND_END: f64 = 60.0;
 
 /// The band of the overall create range a recode pass (app-header rewrite or secondary compression)
 /// occupies. Threaded through [`recode_loaded_patch_with_xdelta_options`] so it can report per-window.
-struct CreateRecodeProgress<'a> {
+pub(super) struct CreateRecodeProgress<'a> {
     progress: &'a CreateProgress<'a>,
     band_start: f64,
     band_end: f64,
 }
 
 /// The band of the overall create range the window diff occupies.
-struct CreateEncodeProgress<'a> {
+pub(super) struct CreateEncodeProgress<'a> {
     progress: &'a CreateProgress<'a>,
     band_start: f64,
     band_end: f64,
@@ -1297,7 +1273,7 @@ struct CreateEncodeProgress<'a> {
 
 /// File inputs and window geometry shared by both window-encode loops, grouped to keep their
 /// signatures small.
-struct WindowEncodeInputs<'a> {
+pub(super) struct WindowEncodeInputs<'a> {
     source_path: &'a Path,
     target_path: &'a Path,
     source_len: u64,
@@ -1309,7 +1285,7 @@ struct WindowEncodeInputs<'a> {
 /// Sequential single-threaded entry point. Produces output byte-identical to the parallel path;
 /// retained for tests that exercise the encoder without an `OperationContext`.
 #[cfg(test)]
-fn encode_patch_with_native_streaming(
+pub(super) fn encode_patch_with_native_streaming(
     source_path: &Path,
     target_path: &Path,
     output_path: &Path,
@@ -1322,17 +1298,23 @@ fn encode_patch_with_native_streaming(
 /// Create-command encode: spreads the independent VCDIFF windows across the negotiated thread
 /// budget and emits per-window running progress. Returns the resolved [`ThreadExecution`] so the
 /// operation report reflects the diff threading rather than the (often single-thread) secondary pass.
-fn encode_patch_create(
+pub(super) fn encode_patch_create(
     source_path: &Path,
     target_path: &Path,
     output_path: &Path,
     options: CompressOptions,
     progress: &CreateEncodeProgress<'_>,
 ) -> Result<(CreatedPatchCandidate, ThreadExecution)> {
-    encode_patch_native(source_path, target_path, output_path, options, Some(progress))
+    encode_patch_native(
+        source_path,
+        target_path,
+        output_path,
+        options,
+        Some(progress),
+    )
 }
 
-fn encode_patch_native(
+pub(super) fn encode_patch_native(
     source_path: &Path,
     target_path: &Path,
     output_path: &Path,
@@ -1358,8 +1340,8 @@ fn encode_patch_native(
     // it never needs an `OperationContext`.
     let (execution, pool) = match progress {
         Some(progress) => {
-            let window_count =
-                usize::try_from(target_len.div_ceil(window_size as u64).max(1)).unwrap_or(usize::MAX);
+            let window_count = usize::try_from(target_len.div_ceil(window_size as u64).max(1))
+                .unwrap_or(usize::MAX);
             let (execution, pool) = progress
                 .progress
                 .context
@@ -1407,7 +1389,7 @@ fn encode_patch_native(
     ))
 }
 
-fn encode_windows_sequential<W: Write>(
+pub(super) fn encode_windows_sequential<W: Write>(
     encoder: &mut StreamEncoder<W>,
     inputs: &WindowEncodeInputs<'_>,
     progress: Option<&CreateEncodeProgress<'_>>,
@@ -1424,8 +1406,12 @@ fn encode_windows_sequential<W: Write>(
         }
 
         let source_offset = target_offset.min(inputs.source_len);
-        let source_window =
-            read_source_window(&mut source, source_offset, target_buffer.len(), inputs.source_len)?;
+        let source_window = read_source_window(
+            &mut source,
+            source_offset,
+            target_buffer.len(),
+            inputs.source_len,
+        )?;
         let encoded = build_native_window(
             &source_window,
             source_offset,
@@ -1452,7 +1438,7 @@ fn encode_windows_sequential<W: Write>(
 /// the assembled window bytes are written back in order. Source/target reads stay on the calling
 /// thread (OPFS-safe in wasm) and only `effective_threads` windows are buffered at a time to keep
 /// peak memory bounded.
-fn encode_windows_parallel<W: Write>(
+pub(super) fn encode_windows_parallel<W: Write>(
     encoder: &mut StreamEncoder<W>,
     inputs: &WindowEncodeInputs<'_>,
     pool: &SharedThreadPool,
@@ -1473,8 +1459,12 @@ fn encode_windows_parallel<W: Write>(
                 break;
             }
             let source_offset = target_offset.min(inputs.source_len);
-            let source_window =
-                read_source_window(&mut source, source_offset, target_buffer.len(), inputs.source_len)?;
+            let source_window = read_source_window(
+                &mut source,
+                source_offset,
+                target_buffer.len(),
+                inputs.source_len,
+            )?;
             batch.push((source_offset, source_window, target_buffer));
             target_offset = checked_add(target_offset, bytes_read as u64, "encoded target offset")?;
         }
@@ -1486,7 +1476,12 @@ fn encode_windows_parallel<W: Write>(
             batch
                 .into_par_iter()
                 .map(|(source_offset, source_window, target_window)| {
-                    build_native_window(&source_window, source_offset, &target_window, inputs.options)
+                    build_native_window(
+                        &source_window,
+                        source_offset,
+                        &target_window,
+                        inputs.options,
+                    )
                 })
                 .collect::<Result<Vec<Vec<u8>>>>()
         })?;
@@ -1510,7 +1505,7 @@ fn encode_windows_parallel<W: Write>(
 /// comparison); the report should describe whichever fanned out widest, so pick the execution with
 /// more effective threads (`used_parallelism` tracks `effective_threads > 1`, so this also reports
 /// parallelism whenever either phase used it).
-fn richer_thread_execution(a: ThreadExecution, b: ThreadExecution) -> ThreadExecution {
+pub(super) fn richer_thread_execution(a: ThreadExecution, b: ThreadExecution) -> ThreadExecution {
     if b.effective_threads > a.effective_threads {
         b
     } else {
@@ -1520,7 +1515,7 @@ fn richer_thread_execution(a: ThreadExecution, b: ThreadExecution) -> ThreadExec
 
 /// Milliseconds elapsed since `start`, saturating to 0 if the clock went backwards. Used for the
 /// per-phase create timing log; `SystemTime` is the wasm-supported clock in this runtime.
-fn elapsed_ms(start: SystemTime) -> u64 {
+pub(super) fn elapsed_ms(start: SystemTime) -> u64 {
     start
         .elapsed()
         .map(|elapsed| u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX))
@@ -1530,7 +1525,7 @@ fn elapsed_ms(start: SystemTime) -> u64 {
 /// Moves `from` onto `to`, preferring a metadata-only `rename`. Cross-filesystem renames fail with
 /// an error (e.g. `EXDEV`), so fall back to a byte copy in that case. The source temp file is
 /// consumed on the fast path; the caller's best-effort temp cleanup tolerates its absence.
-fn move_or_copy_file(from: &Path, to: &Path) -> Result<()> {
+pub(super) fn move_or_copy_file(from: &Path, to: &Path) -> Result<()> {
     if fs::rename(from, to).is_ok() {
         return Ok(());
     }
@@ -1539,7 +1534,7 @@ fn move_or_copy_file(from: &Path, to: &Path) -> Result<()> {
     Ok(())
 }
 
-fn read_next_chunk(reader: &mut BufReader<File>, buffer: &mut Vec<u8>) -> Result<usize> {
+pub(super) fn read_next_chunk(reader: &mut BufReader<File>, buffer: &mut Vec<u8>) -> Result<usize> {
     let capacity = buffer.capacity().max(buffer.len()).max(64);
     buffer.resize(capacity, 0);
     let mut total = 0_usize;
@@ -1554,7 +1549,7 @@ fn read_next_chunk(reader: &mut BufReader<File>, buffer: &mut Vec<u8>) -> Result
     Ok(total)
 }
 
-fn read_source_window(
+pub(super) fn read_source_window(
     source: &mut File,
     offset: u64,
     max_len: usize,
@@ -1563,8 +1558,9 @@ fn read_source_window(
     if offset >= source_len || max_len == 0 {
         return Ok(Vec::new());
     }
-    let len = usize::try_from((source_len - offset).min(max_len as u64))
-        .map_err(|_| RomWeaverError::Validation("source window exceeded addressable memory".into()))?;
+    let len = usize::try_from((source_len - offset).min(max_len as u64)).map_err(|_| {
+        RomWeaverError::Validation("source window exceeded addressable memory".into())
+    })?;
     let mut bytes = vec![0_u8; len];
     source.seek(SeekFrom::Start(offset))?;
     source.read_exact(&mut bytes)?;
@@ -1574,7 +1570,7 @@ fn read_source_window(
 /// Encodes a single VCDIFF window into its assembled section bytes. Pure and self-contained (no
 /// shared encoder state), so it can run on a worker thread; the caller writes the returned bytes to
 /// the stream encoder in window order.
-fn build_native_window(
+pub(super) fn build_native_window(
     source: &[u8],
     source_offset: u64,
     target: &[u8],
@@ -1616,7 +1612,7 @@ fn build_native_window(
     assemble_native_sections(sections, options)
 }
 
-fn assemble_native_sections(
+pub(super) fn assemble_native_sections(
     sections: WindowSections,
     options: &CompressOptions,
 ) -> Result<Vec<u8>> {
@@ -1641,7 +1637,7 @@ fn assemble_native_sections(
     Ok(sections.assemble(0))
 }
 
-fn emit_native_instructions(
+pub(super) fn emit_native_instructions(
     window: &mut WindowEncoder,
     target: &[u8],
     instructions: &[Instruction],
@@ -1667,7 +1663,9 @@ fn emit_native_instructions(
     }
 }
 
-fn load_patch_for_xdelta_recode(baseline_patch_path: &Path) -> Result<LoadedXdeltaRecodePatch> {
+pub(super) fn load_patch_for_xdelta_recode(
+    baseline_patch_path: &Path,
+) -> Result<LoadedXdeltaRecodePatch> {
     let mut reader = BufReader::new(File::open(baseline_patch_path)?);
     let parsed = parse_patch(&mut reader)?;
     if parsed.custom_code_table.is_some() {
@@ -1683,7 +1681,7 @@ fn load_patch_for_xdelta_recode(baseline_patch_path: &Path) -> Result<LoadedXdel
 }
 
 #[cfg(test)]
-fn recode_patch_with_xdelta_options(
+pub(super) fn recode_patch_with_xdelta_options(
     baseline_patch_path: &Path,
     output_path: &Path,
     secondary_compressor_id: Option<u8>,
@@ -1699,7 +1697,7 @@ fn recode_patch_with_xdelta_options(
     )
 }
 
-fn read_xdelta_recode_window_sections<R: Read + Seek>(
+pub(super) fn read_xdelta_recode_window_sections<R: Read + Seek>(
     reader: &mut R,
     window: &WindowIndex,
 ) -> Result<XdeltaRecodeWindowSections> {
@@ -1710,7 +1708,7 @@ fn read_xdelta_recode_window_sections<R: Read + Seek>(
     })
 }
 
-fn recode_loaded_patch_with_xdelta_options(
+pub(super) fn recode_loaded_patch_with_xdelta_options(
     baseline_patch: &LoadedXdeltaRecodePatch,
     output_path: &Path,
     secondary_compressor_id: Option<u8>,
@@ -1762,7 +1760,9 @@ fn recode_loaded_patch_with_xdelta_options(
                 let (data_out, data_comp) = encoders.encode_data(&sections.data)?;
                 let (inst_out, inst_comp) = encoders.encode_inst(&sections.inst)?;
                 let (addr_out, addr_comp) = encoders.encode_addr(&sections.addr)?;
-                (data_out, data_comp, inst_out, inst_comp, addr_out, addr_comp)
+                (
+                    data_out, data_comp, inst_out, inst_comp, addr_out, addr_comp,
+                )
             } else {
                 let (data_out, data_comp) = recode_window_section(
                     &sections.data,
@@ -1782,7 +1782,9 @@ fn recode_loaded_patch_with_xdelta_options(
                     secondary_compressor_id,
                     DjwSectionKind::Addr,
                 )?;
-                (data_out, data_comp, inst_out, inst_comp, addr_out, addr_comp)
+                (
+                    data_out, data_comp, inst_out, inst_comp, addr_out, addr_comp,
+                )
             };
 
         let delta_indicator = recode_delta_indicator(
@@ -1840,7 +1842,7 @@ fn recode_loaded_patch_with_xdelta_options(
     })
 }
 
-fn recode_window_section(
+pub(super) fn recode_window_section(
     section: &[u8],
     original_compressed: bool,
     secondary_compressor_id: Option<u8>,
@@ -1864,7 +1866,7 @@ fn recode_window_section(
 /// secondary candidates without writing it — a full-patch rewrite that a candidate almost always
 /// makes redundant. `create_xdelta_appheader_baseline_size_matches_materialized` guards the formula
 /// against serialization drift.
-fn measure_appheader_baseline_size(
+pub(super) fn measure_appheader_baseline_size(
     baseline_patch: &LoadedXdeltaRecodePatch,
     app_header: &[u8],
 ) -> Result<u64> {
@@ -1908,7 +1910,7 @@ fn measure_appheader_baseline_size(
     Ok(total)
 }
 
-fn recoded_delta_len(
+pub(super) fn recoded_delta_len(
     window: &WindowIndex,
     data_len: u64,
     inst_len: u64,
@@ -1944,7 +1946,7 @@ fn recoded_delta_len(
     )
 }
 
-fn varint_len(mut value: u64) -> usize {
+pub(super) fn varint_len(mut value: u64) -> usize {
     if value == 0 {
         return 1;
     }
@@ -1957,7 +1959,7 @@ fn varint_len(mut value: u64) -> usize {
     len
 }
 
-fn write_varint_raw<W: Write>(writer: &mut W, mut value: u64) -> Result<()> {
+pub(super) fn write_varint_raw<W: Write>(writer: &mut W, mut value: u64) -> Result<()> {
     if value == 0 {
         writer.write_all(&[0])?;
         return Ok(());
@@ -1982,7 +1984,7 @@ fn write_varint_raw<W: Write>(writer: &mut W, mut value: u64) -> Result<()> {
     Ok(())
 }
 
-fn recode_delta_indicator(
+pub(super) fn recode_delta_indicator(
     original_indicator: u8,
     data_comp: bool,
     inst_comp: bool,
@@ -2005,13 +2007,13 @@ fn recode_delta_indicator(
     indicator
 }
 
-fn build_default_xdelta_app_header(source_path: &Path, target_path: &Path) -> Vec<u8> {
+pub(super) fn build_default_xdelta_app_header(source_path: &Path, target_path: &Path) -> Vec<u8> {
     let source = xdelta_app_header_name_component(source_path);
     let target = xdelta_app_header_name_component(target_path);
     format!("{target}//{source}/").into_bytes()
 }
 
-fn xdelta_app_header_name_component(path: &Path) -> String {
+pub(super) fn xdelta_app_header_name_component(path: &Path) -> String {
     path.file_name()
         .and_then(|value| value.to_str())
         .filter(|value| !value.is_empty())
@@ -2019,7 +2021,7 @@ fn xdelta_app_header_name_component(path: &Path) -> String {
         .to_string()
 }
 
-fn maybe_compress_xdelta_djw_section(
+pub(super) fn maybe_compress_xdelta_djw_section(
     section: &[u8],
     section_kind: DjwSectionKind,
 ) -> Result<(Cow<'_, [u8]>, bool)> {
@@ -2039,7 +2041,7 @@ fn maybe_compress_xdelta_djw_section(
     }
 }
 
-fn maybe_compress_xdelta_fgk_section(section: &[u8]) -> Result<(Cow<'_, [u8]>, bool)> {
+pub(super) fn maybe_compress_xdelta_fgk_section(section: &[u8]) -> Result<(Cow<'_, [u8]>, bool)> {
     if section.len() < XDELTA_SECONDARY_MIN_INPUT {
         return Ok((Cow::Borrowed(section), false));
     }
@@ -2056,6 +2058,9 @@ fn maybe_compress_xdelta_fgk_section(section: &[u8]) -> Result<(Cow<'_, [u8]>, b
     }
 }
 
-fn xdelta_secondary_candidate_is_efficient(original_size: usize, candidate_size: usize) -> bool {
+pub(super) fn xdelta_secondary_candidate_is_efficient(
+    original_size: usize,
+    candidate_size: usize,
+) -> bool {
     candidate_size < original_size.saturating_sub(XDELTA_SECONDARY_MIN_SAVINGS)
 }

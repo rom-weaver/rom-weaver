@@ -1,19 +1,20 @@
-const CREATE_PATCH_IPS_SIZE_LIMIT_BYTES: u64 = 16 * 1024 * 1024;
-const CREATE_PATCH_ARCHIVE_DEFAULT_LIMIT_BYTES: u64 = 64 * 1024 * 1024;
-const CREATE_PATCH_BPS_DEFAULT_LIMIT_BYTES: u64 = 128 * 1024 * 1024;
-const CREATE_PATCH_LEGACY_SIZE_LIMIT_BYTES: u64 = 256 * 1024 * 1024;
-const CREATE_PATCH_DEFAULT_FORMAT: &str = "bps";
-const CREATE_PATCH_LARGE_DEFAULT_FORMAT: &str = "xdelta";
+use super::*;
+pub(super) const CREATE_PATCH_IPS_SIZE_LIMIT_BYTES: u64 = 16 * 1024 * 1024;
+pub(super) const CREATE_PATCH_ARCHIVE_DEFAULT_LIMIT_BYTES: u64 = 64 * 1024 * 1024;
+pub(super) const CREATE_PATCH_BPS_DEFAULT_LIMIT_BYTES: u64 = 128 * 1024 * 1024;
+pub(super) const CREATE_PATCH_LEGACY_SIZE_LIMIT_BYTES: u64 = 256 * 1024 * 1024;
+pub(super) const CREATE_PATCH_DEFAULT_FORMAT: &str = "bps";
+pub(super) const CREATE_PATCH_LARGE_DEFAULT_FORMAT: &str = "xdelta";
 
-const SMALL_CREATE_PATCH_FORMATS: &[&str] = &[
+pub(super) const SMALL_CREATE_PATCH_FORMATS: &[&str] = &[
     "bps", "xdelta", "aps", "bdf", "ebp", "ips", "pmsr", "ppf", "rup", "ups",
 ];
-const MEDIUM_CREATE_PATCH_FORMATS: &[&str] =
+pub(super) const MEDIUM_CREATE_PATCH_FORMATS: &[&str] =
     &["bps", "xdelta", "aps", "bdf", "pmsr", "ppf", "rup", "ups"];
-const MID_LARGE_CREATE_PATCH_FORMATS: &[&str] =
+pub(super) const MID_LARGE_CREATE_PATCH_FORMATS: &[&str] =
     &["xdelta", "bps", "aps", "bdf", "pmsr", "ppf", "rup", "ups"];
-const LARGE_CREATE_PATCH_FORMATS: &[&str] = &["xdelta", "ppf"];
-const CREATE_PATCH_ARCHIVE_DEFAULT_EXTENSIONS: &[&str] = &[
+pub(super) const LARGE_CREATE_PATCH_FORMATS: &[&str] = &["xdelta", "ppf"];
+pub(super) const CREATE_PATCH_ARCHIVE_DEFAULT_EXTENSIONS: &[&str] = &[
     ".7z",
     ".apk",
     ".br",
@@ -66,14 +67,14 @@ const CREATE_PATCH_ARCHIVE_DEFAULT_EXTENSIONS: &[&str] = &[
     ".zst",
     ".zstd",
 ];
-const CREATE_PATCH_SPECIAL_COMPRESSION_EXTENSIONS: &[&str] = &[
+pub(super) const CREATE_PATCH_SPECIAL_COMPRESSION_EXTENSIONS: &[&str] = &[
     ".chd", ".rvz", ".gcz", ".wia", ".z3ds", ".z3dsx", ".zcci", ".zcia", ".zcxi",
 ];
-const LIBRETRO_PATCH_ORDER_EXTENSIONS: &[&str] = &[
-    ".ips", ".ups", ".bps", ".aps", ".rup", ".ppf", ".ebp", ".bdf", ".bsp",
-    ".bspatch", ".mod", ".xdelta", ".delta", ".dat", ".vcdiff",
+pub(super) const LIBRETRO_PATCH_ORDER_EXTENSIONS: &[&str] = &[
+    ".ips", ".ups", ".bps", ".aps", ".rup", ".ppf", ".ebp", ".bdf", ".bsp", ".bspatch", ".mod",
+    ".xdelta", ".delta", ".dat", ".vcdiff",
 ];
-const CREATE_PATCH_FORMAT_ALIASES: &[(&str, &str)] = &[
+pub(super) const CREATE_PATCH_FORMAT_ALIASES: &[(&str, &str)] = &[
     ("vcdiff", "xdelta"),
     ("xdelta3", "xdelta"),
     ("mod", "pmsr"),
@@ -113,43 +114,43 @@ pub fn patch_create_format_policy_metadata() -> PatchCreateFormatPolicyMetadata 
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct PatchCreateInputSizes {
+pub(super) struct PatchCreateInputSizes {
     original: u64,
     modified: u64,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-struct PatchCreateSourceInfo {
+pub(super) struct PatchCreateSourceInfo {
     archive: bool,
     size: u64,
     special_compression: bool,
 }
 
 #[derive(Debug, Default)]
-struct DiscoveredPatchApplySidecars {
+pub(super) struct DiscoveredPatchApplySidecars {
     patches: Vec<PathBuf>,
     cleanup_paths: Vec<PathBuf>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-struct ResolvedSidecarPatchEntry {
+pub(super) struct ResolvedSidecarPatchEntry {
     entry: ContainerListEntry,
     order: u32,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-struct PatchCreateInputInfo {
+pub(super) struct PatchCreateInputInfo {
     original: PatchCreateSourceInfo,
     modified: PatchCreateSourceInfo,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct PatchCreateFormatCandidates {
+pub(super) struct PatchCreateFormatCandidates {
     formats: &'static [&'static str],
     default_format: &'static str,
 }
 
-fn normalize_create_patch_format(format: &str) -> String {
+pub(super) fn normalize_create_patch_format(format: &str) -> String {
     let normalized = format.trim().to_ascii_lowercase();
     match CREATE_PATCH_FORMAT_ALIASES
         .iter()
@@ -160,18 +161,20 @@ fn normalize_create_patch_format(format: &str) -> String {
     }
 }
 
-fn max_create_patch_input_size(sizes: PatchCreateInputSizes) -> u64 {
+pub(super) fn max_create_patch_input_size(sizes: PatchCreateInputSizes) -> u64 {
     sizes.original.max(sizes.modified)
 }
 
-fn create_patch_input_sizes(info: &PatchCreateInputInfo) -> PatchCreateInputSizes {
+pub(super) fn create_patch_input_sizes(info: &PatchCreateInputInfo) -> PatchCreateInputSizes {
     PatchCreateInputSizes {
         original: info.original.size,
         modified: info.modified.size,
     }
 }
 
-fn create_patch_formats_for_sizes(sizes: PatchCreateInputSizes) -> &'static [&'static str] {
+pub(super) fn create_patch_formats_for_sizes(
+    sizes: PatchCreateInputSizes,
+) -> &'static [&'static str] {
     let max_size = max_create_patch_input_size(sizes);
     if max_size > CREATE_PATCH_LEGACY_SIZE_LIMIT_BYTES {
         return LARGE_CREATE_PATCH_FORMATS;
@@ -185,23 +188,24 @@ fn create_patch_formats_for_sizes(sizes: PatchCreateInputSizes) -> &'static [&'s
     SMALL_CREATE_PATCH_FORMATS
 }
 
-fn create_patch_source_matches_extension(path: &Path, extensions: &[&str]) -> bool {
+pub(super) fn create_patch_source_matches_extension(path: &Path, extensions: &[&str]) -> bool {
     let normalized_path = path.to_string_lossy().to_ascii_lowercase();
     extensions
         .iter()
         .any(|extension| normalized_path.ends_with(extension))
 }
 
-fn create_patch_default_format_for_sources(info: &PatchCreateInputInfo) -> &'static str {
+pub(super) fn create_patch_default_format_for_sources(info: &PatchCreateInputInfo) -> &'static str {
     let sources = [&info.original, &info.modified];
     if sources.iter().any(|source| source.special_compression)
-        || sources.iter().any(|source| {
-            source.archive && source.size > CREATE_PATCH_ARCHIVE_DEFAULT_LIMIT_BYTES
-        })
+        || sources
+            .iter()
+            .any(|source| source.archive && source.size > CREATE_PATCH_ARCHIVE_DEFAULT_LIMIT_BYTES)
     {
         return CREATE_PATCH_LARGE_DEFAULT_FORMAT;
     }
-    if max_create_patch_input_size(create_patch_input_sizes(info)) < CREATE_PATCH_BPS_DEFAULT_LIMIT_BYTES
+    if max_create_patch_input_size(create_patch_input_sizes(info))
+        < CREATE_PATCH_BPS_DEFAULT_LIMIT_BYTES
     {
         CREATE_PATCH_DEFAULT_FORMAT
     } else {
@@ -209,14 +213,16 @@ fn create_patch_default_format_for_sources(info: &PatchCreateInputInfo) -> &'sta
     }
 }
 
-fn create_patch_format_candidates_for_sources(info: &PatchCreateInputInfo) -> PatchCreateFormatCandidates {
+pub(super) fn create_patch_format_candidates_for_sources(
+    info: &PatchCreateInputInfo,
+) -> PatchCreateFormatCandidates {
     PatchCreateFormatCandidates {
         formats: create_patch_formats_for_sizes(create_patch_input_sizes(info)),
         default_format: create_patch_default_format_for_sources(info),
     }
 }
 
-fn create_patch_format_size_error_message(
+pub(super) fn create_patch_format_size_error_message(
     format: &str,
     sizes: PatchCreateInputSizes,
 ) -> Option<String> {
@@ -241,7 +247,7 @@ fn create_patch_format_size_error_message(
 
 /* jscpd:ignore-start */
 impl CliApp {
-    fn inspect_patch_create_input_sizes(
+    pub(super) fn inspect_patch_create_input_sizes(
         &self,
         command: &str,
         format: Option<String>,
@@ -285,7 +291,7 @@ impl CliApp {
         })
     }
 
-    fn inspect_patch_create_input_info(
+    pub(super) fn inspect_patch_create_input_info(
         &self,
         command: &str,
         format: Option<String>,
@@ -326,20 +332,26 @@ impl CliApp {
         })
     }
 
-    fn archive_entry_directory(entry_name: &str) -> &str {
-        entry_name.rsplit_once('/').map(|(dir, _)| dir).unwrap_or("")
+    pub(super) fn archive_entry_directory(entry_name: &str) -> &str {
+        entry_name
+            .rsplit_once('/')
+            .map(|(dir, _)| dir)
+            .unwrap_or("")
     }
 
-    fn archive_entry_file_name(entry_name: &str) -> &str {
+    pub(super) fn archive_entry_file_name(entry_name: &str) -> &str {
         entry_name.rsplit('/').next().unwrap_or(entry_name)
     }
 
-    fn archive_entry_stem(entry_name: &str) -> &str {
+    pub(super) fn archive_entry_stem(entry_name: &str) -> &str {
         let file_name = Self::archive_entry_file_name(entry_name);
-        file_name.rsplit_once('.').map(|(stem, _)| stem).unwrap_or(file_name)
+        file_name
+            .rsplit_once('.')
+            .map(|(stem, _)| stem)
+            .unwrap_or(file_name)
     }
 
-    fn strip_bracket_label_suffix(value: &str) -> &str {
+    pub(super) fn strip_bracket_label_suffix(value: &str) -> &str {
         let Some(end) = value.strip_suffix(']') else {
             return value.trim();
         };
@@ -349,7 +361,7 @@ impl CliApp {
         base.trim_end()
     }
 
-    fn parse_libretro_patch_file_name(file_name: &str) -> Option<(&str, u32)> {
+    pub(super) fn parse_libretro_patch_file_name(file_name: &str) -> Option<(&str, u32)> {
         let lower = file_name.to_ascii_lowercase();
         let mut best: Option<(usize, usize, u32)> = None;
         for extension in LIBRETRO_PATCH_ORDER_EXTENSIONS {
@@ -380,12 +392,17 @@ impl CliApp {
             }
         }
         let (extension_start, _, order) = best?;
-        Some((Self::strip_bracket_label_suffix(&file_name[..extension_start]), order))
+        Some((
+            Self::strip_bracket_label_suffix(&file_name[..extension_start]),
+            order,
+        ))
     }
 
-    fn entry_matches_libretro_sidecar(rom_entry: &str, patch_entry: &str) -> Option<u32> {
-        if Self::archive_entry_directory(rom_entry) != Self::archive_entry_directory(patch_entry)
-        {
+    pub(super) fn entry_matches_libretro_sidecar(
+        rom_entry: &str,
+        patch_entry: &str,
+    ) -> Option<u32> {
+        if Self::archive_entry_directory(rom_entry) != Self::archive_entry_directory(patch_entry) {
             return None;
         }
         let patch_file_name = Self::archive_entry_file_name(patch_entry);
@@ -399,7 +416,7 @@ impl CliApp {
         }
     }
 
-    fn selected_libretro_rom_entry(
+    pub(super) fn selected_libretro_rom_entry(
         archive_path: &Path,
         select: &[String],
         entries: &[ContainerListEntry],
@@ -429,7 +446,7 @@ impl CliApp {
         }
     }
 
-    fn discover_patch_apply_sidecars(
+    pub(super) fn discover_patch_apply_sidecars(
         &self,
         input: &Path,
         select: &[String],
@@ -535,7 +552,7 @@ impl CliApp {
         })
     }
 
-    fn run_patch_apply(&self, args: PatchApplyCommand) -> AppRunOutcome {
+    pub(super) fn run_patch_apply(&self, args: PatchApplyCommand) -> AppRunOutcome {
         trace!(
             input = %args.input.display(),
             selections = args.select.len(),
@@ -584,7 +601,8 @@ impl CliApp {
             threads,
         } = args;
         let discover_implicit_patches = patches.is_empty() && !no_extract;
-        let input_kind_filter = Self::archive_entry_kind_filter(rom_filter || discover_implicit_patches, false);
+        let input_kind_filter =
+            Self::archive_entry_kind_filter(rom_filter || discover_implicit_patches, false);
         let patch_kind_filter = Self::archive_entry_kind_filter(false, patch_filter);
         let context = self
             .context(threads)
@@ -1051,14 +1069,15 @@ impl CliApp {
                     output: apply_output.clone(),
                 };
                 let progress_tracker = Arc::new(PatchApplyProgressTracker::default());
-                let patch_context = context.clone().with_progress_sink(Arc::new(
-                    PatchApplyProgressSink::new(
-                        context.progress_sink(),
-                        index,
-                        patch_count,
-                        progress_tracker.clone(),
-                    ),
-                ));
+                let patch_context =
+                    context
+                        .clone()
+                        .with_progress_sink(Arc::new(PatchApplyProgressSink::new(
+                            context.progress_sink(),
+                            index,
+                            patch_count,
+                            progress_tracker.clone(),
+                        )));
                 report = match handler.apply(&request, &patch_context) {
                     Ok(report) => report,
                     Err(RomWeaverError::Unsupported(label)) => OperationReport::unsupported(
@@ -1223,7 +1242,8 @@ impl CliApp {
             if !extracted_patch_notes.is_empty() {
                 report.label = format!("{}; {}", report.label, extracted_patch_notes.join("; "));
             }
-            if report.status == OperationStatus::Succeeded && !expected_output_checksums.is_empty() {
+            if report.status == OperationStatus::Succeeded && !expected_output_checksums.is_empty()
+            {
                 self.emit_running(
                     OperationLabel {
                         command: "patch-apply",
@@ -1402,7 +1422,7 @@ impl CliApp {
         self.finish("patch-apply", report)
     }
 
-    fn patch_apply_raw_output_path(
+    pub(super) fn patch_apply_raw_output_path(
         requested_output: &Path,
         extension_source: &Path,
         context: &OperationContext,
@@ -1430,7 +1450,7 @@ impl CliApp {
         Ok(raw_output)
     }
 
-    fn stage_patch_apply_archive_input(
+    pub(super) fn stage_patch_apply_archive_input(
         raw_ready_output: &Path,
         requested_output: &Path,
         extension_source: &Path,
@@ -1471,7 +1491,7 @@ impl CliApp {
         )))
     }
 
-    fn patch_apply_archive_entry_file_name(
+    pub(super) fn patch_apply_archive_entry_file_name(
         requested_output: &Path,
         extension_source: &Path,
     ) -> std::ffi::OsString {
@@ -1504,7 +1524,7 @@ impl CliApp {
         archive_entry_path.as_os_str().to_os_string()
     }
 
-    fn strip_archive_extension(file_name: &str) -> String {
+    pub(super) fn strip_archive_extension(file_name: &str) -> String {
         let lower = file_name.to_ascii_lowercase();
         for extension in [".zipx", ".zip", ".7z"] {
             if lower.ends_with(extension) {
@@ -1515,7 +1535,7 @@ impl CliApp {
         file_name.to_string()
     }
 
-    fn run_patch_validate(&self, args: PatchValidateCommand) -> AppRunOutcome {
+    pub(super) fn run_patch_validate(&self, args: PatchValidateCommand) -> AppRunOutcome {
         trace!(
             input = %args.input.display(),
             selections = args.select.len(),
@@ -1657,7 +1677,11 @@ impl CliApp {
             let patch_source_label = if patches.len() == 1 {
                 "patch validate patch source".to_string()
             } else {
-                format!("patch validate patch {}/{} source", index + 1, patches.len())
+                format!(
+                    "patch validate patch {}/{} source",
+                    index + 1,
+                    patches.len()
+                )
             };
             let resolved_patch = match self.resolve_source_with_auto_extract(
                 patch_path,
@@ -1988,8 +2012,9 @@ impl CliApp {
                         Some(handler.descriptor().name.to_string()),
                         "validate",
                         report.label,
-                        report.thread_execution
-                            .or_else(|| Some(context.plan_threads(ThreadCapability::single_threaded()))),
+                        report.thread_execution.or_else(|| {
+                            Some(context.plan_threads(ThreadCapability::single_threaded()))
+                        }),
                     );
                 }
                 if !progress_tracker.saw_meaningful_running_progress() {
@@ -2069,7 +2094,10 @@ impl CliApp {
         self.finish("patch-validate", report)
     }
 
-    fn run_patch_create_candidates(&self, args: PatchCreateCandidatesCommand) -> AppRunOutcome {
+    pub(super) fn run_patch_create_candidates(
+        &self,
+        args: PatchCreateCandidatesCommand,
+    ) -> AppRunOutcome {
         trace!(
             original = %args.original.display(),
             modified = %args.modified.display(),
@@ -2156,7 +2184,7 @@ impl CliApp {
     /// with the extension; and an extensionless output with no flag is an error. The resolved name
     /// is normalized via [`normalize_create_patch_format`]; capability/registration checks stay in
     /// the caller so the existing patch-create error messages are reused.
-    fn resolve_patch_create_format(
+    pub(super) fn resolve_patch_create_format(
         &self,
         flag: Option<&str>,
         output: &Path,
@@ -2222,7 +2250,7 @@ impl CliApp {
         }
     }
 
-    fn run_patch_create(&self, args: PatchCreateCommand) -> AppRunOutcome {
+    pub(super) fn run_patch_create(&self, args: PatchCreateCommand) -> AppRunOutcome {
         trace!(
             original = %args.original.display(),
             modified = %args.modified.display(),
@@ -2257,22 +2285,22 @@ impl CliApp {
                 PatchChecksumValidation::Strict
             })
             .with_xdelta_secondary_mode(xdelta_secondary_mode);
-        let resolution = match self.resolve_patch_create_format(args.format.as_deref(), &args.output)
-        {
-            Ok(resolution) => resolution,
-            Err(error) => {
-                return self.finish(
-                    "patch-create",
-                    OperationReport::failed(
-                        OperationFamily::Patch,
-                        args.format.clone(),
-                        "validate",
-                        error.to_string(),
-                        probe_threads,
-                    ),
-                );
-            }
-        };
+        let resolution =
+            match self.resolve_patch_create_format(args.format.as_deref(), &args.output) {
+                Ok(resolution) => resolution,
+                Err(error) => {
+                    return self.finish(
+                        "patch-create",
+                        OperationReport::failed(
+                            OperationFamily::Patch,
+                            args.format.clone(),
+                            "validate",
+                            error.to_string(),
+                            probe_threads,
+                        ),
+                    );
+                }
+            };
         let requested_format = resolution.format;
         let format_warning = resolution.warning;
         if let Some(warning) = format_warning.as_deref() {
@@ -2389,7 +2417,7 @@ impl CliApp {
         self.finish("patch-create", report)
     }
 
-    fn parse_patch_apply_checksum_values(
+    pub(super) fn parse_patch_apply_checksum_values(
         values: &[String],
         flag_name: &str,
     ) -> Result<BTreeMap<String, String>> {
@@ -2468,7 +2496,7 @@ impl CliApp {
         Ok(parsed)
     }
 
-    fn validate_patch_apply_expected_checksums(
+    pub(super) fn validate_patch_apply_expected_checksums(
         source: &Path,
         expected: &BTreeMap<String, String>,
         checksum_hints: &BTreeMap<String, String>,
@@ -2490,7 +2518,9 @@ impl CliApp {
             checksum_file_values(source, &algorithms, context)?
         };
         for (algorithm, expected_value) in expected {
-            let Some(actual_value) = checksum_hints.get(algorithm).or_else(|| actual.get(algorithm))
+            let Some(actual_value) = checksum_hints
+                .get(algorithm)
+                .or_else(|| actual.get(algorithm))
             else {
                 return Err(RomWeaverError::Validation(format!(
                     "checksum engine did not return `{algorithm}` while validating {scope} checksums"
@@ -2511,7 +2541,7 @@ impl CliApp {
         Ok(format!("{scope} checksum(s) verified ({rendered})"))
     }
 
-    fn validate_patch_input_size(
+    pub(super) fn validate_patch_input_size(
         source: &Path,
         expected_size: Option<u64>,
         minimum_size: Option<u64>,
@@ -2546,7 +2576,7 @@ impl CliApp {
         }
     }
 
-    fn checksum_hex_len(algorithm: &str) -> Option<usize> {
+    pub(super) fn checksum_hex_len(algorithm: &str) -> Option<usize> {
         match algorithm {
             "crc16" => Some(4),
             "crc32" | "crc32c" | "adler32" => Some(8),
@@ -2559,23 +2589,23 @@ impl CliApp {
 }
 
 #[derive(Debug, Default)]
-struct PatchApplyProgressTracker {
+pub(super) struct PatchApplyProgressTracker {
     saw_meaningful_running_progress: std::sync::atomic::AtomicBool,
 }
 
 impl PatchApplyProgressTracker {
-    fn mark_meaningful_running_progress(&self) {
+    pub(super) fn mark_meaningful_running_progress(&self) {
         self.saw_meaningful_running_progress
             .store(true, std::sync::atomic::Ordering::Relaxed);
     }
 
-    fn saw_meaningful_running_progress(&self) -> bool {
+    pub(super) fn saw_meaningful_running_progress(&self) -> bool {
         self.saw_meaningful_running_progress
             .load(std::sync::atomic::Ordering::Relaxed)
     }
 }
 
-struct PatchApplyProgressSink {
+pub(super) struct PatchApplyProgressSink {
     inner: Arc<dyn ProgressSink>,
     output_command: &'static str,
     output_stage: &'static str,
@@ -2585,16 +2615,23 @@ struct PatchApplyProgressSink {
 }
 
 impl PatchApplyProgressSink {
-    fn new(
+    pub(super) fn new(
         inner: Arc<dyn ProgressSink>,
         patch_index: usize,
         patch_count: usize,
         tracker: Arc<PatchApplyProgressTracker>,
     ) -> Self {
-        Self::new_for_command(inner, patch_index, patch_count, tracker, "patch-apply", "apply")
+        Self::new_for_command(
+            inner,
+            patch_index,
+            patch_count,
+            tracker,
+            "patch-apply",
+            "apply",
+        )
     }
 
-    fn new_for_command(
+    pub(super) fn new_for_command(
         inner: Arc<dyn ProgressSink>,
         patch_index: usize,
         patch_count: usize,
@@ -2615,7 +2652,10 @@ impl PatchApplyProgressSink {
 
 impl ProgressSink for PatchApplyProgressSink {
     fn emit(&self, mut event: ProgressEvent) {
-        if event.command == "patch-apply" && event.status == OperationStatus::Running && event.stage == "apply" {
+        if event.command == "patch-apply"
+            && event.status == OperationStatus::Running
+            && event.stage == "apply"
+        {
             event.command = self.output_command.to_string();
             event.stage = self.output_stage.to_string();
             if let Some(percent) = event.percent
@@ -2624,7 +2664,8 @@ impl ProgressSink for PatchApplyProgressSink {
                 let clamped = percent.clamp(0.0, 100.0);
                 let scaled = if self.segment_end_percent > self.segment_start_percent {
                     self.segment_start_percent
-                        + (clamped / 100.0) * (self.segment_end_percent - self.segment_start_percent)
+                        + (clamped / 100.0)
+                            * (self.segment_end_percent - self.segment_start_percent)
                 } else {
                     self.segment_end_percent
                 };
@@ -2640,7 +2681,7 @@ impl ProgressSink for PatchApplyProgressSink {
     }
 }
 
-fn patch_progress_segment_start(index: usize, patch_count: usize) -> f32 {
+pub(super) fn patch_progress_segment_start(index: usize, patch_count: usize) -> f32 {
     if patch_count <= 1 {
         0.0
     } else {
@@ -2648,7 +2689,7 @@ fn patch_progress_segment_start(index: usize, patch_count: usize) -> f32 {
     }
 }
 
-fn patch_progress_segment_end(index: usize, patch_count: usize) -> f32 {
+pub(super) fn patch_progress_segment_end(index: usize, patch_count: usize) -> f32 {
     if patch_count <= 1 {
         100.0
     } else {

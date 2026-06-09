@@ -303,7 +303,7 @@ type CompressionWorkerRequest = {
   operation: CompressionWorkerOperation;
   requestId?: WorkerRequestId;
   rvzBlockSize?: string | number | null;
-  rvzCompression?: string;
+  rvzCodec?: string;
   rvzCompressionLevel?: string | number | null;
   rvzFile?: BrowserWorkerFile;
   rvzFileName?: string;

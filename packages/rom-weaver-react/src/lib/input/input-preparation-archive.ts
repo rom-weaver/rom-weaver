@@ -3,6 +3,7 @@ import type { SourceObject, SourceRef } from "../../types/source.ts";
 import type { ApplyWorkflowOptions, CreateWorkflowOptions } from "../../types/workflow-runtime.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import { createArchiveSourceBlob } from "../archive-utils.ts";
+import { CREATE_ROM_SPECIFIC_COMPRESSION_FORMATS } from "../compression/container-format-registry.ts";
 import { RomWeaverError } from "../errors.ts";
 import { getPathBaseName } from "../path-utils.ts";
 import { createPatchFileFromPublicOutput } from "../runtime/public-output-bin-file.ts";
@@ -92,7 +93,7 @@ const PATCH_MAGIC_BY_EXTENSION = {
   ips: "PATCH",
   ups: "UPS1",
 } as const;
-const PATH_BACKED_COMPRESSION_FORMATS = new Set(["chd", "rvz", "z3ds"]);
+const PATH_BACKED_COMPRESSION_FORMATS = new Set<string>(CREATE_ROM_SPECIFIC_COMPRESSION_FORMATS);
 const SYNC_READ_ARCHIVE_ENTRY_REGEX =
   /\.(?:cue|ips|ups|bps|aps|rup|ppf|ebp|bdf|bsp|bspatch|mod|xdelta|delta|dat|vcdiff)\d*$/i;
 const validatedPatchArchiveEntriesByFile = new WeakMap<PatchFileInstance, ValidatedPatchArchiveEntryCache>();

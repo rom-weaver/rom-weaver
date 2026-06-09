@@ -1,27 +1,28 @@
+use super::*;
 /// The destination and selection settings for an extract-with-interactive-fallback call,
 /// grouped so the helper takes one descriptor instead of six positional arguments.
 #[derive(Clone, Copy)]
-struct SelectionExtract<'a> {
-    out_dir: &'a Path,
-    selections: &'a [String],
-    kind_filter: ArchiveEntryKindFilter,
-    split_bin: bool,
-    ignore_common_files: bool,
-    overwrite: bool,
-    source_label: &'a str,
+pub(super) struct SelectionExtract<'a> {
+    pub(super) out_dir: &'a Path,
+    pub(super) selections: &'a [String],
+    pub(super) kind_filter: ArchiveEntryKindFilter,
+    pub(super) split_bin: bool,
+    pub(super) ignore_common_files: bool,
+    pub(super) overwrite: bool,
+    pub(super) source_label: &'a str,
 }
 
 #[derive(Clone, Copy)]
-struct SelectionResolutionOptions<'a> {
-    kind_filter: ArchiveEntryKindFilter,
-    split_bin: bool,
-    ignore_common_files: bool,
-    source_label: &'a str,
+pub(super) struct SelectionResolutionOptions<'a> {
+    pub(super) kind_filter: ArchiveEntryKindFilter,
+    pub(super) split_bin: bool,
+    pub(super) ignore_common_files: bool,
+    pub(super) source_label: &'a str,
 }
 
 /// Identifies the inner payload selected from a tar stream for the streamed-checksum fast path.
 #[derive(Clone, Copy)]
-struct TarStreamCandidate<'a> {
+pub(super) struct TarStreamCandidate<'a> {
     tar_format: &'a str,
     candidate_name: &'a str,
     candidate_index: usize,
@@ -30,7 +31,7 @@ struct TarStreamCandidate<'a> {
 /// The checksum command's stream/auto-extract option flags, grouped so the streaming-checksum
 /// helpers take one descriptor instead of threading eight individual arguments.
 #[derive(Clone, Copy)]
-struct ChecksumStreamOptions<'a> {
+pub(super) struct ChecksumStreamOptions<'a> {
     algo: &'a [String],
     select: &'a [String],
     kind_filter: ArchiveEntryKindFilter,
@@ -42,18 +43,18 @@ struct ChecksumStreamOptions<'a> {
     length: Option<u64>,
 }
 
-struct ExtractStepEvent<'a> {
-    format: &'a str,
-    depth: usize,
-    source: &'a Path,
-    out_dir: &'a Path,
-    step_status: &'a str,
-    outputs: &'a [Value],
-    thread_execution: Option<ThreadExecution>,
+pub(super) struct ExtractStepEvent<'a> {
+    pub(super) format: &'a str,
+    pub(super) depth: usize,
+    pub(super) source: &'a Path,
+    pub(super) out_dir: &'a Path,
+    pub(super) step_status: &'a str,
+    pub(super) outputs: &'a [Value],
+    pub(super) thread_execution: Option<ThreadExecution>,
 }
 
 impl CliApp {
-    fn new(
+    pub(super) fn new(
         reporter: Arc<dyn ProgressSink>,
         prompter: Arc<dyn SelectionPrompter>,
         emit_progress_events: bool,
@@ -70,7 +71,7 @@ impl CliApp {
         }
     }
 
-    fn run(&self, command: Commands) -> AppRunOutcome {
+    pub(super) fn run(&self, command: Commands) -> AppRunOutcome {
         let command_name = Self::command_name(&command);
         trace!(command = command_name, "dispatching CLI command");
         match command {
@@ -90,7 +91,7 @@ impl CliApp {
         }
     }
 
-    fn command_name(command: &Commands) -> &'static str {
+    pub(super) fn command_name(command: &Commands) -> &'static str {
         match command {
             Commands::Probe(_) => "probe",
             Commands::List(_) => "list",
@@ -106,11 +107,14 @@ impl CliApp {
         }
     }
 
-    fn archive_entry_kind_filter(rom_filter: bool, patch_filter: bool) -> ArchiveEntryKindFilter {
+    pub(super) fn archive_entry_kind_filter(
+        rom_filter: bool,
+        patch_filter: bool,
+    ) -> ArchiveEntryKindFilter {
         ArchiveEntryKindFilter::new(rom_filter, patch_filter)
     }
 
-    fn kind_filtered_container_list_entries(
+    pub(super) fn kind_filtered_container_list_entries(
         entries: &[ContainerListEntry],
         kind_filter: ArchiveEntryKindFilter,
         ignore_common_files: bool,
@@ -135,7 +139,7 @@ impl CliApp {
 
     /// Note that `--split-bin` was ignored when listing a container that does not support it (only
     /// CHD CD listing honors split CUE + per-track BIN output).
-    fn attach_split_bin_list_note(
+    pub(super) fn attach_split_bin_list_note(
         mut report: OperationReport,
         handler: &dyn ContainerHandler,
         split_bin: bool,
@@ -150,7 +154,7 @@ impl CliApp {
         report
     }
 
-    fn run_probe(&self, args: ProbeCommand) -> AppRunOutcome {
+    pub(super) fn run_probe(&self, args: ProbeCommand) -> AppRunOutcome {
         let ProbeCommand {
             source,
             select,
@@ -361,7 +365,7 @@ impl CliApp {
         self.finish_probe(report, extracted_archives, cleanup_paths)
     }
 
-    fn finish_probe(
+    pub(super) fn finish_probe(
         &self,
         mut report: OperationReport,
         extracted_archives: usize,
@@ -377,7 +381,7 @@ impl CliApp {
         self.finish("probe", report)
     }
 
-    fn run_list(&self, args: ListCommand) -> AppRunOutcome {
+    pub(super) fn run_list(&self, args: ListCommand) -> AppRunOutcome {
         let ListCommand {
             source,
             select,
@@ -585,7 +589,7 @@ impl CliApp {
         self.finish_list(report, extracted_archives, cleanup_paths)
     }
 
-    fn finish_list(
+    pub(super) fn finish_list(
         &self,
         mut report: OperationReport,
         extracted_archives: usize,
@@ -601,7 +605,7 @@ impl CliApp {
         self.finish("list", report)
     }
 
-    fn build_container_list_report(
+    pub(super) fn build_container_list_report(
         &self,
         handler: &dyn ContainerHandler,
         source: &Path,
@@ -628,7 +632,7 @@ impl CliApp {
         )
     }
 
-    fn run_extract(&self, args: ExtractCommand) -> AppRunOutcome {
+    pub(super) fn run_extract(&self, args: ExtractCommand) -> AppRunOutcome {
         trace!(
             source = %args.source.display(),
             selections = args.select.len(),
@@ -885,7 +889,7 @@ impl CliApp {
         self.finish("extract", report)
     }
 
-    fn run_checksum(&self, args: ChecksumCommand) -> AppRunOutcome {
+    pub(super) fn run_checksum(&self, args: ChecksumCommand) -> AppRunOutcome {
         trace!(
             source = %args.source.display(),
             algorithm_count = args.algo.len(),
@@ -1240,7 +1244,7 @@ impl CliApp {
         self.finish("checksum", report)
     }
 
-    fn try_run_checksum_chd_raw_sha1_fast_path(
+    pub(super) fn try_run_checksum_chd_raw_sha1_fast_path(
         &self,
         source: &Path,
         options: &ChecksumStreamOptions,
@@ -1313,7 +1317,7 @@ impl CliApp {
         )))
     }
 
-    fn chd_raw_sha1_fast_path_entries_supported(entries: &[String]) -> bool {
+    pub(super) fn chd_raw_sha1_fast_path_entries_supported(entries: &[String]) -> bool {
         if entries.len() != 1 {
             return false;
         }
@@ -1321,7 +1325,9 @@ impl CliApp {
         entry.ends_with(".bin") || entry.ends_with(".iso") || entry.ends_with(".img")
     }
 
-    fn extract_chd_raw_sha1_from_probe_details(details: Option<&Value>) -> Option<String> {
+    pub(super) fn extract_chd_raw_sha1_from_probe_details(
+        details: Option<&Value>,
+    ) -> Option<String> {
         let details = details?;
         let Value::Object(map) = details else {
             return None;
@@ -1336,11 +1342,11 @@ impl CliApp {
         Some(value)
     }
 
-    fn is_valid_sha1_hex(value: &str) -> bool {
+    pub(super) fn is_valid_sha1_hex(value: &str) -> bool {
         value.len() == 40 && value.chars().all(|ch| ch.is_ascii_hexdigit())
     }
 
-    fn try_run_checksum_tar_stream_auto_extract(
+    pub(super) fn try_run_checksum_tar_stream_auto_extract(
         &self,
         source: &Path,
         options: &ChecksumStreamOptions,
@@ -1408,7 +1414,7 @@ impl CliApp {
         Ok(Some(report))
     }
 
-    fn run_checksum_tar_stream_auto_extract(
+    pub(super) fn run_checksum_tar_stream_auto_extract(
         &self,
         source: &Path,
         candidate: TarStreamCandidate,
@@ -1493,7 +1499,7 @@ impl CliApp {
         ))
     }
 
-    fn select_tar_stream_checksum_candidate(
+    pub(super) fn select_tar_stream_checksum_candidate(
         &self,
         source: &Path,
         tar_format: &str,
@@ -1542,7 +1548,7 @@ impl CliApp {
         Ok(selected.into_iter().next())
     }
 
-    fn select_streamed_checksum_auto_extract_format(
+    pub(super) fn select_streamed_checksum_auto_extract_format(
         &self,
         source: &Path,
         options: &ChecksumStreamOptions,
@@ -1592,7 +1598,7 @@ impl CliApp {
         Some(stream_format)
     }
 
-    fn run_checksum_stream_auto_extract(
+    pub(super) fn run_checksum_stream_auto_extract(
         &self,
         source: &Path,
         stream_format: &str,
@@ -1666,7 +1672,7 @@ impl CliApp {
         ))
     }
 
-    fn libarchive_read_filter_for_stream_format(
+    pub(super) fn libarchive_read_filter_for_stream_format(
         stream_format: &str,
     ) -> Result<LibarchiveReadFilter> {
         match stream_format {
@@ -1680,7 +1686,10 @@ impl CliApp {
         }
     }
 
-    fn inferred_stream_extract_output_path(source: &Path, stream_format: &str) -> Option<PathBuf> {
+    pub(super) fn inferred_stream_extract_output_path(
+        source: &Path,
+        stream_format: &str,
+    ) -> Option<PathBuf> {
         let file_name = source.file_name()?.to_str()?;
         let extension = match stream_format {
             "gz" => ".gz",
@@ -1712,7 +1721,7 @@ impl CliApp {
         Some(parent.join(output_name))
     }
 
-    fn render_streamed_checksum_label(
+    pub(super) fn render_streamed_checksum_label(
         algorithms: &[String],
         values: &BTreeMap<String, String>,
     ) -> String {
@@ -1738,7 +1747,7 @@ impl CliApp {
         }
     }
 
-    fn resolve_source_with_auto_extract(
+    pub(super) fn resolve_source_with_auto_extract(
         &self,
         source: &Path,
         select: &[String],
@@ -1760,7 +1769,7 @@ impl CliApp {
         )
     }
 
-    fn resolve_source_with_single_auto_extract(
+    pub(super) fn resolve_source_with_single_auto_extract(
         &self,
         source: &Path,
         select: &[String],
@@ -1783,7 +1792,7 @@ impl CliApp {
         )
     }
 
-    fn resolve_source_with_auto_extract_with_mode(
+    pub(super) fn resolve_source_with_auto_extract_with_mode(
         &self,
         source: &Path,
         select: &[String],
@@ -2137,7 +2146,7 @@ impl CliApp {
         })
     }
 
-    fn extract_with_selection_fallback(
+    pub(super) fn extract_with_selection_fallback(
         &self,
         handler: &dyn ContainerHandler,
         source: &Path,
@@ -2202,7 +2211,7 @@ impl CliApp {
     /// treated as ambiguous), auto-picks when there is exactly one, and otherwise prompts the host to
     /// choose one. Returns `None` when the container exposes no distinct payload candidate, in which
     /// case the caller extracts everything as before.
-    fn resolve_single_payload_selection(
+    pub(super) fn resolve_single_payload_selection(
         &self,
         handler: &dyn ContainerHandler,
         source: &Path,
@@ -2284,14 +2293,14 @@ impl CliApp {
         }
     }
 
-    fn is_selection_resolution_error(label: &str) -> bool {
+    pub(super) fn is_selection_resolution_error(label: &str) -> bool {
         let lower = label.to_ascii_lowercase();
         lower.contains("requested selections were not found")
             || lower.contains("requested selections resolved to no extractable")
             || lower.contains("does not support --select")
     }
 
-    fn prompt_for_container_selection(
+    pub(super) fn prompt_for_container_selection(
         &self,
         handler: &dyn ContainerHandler,
         source: &Path,
@@ -2347,7 +2356,7 @@ impl CliApp {
         Ok(selected_index.map(|index| prompt_candidates[index].value.clone()))
     }
 
-    fn prompt_for_checksum_candidate(
+    pub(super) fn prompt_for_checksum_candidate(
         &self,
         source: &Path,
         candidates: &[ChecksumExtractCandidate],
@@ -2386,7 +2395,9 @@ impl CliApp {
         Ok(selected_index.map(|index| candidates[index].clone()))
     }
 
-    fn render_checksum_candidate_choices(candidates: &[ChecksumExtractCandidate]) -> String {
+    pub(super) fn render_checksum_candidate_choices(
+        candidates: &[ChecksumExtractCandidate],
+    ) -> String {
         if candidates.is_empty() {
             return "(none)".to_string();
         }
@@ -2397,7 +2408,7 @@ impl CliApp {
             .join(", ")
     }
 
-    fn normalize_selection_entry_name(name: &str) -> String {
+    pub(super) fn normalize_selection_entry_name(name: &str) -> String {
         name.trim()
             .replace('\\', "/")
             .trim_start_matches("./")
@@ -2406,14 +2417,17 @@ impl CliApp {
     }
 
     #[cfg(test)]
-    fn parse_selection_input(input: &str, candidate_count: usize) -> ParsedSelectionInput {
+    pub(super) fn parse_selection_input(
+        input: &str,
+        candidate_count: usize,
+    ) -> ParsedSelectionInput {
         parse_selection_input(input, candidate_count)
     }
 
     /// Resolve a selection by delegating the terminal IO to the injected prompter. The control flow
     /// (candidate building, retries) stays here; only the rendering and stdin read live in the
     /// front-end's [`SelectionPrompter`].
-    fn prompt_for_selection(
+    pub(super) fn prompt_for_selection(
         &self,
         heading: &str,
         candidates: &[PromptCandidate],
@@ -2427,7 +2441,7 @@ impl CliApp {
         }
     }
 
-    fn cleanup_temp_paths(temp_paths: Vec<PathBuf>) {
+    pub(super) fn cleanup_temp_paths(temp_paths: Vec<PathBuf>) {
         for temp_path in temp_paths {
             match fs::metadata(&temp_path) {
                 Ok(metadata) if metadata.is_dir() => {
@@ -2441,7 +2455,7 @@ impl CliApp {
         }
     }
 
-    fn snapshot_file_tree(root: &Path) -> Result<HashMap<PathBuf, FileSnapshot>> {
+    pub(super) fn snapshot_file_tree(root: &Path) -> Result<HashMap<PathBuf, FileSnapshot>> {
         if !root.exists() {
             return Ok(HashMap::new());
         }
@@ -2478,7 +2492,7 @@ impl CliApp {
         Ok(snapshot)
     }
 
-    fn file_snapshot_for_path(path: &Path) -> Result<FileSnapshot> {
+    pub(super) fn file_snapshot_for_path(path: &Path) -> Result<FileSnapshot> {
         let metadata = fs::metadata(path)?;
         let modified_unix_nanos = metadata
             .modified()
@@ -2491,7 +2505,7 @@ impl CliApp {
         })
     }
 
-    fn collect_changed_files(
+    pub(super) fn collect_changed_files(
         root: &Path,
         baseline: &HashMap<PathBuf, FileSnapshot>,
     ) -> Result<Vec<PathBuf>> {
@@ -2507,7 +2521,7 @@ impl CliApp {
         Ok(changed)
     }
 
-    fn attach_emitted_files_details(
+    pub(super) fn attach_emitted_files_details(
         report: OperationReport,
         emitted_files: Vec<PathBuf>,
         default_kind: Option<&str>,
@@ -2526,7 +2540,7 @@ impl CliApp {
     /// Builds the `emitted_files` detail objects for the given paths, merging in any checksum (or
     /// other) fields already present for the same path in `report_details`. Used both by the
     /// single-level attach and by the nested descent, which captures each level's outputs.
-    fn build_emitted_file_detail_values(
+    pub(super) fn build_emitted_file_detail_values(
         report_details: Option<&Value>,
         emitted_files: &[PathBuf],
         default_kind: Option<&str>,
@@ -2566,7 +2580,7 @@ impl CliApp {
 
     /// Replaces the report's `emitted_files` detail with the given pre-built objects, preserving any
     /// other detail keys already present.
-    fn set_emitted_files_detail(
+    pub(super) fn set_emitted_files_detail(
         mut report: OperationReport,
         emitted: Vec<Value>,
     ) -> OperationReport {
@@ -2584,7 +2598,7 @@ impl CliApp {
     /// the whole command with a single terminal finish. The event status stays `Running` because
     /// the host treats `succeeded`/`failed` as the command terminal; the per-level lifecycle is
     /// carried in `details.extract_step.status` instead.
-    fn emit_extract_step(&self, event: ExtractStepEvent<'_>) {
+    pub(super) fn emit_extract_step(&self, event: ExtractStepEvent<'_>) {
         if !self.emit_progress_events {
             return;
         }
@@ -2668,23 +2682,26 @@ impl CliApp {
         });
     }
 
-    fn emitted_file_detail_key(entry: &Map<String, Value>) -> Option<String> {
+    pub(super) fn emitted_file_detail_key(entry: &Map<String, Value>) -> Option<String> {
         entry
             .get("path")
             .and_then(Value::as_str)
             .map(Self::normalize_emitted_path_string)
     }
 
-    fn normalized_emitted_path_key(path: &Path) -> String {
+    pub(super) fn normalized_emitted_path_key(path: &Path) -> String {
         let canonical = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
         Self::normalize_emitted_path_string(&canonical.to_string_lossy())
     }
 
-    fn normalize_emitted_path_string(path: &str) -> String {
+    pub(super) fn normalize_emitted_path_string(path: &str) -> String {
         path.replace('\\', "/")
     }
 
-    fn build_emitted_file_detail(path: &Path, default_kind: Option<&str>) -> Option<Value> {
+    pub(super) fn build_emitted_file_detail(
+        path: &Path,
+        default_kind: Option<&str>,
+    ) -> Option<Value> {
         let metadata = fs::metadata(path).ok()?;
         if !metadata.is_file() {
             return None;
@@ -2705,7 +2722,7 @@ impl CliApp {
         Some(Value::Object(entry))
     }
 
-    fn infer_emitted_file_kind(path: &Path) -> Option<&'static str> {
+    pub(super) fn infer_emitted_file_kind(path: &Path) -> Option<&'static str> {
         let file_name = path.file_name()?.to_string_lossy().to_ascii_lowercase();
         if file_name.ends_with(".cue") {
             return Some("cue");
@@ -2728,7 +2745,7 @@ impl CliApp {
         None
     }
 
-    fn collect_checksum_extract_candidates(
+    pub(super) fn collect_checksum_extract_candidates(
         &self,
         root: &Path,
     ) -> Result<Vec<ChecksumExtractCandidate>> {
@@ -2773,7 +2790,7 @@ impl CliApp {
         Ok(candidates)
     }
 
-    fn normalize_checksum_candidate_name(path: &Path) -> String {
+    pub(super) fn normalize_checksum_candidate_name(path: &Path) -> String {
         path.to_string_lossy()
             .replace('\\', "/")
             .trim_start_matches("./")
@@ -2781,7 +2798,7 @@ impl CliApp {
             .to_string()
     }
 
-    fn should_ignore_checksum_candidate(candidate_name: &str) -> bool {
+    pub(super) fn should_ignore_checksum_candidate(candidate_name: &str) -> bool {
         should_ignore_common_container_file(candidate_name)
     }
 }

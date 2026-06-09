@@ -1,14 +1,15 @@
+use super::*;
 /// Identifies the operation a progress event belongs to: the command name, its family, and the
 /// optional format. Grouped so `emit_running` takes one label instead of three positional values.
 #[derive(Clone, Copy)]
-struct OperationLabel<'a> {
-    command: &'a str,
-    family: OperationFamily,
-    format: Option<&'a str>,
+pub(super) struct OperationLabel<'a> {
+    pub(super) command: &'a str,
+    pub(super) family: OperationFamily,
+    pub(super) format: Option<&'a str>,
 }
 
 impl CliApp {
-    fn emit_running(
+    pub(super) fn emit_running(
         &self,
         op: OperationLabel,
         stage: impl Into<String>,
@@ -66,7 +67,7 @@ impl CliApp {
         });
     }
 
-    fn context(&self, thread_budget: ThreadBudget) -> OperationContext {
+    pub(super) fn context(&self, thread_budget: ThreadBudget) -> OperationContext {
         let temp_root = Self::default_temp_root();
         let reporter: Arc<dyn ProgressSink> = if self.emit_progress_events {
             self.reporter.clone()
@@ -78,7 +79,7 @@ impl CliApp {
         OperationContext::new(thread_budget, temp_root, reporter, CancellationToken::new())
     }
 
-    fn default_temp_root() -> PathBuf {
+    pub(super) fn default_temp_root() -> PathBuf {
         if let Some(pwd) = std::env::var_os("PWD").map(PathBuf::from)
             && pwd.is_absolute()
         {
@@ -88,7 +89,7 @@ impl CliApp {
         PathBuf::from("rom-weaver")
     }
 
-    fn runtime_process_id() -> u32 {
+    pub(super) fn runtime_process_id() -> u32 {
         #[cfg(target_family = "wasm")]
         {
             return 1;
@@ -100,7 +101,7 @@ impl CliApp {
         }
     }
 
-    fn resolve_codec_level(
+    pub(super) fn resolve_codec_level(
         codecs: Vec<String>,
         flag_name: &str,
     ) -> Result<(Option<String>, Option<i32>)> {
@@ -156,7 +157,7 @@ impl CliApp {
         Ok((Some(codec_entries.join("+")), level))
     }
 
-    fn parse_codec_entries(codecs: Vec<String>, flag_name: &str) -> Result<Vec<String>> {
+    pub(super) fn parse_codec_entries(codecs: Vec<String>, flag_name: &str) -> Result<Vec<String>> {
         let mut entries = Vec::new();
         for raw in codecs {
             let trimmed = raw.trim();
@@ -178,7 +179,7 @@ impl CliApp {
         Ok(entries)
     }
 
-    fn primary_codec_name(codec: Option<&str>) -> Option<&str> {
+    pub(super) fn primary_codec_name(codec: Option<&str>) -> Option<&str> {
         codec.and_then(|value| {
             value
                 .split([',', '+'])
@@ -187,7 +188,7 @@ impl CliApp {
         })
     }
 
-    fn resolve_compression_level_for_profile(
+    pub(super) fn resolve_compression_level_for_profile(
         format_name: &str,
         codec: Option<&str>,
         explicit_level: Option<i32>,
@@ -206,59 +207,49 @@ impl CliApp {
         }
     }
 
-    fn default_profile_codec_kind_for_format(format_name: &str) -> Option<ProfileCodecKind> {
+    pub(super) fn default_profile_codec_kind_for_format(
+        format_name: &str,
+    ) -> Option<ProfileCodecKind> {
         let normalized = format_name.trim().to_ascii_lowercase();
         if normalized == "chd" || normalized.starts_with("chd-") {
             return Some(ProfileCodecKind::Standard);
         }
         match normalized.as_str() {
-            "zip" | "7z" | "tar.gz" | "tar.bz2" | "tar.xz" | "gz" | "bz2" | "xz" | "wia" => {
-                Some(ProfileCodecKind::Standard)
-            }
-            "zipx" | "zst" | "zstd" | "rvz" | "z3ds" | "3ds" => Some(ProfileCodecKind::Zstd),
-            "tar" => Some(ProfileCodecKind::NoLevel),
+            "zip" | "7z" => Some(ProfileCodecKind::Standard),
+            "zst" | "zstd" | "zstandard" => Some(ProfileCodecKind::Zstd),
+            "rvz" | "z3ds" => Some(ProfileCodecKind::Zstd),
             _ => None,
         }
     }
 
-    fn profile_codec_kind_for_codec_name(codec_name: &str) -> Option<ProfileCodecKind> {
+    pub(super) fn profile_codec_kind_for_codec_name(codec_name: &str) -> Option<ProfileCodecKind> {
         let codec = codec_name.trim();
         if codec.is_empty() {
             return None;
         }
-        if codec.eq_ignore_ascii_case("cdzs")
-            || codec.eq_ignore_ascii_case("zstd")
-            || codec.eq_ignore_ascii_case("zst")
-            || codec.eq_ignore_ascii_case("zstandard")
-        {
-            return Some(ProfileCodecKind::Zstd);
-        }
-        if codec.eq_ignore_ascii_case("cdzl") || codec.eq_ignore_ascii_case("cdlz") {
-            return Some(ProfileCodecKind::Standard);
-        }
-        if codec.eq_ignore_ascii_case("flac") || codec.eq_ignore_ascii_case("cdfl") {
-            return Some(ProfileCodecKind::Standard);
-        }
-        if codec.eq_ignore_ascii_case("store")
-            || codec.eq_ignore_ascii_case("none")
-            || codec.eq_ignore_ascii_case("uncompressed")
-            || codec.eq_ignore_ascii_case("huffman")
-            || codec.eq_ignore_ascii_case("huff")
-            || codec.eq_ignore_ascii_case("avhuff")
-            || codec.eq_ignore_ascii_case("avhu")
-        {
-            return Some(ProfileCodecKind::NoLevel);
-        }
-        match parse_requested_codec(Some(codec)) {
-            RequestedCodec::Known(CanonicalCodec::Store) => Some(ProfileCodecKind::NoLevel),
-            RequestedCodec::Known(CanonicalCodec::Zstd) => Some(ProfileCodecKind::Zstd),
-            RequestedCodec::Known(CanonicalCodec::Huffman) => Some(ProfileCodecKind::NoLevel),
-            RequestedCodec::Known(_) => Some(ProfileCodecKind::Standard),
-            RequestedCodec::Unspecified | RequestedCodec::Unknown(_) => None,
+        compression_metadata()
+            .codecs
+            .iter()
+            .find(|metadata| {
+                metadata.name.eq_ignore_ascii_case(codec)
+                    || metadata
+                        .aliases
+                        .iter()
+                        .any(|alias| alias.eq_ignore_ascii_case(codec))
+            })
+            .and_then(|metadata| Self::profile_codec_kind_from_metadata_kind(metadata.profile_kind))
+    }
+
+    pub(super) fn profile_codec_kind_from_metadata_kind(kind: &str) -> Option<ProfileCodecKind> {
+        match kind {
+            "standard" => Some(ProfileCodecKind::Standard),
+            "zstd" => Some(ProfileCodecKind::Zstd),
+            "none" => Some(ProfileCodecKind::NoLevel),
+            _ => None,
         }
     }
 
-    fn parse_patch_apply_compression_options(
+    pub(super) fn parse_patch_apply_compression_options(
         no_compress: bool,
         compress_format: Option<String>,
         compress_codec: Vec<String>,
@@ -311,7 +302,7 @@ impl CliApp {
     /// given; an explicit flag wins (with a warning) when it disagrees with the extension; and an
     /// extensionless output with no flag is an error. Capability checks (extract-only, registered)
     /// are left to the caller so the existing per-command error messages are reused.
-    fn resolve_container_output_format(
+    pub(super) fn resolve_container_output_format(
         &self,
         flag: Option<&str>,
         output: &Path,
@@ -377,7 +368,7 @@ impl CliApp {
         }
     }
 
-    fn resolve_patch_apply_compression_plan(
+    pub(super) fn resolve_patch_apply_compression_plan(
         &self,
         requested_output: &Path,
         extension_source: &Path,
@@ -408,10 +399,9 @@ impl CliApp {
             ));
         }
         if !capabilities.create {
-            return Err(RomWeaverError::Validation(format!(
-                "{} is extract-only; supported create formats are 7z, zip, chd, rvz, and z3ds",
-                handler.descriptor().name
-            )));
+            return Err(RomWeaverError::Validation(
+                extract_only_create_validation_message(handler.descriptor().name),
+            ));
         }
         let resolved_format = handler.descriptor().name.to_string();
 
@@ -459,7 +449,7 @@ impl CliApp {
         })
     }
 
-    fn append_output_extension_if_missing(
+    pub(super) fn append_output_extension_if_missing(
         requested_output: &Path,
         extensions: &[&str],
         source_extension_hint: Option<&Path>,
@@ -499,7 +489,7 @@ impl CliApp {
         (appended_path, true)
     }
 
-    fn z3ds_compressed_extension_for_path(path: &Path) -> Option<&'static str> {
+    pub(super) fn z3ds_compressed_extension_for_path(path: &Path) -> Option<&'static str> {
         let extension = path.extension()?.to_str()?.trim().to_ascii_lowercase();
         match extension.as_str() {
             "cia" | "zcia" => Some(".zcia"),
@@ -511,7 +501,7 @@ impl CliApp {
         }
     }
 
-    fn normalize_trim_extension(extension: &str) -> Result<String> {
+    pub(super) fn normalize_trim_extension(extension: &str) -> Result<String> {
         let extension = extension.trim();
         if extension.is_empty() {
             return Err(RomWeaverError::Validation(
@@ -526,7 +516,7 @@ impl CliApp {
         Ok(extension.to_string())
     }
 
-    const fn default_trim_extension_pattern(operation: TrimOperation) -> &'static str {
+    pub(super) const fn default_trim_extension_pattern(operation: TrimOperation) -> &'static str {
         match operation {
             TrimOperation::Trim => "trim.{ext}",
             TrimOperation::Revert => "untrim.{ext}",

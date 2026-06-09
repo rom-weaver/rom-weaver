@@ -1,4 +1,5 @@
-fn decode_djw_secondary(input: &[u8], output_size: usize) -> Result<Vec<u8>> {
+use super::*;
+pub(super) fn decode_djw_secondary(input: &[u8], output_size: usize) -> Result<Vec<u8>> {
     if output_size == 0 {
         return Err(RomWeaverError::Validation(
             "xdelta djw secondary decoder invalid output size".into(),
@@ -132,7 +133,7 @@ fn decode_djw_secondary(input: &[u8], output_size: usize) -> Result<Vec<u8>> {
     Ok(output)
 }
 
-fn decode_djw_clclen_table(
+pub(super) fn decode_djw_clclen_table(
     state: &mut DjwBitState,
     input: &[u8],
     input_pos: &mut usize,
@@ -159,13 +160,13 @@ fn decode_djw_clclen_table(
     build_djw_decoder_table(&cl_clen, DJW_TOTAL_CODES, DJW_MAX_CLCLEN)
 }
 
-struct DjwDecodeOutput<'a> {
+pub(super) struct DjwDecodeOutput<'a> {
     elements: usize,
     skip_offset: usize,
     output: &'a mut [u8],
 }
 
-fn decode_djw_1_2(
+pub(super) fn decode_djw_1_2(
     state: &mut DjwBitState,
     input: &[u8],
     input_pos: &mut usize,
@@ -231,7 +232,7 @@ fn decode_djw_1_2(
     Ok(())
 }
 
-fn build_djw_decoder_table(
+pub(super) fn build_djw_decoder_table(
     code_lengths: &[u8],
     alphabet_size: usize,
     max_code_len: usize,
@@ -322,7 +323,7 @@ fn build_djw_decoder_table(
     })
 }
 
-fn decode_djw_symbol(
+pub(super) fn decode_djw_symbol(
     state: &mut DjwBitState,
     input: &[u8],
     input_pos: &mut usize,
@@ -374,7 +375,7 @@ fn decode_djw_symbol(
     ))
 }
 
-fn decode_djw_bits(
+pub(super) fn decode_djw_bits(
     state: &mut DjwBitState,
     input: &[u8],
     input_pos: &mut usize,
@@ -412,7 +413,7 @@ fn decode_djw_bits(
     Ok(value)
 }
 
-fn init_djw_clen_mtf(cl_mtf: &mut [u8]) {
+pub(super) fn init_djw_clen_mtf(cl_mtf: &mut [u8]) {
     if cl_mtf.len() < DJW_MAX_CODELEN + 1 {
         return;
     }
@@ -429,7 +430,7 @@ fn init_djw_clen_mtf(cl_mtf: &mut [u8]) {
     }
 }
 
-fn djw_update_mtf(mtf_values: &mut [u8], mtf_index: usize) -> Result<u8> {
+pub(super) fn djw_update_mtf(mtf_values: &mut [u8], mtf_index: usize) -> Result<u8> {
     if mtf_index >= mtf_values.len() {
         return Err(RomWeaverError::Validation(format!(
             "xdelta djw mtf index {mtf_index} is out of bounds"
@@ -445,21 +446,21 @@ fn djw_update_mtf(mtf_values: &mut [u8], mtf_index: usize) -> Result<u8> {
 }
 
 #[derive(Clone, Copy, Default)]
-struct DjwHeapNode {
+pub(super) struct DjwHeapNode {
     depth: u32,
     freq: u32,
     parent: usize,
 }
 
 #[derive(Clone)]
-struct DjwPrefix {
-    symbol: Vec<u8>,
-    mtfsym: Vec<u8>,
-    mcount: usize,
+pub(super) struct DjwPrefix {
+    pub(super) symbol: Vec<u8>,
+    pub(super) mtfsym: Vec<u8>,
+    pub(super) mcount: usize,
 }
 
 impl DjwPrefix {
-    fn new(symbol: Vec<u8>) -> Self {
+    pub(super) fn new(symbol: Vec<u8>) -> Self {
         Self {
             mtfsym: vec![0; symbol.len().max(1)],
             symbol,
@@ -468,7 +469,7 @@ impl DjwPrefix {
     }
 }
 
-fn djw_count_byte_frequencies(section: &[u8]) -> [u32; DJW_ALPHABET_SIZE] {
+pub(super) fn djw_count_byte_frequencies(section: &[u8]) -> [u32; DJW_ALPHABET_SIZE] {
     let mut freq = [0u32; DJW_ALPHABET_SIZE];
     for &byte in section {
         freq[usize::from(byte)] += 1;
@@ -476,12 +477,17 @@ fn djw_count_byte_frequencies(section: &[u8]) -> [u32; DJW_ALPHABET_SIZE] {
     freq
 }
 
-fn djw_heap_less(ents: &[DjwHeapNode], left: usize, right: usize) -> bool {
+pub(super) fn djw_heap_less(ents: &[DjwHeapNode], left: usize, right: usize) -> bool {
     ents[left].freq < ents[right].freq
         || (ents[left].freq == ents[right].freq && ents[left].depth < ents[right].depth)
 }
 
-fn djw_heap_insert(heap: &mut [usize], ents: &[DjwHeapNode], mut position: usize, entry: usize) {
+pub(super) fn djw_heap_insert(
+    heap: &mut [usize],
+    ents: &[DjwHeapNode],
+    mut position: usize,
+    entry: usize,
+) {
     let mut parent = position / 2;
     while djw_heap_less(ents, entry, heap[parent]) {
         heap[position] = heap[parent];
@@ -491,7 +497,11 @@ fn djw_heap_insert(heap: &mut [usize], ents: &[DjwHeapNode], mut position: usize
     heap[position] = entry;
 }
 
-fn djw_heap_extract(heap: &mut [usize], ents: &[DjwHeapNode], heap_last: usize) -> usize {
+pub(super) fn djw_heap_extract(
+    heap: &mut [usize],
+    ents: &[DjwHeapNode],
+    heap_last: usize,
+) -> usize {
     let smallest = heap[1];
     heap[1] = heap[heap_last + 1];
     let mut parent = 1usize;
@@ -512,7 +522,10 @@ fn djw_heap_extract(heap: &mut [usize], ents: &[DjwHeapNode], heap_last: usize) 
     smallest
 }
 
-fn djw_build_prefix_lengths(freq: &[u32], max_code_len: usize) -> Result<(Vec<u8>, usize)> {
+pub(super) fn djw_build_prefix_lengths(
+    freq: &[u32],
+    max_code_len: usize,
+) -> Result<(Vec<u8>, usize)> {
     if freq.is_empty() {
         return Err(RomWeaverError::Validation(
             "xdelta djw prefix builder received empty frequency input".into(),
@@ -610,7 +623,10 @@ fn djw_build_prefix_lengths(freq: &[u32], max_code_len: usize) -> Result<(Vec<u8
     }
 }
 
-fn djw_build_codes_from_lengths(code_lengths: &[u8], max_code_len: usize) -> Result<Vec<usize>> {
+pub(super) fn djw_build_codes_from_lengths(
+    code_lengths: &[u8],
+    max_code_len: usize,
+) -> Result<Vec<usize>> {
     let mut min_len = max_code_len;
     let mut max_len = 0usize;
     for &length in code_lengths {
@@ -651,7 +667,7 @@ fn djw_build_codes_from_lengths(code_lengths: &[u8], max_code_len: usize) -> Res
     Ok(codes)
 }
 
-fn djw_update_1_2(
+pub(super) fn djw_update_1_2(
     mtf_run: &mut usize,
     mtf_index: &mut usize,
     mtf_symbols: &mut [u8],
@@ -677,7 +693,7 @@ fn djw_update_1_2(
     Ok(())
 }
 
-fn djw_compute_mtf_1_2(
+pub(super) fn djw_compute_mtf_1_2(
     prefix: &mut DjwPrefix,
     mtf_values: &mut [u8],
     frequencies_out: &mut [u32],
@@ -743,13 +759,16 @@ fn djw_compute_mtf_1_2(
     Ok(())
 }
 
-fn djw_compute_prefix_1_2(prefix: &mut DjwPrefix, frequencies: &mut [u32]) -> Result<()> {
+pub(super) fn djw_compute_prefix_1_2(
+    prefix: &mut DjwPrefix,
+    frequencies: &mut [u32],
+) -> Result<()> {
     let mut code_len_mtf = [0u8; DJW_MAX_CODELEN + 1];
     init_djw_clen_mtf(&mut code_len_mtf);
     djw_compute_mtf_1_2(prefix, &mut code_len_mtf, frequencies, DJW_MAX_CODELEN)
 }
 
-fn djw_encode_prefix(writer: &mut DjwBitWriter, prefix: &mut DjwPrefix) -> Result<()> {
+pub(super) fn djw_encode_prefix(writer: &mut DjwBitWriter, prefix: &mut DjwPrefix) -> Result<()> {
     let mut code_len_freq = [0u32; DJW_TOTAL_CODES];
     djw_compute_prefix_1_2(prefix, &mut code_len_freq)?;
     let (code_len_lengths, _) = djw_build_prefix_lengths(&code_len_freq, DJW_MAX_CLCLEN)?;
@@ -787,7 +806,7 @@ fn djw_encode_prefix(writer: &mut DjwBitWriter, prefix: &mut DjwPrefix) -> Resul
 }
 
 #[derive(Clone, Copy, Default)]
-struct FgkNode {
+pub(super) struct FgkNode {
     weight: u32,
     parent: Option<usize>,
     left_child: Option<usize>,
@@ -798,12 +817,12 @@ struct FgkNode {
 }
 
 #[derive(Clone, Copy, Default)]
-struct FgkBlock {
+pub(super) struct FgkBlock {
     leader: Option<usize>,
     free_next: Option<usize>,
 }
 
-struct FgkState {
+pub(super) struct FgkState {
     alphabet_size: usize,
     zero_freq_count: usize,
     zero_freq_exp: usize,
@@ -820,7 +839,7 @@ struct FgkState {
 }
 
 impl FgkState {
-    fn new(alphabet_size: usize) -> Result<Self> {
+    pub(super) fn new(alphabet_size: usize) -> Result<Self> {
         let total_nodes = (2 * alphabet_size).checked_sub(1).ok_or_else(|| {
             RomWeaverError::Validation("xdelta fgk total node count overflowed".into())
         })?;
@@ -877,7 +896,7 @@ impl FgkState {
         Ok(state)
     }
 
-    fn fgk_decode_bit(&mut self, bit: u8) -> Result<bool> {
+    pub(super) fn fgk_decode_bit(&mut self, bit: u8) -> Result<bool> {
         if bit > 1 {
             return Err(RomWeaverError::Validation(
                 "xdelta fgk decoder received an invalid bit".into(),
@@ -920,7 +939,7 @@ impl FgkState {
         Ok(false)
     }
 
-    fn fgk_find_nth_zero(&self, symbol_index: usize) -> Result<usize> {
+    pub(super) fn fgk_find_nth_zero(&self, symbol_index: usize) -> Result<usize> {
         if symbol_index >= self.alphabet_size {
             return Err(RomWeaverError::Validation(format!(
                 "xdelta fgk symbol index {symbol_index} exceeds alphabet size {}",
@@ -943,7 +962,7 @@ impl FgkState {
         Ok(index)
     }
 
-    fn fgk_encode_data(&mut self, symbol_index: usize) -> Result<usize> {
+    pub(super) fn fgk_encode_data(&mut self, symbol_index: usize) -> Result<usize> {
         if symbol_index >= self.alphabet_size {
             return Err(RomWeaverError::Validation(format!(
                 "xdelta fgk symbol index {symbol_index} exceeds alphabet size {}",
@@ -1000,7 +1019,7 @@ impl FgkState {
         Ok(self.coded_depth)
     }
 
-    fn fgk_get_encoded_bit(&mut self) -> Result<u8> {
+    pub(super) fn fgk_get_encoded_bit(&mut self) -> Result<u8> {
         if self.coded_depth == 0 {
             return Err(RomWeaverError::Validation(
                 "xdelta fgk encoded bit buffer was empty".into(),
@@ -1010,7 +1029,7 @@ impl FgkState {
         Ok(self.coded_bits[self.coded_depth])
     }
 
-    fn fgk_nth_zero(&self, mut index: usize) -> Result<usize> {
+    pub(super) fn fgk_nth_zero(&self, mut index: usize) -> Result<usize> {
         let mut cursor = self
             .remaining_zeros
             .ok_or_else(|| RomWeaverError::Validation("xdelta fgk zero list is empty".into()))?;
@@ -1025,7 +1044,7 @@ impl FgkState {
         Ok(cursor)
     }
 
-    fn fgk_decode_data(&mut self) -> Result<u8> {
+    pub(super) fn fgk_decode_data(&mut self) -> Result<u8> {
         let mut symbol_index = self.decode_ptr;
         if self.nodes[self.decode_ptr].weight == 0 {
             let mut value = 0usize;
@@ -1054,7 +1073,7 @@ impl FgkState {
         })
     }
 
-    fn fgk_update_tree(&mut self, symbol_index: usize) -> Result<()> {
+    pub(super) fn fgk_update_tree(&mut self, symbol_index: usize) -> Result<()> {
         let mut current = if self.nodes[symbol_index].weight == 0 {
             self.fgk_increase_zero_weight(symbol_index)?
         } else {
@@ -1083,7 +1102,7 @@ impl FgkState {
         Ok(())
     }
 
-    fn fgk_move_right(&mut self, move_fwd: usize) -> Result<()> {
+    pub(super) fn fgk_move_right(&mut self, move_fwd: usize) -> Result<()> {
         let block_index = self.nodes[move_fwd].my_block.ok_or_else(|| {
             RomWeaverError::Validation("xdelta fgk node is missing a block".into())
         })?;
@@ -1161,7 +1180,7 @@ impl FgkState {
         Ok(())
     }
 
-    fn fgk_promote(&mut self, node: usize) -> Result<()> {
+    pub(super) fn fgk_promote(&mut self, node: usize) -> Result<()> {
         if self.nodes[node].weight == 0 {
             return Ok(());
         }
@@ -1218,7 +1237,7 @@ impl FgkState {
         Ok(())
     }
 
-    fn fgk_increase_zero_weight(&mut self, symbol_index: usize) -> Result<usize> {
+    pub(super) fn fgk_increase_zero_weight(&mut self, symbol_index: usize) -> Result<usize> {
         let this_zero = symbol_index;
         if self.zero_freq_count == 1 {
             self.nodes[this_zero].right_child = None;
@@ -1300,7 +1319,7 @@ impl FgkState {
         Ok(this_zero)
     }
 
-    fn fgk_eliminate_zero(&mut self, node: usize) -> Result<()> {
+    pub(super) fn fgk_eliminate_zero(&mut self, node: usize) -> Result<()> {
         if self.zero_freq_count == 1 {
             return Ok(());
         }
@@ -1338,7 +1357,7 @@ impl FgkState {
         Ok(())
     }
 
-    fn fgk_make_block(&mut self, leader: usize) -> Result<usize> {
+    pub(super) fn fgk_make_block(&mut self, leader: usize) -> Result<usize> {
         let block = self.free_block.ok_or_else(|| {
             RomWeaverError::Validation("xdelta fgk block allocator exhausted".into())
         })?;
@@ -1348,13 +1367,13 @@ impl FgkState {
         Ok(block)
     }
 
-    fn fgk_free_block(&mut self, block: usize) {
+    pub(super) fn fgk_free_block(&mut self, block: usize) {
         self.blocks[block].leader = None;
         self.blocks[block].free_next = self.free_block;
         self.free_block = Some(block);
     }
 
-    fn fgk_factor_remaining(&mut self) -> Result<()> {
+    pub(super) fn fgk_factor_remaining(&mut self) -> Result<()> {
         if self.zero_freq_count == 0 {
             return Err(RomWeaverError::Validation(
                 "xdelta fgk zero-frequency count underflowed".into(),
@@ -1378,7 +1397,7 @@ impl FgkState {
     }
 }
 
-fn decode_fgk_secondary(input: &[u8], output_size: usize) -> Result<Vec<u8>> {
+pub(super) fn decode_fgk_secondary(input: &[u8], output_size: usize) -> Result<Vec<u8>> {
     let mut state = FgkState::new(DJW_ALPHABET_SIZE)?;
     let mut output = Vec::with_capacity(output_size);
     let mut input_pos = 0usize;
@@ -1416,7 +1435,7 @@ fn decode_fgk_secondary(input: &[u8], output_size: usize) -> Result<Vec<u8>> {
     Ok(output)
 }
 
-fn try_decode_xdelta_djw_sections(
+pub(super) fn try_decode_xdelta_djw_sections(
     data: &[u8],
     inst: &[u8],
     addr: &[u8],
@@ -1428,7 +1447,10 @@ fn try_decode_xdelta_djw_sections(
     Ok((data, inst, addr))
 }
 
-fn decode_xdelta_djw_section_if_flag(section: &[u8], compressed: bool) -> Result<Vec<u8>> {
+pub(super) fn decode_xdelta_djw_section_if_flag(
+    section: &[u8],
+    compressed: bool,
+) -> Result<Vec<u8>> {
     if !compressed {
         return Ok(section.to_vec());
     }
@@ -1446,7 +1468,7 @@ fn decode_xdelta_djw_section_if_flag(section: &[u8], compressed: bool) -> Result
     Ok(decoded)
 }
 
-fn try_decode_xdelta_fgk_sections(
+pub(super) fn try_decode_xdelta_fgk_sections(
     data: &[u8],
     inst: &[u8],
     addr: &[u8],
@@ -1458,7 +1480,10 @@ fn try_decode_xdelta_fgk_sections(
     Ok((data, inst, addr))
 }
 
-fn decode_xdelta_fgk_section_if_flag(section: &[u8], compressed: bool) -> Result<Vec<u8>> {
+pub(super) fn decode_xdelta_fgk_section_if_flag(
+    section: &[u8],
+    compressed: bool,
+) -> Result<Vec<u8>> {
     if !compressed {
         return Ok(section.to_vec());
     }

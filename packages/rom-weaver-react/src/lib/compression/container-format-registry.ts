@@ -242,6 +242,9 @@ const isRomSpecificCompressionFormatName = (
   format: ContainerCompressionFormat,
 ): format is RomSpecificCompressionFormat => Object.hasOwn(ROM_SPECIFIC_RUNTIME_REGISTRY, format);
 
+const isArchiveCompressionFormatName = (format: ContainerCompressionFormat): format is ArchiveCompressionFormat =>
+  !isRomSpecificCompressionFormatName(format);
+
 const createRomSpecificCompressionFormatRegistration = (
   format: RomSpecificCompressionFormat,
 ): RomSpecificCompressionFormatRegistration => {
@@ -303,6 +306,12 @@ const COMPRESSION_FORMAT_REGISTRATIONS = Object.values(COMPRESSION_FORMAT_REGIST
 const ROM_SPECIFIC_COMPRESSION_FORMAT_REGISTRATIONS = Object.values(
   ROM_SPECIFIC_COMPRESSION_FORMAT_REGISTRY,
 ) as RomSpecificCompressionFormatRegistration[];
+const CREATE_CONTAINER_COMPRESSION_FORMATS = [...ROM_WEAVER_CREATE_CONTAINER_FORMATS] as ContainerCompressionFormat[];
+const CREATE_ARCHIVE_COMPRESSION_FORMATS = CREATE_CONTAINER_COMPRESSION_FORMATS.filter(isArchiveCompressionFormatName);
+const CREATE_ROM_SPECIFIC_COMPRESSION_FORMATS = CREATE_CONTAINER_COMPRESSION_FORMATS.filter(
+  isRomSpecificCompressionFormatName,
+);
+const OUTPUT_COMPRESSION_FORMATS = ["none", ...CREATE_CONTAINER_COMPRESSION_FORMATS] as CompressionFormat[];
 const COMPRESSION_FORMATS = Object.keys(COMPRESSION_FORMAT_REGISTRY) as CompressionFormat[];
 
 const isCompressionFormat = (value: unknown): value is CompressionFormat =>
@@ -310,6 +319,9 @@ const isCompressionFormat = (value: unknown): value is CompressionFormat =>
 
 const isRomSpecificCompressionFormat = (value: unknown): value is RomSpecificCompressionFormat =>
   typeof value === "string" && Object.hasOwn(ROM_SPECIFIC_COMPRESSION_FORMAT_REGISTRY, value);
+
+const isArchiveCompressionFormat = (value: unknown): value is ArchiveCompressionFormat =>
+  typeof value === "string" && CREATE_ARCHIVE_COMPRESSION_FORMATS.includes(value as ArchiveCompressionFormat);
 
 const getCompressionFormatRegistration = (
   format: string | null | undefined,
@@ -381,6 +393,7 @@ const resolveAutomaticCompressionFormat = ({
   fallback;
 
 export type {
+  ArchiveCompressionFormat,
   ByteProbeableSource,
   CompressionFormatRegistration,
   RomSpecificCompressionFormat,
@@ -390,6 +403,9 @@ export {
   COMPRESSION_FORMAT_REGISTRATIONS,
   COMPRESSION_FORMAT_REGISTRY,
   COMPRESSION_FORMATS,
+  CREATE_ARCHIVE_COMPRESSION_FORMATS,
+  CREATE_CONTAINER_COMPRESSION_FORMATS,
+  CREATE_ROM_SPECIFIC_COMPRESSION_FORMATS,
   getCompressionFormatForFileExtension,
   getCompressionFormatForParentCompressions,
   getCompressionFormatForParentKind,
@@ -399,9 +415,11 @@ export {
   getRomSpecificCompressionFormatRegistration,
   getRomSpecificExtractedFileName,
   hasRomSpecificCompressionFormatExtension,
+  isArchiveCompressionFormat,
   isCompressionFormat,
   isRomSpecificCompressionFormat,
   normalizeRomSpecificExtractedFileName,
+  OUTPUT_COMPRESSION_FORMATS,
   ROM_SPECIFIC_COMPRESSION_FORMAT_REGISTRATIONS,
   ROM_SPECIFIC_COMPRESSION_FORMAT_REGISTRY,
   resolveAutomaticCompressionFormat,

@@ -16,14 +16,17 @@ import type {
 } from "../../types/workflow-runtime.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import { resolveCompressionLevels } from "../compression/compression-settings.ts";
+import { type ArchiveCompressionFormat, isArchiveCompressionFormat } from "../compression/container-format-registry.ts";
 import OutputCompressionManager from "../compression/output-compression-manager.ts";
 import { getPatchFileBytes, getPatchFileExternalSource } from "../input/binary-service.ts";
 import { reportProgress } from "../progress/progress-reporting.ts";
 import { createPatchFileFromPublicOutput } from "../runtime/public-output-bin-file.ts";
 
-type ArchiveOutputCompression = "7z" | "none" | "zip";
+type ArchiveOutputCompression = ArchiveCompressionFormat | "none";
 type ArchiveCreateCompression = Exclude<ArchiveOutputCompression, "none">;
 type ArchiveOutputOptions = Partial<ApplyWorkflowOptions & CreateWorkflowOptions>;
+type ArchiveOutputContainerSettings = NonNullable<NonNullable<ArchiveOutputOptions["output"]>["container"]> &
+  Record<string, unknown>;
 type ArchiveCompressionOverrides = Pick<SevenZipZstdCompressionOptions, "zipCodec" | "zipLevel">;
 type ArchiveOutputEntry = { entry: ArchiveEntryInput; size: number };
 type CompressionTrace<TValue> = (
@@ -40,7 +43,7 @@ const getArchiveOutputCompression = (
   workflowLabel: string,
 ): ArchiveOutputCompression => {
   const compression = OutputCompressionManager.normalizeOutputCompression(value || "none");
-  if (compression !== "none" && compression !== "zip" && compression !== "7z") {
+  if (compression !== "none" && !isArchiveCompressionFormat(compression)) {
     throw new Error(`Unsupported ${workflowLabel} output compression: ${compression}`);
   }
   return compression;
@@ -54,7 +57,8 @@ const getOutputName = (options: ArchiveOutputOptions | undefined) =>
 
 const getCompressionProfile = (options: ArchiveOutputOptions | undefined) =>
   options?.output?.container?.profile || "max";
-const getContainerSettings = (options: ArchiveOutputOptions | undefined) => options?.output?.container || {};
+const getContainerSettings = (options: ArchiveOutputOptions | undefined): ArchiveOutputContainerSettings =>
+  options?.output?.container || {};
 const getWorkerThreads = (options: ArchiveOutputOptions | undefined) => options?.workers?.threads;
 const getLogLevel = (options: ArchiveOutputOptions | undefined) => options?.logging?.level;
 const getArchiveProgressReporter =
@@ -160,11 +164,11 @@ const createArchiveOutput = async ({
 }): Promise<PublicOutput> => {
   const archiveSettings = getContainerSettings(options);
   const levels = resolveCompressionLevels({
-    compressionProfile: getCompressionProfile(options),
-    sevenZipCodec: archiveSettings.sevenZipCodec,
-    sevenZipLevel: archiveSettings.sevenZipLevel,
-    zipCodec: archiveSettings.zipCodec,
-    zipLevel: archiveSettings.zipLevel,
+    compressionProfile: String(getCompressionProfile(options)),
+    sevenZipCodec: archiveSettings.sevenZipCodec as string | null | undefined,
+    sevenZipLevel: archiveSettings.sevenZipLevel as string | number | null | undefined,
+    zipCodec: archiveSettings.zipCodec as string | null | undefined,
+    zipLevel: archiveSettings.zipLevel as string | number | null | undefined,
   });
   const zipCodec = overrides?.zipCodec || levels.zipCodec;
   const zipLevel = overrides?.zipLevel ?? (zipCodec === "store" ? undefined : levels.zipLevel);
@@ -266,11 +270,11 @@ const createSingleFileArchiveOutput = async ({
   entryFile.fileName = entryName;
   const archiveSettings = getContainerSettings(options);
   const compressionSettings = resolveCompressionLevels({
-    compressionProfile: archiveSettings.profile || "max",
-    sevenZipCodec: archiveSettings.sevenZipCodec,
-    sevenZipLevel: archiveSettings.sevenZipLevel,
-    zipCodec: archiveSettings.zipCodec,
-    zipLevel: archiveSettings.zipLevel,
+    compressionProfile: String(getCompressionProfile(options)),
+    sevenZipCodec: archiveSettings.sevenZipCodec as string | null | undefined,
+    sevenZipLevel: archiveSettings.sevenZipLevel as string | number | null | undefined,
+    zipCodec: archiveSettings.zipCodec as string | null | undefined,
+    zipLevel: archiveSettings.zipLevel as string | number | null | undefined,
   });
   const outputName =
     requestedFileName && deps.hasArchiveFileName(requestedFileName, compression)

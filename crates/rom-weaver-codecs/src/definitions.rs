@@ -1,53 +1,35 @@
 use std::{
-    fs::{self, File},
-    io::{self, BufReader, BufWriter, Cursor, Read, Seek, SeekFrom, Write},
-    path::Path,
+    io::{self, Seek, SeekFrom, Write},
     sync::Arc,
 };
 
-use bzip2::{Compression as Bzip2Compression, read::MultiBzDecoder, write::BzEncoder};
-use flate2::{
-    Compression as FlateCompression,
-    read::DeflateDecoder,
-    read::ZlibDecoder,
-    write::GzEncoder,
-};
-use lzma_rust2::{Lzma2Reader, LzmaReader, XzOptions, XzReader, XzWriter};
-use rayon::prelude::*;
-use rom_weaver_core::{
-    BoundedIoPolicy, ChunkPlanner, CodecBackend, CodecCapabilities, CodecDescriptor,
-    CodecOperationRequest, FileChunk, FormatDescriptor, OperationContext, OperationFamily,
-    OperationReport, OrderedChunkWriter, Result, RomWeaverError, SharedThreadPool, ThreadCapability,
-    ThreadExecution,
-};
-use rom_weaver_libarchive::{ReadArchive, ReadFilter};
-use zstd::stream::{Decoder as ZstdDecoder, write::Encoder as ZstdEncoder};
+use rom_weaver_core::{CodecBackend, CodecDescriptor, FormatDescriptor, OperationFamily};
 
-const STORE: CodecDescriptor = FormatDescriptor {
+pub(super) const STORE: CodecDescriptor = FormatDescriptor {
     family: OperationFamily::Codec,
     name: "store",
     aliases: &[],
     extensions: &[],
 };
-const DEFLATE: CodecDescriptor = FormatDescriptor {
+pub(super) const DEFLATE: CodecDescriptor = FormatDescriptor {
     family: OperationFamily::Codec,
     name: "deflate",
     aliases: &["zlib", "gzip", "gz"],
     extensions: &[],
 };
-const ZSTD: CodecDescriptor = FormatDescriptor {
+pub(super) const ZSTD: CodecDescriptor = FormatDescriptor {
     family: OperationFamily::Codec,
     name: "zstd",
     aliases: &[],
     extensions: &[],
 };
-const LZMA2: CodecDescriptor = FormatDescriptor {
+pub(super) const LZMA2: CodecDescriptor = FormatDescriptor {
     family: OperationFamily::Codec,
     name: "lzma2",
     aliases: &["xz"],
     extensions: &[],
 };
-const BZIP2: CodecDescriptor = FormatDescriptor {
+pub(super) const BZIP2: CodecDescriptor = FormatDescriptor {
     family: OperationFamily::Codec,
     name: "bzip2",
     aliases: &["bz2"],
@@ -176,7 +158,7 @@ impl CodecRegistry {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum NativeCodecKind {
+pub(super) enum NativeCodecKind {
     Store,
     Deflate,
     Zstd,
@@ -184,19 +166,19 @@ enum NativeCodecKind {
     Bzip2,
 }
 
-struct NativeCodecBackend {
-    descriptor: &'static CodecDescriptor,
-    kind: NativeCodecKind,
+pub(super) struct NativeCodecBackend {
+    pub(super) descriptor: &'static CodecDescriptor,
+    pub(super) kind: NativeCodecKind,
 }
 
 /// Avoid vectored writes on WASI file descriptors, which can trigger runtime crashes
 /// in some host runtimes when certain codec pipelines flush output.
-struct NonVectoredWriter<W> {
+pub(super) struct NonVectoredWriter<W> {
     inner: W,
 }
 
 impl<W> NonVectoredWriter<W> {
-    fn new(inner: W) -> Self {
+    pub(super) fn new(inner: W) -> Self {
         Self { inner }
     }
 }

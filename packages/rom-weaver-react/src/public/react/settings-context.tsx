@@ -1,4 +1,5 @@
 import { createContext, useContext, useMemo } from "react";
+import { ROM_WEAVER_CREATE_CONTAINER_FORMATS } from "rom-weaver-wasm/format-metadata";
 import { resolveCompressionLevels } from "../../lib/compression/compression-settings.ts";
 import { createLogger } from "../../lib/logging.ts";
 import type {
@@ -16,8 +17,11 @@ type RomWeaverSettingsContextValue = {
 };
 
 const RomWeaverSettingsContext = createContext<RomWeaverSettingsContextValue>({ settings: {} });
-const APPLY_OUTPUT_COMPRESSION_VALUES = new Set(["auto", "7z", "chd", "none", "rvz", "z3ds", "zip"]);
-const CREATE_OUTPUT_COMPRESSION_VALUES = new Set(["7z", "none", "zip"]);
+const APPLY_OUTPUT_COMPRESSION_VALUES = new Set(["auto", ...ROM_WEAVER_CREATE_CONTAINER_FORMATS, "none"]);
+const CREATE_OUTPUT_COMPRESSION_VALUES = new Set([
+  ...ROM_WEAVER_CREATE_CONTAINER_FORMATS.filter((format) => format === "7z" || format === "zip"),
+  "none",
+]);
 const DEFAULT_COMPRESSION_VALUES = new Set([
   "auto",
   "7z/special",
@@ -89,27 +93,6 @@ const useApplySettings = () => {
   return useMemo(() => toApplyWorkflowSettings(settings as ApplyPatchFormSettings), [settings]);
 };
 
-const normalizeLegacyDefaultArchive = (value: RuntimeValue): ArchiveDefaultCompression => {
-  const normalized = String(value || "")
-    .trim()
-    .toLowerCase();
-  if (normalized === "none") return "none";
-  return normalized === "7z" ? "7z" : "zip";
-};
-
-const defaultCompressionFromLegacySettings = (settings: SettingsRecord): DefaultCompressionMode => {
-  const defaultArchive = normalizeLegacyDefaultArchive(settings.defaultArchive);
-  const specialCompression = typeof settings.specialCompression === "boolean" ? settings.specialCompression : true;
-  if (!specialCompression) {
-    if (defaultArchive === "7z") return "7z only";
-    if (defaultArchive === "none") return "none";
-    return "zip only";
-  }
-  if (defaultArchive === "7z") return "7z/special";
-  if (defaultArchive === "none") return "special only";
-  return "zip/special";
-};
-
 const normalizeDefaultCompression = (value: RuntimeValue, fallback: DefaultCompressionMode = "auto") => {
   const normalized = String(value || "")
     .trim()
@@ -119,8 +102,7 @@ const normalizeDefaultCompression = (value: RuntimeValue, fallback: DefaultCompr
 
 const getDefaultCompressionMode = (settings: RuntimeValue | undefined): DefaultCompressionMode => {
   const source = toRecord(settings);
-  if (source.defaultCompression !== undefined) return normalizeDefaultCompression(source.defaultCompression);
-  return defaultCompressionFromLegacySettings(source);
+  return normalizeDefaultCompression(source.defaultCompression);
 };
 
 const getDefaultCompressionArchive = (mode: DefaultCompressionMode): ArchiveDefaultCompression => {
@@ -174,36 +156,44 @@ const getNormalizedWorkflowSettings = (
   const source = toRecord(settings as RuntimeValue);
   const output = toRecord(source.output);
   const outputContainer = toRecord(output.container);
-  const compressionSettings = toRecord(source.compression);
   const workers = toRecord(source.workers);
   const compatibility = toRecord(source.compatibility);
   const validation = toRecord(source.validation);
   const logging = toRecord(source.logging);
   const configuredLogSink = typeof logging.sink === "function" ? logging.sink : undefined;
-  const compressionProfile = readFirstDefined(
-    outputContainer.profile,
-    source.compressionProfile,
-    compressionSettings.profile,
-  );
-  const sevenZipCodec = readFirstDefined(
-    outputContainer.sevenZipCodec,
-    source.sevenZipCodec,
-    compressionSettings.sevenZipCodec,
-  );
+  const hasFlatProfile = source.compressionProfile !== undefined;
+  const hasFlatSevenZipCodec = source.sevenZipCodec !== undefined;
+  const hasFlatRvzCodec = source.rvzCodec !== undefined;
+  const hasFlatZipCodec = source.zipCodec !== undefined;
+  const compressionProfile = readFirstDefined(source.compressionProfile, outputContainer.profile);
+  const sevenZipCodec = readFirstDefined(source.sevenZipCodec, outputContainer.sevenZipCodec);
   const sevenZipLevel = readFirstDefined(
-    outputContainer.sevenZipLevel,
     source.sevenZipLevel,
-    compressionSettings.sevenZipLevel,
+    hasFlatProfile || hasFlatSevenZipCodec ? undefined : outputContainer.sevenZipLevel,
   );
+  const rvzCodec = readFirstDefined(source.rvzCodec, outputContainer.rvzCodec);
+  const rvzCompressionLevel = readFirstDefined(
+    source.rvzCompressionLevel,
+    hasFlatProfile || hasFlatRvzCodec ? undefined : outputContainer.rvzCompressionLevel,
+  );
+  const rvzBlockSize = readFirstDefined(source.rvzBlockSize, outputContainer.rvzBlockSize);
+  const rvzScrub = readFirstDefined(source.rvzScrub, outputContainer.rvzScrub);
+  const chdCreateCdCodecs = readFirstDefined(source.chdCreateCdCodecs, outputContainer.chdCreateCdCodecs);
+  const chdCreateDvdCodecs = readFirstDefined(source.chdCreateDvdCodecs, outputContainer.chdCreateDvdCodecs);
+  const chdOutputMode = readFirstDefined(source.chdOutputMode, outputContainer.chdOutputMode);
   const z3dsCompressionLevel = readFirstDefined(
-    outputContainer.z3dsCompressionLevel,
     source.z3dsCompressionLevel,
-    compressionSettings.z3dsCompressionLevel,
+    hasFlatProfile ? undefined : outputContainer.z3dsCompressionLevel,
   );
-  const zipCodec = readFirstDefined(outputContainer.zipCodec, source.zipCodec, compressionSettings.zipCodec);
-  const zipLevel = readFirstDefined(outputContainer.zipLevel, source.zipLevel, compressionSettings.zipLevel);
+  const zipCodec = readFirstDefined(source.zipCodec, outputContainer.zipCodec);
+  const zipLevel = readFirstDefined(
+    source.zipLevel,
+    hasFlatProfile || hasFlatZipCodec ? undefined : outputContainer.zipLevel,
+  );
   const compressionLevels = resolveCompressionLevels({
     compressionProfile: compressionProfile as string | null | undefined,
+    rvzCodec: rvzCodec as string | null | undefined,
+    rvzCompressionLevel: rvzCompressionLevel as string | number | null | undefined,
     sevenZipCodec: sevenZipCodec as string | null | undefined,
     sevenZipLevel: sevenZipLevel as string | number | null | undefined,
     z3dsCompressionLevel: z3dsCompressionLevel as string | number | "default" | null | undefined,
@@ -225,10 +215,16 @@ const getNormalizedWorkflowSettings = (
     },
     output: {
       ...output,
-      compression: readFirstDefined(output.compression, source.compressionFormat, compressionSettings.format),
+      compression: readFirstDefined(output.compression, source.compressionFormat),
       container: {
-        ...outputContainer,
+        chdCreateCdCodecs: chdCreateCdCodecs as OutputContainerSettings["chdCreateCdCodecs"],
+        chdCreateDvdCodecs: chdCreateDvdCodecs as OutputContainerSettings["chdCreateDvdCodecs"],
+        chdOutputMode: chdOutputMode as OutputContainerSettings["chdOutputMode"],
         profile: compressionLevels.compressionProfile as OutputContainerSettings["profile"],
+        rvzBlockSize: rvzBlockSize as OutputContainerSettings["rvzBlockSize"],
+        rvzCodec: compressionLevels.rvzCodec as OutputContainerSettings["rvzCodec"],
+        rvzCompressionLevel: compressionLevels.rvzCompressionLevel as OutputContainerSettings["rvzCompressionLevel"],
+        rvzScrub: rvzScrub as OutputContainerSettings["rvzScrub"],
         sevenZipCodec: compressionLevels.sevenZipCodec as OutputContainerSettings["sevenZipCodec"],
         sevenZipLevel: compressionLevels.sevenZipLevel as OutputContainerSettings["sevenZipLevel"],
         z3dsCompressionLevel: compressionLevels.z3dsCompressionLevel as OutputContainerSettings["z3dsCompressionLevel"],
@@ -249,12 +245,7 @@ const getNormalizedWorkflowSettings = (
     },
     workers: {
       ...workers,
-      threads: readFirstDefined(
-        workers.threads,
-        source.workerThreads,
-        compressionSettings.workerThreads,
-        workerThreads,
-      ),
+      threads: readFirstDefined(workers.threads, source.workerThreads, workerThreads),
     },
   };
 };

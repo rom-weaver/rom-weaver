@@ -1,4 +1,5 @@
-fn resolve_algorithms(values: &[String]) -> Result<Vec<Algorithm>> {
+use super::*;
+pub(super) fn resolve_algorithms(values: &[String]) -> Result<Vec<Algorithm>> {
     let mut algorithms = Vec::new();
     let mut seen = BTreeSet::new();
     for value in values {
@@ -12,7 +13,7 @@ fn resolve_algorithms(values: &[String]) -> Result<Vec<Algorithm>> {
     Ok(algorithms)
 }
 
-fn compute_checksum_values(
+pub(super) fn compute_checksum_values(
     request: &ChecksumRequest,
     context: &OperationContext,
 ) -> Result<ChecksumValues> {
@@ -20,7 +21,7 @@ fn compute_checksum_values(
     compute_checksum_values_with_progress(request, context, &mut noop_progress)
 }
 
-fn compute_checksum_values_with_progress<F>(
+pub(super) fn compute_checksum_values_with_progress<F>(
     request: &ChecksumRequest,
     context: &OperationContext,
     on_progress: &mut F,
@@ -51,16 +52,19 @@ where
         capability = ?plan.capability,
         "selected checksum execution plan"
     );
-    let (execution, values) =
-        execute_plan(&request.source, &range, &algorithms, context, &plan, on_progress)?;
+    let (execution, values) = execute_plan(
+        &request.source,
+        &range,
+        &algorithms,
+        context,
+        &plan,
+        on_progress,
+    )?;
 
-    Ok(ChecksumValues {
-        execution,
-        values,
-    })
+    Ok(ChecksumValues { execution, values })
 }
 
-fn plan_checksum(algorithms: &[Algorithm], range: &ResolvedRange) -> ChecksumPlan {
+pub(super) fn plan_checksum(algorithms: &[Algorithm], range: &ResolvedRange) -> ChecksumPlan {
     if algorithms == [Algorithm::Crc32] && range.len >= CRC32_PARALLEL_THRESHOLD {
         let max_threads = parallel_crc32_max_threads(range.len);
         if max_threads > 1 {
@@ -103,7 +107,7 @@ fn plan_checksum(algorithms: &[Algorithm], range: &ResolvedRange) -> ChecksumPla
     ChecksumPlan::sequential()
 }
 
-fn execute_plan(
+pub(super) fn execute_plan(
     source: &Path,
     range: &ResolvedRange,
     algorithms: &[Algorithm],

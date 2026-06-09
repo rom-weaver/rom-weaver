@@ -8,6 +8,7 @@ import type { CreateSettings, PatchFormat } from "../../types/settings.ts";
 import type { WorkflowOptions, WorkflowWarning } from "../../types/workflow-controller.ts";
 import type { CreatePatchInput, CreateWorkflowOptions } from "../../types/workflow-runtime.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
+import { CREATE_ARCHIVE_COMPRESSION_FORMATS } from "../compression/container-format-registry.ts";
 import {
   createPatchFormatSupportsCreateSizes,
   getCreatePatchFormatSizeErrorMessage,
@@ -72,7 +73,7 @@ type SourceSession<TSource> = SharedRomSourceSession<TSource, InternalSourceStat
 const SUPPORTED_CREATE_PATCH_TYPES = new Set<PatchFormat | string>(
   ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY.supportedCreateFormats,
 );
-const CREATE_OUTPUT_FORMATS = new Set(["7z", "none", "zip"]);
+const CREATE_OUTPUT_FORMATS = new Set(["none", ...CREATE_ARCHIVE_COMPRESSION_FORMATS]);
 
 const cloneSourceState = (state: InternalSourceState | null | undefined) =>
   state

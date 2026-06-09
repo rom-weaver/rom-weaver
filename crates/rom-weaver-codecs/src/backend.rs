@@ -1,20 +1,21 @@
+use super::*;
 impl NativeCodecBackend {
     const STORE_COPY_MIN_PARALLEL_BYTES: usize = 1 << 20;
     const LIBARCHIVE_IO_BUFFER_BYTES: usize = 128 * 1024;
     const LIBARCHIVE_OPEN_BLOCK_BYTES: usize = 64 * 1024;
 
-    const fn new(descriptor: &'static CodecDescriptor, kind: NativeCodecKind) -> Self {
+    pub(super) const fn new(descriptor: &'static CodecDescriptor, kind: NativeCodecKind) -> Self {
         Self { descriptor, kind }
     }
 
-    fn ensure_output_parent(path: &Path) -> Result<()> {
+    pub(super) fn ensure_output_parent(path: &Path) -> Result<()> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)?;
         }
         Ok(())
     }
 
-    fn validate_decode_level(&self, request: &CodecOperationRequest) -> Result<()> {
+    pub(super) fn validate_decode_level(&self, request: &CodecOperationRequest) -> Result<()> {
         if request.level.is_some() {
             return Err(RomWeaverError::Validation(format!(
                 "{} decode does not accept a compression level",
@@ -24,7 +25,10 @@ impl NativeCodecBackend {
         Ok(())
     }
 
-    fn resolve_encode_level(&self, request: &CodecOperationRequest) -> Result<Option<i32>> {
+    pub(super) fn resolve_encode_level(
+        &self,
+        request: &CodecOperationRequest,
+    ) -> Result<Option<i32>> {
         let resolved = match self.kind {
             NativeCodecKind::Store => {
                 if request.level.is_some() {
@@ -74,11 +78,11 @@ impl NativeCodecBackend {
         Ok(resolved)
     }
 
-    fn encode_thread_capability(&self) -> ThreadCapability {
+    pub(super) fn encode_thread_capability(&self) -> ThreadCapability {
         ThreadCapability::single_threaded()
     }
 
-    fn decode_thread_capability(&self) -> ThreadCapability {
+    pub(super) fn decode_thread_capability(&self) -> ThreadCapability {
         match self.kind {
             NativeCodecKind::Store
             | NativeCodecKind::Deflate
@@ -88,17 +92,17 @@ impl NativeCodecBackend {
         }
     }
 
-    fn io_policy(execution: &ThreadExecution) -> BoundedIoPolicy {
+    pub(super) fn io_policy(execution: &ThreadExecution) -> BoundedIoPolicy {
         BoundedIoPolicy::for_effective_threads(execution.effective_threads)
     }
 
-    fn file_chunks(path: &Path, policy: &BoundedIoPolicy) -> Result<Vec<FileChunk>> {
+    pub(super) fn file_chunks(path: &Path, policy: &BoundedIoPolicy) -> Result<Vec<FileChunk>> {
         let file_len = fs::metadata(path)?.len();
         let planner = ChunkPlanner::new(policy.chunk_size_bytes)?;
         Ok(planner.plan(file_len))
     }
 
-    fn read_chunk_batch(
+    pub(super) fn read_chunk_batch(
         source: &mut BufReader<File>,
         chunks: &[FileChunk],
     ) -> Result<Vec<(u64, Vec<u8>)>> {
@@ -118,7 +122,7 @@ impl NativeCodecBackend {
         Ok(batch)
     }
 
-    fn encode_with_native_writer(
+    pub(super) fn encode_with_native_writer(
         &self,
         request: &CodecOperationRequest,
         level: i32,
@@ -169,7 +173,7 @@ impl NativeCodecBackend {
         Ok(input_len)
     }
 
-    fn decode_with_libarchive(&self, request: &CodecOperationRequest) -> Result<u64> {
+    pub(super) fn decode_with_libarchive(&self, request: &CodecOperationRequest) -> Result<u64> {
         let mut archive =
             libarchive_open_read_archive(self.descriptor.name, self.kind, &request.input)?;
         let result = (|| -> Result<u64> {
@@ -205,7 +209,7 @@ impl NativeCodecBackend {
         }
     }
 
-    fn copy_store_payload(
+    pub(super) fn copy_store_payload(
         &self,
         request: &CodecOperationRequest,
         execution: &mut ThreadExecution,
@@ -263,7 +267,7 @@ impl NativeCodecBackend {
         Ok(copied)
     }
 
-    fn encode_impl(
+    pub(super) fn encode_impl(
         &self,
         request: &CodecOperationRequest,
         level: Option<i32>,
@@ -287,7 +291,7 @@ impl NativeCodecBackend {
         Ok(bytes)
     }
 
-    fn decode_impl(
+    pub(super) fn decode_impl(
         &self,
         request: &CodecOperationRequest,
         execution: &mut ThreadExecution,
@@ -302,7 +306,7 @@ impl NativeCodecBackend {
         Ok(bytes)
     }
 
-    fn run_encode(
+    pub(super) fn run_encode(
         &self,
         request: &CodecOperationRequest,
         context: &OperationContext,
@@ -327,7 +331,7 @@ impl NativeCodecBackend {
         ))
     }
 
-    fn run_decode(
+    pub(super) fn run_decode(
         &self,
         request: &CodecOperationRequest,
         context: &OperationContext,
@@ -353,14 +357,16 @@ impl NativeCodecBackend {
     }
 }
 
-fn libarchive_open_read_archive(
+pub(super) fn libarchive_open_read_archive(
     codec_name: &str,
     kind: NativeCodecKind,
     input: &Path,
 ) -> Result<ReadArchive> {
     let mut archive = ReadArchive::new(&format!("{codec_name} decode failed"))?;
     let setup_result = (|| -> Result<()> {
-        archive.support_raw_format(&format!("{codec_name} decode failed while enabling raw format"))?;
+        archive.support_raw_format(&format!(
+            "{codec_name} decode failed while enabling raw format"
+        ))?;
 
         let filter = libarchive_read_filter(kind)?;
         archive.support_filter(
@@ -388,7 +394,7 @@ fn libarchive_open_read_archive(
     Ok(archive)
 }
 
-fn libarchive_read_filter(kind: NativeCodecKind) -> Result<ReadFilter> {
+pub(super) fn libarchive_read_filter(kind: NativeCodecKind) -> Result<ReadFilter> {
     match kind {
         NativeCodecKind::Deflate => Ok(ReadFilter::Gzip),
         NativeCodecKind::Zstd => Ok(ReadFilter::Zstd),
@@ -400,7 +406,7 @@ fn libarchive_read_filter(kind: NativeCodecKind) -> Result<ReadFilter> {
     }
 }
 
-fn libarchive_read_filter_name(filter: ReadFilter) -> &'static str {
+pub(super) fn libarchive_read_filter_name(filter: ReadFilter) -> &'static str {
     match filter {
         ReadFilter::Gzip => "gzip",
         ReadFilter::Bzip2 => "bzip2",
@@ -409,7 +415,7 @@ fn libarchive_read_filter_name(filter: ReadFilter) -> &'static str {
     }
 }
 
-fn libarchive_read_entry_to_writer<W: Write>(
+pub(super) fn libarchive_read_entry_to_writer<W: Write>(
     archive: &mut ReadArchive,
     codec_name: &str,
     output: &mut W,
@@ -422,7 +428,7 @@ fn libarchive_read_entry_to_writer<W: Write>(
     )
 }
 
-fn libarchive_close_read_archive(archive: ReadArchive, codec_name: &str) -> Result<()> {
+pub(super) fn libarchive_close_read_archive(archive: ReadArchive, codec_name: &str) -> Result<()> {
     archive.close(
         &format!("{codec_name} decode failed while closing reader"),
         &format!("{codec_name} decode failed while freeing reader"),

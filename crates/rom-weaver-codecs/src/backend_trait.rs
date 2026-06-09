@@ -1,3 +1,4 @@
+use super::*;
 impl CodecBackend for NativeCodecBackend {
     fn descriptor(&self) -> &'static CodecDescriptor {
         self.descriptor
@@ -28,4 +29,3 @@ impl CodecBackend for NativeCodecBackend {
         }
     }
 }
-

@@ -255,8 +255,9 @@ impl ContainerHandlerOperations for ChdContainerHandler {
                 self.header_codec_label(header)
             ),
             Some(100.0),
-            Some(execution),
+            Some(execution.clone()),
         );
+        let report = attach_extraction_details(report, 1, 1, header.logical_bytes, &execution);
         let mut output_checksums = Vec::new();
         push_finalized_extract_checksum(&mut output_checksums, output_path, output_checksum)?;
         Ok(attach_extract_checksum_details(report, output_checksums))
@@ -398,7 +399,7 @@ impl ContainerHandlerOperations for ChdContainerHandler {
             rust_create()
         }?;
 
-        Ok(OperationReport::succeeded(
+        let mut report = OperationReport::succeeded(
             OperationFamily::Container,
             Some(CHD.name.to_string()),
             "create",
@@ -411,7 +412,32 @@ impl ContainerHandlerOperations for ChdContainerHandler {
                 self.header_codec_label(header)
             ),
             Some(100.0),
-            Some(execution),
-        ))
+            Some(execution.clone()),
+        );
+        let codecs = compression_plan
+            .codecs
+            .into_iter()
+            .filter(|codec| *codec != ChdCodec::NONE)
+            .map(|codec| self.codec_label(codec).to_string())
+            .collect::<Vec<_>>();
+        let codec_label = if codecs.is_empty() {
+            "store".to_string()
+        } else {
+            codecs.join("+")
+        };
+        let mut details = operation_report_details(&mut report);
+        let mut compression = Map::new();
+        compression.insert("codec".to_string(), json!(codec_label));
+        compression.insert(
+            "primary_codec".to_string(),
+            json!(self.codec_label(compression_plan.primary_codec)),
+        );
+        compression.insert("codecs".to_string(), json!(codecs));
+        compression.insert("level".to_string(), json!(compression_level));
+        compression.insert("logical_bytes".to_string(), json!(header.logical_bytes));
+        insert_thread_execution_details(&mut compression, &execution);
+        details.insert("compression".to_string(), Value::Object(compression));
+        report.details = Some(Value::Object(details));
+        Ok(report)
     }
 }

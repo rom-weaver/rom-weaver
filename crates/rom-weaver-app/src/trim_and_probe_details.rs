@@ -1,34 +1,35 @@
+use super::*;
 /// The mode/operation settings for a single trim operation, grouped so `trim_file` takes one
 /// request descriptor instead of four positional flags.
 #[derive(Clone, Copy)]
-struct TrimRequest {
-    in_place: bool,
-    dry_run: bool,
-    operation: TrimOperation,
-    kind: TrimInputKind,
+pub(super) struct TrimRequest {
+    pub(super) in_place: bool,
+    pub(super) dry_run: bool,
+    pub(super) operation: TrimOperation,
+    pub(super) kind: TrimInputKind,
     /// When set on a trim, append a small revert footer recording the original size and padding
     /// byte so the file can later be reverted to a byte-identical original.
-    revert_marker: bool,
+    pub(super) revert_marker: bool,
 }
 
 // Revert footer format: see `docs/trim-revert-footer.md` for the full specification.
 /// 4-byte magic + version identifying a rom-weaver revert footer (`"RWT"` + version `0x01`).
-const REVERT_FOOTER_MAGIC: &[u8; 4] = b"RWT\x01";
+pub(super) const REVERT_FOOTER_MAGIC: &[u8; 4] = b"RWT\x01";
 /// Total on-disk size of the revert footer: magic+version(4) + pad_byte(1) + pad_len(5, 40-bit LE)
 /// + crc32(4).
-const REVERT_FOOTER_LEN: u64 = 14;
+pub(super) const REVERT_FOOTER_LEN: u64 = 14;
 /// Maximum padding length the 40-bit `pad_len` field can encode (1 TiB, far beyond any cartridge).
-const REVERT_FOOTER_MAX_PAD_LEN: u64 = (1 << 40) - 1;
+pub(super) const REVERT_FOOTER_MAX_PAD_LEN: u64 = (1 << 40) - 1;
 
 /// Metadata recovered from a revert footer: enough to reconstruct the original file byte-for-byte.
 #[derive(Clone, Copy, Debug)]
-struct RevertFooter {
+pub(super) struct RevertFooter {
     original_size: u64,
     pad_byte: u8,
 }
 
 impl CliApp {
-    fn format_mode_counts(mode_counts: &BTreeMap<&'static str, usize>) -> String {
+    pub(super) fn format_mode_counts(mode_counts: &BTreeMap<&'static str, usize>) -> String {
         if mode_counts.is_empty() {
             return "none".to_string();
         }
@@ -40,7 +41,7 @@ impl CliApp {
             .join(",")
     }
 
-    fn trim_fix_eligible_kind_for_path(&self, path: &Path) -> Option<TrimInputKind> {
+    pub(super) fn trim_fix_eligible_kind_for_path(&self, path: &Path) -> Option<TrimInputKind> {
         if let Some(kind) = TrimInputKind::from_path(path) {
             return Some(kind);
         }
@@ -49,17 +50,18 @@ impl CliApp {
             .extension()
             .and_then(|value| value.to_str())
             .is_some_and(|extension| extension.eq_ignore_ascii_case("iso"))
-            && let Ok(source_file) = File::options().read(true).open(path) {
-                let source_reader = BufReader::new(source_file);
-                if XdvdfsOffsetWrapper::new(source_reader).is_ok() {
-                    return Some(TrimInputKind::Xiso);
-                }
+            && let Ok(source_file) = File::options().read(true).open(path)
+        {
+            let source_reader = BufReader::new(source_file);
+            if XdvdfsOffsetWrapper::new(source_reader).is_ok() {
+                return Some(TrimInputKind::Xiso);
             }
+        }
 
         None
     }
 
-    fn trim_eligible_kind_for_path(&self, path: &Path) -> Option<TrimInputKind> {
+    pub(super) fn trim_eligible_kind_for_path(&self, path: &Path) -> Option<TrimInputKind> {
         if let Some(kind) = self.trim_fix_eligible_kind_for_path(path) {
             return Some(kind);
         }
@@ -71,12 +73,12 @@ impl CliApp {
         None
     }
 
-    fn is_rvz_scrub_candidate(&self, path: &Path) -> bool {
+    pub(super) fn is_rvz_scrub_candidate(&self, path: &Path) -> bool {
         let recommendation = self.containers.recommend_compress_format(path);
         recommendation.format_name.eq_ignore_ascii_case("rvz")
     }
 
-    fn read_checksum_trim_plan_with_offset(
+    pub(super) fn read_checksum_trim_plan_with_offset(
         &self,
         source: &Path,
         data_start_offset: u64,
@@ -154,7 +156,7 @@ impl CliApp {
         }
     }
 
-    fn collect_trim_input_files(
+    pub(super) fn collect_trim_input_files(
         &self,
         sources: &[PathBuf],
         options: TrimCollectOptions<'_>,
@@ -170,7 +172,13 @@ impl CliApp {
                 ))
             })?;
             if metadata.is_file() {
-                self.collect_trim_file(source, options, &mut files, cleanup_paths, skipped_unsupported)?;
+                self.collect_trim_file(
+                    source,
+                    options,
+                    &mut files,
+                    cleanup_paths,
+                    skipped_unsupported,
+                )?;
                 continue;
             }
             if metadata.is_dir() {
@@ -195,7 +203,7 @@ impl CliApp {
     /// Resolve a single file input into trim sources: a directly trim-eligible file becomes one
     /// source, otherwise an extractable archive is unpacked and its trim-eligible payloads are
     /// added. Anything else increments the unsupported counter.
-    fn collect_trim_file(
+    pub(super) fn collect_trim_file(
         &self,
         path: &Path,
         options: TrimCollectOptions<'_>,
@@ -231,7 +239,7 @@ impl CliApp {
         Ok(())
     }
 
-    fn collect_trim_directory_files(
+    pub(super) fn collect_trim_directory_files(
         &self,
         root: &Path,
         options: TrimCollectOptions<'_>,
@@ -258,13 +266,7 @@ impl CliApp {
                     *skipped_unsupported = skipped_unsupported.saturating_add(1);
                     continue;
                 }
-                self.collect_trim_file(
-                    &path,
-                    options,
-                    files,
-                    cleanup_paths,
-                    skipped_unsupported,
-                )?;
+                self.collect_trim_file(&path, options, files, cleanup_paths, skipped_unsupported)?;
             }
         }
         Ok(())
@@ -273,7 +275,7 @@ impl CliApp {
     /// Extract an archive (recursively, bounded) into temporary directories and return only the
     /// payloads whose type trim actually supports. Temp directories are recorded in
     /// `cleanup_paths` so the caller can remove them after trimming completes.
-    fn extract_trim_payloads(
+    pub(super) fn extract_trim_payloads(
         &self,
         archive: &Path,
         options: TrimCollectOptions<'_>,
@@ -310,7 +312,10 @@ impl CliApp {
                 source: current.clone(),
                 split_bin: false,
             };
-            if handler.probe_details(&probe_request, options.context).is_err() {
+            if handler
+                .probe_details(&probe_request, options.context)
+                .is_err()
+            {
                 continue;
             }
 
@@ -379,7 +384,7 @@ impl CliApp {
     /// `--in-place` can trim the ROM and recompress the directory back over the original archive.
     /// Only a single top-level trim-eligible ROM is supported; deeper or multiple ROMs are
     /// rejected so the repack stays unambiguous.
-    fn extract_trim_repack_payload(
+    pub(super) fn extract_trim_repack_payload(
         &self,
         archive: &Path,
         options: TrimCollectOptions<'_>,
@@ -395,7 +400,10 @@ impl CliApp {
             source: archive.to_path_buf(),
             split_bin: false,
         };
-        if handler.probe_details(&probe_request, options.context).is_err() {
+        if handler
+            .probe_details(&probe_request, options.context)
+            .is_err()
+        {
             return Ok(Vec::new());
         }
         if !handler.capabilities().create {
@@ -469,7 +477,7 @@ impl CliApp {
             .collect())
     }
 
-    fn collect_batch_header_fix_input_files(
+    pub(super) fn collect_batch_header_fix_input_files(
         &self,
         sources: &[PathBuf],
         recursive: bool,
@@ -505,7 +513,7 @@ impl CliApp {
         Ok(files)
     }
 
-    fn collect_batch_header_fix_directory_files(
+    pub(super) fn collect_batch_header_fix_directory_files(
         &self,
         root: &Path,
         recursive: bool,
@@ -541,7 +549,7 @@ impl CliApp {
         Ok(())
     }
 
-    fn header_fix_candidate_for_path(path: &Path) -> bool {
+    pub(super) fn header_fix_candidate_for_path(path: &Path) -> bool {
         let Some(extension) = path.extension().and_then(|value| value.to_str()) else {
             return false;
         };
@@ -550,7 +558,7 @@ impl CliApp {
             .any(|candidate| candidate.eq_ignore_ascii_case(extension))
     }
 
-    fn default_batch_header_fix_output_path(source: &Path, extension: &str) -> PathBuf {
+    pub(super) fn default_batch_header_fix_output_path(source: &Path, extension: &str) -> PathBuf {
         let source_extension = source
             .extension()
             .and_then(|value| value.to_str())
@@ -561,7 +569,7 @@ impl CliApp {
         output
     }
 
-    fn fix_headers_for_file(
+    pub(super) fn fix_headers_for_file(
         source: &Path,
         destination: &Path,
         in_place: bool,
@@ -586,7 +594,7 @@ impl CliApp {
         })
     }
 
-    fn default_trim_output_path(source: &TrimSource, extension: &str) -> PathBuf {
+    pub(super) fn default_trim_output_path(source: &TrimSource, extension: &str) -> PathBuf {
         let source_extension = if source.kind == TrimInputKind::RvzScrub {
             "rvz"
         } else {
@@ -604,7 +612,7 @@ impl CliApp {
 
     /// Side-by-side output for an archive-extracted payload: places the trimmed ROM next to the
     /// original archive using the payload's base name and resolved extension.
-    fn archive_sidecar_trim_output_path(
+    pub(super) fn archive_sidecar_trim_output_path(
         archive: &Path,
         source: &TrimSource,
         extension: &str,
@@ -633,7 +641,7 @@ impl CliApp {
         output
     }
 
-    fn trim_file(
+    pub(super) fn trim_file(
         &self,
         source: &Path,
         destination: &Path,
@@ -692,7 +700,7 @@ impl CliApp {
 
     /// Reconstruct the original file from a trimmed file that carries a revert footer: drop the
     /// footer, then pad back to the recorded original size with the recorded padding byte.
-    fn revert_with_footer(
+    pub(super) fn revert_with_footer(
         source: &Path,
         destination: &Path,
         in_place: bool,
@@ -761,7 +769,7 @@ impl CliApp {
         })
     }
 
-    fn trim_nds_file(
+    pub(super) fn trim_nds_file(
         source: &Path,
         destination: &Path,
         in_place: bool,
@@ -844,7 +852,7 @@ impl CliApp {
         })
     }
 
-    fn trim_power_of_two_file(
+    pub(super) fn trim_power_of_two_file(
         source: &Path,
         destination: &Path,
         in_place: bool,
@@ -921,7 +929,7 @@ impl CliApp {
         })
     }
 
-    fn trim_xiso_file(
+    pub(super) fn trim_xiso_file(
         source: &Path,
         destination: &Path,
         in_place: bool,
@@ -1005,7 +1013,7 @@ impl CliApp {
         })
     }
 
-    fn trim_rvz_scrub_file(
+    pub(super) fn trim_rvz_scrub_file(
         &self,
         source: &Path,
         destination: &Path,
@@ -1073,7 +1081,7 @@ impl CliApp {
         })
     }
 
-    fn create_rvz_scrubbed_output(
+    pub(super) fn create_rvz_scrubbed_output(
         &self,
         source: &Path,
         destination: &Path,
@@ -1108,7 +1116,11 @@ impl CliApp {
         Ok(())
     }
 
-    fn measure_rvz_scrubbed_size(&self, source: &Path, context: &OperationContext) -> Result<u64> {
+    pub(super) fn measure_rvz_scrubbed_size(
+        &self,
+        source: &Path,
+        context: &OperationContext,
+    ) -> Result<u64> {
         let handler = self.containers.find_by_name("rvz").ok_or_else(|| {
             RomWeaverError::Unsupported(
                 "rvz handler is not registered; rvz-scrub trim is unavailable".to_string(),
@@ -1134,7 +1146,9 @@ impl CliApp {
             })
     }
 
-    fn open_xiso_trim_source_filesystem(source_path: &Path) -> Result<XisoTrimSourceFilesystem> {
+    pub(super) fn open_xiso_trim_source_filesystem(
+        source_path: &Path,
+    ) -> Result<XisoTrimSourceFilesystem> {
         let source_file = File::options()
             .read(true)
             .open(source_path)
@@ -1159,7 +1173,7 @@ impl CliApp {
         })
     }
 
-    fn create_trimmed_xiso(source: &Path, destination: &Path) -> Result<()> {
+    pub(super) fn create_trimmed_xiso(source: &Path, destination: &Path) -> Result<()> {
         let mut source_fs = Self::open_xiso_trim_source_filesystem(source)?;
         let output = File::create(destination)?;
         let mut output = BufWriter::new(output);
@@ -1173,7 +1187,7 @@ impl CliApp {
         Ok(())
     }
 
-    fn measure_trimmed_xiso_size(source: &Path) -> Result<u64> {
+    pub(super) fn measure_trimmed_xiso_size(source: &Path) -> Result<u64> {
         let mut source_fs = Self::open_xiso_trim_source_filesystem(source)?;
         let mut sink = XisoMeasuredLengthSink::default();
         create_xdvdfs_image(&mut source_fs, &mut sink, |_| {}).map_err(|error| {
@@ -1185,7 +1199,7 @@ impl CliApp {
         Ok(sink.output_len())
     }
 
-    fn temporary_xiso_trim_path(source: &Path) -> PathBuf {
+    pub(super) fn temporary_xiso_trim_path(source: &Path) -> PathBuf {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|value| value.as_nanos())
@@ -1205,7 +1219,7 @@ impl CliApp {
             .unwrap_or_else(|| PathBuf::from(temp_name))
     }
 
-    fn temporary_header_fix_path(source: &Path) -> PathBuf {
+    pub(super) fn temporary_header_fix_path(source: &Path) -> PathBuf {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map(|value| value.as_nanos())
@@ -1224,7 +1238,7 @@ impl CliApp {
             .unwrap_or_else(|| PathBuf::from(temp_name))
     }
 
-    fn apply_file_size_target(
+    pub(super) fn apply_file_size_target(
         source: &Path,
         destination: &Path,
         in_place: bool,
@@ -1261,7 +1275,11 @@ impl CliApp {
         Ok(())
     }
 
-    fn write_padding_bytes(writer: &mut dyn Write, length: u64, fill_byte: u8) -> io::Result<()> {
+    pub(super) fn write_padding_bytes(
+        writer: &mut dyn Write,
+        length: u64,
+        fill_byte: u8,
+    ) -> io::Result<()> {
         if length == 0 {
             return Ok(());
         }
@@ -1277,13 +1295,16 @@ impl CliApp {
         Ok(())
     }
 
-    fn scan_trimmed_size_from_trailing_padding(path: &Path, fill_byte: u8) -> Result<u64> {
+    pub(super) fn scan_trimmed_size_from_trailing_padding(
+        path: &Path,
+        fill_byte: u8,
+    ) -> Result<u64> {
         Self::scan_trimmed_size_from_trailing_padding_from_offset(path, fill_byte, 0)
     }
 
     /// CRC32 (IEEE) over a small buffer, used to validate the revert footer without pulling in a
     /// dependency. Bitwise form is fine for the 24-byte footer body.
-    fn revert_footer_crc32(bytes: &[u8]) -> u32 {
+    pub(super) fn revert_footer_crc32(bytes: &[u8]) -> u32 {
         let mut crc: u32 = 0xFFFF_FFFF;
         for &byte in bytes {
             crc ^= u32::from(byte);
@@ -1297,7 +1318,7 @@ impl CliApp {
 
     /// Append a revert footer recording the padding length and byte so a later `--revert` can
     /// reconstruct the original file exactly. `path` must already hold the trimmed data only.
-    fn write_revert_footer(path: &Path, original_size: u64, pad_byte: u8) -> Result<()> {
+    pub(super) fn write_revert_footer(path: &Path, original_size: u64, pad_byte: u8) -> Result<()> {
         let data_size = fs::metadata(path)?.len();
         let pad_len = original_size.saturating_sub(data_size);
         if pad_len > REVERT_FOOTER_MAX_PAD_LEN {
@@ -1331,7 +1352,7 @@ impl CliApp {
     /// Read and validate a revert footer from the end of a file. Returns `None` when the file is
     /// too small or the trailing bytes are not a valid footer (magic + CRC must both match). The
     /// reconstructed original size is derived from the data length plus the recorded padding.
-    fn read_revert_footer(path: &Path) -> Result<Option<RevertFooter>> {
+    pub(super) fn read_revert_footer(path: &Path) -> Result<Option<RevertFooter>> {
         let mut file = File::open(path)?;
         let file_size = file.metadata()?.len();
         if file_size < REVERT_FOOTER_LEN {
@@ -1361,7 +1382,7 @@ impl CliApp {
     /// Inspect the final byte of a ROM to decide which padding convention it uses. Returns the pad
     /// byte (`0x00` or `0xFF`) when the file ends in one, or `None` when the trailing byte is real
     /// data and there is no padding to remove.
-    fn detect_trailing_pad_byte(path: &Path) -> Result<Option<u8>> {
+    pub(super) fn detect_trailing_pad_byte(path: &Path) -> Result<Option<u8>> {
         let mut input = File::open(path)?;
         let file_size = input.metadata()?.len();
         if file_size == 0 {
@@ -1376,7 +1397,7 @@ impl CliApp {
         }
     }
 
-    fn scan_trimmed_size_from_trailing_padding_from_offset(
+    pub(super) fn scan_trimmed_size_from_trailing_padding_from_offset(
         path: &Path,
         fill_byte: u8,
         start_offset: u64,
@@ -1406,7 +1427,7 @@ impl CliApp {
         Ok(1)
     }
 
-    fn power_of_two_target_size_for_revert(size: u64) -> Result<u64> {
+    pub(super) fn power_of_two_target_size_for_revert(size: u64) -> Result<u64> {
         if size == 0 {
             return Err(RomWeaverError::Validation(
                 "cannot revert an empty file".to_string(),
@@ -1417,7 +1438,7 @@ impl CliApp {
         })
     }
 
-    fn read_nds_trim_plan(
+    pub(super) fn read_nds_trim_plan(
         input: &mut File,
         file_size: u64,
         allow_boundary_past_eof: bool,
@@ -1476,7 +1497,7 @@ impl CliApp {
         })
     }
 
-    fn validate_nds_header(header: &[u8]) -> Result<()> {
+    pub(super) fn validate_nds_header(header: &[u8]) -> Result<()> {
         if header.len() < NDS_HEADER_TOTAL_BYTES {
             return Err(RomWeaverError::Validation(
                 "NDS header buffer is truncated".into(),
@@ -1510,7 +1531,7 @@ impl CliApp {
         Ok(())
     }
 
-    fn nds_crc16(bytes: &[u8]) -> u16 {
+    pub(super) fn nds_crc16(bytes: &[u8]) -> u16 {
         let mut crc = 0xFFFF_u16;
         for byte in bytes {
             crc ^= u16::from(*byte);
@@ -1525,21 +1546,21 @@ impl CliApp {
         crc
     }
 
-    fn read_u16_le(buffer: &[u8], offset: usize, label: &str) -> Result<u16> {
+    pub(super) fn read_u16_le(buffer: &[u8], offset: usize, label: &str) -> Result<u16> {
         let bytes = buffer.get(offset..offset + 2).ok_or_else(|| {
             RomWeaverError::Validation(format!("missing {label} bytes at offset 0x{offset:X}"))
         })?;
         Ok(u16::from_le_bytes([bytes[0], bytes[1]]))
     }
 
-    fn read_u32_le(buffer: &[u8], offset: usize, label: &str) -> Result<u32> {
+    pub(super) fn read_u32_le(buffer: &[u8], offset: usize, label: &str) -> Result<u32> {
         let bytes = buffer.get(offset..offset + 4).ok_or_else(|| {
             RomWeaverError::Validation(format!("missing {label} bytes at offset 0x{offset:X}"))
         })?;
         Ok(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
     }
 
-    fn probe_compress_recommendation(
+    pub(super) fn probe_compress_recommendation(
         &self,
         source: &Path,
     ) -> Option<CompressFormatRecommendation> {
@@ -1550,7 +1571,7 @@ impl CliApp {
         }
     }
 
-    fn append_recommended_compress_label(
+    pub(super) fn append_recommended_compress_label(
         mut report: OperationReport,
         recommendation: Option<&CompressFormatRecommendation>,
     ) -> OperationReport {
@@ -1561,7 +1582,7 @@ impl CliApp {
         report
     }
 
-    fn attach_container_probe_details(
+    pub(super) fn attach_container_probe_details(
         mut report: OperationReport,
         listed_entries: Option<Vec<ContainerListEntry>>,
         recommendation: Option<&CompressFormatRecommendation>,
@@ -1625,7 +1646,7 @@ impl CliApp {
         report
     }
 
-    fn attach_patch_probe_details(mut report: OperationReport) -> OperationReport {
+    pub(super) fn attach_patch_probe_details(mut report: OperationReport) -> OperationReport {
         if report.status != OperationStatus::Succeeded {
             return report;
         }
@@ -1660,5 +1681,4 @@ impl CliApp {
         report.details = Some(Value::Object(details));
         report
     }
-
 }

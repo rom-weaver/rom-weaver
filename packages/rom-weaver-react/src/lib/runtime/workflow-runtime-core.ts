@@ -567,7 +567,7 @@ const createSharedCompressionRuntime = (
       onProgress: forwardRomSpecificProgress("output", request.options?.onProgress),
       outputName: request.outputName,
       rvzBlockSize: request.rvzBlockSize,
-      rvzCompression: request.rvzCompression,
+      rvzCodec: request.rvzCodec,
       rvzCompressionLevel: request.rvzCompressionLevel,
       rvzMode: request.rvzMode,
       rvzScrub: request.rvzScrub,

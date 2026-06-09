@@ -119,7 +119,7 @@ type WorkerCompressionCreateRequestData = WorkerCompressionRequestBase<"create",
   mode?: string;
   outputName: string;
   rvzBlockSize?: string | number | null;
-  rvzCompression?: string;
+  rvzCodec?: string;
   rvzCompressionLevel?: string | number | null;
   rvzFile?: BrowserWorkerFile;
   rvzFileName?: string;

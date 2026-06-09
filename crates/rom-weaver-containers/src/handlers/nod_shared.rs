@@ -387,7 +387,7 @@ impl NodHandlerCore {
         compression_label: &str,
         execution: ThreadExecution,
     ) -> OperationReport {
-        OperationReport::succeeded(
+        let report = OperationReport::succeeded(
             OperationFamily::Container,
             Some(self.format_name().to_string()),
             "extract",
@@ -400,8 +400,9 @@ impl NodHandlerCore {
                 compression_label
             ),
             Some(100.0),
-            Some(execution),
-        )
+            Some(execution.clone()),
+        );
+        attach_extraction_details(report, 1, 1, bytes_written, &execution)
     }
 
     pub(crate) fn ensure_single_create_input<'a>(
@@ -570,10 +571,7 @@ macro_rules! nod_extract_only_handler {
             $handler,
             $descriptor,
             $format,
-            RomWeaverError::Unsupported(format!(
-                "{} is extract-only; supported create formats are 7z, zip, chd, rvz, and z3ds",
-                $descriptor.name
-            ))
+            extract_only_create_error($descriptor.name)
         );
     };
     ($core:ident, $handler:ident, $descriptor:expr, $format:expr, $create_error:expr $(,)?) => {

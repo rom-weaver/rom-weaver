@@ -1,4 +1,5 @@
-fn render_label(
+use super::*;
+pub(super) fn render_label(
     algorithms: &[Algorithm],
     results: &BTreeMap<String, String>,
     range: &ResolvedRange,
@@ -15,7 +16,7 @@ fn render_label(
     parts.join(" ")
 }
 
-fn hex_encode(bytes: &[u8]) -> String {
+pub(super) fn hex_encode(bytes: &[u8]) -> String {
     let mut output = String::with_capacity(bytes.len() * 2);
     for byte in bytes {
         let _ = write!(output, "{byte:02x}");

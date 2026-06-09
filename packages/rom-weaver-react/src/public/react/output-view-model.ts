@@ -1,3 +1,7 @@
+import {
+  CREATE_ARCHIVE_COMPRESSION_FORMATS,
+  CREATE_ROM_SPECIFIC_COMPRESSION_FORMATS,
+} from "../../lib/compression/container-format-registry.ts";
 import OutputCompressionManager from "../../lib/compression/output-compression-manager.ts";
 import { getCreatePatchFormatsForSizes } from "../../lib/create/patch-format-limits.ts";
 import { classifyPatcherInput } from "../../lib/input/input-classification.ts";
@@ -160,7 +164,7 @@ const getOutputOptionExtensionLabel = (option: string, source?: GeneratedOutputS
 };
 
 const createOutputOptions = (
-  compressionOptions: string[],
+  compressionOptions: readonly string[],
   source?: GeneratedOutputSource,
   labels: OutputOptionLabelMap = {},
 ): OutputOption[] =>
@@ -198,7 +202,7 @@ const normalizeExtensionValue = (value: string, fallback: string) =>
 
 const createCreateOutputCompressionOptions = (): OutputOption[] => [
   { label: NONE_COMPRESSION_LABEL, value: "none" },
-  ...createOutputOptions(["zip", "7z"]),
+  ...createOutputOptions(CREATE_ARCHIVE_COMPRESSION_FORMATS),
 ];
 
 const createCreatePatchFormatOptions = (options: CreatePatchFormatOptions = {}): OutputOption[] => {
@@ -230,7 +234,7 @@ const createTrimOutputOptions = (rawExtension: string, { rawLabel }: { rawLabel?
   const normalizedRawExtension = normalizeExtensionValue(rawExtension, "raw");
   return uniqueOutputOptions([
     { label: rawLabel || `.${normalizedRawExtension}`, value: normalizedRawExtension },
-    ...createOutputOptions(["chd", "rvz", "z3ds", "zip", "7z"]),
+    ...createOutputOptions([...CREATE_ROM_SPECIFIC_COMPRESSION_FORMATS, ...CREATE_ARCHIVE_COMPRESSION_FORMATS]),
   ]);
 };
 

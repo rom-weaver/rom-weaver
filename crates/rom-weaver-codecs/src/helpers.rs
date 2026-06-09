@@ -1,4 +1,9 @@
-fn decode_exact(mut decoder: impl Read, expected_len: u64, codec: &'static str) -> Result<Vec<u8>> {
+use super::*;
+pub(super) fn decode_exact(
+    mut decoder: impl Read,
+    expected_len: u64,
+    codec: &'static str,
+) -> Result<Vec<u8>> {
     let expected = usize::try_from(expected_len).map_err(|_| {
         RomWeaverError::Validation(format!("{codec} expected size overflowed usize"))
     })?;

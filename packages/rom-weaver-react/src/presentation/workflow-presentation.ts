@@ -343,6 +343,24 @@ const formatProgressThreadCount = (threads: string | number | null | undefined):
   return normalized ? `${normalized} ${normalized === 1 ? "thread" : "threads"}` : "";
 };
 
+const getProgressEventThreadCount = (progress: WorkflowValue | object | null | undefined): string | number | null => {
+  if (!isRecord(progress)) return null;
+  const details = isRecord(progress.details) ? progress.details : {};
+  const compression = isRecord(details.compression) ? details.compression : {};
+  const extraction = isRecord(details.extraction) ? details.extraction : {};
+  return (
+    getNumericValue(progress.effective_threads) ??
+    getNumericValue(progress.effectiveThreads) ??
+    getNumericValue(details.effective_threads) ??
+    getNumericValue(details.effectiveThreads) ??
+    getNumericValue(compression.effective_threads) ??
+    getNumericValue(compression.effectiveThreads) ??
+    getNumericValue(extraction.effective_threads) ??
+    getNumericValue(extraction.effectiveThreads) ??
+    null
+  );
+};
+
 const stripProgressEllipsis = (label: string): string =>
   String(label || "")
     .trim()
@@ -439,7 +457,7 @@ const createCompressionProgressLabelFromEvent = (options: CompressionProgressLab
     fallbackLabel,
     formatLabel,
     label,
-    threads: options.threads,
+    threads: getProgressEventThreadCount(options.progress) ?? options.threads,
   });
 };
 

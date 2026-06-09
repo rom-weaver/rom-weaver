@@ -1,4 +1,8 @@
-fn build_native_window_header(window: &WindowIndex, source_len: u64) -> OxideltaWindowHeader {
+use super::*;
+pub(super) fn build_native_window_header(
+    window: &WindowIndex,
+    source_len: u64,
+) -> OxideltaWindowHeader {
     let mut win_ind = 0u8;
     match window.source_kind {
         Some(WindowSourceKind::Source) => {
@@ -30,7 +34,7 @@ fn build_native_window_header(window: &WindowIndex, source_len: u64) -> Oxidelta
     header
 }
 
-fn ensure_supported_secondary_compressor(secondary_id: Option<u8>) -> Result<()> {
+pub(super) fn ensure_supported_secondary_compressor(secondary_id: Option<u8>) -> Result<()> {
     match secondary_id {
         Some(id)
             if id != XDELTA_LZMA_SECONDARY_ID
@@ -45,13 +49,20 @@ fn ensure_supported_secondary_compressor(secondary_id: Option<u8>) -> Result<()>
     }
 }
 
-fn native_decode_error(error: OxideltaDecodeError, window: &WindowIndex) -> RomWeaverError {
+pub(super) fn native_decode_error(
+    error: OxideltaDecodeError,
+    window: &WindowIndex,
+) -> RomWeaverError {
     RomWeaverError::Validation(format!(
         "native VCDIFF decoder failed at output offset {}: {error}",
         window.output_offset
     ))
 }
-fn read_section<R: Read + Seek>(reader: &mut R, start: u64, len: u64) -> Result<Vec<u8>> {
+pub(super) fn read_section<R: Read + Seek>(
+    reader: &mut R,
+    start: u64,
+    len: u64,
+) -> Result<Vec<u8>> {
     let size = usize::try_from(len).map_err(|_| {
         RomWeaverError::Validation("section is too large to fit in memory on this platform".into())
     })?;
@@ -61,7 +72,7 @@ fn read_section<R: Read + Seek>(reader: &mut R, start: u64, len: u64) -> Result<
     Ok(buffer)
 }
 
-fn skip_bytes<R: Read>(reader: &mut R, len: u64) -> Result<()> {
+pub(super) fn skip_bytes<R: Read>(reader: &mut R, len: u64) -> Result<()> {
     let size = usize::try_from(len).map_err(|_| {
         RomWeaverError::Validation("section is too large to fit in memory on this platform".into())
     })?;
@@ -70,7 +81,7 @@ fn skip_bytes<R: Read>(reader: &mut R, len: u64) -> Result<()> {
     Ok(())
 }
 
-fn read_optional_u8<R: Read>(reader: &mut R) -> Result<Option<u8>> {
+pub(super) fn read_optional_u8<R: Read>(reader: &mut R) -> Result<Option<u8>> {
     let mut buffer = [0; 1];
     match reader.read_exact(&mut buffer) {
         Ok(()) => Ok(Some(buffer[0])),
@@ -79,19 +90,19 @@ fn read_optional_u8<R: Read>(reader: &mut R) -> Result<Option<u8>> {
     }
 }
 
-fn read_u8<R: Read>(reader: &mut R) -> Result<u8> {
+pub(super) fn read_u8<R: Read>(reader: &mut R) -> Result<u8> {
     let mut buffer = [0; 1];
     reader.read_exact(&mut buffer)?;
     Ok(buffer[0])
 }
 
-fn read_be_u32<R: Read>(reader: &mut R) -> Result<u32> {
+pub(super) fn read_be_u32<R: Read>(reader: &mut R) -> Result<u32> {
     let mut buffer = [0; 4];
     reader.read_exact(&mut buffer)?;
     Ok(u32::from_be_bytes(buffer))
 }
 
-fn read_varint<R: Read>(reader: &mut R) -> Result<(u64, usize)> {
+pub(super) fn read_varint<R: Read>(reader: &mut R) -> Result<(u64, usize)> {
     let mut value = 0u64;
     let mut count = 0usize;
     loop {
@@ -113,8 +124,7 @@ fn read_varint<R: Read>(reader: &mut R) -> Result<(u64, usize)> {
     Ok((value, count))
 }
 
-fn checked_add(lhs: u64, rhs: u64, label: &str) -> Result<u64> {
+pub(super) fn checked_add(lhs: u64, rhs: u64, label: &str) -> Result<u64> {
     lhs.checked_add(rhs)
         .ok_or_else(|| RomWeaverError::Validation(format!("{label} overflowed u64")))
 }
-

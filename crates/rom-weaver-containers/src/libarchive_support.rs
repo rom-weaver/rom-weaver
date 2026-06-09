@@ -33,6 +33,7 @@ use tracing::trace;
 
 use crate::{
     archive_entries::{ArchiveInputEntry, sanitize_archive_relative_path_from_str},
+    attach_extraction_details,
     constants::{LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES, PARALLEL_COORDINATOR_STACK_SIZE_BYTES},
     extract_support::{
         ContainerProgressContext, ExtractedFileChecksum, attach_extract_checksum_details,
@@ -1347,6 +1348,7 @@ pub(crate) fn extract_regular_archive_with_libarchive(
         (execution, written_bytes, output_checksums)
     };
 
+    let file_count = tasks.iter().filter(|task| !task.is_dir).count();
     let report = OperationReport::succeeded(
         OperationFamily::Container,
         Some(format_name.to_string()),
@@ -1355,11 +1357,13 @@ pub(crate) fn extract_regular_archive_with_libarchive(
             "extracted `{}` to `{}` ({} file(s), {} bytes written)",
             request.source.display(),
             request.out_dir.display(),
-            tasks.iter().filter(|task| !task.is_dir).count(),
+            file_count,
             written_bytes
         ),
         Some(100.0),
-        Some(execution),
+        Some(execution.clone()),
     );
+    let report =
+        attach_extraction_details(report, tasks.len(), file_count, written_bytes, &execution);
     Ok(attach_extract_checksum_details(report, output_checksums))
 }

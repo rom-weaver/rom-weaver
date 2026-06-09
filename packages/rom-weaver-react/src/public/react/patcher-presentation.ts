@@ -1,4 +1,9 @@
 import {
+  CREATE_ARCHIVE_COMPRESSION_FORMATS,
+  CREATE_ROM_SPECIFIC_COMPRESSION_FORMATS,
+  getCompressionFormatRegistration,
+} from "../../lib/compression/container-format-registry.ts";
+import {
   createOutputSizeSummary,
   type OutputSizeSummaryViewModel,
   type ProgressViewModel,
@@ -92,13 +97,13 @@ type PatchStackState = {
 };
 
 const DEFAULT_OUTPUT_OPTIONS: OutputOption[] = [
-  { label: "7z", value: "7z" },
-  { label: "CHD", value: "chd" },
-  { label: "RVZ", value: "rvz" },
-  { label: "Z3DS", value: "z3ds" },
-  { label: "ZIP", value: "zip" },
-  { label: "None", value: "none" },
-];
+  ...CREATE_ARCHIVE_COMPRESSION_FORMATS,
+  ...CREATE_ROM_SPECIFIC_COMPRESSION_FORMATS,
+  "none",
+].map((format) => ({
+  label: getCompressionFormatRegistration(format)?.label || format,
+  value: format,
+}));
 
 const cloneOutputOptions = (options: OutputOption[]) => options.map((option) => ({ ...option }));
 

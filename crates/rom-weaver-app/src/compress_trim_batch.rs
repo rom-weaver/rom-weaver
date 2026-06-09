@@ -1,6 +1,7 @@
+use super::*;
 /* jscpd:ignore-start */
 impl CliApp {
-    fn run_compress(&self, args: CompressCommand) -> AppRunOutcome {
+    pub(super) fn run_compress(&self, args: CompressCommand) -> AppRunOutcome {
         trace!(
             input_count = args.input.len(),
             output = %args.output.display(),
@@ -138,10 +139,7 @@ impl CliApp {
                     OperationFamily::Container,
                     Some(handler.descriptor().name.to_string()),
                     "validate",
-                    format!(
-                        "{} is extract-only; supported create formats are 7z, zip, chd, rvz, and z3ds",
-                        handler.descriptor().name
-                    ),
+                    extract_only_create_validation_message(handler.descriptor().name),
                     probe_threads,
                 ),
             );
@@ -215,7 +213,7 @@ impl CliApp {
         self.finish("compress", report)
     }
 
-    fn run_trim(&self, args: TrimCommand) -> AppRunOutcome {
+    pub(super) fn run_trim(&self, args: TrimCommand) -> AppRunOutcome {
         trace!(
             source_count = args.source.len(),
             output = ?args.output.as_ref().map(|path| path.display().to_string()),
@@ -283,21 +281,21 @@ impl CliApp {
             &mut cleanup_paths,
             &mut skipped_unsupported,
         ) {
-                Ok(paths) => paths,
-                Err(error) => {
-                    Self::cleanup_temp_paths(cleanup_paths);
-                    return self.finish(
-                        "trim",
-                        OperationReport::failed(
-                            OperationFamily::Command,
-                            Some("nds".to_string()),
-                            "validate",
-                            error.to_string(),
-                            thread_execution,
-                        ),
-                    );
-                }
-            };
+            Ok(paths) => paths,
+            Err(error) => {
+                Self::cleanup_temp_paths(cleanup_paths);
+                return self.finish(
+                    "trim",
+                    OperationReport::failed(
+                        OperationFamily::Command,
+                        Some("nds".to_string()),
+                        "validate",
+                        error.to_string(),
+                        thread_execution,
+                    ),
+                );
+            }
+        };
 
         if trim_sources.is_empty() {
             Self::cleanup_temp_paths(cleanup_paths);
@@ -307,7 +305,9 @@ impl CliApp {
                     OperationFamily::Command,
                     Some("nds".to_string()),
                     "trim",
-                    format!("no trim-eligible inputs found; skipped_unsupported={skipped_unsupported}"),
+                    format!(
+                        "no trim-eligible inputs found; skipped_unsupported={skipped_unsupported}"
+                    ),
                     Some(100.0),
                     thread_execution,
                 ),
@@ -345,12 +345,8 @@ impl CliApp {
                     .archive_origin
                     .as_ref()
                     .expect("repack source carries its archive origin");
-                match self.confirm_archive_repack(
-                    archive,
-                    repack_root,
-                    &trim_source.path,
-                    dry_run,
-                ) {
+                match self.confirm_archive_repack(archive, repack_root, &trim_source.path, dry_run)
+                {
                     Ok(true) => {}
                     Ok(false) => {
                         let message = format!(
@@ -592,7 +588,7 @@ impl CliApp {
 
     /// Files staged for repack besides the ROM being trimmed, used to decide whether `--in-place`
     /// needs confirmation before rewriting the archive.
-    fn repack_other_files(repack_root: &Path, rom_path: &Path) -> Result<Vec<PathBuf>> {
+    pub(super) fn repack_other_files(repack_root: &Path, rom_path: &Path) -> Result<Vec<PathBuf>> {
         let mut others = Vec::new();
         let mut directories = vec![repack_root.to_path_buf()];
         while let Some(directory) = directories.pop() {
@@ -612,7 +608,7 @@ impl CliApp {
     /// Decide whether an `--in-place` archive repack may proceed. Archives that only contain the
     /// ROM repack freely. When other files are present the rewrite is destructive, so a dry run
     /// just reports it, non-interactive runs fail, and interactive runs prompt for confirmation.
-    fn confirm_archive_repack(
+    pub(super) fn confirm_archive_repack(
         &self,
         archive: &Path,
         repack_root: &Path,
@@ -676,7 +672,7 @@ impl CliApp {
 
     /// Rebuild `archive` from the trimmed contents staged in `repack_root`, writing to a temporary
     /// sibling file first and renaming over the original so a failed build never destroys it.
-    fn repack_archive(
+    pub(super) fn repack_archive(
         &self,
         archive: &Path,
         repack_root: &Path,
@@ -770,7 +766,7 @@ impl CliApp {
         Ok(())
     }
 
-    fn run_batch_header_fixer(&self, args: BatchHeaderFixerCommand) -> AppRunOutcome {
+    pub(super) fn run_batch_header_fixer(&self, args: BatchHeaderFixerCommand) -> AppRunOutcome {
         trace!(
             source_count = args.source.len(),
             output = ?args.output.as_ref().map(|path| path.display().to_string()),

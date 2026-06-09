@@ -518,10 +518,7 @@ impl ContainerHandlerOperations for CsoContainerHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let _ = (request, context);
-        Err(RomWeaverError::Unsupported(format!(
-            "{} is extract-only; supported create formats are 7z, zip, chd, rvz, and z3ds",
-            self.descriptor.name
-        )))
+        Err(extract_only_create_error(self.descriptor.name))
     }
 }
 /* jscpd:ignore-end */
