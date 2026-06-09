@@ -1,0 +1,207 @@
+#!/usr/bin/env node
+import { execFileSync, execSync } from "node:child_process";
+import { access, readFile, writeFile } from "node:fs/promises";
+import { join, relative } from "node:path";
+
+const rootDir = process.cwd();
+const packageJsonPath = join(rootDir, "package.json");
+const workspaceCargoTomlPath = join(rootDir, "Cargo.toml");
+const syncedPackageJsonPaths = [
+  "packages/rom-weaver-react/package.json",
+  "packages/rom-weaver-wasm/package.json",
+];
+const syncedPackageDirs = [".", "packages/rom-weaver-wasm", "packages/rom-weaver-react"];
+
+async function fileExists(filePath) {
+  try {
+    await access(filePath);
+    return true;
+  } catch (_error) {
+    return false;
+  }
+}
+
+async function readRootPackageVersion() {
+  const content = await readFile(packageJsonPath, "utf8");
+  const pkg = JSON.parse(content);
+  if (typeof pkg.version !== "string" || !pkg.version) {
+    throw new Error("No version found in package.json");
+  }
+  return pkg.version;
+}
+
+async function readWorkspaceCargoTomlPaths() {
+  const content = await readFile(workspaceCargoTomlPath, "utf8");
+  const membersBlock = content.match(/members\s*=\s*\[([\s\S]*?)\]/m)?.[1];
+  if (!membersBlock) {
+    throw new Error("Could not find workspace members in Cargo.toml");
+  }
+
+  const members = Array.from(membersBlock.matchAll(/"([^"]+)"/g), (match) => match[1]);
+  const cargoTomlPaths = [workspaceCargoTomlPath];
+  for (const member of members) {
+    const cargoTomlPath = join(rootDir, member, "Cargo.toml");
+    if (await fileExists(cargoTomlPath)) {
+      cargoTomlPaths.push(cargoTomlPath);
+    }
+  }
+
+  return cargoTomlPaths;
+}
+
+async function updateWorkspacePackageVersion(version) {
+  let content = await readFile(workspaceCargoTomlPath, "utf8");
+  const match = content.match(/(\[workspace\.package\][\s\S]*?^version\s*=\s*")([^"]+)(")/m);
+  if (!match) {
+    throw new Error("Could not find [workspace.package] version in Cargo.toml");
+  }
+
+  const currentVersion = match[2];
+  if (currentVersion === version) {
+    console.log(`${workspaceCargoTomlPath} workspace package is already at version ${version}`);
+    return false;
+  }
+
+  content = content.replace(match[0], `${match[1]}${version}${match[3]}`);
+  await writeFile(workspaceCargoTomlPath, content, "utf8");
+  console.log(`Updated ${workspaceCargoTomlPath}: ${currentVersion} -> ${version}`);
+  return true;
+}
+
+async function updateInternalCargoDependencyVersions(cargoTomlPaths, version) {
+  const dependencyRegex = /^(\s*rom-weaver-[A-Za-z0-9_-]+\s*=\s*\{[^}\n]*\bversion\s*=\s*")([^"]+)("[^}\n]*\}\s*)$/gm;
+  let changed = false;
+
+  for (const cargoTomlPath of cargoTomlPaths) {
+    let content = await readFile(cargoTomlPath, "utf8");
+    const nextContent = content.replace(dependencyRegex, (line, prefix, currentVersion, suffix) => {
+      if (currentVersion === version) return line;
+      changed = true;
+      console.log(`Updated ${cargoTomlPath}: internal dependency ${currentVersion} -> ${version}`);
+      return `${prefix}${version}${suffix}`;
+    });
+
+    if (nextContent !== content) {
+      await writeFile(cargoTomlPath, nextContent, "utf8");
+    }
+  }
+
+  return changed;
+}
+
+async function updatePackageJsonVersion(packageJsonRelativePath, version) {
+  const packageJsonFilePath = join(rootDir, packageJsonRelativePath);
+  if (!(await fileExists(packageJsonFilePath))) {
+    console.warn(`Skipped ${packageJsonRelativePath}: not found`);
+    return false;
+  }
+
+  let content = await readFile(packageJsonFilePath, "utf8");
+  const pkg = JSON.parse(content);
+  if (pkg.version === version) {
+    console.log(`${packageJsonFilePath} is already at version ${version}`);
+    return false;
+  }
+
+  const currentVersion = pkg.version;
+  pkg.version = version;
+  content = `${JSON.stringify(pkg, null, 2)}\n`;
+  await writeFile(packageJsonFilePath, content, "utf8");
+  console.log(`Updated ${packageJsonFilePath}: ${currentVersion} -> ${version}`);
+  return true;
+}
+
+function updateCargoLock() {
+  try {
+    execSync("cargo metadata --format-version 1 --no-deps > /dev/null", {
+      cwd: rootDir,
+      stdio: "pipe",
+    });
+    console.log("Updated Cargo.lock");
+  } catch (_error) {
+    console.warn("Warning: Could not update Cargo.lock (cargo may not be available)");
+  }
+}
+
+function updatePackageLock(packageDir) {
+  try {
+    execFileSync("npm", ["install", "--package-lock-only", "--ignore-scripts"], {
+      cwd: join(rootDir, packageDir),
+      stdio: "pipe",
+    });
+    const lockfileName = packageDir === "." ? "package-lock.json" : `${packageDir}/package-lock.json`;
+    console.log(`Updated ${lockfileName}`);
+  } catch (_error) {
+    const lockfileName = packageDir === "." ? "package-lock.json" : `${packageDir}/package-lock.json`;
+    console.warn(`Warning: Could not update ${lockfileName} (npm may not be available)`);
+  }
+}
+
+function stageVersionFiles(cargoTomlPaths) {
+  const cargoTomlRelativePaths = cargoTomlPaths.map((filePath) => relative(rootDir, filePath));
+  const files = [
+    "package.json",
+    "package-lock.json",
+    "Cargo.toml",
+    "Cargo.lock",
+    ...cargoTomlRelativePaths.filter((filePath) => filePath !== "Cargo.toml"),
+    ...syncedPackageJsonPaths,
+    "packages/rom-weaver-react/package-lock.json",
+    "packages/rom-weaver-wasm/package-lock.json",
+  ];
+
+  try {
+    execFileSync("git", ["add", "--", ...files], {
+      cwd: rootDir,
+      stdio: "inherit",
+    });
+  } catch (_error) {
+    console.warn("Warning: Could not stage version files (git may not be available)");
+  }
+}
+
+async function main() {
+  const [bumpType] = process.argv.slice(2);
+
+  if (bumpType) {
+    console.log(`Running npm version ${bumpType}...`);
+    try {
+      execFileSync("npm", ["version", bumpType], {
+        cwd: rootDir,
+        stdio: "inherit",
+      });
+    } catch (_error) {
+      throw new Error(`npm version ${bumpType} failed`);
+    }
+  }
+
+  const version = await readRootPackageVersion();
+  const cargoTomlPaths = await readWorkspaceCargoTomlPaths();
+  let changed = false;
+
+  changed = (await updateWorkspacePackageVersion(version)) || changed;
+  changed = (await updateInternalCargoDependencyVersions(cargoTomlPaths, version)) || changed;
+  for (const packageJsonRelativePath of syncedPackageJsonPaths) {
+    changed = (await updatePackageJsonVersion(packageJsonRelativePath, version)) || changed;
+  }
+
+  if (changed) {
+    updateCargoLock();
+    for (const packageDir of syncedPackageDirs) {
+      updatePackageLock(packageDir);
+    }
+  }
+
+  if (changed || bumpType) {
+    stageVersionFiles(cargoTomlPaths);
+  }
+
+  if (bumpType) {
+    console.log(`\nVersion sync complete: ${version}`);
+  }
+}
+
+main().catch((error) => {
+  console.error("Version sync failed:", error);
+  process.exit(1);
+});

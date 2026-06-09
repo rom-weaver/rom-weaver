@@ -1,5 +1,6 @@
 {
   "name": "rom-weaver-quality-hooks",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,7 +10,8 @@
     "hooks:run": "lefthook run pre-commit --force",
     "hooks:validate": "lefthook validate",
     "typegen": "cargo run -p rom-weaver-typegen -- --write",
-    "typegen:check": "cargo run -p rom-weaver-typegen -- --check"
+    "typegen:check": "cargo run -p rom-weaver-typegen -- --check",
+    "version": "node scripts/sync-version.mjs"
   },
   "devDependencies": {
     "knip": "6.16.1",
