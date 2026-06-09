@@ -703,6 +703,16 @@ const getContainerEntriesFromList = (result: RomWeaverRunJsonResult): Compressio
   return output;
 };
 
+const getChdMediaKindFromList = (result: RomWeaverRunJsonResult): string | undefined => {
+  const terminal = getTerminalEvent(result);
+  const details = asRecord(terminal ? getRomWeaverRunEventDetails(terminal) : null);
+  const chd = asRecord(details?.chd);
+  const mediaKind = String(chd?.media_kind || "")
+    .trim()
+    .toLowerCase();
+  return mediaKind || undefined;
+};
+
 type RomWeaverProbePatchDetails = {
   format: string | null;
   minimum_source_size: number | null;
@@ -1111,22 +1121,25 @@ const runRomWeaverListWorker = async (
     patchFilter?: boolean;
     sourcePath: string;
     signal?: AbortSignal;
+    splitBin?: boolean;
   },
   onProgress?: (progress: { label?: string; message?: string; percent?: number | null }) => void,
   onLog?: (log: WorkflowRuntimeLog) => void,
-): Promise<{ entries: CompressionListResult["entries"] }> => {
+): Promise<{ chdMediaKind?: string; entries: CompressionListResult["entries"] }> => {
   const sourcePath = String(input.sourcePath || "").trim();
   if (!sourcePath) throw new Error("Compression list source path is required");
   const command = createRomWeaverCommand("list", {
     ...(input.romFilter ? { rom_filter: true } : {}),
     ...(input.patchFilter ? { patch_filter: true } : {}),
     source: sourcePath,
+    ...(input.splitBin ? { split_bin: true } : {}),
   });
   emitRuntimeTrace({ logLevel: input.logLevel, onLog }, "runJson list dispatch", {
     command,
     patchFilter: !!input.patchFilter,
     romFilter: !!input.romFilter,
     sourcePath,
+    splitBin: !!input.splitBin,
   });
   const runList = () =>
     runRomWeaverJson(
@@ -1147,7 +1160,7 @@ const runRomWeaverListWorker = async (
     throw new Error(failureMessage);
   }
   const entries = getContainerEntriesFromList(result);
-  return { entries };
+  return { chdMediaKind: getChdMediaKindFromList(result), entries };
 };
 
 const runRomWeaverProbePatchWorker = async (

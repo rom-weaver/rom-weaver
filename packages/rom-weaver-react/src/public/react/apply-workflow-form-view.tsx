@@ -113,20 +113,6 @@ function ApplyWorkflowFormView({
   return (
     <main aria-labelledby="tab-patcher" className="panel" id="rom-weaver-container">
       <WorkflowRomInputStep
-        afterItems={
-          uiState.chdSplitBin.visible ? (
-            <label className="opt">
-              <input
-                checked={uiState.chdSplitBin.checked}
-                disabled={uiState.chdSplitBin.disabled}
-                id="rom-weaver-checkbox-chd-split-bin"
-                onChange={(event) => uiController.setChdSplitBin?.(event.currentTarget.checked)}
-                type="checkbox"
-              />
-              {uiState.chdSplitBin.label}
-            </label>
-          ) : null
-        }
         dropZone={
           showRomDropZone
             ? {

@@ -44,18 +44,20 @@ impl ContainerHandlerOperations for ChdContainerHandler {
             Some(100.0),
             Some(execution),
         );
-        if sha1.is_some() || raw_sha1.is_some() {
-            let mut details = Map::new();
-            let mut chd_details = Map::new();
-            if let Some(sha1) = sha1 {
-                chd_details.insert("sha1".to_string(), json!(sha1));
-            }
-            if let Some(raw_sha1) = raw_sha1 {
-                chd_details.insert("raw_sha1".to_string(), json!(raw_sha1));
-            }
-            details.insert("chd".to_string(), Value::Object(chd_details));
-            report.details = Some(Value::Object(details));
+        let mut details = Map::new();
+        let mut chd_details = Map::new();
+        chd_details.insert(
+            "media_kind".to_string(),
+            json!(self.media_label(media_kind)),
+        );
+        if let Some(sha1) = sha1 {
+            chd_details.insert("sha1".to_string(), json!(sha1));
         }
+        if let Some(raw_sha1) = raw_sha1 {
+            chd_details.insert("raw_sha1".to_string(), json!(raw_sha1));
+        }
+        details.insert("chd".to_string(), Value::Object(chd_details));
+        report.details = Some(Value::Object(details));
         Ok(report)
     }
 

@@ -84,6 +84,8 @@ const getFileStem = (fileName: string) => getFileNameWithoutExtension(fileName);
 const getChdCdOutputFileName = (fileName: string, extension: "bin" | "cue"): string =>
   `${getFileStem(getPathBaseName(fileName, "input.chd")) || "input"}.${extension}`;
 
+const stripPrimaryChdTrackSuffix = (fileName: string): string => fileName.replace(/\.track0*1(?=\.bin$)/i, "");
+
 const getChdCreateFormat = (requestedMode: string): string => {
   if (requestedMode === "cd" || requestedMode === "chd-cd") return "chd-cd";
   if (requestedMode === "dvd" || requestedMode === "chd-dvd") return "chd-dvd";
@@ -151,7 +153,14 @@ const normalizeEntryPath = (value: string) =>
     .replace(/\\/g, "/")
     .replace(/^\/+/, "");
 
-const normalizeRomSpecificListEntries = <TEntry extends { fileName?: string; filename?: string; name?: string }>(
+type ListedOutputEntry = { fileName?: string; filename?: string; name?: string };
+
+const getListedOutputEntryName = (entry: ListedOutputEntry | null | undefined): string =>
+  String(entry?.fileName || entry?.filename || entry?.name || "").trim();
+
+const isCueEntryName = (entryName: string): boolean => /\.cue$/i.test(getPathBaseName(entryName, entryName));
+
+const normalizeRomSpecificListEntries = <TEntry extends ListedOutputEntry>(
   entries: TEntry[],
   stagedFileName: string,
   sourceFileName: string,
@@ -162,7 +171,7 @@ const normalizeRomSpecificListEntries = <TEntry extends { fileName?: string; fil
   const sourceStem = getFileStem(sourceBaseName);
   if (!(stagedStem && sourceStem)) return entries;
   return entries.map((entry) => {
-    const entryName = String(entry?.fileName || entry?.filename || entry?.name || "").trim();
+    const entryName = getListedOutputEntryName(entry);
     if (!entryName) return entry;
     const normalizedEntryName = normalizeEntryPath(entryName);
     const pathParts = normalizedEntryName.split("/");
@@ -212,7 +221,7 @@ const normalizeZ3dsListEntriesForSource = <TEntry extends { fileName?: string; f
   sourceFileName: string,
 ): TEntry[] =>
   entries.map((entry) => {
-    const entryName = String(entry.fileName || entry.filename || entry.name || "").trim();
+    const entryName = getListedOutputEntryName(entry);
     if (!entryName) return entry;
     const normalizedName = normalizeRomSpecificExtractedFileName("z3ds", entryName, { fileName: sourceFileName });
     if (normalizedName === entryName) return entry;
@@ -260,9 +269,9 @@ const annotateChdListEntries = <
       .trim()
       .toLowerCase();
     if (currentType === "cue" || currentType === "track") return entry;
-    const entryName = String(entry.fileName || entry.filename || entry.name || "").trim();
+    const entryName = getListedOutputEntryName(entry);
     if (!entryName) return entry;
-    const archiveEntryType = /\.cue$/i.test(getPathBaseName(entryName, entryName)) ? "cue" : "track";
+    const archiveEntryType = isCueEntryName(entryName) ? "cue" : "track";
     return {
       ...entry,
       archiveEntryType,
@@ -561,7 +570,7 @@ const getBrowserExtractOutputPathCandidates = (outDirPath: string, entryName: st
     });
 };
 
-const getDescendPreopenOutputPaths = async ({
+const getDescendOutputPlan = async ({
   archivePath,
   fileName,
   format,
@@ -577,11 +586,13 @@ const getDescendPreopenOutputPaths = async ({
   onLog?: (log: WorkflowRuntimeLog) => void;
   outDirPath: string;
   signal?: AbortSignal;
-}): Promise<string[]> => {
+}): Promise<{ chdSplitBinEligible: boolean; preopenOutputPaths: string[] }> => {
   const normalizedFormat = String(format || "")
     .trim()
     .toLowerCase();
-  if (!isRomSpecificCompressionFormat(normalizedFormat)) return [];
+  if (!isRomSpecificCompressionFormat(normalizedFormat)) {
+    return { chdSplitBinEligible: false, preopenOutputPaths: [] };
+  }
   const listed = await runRomWeaverListWorker(
     {
       logLevel: logLevel as Parameters<typeof runRomWeaverListWorker>[0]["logLevel"],
@@ -594,23 +605,22 @@ const getDescendPreopenOutputPaths = async ({
   const sourceFileName = fileName || getPathBaseName(archivePath, "archive.bin");
   const stagedSourceFileName = getPathDerivedFileName(archivePath, sourceFileName);
   const listedEntries = normalizeRomSpecificListEntries(listed?.entries || [], stagedSourceFileName, sourceFileName);
+  const chdSplitBinEligible = normalizedFormat === "chd" && listed?.chdMediaKind === "cd";
   const preopenOutputPaths = filterOutputCandidatesAwayFromSource(
     uniqueNonEmptyStrings(
       listedEntries.flatMap((entry) =>
-        getBrowserExtractOutputPathCandidates(
-          outDirPath,
-          String(entry?.fileName || entry?.filename || entry?.name || ""),
-        ),
+        getBrowserExtractOutputPathCandidates(outDirPath, getListedOutputEntryName(entry)),
       ),
     ),
     archivePath,
   );
   emitBrowserWorkflowTrace({ logLevel, onLog }, "archive descend output preopen candidates", {
     archivePath,
+    chdSplitBinEligible,
     format: normalizedFormat,
     preopenOutputPaths,
   });
-  return preopenOutputPaths;
+  return { chdSplitBinEligible, preopenOutputPaths };
 };
 
 const createBrowserChecksumRuntime = (workerIo: RuntimeWorkerIo): WorkflowRuntime["checksum"] =>
@@ -784,7 +794,7 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
         const cleanupExtractedFiles = async (filePaths: string[]) => {
           await Promise.all(filePaths.map((filePath) => browserVfs.remove(filePath).catch(() => undefined)));
         };
-        const preopenOutputPaths = await getDescendPreopenOutputPaths({
+        const outputPlan = await getDescendOutputPlan({
           archivePath: archive.filePath,
           fileName: archive.fileName,
           format: workflowInput.format,
@@ -793,7 +803,7 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
           outDirPath,
           signal: workflowInput.options?.signal,
         });
-        await removeBrowserVfsOutputPaths(preopenOutputPaths, [archive.filePath]);
+        await removeBrowserVfsOutputPaths(outputPlan.preopenOutputPaths, [archive.filePath]);
         const extractChecksumAlgorithms = Array.isArray(workflowInput.options?.extractChecksumAlgorithms)
           ? workflowInput.options.extractChecksumAlgorithms
               .map((algorithm) =>
@@ -811,20 +821,37 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
             noNestedExtract: false,
             outDirPath,
             patchFilter: workflowInput.options?.patchFilter,
-            preopenOutputPaths,
+            preopenOutputPaths: outputPlan.preopenOutputPaths,
             romFilter: workflowInput.options?.romFilter,
             select: selectedEntries,
             signal: workflowInput.options?.signal,
             sourcePath: archive.filePath,
-            splitBin: workflowInput.format === "chd" && workflowInput.options?.chdSplitBin !== false,
+            splitBin: outputPlan.chdSplitBinEligible && workflowInput.options?.chdSplitBin === true,
             workerThreads: workflowInput.options?.workerThreads,
           },
           forwardArchiveProgress("input", workflowInput.options?.onProgress),
           workflowInput.options?.onLog,
         );
+        const normalizedFormat = String(workflowInput.format || "")
+          .trim()
+          .toLowerCase();
+        const sourceFileName = archive.fileName || getPathBaseName(archive.filePath, "archive.bin");
+        const stagedSourceFileName = getPathDerivedFileName(archive.filePath, sourceFileName);
+        const primaryDataEntry = extracted.emittedFiles.find((entry) => {
+          const entryKind = String(entry.kind || "").toLowerCase();
+          const entryName = entry.fileName || getPathBaseName(entry.path, entry.path);
+          return entryKind !== "cue" && !isCueEntryName(entryName);
+        });
         const descendOutputs = await Promise.all(
           extracted.emittedFiles.map((entry) => {
-            const fileName = entry.fileName || getPathBaseName(entry.path, entry.path);
+            const extractedFileName = entry.fileName || getPathBaseName(entry.path, entry.path);
+            const normalizedFileName = isRomSpecificCompressionFormat(normalizedFormat)
+              ? normalizeRomSpecificEntryNameForSource(extractedFileName, stagedSourceFileName, sourceFileName)
+              : extractedFileName;
+            const fileName =
+              outputPlan.chdSplitBinEligible && entry === primaryDataEntry
+                ? stripPrimaryChdTrackSuffix(normalizedFileName)
+                : normalizedFileName;
             return workerIo.createWorkerOutput(
               {
                 checksums: entry.checksums,
@@ -1341,10 +1368,18 @@ const createBrowserRomSpecificRuntime = (workerIo: RuntimeWorkerIo): RomSpecific
               stagedSourceFileName,
               fileName,
             );
+            const isPrimaryDataOutput = !isCue && sameExtractedFile(entry, primaryFile);
+            const primaryOutputName =
+              isPrimaryDataOutput && outputName
+                ? stripPrimaryChdTrackSuffix(outputName)
+                : isPrimaryDataOutput && shouldSplitBin
+                  ? stripPrimaryChdTrackSuffix(normalizedFileName || entry.fileName || "")
+                  : "";
             const fileNameForOutput =
-              !(isCue || shouldSplitBin) && sameExtractedFile(entry, primaryFile) && outputName
+              primaryOutputName ||
+              (isPrimaryDataOutput && !shouldSplitBin && outputName
                 ? outputName
-                : normalizedFileName || entry.fileName || directOutputFileName || fileName;
+                : normalizedFileName || entry.fileName || directOutputFileName || fileName);
             const output = await workerIo.createWorkerOutput(
               {
                 checksums: isCue ? undefined : entry.checksums,
@@ -1593,7 +1628,7 @@ const createBrowserRomSpecificRuntime = (workerIo: RuntimeWorkerIo): RomSpecific
       await workerSource.cleanup().catch(() => undefined);
     }
   },
-  listChd: async ({ source, fileName, logLevel, onLog, onProgress, signal }) => {
+  listChd: async ({ source, fileName, logLevel, onLog, onProgress, signal, splitBin }) => {
     const workerSource = await workerIo.stageSource({
       fallbackFileName: fileName,
       pathPrefix: CHD_ROM_SPECIFIC_FORMAT.pathPrefix.extract,
@@ -1607,6 +1642,7 @@ const createBrowserRomSpecificRuntime = (workerIo: RuntimeWorkerIo): RomSpecific
           logLevel,
           signal,
           sourcePath: workerSource.filePath,
+          splitBin,
         },
         onProgress,
         onLog,

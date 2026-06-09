@@ -531,7 +531,7 @@ impl CliApp {
         entries: Vec<ContainerListEntry>,
         context: &OperationContext,
     ) -> OperationReport {
-        let report = OperationReport::succeeded(
+        let mut report = OperationReport::succeeded(
             OperationFamily::Container,
             Some(handler.descriptor().name.to_string()),
             "list",
@@ -544,6 +544,23 @@ impl CliApp {
             Some(100.0),
             Some(context.plan_threads(ThreadCapability::single_threaded())),
         );
+        if handler.descriptor().matches_name("chd") {
+            let request = ContainerProbeRequest {
+                source: source.to_path_buf(),
+                split_bin: false,
+            };
+            if let Ok(probe_report) = handler.probe_details(&request, context)
+                && let Some(Value::Object(mut probe_details)) = probe_report.details
+                && let Some(chd_details) = probe_details.remove("chd")
+            {
+                let mut details = match report.details.take() {
+                    Some(Value::Object(map)) => map,
+                    _ => Map::new(),
+                };
+                details.insert("chd".to_string(), chd_details);
+                report.details = Some(Value::Object(details));
+            }
+        }
         Self::attach_container_probe_details(
             report,
             Some(entries),

@@ -24,7 +24,6 @@ type PatcherUiController = StoreController<PatcherUiState> & {
   toggleRomInputChecksums?: (id: string) => void;
   providePatchInputFiles?: (fileList: FileList | BinarySource[] | null) => void;
   setAlterHeader?: (checked: boolean) => void;
-  setChdSplitBin?: (checked: boolean) => void;
   selectEmbeddedPatch?: (value: string) => void;
   setOptionalPatch?: (id: string, checked: boolean) => void;
   setChecksumOverride?: (checked: boolean) => void;

@@ -457,8 +457,6 @@ const useLocalApplyPatchFormSession = ({
     }),
     [inputOperationTimingText, localSectionTimingSizes.output, outputOperationTimingText, patchDecompressionTimingText],
   );
-  const chdSplitBinVisible = romInputs.some((entry) => entry.splitBinAvailable);
-  const chdSplitBinChecked = activeSettings.input?.chdSplitBin !== false;
   const strictInputChecksumValidation = activeSettings.validation?.requireInputChecksumMatch === true;
   const hasStrictInputChecksumMismatch =
     strictInputChecksumValidation && stagedPatchInfos.some((info) => info.checksumPreflightMismatch === true);
@@ -566,12 +564,6 @@ const useLocalApplyPatchFormSession = ({
   const localUiState = useMemo(
     () => ({
       ...createInertState(),
-      chdSplitBin: {
-        checked: chdSplitBinChecked,
-        disabled: disabled || busy || inputStaging,
-        label: "Split BIN tracks",
-        visible: chdSplitBinVisible,
-      },
       checksumOverride: {
         checked: checksumOverrideChecked,
         disabled: disabled || busy || inputStaging || patchStaging,
@@ -632,8 +624,6 @@ const useLocalApplyPatchFormSession = ({
       activePatches.length,
       busy,
       checksumOverrideChecked,
-      chdSplitBinChecked,
-      chdSplitBinVisible,
       disabled,
       effectiveInputs,
       inputStaging,
@@ -1522,15 +1512,6 @@ const useLocalApplyPatchFormSession = ({
           compatibility: {
             ...activeSettings.compatibility,
             fixChecksum: checked,
-          },
-        });
-      },
-      setChdSplitBin: (checked: boolean) => {
-        updateSettings({
-          ...activeSettings,
-          input: {
-            ...activeSettings.input,
-            chdSplitBin: checked,
           },
         });
       },

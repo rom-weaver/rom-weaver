@@ -1,6 +1,6 @@
 type CandidateKind = "cue" | "disc" | "patch" | "rom" | "track" | "unknown";
 
-type CandidateGroupKind = "cue-disc" | "multi-file-input";
+type CandidateGroupKind = "chd-output-mode" | "cue-disc" | "multi-file-input";
 
 type SelectionRole = "input" | "modified" | "original" | "patch";
 

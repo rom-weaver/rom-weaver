@@ -191,16 +191,127 @@ test("rom-weaver runtime honors split-bin extraction for multi-track CD CHDs", a
       source: chdSource,
     });
     splitOutputs = splitResult?.outputs || [];
-    expect(splitResult?.output?.fileName).toBe(`${stem}.track01.bin`);
+    expect(splitResult?.output?.fileName).toBe(`${stem}.bin`);
     expect(splitOutputs.filter((entry) => /\.cue$/i.test(entry.fileName || "")).map((entry) => entry.fileName)).toEqual(
       [`${stem}.cue`],
     );
     expect(splitOutputs.filter((entry) => /\.bin$/i.test(entry.fileName || "")).map((entry) => entry.fileName)).toEqual(
-      [`${stem}.track01.bin`, `${stem}.track02.bin`],
+      [`${stem}.bin`, `${stem}.track02.bin`],
     );
     expectCueWithoutChecksumsAndBinsWithChecksums(splitOutputs);
   } finally {
     await Promise.all([...singleOutputs, ...splitOutputs].map((output) => output?.cleanup?.().catch(() => undefined)));
+    await browserRuntime.vfs.remove(sourcePath).catch(() => undefined);
+  }
+});
+
+test("rom-weaver runtime descends DVD CHDs without split-bin", async () => {
+  await resetRomWeaverRunner();
+  await warmupRomWeaverRunner();
+
+  const runId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const sourceFileName = "Ape Escape 2 (USA).iso";
+  const sourcePath = `${WORKER_OPFS_MOUNTPOINT}/chd-dvd-${runId}-${sourceFileName}`;
+  const sourceBytes = new Uint8Array(2048 * 64);
+  for (let index = 0; index < sourceBytes.length; index += 1) {
+    sourceBytes[index] = (index * 31) & 0xff;
+  }
+  await browserRuntime.vfs.truncate(sourcePath, 0);
+  await browserRuntime.vfs.write(sourcePath, sourceBytes, { fileOffset: 0 });
+
+  let chdOutput = null;
+  let extractOutputs = [];
+  try {
+    const createResult = await browserRuntime.compression.create?.({
+      chdSourceMode: "dvd",
+      compressionCodecs: "zstd:1",
+      format: "chd",
+      mode: "dvd",
+      options: {
+        workerThreads: 2,
+      },
+      outputName: "Ape Escape 2 (USA).chd",
+      source: {
+        fileName: sourceFileName,
+        filePath: sourcePath,
+      },
+    });
+    chdOutput = createResult?.output || null;
+    expect(chdOutput?.fileName).toBe("Ape Escape 2 (USA).chd");
+
+    const extractResult = await browserRuntime.compression.extract?.({
+      descendSinglePayload: true,
+      entries: [],
+      format: "chd",
+      options: {
+        chdSplitBin: true,
+        workerThreads: 2,
+      },
+      source: chdOutput,
+    });
+    extractOutputs = extractResult?.outputs || [];
+
+    expect(extractResult?.output?.fileName).toBe("Ape Escape 2 (USA).iso");
+    expect(extractResult?.output?.size).toBe(sourceBytes.length);
+    expect(extractOutputs.map((output) => output.fileName)).toEqual(["Ape Escape 2 (USA).iso"]);
+  } finally {
+    await Promise.all(extractOutputs.map((output) => output?.cleanup?.().catch(() => undefined)));
+    await chdOutput?.cleanup?.().catch(() => undefined);
+    await browserRuntime.vfs.remove(sourcePath).catch(() => undefined);
+  }
+});
+
+test("rom-weaver runtime descends CD CHDs with merged default and base primary split-bin output name", async () => {
+  await resetRomWeaverRunner();
+  await warmupRomWeaverRunner();
+
+  const runId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const { source: chdSource, sourcePath, stem } = await createMultiTrackChdOutput(runId);
+  let defaultOutputs = [];
+  let splitOutputs = [];
+  try {
+    const defaultResult = await browserRuntime.compression.extract?.({
+      descendSinglePayload: true,
+      entries: [],
+      format: "chd",
+      options: {
+        workerThreads: 2,
+      },
+      source: chdSource,
+    });
+    defaultOutputs = defaultResult?.outputs || [];
+
+    expect(defaultResult?.output?.fileName).toBe(`${stem}.bin`);
+    expect(
+      defaultOutputs.filter((entry) => /\.cue$/i.test(entry.fileName || "")).map((entry) => entry.fileName),
+    ).toEqual([`${stem}.cue`]);
+    expect(
+      defaultOutputs.filter((entry) => /\.bin$/i.test(entry.fileName || "")).map((entry) => entry.fileName),
+    ).toEqual([`${stem}.bin`]);
+    expectCueWithoutChecksumsAndBinsWithChecksums(defaultOutputs);
+
+    const splitResult = await browserRuntime.compression.extract?.({
+      descendSinglePayload: true,
+      entries: [],
+      format: "chd",
+      options: {
+        chdSplitBin: true,
+        workerThreads: 2,
+      },
+      source: chdSource,
+    });
+    splitOutputs = splitResult?.outputs || [];
+
+    expect(splitResult?.output?.fileName).toBe(`${stem}.bin`);
+    expect(splitOutputs.filter((entry) => /\.cue$/i.test(entry.fileName || "")).map((entry) => entry.fileName)).toEqual(
+      [`${stem}.cue`],
+    );
+    expect(splitOutputs.filter((entry) => /\.bin$/i.test(entry.fileName || "")).map((entry) => entry.fileName)).toEqual(
+      [`${stem}.bin`, `${stem}.track02.bin`],
+    );
+    expectCueWithoutChecksumsAndBinsWithChecksums(splitOutputs);
+  } finally {
+    await Promise.all([...defaultOutputs, ...splitOutputs].map((output) => output?.cleanup?.().catch(() => undefined)));
     await browserRuntime.vfs.remove(sourcePath).catch(() => undefined);
   }
 });

@@ -1064,7 +1064,7 @@ test("direct CUE plus BIN upload can output CHD from the CUE source", async () =
   }
 });
 
-test("split-bin checkbox renders only when CHD split-bin is available", async () => {
+test("split-bin checkbox is not rendered", async () => {
   const hiddenState = createEmptyPatcherUiState();
   mount(
     createElement(ApplyWorkflowFormView, {
@@ -1085,26 +1085,18 @@ test("split-bin checkbox renders only when CHD split-bin is available", async ()
     label: "Split BIN tracks",
     visible: true,
   };
-  const setChdSplitBin = vi.fn();
   mount(
     createElement(ApplyWorkflowFormView, {
       controllers: {
         dialog: inertDialogController,
         output: inertOutputController,
         patchStack: inertStackController,
-        ui: createStaticController(visibleState, { setChdSplitBin }),
+        ui: createStaticController(visibleState),
       },
     }),
   );
 
-  await expect
-    .poll(() => document.getElementById("rom-weaver-checkbox-chd-split-bin") instanceof HTMLInputElement)
-    .toBe(true);
-  const splitBinCheckbox = document.getElementById("rom-weaver-checkbox-chd-split-bin");
-  expect(splitBinCheckbox).toBeInstanceOf(HTMLInputElement);
-  expect(splitBinCheckbox.checked).toBe(true);
-  splitBinCheckbox.click();
-  expect(setChdSplitBin).toHaveBeenCalledWith(false);
+  expect(document.getElementById("rom-weaver-checkbox-chd-split-bin")).toBeNull();
 });
 
 test("ROM part dropzone hides after a non-disc ROM", async () => {

@@ -1,4 +1,5 @@
 import { isVfsFileRef } from "../../storage/vfs/source-ref.ts";
+import type { SelectionGroupCandidate } from "../../types/selection.ts";
 import type { SourceObject, SourceRef } from "../../types/source.ts";
 import type { ApplyWorkflowOptions, CreateWorkflowOptions } from "../../types/workflow-runtime.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
@@ -71,6 +72,7 @@ type InputPreparationOptions = ApplyWorkflowOptions | CreateWorkflowOptions | un
 type InputPreparationRuntimeLike = InputPreparationRuntime | Pick<WorkflowRuntime, "name">;
 type CompressionExtractOverrides = {
   checksumAlgorithms?: string[];
+  chdSplitBin?: boolean;
 };
 type CompressionEntryKindFilter = {
   romFilter?: boolean;
@@ -96,6 +98,8 @@ const PATCH_MAGIC_BY_EXTENSION = {
 const PATH_BACKED_COMPRESSION_FORMATS = new Set<string>(CREATE_ROM_SPECIFIC_COMPRESSION_FORMATS);
 const SYNC_READ_ARCHIVE_ENTRY_REGEX =
   /\.(?:cue|ips|ups|bps|aps|rup|ppf|ebp|bdf|bsp|bspatch|mod|xdelta|delta|dat|vcdiff)\d*$/i;
+const CHD_MERGED_SELECTION_PREFIX = "rom-weaver:chd-merged:";
+const CHD_SPLIT_SELECTION_PREFIX = "rom-weaver:chd-split:";
 const validatedPatchArchiveEntriesByFile = new WeakMap<PatchFileInstance, ValidatedPatchArchiveEntryCache>();
 const patchArchiveValidationCleanupAttached = new WeakSet<PatchFileInstance>();
 
@@ -147,6 +151,32 @@ const getSyntheticCueTrackEntries = (entries: ArchiveEntryLike[], cueFileName: s
   );
 
 const isCompressionEntryFileName = (fileName: string) => classifyPatcherInput({ fileName }).kind === "compression";
+
+const isBinEntryFileName = (fileName: string) => /\.bin$/i.test(getBaseFileName(fileName));
+
+const encodeChdSplitSelection = (entryName: string, splitBin: boolean) =>
+  `${splitBin ? CHD_SPLIT_SELECTION_PREFIX : CHD_MERGED_SELECTION_PREFIX}${entryName}`;
+
+const parseChdSplitSelection = (
+  entryName: string | undefined,
+): { chdSplitBin?: boolean; selectedEntryName?: string } => {
+  const value = String(entryName || "");
+  if (value.startsWith(CHD_SPLIT_SELECTION_PREFIX)) {
+    return { chdSplitBin: true };
+  }
+  if (value.startsWith(CHD_MERGED_SELECTION_PREFIX)) {
+    return { chdSplitBin: false };
+  }
+  return { selectedEntryName: value || undefined };
+};
+
+const getChdCueEntryName = (entries: ArchiveEntryLike[]) =>
+  entries.find((entry) => isCueEntryFileName(entry.filename))?.filename || "";
+
+const getChdBinEntries = (entries: ArchiveEntryLike[]) => entries.filter((entry) => isBinEntryFileName(entry.filename));
+
+const formatChdEntryListLabel = (entries: ArchiveEntryLike[]) =>
+  entries.map((entry) => getBaseFileName(entry.filename)).join(" + ");
 
 const filterNestedContainerEntries = (entries: ArchiveEntryLike[]) =>
   entries.filter((entry) => typeof entry.filename === "string" && isCompressionEntryFileName(entry.filename));
@@ -357,7 +387,7 @@ const getCompressionRuntimeOptions = (
   ...(Array.isArray(overrides.checksumAlgorithms)
     ? { extractChecksumAlgorithms: [...overrides.checksumAlgorithms] }
     : {}),
-  ...(typeof options?.input?.chdSplitBin === "boolean" ? { chdSplitBin: options.input.chdSplitBin } : {}),
+  ...(typeof overrides.chdSplitBin === "boolean" ? { chdSplitBin: overrides.chdSplitBin } : {}),
   ...(options?.limits ? { limits: options.limits } : {}),
   ...(kindFilter.romFilter ? { romFilter: true } : {}),
   ...(kindFilter.patchFilter ? { patchFilter: true } : {}),
@@ -389,6 +419,7 @@ const listCompressionEntries = async (
   options: InputPreparationOptions,
   runtime: InputPreparationRuntimeLike = DEFAULT_INPUT_PREPARATION_RUNTIME,
   kindFilter: CompressionEntryKindFilter = {},
+  overrides: CompressionExtractOverrides = {},
 ) => {
   const resolvedRuntime = await resolveInputPreparationRuntime(runtime);
   if (!resolvedRuntime.compression.list) throw new Error("Compression listing is unavailable");
@@ -402,7 +433,7 @@ const listCompressionEntries = async (
   });
   const result = await resolvedRuntime.compression.list({
     format: compressionFormat,
-    options: getCompressionRuntimeOptions(options, {}, kindFilter),
+    options: getCompressionRuntimeOptions(options, overrides, kindFilter),
     source: getCompressionRuntimeSource(file),
   });
   const entries = result.entries || [];
@@ -416,6 +447,86 @@ const listCompressionEntries = async (
     runtime: resolvedRuntime.name,
   });
   return entries;
+};
+
+const makeChdOutputModeCandidate = ({
+  cueEntryName,
+  entries,
+  id,
+  label,
+  splitBin,
+}: {
+  cueEntryName: string;
+  entries: ArchiveEntryLike[];
+  id: string;
+  label: string;
+  splitBin: boolean;
+}): SelectionGroupCandidate => ({
+  candidateIds: [],
+  id,
+  kind: "chd-output-mode",
+  label: `${label}: ${formatChdEntryListLabel(entries)}`,
+  path: encodeChdSplitSelection(cueEntryName, splitBin),
+  selectable: true,
+  type: "group",
+  warnings: [],
+});
+
+const resolveChdSplitBinSelection = async ({
+  archiveFile,
+  compressionFormat,
+  kindFilter,
+  options,
+  runtime,
+  selectedEntryName,
+  sourceIndex,
+}: {
+  archiveFile: PatchFileInstance;
+  compressionFormat: string;
+  kindFilter: CompressionEntryKindFilter;
+  options: InputPreparationOptions;
+  runtime: InputPreparationRuntimeLike;
+  selectedEntryName?: string;
+  sourceIndex: number;
+}): Promise<{ selectedEntryName?: string; chdSplitBin?: boolean }> => {
+  const parsedSelection = parseChdSplitSelection(selectedEntryName);
+  if (parsedSelection.chdSplitBin !== undefined || parsedSelection.selectedEntryName) return parsedSelection;
+  if (compressionFormat !== "chd" || !kindFilter.romFilter || typeof options?.onCandidatesFound !== "function") {
+    return parsedSelection;
+  }
+
+  const mergedEntries = await listCompressionEntries(archiveFile, options, runtime, kindFilter, { chdSplitBin: false });
+  const splitEntries = await listCompressionEntries(archiveFile, options, runtime, kindFilter, { chdSplitBin: true });
+  const mergedBinEntries = getChdBinEntries(mergedEntries);
+  const splitBinEntries = getChdBinEntries(splitEntries);
+  const cueEntryName = getChdCueEntryName(mergedEntries) || getChdCueEntryName(splitEntries);
+  if (!(cueEntryName && mergedBinEntries.length === 1 && splitBinEntries.length > 1)) return parsedSelection;
+
+  const request = {
+    candidates: [
+      makeChdOutputModeCandidate({
+        cueEntryName,
+        entries: mergedBinEntries,
+        id: makeInputId(sourceIndex, `${cueEntryName}-merged-bin`, normalizeArchiveEntryName),
+        label: "Merged BIN",
+        splitBin: false,
+      }),
+      makeChdOutputModeCandidate({
+        cueEntryName,
+        entries: splitBinEntries,
+        id: makeInputId(sourceIndex, `${cueEntryName}-split-bin`, normalizeArchiveEntryName),
+        label: "Split BIN tracks",
+        splitBin: true,
+      }),
+    ],
+    role: "input" as const,
+    sourceName: archiveFile.fileName || "CHD input",
+    warnings: [],
+  };
+  options.onCandidatesFound(request);
+  throw new RomWeaverError("AMBIGUOUS_SELECTION", `${request.sourceName} requires CHD output selection`, {
+    details: { request },
+  });
 };
 
 const extractCompressionEntries = async (
@@ -854,12 +965,24 @@ const resolveArchiveInputFileByDescent = async (
   options: InputPreparationOptions,
   runtime: InputPreparationRuntimeLike = DEFAULT_INPUT_PREPARATION_RUNTIME,
   selectedArchiveEntry?: string,
+  sourceIndex = 0,
 ): Promise<PatchFileInstance> => {
   const resolvedRuntime = await resolveInputPreparationRuntime(runtime);
   if (!resolvedRuntime.compression.extract) throw new Error("Compression extraction is unavailable");
   const compressionFormat = getCompressionFormat(file);
   const kindFilter = role === "patch" ? { patchFilter: true } : { romFilter: true };
-  const selectedEntries = normalizeSelectedEntryNames(selectedArchiveEntry ? [selectedArchiveEntry] : []);
+  const chdSelection = await resolveChdSplitBinSelection({
+    archiveFile: file,
+    compressionFormat,
+    kindFilter,
+    options,
+    runtime,
+    selectedEntryName: selectedArchiveEntry,
+    sourceIndex,
+  });
+  const selectedEntries = normalizeSelectedEntryNames(
+    chdSelection.selectedEntryName ? [chdSelection.selectedEntryName] : [],
+  );
   await preflightArchiveLimitsForDescent(file, options, runtime, kindFilter, selectedEntries);
   traceArchivePreparation(options, "input.archive.file.descent.start", {
     compressionFormat,
@@ -871,7 +994,7 @@ const resolveArchiveInputFileByDescent = async (
     descendSinglePayload: true,
     entries: selectedEntries,
     format: compressionFormat,
-    options: getCompressionRuntimeOptions(options, {}, kindFilter),
+    options: getCompressionRuntimeOptions(options, { chdSplitBin: chdSelection.chdSplitBin }, kindFilter),
     source: getCompressionRuntimeSource(file),
   });
   const output = result.output || (Array.isArray(result.outputs) ? result.outputs[0] : undefined);
@@ -916,7 +1039,7 @@ const resolveArchiveInput = async (
     });
     return file;
   }
-  return resolveArchiveInputFileByDescent(file, role, options, runtime, selectedArchiveEntry);
+  return resolveArchiveInputFileByDescent(file, role, options, runtime, selectedArchiveEntry, sourceIndex);
 };
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -936,7 +1059,18 @@ const resolveArchiveInputAssetsByDescent = async (
   const resolvedRuntime = await resolveInputPreparationRuntime(runtime);
   if (!resolvedRuntime.compression.extract) throw new Error("Compression extraction is unavailable");
   const compressionFormat = getCompressionFormat(archiveFile);
-  const selectedEntries = normalizeSelectedEntryNames(selectedInputEntryName ? [selectedInputEntryName] : []);
+  const chdSelection = await resolveChdSplitBinSelection({
+    archiveFile,
+    compressionFormat,
+    kindFilter: { romFilter: true },
+    options,
+    runtime,
+    selectedEntryName: selectedInputEntryName,
+    sourceIndex,
+  });
+  const selectedEntries = normalizeSelectedEntryNames(
+    chdSelection.selectedEntryName ? [chdSelection.selectedEntryName] : [],
+  );
   await preflightArchiveLimitsForDescent(archiveFile, options, runtime, { romFilter: true }, selectedEntries);
   traceArchivePreparation(options, "input.archive.descent.start", {
     compressionFormat,
@@ -957,7 +1091,11 @@ const resolveArchiveInputAssetsByDescent = async (
     format: string;
   }> = [];
   let totalDescentOutputBytes = 0;
-  const runtimeOptions = getCompressionRuntimeOptions(options, {}, { romFilter: true });
+  const runtimeOptions = getCompressionRuntimeOptions(
+    options,
+    { chdSplitBin: chdSelection.chdSplitBin },
+    { romFilter: true },
+  );
   const forwardProgress = runtimeOptions.onProgress;
   runtimeOptions.onProgress = (progress) => {
     const details = isRecord(progress) ? (progress as { details?: unknown }).details : undefined;

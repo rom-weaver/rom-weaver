@@ -634,6 +634,7 @@ const createSharedCompressionRuntime = (
     onLog: request.options?.onLog,
     onProgress: forwardRomSpecificProgress("input", request.options?.onProgress),
     source: request.source,
+    splitBin: typeof request.options?.chdSplitBin === "boolean" ? request.options.chdSplitBin : undefined,
     threads: request.options?.workerThreads,
   });
   const extractChd = async (request: RomSpecificExtractRequest) => {
