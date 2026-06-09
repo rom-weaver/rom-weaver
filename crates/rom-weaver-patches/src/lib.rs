@@ -19,6 +19,7 @@ mod solid;
 #[cfg(test)]
 mod test_support;
 mod ups;
+mod varint;
 
 use std::{
     fs::{self, File},
@@ -284,6 +285,19 @@ pub(crate) fn require_single_patch_file<'a>(
         )));
     }
     Ok(&patches[0])
+}
+
+/// The trailing note appended to an operation label when checksum validation was disabled.
+///
+/// Every checksum-bearing apply handler (APS/BPS/PPF/PMSR/SOLID/DPS/UPS/RUP/...) built this same
+/// `if validate_checksums { "" } else { "; checksum validation skipped" }` inline; centralizing it
+/// keeps the wording identical across formats.
+pub(crate) fn checksum_validation_suffix(validate_checksums: bool) -> &'static str {
+    if validate_checksums {
+        ""
+    } else {
+        "; checksum validation skipped"
+    }
 }
 
 pub(crate) fn patch_success_report(

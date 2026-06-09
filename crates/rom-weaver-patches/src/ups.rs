@@ -134,11 +134,7 @@ impl PatchHandler for UpsPatchHandler {
             }
         }
 
-        let checksum_suffix = if validate_checksums {
-            String::new()
-        } else {
-            "; checksum validation skipped".to_string()
-        };
+        let checksum_suffix = crate::checksum_validation_suffix(validate_checksums);
         Ok(OperationReport::succeeded(
             OperationFamily::Patch,
             Some(self.descriptor.name.to_string()),
@@ -1082,17 +1078,8 @@ fn read_u32_le(bytes: &[u8]) -> u32 {
     u32::from_le_bytes(value)
 }
 
-fn push_varint(bytes: &mut Vec<u8>, mut data: u64) {
-    loop {
-        let value = (data & 0x7f) as u8;
-        data >>= 7;
-        if data == 0 {
-            bytes.push(0x80 | value);
-            break;
-        }
-        bytes.push(value);
-        data -= 1;
-    }
+fn push_varint(bytes: &mut Vec<u8>, data: u64) {
+    crate::varint::push_varint(bytes, data);
 }
 
 fn crc32_path_cached(path: &Path, context: &OperationContext) -> Result<u32> {
@@ -1174,24 +1161,7 @@ impl<'a> UpsParser<'a> {
     }
 
     fn read_varint(&mut self) -> Result<u64> {
-        let mut data = 0u64;
-        let mut shift = 1u64;
-        loop {
-            let byte = u64::from(self.read_u8()?);
-            data = data.checked_add((byte & 0x7f) * shift).ok_or_else(|| {
-                RomWeaverError::Validation("UPS varint overflowed available range".into())
-            })?;
-            if byte & 0x80 != 0 {
-                return Ok(data);
-            }
-
-            shift = shift
-                .checked_shl(7)
-                .ok_or_else(|| RomWeaverError::Validation("UPS varint shift overflowed".into()))?;
-            data = data.checked_add(shift).ok_or_else(|| {
-                RomWeaverError::Validation("UPS varint overflowed available range".into())
-            })?;
-        }
+        crate::varint::read_varint(|| self.read_u8(), "UPS")
     }
 }
 
@@ -1238,24 +1208,7 @@ impl<R: Read> UpsFileParser<R> {
     }
 
     fn read_varint(&mut self) -> Result<u64> {
-        let mut data = 0u64;
-        let mut shift = 1u64;
-        loop {
-            let byte = u64::from(self.read_u8()?);
-            data = data.checked_add((byte & 0x7f) * shift).ok_or_else(|| {
-                RomWeaverError::Validation("UPS varint overflowed available range".into())
-            })?;
-            if byte & 0x80 != 0 {
-                return Ok(data);
-            }
-
-            shift = shift
-                .checked_shl(7)
-                .ok_or_else(|| RomWeaverError::Validation("UPS varint shift overflowed".into()))?;
-            data = data.checked_add(shift).ok_or_else(|| {
-                RomWeaverError::Validation("UPS varint overflowed available range".into())
-            })?;
-        }
+        crate::varint::read_varint(|| self.read_u8(), "UPS")
     }
 }
 

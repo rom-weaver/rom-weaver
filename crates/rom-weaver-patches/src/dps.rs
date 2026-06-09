@@ -162,11 +162,7 @@ impl PatchHandler for DpsPatchHandler {
         };
         output.flush()?;
 
-        let checksum_suffix = if validate_source_size {
-            String::new()
-        } else {
-            "; checksum validation skipped".to_string()
-        };
+        let checksum_suffix = crate::checksum_validation_suffix(validate_source_size);
         let malformed_warning_suffix = parsed
             .malformed_record_warning
             .as_deref()

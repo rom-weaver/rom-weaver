@@ -165,11 +165,7 @@ impl PatchHandler for BpsPatchHandler {
             context,
         )?;
 
-        let checksum_suffix = if validate_checksums {
-            String::new()
-        } else {
-            "; checksum validation skipped".to_string()
-        };
+        let checksum_suffix = crate::checksum_validation_suffix(validate_checksums);
         Ok(OperationReport::succeeded(
             OperationFamily::Patch,
             Some(self.descriptor.name.to_string()),
@@ -1930,17 +1926,8 @@ fn crc32_prefix(path: &Path, len: u64) -> Result<u32> {
 }
 
 #[cfg(test)]
-fn push_varint(bytes: &mut Vec<u8>, mut data: u64) {
-    loop {
-        let value = (data & 0x7f) as u8;
-        data >>= 7;
-        if data == 0 {
-            bytes.push(0x80 | value);
-            break;
-        }
-        bytes.push(value);
-        data -= 1;
-    }
+fn push_varint(bytes: &mut Vec<u8>, data: u64) {
+    crate::varint::push_varint(bytes, data);
 }
 
 struct BpsCreateWriter<'a, W> {
@@ -1962,23 +1949,9 @@ impl<'a, W: Write> BpsCreateWriter<'a, W> {
         Ok(())
     }
 
-    fn write_varint(&mut self, mut data: u64) -> Result<()> {
-        let mut bytes = [0u8; 10];
-        let mut len = 0usize;
-
-        loop {
-            let value = (data & 0x7f) as u8;
-            data >>= 7;
-            if data == 0 {
-                bytes[len] = 0x80 | value;
-                len += 1;
-                break;
-            }
-            bytes[len] = value;
-            len += 1;
-            data -= 1;
-        }
-
+    fn write_varint(&mut self, data: u64) -> Result<()> {
+        let mut bytes = [0u8; crate::varint::VARINT_MAX_LEN];
+        let len = crate::varint::encode_varint(&mut bytes, data);
         self.write_bytes(&bytes[..len])
     }
 
@@ -2095,23 +2068,7 @@ impl<'a> BpsParser<'a> {
     }
 
     fn read_varint(&mut self) -> Result<u64> {
-        let mut data = 0u64;
-        let mut shift = 1u64;
-        loop {
-            let byte = u64::from(self.read_exact(1)?[0]);
-            data = data.checked_add((byte & 0x7f) * shift).ok_or_else(|| {
-                RomWeaverError::Validation("BPS varint overflowed available range".into())
-            })?;
-            if byte & 0x80 != 0 {
-                return Ok(data);
-            }
-            shift = shift
-                .checked_shl(7)
-                .ok_or_else(|| RomWeaverError::Validation("BPS varint shift overflowed".into()))?;
-            data = data.checked_add(shift).ok_or_else(|| {
-                RomWeaverError::Validation("BPS varint overflowed available range".into())
-            })?;
-        }
+        crate::varint::read_varint(|| Ok(self.read_exact(1)?[0]), "BPS")
     }
 }
 
@@ -2158,24 +2115,7 @@ impl<R: Read> BpsFileParser<R> {
     }
 
     fn read_varint(&mut self) -> Result<u64> {
-        let mut data = 0u64;
-        let mut shift = 1u64;
-        loop {
-            let byte = u64::from(self.read_u8()?);
-            data = data.checked_add((byte & 0x7f) * shift).ok_or_else(|| {
-                RomWeaverError::Validation("BPS varint overflowed available range".into())
-            })?;
-            if byte & 0x80 != 0 {
-                return Ok(data);
-            }
-
-            shift = shift
-                .checked_shl(7)
-                .ok_or_else(|| RomWeaverError::Validation("BPS varint shift overflowed".into()))?;
-            data = data.checked_add(shift).ok_or_else(|| {
-                RomWeaverError::Validation("BPS varint overflowed available range".into())
-            })?;
-        }
+        crate::varint::read_varint(|| self.read_u8(), "BPS")
     }
 }
 

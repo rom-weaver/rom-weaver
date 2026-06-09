@@ -131,11 +131,7 @@ impl PatchHandler for PmsrPatchHandler {
                 }
             }
         };
-        let checksum_suffix = if validate_source {
-            String::new()
-        } else {
-            "; checksum validation skipped".to_string()
-        };
+        let checksum_suffix = crate::checksum_validation_suffix(validate_source);
         Ok(OperationReport::succeeded(
             OperationFamily::Patch,
             Some(self.descriptor.name.to_string()),
@@ -168,11 +164,7 @@ impl PatchHandler for PmsrPatchHandler {
         let output_len = patch.min_target_size.max(source_len);
         let _ = pmsr_records_are_non_overlapping(&patch, output_len)?;
 
-        let checksum_suffix = if validate_source {
-            String::new()
-        } else {
-            "; checksum validation skipped".to_string()
-        };
+        let checksum_suffix = crate::checksum_validation_suffix(validate_source);
         Ok(crate::patch_success_report(
             self.descriptor,
             "validate",

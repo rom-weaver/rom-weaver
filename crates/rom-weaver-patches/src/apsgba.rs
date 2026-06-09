@@ -126,11 +126,7 @@ impl PatchHandler for ApsGbaPatchHandler {
             execution
         };
 
-        let checksum_suffix = if validate_checksums {
-            String::new()
-        } else {
-            "; checksum validation skipped".to_string()
-        };
+        let checksum_suffix = crate::checksum_validation_suffix(validate_checksums);
         Ok(OperationReport::succeeded(
             OperationFamily::Patch,
             Some(self.descriptor.name.to_string()),
@@ -181,11 +177,7 @@ impl PatchHandler for ApsGbaPatchHandler {
             )?;
         }
 
-        let checksum_suffix = if validate_checksums {
-            String::new()
-        } else {
-            "; checksum validation skipped".to_string()
-        };
+        let checksum_suffix = crate::checksum_validation_suffix(validate_checksums);
         Ok(crate::patch_success_report(
             self.descriptor,
             "validate",

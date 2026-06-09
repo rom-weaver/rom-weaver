@@ -128,11 +128,7 @@ impl PatchHandler for ApsN64PatchHandler {
             execution
         };
 
-        let checksum_suffix = if validate_checksums {
-            String::new()
-        } else {
-            "; checksum validation skipped".to_string()
-        };
+        let checksum_suffix = crate::checksum_validation_suffix(validate_checksums);
         Ok(OperationReport::succeeded(
             OperationFamily::Patch,
             Some(self.descriptor.name.to_string()),
@@ -169,11 +165,7 @@ impl PatchHandler for ApsN64PatchHandler {
             let _ = prepare_aps_write(record, patch.output_size)?;
         }
 
-        let checksum_suffix = if validate_checksums {
-            String::new()
-        } else {
-            "; checksum validation skipped".to_string()
-        };
+        let checksum_suffix = crate::checksum_validation_suffix(validate_checksums);
         Ok(crate::patch_success_report(
             self.descriptor,
             "validate",
