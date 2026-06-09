@@ -21,6 +21,7 @@ type CreateWorkflowSourceState = {
   selectedCandidateId?: string;
   size?: number;
   sourceSize?: number;
+  chdMode?: string;
   checksums?: Record<string, string>;
   checksumTimeMs?: number;
   decompressionTimeMs?: number;

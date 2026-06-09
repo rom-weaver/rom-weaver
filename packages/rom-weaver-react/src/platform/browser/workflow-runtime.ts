@@ -1647,27 +1647,32 @@ const createBrowserRomSpecificRuntime = (workerIo: RuntimeWorkerIo): RomSpecific
         onProgress,
         onLog,
       );
-      return annotateChdListEntries(
-        normalizeRomSpecificListEntries(
-          result.entries,
-          getPathDerivedFileName(workerSource.filePath, workerSource.fileName || fileName),
-          fileName,
+      return {
+        chdMediaKind: result.chdMediaKind,
+        entries: annotateChdListEntries(
+          normalizeRomSpecificListEntries(
+            result.entries,
+            getPathDerivedFileName(workerSource.filePath, workerSource.fileName || fileName),
+            fileName,
+          ),
         ),
-      );
+      };
     } finally {
       await workerSource.cleanup().catch(() => undefined);
     }
   },
-  listRvz: async ({ fileName }) => [
-    {
-      fileName: getRomSpecificExtractedFileName("rvz", { fileName }),
-      filename: getRomSpecificExtractedFileName("rvz", { fileName }),
-      name: getPathBaseName(
-        getRomSpecificExtractedFileName("rvz", { fileName }),
-        getRomSpecificExtractedFileName("rvz", { fileName }),
-      ),
-    },
-  ],
+  listRvz: async ({ fileName }) => ({
+    entries: [
+      {
+        fileName: getRomSpecificExtractedFileName("rvz", { fileName }),
+        filename: getRomSpecificExtractedFileName("rvz", { fileName }),
+        name: getPathBaseName(
+          getRomSpecificExtractedFileName("rvz", { fileName }),
+          getRomSpecificExtractedFileName("rvz", { fileName }),
+        ),
+      },
+    ],
+  }),
   listZ3ds: async ({ source, fileName, logLevel, onLog, onProgress, signal }) => {
     const workerSource = await workerIo.stageSource({
       fallbackFileName: fileName,
@@ -1688,10 +1693,12 @@ const createBrowserRomSpecificRuntime = (workerIo: RuntimeWorkerIo): RomSpecific
       );
       const sourceFileName = fileName || workerSource.fileName || Z3DS_ROM_SPECIFIC_FORMAT.fallbackFileName;
       const stagedSourceFileName = getPathDerivedFileName(workerSource.filePath, sourceFileName);
-      return normalizeZ3dsListEntriesForSource(
-        normalizeRomSpecificListEntries(result.entries, stagedSourceFileName, sourceFileName),
-        sourceFileName,
-      );
+      return {
+        entries: normalizeZ3dsListEntriesForSource(
+          normalizeRomSpecificListEntries(result.entries, stagedSourceFileName, sourceFileName),
+          sourceFileName,
+        ),
+      };
     } finally {
       await workerSource.cleanup().catch(() => undefined);
     }

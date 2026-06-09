@@ -75,6 +75,7 @@ const getProgressStagedInputInfo = (event: ProgressEvent): StagedInputInfo => {
     details.wasDecompressed === true || progressStage === "checksum" || progressStage === "decompress";
   return {
     archiveName: getArchiveNameFromProgressDetails(details),
+    chdMode: typeof details.chdMode === "string" ? details.chdMode : undefined,
     decompressionTimeMs: typeof details.decompressionTimeMs === "number" ? details.decompressionTimeMs : undefined,
     fileName: getInputDisplayFileName(fileName, isPreparedFileName),
     id: typeof details.sourceId === "string" ? details.sourceId : "",

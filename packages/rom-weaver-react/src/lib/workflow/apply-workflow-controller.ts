@@ -100,6 +100,7 @@ const cloneInputState = (
   state
     ? ({
         candidates: state.candidates.map(cloneCandidate),
+        chdMode: state.chdMode,
         checksums: state.checksums ? cloneValue(state.checksums) : undefined,
         checksumTimeMs: state.checksumTimeMs,
         decompressionTimeMs: state.decompressionTimeMs,
@@ -169,6 +170,7 @@ const cloneResolvedInputState = (
   parentCompressions: ApplyWorkflowParentCompression[],
   selected: boolean,
 ): ApplyWorkflowResolvedInput => ({
+  chdMode: state.chdMode,
   checksums: state.checksums ? cloneValue(state.checksums) : undefined,
   checksumTimeMs: state.checksumTimeMs,
   decompressionTimeMs: state.decompressionTimeMs,
@@ -201,6 +203,12 @@ const cloneResolvedInputAssetState = (
 ): ApplyWorkflowResolvedInput => {
   const checksums = getInputAssetChecksums(asset);
   return {
+    chdMode:
+      asset.file._chdMode === "cd" || asset.file._chdMode === "dvd"
+        ? asset.file._chdMode
+        : asset.file._chdCuePath || asset.file._chdCueText
+          ? "cd"
+          : undefined,
     checksums: checksums ? cloneValue(checksums) : undefined,
     checksumTimeMs: asset.checksumTimeMs,
     decompressionTimeMs: getAssetDecompressionTimeMs(asset),

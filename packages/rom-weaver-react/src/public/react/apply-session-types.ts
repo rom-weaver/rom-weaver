@@ -29,6 +29,7 @@ type StagedInputInfo = {
   fileName?: string;
   size?: number;
   sourceSize?: number;
+  chdMode?: string;
   splitBinAvailable?: boolean;
   wasDecompressed?: boolean;
   validationActualValue?: string;

@@ -1,5 +1,9 @@
 import { isVfsFileRef } from "../../storage/vfs/source-ref.ts";
-import type { SelectionGroupCandidate } from "../../types/selection.ts";
+import type {
+  CandidateSelectionRequest,
+  SelectionFileCandidate,
+  SelectionGroupCandidate,
+} from "../../types/selection.ts";
 import type { SourceObject, SourceRef } from "../../types/source.ts";
 import type { ApplyWorkflowOptions, CreateWorkflowOptions } from "../../types/workflow-runtime.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
@@ -7,6 +11,7 @@ import { createArchiveSourceBlob } from "../archive-utils.ts";
 import { CREATE_ROM_SPECIFIC_COMPRESSION_FORMATS } from "../compression/container-format-registry.ts";
 import { RomWeaverError } from "../errors.ts";
 import { getPathBaseName } from "../path-utils.ts";
+import { reportProgress } from "../progress/progress-reporting.ts";
 import { createPatchFileFromPublicOutput } from "../runtime/public-output-bin-file.ts";
 import { findArchiveEntryByFileName, isCueEntryFileName, parseCueFileReferences } from "./archive.ts";
 import type { PatchFileInstance } from "./binary-service.ts";
@@ -70,6 +75,7 @@ type CompressionRomProbe = {
 };
 type InputPreparationOptions = ApplyWorkflowOptions | CreateWorkflowOptions | undefined;
 type InputPreparationRuntimeLike = InputPreparationRuntime | Pick<WorkflowRuntime, "name">;
+type ChdCodecMode = "cd" | "dvd";
 type CompressionExtractOverrides = {
   checksumAlgorithms?: string[];
   chdSplitBin?: boolean;
@@ -180,6 +186,33 @@ const formatChdEntryListLabel = (entries: ArchiveEntryLike[]) =>
 
 const filterNestedContainerEntries = (entries: ArchiveEntryLike[]) =>
   entries.filter((entry) => typeof entry.filename === "string" && isCompressionEntryFileName(entry.filename));
+
+const getChdCodecModeFromMediaKind = (mediaKind: unknown): ChdCodecMode | null => {
+  const normalized = String(mediaKind || "")
+    .trim()
+    .toLowerCase();
+  if (normalized === "cd" || normalized === "gd") return "cd";
+  if (normalized === "dvd") return "dvd";
+  return null;
+};
+
+const reportChdCodecMode = (
+  archiveFile: PatchFileInstance,
+  options: InputPreparationOptions,
+  chdMode: ChdCodecMode | null,
+) => {
+  if (!chdMode) return;
+  reportProgress(options, {
+    details: { chdMode },
+    label: "Preparing CHD extraction...",
+    percent: null,
+    stage: "input",
+  });
+  traceArchivePreparation(options, "input.archive.chd-mode", {
+    chdMode,
+    file: describeArchiveFileForTrace(archiveFile),
+  });
+};
 
 const getCompressedArchiveVisitKey = (file: PatchFileInstance) =>
   [file.fileName || "", typeof file.filePath === "string" ? file.filePath : "", file.fileSize || 0].join("\u0000");
@@ -421,6 +454,17 @@ const listCompressionEntries = async (
   kindFilter: CompressionEntryKindFilter = {},
   overrides: CompressionExtractOverrides = {},
 ) => {
+  const result = await listCompressionEntryResult(file, options, runtime, kindFilter, overrides);
+  return result.entries || [];
+};
+
+const listCompressionEntryResult = async (
+  file: PatchFileInstance,
+  options: InputPreparationOptions,
+  runtime: InputPreparationRuntimeLike = DEFAULT_INPUT_PREPARATION_RUNTIME,
+  kindFilter: CompressionEntryKindFilter = {},
+  overrides: CompressionExtractOverrides = {},
+) => {
   const resolvedRuntime = await resolveInputPreparationRuntime(runtime);
   if (!resolvedRuntime.compression.list) throw new Error("Compression listing is unavailable");
   const compressionFormat = getCompressionFormat(file);
@@ -437,7 +481,9 @@ const listCompressionEntries = async (
     source: getCompressionRuntimeSource(file),
   });
   const entries = result.entries || [];
+  const chdMode = getChdCodecModeFromMediaKind(result.chdMediaKind);
   traceArchivePreparation(options, "input.archive.list.finish", {
+    chdMode: chdMode || "",
     compressionFormat,
     entryCount: entries.length,
     entrySample: summarizeEntryNames(entries),
@@ -446,7 +492,7 @@ const listCompressionEntries = async (
     romFilter: !!kindFilter.romFilter,
     runtime: resolvedRuntime.name,
   });
-  return entries;
+  return { ...result, chdMode, entries };
 };
 
 const makeChdOutputModeCandidate = ({
@@ -472,6 +518,55 @@ const makeChdOutputModeCandidate = ({
   warnings: [],
 });
 
+const makePatchArchiveCandidate = (entry: ArchiveEntryLike, sourceIndex: number): SelectionFileCandidate => ({
+  fileName: getBaseFileName(entry.filename),
+  id: makeInputId(sourceIndex, entry.filename, normalizeArchiveEntryName),
+  kind: "patch",
+  path: entry.filename,
+  selectable: true,
+  size: entry.size,
+  type: "file",
+});
+
+const listDirectPatchArchiveEntries = async (
+  archiveFile: PatchFileInstance,
+  options: InputPreparationOptions,
+  runtime: InputPreparationRuntimeLike,
+) => {
+  const entries = await listCompressionEntries(archiveFile, options, runtime, { patchFilter: true });
+  const nestedContainerNames = new Set(filterNestedContainerEntries(entries).map((entry) => entry.filename));
+  return entries.filter((entry) => !nestedContainerNames.has(entry.filename));
+};
+
+const maybeReportPatchArchiveSelection = async ({
+  archiveFile,
+  options,
+  runtime,
+  selectedEntryName,
+  sourceIndex,
+}: {
+  archiveFile: PatchFileInstance;
+  options: InputPreparationOptions;
+  runtime: InputPreparationRuntimeLike;
+  selectedEntryName?: string;
+  sourceIndex: number;
+}) => {
+  if (selectedEntryName || typeof options?.onCandidatesFound !== "function") return;
+  const patchEntries = await listDirectPatchArchiveEntries(archiveFile, options, runtime);
+  if (!patchEntries.length) return;
+  const request: CandidateSelectionRequest = {
+    candidates: patchEntries.map((entry) => makePatchArchiveCandidate(entry, sourceIndex)),
+    role: "patch",
+    sourceIndex,
+    sourceName: archiveFile.fileName || "Patch archive",
+    warnings: [],
+  };
+  options.onCandidatesFound(request);
+  throw new RomWeaverError("AMBIGUOUS_SELECTION", `${request.sourceName} requires patch selection`, {
+    details: { request },
+  });
+};
+
 const resolveChdSplitBinSelection = async ({
   archiveFile,
   compressionFormat,
@@ -488,19 +583,29 @@ const resolveChdSplitBinSelection = async ({
   runtime: InputPreparationRuntimeLike;
   selectedEntryName?: string;
   sourceIndex: number;
-}): Promise<{ selectedEntryName?: string; chdSplitBin?: boolean }> => {
+}): Promise<{ selectedEntryName?: string; chdMode?: ChdCodecMode; chdSplitBin?: boolean }> => {
   const parsedSelection = parseChdSplitSelection(selectedEntryName);
-  if (parsedSelection.chdSplitBin !== undefined || parsedSelection.selectedEntryName) return parsedSelection;
+  if (parsedSelection.chdSplitBin !== undefined) return { ...parsedSelection, chdMode: "cd" };
+  if (parsedSelection.selectedEntryName) return parsedSelection;
   if (compressionFormat !== "chd" || !kindFilter.romFilter || typeof options?.onCandidatesFound !== "function") {
     return parsedSelection;
   }
 
-  const mergedEntries = await listCompressionEntries(archiveFile, options, runtime, kindFilter, { chdSplitBin: false });
-  const splitEntries = await listCompressionEntries(archiveFile, options, runtime, kindFilter, { chdSplitBin: true });
+  const mergedResult = await listCompressionEntryResult(archiveFile, options, runtime, kindFilter, {
+    chdSplitBin: false,
+  });
+  const splitResult = await listCompressionEntryResult(archiveFile, options, runtime, kindFilter, {
+    chdSplitBin: true,
+  });
+  const chdMode = mergedResult.chdMode || splitResult.chdMode;
+  reportChdCodecMode(archiveFile, options, chdMode);
+  const mergedEntries = mergedResult.entries;
+  const splitEntries = splitResult.entries;
   const mergedBinEntries = getChdBinEntries(mergedEntries);
   const splitBinEntries = getChdBinEntries(splitEntries);
   const cueEntryName = getChdCueEntryName(mergedEntries) || getChdCueEntryName(splitEntries);
-  if (!(cueEntryName && mergedBinEntries.length === 1 && splitBinEntries.length > 1)) return parsedSelection;
+  if (!(cueEntryName && mergedBinEntries.length === 1 && splitBinEntries.length > 1))
+    return { ...parsedSelection, ...(chdMode ? { chdMode } : {}) };
 
   const request = {
     candidates: [
@@ -971,6 +1076,15 @@ const resolveArchiveInputFileByDescent = async (
   if (!resolvedRuntime.compression.extract) throw new Error("Compression extraction is unavailable");
   const compressionFormat = getCompressionFormat(file);
   const kindFilter = role === "patch" ? { patchFilter: true } : { romFilter: true };
+  if (role === "patch") {
+    await maybeReportPatchArchiveSelection({
+      archiveFile: file,
+      options,
+      runtime,
+      selectedEntryName: selectedArchiveEntry,
+      sourceIndex,
+    });
+  }
   const chdSelection = await resolveChdSplitBinSelection({
     archiveFile: file,
     compressionFormat,
@@ -1005,6 +1119,7 @@ const resolveArchiveInputFileByDescent = async (
     preferExternalFilePath: true,
   });
   extracted.fileName = fileName;
+  if (chdSelection.chdMode) extracted._chdMode = chdSelection.chdMode;
   traceArchivePreparation(options, "input.archive.file.descent.finish", {
     compressionFormat,
     fileName,
@@ -1142,6 +1257,7 @@ const resolveArchiveInputAssetsByDescent = async (
         preferExternalFilePath: !shouldMaterializeForSyncRead,
       });
       file.fileName = fileName;
+      if (chdSelection.chdMode) file._chdMode = chdSelection.chdMode;
       return file;
     }),
   );

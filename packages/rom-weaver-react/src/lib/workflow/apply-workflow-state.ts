@@ -26,6 +26,7 @@ type InternalSourceState = {
   targetInputFileName?: string;
   size?: number;
   sourceSize?: number;
+  chdMode?: string;
   decompressionTimeMs?: number;
   wasDecompressed?: boolean;
   warnings: WorkflowWarning[];

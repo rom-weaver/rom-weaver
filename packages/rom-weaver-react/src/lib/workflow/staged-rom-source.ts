@@ -328,6 +328,7 @@ class StagedRomSourceController<TSource, TState extends SharedRomSourceState> {
       selectedOwner?.state.sourceSize ||
       session.stages.reduce((total, stage) => total + (stage.state.sourceSize || 0), 0) ||
       undefined;
+    view.state.chdMode = selectedOwner?.state.chdMode;
     view.state.decompressionTimeMs = selectedOwner?.state.decompressionTimeMs;
     view.state.wasDecompressed = selectedOwner?.state.wasDecompressed;
     view.parentCompressions = cloneParentCompressions(selectedOwner?.parentCompressions);
@@ -359,6 +360,9 @@ class StagedRomSourceController<TSource, TState extends SharedRomSourceState> {
       (typeof preparation?.sourceSize === "number" && Number.isFinite(preparation.sourceSize)
         ? preparation.sourceSize
         : stage.state.sourceSize) || stage.state.size;
+    stage.state.chdMode =
+      assets.find((asset) => asset.file._chdMode === "cd" || asset.file._chdMode === "dvd")?.file._chdMode ||
+      (assets.some((asset) => asset.file._chdCuePath || asset.file._chdCueText) ? "cd" : stage.state.chdMode);
     stage.state.decompressionTimeMs =
       typeof preparation?.decompressionTimeMs === "number" && Number.isFinite(preparation.decompressionTimeMs)
         ? preparation.decompressionTimeMs
@@ -386,6 +390,7 @@ class StagedRomSourceController<TSource, TState extends SharedRomSourceState> {
   resetStageForSelection(stage: SharedRomStagedSource<TSource, TState>): void {
     stage.state.checksums = undefined;
     stage.state.checksumTimeMs = undefined;
+    stage.state.chdMode = undefined;
     stage.state.decompressionTimeMs = undefined;
     stage.state.parentCompressions = [];
     stage.state.romProbe = undefined;

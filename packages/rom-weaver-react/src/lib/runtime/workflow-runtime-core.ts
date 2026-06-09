@@ -3,7 +3,7 @@ import {
   forwardRomSpecificProgress,
 } from "../../platform/shared/workflow-runtime-progress.ts";
 import type { ChecksumResult } from "../../types/checksum.ts";
-import type { CompressionExtractResult, PublicOutput } from "../../types/workflow-runtime.ts";
+import type { CompressionExtractResult, CompressionListResult, PublicOutput } from "../../types/workflow-runtime.ts";
 import type {
   RuntimePatchApplyWorkerInput,
   RuntimePatchCreateCandidatesWorkerInput,
@@ -80,15 +80,9 @@ type RomSpecificRuntimeAdapter = {
   createZ3ds?: (
     input: RuntimeRomSpecificCreateZ3dsInput,
   ) => Promise<Awaited<ReturnType<RuntimeWorkerIo["createWorkerOutput"]>>>;
-  listChd?: (
-    input: RuntimeRomSpecificExtractChdInput,
-  ) => Promise<Awaited<ReturnType<NonNullable<WorkflowRuntime["compression"]["list"]>>>["entries"]>;
-  listRvz?: (
-    input: RuntimeRomSpecificExtractRvzInput,
-  ) => Promise<Awaited<ReturnType<NonNullable<WorkflowRuntime["compression"]["list"]>>>["entries"]>;
-  listZ3ds?: (
-    input: RuntimeRomSpecificExtractZ3dsInput,
-  ) => Promise<Awaited<ReturnType<NonNullable<WorkflowRuntime["compression"]["list"]>>>["entries"]>;
+  listChd?: (input: RuntimeRomSpecificExtractChdInput) => Promise<CompressionListResult>;
+  listRvz?: (input: RuntimeRomSpecificExtractRvzInput) => Promise<CompressionListResult>;
+  listZ3ds?: (input: RuntimeRomSpecificExtractZ3dsInput) => Promise<CompressionListResult>;
   extractChd?: (input: RuntimeRomSpecificExtractChdInput) => Promise<CompressionExtractResult>;
   extractRvz?: (
     input: RuntimeRomSpecificExtractRvzInput,
@@ -568,7 +562,6 @@ const createSharedCompressionRuntime = (
     | RuntimeRomSpecificExtractRvzInput
     | RuntimeRomSpecificExtractZ3dsInput;
   type RomSpecificCreateOutput = Awaited<ReturnType<RuntimeWorkerIo["createWorkerOutput"]>>;
-  type RomSpecificListEntries = Awaited<ReturnType<NonNullable<WorkflowRuntime["compression"]["list"]>>>["entries"];
   const createRomSpecificInputs = {
     chd: (request: RomSpecificCreateRequest): RuntimeRomSpecificCreateChdInput => ({
       compressionCodecs: request.romSpecific?.chd?.compressionCodecs,
@@ -634,12 +627,12 @@ const createSharedCompressionRuntime = (
       | undefined;
     return extract?.(input);
   };
-  const listRomSpecificEntries = async (
+  const listRomSpecificResult = async (
     registration: RomSpecificCompressionFormatRegistration,
     input: RomSpecificListInput,
   ) => {
     const list = romSpecificRuntime[registration.list] as
-      | ((input: RomSpecificListInput) => Promise<RomSpecificListEntries>)
+      | ((input: RomSpecificListInput) => Promise<CompressionListResult>)
       | undefined;
     return list?.(input);
   };
@@ -775,12 +768,10 @@ const createSharedCompressionRuntime = (
   runtime.list = async (request) => {
     const registration = getRomSpecificCompressionFormatRegistration(request.format);
     if (registration)
-      return {
-        entries: requireOutput(
-          await listRomSpecificEntries(registration, getRomSpecificListInput(registration, request)),
-          `${registration.label} compression listing is unavailable`,
-        ),
-      };
+      return requireOutput(
+        await listRomSpecificResult(registration, getRomSpecificListInput(registration, request)),
+        `${registration.label} compression listing is unavailable`,
+      );
     const listRuntime = archiveRuntime.list;
     if (!listRuntime) throw new Error("Archive compression listing is unavailable");
     return listRuntime(request);

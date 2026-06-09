@@ -768,10 +768,11 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     resolvedOutputFormat,
     settings as Record<string, unknown>,
     source
-      ? ({ ...(source as unknown as Record<string, unknown>), fileName: resolvedSourceFileName } as Record<
-          string,
-          unknown
-        >)
+      ? ({
+          ...(source as unknown as Record<string, unknown>),
+          ...(sourceState?.chdMode ? { _chdMode: sourceState.chdMode } : {}),
+          fileName: resolvedSourceFileName,
+        } as Record<string, unknown>)
       : null,
   );
 

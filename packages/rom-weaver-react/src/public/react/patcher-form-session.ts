@@ -228,6 +228,7 @@ const useLocalApplyPatchFormSession = ({
     configuredOutputCompression !== null &&
     String(configuredOutputCompression).trim() !== "";
   const activeCompression = configuredOutputCompression || defaultArchiveCompression;
+  const primaryRomInput = romInputs[0] || null;
   const z3dsLabelSource = useMemo<BinarySource | undefined>(() => {
     const selectedInputFileName = String(romInputs[0]?.info?.fileName || "").trim();
     const baseSource = effectiveInputs[0];
@@ -235,6 +236,7 @@ const useLocalApplyPatchFormSession = ({
     if (baseSource && typeof baseSource === "object") {
       return {
         ...(baseSource as unknown as Record<string, unknown>),
+        ...(primaryRomInput?.chdMode ? { _chdMode: primaryRomInput.chdMode } : {}),
         fileName: selectedInputFileName,
         name: selectedInputFileName,
       } as unknown as BinarySource;
@@ -404,7 +406,6 @@ const useLocalApplyPatchFormSession = ({
   );
   const fallbackInputCompressedBytes =
     effectiveInputs.reduce((total, input) => total + (getBinarySourceSize(input) || 0), 0) || null;
-  const primaryRomInput = romInputs[0] || null;
   const inputCompressedTotal =
     completedSizeSummary.inputBytes === null ? (primaryRomInput?.sourceSize ?? fallbackInputCompressedBytes) : null;
   const inputCompressedDisplayBytes = completedSizeSummary.inputCompressedBytes ?? inputCompressedTotal;
@@ -859,6 +860,7 @@ const useLocalApplyPatchFormSession = ({
             info.parentCompressions ??
             (patch as Partial<RomInputRowState>).archivePathEntries ??
             existing.archivePathEntries,
+          chdMode: info.chdMode ?? patch.chdMode ?? existing.chdMode,
           decompressionTimeMs: info.decompressionTimeMs ?? patch.decompressionTimeMs ?? existing.decompressionTimeMs,
           groupId: info.groupId ?? patch.groupId ?? existing.groupId,
           id: rowId,
@@ -1255,6 +1257,7 @@ const useLocalApplyPatchFormSession = ({
                 const stableId = info.id || getInputKey(snapshot.inputs[index] as BinarySource, snapshot.inputs);
                 return createRomInputRow({
                   ...(stableId ? byId.get(stableId) : undefined),
+                  chdMode: info.chdMode ?? byId.get(stableId)?.chdMode,
                   disabled: disabledRef.current || busyRef.current,
                   id: stableId,
                   info: {

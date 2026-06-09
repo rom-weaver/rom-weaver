@@ -5,6 +5,7 @@ import { page } from "vitest/browser";
 import { getCompressionCodecOptions, getCompressionCodecSuggestions } from "../../src/lib/compression/codec-fields.ts";
 import { resolveCompressionLevels } from "../../src/lib/compression/compression-settings.ts";
 import OutputCompressionManager from "../../src/lib/compression/output-compression-manager.ts";
+import { getProgressStagedInputInfo } from "../../src/public/react/apply-session-inputs.ts";
 import { CodecCombobox } from "../../src/public/react/components/ds/codec-combobox.tsx";
 import { CompressPanelBody } from "../../src/public/react/components/ds/compress-panel.tsx";
 import { buildCompressPanel, OVERRIDDEN_PROFILE_VALUE } from "../../src/public/react/compress-options.ts";
@@ -220,6 +221,44 @@ test("compress panel keeps cleared codec values editable", () => {
   expect(buildCompressPanel("z3ds", { compressionProfile: "max" })?.summary).toBe("zstd:22");
   expect(buildCompressPanel("zip", { compressionProfile: "min", zipCodec: "zstd" })?.summary).toBe("zstd:-7");
   expect(buildCompressPanel("z3ds", { compressionProfile: "min" })?.summary).toBe("zstd:-7");
+});
+
+test("chd compress panel uses source mode discovered before extraction finishes", () => {
+  const settings = {
+    chdCreateCdCodecs: "cdlz,cdzl,cdfl",
+    chdCreateDvdCodecs: "zstd,lzma,zlib,huff,flac",
+    chdOutputMode: "auto",
+    compressionProfile: "max",
+  };
+  const cdPanel = buildCompressPanel("chd", settings, { _chdMode: "cd", fileName: "game.chd" });
+  const dvdPanel = buildCompressPanel("chd", settings, { _chdMode: "dvd", fileName: "game.chd" });
+
+  expect(cdPanel?.fields[0]?.key).toBe("chdCreateCdCodecs");
+  expect(cdPanel?.summary).toBe("cdlz:9,cdzl:9,cdfl:8");
+  expect(dvdPanel?.fields[0]?.key).toBe("chdCreateDvdCodecs");
+  expect(dvdPanel?.summary).toBe("zstd:22,lzma:9,zlib:9,huff,flac:8");
+});
+
+test("input progress preserves listed chd mode before extraction finishes", () => {
+  const info = getProgressStagedInputInfo({
+    details: {
+      chdMode: "cd",
+      fileName: "game.chd",
+      order: 0,
+      sourceId: "input-0-game-chd",
+      stage: "decompress",
+    },
+    label: "Preparing CHD extraction...",
+    percent: null,
+    stage: "decompress",
+  });
+
+  expect(info).toMatchObject({
+    chdMode: "cd",
+    fileName: "game.chd",
+    id: "input-0-game-chd",
+    order: 0,
+  });
 });
 
 test("compress panel shows codec level overrides and clears them when level changes", async () => {

@@ -82,6 +82,7 @@ type RomInputRowState = InputUiState & {
   archivePathEntries?: ArchivePathEntryState[];
   size?: number;
   sourceSize?: number;
+  chdMode?: string;
   splitBinAvailable?: boolean;
   decompressionTimeMs?: number;
   wasDecompressed?: boolean;
@@ -435,6 +436,7 @@ const normalizePatcherUiState = (
       : undefined;
     return {
       archivePathEntries,
+      chdMode: typeof rowInput.chdMode === "string" ? rowInput.chdMode : undefined,
       decompressionTimeMs: typeof rowInput.decompressionTimeMs === "number" ? rowInput.decompressionTimeMs : undefined,
       disabled: !!rowInput.disabled,
       groupId: typeof rowInput.groupId === "string" ? rowInput.groupId : "",

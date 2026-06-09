@@ -40,6 +40,7 @@ type InternalSourceState = {
   selectedCandidateId?: string;
   size?: number;
   sourceSize?: number;
+  chdMode?: string;
   checksums?: TrimWorkflowChecksums;
   checksumTimeMs?: number;
   decompressionTimeMs?: number;
@@ -58,6 +59,7 @@ const cloneSourceState = (state: InternalSourceState | null | undefined) =>
   state
     ? ({
         candidates: state.candidates.map(cloneCandidate),
+        chdMode: state.chdMode,
         checksums: state.checksums ? cloneValue(state.checksums) : undefined,
         checksumTimeMs: state.checksumTimeMs,
         decompressionTimeMs: state.decompressionTimeMs,

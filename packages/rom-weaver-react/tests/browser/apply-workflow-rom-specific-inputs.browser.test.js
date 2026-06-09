@@ -144,14 +144,25 @@ test("apply workflow resolves ZCCI inputs to extracted CCI names during staging"
 });
 
 test("apply workflow resolves CHD inputs to extracted names during staging", async () => {
-  const workflow = new ApplyWorkflow();
+  const { workflow, logs } = createTraceWorkflow();
   const progressEvents = [];
   workflow.on("progress", (event) => progressEvents.push(event));
   try {
     await workflow.setInput(await loadFixtureFile("tests/fixtures/browser-generated/game-cd.chd"));
     const input = workflow.getInput();
     expect(input?.fileName).not.toMatch(/\.chd$/i);
+    expect(input?.chdMode).toBe("cd");
     expect(input?.wasDecompressed).toBe(true);
+    const chdModeIndex = progressEvents.findIndex(
+      (event) => event.role === "input" && event.stage === "decompress" && event.details?.chdMode === "cd",
+    );
+    expect(chdModeIndex).toBeGreaterThanOrEqual(0);
+    const messages = logs.map((entry) => String(entry?.message || ""));
+    const modeTraceIndex = messages.findIndex((message) => message === "input.archive.chd-mode");
+    const descentStartIndex = messages.findIndex((message) => message === "input.archive.descent.start");
+    expect(modeTraceIndex).toBeGreaterThanOrEqual(0);
+    expect(descentStartIndex).toBeGreaterThanOrEqual(0);
+    expect(modeTraceIndex).toBeLessThan(descentStartIndex);
     const checksumIndex = progressEvents.findIndex((event) => event.role === "input" && event.stage === "checksum");
     expect(checksumIndex).toBe(-1);
   } finally {

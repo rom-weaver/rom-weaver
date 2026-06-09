@@ -31,6 +31,7 @@ type ApplyWorkflowResolvedInput = {
   groupId?: string;
   size?: number;
   sourceSize?: number;
+  chdMode?: string;
   splitBinAvailable?: boolean;
   decompressionTimeMs?: number;
   wasDecompressed?: boolean;
@@ -48,6 +49,7 @@ type ApplyWorkflowInputState = {
   selectedCandidateId?: string;
   size?: number;
   sourceSize?: number;
+  chdMode?: string;
   decompressionTimeMs?: number;
   wasDecompressed?: boolean;
   warnings: WorkflowWarning[];

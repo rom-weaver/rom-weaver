@@ -238,6 +238,7 @@ type CompressionCreateInput =
     };
 
 type CompressionListResult = {
+  chdMediaKind?: string;
   entries: CompressionEntryInfo[];
 };
 

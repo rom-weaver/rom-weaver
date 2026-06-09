@@ -27,6 +27,7 @@ type TrimWorkflowSourceState = {
   selectedCandidateId?: string;
   size?: number;
   sourceSize?: number;
+  chdMode?: string;
   decompressionTimeMs?: number;
   wasDecompressed?: boolean;
   warnings: WorkflowWarning[];
