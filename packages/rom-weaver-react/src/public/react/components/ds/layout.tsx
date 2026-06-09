@@ -1,5 +1,6 @@
 import Upload from "lucide-react/dist/esm/icons/upload.js";
 import { type ReactNode, useId, useState } from "react";
+import { readDataTransferFiles } from "../../../../lib/input/dropped-files.ts";
 
 /**
  * Design-system layout primitives: the numbered step section, the inline help
@@ -72,6 +73,7 @@ const DropZone = ({
   const generatedInputId = useId();
   const resolvedInputId = inputId || generatedInputId;
   const [dragging, setDragging] = useState(false);
+  const [reading, setReading] = useState(false);
 
   const emit = (list: FileList | null) => {
     if (!list || list.length === 0) return;
@@ -83,7 +85,7 @@ const DropZone = ({
   return (
     <label
       aria-disabled={disabled || undefined}
-      className={join("drop", big && "big", dragging && "dragging")}
+      className={join("drop", big && "big", dragging && "dragging", reading && "reading")}
       htmlFor={resolvedInputId}
       id={id}
       onDragLeave={() => setDragging(false)}
@@ -96,12 +98,21 @@ const DropZone = ({
         event.preventDefault();
         setDragging(false);
         if (disabled) return;
-        emit(event.dataTransfer?.files ?? null);
+        // Read synchronously so folder entries are captured before the
+        // DataTransfer is cleared; folders are flattened into the file list.
+        // Surface a "reading" hint only if the traversal runs long enough to
+        // matter, so plain file drops don't flicker it.
+        const readingTimer = setTimeout(() => setReading(true), 120);
+        void readDataTransferFiles(event.dataTransfer).then((files) => {
+          clearTimeout(readingTimer);
+          setReading(false);
+          if (files.length) onFiles(files);
+        });
       }}
     >
       <span className="main">
         <Upload aria-hidden="true" />
-        {label}
+        {reading ? "Reading folder…" : label}
       </span>
       {hint ? <span className="hint">{hint}</span> : null}
       <input

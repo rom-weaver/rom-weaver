@@ -131,6 +131,9 @@
 .rw-app .drop .hint { font-size: 0.758621rem; color: var(--rw-ink-mut); }
 .rw-app .drop.dragging { border-color: var(--rw-accent); border-style: solid; background: color-mix(in oklab, var(--rw-accent) 15%, var(--rw-inset)); color: var(--rw-ink); }
 .rw-app .drop.dragging svg { color: var(--rw-accent); opacity: 1; }
+.rw-app .drop.reading { border-style: solid; border-color: var(--rw-line-strong); color: var(--rw-ink); cursor: progress; }
+.rw-app .unified-drop { display: flex; flex-direction: column; }
+.rw-app .unified-drop-actions { display: flex; justify-content: center; margin-top: 7px; }
 .rw-app .workflow-file-list { position: relative; display: flex; flex-direction: column; gap: 14px; }
 .rw-app .workflow-file-list:not(:empty), .rw-app .workflow-step-after-items:not(:empty) { margin-bottom: 14px; }
 /* inside the list, spacing comes from the flex gap only — override the generic
