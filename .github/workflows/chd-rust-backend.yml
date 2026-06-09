@@ -97,12 +97,11 @@ jobs:
 
       - name: rom-weaver-wasm checks
         run: |
-          npm --prefix packages/rom-weaver-wasm run lint:code
-          npm --prefix packages/rom-weaver-wasm run check:types
+          npm --prefix packages/rom-weaver-wasm run lint
           npm --prefix packages/rom-weaver-wasm test
 
       - name: rom-weaver-react checks
         run: |
-          npm --prefix packages/rom-weaver-react run lint:code
+          npm --prefix packages/rom-weaver-react run lint
           npm --prefix packages/rom-weaver-react test
           npm --prefix packages/rom-weaver-react run build
