@@ -213,7 +213,6 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   const stagedCreateWorkflowRef = useRef<CreateWorkflow | null>(null);
   const stagedCreateWorkflowGenerationRef = useRef(0);
   const sourceStageQueueRef = useRef(Promise.resolve<void>(undefined));
-  const handledPageDropIdRef = useRef<number | null>(null);
   const stagedCreateWorkflowSyncRef = useRef({
     modifiedKey: "",
     originalKey: "",
@@ -420,24 +419,6 @@ function CreatePatchForm(props: CreatePatchFormProps) {
     clearWorkflowMessage();
     setProgress(null);
   };
-
-  useEffect(() => {
-    const pageDrop = props.pageDrop;
-    if (!pageDrop || handledPageDropIdRef.current === pageDrop.id) return;
-    handledPageDropIdRef.current = pageDrop.id;
-    let cancelled = false;
-    queueMicrotask(() => {
-      if (cancelled) return;
-      if (pageDrop.target === "original") {
-        updateOriginal(pageDrop.file);
-        return;
-      }
-      updateModified(pageDrop.file);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [props.pageDrop]);
 
   const cancelSourceStaging = (role: "modified" | "original") => {
     setCreateQueued(false);
@@ -879,7 +860,6 @@ function CreatePatchForm(props: CreatePatchFormProps) {
           label: file ? replaceLabel : emptyLabel,
           onFiles: (files) => onSelect(files[0] ?? null),
         }}
-        id={`patch-builder-row-${role}`}
         items={
           file
             ? [

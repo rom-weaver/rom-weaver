@@ -12,7 +12,6 @@ export type {
   ApplyPatchFormSettings,
   CreatePatchFormProps,
   CreatePatchFormSettings,
-  PageFileDrop,
   RomWeaverReactSettings,
   RomWeaverSettingsProviderProps,
   StartupState,

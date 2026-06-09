@@ -11,12 +11,6 @@ import type {
 
 type ApplyPatchFormSettings = ApplySettings;
 type BinarySource = File | FileSystemFileHandle;
-type PageFileDropTarget = "input" | "modified" | "original" | "patch";
-type PageFileDrop = {
-  file: File;
-  id: number;
-  target: PageFileDropTarget;
-};
 type StartupState = {
   status: "loading" | "ready" | "error";
   message: string;
@@ -83,7 +77,6 @@ type ApplyPatchFormProps = {
   defaultInputs?: BinarySource[];
   defaultPatches?: BinarySource[];
   defaultSettings?: ApplyPatchFormSettings;
-  pageDrop?: PageFileDrop | null;
   disabled?: boolean;
   workerThreads?: number | string;
   containerInputsEnabled?: boolean;
@@ -105,8 +98,6 @@ export type {
   BinarySource,
   DialogController,
   NoticeController,
-  PageFileDrop,
-  PageFileDropTarget,
   PatcherOutputController,
   PatcherStackController,
   PatcherUiController,

@@ -228,7 +228,6 @@ function TrimPatchForm(props: TrimPatchFormProps) {
   const stagedTrimWorkflowRef = useRef<BrowserTrimWorkflow | null>(null);
   const stagedTrimWorkflowGenerationRef = useRef(0);
   const stagedTrimWorkflowReadyRef = useRef<Promise<void> | null>(null);
-  const handledPageDropIdRef = useRef<number | null>(null);
   const trimExecutionTimingRef = useRef<{ compressionStartedAt: number | null; trimStartedAt: number | null }>({
     compressionStartedAt: null,
     trimStartedAt: null,
@@ -369,19 +368,6 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     clearWorkflowMessage();
     setProgress(null);
   };
-
-  useEffect(() => {
-    const pageDrop = props.pageDrop;
-    if (!pageDrop || handledPageDropIdRef.current === pageDrop.id) return;
-    handledPageDropIdRef.current = pageDrop.id;
-    let cancelled = false;
-    queueMicrotask(() => {
-      if (!cancelled) updateSource(pageDrop.file);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [props.pageDrop]);
 
   const cancelSourceStaging = () => {
     setTrimQueued(false);
@@ -804,7 +790,6 @@ function TrimPatchForm(props: TrimPatchFormProps) {
           label: source ? "Replace ROM · drop or browse" : "Select ROM · drop or browse",
           onFiles: (files) => updateSource(files[0] ?? null),
         }}
-        id="trim-builder-row-source"
         info={
           <InfoPopover title="ROM input">
             <strong>ROM</strong>

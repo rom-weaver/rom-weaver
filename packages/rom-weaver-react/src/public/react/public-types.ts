@@ -8,12 +8,7 @@ import type {
   CreateSettings,
 } from "../../platform/browser/browser-api.ts";
 import type { ProgressEvent } from "../../types/workflow-runtime.ts";
-import type {
-  BinarySource,
-  ApplyPatchFormProps as InternalApplyPatchFormProps,
-  PageFileDrop,
-  StartupState,
-} from "./patcher-form.ts";
+import type { BinarySource, ApplyPatchFormProps as InternalApplyPatchFormProps, StartupState } from "./patcher-form.ts";
 
 type RomWeaverReactSettings = ApplySettings & CreateSettings;
 type ApplyWorkflowSettings = ApplySettings;
@@ -42,7 +37,6 @@ type CreatePatchFormProps = {
   defaultModified?: BinarySource | null;
   settings?: CreatePatchFormSettings;
   defaultSettings?: CreatePatchFormSettings;
-  pageDrop?: PageFileDrop | null;
   patchType?: string;
   defaultPatchType?: string;
   disabled?: boolean;
@@ -64,7 +58,6 @@ type TrimPatchFormProps = {
   defaultSource?: BinarySource | null;
   settings?: TrimPatchFormSettings;
   defaultSettings?: TrimPatchFormSettings;
-  pageDrop?: PageFileDrop | null;
   outputFormat?: string;
   defaultOutputFormat?: string;
   disabled?: boolean;
@@ -87,7 +80,6 @@ export type {
   CreatePatchFormSettings,
   CreateWorkflowSettings,
   InternalApplyPatchFormProps,
-  PageFileDrop,
   RomWeaverReactSettings,
   RomWeaverSettingsProviderProps,
   StartupState,
