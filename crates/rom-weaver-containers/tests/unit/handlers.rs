@@ -10,9 +10,9 @@ mod tests {
     };
 
     use super::{
-        ChdCodec, ContainerCreateRequest, ContainerRegistry, RvzContainerHandler, SEVEN_Z,
-        SelectionMatcher, SevenZContainerHandler, SevenZMethod, Z3dsContainerHandler,
-        ZipContainerHandler, copy_progress_buffer_size,
+        ChdCodec, ContainerCreateRequest, ContainerRegistry, NodHandlerCore, RVZ,
+        RvzContainerHandler, SEVEN_Z, SelectionMatcher, SevenZContainerHandler, SevenZMethod,
+        Z3dsContainerHandler, ZipContainerHandler, copy_progress_buffer_size,
     };
     use chd::{
         header::Header,
@@ -2063,6 +2063,24 @@ mod tests {
         assert!(output_path.exists());
 
         let _ = fs::remove_dir_all(temp_dir);
+    }
+
+    #[test]
+    fn rvz_create_splits_preloader_and_processor_threads() {
+        let core = NodHandlerCore::new(&RVZ, NodFormat::Rvz);
+
+        let eight_threads = ThreadCapability::parallel(None).negotiate(ThreadBudget::Fixed(8));
+        assert_eq!(core.create_thread_counts_for_test(&eight_threads), (4, 4));
+
+        let nine_threads = ThreadCapability::parallel(None).negotiate(ThreadBudget::Fixed(9));
+        assert_eq!(core.create_thread_counts_for_test(&nine_threads), (4, 5));
+
+        let single_thread =
+            ThreadCapability::single_threaded().negotiate(ThreadBudget::Fixed(8));
+        assert_eq!(
+            core.create_thread_counts_for_test(&single_thread),
+            (0, 0)
+        );
     }
 
     #[test]

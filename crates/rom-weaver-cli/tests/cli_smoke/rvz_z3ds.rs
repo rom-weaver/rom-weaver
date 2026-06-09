@@ -31,7 +31,7 @@ fn rvz_probe_reports_succeeded() {
 #[test]
 fn rvz_compress_and_extract_round_trips() {
     let temp = setup_temp_dir();
-    let iso_bytes = build_test_gamecube_iso(0xA000);
+    let iso_bytes = build_test_gamecube_iso(4 * 1024 * 1024);
     fs::write(temp.child("disc.iso").path(), &iso_bytes).expect("iso fixture");
 
     let rvz_path = temp.child("disc.rvz");
@@ -53,7 +53,31 @@ fn rvz_compress_and_extract_round_trips() {
     );
 
     let compress_events = parse_json_lines(&compress_output);
-    assert_running_percent_event(&compress_events, "compress", "rvz");
+    assert_running_percent_event_in_range(&compress_events, "compress", "rvz", 0.99, 100.0);
+    assert!(
+        !compress_events.iter().any(|event| {
+            event["command"] == "compress"
+                && event["status"] == "running"
+                && event["format"] == "rvz"
+                && event["stage"] == "create"
+                && event["percent"]
+                    .as_f64()
+                    .map(|percent| percent > 0.0 && percent < 1.0)
+                    .unwrap_or(false)
+        }),
+        "rvz create progress should not emit sub-1% events that render as 0%"
+    );
+    assert!(
+        compress_events.iter().any(|event| {
+            event["command"] == "compress"
+                && event["status"] == "running"
+                && event["format"] == "rvz"
+                && event["stage"] == "create"
+                && event["label"] == "finalizing `rvz` archive"
+                && event["percent"].as_f64() == Some(99.0)
+        }),
+        "rvz finalization should stay determinate at 99%"
+    );
     let compress_json = compress_events.last().expect("compress terminal event");
     assert_eq!(compress_json["command"], "compress");
     assert_eq!(compress_json["family"], "container");

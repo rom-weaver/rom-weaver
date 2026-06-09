@@ -78,6 +78,39 @@ impl RvzContainerHandler {
         }
     }
 
+    fn maybe_emit_create_progress(
+        context: &OperationContext,
+        total_units: u64,
+        processed_units: u64,
+        last_emitted_percent: &mut u8,
+        execution: &ThreadExecution,
+    ) {
+        if total_units == 0 || processed_units == 0 {
+            return;
+        }
+
+        let percent_bucket = (((processed_units.min(total_units) as u128) * 100)
+            / total_units as u128)
+            .min(100) as u8;
+        if percent_bucket == 0 || percent_bucket >= 100 || percent_bucket <= *last_emitted_percent {
+            return;
+        }
+
+        let start_bucket = last_emitted_percent.saturating_add(1);
+        for bucket in start_bucket..=percent_bucket {
+            emit_container_running_progress(
+                context,
+                "compress",
+                RVZ.name,
+                "create",
+                format!("creating rvz ({bucket}%)"),
+                bucket as f32,
+                Some(execution),
+            );
+        }
+        *last_emitted_percent = percent_bucket;
+    }
+
     fn open_disc(&self, source: &Path) -> Result<NodDiscReader> {
         self.open_disc_with_threads(source, 0)
     }
@@ -328,26 +361,20 @@ impl ContainerHandlerOperations for RvzContainerHandler {
 
         RVZ_NOD_CORE.ensure_create_output_parent(&request.output)?;
 
-        let mut last_emitted_percent = -1.0_f32;
+        let mut last_emitted_percent = 0_u8;
         let output_bytes = RVZ_NOD_CORE.process_create_with_progress(
             input,
             &request.output,
             &options,
             &execution,
             |processed_bytes, total| {
-                let percent = ((processed_bytes as f32 / total as f32) * 100.0).clamp(0.0, 100.0);
-                if percent < 100.0 && percent - last_emitted_percent >= 1.0 {
-                    last_emitted_percent = percent;
-                    emit_container_running_progress(
-                        context,
-                        "compress",
-                        RVZ.name,
-                        "create",
-                        format!("creating rvz ({percent:.0}%)"),
-                        percent,
-                        Some(&execution),
-                    );
-                }
+                Self::maybe_emit_create_progress(
+                    context,
+                    total,
+                    processed_bytes,
+                    &mut last_emitted_percent,
+                    &execution,
+                );
             },
         )?;
 
@@ -390,25 +417,19 @@ impl ContainerHandlerOperations for RvzContainerHandler {
             block_size: NodFormat::Rvz.default_block_size(),
         };
 
-        let mut last_emitted_percent = -1.0_f32;
+        let mut last_emitted_percent = 0_u8;
         RVZ_NOD_CORE.process_create_dry_run_size_with_progress(
             input,
             &options,
             &execution,
             |processed_bytes, total| {
-                let percent = ((processed_bytes as f32 / total as f32) * 100.0).clamp(0.0, 100.0);
-                if percent < 100.0 && percent - last_emitted_percent >= 1.0 {
-                    last_emitted_percent = percent;
-                    emit_container_running_progress(
-                        context,
-                        "compress",
-                        RVZ.name,
-                        "create",
-                        format!("creating rvz ({percent:.0}%)"),
-                        percent,
-                        Some(&execution),
-                    );
-                }
+                Self::maybe_emit_create_progress(
+                    context,
+                    total,
+                    processed_bytes,
+                    &mut last_emitted_percent,
+                    &execution,
+                );
             },
         )
     }

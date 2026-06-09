@@ -92,11 +92,13 @@ test("rom-weaver runtime creates an RVZ from a prior browser OPFS output", async
     extractedOutput = extractResult?.output || null;
     expect(extractedOutput?.size).toBeGreaterThan(0);
 
+    const createProgress = [];
     const createResult = await browserRuntime.compression.create?.({
       fileName: "game.iso",
       format: "rvz",
       options: {
-        workerThreads: 8,
+        onProgress: (event) => createProgress.push(event),
+        workerThreads: 10,
       },
       outputName: "created-from-output.rvz",
       rvzCodec: "zstd",
@@ -106,6 +108,19 @@ test("rom-weaver runtime creates an RVZ from a prior browser OPFS output", async
     createdOutput = createResult?.output || null;
     expect(createdOutput?.fileName).toBe("created-from-output.rvz");
     expect(createdOutput?.size).toBeGreaterThan(0);
+    expect(createProgress.some((event) => event.stage === "output" && event.percent === 0)).toBe(
+      false,
+    );
+    expect(
+      createProgress.some(
+        (event) => event.label === "finalizing `rvz` archive" && event.percent === 99,
+      ),
+    ).toBe(true);
+    expect(
+      createProgress.some(
+        (event) => event.label === "finalizing `rvz` archive" && event.percent === null,
+      ),
+    ).toBe(false);
     await browserRuntime.vfs.truncate(createdOutput.path, createdOutput.size);
   } finally {
     await createdOutput?.cleanup?.().catch(() => undefined);

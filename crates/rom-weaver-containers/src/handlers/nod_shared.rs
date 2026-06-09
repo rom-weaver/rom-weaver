@@ -15,6 +15,12 @@ pub(crate) struct NodExtractPlan {
     pub(crate) output_path: PathBuf,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct NodCreateThreadPlan {
+    preloader_threads: usize,
+    processor_threads: usize,
+}
+
 #[cfg(target_family = "wasm")]
 #[derive(Debug)]
 struct ReopenablePathDiscStream {
@@ -88,6 +94,34 @@ impl NodHandlerCore {
         // Preloader fanout follows the full negotiated worker-thread budget; worker reuse keeps
         // browser WASI startup bounded, so no separate native/wasm cap is applied.
         self.negotiated_threads(execution)
+    }
+
+    fn create_thread_plan(&self, execution: &ThreadExecution) -> NodCreateThreadPlan {
+        let total_threads = self.negotiated_threads(execution);
+        if total_threads == 0 {
+            return NodCreateThreadPlan {
+                preloader_threads: 0,
+                processor_threads: 0,
+            };
+        }
+
+        // Create has two internal worker consumers. Split the negotiated budget so the
+        // preloader and compressor cannot each claim the full pool.
+        let preloader_threads = total_threads / 2;
+        let processor_threads = total_threads - preloader_threads;
+        NodCreateThreadPlan {
+            preloader_threads,
+            processor_threads,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn create_thread_counts_for_test(
+        &self,
+        execution: &ThreadExecution,
+    ) -> (usize, usize) {
+        let plan = self.create_thread_plan(execution);
+        (plan.preloader_threads, plan.processor_threads)
     }
 
     fn read_options(&self, preloader_threads: usize) -> NodDiscOptions {
@@ -436,8 +470,8 @@ impl NodHandlerCore {
     where
         F: FnMut(u64, u64),
     {
-        let preloader_threads = self.negotiated_preloader_threads(execution);
-        let read_options = self.read_options(preloader_threads);
+        let thread_plan = self.create_thread_plan(execution);
+        let read_options = self.read_options(thread_plan.preloader_threads);
         let input_disc = self
             .open_disc_from_path_or_stream(input, &read_options)
             .map_err(|error| {
@@ -460,7 +494,7 @@ impl NodHandlerCore {
         // per-block writes into larger syscalls keeps the worker threads from stalling on I/O.
         let mut output = BufWriter::new(File::create(output_path)?);
         let process_options = NodProcessOptions {
-            processor_threads: self.negotiated_threads(execution),
+            processor_threads: thread_plan.processor_threads,
             ..Default::default()
         };
         let finalization = writer
@@ -468,10 +502,7 @@ impl NodHandlerCore {
                 |data, processed, total| {
                     output.write_all(data.as_ref())?;
                     if total > 0 {
-                        let processed_bytes = processed
-                            .saturating_add(data.as_ref().len() as u64)
-                            .min(total);
-                        emit_progress(processed_bytes, total);
+                        emit_progress(processed.min(total), total);
                     }
                     Ok(())
                 },
@@ -498,8 +529,8 @@ impl NodHandlerCore {
     where
         F: FnMut(u64, u64),
     {
-        let preloader_threads = self.negotiated_preloader_threads(execution);
-        let read_options = self.read_options(preloader_threads);
+        let thread_plan = self.create_thread_plan(execution);
+        let read_options = self.read_options(thread_plan.preloader_threads);
         let input_disc = self
             .open_disc_from_path_or_stream(input, &read_options)
             .map_err(|error| {
@@ -519,7 +550,7 @@ impl NodHandlerCore {
 
         let mut output_bytes = 0_u64;
         let process_options = NodProcessOptions {
-            processor_threads: self.negotiated_threads(execution),
+            processor_threads: thread_plan.processor_threads,
             ..Default::default()
         };
         let finalization = writer
@@ -527,10 +558,7 @@ impl NodHandlerCore {
                 |data, processed, total| {
                     output_bytes = output_bytes.saturating_add(data.as_ref().len() as u64);
                     if total > 0 {
-                        let processed_bytes = processed
-                            .saturating_add(data.as_ref().len() as u64)
-                            .min(total);
-                        emit_progress(processed_bytes, total);
+                        emit_progress(processed.min(total), total);
                     }
                     Ok(())
                 },

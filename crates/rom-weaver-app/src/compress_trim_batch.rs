@@ -196,6 +196,11 @@ impl CliApp {
             report.label = format!("{}; warning: {warning}", report.label);
         }
         if report.status == OperationStatus::Succeeded {
+            let finalizing_percent = if handler.descriptor().name == "rvz" {
+                Some(99.0)
+            } else {
+                None
+            };
             self.emit_running(
                 OperationLabel {
                     command: "compress",
@@ -204,7 +209,7 @@ impl CliApp {
                 },
                 "create",
                 format!("finalizing `{}` archive", handler.descriptor().name),
-                None,
+                finalizing_percent,
                 report.thread_execution.clone(),
             );
             report =
