@@ -914,7 +914,7 @@ fn create_rejects_classic_ips_targets_larger_than_flips_limit() {
     assert!(
         error
             .to_string()
-            .contains("exceeds the Flips-compatible 16.8 MB limit"),
+            .contains("exceeds the Flips-compatible 16.78 MB limit"),
         "error mismatch: {error}"
     );
 }

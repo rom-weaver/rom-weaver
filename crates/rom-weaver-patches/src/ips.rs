@@ -10,6 +10,7 @@ use rom_weaver_core::{
     ChunkPlanner, FileChunk, FormatDescriptor, OperationContext, OperationFamily, OperationReport,
     PatchApplyRequest, PatchCapabilities, PatchChecksumValidation, PatchCreateRequest,
     PatchHandler, ProbeConfidence, Result, RomWeaverError, SharedThreadPool, ThreadCapability,
+    format_human_bytes,
 };
 use serde_json::{Map as JsonMap, Value as JsonValue};
 
@@ -635,16 +636,17 @@ fn validate_ips_create_flips_limits(
 
     let max_ips_len = MAX_IPS_OFFSET + 1;
     if modified_len > max_ips_len {
+        let limit = format_human_bytes(max_ips_len);
         return Err(RomWeaverError::Validation(format!(
-            "IPS create target size {modified_len} exceeds the Flips-compatible 16.8 MB limit; use IPS32 or --ignore-checksum-validation to try a non-Flips-compatible IPS patch"
+            "IPS create target size {modified_len} exceeds the Flips-compatible {limit} limit; use IPS32 or --ignore-checksum-validation to try a non-Flips-compatible IPS patch"
         )));
     }
 
     if modified_len == max_ips_len && original_len > modified_len {
-        return Err(RomWeaverError::Validation(
-            "IPS create cannot encode a truncate footer for exact 16.8 MB output; use IPS32 or --ignore-checksum-validation to try a non-Flips-compatible IPS patch"
-                .to_string(),
-        ));
+        let limit = format_human_bytes(max_ips_len);
+        return Err(RomWeaverError::Validation(format!(
+            "IPS create cannot encode a truncate footer for exact {limit} output; use IPS32 or --ignore-checksum-validation to try a non-Flips-compatible IPS patch"
+        )));
     }
 
     Ok(())

@@ -3,6 +3,10 @@ import type { JsonObject, JsonValue } from "../types/runtime.ts";
 
 const TRAILING_ELLIPSIS_REGEX = /\.\.\.$/;
 const THREAD_COUNT_LABEL_REGEX = /\b\d+\s+threads?\b/i;
+const BYTE_SIZE_FORMATTER = new Intl.NumberFormat("en", {
+  maximumFractionDigits: 2,
+  minimumFractionDigits: 1,
+});
 
 type WorkflowScalar = string | number | boolean | null | undefined;
 type WorkflowValue = JsonValue | undefined;
@@ -441,7 +445,7 @@ const formatByteSize = (value: string | number | null | undefined): string => {
     normalizedValue /= unitBase;
     unitIndex++;
   }
-  return `${normalizedValue.toFixed(1)} ${units[unitIndex]}`;
+  return `${BYTE_SIZE_FORMATTER.format(normalizedValue)} ${units[unitIndex]}`;
 };
 
 const createCompressionProgressLabelFromEvent = (options: CompressionProgressLabelOptions = {}): string => {

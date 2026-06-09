@@ -1399,7 +1399,7 @@ fn patch_create_rejects_non_xdelta_ppf_formats_above_256_mib() {
     assert!(json["label"]
         .as_str()
         .expect("label")
-        .contains("above 268.4 MB"));
+        .contains("above 268.44 MB"));
 }
 
 #[test]
@@ -1440,7 +1440,7 @@ fn patch_create_rejects_classic_ips_at_size_limit_even_when_validation_ignored()
     assert!(strict_json["label"]
         .as_str()
         .expect("label")
-        .contains("at or above 16.8 MB"));
+        .contains("at or above 16.78 MB"));
 
     let ignored_output = Command::cargo_bin("rom-weaver")
         .expect("binary")
@@ -1471,7 +1471,7 @@ fn patch_create_rejects_classic_ips_at_size_limit_even_when_validation_ignored()
     assert!(ignored_json["label"]
         .as_str()
         .expect("label")
-        .contains("at or above 16.8 MB"));
+        .contains("at or above 16.78 MB"));
 }
 
 #[test]
@@ -1552,7 +1552,7 @@ fn patch_create_rejects_ips32_at_large_size() {
     assert!(create_json["label"]
         .as_str()
         .expect("label")
-        .contains("at or above 16.8 MB"));
+        .contains("at or above 16.78 MB"));
 }
 
 #[test]

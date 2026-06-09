@@ -2,6 +2,10 @@ import type { LocaleCode } from "../localization/catalog.ts";
 
 const BYTE_UNIT_BASE = 1000;
 const BYTE_UNITS = ["KB", "MB", "GB", "TB"] as const;
+const BYTE_FRACTION_DIGITS = {
+  maximumFractionDigits: 2,
+  minimumFractionDigits: 1,
+} as const;
 
 const getNumberFormatter = (locale: LocaleCode, options: Intl.NumberFormatOptions = {}) =>
   new Intl.NumberFormat(locale, options);
@@ -15,10 +19,7 @@ const formatBytes = (bytes: number, locale: LocaleCode): string => {
     value /= BYTE_UNIT_BASE;
     unitIndex++;
   }
-  return `${getNumberFormatter(locale, {
-    maximumFractionDigits: 1,
-    minimumFractionDigits: 1,
-  }).format(value)} ${BYTE_UNITS[unitIndex]}`;
+  return `${getNumberFormatter(locale, BYTE_FRACTION_DIGITS).format(value)} ${BYTE_UNITS[unitIndex]}`;
 };
 
 const formatPercent = (value: number, locale: LocaleCode, digits = 1): string =>

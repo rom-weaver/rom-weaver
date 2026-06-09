@@ -10,6 +10,7 @@ pub use prompt::StdinPrompter;
 pub use reporter::HumanReporter;
 
 use owo_colors::OwoColorize;
+use rom_weaver_core::format_human_bytes;
 
 /// The webapp's brand accent (`--rw-accent`, `#d9690f`) — a saturated orange that reads on both
 /// light and dark backgrounds — used to color labels.
@@ -142,15 +143,5 @@ impl Surface {
 
 /// Format a byte count using decimal units (e.g. `1.5 MB`).
 pub fn humanize_bytes(bytes: u64) -> String {
-    const UNITS: [&str; 6] = ["B", "KB", "MB", "GB", "TB", "PB"];
-    if bytes < 1000 {
-        return format!("{bytes} B");
-    }
-    let mut value = bytes as f64;
-    let mut unit = 0;
-    while value >= 1000.0 && unit < UNITS.len() - 1 {
-        value /= 1000.0;
-        unit += 1;
-    }
-    format!("{value:.1} {}", UNITS[unit])
+    format_human_bytes(bytes)
 }

@@ -1,4 +1,5 @@
 use super::*;
+use rom_weaver_core::format_human_bytes;
 pub(super) const CREATE_PATCH_IPS_SIZE_LIMIT_BYTES: u64 = 16 * 1024 * 1024;
 pub(super) const CREATE_PATCH_ARCHIVE_DEFAULT_LIMIT_BYTES: u64 = 64 * 1024 * 1024;
 pub(super) const CREATE_PATCH_BPS_DEFAULT_LIMIT_BYTES: u64 = 128 * 1024 * 1024;
@@ -231,15 +232,17 @@ pub(super) fn create_patch_format_size_error_message(
     if matches!(normalized_format.as_str(), "ips" | "ips32" | "ebp")
         && max_size >= CREATE_PATCH_IPS_SIZE_LIMIT_BYTES
     {
+        let limit = format_human_bytes(CREATE_PATCH_IPS_SIZE_LIMIT_BYTES);
         return Some(format!(
-            "Create inputs at or above 16.8 MB should use BPS, xdelta, or another large-capable patch type; selected patch type: {normalized_format}"
+            "Create inputs at or above {limit} should use BPS, xdelta, or another large-capable patch type; selected patch type: {normalized_format}"
         ));
     }
     if max_size > CREATE_PATCH_LEGACY_SIZE_LIMIT_BYTES
         && !matches!(normalized_format.as_str(), "xdelta" | "ppf")
     {
+        let limit = format_human_bytes(CREATE_PATCH_LEGACY_SIZE_LIMIT_BYTES);
         return Some(format!(
-            "Create inputs above 268.4 MB require xdelta or PPF patches; selected patch type: {normalized_format}"
+            "Create inputs above {limit} require xdelta or PPF patches; selected patch type: {normalized_format}"
         ));
     }
     None

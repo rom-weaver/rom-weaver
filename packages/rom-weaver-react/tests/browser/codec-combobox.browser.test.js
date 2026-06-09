@@ -96,11 +96,11 @@ test("chd codec combobox lists zstd and lzma presets before individual codecs", 
   mountCombobox({
     fieldKey: "chdCreateCdCodecs",
     initialValue: "cdlz,",
-    label: "Create CD codecs",
+    label: "CD Codecs",
     multiple: true,
   });
 
-  const cdInput = page.getByRole("combobox", { name: "Create CD codecs" });
+  const cdInput = page.getByRole("combobox", { name: "CD Codecs" });
   await cdInput.click();
 
   expect(optionTexts()).toEqual([
@@ -120,11 +120,11 @@ test("chd codec combobox lists zstd and lzma presets before individual codecs", 
 
   mountCombobox({
     fieldKey: "chdCreateDvdCodecs",
-    label: "Create DVD codecs",
+    label: "DVD Codecs",
     multiple: true,
   });
 
-  const dvdInput = page.getByRole("combobox", { name: "Create DVD codecs" });
+  const dvdInput = page.getByRole("combobox", { name: "DVD Codecs" });
   await dvdInput.click();
 
   expect(optionTexts()).toEqual([
@@ -142,11 +142,11 @@ test("codec combobox replaces the active token in multi-codec lists", async () =
   mountCombobox({
     fieldKey: "chdCreateCdCodecs",
     initialValue: "cdlz,",
-    label: "Create CD codecs",
+    label: "CD Codecs",
     multiple: true,
   });
 
-  const input = page.getByRole("combobox", { name: "Create CD codecs" });
+  const input = page.getByRole("combobox", { name: "CD Codecs" });
   await input.click();
   await page.getByRole("option", { exact: true, name: "cdfl" }).click();
 

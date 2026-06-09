@@ -10,11 +10,12 @@ test("human byte display uses standard byte units", () => {
   expect(formatBytes(999, "en")).toBe("999 B");
   expect(formatBytes(1000, "en")).toBe("1.0 KB");
   expect(formatBytes(1_500_000, "en")).toBe("1.5 MB");
+  expect(formatBytes(1_558_821_365, "en")).toBe("1.56 GB");
   expect(formatBytes(2_500_000_000, "en")).toBe("2.5 GB");
   expect(formatBytes(3_500_000_000_000, "en")).toBe("3.5 TB");
 
   expect(formatByteSize(1000)).toBe("1.0 KB");
-  expect(formatByteSize(12_345_678)).toBe("12.3 MB");
+  expect(formatByteSize(12_345_678)).toBe("12.35 MB");
   expect(createOutputSizeSummary({ inputBytes: 4096, outputBytes: 8192 }).inputLabel).toBe("4.1 KB");
 });
 

@@ -2,6 +2,7 @@ mod cancel;
 mod common_files;
 mod context;
 mod error;
+mod formatting;
 mod io;
 mod progress;
 mod prompt;
@@ -20,6 +21,7 @@ pub use context::{OperationContext, PatchChecksumValidation, XdeltaSecondaryMode
 pub use error::{
     Result, RomWeaverError, ValidationCodeError, ValidationField, ValidationFieldValue,
 };
+pub use formatting::format_human_bytes;
 pub use io::{
     BlockCacheReader, BoundedIoPolicy, ChunkPlanner, DEFAULT_BLOCK_CACHE_MAX_BLOCKS,
     DEFAULT_BLOCK_CACHE_SIZE_BYTES, DEFAULT_CHUNK_SIZE_BYTES, FileChunk, IoWatermark,
