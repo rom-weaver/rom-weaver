@@ -1138,6 +1138,124 @@ fn extract_select_supports_glob_patterns() {
 }
 
 #[test]
+fn extract_repeated_select_recurses_into_multiple_nested_archives() {
+    let temp = setup_temp_dir();
+    fs::write(temp.child("first.bin").path(), b"first payload").expect("first fixture");
+    fs::write(temp.child("second.bin").path(), b"second payload").expect("second fixture");
+    fs::write(temp.child("decoy.bin").path(), b"decoy payload").expect("decoy fixture");
+
+    let inner_first = temp.child("inner-first.zip");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("first.bin").path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            inner_first.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let inner_second = temp.child("inner-second.zip");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("second.bin").path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            inner_second.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let inner_decoy = temp.child("inner-decoy.zip");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child("decoy.bin").path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            inner_decoy.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let outer = temp.child("outer.zip");
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            inner_first.path().to_str().expect("path"),
+            inner_second.path().to_str().expect("path"),
+            inner_decoy.path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            outer.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0);
+
+    let out_dir = temp.child("selected-nested");
+    let events = run_json_events(
+        &[
+            "extract",
+            outer.path().to_str().expect("path"),
+            "--select",
+            "inner-first.zip",
+            "--select",
+            "inner-second.zip",
+            "--out-dir",
+            out_dir.path().to_str().expect("path"),
+            "--json",
+        ],
+        0,
+    );
+    let json = events.last().expect("extract terminal event");
+    assert_eq!(json["command"], "extract");
+    assert_eq!(json["status"], "succeeded");
+    assert!(json["label"]
+        .as_str()
+        .expect("label")
+        .contains("recursively extracted 2 nested container(s)"));
+
+    let first_output = out_dir.child("inner-first/first.bin");
+    let second_output = out_dir.child("inner-second/second.bin");
+    assert_eq!(
+        fs::read(first_output.path()).expect("first output"),
+        b"first payload"
+    );
+    assert_eq!(
+        fs::read(second_output.path()).expect("second output"),
+        b"second payload"
+    );
+    assert!(!out_dir.child("inner-decoy.zip").path().exists());
+    assert!(!out_dir.child("inner-decoy/decoy.bin").path().exists());
+
+    assert_emitted_file(json, first_output.path(), Some("bin"));
+    assert_emitted_file(json, second_output.path(), Some("bin"));
+    let emitted = json["details"]["emitted_files"]
+        .as_array()
+        .expect("emitted_files array");
+    assert!(!emitted
+        .iter()
+        .any(|entry| entry["file_name"].as_str() == Some("inner-first.zip")));
+    assert!(!emitted
+        .iter()
+        .any(|entry| entry["file_name"].as_str() == Some("inner-second.zip")));
+}
+
+#[test]
 fn extract_select_glob_reports_missing_match() {
     let temp = setup_temp_dir();
     fs::create_dir_all(temp.child("content").path()).expect("content dir");

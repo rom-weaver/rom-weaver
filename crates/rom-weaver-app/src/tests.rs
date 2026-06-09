@@ -1,9 +1,135 @@
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
-use rom_weaver_core::ArchiveEntryKindFilter;
+use rom_weaver_core::{
+    ArchiveEntryKindFilter, ContainerCapabilities, ContainerCreateRequest, ContainerExtractRequest,
+    ContainerHandler, ContainerHandlerOperations, ContainerListEntry, ContainerProbeRequest,
+    FormatDescriptor, NoopProgressSink, OperationContext, OperationFamily, OperationReport,
+    PromptCandidate, Result, Selection, SelectionList, SelectionPrompter, ThreadBudget,
+    ThreadCapability,
+};
 use serde_json::json;
 
+use super::selection_resolution::SelectionResolutionOptions;
 use super::{CliApp, CompressionLevelProfile, ParsedSelectionInput};
+
+static TEST_CONTAINER_DESCRIPTOR: FormatDescriptor = FormatDescriptor {
+    family: OperationFamily::Container,
+    name: "test-container",
+    aliases: &[],
+    extensions: &[".test"],
+};
+
+struct TestListHandler {
+    entries: Vec<ContainerListEntry>,
+}
+
+impl ContainerHandlerOperations for TestListHandler {
+    fn descriptor(&self) -> &'static FormatDescriptor {
+        &TEST_CONTAINER_DESCRIPTOR
+    }
+
+    fn probe_details(
+        &self,
+        _request: &ContainerProbeRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        Ok(OperationReport::succeeded(
+            OperationFamily::Container,
+            Some(self.descriptor().name.to_string()),
+            "probe",
+            "test probe",
+            Some(100.0),
+            Some(context.plan_threads(ThreadCapability::single_threaded())),
+        ))
+    }
+
+    fn list_entry_records(
+        &self,
+        _request: &ContainerProbeRequest,
+        _context: &OperationContext,
+    ) -> Result<Vec<ContainerListEntry>> {
+        Ok(self.entries.clone())
+    }
+
+    fn extract(
+        &self,
+        _request: &ContainerExtractRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        Ok(OperationReport::succeeded(
+            OperationFamily::Container,
+            Some(self.descriptor().name.to_string()),
+            "extract",
+            "test extract",
+            Some(100.0),
+            Some(context.plan_threads(ThreadCapability::single_threaded())),
+        ))
+    }
+
+    fn create(
+        &self,
+        _request: &ContainerCreateRequest,
+        context: &OperationContext,
+    ) -> Result<OperationReport> {
+        Ok(OperationReport::unsupported(
+            OperationFamily::Container,
+            Some(self.descriptor().name.to_string()),
+            "create",
+            "test create unsupported",
+            Some(context.plan_threads(ThreadCapability::single_threaded())),
+        ))
+    }
+}
+
+impl ContainerHandler for TestListHandler {
+    fn capabilities(&self) -> ContainerCapabilities {
+        ContainerCapabilities {
+            probe_details: true,
+            extract: true,
+            create: false,
+            extract_threads: ThreadCapability::single_threaded(),
+            create_threads: ThreadCapability::single_threaded(),
+        }
+    }
+}
+
+struct TestPrompter {
+    selected: Vec<usize>,
+}
+
+impl SelectionPrompter for TestPrompter {
+    fn select(&self, _heading: &str, _candidates: &[PromptCandidate]) -> Selection {
+        self.selected
+            .first()
+            .copied()
+            .map(Selection::Selected)
+            .unwrap_or(Selection::Cancelled)
+    }
+
+    fn select_many(&self, _heading: &str, _candidates: &[PromptCandidate]) -> SelectionList {
+        if self.selected.is_empty() {
+            SelectionList::Cancelled
+        } else {
+            SelectionList::Selected(self.selected.clone())
+        }
+    }
+
+    fn confirm(&self, _heading: &str, _details: &[String]) -> bool {
+        false
+    }
+}
+
+fn test_app_with_prompt(selected: Vec<usize>) -> CliApp {
+    CliApp::new(
+        Arc::new(NoopProgressSink),
+        Arc::new(TestPrompter { selected }),
+        false,
+        true,
+    )
+}
 
 #[test]
 fn parse_selection_input_accepts_valid_indexes() {
@@ -39,6 +165,72 @@ fn parse_selection_input_handles_cancel_and_invalid_values() {
         CliApp::parse_selection_input("abc", 4),
         ParsedSelectionInput::Invalid
     );
+}
+
+#[test]
+fn extract_payload_selection_accepts_multiple_prompt_indexes() {
+    let app = test_app_with_prompt(vec![0, 2]);
+    let context = app.context(ThreadBudget::Fixed(1));
+    let handler = TestListHandler {
+        entries: vec![
+            ContainerListEntry {
+                path: "disc1.nes".to_string(),
+                size: Some(1),
+            },
+            ContainerListEntry {
+                path: "disc2.nes".to_string(),
+                size: Some(2),
+            },
+            ContainerListEntry {
+                path: "disc3.nes".to_string(),
+                size: Some(3),
+            },
+        ],
+    };
+
+    let selected = app
+        .resolve_extract_payload_selections(
+            &handler,
+            Path::new("bundle.test"),
+            SelectionResolutionOptions {
+                kind_filter: ArchiveEntryKindFilter::new(false, false),
+                split_bin: false,
+                ignore_common_files: true,
+                source_label: "extract input",
+            },
+            &context,
+        )
+        .expect("selection");
+
+    assert_eq!(selected, vec!["disc1.nes", "disc3.nes"]);
+}
+
+#[test]
+fn extract_payload_selection_keeps_single_logical_payload_whole() {
+    let app = test_app_with_prompt(vec![0]);
+    let context = app.context(ThreadBudget::Fixed(1));
+    let handler = TestListHandler {
+        entries: vec![ContainerListEntry {
+            path: "only-disc.cue".to_string(),
+            size: Some(10),
+        }],
+    };
+
+    let selected = app
+        .resolve_extract_payload_selections(
+            &handler,
+            Path::new("single.test"),
+            SelectionResolutionOptions {
+                kind_filter: ArchiveEntryKindFilter::new(false, false),
+                split_bin: false,
+                ignore_common_files: true,
+                source_label: "extract input",
+            },
+            &context,
+        )
+        .expect("selection");
+
+    assert!(selected.is_empty());
 }
 
 #[test]

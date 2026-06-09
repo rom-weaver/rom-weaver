@@ -220,6 +220,7 @@ impl CliApp {
                     ignore_common_files: false,
                     overwrite: true,
                     source_label: labels.source_label,
+                    allow_multi_select: false,
                 },
                 context,
             )

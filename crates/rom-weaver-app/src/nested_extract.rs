@@ -151,11 +151,11 @@ impl CliApp {
             }
 
             let nested_out_dir = self.next_nested_out_dir(&source);
-            // Mirror the primary level: when interactive selection is enabled, descend a single payload
-            // path per nested container (auto-pick when unambiguous, otherwise prompt) rather than
+            // Mirror the primary level: when interactive selection is enabled, descend selected
+            // payload paths per nested container (keeping unambiguous payloads whole) rather than
             // extracting every nested entry.
             let nested_selections: Vec<String> = if self.interactive_selection_enabled {
-                self.resolve_single_payload_selection(
+                self.resolve_extract_payload_selections(
                     handler.as_ref(),
                     &source,
                     SelectionResolutionOptions {
@@ -166,8 +166,6 @@ impl CliApp {
                     },
                     context,
                 )?
-                .into_iter()
-                .collect()
             } else {
                 Vec::new()
             };

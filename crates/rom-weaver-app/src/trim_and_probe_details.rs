@@ -343,6 +343,7 @@ impl CliApp {
                     ignore_common_files: true,
                     overwrite: true,
                     source_label: "trim",
+                    allow_multi_select: false,
                 },
                 options.context,
             )
@@ -438,6 +439,7 @@ impl CliApp {
                 ignore_common_files: false,
                 overwrite: true,
                 source_label: "trim",
+                allow_multi_select: false,
             },
             options.context,
         )

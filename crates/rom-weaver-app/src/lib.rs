@@ -21,7 +21,7 @@ use rom_weaver_core::{
     ContainerCreateRequest, ContainerExtractRequest, ContainerHandler, ContainerListEntry,
     ContainerProbeRequest, OperationContext, OperationFamily, OperationReport, OperationStatus,
     PatchApplyRequest, PatchChecksumValidation, PatchCreateRequest, PatchValidateRequest,
-    ProgressEvent, ProgressSink, PromptCandidate, Result, RomWeaverError, Selection,
+    ProgressEvent, ProgressSink, PromptCandidate, Result, RomWeaverError, Selection, SelectionList,
     SelectionMatcher, SelectionPrompter, ThreadBudget, ThreadCapability, ThreadExecution,
     XdeltaSecondaryMode, is_patch_filter_candidate_name, is_rom_filter_candidate_name,
     normalize_archive_name, should_ignore_common_container_file,

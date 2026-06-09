@@ -637,12 +637,12 @@ impl CliApp {
                 (split_bin, None)
             };
         let extract_threads = Some(context.plan_threads(handler.capabilities().extract_threads));
-        // When interactive selection is enabled and the caller did not pin an entry, extract a single
-        // payload path instead of every entry: auto-pick when unambiguous, otherwise prompt the host
-        // (the same resolution is applied per nested level during the descent below). This is what lets
-        // the browser "just extract" with no separate `list` command.
+        // When interactive selection is enabled and the caller did not pin entries, extract selected
+        // payload paths instead of every entry: keep unambiguous payloads whole, otherwise prompt the
+        // host (the same resolution is applied per nested level during the descent below). This is
+        // what lets the browser "just extract" with no separate `list` command.
         let selections = if self.interactive_selection_enabled && selections.is_empty() {
-            match self.resolve_single_payload_selection(
+            match self.resolve_extract_payload_selections(
                 handler.as_ref(),
                 &source,
                 SelectionResolutionOptions {
@@ -653,8 +653,8 @@ impl CliApp {
                 },
                 &context,
             ) {
-                Ok(Some(entry)) => vec![entry],
-                Ok(None) => selections,
+                Ok(entries) if entries.is_empty() => selections,
+                Ok(entries) => entries,
                 Err(error) => {
                     return self.finish(
                         "extract",
@@ -705,6 +705,7 @@ impl CliApp {
                     ignore_common_files: !no_ignore,
                     overwrite: !no_overwrite,
                     source_label: "extract input",
+                    allow_multi_select: true,
                 },
                 &context,
             )

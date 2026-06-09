@@ -35,8 +35,8 @@ pub use progress::{
     maybe_emit_container_byte_progress,
 };
 pub use prompt::{
-    NoninteractivePrompter, ParsedSelectionInput, PromptCandidate, Selection, SelectionPrompter,
-    parse_selection_input,
+    NoninteractivePrompter, ParsedSelectionInput, ParsedSelectionListInput, PromptCandidate,
+    Selection, SelectionList, SelectionPrompter, parse_selection_input, parse_selection_list_input,
 };
 pub use registry::{
     ChecksumCapabilities, ChecksumEngine, ChecksumRequest, CodecBackend, CodecCapabilities,

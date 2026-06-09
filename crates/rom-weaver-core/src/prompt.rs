@@ -4,6 +4,8 @@
 //! [`SelectionPrompter`] is injected so the CLI can render and read prompts while headless callers
 //! (wasm, `--json`, non-tty) use the [`NoninteractivePrompter`], which never blocks on input.
 
+use std::collections::BTreeSet;
+
 /// One selectable entry presented to the user. `value` is the machine value returned to the app;
 /// `label` is the human-facing text shown by the prompter. `size` is the entry's byte size when
 /// known, so front-ends can show it alongside the name.
@@ -21,11 +23,26 @@ pub enum Selection {
     Cancelled,
 }
 
+/// The resolved outcome of a multi-entry list selection.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum SelectionList {
+    Selected(Vec<usize>),
+    Cancelled,
+}
+
 /// The result of parsing one line of raw selection input against a candidate count.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ParsedSelectionInput {
     Cancelled,
     Selected(usize),
+    Invalid,
+}
+
+/// The result of parsing one line of raw multi-selection input against a candidate count.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ParsedSelectionListInput {
+    Cancelled,
+    Selected(Vec<usize>),
     Invalid,
 }
 
@@ -47,12 +64,76 @@ pub fn parse_selection_input(input: &str, candidate_count: usize) -> ParsedSelec
     ParsedSelectionInput::Invalid
 }
 
+/// Parse a single line of multi-selection input. Accepts the same single index syntax as
+/// [`parse_selection_input`], plus comma-separated indexes and ascending ranges like `1,3-5`.
+pub fn parse_selection_list_input(input: &str, candidate_count: usize) -> ParsedSelectionListInput {
+    let trimmed = input.trim();
+    if trimmed.eq_ignore_ascii_case("q")
+        || trimmed.eq_ignore_ascii_case("quit")
+        || trimmed.eq_ignore_ascii_case("exit")
+    {
+        return ParsedSelectionListInput::Cancelled;
+    }
+    if trimmed.is_empty() || candidate_count == 0 {
+        return ParsedSelectionListInput::Invalid;
+    }
+
+    let mut selected = BTreeSet::new();
+    for token in trimmed.split(',') {
+        let token = token.trim();
+        if token.is_empty() {
+            return ParsedSelectionListInput::Invalid;
+        }
+        if token.contains('-') {
+            let parts = token.split('-').collect::<Vec<_>>();
+            if parts.len() != 2 {
+                return ParsedSelectionListInput::Invalid;
+            }
+            let Ok(start) = parts[0].trim().parse::<usize>() else {
+                return ParsedSelectionListInput::Invalid;
+            };
+            let Ok(end) = parts[1].trim().parse::<usize>() else {
+                return ParsedSelectionListInput::Invalid;
+            };
+            if start == 0 || end == 0 || start > end || end > candidate_count {
+                return ParsedSelectionListInput::Invalid;
+            }
+            for index in start..=end {
+                selected.insert(index - 1);
+            }
+        } else {
+            let Ok(index) = token.parse::<usize>() else {
+                return ParsedSelectionListInput::Invalid;
+            };
+            if index == 0 || index > candidate_count {
+                return ParsedSelectionListInput::Invalid;
+            }
+            selected.insert(index - 1);
+        }
+    }
+
+    if selected.is_empty() {
+        ParsedSelectionListInput::Invalid
+    } else {
+        ParsedSelectionListInput::Selected(selected.into_iter().collect())
+    }
+}
+
 /// Injected terminal-IO seam for the app's two interactive moments: picking one of several
 /// candidates, and confirming a destructive action.
 pub trait SelectionPrompter: Send + Sync {
     /// Prompt the user to choose one of `candidates`. Returns [`Selection::Cancelled`] when the
     /// user declines or when no interactive input is available.
     fn select(&self, heading: &str, candidates: &[PromptCandidate]) -> Selection;
+
+    /// Prompt the user to choose one or more candidates. Front-ends that only support single
+    /// selection can rely on this default adapter.
+    fn select_many(&self, heading: &str, candidates: &[PromptCandidate]) -> SelectionList {
+        match self.select(heading, candidates) {
+            Selection::Selected(index) => SelectionList::Selected(vec![index]),
+            Selection::Cancelled => SelectionList::Cancelled,
+        }
+    }
 
     /// Prompt the user for a yes/no confirmation. `details` are extra context lines describing what
     /// the action affects. Returns `false` when the user declines or input is unavailable.
@@ -76,7 +157,10 @@ impl SelectionPrompter for NoninteractivePrompter {
 
 #[cfg(test)]
 mod tests {
-    use super::{ParsedSelectionInput, parse_selection_input};
+    use super::{
+        ParsedSelectionInput, ParsedSelectionListInput, parse_selection_input,
+        parse_selection_list_input,
+    };
 
     #[test]
     fn accepts_valid_indexes() {
@@ -105,6 +189,58 @@ mod tests {
         assert_eq!(
             parse_selection_input("abc", 4),
             ParsedSelectionInput::Invalid
+        );
+    }
+
+    #[test]
+    fn parses_multi_selection_indexes_and_ranges() {
+        assert_eq!(
+            parse_selection_list_input("1", 5),
+            ParsedSelectionListInput::Selected(vec![0])
+        );
+        assert_eq!(
+            parse_selection_list_input("1,3,5", 5),
+            ParsedSelectionListInput::Selected(vec![0, 2, 4])
+        );
+        assert_eq!(
+            parse_selection_list_input("1-3", 5),
+            ParsedSelectionListInput::Selected(vec![0, 1, 2])
+        );
+        assert_eq!(
+            parse_selection_list_input("3,1-2,3", 5),
+            ParsedSelectionListInput::Selected(vec![0, 1, 2])
+        );
+    }
+
+    #[test]
+    fn handles_multi_selection_cancel_and_invalid_values() {
+        assert_eq!(
+            parse_selection_list_input("quit", 4),
+            ParsedSelectionListInput::Cancelled
+        );
+        assert_eq!(
+            parse_selection_list_input("1,", 4),
+            ParsedSelectionListInput::Invalid
+        );
+        assert_eq!(
+            parse_selection_list_input("0", 4),
+            ParsedSelectionListInput::Invalid
+        );
+        assert_eq!(
+            parse_selection_list_input("5", 4),
+            ParsedSelectionListInput::Invalid
+        );
+        assert_eq!(
+            parse_selection_list_input("3-1", 4),
+            ParsedSelectionListInput::Invalid
+        );
+        assert_eq!(
+            parse_selection_list_input("1-2-3", 4),
+            ParsedSelectionListInput::Invalid
+        );
+        assert_eq!(
+            parse_selection_list_input("abc", 4),
+            ParsedSelectionListInput::Invalid
         );
     }
 }

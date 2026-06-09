@@ -11,6 +11,7 @@ pub(super) struct SelectionExtract<'a> {
     pub(super) ignore_common_files: bool,
     pub(super) overwrite: bool,
     pub(super) source_label: &'a str,
+    pub(super) allow_multi_select: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -67,6 +68,7 @@ impl CliApp {
             ignore_common_files,
             overwrite,
             source_label,
+            allow_multi_select,
         } = extract;
         let request = ContainerExtractRequest {
             source: source.to_path_buf(),
@@ -87,18 +89,23 @@ impl CliApp {
                     return Err(error);
                 }
 
-                let Some(selected_entry) =
-                    self.prompt_for_container_selection(handler, source, source_label, context)?
-                else {
+                let selected_entries = self.prompt_for_container_selections(
+                    handler,
+                    source,
+                    source_label,
+                    allow_multi_select,
+                    context,
+                )?;
+                if selected_entries.is_empty() {
                     return Err(RomWeaverError::Validation(format!(
                         "interactive selection was cancelled for `{}`",
                         source.display()
                     )));
-                };
+                }
 
                 let retry_request = ContainerExtractRequest {
                     source: source.to_path_buf(),
-                    selections: vec![selected_entry],
+                    selections: selected_entries,
                     kind_filter,
                     out_dir: out_dir.to_path_buf(),
                     split_bin,
@@ -111,19 +118,19 @@ impl CliApp {
         }
     }
 
-    /// Resolve a single payload entry to extract from `source`. Used when interactive selection is
-    /// enabled and no explicit `--select` was given: lists the container's payload candidates
-    /// (grouping a CD's cue + bin/iso/img tracks into the single cue candidate so a disc is not
-    /// treated as ambiguous), auto-picks when there is exactly one, and otherwise prompts the host to
-    /// choose one. Returns `None` when the container exposes no distinct payload candidate, in which
-    /// case the caller extracts everything as before.
-    pub(super) fn resolve_single_payload_selection(
+    /// Resolve payload entries to extract from `source`. Used when interactive selection is enabled
+    /// and no explicit `--select` was given: lists the container's payload candidates (grouping a
+    /// CD's cue + bin/iso/img tracks into the single cue candidate so a disc is not treated as
+    /// ambiguous), keeps 0/1 logical payloads whole, and otherwise prompts the host to choose one or
+    /// more entries. Returns an empty list when the container exposes no distinct ambiguous payload
+    /// set, in which case the caller extracts everything as before.
+    pub(super) fn resolve_extract_payload_selections(
         &self,
         handler: &dyn ContainerHandler,
         source: &Path,
         options: SelectionResolutionOptions<'_>,
         context: &OperationContext,
-    ) -> Result<Option<String>> {
+    ) -> Result<Vec<String>> {
         let entries = handler
             .list_entry_records(
                 &ContainerProbeRequest {
@@ -167,13 +174,13 @@ impl CliApp {
             source = %source.display(),
             candidate_count = candidates.len(),
             interactive = self.interactive_selection_enabled,
-            "resolving single payload selection"
+            "resolving extract payload selections"
         );
         match candidates.len() {
             // 0 or 1 distinct payload: extract everything at this level. This keeps a single logical
             // payload whole — notably a CD image whose cue + bin/iso/img tracks were grouped into one
             // candidate must be extracted together, not just the cue.
-            0 | 1 => Ok(None),
+            0 | 1 => Ok(Vec::new()),
             _ => {
                 let prompt_candidates = candidates
                     .iter()
@@ -184,17 +191,21 @@ impl CliApp {
                     })
                     .collect::<Vec<_>>();
                 let heading = format!(
-                    "{source_label} payload selection for `{}` is ambiguous. Choose one entry:",
+                    "{source_label} payload selection for `{}` is ambiguous. Choose one or more entries:",
                     source.display(),
                     source_label = options.source_label
                 );
-                match self.prompt_for_selection(&heading, &prompt_candidates)? {
-                    Some(index) => Ok(Some(prompt_candidates[index].value.clone())),
-                    None => Err(RomWeaverError::Validation(format!(
+                let selected_indexes = self.prompt_for_selections(&heading, &prompt_candidates)?;
+                if selected_indexes.is_empty() {
+                    return Err(RomWeaverError::Validation(format!(
                         "interactive selection was cancelled for `{}`",
                         source.display()
-                    ))),
+                    )));
                 }
+                Ok(selected_indexes
+                    .into_iter()
+                    .map(|index| prompt_candidates[index].value.clone())
+                    .collect())
             }
         }
     }
@@ -206,13 +217,14 @@ impl CliApp {
             || lower.contains("does not support --select")
     }
 
-    pub(super) fn prompt_for_container_selection(
+    pub(super) fn prompt_for_container_selections(
         &self,
         handler: &dyn ContainerHandler,
         source: &Path,
         source_label: &str,
+        allow_multi_select: bool,
         context: &OperationContext,
-    ) -> Result<Option<String>> {
+    ) -> Result<Vec<String>> {
         let entries = handler
             .list_entries(
                 &ContainerProbeRequest {
@@ -255,11 +267,25 @@ impl CliApp {
             })
             .collect::<Vec<_>>();
         let heading = format!(
-            "{source_label} selection for `{}` did not resolve. Choose one entry:",
-            source.display()
+            "{source_label} selection for `{}` did not resolve. Choose {}:",
+            source.display(),
+            if allow_multi_select {
+                "one or more entries"
+            } else {
+                "one entry"
+            }
         );
-        let selected_index = self.prompt_for_selection(&heading, &prompt_candidates)?;
-        Ok(selected_index.map(|index| prompt_candidates[index].value.clone()))
+        let selected_indexes = if allow_multi_select {
+            self.prompt_for_selections(&heading, &prompt_candidates)?
+        } else {
+            self.prompt_for_selection(&heading, &prompt_candidates)?
+                .into_iter()
+                .collect()
+        };
+        Ok(selected_indexes
+            .into_iter()
+            .map(|index| prompt_candidates[index].value.clone())
+            .collect())
     }
 
     pub(super) fn prompt_for_checksum_candidate(
@@ -342,8 +368,27 @@ impl CliApp {
             return Ok(None);
         }
         match self.prompter.select(heading, candidates) {
-            Selection::Selected(index) => Ok(Some(index)),
-            Selection::Cancelled => Ok(None),
+            Selection::Selected(index) if index < candidates.len() => Ok(Some(index)),
+            Selection::Selected(_) | Selection::Cancelled => Ok(None),
+        }
+    }
+
+    pub(super) fn prompt_for_selections(
+        &self,
+        heading: &str,
+        candidates: &[PromptCandidate],
+    ) -> Result<Vec<usize>> {
+        if !self.interactive_selection_enabled || candidates.is_empty() {
+            return Ok(Vec::new());
+        }
+        match self.prompter.select_many(heading, candidates) {
+            SelectionList::Selected(indexes) => Ok(indexes
+                .into_iter()
+                .filter(|index| *index < candidates.len())
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .collect()),
+            SelectionList::Cancelled => Ok(Vec::new()),
         }
     }
 
