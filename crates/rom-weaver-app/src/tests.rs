@@ -14,7 +14,8 @@ use serde_json::json;
 
 use super::selection_resolution::SelectionResolutionOptions;
 use super::{
-    CliApp, CompressionLevelProfile, N64ByteOrder, N64ByteOrderTransform, ParsedSelectionInput,
+    CliApp, Commands, CompressCommand, CompressionLevelProfile, ExtractCommand, N64ByteOrder,
+    N64ByteOrderTransform, ParsedSelectionInput,
 };
 
 static TEST_CONTAINER_DESCRIPTOR: FormatDescriptor = FormatDescriptor {
@@ -233,6 +234,107 @@ fn extract_payload_selection_keeps_single_logical_payload_whole() {
         .expect("selection");
 
     assert!(selected.is_empty());
+}
+
+/// Compress `inputs` into a `zip` container at `output`, asserting the fixture build succeeds.
+fn compress_zip_fixture(app: &CliApp, inputs: &[PathBuf], output: &Path) {
+    let outcome = app.run(Commands::Compress(CompressCommand {
+        input: inputs.to_vec(),
+        format: Some("zip".to_string()),
+        output: output.to_path_buf(),
+        codec: Vec::new(),
+        level: CompressionLevelProfile::Max,
+        threads: ThreadBudget::Fixed(1),
+    }));
+    assert_eq!(
+        outcome.exit_code, 0,
+        "zip fixture compression should succeed"
+    );
+}
+
+/// Recursively locate a file named `name` anywhere under `root`, panicking if it is absent.
+fn find_emitted_file(root: &Path, name: &str) -> PathBuf {
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(directory) = stack.pop() {
+        for entry in std::fs::read_dir(&directory).expect("read extracted directory") {
+            let path = entry.expect("directory entry").path();
+            if path.is_dir() {
+                stack.push(path);
+            } else if path.file_name().and_then(|value| value.to_str()) == Some(name) {
+                return path;
+            }
+        }
+    }
+    panic!("expected to find `{name}` under `{}`", root.display());
+}
+
+#[test]
+fn nested_extract_auto_extracts_all_branches_without_prompting() {
+    // The libarchive zip compress/extract paths are stack-heavy; run on a generous stack like the
+    // real binary does, rather than the constrained default test-thread stack.
+    std::thread::Builder::new()
+        .stack_size(32 * 1024 * 1024)
+        .spawn(nested_extract_auto_extracts_all_branches_body)
+        .expect("spawn nested extract test thread")
+        .join()
+        .expect("nested extract test thread");
+}
+
+fn nested_extract_auto_extracts_all_branches_body() {
+    // A prompter that cancels every request: if any level prompts for a payload selection the
+    // extraction fails, so a successful run proves nested descent never prompted.
+    let app = test_app_with_prompt(Vec::new());
+
+    let nonce = REPAIR_TEST_FILE_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let dir =
+        std::env::temp_dir().join(format!("rw-nested-branches-{}-{nonce}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("create nested fixture dir");
+
+    let alpha = dir.join("alpha.nes");
+    let beta = dir.join("beta.nes");
+    std::fs::write(&alpha, b"alpha payload").expect("alpha fixture");
+    std::fs::write(&beta, b"beta payload").expect("beta fixture");
+
+    // inner.zip exposes two ambiguous payload branches; previously this prompted while descending.
+    let inner_zip = dir.join("inner.zip");
+    compress_zip_fixture(&app, &[alpha, beta], &inner_zip);
+
+    // outer.zip wraps the nested container so the descent reaches inner.zip's ambiguous branches.
+    let outer_zip = dir.join("outer.zip");
+    compress_zip_fixture(&app, &[inner_zip], &outer_zip);
+
+    let out_dir = dir.join("extracted");
+    let outcome = app.run(Commands::Extract(ExtractCommand {
+        source: outer_zip,
+        select: Vec::new(),
+        rom_filter: false,
+        patch_filter: false,
+        out_dir: out_dir.clone(),
+        split_bin: false,
+        no_ignore: false,
+        no_nested_extract: false,
+        no_overwrite: false,
+        checksum: Vec::new(),
+        threads: ThreadBudget::Fixed(1),
+    }));
+
+    assert_eq!(
+        outcome.exit_code, 0,
+        "nested extraction must auto-extract every branch instead of prompting"
+    );
+
+    let alpha_out = find_emitted_file(&out_dir, "alpha.nes");
+    let beta_out = find_emitted_file(&out_dir, "beta.nes");
+    assert_eq!(
+        std::fs::read(&alpha_out).expect("alpha output"),
+        b"alpha payload"
+    );
+    assert_eq!(
+        std::fs::read(&beta_out).expect("beta output"),
+        b"beta payload"
+    );
+
+    let _ = std::fs::remove_dir_all(dir);
 }
 
 #[test]

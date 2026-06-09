@@ -1,4 +1,3 @@
-use super::selection_resolution::SelectionResolutionOptions;
 use super::*;
 /// The result of descending nested archives during a single `extract` command.
 pub(super) struct NestedExtractOutcome {
@@ -151,30 +150,16 @@ impl CliApp {
             }
 
             let nested_out_dir = self.next_nested_out_dir(&source);
-            // Mirror the primary level: when interactive selection is enabled, descend selected
-            // payload paths per nested container (keeping unambiguous payloads whole) rather than
-            // extracting every nested entry.
-            let nested_selections: Vec<String> = if self.interactive_selection_enabled {
-                self.resolve_extract_payload_selections(
-                    handler.as_ref(),
-                    &source,
-                    SelectionResolutionOptions {
-                        kind_filter,
-                        split_bin: false,
-                        ignore_common_files,
-                        source_label: "nested extract",
-                    },
-                    context,
-                )?
-            } else {
-                Vec::new()
-            };
+            // Auto-extract every branch while descending: nested archives never prompt for a
+            // payload selection, so an ambiguous multi-branch container fully unpacks instead of
+            // pausing for input. The top-level `--select` still narrows the primary container
+            // above; it intentionally does not propagate into nested levels.
+            let nested_selections: Vec<String> = Vec::new();
             trace!(
                 source = %source.display(),
                 format = handler.descriptor().name,
                 nested_out_dir = %nested_out_dir.display(),
-                nested_selection_count = nested_selections.len(),
-                "extracting nested archive candidate"
+                "extracting all branches of nested archive candidate"
             );
             let nested_request = ContainerExtractRequest {
                 source: source.clone(),
