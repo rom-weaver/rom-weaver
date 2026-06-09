@@ -1,9 +1,15 @@
 import { useCallback, useRef, useState } from "react";
+import { createLogger } from "../../lib/logging.ts";
 import { getCandidateDisplayItems } from "../../presentation/formatting/candidates.ts";
 import { createBrowserLocalizer } from "../../presentation/localization/index.ts";
 import { Modal } from "./components/ds/modal.tsx";
 import { type SelectionItem, SelectionTree } from "./components/ds/selection.tsx";
 import type { CandidateSelectionChoice, CandidateSelectionPrompt } from "./public-types.ts";
+
+const logger = createLogger("candidate-selection");
+
+const countSelectable = (request: CandidateSelectionPrompt): number =>
+  request.candidates.filter((candidate) => candidate.selectable).length;
 
 type CandidateSelectionState = {
   request: CandidateSelectionPrompt;
@@ -69,6 +75,12 @@ const useCandidateSelection = ({ onCancelSelection }: UseCandidateSelectionOptio
   const selectFile = useCallback(
     (request: CandidateSelectionPrompt) =>
       new Promise<CandidateSelectionChoice>((resolve, reject) => {
+        logger.trace("opening candidate selection dialog", {
+          candidateCount: request.candidates.length,
+          role: request.role,
+          selectableCount: countSelectable(request),
+          sourceName: request.sourceName,
+        });
         const nextState = { reject, request, resolve };
         selectionStateRef.current = nextState;
         setSelectionState(nextState);
@@ -79,7 +91,14 @@ const useCandidateSelection = ({ onCancelSelection }: UseCandidateSelectionOptio
     const current = selectionStateRef.current;
     selectionStateRef.current = null;
     setSelectionState(null);
-    if (!current) return;
+    if (!current) {
+      logger.trace("candidate selection cancel ignored — no dialog open");
+      return;
+    }
+    logger.trace("candidate selection dialog cancelled by user", {
+      role: current.request.role,
+      sourceName: current.request.sourceName,
+    });
     onCancelSelection?.(current.request);
     current.reject(createSelectionSkippedError());
   }, [onCancelSelection]);
@@ -87,6 +106,11 @@ const useCandidateSelection = ({ onCancelSelection }: UseCandidateSelectionOptio
     const current = selectionStateRef.current;
     selectionStateRef.current = null;
     setSelectionState(null);
+    logger.trace("candidate selection dialog resolved with choice", {
+      id,
+      role: current?.request.role,
+      sourceName: current?.request.sourceName,
+    });
     current?.resolve({ id });
   }, []);
   return {

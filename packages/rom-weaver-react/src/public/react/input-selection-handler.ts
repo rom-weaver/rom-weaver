@@ -1,7 +1,10 @@
 import { useEffect, useRef } from "react";
+import { createLogger } from "../../lib/logging.ts";
 import type { SelectionCandidate } from "../../types/selection.ts";
 import { setInputSelectionHandler } from "../../workers/rom-weaver/rom-weaver-runner.ts";
 import type { CandidateSelectionChoice, CandidateSelectionPrompt } from "./public-types.ts";
+
+const logger = createLogger("input-selection-handler");
 
 type SelectCandidateFile = (request: CandidateSelectionPrompt) => Promise<CandidateSelectionChoice>;
 
@@ -37,18 +40,43 @@ const useInputSelectionHandler = (selectFile: SelectCandidateFile) => {
     setInputSelectionHandler(async (requestJson) => {
       const parsed = parseHostSelectionRequest(requestJson);
       const rawCandidates = Array.isArray(parsed?.candidates) ? parsed.candidates : [];
-      if (!rawCandidates.length) return -1;
+      const heading = String(parsed?.heading || "Select an entry");
+      if (!rawCandidates.length) {
+        logger.trace("selection prompt skipped — no candidates in request", { heading });
+        return -1;
+      }
       const candidates = createHostSelectionCandidates(rawCandidates);
+      logger.trace("prompting user to select an entry to extract", {
+        candidateCount: candidates.length,
+        heading,
+      });
       try {
         const choice = await selectFileRef.current({
           candidates,
           role: "input",
-          sourceName: String(parsed?.heading || "Select an entry"),
+          sourceName: heading,
           warnings: [],
         });
         const selectedIndex = candidates.findIndex((candidate) => candidate.id === choice?.id);
-        return selectedIndex >= 0 ? selectedIndex : -1;
-      } catch {
+        if (selectedIndex < 0) {
+          logger.trace("user dismissed selection prompt without a valid choice — cancelling", {
+            choiceId: choice?.id ?? null,
+            heading,
+          });
+          return -1;
+        }
+        const selectedCandidate = candidates[selectedIndex];
+        logger.trace("user selected an entry to extract", {
+          heading,
+          name: selectedCandidate?.type === "file" ? selectedCandidate.fileName : selectedCandidate?.id,
+          selectedIndex,
+        });
+        return selectedIndex;
+      } catch (error) {
+        logger.trace("selection prompt rejected — cancelling", {
+          error: error instanceof Error ? error.message : String(error),
+          heading,
+        });
         return -1;
       }
     });

@@ -246,11 +246,34 @@ let inputSelectionHandler: InputSelectionHandler | undefined;
 /** Register the UI selection handler invoked when the wasm app needs the user to pick an input
  * candidate. When unset, selection is cancelled (returns -1) — the app always registers a handler. */
 const setInputSelectionHandler = (handler?: InputSelectionHandler) => {
+  logger.trace(handler ? "input selection handler registered" : "input selection handler cleared");
   inputSelectionHandler = handler;
 };
 
-const resolveInputSelection: InputSelectionHandler = (request) =>
-  inputSelectionHandler ? inputSelectionHandler(request) : -1;
+/** Summarize a `{heading, candidates}` selection request JSON for trace logs without dumping its
+ * full contents. */
+const summarizeInputSelectionRequest = (request: string): Record<string, unknown> => {
+  try {
+    const parsed = JSON.parse(request);
+    return {
+      candidateCount: Array.isArray(parsed?.candidates) ? parsed.candidates.length : 0,
+      heading: typeof parsed?.heading === "string" ? parsed.heading : "",
+    };
+  } catch {
+    return { requestBytes: request.length, unparsable: true };
+  }
+};
+
+const resolveInputSelection: InputSelectionHandler = (request) => {
+  if (!inputSelectionHandler) {
+    logger.trace("input selection requested but no handler registered — cancelling", {
+      requestBytes: typeof request === "string" ? request.length : 0,
+    });
+    return -1;
+  }
+  logger.trace("forwarding input selection request to UI handler", summarizeInputSelectionRequest(request));
+  return inputSelectionHandler(request);
+};
 
 const createBrowserRunner = async (options?: { workerThreads?: RuntimeValue }): Promise<RomWeaverRunner> => {
   const runnerWorkerUrl = await resolveBrowserRunnerWorkerUrl();
