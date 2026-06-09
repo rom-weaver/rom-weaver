@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getPreferredCreatePatchFormat } from "../../lib/create/patch-format-limits.ts";
 import { appendFileNameExtension, hasFileNameExtension } from "../../lib/input/path-utils.ts";
 import { resolveAutomaticSelection } from "../../lib/input/selection.ts";
-import { createTiming, formatTiming } from "../../lib/progress/timing.ts";
 import {
   type BrowserCreateResult,
   type BrowserSaveDestination,
@@ -44,7 +43,14 @@ import {
   toBrowserPublicBinarySource,
   toStagedInputInfo,
 } from "./workflow-adapters.ts";
-import { createReactWorkflowId, createSettingsDependencyKey, mergeSettingsWithOutput } from "./workflow-form-utils.ts";
+import {
+  createReactWorkflowId,
+  createSettingsDependencyKey,
+  formatChecksumTiming,
+  formatElapsedMs,
+  isDismissibleWorkflowError,
+  mergeSettingsWithOutput,
+} from "./workflow-form-utils.ts";
 import {
   createIndeterminateWorkflowProgress,
   createWaitingWorkflowProgress,
@@ -124,12 +130,6 @@ type CreateMessagePlacement = "modified" | "original" | "output";
 const getDisplaySourceInfo = (source: CreateDisplaySourceState | null | undefined, fallback: string) =>
   toStagedInputInfo(source, fallback);
 
-const formatElapsedMs = (elapsedMs: number | undefined) =>
-  typeof elapsedMs === "number" && Number.isFinite(elapsedMs) ? formatTiming(createTiming(elapsedMs)) : "";
-
-const formatChecksumTiming = (elapsedMs: number | undefined) =>
-  elapsedMs === 0 ? "from extract" : formatElapsedMs(elapsedMs);
-
 const getDisplaySourceChecksums = (source: CreateDisplaySourceState | null | undefined) =>
   (source as (CreateDisplaySourceState & { checksums?: Record<string, string> }) | null | undefined)?.checksums;
 
@@ -157,8 +157,6 @@ const getSourceNoticeLevel = (source: CreateDisplaySourceState | null | undefine
 
 const isSourceInvalid = (source: CreateDisplaySourceState | null | undefined) =>
   !!source && (source.status === "failed" || (source.warnings?.length ?? 0) > 0);
-
-const isDismissibleWorkflowError = (code: string) => code !== "AMBIGUOUS_SELECTION";
 
 const getChecksumTimingLabel = (timing: string) => (timing ? `Checksum ${timing}` : "");
 const isChecksumProgress = (progress: WorkflowFormProgressState | null) =>

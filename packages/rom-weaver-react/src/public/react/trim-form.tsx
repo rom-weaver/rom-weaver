@@ -43,7 +43,12 @@ import {
   useRomWeaverAssetBaseUrl,
 } from "./settings-context.tsx";
 import { getReactBinarySourceFileName, toBrowserPublicBinarySource } from "./workflow-adapters.ts";
-import { createReactWorkflowId, createSettingsDependencyKey, mergeSettingsWithOutput } from "./workflow-form-utils.ts";
+import {
+  createReactWorkflowId,
+  createSettingsDependencyKey,
+  isDismissibleWorkflowError,
+  mergeSettingsWithOutput,
+} from "./workflow-form-utils.ts";
 import {
   createIndeterminateWorkflowProgress,
   createWaitingWorkflowProgress,
@@ -175,7 +180,6 @@ const getSourceNoticeLevel = (source: TrimWorkflowSourceState | null | undefined
 const isSourceInvalid = (source: TrimWorkflowSourceState | null | undefined) =>
   !!source && (source.status === "failed" || (source.warnings?.length ?? 0) > 0);
 
-const isDismissibleWorkflowError = (code: string) => code !== "AMBIGUOUS_SELECTION";
 const isUserRequestedCancellation = (error: unknown, signal: AbortSignal) =>
   signal.aborted && getErrorCode(error) === "CANCELLED";
 

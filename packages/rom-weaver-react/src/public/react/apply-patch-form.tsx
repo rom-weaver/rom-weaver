@@ -4,7 +4,6 @@ import { getBaseFileName } from "../../lib/input/path-utils.ts";
 import { emitTraceLog } from "../../lib/logging.ts";
 import { buildPatchedOutputBaseName } from "../../lib/output/output-name-composition.ts";
 import { getFileNameWithoutExtension } from "../../lib/path-utils.ts";
-import { createTiming, formatTiming } from "../../lib/progress/timing.ts";
 import { ApplyWorkflow, type BrowserApplyResult, type WorkflowProgress } from "../../platform/browser/browser-api.ts";
 import { getErrorCode } from "../../presentation/errors.ts";
 import type { ApplyWorkflowInputState, ApplyWorkflowPatchState } from "../../types/apply-workflow.ts";
@@ -36,7 +35,7 @@ import {
   toBrowserPublicBinarySource,
   toReactProgressEvent,
 } from "./workflow-adapters.ts";
-import { createReactWorkflowId } from "./workflow-form-utils.ts";
+import { createReactWorkflowId, formatChecksumTiming, formatElapsedMs } from "./workflow-form-utils.ts";
 
 type ApplyWorkflowSessionInput = {
   inputs: BinarySource[];
@@ -372,12 +371,6 @@ const getResolvedInputArchiveName = (
     : resolvedFileName;
   return originalName && resolvedName && originalName !== resolvedName ? originalName : "-";
 };
-
-const formatElapsedMs = (elapsedMs: number | undefined) =>
-  typeof elapsedMs === "number" && Number.isFinite(elapsedMs) ? formatTiming(createTiming(elapsedMs)) : "";
-
-const formatChecksumTiming = (elapsedMs: number | undefined) =>
-  elapsedMs === 0 ? "from extract" : formatElapsedMs(elapsedMs);
 
 const toStagedInputInfos = (input: ApplyWorkflowInputState | null, originals: BinarySource[]) => {
   if (!input) return [];
