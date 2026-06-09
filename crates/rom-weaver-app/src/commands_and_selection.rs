@@ -738,12 +738,15 @@ impl CliApp {
                     );
                 }
             }
+            if primary_emitted_files.is_empty() {
+                primary_emitted_files = Self::emitted_file_detail_paths(report.details.as_ref());
+            }
         }
         if report.status == OperationStatus::Succeeded {
             let format_name = handler.descriptor().name;
             // Level 0 (the input container itself). Its outputs carry the inline checksums computed
             // by the handler when `--checksum` was requested.
-            let primary_details = Self::build_emitted_file_detail_values(
+            let primary_details = Self::build_or_existing_emitted_file_detail_values(
                 report.details.as_ref(),
                 &primary_emitted_files,
                 None,

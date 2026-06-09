@@ -141,6 +141,59 @@ impl CliApp {
             .collect::<Vec<_>>()
     }
 
+    pub(super) fn build_or_existing_emitted_file_detail_values(
+        report_details: Option<&Value>,
+        emitted_files: &[PathBuf],
+        default_kind: Option<&str>,
+    ) -> Vec<Value> {
+        let emitted =
+            Self::build_emitted_file_detail_values(report_details, emitted_files, default_kind);
+        if emitted.is_empty() {
+            Self::existing_emitted_file_detail_values(report_details)
+        } else {
+            emitted
+        }
+    }
+
+    pub(super) fn existing_emitted_file_detail_values(
+        report_details: Option<&Value>,
+    ) -> Vec<Value> {
+        match report_details {
+            Some(Value::Object(map)) => match map.get("emitted_files") {
+                Some(Value::Array(entries)) => entries
+                    .iter()
+                    .filter_map(|entry| match entry {
+                        Value::Object(map) if Self::emitted_file_detail_key(map).is_some() => {
+                            Some(entry.clone())
+                        }
+                        _ => None,
+                    })
+                    .collect(),
+                _ => Vec::new(),
+            },
+            _ => Vec::new(),
+        }
+    }
+
+    pub(super) fn emitted_file_detail_paths(report_details: Option<&Value>) -> Vec<PathBuf> {
+        match report_details {
+            Some(Value::Object(map)) => match map.get("emitted_files") {
+                Some(Value::Array(entries)) => entries
+                    .iter()
+                    .filter_map(|entry| match entry {
+                        Value::Object(map) => map.get("path").and_then(Value::as_str),
+                        _ => None,
+                    })
+                    .map(str::trim)
+                    .filter(|path| !path.is_empty())
+                    .map(PathBuf::from)
+                    .collect(),
+                _ => Vec::new(),
+            },
+            _ => Vec::new(),
+        }
+    }
+
     /// Replaces the report's `emitted_files` detail with the given pre-built objects, preserving any
     /// other detail keys already present.
     pub(super) fn set_emitted_files_detail(

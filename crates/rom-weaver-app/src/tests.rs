@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use rom_weaver_core::ArchiveEntryKindFilter;
+use serde_json::json;
 
 use super::{CliApp, CompressionLevelProfile, ParsedSelectionInput};
 
@@ -265,6 +266,34 @@ fn emitted_rom_extensions_cover_3ds_family_inputs() {
             "missing {extension}"
         );
     }
+}
+
+#[test]
+fn empty_changed_file_scan_preserves_handler_emitted_details() {
+    let details = json!({
+        "emitted_files": [
+            {
+                "checksums": { "sha1": "0123456789abcdef0123456789abcdef01234567" },
+                "file_name": "Crash-QOL.bps",
+                "path": "/work/Crash-QOL.bps",
+                "size_bytes": 406
+            }
+        ]
+    });
+
+    assert_eq!(
+        CliApp::emitted_file_detail_paths(Some(&details)),
+        vec![PathBuf::from("/work/Crash-QOL.bps")]
+    );
+
+    let emitted = CliApp::build_or_existing_emitted_file_detail_values(Some(&details), &[], None);
+    assert_eq!(emitted.len(), 1);
+    assert_eq!(emitted[0]["file_name"], "Crash-QOL.bps");
+    assert_eq!(emitted[0]["size_bytes"], 406);
+    assert_eq!(
+        emitted[0]["checksums"]["sha1"],
+        "0123456789abcdef0123456789abcdef01234567"
+    );
 }
 
 #[test]

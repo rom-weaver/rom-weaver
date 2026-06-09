@@ -56,6 +56,7 @@ type BrowserWasmAssetSelection = {
 let browserThreadedRunnerPromise: Promise<RomWeaverRunner> | null = null;
 let browserThreadedRunnerStale = false;
 let activeRunnerRunCount = 0;
+let runnerRunQueue: Promise<void> = Promise.resolve();
 
 // --- pre-extract-gap experiments (perf/pre-extract-gap) -----------------------------------------
 // The wasm heap only ever grows. The page-load warmup (and the 8-thread pool init) leaves the shared
@@ -340,6 +341,15 @@ const createRunnerAbortError = () => {
   return error;
 };
 
+const enqueueRunnerRun = <T>(callback: () => Promise<T>): Promise<T> => {
+  const queued = runnerRunQueue.catch(() => undefined).then(callback);
+  runnerRunQueue = queued.then(
+    () => undefined,
+    () => undefined,
+  );
+  return queued;
+};
+
 const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: RomWeaverRunnerRunJsonOptions) => {
   const { signal, ...runOptionOverrides } = options || {};
   const activeVirtualFiles = getActiveBrowserVirtualFiles();
@@ -428,7 +438,7 @@ const runRomWeaverJson = async (commandOrRequest: RomWeaverRunInput, options?: R
     });
   };
   try {
-    return await dispatchRunWithAbort();
+    return await enqueueRunnerRun(dispatchRunWithAbort);
   } catch (error) {
     // A long-lived worker can exhaust its (only-ever-growing) wasm heap after several heavy ops and
     // fail a later run with an out-of-memory error. Flag the exhausted worker stale so the next
