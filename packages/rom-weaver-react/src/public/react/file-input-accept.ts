@@ -1,4 +1,4 @@
-import { ROM_WEAVER_FILE_FILTERS } from "rom-weaver-wasm/format-metadata";
+import { ARCHIVE_FILE_EXTENSIONS, PATCH_FILE_EXTENSION_VARIANTS } from "./file-classification.ts";
 
 const SAFARI_USER_AGENT_REGEX = /Safari/;
 const CHROME_USER_AGENT_REGEX = /Chrome/;
@@ -10,15 +10,6 @@ type FileInputAcceptEnvironment = {
   platform?: string;
 };
 
-const stripLeadingExtensionDot = (extension: string) => extension.replace(/^\./, "");
-const unique = <TValue>(values: readonly TValue[]) => [...new Set(values)];
-
-const PATCH_FILE_EXTENSIONS = ROM_WEAVER_FILE_FILTERS.patchExtensions.map(stripLeadingExtensionDot);
-const PATCH_FILE_EXTENSION_VARIANTS = unique([
-  ...PATCH_FILE_EXTENSIONS,
-  ...PATCH_FILE_EXTENSIONS.map((extension) => `${extension}1`),
-]);
-const ARCHIVE_FILE_EXTENSIONS = ROM_WEAVER_FILE_FILTERS.containerExtensions.map(stripLeadingExtensionDot);
 const PATCH_INPUT_ACCEPT = [...PATCH_FILE_EXTENSION_VARIANTS, ...ARCHIVE_FILE_EXTENSIONS]
   .map((extension) => `.${extension}`)
   .join(",");
