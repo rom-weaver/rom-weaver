@@ -459,6 +459,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
   });
   const workflowOutputOverridesKeyRef = useRef("");
   const prepareHandlersRef = useRef<ApplyWorkflowPrepareHandlers | null>(null);
+  const handledPageDropIdRef = useRef<number | null>(null);
   const propsWithSettings = {
     ...props,
     defaultSettings: props.defaultSettings || providerSettings,
@@ -1104,6 +1105,24 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
     });
   const resolvedUiController = controllers?.ui || localUiController;
   const resolvedStackController = controllers?.patchStack || localStackController;
+
+  useEffect(() => {
+    const pageDrop = props.pageDrop;
+    if (!pageDrop || handledPageDropIdRef.current === pageDrop.id) return;
+    handledPageDropIdRef.current = pageDrop.id;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      if (pageDrop.target === "patch") {
+        resolvedUiController.providePatchInputFiles?.([pageDrop.file]);
+        return;
+      }
+      resolvedUiController.provideRomInputFiles?.([pageDrop.file]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [props.pageDrop, resolvedUiController]);
 
   handleSelectionCancelledRef.current = (request) => {
     const normalizedSourceName = request.sourceName.trim().toLowerCase();
