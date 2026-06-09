@@ -172,7 +172,7 @@ const webappController = createWebappRootController({
   onLocalizationChange: () => undefined,
   storage: typeof localStorage === "undefined" ? undefined : localStorage,
 });
-configureLogger({ level: webappController.getState().settings.logLevel });
+applySettingsToRuntime(webappController.getState().settings);
 
 let webappRootInitialized = false;
 let appRoot: Root | null = null;

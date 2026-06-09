@@ -1,4 +1,5 @@
 import type { Eruda } from "eruda";
+import { getDefaultWebappDevToolsEnabled } from "./development-defaults.ts";
 
 (() => {
   const LOCAL_STORAGE_SETTINGS_ID = "rom-weaver-settings";
@@ -15,20 +16,22 @@ import type { Eruda } from "eruda";
   const isRecord = (value: unknown): value is Record<string, unknown> =>
     !!value && typeof value === "object" && !Array.isArray(value);
   const readStoredErudaEnabled = (rawSettings: string | null): boolean => {
-    if (!rawSettings) return false;
+    const fallback = getDefaultWebappDevToolsEnabled();
+    if (!rawSettings) return fallback;
     const settings = JSON.parse(rawSettings) as unknown;
-    if (!isRecord(settings) || settings.version !== SETTINGS_STORAGE_VERSION) return false;
+    if (!isRecord(settings) || settings.version !== SETTINGS_STORAGE_VERSION) return fallback;
     const commonSettings = isRecord(settings.common) ? settings.common : null;
-    return (commonSettings?.devTools ?? commonSettings?.mobileDevTools) === true;
+    const storedValue = commonSettings?.devTools ?? commonSettings?.mobileDevTools;
+    return storedValue === undefined ? fallback : storedValue === true;
   };
 
   const readStoredErudaSetting = (): boolean => {
     try {
-      if (typeof localStorage === "undefined") return false;
+      if (typeof localStorage === "undefined") return getDefaultWebappDevToolsEnabled();
       const rawSettings = localStorage.getItem(LOCAL_STORAGE_SETTINGS_ID);
       return readStoredErudaEnabled(rawSettings);
     } catch (_err) {
-      return false;
+      return getDefaultWebappDevToolsEnabled();
     }
   };
   const mobileErudaMedia = typeof window.matchMedia === "function" ? window.matchMedia(MOBILE_ERUDA_QUERY) : null;

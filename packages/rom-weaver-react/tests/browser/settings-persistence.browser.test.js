@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import { getDefaultWebappDevToolsEnabled, getDefaultWebappLogLevel } from "../../src/webapp/development-defaults.ts";
 import {
   buildSettingsForWebapp,
   getDefaultSettings,
@@ -20,6 +21,15 @@ const createMemoryStorage = () => {
     setItem: (key, value) => values.set(key, String(value)),
   };
 };
+
+test("development webapp defaults enable trace logging and dev tools", () => {
+  const developmentEnvironment = { DEV: true, MODE: "development" };
+  expect(getDefaultWebappLogLevel(developmentEnvironment)).toBe("trace");
+  expect(getDefaultWebappDevToolsEnabled(developmentEnvironment)).toBe(true);
+
+  expect(getDefaultWebappLogLevel({ DEV: true, MODE: "test" })).toBe("warn");
+  expect(getDefaultWebappDevToolsEnabled({ DEV: false, MODE: "production" })).toBe(false);
+});
 
 test("settings persistence round-trips every visible settings field", () => {
   const settings = {

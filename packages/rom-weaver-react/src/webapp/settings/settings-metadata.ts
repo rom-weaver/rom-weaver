@@ -17,6 +17,7 @@ import {
 import { getBrowserLocaleCandidates, negotiateLocale } from "../../presentation/localization/index.ts";
 import { getSettingsLabel } from "../../presentation/settings.ts";
 import { LOG_LEVELS } from "../../types/logging.ts";
+import { getDefaultWebappDevToolsEnabled, getDefaultWebappLogLevel } from "../development-defaults.ts";
 import {
   COMPRESSION_PROFILES,
   canUseThreadedWasm,
@@ -314,7 +315,7 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     validValues: ["7z/special", "zip/special", "special only", "7z only", "zip only", "none"],
   },
   devTools: {
-    defaultValue: false,
+    defaultValue: getDefaultWebappDevToolsEnabled,
     id: "settings-dev-tools",
     key: "devTools",
     kind: "checkbox",
@@ -356,7 +357,7 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     validationLabel: "Language",
   },
   logLevel: {
-    defaultValue: "warn",
+    defaultValue: getDefaultWebappLogLevel,
     id: "settings-log-level",
     key: "logLevel",
     kind: "select",
@@ -369,7 +370,8 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
       { label: "Debug", value: "debug" },
       { label: "Trace", value: "trace" },
     ],
-    suggestion: "Default: Warnings. Debug and Trace include detailed workflow progress.",
+    suggestion:
+      "Default: Trace in development; Warnings otherwise. Debug and Trace include detailed workflow progress.",
     validationLabel: "Log level",
     validValues: [...LOG_LEVELS],
   },
