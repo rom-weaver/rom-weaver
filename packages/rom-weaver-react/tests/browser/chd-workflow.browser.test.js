@@ -24,23 +24,27 @@ const createMultiTrackChdFixtureFile = async () => {
     "  TRACK 02 MODE1/2352\n" +
     "    INDEX 01 00:00:00\n";
   const result = await browserRuntime.compression.create?.({
-    chdSourceMode: "cd",
     format: "chd",
-    imageFiles: [
-      {
-        fileName: firstBinName,
-        source: new File([firstBinBytes], firstBinName, { type: "application/octet-stream" }),
-      },
-      {
-        fileName: secondBinName,
-        source: new File([secondBinBytes], secondBinName, { type: "application/octet-stream" }),
-      },
-    ],
-    mode: "cd",
     options: {
       workerThreads: 2,
     },
     outputName: `${stem}.chd`,
+    romSpecific: {
+      chd: {
+        imageFiles: [
+          {
+            fileName: firstBinName,
+            source: new File([firstBinBytes], firstBinName, { type: "application/octet-stream" }),
+          },
+          {
+            fileName: secondBinName,
+            source: new File([secondBinBytes], secondBinName, { type: "application/octet-stream" }),
+          },
+        ],
+        mode: "cd",
+        sourceMode: "cd",
+      },
+    },
     source: new File([new TextEncoder().encode(cueText)], cueName, { type: "application/x-cue" }),
   });
   const output = result?.output;

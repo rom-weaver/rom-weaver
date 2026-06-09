@@ -33,6 +33,21 @@ beforeEach(async () => {
   await clearOpfsRuntimeBuckets();
 });
 
+test("compression create rejects legacy flat rom-specific options", async () => {
+  const create = browserRuntime.compression.create;
+  if (!create) throw new Error("Runtime compression create capability is unavailable");
+
+  await expect(
+    create({
+      chdSourceMode: "cd",
+      fileName: "legacy.bin",
+      format: "chd",
+      outputName: "legacy.chd",
+      source: new File([new Uint8Array([0])], "legacy.bin", { type: "application/octet-stream" }),
+    }),
+  ).rejects.toThrow(/Legacy compression create option fields are unsupported/);
+});
+
 const createMultiTrackChdOutput = async (runId) => {
   const stem = `multi-track-${runId}`;
   const firstBinName = `${stem}-track1.bin`;
@@ -56,23 +71,27 @@ const createMultiTrackChdOutput = async (runId) => {
   let output = null;
   try {
     const result = await browserRuntime.compression.create?.({
-      chdSourceMode: "cd",
       format: "chd",
-      imageFiles: [
-        {
-          fileName: firstBinName,
-          source: new File([firstBinBytes], firstBinName, { type: "application/octet-stream" }),
-        },
-        {
-          fileName: secondBinName,
-          source: new File([secondBinBytes], secondBinName, { type: "application/octet-stream" }),
-        },
-      ],
-      mode: "cd",
       options: {
         workerThreads: 2,
       },
       outputName: `${stem}.chd`,
+      romSpecific: {
+        chd: {
+          imageFiles: [
+            {
+              fileName: firstBinName,
+              source: new File([firstBinBytes], firstBinName, { type: "application/octet-stream" }),
+            },
+            {
+              fileName: secondBinName,
+              source: new File([secondBinBytes], secondBinName, { type: "application/octet-stream" }),
+            },
+          ],
+          mode: "cd",
+          sourceMode: "cd",
+        },
+      },
       source: new File([new TextEncoder().encode(cueText)], cueName, { type: "application/x-cue" }),
     });
     output = result?.output || null;
@@ -223,14 +242,18 @@ test("rom-weaver runtime descends DVD CHDs without split-bin", async () => {
   let extractOutputs = [];
   try {
     const createResult = await browserRuntime.compression.create?.({
-      chdSourceMode: "dvd",
-      compressionCodecs: "zstd:1",
       format: "chd",
-      mode: "dvd",
       options: {
         workerThreads: 2,
       },
       outputName: "Ape Escape 2 (USA).chd",
+      romSpecific: {
+        chd: {
+          compressionCodecs: "zstd:1",
+          mode: "dvd",
+          sourceMode: "dvd",
+        },
+      },
       source: {
         fileName: sourceFileName,
         filePath: sourcePath,
@@ -379,12 +402,16 @@ test("rom-weaver runtime extracts a single-bin CD CHD from an OPFS path", async 
     expect(output?.chdCueText).toBeUndefined();
 
     const createResult = await browserRuntime.compression.create?.({
-      cueFilePath: output.chdCuePath,
       format: "chd",
       options: {
         workerThreads: 2,
       },
       outputName: "recompressed-cue-path.chd",
+      romSpecific: {
+        chd: {
+          cueFilePath: output.chdCuePath,
+        },
+      },
       source: output,
     });
     recompressed = createResult?.output || null;
@@ -415,14 +442,18 @@ test("rom-weaver runtime creates a CD CHD from a plain 2352-byte-sector input", 
   let output = null;
   try {
     const result = await browserRuntime.compression.create?.({
-      chdSourceMode: "cd",
-      compressionCodecs: "cdlz:9,cdzl:9,cdfl:8",
       format: "chd",
-      mode: "cd",
       options: {
         workerThreads: 2,
       },
       outputName: "created-cd.chd",
+      romSpecific: {
+        chd: {
+          compressionCodecs: "cdlz:9,cdzl:9,cdfl:8",
+          mode: "cd",
+          sourceMode: "cd",
+        },
+      },
       source: {
         fileName: "disc.bin",
         filePath: sourcePath,
@@ -460,14 +491,18 @@ test("rom-weaver runtime creates a CD CHD from a plain 2048-byte-sector input", 
   let output = null;
   try {
     const result = await browserRuntime.compression.create?.({
-      chdSourceMode: "cd",
-      compressionCodecs: "cdlz:9,cdzl:9,cdfl:8",
       format: "chd",
-      mode: "cd",
       options: {
         workerThreads: 2,
       },
       outputName: "created-cd-2048.chd",
+      romSpecific: {
+        chd: {
+          compressionCodecs: "cdlz:9,cdzl:9,cdfl:8",
+          mode: "cd",
+          sourceMode: "cd",
+        },
+      },
       source: {
         fileName: sourceFileName,
         filePath: sourcePath,
@@ -509,13 +544,17 @@ test("rom-weaver runtime creates a CD CHD when input lives directly under /work"
   let output = null;
   try {
     const result = await browserRuntime.compression.create?.({
-      chdSourceMode: "cd",
       format: "chd",
-      mode: "cd",
       options: {
         workerThreads: 2,
       },
       outputName: "Crash Bandicoot (USA) - Quality of Life.chd",
+      romSpecific: {
+        chd: {
+          mode: "cd",
+          sourceMode: "cd",
+        },
+      },
       source: {
         fileName: sourceFileName,
         filePath: sourcePath,
@@ -556,19 +595,23 @@ test("rom-weaver runtime creates a CD CHD from a cue source that references a si
   let output = null;
   try {
     const result = await browserRuntime.compression.create?.({
-      chdSourceMode: "cd",
       format: "chd",
-      imageFiles: [
-        {
-          fileName: binName,
-          source: new File([binBytes], binName, { type: "application/octet-stream" }),
-        },
-      ],
-      mode: "cd",
       options: {
         workerThreads: 2,
       },
       outputName: "Crash Bandicoot (USA) - Quality of Life.chd",
+      romSpecific: {
+        chd: {
+          imageFiles: [
+            {
+              fileName: binName,
+              source: new File([binBytes], binName, { type: "application/octet-stream" }),
+            },
+          ],
+          mode: "cd",
+          sourceMode: "cd",
+        },
+      },
       source: new File([cueBytes], cueName, { type: "application/x-cue" }),
     });
 

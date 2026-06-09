@@ -101,8 +101,12 @@ test("rom-weaver runtime creates an RVZ from a prior browser OPFS output", async
         workerThreads: 10,
       },
       outputName: "created-from-output.rvz",
-      rvzCodec: "zstd",
-      rvzCompressionLevel: 19,
+      romSpecific: {
+        rvz: {
+          codec: "zstd",
+          compressionLevel: 19,
+        },
+      },
       source: extractedOutput,
     });
     createdOutput = createResult?.output || null;

@@ -119,6 +119,10 @@ type RuntimeArchiveCreateInput = Extract<CompressionCreateInput, { entries: unkn
 type RuntimeCompressionExtractInput = CompressionExtractInput;
 type RuntimeCompressionListInput = CompressionListInput;
 type RuntimeRomSpecificCreateInputBase = Extract<CompressionCreateInput, { source: unknown }>;
+type RuntimeRomSpecificCreateOptions = NonNullable<RuntimeRomSpecificCreateInputBase["romSpecific"]>;
+type RuntimeRomSpecificCreateChdOptions = NonNullable<RuntimeRomSpecificCreateOptions["chd"]>;
+type RuntimeRomSpecificCreateRvzOptions = NonNullable<RuntimeRomSpecificCreateOptions["rvz"]>;
+type RuntimeRomSpecificCreateZ3dsOptions = NonNullable<RuntimeRomSpecificCreateOptions["z3ds"]>;
 
 type RuntimeRomSpecificProgress = {
   label?: string;
@@ -135,41 +139,41 @@ type RuntimeRomSpecificHooks = {
 };
 
 type RuntimeRomSpecificCreateChdInput = RuntimeRomSpecificHooks & {
-  chdSourceMode?: RuntimeRomSpecificCreateInputBase["chdSourceMode"];
-  compressionCodecs?: RuntimeRomSpecificCreateInputBase["compressionCodecs"];
-  cueFilePath?: RuntimeRomSpecificCreateInputBase["cueFilePath"];
+  compressionCodecs?: RuntimeRomSpecificCreateChdOptions["compressionCodecs"];
+  cueFilePath?: RuntimeRomSpecificCreateChdOptions["cueFilePath"];
   fileName?: RuntimeRomSpecificCreateInputBase["fileName"];
-  imageFiles?: RuntimeRomSpecificCreateInputBase["imageFiles"];
-  mode?: RuntimeRomSpecificCreateInputBase["mode"];
+  imageFiles?: RuntimeRomSpecificCreateChdOptions["imageFiles"];
+  mode?: RuntimeRomSpecificCreateChdOptions["mode"];
   outputName: RuntimeRomSpecificCreateInputBase["outputName"];
   source: RuntimeRomSpecificCreateInputBase["source"];
+  sourceMode?: RuntimeRomSpecificCreateChdOptions["sourceMode"];
 };
 
 type RuntimeRomSpecificCreateRvzInput = RuntimeRomSpecificHooks & {
+  blockSize?: RuntimeRomSpecificCreateRvzOptions["blockSize"];
+  codec?: RuntimeRomSpecificCreateRvzOptions["codec"];
+  compressionLevel?: RuntimeRomSpecificCreateRvzOptions["compressionLevel"];
   fileName?: RuntimeRomSpecificCreateInputBase["fileName"];
+  mode?: RuntimeRomSpecificCreateRvzOptions["mode"];
   outputName: RuntimeRomSpecificCreateInputBase["outputName"];
-  rvzBlockSize?: RuntimeRomSpecificCreateInputBase["rvzBlockSize"];
-  rvzCodec?: RuntimeRomSpecificCreateInputBase["rvzCodec"];
-  rvzCompressionLevel?: RuntimeRomSpecificCreateInputBase["rvzCompressionLevel"];
-  rvzMode?: RuntimeRomSpecificCreateInputBase["rvzMode"];
-  rvzScrub?: RuntimeRomSpecificCreateInputBase["rvzScrub"];
-  rvzSourceFileName?: RuntimeRomSpecificCreateInputBase["rvzSourceFileName"];
+  scrub?: RuntimeRomSpecificCreateRvzOptions["scrub"];
+  sourceFileName?: RuntimeRomSpecificCreateRvzOptions["sourceFileName"];
   source: RuntimeRomSpecificCreateInputBase["source"];
 };
 
 type RuntimeRomSpecificCreateZ3dsInput = RuntimeRomSpecificHooks & {
+  compressionLevel?: RuntimeRomSpecificCreateZ3dsOptions["compressionLevel"];
   fileName?: RuntimeRomSpecificCreateInputBase["fileName"];
+  metadata?: RuntimeRomSpecificCreateZ3dsOptions["metadata"];
   outputName: RuntimeRomSpecificCreateInputBase["outputName"];
+  sourceFileName?: RuntimeRomSpecificCreateZ3dsOptions["sourceFileName"];
   source: RuntimeRomSpecificCreateInputBase["source"];
-  z3dsCompressionLevel?: RuntimeRomSpecificCreateInputBase["z3dsCompressionLevel"];
-  z3dsMetadata?: RuntimeRomSpecificCreateInputBase["z3dsMetadata"];
-  z3dsSourceFileName?: RuntimeRomSpecificCreateInputBase["z3dsSourceFileName"];
-  z3dsUnderlyingMagic?: RuntimeRomSpecificCreateInputBase["z3dsUnderlyingMagic"];
+  underlyingMagic?: RuntimeRomSpecificCreateZ3dsOptions["underlyingMagic"];
 };
 
 type RuntimeRomSpecificExtractChdInput = RuntimeRomSpecificHooks & {
   fileName: string;
-  mode?: RuntimeRomSpecificCreateInputBase["mode"];
+  mode?: RuntimeRomSpecificCreateChdOptions["mode"];
   outputName?: CompressionExtractInput["outputName"];
   source: CompressionExtractInput["source"];
   splitBin?: boolean;

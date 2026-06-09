@@ -185,14 +185,18 @@ const createRuntimeRomSpecificOutputFiles = async (
   let request: RuntimeCompressionCreateRequest;
   if (compression === "chd") {
     request = {
-      chdSourceMode: outputPlan.chdSourceMode,
-      compressionCodecs: outputPlan.chdCompressionCodecs,
-      cueFilePath: outputPlan.chdCuePath,
       fileName: inputFileName,
       format: "chd",
-      mode: outputPlan.chdCreateMode,
       options: runtimeOptions,
       outputName: outputPlan.finalOutputFileName,
+      romSpecific: {
+        chd: {
+          compressionCodecs: outputPlan.chdCompressionCodecs,
+          cueFilePath: outputPlan.chdCuePath,
+          mode: outputPlan.chdCreateMode,
+          sourceMode: outputPlan.chdSourceMode,
+        },
+      },
       source,
     };
   } else if (compression === "rvz") {
@@ -201,12 +205,16 @@ const createRuntimeRomSpecificOutputFiles = async (
       format: "rvz",
       options: runtimeOptions,
       outputName: outputPlan.finalOutputFileName,
-      rvzBlockSize: outputPlan.rvzOptions?.rvzBlockSize as string | number | null | undefined,
-      rvzCodec: outputPlan.rvzOptions?.rvzCodec as string | null | undefined,
-      rvzCompressionLevel: outputPlan.rvzOptions?.rvzCompressionLevel as string | number | null | undefined,
-      rvzMode: outputPlan.rvzMode,
-      rvzScrub: outputPlan.rvzOptions?.rvzScrub as boolean | string | number | null | undefined,
-      rvzSourceFileName: outputPlan.rvzSourceFileName,
+      romSpecific: {
+        rvz: {
+          blockSize: outputPlan.rvzOptions?.rvzBlockSize as string | number | null | undefined,
+          codec: outputPlan.rvzOptions?.rvzCodec as string | null | undefined,
+          compressionLevel: outputPlan.rvzOptions?.rvzCompressionLevel as string | number | null | undefined,
+          mode: outputPlan.rvzMode,
+          scrub: outputPlan.rvzOptions?.rvzScrub as boolean | string | number | null | undefined,
+          sourceFileName: outputPlan.rvzSourceFileName,
+        },
+      },
       source,
     };
   } else {
@@ -215,11 +223,15 @@ const createRuntimeRomSpecificOutputFiles = async (
       format: "z3ds",
       options: runtimeOptions,
       outputName: outputPlan.finalOutputFileName,
+      romSpecific: {
+        z3ds: {
+          compressionLevel: outputPlan.z3dsOptions?.compressionLevel as string | number | null | undefined,
+          metadata: outputPlan.z3dsMetadata,
+          sourceFileName: outputPlan.z3dsSourceFileName,
+          underlyingMagic: outputPlan.z3dsUnderlyingMagic,
+        },
+      },
       source,
-      z3dsCompressionLevel: outputPlan.z3dsOptions?.compressionLevel as string | number | null | undefined,
-      z3dsMetadata: outputPlan.z3dsMetadata,
-      z3dsSourceFileName: outputPlan.z3dsSourceFileName,
-      z3dsUnderlyingMagic: outputPlan.z3dsUnderlyingMagic,
     };
   }
   const result = await runtime.compression.create(request);
@@ -555,11 +567,8 @@ const buildSessionOutputFiles = async (
       };
     });
     const result = await runtime.compression.create({
-      compressionCodecs: getChdCompressionCodecs("cd", options),
       fileName: cueOutput.asset.fileName,
       format: "chd",
-      imageFiles,
-      mode: "cd",
       options: {
         logLevel: getLogLevel(options),
         onLog: options?.onLog,
@@ -581,6 +590,13 @@ const buildSessionOutputFiles = async (
         workerThreads: getWorkerThreads(options),
       },
       outputName: `${baseName}.chd`,
+      romSpecific: {
+        chd: {
+          compressionCodecs: getChdCompressionCodecs("cd", options),
+          imageFiles,
+          mode: "cd",
+        },
+      },
       source,
     });
     const output = "output" in result ? result.output : result;

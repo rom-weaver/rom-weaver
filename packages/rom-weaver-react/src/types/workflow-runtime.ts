@@ -187,6 +187,41 @@ type SevenZipZstdCompressionOptions = CompressionWorkflowOptions & {
   sevenZipLevel?: number | string;
 };
 
+type CompressionCreateImageFileInput = {
+  source: SourceRef;
+  fileName?: string;
+};
+
+type CompressionCreateChdOptions = {
+  compressionCodecs?: ChdCompressionCodecs | null;
+  cueFilePath?: string | null;
+  imageFiles?: CompressionCreateImageFileInput[];
+  mode?: string | null;
+  sourceMode?: string | null;
+};
+
+type CompressionCreateRvzOptions = {
+  blockSize?: string | number | null;
+  codec?: string | null;
+  compressionLevel?: string | number | null;
+  mode?: string | null;
+  scrub?: boolean | string | number | null;
+  sourceFileName?: string | null;
+};
+
+type CompressionCreateZ3dsOptions = {
+  compressionLevel?: string | number | null;
+  metadata?: JsonValue | null;
+  sourceFileName?: string | null;
+  underlyingMagic?: string | null;
+};
+
+type CompressionCreateRomSpecificOptions = {
+  chd?: CompressionCreateChdOptions;
+  rvz?: CompressionCreateRvzOptions;
+  z3ds?: CompressionCreateZ3dsOptions;
+};
+
 type CompressionCreateInput =
   | {
       entries: CompressionEntryInput[];
@@ -198,24 +233,7 @@ type CompressionCreateInput =
       fileName: string;
       outputName: string;
       format: RomSpecificCompressionFormat;
-      imageFiles?: Array<{
-        source: SourceRef;
-        fileName?: string;
-      }>;
-      mode?: string | null;
-      chdSourceMode?: string | null;
-      cueFilePath?: string | null;
-      compressionCodecs?: ChdCompressionCodecs | null;
-      rvzBlockSize?: string | number | null;
-      rvzCodec?: string | null;
-      rvzCompressionLevel?: string | number | null;
-      rvzMode?: string | null;
-      rvzScrub?: boolean | string | number | null;
-      rvzSourceFileName?: string | null;
-      z3dsCompressionLevel?: string | number | null;
-      z3dsMetadata?: JsonValue | null;
-      z3dsSourceFileName?: string | null;
-      z3dsUnderlyingMagic?: string | null;
+      romSpecific?: CompressionCreateRomSpecificOptions;
       options?: CompressionWorkflowOptions;
     };
 
@@ -279,8 +297,12 @@ type CreatePatchResult = {
 export type {
   ApplyWorkflowOptions,
   ApplyWorkflowResult,
+  CompressionCreateChdOptions,
   CompressionCreateInput,
   CompressionCreateResult,
+  CompressionCreateRomSpecificOptions,
+  CompressionCreateRvzOptions,
+  CompressionCreateZ3dsOptions,
   CompressionEntryInfo,
   CompressionEntryInput,
   CompressionExtractInput,

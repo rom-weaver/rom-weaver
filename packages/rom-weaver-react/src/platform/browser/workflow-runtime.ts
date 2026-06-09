@@ -1009,7 +1009,7 @@ const createBrowserRomSpecificRuntime = (workerIo: RuntimeWorkerIo): RomSpecific
     outputName,
     imageFiles,
     mode,
-    chdSourceMode,
+    sourceMode,
     cueFilePath,
     threads,
     compressionCodecs,
@@ -1040,7 +1040,7 @@ const createBrowserRomSpecificRuntime = (workerIo: RuntimeWorkerIo): RomSpecific
     try {
       const stagedInputPaths = [workerInput.filePath, ...stagedImageSources.map((entry) => entry.filePath)];
       let chdInputPath = workerInput.filePath;
-      const requestedMode = String(chdSourceMode || mode || "")
+      const requestedMode = String(sourceMode || mode || "")
         .trim()
         .toLowerCase();
       const normalizedCueFilePath = String(cueFilePath || "").trim();
@@ -1106,8 +1106,8 @@ const createBrowserRomSpecificRuntime = (workerIo: RuntimeWorkerIo): RomSpecific
     source,
     fileName,
     outputName,
-    rvzCodec,
-    rvzCompressionLevel,
+    codec,
+    compressionLevel,
     threads,
     logLevel,
     onLog,
@@ -1123,7 +1123,7 @@ const createBrowserRomSpecificRuntime = (workerIo: RuntimeWorkerIo): RomSpecific
         const outputFileName = outputName || "output.rvz";
         const outputPath = selectRomWeaverOutputPath(workerSource.filePath, outputFileName, [workerSource.filePath]);
         await removeBrowserVfsOutputPaths([outputPath], [workerSource.filePath]);
-        const codecs = withCodecLevel(rvzCodec || COMPRESSION_DEFAULTS.rvzCodec, rvzCompressionLevel);
+        const codecs = withCodecLevel(codec || COMPRESSION_DEFAULTS.rvzCodec, compressionLevel);
         const result = await invokeRomWeaverCompressionCreateWorker(
           {
             codecs,
@@ -1152,7 +1152,7 @@ const createBrowserRomSpecificRuntime = (workerIo: RuntimeWorkerIo): RomSpecific
     fileName,
     outputName,
     threads,
-    z3dsCompressionLevel,
+    compressionLevel,
     logLevel,
     onLog,
     onProgress,
@@ -1167,7 +1167,7 @@ const createBrowserRomSpecificRuntime = (workerIo: RuntimeWorkerIo): RomSpecific
         const outputFileName = outputName || "output.z3ds";
         const outputPath = selectRomWeaverOutputPath(workerSource.filePath, outputFileName, [workerSource.filePath]);
         await removeBrowserVfsOutputPaths([outputPath], [workerSource.filePath]);
-        const codecs = withCodecLevel(COMPRESSION_DEFAULTS.z3dsCodec, z3dsCompressionLevel);
+        const codecs = withCodecLevel(COMPRESSION_DEFAULTS.z3dsCodec, compressionLevel);
         const result = await invokeRomWeaverCompressionCreateWorker(
           {
             codecs,

@@ -37,11 +37,38 @@ import { getNamedSourceFileName, toWorkerMetadata } from "./source-normalization
 import { createCompressionExtractResult } from "./workflow-runtime-worker-helpers.ts";
 
 const CUE_FILE_REGEX = /\.cue$/i;
+const LEGACY_ROM_SPECIFIC_CREATE_FIELDS = [
+  "chdSourceMode",
+  "compressionCodecs",
+  "cueFilePath",
+  "imageFiles",
+  "mode",
+  "rvzBlockSize",
+  "rvzCodec",
+  "rvzCompressionLevel",
+  "rvzMode",
+  "rvzScrub",
+  "rvzSourceFileName",
+  "z3dsCompressionLevel",
+  "z3dsMetadata",
+  "z3dsSourceFileName",
+  "z3dsUnderlyingMagic",
+] as const;
 
 const isCueOutput = (output: PublicOutput) => CUE_FILE_REGEX.test(output.fileName || output.path || "");
 
 const withOutputFileName = (output: PublicOutput, fileName: string): PublicOutput =>
   output.fileName === fileName ? output : { ...output, fileName };
+
+const assertNoLegacyRomSpecificCreateFields = (request: object) => {
+  const legacyFields = LEGACY_ROM_SPECIFIC_CREATE_FIELDS.filter((field) => Object.hasOwn(request, field));
+  if (!legacyFields.length) return;
+  throw new Error(
+    `Legacy compression create option fields are unsupported; use romSpecific.<format> instead: ${legacyFields.join(
+      ", ",
+    )}`,
+  );
+};
 
 type RomSpecificRuntimeAdapter = {
   createChd?: (
@@ -544,49 +571,49 @@ const createSharedCompressionRuntime = (
   type RomSpecificListEntries = Awaited<ReturnType<NonNullable<WorkflowRuntime["compression"]["list"]>>>["entries"];
   const createRomSpecificInputs = {
     chd: (request: RomSpecificCreateRequest): RuntimeRomSpecificCreateChdInput => ({
-      chdSourceMode: request.chdSourceMode,
-      compressionCodecs: request.compressionCodecs,
-      cueFilePath: request.cueFilePath,
+      compressionCodecs: request.romSpecific?.chd?.compressionCodecs,
+      cueFilePath: request.romSpecific?.chd?.cueFilePath,
       fileName: request.fileName,
-      imageFiles: request.imageFiles,
+      imageFiles: request.romSpecific?.chd?.imageFiles,
       logLevel: request.options?.logLevel,
-      mode: request.mode,
+      mode: request.romSpecific?.chd?.mode,
       onLog: request.options?.onLog,
       onProgress: forwardRomSpecificProgress("output", request.options?.onProgress),
       outputName: request.outputName,
       source: request.source,
+      sourceMode: request.romSpecific?.chd?.sourceMode,
       threads: request.options?.workerThreads,
     }),
     rvz: (request: RomSpecificCreateRequest): RuntimeRomSpecificCreateRvzInput => ({
+      blockSize: request.romSpecific?.rvz?.blockSize,
+      codec: request.romSpecific?.rvz?.codec,
+      compressionLevel: request.romSpecific?.rvz?.compressionLevel,
       fileName: request.fileName,
       logLevel: request.options?.logLevel,
+      mode: request.romSpecific?.rvz?.mode,
       onLog: request.options?.onLog,
       onProgress: forwardRomSpecificProgress("output", request.options?.onProgress),
       outputName: request.outputName,
-      rvzBlockSize: request.rvzBlockSize,
-      rvzCodec: request.rvzCodec,
-      rvzCompressionLevel: request.rvzCompressionLevel,
-      rvzMode: request.rvzMode,
-      rvzScrub: request.rvzScrub,
-      rvzSourceFileName: request.rvzSourceFileName,
+      scrub: request.romSpecific?.rvz?.scrub,
       source: request.source,
+      sourceFileName: request.romSpecific?.rvz?.sourceFileName,
       threads: request.options?.workerThreads,
     }),
     z3ds: (request: RomSpecificCreateRequest): RuntimeRomSpecificCreateZ3dsInput => ({
+      compressionLevel: request.romSpecific?.z3ds?.compressionLevel,
       fileName: request.fileName,
       logLevel: request.options?.logLevel,
+      metadata: request.romSpecific?.z3ds?.metadata as Record<
+        string,
+        string | number | boolean | Uint8Array | null | undefined
+      > | null,
       onLog: request.options?.onLog,
       onProgress: forwardRomSpecificProgress("output", request.options?.onProgress),
       outputName: request.outputName,
       source: request.source,
+      sourceFileName: request.romSpecific?.z3ds?.sourceFileName,
       threads: request.options?.workerThreads,
-      z3dsCompressionLevel: request.z3dsCompressionLevel,
-      z3dsMetadata: request.z3dsMetadata as Record<
-        string,
-        string | number | boolean | Uint8Array | null | undefined
-      > | null,
-      z3dsSourceFileName: request.z3dsSourceFileName,
-      z3dsUnderlyingMagic: request.z3dsUnderlyingMagic,
+      underlyingMagic: request.romSpecific?.z3ds?.underlyingMagic,
     }),
   } satisfies Record<RomSpecificCompressionFormat, (request: RomSpecificCreateRequest) => RomSpecificCreateInput>;
   const createRomSpecificOutput = async (
@@ -720,6 +747,7 @@ const createSharedCompressionRuntime = (
         if (!archiveRuntime.create) throw new Error("Archive compression creation is unavailable");
         return archiveRuntime.create(request);
       }
+      assertNoLegacyRomSpecificCreateFields(request);
       const registration = getRomSpecificCompressionFormatRegistration(request.format);
       if (registration)
         return {

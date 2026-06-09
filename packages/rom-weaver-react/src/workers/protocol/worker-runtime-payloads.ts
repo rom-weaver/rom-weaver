@@ -52,6 +52,47 @@ type WorkerImageFileEntry = {
   filePath?: string;
 };
 
+type WorkerCompressionCreateChdData = {
+  createMode?: string;
+  file?: BrowserWorkerFile;
+  fileName?: string;
+  filePath?: string;
+  imageFile?: BrowserWorkerFile;
+  imageFilePath?: string;
+  imageFiles?: WorkerImageFileEntry[];
+  inputFileName?: string;
+  mode?: string;
+  outputFileName?: string;
+};
+
+type WorkerCompressionCreateRvzData = {
+  blockSize?: RuntimeThreadBudgetInput;
+  codec?: string;
+  compressionLevel?: RuntimeThreadBudgetInput;
+  file?: BrowserWorkerFile;
+  fileName?: string;
+  filePath?: string;
+  mode?: string;
+  scrub?: boolean | string | number | null;
+  sourceFileName?: string;
+};
+
+type WorkerCompressionCreateZ3dsData = {
+  compressionLevel?: RuntimeThreadBudgetInput;
+  file?: BrowserWorkerFile;
+  fileName?: string;
+  filePath?: string;
+  metadata?: WorkerRomSpecificMetadata | null;
+  sourceFileName?: string;
+  underlyingMagic?: string;
+};
+
+type WorkerCompressionCreateRomSpecificData = {
+  chd?: WorkerCompressionCreateChdData;
+  rvz?: WorkerCompressionCreateRvzData;
+  z3ds?: WorkerCompressionCreateZ3dsData;
+};
+
 type WorkerPatchApplyRequestData = WorkerRequestBase<"apply"> & {
   options?: RuntimePatchApplyOptions;
   patchFile?: BrowserWorkerFile;
@@ -116,41 +157,15 @@ type WorkerCompressionRequestBase<
 };
 
 type WorkerCompressionCreateRequestData = WorkerCompressionRequestBase<"create", "create"> & {
-  chdCreateMode?: string;
-  chdFile?: BrowserWorkerFile;
-  chdFileName?: string;
-  chdFilePath?: string;
-  chdInputFileName?: string;
-  chdMode?: string;
-  chdOutputFileName?: string;
   compressionCodecs?: WorkerCodecSelection;
   fileName?: string;
   filePaths: CompressCommand["input"];
   format: NonNullable<CompressCommand["format"]>;
-  imageFile?: BrowserWorkerFile;
-  imageFilePath?: string;
-  imageFiles?: WorkerImageFileEntry[];
   metadata?: WorkerRequestMetadata;
-  mode?: string;
   outputName: CompressCommand["output"];
-  rvzBlockSize?: RuntimeThreadBudgetInput;
-  rvzCodec?: string;
-  rvzCompressionLevel?: RuntimeThreadBudgetInput;
-  rvzFile?: BrowserWorkerFile;
-  rvzFileName?: string;
-  rvzFilePath?: string;
-  rvzMode?: string;
-  rvzScrub?: boolean | string | number | null;
-  rvzSourceFileName?: string;
+  romSpecific?: WorkerCompressionCreateRomSpecificData;
   threads?: RuntimeThreadBudgetInput;
   workerThreads?: RuntimeThreadBudgetInput;
-  z3dsCompressionLevel?: RuntimeThreadBudgetInput;
-  z3dsFile?: BrowserWorkerFile;
-  z3dsFileName?: string;
-  z3dsFilePath?: string;
-  z3dsMetadata?: WorkerRomSpecificMetadata | null;
-  z3dsSourceFileName?: string;
-  z3dsUnderlyingMagic?: string;
 };
 
 type WorkerCompressionExtractRequestData = WorkerCompressionRequestBase<"extract", "extract"> & {
