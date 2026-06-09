@@ -1,5 +1,7 @@
+use super::*;
+
 impl ChdContainerHandler {
-    fn parse_cue_file(&self, path: &Path) -> Result<DiscLayout> {
+    pub(super) fn parse_cue_file(&self, path: &Path) -> Result<DiscLayout> {
         #[derive(Clone, Debug)]
         struct PendingTrack {
             number: u32,
@@ -304,7 +306,7 @@ impl ChdContainerHandler {
         })
     }
 
-    fn parse_gdi_file(&self, path: &Path) -> Result<DiscLayout> {
+    pub(super) fn parse_gdi_file(&self, path: &Path) -> Result<DiscLayout> {
         #[derive(Clone, Debug)]
         struct PendingTrack {
             number: u32,
@@ -533,7 +535,11 @@ impl ChdContainerHandler {
         })
     }
 
-    fn read_disc_tracks(&self, chd: &ChdReadSession, kind: DiscKind) -> Result<DiscLayout> {
+    pub(super) fn read_disc_tracks(
+        &self,
+        chd: &ChdReadSession,
+        kind: DiscKind,
+    ) -> Result<DiscLayout> {
         let mut tracks = Vec::new();
         for index in 0..99_u32 {
             let Some(metadata) = chd.read_metadata(kind.metadata_tag(), index)? else {
@@ -612,11 +618,11 @@ impl ChdContainerHandler {
         Ok(DiscLayout { kind, tracks })
     }
 
-    fn track_output_name(&self, stem: &str, track_number: u32) -> String {
+    pub(super) fn track_output_name(&self, stem: &str, track_number: u32) -> String {
         format!("{stem}.track{track_number:02}.bin")
     }
 
-    fn stream_chd_frames_with_progress<F>(
+    pub(super) fn stream_chd_frames_with_progress<F>(
         &self,
         chd: &ChdReadSession,
         thread_count: usize,
@@ -662,7 +668,7 @@ impl ChdContainerHandler {
         Ok(())
     }
 
-    fn extract_cd(
+    pub(super) fn extract_cd(
         &self,
         chd: ChdReadSession,
         request: &ContainerExtractRequest,
@@ -1131,11 +1137,12 @@ impl ChdContainerHandler {
             Some(100.0),
             Some(execution.clone()),
         );
-        let report = attach_extraction_details(report, file_count, file_count, written_bytes, &execution);
+        let report =
+            attach_extraction_details(report, file_count, file_count, written_bytes, &execution);
         Ok(attach_extract_checksum_details(report, output_checksums))
     }
 
-    fn extract_gd(
+    pub(super) fn extract_gd(
         &self,
         chd: ChdReadSession,
         request: &ContainerExtractRequest,
@@ -1179,7 +1186,8 @@ impl ChdContainerHandler {
         for track in &layout.tracks {
             let track_name = self.track_output_name(stem, track.number);
             let track_selected = selections.matches(&track_name);
-            write_tracks.push(track_selected && request.kind_filter.matches_payload_name(&track_name));
+            write_tracks
+                .push(track_selected && request.kind_filter.matches_payload_name(&track_name));
             track_names.push(track_name);
         }
         if selection_requested && write_gdi && !write_tracks.iter().any(|selected| *selected) {
@@ -1378,7 +1386,8 @@ impl ChdContainerHandler {
             Some(100.0),
             Some(execution.clone()),
         );
-        let report = attach_extraction_details(report, file_count, file_count, written_bytes, &execution);
+        let report =
+            attach_extraction_details(report, file_count, file_count, written_bytes, &execution);
         Ok(attach_extract_checksum_details(report, output_checksums))
     }
 }

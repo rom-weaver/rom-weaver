@@ -1,3 +1,5 @@
+use super::*;
+
 impl ContainerHandlerOperations for ChdContainerHandler {
     fn descriptor(&self) -> &'static FormatDescriptor {
         &CHD

@@ -9,10 +9,11 @@ mod tests {
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use super::{
-        ChdCodec, ContainerCreateRequest, ContainerRegistry, NodHandlerCore, RVZ,
-        RvzContainerHandler, SEVEN_Z, SelectionMatcher, SevenZContainerHandler, SevenZMethod,
+    use crate::{
+        ChdCodec, ChdContainerHandler, ContainerCreateRequest, ContainerRegistry, NodHandlerCore,
+        RVZ, RvzContainerHandler, SEVEN_Z, SelectionMatcher, SevenZContainerHandler, SevenZMethod,
         Z3dsContainerHandler, ZipContainerHandler, copy_progress_buffer_size,
+        lzma2_threads_for_budget, lzma2_threads_for_budget_with_limits, zstd_threads_for_budget,
     };
     use chd::{
         header::Header,
@@ -2075,12 +2076,8 @@ mod tests {
         let nine_threads = ThreadCapability::parallel(None).negotiate(ThreadBudget::Fixed(9));
         assert_eq!(core.create_thread_counts_for_test(&nine_threads), (4, 5));
 
-        let single_thread =
-            ThreadCapability::single_threaded().negotiate(ThreadBudget::Fixed(8));
-        assert_eq!(
-            core.create_thread_counts_for_test(&single_thread),
-            (0, 0)
-        );
+        let single_thread = ThreadCapability::single_threaded().negotiate(ThreadBudget::Fixed(8));
+        assert_eq!(core.create_thread_counts_for_test(&single_thread), (0, 0));
     }
 
     #[test]
@@ -2460,14 +2457,14 @@ mod tests {
         // single encoder (7-Zip-like footprint), larger budgets allow more.
         let total = 64 * 1024 * 1024;
         let gib = 1024 * 1024 * 1024;
-        assert_eq!(super::lzma2_threads_for_budget(total, 9, gib), 1);
-        assert_eq!(super::lzma2_threads_for_budget(total, 9, 2 * gib), 2);
-        assert_eq!(super::lzma2_threads_for_budget(total, 9, 4 * gib), 5);
+        assert_eq!(lzma2_threads_for_budget(total, 9, gib), 1);
+        assert_eq!(lzma2_threads_for_budget(total, 9, 2 * gib), 2);
+        assert_eq!(lzma2_threads_for_budget(total, 9, 4 * gib), 5);
         // Never zero, even with no budget.
-        assert_eq!(super::lzma2_threads_for_budget(total, 9, 0), 1);
+        assert_eq!(lzma2_threads_for_budget(total, 9, 0), 1);
         // A tiny input reduces the dictionary, so the same budget allows many
         // more workers (cheap per-worker memory).
-        assert!(super::lzma2_threads_for_budget(1024 * 1024, 9, gib) > 10);
+        assert!(lzma2_threads_for_budget(1024 * 1024, 9, gib) > 10);
     }
 
     #[test]
@@ -2478,25 +2475,15 @@ mod tests {
         let wasm_max_threads = Some(2);
 
         assert_eq!(
-            super::lzma2_threads_for_budget_with_limits(large_total, 9, gib, wasm_max_threads),
+            lzma2_threads_for_budget_with_limits(large_total, 9, gib, wasm_max_threads),
             1
         );
         assert_eq!(
-            super::lzma2_threads_for_budget_with_limits(
-                reduced_dict_total,
-                9,
-                gib,
-                wasm_max_threads
-            ),
+            lzma2_threads_for_budget_with_limits(reduced_dict_total, 9, gib, wasm_max_threads),
             2
         );
         assert_eq!(
-            super::lzma2_threads_for_budget_with_limits(
-                reduced_dict_total,
-                9,
-                4 * gib,
-                wasm_max_threads
-            ),
+            lzma2_threads_for_budget_with_limits(reduced_dict_total, 9, 4 * gib, wasm_max_threads),
             2
         );
     }
@@ -2508,12 +2495,12 @@ mod tests {
 
         // Level 22's default MT job is larger than this input, so extra zstd
         // workers add memory pressure without useful parallel jobs.
-        assert_eq!(super::zstd_threads_for_budget(total, 22, gib), 1);
-        assert_eq!(super::zstd_threads_for_budget(total, 22, 8 * gib), 1);
+        assert_eq!(zstd_threads_for_budget(total, 22, gib), 1);
+        assert_eq!(zstd_threads_for_budget(total, 22, 8 * gib), 1);
         // Lower levels have much smaller windows/job buffers and can still use
         // useful parallelism under the same budget.
-        assert!(super::zstd_threads_for_budget(total, 3, gib) >= 8);
-        assert_eq!(super::zstd_threads_for_budget(total, 3, 0), 1);
+        assert!(zstd_threads_for_budget(total, 3, gib) >= 8);
+        assert_eq!(zstd_threads_for_budget(total, 3, 0), 1);
     }
 
     #[test]
@@ -2809,7 +2796,7 @@ mod tests {
     #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     #[test]
     fn chd_create_mode_overrides_adjust_inferred_kind() {
-        let handler = super::ChdContainerHandler;
+        let handler = ChdContainerHandler;
         let input = Path::new("disc.iso");
         assert_eq!(
             handler
@@ -2854,7 +2841,7 @@ mod tests {
 
         let temp_dir = temp_dir_path("chd-cd-auto-infer");
         fs::create_dir_all(&temp_dir).expect("temp dir");
-        let handler = super::ChdContainerHandler;
+        let handler = ChdContainerHandler;
 
         // Raw 2352-byte `.bin` carrying a CD sync header -> cd.
         let raw_bin_path = temp_dir.join("disc.bin");
@@ -2989,7 +2976,7 @@ mod tests {
 
         let temp_dir = temp_dir_path("chd-hd-auto-infer");
         fs::create_dir_all(&temp_dir).expect("temp dir");
-        let handler = super::ChdContainerHandler;
+        let handler = ChdContainerHandler;
 
         let mbr_path = temp_dir.join("mbr-disk");
         let mbr_bytes = write_mbr_disk(&mbr_path, 64);
@@ -3050,7 +3037,7 @@ mod tests {
     #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     #[test]
     fn chd_cd_override_rejects_invalid_raw_sector_size() {
-        let handler = super::ChdContainerHandler;
+        let handler = ChdContainerHandler;
         let error = handler
             .infer_create_kind_label_for_tests("chd-cd", Path::new("disc.bin"), 12345)
             .expect_err("invalid sector size should fail");
@@ -3064,7 +3051,7 @@ mod tests {
     #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     #[test]
     fn chd_default_codecs_for_cd_inputs_match_rust_native_policy() {
-        let handler = super::ChdContainerHandler;
+        let handler = ChdContainerHandler;
         let (codecs, primary_codec) = handler
             .default_cd_compression_plan_for_tests()
             .expect("default cd plan");
@@ -3083,7 +3070,7 @@ mod tests {
     #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     #[test]
     fn chd_default_codecs_for_dvd_inputs_match_rust_native_policy() {
-        let handler = super::ChdContainerHandler;
+        let handler = ChdContainerHandler;
         let (codecs, primary_codec) = handler
             .default_dvd_compression_plan_for_tests()
             .expect("default dvd plan");
@@ -3102,7 +3089,7 @@ mod tests {
     #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     #[test]
     fn chd_default_codecs_for_raw_inputs_match_rust_native_policy() {
-        let handler = super::ChdContainerHandler;
+        let handler = ChdContainerHandler;
         let (codecs, primary_codec) = handler
             .default_raw_compression_plan_for_tests()
             .expect("default raw plan");
@@ -3121,7 +3108,7 @@ mod tests {
     #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     #[test]
     fn chd_explicit_codec_lists_support_multiple_codecs() {
-        let handler = super::ChdContainerHandler;
+        let handler = ChdContainerHandler;
         let (codecs, primary_codec) = handler
             .explicit_compression_plan_for_tests("cdzs,cdzl+cdfl")
             .expect("explicit codec list");
@@ -3140,7 +3127,7 @@ mod tests {
     #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     #[test]
     fn chd_explicit_codec_lists_reject_too_many_entries() {
-        let handler = super::ChdContainerHandler;
+        let handler = ChdContainerHandler;
         let error = handler
             .explicit_compression_plan_for_tests("cdzs,cdzl,cdfl,zstd,zlib")
             .expect_err("too many codecs should fail");
@@ -3150,7 +3137,7 @@ mod tests {
     #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     #[test]
     fn chd_explicit_codec_lists_accept_huff_and_avhuff_aliases() {
-        let handler = super::ChdContainerHandler;
+        let handler = ChdContainerHandler;
 
         let (codecs, primary_codec) = handler
             .explicit_compression_plan_for_tests("huff")
@@ -3180,7 +3167,7 @@ mod tests {
     #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     #[test]
     fn chd_rust_backend_store_attempt_policy_matches_supported_codecs() {
-        let handler = super::ChdContainerHandler;
+        let handler = ChdContainerHandler;
         assert!(
             handler
                 .rust_backend_can_create_with_codec_list_for_tests("store")
@@ -3191,7 +3178,7 @@ mod tests {
     #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     #[test]
     fn chd_rust_backend_create_attempt_accepts_huff_codec_slots() {
-        let handler = super::ChdContainerHandler;
+        let handler = ChdContainerHandler;
         assert!(
             handler
                 .rust_backend_can_create_with_codec_list_for_tests("zstd")
@@ -3285,7 +3272,7 @@ mod tests {
             .collect::<Vec<_>>();
         fs::write(&source_path, &payload).expect("write fixture");
 
-        let handler = super::ChdContainerHandler;
+        let handler = ChdContainerHandler;
         handler
             .create(
                 &ContainerCreateRequest {
@@ -3328,7 +3315,7 @@ mod tests {
             .collect::<Vec<_>>();
         fs::write(&source_path, &payload).expect("write fixture");
 
-        let handler = super::ChdContainerHandler;
+        let handler = ChdContainerHandler;
         handler
             .create_raw_store_with_rust_backend_for_tests(&source_path, &archive_path)
             .expect("create rust store chd");
@@ -3360,7 +3347,7 @@ mod tests {
         }
         fs::write(&source_path, &payload).expect("write fixture");
 
-        let handler = super::ChdContainerHandler;
+        let handler = ChdContainerHandler;
         handler
             .create_raw_with_rust_backend_codec_for_tests(
                 &source_path,
@@ -3537,7 +3524,7 @@ mod tests {
             .collect::<Vec<_>>();
         fs::write(&source_path, &payload).expect("write fixture");
 
-        let handler = super::ChdContainerHandler;
+        let handler = ChdContainerHandler;
         for (codec, codec_label) in [
             (ChdCodec::ZSTD, "zstd"),
             (ChdCodec::ZLIB, "zlib"),
@@ -3572,7 +3559,7 @@ mod tests {
     #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     #[test]
     fn chd_rust_raw_flac_payload_round_trip_matches_input_bytes() {
-        let handler = super::ChdContainerHandler;
+        let handler = ChdContainerHandler;
         let mut source = Vec::with_capacity(4096);
         for sample_index in 0..(4096 / 4) {
             let left = ((sample_index as i16).wrapping_mul(17)).wrapping_sub(11_000);
@@ -3602,7 +3589,7 @@ mod tests {
         }
         sector[0x0f] = 1;
         sector[0x81c..].fill(0);
-        super::ChdContainerHandler::generate_cd_sector_ecc_for_tests(&mut sector);
+        ChdContainerHandler::generate_cd_sector_ecc_for_tests(&mut sector);
         sector
     }
 
@@ -3613,7 +3600,7 @@ mod tests {
         const SUBCODE_BYTES: usize = 96;
         const ECC_P_OFFSET: usize = 0x81c;
 
-        let handler = super::ChdContainerHandler;
+        let handler = ChdContainerHandler;
         let valid_sector = build_cd_mode1_sector_for_ecc_test(17);
         let mut invalid_sector = build_cd_mode1_sector_for_ecc_test(41);
         invalid_sector[ECC_P_OFFSET] ^= 0x55;
@@ -3669,7 +3656,7 @@ mod tests {
     #[cfg(any(not(target_family = "wasm"), rom_weaver_wasi_threads))]
     #[test]
     fn chd_rust_cd_flac_payload_round_trip_matches_input_bytes() {
-        let handler = super::ChdContainerHandler;
+        let handler = ChdContainerHandler;
         let frame_count = 4usize;
         let frame_bytes = 2448usize;
         let sector_bytes = 2352usize;
