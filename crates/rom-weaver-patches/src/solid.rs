@@ -14,6 +14,7 @@ use rom_weaver_core::{
     ThreadCapability, ValidationCodeError,
 };
 
+use crate::checksum_validation_suffix;
 use crate::shared::threading::{
     chunk_count_for_len, parallel_chunked_capability, parallel_per_record_capability,
 };
@@ -142,10 +143,9 @@ impl PatchHandler for SolidPatchHandler {
             planned_execution
         };
 
-        let checksum_suffix = crate::checksum_validation_suffix(validate_checksums);
-        Ok(OperationReport::succeeded(
-            OperationFamily::Patch,
-            Some(self.descriptor.name.to_string()),
+        let checksum_suffix = checksum_validation_suffix(validate_checksums);
+        Ok(crate::patch_success_report(
+            self.descriptor,
             "apply",
             format!(
                 "applied {} patch with {} {}{}",
@@ -154,7 +154,6 @@ impl PatchHandler for SolidPatchHandler {
                 pluralize(parsed.primitives.len(), "primitive", "primitives"),
                 checksum_suffix
             ),
-            Some(100.0),
             Some(execution),
         ))
     }
@@ -174,7 +173,7 @@ impl PatchHandler for SolidPatchHandler {
         let source_len =
             usize_from_u64(fs::metadata(&request.input)?.len(), "SOLID source length")?;
         let _ = build_primitive_write_plans(&parsed, source_len)?;
-        let checksum_suffix = crate::checksum_validation_suffix(validate_checksums);
+        let checksum_suffix = checksum_validation_suffix(validate_checksums);
         Ok(crate::patch_success_report(
             self.descriptor,
             "validate",
@@ -308,9 +307,8 @@ impl PatchHandler for SolidPatchHandler {
         }
         fs::write(&request.output, patch)?;
 
-        Ok(OperationReport::succeeded(
-            OperationFamily::Patch,
-            Some(self.descriptor.name.to_string()),
+        Ok(crate::patch_success_report(
+            self.descriptor,
             "create",
             format!(
                 "created {} patch with {} {}",
@@ -318,7 +316,6 @@ impl PatchHandler for SolidPatchHandler {
                 primitive_count,
                 pluralize(primitive_count as usize, "primitive", "primitives")
             ),
-            Some(100.0),
             Some(execution),
         ))
     }

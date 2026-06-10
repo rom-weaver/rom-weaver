@@ -17,12 +17,13 @@ use rom_weaver_core::{
     ProgressEvent, Result, RomWeaverError, SharedBlockCacheReader, SharedThreadPool,
     ThreadCapability,
 };
-use serde_json::json;
 use suffix_array::SuffixArray;
 
 #[cfg(test)]
 use crate::varint::push_varint;
 use crate::shared::checksum_io::{crc32_path_cached, crc32_prefix, crc32_slice, read_u32_le};
+use crate::checksum_validation_suffix;
+use crate::shared::labels::byuu_parse_report;
 
 const BPS_MAGIC: &[u8; 4] = b"BPS1";
 const BPS_FOOTER_SIZE: usize = 12;
@@ -53,33 +54,15 @@ impl PatchHandler for BpsPatchHandler {
 
     fn parse(&self, patch_path: &Path, _context: &OperationContext) -> Result<OperationReport> {
         let patch = parse_bps_file(patch_path)?;
-        let mut report = OperationReport::succeeded(
-            OperationFamily::Patch,
-            Some(self.descriptor.name.to_string()),
-            "parse",
-            format!(
-                "parsed {} patch with {} record(s); source crc32 {:08x}; target crc32 {:08x}; patch crc32 {:08x}",
-                self.descriptor.name,
-                patch.actions.len(),
-                patch.source_checksum,
-                patch.target_checksum,
-                patch.patch_checksum
-            ),
-            Some(100.0),
-            None,
-        );
-        report.details = Some(json!({
-            "patch": {
-                "format": self.descriptor.name,
-                "source_size": patch.source_size,
-                "target_size": patch.target_size,
-                "source_crc32": patch.source_checksum,
-                "target_crc32": patch.target_checksum,
-                "patch_crc32": patch.patch_checksum,
-                "record_count": patch.actions.len(),
-            }
-        }));
-        Ok(report)
+        Ok(byuu_parse_report(
+            self.descriptor,
+            patch.actions.len(),
+            patch.source_size,
+            patch.target_size,
+            patch.source_checksum,
+            patch.target_checksum,
+            patch.patch_checksum,
+        ))
     }
 
     fn apply(
@@ -168,10 +151,9 @@ impl PatchHandler for BpsPatchHandler {
             context,
         )?;
 
-        let checksum_suffix = crate::checksum_validation_suffix(validate_checksums);
-        Ok(OperationReport::succeeded(
-            OperationFamily::Patch,
-            Some(self.descriptor.name.to_string()),
+        let checksum_suffix = checksum_validation_suffix(validate_checksums);
+        Ok(crate::patch_success_report(
+            self.descriptor,
             "apply",
             format!(
                 "applied {} patch with {} record(s){}",
@@ -179,7 +161,6 @@ impl PatchHandler for BpsPatchHandler {
                 patch.actions.len(),
                 checksum_suffix
             ),
-            Some(100.0),
             Some(execution),
         ))
     }
@@ -207,15 +188,13 @@ impl PatchHandler for BpsPatchHandler {
         )?;
         output.flush()?;
 
-        Ok(OperationReport::succeeded(
-            OperationFamily::Patch,
-            Some(self.descriptor.name.to_string()),
+        Ok(crate::patch_success_report(
+            self.descriptor,
             "create",
             format!(
                 "created {} patch with {} record(s)",
                 self.descriptor.name, created.action_count
             ),
-            Some(100.0),
             Some(execution),
         ))
     }

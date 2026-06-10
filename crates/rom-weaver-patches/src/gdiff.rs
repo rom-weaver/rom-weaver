@@ -103,9 +103,8 @@ impl PatchHandler for GdiffPatchHandler {
             planned_execution
         };
 
-        Ok(OperationReport::succeeded(
-            OperationFamily::Patch,
-            Some(self.descriptor.name.to_string()),
+        Ok(crate::patch_success_report(
+            self.descriptor,
             "apply",
             format!(
                 "applied {} patch with {} command(s): {} copy / {} data; output {} byte(s)",
@@ -115,7 +114,6 @@ impl PatchHandler for GdiffPatchHandler {
                 summary.data_commands,
                 summary.output_bytes
             ),
-            Some(100.0),
             Some(execution),
         ))
     }
@@ -135,9 +133,8 @@ impl PatchHandler for GdiffPatchHandler {
             }
         }
 
-        Ok(OperationReport::succeeded(
-            OperationFamily::Patch,
-            Some(self.descriptor.name.to_string()),
+        Ok(crate::patch_success_report(
+            self.descriptor,
             "validate",
             format!(
                 "validated {} patch source with {} command(s): {} copy / {} data; output would be {} byte(s)",
@@ -147,7 +144,6 @@ impl PatchHandler for GdiffPatchHandler {
                 summary.data_commands,
                 summary.output_bytes
             ),
-            Some(100.0),
             Some(context.plan_threads(ThreadCapability::single_threaded())),
         ))
     }
@@ -172,15 +168,13 @@ impl PatchHandler for GdiffPatchHandler {
         )?;
         output.flush()?;
 
-        Ok(OperationReport::succeeded(
-            OperationFamily::Patch,
-            Some(self.descriptor.name.to_string()),
+        Ok(crate::patch_success_report(
+            self.descriptor,
             "create",
             format!(
                 "created {} patch with {} data command(s); output {} byte(s)",
                 self.descriptor.name, command_count, output_bytes
             ),
-            Some(100.0),
             Some(execution),
         ))
     }

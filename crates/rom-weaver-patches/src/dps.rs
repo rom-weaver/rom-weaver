@@ -16,6 +16,8 @@ use rom_weaver_core::{
     ThreadCapability, ValidationCodeError,
 };
 
+use crate::checksum_validation_suffix;
+use crate::shared::labels::append_warning_labels;
 use crate::shared::threading::{parallel_chunked_capability, parallel_per_record_capability};
 
 const DPS_TEXT_FIELD_BYTES: usize = 64;
@@ -164,15 +166,11 @@ impl PatchHandler for DpsPatchHandler {
         };
         output.flush()?;
 
-        let checksum_suffix = crate::checksum_validation_suffix(validate_source_size);
-        let malformed_warning_suffix = parsed
-            .malformed_record_warning
-            .as_deref()
-            .map(|warning| format!("; warning={warning}"))
-            .unwrap_or_default();
-        Ok(OperationReport::succeeded(
-            OperationFamily::Patch,
-            Some(self.descriptor.name.to_string()),
+        let checksum_suffix = checksum_validation_suffix(validate_source_size);
+        let malformed_warning_suffix =
+            append_warning_labels(String::new(), parsed.malformed_record_warning.as_slice());
+        Ok(crate::patch_success_report(
+            self.descriptor,
             "apply",
             format!(
                 "applied {} patch with {} record(s): {} copy / {} data{}{}",
@@ -183,7 +181,6 @@ impl PatchHandler for DpsPatchHandler {
                 checksum_suffix,
                 malformed_warning_suffix
             ),
-            Some(100.0),
             Some(execution),
         ))
     }
@@ -311,9 +308,8 @@ impl PatchHandler for DpsPatchHandler {
             .count();
         let data_record_count = records.len().saturating_sub(copy_record_count);
 
-        Ok(OperationReport::succeeded(
-            OperationFamily::Patch,
-            Some(self.descriptor.name.to_string()),
+        Ok(crate::patch_success_report(
+            self.descriptor,
             "create",
             format!(
                 "created {} patch with {} record(s): {} copy / {} data",
@@ -322,7 +318,6 @@ impl PatchHandler for DpsPatchHandler {
                 copy_record_count,
                 data_record_count
             ),
-            Some(100.0),
             Some(execution),
         ))
     }

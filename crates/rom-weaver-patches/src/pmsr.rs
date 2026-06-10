@@ -16,6 +16,7 @@ use rom_weaver_core::{
     ThreadCapability,
 };
 
+use crate::checksum_validation_suffix;
 use crate::shared::threading::{chunk_count_for_len_checked, parallel_per_record_capability};
 
 const PMSR_MAGIC: &[u8; 4] = b"PMSR";
@@ -133,10 +134,9 @@ impl PatchHandler for PmsrPatchHandler {
                 }
             }
         };
-        let checksum_suffix = crate::checksum_validation_suffix(validate_source);
-        Ok(OperationReport::succeeded(
-            OperationFamily::Patch,
-            Some(self.descriptor.name.to_string()),
+        let checksum_suffix = checksum_validation_suffix(validate_source);
+        Ok(crate::patch_success_report(
+            self.descriptor,
             "apply",
             format!(
                 "applied {} patch with {} record(s){}",
@@ -144,7 +144,6 @@ impl PatchHandler for PmsrPatchHandler {
                 patch.records.len(),
                 checksum_suffix
             ),
-            Some(100.0),
             Some(execution),
         ))
     }
@@ -166,7 +165,7 @@ impl PatchHandler for PmsrPatchHandler {
         let output_len = patch.min_target_size.max(source_len);
         let _ = pmsr_records_are_non_overlapping(&patch, output_len)?;
 
-        let checksum_suffix = crate::checksum_validation_suffix(validate_source);
+        let checksum_suffix = checksum_validation_suffix(validate_source);
         Ok(crate::patch_success_report(
             self.descriptor,
             "validate",
@@ -211,15 +210,13 @@ impl PatchHandler for PmsrPatchHandler {
         }
         fs::write(&request.output, patch.bytes)?;
 
-        Ok(OperationReport::succeeded(
-            OperationFamily::Patch,
-            Some(self.descriptor.name.to_string()),
+        Ok(crate::patch_success_report(
+            self.descriptor,
             "create",
             format!(
                 "created {} patch with {} record(s)",
                 self.descriptor.name, patch.record_count
             ),
-            Some(100.0),
             Some(execution),
         ))
     }

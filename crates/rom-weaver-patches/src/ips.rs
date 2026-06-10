@@ -14,6 +14,7 @@ use rom_weaver_core::{
 };
 use serde_json::{Map as JsonMap, Value as JsonValue};
 
+use crate::shared::labels::append_warning_labels;
 use crate::shared::threading::chunk_count_for_len_checked;
 
 const IPS_MAGIC: &[u8; 5] = b"PATCH";
@@ -170,9 +171,8 @@ impl PatchHandler for IpsPatchHandler {
         let warnings =
             ips_apply_warning_labels(self.descriptor.name, &patch, input_len, did_change);
 
-        Ok(OperationReport::succeeded(
-            OperationFamily::Patch,
-            Some(self.descriptor.name.to_string()),
+        Ok(crate::patch_success_report(
+            self.descriptor,
             "apply",
             append_warning_labels(
                 format!(
@@ -182,7 +182,6 @@ impl PatchHandler for IpsPatchHandler {
                 ),
                 &warnings,
             ),
-            Some(100.0),
             Some(execution),
         ))
     }
@@ -239,9 +238,8 @@ impl PatchHandler for IpsPatchHandler {
             &create_result,
         );
 
-        Ok(OperationReport::succeeded(
-            OperationFamily::Patch,
-            Some(self.descriptor.name.to_string()),
+        Ok(crate::patch_success_report(
+            self.descriptor,
             "create",
             append_warning_labels(
                 format!(
@@ -250,7 +248,6 @@ impl PatchHandler for IpsPatchHandler {
                 ),
                 &warnings,
             ),
-            Some(100.0),
             Some(execution),
         ))
     }
@@ -652,14 +649,6 @@ fn validate_ips_create_flips_limits(
     }
 
     Ok(())
-}
-
-fn append_warning_labels(mut label: String, warnings: &[String]) -> String {
-    for warning in warnings {
-        label.push_str("; warning=");
-        label.push_str(warning);
-    }
-    label
 }
 
 fn parse_ebp_metadata(bytes: &[u8]) -> Result<JsonMap<String, JsonValue>> {

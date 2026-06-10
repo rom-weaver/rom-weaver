@@ -12,6 +12,7 @@ use rom_weaver_core::{
     ThreadCapability,
 };
 
+use crate::shared::labels::append_warning_labels;
 use crate::shared::threading::parallel_chunked_capability;
 
 const DLDI_VERSION: u8 = 1;
@@ -122,21 +123,18 @@ impl PatchHandler for DldiPatchHandler {
             fs::create_dir_all(parent)?;
         }
 
-        let mut label = format!(
-            "applied {} driver `{}` over `{}` at 0x{:08X}",
-            self.descriptor.name, apply.new_driver, apply.old_driver, apply.patch_offset
+        let label = append_warning_labels(
+            format!(
+                "applied {} driver `{}` over `{}` at 0x{:08X}",
+                self.descriptor.name, apply.new_driver, apply.old_driver, apply.patch_offset
+            ),
+            &apply.warnings,
         );
-        for warning in &apply.warnings {
-            label.push_str("; warning=");
-            label.push_str(warning);
-        }
 
-        Ok(OperationReport::succeeded(
-            OperationFamily::Patch,
-            Some(self.descriptor.name.to_string()),
+        Ok(crate::patch_success_report(
+            self.descriptor,
             "apply",
             label,
-            Some(100.0),
             Some(execution),
         ))
     }
@@ -229,9 +227,8 @@ impl PatchHandler for DldiPatchHandler {
         }
         fs::write(&request.output, &patch_bytes)?;
 
-        Ok(OperationReport::succeeded(
-            OperationFamily::Patch,
-            Some(self.descriptor.name.to_string()),
+        Ok(crate::patch_success_report(
+            self.descriptor,
             "create",
             format!(
                 "created {} patch for driver `{}` ({} byte(s))",
@@ -239,7 +236,6 @@ impl PatchHandler for DldiPatchHandler {
                 modified_header.friendly_name,
                 patch_bytes.len()
             ),
-            Some(100.0),
             Some(execution),
         ))
     }

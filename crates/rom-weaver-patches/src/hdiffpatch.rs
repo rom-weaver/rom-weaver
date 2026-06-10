@@ -95,16 +95,14 @@ impl PatchHandler for HdiffPatchHandler {
         output.write_all(&output_bytes)?;
         output.flush()?;
 
-        Ok(OperationReport::succeeded(
-            OperationFamily::Patch,
-            Some(self.descriptor.name.to_string()),
+        Ok(crate::patch_success_report(
+            self.descriptor,
             "apply",
             format!(
                 "applied {} patch; output {} byte(s)",
                 self.descriptor.name,
                 output_bytes.len()
             ),
-            Some(100.0),
             Some(execution),
         ))
     }
@@ -118,16 +116,14 @@ impl PatchHandler for HdiffPatchHandler {
         let (output_bytes, execution) =
             render_hdiff_patch_to_memory(&request.input, patch_path, context)?;
 
-        Ok(OperationReport::succeeded(
-            OperationFamily::Patch,
-            Some(self.descriptor.name.to_string()),
+        Ok(crate::patch_success_report(
+            self.descriptor,
             "validate",
             format!(
                 "validated {} patch; output would be {} byte(s)",
                 self.descriptor.name,
                 output_bytes.len()
             ),
-            Some(100.0),
             Some(execution),
         ))
     }

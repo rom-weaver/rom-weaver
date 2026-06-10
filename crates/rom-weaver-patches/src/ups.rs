@@ -8,20 +8,20 @@ use std::{
 
 use tracing::info;
 
+use crate::shared::checksum_io::{crc32_path_cached, crc32_prefix, read_u32_le};
+use crate::varint::push_varint;
+use crate::checksum_validation_suffix;
+use crate::shared::labels::byuu_parse_report;
+use crate::shared::threading::{parallel_chunked_capability, parallel_per_record_capability};
 use crc32fast::Hasher;
 use rayon::prelude::*;
 use rom_weaver_checksum::crc32_bytes;
 use rom_weaver_core::{
     DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES, FormatDescriptor,
-    OperationContext, OperationFamily, OperationReport, PatchApplyRequest, PatchCapabilities,
+    OperationContext, OperationReport, PatchApplyRequest, PatchCapabilities,
     PatchChecksumValidation, PatchCreateRequest, PatchHandler, ProbeConfidence, Result,
     RomWeaverError, SharedBlockCacheReader, SharedThreadPool,
 };
-use serde_json::json;
-
-use crate::shared::checksum_io::{crc32_path_cached, crc32_prefix, read_u32_le};
-use crate::shared::threading::{parallel_chunked_capability, parallel_per_record_capability};
-use crate::varint::push_varint;
 
 const UPS_MAGIC: &[u8; 4] = b"UPS1";
 const UPS_FOOTER_SIZE: usize = 12;
@@ -49,33 +49,15 @@ impl PatchHandler for UpsPatchHandler {
 
     fn parse(&self, patch_path: &Path, _context: &OperationContext) -> Result<OperationReport> {
         let patch = parse_ups_file(patch_path)?;
-        let mut report = OperationReport::succeeded(
-            OperationFamily::Patch,
-            Some(self.descriptor.name.to_string()),
-            "parse",
-            format!(
-                "parsed {} patch with {} record(s); source crc32 {:08x}; target crc32 {:08x}; patch crc32 {:08x}",
-                self.descriptor.name,
-                patch.changes.len(),
-                patch.source_checksum,
-                patch.target_checksum,
-                patch.patch_checksum
-            ),
-            Some(100.0),
-            None,
-        );
-        report.details = Some(json!({
-            "patch": {
-                "format": self.descriptor.name,
-                "source_size": patch.source_size,
-                "target_size": patch.target_size,
-                "source_crc32": patch.source_checksum,
-                "target_crc32": patch.target_checksum,
-                "patch_crc32": patch.patch_checksum,
-                "record_count": patch.changes.len(),
-            }
-        }));
-        Ok(report)
+        Ok(byuu_parse_report(
+            self.descriptor,
+            patch.changes.len(),
+            patch.source_size,
+            patch.target_size,
+            patch.source_checksum,
+            patch.target_checksum,
+            patch.patch_checksum,
+        ))
     }
 
     fn apply(
@@ -138,10 +120,9 @@ impl PatchHandler for UpsPatchHandler {
             }
         }
 
-        let checksum_suffix = crate::checksum_validation_suffix(validate_checksums);
-        Ok(OperationReport::succeeded(
-            OperationFamily::Patch,
-            Some(self.descriptor.name.to_string()),
+        let checksum_suffix = checksum_validation_suffix(validate_checksums);
+        Ok(crate::patch_success_report(
+            self.descriptor,
             "apply",
             format!(
                 "applied {} patch with {} record(s){}",
@@ -149,7 +130,6 @@ impl PatchHandler for UpsPatchHandler {
                 patch.changes.len(),
                 checksum_suffix
             ),
-            Some(100.0),
             Some(execution),
         ))
     }
@@ -179,15 +159,13 @@ impl PatchHandler for UpsPatchHandler {
         }
         fs::write(&request.output, created.bytes)?;
 
-        Ok(OperationReport::succeeded(
-            OperationFamily::Patch,
-            Some(self.descriptor.name.to_string()),
+        Ok(crate::patch_success_report(
+            self.descriptor,
             "create",
             format!(
                 "created {} patch with {} record(s)",
                 self.descriptor.name, created.record_count
             ),
-            Some(100.0),
             Some(execution),
         ))
     }

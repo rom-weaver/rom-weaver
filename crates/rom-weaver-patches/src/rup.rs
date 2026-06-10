@@ -18,6 +18,7 @@ use rom_weaver_core::{
     Result, RomWeaverError, SharedThreadPool,
 };
 
+use crate::checksum_validation_suffix;
 use crate::shared::threading::{parallel_chunked_capability, parallel_per_record_capability};
 
 const RUP_MAGIC: &[u8; 6] = b"NINJA2";
@@ -194,10 +195,9 @@ impl PatchHandler for RupPatchHandler {
             &request.output,
         )?;
 
-        let checksum_suffix = crate::checksum_validation_suffix(validate_checksums);
-        Ok(OperationReport::succeeded(
-            OperationFamily::Patch,
-            Some(self.descriptor.name.to_string()),
+        let checksum_suffix = checksum_validation_suffix(validate_checksums);
+        Ok(crate::patch_success_report(
+            self.descriptor,
             "apply",
             format!(
                 "applied {} patch ({}) with {} record(s){}",
@@ -206,7 +206,6 @@ impl PatchHandler for RupPatchHandler {
                 file.records.len(),
                 checksum_suffix
             ),
-            Some(100.0),
             Some(execution),
         ))
     }
@@ -236,15 +235,13 @@ impl PatchHandler for RupPatchHandler {
         )?;
         fs::write(&request.output, &created.bytes)?;
 
-        Ok(OperationReport::succeeded(
-            OperationFamily::Patch,
-            Some(self.descriptor.name.to_string()),
+        Ok(crate::patch_success_report(
+            self.descriptor,
             "create",
             format!(
                 "created {} patch with {} record(s)",
                 self.descriptor.name, created.record_count
             ),
-            Some(100.0),
             Some(execution),
         ))
     }

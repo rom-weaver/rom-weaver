@@ -15,6 +15,7 @@ use rom_weaver_core::{
     ThreadCapability,
 };
 
+use crate::checksum_validation_suffix;
 use crate::shared::threading::{chunk_count_for_len_checked, parallel_per_record_capability};
 
 const APS_GBA_MAGIC: &[u8; 4] = b"APS1";
@@ -128,10 +129,9 @@ impl PatchHandler for ApsGbaPatchHandler {
             execution
         };
 
-        let checksum_suffix = crate::checksum_validation_suffix(validate_checksums);
-        Ok(OperationReport::succeeded(
-            OperationFamily::Patch,
-            Some(self.descriptor.name.to_string()),
+        let checksum_suffix = checksum_validation_suffix(validate_checksums);
+        Ok(crate::patch_success_report(
+            self.descriptor,
             "apply",
             format!(
                 "applied {} patch with {} record(s){}",
@@ -139,7 +139,6 @@ impl PatchHandler for ApsGbaPatchHandler {
                 patch.records.len(),
                 checksum_suffix
             ),
-            Some(100.0),
             Some(execution),
         ))
     }
@@ -179,7 +178,7 @@ impl PatchHandler for ApsGbaPatchHandler {
             )?;
         }
 
-        let checksum_suffix = crate::checksum_validation_suffix(validate_checksums);
+        let checksum_suffix = checksum_validation_suffix(validate_checksums);
         Ok(crate::patch_success_report(
             self.descriptor,
             "validate",
@@ -225,15 +224,13 @@ impl PatchHandler for ApsGbaPatchHandler {
         }
         output.flush()?;
 
-        Ok(OperationReport::succeeded(
-            OperationFamily::Patch,
-            Some(self.descriptor.name.to_string()),
+        Ok(crate::patch_success_report(
+            self.descriptor,
             "create",
             format!(
                 "created {} patch with {} record(s)",
                 self.descriptor.name, created.record_count
             ),
-            Some(100.0),
             Some(execution),
         ))
     }
