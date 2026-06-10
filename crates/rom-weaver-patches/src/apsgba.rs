@@ -15,6 +15,8 @@ use rom_weaver_core::{
     ThreadCapability,
 };
 
+use crate::shared::threading::{chunk_count_for_len_checked, parallel_per_record_capability};
+
 const APS_GBA_MAGIC: &[u8; 4] = b"APS1";
 const APS_GBA_HEADER_SIZE: usize = 12;
 const APS_GBA_BLOCK_SIZE: usize = 0x01_0000;
@@ -80,7 +82,7 @@ impl PatchHandler for ApsGbaPatchHandler {
             fs::create_dir_all(parent)?;
         }
         let target_size_u64 = u64::from(patch.target_size);
-        let thread_capability = apsgba_apply_thread_capability(patch.records.len());
+        let thread_capability = parallel_per_record_capability(patch.records.len());
         let planned_execution = context.plan_threads(thread_capability.clone());
         let execution = if crate::can_apply_in_memory(actual_input_size, target_size_u64) {
             let source_bytes = fs::read(&request.input)?;
@@ -267,26 +269,17 @@ struct PreparedApsGbaWrite {
     data: Vec<u8>,
 }
 
-fn apsgba_apply_thread_capability(record_count: usize) -> ThreadCapability {
-    ThreadCapability::parallel(Some(record_count.max(1)))
-}
-
 fn apsgba_create_thread_capability(max_len: u64) -> Result<ThreadCapability> {
     let block_count = apsgba_create_block_count(max_len)?;
     Ok(ThreadCapability::parallel(Some(block_count.max(1))))
 }
 
 fn apsgba_create_block_count(max_len: u64) -> Result<usize> {
-    let block_count = if max_len == 0 {
-        1
-    } else {
-        max_len.div_ceil(APS_GBA_BLOCK_SIZE as u64)
-    };
-    usize::try_from(block_count).map_err(|_| {
-        RomWeaverError::Validation(
-            "APSGBA create required more blocks than this platform can index".into(),
-        )
-    })
+    chunk_count_for_len_checked(
+        max_len,
+        APS_GBA_BLOCK_SIZE as u64,
+        "APSGBA create required more blocks than this platform can index",
+    )
 }
 
 fn parse_apsgba_file(path: &Path) -> Result<ParsedApsGbaPatch> {

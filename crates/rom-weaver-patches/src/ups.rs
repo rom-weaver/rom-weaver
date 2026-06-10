@@ -15,11 +15,12 @@ use rom_weaver_core::{
     DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES, FormatDescriptor,
     OperationContext, OperationFamily, OperationReport, PatchApplyRequest, PatchCapabilities,
     PatchChecksumValidation, PatchCreateRequest, PatchHandler, ProbeConfidence, Result,
-    RomWeaverError, SharedBlockCacheReader, SharedThreadPool, ThreadCapability,
+    RomWeaverError, SharedBlockCacheReader, SharedThreadPool,
 };
 use serde_json::json;
 
 use crate::shared::checksum_io::{crc32_path_cached, crc32_prefix, read_u32_le};
+use crate::shared::threading::{parallel_chunked_capability, parallel_per_record_capability};
 use crate::varint::push_varint;
 
 const UPS_MAGIC: &[u8; 4] = b"UPS1";
@@ -96,7 +97,7 @@ impl PatchHandler for UpsPatchHandler {
             fs::create_dir_all(parent)?;
         }
         fs::copy(&request.input, &request.output)?;
-        let thread_capability = ups_apply_thread_capability(patch.changes.len());
+        let thread_capability = parallel_per_record_capability(patch.changes.len());
         let planned_execution = context.plan_threads(thread_capability.clone());
         let execution = {
             let mut output = OpenOptions::new().write(true).open(&request.output)?;
@@ -161,7 +162,10 @@ impl PatchHandler for UpsPatchHandler {
         let source_size = fs::metadata(&request.original)?.len();
         let target_size = fs::metadata(&request.modified)?.len();
         let scan_size = max(source_size, target_size);
-        let (execution, pool) = context.build_pool(ups_create_thread_capability(scan_size))?;
+        let (execution, pool) = context.build_pool(parallel_chunked_capability(
+            scan_size,
+            CREATE_THREAD_SCAN_CHUNK_BYTES as u64,
+        ))?;
         let created = create_ups_patch(
             &request.original,
             &request.modified,
@@ -474,10 +478,6 @@ fn apply_changes_from_input(
     Ok(())
 }
 
-fn ups_apply_thread_capability(change_count: usize) -> ThreadCapability {
-    ThreadCapability::parallel(Some(change_count.max(1)))
-}
-
 fn prepare_ups_writes_parallel(
     patch: &ParsedUpsPatch,
     source_path: &Path,
@@ -548,20 +548,6 @@ fn apply_prepared_ups_writes(output: &mut File, writes: &[PreparedUpsWrite]) -> 
         output.write_all(&write.data)?;
     }
     Ok(())
-}
-
-fn ups_create_thread_capability(scan_size: u64) -> ThreadCapability {
-    let chunk_count = ups_create_chunk_count(scan_size).max(1);
-    ThreadCapability::parallel(Some(chunk_count))
-}
-
-fn ups_create_chunk_count(scan_size: u64) -> usize {
-    if scan_size == 0 {
-        return 1;
-    }
-    let chunk_bytes = CREATE_THREAD_SCAN_CHUNK_BYTES as u64;
-    let chunk_count = scan_size.saturating_add(chunk_bytes - 1) / chunk_bytes;
-    usize::try_from(chunk_count).unwrap_or(usize::MAX)
 }
 
 fn create_ups_patch(

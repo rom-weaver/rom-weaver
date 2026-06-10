@@ -14,6 +14,8 @@ use rom_weaver_core::{
 };
 use serde_json::{Map as JsonMap, Value as JsonValue};
 
+use crate::shared::threading::chunk_count_for_len_checked;
+
 const IPS_MAGIC: &[u8; 5] = b"PATCH";
 const IPS_EOF: &[u8; 3] = b"EOF";
 const IPS32_MAGIC: &[u8; 5] = b"IPS32";
@@ -679,29 +681,19 @@ fn parse_ebp_metadata(bytes: &[u8]) -> Result<JsonMap<String, JsonValue>> {
 }
 
 fn max_parallel_chunks(output_size: u64) -> Result<usize> {
-    let chunk_count = if output_size == 0 {
-        1
-    } else {
-        output_size.div_ceil(OUTPUT_CHUNK_SIZE)
-    };
-    usize::try_from(chunk_count).map_err(|_| {
-        RomWeaverError::Validation(
-            "IPS output required more chunks than this platform can index".into(),
-        )
-    })
+    chunk_count_for_len_checked(
+        output_size,
+        OUTPUT_CHUNK_SIZE,
+        "IPS output required more chunks than this platform can index",
+    )
 }
 
 fn ips_create_chunk_count(modified_len: u64) -> Result<usize> {
-    if modified_len == 0 {
-        return Ok(1);
-    }
-    let chunk_bytes = CREATE_SCAN_CHUNK_BYTES as u64;
-    let chunk_count = modified_len.saturating_add(chunk_bytes - 1) / chunk_bytes;
-    usize::try_from(chunk_count).map_err(|_| {
-        RomWeaverError::Validation(
-            "IPS create required more chunks than this platform can index".into(),
-        )
-    })
+    chunk_count_for_len_checked(
+        modified_len,
+        CREATE_SCAN_CHUNK_BYTES as u64,
+        "IPS create required more chunks than this platform can index",
+    )
 }
 
 fn ips_create_thread_capability(modified_len: u64) -> Result<ThreadCapability> {

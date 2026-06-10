@@ -15,6 +15,8 @@ use rom_weaver_core::{
     Result, RomWeaverError, SharedThreadPool, ThreadCapability,
 };
 
+use crate::shared::threading::{parallel_chunked_capability, parallel_per_record_capability};
+
 const GDIFF_MAGIC: [u8; 4] = [0xD1, 0xFF, 0xD1, 0xFF];
 const GDIFF_VERSION: u8 = 4;
 const GDIFF_IO_BUFFER_SIZE: usize = 64 * 1024;
@@ -72,7 +74,7 @@ impl PatchHandler for GdiffPatchHandler {
         let patch_path = crate::require_single_patch_file(&request.patches, self.descriptor.name)?;
         let source_len = fs::metadata(&request.input)?.len();
         let (summary, commands) = parse_gdiff_apply_plan(patch_path)?;
-        let thread_capability = gdiff_apply_thread_capability(commands.len());
+        let thread_capability = parallel_per_record_capability(commands.len());
         let planned_execution = context.plan_threads(thread_capability.clone());
 
         let execution = if planned_execution.used_parallelism
@@ -157,7 +159,10 @@ impl PatchHandler for GdiffPatchHandler {
     ) -> Result<OperationReport> {
         let _ = fs::metadata(&request.original)?;
         let modified_len = fs::metadata(&request.modified)?.len();
-        let (execution, pool) = context.build_pool(gdiff_create_thread_capability(modified_len))?;
+        let (execution, pool) = context.build_pool(parallel_chunked_capability(
+            modified_len,
+            CREATE_COMMAND_CHUNK_BYTES as u64,
+        ))?;
         let mut output = crate::create_buffered_output(&request.output)?;
         let (command_count, output_bytes) = create_gdiff_patch(
             &request.modified,
@@ -183,24 +188,6 @@ impl PatchHandler for GdiffPatchHandler {
     fn capabilities(&self) -> PatchCapabilities {
         crate::threaded_create_capabilities()
     }
-}
-
-fn gdiff_create_thread_capability(modified_len: u64) -> ThreadCapability {
-    let command_count = gdiff_create_command_count(modified_len).max(1);
-    ThreadCapability::parallel(Some(command_count))
-}
-
-fn gdiff_create_command_count(modified_len: u64) -> usize {
-    if modified_len == 0 {
-        return 1;
-    }
-    let chunk_bytes = CREATE_COMMAND_CHUNK_BYTES as u64;
-    let command_count = modified_len.saturating_add(chunk_bytes - 1) / chunk_bytes;
-    usize::try_from(command_count).unwrap_or(usize::MAX)
-}
-
-fn gdiff_apply_thread_capability(command_count: usize) -> ThreadCapability {
-    ThreadCapability::parallel(Some(command_count.max(1)))
 }
 
 #[derive(Clone, Copy)]

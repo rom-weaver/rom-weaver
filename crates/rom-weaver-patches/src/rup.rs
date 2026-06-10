@@ -15,8 +15,10 @@ use rom_weaver_checksum::md5_file;
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
     PatchCapabilities, PatchChecksumValidation, PatchCreateRequest, PatchHandler, ProbeConfidence,
-    Result, RomWeaverError, SharedThreadPool, ThreadCapability,
+    Result, RomWeaverError, SharedThreadPool,
 };
+
+use crate::shared::threading::{parallel_chunked_capability, parallel_per_record_capability};
 
 const RUP_MAGIC: &[u8; 6] = b"NINJA2";
 const RUP_HEADER_SIZE: usize = 0x800;
@@ -136,7 +138,7 @@ impl PatchHandler for RupPatchHandler {
             .write(true)
             .open(&normalized_output_path)?;
         output.set_len(output_size)?;
-        let thread_capability = rup_apply_thread_capability(file.records.len());
+        let thread_capability = parallel_per_record_capability(file.records.len());
         let planned_execution = context.plan_threads(thread_capability.clone());
         let execution = if planned_execution.used_parallelism
             && !crate::patches_reads_source_on_main_thread()
@@ -217,7 +219,10 @@ impl PatchHandler for RupPatchHandler {
         let source_size = fs::metadata(&request.original)?.len();
         let target_size = fs::metadata(&request.modified)?.len();
         let shared_len = min(source_size, target_size);
-        let (execution, pool) = context.build_pool(rup_create_thread_capability(shared_len))?;
+        let (execution, pool) = context.build_pool(parallel_chunked_capability(
+            shared_len,
+            CREATE_THREAD_SCAN_CHUNK_BYTES as u64,
+        ))?;
 
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
@@ -1239,24 +1244,6 @@ fn read_exact_at(path: &Path, offset: u64, len: u64) -> Result<Vec<u8>> {
 fn read_u16_le_from_slice(bytes: &[u8], offset: usize) -> Option<u16> {
     let raw = bytes.get(offset..offset + 2)?;
     Some(u16::from_le_bytes([raw[0], raw[1]]))
-}
-
-fn rup_create_thread_capability(shared_len: u64) -> ThreadCapability {
-    let chunk_count = rup_create_chunk_count(shared_len).max(1);
-    ThreadCapability::parallel(Some(chunk_count))
-}
-
-fn rup_apply_thread_capability(record_count: usize) -> ThreadCapability {
-    ThreadCapability::parallel(Some(record_count.max(1)))
-}
-
-fn rup_create_chunk_count(shared_len: u64) -> usize {
-    if shared_len == 0 {
-        return 1;
-    }
-    let chunk_bytes = CREATE_THREAD_SCAN_CHUNK_BYTES as u64;
-    let chunk_count = shared_len.saturating_add(chunk_bytes - 1) / chunk_bytes;
-    usize::try_from(chunk_count).unwrap_or(usize::MAX)
 }
 
 fn build_rup_prepared_tasks(record_count: usize) -> Vec<RupPreparedTask> {

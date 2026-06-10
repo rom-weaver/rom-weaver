@@ -14,6 +14,8 @@ use rom_weaver_core::{
     ThreadCapability,
 };
 
+use crate::shared::threading::{chunk_count_for_len_checked, parallel_per_record_capability};
+
 const APS_N64_MAGIC: &[u8; 5] = b"APS10";
 const APS_N64_MODE: u8 = 0x01;
 const APS_RECORD_RLE: u8 = 0x00;
@@ -96,7 +98,7 @@ impl PatchHandler for ApsN64PatchHandler {
             fs::create_dir_all(parent)?;
         }
         let input_size = fs::metadata(&request.input)?.len();
-        let thread_capability = aps_apply_thread_capability(patch.records.len());
+        let thread_capability = parallel_per_record_capability(patch.records.len());
         let planned_execution = context.plan_threads(thread_capability.clone());
         let execution = if crate::can_apply_in_memory(input_size, patch.output_size) {
             let mut output_bytes = fs::read(&request.input)?;
@@ -285,27 +287,17 @@ struct PreparedApsWrite {
     data: Vec<u8>,
 }
 
-fn aps_apply_thread_capability(record_count: usize) -> ThreadCapability {
-    ThreadCapability::parallel(Some(record_count.max(1)))
-}
-
 fn aps_create_thread_capability(modified_len: usize) -> Result<ThreadCapability> {
     let chunk_count = aps_create_chunk_count(modified_len)?;
     Ok(ThreadCapability::parallel(Some(chunk_count.max(1))))
 }
 
 fn aps_create_chunk_count(modified_len: usize) -> Result<usize> {
-    let chunk_count = if modified_len == 0 {
-        1
-    } else {
-        modified_len.div_ceil(APS_CREATE_CHUNK_BYTES)
-    };
-    if chunk_count == 0 {
-        return Err(RomWeaverError::Validation(
-            "APS create chunk count resolved to zero".into(),
-        ));
-    }
-    Ok(chunk_count)
+    chunk_count_for_len_checked(
+        modified_len as u64,
+        APS_CREATE_CHUNK_BYTES as u64,
+        "APS create chunk count resolved to zero",
+    )
 }
 
 fn parse_aps_file(path: &Path) -> Result<ParsedApsPatch> {

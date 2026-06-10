@@ -14,6 +14,10 @@ use rom_weaver_core::{
     ThreadCapability, ValidationCodeError,
 };
 
+use crate::shared::threading::{
+    chunk_count_for_len, parallel_chunked_capability, parallel_per_record_capability,
+};
+
 const SOLID_MAGIC: &[u8; 2] = b"SP";
 const SOLID_FORMAT_VERSION: u8 = 4;
 const SOLID_MD5_LEN: usize = 16;
@@ -118,7 +122,7 @@ impl PatchHandler for SolidPatchHandler {
         if validate_checksums {
             validate_source_checksum(parsed.source_md5, &request.input)?;
         }
-        let thread_capability = solid_apply_thread_capability(parsed.primitives.len());
+        let thread_capability = parallel_per_record_capability(parsed.primitives.len());
         let planned_execution = context.plan_threads(thread_capability.clone());
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
@@ -193,7 +197,10 @@ impl PatchHandler for SolidPatchHandler {
         let original_len = fs::metadata(&request.original)?.len();
         let modified_len = fs::metadata(&request.modified)?.len();
         let shared_len = original_len.min(modified_len);
-        let (execution, pool) = context.build_pool(solid_create_thread_capability(shared_len))?;
+        let (execution, pool) = context.build_pool(parallel_chunked_capability(
+            shared_len,
+            CREATE_THREAD_SCAN_CHUNK_BYTES as u64,
+        ))?;
         let expansion =
             build_created_expansion_from_paths(original_len, &request.modified, modified_len)?;
         let mod_action = if expansion.is_some() {
@@ -940,22 +947,8 @@ fn build_created_addr_param(mod_action: u8, uses_big_fields: bool, patch_info_fl
     addr_param
 }
 
-fn solid_create_thread_capability(shared_len: u64) -> ThreadCapability {
-    let chunk_count = solid_create_chunk_count(shared_len).max(1);
-    ThreadCapability::parallel(Some(chunk_count))
-}
-
-fn solid_apply_thread_capability(primitive_count: usize) -> ThreadCapability {
-    ThreadCapability::parallel(Some(primitive_count.max(1)))
-}
-
 fn solid_create_chunk_count(shared_len: u64) -> usize {
-    if shared_len == 0 {
-        return 1;
-    }
-    let chunk_bytes = CREATE_THREAD_SCAN_CHUNK_BYTES as u64;
-    let chunk_count = shared_len.saturating_add(chunk_bytes - 1) / chunk_bytes;
-    usize::try_from(chunk_count).unwrap_or(usize::MAX)
+    chunk_count_for_len(shared_len, CREATE_THREAD_SCAN_CHUNK_BYTES as u64)
 }
 
 fn build_created_primitives_with_threads_from_paths(

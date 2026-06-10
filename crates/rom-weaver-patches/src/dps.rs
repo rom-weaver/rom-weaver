@@ -16,6 +16,8 @@ use rom_weaver_core::{
     ThreadCapability, ValidationCodeError,
 };
 
+use crate::shared::threading::{parallel_chunked_capability, parallel_per_record_capability};
+
 const DPS_TEXT_FIELD_BYTES: usize = 64;
 const DPS_HEADER_BYTES: usize = (DPS_TEXT_FIELD_BYTES * 3) + 1 + 1 + 4;
 const DPS_PATCH_VERSION: u8 = 1;
@@ -135,7 +137,7 @@ impl PatchHandler for DpsPatchHandler {
             .truncate(true)
             .open(&request.output)?;
         output.set_len(parsed.output_size)?;
-        let thread_capability = dps_apply_thread_capability(parsed.records.len());
+        let thread_capability = parallel_per_record_capability(parsed.records.len());
         let planned_execution = context.plan_threads(thread_capability.clone());
         let execution = if planned_execution.used_parallelism {
             let (execution, pool) = context.build_pool(thread_capability)?;
@@ -271,7 +273,10 @@ impl PatchHandler for DpsPatchHandler {
             )
         })?;
         let target_len = fs::metadata(&request.modified)?.len();
-        let (execution, pool) = context.build_pool(dps_create_thread_capability(target_len))?;
+        let (execution, pool) = context.build_pool(parallel_chunked_capability(
+            target_len,
+            CREATE_THREAD_SCAN_CHUNK_BYTES as u64,
+        ))?;
 
         let records = create_dps_records(
             &request.original,
@@ -325,24 +330,6 @@ impl PatchHandler for DpsPatchHandler {
     fn capabilities(&self) -> PatchCapabilities {
         crate::threaded_create_capabilities()
     }
-}
-
-fn dps_apply_thread_capability(record_count: usize) -> ThreadCapability {
-    ThreadCapability::parallel(Some(record_count.max(1)))
-}
-
-fn dps_create_thread_capability(target_len: u64) -> ThreadCapability {
-    let chunk_count = dps_create_chunk_count(target_len).max(1);
-    ThreadCapability::parallel(Some(chunk_count))
-}
-
-fn dps_create_chunk_count(target_len: u64) -> usize {
-    if target_len == 0 {
-        return 1;
-    }
-    let chunk_bytes = CREATE_THREAD_SCAN_CHUNK_BYTES as u64;
-    let chunk_count = target_len.saturating_add(chunk_bytes - 1) / chunk_bytes;
-    usize::try_from(chunk_count).unwrap_or(usize::MAX)
 }
 
 #[derive(Clone, Debug)]

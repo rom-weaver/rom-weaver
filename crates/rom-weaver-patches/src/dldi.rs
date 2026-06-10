@@ -12,6 +12,8 @@ use rom_weaver_core::{
     ThreadCapability,
 };
 
+use crate::shared::threading::parallel_chunked_capability;
+
 const DLDI_VERSION: u8 = 1;
 const DLDI_MAGIC: [u8; 12] = [
     0xED, 0xA5, 0x8D, 0xBF, b' ', b'C', b'h', b'i', b's', b'h', b'm', 0x00,
@@ -527,22 +529,12 @@ fn parse_friendly_name(bytes: &[u8]) -> Result<String> {
 }
 
 fn dldi_apply_thread_capability(input_len: usize) -> ThreadCapability {
-    ThreadCapability::parallel(Some(dldi_thread_chunk_count(input_len)))
+    parallel_chunked_capability(input_len as u64, THREAD_WORK_CHUNK_BYTES as u64)
 }
 
 fn dldi_create_thread_capability(original_len: usize, modified_len: usize) -> ThreadCapability {
     let total_len = original_len.max(modified_len);
-    ThreadCapability::parallel(Some(dldi_thread_chunk_count(total_len)))
-}
-
-fn dldi_thread_chunk_count(byte_len: usize) -> usize {
-    if byte_len == 0 {
-        return 1;
-    }
-    byte_len
-        .saturating_add(THREAD_WORK_CHUNK_BYTES - 1)
-        .saturating_div(THREAD_WORK_CHUNK_BYTES)
-        .max(1)
+    parallel_chunked_capability(total_len as u64, THREAD_WORK_CHUNK_BYTES as u64)
 }
 
 fn relocate_header_pointers(slot: &mut [u8], relocation: i64) -> Result<()> {

@@ -14,6 +14,8 @@ use rom_weaver_core::{
     ThreadCapability,
 };
 
+use crate::shared::threading::{parallel_chunked_capability, parallel_per_record_capability};
+
 const PPF_HEADER_MIN_SIZE: usize = 56;
 const PPF2_HEADER_SIZE: usize = 1084;
 const PPF3_HEADER_BASE_SIZE: usize = 60;
@@ -118,7 +120,7 @@ impl PatchHandler for PpfPatchHandler {
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
         }
-        let thread_capability = ppf_apply_thread_capability(parsed.records.len());
+        let thread_capability = parallel_per_record_capability(parsed.records.len());
         let planned_execution = context.plan_threads(thread_capability.clone());
         let ppf_output_len = ppf_required_output_len(input_len, &parsed.records);
         let execution = if crate::can_apply_in_memory(input_len, ppf_output_len) {
@@ -212,7 +214,10 @@ impl PatchHandler for PpfPatchHandler {
     ) -> Result<OperationReport> {
         let original_len = fs::metadata(&request.original)?.len();
         let modified_len = fs::metadata(&request.modified)?.len();
-        let (execution, pool) = context.build_pool(ppf_create_thread_capability(modified_len))?;
+        let (execution, pool) = context.build_pool(parallel_chunked_capability(
+            modified_len,
+            CREATE_THREAD_SCAN_CHUNK_BYTES as u64,
+        ))?;
 
         let mut output = crate::create_buffered_output(&request.output)?;
         let created = create_ppf3_patch(
@@ -303,24 +308,6 @@ struct CreatedPpfPatch {
 struct PreparedPpfWrite {
     offset: u64,
     data: Vec<u8>,
-}
-
-fn ppf_create_thread_capability(modified_len: u64) -> ThreadCapability {
-    let chunk_count = ppf_create_chunk_count(modified_len).max(1);
-    ThreadCapability::parallel(Some(chunk_count))
-}
-
-fn ppf_apply_thread_capability(record_count: usize) -> ThreadCapability {
-    ThreadCapability::parallel(Some(record_count.max(1)))
-}
-
-fn ppf_create_chunk_count(modified_len: u64) -> usize {
-    if modified_len == 0 {
-        return 1;
-    }
-    let chunk_bytes = CREATE_THREAD_SCAN_CHUNK_BYTES as u64;
-    let chunk_count = modified_len.saturating_add(chunk_bytes - 1) / chunk_bytes;
-    usize::try_from(chunk_count).unwrap_or(usize::MAX)
 }
 
 fn create_ppf3_patch(

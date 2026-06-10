@@ -11,6 +11,8 @@ use rom_weaver_core::{
     PatchCreateRequest, PatchHandler, Result, RomWeaverError, SharedThreadPool, ThreadCapability,
 };
 
+use crate::shared::threading::parallel_chunked_capability;
+
 #[cfg(test)]
 const BSP_VM_SOURCE: &str = include_str!("bsp_vm_runtime.js");
 const BSP_THREAD_WORK_CHUNK_BYTES: usize = 1024 * 1024;
@@ -178,8 +180,7 @@ fn bsp_temp_path() -> PathBuf {
 
 fn bsp_apply_thread_capability(input_len: usize, patch_len: usize) -> ThreadCapability {
     let work_bytes = input_len.max(patch_len).max(1);
-    let chunk_count = work_bytes.div_ceil(BSP_THREAD_WORK_CHUNK_BYTES);
-    ThreadCapability::parallel(Some(chunk_count.max(1)))
+    parallel_chunked_capability(work_bytes as u64, BSP_THREAD_WORK_CHUNK_BYTES as u64)
 }
 
 fn build_bsp_parse_label(format_name: &str, patch_len: u64) -> String {

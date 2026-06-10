@@ -16,6 +16,8 @@ use rom_weaver_core::{
     ThreadCapability,
 };
 
+use crate::shared::threading::{chunk_count_for_len_checked, parallel_per_record_capability};
+
 const PMSR_MAGIC: &[u8; 4] = b"PMSR";
 const PMSR_HEADER_SIZE: usize = 8;
 const PMSR_IO_BUFFER_SIZE: usize = 64 * 1024;
@@ -78,7 +80,7 @@ impl PatchHandler for PmsrPatchHandler {
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
         }
-        let thread_capability = pmsr_apply_thread_capability(patch.records.len());
+        let thread_capability = parallel_per_record_capability(patch.records.len());
         let planned_execution = context.plan_threads(thread_capability.clone());
         let records_non_overlapping = pmsr_records_are_non_overlapping(&patch, output_len)?;
         let execution = if crate::can_apply_in_memory(source_len, output_len) {
@@ -551,23 +553,16 @@ fn validate_paper_mario_source(input_path: &Path) -> Result<()> {
 }
 
 fn pmsr_create_chunk_count(modified_len: u64) -> Result<usize> {
-    if modified_len == 0 {
-        return Ok(1);
-    }
-    let chunk_bytes = CREATE_SCAN_CHUNK_BYTES as u64;
-    let chunk_count = modified_len.saturating_add(chunk_bytes - 1) / chunk_bytes;
-    usize::try_from(chunk_count).map_err(|_| {
-        RomWeaverError::Validation("MOD create required too many chunks to index".into())
-    })
+    chunk_count_for_len_checked(
+        modified_len,
+        CREATE_SCAN_CHUNK_BYTES as u64,
+        "MOD create required too many chunks to index",
+    )
 }
 
 fn pmsr_create_thread_capability(modified_len: u64) -> Result<ThreadCapability> {
     let chunk_count = pmsr_create_chunk_count(modified_len)?;
     Ok(ThreadCapability::parallel(Some(chunk_count.max(1))))
-}
-
-fn pmsr_apply_thread_capability(record_count: usize) -> ThreadCapability {
-    ThreadCapability::parallel(Some(record_count.max(1)))
 }
 
 fn create_pmsr_patch_streaming(

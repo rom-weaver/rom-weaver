@@ -11,7 +11,11 @@ use rayon::prelude::*;
 use rom_weaver_core::{
     BlockCacheReader, DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES,
     FormatDescriptor, OperationContext, OperationReport, PatchApplyRequest, PatchCapabilities,
-    PatchCreateRequest, PatchHandler, Result, RomWeaverError, SharedThreadPool, ThreadCapability,
+    PatchCreateRequest, PatchHandler, Result, RomWeaverError, SharedThreadPool,
+};
+
+use crate::shared::threading::{
+    chunk_count_for_len, parallel_chunked_capability, parallel_per_record_capability,
 };
 
 const PAT_LINE_MAX_BYTES: usize = 4 * 1024;
@@ -48,7 +52,7 @@ impl PatPatchHandler {
         }
         let output_len = fs::metadata(&request.input)?.len();
         validate_pat_record_offsets(&grouped_records, output_len)?;
-        let thread_capability = pat_apply_thread_capability(grouped_records.len());
+        let thread_capability = parallel_per_record_capability(grouped_records.len());
         let planned_execution = context.plan_threads(thread_capability.clone());
 
         let (execution, writes) = if crate::can_apply_in_memory(output_len, output_len) {
@@ -190,7 +194,10 @@ impl PatchHandler for PatPatchHandler {
             )));
         }
 
-        let (execution, pool) = context.build_pool(pat_create_thread_capability(original_len))?;
+        let (execution, pool) = context.build_pool(parallel_chunked_capability(
+            original_len,
+            CREATE_THREAD_SCAN_CHUNK_BYTES as u64,
+        ))?;
         let created = create_pat_patch(
             &request.original,
             &request.modified,
@@ -285,10 +292,6 @@ fn validate_pat_record_offsets(groups: &[PatOffsetGroup], output_len: u64) -> Re
         }
     }
     Ok(())
-}
-
-fn pat_apply_thread_capability(group_count: usize) -> ThreadCapability {
-    ThreadCapability::parallel(Some(group_count.max(1)))
 }
 
 fn prepare_pat_offset_write(
@@ -495,18 +498,8 @@ fn create_pat_patch_streaming(
     Ok(CreatedPatPatch { records })
 }
 
-fn pat_create_thread_capability(input_len: u64) -> ThreadCapability {
-    let chunk_count = pat_create_chunk_count(input_len).max(1);
-    ThreadCapability::parallel(Some(chunk_count))
-}
-
 fn pat_create_chunk_count(input_len: u64) -> usize {
-    if input_len == 0 {
-        return 1;
-    }
-    let chunk_bytes = CREATE_THREAD_SCAN_CHUNK_BYTES as u64;
-    let chunk_count = input_len.saturating_add(chunk_bytes - 1) / chunk_bytes;
-    usize::try_from(chunk_count).unwrap_or(usize::MAX)
+    chunk_count_for_len(input_len, CREATE_THREAD_SCAN_CHUNK_BYTES as u64)
 }
 
 fn create_pat_patch(
