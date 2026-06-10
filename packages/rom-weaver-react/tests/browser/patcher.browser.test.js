@@ -19,6 +19,11 @@ const RAW_ROM = "tests/fixtures/archive_sources/game.bin";
 const RAW_PATCH = "tests/fixtures/archive_sources/change.ips";
 const ONE_PATCH_7Z = "tests/fixtures/archives/one-patch.7z";
 const MULTI_PATCH_ZIP = "tests/fixtures/archives/multi-patch.zip";
+// Nested patch bundles: B_bundle = three nested zips with one patch each; C_root = a nested zip with
+// two sibling patches plus a deeper nested patch; A_outer = a deep single-patch chain.
+const NESTED_BUNDLE_ZIP = "tests/fixtures/archives/B_bundle.zip";
+const NESTED_ROOT_ZIP = "tests/fixtures/archives/C_root.zip";
+const NESTED_CHAIN_ZIP = "tests/fixtures/archives/A_outer.zip";
 const MULTI_ROM_ZIP = "tests/fixtures/archives/multi-rom.zip";
 const RVZ_INPUT = "tests/fixtures/browser-generated/game.rvz";
 const CHD_INPUT = "tests/fixtures/browser-generated/game-cd.chd";
@@ -280,6 +285,13 @@ const getCandidateSelectionCloseButton = () =>
   document.querySelector(".rw-modal.select-modal .modal-head button[aria-label='Close']");
 const getInputStackRows = () => Array.from(document.querySelectorAll("#rom-weaver-list-input-stack .file"));
 const getPatchStackRows = () => Array.from(document.querySelectorAll("#rom-weaver-list-patch-stack .file"));
+// One patch row = one `.rom-weaver-patch-stack-file` label; read its primary file name (the
+// direct-child <strong>). A nested patch also renders a second <strong> inside the archive-path
+// span, so match only direct children to avoid double-counting rows that have an extract section.
+const getPatchStackFileNames = () =>
+  Array.from(document.querySelectorAll("#rom-weaver-list-patch-stack .rom-weaver-patch-stack-file > strong"))
+    .map((entry) => entry.textContent?.trim() || "")
+    .filter(Boolean);
 
 const clickCandidateSelectionOption = async (label) => {
   const state = await waitForState(() => {
@@ -306,13 +318,16 @@ const clickCandidateSelectionOption = async (label) => {
   button.click();
 };
 
-const clickPatchCandidateSelectionOption = async (label) => {
+// The patch candidate dialog is a multi-select checklist: tick each requested row's checkbox, then
+// click the confirm button. Passing one label adds a single patch (mirrors the old single-select).
+const selectPatchCandidates = async (labels) => {
+  const firstLabel = labels[0];
   const state = await waitForState(() => {
     const patchFileName =
       document.querySelector("#rom-weaver-list-patch-stack .rom-weaver-patch-stack-file")?.textContent || "";
     const selectedPatchName =
       document.querySelector("#rom-weaver-list-patch-stack .rom-weaver-patch-stack-file strong")?.textContent || "";
-    if (selectedPatchName.includes(label) || patchFileName === label) return { kind: "selected" };
+    if (selectedPatchName.includes(firstLabel) || patchFileName === firstLabel) return { kind: "selected" };
     const list = getCandidateSelectionList();
     if (list) return { kind: "dialog" };
     const errorText = getRuntimeErrorText();
@@ -323,14 +338,19 @@ const clickPatchCandidateSelectionOption = async (label) => {
   expect(state?.kind, state && "errorText" in state ? state.errorText : "").not.toBe("error");
   if (state?.kind === "selected") return;
   if (!getCandidateSelectionList()) return;
-  const button = Array.from(
-    document.querySelectorAll(
-      ".rw-modal.select-modal .seltree button, .rw-modal.select-modal .seltree [role='button']",
-    ),
-  ).find((entry) => entry.textContent?.includes(label));
-  if (!button) throw new Error(`Missing patch candidate selection option: ${label}`);
-  button.click();
+  const rows = Array.from(document.querySelectorAll(".rw-modal.select-modal .seltree .selcheck"));
+  for (const label of labels) {
+    const row = rows.find((entry) => entry.textContent?.includes(label));
+    if (!row) throw new Error(`Missing patch candidate selection option: ${label}`);
+    const checkbox = row.querySelector("input[type='checkbox']");
+    if (checkbox && !checkbox.checked) checkbox.click();
+  }
+  const confirm = document.querySelector(".rw-modal.select-modal .selconfirm");
+  if (!confirm) throw new Error("Missing patch candidate confirm button");
+  confirm.click();
 };
+
+const clickPatchCandidateSelectionOption = async (label) => selectPatchCandidates([label]);
 
 const getInputStackFileName = () => {
   const candidates = Array.from(
@@ -2063,6 +2083,70 @@ test("re-uploading the same patch archive can add a second different patch", asy
   expect(labels).toContain("alternate.ips");
   const errorText = getRuntimeErrorText();
   expect(errorText, errorText).toBe("");
+});
+
+test("nested patch bundle lists every branch patch and multi-selects into separate stack entries", async () => {
+  mount(createElement(ApplyPatchForm));
+
+  await expect.poll(() => document.getElementById("rom-weaver-input-file-patch")).not.toBeNull();
+
+  selectFileInput(
+    document.getElementById("rom-weaver-input-file-patch"),
+    await loadFixtureFile(NESTED_BUNDLE_ZIP, "application/zip"),
+  );
+
+  const listText = () => getCandidateSelectionList()?.textContent || "";
+  await expect.poll(listText, { timeout: 60000 }).toContain("patchB1.ips");
+  expect(listText()).toContain("patchB2.ips");
+  expect(listText()).toContain("patchB3.ips");
+
+  await selectPatchCandidates(["patchB1.ips", "patchB2.ips"]);
+
+  await expect.poll(() => getPatchStackFileNames().length, { timeout: 60000 }).toBe(2);
+  const names = getPatchStackFileNames();
+  expect(names).toContain("patchB1.ips");
+  expect(names).toContain("patchB2.ips");
+  expect(getRuntimeErrorText()).toBeFalsy();
+});
+
+test("nested patch archive distinguishes sibling patches in the same branch", async () => {
+  mount(createElement(ApplyPatchForm));
+
+  await expect.poll(() => document.getElementById("rom-weaver-input-file-patch")).not.toBeNull();
+
+  selectFileInput(
+    document.getElementById("rom-weaver-input-file-patch"),
+    await loadFixtureFile(NESTED_ROOT_ZIP, "application/zip"),
+  );
+
+  const listText = () => getCandidateSelectionList()?.textContent || "";
+  await expect.poll(listText, { timeout: 60000 }).toContain("flat1.ips");
+  expect(listText()).toContain("flat2.ips");
+  expect(listText()).toContain("deep.ips");
+
+  // flat1.ips and flat2.ips are two distinct patches inside the SAME nested branch, so each must be
+  // addressable individually (a single branch selection could not distinguish them).
+  await selectPatchCandidates(["flat1.ips", "flat2.ips"]);
+
+  await expect.poll(() => getPatchStackFileNames().length, { timeout: 60000 }).toBe(2);
+  expect(getPatchStackFileNames()).toEqual(expect.arrayContaining(["flat1.ips", "flat2.ips"]));
+  expect(getRuntimeErrorText()).toBeFalsy();
+});
+
+test("deeply nested single patch auto-selects without a selection dialog", async () => {
+  mount(createElement(ApplyPatchForm));
+
+  await expect.poll(() => document.getElementById("rom-weaver-input-file-patch")).not.toBeNull();
+
+  selectFileInput(
+    document.getElementById("rom-weaver-input-file-patch"),
+    await loadFixtureFile(NESTED_CHAIN_ZIP, "application/zip"),
+  );
+
+  await expect.poll(() => getPatchStackFileNames().length, { timeout: 60000 }).toBe(1);
+  expect(getPatchStackFileNames()[0]).toContain("levelA.ips");
+  expect(getCandidateSelectionList()).toBeNull();
+  expect(getRuntimeErrorText()).toBeFalsy();
 });
 
 test("adding an input after a staged patch does not reshow preparing patch progress", async () => {
