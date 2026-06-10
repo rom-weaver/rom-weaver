@@ -1143,10 +1143,13 @@ pub(crate) fn extract_regular_archive_with_libarchive(
         let progress_execution = execution.clone();
         // In the browser only the main runner thread can open an OPFS-backed source; read the whole
         // archive image here (on the calling thread) so the parallel workers extract from shared
-        // bytes instead of re-opening the file, which fails with `os error 44` for the nested
-        // intermediates that a prior extract step just wrote.
+        // bytes instead of re-opening the file, which fails with `os error 44`. This applies to any
+        // OPFS-staged source, not just nested intermediates a prior extract step wrote: a top-level
+        // extract (e.g. a patch archive staged to OPFS, `parent=None`) hits the same worker-open
+        // wall on Safari iOS. Gated by `container_reads_source_on_main_thread()` (always true on
+        // wasm; native opts in via env for tests), so native still opens per-worker for overlap.
         let source_bytes: Option<Arc<[u8]>> =
-            if request.parent.is_some() && container_reads_source_on_main_thread() {
+            if execution.used_parallelism && container_reads_source_on_main_thread() {
                 Some(Arc::from(fs::read(&source).map_err(|error| {
                 RomWeaverError::Validation(format!(
                     "{format_name} extract failed while reading source on the main thread: {error}"
