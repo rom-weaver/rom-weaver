@@ -10,6 +10,9 @@
 - apply and create many ROM patch formats
 - batch-fix supported ROM headers/checksums
 
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the workspace layout,
+crate graph, threading model, and the Rust⇄TypeScript boundary.
+
 ## Setup
 
 Toolchain versions and build tasks are managed with [mise](https://mise.jdx.dev).
