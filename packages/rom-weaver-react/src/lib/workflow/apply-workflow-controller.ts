@@ -1,12 +1,7 @@
-import type {
-  ApplyWorkflowInputState,
-  ApplyWorkflowParentCompression,
-  ApplyWorkflowPatchState,
-  ApplyWorkflowResolvedInput,
-} from "../../types/apply-workflow.ts";
+import type { ApplyWorkflowInputState, ApplyWorkflowPatchState } from "../../types/apply-workflow.ts";
 import type { WorkflowProgress } from "../../types/progress.ts";
 import type { ApplyResult } from "../../types/public.ts";
-import type { CandidateSelectionRequest, SelectionCandidate, SelectionFileCandidate } from "../../types/selection.ts";
+import type { CandidateSelectionRequest, SelectionCandidate } from "../../types/selection.ts";
 import type { ApplySettings, CompressionFormat } from "../../types/settings.ts";
 import type { WorkflowOptions, WorkflowWarning } from "../../types/workflow-controller.ts";
 import type { ApplyWorkflowOptions, PatchInput } from "../../types/workflow-runtime.ts";
@@ -16,22 +11,17 @@ import { getPatchProbeRequirements } from "../apply/patch-apply-service.ts";
 import { patchWorkflowDeps, runApplyWorkflow } from "../apply/workflow.ts";
 import { isCompressionFormat } from "../compression/container-format-registry.ts";
 import { RomWeaverError, throwIfAborted, toRomWeaverError, withAbortSignal } from "../errors.ts";
-import {
-  getPatchFileBlob,
-  getPatchFileBytes,
-  getPatchFileCleanup,
-  getPatchFileExternalSource,
-} from "../input/binary-service.ts";
-import { getInputPreparationMetrics, type InputAsset, type InputParentCompression } from "../input/input-assets.ts";
+import { getPatchFileBlob, getPatchFileBytes } from "../input/binary-service.ts";
+import type { InputAsset } from "../input/input-assets.ts";
 import {
   getPatchLeafFileForSelection,
   getPatchLeafParentCompressionsForSelection,
   prepareAutoPatchInputs,
   prepareInputFile,
 } from "../input/input-preparation-service.ts";
-import { getBaseFileName } from "../input/path-utils.ts";
 import { selectionToArchiveEntry } from "../input/selection.ts";
 import { wrapPublicOutput } from "../output/index.ts";
+import { finalizeApplyInputChecksums } from "./apply-input-checksums.ts";
 import {
   type ApplyOutputState,
   applyOutputSettings,
@@ -41,18 +31,29 @@ import {
   setApplyOutputFormat,
   setApplyOutputName,
 } from "./apply-output-state-machine.ts";
+import { createPatchOutputLabel, resolvePatchOutputName } from "./apply-patch-output-naming.ts";
 import {
   assignApplyPatchTarget,
   clearApplyPatchTarget,
-  createApplyPatchValidationKey,
   evaluateApplyPatchReadiness,
 } from "./apply-patch-readiness-state-machine.ts";
+import { validateApplyPatchTarget } from "./apply-patch-target-validation.ts";
+import { applyPreparedInputMetadata, applyPreparedPatchMetadata } from "./apply-prepared-metadata.ts";
+import { releasePreparedSource, releasePreparedSourceAndWait } from "./apply-prepared-source-release.ts";
+import {
+  canRecoverWithCandidateSelection,
+  createSourceStagingOptions,
+  getPreparedAssetFileName,
+} from "./apply-source-staging.ts";
+import {
+  cloneInputState,
+  clonePatchRequirements,
+  clonePatchState,
+  cloneResolvedInputStatesForStage,
+} from "./apply-state-cloning.ts";
 import type {
   InputSession,
   InternalCandidate,
-  InternalPatchChecksumPreflight,
-  InternalPatchRequirements,
-  InternalPatchValidation,
   InternalSourceState,
   SourceRole,
   SourceValidator,
@@ -61,261 +62,20 @@ import type {
 import {
   cloneCandidate,
   cloneValue,
-  cloneWarning,
   createWorkflowId,
   createWorkflowProgress,
-  getPreparationProgressStage,
   getSourceFileName,
   getSourceSize,
   isRecord,
 } from "./controller-utils.ts";
 import { StagedRomSourceController } from "./staged-rom-source.ts";
-import {
-  calculateStandardInputChecksumsForFile,
-  cloneChecksumRomProbe,
-  cloneChecksumVariants,
-  getAssetDecompressionTimeMs,
-  getAssetParentCompressions,
-  getAssetSourceSize,
-  getInputAssetChecksums,
-  getPatchFilePrecomputedChecksums,
-  getPatchFilePrecomputedChecksumVariants,
-  getPrimaryInputAsset,
-  isChecksummableInputAsset,
-} from "./staged-source-checksums.ts";
+import { cloneChecksumRomProbe } from "./staged-source-checksums.ts";
 import { WorkflowController } from "./workflow-controller.ts";
 import { traceWorkflowControllerEvent } from "./workflow-tracing.ts";
-
-const clonePatchRequirements = (
-  requirements: InternalPatchRequirements | undefined,
-): InternalPatchRequirements | undefined => (requirements ? { ...requirements } : undefined);
-
-const clonePatchChecksumPreflight = (
-  preflight: InternalPatchChecksumPreflight | undefined,
-): InternalPatchChecksumPreflight | undefined => (preflight ? { ...preflight } : undefined);
-
-const clonePatchValidation = (validation: InternalPatchValidation | undefined): InternalPatchValidation | undefined =>
-  validation ? { ...validation } : undefined;
-
-const PATCH_OUTPUT_LABEL_PATTERN = /\[([^\]]+)\](?:\.[^.]+)?\d*$/;
-
-const cloneInputState = (
-  state: InternalSourceState | null | undefined,
-  parentCompressions: ApplyWorkflowParentCompression[],
-  resolvedInputs?: ApplyWorkflowResolvedInput[],
-) =>
-  state
-    ? ({
-        candidates: state.candidates.map(cloneCandidate),
-        chdMode: state.chdMode,
-        checksums: state.checksums ? cloneValue(state.checksums) : undefined,
-        checksumTimeMs: state.checksumTimeMs,
-        checksumVariants: cloneChecksumVariants(state.checksumVariants),
-        decompressionTimeMs: state.decompressionTimeMs,
-        fileName: (() => {
-          if (!(state.status === "needsSelection" && !state.selectedCandidateId)) return state.fileName;
-          const selectableGroups = state.candidates.filter(
-            (candidate) => candidate.type === "group" && candidate.selectable,
-          );
-          const selectableGroupIds = new Set(selectableGroups.map((candidate) => candidate.id));
-          const romCandidates = state.candidates.filter(
-            (candidate): candidate is SelectionFileCandidate =>
-              candidate.type === "file" &&
-              candidate.kind === "rom" &&
-              candidate.selectable &&
-              !selectableGroupIds.has(candidate.parentCandidateId || ""),
-          );
-          return romCandidates.length === 1 ? romCandidates[0]?.fileName || state.fileName : state.fileName;
-        })(),
-        id: state.id,
-        parentCompressions: parentCompressions.map((entry) => ({ ...entry })),
-        resolvedInputs: resolvedInputs?.map((entry) => ({
-          ...entry,
-          checksums: entry.checksums ? cloneValue(entry.checksums) : undefined,
-          checksumVariants: cloneChecksumVariants(entry.checksumVariants),
-          parentCompressions: entry.parentCompressions.map((parent) => ({
-            ...parent,
-          })),
-          romProbe: cloneChecksumRomProbe(entry.romProbe),
-        })),
-        romProbe: cloneChecksumRomProbe(state.romProbe),
-        selectedCandidateId: state.selectedCandidateId,
-        size: state.size,
-        sourceSize: state.sourceSize,
-        status: state.status,
-        warnings: state.warnings.map(cloneWarning),
-        wasDecompressed: state.wasDecompressed,
-      } satisfies ApplyWorkflowInputState)
-    : null;
-
-const clonePatchState = (
-  state: InternalSourceState,
-  parentCompressions: ApplyWorkflowParentCompression[],
-): ApplyWorkflowPatchState => ({
-  candidates: state.candidates.map(cloneCandidate),
-  checksumPreflight: clonePatchChecksumPreflight(state.checksumPreflight),
-  checksumTimeMs: state.checksumTimeMs,
-  decompressionTimeMs: state.decompressionTimeMs,
-  fileName: state.fileName,
-  id: state.id,
-  parentCompressions: parentCompressions.map((entry) => ({ ...entry })),
-  patchValidation: clonePatchValidation(state.patchValidation),
-  ppfUndo: state.ppfUndo,
-  requirements: clonePatchRequirements(state.requirements),
-  selectedCandidateId: state.selectedCandidateId,
-  size: state.size,
-  sourceSize: state.sourceSize,
-  status: state.status,
-  targetInputFileName: state.targetInputFileName,
-  targetInputId: state.targetInputId,
-  validateInputChecksum: state.validateInputChecksum,
-  validateOutputChecksum: state.validateOutputChecksum,
-  warnings: state.warnings.map(cloneWarning),
-  wasDecompressed: state.wasDecompressed,
-});
-
-const cloneResolvedInputState = (
-  state: InternalSourceState,
-  parentCompressions: ApplyWorkflowParentCompression[],
-  selected: boolean,
-): ApplyWorkflowResolvedInput => ({
-  chdMode: state.chdMode,
-  checksums: state.checksums ? cloneValue(state.checksums) : undefined,
-  checksumTimeMs: state.checksumTimeMs,
-  checksumVariants: cloneChecksumVariants(state.checksumVariants),
-  decompressionTimeMs: state.decompressionTimeMs,
-  fileName: state.fileName,
-  groupId: (() => {
-    const selectedCandidate = state.candidates.find(
-      (candidate) => candidate.id === state.selectedCandidateId && "parentCandidateId" in candidate,
-    );
-    return selectedCandidate && "parentCandidateId" in selectedCandidate
-      ? selectedCandidate.parentCandidateId || undefined
-      : undefined;
-  })(),
-  id: state.id,
-  order: state.order,
-  parentCompressions: parentCompressions.map((entry) => ({ ...entry })),
-  romProbe: cloneChecksumRomProbe(state.romProbe),
-  selected,
-  selectedCandidateId: state.selectedCandidateId,
-  size: state.size,
-  sourceSize: state.sourceSize,
-  wasDecompressed: state.wasDecompressed,
-});
-
-const cloneResolvedInputAssetState = (
-  asset: InputAsset,
-  order: number,
-  parentCompressions: ApplyWorkflowParentCompression[],
-  selected: boolean,
-  selectedCandidateId?: string,
-): ApplyWorkflowResolvedInput => {
-  const checksums = getInputAssetChecksums(asset);
-  return {
-    chdMode:
-      asset.file._chdMode === "cd" || asset.file._chdMode === "dvd"
-        ? asset.file._chdMode
-        : asset.file._chdCuePath || asset.file._chdCueText
-          ? "cd"
-          : undefined,
-    checksums: checksums ? cloneValue(checksums) : undefined,
-    checksumTimeMs: asset.checksumTimeMs,
-    checksumVariants: cloneChecksumVariants(asset.checksumVariants),
-    cueText: asset.disc?.cueText ?? asset.file._chdCueText,
-    decompressionTimeMs: getAssetDecompressionTimeMs(asset),
-    fileName: asset.fileName,
-    groupId: asset.groupId,
-    id: asset.id,
-    kind: asset.kind,
-    order,
-    parentCompressions: getAssetParentCompressions(asset, parentCompressions),
-    patchable: asset.patchable,
-    romProbe: cloneChecksumRomProbe(asset.romProbe),
-    selected,
-    selectedCandidateId,
-    size: asset.size,
-    sourceSize: getAssetSourceSize(asset),
-    splitBinAvailable: asset.disc?.splitBinAvailable,
-    wasDecompressed: asset.preparation?.wasDecompressed,
-  };
-};
-
-const cloneResolvedInputStatesForStage = <TSource>(
-  stage: StagedSource<TSource>,
-  selectedStage: boolean,
-): ApplyWorkflowResolvedInput[] => {
-  // The cue is not shown as its own row; its text rides on the sibling bin/track rows via
-  // `cueText`. Output generation still reads `preparedInputAssets` directly, so the cue asset
-  // stays available there. Filter the cue out of the UI-facing resolved inputs only.
-  const assets = (stage.preparedInputAssets || []).filter((asset) => asset.kind !== "cue");
-  if (!assets.length) return [cloneResolvedInputState(stage.state, stage.parentCompressions, selectedStage)];
-  const primaryAsset = getPrimaryInputAsset(assets);
-  return assets.map((asset, index) =>
-    cloneResolvedInputAssetState(
-      asset,
-      index,
-      stage.parentCompressions,
-      selectedStage && asset.id === primaryAsset?.id,
-      stage.state.selectedCandidateId,
-    ),
-  );
-};
-
-const createPatchOutputLabel = (fileName: string | undefined) => {
-  const label = String(fileName || "")
-    .match(PATCH_OUTPUT_LABEL_PATTERN)?.[1]
-    ?.trim();
-  return label || undefined;
-};
 
 /** Side-channel chain attached to a fanned-out leaf patch File so a re-stage (which sees only the
  * raw patch, not its parent archive) can still render the archive-nesting "extract section". */
 type NestedPatchSourceMetadata = { __nestedParentCompressions?: InputParentCompression[] };
-
-const releasePreparedFile = (file?: PatchFileInstance) => {
-  const cleanup = file ? getPatchFileCleanup(file) : undefined;
-  if (cleanup) void Promise.resolve(cleanup()).catch(() => undefined);
-};
-
-const releasePreparedSource = (source?: StagedSource<unknown>) => {
-  if (!source) return;
-  for (const asset of source.preparedInputAssets || []) releasePreparedFile(asset.file);
-  releasePreparedFile(source.preparedPatchFile);
-  source.preparedInputAssets = undefined;
-  source.preparedPatchFile = undefined;
-  source.parsedPatch = undefined;
-  source.state.requirements = undefined;
-  source.state.checksumPreflight = undefined;
-  source.state.patchValidation = undefined;
-};
-
-const releasePreparedFileAndWait = async (file?: PatchFileInstance) => {
-  const cleanup = file ? getPatchFileCleanup(file) : undefined;
-  if (cleanup) await Promise.resolve(cleanup()).catch(() => undefined);
-};
-
-const releasePreparedSourceAndWait = async (source?: StagedSource<unknown>) => {
-  if (!source) return;
-  await Promise.all((source.preparedInputAssets || []).map((asset) => releasePreparedFileAndWait(asset.file)));
-  await releasePreparedFileAndWait(source.preparedPatchFile);
-  source.preparedInputAssets = undefined;
-  source.preparedPatchFile = undefined;
-  source.parsedPatch = undefined;
-  source.state.requirements = undefined;
-  source.state.checksumPreflight = undefined;
-  source.state.patchValidation = undefined;
-};
-
-const getPreparedAssetFileName = (asset: InputAsset | undefined, fallback?: string) =>
-  getBaseFileName(asset?.file.fileName || asset?.fileName || fallback || "input.bin");
-
-const canRecoverWithCandidateSelection = (error: unknown, requests: CandidateSelectionRequest[]) => {
-  if (!requests.length) return false;
-  const normalized = toRomWeaverError(error);
-  if (normalized.code === "AMBIGUOUS_SELECTION") return true;
-  return false;
-};
 
 class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<{ progress: WorkflowProgress }> {
   readonly id: string;
@@ -531,7 +291,7 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
         (patchFile as PatchFileInstance & { _generatedPatchName?: string })._generatedPatchName ||
         createPatchOutputLabel(patchFile.fileName) ||
         stage.outputLabel;
-      this.applyPreparedPatchMetadata(stage, {
+      applyPreparedPatchMetadata(stage, {
         decompressionTimeMs: 0,
         file: patchFile,
         parentCompressions: [],
@@ -874,38 +634,13 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
       sourceSize: stage.state.sourceSize,
     });
     const requests: CandidateSelectionRequest[] = [];
-    const options = {
-      ...this.createExecutionOptions(),
-      onCandidatesFound: (request: CandidateSelectionRequest) => requests.push(request),
-      onProgress: (progress: {
-        current?: number;
-        details?: unknown;
-        hasProgress?: boolean;
-        label?: string;
-        message?: string;
-        percent?: number | null;
-        total?: number;
-      }) => {
-        const progressStage = getPreparationProgressStage(progress, stage.state.role);
-        this.emitProgress({
-          current: progress.current,
-          details: {
-            ...(isRecord(progress.details) ? progress.details : {}),
-            fileName: stage.state.fileName,
-            order: stage.state.order,
-            sourceId: stage.state.id,
-          },
-          hasProgress: progress.hasProgress,
-          id: `${this.id}:${stage.state.id}:${progressStage}`,
-          label: progress.label || progress.message || "Preparing input...",
-          percent: typeof progress.percent === "number" && Number.isFinite(progress.percent) ? progress.percent : null,
-          role: stage.state.role,
-          stage: progressStage,
-          total: progress.total,
-          workflow: "apply",
-        });
-      },
-    } satisfies Partial<ApplyWorkflowOptions>;
+    const options = createSourceStagingOptions({
+      base: this.createExecutionOptions(),
+      emitProgress: (event) => this.emitProgress(event),
+      onCandidatesFound: (request) => requests.push(request),
+      state: stage.state,
+      workflowId: this.id,
+    });
     try {
       this.trace("source.stage.prepare-patch.start", {
         fileName: stage.state.fileName,
@@ -920,7 +655,7 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
         stage.index,
       );
       stage.preparedPatchFile = prepared.file;
-      this.applyPreparedPatchMetadata(stage, prepared);
+      applyPreparedPatchMetadata(stage, prepared);
       this.trace("source.stage.prepare-patch.finish", {
         fileName: stage.state.fileName,
         order: stage.state.order,
@@ -989,38 +724,13 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
       role: stage.state.role,
     });
     const requests: CandidateSelectionRequest[] = [];
-    const options = {
-      ...this.createExecutionOptions(),
-      onCandidatesFound: (request: CandidateSelectionRequest) => requests.push(request),
-      onProgress: (progress: {
-        current?: number;
-        details?: unknown;
-        hasProgress?: boolean;
-        label?: string;
-        message?: string;
-        percent?: number | null;
-        total?: number;
-      }) => {
-        const progressStage = getPreparationProgressStage(progress, stage.state.role);
-        this.emitProgress({
-          current: progress.current,
-          details: {
-            ...(isRecord(progress.details) ? progress.details : {}),
-            fileName: stage.state.fileName,
-            order: stage.state.order,
-            sourceId: stage.state.id,
-          },
-          hasProgress: progress.hasProgress,
-          id: `${this.id}:${stage.state.id}:${progressStage}`,
-          label: progress.label || progress.message || "Preparing input...",
-          percent: typeof progress.percent === "number" && Number.isFinite(progress.percent) ? progress.percent : null,
-          role: stage.state.role,
-          stage: progressStage,
-          total: progress.total,
-          workflow: "apply",
-        });
-      },
-    } satisfies Partial<ApplyWorkflowOptions>;
+    const options = createSourceStagingOptions({
+      base: this.createExecutionOptions(),
+      emitProgress: (event) => this.emitProgress(event),
+      onCandidatesFound: (request) => requests.push(request),
+      state: stage.state,
+      workflowId: this.id,
+    });
     try {
       const prepared = stage.preparedPatchFile
         ? {
@@ -1039,7 +749,7 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
             stage.index,
           );
       stage.preparedPatchFile = prepared.file;
-      this.applyPreparedPatchMetadata(stage, prepared);
+      applyPreparedPatchMetadata(stage, prepared);
       stage.outputLabel = stage.outputLabel || createPatchOutputLabel(prepared.file.fileName);
       if (stage.outputLabel)
         (
@@ -1161,63 +871,9 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
     return true;
   }
 
-  /** Stage one additional already-extracted patch leaf as its own independent patch-stack entry,
-   * preserving its archive-nesting chain so the row keeps its "extract section". */
-  private async addFannedOutPatch(
-    patchFile: PatchFileInstance,
-    parentCompressions: InputParentCompression[],
-  ): Promise<void> {
-    this.trace("patch.multiselect.fanout.add", { fileName: patchFile.fileName, patchCount: this.patches.length });
-    const stage = this.createInitialSource(
-      "patch",
-      this.createImplicitPatchSource(patchFile, parentCompressions),
-      this.patches.length,
-    );
-    stage.preparedPatchFile = patchFile;
-    stage.outputLabel = createPatchOutputLabel(patchFile.fileName) || stage.outputLabel;
-    this.applyPreparedPatchMetadata(stage, {
-      decompressionTimeMs: parentCompressions[0]?.decompressionTimeMs || 0,
-      file: patchFile,
-      parentCompressions,
-      sourceSize: patchFile.fileSize,
-      wasDecompressed: true,
-    });
-    this.addDirectCandidate(stage, "patch", stage.index, stage.state.id);
-    stage.state.selectedCandidateId = stage.state.candidates[0]?.id;
-    if (stage.outputLabel)
-      (stage.preparedPatchFile as PatchFileInstance & { _generatedPatchName?: string })._generatedPatchName =
-        stage.outputLabel;
-    await this.evaluatePatchReadiness(stage);
-    this.patches.push(stage);
-  }
-
-  private applyPreparedInputMetadata(stage: StagedSource<TSource>) {
-    const assets = stage.preparedInputAssets || [];
-    const preparation = getInputPreparationMetrics(assets);
-    stage.parentCompressions = this.normalizeParentCompressions(preparation?.parentCompressions);
-    stage.state.fileName = getPreparedAssetFileName(assets[0], stage.state.fileName || stage.state.id);
-    stage.state.size = assets.reduce((total, asset) => total + asset.size, 0) || stage.state.size;
-    stage.state.sourceSize =
-      (typeof preparation?.sourceSize === "number" && Number.isFinite(preparation.sourceSize)
-        ? preparation.sourceSize
-        : stage.state.sourceSize) || stage.state.size;
-    stage.state.decompressionTimeMs =
-      typeof preparation?.decompressionTimeMs === "number" && Number.isFinite(preparation.decompressionTimeMs)
-        ? preparation.decompressionTimeMs
-        : undefined;
-    stage.state.wasDecompressed = preparation?.wasDecompressed === true;
-    if (!stage.state.checksums) {
-      const precomputed = getInputAssetChecksums(getPrimaryInputAsset(assets));
-      if (precomputed) {
-        stage.state.checksums = precomputed;
-        stage.state.checksumTimeMs = 0;
-      }
-    }
-  }
-
   private refreshPreparedInputMetadataForStage(stage: StagedSource<TSource> | undefined) {
     if (!(stage && stage.state.role === "input" && stage.preparedInputAssets?.length)) return;
-    this.applyPreparedInputMetadata(stage);
+    applyPreparedInputMetadata(stage);
   }
 
   private refreshPreparedInputMetadata(session: InputSession<TSource> | undefined) {
@@ -1225,41 +881,6 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
     for (const stage of session.stages) this.refreshPreparedInputMetadataForStage(stage as StagedSource<TSource>);
     if (!session.stages.includes(session.view)) this.refreshPreparedInputMetadataForStage(session.view);
     if (session.synthetic) this.syncInputSessionView();
-  }
-
-  private applyPreparedPatchMetadata(
-    stage: StagedSource<TSource>,
-    prepared: Awaited<ReturnType<typeof prepareInputFile>>,
-  ) {
-    const carried = (stage.source as Partial<NestedPatchSourceMetadata> | undefined)?.__nestedParentCompressions;
-    // On a re-stage the source is a raw leaf File, so `prepared` has no nesting chain; fall back to
-    // the chain (and its root extract time) carried on the implicit leaf source so the row keeps its
-    // extract section, parent-archive size, and elapsed time across re-stages.
-    const usingCarried = !prepared.parentCompressions?.length && !!carried?.length;
-    stage.parentCompressions = this.normalizeParentCompressions(usingCarried ? carried : prepared.parentCompressions);
-    stage.state.fileName = getBaseFileName(prepared.file.fileName || stage.state.fileName || stage.state.id);
-    stage.state.size = prepared.file.fileSize;
-    stage.state.sourceSize = prepared.sourceSize || prepared.file.fileSize;
-    const carriedTime = usingCarried ? carried?.[0]?.decompressionTimeMs : undefined;
-    stage.state.decompressionTimeMs = prepared.wasDecompressed
-      ? prepared.decompressionTimeMs
-      : typeof carriedTime === "number"
-        ? carriedTime
-        : undefined;
-    stage.state.wasDecompressed = prepared.wasDecompressed || (usingCarried && typeof carriedTime === "number");
-  }
-
-  private normalizeParentCompressions(
-    parentCompressions: InputParentCompression[] | undefined,
-  ): ApplyWorkflowParentCompression[] {
-    return (parentCompressions || []).map((entry) => ({
-      decompressionTimeMs: entry.decompressionTimeMs,
-      depth: entry.depth,
-      fileName: entry.fileName,
-      kind: entry.kind,
-      outputSize: entry.outputSize,
-      sourceSize: entry.sourceSize,
-    }));
   }
 
   private async parsePatch(stage: StagedSource<TSource>): Promise<void> {
@@ -1349,65 +970,14 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
   }
 
   private async finalizeInputStableState(): Promise<boolean> {
-    const session = this.inputSession;
-    const selected = this.getSelectedInputOwner();
-    if (!session) return false;
-    const checksumStages = session.synthetic ? session.stages : [selected];
-    for (let index = 0; index < checksumStages.length; index += 1) {
-      const stage = checksumStages[index];
-      if (!(stage && stage.state.status === "ready" && stage.preparedInputAssets?.[0]?.file)) continue;
-      const assets = stage.preparedInputAssets || [];
-      for (let assetIndex = 0; assetIndex < assets.length; assetIndex += 1) {
-        const asset = assets[assetIndex];
-        if (!(asset?.file && isChecksummableInputAsset(asset))) continue;
-        if (asset.checksums) continue;
-        const precomputed = getPatchFilePrecomputedChecksums(asset.file);
-        if (precomputed) {
-          asset.checksums = precomputed;
-          asset.checksumVariants = getPatchFilePrecomputedChecksumVariants(asset.file);
-          asset.checksumTimeMs = 0;
-          continue;
-        }
-        const checksumFileName = getPreparedAssetFileName(asset, stage.state.fileName);
-        const checksumStartedAt = Date.now();
-        const checksumResult = await calculateStandardInputChecksumsForFile({
-          emitProgress: (event) => this.emitProgress(event),
-          file: asset.file,
-          logLevel: this.settings.logging?.level,
-          onLog: this.settings.logging?.sink,
-          progressId: session.synthetic
-            ? `${this.id}:${stage.state.id}:${index}:${assetIndex}`
-            : `${this.id}:${stage.state.id}:${assetIndex}`,
-          role: "input",
-          runtime: this.runtime,
-          state: {
-            ...stage.state,
-            decompressionTimeMs: getAssetDecompressionTimeMs(asset, stage.state.decompressionTimeMs),
-            fileName: checksumFileName,
-            order: assetIndex,
-            parentCompressions: getAssetParentCompressions(asset, stage.parentCompressions),
-            size: asset.size,
-            sourceSize: getAssetSourceSize(asset, stage.state.sourceSize),
-            wasDecompressed: asset.preparation?.wasDecompressed ?? stage.state.wasDecompressed,
-          },
-          workflow: "apply",
-        });
-        asset.checksums = checksumResult.checksums;
-        asset.checksumVariants = checksumResult.variants;
-        asset.romProbe = checksumResult.romProbe;
-        asset.checksumTimeMs = Date.now() - checksumStartedAt;
-      }
-      const primaryAsset = getPrimaryInputAsset(assets);
-      const primaryChecksums = getInputAssetChecksums(primaryAsset);
-      if (primaryChecksums) {
-        stage.state.checksums = primaryChecksums;
-        stage.state.checksumVariants = cloneChecksumVariants(primaryAsset?.checksumVariants);
-        stage.state.checksumTimeMs = primaryAsset?.checksumTimeMs;
-        stage.state.romProbe = cloneChecksumRomProbe(primaryAsset?.romProbe);
-      }
-    }
-    if (session.synthetic) this.syncInputSessionView();
-    return !!(selected && session.view.state.status === "ready" && selected.preparedInputAssets?.[0]?.file);
+    return finalizeApplyInputChecksums(this.inputSession, {
+      emitProgress: (event) => this.emitProgress(event),
+      getSelectedInputOwner: () => this.getSelectedInputOwner(),
+      runtime: this.runtime,
+      settings: this.settings,
+      syncInputSessionView: () => this.syncInputSessionView(),
+      workflowId: this.id,
+    });
   }
 
   private getPreparedInputAssets(): InputAsset[] {
@@ -1418,122 +988,20 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
     return this.getPreparedInputAssets().filter((asset) => asset.patchable);
   }
 
-  private async validatePatchTarget(
-    stage: StagedSource<TSource>,
-    target: InputAsset,
-    preflight: InternalPatchChecksumPreflight,
-  ): Promise<void> {
-    const validationKey = createApplyPatchValidationKey(stage, target, preflight);
-    const existingValidation = stage.state.patchValidation;
-    if (
-      existingValidation?.validationKey === validationKey &&
-      (existingValidation.status === "valid" || existingValidation.status === "invalid")
-    ) {
-      return;
-    }
-    const validationStartedAt = Date.now();
-    const validatePatch = this.runtime.patch.validatePatch;
-    const patchFile = stage.preparedPatchFile;
-    if (!(validatePatch && patchFile && stage.parsedPatch)) {
-      stage.state.patchValidation =
-        preflight.status === "invalid"
-          ? {
-              message: "Patch source requirements failed",
-              status: "invalid",
-              targetInputId: target.id,
-              validationKey,
-            }
-          : undefined;
-      stage.state.checksumTimeMs = Date.now() - validationStartedAt;
-      return;
-    }
-    const patchSource = getPatchFileExternalSource(
-      patchFile,
-      patchFile.fileName || stage.state.fileName || "patch.bin",
-    );
-    const inputSource = getPatchFileExternalSource(target.file, target.fileName || "input.bin");
-    if (!(patchSource && inputSource)) {
-      stage.state.patchValidation = {
-        message:
-          preflight.status === "invalid"
-            ? "Patch source requirements failed"
-            : "Patch validation is unavailable for this source",
-        status: preflight.status === "invalid" ? "invalid" : "unknown",
-        targetInputId: target.id,
-        validationKey,
-      };
-      stage.state.checksumTimeMs = Date.now() - validationStartedAt;
-      return;
-    }
-
-    stage.state.patchValidation = {
-      message: "Validating patch against selected target",
-      status: "pending",
-      targetInputId: target.id,
-      validationKey,
-    };
-    try {
-      const result = await validatePatch({
-        input: inputSource as never,
-        logLevel: this.settings.logging?.level,
-        onLog: this.settings.logging?.sink,
-        onProgress: (progress) =>
-          this.emitProgress({
-            details: {
-              fileName: stage.state.fileName,
-              order: stage.state.order,
-              sourceId: stage.state.id,
-              targetInputId: target.id,
-              targetInputName: target.fileName,
-            },
-            id: `${this.id}:${stage.state.id}:patch-validate`,
-            label: String(progress.label || progress.message || "Validating patch..."),
-            percent:
-              typeof progress.percent === "number" && Number.isFinite(progress.percent) ? progress.percent : null,
-            role: "patch",
-            stage: "verify",
-            workflow: "apply",
-          }),
-        options: {
-          checksumCache: getInputAssetChecksums(target),
-          removeHeader: !!this.settings.compatibility?.removeHeader,
-          workerThreads: this.settings.workers?.threads,
-        },
-        patches: [
-          {
-            patchFile: patchSource as never,
-            patchFileName: patchFile.fileName || stage.state.fileName || "patch.bin",
-            patchFormat: stage.state.requirements?.format,
-            requirements: stage.state.requirements,
-          },
-        ],
-        signal: this.abortController.signal,
-      });
-      stage.state.patchValidation = {
-        message: result.message || "Patch validation passed",
-        status: "valid",
-        targetInputId: target.id,
-        validationKey,
-      };
-      stage.state.checksumTimeMs = Date.now() - validationStartedAt;
-    } catch (error) {
-      stage.state.patchValidation = {
-        message: toRomWeaverError(error).message,
-        status: "invalid",
-        targetInputId: target.id,
-        validationKey,
-      };
-      stage.state.checksumTimeMs = Date.now() - validationStartedAt;
-    }
-  }
-
   private async evaluatePatchReadiness(stage: StagedSource<TSource>): Promise<boolean> {
     return evaluateApplyPatchReadiness(stage, {
       getPatchableInputAssets: () => this.getPatchableInputAssets(),
       parsePatch: (patchStage) => this.parsePatch(patchStage),
       prepareSelectedSource: (patchStage) => this.prepareSelectedSource(patchStage),
       pushWarning: (patchStage, error) => this.pushWarning(patchStage, error),
-      validatePatchTarget: (patchStage, target, preflight) => this.validatePatchTarget(patchStage, target, preflight),
+      validatePatchTarget: (patchStage, target, preflight) =>
+        validateApplyPatchTarget(patchStage, target, preflight, {
+          emitProgress: (event) => this.emitProgress(event),
+          runtime: this.runtime,
+          settings: this.settings,
+          signal: this.abortController.signal,
+          workflowId: this.id,
+        }),
     });
   }
 
@@ -1545,32 +1013,8 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
     recomputeApplyOutputState(this.outputState, this.settings, {
       input: this.getInput(),
       inputSession: this.inputSession as InputSession<unknown> | undefined,
-      patchOutputNames: this.patches.map((patch, index) => this.resolvePatchOutputName(patch, index)),
+      patchOutputNames: this.patches.map((patch, index) => resolvePatchOutputName(patch, index)),
     });
-  }
-
-  private resolvePatchOutputName(patch: StagedSource<TSource>, index: number): string {
-    if (patch.state.selectedCandidateId) {
-      const selectedCandidate = patch.state.candidates.find(
-        (candidate) => candidate.id === patch.state.selectedCandidateId,
-      );
-      if (selectedCandidate?.type === "file" && selectedCandidate.fileName) return selectedCandidate.fileName;
-    }
-    if (patch.state.status === "needsSelection" && !patch.state.selectedCandidateId) {
-      const selectableGroups = patch.state.candidates.filter(
-        (candidate) => candidate.type === "group" && candidate.selectable,
-      );
-      const selectableGroupIds = new Set(selectableGroups.map((candidate) => candidate.id));
-      const selectablePatches = patch.state.candidates.filter(
-        (candidate): candidate is SelectionFileCandidate =>
-          candidate.type === "file" &&
-          candidate.kind === "patch" &&
-          candidate.selectable &&
-          !selectableGroupIds.has(candidate.parentCandidateId || ""),
-      );
-      if (selectablePatches.length === 1 && selectablePatches[0]?.fileName) return selectablePatches[0].fileName;
-    }
-    return patch.state.fileName || patch.outputLabel || `patch ${index + 1}`;
   }
 
   private createExecutionOptions(onProgress?: ApplyWorkflowOptions["onProgress"]): ApplyWorkflowOptions {
