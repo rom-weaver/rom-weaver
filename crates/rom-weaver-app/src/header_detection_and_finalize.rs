@@ -157,7 +157,7 @@ impl CliApp {
         stripped_header: Option<&[u8]>,
         repair_checksum: bool,
         repair_hint_path: Option<&Path>,
-        restore_n64_order: Option<N64ByteOrder>,
+        restore_n64_order: Option<N64ByteOrderTransform>,
     ) -> Result<PatchApplyFinalizeResult> {
         let header_bytes = if add_header {
             Some(stripped_header.unwrap_or(&[0_u8; ROM_HEADER_BYTES]))
@@ -165,12 +165,12 @@ impl CliApp {
             None
         };
 
-        if let Some(order) = restore_n64_order {
+        if let Some(transform) = restore_n64_order {
             Self::rewrite_n64_byte_order(
                 staged_output,
                 final_output,
-                N64ByteOrder::BigEndian,
-                order,
+                transform.from,
+                transform.to,
             )?;
         } else {
             Self::copy_with_optional_header(staged_output, final_output, header_bytes)?;

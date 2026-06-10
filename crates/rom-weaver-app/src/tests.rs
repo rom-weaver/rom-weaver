@@ -13,7 +13,9 @@ use rom_weaver_core::{
 use serde_json::json;
 
 use super::selection_resolution::SelectionResolutionOptions;
-use super::{CliApp, CompressionLevelProfile, N64ByteOrder, ParsedSelectionInput};
+use super::{
+    CliApp, CompressionLevelProfile, N64ByteOrder, N64ByteOrderTransform, ParsedSelectionInput,
+};
 
 static TEST_CONTAINER_DESCRIPTOR: FormatDescriptor = FormatDescriptor {
     family: OperationFamily::Container,
@@ -699,7 +701,10 @@ fn header_repair_finalize_restores_original_n64_order() {
         None,
         false,
         None,
-        Some(N64ByteOrder::ByteSwapped),
+        Some(N64ByteOrderTransform {
+            from: N64ByteOrder::BigEndian,
+            to: N64ByteOrder::ByteSwapped,
+        }),
     )
     .expect("restore N64 byte order");
 

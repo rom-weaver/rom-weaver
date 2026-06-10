@@ -246,6 +246,7 @@ function commandArgsToRunRequest(args) {
         ...(parsed.flags.has('strip-header') ? { strip_header: true } : {}),
         ...(parsed.flags.has('add-header') ? { add_header: true } : {}),
         ...(parsed.flags.has('repair-checksum') ? { repair_checksum: true } : {}),
+        ...(readOptionalValue(parsed, 'n64-byte-order') ? { n64_byte_order: readOptionalValue(parsed, 'n64-byte-order') } : {}),
         ...(parsed.flags.has('ignore-checksum-validation') ? { ignore_checksum_validation: true } : {}),
       });
       break;
@@ -269,6 +270,7 @@ function commandArgsToRunRequest(args) {
           ? { validate_with_min_size: readOptionalNumber(parsed, 'validate-with-min-size') }
           : {}),
         ...(parsed.flags.has('strip-header') ? { strip_header: true } : {}),
+        ...(readOptionalValue(parsed, 'n64-byte-order') ? { n64_byte_order: readOptionalValue(parsed, 'n64-byte-order') } : {}),
         ...(parsed.flags.has('ignore-checksum-validation') ? { ignore_checksum_validation: true } : {}),
       });
       break;

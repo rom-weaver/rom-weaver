@@ -1,3 +1,4 @@
+import type { ChecksumVariant } from "../../types/checksum.ts";
 import type { CompressionFormat } from "../../types/settings.ts";
 import type { ApplyWorkflowResult, ProgressEvent } from "../../types/workflow-runtime.ts";
 import type { ApplyPatchFormProps, ApplyPatchFormSettings, BinarySource } from "./patcher-form.ts";
@@ -23,6 +24,7 @@ type StagedInputInfo = {
   targetInputId?: string;
   targetLabel?: string;
   checksums?: Record<string, string>;
+  checksumVariants?: ChecksumVariant[];
   checksumTiming?: string;
   romProbe?: RomInputRowState["info"]["romProbe"];
   decompressionTimeMs?: number;

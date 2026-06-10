@@ -19,6 +19,7 @@ impl CliApp {
             validate_with_size = ?args.validate_with_size,
             validate_with_min_size = ?args.validate_with_min_size,
             strip_header = args.strip_header,
+            n64_byte_order = ?args.n64_byte_order,
             ignore_checksum_validation = args.ignore_checksum_validation,
             threads = %args.threads,
             "starting patch-validate command"
@@ -36,6 +37,7 @@ impl CliApp {
             validate_with_size,
             validate_with_min_size,
             strip_header,
+            n64_byte_order,
             ignore_checksum_validation,
             threads,
         } = args;
@@ -253,6 +255,47 @@ impl CliApp {
                 }
             } else {
                 resolved_input.clone()
+            };
+            let validate_input = if let Some(target_order) = n64_byte_order {
+                self.emit_running(
+                    OperationLabel {
+                        command: "patch-validate",
+                        family: OperationFamily::Patch,
+                        format: None,
+                    },
+                    "compat",
+                    format!(
+                        "transforming N64 input byte order to {}",
+                        target_order.label()
+                    ),
+                    None,
+                    Some(context.plan_threads(ThreadCapability::single_threaded())),
+                );
+                let transformed_path = context
+                    .temp_paths()
+                    .next_path("patch-validate-input-n64-byte-order", Some("bin"));
+                match Self::rewrite_n64_byte_order_to_temp(
+                    &validate_input,
+                    &transformed_path,
+                    target_order,
+                ) {
+                    Ok(Some(_transform)) => {
+                        temp_paths.push(transformed_path.clone());
+                        transformed_path
+                    }
+                    Ok(None) => validate_input,
+                    Err(error) => {
+                        return OperationReport::failed(
+                            OperationFamily::Patch,
+                            None,
+                            "compat",
+                            error.to_string(),
+                            Some(context.plan_threads(ThreadCapability::single_threaded())),
+                        );
+                    }
+                }
+            } else {
+                validate_input
             };
             if validate_with_size.is_some() || validate_with_min_size.is_some() {
                 match Self::validate_patch_input_size(
@@ -519,6 +562,9 @@ impl CliApp {
                 validation_labels.push(format!(
                     "input resolved via {extracted_archives} container extract step(s)"
                 ));
+            }
+            if let Some(target_order) = n64_byte_order {
+                validation_labels.push(format!("n64_byte_order={}", target_order.id()));
             }
             validation_labels.extend(extracted_patch_notes);
             let format_label = if formats.is_empty() {

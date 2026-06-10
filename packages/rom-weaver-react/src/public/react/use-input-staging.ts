@@ -395,6 +395,7 @@ const useInputStaging = (context: InputStagingContext) => {
                   info: {
                     archiveName: info.archiveName || "",
                     checksumTiming: info.checksumTiming || byId.get(stableId)?.info.checksumTiming || "",
+                    checksumVariants: info.checksumVariants,
                     crc32: info.checksums?.crc32 || "",
                     fileName: info.fileName || getBinarySourceFileName(snapshot.inputs[index], `Input ${index + 1}`),
                     md5: info.checksums?.md5 || "",

@@ -1,5 +1,5 @@
 import { createProgressViewModelFromEvent } from "../../presentation/workflow-presentation.ts";
-import type { ChecksumRomProbe } from "../../types/checksum.ts";
+import type { ChecksumRomProbe, ChecksumVariant } from "../../types/checksum.ts";
 import type { JsonValue } from "../../types/runtime.ts";
 
 type StoreController<TState> = {
@@ -57,6 +57,7 @@ type RomInputInfoState = {
   crc32: string;
   md5: string;
   sha1: string;
+  checksumVariants?: ChecksumVariant[];
   romInfo: string;
   romProbe?: ChecksumRomProbe;
   validationPhase: string;
@@ -131,6 +132,7 @@ type PatcherUiState = {
     crc32: string;
     md5: string;
     sha1: string;
+    checksumVariants?: ChecksumVariant[];
     romInfo: string;
     validationPhase: string;
     alterHeaderVisible: boolean;
@@ -230,6 +232,7 @@ const createEmptyPatcherUiState = (): PatcherUiState => ({
     alterHeaderLabel: "",
     alterHeaderVisible: false,
     archiveName: "",
+    checksumVariants: undefined,
     crc32: "",
     fileName: "",
     md5: "",
@@ -375,10 +378,16 @@ const normalizePatcherUiState = (
     const source = isRecord(info) ? info : {};
     const romProbe = isRecord(source.romProbe) ? source.romProbe : {};
     const trim = isRecord(romProbe.trim) ? romProbe.trim : {};
+    const checksumVariants = Array.isArray(source.checksumVariants)
+      ? source.checksumVariants.filter(
+          (entry): entry is ChecksumVariant => isRecord(entry) && typeof entry.id === "string",
+        )
+      : undefined;
     return {
       archiveName: typeof source.archiveName === "string" ? source.archiveName : "",
       checksumsExpanded: source.checksumsExpanded !== false,
       checksumTiming: typeof source.checksumTiming === "string" ? source.checksumTiming : fallbackChecksumTiming,
+      checksumVariants,
       crc32: typeof source.crc32 === "string" ? source.crc32 : "",
       fileName: typeof source.fileName === "string" ? source.fileName : "",
       md5: typeof source.md5 === "string" ? source.md5 : "",
@@ -504,6 +513,11 @@ const normalizePatcherUiState = (
       alterHeaderLabel: typeof romInfo.alterHeaderLabel === "string" ? romInfo.alterHeaderLabel : "",
       alterHeaderVisible: !!romInfo.alterHeaderVisible,
       archiveName: typeof romInfo.archiveName === "string" ? romInfo.archiveName : "",
+      checksumVariants: Array.isArray(romInfo.checksumVariants)
+        ? romInfo.checksumVariants.filter(
+            (entry): entry is ChecksumVariant => isRecord(entry) && typeof entry.id === "string",
+          )
+        : undefined,
       crc32: typeof romInfo.crc32 === "string" ? romInfo.crc32 : "",
       fileName: typeof romInfo.fileName === "string" ? romInfo.fileName : "",
       md5: typeof romInfo.md5 === "string" ? romInfo.md5 : "",

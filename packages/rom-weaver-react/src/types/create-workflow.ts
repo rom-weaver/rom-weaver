@@ -1,3 +1,4 @@
+import type { ChecksumVariant } from "./checksum.ts";
 import type { SelectionCandidate } from "./selection.ts";
 import type { WorkflowWarning } from "./workflow-controller.ts";
 
@@ -23,6 +24,7 @@ type CreateWorkflowSourceState = {
   sourceSize?: number;
   chdMode?: string;
   checksums?: Record<string, string>;
+  checksumVariants?: ChecksumVariant[];
   checksumTimeMs?: number;
   decompressionTimeMs?: number;
   wasDecompressed?: boolean;

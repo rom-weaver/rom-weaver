@@ -403,6 +403,7 @@ const toStagedInputInfos = (input: ApplyWorkflowInputState | null, originals: Bi
       chdMode: resolved.chdMode ?? input.chdMode,
       checksums: resolved.checksums || undefined,
       checksumTiming: formatChecksumTiming(resolved.checksumTimeMs ?? input.checksumTimeMs),
+      checksumVariants: resolved.checksumVariants || input.checksumVariants,
       cueText: resolved.cueText,
       decompressionTimeMs: resolved.decompressionTimeMs,
       fileName: stagedFileName,
@@ -868,6 +869,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         onChecksum: (info: {
           archiveName?: string;
           checksums?: Record<string, string>;
+          checksumVariants?: ApplyWorkflowInputState["checksumVariants"];
           decompressionTimeMs?: number;
           fileName?: string;
           romProbe?: ApplyWorkflowInputState["romProbe"];
@@ -880,6 +882,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
         onState: (info: {
           archiveName?: string;
           checksums?: Record<string, string>;
+          checksumVariants?: ApplyWorkflowInputState["checksumVariants"];
           decompressionTimeMs?: number;
           fileName?: string;
           romProbe?: ApplyWorkflowInputState["romProbe"];

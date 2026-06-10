@@ -190,6 +190,7 @@ function ApplyWorkflowFormView({
                     md5: romInput.info.md5,
                     sha1: romInput.info.sha1,
                   },
+                  checksumVariants: romInput.info.checksumVariants,
                   lead:
                     !checksumProgress && romInput.info.romInfo ? (
                       <p className="pdesc">{romInput.info.romInfo}</p>

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { ChecksumVariant } from "../../../../types/checksum.ts";
 import { CuePanel } from "./cue-panel.tsx";
 import { FixesPanel, type FixesPanelProps } from "./fixes-panel.tsx";
 import { type SourceInfoChecksums, SourceInfoList, type SourceInfoProgress } from "./source-info-list.tsx";
@@ -6,6 +7,7 @@ import { type SourceInfoChecksums, SourceInfoList, type SourceInfoProgress } fro
 type RomInputInfoPanelProps = {
   bytes?: number;
   checksums?: SourceInfoChecksums | null;
+  checksumVariants?: ChecksumVariant[];
   defaultOpen?: boolean;
   lead?: ReactNode;
   onToggle?: (open: boolean) => void;

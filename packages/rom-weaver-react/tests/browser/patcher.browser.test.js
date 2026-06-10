@@ -184,7 +184,11 @@ const waitForApplyOutcome = async () => {
   }, 60000);
 };
 
-const createChecksumOverrideHarnessElement = (applyPatchesSpy, stagedPatchInfoOverrides = {}) => {
+const createChecksumOverrideHarnessElement = (
+  applyPatchesSpy,
+  stagedPatchInfoOverrides = {},
+  stagedInputInfoOverrides = {},
+) => {
   const inputFile = new File([new Uint8Array([0, 1, 2, 3])], "game.bin", {
     type: "application/octet-stream",
   });
@@ -210,6 +214,7 @@ const createChecksumOverrideHarnessElement = (applyPatchesSpy, stagedPatchInfoOv
     ],
     size: 4096,
     sourceSize: 4096,
+    ...stagedInputInfoOverrides,
   };
   const stagedPatchInfo = {
     checksumPreflightMismatch: true,
@@ -2320,6 +2325,48 @@ test("expected validation sizes retain raw byte metadata and hide legacy actual 
   const statusText = patchRow?.textContent || "";
   expect(statusText).not.toMatch(/size=4 B/i);
   expect(statusText).not.toMatch(/crc32=/i);
+});
+
+test("ROM info panel shows checksum variant rows", async () => {
+  mount(
+    createChecksumOverrideHarnessElement(
+      vi.fn(async () => undefined),
+      {},
+      {
+        checksumVariants: [
+          {
+            checksums: {
+              crc32: "00000000",
+              md5: "d41d8cd98f00b204e9800998ecf8427e",
+              sha1: "da39a3ee5e6b4b0d3255bfef95601890afd80709",
+            },
+            id: "raw",
+            label: "Raw",
+          },
+          {
+            checksums: {
+              crc32: "12345678",
+              md5: "0123456789abcdef0123456789abcdef",
+              sha1: "0123456789abcdef0123456789abcdef01234567",
+            },
+            id: "remove-header",
+            label: "Remove header",
+          },
+        ],
+      },
+    ),
+  );
+
+  const inputRow = await waitForState(() => {
+    const row = getInputStackRows()[0];
+    if (!(row instanceof HTMLElement)) return null;
+    return row.textContent?.includes("Remove header CRC32") ? row : null;
+  }, 30000);
+  expect(inputRow.textContent).toContain("Remove header CRC32");
+  expect(inputRow.textContent).toContain("12345678");
+  expect(inputRow.textContent).toContain("Remove header MD5");
+  expect(inputRow.textContent).toContain("Remove header SHA-1");
+  expect(inputRow.textContent).not.toContain("Raw CRC32");
 });
 
 test("patch stack mentions when patch validation passed", async () => {

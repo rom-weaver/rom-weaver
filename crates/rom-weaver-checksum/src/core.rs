@@ -25,6 +25,7 @@ use rom_weaver_core::{
     ChecksumCapabilities, ChecksumEngine, ChecksumRequest, OperationContext, OperationFamily,
     OperationReport, Result, RomWeaverError, ThreadCapability, ThreadExecution,
 };
+use serde_json::json;
 use sha1::Sha1;
 use sha2::{Digest as Sha2Digest, Sha256};
 use tracing::trace;
@@ -438,14 +439,18 @@ impl NativeChecksumEngine {
         let range = ResolvedRange::from_request(&request.source, request.start, request.length)?;
         let computed = compute_checksum_values_with_progress(request, context, on_progress)?;
 
-        Ok(OperationReport::succeeded(
+        let mut report = OperationReport::succeeded(
             OperationFamily::Checksum,
             Some(self.name().to_string()),
             stage,
             render_label(&algorithms, &computed.values, &range),
             Some(100.0),
             Some(computed.execution),
-        ))
+        );
+        report.details = Some(json!({
+            "checksums": computed.values,
+        }));
+        Ok(report)
     }
 }
 

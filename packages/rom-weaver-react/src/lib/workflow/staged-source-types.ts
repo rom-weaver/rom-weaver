@@ -1,3 +1,4 @@
+import type { ChecksumVariant } from "../../types/checksum.ts";
 import type { WorkflowKind, WorkflowProgress, WorkflowProgressRole } from "../../types/progress.ts";
 import type { CandidateSelectionRequest, SelectFile, SelectionCandidate } from "../../types/selection.ts";
 import type { ApplyWorkflowOptions, CreateWorkflowOptions } from "../../types/workflow-runtime.ts";
@@ -36,6 +37,7 @@ type SharedRomSourceState<TRole extends SharedRomSourceRole = SharedRomSourceRol
   }>;
   parentCompressions?: SharedParentCompression[];
   checksums?: unknown;
+  checksumVariants?: ChecksumVariant[];
   checksumTimeMs?: number;
   romProbe?: unknown;
 };

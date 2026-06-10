@@ -334,6 +334,8 @@ class StagedRomSourceController<TSource, TState extends SharedRomSourceState> {
     view.parentCompressions = cloneParentCompressions(selectedOwner?.parentCompressions);
     view.state.parentCompressions = cloneParentCompressions(selectedOwner?.parentCompressions);
     if (selectedOwner && "checksums" in selectedOwner.state) view.state.checksums = selectedOwner.state.checksums;
+    if (selectedOwner && "checksumVariants" in selectedOwner.state)
+      view.state.checksumVariants = selectedOwner.state.checksumVariants;
     if (selectedOwner && "checksumTimeMs" in selectedOwner.state)
       view.state.checksumTimeMs = selectedOwner.state.checksumTimeMs;
     if (selectedOwner && "romProbe" in selectedOwner.state) view.state.romProbe = selectedOwner.state.romProbe;
@@ -389,6 +391,7 @@ class StagedRomSourceController<TSource, TState extends SharedRomSourceState> {
 
   resetStageForSelection(stage: SharedRomStagedSource<TSource, TState>): void {
     stage.state.checksums = undefined;
+    stage.state.checksumVariants = undefined;
     stage.state.checksumTimeMs = undefined;
     stage.state.chdMode = undefined;
     stage.state.decompressionTimeMs = undefined;

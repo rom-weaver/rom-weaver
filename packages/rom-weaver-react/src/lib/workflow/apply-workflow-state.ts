@@ -3,7 +3,7 @@ import type {
   ApplyWorkflowInputState,
   ApplyWorkflowPatchState,
 } from "../../types/apply-workflow.ts";
-import type { ChecksumRomProbe } from "../../types/checksum.ts";
+import type { ChecksumRomProbe, ChecksumVariant } from "../../types/checksum.ts";
 import type { WorkflowWarning } from "../../types/workflow-controller.ts";
 import type { ParsedPatchLike, PatchFileInstance } from "../../workers/protocol/patch-engine.ts";
 import type { InputAsset } from "../input/input-assets.ts";
@@ -32,6 +32,7 @@ type InternalSourceState = {
   warnings: WorkflowWarning[];
   checksums?: ApplyWorkflowChecksums;
   checksumTimeMs?: number;
+  checksumVariants?: ChecksumVariant[];
   romProbe?: ChecksumRomProbe;
   requirements?: InternalPatchRequirements;
   checksumPreflight?: InternalPatchChecksumPreflight;

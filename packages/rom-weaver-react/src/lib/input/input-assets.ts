@@ -1,4 +1,4 @@
-import type { ChecksumRomProbe } from "../../types/checksum.ts";
+import type { ChecksumRomProbe, ChecksumVariant } from "../../types/checksum.ts";
 import type { SelectionGroupCandidate } from "../../types/selection.ts";
 import type { PatchFileInstance } from "../../workers/protocol/patch-engine.ts";
 
@@ -24,6 +24,7 @@ type InputAsset = {
   kind: "rom" | "cue" | "track";
   size: number;
   checksums?: Record<string, string>;
+  checksumVariants?: ChecksumVariant[];
   checksumTimeMs?: number;
   romProbe?: ChecksumRomProbe;
   preparation?: InputPreparationMetrics;

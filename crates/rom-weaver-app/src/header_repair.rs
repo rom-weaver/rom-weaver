@@ -584,6 +584,27 @@ impl CliApp {
         Ok(Some(order))
     }
 
+    pub(super) fn rewrite_n64_byte_order_to_temp(
+        input: &Path,
+        output: &Path,
+        target: N64ByteOrder,
+    ) -> Result<Option<N64ByteOrderTransform>> {
+        let Some(source) = Self::detect_n64_byte_order_path(input)? else {
+            return Err(RomWeaverError::Validation(format!(
+                "could not detect N64 byte order for `{}`",
+                input.display()
+            )));
+        };
+        if source == target {
+            return Ok(None);
+        }
+        Self::rewrite_n64_byte_order(input, output, source, target)?;
+        Ok(Some(N64ByteOrderTransform {
+            from: target,
+            to: source,
+        }))
+    }
+
     pub(super) fn repair_atari_7800_header_file(
         file: &mut File,
         file_len: usize,

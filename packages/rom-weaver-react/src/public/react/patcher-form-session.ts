@@ -694,6 +694,7 @@ const useLocalApplyPatchFormSession = ({
             ...(patch.info || {}),
             archiveName,
             checksumTiming: info.checksumTiming ?? patch.info?.checksumTiming ?? existing.info.checksumTiming,
+            checksumVariants: info.checksumVariants ?? patch.info?.checksumVariants ?? existing.info.checksumVariants,
             crc32: info.checksums?.crc32 ?? patch.info?.crc32 ?? existing.info.crc32,
             fileName,
             md5: info.checksums?.md5 ?? patch.info?.md5 ?? existing.info.md5,

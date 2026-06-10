@@ -25,6 +25,7 @@ impl CliApp {
             strip_header = args.strip_header,
             add_header = args.add_header,
             repair_checksum = args.repair_checksum,
+            n64_byte_order = ?args.n64_byte_order,
             ignore_checksum_validation = args.ignore_checksum_validation,
             validate_with_output_checksums = args.validate_with_output_checksums.len(),
             ppf_undo_aware = args.ppf_undo_aware,
@@ -49,6 +50,7 @@ impl CliApp {
             strip_header,
             add_header,
             repair_checksum,
+            n64_byte_order,
             ignore_checksum_validation,
             validate_with_output_checksums,
             ppf_undo_aware,
@@ -309,7 +311,7 @@ impl CliApp {
 
             let mut stripped_header = None;
             let mut stripped_header_match = None;
-            let mut normalized_from_order = None;
+            let mut restore_n64_order = None;
             let mut checksum_verification_labels = Vec::new();
             let apply_input = if strip_header {
                 self.emit_running(
@@ -346,6 +348,48 @@ impl CliApp {
             } else {
                 resolved_input.clone()
             };
+            let apply_input = if let Some(target_order) = n64_byte_order {
+                let transformed_path = context
+                    .temp_paths()
+                    .next_path("patch-apply-input-n64-byte-order", Some("bin"));
+                match Self::rewrite_n64_byte_order_to_temp(
+                    &apply_input,
+                    &transformed_path,
+                    target_order,
+                ) {
+                    Ok(Some(transform)) => {
+                        self.emit_running(
+                            OperationLabel {
+                                command: "patch-apply",
+                                family: OperationFamily::Patch,
+                                format: None,
+                            },
+                            "compat",
+                            format!(
+                                "transforming N64 input byte order to {}",
+                                target_order.label()
+                            ),
+                            None,
+                            Some(context.plan_threads(ThreadCapability::single_threaded())),
+                        );
+                        restore_n64_order = Some(transform);
+                        temp_paths.push(transformed_path.clone());
+                        transformed_path
+                    }
+                    Ok(None) => apply_input,
+                    Err(error) => {
+                        return OperationReport::failed(
+                            OperationFamily::Patch,
+                            None,
+                            "compat",
+                            error.to_string(),
+                            Some(context.plan_threads(ThreadCapability::single_threaded())),
+                        );
+                    }
+                }
+            } else {
+                apply_input
+            };
             let apply_input = if repair_checksum {
                 let normalized_path = context
                     .temp_paths()
@@ -363,7 +407,14 @@ impl CliApp {
                             None,
                             Some(context.plan_threads(ThreadCapability::single_threaded())),
                         );
-                        normalized_from_order = Some(order);
+                        if restore_n64_order.is_none() {
+                            restore_n64_order = Some(N64ByteOrderTransform {
+                                from: N64ByteOrder::BigEndian,
+                                to: order,
+                            });
+                        } else if let Some(transform) = restore_n64_order.as_mut() {
+                            transform.from = N64ByteOrder::BigEndian;
+                        }
                         temp_paths.push(normalized_path.clone());
                         normalized_path
                     }
@@ -418,7 +469,7 @@ impl CliApp {
 
             let patch_count = resolved_patches.len();
             let requires_compat_finalize =
-                add_header || repair_checksum || normalized_from_order.is_some() || patch_count > 1;
+                add_header || repair_checksum || restore_n64_order.is_some() || patch_count > 1;
             let needs_staged_output = requires_compat_finalize || compression_options.enabled;
             let staged_output = if needs_staged_output {
                 if compression_options.enabled {
@@ -671,7 +722,7 @@ impl CliApp {
                     stripped_header.as_deref(),
                     repair_checksum,
                     Some(&resolved_input),
-                    normalized_from_order,
+                    restore_n64_order,
                 ) {
                     Ok(finalized) => {
                         raw_ready_output = finalized_output_path;
@@ -724,6 +775,9 @@ impl CliApp {
                         report.label, ROM_HEADER_BYTES
                     );
                 }
+            }
+            if let Some(target_order) = n64_byte_order {
+                report.label = format!("{}; n64_byte_order={}", report.label, target_order.id());
             }
             if extracted_archives > 0 {
                 report.label = format!(
