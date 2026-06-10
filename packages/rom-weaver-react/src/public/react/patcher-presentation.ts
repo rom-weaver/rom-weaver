@@ -68,6 +68,8 @@ type PatchStackItemState = {
   progress?: InputProgressState;
   checksumTiming?: string;
   validationState: string;
+  /** Source-checksum preflight verdict ("valid"/"invalid"/"pending"/"unknown"); drives ROM verification color. */
+  sourceChecksumState: string;
   validationLabel: string;
   validationValues: string[];
   validationMessage: string;

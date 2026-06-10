@@ -19,6 +19,7 @@ import type {
   StartupState,
 } from "./patcher-form.ts";
 import { inertUiController } from "./patcher-form-session.ts";
+import type { PatchStackItemState } from "./patcher-presentation.ts";
 import { ArchiveDialog as SharedArchiveDialog } from "./patcher-react-shared.tsx";
 import type { NoticeState, PatcherSectionNoticeKey, RomInputRowState } from "./patcher-ui-state.ts";
 import { toWorkflowChecksumProgressProps, toWorkflowFileProgressProps } from "./workflow-run-hooks.ts";
@@ -58,6 +59,52 @@ const SectionNotice = ({ id, onDismiss, state }: { id?: string; onDismiss?: () =
 
 const getHeaderFixLabel = (checked: boolean) => (checked ? "Will fix internal checksum" : "No change");
 
+const ROM_CHECKSUM_HEX_LENGTHS: Record<number, "crc32" | "md5" | "sha1"> = { 8: "crc32", 32: "md5", 40: "sha1" };
+
+/**
+ * Compare a user-pasted input checksum against a ROM's computed checksums,
+ * mirroring the apply-time hex auto-detection (crc32/md5/sha1 by length).
+ * Returns "ok" on match, "bad" on mismatch, or undefined when there is nothing
+ * to compare yet (no/invalid pasted value, unsupported length, or the matching
+ * ROM checksum has not been computed).
+ */
+const matchPastedInputChecksum = (pasted: string, info: RomInputRowState["info"]): "bad" | "ok" | undefined => {
+  const hex = pasted.trim().toLowerCase().replace(/^0x/, "");
+  if (!/^[0-9a-f]+$/.test(hex)) return undefined;
+  const algorithm = ROM_CHECKSUM_HEX_LENGTHS[hex.length];
+  if (!algorithm) return undefined;
+  const actual = (info[algorithm] || "").trim().toLowerCase();
+  if (!actual) return undefined;
+  return actual === hex ? "ok" : "bad";
+};
+
+/**
+ * Derive each ROM's verification color from the patches targeting it. A ROM is
+ * only highlighted once a patch has actually verified it: green when the ROM
+ * matches a required source checksum (the patch's embedded preflight) or a
+ * user-pasted input checksum, red on mismatch, and no color when there is
+ * nothing to verify against. A mismatch from any signal wins over a match.
+ */
+const buildRomVerificationStates = (patches: PatchStackItemState[], romInputs: RomInputRowState[]) => {
+  const infoById = new Map(romInputs.map((rom) => [rom.id, rom.info]));
+  const states = new Map<string, "bad" | "ok">();
+  const apply = (romId: string, verdict: "bad" | "ok" | undefined) => {
+    if (!verdict) return;
+    if (verdict === "bad" || !states.has(romId)) states.set(romId, verdict);
+  };
+  for (const patch of patches) {
+    const romId = patch.targetValue;
+    if (!romId) continue;
+    apply(
+      romId,
+      patch.sourceChecksumState === "invalid" ? "bad" : patch.sourceChecksumState === "valid" ? "ok" : undefined,
+    );
+    const info = infoById.get(romId);
+    if (info && patch.validateInputChecksum) apply(romId, matchPastedInputChecksum(patch.validateInputChecksum, info));
+  }
+  return states;
+};
+
 function ApplyWorkflowFormView({
   controllers,
   startup = { message: "", status: "ready" },
@@ -95,6 +142,7 @@ function ApplyWorkflowFormView({
 
   const romInputs: RomInputRowState[] = uiState.romInputs;
   const patches = patchState.items;
+  const romVerificationStates = buildRomVerificationStates(patches, romInputs);
   const compressHeaderFormat = getOutputCompressionFormatLabel(outputState.compressionFormat, outputState.options);
   const compressionTypeOptions = createCompressionTypeOptions(outputState.options, "none");
   const showRomDropZone = shouldShowRomDropZone(romInputs);
@@ -142,7 +190,7 @@ function ApplyWorkflowFormView({
           </InfoPopover>
         }
         items={romInputs.map((romInput, index) => {
-          const state = romInput.invalid ? "bad" : romInput.valid ? "ok" : undefined;
+          const state = romVerificationStates.get(romInput.id);
           const rowProgress =
             romInput.progress && romInput.info.validationPhase !== "checksum" ? romInput.progress : null;
           if (rowProgress) {

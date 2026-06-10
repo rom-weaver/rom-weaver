@@ -162,6 +162,7 @@ const buildStackViewState = ({
       ppfUndo: patchInfo?.ppfUndo,
       progress: patchProgressByKey[key] || null,
       showPpfUndo: patchInfo?.format === "PPF",
+      sourceChecksumState: patchInfo?.sourceChecksumState || "",
       targetDisabled: disabled || busy || patchStaging || targetOptions.length < 2,
       targetOptions,
       targetValue: patchInfo?.targetInputId || (targetOptions.length === 1 ? targetOptions[0]?.value : ""),

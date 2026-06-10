@@ -189,6 +189,7 @@ const toPatchStageInfo = (
     parentCompressions: patch.parentCompressions,
     ppfUndo: patch.ppfUndo,
     size: patch.size,
+    sourceChecksumState: patch.checksumPreflight?.status || "",
     sourceSize: patch.sourceSize,
     targetInputId: patch.targetInputId,
     targetLabel,

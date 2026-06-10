@@ -41,6 +41,7 @@ type StagedInputInfo = {
   validationState?: string;
   validationValues?: string[];
   checksumPreflightMismatch?: boolean;
+  sourceChecksumState?: string;
   format?: string;
   ppfUndo?: boolean;
   validateInputChecksum?: string;
