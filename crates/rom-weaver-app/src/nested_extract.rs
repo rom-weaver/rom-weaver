@@ -71,7 +71,7 @@ impl CliApp {
         let mut descended: HashSet<String> = HashSet::new();
         let mut emitted_details: Vec<Value> = Vec::new();
         let mut processed = HashSet::new();
-        processed.insert(root_source);
+        processed.insert(root_source.clone());
 
         let mut queue = VecDeque::new();
         for candidate in root_candidates {
@@ -169,7 +169,9 @@ impl CliApp {
                 split_bin: false,
                 ignore_common_files,
                 overwrite,
-                parent: None,
+                // This source is a run-local intermediate (written while descending `root_source`),
+                // so flag its provenance: in the browser the handler must read it on the main thread.
+                parent: Some(root_source.clone()),
             };
             let format_name = handler.descriptor().name;
             let step_threads = Some(context.plan_threads(handler.capabilities().extract_threads));
@@ -182,6 +184,7 @@ impl CliApp {
                 outputs: &[],
                 thread_execution: step_threads.clone(),
             });
+            let step_started = std::time::Instant::now();
             let nested_report = handler.extract(&nested_request, context).map_err(|error| {
                 RomWeaverError::Validation(format!(
                     "nested extract failed for `{}` ({}): {error}",
@@ -189,18 +192,27 @@ impl CliApp {
                     format_name
                 ))
             })?;
+            let step_elapsed_ms = step_started.elapsed().as_millis().min(u32::MAX as u128) as u32;
             descended.insert(canonical_source_key);
             nested_count = nested_count.saturating_add(1);
             // Snapshot this level's freshly-extracted outputs (the nested dir is created empty),
             // merging in any inline checksums the handler attached, then surface them as a
-            // succeeded step event and accumulate them for leaf selection by the caller.
+            // succeeded step event and accumulate them for leaf selection by the caller. Tag each
+            // output with this step's elapsed time so the caller can report per-file extract timing
+            // (each leaf carries the time of the archive level that produced it).
             let nested_emitted =
                 Self::collect_changed_files(&nested_out_dir, &HashMap::new()).unwrap_or_default();
-            let nested_details = Self::build_emitted_file_detail_values(
+            let mut nested_details = Self::build_emitted_file_detail_values(
                 nested_report.details.as_ref(),
                 &nested_emitted,
                 None,
             );
+            for detail in &mut nested_details {
+                if let Value::Object(map) = detail {
+                    map.entry("extract_time_ms".to_string())
+                        .or_insert_with(|| json!(step_elapsed_ms));
+                }
+            }
             self.emit_extract_step(ExtractStepEvent {
                 format: format_name,
                 depth,

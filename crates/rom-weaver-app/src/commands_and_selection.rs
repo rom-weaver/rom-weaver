@@ -694,6 +694,7 @@ impl CliApp {
             None,
             extract_threads.clone(),
         );
+        let primary_extract_started = std::time::Instant::now();
         let mut report = self
             .extract_with_selection_fallback(
                 handler.as_ref(),
@@ -719,6 +720,10 @@ impl CliApp {
                     Some(context.plan_threads(ThreadCapability::single_threaded())),
                 )
             });
+        let primary_extract_elapsed_ms = primary_extract_started
+            .elapsed()
+            .as_millis()
+            .min(u32::MAX as u128) as u32;
         let mut warnings = Vec::new();
         if let Some(split_bin_warning) = split_bin_warning {
             warnings.push(split_bin_warning);
@@ -748,11 +753,19 @@ impl CliApp {
             let format_name = handler.descriptor().name;
             // Level 0 (the input container itself). Its outputs carry the inline checksums computed
             // by the handler when `--checksum` was requested.
-            let primary_details = Self::build_or_existing_emitted_file_detail_values(
+            let mut primary_details = Self::build_or_existing_emitted_file_detail_values(
                 report.details.as_ref(),
                 &primary_emitted_files,
                 None,
             );
+            // Tag each direct (level 0) output with the primary extract's elapsed time so the host can
+            // report per-file extract timing for patches that sit directly in the dropped archive.
+            for detail in &mut primary_details {
+                if let Value::Object(map) = detail {
+                    map.entry("extract_time_ms".to_string())
+                        .or_insert_with(|| json!(primary_extract_elapsed_ms));
+                }
+            }
             self.emit_extract_step(ExtractStepEvent {
                 format: format_name,
                 depth: 0,

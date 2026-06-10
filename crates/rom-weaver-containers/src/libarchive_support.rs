@@ -27,6 +27,7 @@ use rom_weaver_libarchive::{
     ZeroWriteBehavior, list_regular_archive_entries,
     probe_regular_archive as probe_regular_archive_with_libarchive_impl,
     probe_regular_archive_format, visit_selected_regular_archive_entries,
+    visit_selected_regular_archive_entries_from_memory,
 };
 use tracing::trace;
 
@@ -34,6 +35,7 @@ use crate::{
     archive_entries::{ArchiveInputEntry, sanitize_archive_relative_path_from_str},
     attach_extraction_details,
     constants::{LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES, PARALLEL_COORDINATOR_STACK_SIZE_BYTES},
+    container_reads_source_on_main_thread,
     extract_support::{
         ContainerProgressContext, ExtractHasher, ExtractedFileChecksum,
         attach_extract_checksum_details, emit_container_step_progress,
@@ -733,6 +735,7 @@ fn build_libarchive_extract_tasks(
     selections: &[String],
     kind_filter: ArchiveEntryKindFilter,
     ignore_common_files: bool,
+    include_nested_containers: bool,
     format_name: &str,
 ) -> Result<Vec<LibarchiveExtractTask>> {
     let mut matcher = SelectionMatcher::new(selections);
@@ -777,7 +780,13 @@ fn build_libarchive_extract_tasks(
 
     matcher.ensure_all_matched()?;
     if kind_filter.enabled() {
-        tasks = if payload_kind_tasks.iter().any(|task| !task.is_dir) {
+        tasks = if include_nested_containers {
+            // Exhaustive nested extract-all: keep the matched payloads AND any nested-container
+            // entries, so descent continues into deeper sub-archives (e.g. a patch sitting beside
+            // a further nested zip) instead of stopping once sibling payloads are found.
+            payload_kind_tasks.append(&mut container_fallback_tasks);
+            payload_kind_tasks
+        } else if payload_kind_tasks.iter().any(|task| !task.is_dir) {
             payload_kind_tasks
         } else {
             container_fallback_tasks
@@ -924,8 +933,16 @@ fn send_libarchive_extract_output(
     })
 }
 
+/// Where a worker chunk reads the archive image. `Memory` carries the source bytes read once on the
+/// main thread (the only thread that can open an OPFS-backed intermediate in the browser), so worker
+/// threads read from shared memory instead of re-`open`ing the file and failing with `os error 44`.
+enum ChunkArchiveSource<'a> {
+    Path(&'a Path),
+    Memory(Arc<[u8]>),
+}
+
 fn extract_libarchive_task_chunk_to_sender(
-    source: &Path,
+    source: ChunkArchiveSource<'_>,
     chunk: &[LibarchiveExtractTask],
     format_name: &str,
     sender: &mpsc::SyncSender<LibarchiveExtractOutput>,
@@ -939,19 +956,31 @@ fn extract_libarchive_task_chunk_to_sender(
         tasks_by_index.insert(task.index, task);
     }
     let selected_indices = tasks_by_index.keys().copied().collect::<BTreeSet<_>>();
-    let matched_tasks = visit_selected_regular_archive_entries(
-        source,
-        format_name,
-        &selected_indices,
-        |selected_entry| -> Result<()> {
-            match selected_entry {
-                SelectedRegularArchiveEntry::Directory { entry } => {
-                    let task = tasks_by_index.get(&entry.index).copied().ok_or_else(|| {
-                        RomWeaverError::Validation(format!(
-                            "{format_name} extract failed while resolving selected directory index {}",
-                            entry.index
-                        ))
-                    })?;
+    let mut visit = |selected_entry: SelectedRegularArchiveEntry<'_>| -> Result<()> {
+        match selected_entry {
+            SelectedRegularArchiveEntry::Directory { entry } => {
+                let task = tasks_by_index.get(&entry.index).copied().ok_or_else(|| {
+                    RomWeaverError::Validation(format!(
+                        "{format_name} extract failed while resolving selected directory index {}",
+                        entry.index
+                    ))
+                })?;
+                send_libarchive_extract_output(
+                    sender,
+                    LibarchiveExtractOutput::Directory {
+                        output_path: task.output_path.clone(),
+                    },
+                    format_name,
+                )?;
+            }
+            SelectedRegularArchiveEntry::File { entry, reader } => {
+                let task = tasks_by_index.get(&entry.index).copied().ok_or_else(|| {
+                    RomWeaverError::Validation(format!(
+                        "{format_name} extract failed while resolving selected file index {}",
+                        entry.index
+                    ))
+                })?;
+                if task.is_dir {
                     send_libarchive_extract_output(
                         sender,
                         LibarchiveExtractOutput::Directory {
@@ -959,68 +988,65 @@ fn extract_libarchive_task_chunk_to_sender(
                         },
                         format_name,
                     )?;
-                }
-                SelectedRegularArchiveEntry::File { entry, reader } => {
-                    let task = tasks_by_index.get(&entry.index).copied().ok_or_else(|| {
-                        RomWeaverError::Validation(format!(
-                            "{format_name} extract failed while resolving selected file index {}",
-                            entry.index
-                        ))
-                    })?;
-                    if task.is_dir {
-                        send_libarchive_extract_output(
-                            sender,
-                            LibarchiveExtractOutput::Directory {
-                                output_path: task.output_path.clone(),
-                            },
-                            format_name,
-                        )?;
-                    } else {
-                        send_libarchive_extract_output(
-                            sender,
-                            LibarchiveExtractOutput::FileStart {
-                                index: task.index,
-                                archive_name: task.archive_name.clone(),
-                                output_path: task.output_path.clone(),
-                                logical_bytes: task.logical_bytes,
-                            },
-                            format_name,
-                        )?;
-                        let mut buffer = vec![0u8; LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES];
-                        loop {
-                            let read = reader.read(&mut buffer).map_err(|error| {
+                } else {
+                    send_libarchive_extract_output(
+                        sender,
+                        LibarchiveExtractOutput::FileStart {
+                            index: task.index,
+                            archive_name: task.archive_name.clone(),
+                            output_path: task.output_path.clone(),
+                            logical_bytes: task.logical_bytes,
+                        },
+                        format_name,
+                    )?;
+                    let mut buffer = vec![0u8; LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES];
+                    loop {
+                        let read = reader.read(&mut buffer).map_err(|error| {
                                 RomWeaverError::Validation(format!(
                                     "{format_name} extract failed while reading entry {} (`{}`): {error}",
                                     task.index, task.archive_name
                                 ))
                             })?;
-                            if read == 0 {
-                                break;
-                            }
-                            send_libarchive_extract_output(
-                                sender,
-                                LibarchiveExtractOutput::FileData {
-                                    index: task.index,
-                                    archive_name: task.archive_name.clone(),
-                                    bytes: buffer[..read].to_vec(),
-                                },
-                                format_name,
-                            )?;
+                        if read == 0 {
+                            break;
                         }
                         send_libarchive_extract_output(
                             sender,
-                            LibarchiveExtractOutput::FileEnd {
+                            LibarchiveExtractOutput::FileData {
                                 index: task.index,
                                 archive_name: task.archive_name.clone(),
+                                bytes: buffer[..read].to_vec(),
                             },
                             format_name,
                         )?;
                     }
+                    send_libarchive_extract_output(
+                        sender,
+                        LibarchiveExtractOutput::FileEnd {
+                            index: task.index,
+                            archive_name: task.archive_name.clone(),
+                        },
+                        format_name,
+                    )?;
                 }
             }
-            Ok(())
-        },
-    )?;
+        }
+        Ok(())
+    };
+    let matched_tasks = match source {
+        ChunkArchiveSource::Path(path) => visit_selected_regular_archive_entries(
+            path,
+            format_name,
+            &selected_indices,
+            &mut visit,
+        )?,
+        ChunkArchiveSource::Memory(bytes) => visit_selected_regular_archive_entries_from_memory(
+            bytes,
+            format_name,
+            &selected_indices,
+            &mut visit,
+        )?,
+    };
 
     if matched_tasks != tasks_by_index.len() {
         return Err(RomWeaverError::Validation(format!(
@@ -1043,6 +1069,7 @@ pub(crate) fn extract_regular_archive_with_libarchive(
         &request.selections,
         request.kind_filter,
         request.ignore_common_files,
+        request.parent.is_some(),
         format_name,
     )?;
     let total_tasks = tasks.len();
@@ -1114,6 +1141,20 @@ pub(crate) fn extract_regular_archive_with_libarchive(
         let source = request.source.clone();
         let progress_context = context.clone();
         let progress_execution = execution.clone();
+        // In the browser only the main runner thread can open an OPFS-backed source; read the whole
+        // archive image here (on the calling thread) so the parallel workers extract from shared
+        // bytes instead of re-opening the file, which fails with `os error 44` for the nested
+        // intermediates that a prior extract step just wrote.
+        let source_bytes: Option<Arc<[u8]>> =
+            if request.parent.is_some() && container_reads_source_on_main_thread() {
+                Some(Arc::from(fs::read(&source).map_err(|error| {
+                RomWeaverError::Validation(format!(
+                    "{format_name} extract failed while reading source on the main thread: {error}"
+                ))
+            })?))
+            } else {
+                None
+            };
 
         let mut output_checksums = Vec::new();
         let written_bytes = if execution.used_parallelism {
@@ -1138,8 +1179,14 @@ pub(crate) fn extract_regular_archive_with_libarchive(
                             tasks.par_chunks(chunk_size).try_for_each_with(
                                 sender,
                                 |sender, chunk| {
+                                    let chunk_source = match &source_bytes {
+                                        Some(bytes) => {
+                                            ChunkArchiveSource::Memory(Arc::clone(bytes))
+                                        }
+                                        None => ChunkArchiveSource::Path(&source),
+                                    };
                                     extract_libarchive_task_chunk_to_sender(
-                                        &source,
+                                        chunk_source,
                                         chunk,
                                         format_name,
                                         sender,

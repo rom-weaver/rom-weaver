@@ -179,6 +179,11 @@ pub struct ContainerExtractRequest {
     pub split_bin: bool,
     pub ignore_common_files: bool,
     pub overwrite: bool,
+    /// The containing archive this source was extracted from, when it is a nested-archive
+    /// intermediate written during this run (top-level inputs leave this `None`). Beyond tracing
+    /// provenance, handlers use `parent.is_some()` to know the source is run-local: in the browser
+    /// only the main runner thread can open such a file, so a parallel extract must read it on the
+    /// main thread and hand the bytes to workers (a top-level input is already synced to workers).
     pub parent: Option<PathBuf>,
 }
 
