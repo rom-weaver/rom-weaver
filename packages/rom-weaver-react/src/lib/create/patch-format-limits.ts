@@ -1,6 +1,5 @@
-import { ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY } from "rom-weaver-wasm/format-metadata";
-
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
+import { ROM_WEAVER_CREATE_PATCH_FORMAT_POLICY } from "../../wasm/generated/rom-weaver-format-metadata.ts";
 
 type CreatePatchFormatPreferenceInput = {
   automaticFormatSelection?: boolean;

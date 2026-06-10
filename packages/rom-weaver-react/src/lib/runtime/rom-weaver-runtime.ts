@@ -1,5 +1,3 @@
-import type { CompressionLevelProfile } from "rom-weaver-wasm";
-import { createRomWeaverCommand } from "rom-weaver-wasm";
 import { withBrowserOutputStorageFailureContext } from "../../storage/browser/browser-output-storage-guard.ts";
 import {
   formatBrowserStorageEstimateState,
@@ -20,7 +18,10 @@ import type {
   RuntimeWorkerIo,
   WorkflowRuntimeLog,
 } from "../../types/workflow-runtime-adapter.ts";
+import type { CompressionLevelProfile } from "../../wasm/index.ts";
+import { createRomWeaverCommand } from "../../wasm/index.ts";
 import {
+  getRomWeaverRunEventDetails,
   getRomWeaverRunEventFormat,
   getRomWeaverRunEventLabel,
 } from "../../workers/rom-weaver/rom-weaver-run-events.ts";

@@ -4,14 +4,14 @@
  */
 
 import {
-  type ROM_WEAVER_COMPRESSION_METADATA,
-  ROM_WEAVER_CREATE_CONTAINER_FORMATS,
-} from "rom-weaver-wasm/format-metadata";
-import {
   getSourceExtension,
   getSourceFileName,
   replaceFileExtension,
 } from "../../storage/shared/binary/source-file-utils.ts";
+import {
+  type ROM_WEAVER_COMPRESSION_METADATA,
+  ROM_WEAVER_CREATE_CONTAINER_FORMATS,
+} from "../../wasm/generated/rom-weaver-format-metadata.ts";
 import { parseCompressionCodecEntry } from "./codec-parser.ts";
 import {
   COMPRESSION_DEFAULTS,

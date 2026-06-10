@@ -1,4 +1,3 @@
-import { ROM_WEAVER_CREATE_CONTAINER_FORMATS } from "rom-weaver-wasm/format-metadata";
 import {
   type CompressionCodecOption,
   getCompressionCodecLevelMax,
@@ -17,6 +16,7 @@ import {
 import { getBrowserLocaleCandidates, negotiateLocale } from "../../presentation/localization/index.ts";
 import { getSettingsLabel } from "../../presentation/settings.ts";
 import { LOG_LEVELS } from "../../types/logging.ts";
+import { ROM_WEAVER_CREATE_CONTAINER_FORMATS } from "../../wasm/generated/rom-weaver-format-metadata.ts";
 import { getDefaultWebappDevToolsEnabled, getDefaultWebappLogLevel } from "../development-defaults.ts";
 import {
   COMPRESSION_PROFILES,

@@ -387,10 +387,12 @@ const createBrowserDiscFormatsRuntime = (
       );
       const sourceFileName = fileName || workerSource.fileName || Z3DS_ROM_SPECIFIC_FORMAT.fallbackFileName;
       const stagedSourceFileName = getPathDerivedFileName(workerSource.filePath, sourceFileName);
-      return normalizeZ3dsListEntriesForSource(
-        normalizeRomSpecificListEntries(result.entries, stagedSourceFileName, sourceFileName),
-        sourceFileName,
-      );
+      return {
+        entries: normalizeZ3dsListEntriesForSource(
+          normalizeRomSpecificListEntries(result.entries, stagedSourceFileName, sourceFileName),
+          sourceFileName,
+        ),
+      };
     } finally {
       await workerSource.cleanup().catch(() => undefined);
     }

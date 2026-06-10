@@ -1,3 +1,5 @@
+import { createLogger } from "../../lib/logging.ts";
+import { getDefaultBrowserThreadCount } from "../../platform/shared/compression-options.ts";
 import type {
   RomWeaverBrowserOpfsRunOptions,
   RomWeaverCommand,
@@ -5,14 +7,12 @@ import type {
   RomWeaverRunJsonEvent,
   RomWeaverRunJsonOptions,
   RomWeaverRunJsonResult,
-} from "rom-weaver-wasm";
-import { collectRomWeaverRunInputPaths, readRomWeaverRunInputCommand } from "rom-weaver-wasm";
-import browserWasmUrl from "rom-weaver-wasm/rom-weaver-app.wasm?url";
-import { createBrowserWorkerClient } from "rom-weaver-wasm/workers/browser-client";
-import browserRunnerWorkerUrl from "rom-weaver-wasm/workers/browser-runner-worker?worker&url";
-import browserThreadWorkerUrl from "rom-weaver-wasm/workers/browser-wasi-thread-worker?worker&url";
-import { createLogger } from "../../lib/logging.ts";
-import { getDefaultBrowserThreadCount } from "../../platform/shared/compression-options.ts";
+} from "../../wasm/index.ts";
+import { collectRomWeaverRunInputPaths, readRomWeaverRunInputCommand } from "../../wasm/index.ts";
+import browserWasmUrl from "../../wasm/rom-weaver-app.wasm?url";
+import browserRunnerWorkerUrl from "../../wasm/workers/browser-runner-worker.ts?worker&url";
+import browserThreadWorkerUrl from "../../wasm/workers/browser-wasi-thread-worker.ts?worker&url";
+import { createBrowserWorkerClient } from "../../wasm/workers/browser-worker-client.ts";
 import { type BrowserVirtualFile, getActiveBrowserVirtualFiles } from "../protocol/browser-virtual-files.ts";
 import { isBrowserRuntime } from "../shared/runtime-env.ts";
 import { WORKER_OPFS_MOUNTPOINT } from "../shared/worker-storage/storage-layout.ts";

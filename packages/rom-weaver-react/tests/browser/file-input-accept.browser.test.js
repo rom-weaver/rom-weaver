@@ -1,6 +1,6 @@
-import { ROM_WEAVER_FILE_FILTERS } from "rom-weaver-wasm/format-metadata";
 import { expect, test } from "vitest";
 import { getFileInputAcceptAttributes } from "../../src/public/react/file-input-accept.ts";
+import { ROM_WEAVER_FILE_FILTERS } from "../../src/wasm/generated/rom-weaver-format-metadata.ts";
 
 const stripLeadingExtensionDot = (extension) => extension.replace(/^\./, "");
 const unique = (values) => [...new Set(values)];

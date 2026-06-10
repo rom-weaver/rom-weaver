@@ -1,7 +1,7 @@
 import type {
   ROM_WEAVER_COMPRESSION_METADATA,
   ROM_WEAVER_CREATE_CONTAINER_FORMATS,
-} from "rom-weaver-wasm/format-metadata";
+} from "../wasm/generated/rom-weaver-format-metadata.ts";
 
 type PatchFormat = "aps" | "bdf" | "bps" | "ebp" | "ips" | "pmsr" | "ppf" | "rup" | "ups" | "vcdiff" | "xdelta";
 

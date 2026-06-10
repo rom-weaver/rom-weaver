@@ -3,8 +3,8 @@ import {
   type BrowserFormatMatrixSummary,
   runBrowserFullFormatMatrix,
   summarizeBrowserFormatMatrixResult,
-} from "../../../rom-weaver-wasm/src/browser-format-matrix.ts";
-import type { RomWeaverRunJsonEvent } from "../../../rom-weaver-wasm/src/rom-weaver-types.d.ts";
+} from "../wasm/browser-format-matrix.ts";
+import type { RomWeaverRunJsonEvent } from "../wasm/rom-weaver-types.d.ts";
 import { type BrowserRuntimeDiagnostics, collectBrowserRuntimeDiagnostics } from "./browser-runtime-diagnostics.ts";
 
 type MobileSafariMatrixStatus = "idle" | "running" | "passed" | "failed" | "diagnostics failed";

@@ -1,11 +1,11 @@
+import type { LogLevel } from "../../types/logging.ts";
+import type { WorkflowRuntimeLog } from "../../types/workflow-runtime-adapter.ts";
 import type {
   RomWeaverRunJsonOptions as BaseRomWeaverRunJsonOptions,
   RomWeaverBrowserOpfsRunOptions,
   RomWeaverBrowserSyncAccessMode,
   RomWeaverRunJsonEvent,
-} from "rom-weaver-wasm";
-import type { LogLevel } from "../../types/logging.ts";
-import type { WorkflowRuntimeLog } from "../../types/workflow-runtime-adapter.ts";
+} from "../../wasm/index.ts";
 import { emitTraceLog } from "../logging.ts";
 
 type RomWeaverRunJsonOptions = BaseRomWeaverRunJsonOptions<RomWeaverRunJsonEvent, RuntimeValue> &

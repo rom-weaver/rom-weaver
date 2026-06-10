@@ -1,6 +1,9 @@
-import { ROM_WEAVER_CONTAINER_FORMATS, ROM_WEAVER_CREATE_CONTAINER_FORMATS } from "rom-weaver-wasm/format-metadata";
 import type { ApplySettings, CompressionFormat } from "../../types/settings.ts";
 import type { RuntimeWorkerSourceScope } from "../../types/workflow-runtime-adapter.ts";
+import {
+  ROM_WEAVER_CONTAINER_FORMATS,
+  ROM_WEAVER_CREATE_CONTAINER_FORMATS,
+} from "../../wasm/generated/rom-weaver-format-metadata.ts";
 import {
   getFileNameExtension,
   hasFileNameExtension,

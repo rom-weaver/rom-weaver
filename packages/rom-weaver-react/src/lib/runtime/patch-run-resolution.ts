@@ -1,9 +1,9 @@
-import type { ThreadBudget } from "rom-weaver-wasm";
 import type {
   RuntimePatchApplyWorkerInput,
   RuntimePatchCreateFormatCandidates,
   RuntimePatchValidateWorkerInput,
 } from "../../types/workflow-runtime-adapter.ts";
+import type { ThreadBudget } from "../../wasm/index.ts";
 import {
   getRomWeaverRunEventDetails,
   getRomWeaverRunEventFormat,

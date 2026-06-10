@@ -1,10 +1,10 @@
-import type { ROM_WEAVER_COMPRESSION_METADATA } from "rom-weaver-wasm/format-metadata";
 import type {
   ArchiveCompressionFormat,
   RomSpecificCompressionFormat,
 } from "../lib/compression/container-format-registry.ts";
 import type { InputAsset } from "../lib/input/input-assets.ts";
 import type { VfsOutputRef } from "../storage/vfs/types.ts";
+import type { ROM_WEAVER_COMPRESSION_METADATA } from "../wasm/generated/rom-weaver-format-metadata.ts";
 import type { ParsedPatchLike, PatchFileInstance } from "../workers/protocol/patch-engine.ts";
 import type { ChecksumVariant } from "./checksum.ts";
 import type { LogLevel, LogRecord } from "./logging.ts";

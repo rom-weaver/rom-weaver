@@ -1,3 +1,5 @@
+import { emitTraceLog } from "../../lib/logging.ts";
+import type { LogRecord } from "../../types/logging.ts";
 import {
   VIRTUAL_FILE_CONTROL_BYTES_READ_INDEX as CONTROL_BYTES_READ_INDEX,
   VIRTUAL_FILE_CONTROL_WORD_COUNT as CONTROL_LENGTH,
@@ -11,9 +13,7 @@ import {
   VIRTUAL_FILE_STATUS_ERROR as CONTROL_STATUS_ERROR,
   VIRTUAL_FILE_CONTROL_STATUS_INDEX as CONTROL_STATUS_INDEX,
   VIRTUAL_FILE_STATUS_OK as CONTROL_STATUS_OK,
-} from "rom-weaver-wasm/browser-virtual-file-protocol";
-import { emitTraceLog } from "../../lib/logging.ts";
-import type { LogRecord } from "../../types/logging.ts";
+} from "../../wasm/browser-virtual-file-protocol.ts";
 
 type BrowserVirtualFileSource = Blob | Uint8Array | ArrayBuffer;
 
@@ -62,7 +62,7 @@ const VIRTUAL_FILE_MIN_CHUNK_SIZE = 256 * 1024;
 const VIRTUAL_FILE_MAX_CHUNK_SIZE = 4 * 1024 * 1024;
 const VIRTUAL_FILE_MAX_SLOT_COUNT = 4;
 const VIRTUAL_FILE_MAX_TOTAL_SAB_BYTES_PER_FILE = 16 * 1024 * 1024;
-// Control-word layout and slot states are imported from rom-weaver-wasm/browser-virtual-file-protocol
+// Control-word layout and slot states are imported from ../../wasm/browser-virtual-file-protocol.ts
 // (aliased above to this file's CONTROL_* vocabulary) so the producer and the WASM consumer can never
 // disagree on the wire format. CONTROL_STATE_READING (the producer's in-flight marker) is deliberately
 // a distinct value from the consumer's LOCKED slot-acquire marker; both are defined in that one module

@@ -7,9 +7,8 @@
 
 # Generated wasm artifacts
 /dist/wasm/
-/packages/rom-weaver-wasm/rom-weaver-app.wasm
-/packages/rom-weaver-wasm/rom-weaver-app.wasm.br
-/packages/rom-weaver-wasm/rom-weaver-app-threaded.wasm
-/packages/rom-weaver-wasm/rom-weaver-app-threaded.wasm.br
-/packages/rom-weaver-wasm/.vitest-attachments/
-/packages/rom-weaver-wasm/tests/__screenshots__/
+/packages/rom-weaver-react/src/wasm/rom-weaver-app.wasm
+/packages/rom-weaver-react/src/wasm/rom-weaver-app.wasm.br
+/packages/rom-weaver-react/src/wasm/rom-weaver-app-threaded.wasm
+/packages/rom-weaver-react/src/wasm/rom-weaver-app-threaded.wasm.br
+/packages/rom-weaver-react/tests/wasm/__screenshots__/

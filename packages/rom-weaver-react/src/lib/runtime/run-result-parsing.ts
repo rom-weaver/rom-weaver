@@ -1,6 +1,6 @@
-import type { RomWeaverRunJsonResult as BaseRomWeaverRunJsonResult, RomWeaverRunJsonEvent } from "rom-weaver-wasm";
 import type { ChecksumMap, ChecksumVariant } from "../../types/checksum.ts";
 import type { CompressionListResult } from "../../types/workflow-runtime.ts";
+import type { RomWeaverRunJsonResult as BaseRomWeaverRunJsonResult, RomWeaverRunJsonEvent } from "../../wasm/index.ts";
 import {
   getRomWeaverRunEventDetails,
   getRomWeaverRunEventElapsedMs,
@@ -242,8 +242,6 @@ export type { RomWeaverEmittedFile, RomWeaverRunJsonResult };
 export {
   asRecord,
   ensureRomWeaverSuccess,
-  parseChecksumVariants,
-  readChecksumMap,
   getChdMediaKindFromList,
   getContainerEntriesFromList,
   getEmittedFileDetails,
@@ -251,5 +249,7 @@ export {
   getLastEvent,
   getRunResultTiming,
   getTerminalEvent,
+  parseChecksumVariants,
+  readChecksumMap,
   toSimpleProgress,
 };

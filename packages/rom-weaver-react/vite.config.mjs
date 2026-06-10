@@ -13,24 +13,8 @@ import { getBuildInfo } from "./scripts/version.mjs";
 const rootDir = process.cwd();
 const repoRoot = path.resolve(rootDir, "../..");
 
-// In a git worktree, node_modules is commonly symlinked back to the primary checkout,
-// so `file:` workspace deps (e.g. rom-weaver-wasm and its worker sources) resolve to a
-// path outside the worktree. Allow Vite's dev server to serve those real locations so
-// the runtime worker modules aren't rejected as "outside of Vite serving allow list".
-const resolveRealPath = (target) => {
-  try {
-    return fs.realpathSync(target);
-  } catch {
-    return null;
-  }
-};
-const linkedDependencyAllowRoots = [
-  resolveRealPath(path.join(rootDir, "node_modules")),
-  resolveRealPath(path.join(rootDir, "node_modules", "rom-weaver-wasm")),
-].filter((entry) => entry !== null && !entry.startsWith(repoRoot));
-
 const rootManifestSourcePath = path.join(rootDir, "src", "assets", "app", "root", "manifest.json");
-const packagedWasmPath = path.join(rootDir, "..", "rom-weaver-wasm", "rom-weaver-app.wasm");
+const packagedWasmPath = path.join(rootDir, "src", "wasm", "rom-weaver-app.wasm");
 const packagedWasmBrotliPath = `${packagedWasmPath}.br`;
 const rootStaticAssetSources = {
   "/apple-touch-icon.png": path.join(rootDir, "src", "assets", "app", "root", "apple-touch-icon.png"),
@@ -51,8 +35,8 @@ const runtimeScratchIgnorePatterns = [
   "**/dist/**",
   "**/.rpjs-vfs",
   "**/.rpjs-vfs/**",
-  "../rom-weaver-wasm/*.wasm",
-  "../rom-weaver-wasm/*.wasm.br",
+  "**/src/wasm/*.wasm",
+  "**/src/wasm/*.wasm.br",
   path.join(os.tmpdir(), "rpjs-vfs*").replace(/\\/g, "/"),
 ];
 const getHotUpdateLabel = (filePath) => path.relative(rootDir, filePath) || path.basename(filePath);
@@ -256,7 +240,6 @@ export default defineConfig(({ command }) => {
       ...serviceWorkerDefines,
     },
     optimizeDeps: {
-      exclude: ["rom-weaver-wasm"],
       include: [
         "@bjorn3/browser_wasi_shim",
         "lucide-react/dist/esm/icons/github.js",
@@ -322,7 +305,7 @@ export default defineConfig(({ command }) => {
     },
     server: {
       fs: {
-        allow: [rootDir, repoRoot, ...linkedDependencyAllowRoots],
+        allow: [rootDir, repoRoot],
       },
       headers: securityHeaders,
       host: "0.0.0.0",

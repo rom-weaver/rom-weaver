@@ -1,11 +1,11 @@
+import type { LargeFileVfs } from "../storage/vfs/types.ts";
 import type {
   PatchApplyCommand,
   PatchCreateCandidatesCommand,
   PatchCreateCommand,
   PatchValidateCommand,
   ThreadBudget,
-} from "rom-weaver-wasm";
-import type { LargeFileVfs } from "../storage/vfs/types.ts";
+} from "../wasm/index.ts";
 import type { ChecksumResult, ChecksumVariant } from "./checksum.ts";
 import type { LogLevel, LogRecord } from "./logging.ts";
 import type { OutputStorageKind } from "./output.ts";

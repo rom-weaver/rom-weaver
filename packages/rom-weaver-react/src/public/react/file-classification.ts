@@ -1,5 +1,5 @@
-import { ROM_WEAVER_FILE_FILTERS } from "rom-weaver-wasm/format-metadata";
 import { createLogger } from "../../lib/logging.ts";
+import { ROM_WEAVER_FILE_FILTERS } from "../../wasm/generated/rom-weaver-format-metadata.ts";
 
 /**
  * Single source of truth for classifying a dropped file by name into a patch,

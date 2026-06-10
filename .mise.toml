@@ -80,8 +80,8 @@ run = '''
 set -euo pipefail
 
 target="wasm32-wasip1-threads"
-out_dir="${ROM_WEAVER_WASM_OUT_DIR:-$MISE_PROJECT_ROOT/packages/rom-weaver-wasm}"
-pkg_dir="$MISE_PROJECT_ROOT/packages/rom-weaver-wasm"
+out_dir="${ROM_WEAVER_WASM_OUT_DIR:-$MISE_PROJECT_ROOT/packages/rom-weaver-react/src/wasm}"
+pkg_dir="$MISE_PROJECT_ROOT/packages/rom-weaver-react/src/wasm"
 artifact="$out_dir/rom-weaver-app.wasm"
 
 command -v cargo >/dev/null || { echo "missing command: cargo" >&2; exit 1; }
@@ -98,7 +98,7 @@ cp "$MISE_PROJECT_ROOT/target/$target/wasm-release/rom-weaver-app.wasm" "$artifa
 
 # Sync into the npm package only when built to a separate output directory.
 if [[ "$out_dir" != "$pkg_dir" ]]; then
-  node "$pkg_dir/scripts/sync-dist.mjs" "$out_dir"
+  node "$MISE_PROJECT_ROOT/packages/rom-weaver-react/scripts/sync-dist.mjs" "$out_dir"
 fi
 
 echo "artifact written to $out_dir/rom-weaver-app.wasm"
@@ -116,8 +116,8 @@ run = '''
 set -euo pipefail
 
 target="wasm32-wasip1-threads"
-out_dir="${ROM_WEAVER_WASM_OUT_DIR:-$MISE_PROJECT_ROOT/packages/rom-weaver-wasm}"
-pkg_dir="$MISE_PROJECT_ROOT/packages/rom-weaver-wasm"
+out_dir="${ROM_WEAVER_WASM_OUT_DIR:-$MISE_PROJECT_ROOT/packages/rom-weaver-react/src/wasm}"
+pkg_dir="$MISE_PROJECT_ROOT/packages/rom-weaver-react/src/wasm"
 artifact="$out_dir/rom-weaver-app.wasm"
 
 command -v cargo >/dev/null || { echo "missing command: cargo" >&2; exit 1; }
@@ -144,7 +144,7 @@ brotli --force --quality="${BROTLI_QUALITY:-11}" --output="$artifact.br" "$artif
 
 # Sync into the npm package only when built to a separate output directory.
 if [[ "$out_dir" != "$pkg_dir" ]]; then
-  node "$pkg_dir/scripts/sync-dist.mjs" "$out_dir"
+  node "$MISE_PROJECT_ROOT/packages/rom-weaver-react/scripts/sync-dist.mjs" "$out_dir"
 fi
 
 echo "artifacts written to $out_dir (rom-weaver-app.wasm, rom-weaver-app.wasm.br)"
@@ -207,9 +207,8 @@ depends = ["fmt", "clippy", "typegen-check", "wasm-check", "thread-guards", "tes
 run = '''
 #!/usr/bin/env bash
 set -euo pipefail
-npm --prefix packages/rom-weaver-wasm run lint
-npm --prefix packages/rom-weaver-wasm test
 npm --prefix packages/rom-weaver-react run lint
+npm --prefix packages/rom-weaver-react run test:browser:wasm
 npm --prefix packages/rom-weaver-react test
 npm --prefix packages/rom-weaver-react run build
 '''

@@ -1,4 +1,4 @@
-import type { RomWeaverProgressEvent, RomWeaverRunJsonEvent } from "rom-weaver-wasm";
+import type { RomWeaverProgressEvent, RomWeaverRunJsonEvent } from "../../wasm/index.ts";
 
 type RomWeaverRuntimeProgressStatus = RomWeaverProgressEvent["status"];
 type RomWeaverRuntimeProgressLabel = RomWeaverProgressEvent["label"];

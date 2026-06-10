@@ -12,7 +12,7 @@ import { patchWorkflowDeps, runApplyWorkflow } from "../apply/workflow.ts";
 import { isCompressionFormat } from "../compression/container-format-registry.ts";
 import { RomWeaverError, throwIfAborted, toRomWeaverError, withAbortSignal } from "../errors.ts";
 import { getPatchFileBlob, getPatchFileBytes } from "../input/binary-service.ts";
-import type { InputAsset } from "../input/input-assets.ts";
+import type { InputAsset, InputParentCompression } from "../input/input-assets.ts";
 import {
   getPatchLeafFileForSelection,
   getPatchLeafParentCompressionsForSelection,
@@ -38,7 +38,11 @@ import {
   evaluateApplyPatchReadiness,
 } from "./apply-patch-readiness-state-machine.ts";
 import { validateApplyPatchTarget } from "./apply-patch-target-validation.ts";
-import { applyPreparedInputMetadata, applyPreparedPatchMetadata } from "./apply-prepared-metadata.ts";
+import {
+  applyPreparedInputMetadata,
+  applyPreparedPatchMetadata,
+  normalizeParentCompressions,
+} from "./apply-prepared-metadata.ts";
 import { releasePreparedSource, releasePreparedSourceAndWait } from "./apply-prepared-source-release.ts";
 import {
   canRecoverWithCandidateSelection,
@@ -245,6 +249,34 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
         throw error;
       }
     });
+  }
+
+  private async addFannedOutPatch(
+    patchFile: PatchFileInstance,
+    parentCompressions: InputParentCompression[],
+  ): Promise<void> {
+    this.trace("patch.multiselect.fanout.add", { fileName: patchFile.fileName, patchCount: this.patches.length });
+    const stage = this.createInitialSource(
+      "patch",
+      this.createImplicitPatchSource(patchFile, parentCompressions),
+      this.patches.length,
+    );
+    stage.preparedPatchFile = patchFile;
+    stage.outputLabel = createPatchOutputLabel(patchFile.fileName) || stage.outputLabel;
+    applyPreparedPatchMetadata(stage, {
+      decompressionTimeMs: parentCompressions[0]?.decompressionTimeMs || 0,
+      file: patchFile,
+      parentCompressions,
+      sourceSize: patchFile.fileSize,
+      wasDecompressed: true,
+    });
+    this.addDirectCandidate(stage, "patch", stage.index, stage.state.id);
+    stage.state.selectedCandidateId = stage.state.candidates[0]?.id;
+    if (stage.outputLabel)
+      (stage.preparedPatchFile as PatchFileInstance & { _generatedPatchName?: string })._generatedPatchName =
+        stage.outputLabel;
+    await this.evaluatePatchReadiness(stage);
+    this.patches.push(stage);
   }
 
   private createImplicitPatchSource(
@@ -846,7 +878,7 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
           getPatchLeafParentCompressionsForSelection(firstInternal.request, firstInternal.candidate.id)) ||
         undefined;
       if (firstParentCompressions?.length) {
-        stage.parentCompressions = this.normalizeParentCompressions(firstParentCompressions);
+        stage.parentCompressions = normalizeParentCompressions(firstParentCompressions);
         // Carry the extract elapsed time onto the stage so the row shows it (prepareSelectedSource
         // reuses stage.state.decompressionTimeMs for the already-extracted leaf).
         const rootTime = firstParentCompressions[0]?.decompressionTimeMs;

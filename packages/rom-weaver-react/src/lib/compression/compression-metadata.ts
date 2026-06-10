@@ -1,4 +1,4 @@
-import { ROM_WEAVER_COMPRESSION_METADATA } from "rom-weaver-wasm/format-metadata";
+import { ROM_WEAVER_COMPRESSION_METADATA } from "../../wasm/generated/rom-weaver-format-metadata.ts";
 
 type GeneratedCompressionMetadata = typeof ROM_WEAVER_COMPRESSION_METADATA;
 type GeneratedCompressionProfile = GeneratedCompressionMetadata["profiles"][number]["name"];

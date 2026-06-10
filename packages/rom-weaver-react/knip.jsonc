@@ -3,7 +3,11 @@
   "entry": [
     "src/webapp/cache-service-worker.ts",
     "src/webapp/mobile-safari-matrix.ts",
+    "src/wasm/workers/browser-runner-worker.ts",
+    "src/wasm/workers/browser-wasi-thread-worker.ts",
     "scripts/version.mjs",
+    "tests/wasm/*.test.mjs",
+    "tests/wasm/*.bench.mjs",
     "vitest.config.base.mjs"
   ],
   "project": [

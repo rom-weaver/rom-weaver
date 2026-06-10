@@ -19,10 +19,7 @@ const normalizeParentCompressions = (
   }));
 
 const applyPreparedInputMetadata = <TSource>(stage: StagedSource<TSource>) => {
-  // The cue is not shown as its own row; its text rides on the sibling bin/track rows via
-  // `cueText`. Output generation still reads `preparedInputAssets` directly, so the cue asset
-  // stays available there. Filter the cue out of the UI-facing resolved inputs only.
-  const assets = (stage.preparedInputAssets || []).filter((asset) => asset.kind !== "cue");
+  const assets = stage.preparedInputAssets || [];
   const preparation = getInputPreparationMetrics(assets);
   stage.parentCompressions = normalizeParentCompressions(preparation?.parentCompressions);
   stage.state.fileName = getPreparedAssetFileName(assets[0], stage.state.fileName || stage.state.id);
@@ -45,16 +42,30 @@ const applyPreparedInputMetadata = <TSource>(stage: StagedSource<TSource>) => {
   }
 };
 
+/** Side-channel chain attached to a fanned-out leaf patch File so a re-stage (which sees only the
+ * raw patch, not its parent archive) can still render the archive-nesting "extract section". */
+type NestedPatchSourceMetadata = { __nestedParentCompressions?: InputParentCompression[] };
+
 const applyPreparedPatchMetadata = <TSource>(
   stage: StagedSource<TSource>,
   prepared: Awaited<ReturnType<typeof prepareInputFile>>,
 ) => {
-  stage.parentCompressions = normalizeParentCompressions(prepared.parentCompressions);
+  const carried = (stage.source as Partial<NestedPatchSourceMetadata> | undefined)?.__nestedParentCompressions;
+  // On a re-stage the source is a raw leaf File, so `prepared` has no nesting chain; fall back to
+  // the chain (and its root extract time) carried on the implicit leaf source so the row keeps its
+  // extract section, parent-archive size, and elapsed time across re-stages.
+  const usingCarried = !prepared.parentCompressions?.length && !!carried?.length;
+  stage.parentCompressions = normalizeParentCompressions(usingCarried ? carried : prepared.parentCompressions);
   stage.state.fileName = getBaseFileName(prepared.file.fileName || stage.state.fileName || stage.state.id);
   stage.state.size = prepared.file.fileSize;
   stage.state.sourceSize = prepared.sourceSize || prepared.file.fileSize;
-  stage.state.decompressionTimeMs = prepared.wasDecompressed ? prepared.decompressionTimeMs : undefined;
-  stage.state.wasDecompressed = prepared.wasDecompressed;
+  const carriedTime = usingCarried ? carried?.[0]?.decompressionTimeMs : undefined;
+  stage.state.decompressionTimeMs = prepared.wasDecompressed
+    ? prepared.decompressionTimeMs
+    : typeof carriedTime === "number"
+      ? carriedTime
+      : undefined;
+  stage.state.wasDecompressed = prepared.wasDecompressed || (usingCarried && typeof carriedTime === "number");
 };
 
-export { applyPreparedInputMetadata, applyPreparedPatchMetadata };
+export { applyPreparedInputMetadata, applyPreparedPatchMetadata, normalizeParentCompressions };

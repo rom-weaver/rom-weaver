@@ -1,3 +1,10 @@
+import type { WorkerKind } from "../../types/worker-messages.ts";
+import type {
+  RuntimePatchApplyOptions,
+  RuntimePatchValidateOptions,
+  RuntimeThreadBudgetInput,
+} from "../../types/workflow-runtime-adapter.ts";
+import type { PatchFileEntry as WorkflowPatchFileEntry } from "../../types/workflow-source.ts";
 import type {
   ChecksumCommand,
   CompressCommand,
@@ -8,14 +15,7 @@ import type {
   RomWeaverJsonValue,
   RomWeaverProgressEvent,
   TrimCommand,
-} from "rom-weaver-wasm";
-import type { WorkerKind } from "../../types/worker-messages.ts";
-import type {
-  RuntimePatchApplyOptions,
-  RuntimePatchValidateOptions,
-  RuntimeThreadBudgetInput,
-} from "../../types/workflow-runtime-adapter.ts";
-import type { PatchFileEntry as WorkflowPatchFileEntry } from "../../types/workflow-source.ts";
+} from "../../wasm/index.ts";
 import type { BrowserWorkerFile, CompressionWorkerKind, CompressionWorkerOperation } from "./worker-protocol.ts";
 
 type WorkerRequestId = string;

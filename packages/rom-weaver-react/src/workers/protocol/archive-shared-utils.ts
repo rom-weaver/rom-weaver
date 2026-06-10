@@ -1,7 +1,6 @@
-import { ROM_WEAVER_FILE_FILTERS } from "rom-weaver-wasm/format-metadata";
-
 import { getFileNameExtension, getFileNameWithoutExtension, stripFileNameQuery } from "../../lib/path-utils.ts";
 import { hasReadableBytes, toUint8Array } from "../../storage/shared/binary/binary-source-utils.ts";
+import { ROM_WEAVER_FILE_FILTERS } from "../../wasm/generated/rom-weaver-format-metadata.ts";
 import type { BlobLike } from "./archive-source-types.ts";
 
 const MACOS_RESOURCE_FORK_ENTRY_REGEX = /(^|\/)\._[^/]+$/i;

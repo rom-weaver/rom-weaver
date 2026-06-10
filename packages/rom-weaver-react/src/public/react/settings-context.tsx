@@ -1,7 +1,7 @@
 import { createContext, useContext, useMemo } from "react";
-import { ROM_WEAVER_CREATE_CONTAINER_FORMATS } from "rom-weaver-wasm/format-metadata";
 import { resolveCompressionLevels } from "../../lib/compression/compression-settings.ts";
 import { createLogger } from "../../lib/logging.ts";
+import { ROM_WEAVER_CREATE_CONTAINER_FORMATS } from "../../wasm/generated/rom-weaver-format-metadata.ts";
 import type {
   ApplyPatchFormSettings,
   ApplyWorkflowSettings,

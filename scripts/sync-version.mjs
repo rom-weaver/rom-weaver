@@ -6,11 +6,8 @@ import { join, relative } from "node:path";
 const rootDir = process.cwd();
 const packageJsonPath = join(rootDir, "package.json");
 const workspaceCargoTomlPath = join(rootDir, "Cargo.toml");
-const syncedPackageJsonPaths = [
-  "packages/rom-weaver-react/package.json",
-  "packages/rom-weaver-wasm/package.json",
-];
-const syncedPackageDirs = [".", "packages/rom-weaver-wasm", "packages/rom-weaver-react"];
+const syncedPackageJsonPaths = ["packages/rom-weaver-react/package.json"];
+const syncedPackageDirs = [".", "packages/rom-weaver-react"];
 
 async function fileExists(filePath) {
   try {
@@ -147,7 +144,6 @@ function stageVersionFiles(cargoTomlPaths) {
     ...cargoTomlRelativePaths.filter((filePath) => filePath !== "Cargo.toml"),
     ...syncedPackageJsonPaths,
     "packages/rom-weaver-react/package-lock.json",
-    "packages/rom-weaver-wasm/package-lock.json",
   ];
 
   try {

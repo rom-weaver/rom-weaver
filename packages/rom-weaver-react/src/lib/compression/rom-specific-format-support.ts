@@ -1,4 +1,4 @@
-import { ROM_WEAVER_CONTAINER_FORMATS } from "rom-weaver-wasm/format-metadata";
+import { ROM_WEAVER_CONTAINER_FORMATS } from "../../wasm/generated/rom-weaver-format-metadata.ts";
 
 const REGEX_SPECIAL_CHARACTER_REGEX = /[\\^$.*+?()[\]{}|]/g;
 const LEADING_EXTENSION_DOT_REGEX = /^\./;

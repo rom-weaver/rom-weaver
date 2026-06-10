@@ -1,6 +1,6 @@
-import type { ThreadBudget } from "rom-weaver-wasm";
 import { getDefaultBrowserThreadCount } from "../../platform/shared/compression-options.ts";
 import type { RuntimeThreadBudgetInput } from "../../types/workflow-runtime-adapter.ts";
+import type { ThreadBudget } from "../../wasm/index.ts";
 import { parseCompressionCodecEntry } from "../compression/codec-parser.ts";
 import { normalizeCodecEntries } from "./compression-codec-args.ts";
 
