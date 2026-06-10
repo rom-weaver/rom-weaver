@@ -604,7 +604,9 @@ export function createBrowserWasiThreadSpawner({
     return {
       ready: Promise.resolve(),
       spawn: () => -WASI_ERRNO_ENOSYS,
-      waitForWorkers: async () => {},
+      waitForWorkers: async () => {
+        // single-thread fallback spawner has no workers to wait for
+      },
     };
   }
   if (!(wasmMemory instanceof WebAssembly.Memory)) {

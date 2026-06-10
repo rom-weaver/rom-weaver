@@ -263,7 +263,9 @@ class FlakyPoolShellWorker {
     const event = {
       error,
       message: error.message,
-      preventDefault() {},
+      preventDefault() {
+        // synthetic worker error events have no default action to cancel
+      },
     };
     for (const listener of this.listeners.get("error") || []) {
       listener(event);

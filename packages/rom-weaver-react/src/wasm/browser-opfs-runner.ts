@@ -260,8 +260,12 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
       const drainThreadSpawnerOnce = async () => {
         if (threadSpawnerDrained) return;
         threadSpawnerDrained = true;
-        await threadSpawner.ready.catch(() => {});
-        await threadSpawner.waitForWorkers().catch(() => {});
+        await threadSpawner.ready.catch(() => {
+          // drain regardless of readiness failures; the run error surfaces elsewhere
+        });
+        await threadSpawner.waitForWorkers().catch(() => {
+          // drain best-effort; worker failures already surfaced through the run result
+        });
       };
       trace(
         `[browser-opfs] build wasi fds start mounts=${runtimeMounts.length} syncAccess=${resolvedSyncAccessMode} scratch=${resolvedMainScratchFilePoolSize}`,

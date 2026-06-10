@@ -19,8 +19,8 @@ export default defineConfig({
   },
   publicDir: false,
   test: {
-    hookTimeout: 180000,
-    testTimeout: 180000,
+    hookTimeout: 60000,
+    testTimeout: 60000,
   },
   worker: {
     format: "es",
