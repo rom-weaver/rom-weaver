@@ -32,9 +32,9 @@ type WorkerStreamHandlers<TEvent = RomWeaverRunJsonEvent, TTraceEvent = unknown>
 >;
 
 type PendingRequest = {
-  onEvent: ((event: any) => void) | null;
+  onEvent: ((event: RomWeaverRunJsonEvent) => void) | null;
   onNonJsonLine: ((line: string) => void) | null;
-  onTraceEvent: ((event: any) => void) | null;
+  onTraceEvent: ((event: unknown) => void) | null;
   onTraceNonJsonLine: ((line: string) => void) | null;
   reject: (error: unknown) => void;
   resolve: (value: unknown) => void;
@@ -112,7 +112,14 @@ export class RomWeaverWorkerClientCore {
     const workerOptions: RomWeaverWorkerRunJsonOptions<unknown, unknown> = runOptions;
     return this._send(
       { type: 'runJson', request, options: workerOptions },
-      { onEvent, onNonJsonLine, onTraceEvent, onTraceNonJsonLine },
+      {
+        // The worker protocol carries RomWeaverRunJsonEvent payloads on the wire; TEvent and
+        // TTraceEvent are caller-level refinements, so erase them at the transport boundary.
+        onEvent: onEvent as WorkerStreamHandlers['onEvent'],
+        onNonJsonLine,
+        onTraceEvent: onTraceEvent as WorkerStreamHandlers['onTraceEvent'],
+        onTraceNonJsonLine,
+      },
     ) as Promise<RomWeaverRunJsonResult<TEvent, TTraceEvent>>;
   }
 
@@ -122,7 +129,7 @@ export class RomWeaverWorkerClientCore {
 
   protected _send<TResponse = unknown>(
     payload: RomWeaverWorkerRequest,
-    handlers: WorkerStreamHandlers<any, any> = {},
+    handlers: WorkerStreamHandlers = {},
   ): Promise<TResponse> {
     if (this._disposed) {
       // The worker was terminated; its listeners are gone and postMessage is a silent no-op, so a
@@ -422,7 +429,7 @@ function createWorkerStreamChannel({
   payload,
   requestId,
 }: {
-  handlers: WorkerStreamHandlers<any, any>;
+  handlers: WorkerStreamHandlers;
   payload: RomWeaverWorkerRequest;
   requestId: number;
 }) {
@@ -459,7 +466,7 @@ function createWorkerStreamChannel({
   };
 }
 
-function hasAnyStreamHandler(handlers: WorkerStreamHandlers<any, any> | null | undefined): boolean {
+function hasAnyStreamHandler(handlers: WorkerStreamHandlers | null | undefined): boolean {
   return Boolean(
     typeof handlers?.onEvent === 'function'
       || typeof handlers?.onNonJsonLine === 'function'
@@ -469,7 +476,7 @@ function hasAnyStreamHandler(handlers: WorkerStreamHandlers<any, any> | null | u
 }
 
 function dispatchStreamMessage(
-  handlers: WorkerStreamHandlers<any, any>,
+  handlers: WorkerStreamHandlers,
   message: RomWeaverWorkerStreamMessage,
 ) {
   switch (message.type) {
@@ -490,7 +497,7 @@ function dispatchStreamMessage(
   }
 }
 
-function emitClientTrace(handlers: WorkerStreamHandlers<any, any> | null | undefined, line: string): void {
+function emitClientTrace(handlers: WorkerStreamHandlers | null | undefined, line: string): void {
   const onTraceNonJsonLine = typeof handlers?.onTraceNonJsonLine === 'function'
     ? handlers.onTraceNonJsonLine
     : null;

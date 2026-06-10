@@ -55,7 +55,6 @@ import {
 } from './browser-opfs-runtime-env.ts';
 import {
   DEFAULT_BROWSER_THREAD_COUNT,
-  MAX_BROWSER_THREAD_POOL_SIZE,
   browserThreadRequestOptions,
   createBrowserWasiThreadSpawner,
   createBrowserWasiThreadWorkerPool,
@@ -75,9 +74,11 @@ import type {
   RomWeaverRunJsonOptions,
   RomWeaverRunJsonResult,
   RomWeaverRunOutput,
+  RomWeaverRunRequest,
   RomWeaverRunResult,
   WasiStartInstance,
 } from './browser-opfs-runtime-types.ts';
+import type { RomWeaverEnv } from './rom-weaver-types.d.ts';
 
 const DEFAULT_BROWSER_RAYON_GLOBAL_THREADS = DEFAULT_BROWSER_THREAD_COUNT;
 const MAX_BROWSER_RAYON_GLOBAL_THREADS = 8;
@@ -195,7 +196,7 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
       ]);
       trace(`[browser-opfs] virtual files normalized ${summarizeNormalizedVirtualFiles(virtualFiles)}`);
 
-      const closeables: any[] = [];
+      const closeables: { close(): unknown }[] = [];
       let runSucceeded = false;
       const resolvedSyncAccessMode = resolveRunSyncAccessMode({
         baseMode: options.syncAccessMode,
@@ -339,6 +340,9 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
         } catch (error) {
           trace(`[browser-opfs] wasi.start threw ${formatErrorForTrace(error)}`);
           await throwWithThreadFailure(error, threadSpawner);
+          // throwWithThreadFailure always throws; this unreachable rethrow keeps exitCode
+          // definitely assigned for the success path below.
+          throw error;
         }
         trace('[browser-opfs] waitForWorkers start');
         await threadSpawner.waitForWorkers();
@@ -453,7 +457,12 @@ export async function createRomWeaverBrowserOpfs(options: BrowserOpfsCreateOptio
   };
 }
 
-function createRunEnv({ baseEnv, runEnv, requestedThreadCount, threaded }) {
+function createRunEnv({ baseEnv, runEnv, requestedThreadCount, threaded }: {
+  baseEnv?: RomWeaverEnv;
+  runEnv?: RomWeaverEnv;
+  requestedThreadCount: number | null;
+  threaded: boolean;
+}): RomWeaverEnv {
   const merged = {
     ...(baseEnv ?? {}),
     ...(runEnv ?? {}),
@@ -463,7 +472,7 @@ function createRunEnv({ baseEnv, runEnv, requestedThreadCount, threaded }) {
   return merged;
 }
 
-function applyBrowserThreadedRayonEnvDefaults(env, requestedThreadCount) {
+function applyBrowserThreadedRayonEnvDefaults(env: RomWeaverEnv, requestedThreadCount: number | null) {
   if (!env || typeof env !== 'object') return;
   if (Object.hasOwn(env, 'RAYON_NUM_THREADS') || Object.hasOwn(env, 'RAYON_RS_NUM_CPUS')) return;
   const resolved = resolveBrowserGlobalRayonThreads(requestedThreadCount);
@@ -471,8 +480,12 @@ function applyBrowserThreadedRayonEnvDefaults(env, requestedThreadCount) {
   env.RAYON_RS_NUM_CPUS = String(resolved);
 }
 
-function resolveBrowserGlobalRayonThreads(requestedThreadCount) {
-  if (!Number.isInteger(requestedThreadCount) || requestedThreadCount <= 0) {
+function resolveBrowserGlobalRayonThreads(requestedThreadCount: number | null): number {
+  if (
+    requestedThreadCount === null
+    || !Number.isInteger(requestedThreadCount)
+    || requestedThreadCount <= 0
+  ) {
     return DEFAULT_BROWSER_RAYON_GLOBAL_THREADS;
   }
   return Math.max(1, Math.min(MAX_BROWSER_RAYON_GLOBAL_THREADS, requestedThreadCount));
@@ -492,11 +505,11 @@ function readRunOutputOverrides(runOptions: Partial<BrowserOpfsRunOptions> = {})
   return output;
 }
 
-function serializeRunRequestForStdin(request) {
+function serializeRunRequestForStdin(request: RomWeaverRunRequest): string {
   return `${JSON.stringify(request, runRequestJsonReplacer)}\n`;
 }
 
-function runRequestJsonReplacer(_key, value) {
+function runRequestJsonReplacer(_key: string, value: unknown): unknown {
   if (typeof value !== 'bigint') return value;
   if (
     value > BigInt(Number.MAX_SAFE_INTEGER)
@@ -507,14 +520,17 @@ function runRequestJsonReplacer(_key, value) {
   return Number(value);
 }
 
-function resolveConfiguredDefaultThreads(options, fallback) {
+function resolveConfiguredDefaultThreads(
+  options: BrowserOpfsCreateOptions | BrowserOpfsRunOptions,
+  fallback: number | null,
+): number | null {
   if (options && Object.hasOwn(options, 'defaultThreads')) {
     return normalizeDefaultThreads(options.defaultThreads);
   }
   return fallback;
 }
 
-function assertThreadedWasmRuntimeSupported({ wasmUrl }) {
+function assertThreadedWasmRuntimeSupported({ wasmUrl }: { wasmUrl?: string | null }) {
   if (canUseThreadedWasmRuntime()) return;
   throw new Error(
     `threaded wasm requires SharedArrayBuffer and cross-origin isolation (COOP/COEP); selected ${wasmUrl ?? 'WebAssembly.Module'} cannot run in this browser runtime`,

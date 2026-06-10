@@ -1,5 +1,6 @@
 import { normalizeGuestPath } from './rom-weaver-runtime-utils.ts';
-import { openSyncAccessHandle } from './browser-opfs-sync-access.ts';
+import { openSyncAccessHandle, type SyncAccessHandleLike } from './browser-opfs-sync-access.ts';
+import type { FileSystemDirectoryHandleLike } from './browser-opfs-runtime-types.ts';
 
 declare const FileSystemSyncAccessHandle: unknown;
 
@@ -8,10 +9,22 @@ const DEFAULT_BROWSER_WASM_URLS = [
   new URL('./rom-weaver-app.wasm', import.meta.url).href,
 ];
 
-export async function verifyWritableOpfsRoot(rootHandle) {
+type ResolvedBrowserModule = {
+  module: WebAssembly.Module;
+  wasmByteLength: number | null;
+  wasmSha: string;
+  wasmUrl: string | null;
+};
+
+type WasmModuleIdentity = {
+  wasmByteLength: number | null;
+  wasmSha: string;
+};
+
+export async function verifyWritableOpfsRoot(rootHandle: FileSystemDirectoryHandleLike): Promise<void> {
   const probeName = `.rw-probe-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const probeFile = await rootHandle.getFileHandle(probeName, { create: true });
-  let accessHandle = null;
+  let accessHandle: SyncAccessHandleLike | null = null;
   try {
     accessHandle = await openSyncAccessHandle({ fileHandle: probeFile, mode: 'readwrite' });
     accessHandle.write(new Uint8Array([0x52, 0x57]), { at: 0 });
@@ -27,7 +40,7 @@ export async function verifyWritableOpfsRoot(rootHandle) {
       }
     }
     try {
-      await rootHandle.removeEntry(probeName);
+      await rootHandle.removeEntry?.(probeName);
     } catch {
       // ignore best-effort cleanup failures
     }
@@ -54,20 +67,20 @@ export function assertDedicatedWorkerRuntime() {
   }
 }
 
-export function assertDirectoryHandle(handle, label) {
+export function assertDirectoryHandle(handle: unknown, label: string): asserts handle is FileSystemDirectoryHandleLike {
   if (!isDirectoryHandle(handle)) {
     throw new TypeError(`${label} must be a FileSystemDirectoryHandle`);
   }
 }
 
-function isDirectoryHandle(handle) {
+function isDirectoryHandle(handle: unknown): handle is FileSystemDirectoryHandleLike {
+  if (!handle || typeof handle !== 'object') return false;
+  const candidate = handle as Partial<FileSystemDirectoryHandleLike>;
   return Boolean(
-    handle
-      && typeof handle === 'object'
-      && handle.kind === 'directory'
-      && typeof handle.entries === 'function'
-      && typeof handle.getDirectoryHandle === 'function'
-      && typeof handle.getFileHandle === 'function',
+    candidate.kind === 'directory'
+      && typeof candidate.entries === 'function'
+      && typeof candidate.getDirectoryHandle === 'function'
+      && typeof candidate.getFileHandle === 'function',
   );
 }
 
@@ -77,11 +90,11 @@ export async function resolveBrowserModule({
 }: {
   module?: WebAssembly.Module;
   wasmUrl?: string | URL;
-} = {}) {
+} = {}): Promise<ResolvedBrowserModule> {
   if (module instanceof WebAssembly.Module) {
     return {
       module,
-      wasmUrl: normalizeConfiguredWasmUrls(wasmUrl, [null])[0],
+      wasmUrl: normalizeConfiguredWasmUrls(wasmUrl, [null])[0] ?? null,
       wasmByteLength: null,
       wasmSha: '',
     };
@@ -91,18 +104,21 @@ export async function resolveBrowserModule({
   return compileBrowserModuleFromUrls(resolvedWasmUrls);
 }
 
-export function canUseThreadedWasmRuntime() {
+export function canUseThreadedWasmRuntime(): boolean {
   return typeof SharedArrayBuffer === 'function' && globalThis.crossOriginIsolated === true;
 }
 
-function normalizeConfiguredWasmUrls(url, fallbacks) {
+function normalizeConfiguredWasmUrls(
+  url: string | URL | undefined,
+  fallbacks: ReadonlyArray<string | null>,
+): ReadonlyArray<string | null> {
   if (url instanceof URL) return [url.href];
   if (typeof url === 'string' && url.trim().length > 0) return [url];
   return fallbacks;
 }
 
-async function compileBrowserModuleFromUrls(urls) {
-  let lastError = null;
+async function compileBrowserModuleFromUrls(urls: ReadonlyArray<string | null>): Promise<ResolvedBrowserModule> {
+  let lastError: unknown = null;
   for (const url of urls) {
     if (!url) continue;
     try {
@@ -116,9 +132,9 @@ async function compileBrowserModuleFromUrls(urls) {
 
 // Reads a wasm response clone and returns its byte length plus a short SHA-256 prefix. Surfaced in the
 // run-start trace so a stale or browser-cached binary is immediately distinguishable from a fresh build
-// (e.g. after a rebuild during dev) without inspecting the network tab. Best-effort: any failure yields
+// (e.g. after a rebuild during dev) without inspecting the network tab. Best-effort: every failure yields
 // an empty identity rather than blocking module load.
-async function describeWasmModuleIdentity(response) {
+async function describeWasmModuleIdentity(response: Response): Promise<WasmModuleIdentity> {
   try {
     const bytes = new Uint8Array(await response.arrayBuffer());
     let sha = '';
@@ -132,7 +148,7 @@ async function describeWasmModuleIdentity(response) {
   }
 }
 
-async function compileBrowserModuleFromUrl(url) {
+async function compileBrowserModuleFromUrl(url: string): Promise<ResolvedBrowserModule> {
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`failed to fetch wasm module from ${url}: ${response.status} ${response.statusText}`);
@@ -158,11 +174,11 @@ async function compileBrowserModuleFromUrl(url) {
   };
 }
 
-export function normalizeRuntimeMounts(mounts) {
+export function normalizeRuntimeMounts(mounts: unknown): string[] {
   if (!Array.isArray(mounts) || mounts.length === 0) {
     throw new TypeError('runtimeMounts must be a non-empty array of guest paths');
   }
-  return mounts.map((mountPath) => normalizeGuestPath(String(mountPath), {
+  return mounts.map((mountPath: unknown) => normalizeGuestPath(String(mountPath), {
     label: 'runtime mount guest path',
   }));
 }

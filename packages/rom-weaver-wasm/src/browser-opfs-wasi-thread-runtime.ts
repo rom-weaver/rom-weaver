@@ -35,10 +35,10 @@ import {
 import {
   createBrowserWasiThreadSpawner,
   needsWasiThreadSpawnImport,
+  type ThreadSpawnerRuntime,
 } from './browser-wasi-thread-pool.ts';
 import type {
-  BrowserOpfsRuntime,
-  BrowserOpfsRuntimePayload,
+  FileSystemDirectoryHandleLike,
   LineHandler,
   TraceLine,
   WasiThreadInstance,
@@ -46,7 +46,30 @@ import type {
 
 const THREAD_WORKER_MOUNT_CACHE = createBrowserOpfsMountCache();
 
-export async function __runRomWeaverBrowserWasiThread(payload: BrowserOpfsRuntimePayload = {}) {
+/**
+ * Message payload accepted by the thread runtime entry point. Mirrors the fields posted with
+ * `mode: 'thread'` / `mode: 'pool-command'` worker messages (see browser-wasi-thread-pool.ts),
+ * plus the per-thread line handlers the worker shell injects before delegating here.
+ */
+export interface BrowserWasiThreadRunPayload {
+  __streamBroadcastChannelName?: string;
+  __streamRequestId?: number;
+  debugWasi?: boolean;
+  envList?: unknown;
+  runtime?: ThreadSpawnerRuntime;
+  startArg?: number;
+  startControlBuffer?: SharedArrayBuffer;
+  stderrLineHandler?: LineHandler;
+  stdoutLineHandler?: LineHandler;
+  threadIdState?: unknown;
+  threadWorkerUrl?: string | URL;
+  tid?: number;
+  wasiArgs?: unknown;
+  wasmMemory?: WebAssembly.Memory;
+  wasmModule?: WebAssembly.Module;
+}
+
+export async function __runRomWeaverBrowserWasiThread(payload: BrowserWasiThreadRunPayload = {}) {
   assertDedicatedWorkerRuntime();
 
   const {
@@ -82,7 +105,7 @@ export async function __runRomWeaverBrowserWasiThread(payload: BrowserOpfsRuntim
   const startControl = threadStartControlFromBuffer(payload.startControlBuffer);
   signalThreadStartState(startControl, THREAD_SLOT_STATE_STARTING);
   let startAcked = false;
-  const closeables = [];
+  const closeables: unknown[] = [];
   const normalizedRuntimeMounts = normalizeRuntimeMounts(runtime?.runtimeMounts);
   const normalizedMountHandles = await resolveThreadRuntimeMountHandles({
     runtime,
@@ -95,7 +118,7 @@ export async function __runRomWeaverBrowserWasiThread(payload: BrowserOpfsRuntim
     trace(`[browser-opfs-thread] invalidate mount cache before run done tid=${tid ?? 'unknown'}`);
   }
   let runSucceeded = false;
-  let mounts = [];
+  let mounts: Awaited<ReturnType<typeof buildBrowserOpfsWasiFds>>['mounts'] = [];
 
   try {
     trace(`[browser-opfs-thread] build wasi fds start tid=${tid ?? 'unknown'}`);
@@ -187,7 +210,7 @@ export async function __disposeRomWeaverBrowserThreadMountCache() {
 }
 
 export async function __primeRomWeaverBrowserThreadRuntime(
-  runtime: BrowserOpfsRuntime = {},
+  runtime: ThreadSpawnerRuntime = {},
   onTraceNonJsonLine?: LineHandler,
 ) {
   assertDedicatedWorkerRuntime();
@@ -217,11 +240,13 @@ async function resolveThreadRuntimeMountHandles({
   runtimeMounts,
   trace,
 }: {
-  runtime?: BrowserOpfsRuntime;
+  runtime?: ThreadSpawnerRuntime;
   runtimeMounts: string[];
   trace?: TraceLine;
-}) {
-  const mountHandles = normalizeMountHandleMap({ mountHandles: runtime?.mountHandles });
+}): Promise<Record<string, FileSystemDirectoryHandleLike>> {
+  const mountHandles: Record<string, FileSystemDirectoryHandleLike> = normalizeMountHandleMap({
+    mountHandles: runtime?.mountHandles,
+  });
   const missingMounts = runtimeMounts.filter((mountPath) => !mountHandles[mountPath]);
   if (missingMounts.length === 0) {
     trace?.(`[browser-opfs-thread] mount handles provided count=${Object.keys(mountHandles).length}`);
@@ -237,6 +262,6 @@ async function resolveThreadRuntimeMountHandles({
   return mountHandles;
 }
 
-function resolveThreadVirtualOnlyMounts(runtime) {
+function resolveThreadVirtualOnlyMounts(runtime: ThreadSpawnerRuntime | undefined): boolean {
   return Boolean(runtime?.virtualOnlyMounts ?? true);
 }

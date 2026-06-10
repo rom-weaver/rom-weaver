@@ -3,13 +3,38 @@ import {
   __primeRomWeaverBrowserThreadRuntime,
   __runRomWeaverBrowserWasiThread,
 } from '../browser-opfs-wasi-thread-runtime.ts';
+import type {
+  SerializedThreadWorkerError,
+  ThreadWorkerCommandDoneReply,
+  ThreadWorkerDoneReply,
+  ThreadWorkerErrorReply,
+  ThreadWorkerMessage,
+  ThreadWorkerPoolCommandMessage,
+  ThreadWorkerReadyReply,
+  ThreadWorkerShellReadyReply,
+  ThreadWorkerThreadStartMessage,
+} from '../browser-wasi-thread-pool.ts';
+
+/** Stream-routing fields shared by every command-style worker message. */
+interface ThreadWorkerStreamSource {
+  __streamBroadcastChannelName?: string;
+  __streamRequestId?: number;
+}
+
+interface ThreadWorkerStreamPublisher {
+  close: () => void;
+  stderrLine: (line: string) => void;
+  stdoutLine: (line: string) => void;
+  traceLine: (line: string) => void;
+}
 
 let shellBusy = false;
 
 self.addEventListener('message', (event) => {
-  const payload = event.data ?? {};
+  const payload: ThreadWorkerMessage = event.data ?? {};
+  const payloadMode = payload.mode;
   if (payload.mode === 'pool-shell') {
-    self.postMessage({ type: 'shell-ready' });
+    self.postMessage({ type: 'shell-ready' } satisfies ThreadWorkerShellReadyReply);
     return;
   }
   if (payload.mode === 'pool-command') {
@@ -21,13 +46,13 @@ self.addEventListener('message', (event) => {
         commandId: payload.commandId,
         tid: null,
         error: serializeError(new Error('browser wasi thread worker received a command while busy')),
-      });
+      } satisfies ThreadWorkerErrorReply);
       return;
     }
     shellBusy = true;
     void runPoolWorker(payload)
       .then(() => {
-        self.postMessage({ type: 'command-done', commandId: payload.commandId });
+        self.postMessage({ type: 'command-done', commandId: payload.commandId } satisfies ThreadWorkerCommandDoneReply);
       })
       .catch((error) => {
         self.postMessage({
@@ -35,7 +60,7 @@ self.addEventListener('message', (event) => {
           commandId: payload.commandId,
           tid: null,
           error: serializeError(error),
-        });
+        } satisfies ThreadWorkerErrorReply);
       })
       .finally(() => {
         shellBusy = false;
@@ -54,8 +79,8 @@ self.addEventListener('message', (event) => {
     self.postMessage({
       type: 'error',
       tid: null,
-      error: serializeError(new Error(`unsupported browser wasi thread worker mode: ${String(payload.mode ?? 'unknown')}`)),
-    });
+      error: serializeError(new Error(`unsupported browser wasi thread worker mode: ${String(payloadMode ?? 'unknown')}`)),
+    } satisfies ThreadWorkerErrorReply);
     return;
   }
   void runSingleThread(payload).catch((error) => {
@@ -63,7 +88,7 @@ self.addEventListener('message', (event) => {
       type: 'error',
       tid: payload?.tid ?? null,
       error: serializeError(error),
-    });
+    } satisfies ThreadWorkerErrorReply);
     void __disposeRomWeaverBrowserThreadMountCache()
       .catch(() => undefined)
       .finally(() => {
@@ -84,7 +109,7 @@ const THREAD_SLOT_STATE_FAILED = 5;
 const THREAD_SLOT_STATE_SHUTDOWN = 6;
 const ATOMICS_WAIT_SLICE_MS = 100;
 
-async function runSingleThread(payload) {
+async function runSingleThread(payload: ThreadWorkerThreadStartMessage) {
   const tid = payload?.tid ?? null;
   const stream = createStreamPublisher(payload, tid);
   const startControl = threadStartControlFromBuffer(payload?.startControlBuffer);
@@ -102,7 +127,7 @@ async function runSingleThread(payload) {
       Atomics.store(startControl, THREAD_SLOT_ERROR_INDEX, 0);
       signalThreadState(startControl, THREAD_SLOT_STATE_IDLE);
     }
-    self.postMessage({ type: 'done', tid });
+    self.postMessage({ type: 'done', tid } satisfies ThreadWorkerDoneReply);
   } catch (error) {
     stream?.traceLine(`[wasi-thread-worker] single thread failed tid=${tid ?? 'unknown'} ${formatErrorForTrace(error)}`);
     if (startControl) {
@@ -113,7 +138,7 @@ async function runSingleThread(payload) {
       type: 'error',
       tid,
       error: serializeError(error),
-    });
+    } satisfies ThreadWorkerErrorReply);
   } finally {
     stream?.close();
     await __disposeRomWeaverBrowserThreadMountCache().catch(() => undefined);
@@ -121,14 +146,14 @@ async function runSingleThread(payload) {
   }
 }
 
-function threadStartControlFromBuffer(controlBuffer) {
+function threadStartControlFromBuffer(controlBuffer: unknown): Int32Array<SharedArrayBuffer> | null {
   if (!(controlBuffer instanceof SharedArrayBuffer)) return null;
   const control = new Int32Array(controlBuffer);
   if (control.length < THREAD_SLOT_LENGTH) return null;
   return control;
 }
 
-async function runPoolWorker(payload) {
+async function runPoolWorker(payload: ThreadWorkerPoolCommandMessage) {
   const control = new Int32Array(payload.controlBuffer);
   if (!(control.buffer instanceof SharedArrayBuffer) || control.length < THREAD_SLOT_LENGTH) {
     throw new Error('browser wasi thread pool worker missing shared control buffer');
@@ -136,7 +161,7 @@ async function runPoolWorker(payload) {
   const poolStream = createStreamPublisher(payload, null);
   await __primeRomWeaverBrowserThreadRuntime(payload.runtime, poolStream?.traceLine);
   poolStream?.traceLine(`[wasi-thread-worker] pool worker ready command=${payload.commandId ?? 'standalone'}`);
-  self.postMessage({ type: 'ready', commandId: payload.commandId });
+  self.postMessage({ type: 'ready', commandId: payload.commandId } satisfies ThreadWorkerReadyReply);
 
   try {
     while (true) {
@@ -186,7 +211,7 @@ async function runPoolWorker(payload) {
           commandId: payload.commandId,
           tid,
           error: serializeError(error),
-        });
+        } satisfies ThreadWorkerErrorReply);
       } finally {
         stream?.close();
       }
@@ -196,11 +221,15 @@ async function runPoolWorker(payload) {
   }
 }
 
-function createStreamPublisher(payload, tid) {
+function createStreamPublisher(
+  payload: ThreadWorkerStreamSource,
+  tid: number | null,
+): ThreadWorkerStreamPublisher | null {
   const channelName = typeof payload?.__streamBroadcastChannelName === 'string'
     ? payload.__streamBroadcastChannelName
     : '';
-  const requestId = Number.isInteger(payload?.__streamRequestId) ? payload.__streamRequestId : null;
+  const rawRequestId = payload?.__streamRequestId;
+  const requestId = typeof rawRequestId === 'number' && Number.isInteger(rawRequestId) ? rawRequestId : null;
   if (!channelName || requestId === null || typeof BroadcastChannel !== 'function') return null;
 
   const channel = new BroadcastChannel(channelName);
@@ -220,17 +249,23 @@ function createStreamPublisher(payload, tid) {
   };
 }
 
-function tracePayload(payload, tid, line) {
+function tracePayload(payload: ThreadWorkerStreamSource, tid: number | null, line: string): void {
   const stream = createStreamPublisher(payload, tid);
   stream?.traceLine(line);
   stream?.close();
 }
 
-function publishLine(channel, requestId, tid, line, trace) {
+function publishLine(
+  channel: BroadcastChannel,
+  requestId: number,
+  tid: number | null,
+  line: string,
+  trace: boolean,
+): void {
   const text = String(line ?? '');
   if (text.length === 0) return;
   try {
-    const event = JSON.parse(text);
+    const event: unknown = JSON.parse(text);
     channel.postMessage({
       type: trace ? 'traceEvent' : 'event',
       requestId,
@@ -247,30 +282,47 @@ function publishLine(channel, requestId, tid, line, trace) {
   }
 }
 
-function signalThreadState(control, state) {
+function signalThreadState(control: Int32Array<SharedArrayBuffer>, state: number): void {
   Atomics.store(control, THREAD_SLOT_STATE_INDEX, state);
   Atomics.notify(control, THREAD_SLOT_STATE_INDEX, 1);
 }
 
-function waitForThreadStateChange(control, expectedState) {
+function waitForThreadStateChange(control: Int32Array<SharedArrayBuffer>, expectedState: number): void {
   Atomics.wait(control, THREAD_SLOT_STATE_INDEX, expectedState, ATOMICS_WAIT_SLICE_MS);
 }
 
-function serializeError(error) {
+function serializeError(error: unknown): SerializedThreadWorkerError {
+  if (!isErrorLike(error)) {
+    return {
+      cause: undefined,
+      name: 'Error',
+      message: String(error),
+      stack: undefined,
+    };
+  }
   return {
-    cause: error && error.cause ? serializeError(error.cause) : undefined,
-    name: error && typeof error.name === 'string' ? error.name : 'Error',
-    message: error && typeof error.message === 'string' ? error.message : String(error),
-    stack: error && typeof error.stack === 'string' ? error.stack : undefined,
+    cause: error.cause ? serializeError(error.cause) : undefined,
+    name: typeof error.name === 'string' ? error.name : 'Error',
+    message: typeof error.message === 'string' ? error.message : String(error),
+    stack: typeof error.stack === 'string' ? error.stack : undefined,
   };
 }
 
-function formatErrorForTrace(error) {
+function isErrorLike(value: unknown): value is {
+  cause?: unknown;
+  message?: unknown;
+  name?: unknown;
+  stack?: unknown;
+} {
+  return Boolean(value) && (typeof value === 'object' || typeof value === 'function');
+}
+
+function formatErrorForTrace(error: unknown): string {
   if (error instanceof Error) return `${error.name}:${truncateForTrace(error.message)}`;
   return truncateForTrace(String(error));
 }
 
-function truncateForTrace(value, maxLength = 180) {
+function truncateForTrace(value: unknown, maxLength = 180): string {
   const text = String(value ?? '');
   if (text.length <= maxLength) return text;
   return `${text.slice(0, maxLength - 1)}...`;

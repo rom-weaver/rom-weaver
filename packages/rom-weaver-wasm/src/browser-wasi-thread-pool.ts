@@ -24,15 +24,16 @@ import {
   monotonicNowMs,
 } from './browser-opfs-stdio-events.ts';
 import type {
-  AnyRecord,
-  ThreadPoolCommand,
+  BrowserOpfsRuntime,
+  RomWeaverRunInput,
+  RomWeaverRunRequest,
   ThreadPoolCommandSlot,
   ThreadPoolShell,
   ThreadWorkerSlot,
+  TraceLine,
 } from './browser-opfs-runtime-types.ts';
 
 export const DEFAULT_BROWSER_THREAD_COUNT = 4;
-const DEFAULT_BROWSER_THREAD_POOL_SIZE = 4;
 export const MAX_BROWSER_THREAD_POOL_SIZE = 64;
 const BROWSER_THREAD_POOL_HEADROOM = 4;
 const THREAD_WORKER_READY_TIMEOUT_MS = 5000;
@@ -50,18 +51,237 @@ const FALLBACK_SHARED_MEMORY_MAX_PAGES = [
   4096,
 ];
 
-export function createThreadWorkerRuntimePayload(runtime) {
+/**
+ * Runtime options accepted by the thread spawner. Identical to the shared BrowserOpfsRuntime
+ * except `virtualFiles` is widened to `unknown[]` so callers can pass normalized virtual files;
+ * workers re-normalize them defensively anyway.
+ */
+export type ThreadSpawnerRuntime = Omit<BrowserOpfsRuntime, 'virtualFiles'> & {
+  virtualFiles?: unknown[];
+};
+
+/** Runtime payload forwarded to thread workers; handles are re-resolved inside the worker. */
+export type ThreadWorkerRuntimePayload = ThreadSpawnerRuntime & {
+  resolveMountHandlesInWorker: true;
+  virtualOnlyMounts: true;
+};
+
+/** Structured clone of an Error posted by a thread worker (see worker serializeError). */
+export interface SerializedThreadWorkerError {
+  cause?: SerializedThreadWorkerError;
+  message: string;
+  name: string;
+  stack?: string;
+}
+
+/** Shared fields posted with both pool-command and standalone thread messages. */
+export interface ThreadWorkerCommandMessageBase {
+  __streamBroadcastChannelName?: string;
+  __streamRequestId?: number;
+  debugWasi: boolean;
+  envList: unknown;
+  runtime?: ThreadSpawnerRuntime;
+  threadIdState: unknown;
+  threadWorkerUrl: string;
+  wasiArgs: unknown;
+  wasmMemory: WebAssembly.Memory;
+  wasmModule: WebAssembly.Module;
+}
+
+/** Posted to a pooled worker shell right after construction. */
+export interface ThreadWorkerPoolShellMessage {
+  mode: 'pool-shell';
+}
+
+/** Posted to a pooled worker shell to terminate it. */
+export interface ThreadWorkerShutdownMessage {
+  mode: 'shutdown';
+}
+
+/** Posted to a pooled worker shell to attach it to a command's control slot. */
+export interface ThreadWorkerPoolCommandMessage extends ThreadWorkerCommandMessageBase {
+  commandId: number;
+  controlBuffer: SharedArrayBuffer;
+  mode: 'pool-command';
+}
+
+/** Posted to a standalone (non-pooled) worker to run a single wasi thread. */
+export interface ThreadWorkerThreadStartMessage extends ThreadWorkerCommandMessageBase {
+  mode: 'thread';
+  startArg: number;
+  startControlBuffer: SharedArrayBuffer;
+  tid: number;
+}
+
+/** Every message the pool posts to a thread worker. */
+export type ThreadWorkerMessage =
+  | ThreadWorkerPoolCommandMessage
+  | ThreadWorkerPoolShellMessage
+  | ThreadWorkerShutdownMessage
+  | ThreadWorkerThreadStartMessage;
+
+/** Worker shell finished booting and can accept pool commands. */
+export interface ThreadWorkerShellReadyReply {
+  type: 'shell-ready';
+}
+
+/** Pooled worker primed its runtime and is watching the command control slot. */
+export interface ThreadWorkerReadyReply {
+  commandId: number;
+  type: 'ready';
+}
+
+/** Pooled worker observed the command shutdown state and detached. */
+export interface ThreadWorkerCommandDoneReply {
+  commandId: number;
+  type: 'command-done';
+}
+
+/** Standalone worker finished its single wasi thread. */
+export interface ThreadWorkerDoneReply {
+  tid: number | null;
+  type: 'done';
+}
+
+/** A thread (or the shell itself) failed; `tid` is null for shell-level failures. */
+export interface ThreadWorkerErrorReply {
+  commandId?: number;
+  error: SerializedThreadWorkerError;
+  tid: number | null;
+  type: 'error';
+}
+
+/** Every message a thread worker posts back to the pool. */
+export type ThreadWorkerReply =
+  | ThreadWorkerCommandDoneReply
+  | ThreadWorkerDoneReply
+  | ThreadWorkerErrorReply
+  | ThreadWorkerReadyReply
+  | ThreadWorkerShellReadyReply;
+
+/** Defensive receive-side view of ThreadWorkerReply (unknown senders, partial clones). */
+interface ThreadWorkerReplyView {
+  commandId?: number;
+  error?: unknown;
+  tid?: number | null;
+  type?: string;
+}
+
+export interface BrowserWasiThreadWorkerPoolOptions {
+  initialSize: number;
+  threadWorkerUrl?: string | URL;
+}
+
+export interface BrowserWasiThreadPoolCommandOptions {
+  debugWasi: boolean;
+  envList: unknown;
+  poolSize: number;
+  runtime: ThreadSpawnerRuntime | undefined;
+  streamBroadcastChannelName?: string;
+  streamRequestId?: number;
+  threadIdState: unknown;
+  threadWorkerUrl?: string | URL;
+  trace?: TraceLine;
+  wasiArgs: unknown;
+  wasmMemory: WebAssembly.Memory;
+  wasmModule: WebAssembly.Module;
+}
+
+export interface BrowserWasiThreadPoolCommand {
+  commandId: number;
+  debugWasi: boolean;
+  envList: unknown;
+  ready: Promise<void>;
+  runtime: ThreadSpawnerRuntime | undefined;
+  shutdown: () => Promise<void>;
+  slots: ThreadPoolCommandSlot[];
+  streamBroadcastChannelName?: string;
+  streamRequestId?: number;
+  threadIdState: unknown;
+  threadWorkerUrl: string;
+  wasiArgs: unknown;
+  wasmMemory: WebAssembly.Memory;
+  wasmModule: WebAssembly.Module;
+}
+
+export interface BrowserWasiThreadWorkerPool {
+  createCommand: (options: BrowserWasiThreadPoolCommandOptions) => BrowserWasiThreadPoolCommand;
+  dispose: () => Promise<void>;
+  isReady: (size: number) => boolean;
+  ready: Promise<void>;
+  resolvedThreadWorkerUrl: string;
+}
+
+export interface BrowserWasiThreadSpawnerOptions {
+  allowWorkerPool?: boolean;
+  envList?: unknown;
+  moduleImports: WebAssembly.ModuleImportDescriptor[];
+  runtime?: ThreadSpawnerRuntime;
+  streamBroadcastChannelName?: string;
+  streamRequestId?: number;
+  threadIdState: unknown;
+  threadWorkerPool?: BrowserWasiThreadWorkerPool | null;
+  threadWorkerUrl?: string | URL;
+  trace?: TraceLine;
+  wasiArgs?: unknown;
+  wasmMemory?: WebAssembly.Memory;
+  wasmModule: WebAssembly.Module;
+}
+
+export interface BrowserWasiThreadSpawner {
+  ready: Promise<void>;
+  spawn: (startArg: number, errorOrTidPtr?: number) => number;
+  waitForWorkers: () => Promise<void>;
+}
+
+interface StandaloneBrowserWasiThreadOptions {
+  debugWasi: boolean;
+  envList: unknown;
+  index: number | string;
+  runtime: ThreadSpawnerRuntime | undefined;
+  startArg: number;
+  streamBroadcastChannelName?: string;
+  streamRequestId?: number;
+  threadIdState: unknown;
+  threadWorkerUrl: string;
+  tid: number;
+  trace?: TraceLine;
+  wasiArgs: unknown;
+  wasmMemory: WebAssembly.Memory;
+  wasmModule: WebAssembly.Module;
+}
+
+type ThreadWorkerErrorContext = {
+  index: number | string;
+  tid?: number | null;
+};
+
+type ErrorLikeFields = {
+  cause?: unknown;
+  message?: unknown;
+  name?: unknown;
+  stack?: unknown;
+};
+
+function isErrorLike(value: unknown): value is ErrorLikeFields {
+  return Boolean(value) && (typeof value === 'object' || typeof value === 'function');
+}
+
+export function createThreadWorkerRuntimePayload(
+  runtime: ThreadSpawnerRuntime | undefined,
+): ThreadSpawnerRuntime | undefined {
   if (!runtime || typeof runtime !== 'object') return runtime;
   const {
     mountHandles: _mountHandles,
     preopenOutputPaths: _preopenOutputPaths,
     ...rest
   } = runtime;
-  return {
+  const payload: ThreadWorkerRuntimePayload = {
     ...rest,
     resolveMountHandlesInWorker: true,
     virtualOnlyMounts: true,
   };
+  return payload;
 }
 
 function createThreadSlotControl(): ThreadStartControl {
@@ -74,19 +294,22 @@ function loadThreadSlotState(control: ThreadStartControl): number {
   return Atomics.load(control, THREAD_SLOT_STATE_INDEX);
 }
 
-export function createBrowserWasiThreadWorkerPool({ initialSize, threadWorkerUrl }) {
+export function createBrowserWasiThreadWorkerPool({
+  initialSize,
+  threadWorkerUrl,
+}: BrowserWasiThreadWorkerPoolOptions): BrowserWasiThreadWorkerPool {
   const resolvedThreadWorkerUrl = resolveThreadWorkerUrl(threadWorkerUrl);
   const workers: ThreadPoolShell[] = [];
   let disposed = false;
   let nextCommandId = 1;
 
-  const rejectShell = (slot, error) => {
+  const rejectShell = (slot: ThreadPoolShell, error: Error) => {
     slot.rejectReady?.(error);
     slot.resolveReady = null;
     slot.rejectReady = null;
   };
 
-  const failShell = (shell, error) => {
+  const failShell = (shell: ThreadPoolShell, error: Error) => {
     if (shell.terminated) return;
     shell.trace?.(
       `[browser-opfs] thread pool shell failed index=${shell.index}`
@@ -109,7 +332,7 @@ export function createBrowserWasiThreadWorkerPool({ initialSize, threadWorkerUrl
     shell.currentCommand = null;
   };
 
-  const handleShellMessage = (shell, message) => {
+  const handleShellMessage = (shell: ThreadPoolShell, message: ThreadWorkerReplyView) => {
     if (message.type === 'shell-ready') {
       shell.trace?.(`[browser-opfs] thread pool shell online index=${shell.index}`);
       shell.online = true;
@@ -141,7 +364,7 @@ export function createBrowserWasiThreadWorkerPool({ initialSize, threadWorkerUrl
       command.failure = error;
       Atomics.store(command.control, THREAD_SLOT_ERROR_INDEX, 1);
       signalThreadStartState(command.control, THREAD_SLOT_STATE_FAILED);
-      if (Number.isInteger(message.tid)) {
+      if (typeof message.tid === 'number' && Number.isInteger(message.tid)) {
         command.tid = message.tid;
         return;
       }
@@ -151,7 +374,7 @@ export function createBrowserWasiThreadWorkerPool({ initialSize, threadWorkerUrl
     }
   };
 
-  const createShell = (index, trace = null) => {
+  const createShell = (index: number, trace: ThreadPoolShell['trace'] = null): ThreadPoolShell => {
     const slot: ThreadPoolShell = {
       index,
       worker: null,
@@ -184,7 +407,9 @@ export function createBrowserWasiThreadWorkerPool({ initialSize, threadWorkerUrl
 
     const worker = new Worker(resolvedThreadWorkerUrl, { type: 'module' });
     slot.worker = worker;
-    worker.addEventListener('message', (event) => handleShellMessage(slot, event.data ?? {}));
+    worker.addEventListener('message', (event: MessageEvent<ThreadWorkerReplyView>) => {
+      handleShellMessage(slot, event.data ?? {});
+    });
     worker.addEventListener('error', (event) => {
       event.preventDefault?.();
       const error = createThreadWorkerLoadError(event, slot.currentCommand ?? slot, resolvedThreadWorkerUrl);
@@ -197,11 +422,11 @@ export function createBrowserWasiThreadWorkerPool({ initialSize, threadWorkerUrl
         + ` (workerUrl=${resolvedThreadWorkerUrl})`,
       ));
     });
-    worker.postMessage({ mode: 'pool-shell' });
+    worker.postMessage({ mode: 'pool-shell' } satisfies ThreadWorkerPoolShellMessage);
     return slot;
   };
 
-  const replaceShell = (index, reason = null, trace = null) => {
+  const replaceShell = (index: number, reason: Error | null = null, trace: ThreadPoolShell['trace'] = null) => {
     const previous = workers[index];
     if (previous) {
       previous.terminated = true;
@@ -221,7 +446,7 @@ export function createBrowserWasiThreadWorkerPool({ initialSize, threadWorkerUrl
     return replacement;
   };
 
-  const ensureSize = async (size, trace = null) => {
+  const ensureSize = async (size: number, trace: ThreadPoolShell['trace'] = null) => {
     if (disposed) throw new Error('browser wasi thread worker pool is disposed');
     const targetSize = Math.min(Math.max(0, size), MAX_BROWSER_THREAD_POOL_SIZE);
     let replacementCount = 0;
@@ -290,7 +515,7 @@ export function createBrowserWasiThreadWorkerPool({ initialSize, threadWorkerUrl
     }
   };
 
-  const selectAvailableShells = async (poolSize, trace, commandId) => {
+  const selectAvailableShells = async (poolSize: number): Promise<ThreadPoolShell[]> => {
     const deadline = Date.now() + THREAD_WORKER_BUSY_RETRY_TIMEOUT_MS;
     while (true) {
       const available = workers.filter((shell) => !shell.terminated && !shell.currentCommand);
@@ -308,7 +533,7 @@ export function createBrowserWasiThreadWorkerPool({ initialSize, threadWorkerUrl
     }
   };
 
-  const isReady = (size) => {
+  const isReady = (size: number): boolean => {
     if (disposed) return false;
     const targetSize = Math.min(Math.max(0, size), MAX_BROWSER_THREAD_POOL_SIZE);
     if (targetSize === 0) return true;
@@ -331,16 +556,16 @@ export function createBrowserWasiThreadWorkerPool({ initialSize, threadWorkerUrl
     wasiArgs,
     wasmMemory,
     wasmModule,
-  }) => {
+  }: BrowserWasiThreadPoolCommandOptions): BrowserWasiThreadPoolCommand => {
     const commandId = nextCommandId;
     nextCommandId += 1;
     const commandStartMs = monotonicNowMs();
     trace?.(`[browser-opfs] thread pool command create id=${commandId} poolSize=${poolSize}`);
-    const command: ThreadPoolCommand = {
+    const command: BrowserWasiThreadPoolCommand = {
       commandId,
       debugWasi,
       envList,
-      ready: null,
+      ready: Promise.resolve(),
       runtime,
       slots: [],
       streamBroadcastChannelName,
@@ -384,14 +609,17 @@ export function createBrowserWasiThreadWorkerPool({ initialSize, threadWorkerUrl
         );
       }
       const selectStartMs = monotonicNowMs();
-      const shells = await selectAvailableShells(poolSize, trace, commandId);
+      const shells = await selectAvailableShells(poolSize);
       const selectMs = monotonicNowMs() - selectStartMs;
       trace?.(
         `[browser-opfs] thread pool command selected workers id=${commandId} workers=${shells.map((shell) => shell.index).join(',')}`,
       );
       const postStartMs = monotonicNowMs();
       for (const shell of shells) {
-        if (shell.terminated) throw new Error(`browser wasi thread worker ${shell.index} is not available`);
+        const shellWorker = shell.worker;
+        if (shell.terminated || !shellWorker) {
+          throw new Error(`browser wasi thread worker ${shell.index} is not available`);
+        }
         const control = createThreadSlotControl();
         control[THREAD_SLOT_STATE_INDEX] = THREAD_SLOT_STATE_IDLE;
         control[THREAD_SLOT_TID_INDEX] = 0;
@@ -400,7 +628,7 @@ export function createBrowserWasiThreadWorkerPool({ initialSize, threadWorkerUrl
         const commandSlot: ThreadPoolCommandSlot = {
           commandId,
           index: shell.index,
-          worker: shell.worker,
+          worker: shellWorker,
           shell,
           control,
           online: true,
@@ -423,7 +651,7 @@ export function createBrowserWasiThreadWorkerPool({ initialSize, threadWorkerUrl
         });
         shell.currentCommand = commandSlot;
         command.slots.push(commandSlot);
-        const payload = {
+        const payload: ThreadWorkerPoolCommandMessage = {
           mode: 'pool-command',
           commandId,
           __streamBroadcastChannelName: streamBroadcastChannelName,
@@ -440,13 +668,13 @@ export function createBrowserWasiThreadWorkerPool({ initialSize, threadWorkerUrl
         };
         trace?.(`[browser-opfs] thread pool command post worker=${shell.index} id=${commandId}`);
         try {
-          shell.worker.postMessage(payload);
+          shellWorker.postMessage(payload);
           trace?.(`[browser-opfs] thread pool command post returned worker=${shell.index} id=${commandId}`);
         } catch (error) {
           trace?.(
             `[browser-opfs] thread pool command post failed worker=${shell.index} id=${commandId} ${formatErrorForTrace(error)}`,
           );
-          commandSlot.failure = error;
+          commandSlot.failure = toThreadWorkerError(error);
           commandSlot.rejectReady?.(error);
           commandSlot.resolveDone?.();
           shell.currentCommand = null;
@@ -468,7 +696,7 @@ export function createBrowserWasiThreadWorkerPool({ initialSize, threadWorkerUrl
     disposed = true;
     for (const slot of workers) {
       try {
-        slot.worker?.postMessage({ mode: 'shutdown' });
+        slot.worker?.postMessage({ mode: 'shutdown' } satisfies ThreadWorkerShutdownMessage);
       } catch {
         // ignored
       }
@@ -502,7 +730,7 @@ function createStandaloneBrowserWasiThread({
   wasiArgs,
   wasmMemory,
   wasmModule,
-}: AnyRecord): ThreadWorkerSlot {
+}: StandaloneBrowserWasiThreadOptions): ThreadWorkerSlot {
   const control = createThreadSlotControl();
   Atomics.store(control, THREAD_SLOT_STATE_INDEX, THREAD_SLOT_STATE_REQUESTED);
   Atomics.store(control, THREAD_SLOT_TID_INDEX, Number(tid) | 0);
@@ -519,7 +747,7 @@ function createStandaloneBrowserWasiThread({
     worker,
   };
 
-  worker.addEventListener('message', (event) => {
+  worker.addEventListener('message', (event: MessageEvent<ThreadWorkerReplyView>) => {
     const message = event.data ?? {};
     if (message.type === 'done') {
       slot.busy = false;
@@ -569,7 +797,7 @@ function createStandaloneBrowserWasiThread({
     wasiArgs,
     wasmMemory,
     wasmModule,
-  });
+  } satisfies ThreadWorkerThreadStartMessage);
   trace?.(`[browser-opfs] standalone thread worker posted tid=${tid} worker=${index}`);
   return slot;
 }
@@ -588,7 +816,7 @@ export function createBrowserWasiThreadSpawner({
   wasiArgs,
   envList,
   runtime,
-}) {
+}: BrowserWasiThreadSpawnerOptions): BrowserWasiThreadSpawner {
   if (!needsWasiThreadSpawnImport(moduleImports)) {
     return {
       spawn: () => -WASI_ERRNO_ENOSYS,
@@ -603,8 +831,8 @@ export function createBrowserWasiThreadSpawner({
     throw new Error('threaded wasm requires shared memory backed by SharedArrayBuffer');
   }
 
-  const activeWorkers = new Map();
-  let firstThreadFailure = null;
+  const activeWorkers = new Map<number, ThreadWorkerSlot>();
+  let firstThreadFailure: Error | null = null;
   const resolvedThreadWorkerUrl = resolveThreadWorkerUrl(threadWorkerUrl);
   trace?.(
     `[browser-opfs] thread spawner create pooled=${Boolean(allowWorkerPool && threadWorkerPool)} worker=${basenameForTrace(resolvedThreadWorkerUrl)}`,
@@ -633,7 +861,7 @@ export function createBrowserWasiThreadSpawner({
     });
   }
 
-  const recordFailure = (tid, error) => {
+  const recordFailure = (tid: number, error: unknown): Error => {
     const wrapped = wrapThreadFailure(tid, error);
     if (!firstThreadFailure) firstThreadFailure = wrapped;
     for (const [activeTid, slot] of activeWorkers.entries()) {
@@ -647,8 +875,7 @@ export function createBrowserWasiThreadSpawner({
     return wrapped;
   };
 
-  const spawn = function spawn(startArg) {
-    const errorOrTidPtr = arguments.length > 1 ? arguments[1] : undefined;
+  const spawn = function spawn(startArg: number, errorOrTidPtr?: number): number {
     trace?.(`[browser-opfs] thread spawn requested startArg=${Number(startArg) | 0}`);
     for (const [activeTid, slot] of activeWorkers.entries()) {
       const state = loadThreadSlotState(slot.control);
@@ -747,11 +974,16 @@ function createBrowserWasiThreadSpawnerForCommand({
   threadIdState,
   trace,
   wasmMemory,
-}) {
-  const activeWorkers = new Map();
-  let firstThreadFailure = null;
+}: {
+  command: BrowserWasiThreadPoolCommand;
+  threadIdState: unknown;
+  trace?: TraceLine;
+  wasmMemory: WebAssembly.Memory;
+}): BrowserWasiThreadSpawner {
+  const activeWorkers = new Map<number, ThreadPoolCommandSlot>();
+  let firstThreadFailure: Error | null = null;
 
-  const recordFailure = (tid, error) => {
+  const recordFailure = (tid: number, error: unknown): Error => {
     const wrapped = wrapThreadFailure(tid, error);
     if (!firstThreadFailure) firstThreadFailure = wrapped;
     return wrapped;
@@ -779,7 +1011,7 @@ function createBrowserWasiThreadSpawnerForCommand({
     && !candidate.busy
     && loadThreadSlotState(candidate.control) === THREAD_SLOT_STATE_IDLE);
 
-  const findWaitablePooledWorker = () => {
+  const findWaitablePooledWorker = (): { slot: ThreadPoolCommandSlot; state: number } | null => {
     for (const slot of activeWorkers.values()) {
       const state = loadThreadSlotState(slot.control);
       if (
@@ -804,7 +1036,7 @@ function createBrowserWasiThreadSpawnerForCommand({
     return null;
   };
 
-  const waitForIdlePooledWorker = (tid) => {
+  const waitForIdlePooledWorker = (tid: number): ThreadPoolCommandSlot | null => {
     const deadline = createWaitDeadline(THREAD_WORKER_BUSY_RETRY_TIMEOUT_MS);
     let tracedWait = false;
     while (true) {
@@ -838,8 +1070,7 @@ function createBrowserWasiThreadSpawnerForCommand({
     }
   };
 
-  const spawn = function spawn(startArg) {
-    const errorOrTidPtr = arguments.length > 1 ? arguments[1] : undefined;
+  const spawn = function spawn(startArg: number, errorOrTidPtr?: number): number {
     trace?.(`[browser-opfs] thread spawn requested startArg=${Number(startArg) | 0} command=${command.commandId}`);
     reapCompletedWorkers();
 
@@ -918,31 +1149,38 @@ function createBrowserWasiThreadSpawnerForCommand({
   return { spawn, ready, waitForWorkers };
 }
 
-function resolveBrowserThreadPoolSizeFromRequest(request) {
+function resolveBrowserThreadPoolSizeFromRequest(request: RomWeaverRunRequest | undefined): number {
+  if (request === undefined) {
+    throw new TypeError('browser wasi thread pool sizing requires a runtime request');
+  }
   return resolveBrowserThreadPoolSizeFromCount(parseRequestedThreadCount(request));
 }
 
-export function resolveBrowserThreadPoolSizeFromCount(requestedThreadCount) {
+export function resolveBrowserThreadPoolSizeFromCount(requestedThreadCount: number | null): number {
   if (requestedThreadCount === null || requestedThreadCount <= 1) return 0;
   const requested = Math.min(Math.max(1, requestedThreadCount), MAX_BROWSER_THREAD_POOL_SIZE);
   return Math.min(requested + BROWSER_THREAD_POOL_HEADROOM, MAX_BROWSER_THREAD_POOL_SIZE);
 }
 
-export function parseRequestedThreadCount(request) {
+export function parseRequestedThreadCount(request: RomWeaverRunInput): number | null {
   return readRomWeaverRequestedThreadCount(
     request,
     browserThreadRequestOptions(DEFAULT_BROWSER_THREAD_COUNT),
   );
 }
 
-function wrapThreadFailure(tid, error) {
+function wrapThreadFailure(tid: number, error: unknown): Error {
   const message = error instanceof Error ? error.message : String(error);
   const out = new Error(`wasi thread ${tid} failed before completion: ${message}`);
   if (error instanceof Error && typeof error.stack === 'string') out.stack = error.stack;
   return out;
 }
 
-function createThreadWorkerLoadError(event, slot, workerUrl) {
+function createThreadWorkerLoadError(
+  event: ErrorEvent,
+  slot: ThreadWorkerErrorContext,
+  workerUrl: string,
+): Error {
   const originalError = event?.error instanceof Error ? event.error : null;
   const parts = [
     `browser wasi thread worker ${slot.index} failed`,
@@ -962,7 +1200,7 @@ function createThreadWorkerLoadError(event, slot, workerUrl) {
   return out;
 }
 
-function annotateThreadWorkerError(error, slot, workerUrl) {
+function annotateThreadWorkerError(error: Error, slot: ThreadWorkerErrorContext, workerUrl: string): Error {
   const message = error instanceof Error ? error.message : String(error);
   const out = new Error(
     `browser wasi thread worker ${slot.index} failed`
@@ -976,15 +1214,26 @@ function annotateThreadWorkerError(error, slot, workerUrl) {
   return out;
 }
 
-function deserializeThreadWorkerError(error) {
-  const out = new Error(error && typeof error.message === 'string' ? error.message : 'browser wasi thread worker failed');
-  if (error && typeof error.name === 'string') out.name = error.name;
-  if (error && typeof error.stack === 'string') out.stack = error.stack;
-  if (error && error.cause) out.cause = deserializeThreadWorkerError(error.cause);
+function deserializeThreadWorkerError(error: unknown): Error {
+  const source = isErrorLike(error) ? error : null;
+  const out = new Error(
+    source && typeof source.message === 'string' ? source.message : 'browser wasi thread worker failed',
+  );
+  if (source && typeof source.name === 'string') out.name = source.name;
+  if (source && typeof source.stack === 'string') out.stack = source.stack;
+  if (source?.cause) out.cause = deserializeThreadWorkerError(source.cause);
   return out;
 }
 
-export async function throwWithThreadFailure(error, threadSpawner) {
+function toThreadWorkerError(error: unknown): Error {
+  if (error instanceof Error) return error;
+  return new Error(String(error));
+}
+
+export async function throwWithThreadFailure(
+  error: unknown,
+  threadSpawner: Pick<BrowserWasiThreadSpawner, 'waitForWorkers'>,
+): Promise<never> {
   try {
     await threadSpawner.waitForWorkers();
   } catch (threadError) {
@@ -997,7 +1246,12 @@ export async function throwWithThreadFailure(error, threadSpawner) {
   throw error;
 }
 
-function storeThreadSpawnResult(wasmMemory, errorOrTidPtr, isError, value) {
+function storeThreadSpawnResult(
+  wasmMemory: WebAssembly.Memory,
+  errorOrTidPtr: number,
+  isError: boolean,
+  value: number,
+): boolean {
   if (!(wasmMemory instanceof WebAssembly.Memory)) return false;
   if (!(wasmMemory.buffer instanceof SharedArrayBuffer)) return false;
   const pointer = Number(errorOrTidPtr);
@@ -1013,7 +1267,12 @@ function storeThreadSpawnResult(wasmMemory, errorOrTidPtr, isError, value) {
   }
 }
 
-function finishThreadSpawn(wasmMemory, errorOrTidPtr, tidOrErrno, isError = false) {
+function finishThreadSpawn(
+  wasmMemory: WebAssembly.Memory,
+  errorOrTidPtr: number | undefined,
+  tidOrErrno: number,
+  isError = false,
+): number {
   const usesResultPointer = errorOrTidPtr !== undefined;
   if (!usesResultPointer) {
     return isError ? -Math.abs(Number(tidOrErrno) || WASI_ERRNO_AGAIN) : tidOrErrno;
@@ -1023,7 +1282,7 @@ function finishThreadSpawn(wasmMemory, errorOrTidPtr, tidOrErrno, isError = fals
   return stored && !isError ? 0 : 1;
 }
 
-export function needsEnvMemoryImport(moduleImports) {
+export function needsEnvMemoryImport(moduleImports: WebAssembly.ModuleImportDescriptor[]): boolean {
   return moduleImports.some(
     (descriptor) => descriptor.module === 'env'
       && descriptor.name === 'memory'
@@ -1031,7 +1290,7 @@ export function needsEnvMemoryImport(moduleImports) {
   );
 }
 
-export function needsWasiThreadSpawnImport(moduleImports) {
+export function needsWasiThreadSpawnImport(moduleImports: WebAssembly.ModuleImportDescriptor[]): boolean {
   return moduleImports.some(
     (descriptor) => descriptor.module === 'wasi'
       && descriptor.name === 'thread-spawn'
@@ -1045,7 +1304,7 @@ export function createSharedThreadMemory({
 }: {
   initialPages?: unknown;
   maximumPages?: unknown;
-} = {}) {
+} = {}): WebAssembly.Memory {
   const initial = normalizePositiveInteger(
     initialPages,
     DEFAULT_SHARED_MEMORY_INITIAL_PAGES,
@@ -1066,7 +1325,7 @@ export function createSharedThreadMemory({
         maximum,
         ...FALLBACK_SHARED_MEMORY_MAX_PAGES.filter((candidate) => candidate < maximum && candidate >= initial),
       ];
-  let allocationError = null;
+  let allocationError: unknown = null;
   for (const candidate of candidates) {
     try {
       return new WebAssembly.Memory({ initial, maximum: candidate, shared: true });
@@ -1078,13 +1337,14 @@ export function createSharedThreadMemory({
   throw allocationError ?? new RangeError('failed to allocate shared wasm memory');
 }
 
-function isSharedMemoryAllocationError(error) {
+function isSharedMemoryAllocationError(error: unknown): boolean {
   if (error instanceof RangeError) return true;
-  const message = String(error?.message || '');
+  const rawMessage = isErrorLike(error) ? error.message : undefined;
+  const message = String(rawMessage || '');
   return /\b(out of memory|allocation|reserve|could not allocate)\b/i.test(message);
 }
 
-function normalizePositiveInteger(value, fallback, label) {
+function normalizePositiveInteger(value: unknown, fallback: number, label: string): number {
   if (value === undefined || value === null) return fallback;
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed <= 0) {
@@ -1093,7 +1353,7 @@ function normalizePositiveInteger(value, fallback, label) {
   return parsed;
 }
 
-export function browserThreadRequestOptions(defaultThreads = DEFAULT_BROWSER_THREAD_COUNT) {
+export function browserThreadRequestOptions(defaultThreads: number = DEFAULT_BROWSER_THREAD_COUNT) {
   return {
     autoThreads: DEFAULT_BROWSER_THREAD_COUNT,
     defaultThreads,
@@ -1101,7 +1361,7 @@ export function browserThreadRequestOptions(defaultThreads = DEFAULT_BROWSER_THR
   };
 }
 
-export function resolveThreadWorkerUrl(value) {
+export function resolveThreadWorkerUrl(value: string | URL | undefined): string {
   if (value instanceof URL) return value.href;
   if (typeof value === 'string' && value.trim().length > 0) return value;
   return new URL('./workers/browser-wasi-thread-worker.ts', import.meta.url).href;

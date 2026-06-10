@@ -26,10 +26,11 @@ import {
 import { closeSyncFiles, openSyncAccessHandle, writableSyncAccessMode } from './browser-opfs-sync-access.ts';
 import { assertDirectoryHandle } from './browser-opfs-runtime-env.ts';
 import type {
-  AnyRecord,
   FileReaderSyncLike,
   FileSystemDirectoryHandleLike,
+  LineHandler,
   RomWeaverBrowserSyncAccessMode,
+  RomWeaverRunInput,
   TraceLine,
 } from './browser-opfs-runtime-types.ts';
 
@@ -37,12 +38,96 @@ declare const FileReaderSync: {
   new(): FileReaderSyncLike;
 };
 
+/**
+ * Structural surface this module needs from the random-access file adapters
+ * (BrowserOpfsRandomAccessFile, BrowserMemoryRandomAccessFile, BrowserVirtualRandomAccessFile).
+ * Optional members exist only on some adapters and are feature-detected before use.
+ */
+export interface RandomAccessFileLike {
+  allocateAtLeast?: (size: number) => void;
+  close?: () => void;
+  flush: () => void;
+  readAt: (offset: number | bigint, dst: Uint8Array) => number;
+  reopen?: () => void;
+  scratchName?: string | null;
+  size: () => number;
+  supportsBufferedSequentialWrite?: boolean;
+  supportsDirectWasmRead?: boolean;
+  truncate: (size: number) => void;
+  writeAt: (offset: number | bigint, data: Uint8Array) => number;
+}
+
+/** Directory contents map used by the in-memory WASI inode tree. */
+type WasiDirectoryContents = Map<string, wasiShim.Inode>;
+
+/** FileSystemDirectoryHandleLike does not declare isSameEntry; real OPFS handles may have it. */
+type DirectoryHandleWithSameEntry = FileSystemDirectoryHandleLike & {
+  isSameEntry?: (other: FileSystemDirectoryHandleLike) => boolean | Promise<boolean>;
+};
+
+/** Shape produced by normalizeVirtualFiles and consumed by mount startRun. */
+export interface NormalizedVirtualFile {
+  path: string;
+  source: unknown;
+}
+
+/** Bookkeeping needed to undo a virtual-file mount after a run finishes. */
+type VirtualFileRestore =
+  | { entries: WasiDirectoryContents; hadExisting: true; name: string; value: wasiShim.Inode }
+  | { entries: WasiDirectoryContents; hadExisting: false; name: string; value: null };
+
+export interface BrowserOpfsMountAcquireOptions {
+  directoryHandle: FileSystemDirectoryHandleLike;
+  mountPath: string;
+  syncAccessMode?: RomWeaverBrowserSyncAccessMode;
+  virtualOnly?: boolean;
+  writableRoots: string[];
+}
+
+export type BrowserOpfsMountCache = ReturnType<typeof createBrowserOpfsMountCache>;
+
+export interface SeedBrowserOpfsScratchPoolsOptions {
+  mountCache: BrowserOpfsMountCache;
+  mountHandles?: Record<string, FileSystemDirectoryHandleLike> | null;
+  runtimeMounts?: string[] | null;
+  scratchFilePoolSize?: unknown;
+  syncAccessMode?: RomWeaverBrowserSyncAccessMode;
+  virtualOnlyMounts?: boolean;
+  writableRoots: string[];
+}
+
+export interface BuildBrowserOpfsWasiFdsOptions {
+  cwdMountPath?: string;
+  knownInputPaths?: unknown;
+  mountCache: BrowserOpfsMountCache;
+  mountHandles: Record<string, FileSystemDirectoryHandleLike>;
+  preopenOutputPaths?: unknown;
+  request: RomWeaverRunInput | undefined;
+  runCloseables: unknown[];
+  runtimeMounts: string[];
+  scratchFilePoolSize?: unknown;
+  stderrLineHandler?: LineHandler;
+  stdin?: unknown;
+  stdoutLineHandler?: LineHandler;
+  syncAccessMode?: RomWeaverBrowserSyncAccessMode;
+  trace?: TraceLine;
+  virtualFiles?: NormalizedVirtualFile[];
+  virtualOnlyMounts?: boolean;
+  writableRoots: string[];
+}
+
 export function createBrowserOpfsMountCache() {
   let disposed = false;
   const mountsByPath = new Map<string, BrowserOpfsMount>();
 
   return {
-    async acquire({ directoryHandle, mountPath, syncAccessMode, virtualOnly, writableRoots }) {
+    async acquire({
+      directoryHandle,
+      mountPath,
+      syncAccessMode,
+      virtualOnly,
+      writableRoots,
+    }: BrowserOpfsMountAcquireOptions) {
       if (disposed) throw new Error('browser OPFS mount cache is disposed');
       const writableRootsKey = writableRoots.join('\0');
       const current = mountsByPath.get(mountPath) ?? null;
@@ -109,7 +194,7 @@ export async function seedBrowserOpfsScratchPools({
   syncAccessMode,
   virtualOnlyMounts,
   writableRoots,
-}: AnyRecord) {
+}: SeedBrowserOpfsScratchPoolsOptions) {
   for (const mountPath of runtimeMounts ?? []) {
     const handle = mountHandles?.[mountPath];
     if (!handle) continue;
@@ -124,7 +209,10 @@ export async function seedBrowserOpfsScratchPools({
   }
 }
 
-async function directoryHandlesMatch(left, right) {
+async function directoryHandlesMatch(
+  left: DirectoryHandleWithSameEntry,
+  right: DirectoryHandleWithSameEntry,
+) {
   if (left === right) return true;
   if (typeof left?.isSameEntry === 'function') {
     try {
@@ -161,7 +249,7 @@ export async function buildBrowserOpfsWasiFds({
   runCloseables,
   trace,
   virtualOnlyMounts = false,
-}) {
+}: BuildBrowserOpfsWasiFdsOptions) {
   trace?.(
     `[browser-opfs] build fds enter mounts=${Array.isArray(runtimeMounts) ? runtimeMounts.length : 0} virtualOnly=${Boolean(virtualOnlyMounts)} virtualFiles=${summarizeNormalizedVirtualFiles(virtualFiles)}`,
   );
@@ -173,13 +261,13 @@ export async function buildBrowserOpfsWasiFds({
     onLine: stderrLineHandler,
   });
 
-  const fds = [
+  const fds: wasiShim.Fd[] = [
     new wasiShim.OpenFile(new wasiShim.File(stdinBytes)),
     stdoutCollector.fd,
     stderrCollector.fd,
   ];
-  const mounts = [];
-  let cwdMount = null;
+  const mounts: BrowserOpfsMount[] = [];
+  let cwdMount: BrowserOpfsMount | null = null;
   try {
     for (const mountPath of runtimeMounts) {
       trace?.(`[browser-opfs] mount acquire start path=${mountPath}`);
@@ -250,18 +338,28 @@ export async function buildBrowserOpfsWasiFds({
   };
 }
 
-class BrowserOpfsMount {
-  contents: Map<string, any>;
+interface BrowserOpfsMountConstructorOptions {
+  contents: WasiDirectoryContents;
   directoryHandle: FileSystemDirectoryHandleLike;
   mountPath: string;
-  ownedFiles: any[];
+  ownedFiles: RandomAccessFileLike[];
+  syncAccessMode?: RomWeaverBrowserSyncAccessMode;
+  virtualOnly?: boolean;
+  writableRoots: string[];
+}
+
+class BrowserOpfsMount {
+  contents: WasiDirectoryContents;
+  directoryHandle: FileSystemDirectoryHandleLike;
+  mountPath: string;
+  ownedFiles: RandomAccessFileLike[];
   scratchDirectoryHandle: FileSystemDirectoryHandleLike | null;
-  scratchFiles: any[];
-  scratchPool: any[];
+  scratchFiles: RandomAccessFileLike[];
+  scratchPool: RandomAccessFileLike[];
   syncAccessMode: RomWeaverBrowserSyncAccessMode | undefined;
   trace: TraceLine | null;
   virtualOnly: boolean;
-  virtualRestores: any[] | null;
+  virtualRestores: VirtualFileRestore[] | null;
   writableRoots: string[];
   writableRootsKey: string;
 
@@ -271,10 +369,10 @@ class BrowserOpfsMount {
     syncAccessMode,
     virtualOnly,
     writableRoots,
-  }) {
-    const ownedFiles = [];
+  }: BrowserOpfsMountAcquireOptions) {
+    const ownedFiles: RandomAccessFileLike[] = [];
     const contents = virtualOnly
-      ? new Map()
+      ? new Map<string, wasiShim.Inode>()
       : await buildOpfsInodeMap({
           closeables: ownedFiles,
           directoryHandle,
@@ -301,7 +399,7 @@ class BrowserOpfsMount {
     syncAccessMode,
     virtualOnly,
     writableRoots,
-  }) {
+  }: BrowserOpfsMountConstructorOptions) {
     this.contents = contents;
     this.directoryHandle = directoryHandle;
     this.mountPath = mountPath;
@@ -317,7 +415,7 @@ class BrowserOpfsMount {
     this.trace = null;
   }
 
-  isWritablePath(guestPath) {
+  isWritablePath(guestPath: string) {
     return isGuestPathWithinRoots(guestPath, this.writableRoots);
   }
 
@@ -391,7 +489,7 @@ class BrowserOpfsMount {
   }: {
     runCloseables: unknown[];
     scratchFilePoolSize?: unknown;
-    virtualFiles?: unknown[];
+    virtualFiles?: NormalizedVirtualFile[];
     trace?: TraceLine;
   }) {
     void runCloseables;
@@ -446,7 +544,7 @@ class BrowserOpfsMount {
     }
   }
 
-  async preopenOutputPath(guestPath) {
+  async preopenOutputPath(guestPath: string) {
     if (!this.isWritablePath(guestPath)) {
       throw new Error(`Browser OPFS output path is not writable: ${guestPath}`);
     }
@@ -459,7 +557,7 @@ class BrowserOpfsMount {
     let entries = this.contents;
     let directoryHandle = this.directoryHandle;
     for (const part of parts.slice(0, -1)) {
-      let entry = entries.get(part) ?? null;
+      let entry: wasiShim.Inode | null = entries.get(part) ?? null;
       if (!entry) {
         entry = new wasiShim.Directory(new Map());
         entries.set(part, entry);
@@ -471,7 +569,7 @@ class BrowserOpfsMount {
       entries = entry.contents;
     }
 
-    const name = parts[parts.length - 1];
+    const name = lastPathPart(parts);
     const existing = entries.get(name) ?? null;
     if (existing instanceof wasiShim.Directory) {
       throw new Error(`Browser OPFS output path is a directory: ${guestPath}`);
@@ -495,7 +593,7 @@ class BrowserOpfsMount {
     entries.set(name, new WasiRandomAccessFileInode(file));
   }
 
-  trackOwnedFile(file) {
+  trackOwnedFile(file: RandomAccessFileLike) {
     this.ownedFiles.push(file);
   }
 
@@ -514,7 +612,9 @@ class BrowserOpfsMount {
     for (const file of this.scratchFiles) {
       if (!file.scratchName) continue;
       try {
-        await this.scratchDirectoryHandle.removeEntry(file.scratchName);
+        // removeEntry is optional on the handle type; previously a missing method threw a
+        // TypeError that this try/catch ignored, so skipping the call is observably identical.
+        await this.scratchDirectoryHandle.removeEntry?.(file.scratchName);
       } catch {
         // ignore best-effort scratch cleanup failures
       }
@@ -522,7 +622,7 @@ class BrowserOpfsMount {
     try {
       for await (const [name] of this.scratchDirectoryHandle.entries()) {
         try {
-          await this.scratchDirectoryHandle.removeEntry(name);
+          await this.scratchDirectoryHandle.removeEntry?.(name);
         } catch {
           // ignore best-effort scratch cleanup failures
         }
@@ -541,7 +641,14 @@ class PreparedWasiPreopenDirectory extends wasiShim.PreopenDirectory {
     this.mount = mount;
   }
 
-  path_open(dirflags, pathStr, oflags, fsRightsBase, fsRightsInheriting, fdFlags) {
+  override path_open(
+    _dirflags: number,
+    pathStr: string,
+    oflags: number,
+    fsRightsBase: bigint,
+    _fsRightsInheriting: bigint,
+    fdFlags: number,
+  ) {
     const pathRet = validateWasiRelativePath(pathStr);
     if (pathRet !== wasiShim.wasi.ERRNO_SUCCESS) return { ret: pathRet, fd_obj: null };
 
@@ -579,7 +686,7 @@ class PreparedWasiPreopenDirectory extends wasiShim.PreopenDirectory {
     return entry.path_open(oflags, fsRightsBase, fdFlags);
   }
 
-  path_create_directory(pathStr) {
+  override path_create_directory(pathStr: string) {
     const pathRet = validateWasiRelativePath(pathStr);
     if (pathRet !== wasiShim.wasi.ERRNO_SUCCESS) return pathRet;
 
@@ -596,7 +703,7 @@ class PreparedWasiPreopenDirectory extends wasiShim.PreopenDirectory {
     });
   }
 
-  path_link(pathStr, inode, _allowDir) {
+  override path_link(pathStr: string, inode: wasiShim.Inode, _allowDir: boolean) {
     const pathRet = validateWasiRelativePath(pathStr);
     if (pathRet !== wasiShim.wasi.ERRNO_SUCCESS) return pathRet;
 
@@ -607,7 +714,7 @@ class PreparedWasiPreopenDirectory extends wasiShim.PreopenDirectory {
     return setEntryInDirectory(this.mount.contents, pathStr, inode);
   }
 
-  path_unlink(pathStr) {
+  override path_unlink(pathStr: string) {
     const pathRet = validateWasiRelativePath(pathStr);
     if (pathRet !== wasiShim.wasi.ERRNO_SUCCESS) {
       return { ret: pathRet, inode_obj: null };
@@ -620,7 +727,7 @@ class PreparedWasiPreopenDirectory extends wasiShim.PreopenDirectory {
     return unlinkEntryFromDirectory(this.mount.contents, pathStr);
   }
 
-  path_unlink_file(pathStr) {
+  override path_unlink_file(pathStr: string) {
     const pathRet = validateWasiRelativePath(pathStr);
     if (pathRet !== wasiShim.wasi.ERRNO_SUCCESS) return pathRet;
 
@@ -631,7 +738,7 @@ class PreparedWasiPreopenDirectory extends wasiShim.PreopenDirectory {
     return ret;
   }
 
-  path_remove_directory(pathStr) {
+  override path_remove_directory(pathStr: string) {
     const pathRet = validateWasiRelativePath(pathStr);
     if (pathRet !== wasiShim.wasi.ERRNO_SUCCESS) return pathRet;
 
@@ -643,19 +750,20 @@ class PreparedWasiPreopenDirectory extends wasiShim.PreopenDirectory {
   }
 }
 
+interface WasiRandomAccessFileInodeOptions {
+  closeOnLastFdClose?: boolean;
+  readonly?: boolean;
+  scratchBacked?: boolean;
+}
+
 class WasiRandomAccessFileInode extends wasiShim.Inode {
   closeOnLastFdClose: boolean;
-  file: any;
-  declare ino: any;
+  file: RandomAccessFileLike;
   openRefCount: number;
   readonly: boolean;
   scratchBacked: boolean;
 
-  constructor(file, options: {
-    closeOnLastFdClose?: boolean;
-    readonly?: boolean;
-    scratchBacked?: boolean;
-  } = {}) {
+  constructor(file: RandomAccessFileLike, options: WasiRandomAccessFileInodeOptions = {}) {
     super();
     this.file = file;
     this.readonly = Boolean(options.readonly);
@@ -664,7 +772,7 @@ class WasiRandomAccessFileInode extends wasiShim.Inode {
     this.openRefCount = 0;
   }
 
-  path_open(oflags, fsRightsBase, fdFlags) {
+  path_open(oflags: number, fsRightsBase: bigint, fdFlags: number) {
     if (this.readonly && requestsWriteRights(fsRightsBase, oflags)) {
       return { ret: wasiShim.wasi.ERRNO_PERM, fd_obj: null };
     }
@@ -714,11 +822,14 @@ class WasiRandomAccessFileInode extends wasiShim.Inode {
   }
 }
 
-export function __createWasiRandomAccessFileInodeForTest(file, options = {}) {
+export function __createWasiRandomAccessFileInodeForTest(
+  file: RandomAccessFileLike,
+  options: WasiRandomAccessFileInodeOptions = {},
+) {
   return new WasiRandomAccessFileInode(file, options);
 }
 
-function normalizeWasiReadResult(value) {
+function normalizeWasiReadResult(value: unknown) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return { bytesRead: 0, ret: wasiShim.wasi.ERRNO_IO };
   const integral = Math.trunc(numeric);
@@ -728,7 +839,7 @@ function normalizeWasiReadResult(value) {
   return { bytesRead: 0, ret: wasiShim.wasi.ERRNO_IO };
 }
 
-function emitWasiReadErrorTrace(scope, rawValue, retCode) {
+function emitWasiReadErrorTrace(scope: string, rawValue: unknown, retCode: number) {
   if (typeof console === 'undefined') return;
   const log = typeof console.debug === 'function' ? console.debug : console.log;
   log.call(console, `[rom-weaver trace] browser-opfs: ${scope} readAt returned error-like value`, {
@@ -745,7 +856,7 @@ class OpenWasiRandomAccessFile extends wasiShim.Fd {
   writeBufferLength: number;
   writeBufferStart: bigint;
 
-  constructor(inode) {
+  constructor(inode: WasiRandomAccessFileInode) {
     super();
     this.inode = inode;
     this.position = 0n;
@@ -755,7 +866,7 @@ class OpenWasiRandomAccessFile extends wasiShim.Fd {
     this.closed = false;
   }
 
-  fd_allocate(offset, len) {
+  override fd_allocate(offset: bigint, len: bigint) {
     if (this.closed) return wasiShim.wasi.ERRNO_BADF;
     const flushRet = this.flushPendingWrite();
     if (flushRet !== wasiShim.wasi.ERRNO_SUCCESS) return flushRet;
@@ -769,7 +880,7 @@ class OpenWasiRandomAccessFile extends wasiShim.Fd {
     return wasiShim.wasi.ERRNO_SUCCESS;
   }
 
-  fd_fdstat_get() {
+  override fd_fdstat_get() {
     if (this.closed) {
       return {
         ret: wasiShim.wasi.ERRNO_BADF,
@@ -782,14 +893,14 @@ class OpenWasiRandomAccessFile extends wasiShim.Fd {
     };
   }
 
-  fd_filestat_get() {
+  override fd_filestat_get() {
     if (this.closed) return { ret: wasiShim.wasi.ERRNO_BADF, filestat: null };
     const flushRet = this.flushPendingWrite();
     if (flushRet !== wasiShim.wasi.ERRNO_SUCCESS) return { ret: flushRet, filestat: null };
     return { ret: wasiShim.wasi.ERRNO_SUCCESS, filestat: this.inode.stat() };
   }
 
-  fd_filestat_set_size(size) {
+  override fd_filestat_set_size(size: bigint) {
     if (this.closed) return wasiShim.wasi.ERRNO_BADF;
     if (this.inode.readonly) return wasiShim.wasi.ERRNO_BADF;
     const flushRet = this.flushPendingWrite();
@@ -799,7 +910,7 @@ class OpenWasiRandomAccessFile extends wasiShim.Fd {
     return wasiShim.wasi.ERRNO_SUCCESS;
   }
 
-  fd_read(size) {
+  override fd_read(size: number) {
     if (this.closed) return { ret: wasiShim.wasi.ERRNO_BADF, data: new Uint8Array(0) };
     const flushRet = this.flushPendingWrite();
     if (flushRet !== wasiShim.wasi.ERRNO_SUCCESS) {
@@ -817,7 +928,7 @@ class OpenWasiRandomAccessFile extends wasiShim.Fd {
     return { ret: wasiShim.wasi.ERRNO_SUCCESS, data: buffer.subarray(0, bytesRead) };
   }
 
-  fd_pread(size, offset) {
+  override fd_pread(size: number, offset: bigint) {
     if (this.closed) return { ret: wasiShim.wasi.ERRNO_BADF, data: new Uint8Array(0) };
     const flushRet = this.flushPendingWrite();
     if (flushRet !== wasiShim.wasi.ERRNO_SUCCESS) {
@@ -834,7 +945,7 @@ class OpenWasiRandomAccessFile extends wasiShim.Fd {
     return { ret: wasiShim.wasi.ERRNO_SUCCESS, data: buffer.subarray(0, bytesRead) };
   }
 
-  fd_read_into(target) {
+  fd_read_into(target: Uint8Array) {
     if (this.closed) return { ret: wasiShim.wasi.ERRNO_BADF, nread: 0 };
     const flushRet = this.flushPendingWrite();
     if (flushRet !== wasiShim.wasi.ERRNO_SUCCESS) return { ret: flushRet, nread: 0 };
@@ -852,7 +963,7 @@ class OpenWasiRandomAccessFile extends wasiShim.Fd {
     return { ret: wasiShim.wasi.ERRNO_SUCCESS, nread: bytesRead };
   }
 
-  fd_pread_into(target, offset) {
+  fd_pread_into(target: Uint8Array, offset: bigint) {
     if (this.closed) return { ret: wasiShim.wasi.ERRNO_BADF, nread: 0 };
     const flushRet = this.flushPendingWrite();
     if (flushRet !== wasiShim.wasi.ERRNO_SUCCESS) return { ret: flushRet, nread: 0 };
@@ -869,7 +980,7 @@ class OpenWasiRandomAccessFile extends wasiShim.Fd {
     return { ret: wasiShim.wasi.ERRNO_SUCCESS, nread: bytesRead };
   }
 
-  fd_seek(offset, whence) {
+  override fd_seek(offset: bigint, whence: number) {
     if (this.closed) return { ret: wasiShim.wasi.ERRNO_BADF, offset: this.position };
     const flushRet = this.flushPendingWrite();
     if (flushRet !== wasiShim.wasi.ERRNO_SUCCESS) return { ret: flushRet, offset: this.position };
@@ -892,12 +1003,12 @@ class OpenWasiRandomAccessFile extends wasiShim.Fd {
     return { ret: wasiShim.wasi.ERRNO_SUCCESS, offset: this.position };
   }
 
-  fd_tell() {
+  override fd_tell() {
     if (this.closed) return { ret: wasiShim.wasi.ERRNO_BADF, offset: this.position };
     return { ret: wasiShim.wasi.ERRNO_SUCCESS, offset: this.position };
   }
 
-  fd_write(data) {
+  override fd_write(data: Uint8Array) {
     if (this.closed) return { ret: wasiShim.wasi.ERRNO_BADF, nwritten: 0 };
     if (this.inode.readonly) return { ret: wasiShim.wasi.ERRNO_BADF, nwritten: 0 };
     if (data.byteLength === 0) return { ret: wasiShim.wasi.ERRNO_SUCCESS, nwritten: 0 };
@@ -909,7 +1020,7 @@ class OpenWasiRandomAccessFile extends wasiShim.Fd {
     return this.bufferSequentialWrite(data);
   }
 
-  fd_pwrite(data, offset) {
+  override fd_pwrite(data: Uint8Array, offset: bigint) {
     if (this.closed) return { ret: wasiShim.wasi.ERRNO_BADF, nwritten: 0 };
     if (this.inode.readonly) return { ret: wasiShim.wasi.ERRNO_BADF, nwritten: 0 };
     const flushRet = this.flushPendingWrite();
@@ -918,7 +1029,7 @@ class OpenWasiRandomAccessFile extends wasiShim.Fd {
     return { ret: wasiShim.wasi.ERRNO_SUCCESS, nwritten: bytesWritten };
   }
 
-  fd_sync() {
+  override fd_sync() {
     if (this.closed) return wasiShim.wasi.ERRNO_BADF;
     const flushRet = this.flushPendingWrite();
     if (flushRet !== wasiShim.wasi.ERRNO_SUCCESS) return flushRet;
@@ -926,7 +1037,7 @@ class OpenWasiRandomAccessFile extends wasiShim.Fd {
     return wasiShim.wasi.ERRNO_SUCCESS;
   }
 
-  fd_close() {
+  override fd_close() {
     if (this.closed) return wasiShim.wasi.ERRNO_SUCCESS;
     const flushRet = this.flushPendingWrite();
     if (flushRet !== wasiShim.wasi.ERRNO_SUCCESS) return flushRet;
@@ -951,12 +1062,15 @@ class OpenWasiRandomAccessFile extends wasiShim.Fd {
 
   flushPendingWrite() {
     if (this.closed) return wasiShim.wasi.ERRNO_BADF;
-    if (this.writeBufferLength <= 0) return wasiShim.wasi.ERRNO_SUCCESS;
-    const source = this.writeBuffer.subarray(0, this.writeBufferLength);
+    // writeBuffer is always allocated before writeBufferLength becomes positive; the null
+    // check only narrows the type and matches the empty-buffer early return.
+    const buffer = this.writeBuffer;
+    if (this.writeBufferLength <= 0 || buffer === null) return wasiShim.wasi.ERRNO_SUCCESS;
+    const source = buffer.subarray(0, this.writeBufferLength);
     const bytesWritten = this.inode.file.writeAt(this.writeBufferStart, source);
     if (bytesWritten !== this.writeBufferLength) {
       if (bytesWritten > 0 && bytesWritten < this.writeBufferLength) {
-        this.writeBuffer.copyWithin(0, bytesWritten, this.writeBufferLength);
+        buffer.copyWithin(0, bytesWritten, this.writeBufferLength);
         this.writeBufferStart += BigInt(bytesWritten);
         this.writeBufferLength -= bytesWritten;
       }
@@ -966,7 +1080,7 @@ class OpenWasiRandomAccessFile extends wasiShim.Fd {
     return wasiShim.wasi.ERRNO_SUCCESS;
   }
 
-  bufferSequentialWrite(data) {
+  bufferSequentialWrite(data: Uint8Array) {
     if (this.closed) return { ret: wasiShim.wasi.ERRNO_BADF, nwritten: 0 };
     let nwritten = 0;
     while (nwritten < data.byteLength) {
@@ -1012,16 +1126,26 @@ class OpenWasiRandomAccessFile extends wasiShim.Fd {
   }
 }
 
+interface BuildOpfsInodeMapOptions {
+  closeables: RandomAccessFileLike[];
+  directoryHandle: FileSystemDirectoryHandleLike;
+  guestPath: string;
+  syncAccessMode?: RomWeaverBrowserSyncAccessMode;
+  writableRoots: string[];
+}
+
 async function buildOpfsInodeMap({
   closeables,
   directoryHandle,
   guestPath,
   syncAccessMode,
   writableRoots,
-}) {
-  const entries = new Map();
+}: BuildOpfsInodeMapOptions): Promise<WasiDirectoryContents> {
+  const entries = new Map<string, wasiShim.Inode>();
 
-  for await (const [entryName, entryHandle] of directoryHandle.entries()) {
+  for await (const [entryName, rawEntryHandle] of directoryHandle.entries()) {
+    // entries() yields handles typed as unknown; kind discriminates directory vs file handles.
+    const entryHandle = rawEntryHandle as FileSystemDirectoryHandleLike;
     const entryGuestPath = joinGuestPath(guestPath, entryName);
     if (entryHandle.kind === 'directory') {
       const nested = await buildOpfsInodeMap({
@@ -1050,8 +1174,15 @@ async function buildOpfsInodeMap({
   return entries;
 }
 
-function addVirtualFilesToMount({ contents, mountPath, trace, virtualFiles }: AnyRecord) {
-  const restores = [];
+interface AddVirtualFilesToMountOptions {
+  contents: WasiDirectoryContents;
+  mountPath: string;
+  trace?: TraceLine;
+  virtualFiles?: NormalizedVirtualFile[];
+}
+
+function addVirtualFilesToMount({ contents, mountPath, trace, virtualFiles }: AddVirtualFilesToMountOptions) {
+  const restores: VirtualFileRestore[] = [];
   for (const entry of virtualFiles ?? []) {
     if (!isGuestPathWithinMount(entry.path, mountPath)) {
       trace?.(`[browser-opfs] virtual file skipped outside mount path=${basenameForTrace(entry.path)} mount=${mountPath}`);
@@ -1064,17 +1195,17 @@ function addVirtualFilesToMount({ contents, mountPath, trace, virtualFiles }: An
 }
 
 function addVirtualFileEntry(
-  contents: Map<string, any>,
-  relativePath,
-  source,
-  restores,
-  trace,
+  contents: WasiDirectoryContents,
+  relativePath: string,
+  source: unknown,
+  restores: VirtualFileRestore[],
+  trace: TraceLine | undefined,
 ) {
   const parts = normalizeWasiRelativePathParts(relativePath);
   if (parts === null || parts.length === 0) {
     throw new TypeError(`virtual file path must be inside a mounted directory: ${relativePath}`);
   }
-  let entries: Map<string, any> = contents;
+  let entries: WasiDirectoryContents = contents;
   for (const part of parts.slice(0, -1)) {
     const existing = entries.get(part) ?? null;
     if (!existing) {
@@ -1083,28 +1214,30 @@ function addVirtualFileEntry(
       entries = directory.contents;
       continue;
     }
-    if (!(existing.contents instanceof Map)) {
+    const existingContents = inodeMapContents(existing);
+    if (!existingContents) {
       throw new Error(`virtual file parent path is not a directory: ${relativePath}`);
     }
-    entries = existing.contents;
+    entries = existingContents;
   }
   const file = new BrowserVirtualRandomAccessFile(source, { trace });
-  const name = parts[parts.length - 1];
+  const name = lastPathPart(parts);
   trace?.(
     `[browser-opfs] virtual file mounted name=${name} proxy=${Boolean(file.proxy)} size=${file.size()}`,
   );
-  restores.push({
-    entries,
-    hadExisting: entries.has(name),
-    name,
-    value: entries.get(name) ?? null,
-  });
+  const existingValue = entries.get(name);
+  restores.push(
+    existingValue === undefined
+      ? { entries, hadExisting: false, name, value: null }
+      : { entries, hadExisting: true, name, value: existingValue },
+  );
   entries.set(name, new WasiRandomAccessFileInode(file, { closeOnLastFdClose: true, readonly: true }));
 }
 
-function restoreVirtualFiles(restores) {
+function restoreVirtualFiles(restores: VirtualFileRestore[]) {
   for (let index = restores.length - 1; index >= 0; index -= 1) {
     const restore = restores[index];
+    if (!restore) continue;
     const current = restore.entries.get(restore.name) ?? null;
     if (current instanceof WasiRandomAccessFileInode && typeof current.file?.close === 'function') {
       try {
@@ -1121,6 +1254,16 @@ function restoreVirtualFiles(restores) {
   }
 }
 
+interface SyncMountedInputPathsFromOpfsOptions {
+  cwdMountPath?: string;
+  knownInputPaths?: unknown;
+  mountHandles: Record<string, FileSystemDirectoryHandleLike>;
+  mounts: BrowserOpfsMount[];
+  request: RomWeaverRunInput | undefined;
+  runtimeMounts: string[];
+  trace?: TraceLine;
+}
+
 async function syncMountedInputPathsFromOpfs({
   cwdMountPath,
   knownInputPaths,
@@ -1129,12 +1272,12 @@ async function syncMountedInputPathsFromOpfs({
   request,
   runtimeMounts,
   trace,
-}) {
+}: SyncMountedInputPathsFromOpfsOptions) {
   const inputPaths = collectMountedInputPaths(request, knownInputPaths);
   const summary = { paths: inputPaths.length, hydrated: 0, missing: 0 };
   if (inputPaths.length === 0) return summary;
   const mountsByPath = new Map<string, BrowserOpfsMount>(
-    mounts.map((mount: BrowserOpfsMount) => [mount.mountPath, mount]),
+    mounts.map((mount) => [mount.mountPath, mount]),
   );
   for (const path of inputPaths) {
     const resolved = resolveMountedGuestPath(path, mountHandles, runtimeMounts, { cwdMountPath });
@@ -1158,21 +1301,31 @@ async function syncMountedInputPathsFromOpfs({
   return summary;
 }
 
-function collectMountedInputPaths(request, knownInputPaths) {
-  return collectRomWeaverRunInputPaths(request, {
+function collectMountedInputPaths(request: RomWeaverRunInput | undefined, knownInputPaths: unknown) {
+  // request is always provided on real runs; preserve the original behavior (a TypeError from
+  // collectRomWeaverRunInputPaths) instead of silently skipping when it is missing.
+  return collectRomWeaverRunInputPaths(request as RomWeaverRunInput, {
     knownInputPaths: normalizeKnownInputPaths(knownInputPaths),
   });
 }
 
-async function hydrateMountedInputPathFromOpfs({ mount, relativeParts, rootHandle }) {
+async function hydrateMountedInputPathFromOpfs({
+  mount,
+  relativeParts,
+  rootHandle,
+}: {
+  mount: BrowserOpfsMount;
+  relativeParts: string[];
+  rootHandle: FileSystemDirectoryHandleLike;
+}) {
   if (!Array.isArray(relativeParts) || relativeParts.length === 0) return false;
   let entries = mount.contents;
   let directoryHandle = rootHandle;
   for (const part of relativeParts.slice(0, -1)) {
-    let entry = entries.get(part) ?? null;
+    let entry: wasiShim.Inode | null = entries.get(part) ?? null;
     if (!entry) {
       try {
-        directoryHandle = await directoryHandle.getDirectoryHandle(part, { create: false });
+        directoryHandle = await directoryHandle.getDirectoryHandle(part, { create: false }) as FileSystemDirectoryHandleLike;
       } catch {
         return false;
       }
@@ -1180,7 +1333,7 @@ async function hydrateMountedInputPathFromOpfs({ mount, relativeParts, rootHandl
       entries.set(part, entry);
     } else {
       try {
-        directoryHandle = await directoryHandle.getDirectoryHandle(part, { create: false });
+        directoryHandle = await directoryHandle.getDirectoryHandle(part, { create: false }) as FileSystemDirectoryHandleLike;
       } catch {
         return false;
       }
@@ -1189,7 +1342,7 @@ async function hydrateMountedInputPathFromOpfs({ mount, relativeParts, rootHandl
     entries = entry.contents;
   }
 
-  const name = relativeParts[relativeParts.length - 1];
+  const name = lastPathPart(relativeParts);
   if (entries.has(name)) return true;
 
   const guestPath = joinGuestPath(mount.mountPath, relativeParts.join('/'));
@@ -1219,9 +1372,9 @@ async function hydrateMountedInputPathFromOpfs({ mount, relativeParts, rootHandl
 }
 
 function resolveMountedGuestPath(
-  path,
-  mountHandles,
-  runtimeMounts,
+  path: string,
+  mountHandles: Record<string, FileSystemDirectoryHandleLike>,
+  runtimeMounts: string[],
   { cwdMountPath }: { cwdMountPath?: string } = {},
 ) {
   const rawPath = String(path ?? '').trim();
@@ -1246,46 +1399,64 @@ function resolveMountedGuestPath(
   return null;
 }
 
-function requestsWriteRights(fsRightsBase, oflags) {
+function requestsWriteRights(fsRightsBase: bigint, oflags: number) {
   return (BigInt(fsRightsBase) & BigInt(wasiShim.wasi.RIGHTS_FD_WRITE)) === BigInt(wasiShim.wasi.RIGHTS_FD_WRITE)
     || (oflags & wasiShim.wasi.OFLAGS_TRUNC) === wasiShim.wasi.OFLAGS_TRUNC
     || (oflags & wasiShim.wasi.OFLAGS_CREAT) === wasiShim.wasi.OFLAGS_CREAT;
 }
 
-function pathExistsInDirectory(contents, pathStr) {
+function pathExistsInDirectory(contents: WasiDirectoryContents, pathStr: string) {
   return Boolean(findEntryInDirectory(contents, pathStr));
 }
 
-function pathIsDirectoryInDirectory(contents, pathStr) {
+function pathIsDirectoryInDirectory(contents: WasiDirectoryContents, pathStr: string) {
   const entry = findEntryInDirectory(contents, pathStr);
   return Boolean(entry && entry instanceof wasiShim.Directory);
 }
 
-function findEntryInDirectory(contents, pathStr) {
+function findEntryInDirectory(contents: WasiDirectoryContents, pathStr: string): wasiShim.Inode | null {
   if (!(contents instanceof Map)) return null;
   const parts = normalizeWasiRelativePathParts(pathStr);
   if (parts === null) return null;
   if (parts.length === 0) return new wasiShim.Directory(contents);
 
   let currentEntries = contents;
-  let entry = null;
-  for (let index = 0; index < parts.length; index += 1) {
-    const part = parts[index];
-    entry = currentEntries.get(part) ?? null;
+  for (const [index, part] of parts.entries()) {
+    const entry = currentEntries.get(part) ?? null;
     if (!entry) return null;
     if (index === parts.length - 1) return entry;
-    if (!(entry.contents instanceof Map)) return null;
-    currentEntries = entry.contents;
+    const entryContents = inodeMapContents(entry);
+    if (!entryContents) return null;
+    currentEntries = entryContents;
   }
   return null;
 }
 
-function createInMemoryEntry(contents, pathStr, { directory, mount }) {
+// Inode subclasses store directory children on `contents`; duck-type the property instead of
+// using `instanceof Directory` so the runtime check matches the original behavior exactly.
+function inodeMapContents(entry: wasiShim.Inode): WasiDirectoryContents | null {
+  const contents = (entry as { contents?: unknown }).contents;
+  return contents instanceof Map ? contents as WasiDirectoryContents : null;
+}
+
+// Callers verify parts is non-empty before indexing; this re-asserts that for
+// noUncheckedIndexedAccess without resorting to non-null assertions.
+function lastPathPart(parts: string[]): string {
+  const name = parts[parts.length - 1];
+  if (name === undefined) throw new Error('path has no segments');
+  return name;
+}
+
+function createInMemoryEntry(
+  contents: WasiDirectoryContents,
+  pathStr: string,
+  { directory, mount }: { directory: boolean; mount: BrowserOpfsMount },
+) {
   const parts = normalizeWasiRelativePathParts(pathStr);
   if (parts === null) return wasiShim.wasi.ERRNO_NOTCAPABLE;
   if (parts.length === 0) return wasiShim.wasi.ERRNO_EXIST;
   const parent = resolveParentDirectory(contents, parts);
-  if (parent.ret !== wasiShim.wasi.ERRNO_SUCCESS) return parent.ret;
+  if (parent.ret !== wasiShim.wasi.ERRNO_SUCCESS || parent.entries === null) return parent.ret;
   if (parent.entries.has(parent.name)) return wasiShim.wasi.ERRNO_EXIST;
   if (directory) {
     parent.entries.set(parent.name, new wasiShim.Directory(new Map()));
@@ -1301,12 +1472,12 @@ function createInMemoryEntry(contents, pathStr, { directory, mount }) {
   return wasiShim.wasi.ERRNO_SUCCESS;
 }
 
-function setEntryInDirectory(contents, pathStr, inode) {
+function setEntryInDirectory(contents: WasiDirectoryContents, pathStr: string, inode: wasiShim.Inode) {
   const parts = normalizeWasiRelativePathParts(pathStr);
   if (parts === null) return wasiShim.wasi.ERRNO_NOTCAPABLE;
   if (parts.length === 0) return wasiShim.wasi.ERRNO_INVAL;
   const parent = resolveParentDirectory(contents, parts);
-  if (parent.ret !== wasiShim.wasi.ERRNO_SUCCESS) return parent.ret;
+  if (parent.ret !== wasiShim.wasi.ERRNO_SUCCESS || parent.entries === null) return parent.ret;
   const existing = parent.entries.get(parent.name) ?? null;
   if (existing && copyInodeContents(existing, inode)) {
     return wasiShim.wasi.ERRNO_SUCCESS;
@@ -1315,7 +1486,7 @@ function setEntryInDirectory(contents, pathStr, inode) {
   return wasiShim.wasi.ERRNO_SUCCESS;
 }
 
-function copyInodeContents(target, source) {
+function copyInodeContents(target: wasiShim.Inode, source: wasiShim.Inode) {
   if (!(target instanceof WasiRandomAccessFileInode) || target.readonly) return false;
   if (source instanceof WasiRandomAccessFileInode) {
     copyRandomAccessFileSync(source.file, target.file);
@@ -1329,7 +1500,7 @@ function copyInodeContents(target, source) {
   return true;
 }
 
-function readInodeBytes(inode) {
+function readInodeBytes(inode: wasiShim.Inode) {
   if (inode instanceof wasiShim.File) {
     return inode.data instanceof Uint8Array ? inode.data : new Uint8Array(inode.data ?? []);
   }
@@ -1341,6 +1512,11 @@ async function createScratchFilePool({
   directoryHandle,
   scratchFilePoolSize,
   syncAccessMode,
+}: {
+  closeables: RandomAccessFileLike[];
+  directoryHandle: FileSystemDirectoryHandleLike;
+  scratchFilePoolSize?: unknown;
+  syncAccessMode?: RomWeaverBrowserSyncAccessMode;
 }) {
   const count = normalizeScratchFilePoolSize(scratchFilePoolSize);
   if (count === 0) {
@@ -1350,13 +1526,13 @@ async function createScratchFilePool({
   const scratchDirectoryHandle = await directoryHandle.getDirectoryHandle(
     SCRATCH_DIRECTORY_NAME,
     { create: true },
-  );
+  ) as FileSystemDirectoryHandleLike;
   const token = `${Date.now().toString(36)}-${Math.random().toString(16).slice(2)}`;
-  const files = new Array(count);
+  const files = new Array<BrowserOpfsRandomAccessFile>(count);
   await forEachRangeConcurrently({
     count,
     limit: Math.min(count, SCRATCH_FILE_CREATE_CONCURRENCY),
-    async run(index) {
+    async run(index: number) {
       const scratchName = `${token}-${index}.tmp`;
       const fileHandle = await scratchDirectoryHandle.getFileHandle(scratchName, { create: true });
       const syncHandle = await openSyncAccessHandle({
@@ -1379,12 +1555,16 @@ async function forEachRangeConcurrently({
   count,
   limit,
   run,
+}: {
+  count: number;
+  limit: number;
+  run: (index: number) => Promise<void>;
 }) {
   const total = Math.max(0, Number(count) || 0);
   if (total === 0) return;
   const parallel = Math.max(1, Math.floor(Number(limit) || 1));
   let nextIndex = 0;
-  const workers = [];
+  const workers: Promise<void>[] = [];
   const workerCount = Math.min(parallel, total);
   for (let worker = 0; worker < workerCount; worker += 1) {
     workers.push((async () => {
@@ -1399,9 +1579,15 @@ async function forEachRangeConcurrently({
   await Promise.all(workers);
 }
 
-function createMemoryScratchFilePool({ closeables, scratchFilePoolSize }) {
+function createMemoryScratchFilePool({
+  closeables,
+  scratchFilePoolSize,
+}: {
+  closeables: RandomAccessFileLike[];
+  scratchFilePoolSize?: unknown;
+}) {
   const count = normalizeScratchFilePoolSize(scratchFilePoolSize);
-  const files = [];
+  const files: BrowserMemoryRandomAccessFile[] = [];
   for (let index = 0; index < count; index += 1) {
     const file = new BrowserMemoryRandomAccessFile();
     files.push(file);
@@ -1421,7 +1607,7 @@ export function normalizeScratchFilePoolSize(value?: unknown) {
   return Math.floor(parsed);
 }
 
-export async function cleanupBrowserOpfsMounts(mounts) {
+export async function cleanupBrowserOpfsMounts(mounts: BrowserOpfsMount[]) {
   for (const mount of mounts) {
     mount.finishRun();
     if (Array.isArray(mount.scratchFiles) && mount.scratchFiles.length > 0) {
@@ -1430,7 +1616,7 @@ export async function cleanupBrowserOpfsMounts(mounts) {
   }
 }
 
-function copyRandomAccessFileSync(source, target) {
+function copyRandomAccessFileSync(source: RandomAccessFileLike, target: RandomAccessFileLike) {
   if (source === target) return;
   const size = Number(source.size());
   const buffer = new Uint8Array(OPFS_COPY_CHUNK_SIZE);
@@ -1447,35 +1633,42 @@ function copyRandomAccessFileSync(source, target) {
   target.flush();
 }
 
-function unlinkEntryFromDirectory(contents, pathStr) {
+function unlinkEntryFromDirectory(contents: WasiDirectoryContents, pathStr: string) {
   const parts = normalizeWasiRelativePathParts(pathStr);
   if (parts === null) return { ret: wasiShim.wasi.ERRNO_NOTCAPABLE, inode_obj: null };
   if (parts.length === 0) return { ret: wasiShim.wasi.ERRNO_INVAL, inode_obj: null };
   const parent = resolveParentDirectory(contents, parts);
-  if (parent.ret !== wasiShim.wasi.ERRNO_SUCCESS) return { ret: parent.ret, inode_obj: null };
+  if (parent.ret !== wasiShim.wasi.ERRNO_SUCCESS || parent.entries === null) {
+    return { ret: parent.ret, inode_obj: null };
+  }
   const entry = parent.entries.get(parent.name) ?? null;
   if (!entry) return { ret: wasiShim.wasi.ERRNO_NOENT, inode_obj: null };
   parent.entries.delete(parent.name);
   return { ret: wasiShim.wasi.ERRNO_SUCCESS, inode_obj: entry };
 }
 
-function resolveParentDirectory(contents, parts) {
+type ParentDirectoryResolution =
+  | { ret: number; entries: WasiDirectoryContents; name: string }
+  | { ret: number; entries: null; name: null };
+
+function resolveParentDirectory(contents: WasiDirectoryContents, parts: string[]): ParentDirectoryResolution {
   let entries = contents;
   for (const part of parts.slice(0, -1)) {
     const entry = entries.get(part) ?? null;
     if (!entry) return { ret: wasiShim.wasi.ERRNO_NOENT, entries: null, name: null };
-    if (!(entry.contents instanceof Map)) {
+    const entryContents = inodeMapContents(entry);
+    if (!entryContents) {
       return { ret: wasiShim.wasi.ERRNO_NOTDIR, entries: null, name: null };
     }
-    entries = entry.contents;
+    entries = entryContents;
   }
-  return { ret: wasiShim.wasi.ERRNO_SUCCESS, entries, name: parts[parts.length - 1] };
+  return { ret: wasiShim.wasi.ERRNO_SUCCESS, entries, name: lastPathPart(parts) };
 }
 
-function normalizeWasiRelativePathParts(pathStr) {
+function normalizeWasiRelativePathParts(pathStr: string) {
   const value = String(pathStr);
   if (value.startsWith('/') || value.includes('\0')) return null;
-  const parts = [];
+  const parts: string[] = [];
   for (const token of value.split('/')) {
     if (token === '' || token === '.') continue;
     if (token === '..') {
@@ -1488,12 +1681,12 @@ function normalizeWasiRelativePathParts(pathStr) {
   return parts;
 }
 
-function validateWasiRelativePath(pathStr) {
+function validateWasiRelativePath(pathStr: string) {
   const value = String(pathStr);
   if (value.startsWith('/')) return wasiShim.wasi.ERRNO_NOTCAPABLE;
   if (value.includes('\0')) return wasiShim.wasi.ERRNO_INVAL;
 
-  const parts = [];
+  const parts: string[] = [];
   for (const token of value.split('/')) {
     if (token === '' || token === '.') continue;
     if (token === '..') {
@@ -1507,13 +1700,17 @@ function validateWasiRelativePath(pathStr) {
   return wasiShim.wasi.ERRNO_SUCCESS;
 }
 
-function pathRequiresDirectory(pathStr, oflags) {
+function pathRequiresDirectory(pathStr: string, oflags: number) {
   return (oflags & wasiShim.wasi.OFLAGS_DIRECTORY) === wasiShim.wasi.OFLAGS_DIRECTORY
     || String(pathStr).endsWith('/');
 }
 
-export function normalizeMountHandleMap({ mountHandles }) {
-  const normalized = {};
+export function normalizeMountHandleMap({
+  mountHandles,
+}: {
+  mountHandles?: Record<string, unknown> | null;
+}) {
+  const normalized: Record<string, FileSystemDirectoryHandleLike> = {};
   if (!mountHandles) return normalized;
 
   for (const [guestPath, handle] of Object.entries(mountHandles)) {
@@ -1521,25 +1718,27 @@ export function normalizeMountHandleMap({ mountHandles }) {
       label: `mountHandles[${guestPath}]`,
     });
     assertDirectoryHandle(handle, `mountHandles[${guestPath}]`);
-    normalized[normalizedGuestPath] = handle;
+    // assertDirectoryHandle throws above unless handle structurally matches a directory handle.
+    normalized[normalizedGuestPath] = handle as FileSystemDirectoryHandleLike;
   }
 
   return normalized;
 }
 
-export function normalizeVirtualFiles(value) {
+export function normalizeVirtualFiles(value: unknown): NormalizedVirtualFile[] {
   if (value == null) return [];
   if (!Array.isArray(value)) throw new TypeError('virtualFiles must be an array');
   return value.map((entry, index) => normalizeVirtualFile(entry, index));
 }
 
-function normalizeVirtualFile(entry, index) {
+function normalizeVirtualFile(entry: unknown, index: number): NormalizedVirtualFile {
   if (!entry || typeof entry !== 'object') {
     throw new TypeError(`virtualFiles[${index}] must be an object`);
   }
-  const path = normalizeGuestPath(entry.path, { label: `virtualFiles[${index}].path` });
-  const source = entry.source ?? entry.file ?? entry.blob ?? entry.bytes ?? entry.data;
-  const proxy = entry.proxy;
+  const record = entry as Record<string, unknown>;
+  const path = normalizeGuestPath(record.path, { label: `virtualFiles[${index}].path` });
+  const source = record.source ?? record.file ?? record.blob ?? record.bytes ?? record.data;
+  const proxy = record.proxy;
   if (isVirtualFileProxy(proxy)) return { path, source: proxy };
   if (isVirtualFileProxy(source)) return { path, source };
   if (isBlobLike(source)) {
@@ -1572,15 +1771,15 @@ function normalizeGuestPathList(value: unknown, label: string): string[] {
   return value.map((entry) => normalizeGuestPath(String(entry), { label }));
 }
 
-export function normalizeKnownInputPaths(value) {
+export function normalizeKnownInputPaths(value: unknown) {
   return normalizeGuestPathList(value, 'knownInputPaths');
 }
 
-export function normalizePreopenOutputPaths(value) {
+export function normalizePreopenOutputPaths(value: unknown) {
   return normalizeGuestPathList(value, 'preopenOutputPaths');
 }
 
-export function isGuestPathWithinRoots(path, roots) {
+export function isGuestPathWithinRoots(path: unknown, roots: readonly string[]) {
   const normalizedPath = normalizeGuestPath(path, { label: 'guest path' });
   for (const root of roots) {
     if (normalizedPath === root || normalizedPath.startsWith(`${root}/`)) return true;
@@ -1588,11 +1787,11 @@ export function isGuestPathWithinRoots(path, roots) {
   return false;
 }
 
-export function isGuestPathWithinMount(path, mountPath) {
+export function isGuestPathWithinMount(path: string, mountPath: string) {
   return path === mountPath || path.startsWith(`${mountPath}/`);
 }
 
-export function joinGuestPath(...parts) {
+export function joinGuestPath(...parts: unknown[]) {
   const joined = parts
     .map((part, index) => {
       const value = String(part ?? '');
@@ -1604,7 +1803,7 @@ export function joinGuestPath(...parts) {
   return normalizeGuestPath(joined.startsWith('/') ? joined : `/${joined}`, { label: 'guest path' });
 }
 
-export function normalizeRelativePathParts(value, { label = 'relative path' } = {}) {
+export function normalizeRelativePathParts(value: unknown, { label = 'relative path' }: { label?: string } = {}) {
   const parts = String(value ?? '')
     .replace(/^\/+/, '')
     .split(PATH_SEPARATOR_REGEX)
@@ -1617,7 +1816,7 @@ export function normalizeRelativePathParts(value, { label = 'relative path' } = 
   return parts;
 }
 
-export function normalizeStdin(stdin) {
+export function normalizeStdin(stdin: unknown) {
   if (stdin === undefined || stdin === null) return new Uint8Array();
   if (typeof stdin === 'string') return new TextEncoder().encode(stdin);
   if (stdin instanceof Uint8Array) return stdin;

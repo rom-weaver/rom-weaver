@@ -2,8 +2,47 @@ import * as wasiShim from '@bjorn3/browser_wasi_shim';
 import { BrowserOpfsRandomAccessFile } from './browser-opfs-io-adapters.ts';
 import { OPFS_COPY_CHUNK_SIZE } from './browser-opfs-constants.ts';
 import { openSyncAccessHandle, writableSyncAccessMode } from './browser-opfs-sync-access.ts';
+import type { SyncAccessHandleLike } from './browser-opfs-sync-access.ts';
+import type { RandomAccessFileLike } from './browser-opfs-mounts.ts';
+import type {
+  FileSystemDirectoryHandleLike,
+  RomWeaverBrowserSyncAccessMode,
+  TraceLine,
+} from './browser-opfs-runtime-types.ts';
 
-export async function flushBrowserOpfsMounts(mounts, trace) {
+type OpfsWritableStreamLike = {
+  abort?: (reason?: unknown) => Promise<void>;
+  close(): Promise<void>;
+  truncate(size: number): Promise<void>;
+  write(data: Uint8Array | { data: Uint8Array; position: number; type: 'write' }): Promise<void>;
+};
+
+/**
+ * Output surface of OPFS file handles returned by FileSystemDirectoryHandleLike.getFileHandle
+ * (which surfaces `unknown`). createSyncAccessHandle only exists in worker contexts and is
+ * feature-detected before use.
+ */
+type OpfsFileHandleLike = {
+  createSyncAccessHandle?: (options?: { mode?: RomWeaverBrowserSyncAccessMode }) => Promise<SyncAccessHandleLike>;
+  createWritable(options?: { keepExistingData?: boolean }): Promise<OpfsWritableStreamLike>;
+};
+
+type RandomAccessFileInodeLike = {
+  file: RandomAccessFileLike;
+  path_open: (...args: unknown[]) => unknown;
+  scratchBacked?: boolean;
+  stat: (...args: unknown[]) => unknown;
+};
+
+type FlushableBrowserOpfsMount = {
+  contents: Map<string, unknown>;
+  directoryHandle: FileSystemDirectoryHandleLike;
+  resetScratchPool?: (options: { trace?: TraceLine }) => void;
+  syncAccessMode?: RomWeaverBrowserSyncAccessMode;
+  trackOwnedFile: (file: RandomAccessFileLike) => void;
+};
+
+export async function flushBrowserOpfsMounts(mounts: FlushableBrowserOpfsMount[], trace: TraceLine) {
   for (const mount of mounts) {
     await flushInMemoryEntriesToOpfs(mount.directoryHandle, mount.contents);
     await replaceScratchBackedEntriesWithOpfsHandles({
@@ -19,6 +58,10 @@ async function replaceScratchBackedEntriesWithOpfsHandles({
   directoryHandle,
   entries,
   mount,
+}: {
+  directoryHandle: FileSystemDirectoryHandleLike;
+  entries: Map<string, unknown>;
+  mount: FlushableBrowserOpfsMount;
 }) {
   for (const [name, entry] of entries) {
     if (isRandomAccessFileInodeLike(entry)) {
@@ -35,7 +78,10 @@ async function replaceScratchBackedEntriesWithOpfsHandles({
       continue;
     }
     if (entry instanceof wasiShim.Directory) {
-      const childHandle = await directoryHandle.getDirectoryHandle(name, { create: true });
+      const childHandle = await directoryHandle.getDirectoryHandle(
+        name,
+        { create: true },
+      ) as FileSystemDirectoryHandleLike;
       await replaceScratchBackedEntriesWithOpfsHandles({
         directoryHandle: childHandle,
         entries: entry.contents,
@@ -45,11 +91,17 @@ async function replaceScratchBackedEntriesWithOpfsHandles({
   }
 }
 
-async function flushInMemoryEntriesToOpfs(directoryHandle, entries) {
+async function flushInMemoryEntriesToOpfs(
+  directoryHandle: FileSystemDirectoryHandleLike,
+  entries: Map<string, unknown>,
+) {
   for (const [name, entry] of entries) {
     if (isRandomAccessFileInodeLike(entry)) {
       if (entry.scratchBacked) {
-        const fileHandle = await directoryHandle.getFileHandle(name, { create: true });
+        const fileHandle = await directoryHandle.getFileHandle(
+          name,
+          { create: true },
+        ) as OpfsFileHandleLike;
         await copyRandomAccessFileToHandle(entry.file, fileHandle);
       } else if (typeof entry.file?.flush === 'function') {
         entry.file.flush();
@@ -58,29 +110,38 @@ async function flushInMemoryEntriesToOpfs(directoryHandle, entries) {
     }
 
     if (entry instanceof wasiShim.Directory) {
-      const childHandle = await directoryHandle.getDirectoryHandle(name, { create: true });
+      const childHandle = await directoryHandle.getDirectoryHandle(
+        name,
+        { create: true },
+      ) as FileSystemDirectoryHandleLike;
       await flushInMemoryEntriesToOpfs(childHandle, entry.contents);
       continue;
     }
 
     if (entry instanceof wasiShim.File) {
-      const fileHandle = await directoryHandle.getFileHandle(name, { create: true });
+      const fileHandle = await directoryHandle.getFileHandle(
+        name,
+        { create: true },
+      ) as OpfsFileHandleLike;
       await writeFileHandle(fileHandle, entry.data);
     }
   }
 }
 
-function isRandomAccessFileInodeLike(entry) {
-  return Boolean(
-    entry
-      && typeof entry === 'object'
-      && 'file' in entry
-      && typeof entry.path_open === 'function'
-      && typeof entry.stat === 'function'
+function isRandomAccessFileInodeLike(entry: unknown): entry is RandomAccessFileInodeLike {
+  if (!entry || typeof entry !== 'object') return false;
+  const record = entry as Record<string, unknown>;
+  return (
+    'file' in record
+    && typeof record.path_open === 'function'
+    && typeof record.stat === 'function'
   );
 }
 
-export async function copyRandomAccessFileToHandle(source, fileHandle) {
+export async function copyRandomAccessFileToHandle(
+  source: RandomAccessFileLike,
+  fileHandle: OpfsFileHandleLike,
+) {
   const size = Number(source.size());
   if (typeof fileHandle.createSyncAccessHandle === 'function') {
     const accessHandle = await openSyncAccessHandle({ fileHandle, mode: 'readwrite' });
@@ -105,7 +166,7 @@ export async function copyRandomAccessFileToHandle(source, fileHandle) {
   }
 
   const writable = await fileHandle.createWritable({ keepExistingData: false });
-  let writeError = null;
+  let writeError: unknown = null;
   try {
     const buffer = new Uint8Array(OPFS_COPY_CHUNK_SIZE);
     let offset = 0;
@@ -130,7 +191,10 @@ export async function copyRandomAccessFileToHandle(source, fileHandle) {
   }
 }
 
-async function writeFileHandle(fileHandle, data) {
+async function writeFileHandle(
+  fileHandle: OpfsFileHandleLike,
+  data: Uint8Array | ArrayLike<number> | null | undefined,
+) {
   const bytes = data instanceof Uint8Array ? data : new Uint8Array(data ?? []);
   if (typeof fileHandle.createSyncAccessHandle === 'function') {
     const accessHandle = await openSyncAccessHandle({ fileHandle, mode: 'readwrite' });
@@ -146,7 +210,7 @@ async function writeFileHandle(fileHandle, data) {
   }
 
   const writable = await fileHandle.createWritable({ keepExistingData: false });
-  let writeError = null;
+  let writeError: unknown = null;
   try {
     await writable.write(bytes);
   } catch (error) {
@@ -157,7 +221,7 @@ async function writeFileHandle(fileHandle, data) {
   }
 }
 
-async function closeWritableStream(writable, priorError) {
+async function closeWritableStream(writable: OpfsWritableStreamLike, priorError: unknown) {
   if (priorError) {
     if (typeof writable.abort === 'function') {
       try {
