@@ -735,7 +735,7 @@ impl ChdContainerHandler {
     }
 
     pub(super) fn track_output_name(&self, stem: &str, track_number: u32) -> String {
-        format!("{stem}.track{track_number:02}.bin")
+        format!("{stem} (Track {track_number}).bin")
     }
 
     pub(super) fn stream_chd_frames_with_progress<F>(
@@ -1326,7 +1326,7 @@ impl ChdContainerHandler {
                 let track_selected = write_tracks[track_index];
                 if track_selected {
                     gdi_lines.push(format!(
-                        "{} {} {} {} {} 0",
+                        "{} {} {} {} \"{}\" 0",
                         track.number, physframeofs, track_type, sector_size, track_name
                     ));
                 }

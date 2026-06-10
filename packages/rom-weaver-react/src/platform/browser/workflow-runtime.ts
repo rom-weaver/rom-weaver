@@ -84,7 +84,7 @@ const getFileStem = (fileName: string) => getFileNameWithoutExtension(fileName);
 const getChdCdOutputFileName = (fileName: string, extension: "bin" | "cue"): string =>
   `${getFileStem(getPathBaseName(fileName, "input.chd")) || "input"}.${extension}`;
 
-const stripPrimaryChdTrackSuffix = (fileName: string): string => fileName.replace(/\.track0*1(?=\.bin$)/i, "");
+const stripPrimaryChdTrackSuffix = (fileName: string): string => fileName.replace(/ \(Track 0*1\)(?=\.bin$)/i, "");
 
 const getChdCreateFormat = (requestedMode: string): string => {
   if (requestedMode === "cd" || requestedMode === "chd-cd") return "chd-cd";

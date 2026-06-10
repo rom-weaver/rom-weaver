@@ -692,25 +692,25 @@ fn chd_extract_split_bin_forces_per_track_outputs_and_reports_emitted_files() {
     assert_emitted_file(extract_json, out_dir.child("disc.cue").path(), Some("cue"));
     assert_emitted_file(
         extract_json,
-        out_dir.child("disc.track01.bin").path(),
+        out_dir.child("disc (Track 1).bin").path(),
         Some("bin"),
     );
     assert_emitted_file(
         extract_json,
-        out_dir.child("disc.track02.bin").path(),
+        out_dir.child("disc (Track 2).bin").path(),
         Some("bin"),
     );
     let label = extract_json["label"].as_str().expect("label");
     assert!(label.contains("splitbin=true"));
-    assert!(label.contains("emitted_files=disc.cue,disc.track01.bin,disc.track02.bin"));
+    assert!(label.contains("emitted_files=disc.cue,disc (Track 1).bin,disc (Track 2).bin"));
 
     assert!(out_dir.child("disc.cue").path().exists());
-    assert!(out_dir.child("disc.track01.bin").path().exists());
-    assert!(out_dir.child("disc.track02.bin").path().exists());
+    assert!(out_dir.child("disc (Track 1).bin").path().exists());
+    assert!(out_dir.child("disc (Track 2).bin").path().exists());
     assert!(!out_dir.child("disc.bin").path().exists());
     let cue = fs::read_to_string(out_dir.child("disc.cue").path()).expect("cue output");
-    assert!(cue.contains("FILE \"disc.track01.bin\" BINARY"));
-    assert!(cue.contains("FILE \"disc.track02.bin\" BINARY"));
+    assert!(cue.contains("FILE \"disc (Track 1).bin\" BINARY"));
+    assert!(cue.contains("FILE \"disc (Track 2).bin\" BINARY"));
 }
 
 #[test]
@@ -770,8 +770,8 @@ fn chd_extract_split_bin_selecting_cue_fanouts_track_outputs() {
     assert!(label.contains("splitbin=true"));
 
     assert!(out_dir.child("disc.cue").path().exists());
-    assert!(out_dir.child("disc.track01.bin").path().exists());
-    assert!(out_dir.child("disc.track02.bin").path().exists());
+    assert!(out_dir.child("disc (Track 1).bin").path().exists());
+    assert!(out_dir.child("disc (Track 2).bin").path().exists());
     assert!(!out_dir.child("disc.bin").path().exists());
 }
 
@@ -982,17 +982,17 @@ fn chd_compress_and_extract_gdi_round_trip() {
         .code(0);
 
     assert_eq!(
-        fs::read(out_dir.child("disc.track01.bin").path()).expect("extract track01"),
+        fs::read(out_dir.child("disc (Track 1).bin").path()).expect("extract track01"),
         track01
     );
     assert_eq!(
-        fs::read(out_dir.child("disc.track02.bin").path()).expect("extract track02"),
+        fs::read(out_dir.child("disc (Track 2).bin").path()).expect("extract track02"),
         track02
     );
     let gdi = fs::read_to_string(out_dir.child("disc.gdi").path()).expect("gdi output");
     assert!(gdi.contains("2\n"));
-    assert!(gdi.contains("1 0 4 2352 disc.track01.bin 0"));
-    assert!(gdi.contains("2 4 4 2048 disc.track02.bin 0"));
+    assert!(gdi.contains("1 0 4 2352 \"disc (Track 1).bin\" 0"));
+    assert!(gdi.contains("2 4 4 2048 \"disc (Track 2).bin\" 0"));
 }
 
 #[test]
@@ -1073,11 +1073,11 @@ fn chd_compress_cue_with_sibling_gdi_detects_gdrom() {
         .code(0);
 
     assert_eq!(
-        fs::read(out_dir.child("disc.track01.bin").path()).expect("extract track01"),
+        fs::read(out_dir.child("disc (Track 1).bin").path()).expect("extract track01"),
         track01
     );
     assert_eq!(
-        fs::read(out_dir.child("disc.track02.bin").path()).expect("extract track02"),
+        fs::read(out_dir.child("disc (Track 2).bin").path()).expect("extract track02"),
         track02
     );
 }
@@ -1165,11 +1165,11 @@ fn chd_compress_cue_density_markers_without_gdi_synthesizes_gdrom() {
         .code(0);
 
     assert_eq!(
-        fs::read(out_dir.child("disc.track01.bin").path()).expect("extract track01"),
+        fs::read(out_dir.child("disc (Track 1).bin").path()).expect("extract track01"),
         track01
     );
     assert_eq!(
-        fs::read(out_dir.child("disc.track02.bin").path()).expect("extract track02"),
+        fs::read(out_dir.child("disc (Track 2).bin").path()).expect("extract track02"),
         track02
     );
 }
@@ -1717,11 +1717,11 @@ fn chd_extract_selecting_gdi_descriptor_includes_tracks() {
 
     assert!(out_dir.child("disc.gdi").path().exists());
     assert_eq!(
-        fs::read(out_dir.child("disc.track01.bin").path()).expect("extract track01"),
+        fs::read(out_dir.child("disc (Track 1).bin").path()).expect("extract track01"),
         track01
     );
     assert_eq!(
-        fs::read(out_dir.child("disc.track02.bin").path()).expect("extract track02"),
+        fs::read(out_dir.child("disc (Track 2).bin").path()).expect("extract track02"),
         track02
     );
 }
