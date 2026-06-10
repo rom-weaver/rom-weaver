@@ -9,7 +9,7 @@
   --rw-accent:    #d9690f;
   --rw-accent-ink:#1c1206;
   --rw-ctl: 40px;
-  --rw-sec-pad: 16px;   /* section horizontal padding (card edges align here) */
+  --rw-sec-pad: 20px;   /* section horizontal padding = control gutter (card edges align here) */
   --rw-card-indent: 9px; /* card border(1) + padding(8): content sits here, headings align to it */
   --rw-mono: "Inter Tight", "Segoe UI", sans-serif;
   --rw-sans: "Inter Tight", "Segoe UI", sans-serif;
@@ -37,9 +37,6 @@
 @keyframes rw-shimmer { 100% { transform: translateX(360%); } }
 @keyframes rw-indet { 0% { transform: translateX(-110%); } 100% { transform: translateX(330%); } }
 @keyframes rw-pop { 0% { transform: scale(.7); } 60% { transform: scale(1.2); } 100% { transform: scale(1); } }
-@keyframes rw-po-flow-down { to { background-position-y: 6px; } }
-@keyframes rw-po-flow-up { to { background-position-y: -6px; } }
-@keyframes rw-po-arrow-pop { 0% { transform: translateY(0) scale(1); } 35% { transform: translateY(0) scale(1.25); } 100% { transform: translateY(0) scale(1); } }
 @keyframes rw-sc-pop { 0% { transform: scale(1); } 40% { transform: scale(1.07); } 100% { transform: scale(1); } }
 
 .rw-app * { box-sizing: border-box; }
@@ -134,9 +131,13 @@
 .rw-app .drop .hint { font-size: 0.758621rem; color: var(--rw-ink-mut); }
 .rw-app .drop.dragging { border-color: var(--rw-accent); border-style: solid; background: color-mix(in oklab, var(--rw-accent) 15%, var(--rw-inset)); color: var(--rw-ink); }
 .rw-app .drop.dragging svg { color: var(--rw-accent); opacity: 1; }
-.rw-app .workflow-file-list { display: flex; flex-direction: column; gap: 14px; }
+.rw-app .workflow-file-list { position: relative; display: flex; flex-direction: column; gap: 14px; }
 .rw-app .workflow-file-list:not(:empty), .rw-app .workflow-step-after-items:not(:empty) { margin-bottom: 14px; }
-.rw-app .workflow-file-list > .file, .rw-app .workflow-file-list > .fileprog { margin-top: 0; }
+/* inside the list, spacing comes from the flex gap only — override the generic
+   `.file + .file` margin (equal specificity but later in source) so rows don't double up */
+.rw-app .workflow-file-list > .file, .rw-app .workflow-file-list > .fileprog,
+.rw-app .workflow-file-list > .file + .file, .rw-app .workflow-file-list > .file + .fileprog,
+.rw-app .workflow-file-list > .fileprog + .file, .rw-app .workflow-file-list > .fileprog + .fileprog { margin-top: 0; }
 
 /* resolved file row */
 .rw-app .file {
@@ -150,10 +151,16 @@
   background-image: repeating-linear-gradient(to bottom, var(--rw-line-strong) 0 3px, transparent 3px 6px); background-size: 1px 6px; }
 .rw-app .file::before { left: calc(var(--rw-sec-pad) / -2 - 1px); }
 .rw-app .file::after { right: calc(var(--rw-sec-pad) / -2 - 1px); }
-.rw-app .file.patch::before, .rw-app .file.patch::after { top: calc(0.95rem - 1px); bottom: calc(0.95rem - 1px); }
+.rw-app .file.patch::before { top: calc(0.95rem - 1px); bottom: calc(0.95rem - 1px); }
+/* patches drop the right dashed rail (by the remove icon); a single patch has no drag
+   handle, so it drops its left rail too — the left rail only frames a present handle */
+.rw-app .file.patch::after { content: none; }
+.rw-app .file.patch:not(:has(.phandle))::before { content: none; }
+/* ROM inputs carry only the delete button (right gutter) — no dashed rails, no index badge */
+.rw-app .file:not(.patch)::before, .rw-app .file:not(.patch)::after { content: none; }
 .rw-app .file:has(.rm:hover)::before, .rw-app .file:has(.rm:hover)::after { background-image: repeating-linear-gradient(to bottom, var(--rw-bad) 0 3px, transparent 3px 6px); }
 .rw-app .file:has(.fidx:hover)::before, .rw-app .file:has(.fidx:hover)::after,
-.rw-app .file:has(.po-num:hover)::before, .rw-app .file:has(.po-num:hover)::after { background-image: repeating-linear-gradient(to bottom, var(--rw-accent) 0 3px, transparent 3px 6px); }
+.rw-app .file:has(.phandle:hover:not(:disabled))::before, .rw-app .file:has(.phandle:focus-visible)::before { background-image: repeating-linear-gradient(to bottom, var(--rw-accent) 0 3px, transparent 3px 6px); }
 .rw-app .fidx { position: absolute; top: 50%; left: calc(var(--rw-sec-pad) / -2 - 1px); transform: translate(-50%, -50%); z-index: 2; padding: 3px 0; font: 600 0.74rem/1 var(--rw-mono); color: var(--rw-ink-mut); background: var(--rw-panel); }
 .rw-app .file.bad .fidx { color: var(--rw-bad); }
 .rw-app .ptgt { margin-left: 6px; font: 600 0.724138rem/1 var(--rw-mono); color: var(--rw-ink-mut); padding: 2px 6px; border: 1px solid var(--rw-line-strong); border-radius: 4px; white-space: nowrap; }
@@ -172,6 +179,11 @@
 .rw-app .file + .file { margin-top: 14px; }
 .rw-app .file.ok { border-color: color-mix(in oklab, var(--rw-ok) 42%, var(--rw-line)); }
 .rw-app .file.bad { border-color: color-mix(in oklab, var(--rw-bad) 50%, var(--rw-line)); }
+/* hovering a row's controls highlights the whole card border, reusing the ok/bad state
+   treatment: the drag handle uses the brand accent, the remove icon uses the error red */
+.rw-app .file.patch:has(.phandle:hover:not(:disabled)),
+.rw-app .file.patch:has(.phandle:focus-visible) { border-color: color-mix(in oklab, var(--rw-accent) 50%, var(--rw-line)); }
+.rw-app .file:has(.rm:hover) { border-color: color-mix(in oklab, var(--rw-bad) 50%, var(--rw-line)); }
 .rw-app .file-name { min-width: 0; align-self: start; }
 .rw-app .nmline { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .rw-app .nmline .nm { font-weight: 600; word-break: break-word; }
@@ -179,32 +191,27 @@
 .rw-app .statedot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
 .rw-app .statedot.ok { background: var(--rw-ok); } .rw-app .statedot.bad { background: var(--rw-bad); }
 
-/* patch reorder controls */
-.rw-app .preorder { position: absolute; top: -1px; bottom: -1px; left: calc(var(--rw-sec-pad) / -2 - 1px); transform: translateX(-50%); z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: space-between; }
-.rw-app .preorder::before, .rw-app .preorder::after { content: ""; position: absolute; left: 50%; width: 1px; transform: translateX(-50%); background-image: repeating-linear-gradient(to bottom, var(--rw-accent) 0 3px, transparent 3px 6px); background-size: 1px 6px; opacity: 0; pointer-events: none; transition: opacity .12s; z-index: -1; }
-.rw-app .preorder::before { top: 0.95rem; bottom: 50%; }
-.rw-app .preorder::after { top: 50%; bottom: 0.95rem; }
-.rw-app .file:has(.po-up:hover:not(:disabled)) .preorder::before,
-.rw-app .file.po-moving-up .preorder::before { opacity: 1; animation: rw-po-flow-up .55s linear infinite; }
-.rw-app .file:has(.po-down:hover:not(:disabled)) .preorder::after,
-.rw-app .file.po-moving-down .preorder::after { opacity: 1; animation: rw-po-flow-down .55s linear infinite; }
-.rw-app .file.po-moving-up .po-btn.po-up,
-.rw-app .file.po-moving-down .po-btn.po-down { color: var(--rw-accent); }
-.rw-app .file.po-moving-up .po-btn.po-up svg,
-.rw-app .file.po-moving-down .po-btn.po-down svg { animation: rw-po-arrow-pop .28s cubic-bezier(.3,.7,.3,1.3); }
-.rw-app .preorder.po-right { left: auto; right: calc(var(--rw-sec-pad) / -2 - 1px); transform: translateX(50%); }
-.rw-app .preorder .po-num, .rw-app .preorder .po-mid { font: 600 0.72rem/1 var(--rw-mono); color: var(--rw-ink-mut); background: var(--rw-panel); padding: 3px 2px; display: flex; align-items: center; justify-content: center; position: static; transform: none; }
-.rw-app .preorder .po-num:hover { color: var(--rw-accent); }
-.rw-app .po-btn { appearance: none; border: 0; background: var(--rw-panel); padding: 0; cursor: pointer; color: var(--rw-ink-mut); display: flex; }
-.rw-app .po-btn svg { width: 0.95rem; height: 0.95rem; display: block; }
-.rw-app .po-btn:hover:not(:disabled) { color: var(--rw-accent); }
-.rw-app .po-btn:disabled { cursor: default; }
-.rw-app .po-btn:disabled svg { opacity: .45; }
-.rw-app .preorder.po-right .rm { position: static; inset: auto; width: 0.85rem; transform: none; padding: 3px 0; }
-.rw-app .po-mid.po-x:hover { color: var(--rw-bad); cursor: pointer; }
-.rw-app .po-mid.po-x svg { width: 0.85rem; height: 0.85rem; }
+/* patch drag handle: grip glyph pinned in the left gutter rail */
+.rw-app .phandle { position: absolute; top: -1px; bottom: -1px; left: calc(var(--rw-sec-pad) / -2 - 1px); transform: translateX(-50%); z-index: 2;
+  appearance: none; border: 0; padding: 3px 1px; background: var(--rw-panel); color: var(--rw-ink-soft);
+  display: flex; align-items: center; justify-content: center;
+  cursor: grab; touch-action: none; transition: color .12s; }
+.rw-app .phandle-grip { width: 0.85rem; height: 0.85rem; transition: opacity .12s; }
+.rw-app .phandle:hover:not(:disabled), .rw-app .phandle:focus-visible { color: var(--rw-accent); }
+.rw-app .phandle:focus-visible { outline: 1px solid var(--rw-accent); outline-offset: 1px; border-radius: 3px; }
+.rw-app .phandle:disabled { cursor: default; color: var(--rw-ink-mut); }
+.rw-app .phandle:disabled .phandle-grip { opacity: .5; }
+.rw-app .file.bad .phandle { color: var(--rw-bad); }
+
+/* dragged row lifts and follows the pointer */
+.rw-app .file.rw-dragging { z-index: 5; transition: none; box-shadow: 0 8px 20px rgba(0,0,0,.35); }
+.rw-app .file.rw-dragging, .rw-app .file.rw-dragging .phandle { cursor: grabbing; }
+.rw-app .file.rw-dragging .phandle { color: var(--rw-accent); }
+/* non-dragged rows glide to open/close the gap as the grabbed row passes over them */
+.rw-app .file.rw-shifting { transition: transform .16s cubic-bezier(.2,.7,.3,1); }
+@media (prefers-reduced-motion: reduce) { .rw-app .file.rw-shifting { transition: none; } }
 .rw-app .fidx:hover { color: var(--rw-accent); }
-.rw-app .rm { position: absolute; top: 50%; right: calc(var(--rw-sec-pad) / -2 - 1px); transform: translate(50%, -50%); z-index: 2; appearance: none; border: 0; background: var(--rw-panel); color: var(--rw-ink-mut); padding: 3px 0; cursor: pointer; display: flex; align-items: center; justify-content: center; line-height: 0; flex: none; }
+.rw-app .rm { position: absolute; top: 50%; right: calc(var(--rw-sec-pad) / -2 - 1px); transform: translate(50%, -50%); z-index: 2; appearance: none; border: 0; background: var(--rw-panel); color: var(--rw-ink-soft); padding: 3px 0; cursor: pointer; display: flex; align-items: center; justify-content: center; line-height: 0; flex: none; }
 .rw-app .rm:hover { color: var(--rw-bad); }
 .rw-app .rm svg { display: block; width: 0.85rem; height: 0.85rem; }
 
@@ -323,7 +330,7 @@
 .rw-app .fname-group:focus-within { border-color: var(--rw-accent); box-shadow: 0 0 0 1px var(--rw-accent); }
 .rw-app .fname-group .input { flex: 1 1 auto; min-width: 0; border: 0; background: transparent; }
 .rw-app .fname-group .input:focus { box-shadow: none; }
-.rw-app .fname-group textarea.input { height: auto; min-height: var(--rw-ctl); padding-top: calc((var(--rw-ctl) - 1.3em) / 2); padding-bottom: calc((var(--rw-ctl) - 1.3em) / 2); line-height: 1.3; resize: none; field-sizing: content; overflow: hidden; overflow-wrap: anywhere; word-break: break-word; white-space: pre-wrap; }
+.rw-app .fname-group textarea.input { height: auto; min-height: var(--rw-ctl); max-height: calc(var(--rw-ctl) + 1.3em); padding-top: calc((var(--rw-ctl) - 1.3em) / 2); padding-bottom: calc((var(--rw-ctl) - 1.3em) / 2); line-height: 1.3; resize: none; field-sizing: content; overflow-y: auto; overflow-x: hidden; overflow-wrap: anywhere; word-break: break-word; white-space: pre-wrap; }
 .rw-app .fname-group .sep { width: 1px; background: var(--rw-line); flex: none; }
 .rw-app .fname-group .select { flex: none; width: auto; border: 0; background-color: var(--rw-panel-2); color: var(--rw-ink); padding-right: 28px; cursor: pointer; font-weight: 600; }
 .rw-app .fname-group .select:hover { color: var(--rw-accent); }
@@ -598,7 +605,7 @@
 
 /* responsive */
 @media (max-width: 600px) {
-  :root { --rw-ctl: 44px; --rw-sec-pad: 14px; }
+  :root { --rw-ctl: 44px; --rw-sec-pad: 18px; }
   .rw-app .app { padding-left: 10px; padding-right: 10px; }
   .rw-app .panel { margin-left: -10px; margin-right: -10px; border-left: 0; border-right: 0; border-radius: 0; }
   .rw-modal .setcols { grid-template-columns: 1fr; }
@@ -646,11 +653,7 @@
   .rw-modal .selmain { flex-direction: column; align-items: stretch; gap: 2px; }
   .rw-modal .selmain .fnm { white-space: normal; word-break: break-all; overflow: visible; }
   .rw-modal .selmeta { gap: 9px; font-size: 0.74rem; }
-  .rw-app .po-btn svg { width: 0.78rem; height: 0.78rem; }
-  .rw-app .po-mid.po-x svg { width: 0.72rem; height: 0.72rem; }
-  .rw-app .file.patch::before, .rw-app .file.patch::after { top: calc(0.78rem - 1px); bottom: calc(0.78rem - 1px); }
-  .rw-app .preorder::before { top: 0.78rem; }
-  .rw-app .preorder::after { bottom: 0.78rem; }
+  .rw-app .phandle-grip { width: 0.72rem; height: 0.72rem; }
   .rw-app .foot { flex-wrap: nowrap; gap: 7px; font-size: 0.62rem; white-space: nowrap; }
   .rw-app .foot .mono { font-size: 0.6rem; }
   .rw-app .foot .donate { padding: 3px 8px; gap: 4px; }

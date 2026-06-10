@@ -631,9 +631,20 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           forcePatchWorkflowRefreshRef.current ||
           preparationSettingsChanged ||
           !sameBinarySourceLists(previousSync.patches, snapshot.patches);
+        // Appending patches keeps the existing prefix staged in the workflow (and OPFS).
+        // Only the new tail needs addPatch, so skip the clear-and-re-add of everything.
+        const previousPatches = previousSync.patches;
+        const patchesAppended =
+          patchesChanged &&
+          !forcePatchWorkflowRefreshRef.current &&
+          !preparationSettingsChanged &&
+          !inputsChanged &&
+          snapshot.patches.length > previousPatches.length &&
+          sameBinarySourceLists(previousPatches, snapshot.patches.slice(0, previousPatches.length));
         emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow diff", {
           executionSettingsChanged,
           inputsChanged,
+          patchesAppended,
           patchesChanged,
           preparationSettingsChanged,
         });
@@ -642,7 +653,7 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           await workflow.setSettings(baseSettings);
           emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow setSettings finish");
         }
-        if (patchesChanged) {
+        if (patchesChanged && !patchesAppended) {
           emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow clearPatches start");
           await workflow.clearPatches();
           emitApplyWorkflowTrace(snapshot.options, "prepareWorkflow clearPatches finish");
@@ -679,7 +690,8 @@ function ApplyPatchForm(props: ApplyPatchFormProps) {
           });
         }
         if (patchesChanged) {
-          for (const patch of snapshot.patches) {
+          const patchesToAdd = patchesAppended ? snapshot.patches.slice(previousPatches.length) : snapshot.patches;
+          for (const patch of patchesToAdd) {
             await workflow.addPatch(toBrowserPublicBinarySource(patch)).catch((error) => {
               if (getErrorCode(error) !== "WORKFLOW_SELECTION_SKIPPED") throw error;
             });

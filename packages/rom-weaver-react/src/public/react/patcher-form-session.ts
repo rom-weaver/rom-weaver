@@ -847,6 +847,17 @@ const useLocalApplyPatchFormSession = ({
     const previousSync = patchStageSyncRef.current;
     const inputsChanged = !sameBinarySourceLists(previousSync.inputs, effectiveInputs);
     const patchesChanged = !sameBinarySourceLists(previousSync.patches, activePatches);
+    // Reordering and removing patches only rearrange/drop files already staged in OPFS;
+    // as long as no current patch is new, there is nothing to (re-)stage — just record order.
+    const previousPatchIds = new Set(getBinarySourceListStableIds(previousSync.patches));
+    const noNewPatches =
+      patchesChanged && getBinarySourceListStableIds(activePatches).every((id) => previousPatchIds.has(id));
+    // Appending patches keeps the existing prefix staged; only the new tail needs work.
+    const patchesAppended =
+      patchesChanged &&
+      activePatches.length > previousSync.patches.length &&
+      sameBinarySourceLists(previousSync.patches, activePatches.slice(0, previousSync.patches.length));
+    const previousPatchCount = previousSync.patches.length;
     const settingsChanged = previousSync.settingsKey !== stageSettingsKey;
     if (!(inputsChanged || patchesChanged || settingsChanged)) return;
     if (!activePatches.length) {
@@ -866,7 +877,15 @@ const useLocalApplyPatchFormSession = ({
       settingsKey: stageSettingsKey,
     };
     if (inputsChanged && !patchesChanged && !settingsChanged) return;
-    syncPatchFiles(createStageSnapshot());
+    if (noNewPatches && !inputsChanged && !settingsChanged) {
+      emitSessionTrace("patch reorder/remove skipped re-stage", { patchCount: activePatches.length });
+      return;
+    }
+    const freshFromIndex = patchesAppended && !inputsChanged && !settingsChanged ? previousPatchCount : 0;
+    if (freshFromIndex > 0) {
+      emitSessionTrace("patch append staged incrementally", { freshFromIndex, patchCount: activePatches.length });
+    }
+    syncPatchFiles(createStageSnapshot(), { freshFromIndex });
   }, [
     activePatches,
     createStageSnapshot,
@@ -900,7 +919,7 @@ const useLocalApplyPatchFormSession = ({
       updatePatches,
       updateSettings,
     },
-    state: { activeSettings, effectiveInputs, failurePlacement, outputErrorMessage, romInputs },
+    state: { activePatches, activeSettings, effectiveInputs, failurePlacement, outputErrorMessage, romInputs },
   });
   const localUiController = useMemo(
     () => ({

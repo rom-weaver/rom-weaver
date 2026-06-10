@@ -1,4 +1,5 @@
 import { type Dispatch, type SetStateAction, useMemo } from "react";
+import { createLogger } from "../../lib/logging.ts";
 import { createRomInputRow } from "./apply-session-inputs.ts";
 import { getTraceSourceSummaries, getTraceSourceSummary, logUiError } from "./apply-session-logging.ts";
 import type { useLocalPatcherSessionState } from "./apply-session-state.ts";
@@ -7,10 +8,13 @@ import type {
   LocalApplyPatchFormSessionOptions,
   StagedInputInfo,
 } from "./apply-session-types.ts";
+import { reorder } from "./components/ds/use-list-reorder.ts";
 import type { ApplyPatchFormSettings, BinarySource } from "./patcher-form.ts";
 import { toError } from "./patcher-form-session-utils.ts";
 import type { PatcherSectionNoticeKey, RomInputRowState } from "./patcher-ui-state.ts";
 import { useLatestRef } from "./use-latest-ref.ts";
+
+const logger = createLogger("patcher-controllers");
 
 type SessionState = ReturnType<typeof useLocalPatcherSessionState>;
 type FailurePlacement = "input" | "output" | "patch" | null;
@@ -36,6 +40,7 @@ interface InputUiControllerContext {
     updateSettings: (nextSettings: ApplyPatchFormSettings) => void;
   };
   state: {
+    activePatches: BinarySource[];
     activeSettings: ApplyPatchFormSettings;
     effectiveInputs: BinarySource[];
     failurePlacement: FailurePlacement;
@@ -78,8 +83,15 @@ const useInputUiController = (context: InputUiControllerContext) => {
         }
       },
       providePatchInputFiles: (fileList: FileList | BinarySource[] | null) => {
-        const { actions } = contextRef.current;
-        const nextPatches = Array.from(fileList || []) as BinarySource[];
+        const { actions, state } = contextRef.current;
+        const providedPatches = Array.from(fileList || []) as BinarySource[];
+        const nextPatches = providedPatches.length ? [...state.activePatches, ...providedPatches] : providedPatches;
+        actions.emitSessionTrace("providePatchInputFiles requested", {
+          existingCount: state.activePatches.length,
+          nextCount: nextPatches.length,
+          providedCount: providedPatches.length,
+          providedSources: getTraceSourceSummaries(providedPatches, "Patch"),
+        });
         actions.invalidatePatchStage();
         actions.setPatchProgress(null);
         actions.setPatchProgressByKey({});
@@ -195,19 +207,16 @@ const usePatchStackController = (context: PatchStackControllerContext) => {
   const contextRef = useLatestRef(context);
   return useMemo(
     () => ({
-      moveItem: (index: number, direction: number) => {
-        const { actions, state } = contextRef.current;
-        const nextIndex = index + direction;
-        if (nextIndex < 0 || nextIndex >= state.activePatches.length) return;
-        const nextPatches = state.activePatches.slice();
-        const [item] = nextPatches.splice(index, 1);
-        if (!item) return;
-        nextPatches.splice(nextIndex, 0, item);
-        actions.updatePatches(nextPatches);
-      },
       removeItem: (index: number) => {
         const { actions, state } = contextRef.current;
         actions.updatePatches(state.activePatches.filter((_patch, patchIndex) => patchIndex !== index));
+      },
+      reorder: (from: number, to: number) => {
+        const { actions, state } = contextRef.current;
+        const count = state.activePatches.length;
+        if (from === to || from < 0 || from >= count || to < 0 || to >= count) return;
+        logger.debug("patch reorder", { count, from, to });
+        actions.updatePatches(reorder(state.activePatches, from, to));
       },
       setPatchOption: async (
         index: number,

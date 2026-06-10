@@ -71,6 +71,8 @@ const useInputStaging = (context: InputStagingContext) => {
       snapshot: ApplyWorkflowStageSnapshot,
       options: {
         silent?: boolean;
+        /** Index of the first newly-added patch; earlier patches keep their staged cards. */
+        freshFromIndex?: number;
       } = {},
     ) => {
       const { machines, report, rows, session, stage } = contextRef.current;
@@ -88,6 +90,9 @@ const useInputStaging = (context: InputStagingContext) => {
         return;
       }
       const silent = options.silent === true;
+      // Patches before this index are already staged in OPFS; only the appended tail
+      // shows progress so their resolved cards stay put instead of flashing "Waiting".
+      const freshFromIndex = Math.max(0, Math.min(options.freshFromIndex ?? 0, snapshot.patches.length));
       const initialProgress = {
         indeterminate: true,
         label: "Preparing patch...",
@@ -96,14 +101,15 @@ const useInputStaging = (context: InputStagingContext) => {
       if (!silent) {
         setPatchStaging(true);
         setPatchProgress(null);
-        setPatchProgressByKey(
-          Object.fromEntries(
-            snapshot.patches.map((patch, index) => [
-              getPatchKey(patch, snapshot.patches),
-              index === 0 ? initialProgress : createWaitingWorkflowProgress(),
-            ]),
-          ),
-        );
+        setPatchProgressByKey((current) => {
+          const next = freshFromIndex > 0 ? { ...current } : {};
+          snapshot.patches.forEach((patch, index) => {
+            if (index < freshFromIndex) return;
+            next[getPatchKey(patch, snapshot.patches)] =
+              index === freshFromIndex ? initialProgress : createWaitingWorkflowProgress();
+          });
+          return next;
+        });
       }
       void stagePatches(snapshot, {
         onProgress: (event) => {

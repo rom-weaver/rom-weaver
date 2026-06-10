@@ -1,9 +1,11 @@
+import GripVertical from "lucide-react/dist/esm/icons/grip-vertical.js";
 import { createTiming, formatTiming } from "../../lib/progress/timing.ts";
 import { ChecksumList, ChecksumRow } from "./components/ds/checksum-list.tsx";
 import { ExtractPanel } from "./components/ds/extraction-tree.tsx";
 import { FileProgress, Notice } from "./components/ds/feedback.tsx";
 import { FileCard } from "./components/ds/file-card.tsx";
 import { DropZone, InfoPopover, StepSection } from "./components/ds/layout.tsx";
+import { useListReorder } from "./components/ds/use-list-reorder.ts";
 import { getFileInputAcceptAttributes } from "./file-input-accept";
 import { PATCH_INPUT_HINT } from "./input-helper-text.ts";
 import type { PatcherStackController, PatcherUiController } from "./patcher-form.ts";
@@ -167,6 +169,32 @@ const PatchOptions = ({
   );
 };
 
+type ReorderHandleProps = ReturnType<ReturnType<typeof useListReorder>["handleProps"]>;
+
+/** Left-gutter drag handle for patch rows: a grip glyph the user drags to reorder. */
+const PatchDragHandle = ({
+  disabled,
+  handleProps,
+  index,
+  total,
+}: {
+  disabled: boolean;
+  handleProps: ReorderHandleProps;
+  index: number;
+  total: number;
+}) => (
+  <button
+    aria-label={`Patch ${index + 1} of ${total}. Drag or press the up and down arrow keys to reorder.`}
+    className="phandle"
+    disabled={disabled}
+    title="Drag to reorder · ↑ / ↓ keys"
+    type="button"
+    {...handleProps}
+  >
+    <GripVertical aria-hidden="true" className="phandle-grip" />
+  </button>
+);
+
 const ApplyPatchListStep = ({
   patchInput,
   patchNotice,
@@ -181,6 +209,12 @@ const ApplyPatchListStep = ({
   ui: PatcherUiController;
 }) => {
   const fileInputAccept = getFileInputAcceptAttributes();
+  const total = patches.length;
+  // Reordering only makes sense for a multi-patch stack. Dragging is additionally
+  // suspended while any patch is staging or the stack is otherwise busy.
+  const reorderable = total > 1;
+  const canReorder = reorderable && patches.every((item) => !item.progress && item.canRemove);
+  const reorderList = useListReorder({ count: total, disabled: !canReorder, onReorder: patchStack.reorder });
   return (
     <StepSection
       id="rom-weaver-row-patch-stack"
@@ -201,7 +235,7 @@ const ApplyPatchListStep = ({
       num="02"
       title="Patches"
     >
-      <div className="workflow-file-list" id="rom-weaver-list-patch-stack">
+      <div className="workflow-file-list" id="rom-weaver-list-patch-stack" ref={reorderList.containerRef}>
         {patches.map((item, index) =>
           item.progress ? (
             <FileProgress
@@ -214,6 +248,17 @@ const ApplyPatchListStep = ({
           ) : (
             <FileCard
               key={item.key ?? `${index}:${item.fileName}`}
+              {...reorderList.rowProps(index)}
+              handle={
+                reorderable ? (
+                  <PatchDragHandle
+                    disabled={!canReorder}
+                    handleProps={reorderList.handleProps(index)}
+                    index={index}
+                    total={total}
+                  />
+                ) : undefined
+              }
               name={
                 <ExtractPanel
                   fileName={item.fileName}
@@ -223,13 +268,9 @@ const ApplyPatchListStep = ({
                   timing={TIMING_LABEL(item.decompressionTimeMs)}
                 />
               }
-              patch={{
-                index,
-                onDown: () => patchStack.moveItem(index, 1),
-                onRemove: () => patchStack.removeItem(index),
-                onUp: () => patchStack.moveItem(index, -1),
-                total: patches.length,
-              }}
+              onRemove={() => patchStack.removeItem(index)}
+              patch
+              removeLabel="Remove patch"
               state={item.validationState === "invalid" ? "bad" : item.validationState === "valid" ? "ok" : undefined}
               target={
                 item.targetOptions && item.targetOptions.length > 1 ? (

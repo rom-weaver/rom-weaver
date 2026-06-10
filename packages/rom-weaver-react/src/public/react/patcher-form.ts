@@ -34,7 +34,7 @@ type PatcherUiController = StoreController<PatcherUiState> & {
 type StackPatchItem = PatchStackItemState;
 
 type PatcherStackController = StoreController<PatchStackState> & {
-  moveItem: (index: number, direction: number) => void;
+  reorder: (from: number, to: number) => void;
   removeItem: (index: number) => void;
   setPatchTarget?: (index: number, targetInputId: string) => void;
   setPatchOption?: (

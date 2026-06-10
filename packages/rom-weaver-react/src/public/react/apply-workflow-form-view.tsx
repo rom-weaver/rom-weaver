@@ -170,7 +170,6 @@ function ApplyWorkflowFormView({
                 parentCompressions: romInput.archivePathEntries,
                 timing: TIMING_LABEL(romInput.decompressionTimeMs),
               },
-              index: index + 1,
               onRemove: () => {
                 if (romInputs.length === 1 && uiController.clearRomInput) uiController.clearRomInput();
                 else uiController.removeRomInput?.(romInput.id);

@@ -41,8 +41,8 @@ const inertUiController: PatcherUiController = createStaticStoreController(inert
 const inertDialogController: DialogController = createStaticStoreController(inertState);
 const inertStackController: PatcherStackController = {
   ...createStaticStoreController({ items: [] }),
-  moveItem: () => undefined,
   removeItem: () => undefined,
+  reorder: () => undefined,
 };
 const inertOutputController: PatcherOutputController = {
   ...createStaticStoreController({
