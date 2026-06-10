@@ -1,3 +1,5 @@
+use super::shared::*;
+
 #[test]
 fn compress_routes_through_registered_container_format() {
     let temp = setup_temp_dir();

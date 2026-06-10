@@ -1,3 +1,5 @@
+use super::shared::*;
+
 #[test]
 fn chd_compress_and_extract_raw_round_trip() {
     let source = (0..16_384)

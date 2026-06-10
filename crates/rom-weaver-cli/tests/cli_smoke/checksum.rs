@@ -1,3 +1,5 @@
+use super::shared::*;
+
 fn checksum_variant_rows(json: &Value) -> &Vec<Value> {
     json["details"]["checksum_variants"]
         .as_array()

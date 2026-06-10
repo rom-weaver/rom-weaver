@@ -1,15 +1,23 @@
-include!("cli_smoke/shared.rs");
+#[path = "cli_smoke/shared.rs"]
+mod shared;
 
-include!("cli_smoke/trim_batch.rs");
+#[path = "cli_smoke/trim_batch.rs"]
+mod trim_batch;
 
-include!("cli_smoke/probe_extract.rs");
+#[path = "cli_smoke/probe_extract.rs"]
+mod probe_extract;
 
-include!("cli_smoke/checksum.rs");
+#[path = "cli_smoke/checksum.rs"]
+mod checksum;
 
-include!("cli_smoke/compress.rs");
+#[path = "cli_smoke/compress.rs"]
+mod compress;
 
-include!("cli_smoke/chd.rs");
+#[path = "cli_smoke/chd.rs"]
+mod chd;
 
-include!("cli_smoke/rvz_z3ds.rs");
+#[path = "cli_smoke/rvz_z3ds.rs"]
+mod rvz_z3ds;
 
-include!("cli_smoke/patch.rs");
+#[path = "cli_smoke/patch.rs"]
+mod patch;

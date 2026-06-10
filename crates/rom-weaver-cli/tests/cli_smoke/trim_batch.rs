@@ -1,3 +1,5 @@
+use super::shared::*;
+
 #[test]
 fn trim_reports_percent_100_in_json() {
     let temp = setup_temp_dir();

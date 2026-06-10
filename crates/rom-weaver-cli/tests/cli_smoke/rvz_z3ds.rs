@@ -1,4 +1,6 @@
 /* jscpd:ignore-start */
+use super::shared::*;
+
 #[test]
 fn rvz_probe_reports_succeeded() {
     let temp = setup_temp_dir();

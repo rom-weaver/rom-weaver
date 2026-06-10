@@ -1,4 +1,6 @@
 /* jscpd:ignore-start */
+use super::shared::*;
+
 #[test]
 fn old_inspect_command_is_removed() {
     Command::cargo_bin("rom-weaver")

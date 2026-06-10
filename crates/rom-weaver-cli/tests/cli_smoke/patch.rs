@@ -1,3 +1,5 @@
+use super::shared::*;
+
 #[test]
 fn patch_flat_commands_are_rejected() {
     Command::cargo_bin("rom-weaver")
