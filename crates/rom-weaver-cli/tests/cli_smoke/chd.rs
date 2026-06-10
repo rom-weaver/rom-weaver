@@ -2118,3 +2118,172 @@ fn wia_extract_supports_single_output_selection() {
             .contains("requested selections were not found")
     );
 }
+
+// ---- relocated from shared.rs (single-module helpers) ----
+
+fn run_chd_round_trip(input_name: &str, source: &[u8], codec: &str, expected_extract_name: &str) {
+    run_chd_round_trip_with_format("chd", input_name, source, codec, expected_extract_name);
+}
+
+fn run_chd_round_trip_with_format(
+    format: &str,
+    input_name: &str,
+    source: &[u8],
+    codec: &str,
+    expected_extract_name: &str,
+) {
+    let temp = setup_temp_dir();
+    fs::write(temp.child(input_name).path(), source).expect("fixture");
+
+    let chd_path = temp.child("disc.chd");
+    let compress_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            temp.child(input_name).path().to_str().expect("path"),
+            "--format",
+            format,
+            "--output",
+            chd_path.path().to_str().expect("path"),
+            "--codec",
+            codec,
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let compress_events = parse_json_lines(&compress_output);
+    assert_running_percent_event(&compress_events, "compress", "chd");
+    let compress_json = compress_events.last().expect("compress terminal event");
+    assert_eq!(compress_json["command"], "compress");
+    assert_eq!(compress_json["family"], "container");
+    assert_eq!(compress_json["format"], "chd");
+    assert_eq!(compress_json["status"], "succeeded");
+
+    let out_dir = temp.child("extract");
+    let extract_output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "extract",
+            chd_path.path().to_str().expect("path"),
+            "--out-dir",
+            out_dir.path().to_str().expect("path"),
+            "--json",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .stdout
+        .clone();
+
+    let extract_events = parse_json_lines(&extract_output);
+    assert_running_percent_event(&extract_events, "extract", "chd");
+    let extract_json = extract_events.last().expect("extract terminal event");
+    assert_eq!(extract_json["command"], "extract");
+    assert_eq!(extract_json["family"], "container");
+    assert_eq!(extract_json["format"], "chd");
+    assert_eq!(extract_json["status"], "succeeded");
+    assert_eq!(
+        fs::read(out_dir.child(expected_extract_name).path()).expect("extract bytes"),
+        source
+    );
+}
+
+fn build_test_chav_stream(frame_count: usize, width: u16, height: u16) -> Vec<u8> {
+    let pixels_per_frame = usize::from(width) * usize::from(height) * 2;
+    let frame_bytes = 12 + pixels_per_frame;
+    let mut data = Vec::with_capacity(frame_count * frame_bytes);
+    for frame in 0..frame_count {
+        data.extend_from_slice(b"chav");
+        data.push(0); // metadata bytes
+        data.push(0); // channels
+        data.extend_from_slice(&0_u16.to_be_bytes()); // samples per channel
+        data.extend_from_slice(&width.to_be_bytes());
+        data.extend_from_slice(&height.to_be_bytes());
+        for pixel in 0..pixels_per_frame {
+            data.push(((frame * 29 + pixel) % 251) as u8);
+        }
+    }
+    data
+}
+
+fn write_gcz_fixture_from_iso(iso_path: &Path, gcz_path: &Path) {
+    const GCZ_BLOCK_SIZE: usize = 0x8000;
+    const GCZ_UNCOMPRESSED_BLOCK_FLAG: u64 = 1 << 63;
+
+    let iso = fs::read(iso_path).expect("read iso fixture");
+    let disc_size = iso.len() as u64;
+    let block_count = disc_size.div_ceil(GCZ_BLOCK_SIZE as u64) as u32;
+    let compressed_size = block_count as u64 * GCZ_BLOCK_SIZE as u64;
+
+    let mut output = File::create(gcz_path).expect("create gcz fixture");
+    output
+        .write_all(&[0x01, 0xC0, 0x0B, 0xB1])
+        .expect("write gcz magic");
+    output
+        .write_all(&0_u32.to_le_bytes())
+        .expect("write gcz disc type");
+    output
+        .write_all(&compressed_size.to_le_bytes())
+        .expect("write gcz compressed size");
+    output
+        .write_all(&disc_size.to_le_bytes())
+        .expect("write gcz disc size");
+    output
+        .write_all(&(GCZ_BLOCK_SIZE as u32).to_le_bytes())
+        .expect("write gcz block size");
+    output
+        .write_all(&block_count.to_le_bytes())
+        .expect("write gcz block count");
+
+    let mut blocks = Vec::with_capacity(block_count as usize);
+    let mut data_offset = 0_u64;
+    let mut hashes = Vec::with_capacity(block_count as usize);
+    for block_index in 0..block_count as usize {
+        output
+            .write_all(&(data_offset | GCZ_UNCOMPRESSED_BLOCK_FLAG).to_le_bytes())
+            .expect("write gcz block map");
+        let start = block_index * GCZ_BLOCK_SIZE;
+        let end = (start + GCZ_BLOCK_SIZE).min(iso.len());
+        let mut block = vec![0_u8; GCZ_BLOCK_SIZE];
+        block[..end - start].copy_from_slice(&iso[start..end]);
+        hashes.push(adler32(&block));
+        data_offset = data_offset.saturating_add(block.len() as u64);
+        blocks.push(block);
+    }
+    for hash in hashes {
+        output
+            .write_all(&hash.to_le_bytes())
+            .expect("write gcz block hash");
+    }
+    for block in blocks {
+        output.write_all(&block).expect("write gcz block");
+    }
+    output.flush().expect("flush gcz");
+}
+
+fn build_pcm_wave(data: &[u8]) -> Vec<u8> {
+    let fmt_chunk_size = 16_u32;
+    let data_chunk_size = u32::try_from(data.len()).expect("wave data fits");
+    let riff_size = 4 + (8 + fmt_chunk_size) + (8 + data_chunk_size);
+
+    let mut bytes = Vec::with_capacity(44 + data.len());
+    bytes.extend_from_slice(b"RIFF");
+    bytes.extend_from_slice(&riff_size.to_le_bytes());
+    bytes.extend_from_slice(b"WAVE");
+    bytes.extend_from_slice(b"fmt ");
+    bytes.extend_from_slice(&fmt_chunk_size.to_le_bytes());
+    bytes.extend_from_slice(&1u16.to_le_bytes());
+    bytes.extend_from_slice(&2u16.to_le_bytes());
+    bytes.extend_from_slice(&44_100u32.to_le_bytes());
+    bytes.extend_from_slice(&(44_100u32 * 4).to_le_bytes());
+    bytes.extend_from_slice(&4u16.to_le_bytes());
+    bytes.extend_from_slice(&16u16.to_le_bytes());
+    bytes.extend_from_slice(b"data");
+    bytes.extend_from_slice(&data_chunk_size.to_le_bytes());
+    bytes.extend_from_slice(data);
+    bytes
+}

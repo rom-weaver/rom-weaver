@@ -557,3 +557,29 @@ fn z3ds_extract_rejects_invalid_header() {
     );
 }
 /* jscpd:ignore-end */
+
+// ---- relocated from shared.rs (single-module helpers) ----
+
+fn write_rvz_fixture_from_iso(iso_path: &std::path::Path, rvz_path: &std::path::Path) {
+    let disc = NodDiscReader::new(iso_path, &NodDiscOptions::default()).expect("open iso");
+    let options = NodFormatOptions {
+        format: NodFormat::Rvz,
+        compression: NodCompression::Zstandard(5),
+        block_size: NodFormat::Rvz.default_block_size(),
+    };
+    let writer = NodDiscWriter::new(disc, &options).expect("create rvz writer");
+    let mut output = File::create(rvz_path).expect("create rvz");
+    let finalization = writer
+        .process(
+            |data, _processed, _total| output.write_all(data.as_ref()),
+            &NodProcessOptions::default(),
+        )
+        .expect("write rvz");
+    if !finalization.header.is_empty() {
+        output.rewind().expect("seek rvz");
+        output
+            .write_all(finalization.header.as_ref())
+            .expect("write rvz header");
+    }
+    output.flush().expect("flush rvz");
+}

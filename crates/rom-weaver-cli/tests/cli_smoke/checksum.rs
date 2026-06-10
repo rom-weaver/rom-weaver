@@ -1468,3 +1468,13 @@ fn checksum_auto_trim_fix_ignores_non_trim_eligible_extensions() {
         label_digest_value(no_fix_label, "crc32")
     );
 }
+
+// ---- relocated from shared.rs (single-module helpers) ----
+
+fn write_gzip_fixture(source_path: &Path, gzip_path: &Path) {
+    let source = fs::read(source_path).expect("read gzip source");
+    let output = File::create(gzip_path).expect("create gzip fixture");
+    let mut encoder = GzEncoder::new(output, DeflateCompression::default());
+    encoder.write_all(&source).expect("write gzip fixture");
+    encoder.finish().expect("finish gzip fixture");
+}

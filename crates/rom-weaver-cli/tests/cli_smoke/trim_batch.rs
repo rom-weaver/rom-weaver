@@ -1597,3 +1597,51 @@ fn trim_without_revert_marker_writes_no_footer() {
     // Opt-in: without --revert-marker the trim is a clean truncation with no footer appended.
     assert_eq!(fs::read(trimmed.path()).expect("trimmed gba").len(), 0x3456);
 }
+
+// ---- relocated from shared.rs (single-module helpers) ----
+
+fn trim_fixture_path(name: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/fixtures/trim")
+        .join(name)
+}
+
+fn build_test_game_boy_rom(payload_len: usize) -> Vec<u8> {
+    const GAME_BOY_LOGO: [u8; 48] = [
+        0xCE, 0xED, 0x66, 0x66, 0xCC, 0x0D, 0x00, 0x0B, 0x03, 0x73, 0x00, 0x83, 0x00, 0x0C, 0x00,
+        0x0D, 0x00, 0x08, 0x11, 0x1F, 0x88, 0x89, 0x00, 0x0E, 0xDC, 0xCC, 0x6E, 0xE6, 0xDD, 0xDD,
+        0xD9, 0x99, 0xBB, 0xBB, 0x67, 0x63, 0x6E, 0x0E, 0xEC, 0xCC, 0xDD, 0xDC, 0x99, 0x9F, 0xBB,
+        0xB9, 0x33, 0x3E,
+    ];
+    let rom_len = payload_len.max(0x200);
+    let mut bytes = vec![0u8; rom_len];
+    bytes[0x104..0x134].copy_from_slice(&GAME_BOY_LOGO);
+    for (index, value) in bytes[0x134..=0x14C].iter_mut().enumerate() {
+        *value = (index as u8).wrapping_mul(7).wrapping_add(0x11);
+    }
+    for (index, value) in bytes[0x150..].iter_mut().enumerate() {
+        *value = (index as u8).wrapping_mul(3).wrapping_add(0x42);
+    }
+    bytes
+}
+
+fn build_test_padded_rom(payload_size: usize, full_size: usize, pad_byte: u8) -> Vec<u8> {
+    assert!(payload_size > 0, "payload size must be non-zero");
+    assert!(
+        full_size > payload_size,
+        "full ROM size must exceed payload size"
+    );
+
+    let mut rom = vec![pad_byte; full_size];
+    for (index, byte) in rom[..payload_size].iter_mut().enumerate() {
+        let mut value = ((index * 17 + 3) % 253 + 1) as u8;
+        if value == pad_byte {
+            value = value.wrapping_sub(1);
+            if value == pad_byte {
+                value = value.wrapping_add(2);
+            }
+        }
+        *byte = value;
+    }
+    rom
+}

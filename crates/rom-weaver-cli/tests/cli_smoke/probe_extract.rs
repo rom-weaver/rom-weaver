@@ -1411,3 +1411,116 @@ fn extract_rar_reports_thread_fallback_in_json() {
     );
 }
 /* jscpd:ignore-end */
+
+// ---- relocated from shared.rs (single-module helpers) ----
+
+fn rar_fixture_path(name: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/fixtures/rar")
+        .join(name)
+}
+
+#[test]
+fn extract_progress_text_reports_elapsed_and_files() {
+    let temp = setup_temp_dir();
+    let input = temp.child("sample.bin");
+    let archive = temp.child("sample.zip");
+    let extract_dir = temp.child("extract");
+    fs::write(input.path(), b"extract-progress-check").expect("fixture");
+
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            input.path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            archive.path().to_str().expect("path"),
+        ])
+        .assert()
+        .code(0);
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "--progress",
+            "extract",
+            archive.path().to_str().expect("path"),
+            "--out-dir",
+            extract_dir.path().to_str().expect("path"),
+            "--no-nested-extract",
+        ])
+        .assert()
+        .code(0)
+        .get_output()
+        .clone();
+
+    let stdout = String::from_utf8(output.stdout).expect("utf8 stdout");
+    let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
+    // `--progress` draws running progress on stderr...
+    assert!(
+        stderr.contains('%'),
+        "expected extract progress on stderr, got: {stderr}"
+    );
+    // ...and the summary table on stdout lists the extracted file and count.
+    assert!(
+        stdout.contains("sample.bin"),
+        "expected extracted file in summary, got: {stdout}"
+    );
+    assert!(
+        stdout.contains("1 file(s) written"),
+        "expected file count in summary, got: {stdout}"
+    );
+    assert!(
+        stdout.contains("elapsed: "),
+        "expected elapsed timing in summary, got: {stdout}"
+    );
+}
+
+#[test]
+fn extract_no_overwrite_fails_when_output_exists() {
+    let temp = setup_temp_dir();
+    let input = temp.child("sample.bin");
+    let archive = temp.child("sample.zip");
+    let extract_dir = temp.child("extract");
+    fs::write(input.path(), b"overwrite-check").expect("fixture");
+
+    Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "compress",
+            input.path().to_str().expect("path"),
+            "--format",
+            "zip",
+            "--output",
+            archive.path().to_str().expect("path"),
+        ])
+        .assert()
+        .code(0);
+
+    fs::create_dir_all(extract_dir.path()).expect("extract dir");
+    fs::write(extract_dir.child("sample.bin").path(), b"existing").expect("existing output");
+
+    let output = Command::cargo_bin("rom-weaver")
+        .expect("binary")
+        .args([
+            "extract",
+            archive.path().to_str().expect("path"),
+            "--out-dir",
+            extract_dir.path().to_str().expect("path"),
+            "--no-overwrite",
+            "--no-nested-extract",
+        ])
+        .assert()
+        .code(1)
+        .get_output()
+        .stderr
+        .clone();
+
+    let text = String::from_utf8(output).expect("utf8 stderr");
+    assert!(
+        text.contains("refusing to overwrite existing output"),
+        "expected overwrite error on stderr, got: {text}"
+    );
+}

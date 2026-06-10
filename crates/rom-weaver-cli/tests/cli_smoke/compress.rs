@@ -1508,3 +1508,14 @@ fn extract_nested_scan_ignores_existing_output_archives() {
     assert!(stale_archive.path().exists());
     assert!(!out_dir.child("stale/stale.bin").path().exists());
 }
+
+// ---- relocated from shared.rs (single-module helpers) ----
+
+fn assert_running_event(events: &[Value], command: &str, format: &str) {
+    assert!(
+        events.iter().any(|event| {
+            event["command"] == command && event["status"] == "running" && event["format"] == format
+        }),
+        "expected {command} ({format}) to emit running progress"
+    );
+}

@@ -124,15 +124,6 @@ pub(crate) fn assert_running_percent_event(events: &[Value], command: &str, form
     );
 }
 
-pub(crate) fn assert_running_event(events: &[Value], command: &str, format: &str) {
-    assert!(
-        events.iter().any(|event| {
-            event["command"] == command && event["status"] == "running" && event["format"] == format
-        }),
-        "expected {command} ({format}) to emit running progress"
-    );
-}
-
 pub(crate) fn assert_running_percent_event_in_range(
     events: &[Value],
     command: &str,
@@ -226,111 +217,6 @@ pub(crate) fn setup_temp_dir() -> TempDir {
     TempDir::new().expect("temp dir")
 }
 
-pub(crate) fn read_single_file_bytes(dir: &std::path::Path) -> Vec<u8> {
-    let mut files = fs::read_dir(dir)
-        .expect("read dir")
-        .map(|entry| entry.expect("dir entry").path())
-        .filter(|path| path.is_file())
-        .collect::<Vec<_>>();
-    files.sort();
-    assert_eq!(files.len(), 1, "expected one extracted file");
-    fs::read(&files[0]).expect("read extracted file")
-}
-
-pub(crate) fn run_chd_round_trip(
-    input_name: &str,
-    source: &[u8],
-    codec: &str,
-    expected_extract_name: &str,
-) {
-    run_chd_round_trip_with_format("chd", input_name, source, codec, expected_extract_name);
-}
-
-pub(crate) fn run_chd_round_trip_with_format(
-    format: &str,
-    input_name: &str,
-    source: &[u8],
-    codec: &str,
-    expected_extract_name: &str,
-) {
-    let temp = setup_temp_dir();
-    fs::write(temp.child(input_name).path(), source).expect("fixture");
-
-    let chd_path = temp.child("disc.chd");
-    let compress_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
-            "compress",
-            temp.child(input_name).path().to_str().expect("path"),
-            "--format",
-            format,
-            "--output",
-            chd_path.path().to_str().expect("path"),
-            "--codec",
-            codec,
-            "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
-
-    let compress_events = parse_json_lines(&compress_output);
-    assert_running_percent_event(&compress_events, "compress", "chd");
-    let compress_json = compress_events.last().expect("compress terminal event");
-    assert_eq!(compress_json["command"], "compress");
-    assert_eq!(compress_json["family"], "container");
-    assert_eq!(compress_json["format"], "chd");
-    assert_eq!(compress_json["status"], "succeeded");
-
-    let out_dir = temp.child("extract");
-    let extract_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
-            "extract",
-            chd_path.path().to_str().expect("path"),
-            "--out-dir",
-            out_dir.path().to_str().expect("path"),
-            "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
-
-    let extract_events = parse_json_lines(&extract_output);
-    assert_running_percent_event(&extract_events, "extract", "chd");
-    let extract_json = extract_events.last().expect("extract terminal event");
-    assert_eq!(extract_json["command"], "extract");
-    assert_eq!(extract_json["family"], "container");
-    assert_eq!(extract_json["format"], "chd");
-    assert_eq!(extract_json["status"], "succeeded");
-    assert_eq!(
-        fs::read(out_dir.child(expected_extract_name).path()).expect("extract bytes"),
-        source
-    );
-}
-
-pub(crate) fn build_test_chav_stream(frame_count: usize, width: u16, height: u16) -> Vec<u8> {
-    let pixels_per_frame = usize::from(width) * usize::from(height) * 2;
-    let frame_bytes = 12 + pixels_per_frame;
-    let mut data = Vec::with_capacity(frame_count * frame_bytes);
-    for frame in 0..frame_count {
-        data.extend_from_slice(b"chav");
-        data.push(0); // metadata bytes
-        data.push(0); // channels
-        data.extend_from_slice(&0_u16.to_be_bytes()); // samples per channel
-        data.extend_from_slice(&width.to_be_bytes());
-        data.extend_from_slice(&height.to_be_bytes());
-        for pixel in 0..pixels_per_frame {
-            data.push(((frame * 29 + pixel) % 251) as u8);
-        }
-    }
-    data
-}
-
 pub(crate) fn build_test_gamecube_iso(payload_len: usize) -> Vec<u8> {
     let total_len = (0x440 + payload_len).max(0x440);
     let mut bytes = vec![0_u8; total_len];
@@ -344,38 +230,6 @@ pub(crate) fn build_test_gamecube_iso(payload_len: usize) -> Vec<u8> {
     bytes
 }
 
-pub(crate) fn write_rvz_fixture_from_iso(iso_path: &std::path::Path, rvz_path: &std::path::Path) {
-    let disc = NodDiscReader::new(iso_path, &NodDiscOptions::default()).expect("open iso");
-    let options = NodFormatOptions {
-        format: NodFormat::Rvz,
-        compression: NodCompression::Zstandard(5),
-        block_size: NodFormat::Rvz.default_block_size(),
-    };
-    let writer = NodDiscWriter::new(disc, &options).expect("create rvz writer");
-    let mut output = File::create(rvz_path).expect("create rvz");
-    let finalization = writer
-        .process(
-            |data, _processed, _total| output.write_all(data.as_ref()),
-            &NodProcessOptions::default(),
-        )
-        .expect("write rvz");
-    if !finalization.header.is_empty() {
-        output.rewind().expect("seek rvz");
-        output
-            .write_all(finalization.header.as_ref())
-            .expect("write rvz header");
-    }
-    output.flush().expect("flush rvz");
-}
-
-pub(crate) fn write_gzip_fixture(source_path: &Path, gzip_path: &Path) {
-    let source = fs::read(source_path).expect("read gzip source");
-    let output = File::create(gzip_path).expect("create gzip fixture");
-    let mut encoder = GzEncoder::new(output, DeflateCompression::default());
-    encoder.write_all(&source).expect("write gzip fixture");
-    encoder.finish().expect("finish gzip fixture");
-}
-
 pub(crate) fn write_tar_gz_fixture(entries: &[(&Path, &str)], tar_gz_path: &Path) {
     let output = File::create(tar_gz_path).expect("create tar.gz fixture");
     let encoder = GzEncoder::new(output, DeflateCompression::default());
@@ -387,61 +241,6 @@ pub(crate) fn write_tar_gz_fixture(entries: &[(&Path, &str)], tar_gz_path: &Path
     }
     let encoder = builder.into_inner().expect("finish tar fixture");
     encoder.finish().expect("finish tar.gz fixture");
-}
-
-pub(crate) fn write_gcz_fixture_from_iso(iso_path: &Path, gcz_path: &Path) {
-    const GCZ_BLOCK_SIZE: usize = 0x8000;
-    const GCZ_UNCOMPRESSED_BLOCK_FLAG: u64 = 1 << 63;
-
-    let iso = fs::read(iso_path).expect("read iso fixture");
-    let disc_size = iso.len() as u64;
-    let block_count = disc_size.div_ceil(GCZ_BLOCK_SIZE as u64) as u32;
-    let compressed_size = block_count as u64 * GCZ_BLOCK_SIZE as u64;
-
-    let mut output = File::create(gcz_path).expect("create gcz fixture");
-    output
-        .write_all(&[0x01, 0xC0, 0x0B, 0xB1])
-        .expect("write gcz magic");
-    output
-        .write_all(&0_u32.to_le_bytes())
-        .expect("write gcz disc type");
-    output
-        .write_all(&compressed_size.to_le_bytes())
-        .expect("write gcz compressed size");
-    output
-        .write_all(&disc_size.to_le_bytes())
-        .expect("write gcz disc size");
-    output
-        .write_all(&(GCZ_BLOCK_SIZE as u32).to_le_bytes())
-        .expect("write gcz block size");
-    output
-        .write_all(&block_count.to_le_bytes())
-        .expect("write gcz block count");
-
-    let mut blocks = Vec::with_capacity(block_count as usize);
-    let mut data_offset = 0_u64;
-    let mut hashes = Vec::with_capacity(block_count as usize);
-    for block_index in 0..block_count as usize {
-        output
-            .write_all(&(data_offset | GCZ_UNCOMPRESSED_BLOCK_FLAG).to_le_bytes())
-            .expect("write gcz block map");
-        let start = block_index * GCZ_BLOCK_SIZE;
-        let end = (start + GCZ_BLOCK_SIZE).min(iso.len());
-        let mut block = vec![0_u8; GCZ_BLOCK_SIZE];
-        block[..end - start].copy_from_slice(&iso[start..end]);
-        hashes.push(adler32(&block));
-        data_offset = data_offset.saturating_add(block.len() as u64);
-        blocks.push(block);
-    }
-    for hash in hashes {
-        output
-            .write_all(&hash.to_le_bytes())
-            .expect("write gcz block hash");
-    }
-    for block in blocks {
-        output.write_all(&block).expect("write gcz block");
-    }
-    output.flush().expect("flush gcz");
 }
 
 pub(crate) fn write_wbfs_fixture_from_iso(iso_path: &std::path::Path, wbfs_path: &std::path::Path) {
@@ -676,24 +475,6 @@ pub(crate) fn build_test_pbp_fixture(discs: Vec<(&str, Vec<u8>)>) -> Vec<u8> {
     pbp
 }
 
-pub(crate) fn fixture_path(name: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/fixtures/vcdiff")
-        .join(name)
-}
-
-pub(crate) fn rar_fixture_path(name: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/fixtures/rar")
-        .join(name)
-}
-
-pub(crate) fn trim_fixture_path(name: &str) -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/fixtures/trim")
-        .join(name)
-}
-
 pub(crate) fn encode_varint(bytes: &mut Vec<u8>, mut value: u64) {
     if value == 0 {
         bytes.push(0);
@@ -720,162 +501,6 @@ pub(crate) fn encode_all_varints(values: &[u64]) -> Vec<u8> {
     bytes
 }
 
-pub(crate) fn build_hdiff13_nocomp_patch(old: &[u8], new: &[u8]) -> Vec<u8> {
-    let mut patch = Vec::new();
-    patch.extend_from_slice(b"HDIFF13&nocomp");
-    patch.push(0);
-    patch.extend_from_slice(&encode_all_varints(&[
-        u64::try_from(new.len()).expect("new size"),
-        u64::try_from(old.len()).expect("old size"),
-        0, // cover_count
-        0, // cover_buf_size
-        0, // compress_cover_buf_size
-        0, // rle_ctrl_buf_size
-        0, // compress_rle_ctrl_buf_size
-        0, // rle_code_buf_size
-        0, // compress_rle_code_buf_size
-        u64::try_from(new.len()).expect("new diff size"),
-        0, // compress_new_data_diff_size
-    ]));
-    patch.extend_from_slice(new);
-    patch
-}
-
-pub(crate) fn build_hdiff13_identity_patch_with_cover_and_rle(source: &[u8]) -> Vec<u8> {
-    let source_size = u64::try_from(source.len()).expect("source size");
-    let mut cover = Vec::new();
-    cover.push(0); // old sign=0, old_delta=0
-    encode_varint(&mut cover, 0); // copy_length
-    encode_varint(&mut cover, source_size); // cover_length
-
-    let mut patch = Vec::new();
-    patch.extend_from_slice(b"HDIFF13&nocomp");
-    patch.push(0);
-    patch.extend_from_slice(&encode_all_varints(&[
-        source_size, // new_data_size
-        source_size, // old_data_size
-        1,           // cover_count
-        u64::try_from(cover.len()).expect("cover size"),
-        0, // compress_cover_buf_size
-        1, // rle_ctrl_buf_size
-        0, // compress_rle_ctrl_buf_size
-        1, // rle_code_buf_size
-        0, // compress_rle_code_buf_size
-        0, // new_data_diff_size
-        0, // compress_new_data_diff_size
-    ]));
-    patch.extend_from_slice(&cover);
-    patch.push(0xC0); // rle_type=copy, length=1
-    patch.push(0x00); // add 0 to keep bytes unchanged
-    patch
-}
-
-pub(crate) fn build_hdiffsf20_nocomp_identity_two_steps(source: &[u8]) -> Vec<u8> {
-    assert!(source.len() >= 2, "fixture requires at least two bytes");
-    let split = source.len() / 2;
-    let tail = source.len() - split;
-    assert!(split > 0 && tail > 0, "fixture split invalid");
-
-    let mut payload = Vec::new();
-
-    let mut cover1 = Vec::new();
-    cover1.push(0); // old sign=0, old_delta=0
-    encode_varint(&mut cover1, 0); // new_gap
-    encode_varint(&mut cover1, u64::try_from(split).expect("split"));
-    let mut rle1 = Vec::new();
-    encode_varint(&mut rle1, u64::try_from(split).expect("split"));
-    encode_varint(
-        &mut payload,
-        u64::try_from(cover1.len()).expect("cover1 len"),
-    );
-    encode_varint(&mut payload, u64::try_from(rle1.len()).expect("rle1 len"));
-    payload.extend_from_slice(&cover1);
-    payload.extend_from_slice(&rle1);
-
-    let mut cover2 = Vec::new();
-    cover2.push(0); // old sign=0, old_delta=0
-    encode_varint(&mut cover2, 0); // new_gap
-    encode_varint(&mut cover2, u64::try_from(tail).expect("tail"));
-    let mut rle2 = Vec::new();
-    encode_varint(&mut rle2, u64::try_from(tail).expect("tail"));
-    encode_varint(
-        &mut payload,
-        u64::try_from(cover2.len()).expect("cover2 len"),
-    );
-    encode_varint(&mut payload, u64::try_from(rle2.len()).expect("rle2 len"));
-    payload.extend_from_slice(&cover2);
-    payload.extend_from_slice(&rle2);
-
-    let mut patch = Vec::new();
-    patch.extend_from_slice(b"HDIFFSF20&nocomp");
-    patch.push(0);
-    patch.extend_from_slice(&encode_all_varints(&[
-        u64::try_from(source.len()).expect("new size"),
-        u64::try_from(source.len()).expect("old size"),
-        2,   // cover_count
-        256, // step_mem_size
-        u64::try_from(payload.len()).expect("payload size"),
-        0, // compressed_size
-    ]));
-    patch.extend_from_slice(&payload);
-    patch
-}
-
-pub(crate) fn build_hdiffsf20_nocomp_identity_single_step_two_covers(source: &[u8]) -> Vec<u8> {
-    assert!(source.len() >= 2, "fixture requires at least two bytes");
-    let split = source.len() / 2;
-    let tail = source.len() - split;
-    assert!(split > 0 && tail > 0, "fixture split invalid");
-
-    let mut cover = Vec::new();
-    cover.push(0); // old sign=0, old_delta=0
-    encode_varint(&mut cover, 0); // new_gap
-    encode_varint(&mut cover, u64::try_from(split).expect("split"));
-    cover.push(0); // old sign=0, old_delta=0
-    encode_varint(&mut cover, 0); // new_gap
-    encode_varint(&mut cover, u64::try_from(tail).expect("tail"));
-
-    let mut rle = Vec::new();
-    encode_varint(&mut rle, u64::try_from(split).expect("split"));
-    encode_varint(&mut rle, 0); // len_value for second cover transition
-    encode_varint(&mut rle, u64::try_from(tail).expect("tail"));
-
-    let mut payload = Vec::new();
-    encode_varint(&mut payload, u64::try_from(cover.len()).expect("cover len"));
-    encode_varint(&mut payload, u64::try_from(rle.len()).expect("rle len"));
-    payload.extend_from_slice(&cover);
-    payload.extend_from_slice(&rle);
-
-    let mut patch = Vec::new();
-    patch.extend_from_slice(b"HDIFFSF20&nocomp");
-    patch.push(0);
-    patch.extend_from_slice(&encode_all_varints(&[
-        u64::try_from(source.len()).expect("new size"),
-        u64::try_from(source.len()).expect("old size"),
-        2,   // cover_count
-        256, // step_mem_size
-        u64::try_from(payload.len()).expect("payload size"),
-        0, // compressed_size
-    ]));
-    patch.extend_from_slice(&payload);
-    patch
-}
-
-pub(crate) fn build_hdiff19_nocomp_directory_patch() -> Vec<u8> {
-    let mut patch = Vec::new();
-    patch.extend_from_slice(b"HDIFF19&nocomp");
-    patch.push(0);
-    patch.push(1); // is_input_dir
-    patch.push(1); // is_output_dir
-    patch.extend_from_slice(&encode_all_varints(&[
-        0, // input_dir_count
-        0, // input_sum_size
-        0, // output_dir_count
-        0, // output_sum_size
-    ]));
-    patch
-}
-
 pub(crate) fn adler32(bytes: &[u8]) -> u32 {
     const MOD_ADLER: u32 = 65_521;
     let mut a = 1u32;
@@ -887,115 +512,10 @@ pub(crate) fn adler32(bytes: &[u8]) -> u32 {
     (b << 16) | a
 }
 
-pub(crate) fn build_pcm_wave(data: &[u8]) -> Vec<u8> {
-    let fmt_chunk_size = 16_u32;
-    let data_chunk_size = u32::try_from(data.len()).expect("wave data fits");
-    let riff_size = 4 + (8 + fmt_chunk_size) + (8 + data_chunk_size);
-
-    let mut bytes = Vec::with_capacity(44 + data.len());
-    bytes.extend_from_slice(b"RIFF");
-    bytes.extend_from_slice(&riff_size.to_le_bytes());
-    bytes.extend_from_slice(b"WAVE");
-    bytes.extend_from_slice(b"fmt ");
-    bytes.extend_from_slice(&fmt_chunk_size.to_le_bytes());
-    bytes.extend_from_slice(&1u16.to_le_bytes());
-    bytes.extend_from_slice(&2u16.to_le_bytes());
-    bytes.extend_from_slice(&44_100u32.to_le_bytes());
-    bytes.extend_from_slice(&(44_100u32 * 4).to_le_bytes());
-    bytes.extend_from_slice(&4u16.to_le_bytes());
-    bytes.extend_from_slice(&16u16.to_le_bytes());
-    bytes.extend_from_slice(b"data");
-    bytes.extend_from_slice(&data_chunk_size.to_le_bytes());
-    bytes.extend_from_slice(data);
-    bytes
-}
-
-pub(crate) struct TestWindow {
-    pub(crate) win_indicator: u8,
-    pub(crate) source_segment_size: Option<u64>,
-    pub(crate) source_segment_position: Option<u64>,
-    pub(crate) target_window_size: u64,
-    pub(crate) checksum: Option<u32>,
-    pub(crate) data: Vec<u8>,
-    pub(crate) inst: Vec<u8>,
-    pub(crate) addr: Vec<u8>,
-}
-
-pub(crate) fn build_patch(app_header: Option<&[u8]>, windows: Vec<TestWindow>) -> Vec<u8> {
-    const MAGIC: [u8; 4] = [0xD6, 0xC3, 0xC4, 0x00];
-    const HDR_APP_HEADER: u8 = 0x04;
-
-    let mut bytes = Vec::new();
-    bytes.extend_from_slice(&MAGIC);
-    if let Some(header) = app_header {
-        bytes.push(HDR_APP_HEADER);
-        encode_varint(&mut bytes, header.len() as u64);
-        bytes.extend_from_slice(header);
-    } else {
-        bytes.push(0);
-    }
-
-    for window in windows {
-        bytes.push(window.win_indicator);
-        if let (Some(size), Some(position)) =
-            (window.source_segment_size, window.source_segment_position)
-        {
-            encode_varint(&mut bytes, size);
-            encode_varint(&mut bytes, position);
-        }
-
-        let mut delta = Vec::new();
-        encode_varint(&mut delta, window.target_window_size);
-        delta.push(0);
-        encode_varint(&mut delta, window.data.len() as u64);
-        encode_varint(&mut delta, window.inst.len() as u64);
-        encode_varint(&mut delta, window.addr.len() as u64);
-        if let Some(checksum) = window.checksum {
-            delta.extend_from_slice(&checksum.to_be_bytes());
-        }
-        delta.extend_from_slice(&window.data);
-        delta.extend_from_slice(&window.inst);
-        delta.extend_from_slice(&window.addr);
-
-        encode_varint(&mut bytes, delta.len() as u64);
-        bytes.extend_from_slice(&delta);
-    }
-
-    bytes
-}
-
 pub(crate) const SIMPLE_BPS_PATCH: [u8; 25] = [
     0x42, 0x50, 0x53, 0x31, 0x8C, 0x8E, 0x80, 0x94, 0x85, 0x5A, 0x5A, 0x96, 0x8C, 0x34, 0x2A, 0x6E,
     0x5A, 0xB9, 0x87, 0x43, 0x50, 0xB0, 0xFC, 0x51, 0xA7,
 ];
-pub(crate) const APS_GBA_BLOCK_SIZE: usize = 0x01_0000;
-pub(crate) const DLDI_VERSION: u8 = 1;
-pub(crate) const DLDI_MAGIC: [u8; 12] = [
-    0xED, 0xA5, 0x8D, 0xBF, b' ', b'C', b'h', b'i', b's', b'h', b'm', 0x00,
-];
-pub(crate) const DLDI_FIX_ALL: u8 = 0x01;
-pub(crate) const DLDI_FIX_GLUE: u8 = 0x02;
-pub(crate) const DLDI_FIX_GOT: u8 = 0x04;
-pub(crate) const DLDI_FIX_BSS: u8 = 0x08;
-pub(crate) const DLDI_DO_MAGIC_STRING: usize = 0x00;
-pub(crate) const DLDI_DO_VERSION: usize = 0x0C;
-pub(crate) const DLDI_DO_DRIVER_SIZE: usize = 0x0D;
-pub(crate) const DLDI_DO_FIX_SECTIONS: usize = 0x0E;
-pub(crate) const DLDI_DO_ALLOCATED_SPACE: usize = 0x0F;
-pub(crate) const DLDI_DO_FRIENDLY_NAME: usize = 0x10;
-pub(crate) const DLDI_DO_TEXT_START: usize = 0x40;
-pub(crate) const DLDI_DO_DATA_END: usize = 0x44;
-pub(crate) const DLDI_DO_GLUE_START: usize = 0x48;
-pub(crate) const DLDI_DO_GLUE_END: usize = 0x4C;
-pub(crate) const DLDI_DO_GOT_START: usize = 0x50;
-pub(crate) const DLDI_DO_GOT_END: usize = 0x54;
-pub(crate) const DLDI_DO_BSS_START: usize = 0x58;
-pub(crate) const DLDI_DO_BSS_END: usize = 0x5C;
-pub(crate) const DLDI_DO_STARTUP: usize = 0x68;
-pub(crate) const DLDI_DO_READ_SECTORS: usize = 0x70;
-pub(crate) const DLDI_DO_WRITE_SECTORS: usize = 0x74;
-pub(crate) const DLDI_DO_SHUTDOWN: usize = 0x7C;
-pub(crate) const DLDI_DO_CODE: usize = 0x80;
 
 pub(crate) enum TestIpsRecord {
     Literal { offset: u32, data: Vec<u8> },
@@ -1036,42 +556,6 @@ pub(crate) fn build_ips_patch(records: Vec<TestIpsRecord>, truncate_size: Option
         write_u24(&mut bytes, size);
     }
     bytes
-}
-
-pub(crate) fn build_ips32_patch(records: Vec<TestIpsRecord>) -> Vec<u8> {
-    let mut bytes = b"IPS32".to_vec();
-    for record in records {
-        match record {
-            TestIpsRecord::Literal { offset, data } => {
-                write_u32(&mut bytes, offset);
-                let len = u16::try_from(data.len()).expect("literal len");
-                bytes.extend_from_slice(&len.to_be_bytes());
-                bytes.extend_from_slice(&data);
-            }
-            TestIpsRecord::Rle { offset, len, value } => {
-                write_u32(&mut bytes, offset);
-                bytes.extend_from_slice(&0u16.to_be_bytes());
-                bytes.extend_from_slice(&len.to_be_bytes());
-                bytes.push(value);
-            }
-        }
-    }
-    bytes.extend_from_slice(b"EEOF");
-    bytes
-}
-
-pub(crate) fn build_ebp_patch(records: Vec<TestIpsRecord>, metadata_json: &str) -> Vec<u8> {
-    let mut bytes = build_ips_patch(records, None);
-    bytes.extend_from_slice(metadata_json.as_bytes());
-    bytes
-}
-
-pub(crate) fn write_sparse_bytes(path: &std::path::Path, len: u64, offset: u64, bytes: &[u8]) {
-    let mut file = File::create(path).expect("create sparse file");
-    file.set_len(len).expect("set len");
-    file.seek(std::io::SeekFrom::Start(offset)).expect("seek");
-    file.write_all(bytes).expect("write bytes");
-    file.flush().expect("flush");
 }
 
 pub(crate) fn with_header(bytes: &[u8]) -> Vec<u8> {
@@ -1130,25 +614,6 @@ pub(crate) fn build_test_gba_rom(payload_len: usize) -> Vec<u8> {
     bytes
 }
 
-pub(crate) fn build_test_game_boy_rom(payload_len: usize) -> Vec<u8> {
-    const GAME_BOY_LOGO: [u8; 48] = [
-        0xCE, 0xED, 0x66, 0x66, 0xCC, 0x0D, 0x00, 0x0B, 0x03, 0x73, 0x00, 0x83, 0x00, 0x0C, 0x00,
-        0x0D, 0x00, 0x08, 0x11, 0x1F, 0x88, 0x89, 0x00, 0x0E, 0xDC, 0xCC, 0x6E, 0xE6, 0xDD, 0xDD,
-        0xD9, 0x99, 0xBB, 0xBB, 0x67, 0x63, 0x6E, 0x0E, 0xEC, 0xCC, 0xDD, 0xDC, 0x99, 0x9F, 0xBB,
-        0xB9, 0x33, 0x3E,
-    ];
-    let rom_len = payload_len.max(0x200);
-    let mut bytes = vec![0u8; rom_len];
-    bytes[0x104..0x134].copy_from_slice(&GAME_BOY_LOGO);
-    for (index, value) in bytes[0x134..=0x14C].iter_mut().enumerate() {
-        *value = (index as u8).wrapping_mul(7).wrapping_add(0x11);
-    }
-    for (index, value) in bytes[0x150..].iter_mut().enumerate() {
-        *value = (index as u8).wrapping_mul(3).wrapping_add(0x42);
-    }
-    bytes
-}
-
 pub(crate) fn sega_genesis_checksum(bytes: &[u8]) -> u16 {
     let mut sum = 0_u32;
     let mut cursor = 0x200usize;
@@ -1161,31 +626,6 @@ pub(crate) fn sega_genesis_checksum(bytes: &[u8]) -> u16 {
         sum = sum.wrapping_add(u32::from(bytes[cursor]) << 8);
     }
     (sum & 0xFFFF) as u16
-}
-
-pub(crate) struct TestPpfRecord {
-    pub(crate) offset: u32,
-    pub(crate) data: Vec<u8>,
-}
-
-pub(crate) fn build_ppf1_patch(description: &str, records: Vec<TestPpfRecord>) -> Vec<u8> {
-    let mut bytes = Vec::new();
-    bytes.extend_from_slice(b"PPF10");
-    bytes.push(0);
-
-    let mut desc = [0u8; 50];
-    let src = description.as_bytes();
-    let copy_len = src.len().min(desc.len());
-    desc[..copy_len].copy_from_slice(&src[..copy_len]);
-    bytes.extend_from_slice(&desc);
-
-    for record in records {
-        bytes.extend_from_slice(&record.offset.to_le_bytes());
-        bytes.push(record.data.len() as u8);
-        bytes.extend_from_slice(&record.data);
-    }
-
-    bytes
 }
 
 pub(crate) fn crc16(bytes: &[u8]) -> u16 {
@@ -1203,183 +643,8 @@ pub(crate) fn crc16(bytes: &[u8]) -> u16 {
     crc
 }
 
-pub(crate) fn build_apsgba_patch(source: &[u8], target: &[u8]) -> Vec<u8> {
-    assert_eq!(source.len(), APS_GBA_BLOCK_SIZE);
-    assert_eq!(target.len(), APS_GBA_BLOCK_SIZE);
-
-    let mut xor_bytes = vec![0u8; APS_GBA_BLOCK_SIZE];
-    for (index, byte) in xor_bytes.iter_mut().enumerate() {
-        *byte = source[index] ^ target[index];
-    }
-
-    let mut bytes = Vec::with_capacity(12 + 4 + 2 + 2 + APS_GBA_BLOCK_SIZE);
-    bytes.extend_from_slice(b"APS1");
-    bytes.extend_from_slice(&(source.len() as u32).to_le_bytes());
-    bytes.extend_from_slice(&(target.len() as u32).to_le_bytes());
-    bytes.extend_from_slice(&0u32.to_le_bytes());
-    bytes.extend_from_slice(&crc16(source).to_le_bytes());
-    bytes.extend_from_slice(&crc16(target).to_le_bytes());
-    bytes.extend_from_slice(&xor_bytes);
-    bytes
-}
-
-pub(crate) fn build_mod_patch(records: Vec<(u32, Vec<u8>)>) -> Vec<u8> {
-    let mut bytes = Vec::new();
-    bytes.extend_from_slice(b"PMSR");
-    bytes.extend_from_slice(&(records.len() as u32).to_be_bytes());
-    for (offset, data) in records {
-        bytes.extend_from_slice(&offset.to_be_bytes());
-        bytes.extend_from_slice(&(data.len() as u32).to_be_bytes());
-        bytes.extend_from_slice(&data);
-    }
-    bytes
-}
-
-pub(crate) enum TestGdiffCommand {
-    Data(Vec<u8>),
-    Copy { offset: u64, len: u64 },
-}
-
-pub(crate) fn build_gdiff_patch(commands: Vec<TestGdiffCommand>) -> Vec<u8> {
-    let mut bytes = Vec::new();
-    bytes.extend_from_slice(&[0xD1, 0xFF, 0xD1, 0xFF, 4]);
-    for command in commands {
-        match command {
-            TestGdiffCommand::Data(data) => {
-                if data.len() <= 246 {
-                    bytes.push(u8::try_from(data.len()).expect("len <= 246"));
-                } else if data.len() <= usize::from(u16::MAX) {
-                    bytes.push(247);
-                    bytes.extend_from_slice(
-                        &u16::try_from(data.len())
-                            .expect("len <= u16::MAX")
-                            .to_be_bytes(),
-                    );
-                } else {
-                    bytes.push(248);
-                    bytes.extend_from_slice(
-                        &i32::try_from(data.len())
-                            .expect("len <= i32::MAX")
-                            .to_be_bytes(),
-                    );
-                }
-                bytes.extend_from_slice(&data);
-            }
-            TestGdiffCommand::Copy { offset, len } => {
-                if offset <= u64::from(u16::MAX) && len <= u64::from(u8::MAX) {
-                    bytes.push(249);
-                    bytes.extend_from_slice(&(offset as u16).to_be_bytes());
-                    bytes.push(len as u8);
-                } else if offset <= u64::from(u16::MAX) && len <= u64::from(u16::MAX) {
-                    bytes.push(250);
-                    bytes.extend_from_slice(&(offset as u16).to_be_bytes());
-                    bytes.extend_from_slice(&(len as u16).to_be_bytes());
-                } else if offset <= u64::from(i32::MAX as u32) && len <= u64::from(u8::MAX) {
-                    bytes.push(252);
-                    bytes.extend_from_slice(&(offset as u32).to_be_bytes());
-                    bytes.push(len as u8);
-                } else if offset <= u64::from(i32::MAX as u32) && len <= u64::from(u16::MAX) {
-                    bytes.push(253);
-                    bytes.extend_from_slice(&(offset as u32).to_be_bytes());
-                    bytes.extend_from_slice(&(len as u16).to_be_bytes());
-                } else if offset <= u64::from(i32::MAX as u32) && len <= u64::from(i32::MAX as u32)
-                {
-                    bytes.push(254);
-                    bytes.extend_from_slice(&(offset as u32).to_be_bytes());
-                    bytes.extend_from_slice(&(len as u32).to_be_bytes());
-                } else {
-                    bytes.push(255);
-                    bytes.extend_from_slice(
-                        &i64::try_from(offset)
-                            .expect("offset <= i64::MAX")
-                            .to_be_bytes(),
-                    );
-                    bytes.extend_from_slice(
-                        &i32::try_from(len).expect("len <= i32::MAX").to_be_bytes(),
-                    );
-                }
-            }
-        }
-    }
-    bytes.push(0);
-    bytes
-}
-
 pub(crate) fn write_i32_le(bytes: &mut [u8], offset: usize, value: i32) {
     bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
-}
-
-pub(crate) fn build_dldi_driver(
-    driver_log2: u8,
-    base_address: i32,
-    friendly_name: &str,
-) -> Vec<u8> {
-    let size = 1usize << driver_log2;
-    let mut bytes = vec![0u8; size];
-
-    bytes[DLDI_DO_MAGIC_STRING..DLDI_DO_MAGIC_STRING + DLDI_MAGIC.len()]
-        .copy_from_slice(&DLDI_MAGIC);
-    bytes[DLDI_DO_VERSION] = DLDI_VERSION;
-    bytes[DLDI_DO_DRIVER_SIZE] = driver_log2;
-    bytes[DLDI_DO_FIX_SECTIONS] = DLDI_FIX_ALL | DLDI_FIX_GLUE | DLDI_FIX_GOT | DLDI_FIX_BSS;
-    bytes[DLDI_DO_ALLOCATED_SPACE] = driver_log2;
-
-    let name_bytes = friendly_name.as_bytes();
-    let max_name_len = DLDI_DO_TEXT_START - DLDI_DO_FRIENDLY_NAME;
-    let copy_len = name_bytes.len().min(max_name_len.saturating_sub(1));
-    bytes[DLDI_DO_FRIENDLY_NAME..DLDI_DO_FRIENDLY_NAME + copy_len]
-        .copy_from_slice(&name_bytes[..copy_len]);
-
-    let size_i32 = i32::try_from(size).expect("size fits");
-    write_i32_le(&mut bytes, DLDI_DO_TEXT_START, base_address);
-    write_i32_le(&mut bytes, DLDI_DO_DATA_END, base_address + size_i32);
-    write_i32_le(&mut bytes, DLDI_DO_GLUE_START, base_address + 0xA0);
-    write_i32_le(&mut bytes, DLDI_DO_GLUE_END, base_address + 0xA8);
-    write_i32_le(&mut bytes, DLDI_DO_GOT_START, base_address + 0xA8);
-    write_i32_le(&mut bytes, DLDI_DO_GOT_END, base_address + 0xB0);
-    write_i32_le(&mut bytes, DLDI_DO_BSS_START, base_address + 0xB0);
-    write_i32_le(&mut bytes, DLDI_DO_BSS_END, base_address + 0xC0);
-    write_i32_le(
-        &mut bytes,
-        DLDI_DO_STARTUP,
-        base_address + i32::try_from(DLDI_DO_CODE).expect("fits"),
-    );
-    write_i32_le(
-        &mut bytes,
-        DLDI_DO_READ_SECTORS,
-        base_address + i32::try_from(DLDI_DO_CODE + 8).expect("fits"),
-    );
-    write_i32_le(
-        &mut bytes,
-        DLDI_DO_WRITE_SECTORS,
-        base_address + i32::try_from(DLDI_DO_CODE + 12).expect("fits"),
-    );
-    write_i32_le(
-        &mut bytes,
-        DLDI_DO_SHUTDOWN,
-        base_address + i32::try_from(DLDI_DO_CODE + 16).expect("fits"),
-    );
-
-    write_i32_le(&mut bytes, DLDI_DO_CODE + 4, base_address + 0xD0);
-    write_i32_le(&mut bytes, DLDI_DO_CODE + 12, base_address + 0xD8);
-    write_i32_le(&mut bytes, 0xA0, base_address + 0x80);
-    write_i32_le(&mut bytes, 0xA8, base_address + 0x84);
-    bytes[0xB0..0xC0].fill(0x7F);
-    bytes
-}
-
-pub(crate) fn build_nds_with_dldi_slot(
-    slot_offset: usize,
-    allocated_log2: u8,
-    base_address: i32,
-    friendly_name: &str,
-) -> Vec<u8> {
-    let slot_size = 1usize << allocated_log2;
-    let mut file = vec![0xCDu8; slot_offset + slot_size + 0x80];
-    let mut slot = build_dldi_driver(allocated_log2, base_address, friendly_name);
-    slot[DLDI_DO_ALLOCATED_SPACE] = allocated_log2;
-    file[slot_offset..slot_offset + slot_size].copy_from_slice(&slot);
-    file
 }
 
 pub(crate) fn nds_crc16(bytes: &[u8]) -> u16 {
@@ -1469,31 +734,6 @@ pub(crate) fn build_test_nds_rom(
         }
     }
 
-    rom
-}
-
-pub(crate) fn build_test_padded_rom(
-    payload_size: usize,
-    full_size: usize,
-    pad_byte: u8,
-) -> Vec<u8> {
-    assert!(payload_size > 0, "payload size must be non-zero");
-    assert!(
-        full_size > payload_size,
-        "full ROM size must exceed payload size"
-    );
-
-    let mut rom = vec![pad_byte; full_size];
-    for (index, byte) in rom[..payload_size].iter_mut().enumerate() {
-        let mut value = ((index * 17 + 3) % 253 + 1) as u8;
-        if value == pad_byte {
-            value = value.wrapping_sub(1);
-            if value == pad_byte {
-                value = value.wrapping_add(2);
-            }
-        }
-        *byte = value;
-    }
     rom
 }
 
@@ -1628,111 +868,6 @@ pub(crate) fn no_progress_flag_suppresses_running_progress_in_json_mode() {
     let terminal = events.last().expect("terminal event");
     assert_eq!(terminal["command"], "checksum");
     assert_eq!(terminal["status"], "succeeded");
-}
-
-#[test]
-pub(crate) fn extract_progress_text_reports_elapsed_and_files() {
-    let temp = setup_temp_dir();
-    let input = temp.child("sample.bin");
-    let archive = temp.child("sample.zip");
-    let extract_dir = temp.child("extract");
-    fs::write(input.path(), b"extract-progress-check").expect("fixture");
-
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
-            "compress",
-            input.path().to_str().expect("path"),
-            "--format",
-            "zip",
-            "--output",
-            archive.path().to_str().expect("path"),
-        ])
-        .assert()
-        .code(0);
-
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
-            "--progress",
-            "extract",
-            archive.path().to_str().expect("path"),
-            "--out-dir",
-            extract_dir.path().to_str().expect("path"),
-            "--no-nested-extract",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .clone();
-
-    let stdout = String::from_utf8(output.stdout).expect("utf8 stdout");
-    let stderr = String::from_utf8(output.stderr).expect("utf8 stderr");
-    // `--progress` draws running progress on stderr...
-    assert!(
-        stderr.contains('%'),
-        "expected extract progress on stderr, got: {stderr}"
-    );
-    // ...and the summary table on stdout lists the extracted file and count.
-    assert!(
-        stdout.contains("sample.bin"),
-        "expected extracted file in summary, got: {stdout}"
-    );
-    assert!(
-        stdout.contains("1 file(s) written"),
-        "expected file count in summary, got: {stdout}"
-    );
-    assert!(
-        stdout.contains("elapsed: "),
-        "expected elapsed timing in summary, got: {stdout}"
-    );
-}
-
-#[test]
-pub(crate) fn extract_no_overwrite_fails_when_output_exists() {
-    let temp = setup_temp_dir();
-    let input = temp.child("sample.bin");
-    let archive = temp.child("sample.zip");
-    let extract_dir = temp.child("extract");
-    fs::write(input.path(), b"overwrite-check").expect("fixture");
-
-    Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
-            "compress",
-            input.path().to_str().expect("path"),
-            "--format",
-            "zip",
-            "--output",
-            archive.path().to_str().expect("path"),
-        ])
-        .assert()
-        .code(0);
-
-    fs::create_dir_all(extract_dir.path()).expect("extract dir");
-    fs::write(extract_dir.child("sample.bin").path(), b"existing").expect("existing output");
-
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
-            "extract",
-            archive.path().to_str().expect("path"),
-            "--out-dir",
-            extract_dir.path().to_str().expect("path"),
-            "--no-overwrite",
-            "--no-nested-extract",
-        ])
-        .assert()
-        .code(1)
-        .get_output()
-        .stderr
-        .clone();
-
-    let text = String::from_utf8(output).expect("utf8 stderr");
-    assert!(
-        text.contains("refusing to overwrite existing output"),
-        "expected overwrite error on stderr, got: {text}"
-    );
 }
 
 #[test]

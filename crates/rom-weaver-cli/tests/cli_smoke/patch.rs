@@ -6857,3 +6857,518 @@ fn patch_apply_validates_size_requirement_from_patch_name() {
         .expect("label")
         .contains("input size mismatch"));
 }
+
+// ---- relocated from shared.rs (single-module helpers) ----
+
+fn read_single_file_bytes(dir: &std::path::Path) -> Vec<u8> {
+    let mut files = fs::read_dir(dir)
+        .expect("read dir")
+        .map(|entry| entry.expect("dir entry").path())
+        .filter(|path| path.is_file())
+        .collect::<Vec<_>>();
+    files.sort();
+    assert_eq!(files.len(), 1, "expected one extracted file");
+    fs::read(&files[0]).expect("read extracted file")
+}
+
+fn fixture_path(name: &str) -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/fixtures/vcdiff")
+        .join(name)
+}
+
+fn build_hdiff13_nocomp_patch(old: &[u8], new: &[u8]) -> Vec<u8> {
+    let mut patch = Vec::new();
+    patch.extend_from_slice(b"HDIFF13&nocomp");
+    patch.push(0);
+    patch.extend_from_slice(&encode_all_varints(&[
+        u64::try_from(new.len()).expect("new size"),
+        u64::try_from(old.len()).expect("old size"),
+        0, // cover_count
+        0, // cover_buf_size
+        0, // compress_cover_buf_size
+        0, // rle_ctrl_buf_size
+        0, // compress_rle_ctrl_buf_size
+        0, // rle_code_buf_size
+        0, // compress_rle_code_buf_size
+        u64::try_from(new.len()).expect("new diff size"),
+        0, // compress_new_data_diff_size
+    ]));
+    patch.extend_from_slice(new);
+    patch
+}
+
+fn build_hdiff13_identity_patch_with_cover_and_rle(source: &[u8]) -> Vec<u8> {
+    let source_size = u64::try_from(source.len()).expect("source size");
+    let mut cover = Vec::new();
+    cover.push(0); // old sign=0, old_delta=0
+    encode_varint(&mut cover, 0); // copy_length
+    encode_varint(&mut cover, source_size); // cover_length
+
+    let mut patch = Vec::new();
+    patch.extend_from_slice(b"HDIFF13&nocomp");
+    patch.push(0);
+    patch.extend_from_slice(&encode_all_varints(&[
+        source_size, // new_data_size
+        source_size, // old_data_size
+        1,           // cover_count
+        u64::try_from(cover.len()).expect("cover size"),
+        0, // compress_cover_buf_size
+        1, // rle_ctrl_buf_size
+        0, // compress_rle_ctrl_buf_size
+        1, // rle_code_buf_size
+        0, // compress_rle_code_buf_size
+        0, // new_data_diff_size
+        0, // compress_new_data_diff_size
+    ]));
+    patch.extend_from_slice(&cover);
+    patch.push(0xC0); // rle_type=copy, length=1
+    patch.push(0x00); // add 0 to keep bytes unchanged
+    patch
+}
+
+fn build_hdiffsf20_nocomp_identity_two_steps(source: &[u8]) -> Vec<u8> {
+    assert!(source.len() >= 2, "fixture requires at least two bytes");
+    let split = source.len() / 2;
+    let tail = source.len() - split;
+    assert!(split > 0 && tail > 0, "fixture split invalid");
+
+    let mut payload = Vec::new();
+
+    let mut cover1 = Vec::new();
+    cover1.push(0); // old sign=0, old_delta=0
+    encode_varint(&mut cover1, 0); // new_gap
+    encode_varint(&mut cover1, u64::try_from(split).expect("split"));
+    let mut rle1 = Vec::new();
+    encode_varint(&mut rle1, u64::try_from(split).expect("split"));
+    encode_varint(
+        &mut payload,
+        u64::try_from(cover1.len()).expect("cover1 len"),
+    );
+    encode_varint(&mut payload, u64::try_from(rle1.len()).expect("rle1 len"));
+    payload.extend_from_slice(&cover1);
+    payload.extend_from_slice(&rle1);
+
+    let mut cover2 = Vec::new();
+    cover2.push(0); // old sign=0, old_delta=0
+    encode_varint(&mut cover2, 0); // new_gap
+    encode_varint(&mut cover2, u64::try_from(tail).expect("tail"));
+    let mut rle2 = Vec::new();
+    encode_varint(&mut rle2, u64::try_from(tail).expect("tail"));
+    encode_varint(
+        &mut payload,
+        u64::try_from(cover2.len()).expect("cover2 len"),
+    );
+    encode_varint(&mut payload, u64::try_from(rle2.len()).expect("rle2 len"));
+    payload.extend_from_slice(&cover2);
+    payload.extend_from_slice(&rle2);
+
+    let mut patch = Vec::new();
+    patch.extend_from_slice(b"HDIFFSF20&nocomp");
+    patch.push(0);
+    patch.extend_from_slice(&encode_all_varints(&[
+        u64::try_from(source.len()).expect("new size"),
+        u64::try_from(source.len()).expect("old size"),
+        2,   // cover_count
+        256, // step_mem_size
+        u64::try_from(payload.len()).expect("payload size"),
+        0, // compressed_size
+    ]));
+    patch.extend_from_slice(&payload);
+    patch
+}
+
+fn build_hdiffsf20_nocomp_identity_single_step_two_covers(source: &[u8]) -> Vec<u8> {
+    assert!(source.len() >= 2, "fixture requires at least two bytes");
+    let split = source.len() / 2;
+    let tail = source.len() - split;
+    assert!(split > 0 && tail > 0, "fixture split invalid");
+
+    let mut cover = Vec::new();
+    cover.push(0); // old sign=0, old_delta=0
+    encode_varint(&mut cover, 0); // new_gap
+    encode_varint(&mut cover, u64::try_from(split).expect("split"));
+    cover.push(0); // old sign=0, old_delta=0
+    encode_varint(&mut cover, 0); // new_gap
+    encode_varint(&mut cover, u64::try_from(tail).expect("tail"));
+
+    let mut rle = Vec::new();
+    encode_varint(&mut rle, u64::try_from(split).expect("split"));
+    encode_varint(&mut rle, 0); // len_value for second cover transition
+    encode_varint(&mut rle, u64::try_from(tail).expect("tail"));
+
+    let mut payload = Vec::new();
+    encode_varint(&mut payload, u64::try_from(cover.len()).expect("cover len"));
+    encode_varint(&mut payload, u64::try_from(rle.len()).expect("rle len"));
+    payload.extend_from_slice(&cover);
+    payload.extend_from_slice(&rle);
+
+    let mut patch = Vec::new();
+    patch.extend_from_slice(b"HDIFFSF20&nocomp");
+    patch.push(0);
+    patch.extend_from_slice(&encode_all_varints(&[
+        u64::try_from(source.len()).expect("new size"),
+        u64::try_from(source.len()).expect("old size"),
+        2,   // cover_count
+        256, // step_mem_size
+        u64::try_from(payload.len()).expect("payload size"),
+        0, // compressed_size
+    ]));
+    patch.extend_from_slice(&payload);
+    patch
+}
+
+fn build_hdiff19_nocomp_directory_patch() -> Vec<u8> {
+    let mut patch = Vec::new();
+    patch.extend_from_slice(b"HDIFF19&nocomp");
+    patch.push(0);
+    patch.push(1); // is_input_dir
+    patch.push(1); // is_output_dir
+    patch.extend_from_slice(&encode_all_varints(&[
+        0, // input_dir_count
+        0, // input_sum_size
+        0, // output_dir_count
+        0, // output_sum_size
+    ]));
+    patch
+}
+
+struct TestWindow {
+    pub(crate) win_indicator: u8,
+    pub(crate) source_segment_size: Option<u64>,
+    pub(crate) source_segment_position: Option<u64>,
+    pub(crate) target_window_size: u64,
+    pub(crate) checksum: Option<u32>,
+    pub(crate) data: Vec<u8>,
+    pub(crate) inst: Vec<u8>,
+    pub(crate) addr: Vec<u8>,
+}
+
+fn build_patch(app_header: Option<&[u8]>, windows: Vec<TestWindow>) -> Vec<u8> {
+    const MAGIC: [u8; 4] = [0xD6, 0xC3, 0xC4, 0x00];
+    const HDR_APP_HEADER: u8 = 0x04;
+
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(&MAGIC);
+    if let Some(header) = app_header {
+        bytes.push(HDR_APP_HEADER);
+        encode_varint(&mut bytes, header.len() as u64);
+        bytes.extend_from_slice(header);
+    } else {
+        bytes.push(0);
+    }
+
+    for window in windows {
+        bytes.push(window.win_indicator);
+        if let (Some(size), Some(position)) =
+            (window.source_segment_size, window.source_segment_position)
+        {
+            encode_varint(&mut bytes, size);
+            encode_varint(&mut bytes, position);
+        }
+
+        let mut delta = Vec::new();
+        encode_varint(&mut delta, window.target_window_size);
+        delta.push(0);
+        encode_varint(&mut delta, window.data.len() as u64);
+        encode_varint(&mut delta, window.inst.len() as u64);
+        encode_varint(&mut delta, window.addr.len() as u64);
+        if let Some(checksum) = window.checksum {
+            delta.extend_from_slice(&checksum.to_be_bytes());
+        }
+        delta.extend_from_slice(&window.data);
+        delta.extend_from_slice(&window.inst);
+        delta.extend_from_slice(&window.addr);
+
+        encode_varint(&mut bytes, delta.len() as u64);
+        bytes.extend_from_slice(&delta);
+    }
+
+    bytes
+}
+
+const APS_GBA_BLOCK_SIZE: usize = 0x01_0000;
+
+const DLDI_VERSION: u8 = 1;
+
+const DLDI_MAGIC: [u8; 12] = [
+    0xED, 0xA5, 0x8D, 0xBF, b' ', b'C', b'h', b'i', b's', b'h', b'm', 0x00,
+];
+
+const DLDI_FIX_ALL: u8 = 0x01;
+
+const DLDI_FIX_GLUE: u8 = 0x02;
+
+const DLDI_FIX_GOT: u8 = 0x04;
+
+const DLDI_FIX_BSS: u8 = 0x08;
+
+const DLDI_DO_MAGIC_STRING: usize = 0x00;
+
+const DLDI_DO_VERSION: usize = 0x0C;
+
+const DLDI_DO_DRIVER_SIZE: usize = 0x0D;
+
+const DLDI_DO_FIX_SECTIONS: usize = 0x0E;
+
+const DLDI_DO_ALLOCATED_SPACE: usize = 0x0F;
+
+const DLDI_DO_FRIENDLY_NAME: usize = 0x10;
+
+const DLDI_DO_TEXT_START: usize = 0x40;
+
+const DLDI_DO_DATA_END: usize = 0x44;
+
+const DLDI_DO_GLUE_START: usize = 0x48;
+
+const DLDI_DO_GLUE_END: usize = 0x4C;
+
+const DLDI_DO_GOT_START: usize = 0x50;
+
+const DLDI_DO_GOT_END: usize = 0x54;
+
+const DLDI_DO_BSS_START: usize = 0x58;
+
+const DLDI_DO_BSS_END: usize = 0x5C;
+
+const DLDI_DO_STARTUP: usize = 0x68;
+
+const DLDI_DO_READ_SECTORS: usize = 0x70;
+
+const DLDI_DO_WRITE_SECTORS: usize = 0x74;
+
+const DLDI_DO_SHUTDOWN: usize = 0x7C;
+
+const DLDI_DO_CODE: usize = 0x80;
+
+fn build_ips32_patch(records: Vec<TestIpsRecord>) -> Vec<u8> {
+    let mut bytes = b"IPS32".to_vec();
+    for record in records {
+        match record {
+            TestIpsRecord::Literal { offset, data } => {
+                write_u32(&mut bytes, offset);
+                let len = u16::try_from(data.len()).expect("literal len");
+                bytes.extend_from_slice(&len.to_be_bytes());
+                bytes.extend_from_slice(&data);
+            }
+            TestIpsRecord::Rle { offset, len, value } => {
+                write_u32(&mut bytes, offset);
+                bytes.extend_from_slice(&0u16.to_be_bytes());
+                bytes.extend_from_slice(&len.to_be_bytes());
+                bytes.push(value);
+            }
+        }
+    }
+    bytes.extend_from_slice(b"EEOF");
+    bytes
+}
+
+fn build_ebp_patch(records: Vec<TestIpsRecord>, metadata_json: &str) -> Vec<u8> {
+    let mut bytes = build_ips_patch(records, None);
+    bytes.extend_from_slice(metadata_json.as_bytes());
+    bytes
+}
+
+fn write_sparse_bytes(path: &std::path::Path, len: u64, offset: u64, bytes: &[u8]) {
+    let mut file = File::create(path).expect("create sparse file");
+    file.set_len(len).expect("set len");
+    file.seek(std::io::SeekFrom::Start(offset)).expect("seek");
+    file.write_all(bytes).expect("write bytes");
+    file.flush().expect("flush");
+}
+
+struct TestPpfRecord {
+    pub(crate) offset: u32,
+    pub(crate) data: Vec<u8>,
+}
+
+fn build_ppf1_patch(description: &str, records: Vec<TestPpfRecord>) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(b"PPF10");
+    bytes.push(0);
+
+    let mut desc = [0u8; 50];
+    let src = description.as_bytes();
+    let copy_len = src.len().min(desc.len());
+    desc[..copy_len].copy_from_slice(&src[..copy_len]);
+    bytes.extend_from_slice(&desc);
+
+    for record in records {
+        bytes.extend_from_slice(&record.offset.to_le_bytes());
+        bytes.push(record.data.len() as u8);
+        bytes.extend_from_slice(&record.data);
+    }
+
+    bytes
+}
+
+fn build_apsgba_patch(source: &[u8], target: &[u8]) -> Vec<u8> {
+    assert_eq!(source.len(), APS_GBA_BLOCK_SIZE);
+    assert_eq!(target.len(), APS_GBA_BLOCK_SIZE);
+
+    let mut xor_bytes = vec![0u8; APS_GBA_BLOCK_SIZE];
+    for (index, byte) in xor_bytes.iter_mut().enumerate() {
+        *byte = source[index] ^ target[index];
+    }
+
+    let mut bytes = Vec::with_capacity(12 + 4 + 2 + 2 + APS_GBA_BLOCK_SIZE);
+    bytes.extend_from_slice(b"APS1");
+    bytes.extend_from_slice(&(source.len() as u32).to_le_bytes());
+    bytes.extend_from_slice(&(target.len() as u32).to_le_bytes());
+    bytes.extend_from_slice(&0u32.to_le_bytes());
+    bytes.extend_from_slice(&crc16(source).to_le_bytes());
+    bytes.extend_from_slice(&crc16(target).to_le_bytes());
+    bytes.extend_from_slice(&xor_bytes);
+    bytes
+}
+
+fn build_mod_patch(records: Vec<(u32, Vec<u8>)>) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(b"PMSR");
+    bytes.extend_from_slice(&(records.len() as u32).to_be_bytes());
+    for (offset, data) in records {
+        bytes.extend_from_slice(&offset.to_be_bytes());
+        bytes.extend_from_slice(&(data.len() as u32).to_be_bytes());
+        bytes.extend_from_slice(&data);
+    }
+    bytes
+}
+
+enum TestGdiffCommand {
+    Data(Vec<u8>),
+    Copy { offset: u64, len: u64 },
+}
+
+fn build_gdiff_patch(commands: Vec<TestGdiffCommand>) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(&[0xD1, 0xFF, 0xD1, 0xFF, 4]);
+    for command in commands {
+        match command {
+            TestGdiffCommand::Data(data) => {
+                if data.len() <= 246 {
+                    bytes.push(u8::try_from(data.len()).expect("len <= 246"));
+                } else if data.len() <= usize::from(u16::MAX) {
+                    bytes.push(247);
+                    bytes.extend_from_slice(
+                        &u16::try_from(data.len())
+                            .expect("len <= u16::MAX")
+                            .to_be_bytes(),
+                    );
+                } else {
+                    bytes.push(248);
+                    bytes.extend_from_slice(
+                        &i32::try_from(data.len())
+                            .expect("len <= i32::MAX")
+                            .to_be_bytes(),
+                    );
+                }
+                bytes.extend_from_slice(&data);
+            }
+            TestGdiffCommand::Copy { offset, len } => {
+                if offset <= u64::from(u16::MAX) && len <= u64::from(u8::MAX) {
+                    bytes.push(249);
+                    bytes.extend_from_slice(&(offset as u16).to_be_bytes());
+                    bytes.push(len as u8);
+                } else if offset <= u64::from(u16::MAX) && len <= u64::from(u16::MAX) {
+                    bytes.push(250);
+                    bytes.extend_from_slice(&(offset as u16).to_be_bytes());
+                    bytes.extend_from_slice(&(len as u16).to_be_bytes());
+                } else if offset <= u64::from(i32::MAX as u32) && len <= u64::from(u8::MAX) {
+                    bytes.push(252);
+                    bytes.extend_from_slice(&(offset as u32).to_be_bytes());
+                    bytes.push(len as u8);
+                } else if offset <= u64::from(i32::MAX as u32) && len <= u64::from(u16::MAX) {
+                    bytes.push(253);
+                    bytes.extend_from_slice(&(offset as u32).to_be_bytes());
+                    bytes.extend_from_slice(&(len as u16).to_be_bytes());
+                } else if offset <= u64::from(i32::MAX as u32) && len <= u64::from(i32::MAX as u32)
+                {
+                    bytes.push(254);
+                    bytes.extend_from_slice(&(offset as u32).to_be_bytes());
+                    bytes.extend_from_slice(&(len as u32).to_be_bytes());
+                } else {
+                    bytes.push(255);
+                    bytes.extend_from_slice(
+                        &i64::try_from(offset)
+                            .expect("offset <= i64::MAX")
+                            .to_be_bytes(),
+                    );
+                    bytes.extend_from_slice(
+                        &i32::try_from(len).expect("len <= i32::MAX").to_be_bytes(),
+                    );
+                }
+            }
+        }
+    }
+    bytes.push(0);
+    bytes
+}
+
+fn build_dldi_driver(driver_log2: u8, base_address: i32, friendly_name: &str) -> Vec<u8> {
+    let size = 1usize << driver_log2;
+    let mut bytes = vec![0u8; size];
+
+    bytes[DLDI_DO_MAGIC_STRING..DLDI_DO_MAGIC_STRING + DLDI_MAGIC.len()]
+        .copy_from_slice(&DLDI_MAGIC);
+    bytes[DLDI_DO_VERSION] = DLDI_VERSION;
+    bytes[DLDI_DO_DRIVER_SIZE] = driver_log2;
+    bytes[DLDI_DO_FIX_SECTIONS] = DLDI_FIX_ALL | DLDI_FIX_GLUE | DLDI_FIX_GOT | DLDI_FIX_BSS;
+    bytes[DLDI_DO_ALLOCATED_SPACE] = driver_log2;
+
+    let name_bytes = friendly_name.as_bytes();
+    let max_name_len = DLDI_DO_TEXT_START - DLDI_DO_FRIENDLY_NAME;
+    let copy_len = name_bytes.len().min(max_name_len.saturating_sub(1));
+    bytes[DLDI_DO_FRIENDLY_NAME..DLDI_DO_FRIENDLY_NAME + copy_len]
+        .copy_from_slice(&name_bytes[..copy_len]);
+
+    let size_i32 = i32::try_from(size).expect("size fits");
+    write_i32_le(&mut bytes, DLDI_DO_TEXT_START, base_address);
+    write_i32_le(&mut bytes, DLDI_DO_DATA_END, base_address + size_i32);
+    write_i32_le(&mut bytes, DLDI_DO_GLUE_START, base_address + 0xA0);
+    write_i32_le(&mut bytes, DLDI_DO_GLUE_END, base_address + 0xA8);
+    write_i32_le(&mut bytes, DLDI_DO_GOT_START, base_address + 0xA8);
+    write_i32_le(&mut bytes, DLDI_DO_GOT_END, base_address + 0xB0);
+    write_i32_le(&mut bytes, DLDI_DO_BSS_START, base_address + 0xB0);
+    write_i32_le(&mut bytes, DLDI_DO_BSS_END, base_address + 0xC0);
+    write_i32_le(
+        &mut bytes,
+        DLDI_DO_STARTUP,
+        base_address + i32::try_from(DLDI_DO_CODE).expect("fits"),
+    );
+    write_i32_le(
+        &mut bytes,
+        DLDI_DO_READ_SECTORS,
+        base_address + i32::try_from(DLDI_DO_CODE + 8).expect("fits"),
+    );
+    write_i32_le(
+        &mut bytes,
+        DLDI_DO_WRITE_SECTORS,
+        base_address + i32::try_from(DLDI_DO_CODE + 12).expect("fits"),
+    );
+    write_i32_le(
+        &mut bytes,
+        DLDI_DO_SHUTDOWN,
+        base_address + i32::try_from(DLDI_DO_CODE + 16).expect("fits"),
+    );
+
+    write_i32_le(&mut bytes, DLDI_DO_CODE + 4, base_address + 0xD0);
+    write_i32_le(&mut bytes, DLDI_DO_CODE + 12, base_address + 0xD8);
+    write_i32_le(&mut bytes, 0xA0, base_address + 0x80);
+    write_i32_le(&mut bytes, 0xA8, base_address + 0x84);
+    bytes[0xB0..0xC0].fill(0x7F);
+    bytes
+}
+
+fn build_nds_with_dldi_slot(
+    slot_offset: usize,
+    allocated_log2: u8,
+    base_address: i32,
+    friendly_name: &str,
+) -> Vec<u8> {
+    let slot_size = 1usize << allocated_log2;
+    let mut file = vec![0xCDu8; slot_offset + slot_size + 0x80];
+    let mut slot = build_dldi_driver(allocated_log2, base_address, friendly_name);
+    slot[DLDI_DO_ALLOCATED_SPACE] = allocated_log2;
+    file[slot_offset..slot_offset + slot_size].copy_from_slice(&slot);
+    file
+}
