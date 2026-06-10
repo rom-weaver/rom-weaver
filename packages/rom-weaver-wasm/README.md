@@ -94,10 +94,11 @@ worker.terminate();
 Build artifacts are written to this package by default:
 
 ```bash
-scripts/build-wasm-app.sh
+mise run build-wasm
 ```
 
-If you built artifacts to a custom directory, syncing into this package is explicit:
+If you built artifacts to a custom directory (`ROM_WEAVER_WASM_OUT_DIR`), `build-wasm`
+syncs them in automatically. To sync a pre-built directory manually:
 
 ```bash
 ARTIFACT_DIR="/path/to/wasm-artifacts"

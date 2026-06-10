@@ -39,7 +39,6 @@ MIB = 1024 * 1024
 TIME_BIN = Path("/usr/bin/time")
 SCRIPT_PATH = Path(__file__).resolve()
 REPO_ROOT = SCRIPT_PATH.parent.parent
-WASM_BUILD_SCRIPT = REPO_ROOT / "scripts" / "build-wasm-app.sh"
 BENCH_DEFAULTS_PATH = REPO_ROOT / "scripts" / "bench-defaults.json"
 CACHE_SCHEMA_VERSION = 1
 
@@ -738,7 +737,7 @@ def rebuild_release_and_wasm(skip_build: bool, needs_rom_weaver: bool) -> None:
     print("[bench] rebuild release binary", flush=True)
     subprocess.run(["cargo", "build", "-p", "rom-weaver-cli", "--release"], check=True, cwd=REPO_ROOT)
     print("[bench] rebuild wasm artifacts", flush=True)
-    subprocess.run(["bash", str(WASM_BUILD_SCRIPT)], check=True, cwd=REPO_ROOT)
+    subprocess.run(["mise", "run", "build-wasm"], check=True, cwd=REPO_ROOT)
 
 
 def resolve_external_binary(bin_path: Path, flag_name: str) -> Path:

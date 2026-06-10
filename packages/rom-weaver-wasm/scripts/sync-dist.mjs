@@ -30,7 +30,7 @@ function main() {
 
   if (!existsSync(DIST_WASM_DIR)) {
     fail(
-      `Missing artifacts directory: ${DIST_WASM_DIR}. Run scripts/build-wasm-app.sh and pass that output directory here.`,
+      `Missing artifacts directory: ${DIST_WASM_DIR}. Run mise run build-wasm and pass that output directory here.`,
     );
   }
 
@@ -39,7 +39,7 @@ function main() {
     const dst = resolve(PACKAGE_DIR, dstName);
 
     if (!existsSync(src)) {
-      fail(`Missing artifact: ${src}. Run scripts/build-wasm-app.sh first.`);
+      fail(`Missing artifact: ${src}. Run mise run build-wasm first.`);
     }
 
     mkdirSync(dirname(dst), { recursive: true });

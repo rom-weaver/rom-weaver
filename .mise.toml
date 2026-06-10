@@ -1,3 +1,173 @@
+# WASI / WebAssembly toolchain, build environment, and tasks.
+#
+# Replaces the former scripts/build-wasm-*.sh and scripts/wasm/with-wasi-env.sh.
+# The static threaded rustflags live in .cargo/config.toml; the SDK-relative
+# toolchain wiring lives in [env] below; orchestration lives in [tasks.*].
+#
+# Run `mise tasks` to list, `mise run build-wasm` to build the browser/app module.
+
 [tools]
+# Pinned toolchain. mise installs these on activation (and in CI via mise-action),
+# so dev and CI share exact versions.
+#
+# Deliberately NOT pinned here:
+#   - WASI SDK: pinning it puts its bin/ (clang) on PATH, which makes bindgen's
+#     clang-sys load the wasi-sdk libclang and breaks the libarchive-sys binding
+#     generation on macOS (multiarch sysroot includes don't resolve via libclang).
+#     It stays sourced via scripts/wasm/detect-wasi-sdk.sh (local) / the CI
+#     download step, neither of which shadows the host clang on PATH.
+#   - brotli: publishes no macOS/Linux release binaries (install via OS package).
+#   - twiggy: no binary releases (`cargo install` when needed for size analysis).
 node = "26.2.0"
 rust = "1.95.0"
+"aqua:WebAssembly/binaryen" = "129"            # provides wasm-opt
+"aqua:BurntSushi/ripgrep" = "14.1.1"           # provides rg (thread-guard checks)
+
+[env]
+# WASI SDK discovery. detect-wasi-sdk.sh prints the SDK root, preferring an
+# explicit $WASI_SDK_PATH, then legacy install locations. When no SDK is present
+# these resolve to broken paths and the build tasks fail with a clear toolchain
+# error — harmless for non-wasm commands.
+WASI_SDK_PATH = "{{ exec(command='bash ' ~ config_root ~ '/scripts/wasm/detect-wasi-sdk.sh') }}"
+WASI_SYSROOT = "{{ env.WASI_SDK_PATH }}/share/wasi-sysroot"
+WASI_CLANG = "{{ env.WASI_SDK_PATH }}/bin/clang"
+WASI_CLANGXX = "{{ env.WASI_SDK_PATH }}/bin/clang++"
+WASI_AR = "{{ env.WASI_SDK_PATH }}/bin/llvm-ar"
+WASI_RANLIB = "{{ env.WASI_SDK_PATH }}/bin/llvm-ranlib"
+WASI_STRIP = "{{ env.WASI_SDK_PATH }}/bin/llvm-strip"
+
+# cc-rs toolchain wiring for C/C++ dependencies (liblzma, libarchive, ...).
+# Single-threaded target.
+CC_wasm32_wasip1 = "{{ env.WASI_CLANG }} --sysroot={{ env.WASI_SYSROOT }}"
+CXX_wasm32_wasip1 = "{{ env.WASI_CLANGXX }} --sysroot={{ env.WASI_SYSROOT }}"
+AR_wasm32_wasip1 = "{{ env.WASI_AR }}"
+RANLIB_wasm32_wasip1 = "{{ env.WASI_RANLIB }}"
+CFLAGS_wasm32_wasip1 = "-msimd128"
+CXXFLAGS_wasm32_wasip1 = "-msimd128"
+
+# Threaded target. CC/CXX point at the wrapper scripts that normalize the target
+# triple and force-include the liblzma threading shim; they read WASI_CLANG/
+# WASI_CLANGXX/WASI_SYSROOT from the env above.
+CC_wasm32_wasip1_threads = "{{ config_root }}/scripts/wasm/wasm32-wasip1-threads-cc.sh"
+CXX_wasm32_wasip1_threads = "{{ config_root }}/scripts/wasm/wasm32-wasip1-threads-cxx.sh"
+AR_wasm32_wasip1_threads = "{{ env.WASI_AR }}"
+RANLIB_wasm32_wasip1_threads = "{{ env.WASI_RANLIB }}"
+CFLAGS_wasm32_wasip1_threads = "-matomics -mbulk-memory -msimd128"
+CXXFLAGS_wasm32_wasip1_threads = "-matomics -mbulk-memory -msimd128"
+
+# --- Tasks ----------------------------------------------------------------
+
+[tasks.wasm-check]
+description = "Type-check the threaded WASM target (containers lib)"
+run = "cargo check -p rom-weaver-containers --target wasm32-wasip1-threads --lib"
+
+[tasks.build-wasm]
+description = "Build, optimize, and compress the threaded WASM app module"
+# Release C builds add -O3 -flto on top of the lean check-time CFLAGS above.
+env.CFLAGS_wasm32_wasip1 = "-msimd128 -O3 -flto"
+env.CXXFLAGS_wasm32_wasip1 = "-msimd128 -O3 -flto"
+env.CFLAGS_wasm32_wasip1_threads = "-matomics -mbulk-memory -msimd128 -O3 -flto"
+env.CXXFLAGS_wasm32_wasip1_threads = "-matomics -mbulk-memory -msimd128 -O3 -flto"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+
+target="wasm32-wasip1-threads"
+out_dir="${ROM_WEAVER_WASM_OUT_DIR:-$MISE_PROJECT_ROOT/packages/rom-weaver-wasm}"
+pkg_dir="$MISE_PROJECT_ROOT/packages/rom-weaver-wasm"
+artifact="$out_dir/rom-weaver-app.wasm"
+
+command -v cargo >/dev/null || { echo "missing command: cargo" >&2; exit 1; }
+command -v brotli >/dev/null || { echo "missing command: brotli" >&2; exit 1; }
+[[ -x "$WASI_CLANG" ]] || { echo "missing WASI toolchain: $WASI_CLANG (install WASI SDK)" >&2; exit 1; }
+[[ -d "$WASI_SYSROOT" ]] || { echo "missing WASI sysroot: $WASI_SYSROOT" >&2; exit 1; }
+
+mkdir -p "$out_dir"
+
+echo "building $target -> $artifact"
+cargo build -p rom-weaver-app --bin rom-weaver-app --profile wasm-release --target "$target"
+cp "$MISE_PROJECT_ROOT/target/$target/wasm-release/rom-weaver-app.wasm" "$artifact"
+
+if command -v wasm-opt >/dev/null; then
+  wasm-opt -O4 --strip-debug --strip-dwarf \
+    --enable-bulk-memory --enable-bulk-memory-opt --enable-mutable-globals \
+    --enable-nontrapping-float-to-int --enable-sign-ext --enable-reference-types \
+    --enable-simd --enable-threads \
+    -o "$artifact.opt" "$artifact"
+  mv "$artifact.opt" "$artifact"
+fi
+
+"$WASI_STRIP" "$artifact"
+brotli --force --quality="${BROTLI_QUALITY:-11}" --output="$artifact.br" "$artifact"
+
+# Sync into the npm package only when built to a separate output directory.
+if [[ "$out_dir" != "$pkg_dir" ]]; then
+  node "$pkg_dir/scripts/sync-dist.mjs" "$out_dir"
+fi
+
+echo "artifacts written to $out_dir (rom-weaver-app.wasm, rom-weaver-app.wasm.br)"
+'''
+
+[tasks.build-wasm-twiggy]
+description = "Build an unoptimized, symbol-rich WASM module for twiggy analysis"
+env.CARGO_PROFILE_WASM_RELEASE_STRIP = "none"
+env.CARGO_PROFILE_WASM_RELEASE_DEBUG = "true"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+
+target="wasm32-wasip1-threads"
+out_dir="${ROM_WEAVER_WASM_TWIGGY_OUT_DIR:-$MISE_PROJECT_ROOT/target/wasm-twiggy}"
+mkdir -p "$out_dir"
+
+cargo build -p rom-weaver-app --bin rom-weaver-app --profile wasm-release --target "$target"
+cp "$MISE_PROJECT_ROOT/target/$target/wasm-release/rom-weaver-app.wasm" "$out_dir/rom-weaver-app.wasm"
+
+echo "twiggy-ready artifact: $out_dir/rom-weaver-app.wasm"
+echo "run: twiggy top -n 80 $out_dir/rom-weaver-app.wasm"
+'''
+
+# --- Quality gate ---------------------------------------------------------
+# Single source of truth for the checks shared by lefthook (pre-commit) and CI.
+# lefthook keeps its `glob` gating and just delegates the `run` to these tasks.
+
+[tasks.fmt]
+description = "Check Rust formatting"
+run = "cargo fmt --check"
+
+[tasks.clippy]
+description = "Lint the workspace with clippy (warnings are errors)"
+run = "cargo clippy --workspace --all-targets -- -D warnings"
+
+[tasks.typegen]
+description = "Regenerate TypeScript bindings from Rust"
+run = "cargo run -p rom-weaver-typegen -- --write"
+
+[tasks.typegen-check]
+description = "Verify TypeScript bindings are up to date"
+run = "cargo run -p rom-weaver-typegen -- --check"
+
+[tasks.test-rust]
+description = "Run the Rust workspace test suite"
+run = "cargo test --workspace"
+
+[tasks.thread-guards]
+description = "Fail on threaded-WASM suppression regressions"
+run = "{{ config_root }}/scripts/check-thread-guards.sh"
+
+[tasks.dev]
+description = "Run the React dev server"
+run = "npm --prefix packages/rom-weaver-react run dev --"
+
+[tasks.ci]
+description = "Run the full local quality gate (mirrors CI)"
+depends = ["fmt", "clippy", "typegen-check", "wasm-check", "thread-guards", "test-rust", "build-wasm"]
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+npm --prefix packages/rom-weaver-wasm run lint
+npm --prefix packages/rom-weaver-wasm test
+npm --prefix packages/rom-weaver-react run lint
+npm --prefix packages/rom-weaver-react test
+npm --prefix packages/rom-weaver-react run build
+'''

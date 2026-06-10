@@ -35,5 +35,5 @@ cargo test -p rom-weaver-containers chd_ -- --nocapture
 cargo test -p rom-weaver-cli chd_ -- --nocapture
 
 # WASM build and package sync
-./scripts/build-wasm-cli.sh
+mise run build-wasm
 ```

@@ -14,7 +14,7 @@ forked `.mjs` copies.
 ## Runtime Requirements
 
 - Secure-context Dedicated Worker runtime
-- `rom-weaver-app.wasm` artifact from `scripts/build-wasm-app.sh`
+- `rom-weaver-app.wasm` artifact from `mise run build-wasm`
 - Browser support for OPFS + `FileSystemSyncAccessHandle`
 - Cross-origin isolation and `SharedArrayBuffer` when using `rom-weaver-app.wasm`
 - `@bjorn3/browser_wasi_shim`

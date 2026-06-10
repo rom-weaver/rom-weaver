@@ -1,0 +1,25 @@
+# Static build configuration for the threaded WebAssembly target.
+#
+# These flags were previously assembled in scripts/build-wasm-app.sh and passed
+# through CARGO_TARGET_WASM32_WASIP1_THREADS_RUSTFLAGS. They are fully static, so
+# they live here where cargo picks them up for every build of this target.
+#
+# The dynamic library search path (-L native=<sysroot>/lib/wasm32-wasip1-threads/noeh)
+# is *not* listed here because it depends on the WASI SDK location, which varies
+# between machines and CI. cargo's rustflags sources are mutually exclusive (an env
+# override replaces this list rather than extending it), so the mise `build-wasm`
+# task injects that single path via CARGO_TARGET_WASM32_WASIP1_THREADS_RUSTFLAGS,
+# re-stating these flags alongside it. Keep the two in sync.
+[target.wasm32-wasip1-threads]
+rustflags = [
+  "-C", "target-feature=+atomics,+bulk-memory,+mutable-globals,+sign-ext,+reference-types,+simd128",
+  "-C", "linker-plugin-lto",
+  "-C", "link-arg=--export=malloc",
+  "-C", "link-arg=--export=free",
+  # Shared memory ceiling for the threaded module. Browser LZMA2 workers can need
+  # more than 1 GiB when several raw encoders run concurrently. Threaded wasm needs
+  # *shared* memory, which the threads spec requires to declare a fixed maximum (the
+  # engine reserves the address range up front and cannot grow a SharedArrayBuffer
+  # past it). 2147483648 = 2 GiB = 32768 * 64 KiB pages.
+  "-C", "link-arg=--max-memory=2147483648",
+]
