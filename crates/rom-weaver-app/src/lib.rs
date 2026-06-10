@@ -784,9 +784,21 @@ pub use compression::{
 mod compression_planning;
 use compression_planning::*;
 
-#[path = "trim_and_probe_details.rs"]
-mod trim_and_probe_details;
-use trim_and_probe_details::*;
+#[path = "trim_detection.rs"]
+mod trim_detection;
+
+#[path = "trim_execution.rs"]
+mod trim_execution;
+use trim_execution::*;
+
+#[path = "revert_footer.rs"]
+mod revert_footer;
+
+#[path = "header_fix_batch.rs"]
+mod header_fix_batch;
+
+#[path = "probe_details.rs"]
+mod probe_details;
 
 #[path = "header_detection_and_finalize.rs"]
 mod header_detection_and_finalize;
