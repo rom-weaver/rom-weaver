@@ -5449,7 +5449,8 @@ fn patch_create_checksum_name_embeds_crc32_and_apply_validates_input() {
     let create_output = Command::cargo_bin("rom-weaver")
         .expect("binary")
         .args([
-            "patch", "create",
+            "patch",
+            "create",
             "--original",
             original.path().to_str().expect("path"),
             "--modified",
@@ -5486,7 +5487,8 @@ fn patch_create_checksum_name_embeds_crc32_and_apply_validates_input() {
     let ok_output = Command::cargo_bin("rom-weaver")
         .expect("binary")
         .args([
-            "patch", "apply",
+            "patch",
+            "apply",
             "--input",
             original.path().to_str().expect("path"),
             "--patch",
@@ -5503,10 +5505,12 @@ fn patch_create_checksum_name_embeds_crc32_and_apply_validates_input() {
         .clone();
     let ok_json = parse_single_json_line(&ok_output);
     assert_eq!(ok_json["status"], "succeeded");
-    assert!(ok_json["label"]
-        .as_str()
-        .expect("label")
-        .contains("input checksum(s) verified"));
+    assert!(
+        ok_json["label"]
+            .as_str()
+            .expect("label")
+            .contains("input checksum(s) verified")
+    );
     assert_eq!(
         fs::read(temp.child("ok.bin").path()).expect("output"),
         fs::read(modified.path()).expect("modified")
@@ -5518,7 +5522,8 @@ fn patch_create_checksum_name_embeds_crc32_and_apply_validates_input() {
     let bad_output = Command::cargo_bin("rom-weaver")
         .expect("binary")
         .args([
-            "patch", "apply",
+            "patch",
+            "apply",
             "--input",
             wrong.path().to_str().expect("path"),
             "--patch",
@@ -5535,16 +5540,19 @@ fn patch_create_checksum_name_embeds_crc32_and_apply_validates_input() {
         .clone();
     let bad_json = parse_single_json_line(&bad_output);
     assert_eq!(bad_json["status"], "failed");
-    assert!(bad_json["label"]
-        .as_str()
-        .expect("label")
-        .contains("input checksum mismatch for crc32"));
+    assert!(
+        bad_json["label"]
+            .as_str()
+            .expect("label")
+            .contains("input checksum mismatch for crc32")
+    );
 
     // `--ignore-checksum-validation` skips the file-name requirement entirely.
     let ignored_output = Command::cargo_bin("rom-weaver")
         .expect("binary")
         .args([
-            "patch", "apply",
+            "patch",
+            "apply",
             "--input",
             wrong.path().to_str().expect("path"),
             "--patch",
@@ -5581,7 +5589,8 @@ fn patch_apply_validates_bare_enclosed_crc32_from_patch_name() {
     let labeled = Command::cargo_bin("rom-weaver")
         .expect("binary")
         .args([
-            "patch", "create",
+            "patch",
+            "create",
             "--original",
             temp.child("input.bin").path().to_str().expect("path"),
             "--modified",
@@ -5612,7 +5621,8 @@ fn patch_apply_validates_bare_enclosed_crc32_from_patch_name() {
     let apply_output = Command::cargo_bin("rom-weaver")
         .expect("binary")
         .args([
-            "patch", "apply",
+            "patch",
+            "apply",
             "--input",
             temp.child("input.bin").path().to_str().expect("path"),
             "--patch",
@@ -5629,10 +5639,12 @@ fn patch_apply_validates_bare_enclosed_crc32_from_patch_name() {
         .clone();
     let apply_json = parse_single_json_line(&apply_output);
     assert_eq!(apply_json["status"], "succeeded");
-    assert!(apply_json["label"]
-        .as_str()
-        .expect("label")
-        .contains("input checksum(s) verified"));
+    assert!(
+        apply_json["label"]
+            .as_str()
+            .expect("label")
+            .contains("input checksum(s) verified")
+    );
     assert_eq!(
         fs::read(temp.child("bare-out.bin").path()).expect("output"),
         b"abXYZfgh"
@@ -5657,7 +5669,8 @@ fn patch_apply_validates_size_requirement_from_patch_name() {
     let output = Command::cargo_bin("rom-weaver")
         .expect("binary")
         .args([
-            "patch", "apply",
+            "patch",
+            "apply",
             "--input",
             temp.child("input.bin").path().to_str().expect("path"),
             "--patch",
@@ -5674,10 +5687,12 @@ fn patch_apply_validates_size_requirement_from_patch_name() {
         .clone();
     let json = parse_single_json_line(&output);
     assert_eq!(json["status"], "failed");
-    assert!(json["label"]
-        .as_str()
-        .expect("label")
-        .contains("input size mismatch"));
+    assert!(
+        json["label"]
+            .as_str()
+            .expect("label")
+            .contains("input size mismatch")
+    );
 }
 
 // ---- relocated from shared.rs (single-module helpers) ----

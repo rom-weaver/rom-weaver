@@ -1231,10 +1231,12 @@ fn extract_repeated_select_recurses_into_multiple_nested_archives() {
     let json = events.last().expect("extract terminal event");
     assert_eq!(json["command"], "extract");
     assert_eq!(json["status"], "succeeded");
-    assert!(json["label"]
-        .as_str()
-        .expect("label")
-        .contains("recursively extracted 2 nested container(s)"));
+    assert!(
+        json["label"]
+            .as_str()
+            .expect("label")
+            .contains("recursively extracted 2 nested container(s)")
+    );
 
     let first_output = out_dir.child("inner-first/first.bin");
     let second_output = out_dir.child("inner-second/second.bin");
@@ -1254,12 +1256,16 @@ fn extract_repeated_select_recurses_into_multiple_nested_archives() {
     let emitted = json["details"]["emitted_files"]
         .as_array()
         .expect("emitted_files array");
-    assert!(!emitted
-        .iter()
-        .any(|entry| entry["file_name"].as_str() == Some("inner-first.zip")));
-    assert!(!emitted
-        .iter()
-        .any(|entry| entry["file_name"].as_str() == Some("inner-second.zip")));
+    assert!(
+        !emitted
+            .iter()
+            .any(|entry| entry["file_name"].as_str() == Some("inner-first.zip"))
+    );
+    assert!(
+        !emitted
+            .iter()
+            .any(|entry| entry["file_name"].as_str() == Some("inner-second.zip"))
+    );
 }
 
 #[test]

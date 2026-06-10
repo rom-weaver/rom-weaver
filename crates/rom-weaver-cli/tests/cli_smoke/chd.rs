@@ -352,7 +352,10 @@ fn chd_compress_auto_detects_av_stream_without_explicit_codec() {
     let probe_json = parse_single_json_line(&probe_output);
     let label = probe_json["label"].as_str().expect("label");
     assert!(label.contains("av chd"), "expected A/V media, got {label}");
-    assert!(label.contains("codec=avhuff"), "expected avhuff codec, got {label}");
+    assert!(
+        label.contains("codec=avhuff"),
+        "expected avhuff codec, got {label}"
+    );
 
     let out_dir = temp.child("extract");
     Command::cargo_bin("rom-weaver")
@@ -411,7 +414,10 @@ fn chd_av_and_ld_overrides_force_av_media() {
             .as_str()
             .expect("label")
             .to_string();
-        assert!(label.contains("av chd"), "{format}: expected A/V media, got {label}");
+        assert!(
+            label.contains("av chd"),
+            "{format}: expected A/V media, got {label}"
+        );
     }
 }
 
@@ -1255,7 +1261,12 @@ fn chd_gd_override_forces_gdrom_and_rejects_plain_cd() {
         .code(0);
     let probe_output = Command::cargo_bin("rom-weaver")
         .expect("binary")
-        .args(["probe", gd_chd.path().to_str().expect("path"), "--no-extract", "--json"])
+        .args([
+            "probe",
+            gd_chd.path().to_str().expect("path"),
+            "--no-extract",
+            "--json",
+        ])
         .assert()
         .code(0)
         .get_output()

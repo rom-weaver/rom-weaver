@@ -931,7 +931,13 @@ fn checksum_json_includes_primary_checksums_and_raw_variant_by_default() {
     let raw = checksum_variant_row(&json, "raw");
     assert_eq!(raw["label"], "Raw");
     assert_eq!(raw["checksums"], json["details"]["checksums"]);
-    assert_eq!(raw["applyCompatibility"].as_object().expect("raw compatibility").len(), 0);
+    assert_eq!(
+        raw["applyCompatibility"]
+            .as_object()
+            .expect("raw compatibility")
+            .len(),
+        0
+    );
 }
 
 #[test]
@@ -998,12 +1004,7 @@ fn checksum_legacy_range_skips_variants() {
     for extra_args in [vec!["--start", "1"], vec!["--length", "128"]] {
         let headered_path = temp.child("headered.nes");
         let headered_path = headered_path.path().to_str().expect("path");
-        let mut args = vec![
-            "checksum",
-            headered_path,
-            "--algo",
-            "sha1",
-        ];
+        let mut args = vec!["checksum", headered_path, "--algo", "sha1"];
         args.extend(extra_args);
         args.push("--json");
         let output = Command::cargo_bin("rom-weaver")
@@ -1064,10 +1065,12 @@ fn checksum_auto_extract_payload_gets_variants_after_resolution() {
 
     let json = parse_single_json_line(&output);
     assert_eq!(json["status"], "succeeded");
-    assert!(json["label"]
-        .as_str()
-        .expect("label")
-        .contains("checksum source resolved via"));
+    assert!(
+        json["label"]
+            .as_str()
+            .expect("label")
+            .contains("checksum source resolved via")
+    );
     assert_eq!(
         checksum_variant_row(&json, "remove-header")["checksums"]["sha1"],
         expected_sha1
@@ -1092,7 +1095,8 @@ fn checksum_broken_header_checksums_include_fix_header_variant() {
     let repaired_genesis_checksum = sega_genesis_checksum(&repaired_genesis);
     repaired_genesis[0x18E..0x190].copy_from_slice(&repaired_genesis_checksum.to_be_bytes());
     fs::write(temp.child("broken.md").path(), &broken_genesis).expect("genesis fixture");
-    fs::write(temp.child("repaired.md").path(), &repaired_genesis).expect("genesis repaired fixture");
+    fs::write(temp.child("repaired.md").path(), &repaired_genesis)
+        .expect("genesis repaired fixture");
 
     let mut broken_n64 = vec![0_u8; 0x101000];
     broken_n64[..4].copy_from_slice(&[0x80, 0x37, 0x12, 0x40]);
@@ -1156,8 +1160,11 @@ fn extract_checksum_variants_match_checksum_command() {
     let nes_payload = (0..4096)
         .map(|index| ((index * 17) % 251) as u8)
         .collect::<Vec<_>>();
-    fs::write(temp.child("headered.nes").path(), with_nes_header(&nes_payload))
-        .expect("nes fixture");
+    fs::write(
+        temp.child("headered.nes").path(),
+        with_nes_header(&nes_payload),
+    )
+    .expect("nes fixture");
 
     let mut broken_gba = build_test_gba_rom(0x4000);
     broken_gba[0x1BD] ^= 0x7F;
@@ -1291,8 +1298,14 @@ fn checksum_n64_byte_order_variants_cover_all_target_orders() {
             let row = checksum_variant_row(&json, &format!("n64-byte-order:{target_order}"));
             assert_eq!(row["applyCompatibility"]["n64ByteOrder"], target_order);
             assert_eq!(row["applyCompatibility"]["n64_byte_order"], target_order);
-            assert_eq!(row["transforms"]["n64ByteOrder"]["sourceOrder"], source_order);
-            assert_eq!(row["transforms"]["n64ByteOrder"]["targetOrder"], target_order);
+            assert_eq!(
+                row["transforms"]["n64ByteOrder"]["sourceOrder"],
+                source_order
+            );
+            assert_eq!(
+                row["transforms"]["n64ByteOrder"]["targetOrder"],
+                target_order
+            );
         }
         assert_eq!(
             checksum_variant_row(&json, "n64-byte-order:big-endian")["checksums"]["sha1"],
