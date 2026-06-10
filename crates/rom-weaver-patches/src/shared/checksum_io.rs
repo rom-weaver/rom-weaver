@@ -25,7 +25,6 @@ pub(crate) fn crc32_slice(bytes: &[u8]) -> u32 {
     hasher.finalize()
 }
 
-
 pub(crate) fn crc32_path_cached(path: &Path, context: &OperationContext) -> Result<u32> {
     let results = checksum_file_values(path, &["crc32"], context)?;
     let Some(value) = results.get("crc32") else {

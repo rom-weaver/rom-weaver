@@ -19,11 +19,12 @@ use rom_weaver_core::{
 };
 use suffix_array::SuffixArray;
 
+use crate::checksum_validation_suffix;
+use crate::shared::checksum_io::{crc32_path_cached, crc32_prefix, crc32_slice, read_u32_le};
+use crate::shared::labels::byuu_parse_report;
+use crate::shared::threading::run_with_optional_pool;
 #[cfg(test)]
 use crate::varint::push_varint;
-use crate::shared::checksum_io::{crc32_path_cached, crc32_prefix, crc32_slice, read_u32_le};
-use crate::checksum_validation_suffix;
-use crate::shared::labels::byuu_parse_report;
 
 const BPS_MAGIC: &[u8; 4] = b"BPS1";
 const BPS_FOOTER_SIZE: usize = 12;
@@ -92,10 +93,9 @@ impl PatchHandler for BpsPatchHandler {
             .open(&request.output)?;
         output.set_len(patch.target_size)?;
         let thread_capability = bps_apply_thread_capability(&patch.actions);
-        let planned_execution = context.plan_threads(thread_capability.clone());
         let has_target_copy = patch_contains_target_copy(&patch.actions);
-        let wants_parallel = planned_execution.used_parallelism && !has_target_copy;
         let execution = if crate::can_apply_in_memory(patch.source_size, patch.target_size) {
+            let mut execution = context.plan_threads(thread_capability.clone());
             let target_size = patch.target_size as usize;
             let mut source_bytes = Vec::with_capacity(patch.source_size as usize);
             source.read_to_end(&mut source_bytes)?;
@@ -109,37 +109,45 @@ impl PatchHandler for BpsPatchHandler {
             )?;
             output.seek(SeekFrom::Start(0))?;
             output.write_all(&output_bytes)?;
-            let mut execution = planned_execution;
             execution.effective_threads = 1;
             execution.used_parallelism = false;
             execution
-        } else if wants_parallel {
-            let (execution, pool) = context.build_pool(thread_capability)?;
-            let prepared = prepare_bps_writes_parallel(
-                &patch,
-                &request.input,
-                patch.source_size,
-                &pool,
-                context,
-            )?;
-            apply_prepared_bps_writes(&mut output, &prepared)?;
-            execution
         } else {
-            let mut execution = planned_execution;
+            let (mut execution, prepared) = run_with_optional_pool(
+                context,
+                thread_capability,
+                !has_target_copy,
+                |pool| {
+                    prepare_bps_writes_parallel(
+                        &patch,
+                        &request.input,
+                        patch.source_size,
+                        pool,
+                        context,
+                    )
+                    .map(Some)
+                },
+                || {
+                    let mut buffered_source = BufReader::new(source);
+                    apply_patch_actions(
+                        &patch,
+                        &mut buffered_source,
+                        &mut output,
+                        context,
+                        self.descriptor.name,
+                    )?;
+                    Ok(None)
+                },
+            )?;
+            if let Some(prepared) = prepared {
+                apply_prepared_bps_writes(&mut output, &prepared)?;
+            }
             if execution.used_parallelism && has_target_copy {
                 execution.apply_pool_fallback(
                     "BPS apply encountered TargetCopy actions that require sequential output"
                         .to_string(),
                 );
             }
-            let mut buffered_source = BufReader::new(source);
-            apply_patch_actions(
-                &patch,
-                &mut buffered_source,
-                &mut output,
-                context,
-                self.descriptor.name,
-            )?;
             execution
         };
         validate_output_file(

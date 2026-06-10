@@ -15,7 +15,9 @@ use rom_weaver_core::{
     Result, RomWeaverError, SharedThreadPool, ThreadCapability,
 };
 
-use crate::shared::threading::{parallel_chunked_capability, parallel_per_record_capability};
+use crate::shared::threading::{
+    parallel_chunked_capability, parallel_per_record_capability, run_with_optional_pool,
+};
 
 const GDIFF_MAGIC: [u8; 4] = [0xD1, 0xFF, 0xD1, 0xFF];
 const GDIFF_VERSION: u8 = 4;
@@ -75,33 +77,33 @@ impl PatchHandler for GdiffPatchHandler {
         let source_len = fs::metadata(&request.input)?.len();
         let (summary, commands) = parse_gdiff_apply_plan(patch_path)?;
         let thread_capability = parallel_per_record_capability(commands.len());
-        let planned_execution = context.plan_threads(thread_capability.clone());
 
-        let execution = if planned_execution.used_parallelism
-            && !crate::patches_reads_source_on_main_thread()
-        {
-            let tasks = build_gdiff_apply_tasks(&commands);
-            let (execution, pool) = context.build_pool(thread_capability)?;
-            let prepared = pool.install(|| {
-                tasks
-                    .par_iter()
-                    .map(|task| {
-                        prepare_gdiff_apply_task(task, patch_path, &request.input, source_len)
-                    })
-                    .collect::<Result<Vec<_>>>()
-            })?;
-            apply_gdiff_prepared_chunks(&prepared, &request.output, context)?;
-            execution
-        } else {
-            apply_gdiff_plan_sequential(
-                &commands,
-                patch_path,
-                &request.input,
-                &request.output,
-                source_len,
-            )?;
-            planned_execution
-        };
+        let (execution, ()) = run_with_optional_pool(
+            context,
+            thread_capability,
+            !crate::patches_reads_source_on_main_thread(),
+            |pool| {
+                let tasks = build_gdiff_apply_tasks(&commands);
+                let prepared = pool.install(|| {
+                    tasks
+                        .par_iter()
+                        .map(|task| {
+                            prepare_gdiff_apply_task(task, patch_path, &request.input, source_len)
+                        })
+                        .collect::<Result<Vec<_>>>()
+                })?;
+                apply_gdiff_prepared_chunks(&prepared, &request.output, context)
+            },
+            || {
+                apply_gdiff_plan_sequential(
+                    &commands,
+                    patch_path,
+                    &request.input,
+                    &request.output,
+                    source_len,
+                )
+            },
+        )?;
 
         Ok(crate::patch_success_report(
             self.descriptor,

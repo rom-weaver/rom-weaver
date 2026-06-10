@@ -6,7 +6,6 @@ use std::{
 
 use tracing::info;
 
-use rayon::prelude::*;
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
     PatchCapabilities, PatchChecksumValidation, PatchCreateRequest, PatchHandler,
@@ -15,7 +14,10 @@ use rom_weaver_core::{
 };
 
 use crate::checksum_validation_suffix;
-use crate::shared::threading::{parallel_chunked_capability, parallel_per_record_capability};
+use crate::shared::threading::{
+    PreparedWrite, apply_prepared_writes, parallel_chunked_capability,
+    parallel_per_record_capability, pool_map, run_with_optional_pool, scan_create_chunks,
+};
 
 const PPF_HEADER_MIN_SIZE: usize = 56;
 const PPF2_HEADER_SIZE: usize = 1084;
@@ -122,14 +124,13 @@ impl PatchHandler for PpfPatchHandler {
             fs::create_dir_all(parent)?;
         }
         let thread_capability = parallel_per_record_capability(parsed.records.len());
-        let planned_execution = context.plan_threads(thread_capability.clone());
         let ppf_output_len = ppf_required_output_len(input_len, &parsed.records);
         let execution = if crate::can_apply_in_memory(input_len, ppf_output_len) {
+            let mut execution = context.plan_threads(thread_capability.clone());
             let mut output_bytes = fs::read(&request.input)?;
             output_bytes.resize(ppf_output_len as usize, 0);
             apply_records_in_memory(&parsed.records, &mut output_bytes)?;
             fs::write(&request.output, &output_bytes)?;
-            let mut execution = planned_execution;
             execution.effective_threads = 1;
             execution.used_parallelism = false;
             execution
@@ -139,15 +140,19 @@ impl PatchHandler for PpfPatchHandler {
                 .read(true)
                 .write(true)
                 .open(&request.output)?;
-            let execution = if planned_execution.used_parallelism {
-                let (execution, pool) = context.build_pool(thread_capability)?;
-                let prepared = prepare_ppf_writes_parallel(&parsed.records, &pool, context)?;
-                apply_prepared_ppf_writes(&mut output, &prepared)?;
-                execution
-            } else {
-                apply_records(&mut output, &parsed.records)?;
-                planned_execution
-            };
+            let (execution, prepared) = run_with_optional_pool(
+                context,
+                thread_capability,
+                true,
+                |pool| prepare_ppf_writes_parallel(&parsed.records, pool, context).map(Some),
+                || {
+                    apply_records(&mut output, &parsed.records)?;
+                    Ok(None)
+                },
+            )?;
+            if let Some(prepared) = prepared {
+                apply_prepared_writes(&mut output, &prepared)?;
+            }
             output.flush()?;
             execution
         };
@@ -300,11 +305,6 @@ struct PpfRecord {
 struct CreatedPpfPatch {
     record_count: usize,
     blockcheck_enabled: bool,
-}
-
-struct PreparedPpfWrite {
-    offset: u64,
-    data: Vec<u8>,
 }
 
 fn create_ppf3_patch(
@@ -647,57 +647,43 @@ fn collect_ppf_diff_runs_parallel(
     pool: &SharedThreadPool,
 ) -> Result<Vec<PpfDiffRun>> {
     let chunk_size = CREATE_THREAD_SCAN_CHUNK_BYTES as u64;
-    let chunk_ranges = (0..modified_len)
-        .step_by(CREATE_THREAD_SCAN_CHUNK_BYTES)
-        .map(|start| {
+    // Empty modified inputs scan zero chunks (matching the old `step_by`
+    // ranges), not the one floor chunk `chunk_count_for_len` would plan.
+    let chunk_count = usize::try_from(modified_len.div_ceil(chunk_size)).unwrap_or(usize::MAX);
+    // Each chunk scan is wrapped in `Ok(...)` so the shared fail-fast collect
+    // never engages: PPF keeps collecting every chunk and surfaces scan
+    // errors in chunk order from the merge loop below, exactly as before.
+    let per_chunk_runs = scan_create_chunks(
+        crate::PatchCreateSources {
+            original_path,
+            original_len,
+            modified_path,
+            modified_len,
+        },
+        modified_len,
+        chunk_size,
+        chunk_count,
+        pool,
+        |start, original_bytes, modified_bytes| {
+            Ok(collect_ppf_chunk_diff_runs_from_bytes(
+                start,
+                original_bytes,
+                modified_bytes,
+                original_len,
+            ))
+        },
+        |chunk_index| {
+            let start = chunk_index as u64 * chunk_size;
             let end = start.saturating_add(chunk_size).min(modified_len);
-            start..end
-        })
-        .collect::<Vec<_>>();
-
-    let per_chunk_runs = if crate::patches_reads_source_on_main_thread() {
-        let buffered = chunk_ranges
-            .iter()
-            .map(|range| {
-                crate::read_original_modified_chunk(
-                    original_path,
-                    original_len,
-                    modified_path,
-                    range.start,
-                    range.end,
-                )
-            })
-            .collect::<Result<Vec<_>>>()?;
-        pool.install(|| {
-            buffered
-                .into_par_iter()
-                .zip(chunk_ranges.into_par_iter())
-                .map(|((original_bytes, modified_bytes), range)| {
-                    collect_ppf_chunk_diff_runs_from_bytes(
-                        range.start,
-                        &original_bytes,
-                        &modified_bytes,
-                        original_len,
-                    )
-                })
-                .collect::<Vec<_>>()
-        })
-    } else {
-        pool.install(|| {
-            chunk_ranges
-                .into_par_iter()
-                .map(|range| {
-                    collect_ppf_chunk_diff_runs(
-                        original_path,
-                        original_len,
-                        modified_path,
-                        range.start,
-                        range.end,
-                    )
-                })
-                .collect::<Vec<_>>()
-        })
-    };
+            Ok(collect_ppf_chunk_diff_runs(
+                original_path,
+                original_len,
+                modified_path,
+                start,
+                end,
+            ))
+        },
+    )?;
 
     let mut merged: Vec<PpfDiffRun> = Vec::new();
     for runs in per_chunk_runs {
@@ -1703,30 +1689,14 @@ fn prepare_ppf_writes_parallel(
     records: &[PpfRecord],
     pool: &SharedThreadPool,
     context: &OperationContext,
-) -> Result<Vec<PreparedPpfWrite>> {
-    pool.install(|| {
-        records
-            .par_iter()
-            .map(|record| {
-                context.cancel().check()?;
-                Ok(PreparedPpfWrite {
-                    offset: record.offset,
-                    data: record.data.clone(),
-                })
-            })
-            .collect::<Result<Vec<_>>>()
+) -> Result<Vec<PreparedWrite>> {
+    pool_map(pool, records, |record| {
+        context.cancel().check()?;
+        Ok(PreparedWrite {
+            offset: record.offset,
+            data: record.data.clone(),
+        })
     })
-}
-
-fn apply_prepared_ppf_writes(file: &mut File, writes: &[PreparedPpfWrite]) -> Result<()> {
-    for write in writes {
-        if write.data.is_empty() {
-            continue;
-        }
-        file.seek(SeekFrom::Start(write.offset))?;
-        file.write_all(&write.data)?;
-    }
-    Ok(())
 }
 
 #[cfg(test)]

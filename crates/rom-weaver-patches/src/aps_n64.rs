@@ -6,7 +6,6 @@ use std::{
 
 use tracing::info;
 
-use rayon::prelude::*;
 use rom_weaver_core::{
     FormatDescriptor, OperationContext, OperationFamily, OperationReport, PatchApplyRequest,
     PatchCapabilities, PatchChecksumValidation, PatchCreateRequest, PatchHandler,
@@ -15,7 +14,10 @@ use rom_weaver_core::{
 };
 
 use crate::checksum_validation_suffix;
-use crate::shared::threading::{chunk_count_for_len_checked, parallel_per_record_capability};
+use crate::shared::threading::{
+    PreparedWrite, apply_prepared_writes, chunk_count_for_len_checked,
+    parallel_per_record_capability, pool_map, run_with_optional_pool, scan_create_chunks,
+};
 
 const APS_N64_MAGIC: &[u8; 5] = b"APS10";
 const APS_N64_MODE: u8 = 0x01;
@@ -100,13 +102,12 @@ impl PatchHandler for ApsN64PatchHandler {
         }
         let input_size = fs::metadata(&request.input)?.len();
         let thread_capability = parallel_per_record_capability(patch.records.len());
-        let planned_execution = context.plan_threads(thread_capability.clone());
         let execution = if crate::can_apply_in_memory(input_size, patch.output_size) {
+            let mut execution = context.plan_threads(thread_capability.clone());
             let mut output_bytes = fs::read(&request.input)?;
             output_bytes.resize(patch.output_size as usize, 0);
             apply_aps_records_in_memory(patch.output_size, &patch.records, &mut output_bytes)?;
             fs::write(&request.output, &output_bytes)?;
-            let mut execution = planned_execution;
             execution.effective_threads = 1;
             execution.used_parallelism = false;
             execution
@@ -117,16 +118,22 @@ impl PatchHandler for ApsN64PatchHandler {
                 .write(true)
                 .open(&request.output)?;
             output.set_len(patch.output_size)?;
-            let execution = if planned_execution.used_parallelism {
-                let (execution, pool) = context.build_pool(thread_capability)?;
-                let prepared =
-                    prepare_aps_writes_parallel(&patch.records, patch.output_size, &pool, context)?;
-                apply_prepared_aps_writes(&mut output, &prepared)?;
-                execution
-            } else {
-                apply_aps_records(&mut output, patch.output_size, &patch.records)?;
-                planned_execution
-            };
+            let (execution, prepared) = run_with_optional_pool(
+                context,
+                thread_capability,
+                true,
+                |pool| {
+                    prepare_aps_writes_parallel(&patch.records, patch.output_size, pool, context)
+                        .map(Some)
+                },
+                || {
+                    apply_aps_records(&mut output, patch.output_size, &patch.records)?;
+                    Ok(None)
+                },
+            )?;
+            if let Some(prepared) = prepared {
+                apply_prepared_writes(&mut output, &prepared)?;
+            }
             output.flush()?;
             execution
         };
@@ -189,28 +196,30 @@ impl PatchHandler for ApsN64PatchHandler {
         let modified_len = fs::metadata(&request.modified)?.len();
         let modified_len_usize = usize::try_from(modified_len).unwrap_or(usize::MAX);
         let thread_capability = aps_create_thread_capability(modified_len_usize)?;
-        let planned_execution = context.plan_threads(thread_capability.clone());
-        let (execution, created) = if planned_execution.used_parallelism {
-            let (execution, pool) = context.build_pool(thread_capability)?;
-            let created = create_aps_patch_parallel(
-                &request.original,
-                original_len,
-                &request.modified,
-                modified_len,
-                &pool,
-                context,
-            )?;
-            (execution, created)
-        } else {
-            let created = create_aps_patch_from_files(
-                &request.original,
-                original_len,
-                &request.modified,
-                modified_len,
-                context,
-            )?;
-            (planned_execution, created)
-        };
+        let (execution, created) = run_with_optional_pool(
+            context,
+            thread_capability,
+            true,
+            |pool| {
+                create_aps_patch_parallel(
+                    &request.original,
+                    original_len,
+                    &request.modified,
+                    modified_len,
+                    pool,
+                    context,
+                )
+            },
+            || {
+                create_aps_patch_from_files(
+                    &request.original,
+                    original_len,
+                    &request.modified,
+                    modified_len,
+                    context,
+                )
+            },
+        )?;
 
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
@@ -277,11 +286,6 @@ enum ApsRecord {
 struct CreatedApsPatch {
     bytes: Vec<u8>,
     record_count: usize,
-}
-
-struct PreparedApsWrite {
-    offset: u64,
-    data: Vec<u8>,
 }
 
 fn aps_create_thread_capability(modified_len: usize) -> Result<ThreadCapability> {
@@ -594,19 +598,14 @@ fn prepare_aps_writes_parallel(
     output_size: u64,
     pool: &SharedThreadPool,
     context: &OperationContext,
-) -> Result<Vec<PreparedApsWrite>> {
-    pool.install(|| {
-        records
-            .par_iter()
-            .map(|record| {
-                context.cancel().check()?;
-                prepare_aps_write(record, output_size)
-            })
-            .collect::<Result<Vec<_>>>()
+) -> Result<Vec<PreparedWrite>> {
+    pool_map(pool, records, |record| {
+        context.cancel().check()?;
+        prepare_aps_write(record, output_size)
     })
 }
 
-fn prepare_aps_write(record: &ApsRecord, output_size: u64) -> Result<PreparedApsWrite> {
+fn prepare_aps_write(record: &ApsRecord, output_size: u64) -> Result<PreparedWrite> {
     match record {
         ApsRecord::Simple { offset, data } => {
             let end = offset
@@ -619,7 +618,7 @@ fn prepare_aps_write(record: &ApsRecord, output_size: u64) -> Result<PreparedAps
                     "APS record exceeded output size".into(),
                 ));
             }
-            Ok(PreparedApsWrite {
+            Ok(PreparedWrite {
                 offset: *offset,
                 data: data.clone(),
             })
@@ -638,23 +637,12 @@ fn prepare_aps_write(record: &ApsRecord, output_size: u64) -> Result<PreparedAps
                     "APS RLE record exceeded output size".into(),
                 ));
             }
-            Ok(PreparedApsWrite {
+            Ok(PreparedWrite {
                 offset: *offset,
                 data: vec![*byte; usize::from(*length)],
             })
         }
     }
-}
-
-fn apply_prepared_aps_writes(file: &mut File, writes: &[PreparedApsWrite]) -> Result<()> {
-    for write in writes {
-        if write.data.is_empty() {
-            continue;
-        }
-        file.seek(SeekFrom::Start(write.offset))?;
-        file.write_all(&write.data)?;
-    }
-    Ok(())
 }
 
 #[cfg(test)]
@@ -919,52 +907,32 @@ fn create_aps_patch_parallel(
         }
     }
 
-    let chunk_size = APS_CREATE_CHUNK_BYTES as u64;
-    let chunk_runs = if crate::patches_reads_source_on_main_thread() {
-        let chunk_starts: Vec<u64> = (0..chunk_count as u64)
-            .map(|i| i * chunk_size)
-            .filter(|&s| s < modified_len)
-            .collect();
-        let buffered = chunk_starts
-            .iter()
-            .map(|&start| {
-                let end = start.saturating_add(chunk_size).min(modified_len);
-                crate::read_original_modified_chunk(
-                    original_path,
-                    original_len,
-                    modified_path,
-                    start,
-                    end,
-                )
-            })
-            .collect::<Result<Vec<_>>>()?;
-        pool.install(|| {
-            buffered
-                .into_par_iter()
-                .zip(chunk_starts.into_par_iter())
-                .map(|((original_bytes, modified_bytes), start)| {
-                    context.cancel().check()?;
-                    collect_diff_runs_from_bytes(start, &original_bytes, &modified_bytes)
-                })
-                .collect::<Result<Vec<_>>>()
-        })?
-    } else {
-        pool.install(|| {
-            (0..chunk_count)
-                .into_par_iter()
-                .map(|chunk_index| {
-                    context.cancel().check()?;
-                    collect_diff_runs_for_chunk(
-                        chunk_index,
-                        original_path,
-                        original_len,
-                        modified_path,
-                        modified_len,
-                    )
-                })
-                .collect::<Result<Vec<_>>>()
-        })?
-    };
+    let chunk_runs = scan_create_chunks(
+        crate::PatchCreateSources {
+            original_path,
+            original_len,
+            modified_path,
+            modified_len,
+        },
+        modified_len,
+        APS_CREATE_CHUNK_BYTES as u64,
+        chunk_count,
+        pool,
+        |start, original_bytes, modified_bytes| {
+            context.cancel().check()?;
+            collect_diff_runs_from_bytes(start, original_bytes, modified_bytes)
+        },
+        |chunk_index| {
+            context.cancel().check()?;
+            collect_diff_runs_for_chunk(
+                chunk_index,
+                original_path,
+                original_len,
+                modified_path,
+                modified_len,
+            )
+        },
+    )?;
     let runs = merge_diff_runs(chunk_runs)?;
     let records = encode_runs_as_aps_records(runs)?;
     create_aps_patch_with_records(n64_header, modified_len, records)

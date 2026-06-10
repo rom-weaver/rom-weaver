@@ -15,9 +15,6 @@ pub(crate) fn append_warning_labels(mut label: String, warnings: &[String]) -> S
     label
 }
 
-/// Label suffix describing whether checksum validation ran: empty when it did, the shared
-/// `"; checksum validation skipped"` marker when it was disabled.
-
 /// Build the parse report shared by the byuu formats (BPS/UPS): identical label wording plus the
 /// `patch` details JSON with the same keys, order, and types both handlers emitted inline.
 pub(crate) fn byuu_parse_report(

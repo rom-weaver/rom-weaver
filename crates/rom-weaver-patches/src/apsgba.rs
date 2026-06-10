@@ -16,7 +16,10 @@ use rom_weaver_core::{
 };
 
 use crate::checksum_validation_suffix;
-use crate::shared::threading::{chunk_count_for_len_checked, parallel_per_record_capability};
+use crate::shared::threading::{
+    PreparedWrite, apply_prepared_writes, chunk_count_for_len_checked,
+    parallel_per_record_capability, pool_map, run_with_optional_pool,
+};
 
 const APS_GBA_MAGIC: &[u8; 4] = b"APS1";
 const APS_GBA_HEADER_SIZE: usize = 12;
@@ -84,8 +87,8 @@ impl PatchHandler for ApsGbaPatchHandler {
         }
         let target_size_u64 = u64::from(patch.target_size);
         let thread_capability = parallel_per_record_capability(patch.records.len());
-        let planned_execution = context.plan_threads(thread_capability.clone());
         let execution = if crate::can_apply_in_memory(actual_input_size, target_size_u64) {
+            let mut execution = context.plan_threads(thread_capability.clone());
             let source_bytes = fs::read(&request.input)?;
             let mut output_bytes = vec![0u8; patch.target_size as usize];
             let copy_len = source_bytes.len().min(output_bytes.len());
@@ -97,7 +100,6 @@ impl PatchHandler for ApsGbaPatchHandler {
                 validate_checksums,
             )?;
             fs::write(&request.output, &output_bytes)?;
-            let mut execution = planned_execution;
             execution.effective_threads = 1;
             execution.used_parallelism = false;
             execution
@@ -108,23 +110,35 @@ impl PatchHandler for ApsGbaPatchHandler {
                 .write(true)
                 .open(&request.output)?;
             output.set_len(target_size_u64)?;
-            let execution = if planned_execution.used_parallelism {
-                let (execution, pool) = context.build_pool(thread_capability)?;
-                let prepared = prepare_apsgba_writes_parallel(
-                    &patch,
-                    &request.input,
-                    actual_input_size,
-                    validate_checksums,
-                    &pool,
-                    context,
-                )?;
-                apply_prepared_apsgba_writes(&mut output, &prepared)?;
-                execution
-            } else {
-                let mut source = File::open(&request.input)?;
-                apply_apsgba_patch_in_place(&patch, &mut source, &mut output, validate_checksums)?;
-                planned_execution
-            };
+            let (execution, prepared) = run_with_optional_pool(
+                context,
+                thread_capability,
+                true,
+                |pool| {
+                    prepare_apsgba_writes_parallel(
+                        &patch,
+                        &request.input,
+                        actual_input_size,
+                        validate_checksums,
+                        pool,
+                        context,
+                    )
+                    .map(Some)
+                },
+                || {
+                    let mut source = File::open(&request.input)?;
+                    apply_apsgba_patch_in_place(
+                        &patch,
+                        &mut source,
+                        &mut output,
+                        validate_checksums,
+                    )?;
+                    Ok(None)
+                },
+            )?;
+            if let Some(prepared) = prepared {
+                apply_prepared_writes(&mut output, &prepared)?;
+            }
             output.flush()?;
             execution
         };
@@ -201,22 +215,22 @@ impl PatchHandler for ApsGbaPatchHandler {
         let target_size_u64 = fs::metadata(&request.modified)?.len();
         let thread_capability =
             apsgba_create_thread_capability(source_size_u64.max(target_size_u64))?;
-        let planned_execution = context.plan_threads(thread_capability.clone());
-        let (execution, created) = if planned_execution.used_parallelism {
-            let (execution, pool) = context.build_pool(thread_capability)?;
-            let created = create_apsgba_patch_parallel(
-                &request.original,
-                source_size_u64,
-                &request.modified,
-                target_size_u64,
-                &pool,
-                context,
-            )?;
-            (execution, created)
-        } else {
-            let created = create_apsgba_patch_streaming(&request.original, &request.modified)?;
-            (planned_execution, created)
-        };
+        let (execution, created) = run_with_optional_pool(
+            context,
+            thread_capability,
+            true,
+            |pool| {
+                create_apsgba_patch_parallel(
+                    &request.original,
+                    source_size_u64,
+                    &request.modified,
+                    target_size_u64,
+                    pool,
+                    context,
+                )
+            },
+            || create_apsgba_patch_streaming(&request.original, &request.modified),
+        )?;
 
         let mut output = crate::create_buffered_output(&request.output)?;
         for chunk in created.bytes.chunks(APS_GBA_IO_BUFFER_SIZE) {
@@ -259,11 +273,6 @@ struct ApsGbaRecord {
 struct CreatedApsGbaPatch {
     bytes: Vec<u8>,
     record_count: usize,
-}
-
-struct PreparedApsGbaWrite {
-    offset: u64,
-    data: Vec<u8>,
 }
 
 fn apsgba_create_thread_capability(max_len: u64) -> Result<ThreadCapability> {
@@ -556,22 +565,16 @@ fn prepare_apsgba_writes_parallel(
     validate_checksums: bool,
     pool: &SharedThreadPool,
     context: &OperationContext,
-) -> Result<Vec<PreparedApsGbaWrite>> {
+) -> Result<Vec<PreparedWrite>> {
     let output_len = usize::try_from(patch.target_size).expect("u32 fits usize");
     let source = Arc::new(SharedBlockCacheReader::open(
         source_path,
         DEFAULT_BLOCK_CACHE_SIZE_BYTES,
         DEFAULT_BLOCK_CACHE_MAX_BLOCKS,
     )?);
-    pool.install(|| {
-        patch
-            .records
-            .par_iter()
-            .map(|record| {
-                context.cancel().check()?;
-                prepare_apsgba_write(record, &source, source_len, output_len, validate_checksums)
-            })
-            .collect::<Result<Vec<_>>>()
+    pool_map(pool, &patch.records, |record| {
+        context.cancel().check()?;
+        prepare_apsgba_write(record, &source, source_len, output_len, validate_checksums)
     })
 }
 
@@ -581,7 +584,7 @@ fn prepare_apsgba_write(
     source_len: u64,
     output_len: usize,
     validate_checksums: bool,
-) -> Result<PreparedApsGbaWrite> {
+) -> Result<PreparedWrite> {
     let offset = usize::try_from(record.offset).expect("u32 fits usize");
     let source_offset = u64::from(record.offset);
     let source_read_len = if source_offset >= source_len {
@@ -623,21 +626,10 @@ fn prepare_apsgba_write(
         }
     }
 
-    Ok(PreparedApsGbaWrite {
+    Ok(PreparedWrite {
         offset: u64::from(record.offset),
         data: patched,
     })
-}
-
-fn apply_prepared_apsgba_writes(output: &mut File, writes: &[PreparedApsGbaWrite]) -> Result<()> {
-    for write in writes {
-        if write.data.is_empty() {
-            continue;
-        }
-        output.seek(SeekFrom::Start(write.offset))?;
-        output.write_all(&write.data)?;
-    }
-    Ok(())
 }
 
 fn create_apsgba_patch_streaming(

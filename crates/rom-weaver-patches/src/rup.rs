@@ -19,7 +19,10 @@ use rom_weaver_core::{
 };
 
 use crate::checksum_validation_suffix;
-use crate::shared::threading::{parallel_chunked_capability, parallel_per_record_capability};
+use crate::shared::threading::{
+    chunk_count_for_len, parallel_chunked_capability, parallel_per_record_capability,
+    run_with_optional_pool, scan_create_chunks,
+};
 
 const RUP_MAGIC: &[u8; 6] = b"NINJA2";
 const RUP_HEADER_SIZE: usize = 0x800;
@@ -140,34 +143,38 @@ impl PatchHandler for RupPatchHandler {
             .open(&normalized_output_path)?;
         output.set_len(output_size)?;
         let thread_capability = parallel_per_record_capability(file.records.len());
-        let planned_execution = context.plan_threads(thread_capability.clone());
-        let execution = if planned_execution.used_parallelism
-            && !crate::patches_reads_source_on_main_thread()
-        {
-            let tasks = build_rup_prepared_tasks(file.records.len());
-            let (execution, pool) = context.build_pool(thread_capability)?;
-            let prepared = pool.install(|| {
-                tasks
-                    .par_iter()
-                    .map(|task| {
-                        prepare_rup_write_task(
-                            task,
-                            file,
-                            &normalized_input.path,
-                            input_len,
-                            output_len,
-                            context,
-                        )
-                    })
-                    .collect::<Result<Vec<_>>>()
-            })?;
+        let (execution, prepared) = run_with_optional_pool(
+            context,
+            thread_capability,
+            !crate::patches_reads_source_on_main_thread(),
+            |pool| {
+                let tasks = build_rup_prepared_tasks(file.records.len());
+                pool.install(|| {
+                    tasks
+                        .par_iter()
+                        .map(|task| {
+                            prepare_rup_write_task(
+                                task,
+                                file,
+                                &normalized_input.path,
+                                input_len,
+                                output_len,
+                                context,
+                            )
+                        })
+                        .collect::<Result<Vec<_>>>()
+                })
+                .map(Some)
+            },
+            || {
+                let mut input = File::open(&normalized_input.path)?;
+                apply_xor_records_in_place(file, output_len, input_len, &mut input, &mut output)?;
+                Ok(None)
+            },
+        )?;
+        if let Some(prepared) = prepared {
             apply_rup_prepared_records(file, &prepared, &mut output, context)?;
-            execution
-        } else {
-            let mut input = File::open(&normalized_input.path)?;
-            apply_xor_records_in_place(file, output_len, input_len, &mut input, &mut output)?;
-            planned_execution
-        };
+        }
         apply_overflow_in_place(file, undo, output_len, &mut output)?;
         output.flush()?;
 
@@ -1727,53 +1734,40 @@ fn collect_rup_records_parallel(
     }
 
     let chunk_size = CREATE_THREAD_SCAN_CHUNK_BYTES as u64;
-    let chunk_ranges = (0..shared_len)
-        .step_by(CREATE_THREAD_SCAN_CHUNK_BYTES)
-        .map(|start| {
+    // Each chunk scan is wrapped in `Ok(...)` so the shared fail-fast collect
+    // never engages: RUP keeps collecting every chunk and surfaces scan
+    // errors in chunk order from the merge loop below, exactly as before.
+    let per_chunk = scan_create_chunks(
+        crate::PatchCreateSources {
+            original_path: source_path,
+            original_len: source_size,
+            modified_path: target_path,
+            modified_len: target_size,
+        },
+        shared_len,
+        chunk_size,
+        chunk_count_for_len(shared_len, chunk_size),
+        pool,
+        |start, source_bytes, target_bytes| {
+            Ok(collect_rup_chunk_records_from_bytes(
+                start,
+                source_bytes,
+                target_bytes,
+            ))
+        },
+        |chunk_index| {
+            let start = chunk_index as u64 * chunk_size;
             let end = start.saturating_add(chunk_size).min(shared_len);
-            start..end
-        })
-        .collect::<Vec<_>>();
-
-    let per_chunk = if crate::patches_reads_source_on_main_thread() {
-        let buffered = chunk_ranges
-            .iter()
-            .map(|range| {
-                crate::read_original_modified_chunk(
-                    source_path,
-                    source_size,
-                    target_path,
-                    range.start,
-                    range.end,
-                )
-            })
-            .collect::<Result<Vec<_>>>()?;
-        pool.install(|| {
-            buffered
-                .into_par_iter()
-                .zip(chunk_ranges.into_par_iter())
-                .map(|((source_bytes, target_bytes), range)| {
-                    collect_rup_chunk_records_from_bytes(range.start, &source_bytes, &target_bytes)
-                })
-                .collect::<Vec<_>>()
-        })
-    } else {
-        pool.install(|| {
-            chunk_ranges
-                .into_par_iter()
-                .map(|range| {
-                    collect_rup_chunk_records(
-                        source_path,
-                        source_size,
-                        target_path,
-                        target_size,
-                        range.start,
-                        range.end,
-                    )
-                })
-                .collect::<Vec<_>>()
-        })
-    };
+            Ok(collect_rup_chunk_records(
+                source_path,
+                source_size,
+                target_path,
+                target_size,
+                start,
+                end,
+            ))
+        },
+    )?;
 
     let mut merged: Vec<RupRecord> = Vec::new();
     for runs in per_chunk {

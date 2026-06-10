@@ -8,11 +8,14 @@ use std::{
 
 use tracing::info;
 
-use crate::shared::checksum_io::{crc32_path_cached, crc32_prefix, read_u32_le};
-use crate::varint::push_varint;
 use crate::checksum_validation_suffix;
+use crate::shared::checksum_io::{crc32_path_cached, crc32_prefix, read_u32_le};
 use crate::shared::labels::byuu_parse_report;
-use crate::shared::threading::{parallel_chunked_capability, parallel_per_record_capability};
+use crate::shared::threading::{
+    PreparedWrite, apply_prepared_writes, parallel_chunked_capability,
+    parallel_per_record_capability, pool_map, run_with_optional_pool,
+};
+use crate::varint::push_varint;
 use crc32fast::Hasher;
 use rayon::prelude::*;
 use rom_weaver_checksum::crc32_bytes;
@@ -80,32 +83,38 @@ impl PatchHandler for UpsPatchHandler {
         }
         fs::copy(&request.input, &request.output)?;
         let thread_capability = parallel_per_record_capability(patch.changes.len());
-        let planned_execution = context.plan_threads(thread_capability.clone());
         let execution = {
             let mut output = OpenOptions::new().write(true).open(&request.output)?;
             output.set_len(working_size)?;
-            let execution = if planned_execution.used_parallelism {
-                let (execution, pool) = context.build_pool(thread_capability)?;
-                let prepared = prepare_ups_writes_parallel(
-                    &patch,
-                    &request.input,
-                    input_len,
-                    working_size,
-                    &pool,
-                    context,
-                )?;
-                apply_prepared_ups_writes(&mut output, &prepared)?;
-                execution
-            } else {
-                apply_changes_from_input(
-                    &patch,
-                    &request.input,
-                    input_len,
-                    working_size,
-                    &mut output,
-                )?;
-                planned_execution
-            };
+            let (execution, prepared) = run_with_optional_pool(
+                context,
+                thread_capability,
+                true,
+                |pool| {
+                    prepare_ups_writes_parallel(
+                        &patch,
+                        &request.input,
+                        input_len,
+                        working_size,
+                        pool,
+                        context,
+                    )
+                    .map(Some)
+                },
+                || {
+                    apply_changes_from_input(
+                        &patch,
+                        &request.input,
+                        input_len,
+                        working_size,
+                        &mut output,
+                    )?;
+                    Ok(None)
+                },
+            )?;
+            if let Some(prepared) = prepared {
+                apply_prepared_writes(&mut output, &prepared)?;
+            }
             output.set_len(output_size)?;
             output.flush()?;
             execution
@@ -195,11 +204,6 @@ struct UpsChange {
 struct CreatedUpsPatch {
     bytes: Vec<u8>,
     record_count: usize,
-}
-
-struct PreparedUpsWrite {
-    offset: u64,
-    data: Vec<u8>,
 }
 
 fn parse_ups_file(path: &Path) -> Result<ParsedUpsPatch> {
@@ -463,21 +467,15 @@ fn prepare_ups_writes_parallel(
     output_len: u64,
     pool: &SharedThreadPool,
     context: &OperationContext,
-) -> Result<Vec<PreparedUpsWrite>> {
+) -> Result<Vec<PreparedWrite>> {
     let shared_source = Arc::new(SharedBlockCacheReader::open(
         source_path,
         DEFAULT_BLOCK_CACHE_SIZE_BYTES,
         DEFAULT_BLOCK_CACHE_MAX_BLOCKS,
     )?);
-    pool.install(|| {
-        patch
-            .changes
-            .par_iter()
-            .map(|change| {
-                context.cancel().check()?;
-                prepare_ups_write(change, source_len, output_len, &shared_source)
-            })
-            .collect::<Result<Vec<_>>>()
+    pool_map(pool, &patch.changes, |change| {
+        context.cancel().check()?;
+        prepare_ups_write(change, source_len, output_len, &shared_source)
     })
 }
 
@@ -486,7 +484,7 @@ fn prepare_ups_write(
     source_len: u64,
     output_len: u64,
     source: &Arc<SharedBlockCacheReader>,
-) -> Result<PreparedUpsWrite> {
+) -> Result<PreparedWrite> {
     let change_len = u64::try_from(change.xor_bytes.len()).map_err(|_| {
         RomWeaverError::Validation("UPS record length exceeded addressable memory".into())
     })?;
@@ -511,21 +509,10 @@ fn prepare_ups_write(
         *byte = source_bytes[index] ^ change.xor_bytes[index];
     }
 
-    Ok(PreparedUpsWrite {
+    Ok(PreparedWrite {
         offset: change.offset,
         data: patched,
     })
-}
-
-fn apply_prepared_ups_writes(output: &mut File, writes: &[PreparedUpsWrite]) -> Result<()> {
-    for write in writes {
-        if write.data.is_empty() {
-            continue;
-        }
-        output.seek(SeekFrom::Start(write.offset))?;
-        output.write_all(&write.data)?;
-    }
-    Ok(())
 }
 
 fn create_ups_patch(

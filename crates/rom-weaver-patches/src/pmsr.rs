@@ -17,7 +17,10 @@ use rom_weaver_core::{
 };
 
 use crate::checksum_validation_suffix;
-use crate::shared::threading::{chunk_count_for_len_checked, parallel_per_record_capability};
+use crate::shared::threading::{
+    chunk_count_for_len_checked, parallel_per_record_capability, run_with_optional_pool,
+    scan_create_chunks,
+};
 
 const PMSR_MAGIC: &[u8; 4] = b"PMSR";
 const PMSR_HEADER_SIZE: usize = 8;
@@ -82,14 +85,13 @@ impl PatchHandler for PmsrPatchHandler {
             fs::create_dir_all(parent)?;
         }
         let thread_capability = parallel_per_record_capability(patch.records.len());
-        let planned_execution = context.plan_threads(thread_capability.clone());
         let records_non_overlapping = pmsr_records_are_non_overlapping(&patch, output_len)?;
         let execution = if crate::can_apply_in_memory(source_len, output_len) {
+            let mut execution = context.plan_threads(thread_capability.clone());
             let mut output_bytes = fs::read(&request.input)?;
             output_bytes.resize(output_len as usize, 0);
             apply_pmsr_records_in_memory(output_len, &patch.records, &mut output_bytes)?;
             fs::write(&request.output, &output_bytes)?;
-            let mut execution = planned_execution;
             execution.effective_threads = 1;
             execution.used_parallelism = false;
             execution
@@ -102,37 +104,38 @@ impl PatchHandler for PmsrPatchHandler {
             output.set_len(output_len)?;
             drop(output);
 
-            if planned_execution.used_parallelism
-                && records_non_overlapping
-                && !crate::patches_reads_source_on_main_thread()
-            {
-                let (execution, pool) = context.build_pool(thread_capability)?;
-                apply_pmsr_patch_parallel_in_place(
-                    &patch,
-                    &request.output,
-                    output_len,
-                    execution.effective_threads,
-                    &pool,
-                    context,
-                )?;
-                execution
-            } else {
-                let mut output = OpenOptions::new()
-                    .read(true)
-                    .write(true)
-                    .open(&request.output)?;
-                apply_pmsr_patch_in_place(&patch, output_len, &mut output)?;
-                output.flush()?;
-                if planned_execution.used_parallelism && !records_non_overlapping {
-                    let mut fallback = planned_execution;
-                    fallback.apply_pool_fallback(
-                        "MOD apply records overlap; preserving patch order with single-thread writes",
-                    );
-                    fallback
-                } else {
-                    planned_execution
-                }
+            let (mut execution, ()) = run_with_optional_pool(
+                context,
+                thread_capability,
+                records_non_overlapping && !crate::patches_reads_source_on_main_thread(),
+                |pool| {
+                    // `pool.size()` always matches the negotiated
+                    // `effective_threads` for pools built by `build_pool`.
+                    apply_pmsr_patch_parallel_in_place(
+                        &patch,
+                        &request.output,
+                        output_len,
+                        pool.size(),
+                        pool,
+                        context,
+                    )
+                },
+                || {
+                    let mut output = OpenOptions::new()
+                        .read(true)
+                        .write(true)
+                        .open(&request.output)?;
+                    apply_pmsr_patch_in_place(&patch, output_len, &mut output)?;
+                    output.flush()?;
+                    Ok(())
+                },
+            )?;
+            if execution.used_parallelism && !records_non_overlapping {
+                execution.apply_pool_fallback(
+                    "MOD apply records overlap; preserving patch order with single-thread writes",
+                );
             }
+            execution
         };
         let checksum_suffix = checksum_validation_suffix(validate_source);
         Ok(crate::patch_success_report(
@@ -194,16 +197,13 @@ impl PatchHandler for PmsrPatchHandler {
         }
 
         let thread_capability = pmsr_create_thread_capability(modified_len)?;
-        let planned_execution = context.plan_threads(thread_capability.clone());
-        let (execution, patch) = if planned_execution.used_parallelism {
-            let (execution, pool) = context.build_pool(thread_capability)?;
-            let patch =
-                create_pmsr_patch_parallel(&request.original, &request.modified, &pool, context)?;
-            (execution, patch)
-        } else {
-            let patch = create_pmsr_patch_streaming(&request.original, &request.modified)?;
-            (planned_execution, patch)
-        };
+        let (execution, patch) = run_with_optional_pool(
+            context,
+            thread_capability,
+            true,
+            |pool| create_pmsr_patch_parallel(&request.original, &request.modified, pool, context),
+            || create_pmsr_patch_streaming(&request.original, &request.modified),
+        )?;
 
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
@@ -670,52 +670,32 @@ fn create_pmsr_patch_parallel(
     }
 
     let chunk_count = pmsr_create_chunk_count(modified_len)?;
-    let chunk_size = CREATE_SCAN_CHUNK_BYTES as u64;
-    let chunk_records = if crate::patches_reads_source_on_main_thread() {
-        let chunk_starts: Vec<u64> = (0..chunk_count as u64)
-            .map(|i| i * chunk_size)
-            .filter(|&s| s < modified_len)
-            .collect();
-        let buffered = chunk_starts
-            .iter()
-            .map(|&start| {
-                let end = start.saturating_add(chunk_size).min(modified_len);
-                crate::read_original_modified_chunk(
-                    original_path,
-                    original_len,
-                    modified_path,
-                    start,
-                    end,
-                )
-            })
-            .collect::<Result<Vec<_>>>()?;
-        pool.install(|| {
-            buffered
-                .into_par_iter()
-                .zip(chunk_starts.into_par_iter())
-                .map(|((original_bytes, modified_bytes), start)| {
-                    context.cancel().check()?;
-                    collect_pmsr_records_from_bytes(start, &original_bytes, &modified_bytes)
-                })
-                .collect::<Result<Vec<_>>>()
-        })?
-    } else {
-        pool.install(|| {
-            (0..chunk_count)
-                .into_par_iter()
-                .map(|chunk_index| {
-                    context.cancel().check()?;
-                    collect_pmsr_records_for_chunk(
-                        chunk_index,
-                        original_path,
-                        original_len,
-                        modified_path,
-                        modified_len,
-                    )
-                })
-                .collect::<Result<Vec<_>>>()
-        })?
-    };
+    let chunk_records = scan_create_chunks(
+        crate::PatchCreateSources {
+            original_path,
+            original_len,
+            modified_path,
+            modified_len,
+        },
+        modified_len,
+        CREATE_SCAN_CHUNK_BYTES as u64,
+        chunk_count,
+        pool,
+        |start, original_bytes, modified_bytes| {
+            context.cancel().check()?;
+            collect_pmsr_records_from_bytes(start, original_bytes, modified_bytes)
+        },
+        |chunk_index| {
+            context.cancel().check()?;
+            collect_pmsr_records_for_chunk(
+                chunk_index,
+                original_path,
+                original_len,
+                modified_path,
+                modified_len,
+            )
+        },
+    )?;
     let records = merge_pmsr_records(chunk_records)?;
     finalize_created_pmsr_patch(records, modified_len)
 }

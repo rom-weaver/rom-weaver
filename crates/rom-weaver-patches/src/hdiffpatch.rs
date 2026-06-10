@@ -17,6 +17,8 @@ use rom_weaver_core::{
     RomWeaverError, SharedBlockCacheReader, ThreadCapability, ThreadExecution, ValidationCodeError,
 };
 
+use crate::shared::threading::run_with_optional_pool;
+
 fn hdiff_validation_code(code: &'static str) -> ValidationCodeError {
     ValidationCodeError::new(code)
 }
@@ -182,30 +184,36 @@ fn render_hdiff_patch_to_memory(
             }
 
             let thread_capability = hdiff13_apply_thread_capability(&header);
-            let planned_execution = context.plan_threads(thread_capability.clone());
-            if planned_execution.used_parallelism {
-                let (execution, pool) = context.build_pool(thread_capability)?;
-                let chunk_parallel = execution.used_parallelism;
-                let output = pool.install(|| {
+            let (execution, output) = run_with_optional_pool(
+                context,
+                thread_capability,
+                true,
+                |pool| {
+                    // `pool.size()` always matches the negotiated
+                    // `effective_threads`, so chunk-level parallelism stays
+                    // disabled after a single-thread pool fallback.
+                    let chunk_parallel = pool.size() > 1;
+                    pool.install(|| {
+                        apply_hdiff13_with_chunk_parallelism_from_reader(
+                            &old_data,
+                            &patch_reader,
+                            patch_len,
+                            &header,
+                            chunk_parallel,
+                        )
+                    })
+                },
+                || {
                     apply_hdiff13_with_chunk_parallelism_from_reader(
                         &old_data,
                         &patch_reader,
                         patch_len,
                         &header,
-                        chunk_parallel,
+                        false,
                     )
-                })?;
-                Ok((output, execution))
-            } else {
-                let output = apply_hdiff13_with_chunk_parallelism_from_reader(
-                    &old_data,
-                    &patch_reader,
-                    patch_len,
-                    &header,
-                    false,
-                )?;
-                Ok((output, planned_execution))
-            }
+                },
+            )?;
+            Ok((output, execution))
         }
         ParsedPatchVariant::SingleStream20(header) => {
             if old_len != header.old_data_size {
@@ -218,37 +226,45 @@ fn render_hdiff_patch_to_memory(
             }
 
             let thread_capability = hdiffsf20_apply_thread_capability(&header);
-            let planned_execution = context.plan_threads(thread_capability.clone());
-            if planned_execution.used_parallelism {
-                let (mut execution, pool) = context.build_pool(thread_capability)?;
-                let step_parallel = execution.used_parallelism;
-                let apply = pool.install(|| {
+            // The serial branch never reports a step-parallelism fallback, so
+            // each branch tags whether the parallel path ran.
+            let (mut execution, (apply, ran_parallel)) = run_with_optional_pool(
+                context,
+                thread_capability,
+                true,
+                |pool| {
+                    // `pool.size()` always matches the negotiated
+                    // `effective_threads`, so step-level parallelism stays
+                    // disabled after a single-thread pool fallback.
+                    let step_parallel = pool.size() > 1;
+                    pool.install(|| {
+                        apply_hdiffsf20_with_step_parallelism_from_reader(
+                            &old_data,
+                            &patch_reader,
+                            patch_len,
+                            &header,
+                            step_parallel,
+                        )
+                    })
+                    .map(|apply| (apply, true))
+                },
+                || {
                     apply_hdiffsf20_with_step_parallelism_from_reader(
                         &old_data,
                         &patch_reader,
                         patch_len,
                         &header,
-                        step_parallel,
+                        false,
                     )
-                })?;
-                if !apply.used_parallelism {
-                    execution.apply_pool_fallback(
-                        "HDIFFSF20 payload had no independent step-level parallel work"
-                            .to_string(),
-                    );
-                }
-                Ok((apply.output, execution))
-            } else {
-                let output = apply_hdiffsf20_with_step_parallelism_from_reader(
-                    &old_data,
-                    &patch_reader,
-                    patch_len,
-                    &header,
-                    false,
-                )?
-                .output;
-                Ok((output, planned_execution))
+                    .map(|apply| (apply, false))
+                },
+            )?;
+            if ran_parallel && !apply.used_parallelism {
+                execution.apply_pool_fallback(
+                    "HDIFFSF20 payload had no independent step-level parallel work".to_string(),
+                );
             }
+            Ok((apply.output, execution))
         }
         ParsedPatchVariant::Directory19(_) => Err(RomWeaverError::Unsupported(
             "HDiffPatch directory patches (HDIFF19) are not supported for patch-apply; expected single-file patch (.hdiff/.hpatchz)".into(),

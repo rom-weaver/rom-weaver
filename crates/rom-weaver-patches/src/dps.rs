@@ -7,7 +7,6 @@ use std::{
 
 use tracing::info;
 
-use rayon::prelude::*;
 use rom_weaver_core::{
     DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES, FormatDescriptor,
     OperationContext, OperationFamily, OperationReport, PatchApplyRequest, PatchCapabilities,
@@ -18,7 +17,10 @@ use rom_weaver_core::{
 
 use crate::checksum_validation_suffix;
 use crate::shared::labels::append_warning_labels;
-use crate::shared::threading::{parallel_chunked_capability, parallel_per_record_capability};
+use crate::shared::threading::{
+    PreparedWrite, apply_prepared_writes, chunk_count_for_len, parallel_chunked_capability,
+    parallel_per_record_capability, pool_map, run_with_optional_pool, scan_create_chunks,
+};
 
 const DPS_TEXT_FIELD_BYTES: usize = 64;
 const DPS_HEADER_BYTES: usize = (DPS_TEXT_FIELD_BYTES * 3) + 1 + 1 + 4;
@@ -140,30 +142,36 @@ impl PatchHandler for DpsPatchHandler {
             .open(&request.output)?;
         output.set_len(parsed.output_size)?;
         let thread_capability = parallel_per_record_capability(parsed.records.len());
-        let planned_execution = context.plan_threads(thread_capability.clone());
-        let execution = if planned_execution.used_parallelism {
-            let (execution, pool) = context.build_pool(thread_capability)?;
-            let prepared = prepare_dps_writes_parallel(
-                &parsed.records,
-                &request.input,
-                source_len,
-                output_len,
-                &pool,
-                context,
-            )?;
-            apply_prepared_dps_writes(&mut output, &prepared)?;
-            execution
-        } else {
-            let mut source = File::open(&request.input)?;
-            apply_dps_records_in_place(
-                &parsed.records,
-                source_len,
-                output_len,
-                &mut source,
-                &mut output,
-            )?;
-            planned_execution
-        };
+        let (execution, prepared) = run_with_optional_pool(
+            context,
+            thread_capability,
+            true,
+            |pool| {
+                prepare_dps_writes_parallel(
+                    &parsed.records,
+                    &request.input,
+                    source_len,
+                    output_len,
+                    pool,
+                    context,
+                )
+                .map(Some)
+            },
+            || {
+                let mut source = File::open(&request.input)?;
+                apply_dps_records_in_place(
+                    &parsed.records,
+                    source_len,
+                    output_len,
+                    &mut source,
+                    &mut output,
+                )?;
+                Ok(None)
+            },
+        )?;
+        if let Some(prepared) = prepared {
+            apply_prepared_writes(&mut output, &prepared)?;
+        }
         output.flush()?;
 
         let checksum_suffix = checksum_validation_suffix(validate_source_size);
@@ -903,15 +911,7 @@ fn collect_dps_records_parallel(
     }
 
     let chunk_size = CREATE_THREAD_SCAN_CHUNK_BYTES as u64;
-    let chunk_ranges = (0..target_len)
-        .step_by(CREATE_THREAD_SCAN_CHUNK_BYTES)
-        .map(|start| {
-            let end = start.saturating_add(chunk_size).min(target_len);
-            start..end
-        })
-        .collect::<Vec<_>>();
-
-    let per_chunk = if crate::patches_reads_source_on_main_thread() {
+    if crate::patches_reads_source_on_main_thread() {
         let combined = source_len.saturating_add(target_len);
         if combined > crate::IN_MEMORY_APPLY_LIMIT_BYTES {
             info!(
@@ -922,43 +922,41 @@ fn collect_dps_records_parallel(
             let records = create_dps_records_streaming(source_path, target_path)?;
             return Ok(records);
         }
-        let buffered = chunk_ranges
-            .iter()
-            .map(|range| {
-                crate::read_original_modified_chunk(
-                    source_path,
-                    source_len,
-                    target_path,
-                    range.start,
-                    range.end,
-                )
-            })
-            .collect::<Result<Vec<_>>>()?;
-        pool.install(|| {
-            buffered
-                .into_par_iter()
-                .zip(chunk_ranges.into_par_iter())
-                .map(|((source_bytes, target_bytes), range)| {
-                    collect_dps_chunk_records_from_bytes(range.start, &source_bytes, &target_bytes)
-                })
-                .collect::<Vec<_>>()
-        })
-    } else {
-        pool.install(|| {
-            chunk_ranges
-                .into_par_iter()
-                .map(|range| {
-                    collect_dps_chunk_records(
-                        source_path,
-                        source_len,
-                        target_path,
-                        range.start,
-                        range.end,
-                    )
-                })
-                .collect::<Vec<_>>()
-        })
-    };
+    }
+
+    // Each chunk scan is wrapped in `Ok(...)` so the shared fail-fast collect
+    // never engages: DPS keeps collecting every chunk and surfaces scan
+    // errors in chunk order from the merge loop below, exactly as before.
+    let per_chunk = scan_create_chunks(
+        crate::PatchCreateSources {
+            original_path: source_path,
+            original_len: source_len,
+            modified_path: target_path,
+            modified_len: target_len,
+        },
+        target_len,
+        chunk_size,
+        chunk_count_for_len(target_len, chunk_size),
+        pool,
+        |start, source_bytes, target_bytes| {
+            Ok(collect_dps_chunk_records_from_bytes(
+                start,
+                source_bytes,
+                target_bytes,
+            ))
+        },
+        |chunk_index| {
+            let start = chunk_index as u64 * chunk_size;
+            let end = start.saturating_add(chunk_size).min(target_len);
+            Ok(collect_dps_chunk_records(
+                source_path,
+                source_len,
+                target_path,
+                start,
+                end,
+            ))
+        },
+    )?;
 
     let mut merged = Vec::<DpsRecord>::new();
     for records in per_chunk {
@@ -1257,11 +1255,6 @@ fn copy_range_between_files(
     Ok(())
 }
 
-struct PreparedDpsWrite {
-    output_offset: u64,
-    data: Vec<u8>,
-}
-
 fn apply_dps_records_in_place(
     records: &[ParsedDpsRecord],
     source_len: usize,
@@ -1315,20 +1308,15 @@ fn prepare_dps_writes_parallel(
     output_len: usize,
     pool: &SharedThreadPool,
     context: &OperationContext,
-) -> Result<Vec<PreparedDpsWrite>> {
+) -> Result<Vec<PreparedWrite>> {
     let shared_source = Arc::new(SharedBlockCacheReader::open(
         source_path,
         DEFAULT_BLOCK_CACHE_SIZE_BYTES,
         DEFAULT_BLOCK_CACHE_MAX_BLOCKS,
     )?);
-    pool.install(|| {
-        records
-            .par_iter()
-            .map(|record| {
-                context.cancel().check()?;
-                prepare_dps_write(record, source_len, output_len, &shared_source)
-            })
-            .collect::<Result<Vec<_>>>()
+    pool_map(pool, records, |record| {
+        context.cancel().check()?;
+        prepare_dps_write(record, source_len, output_len, &shared_source)
     })
 }
 
@@ -1337,7 +1325,7 @@ fn prepare_dps_write(
     source_len: usize,
     output_len: usize,
     source: &Arc<SharedBlockCacheReader>,
-) -> Result<PreparedDpsWrite> {
+) -> Result<PreparedWrite> {
     match record {
         ParsedDpsRecord::CopyFromSource {
             output_offset,
@@ -1353,8 +1341,8 @@ fn prepare_dps_write(
             if !bytes.is_empty() {
                 source.read_exact_at(source_start as u64, &mut bytes)?;
             }
-            Ok(PreparedDpsWrite {
-                output_offset: output_start as u64,
+            Ok(PreparedWrite {
+                offset: output_start as u64,
                 data: bytes,
             })
         }
@@ -1369,8 +1357,8 @@ fn prepare_dps_write(
             })?;
             let (output_start, output_end) =
                 checked_range(*output_offset, data_len, output_len, "DPS output write")?;
-            Ok(PreparedDpsWrite {
-                output_offset: output_start as u64,
+            Ok(PreparedWrite {
+                offset: output_start as u64,
                 data: data[..output_end - output_start].to_vec(),
             })
         }
@@ -1404,17 +1392,6 @@ fn validate_dps_record_ranges(
                 let _ = checked_range(*output_offset, data_len, output_len, "DPS output write")?;
             }
         }
-    }
-    Ok(())
-}
-
-fn apply_prepared_dps_writes(output: &mut File, writes: &[PreparedDpsWrite]) -> Result<()> {
-    for write in writes {
-        if write.data.is_empty() {
-            continue;
-        }
-        output.seek(SeekFrom::Start(write.output_offset))?;
-        output.write_all(&write.data)?;
     }
     Ok(())
 }

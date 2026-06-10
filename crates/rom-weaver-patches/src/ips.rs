@@ -1,4 +1,5 @@
 use std::{
+    cell::RefCell,
     cmp::{max, min},
     fs::{self, File},
     io::{BufReader, Read, Seek, SeekFrom, Write},
@@ -15,7 +16,9 @@ use rom_weaver_core::{
 use serde_json::{Map as JsonMap, Value as JsonValue};
 
 use crate::shared::labels::append_warning_labels;
-use crate::shared::threading::chunk_count_for_len_checked;
+use crate::shared::threading::{
+    chunk_count_for_len_checked, run_with_optional_pool, scan_create_chunks,
+};
 
 const IPS_MAGIC: &[u8; 5] = b"PATCH";
 const IPS_EOF: &[u8; 3] = b"EOF";
@@ -134,30 +137,32 @@ impl PatchHandler for IpsPatchHandler {
         let output_size = patch.resolved_output_size(input_len);
         let max_parallel_chunks = max_parallel_chunks(output_size)?;
         let thread_capability = ThreadCapability::parallel(Some(max_parallel_chunks));
-        let planned_execution = context.plan_threads(thread_capability.clone());
         let tasks = build_chunk_tasks(&patch, output_size, context)?;
 
-        let (execution, render_result) = if planned_execution.used_parallelism
-            && !crate::patches_reads_source_on_main_thread()
-        {
-            let (execution, pool) = context.build_pool(thread_capability)?;
-            let render_result = pool.install(|| {
+        let render_result = run_with_optional_pool(
+            context,
+            thread_capability,
+            !crate::patches_reads_source_on_main_thread(),
+            |pool| {
+                pool.install(|| {
+                    tasks
+                        .par_iter()
+                        .map(|task| {
+                            render_chunk_task(task, &request.input, input_len, &patch, context)
+                        })
+                        .collect::<Result<Vec<_>>>()
+                })
+            },
+            || {
                 tasks
-                    .par_iter()
+                    .iter()
                     .map(|task| render_chunk_task(task, &request.input, input_len, &patch, context))
                     .collect::<Result<Vec<_>>>()
-            });
-            (execution, render_result)
-        } else {
-            let render_result = tasks
-                .iter()
-                .map(|task| render_chunk_task(task, &request.input, input_len, &patch, context))
-                .collect::<Result<Vec<_>>>();
-            (planned_execution, render_result)
-        };
+            },
+        );
 
-        let rendered_chunks_changed = match render_result {
-            Ok(changed) => changed.into_iter().any(|changed| changed),
+        let (execution, rendered_chunks_changed) = match render_result {
+            Ok((execution, changed)) => (execution, changed.into_iter().any(|changed| changed)),
             Err(error) => {
                 cleanup_chunk_files(&tasks);
                 return Err(error);
@@ -200,37 +205,41 @@ impl PatchHandler for IpsPatchHandler {
             context.patch_checksum_validation(),
         )?;
         let thread_capability = ips_create_thread_capability(modified_len)?;
-        let planned_execution = context.plan_threads(thread_capability.clone());
 
-        let mut output = crate::create_buffered_output(&request.output)?;
-        let (execution, create_result) = if planned_execution.used_parallelism {
-            let (execution, pool) = context.build_pool(thread_capability)?;
-            let create_result = create_ips_patch_parallel(
-                crate::PatchCreateSources {
-                    original_path: &request.original,
+        // Both branches stream into the same writer, so it lives in a RefCell
+        // that whichever closure runs borrows for the duration of the create.
+        let output = RefCell::new(crate::create_buffered_output(&request.output)?);
+        let (execution, create_result) = run_with_optional_pool(
+            context,
+            thread_capability,
+            true,
+            |pool| {
+                create_ips_patch_parallel(
+                    crate::PatchCreateSources {
+                        original_path: &request.original,
+                        original_len,
+                        modified_path: &request.modified,
+                        modified_len,
+                    },
+                    pool,
+                    &mut *output.borrow_mut(),
+                    context,
+                    self.flavor,
+                )
+            },
+            || {
+                create_ips_patch_streaming(
+                    &request.original,
                     original_len,
-                    modified_path: &request.modified,
+                    &request.modified,
                     modified_len,
-                },
-                &pool,
-                &mut output,
-                context,
-                self.flavor,
-            )?;
-            (execution, create_result)
-        } else {
-            let create_result = create_ips_patch_streaming(
-                &request.original,
-                original_len,
-                &request.modified,
-                modified_len,
-                &mut output,
-                context,
-                self.flavor,
-            )?;
-            (planned_execution, create_result)
-        };
-        output.flush()?;
+                    &mut *output.borrow_mut(),
+                    context,
+                    self.flavor,
+                )
+            },
+        )?;
+        output.into_inner().flush()?;
         let warnings = ips_create_warning_labels(
             self.descriptor.name,
             original_len,
@@ -802,59 +811,29 @@ fn create_ips_patch_parallel(
             flavor,
         );
     }
-    if crate::patches_reads_source_on_main_thread() {
-        let chunk_count = ips_create_chunk_count(modified_len)?;
-        let chunk_pairs = (0..chunk_count)
-            .map(|chunk_index| {
-                let start = (chunk_index as u64) * (CREATE_SCAN_CHUNK_BYTES as u64);
-                let end = start
-                    .saturating_add(CREATE_SCAN_CHUNK_BYTES as u64)
-                    .min(modified_len);
-                crate::read_original_modified_chunk(
-                    original_path,
-                    original_len,
-                    modified_path,
-                    start,
-                    end,
-                )
-            })
-            .collect::<Result<Vec<_>>>()?;
-        let chunk_runs = pool.install(|| {
-            chunk_pairs
-                .into_par_iter()
-                .enumerate()
-                .map(|(chunk_index, (original_bytes, modified_bytes))| {
-                    let start = (chunk_index as u64) * (CREATE_SCAN_CHUNK_BYTES as u64);
-                    collect_ips_diff_runs_from_bytes(
-                        start,
-                        &original_bytes,
-                        &modified_bytes,
-                        original_len,
-                    )
-                })
-                .collect::<Result<Vec<_>>>()
-        })?;
-        let runs = merge_ips_diff_runs(chunk_runs)?;
-        let runs = coalesce_ips_diff_runs(runs, modified_path, flavor)?;
-        return write_ips_runs_to_output(runs, original_len, modified_len, output, flavor);
-    }
-
     let chunk_count = ips_create_chunk_count(modified_len)?;
-    let chunk_runs = pool.install(|| {
-        (0..chunk_count)
-            .into_par_iter()
-            .map(|chunk_index| {
-                context.cancel().check()?;
-                collect_ips_diff_runs_for_chunk(
-                    chunk_index,
-                    original_path,
-                    original_len,
-                    modified_path,
-                    modified_len,
-                )
-            })
-            .collect::<Result<Vec<_>>>()
-    })?;
+    let chunk_runs = scan_create_chunks(
+        sources,
+        modified_len,
+        CREATE_SCAN_CHUNK_BYTES as u64,
+        chunk_count,
+        pool,
+        // NOTE: the buffered scan deliberately has no cancel check (and the
+        // by-index scan deliberately has one), matching the previous code.
+        |start, original_bytes, modified_bytes| {
+            collect_ips_diff_runs_from_bytes(start, original_bytes, modified_bytes, original_len)
+        },
+        |chunk_index| {
+            context.cancel().check()?;
+            collect_ips_diff_runs_for_chunk(
+                chunk_index,
+                original_path,
+                original_len,
+                modified_path,
+                modified_len,
+            )
+        },
+    )?;
     let runs = merge_ips_diff_runs(chunk_runs)?;
     let runs = coalesce_ips_diff_runs(runs, modified_path, flavor)?;
     write_ips_runs_to_output(runs, original_len, modified_len, output, flavor)

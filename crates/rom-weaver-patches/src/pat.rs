@@ -16,6 +16,7 @@ use rom_weaver_core::{
 
 use crate::shared::threading::{
     chunk_count_for_len, parallel_chunked_capability, parallel_per_record_capability,
+    scan_create_chunks,
 };
 
 const PAT_LINE_MAX_BYTES: usize = 4 * 1024;
@@ -552,49 +553,29 @@ fn create_pat_patch_parallel(
     }
 
     let chunk_count = pat_create_chunk_count(original_len);
-    let per_chunk_records = if crate::patches_reads_source_on_main_thread() {
-        let chunk_size = CREATE_THREAD_SCAN_CHUNK_BYTES as u64;
-        let chunk_starts: Vec<u64> = (0..chunk_count as u64)
-            .map(|i| i * chunk_size)
-            .filter(|&s| s < original_len)
-            .collect();
-        let buffered = chunk_starts
-            .iter()
-            .map(|&start| {
-                let end = start.saturating_add(chunk_size).min(original_len);
-                crate::read_original_modified_chunk(
-                    original_path,
-                    original_len,
-                    modified_path,
-                    start,
-                    end,
-                )
-            })
-            .collect::<Result<Vec<_>>>()?;
-        pool.install(|| {
-            buffered
-                .into_par_iter()
-                .zip(chunk_starts.into_par_iter())
-                .map(|((original_bytes, modified_bytes), start)| {
-                    collect_pat_chunk_records_from_bytes(start, &original_bytes, &modified_bytes)
-                })
-                .collect::<Result<Vec<_>>>()
-        })?
-    } else {
-        pool.install(|| {
-            (0..chunk_count)
-                .into_par_iter()
-                .map(|chunk_index| {
-                    collect_pat_chunk_records_for_chunk(
-                        chunk_index,
-                        original_path,
-                        modified_path,
-                        original_len,
-                    )
-                })
-                .collect::<Result<Vec<_>>>()
-        })?
-    };
+    let per_chunk_records = scan_create_chunks(
+        crate::PatchCreateSources {
+            original_path,
+            original_len,
+            modified_path,
+            modified_len,
+        },
+        original_len,
+        CREATE_THREAD_SCAN_CHUNK_BYTES as u64,
+        chunk_count,
+        pool,
+        |start, original_bytes, modified_bytes| {
+            collect_pat_chunk_records_from_bytes(start, original_bytes, modified_bytes)
+        },
+        |chunk_index| {
+            collect_pat_chunk_records_for_chunk(
+                chunk_index,
+                original_path,
+                modified_path,
+                original_len,
+            )
+        },
+    )?;
 
     let mut records = Vec::new();
     for mut chunk_records in per_chunk_records {
