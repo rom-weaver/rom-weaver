@@ -102,7 +102,7 @@ jobs:
         run: mise run test-rust
 
       - name: WASM build
-        run: mise run build-wasm
+        run: mise run build-wasm-prod
 
       - name: rom-weaver-wasm checks
         run: |

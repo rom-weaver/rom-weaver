@@ -563,30 +563,9 @@ pub(crate) fn with_header(bytes: &[u8]) -> Vec<u8> {
     headered
 }
 
-pub(crate) fn with_a78_header(bytes: &[u8]) -> Vec<u8> {
-    let mut headered = vec![0u8; 128];
-    headered[1..10].copy_from_slice(b"ATARI7800");
-    headered.extend_from_slice(bytes);
-    headered
-}
-
-pub(crate) fn with_lnx_header(bytes: &[u8]) -> Vec<u8> {
-    let mut headered = vec![0u8; 64];
-    headered[..4].copy_from_slice(b"LYNX");
-    headered.extend_from_slice(bytes);
-    headered
-}
-
 pub(crate) fn with_nes_header(bytes: &[u8]) -> Vec<u8> {
     let mut headered = vec![0u8; 16];
     headered[..4].copy_from_slice(b"NES\x1A");
-    headered.extend_from_slice(bytes);
-    headered
-}
-
-pub(crate) fn with_fds_header(bytes: &[u8]) -> Vec<u8> {
-    let mut headered = vec![0u8; 16];
-    headered[..3].copy_from_slice(b"FDS");
     headered.extend_from_slice(bytes);
     headered
 }

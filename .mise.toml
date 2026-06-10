@@ -4,7 +4,7 @@
 # The static threaded rustflags live in .cargo/config.toml; the SDK-relative
 # toolchain wiring lives in [env] below; orchestration lives in [tasks.*].
 #
-# Run `mise tasks` to list, `mise run build-wasm` to build the browser/app module.
+# Run `mise tasks` to list, `mise run build-wasm` for dev, `mise run build-wasm-prod` for CI/release.
 
 [tools]
 # Pinned toolchain. mise installs these on activation (and in CI via mise-action),
@@ -17,6 +17,7 @@
 #     It stays sourced via scripts/wasm/detect-wasi-sdk.sh (local) / the CI
 #     download step, neither of which shadows the host clang on PATH.
 #   - brotli: publishes no macOS/Linux release binaries (install via OS package).
+#   - sccache: install via OS package (brew install sccache / apt install sccache).
 #   - twiggy: no binary releases (`cargo install` when needed for size analysis).
 node = "26.2.0"
 rust = "1.95.0"
@@ -55,6 +56,12 @@ RANLIB_wasm32_wasip1_threads = "{{ env.WASI_RANLIB }}"
 CFLAGS_wasm32_wasip1_threads = "-matomics -mbulk-memory -msimd128"
 CXXFLAGS_wasm32_wasip1_threads = "-matomics -mbulk-memory -msimd128"
 
+# sccache: cache rustc invocations across builds and worktrees (install separately, see [tools] note).
+# CARGO_INCREMENTAL=0 because sccache caches at the rustc level; cargo's own incremental artifacts
+# are incompatible with it and would silently bypass the cache.
+RUSTC_WRAPPER = "sccache"
+CARGO_INCREMENTAL = "0"
+
 # --- Tasks ----------------------------------------------------------------
 
 [tasks.wasm-check]
@@ -62,7 +69,43 @@ description = "Type-check the threaded WASM target (containers lib)"
 run = "cargo check -p rom-weaver-containers --target wasm32-wasip1-threads --lib"
 
 [tasks.build-wasm]
-description = "Build, optimize, and compress the threaded WASM app module"
+description = "Build the threaded WASM app module (fast local dev build, no wasm-opt/brotli)"
+# Release C builds add -O3 -flto on top of the lean check-time CFLAGS above.
+env.CFLAGS_wasm32_wasip1 = "-msimd128 -O3 -flto"
+env.CXXFLAGS_wasm32_wasip1 = "-msimd128 -O3 -flto"
+env.CFLAGS_wasm32_wasip1_threads = "-matomics -mbulk-memory -msimd128 -O3 -flto"
+env.CXXFLAGS_wasm32_wasip1_threads = "-matomics -mbulk-memory -msimd128 -O3 -flto"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+
+target="wasm32-wasip1-threads"
+out_dir="${ROM_WEAVER_WASM_OUT_DIR:-$MISE_PROJECT_ROOT/packages/rom-weaver-wasm}"
+pkg_dir="$MISE_PROJECT_ROOT/packages/rom-weaver-wasm"
+artifact="$out_dir/rom-weaver-app.wasm"
+
+command -v cargo >/dev/null || { echo "missing command: cargo" >&2; exit 1; }
+[[ -x "$WASI_CLANG" ]] || { echo "missing WASI toolchain: $WASI_CLANG (install WASI SDK)" >&2; exit 1; }
+[[ -d "$WASI_SYSROOT" ]] || { echo "missing WASI sysroot: $WASI_SYSROOT" >&2; exit 1; }
+
+mkdir -p "$out_dir"
+
+echo "building $target -> $artifact"
+cargo build -p rom-weaver-app --bin rom-weaver-app --profile wasm-release --target "$target"
+cp "$MISE_PROJECT_ROOT/target/$target/wasm-release/rom-weaver-app.wasm" "$artifact"
+
+"$WASI_STRIP" "$artifact"
+
+# Sync into the npm package only when built to a separate output directory.
+if [[ "$out_dir" != "$pkg_dir" ]]; then
+  node "$pkg_dir/scripts/sync-dist.mjs" "$out_dir"
+fi
+
+echo "artifact written to $out_dir/rom-weaver-app.wasm"
+'''
+
+[tasks.build-wasm-prod]
+description = "Build the threaded WASM app module with wasm-opt and brotli (CI/release)"
 # Release C builds add -O3 -flto on top of the lean check-time CFLAGS above.
 env.CFLAGS_wasm32_wasip1 = "-msimd128 -O3 -flto"
 env.CXXFLAGS_wasm32_wasip1 = "-msimd128 -O3 -flto"
@@ -88,14 +131,13 @@ echo "building $target -> $artifact"
 cargo build -p rom-weaver-app --bin rom-weaver-app --profile wasm-release --target "$target"
 cp "$MISE_PROJECT_ROOT/target/$target/wasm-release/rom-weaver-app.wasm" "$artifact"
 
-if command -v wasm-opt >/dev/null; then
-  wasm-opt -O4 --strip-debug --strip-dwarf \
-    --enable-bulk-memory --enable-bulk-memory-opt --enable-mutable-globals \
-    --enable-nontrapping-float-to-int --enable-sign-ext --enable-reference-types \
-    --enable-simd --enable-threads \
-    -o "$artifact.opt" "$artifact"
-  mv "$artifact.opt" "$artifact"
-fi
+command -v wasm-opt >/dev/null || { echo "missing command: wasm-opt (install via mise or brew install binaryen)" >&2; exit 1; }
+wasm-opt -O4 --strip-debug --strip-dwarf \
+  --enable-bulk-memory --enable-bulk-memory-opt --enable-mutable-globals \
+  --enable-nontrapping-float-to-int --enable-sign-ext --enable-reference-types \
+  --enable-simd --enable-threads \
+  -o "$artifact.opt" "$artifact"
+mv "$artifact.opt" "$artifact"
 
 "$WASI_STRIP" "$artifact"
 brotli --force --quality="${BROTLI_QUALITY:-11}" --output="$artifact.br" "$artifact"
@@ -161,7 +203,7 @@ run = "npm --prefix packages/rom-weaver-react run dev --"
 
 [tasks.ci]
 description = "Run the full local quality gate (mirrors CI)"
-depends = ["fmt", "clippy", "typegen-check", "wasm-check", "thread-guards", "test-rust", "build-wasm"]
+depends = ["fmt", "clippy", "typegen-check", "wasm-check", "thread-guards", "test-rust", "build-wasm-prod"]
 run = '''
 #!/usr/bin/env bash
 set -euo pipefail
