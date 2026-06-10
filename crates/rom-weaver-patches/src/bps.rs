@@ -8,7 +8,6 @@ use std::{
 
 use crc32fast::Hasher;
 use rayon::prelude::*;
-use rom_weaver_checksum::checksum_file_values;
 #[cfg(test)]
 use rom_weaver_checksum::crc32_bytes;
 use rom_weaver_core::{
@@ -20,6 +19,10 @@ use rom_weaver_core::{
 };
 use serde_json::json;
 use suffix_array::SuffixArray;
+
+#[cfg(test)]
+use crate::varint::push_varint;
+use crate::shared::checksum_io::{crc32_path_cached, crc32_prefix, crc32_slice, read_u32_le};
 
 const BPS_MAGIC: &[u8; 4] = b"BPS1";
 const BPS_FOOTER_SIZE: usize = 12;
@@ -359,7 +362,12 @@ fn parse_bps_file_with_checksum_validation(
     let target_checksum = read_u32_le(&footer[4..8]);
     let patch_checksum = read_u32_le(&footer[8..12]);
     if validate_patch_checksum {
-        let actual_patch_checksum = crc32_prefix(path, file_len - 4)?;
+        let actual_patch_checksum = crc32_prefix(
+            path,
+            file_len - 4,
+            COPY_BUFFER_SIZE,
+            "BPS checksum chunk exceeded usize",
+        )?;
         if actual_patch_checksum != patch_checksum {
             return Err(RomWeaverError::Validation(format!(
                 "Patch checksum invalid; expected: {patch_checksum:x}, Actual: {actual_patch_checksum:x}"
@@ -1547,12 +1555,6 @@ fn repeated_byte_run_len(bytes: &[u8], offset: usize) -> usize {
     len
 }
 
-fn crc32_slice(bytes: &[u8]) -> u32 {
-    let mut hasher = Hasher::new();
-    hasher.update(bytes);
-    hasher.finalize()
-}
-
 fn bps_apply_thread_capability(actions: &[BpsAction]) -> ThreadCapability {
     if patch_contains_target_copy(actions) {
         ThreadCapability::single_threaded()
@@ -1884,50 +1886,8 @@ fn decode_signed_offset(raw: u64) -> i128 {
     if raw & 1 != 0 { -magnitude } else { magnitude }
 }
 
-fn read_u32_le(bytes: &[u8]) -> u32 {
-    u32::from_le_bytes(bytes.try_into().expect("u32 slice"))
-}
-
-fn crc32_path_cached(path: &Path, context: &OperationContext) -> Result<u32> {
-    let results = checksum_file_values(path, &["crc32"], context)?;
-    let Some(value) = results.get("crc32") else {
-        return Err(RomWeaverError::Validation(
-            "native checksum engine did not return crc32 result".into(),
-        ));
-    };
-    u32::from_str_radix(value, 16).map_err(|error| {
-        RomWeaverError::Validation(format!(
-            "native checksum engine returned invalid crc32: {error}"
-        ))
-    })
-}
-
 fn read_bps_footer(path: &Path, footer_offset: u64) -> Result<[u8; BPS_FOOTER_SIZE]> {
-    let mut footer = [0u8; BPS_FOOTER_SIZE];
-    let mut file = File::open(path)?;
-    file.seek(SeekFrom::Start(footer_offset))?;
-    file.read_exact(&mut footer)?;
-    Ok(footer)
-}
-
-fn crc32_prefix(path: &Path, len: u64) -> Result<u32> {
-    let mut file = BufReader::new(File::open(path)?);
-    let mut hasher = Hasher::new();
-    let mut remaining = len;
-    let mut buffer = [0u8; COPY_BUFFER_SIZE];
-    while remaining > 0 {
-        let chunk_len = usize::try_from(remaining.min(buffer.len() as u64))
-            .map_err(|_| RomWeaverError::Validation("BPS checksum chunk exceeded usize".into()))?;
-        file.read_exact(&mut buffer[..chunk_len])?;
-        hasher.update(&buffer[..chunk_len]);
-        remaining -= chunk_len as u64;
-    }
-    Ok(hasher.finalize())
-}
-
-#[cfg(test)]
-fn push_varint(bytes: &mut Vec<u8>, data: u64) {
-    crate::varint::push_varint(bytes, data);
+    crate::shared::checksum_io::read_footer(path, footer_offset)
 }
 
 struct BpsCreateWriter<'a, W> {

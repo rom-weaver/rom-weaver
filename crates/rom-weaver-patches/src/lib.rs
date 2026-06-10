@@ -15,6 +15,7 @@ mod pmsr;
 mod ppf;
 mod qbsdiff_support;
 mod rup;
+mod shared;
 mod solid;
 #[cfg(test)]
 mod test_support;

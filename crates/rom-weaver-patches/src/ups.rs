@@ -10,7 +10,7 @@ use tracing::info;
 
 use crc32fast::Hasher;
 use rayon::prelude::*;
-use rom_weaver_checksum::{checksum_file_values, crc32_bytes};
+use rom_weaver_checksum::crc32_bytes;
 use rom_weaver_core::{
     DEFAULT_BLOCK_CACHE_MAX_BLOCKS, DEFAULT_BLOCK_CACHE_SIZE_BYTES, FormatDescriptor,
     OperationContext, OperationFamily, OperationReport, PatchApplyRequest, PatchCapabilities,
@@ -18,6 +18,9 @@ use rom_weaver_core::{
     RomWeaverError, SharedBlockCacheReader, SharedThreadPool, ThreadCapability,
 };
 use serde_json::json;
+
+use crate::shared::checksum_io::{crc32_path_cached, crc32_prefix, read_u32_le};
+use crate::varint::push_varint;
 
 const UPS_MAGIC: &[u8; 4] = b"UPS1";
 const UPS_FOOTER_SIZE: usize = 12;
@@ -276,7 +279,12 @@ fn parse_ups_file_with_checksum_validation(
     let target_checksum = read_u32_le(&footer[4..8]);
     let patch_checksum = read_u32_le(&footer[8..12]);
     if validate_patch_checksum {
-        let actual_patch_checksum = crc32_prefix(path, file_len - 4)?;
+        let actual_patch_checksum = crc32_prefix(
+            path,
+            file_len - 4,
+            UPS_IO_BUFFER_SIZE,
+            "UPS checksum chunk exceeded usize",
+        )?;
         if actual_patch_checksum != patch_checksum {
             return Err(RomWeaverError::Validation(format!(
                 "Patch checksum invalid; expected: {patch_checksum:08x}, Actual: {actual_patch_checksum:08x}"
@@ -1072,51 +1080,8 @@ fn checked_add_usize(lhs: usize, rhs: usize, label: &str) -> Result<usize> {
         .ok_or_else(|| RomWeaverError::Validation(format!("{label} overflowed")))
 }
 
-fn read_u32_le(bytes: &[u8]) -> u32 {
-    let mut value = [0u8; 4];
-    value.copy_from_slice(bytes);
-    u32::from_le_bytes(value)
-}
-
-fn push_varint(bytes: &mut Vec<u8>, data: u64) {
-    crate::varint::push_varint(bytes, data);
-}
-
-fn crc32_path_cached(path: &Path, context: &OperationContext) -> Result<u32> {
-    let results = checksum_file_values(path, &["crc32"], context)?;
-    let Some(value) = results.get("crc32") else {
-        return Err(RomWeaverError::Validation(
-            "native checksum engine did not return crc32 result".into(),
-        ));
-    };
-    u32::from_str_radix(value, 16).map_err(|error| {
-        RomWeaverError::Validation(format!(
-            "native checksum engine returned invalid crc32: {error}"
-        ))
-    })
-}
-
 fn read_ups_footer(path: &Path, footer_offset: u64) -> Result<[u8; UPS_FOOTER_SIZE]> {
-    let mut footer = [0u8; UPS_FOOTER_SIZE];
-    let mut file = File::open(path)?;
-    file.seek(SeekFrom::Start(footer_offset))?;
-    file.read_exact(&mut footer)?;
-    Ok(footer)
-}
-
-fn crc32_prefix(path: &Path, len: u64) -> Result<u32> {
-    let mut file = BufReader::new(File::open(path)?);
-    let mut hasher = Hasher::new();
-    let mut remaining = len;
-    let mut buffer = [0u8; UPS_IO_BUFFER_SIZE];
-    while remaining > 0 {
-        let chunk_len = usize::try_from(remaining.min(buffer.len() as u64))
-            .map_err(|_| RomWeaverError::Validation("UPS checksum chunk exceeded usize".into()))?;
-        file.read_exact(&mut buffer[..chunk_len])?;
-        hasher.update(&buffer[..chunk_len]);
-        remaining -= chunk_len as u64;
-    }
-    Ok(hasher.finalize())
+    crate::shared::checksum_io::read_footer(path, footer_offset)
 }
 
 #[cfg(test)]
