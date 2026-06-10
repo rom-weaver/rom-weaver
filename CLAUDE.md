@@ -53,7 +53,11 @@ paths; CI runs all of it unconditionally plus the full test suites.
 Fresh worktrees need `scripts/setup-worktree.sh` (mirrors node_modules) and
 `vendor/*` symlinked from the main checkout. Don't share the main checkout's
 `target/` for wasm builds — cmake-built C deps (libarchive) break; use a fresh
-target dir.
+target dir. To run browser tests from a worktree, replace the mirrored
+node_modules with a real `npm ci` in that package first — the symlink mirror
+silently stalls vitest's browser mode — and copy `rom-weaver-app.wasm`
+from the main checkout into the wasm package dir. Never put `/` or `+`
+in a worktree name (vitest browser mode hangs on `+` in test paths).
 
 ## Tests
 

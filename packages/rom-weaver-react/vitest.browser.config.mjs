@@ -1,10 +1,27 @@
 import { Buffer } from "node:buffer";
+import { execSync } from "node:child_process";
+import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { playwright } from "@vitest/browser-playwright";
 import { mergeConfig } from "vitest/config";
 import baseConfig from "./vitest.config.base.mjs";
 
 const REPO_ROOT = fileURLToPath(new URL("../..", import.meta.url));
+// In a git worktree, node_modules entries are symlinks into the main checkout
+// (scripts/setup-worktree.sh); vite checks real paths against fs.allow and
+// 403s them, silently hanging browser tests, unless the main root is allowed.
+const GIT_COMMON_ROOT = (() => {
+  try {
+    const commonDir = execSync("git rev-parse --path-format=absolute --git-common-dir", {
+      cwd: REPO_ROOT,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    return dirname(commonDir);
+  } catch {
+    return REPO_ROOT;
+  }
+})();
 const VIRTUAL_PWA_REGISTER_STUB = fileURLToPath(
   new URL("./tests/browser/stubs/virtual-pwa-register.js", import.meta.url),
 );
@@ -74,7 +91,7 @@ export default mergeConfig(baseConfig, {
   },
   server: {
     fs: {
-      allow: [REPO_ROOT],
+      allow: [...new Set([REPO_ROOT, GIT_COMMON_ROOT])],
     },
     headers: {
       "Cross-Origin-Embedder-Policy": "require-corp",
