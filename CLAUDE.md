@@ -13,7 +13,7 @@ cargo run -p rom-weaver-typegen -- --write         # regen TS types (REQUIRED af
 scripts/build-wasm-cli.sh                          # wasm build (needs WASI SDK v33+)
 npm --prefix packages/rom-weaver-react run dev     # webapp dev server
 npm --prefix packages/rom-weaver-react run lint    # biome + tsc + browser-compat + knip
-npm --prefix packages/rom-weaver-wasm run check    # wasm package lint + types + tests
+npm --prefix packages/rom-weaver-react run test:browser:wasm  # wasm-layer browser tests
 ```
 
 Pre-commit hooks (lefthook) run fmt/clippy/typegen/biome/tsc scoped to changed
@@ -43,21 +43,19 @@ paths; CI runs all of it unconditionally plus the full test suites.
 - Format handler registries: `crates/rom-weaver-containers`,
   `crates/rom-weaver-patches`
 - Browser wasm runtime (OPFS, thread pool, worker client):
-  `packages/rom-weaver-wasm/src`
+  `packages/rom-weaver-react/src/wasm`
 - Webapp workflows/forms: `packages/rom-weaver-react/src`
 - Vendored forks: `vendor/` (`nod` is a submodule — push to the fork remote,
   not upstream)
 
 ## Worktrees
 
-Fresh worktrees need `scripts/setup-worktree.sh` (mirrors node_modules) and
-`vendor/*` symlinked from the main checkout. Don't share the main checkout's
-`target/` for wasm builds — cmake-built C deps (libarchive) break; use a fresh
-target dir. To run browser tests from a worktree, replace the mirrored
-node_modules with a real `npm ci` in that package first — the symlink mirror
-silently stalls vitest's browser mode — and copy `rom-weaver-app.wasm`
-from the main checkout into the wasm package dir. Never put `/` or `+`
-in a worktree name (vitest browser mode hangs on `+` in test paths).
+Fresh worktrees need `scripts/setup-worktree.sh` (real `npm ci` installs +
+wasm artifact copy — symlink-mirrored node_modules silently stall vitest's
+browser mode) and `vendor/*` symlinked from the main checkout. Don't share the
+main checkout's `target/` for wasm builds — cmake-built C deps (libarchive)
+break; use a fresh target dir. Never put `/` or `+` in a worktree name (vitest
+browser mode hangs on `+` in test paths).
 
 ## Tests
 

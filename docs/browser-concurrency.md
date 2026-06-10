@@ -6,7 +6,7 @@ its own pool of WASI threads for rayon-parallel work). Two hand-rolled
 have each been the source of hard-to-reproduce hangs, and their two halves usually
 live in different files (sometimes different packages). This document is the prose
 spec; the machine-readable constants live in
-`packages/rom-weaver-wasm/src/browser-virtual-file-protocol.ts`.
+`packages/rom-weaver-react/src/wasm/browser-virtual-file-protocol.ts`.
 
 Everything here requires a cross-origin-isolated context (`crossOriginIsolated`),
 `SharedArrayBuffer`, and `Atomics`. The producer half of the virtual-file channel
@@ -18,11 +18,11 @@ also requires `Atomics.waitAsync` (the page main thread may not block).
 
 **Where:** the wire constants and Atomics leaf helpers (`allocateThreadId`,
 `signalThreadStartState`, `waitForThreadStartAck`, …) live in
-`packages/rom-weaver-wasm/src/browser-wasi-thread-protocol.ts`. The requester glue
+`packages/rom-weaver-react/src/wasm/browser-wasi-thread-protocol.ts`. The requester glue
 (`spawn`, the worker pool) is in
-`packages/rom-weaver-wasm/src/rom-weaver-browser-opfs-api.ts`, and the worker that
+`packages/rom-weaver-react/src/wasm/rom-weaver-browser-opfs-api.ts`, and the worker that
 actually runs `wasi_thread_start` is
-`packages/rom-weaver-wasm/src/workers/browser-wasi-thread-worker.ts`.
+`packages/rom-weaver-react/src/wasm/workers/browser-wasi-thread-worker.ts`.
 
 **Why it exists.** The threaded wasm module imports `wasi.thread-spawn`. When several
 threads start at once, each one allocates its stack, which triggers `memory.grow` on
@@ -83,7 +83,7 @@ busy-retry `25 ms` interval / `30 s` ceiling when no pooled worker is free.
 - Producer (page main thread, owns the `File`/`Blob`):
   `packages/rom-weaver-react/src/workers/protocol/browser-virtual-files.ts`
 - Consumer (wasm worker thread, `BrowserVirtualRandomAccessFile`):
-  `packages/rom-weaver-wasm/src/browser-opfs-io-adapters.ts`
+  `packages/rom-weaver-react/src/wasm/browser-opfs-io-adapters.ts`
 - Shared constants (the wire contract): **`browser-virtual-file-protocol.ts`** — both
   files above import from it so they can never disagree on the layout or state values.
 

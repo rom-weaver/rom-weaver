@@ -36,7 +36,6 @@ separately:
 Then install the JS workspaces and git hooks:
 
 ```bash
-npm ci --prefix packages/rom-weaver-wasm
 npm ci --prefix packages/rom-weaver-react
 npm install         # root: installs lefthook + runs `lefthook install`
 ```
@@ -70,16 +69,16 @@ mise run wasm-check   # cargo check the threaded containers lib
 mise exec -- cargo check -p rom-weaver-containers --target wasm32-wasip1
 ```
 
-By default `build-wasm` writes artifacts to `packages/rom-weaver-wasm` (generated
-files are gitignored). Set `ROM_WEAVER_WASM_OUT_DIR` to write elsewhere; when the
-output directory differs from the package, the artifacts are synced into
-`packages/rom-weaver-wasm` automatically:
+By default `build-wasm` writes artifacts to `packages/rom-weaver-react/src/wasm`
+(gitignored). Set `ROM_WEAVER_WASM_OUT_DIR` to write elsewhere; when the output
+directory differs from the package, the artifacts are synced into
+`packages/rom-weaver-react/src/wasm` automatically:
 
 ```bash
 ROM_WEAVER_WASM_OUT_DIR=/path/to/wasm-artifacts mise run build-wasm
 ```
 
-See [`packages/rom-weaver-wasm/README.md`](packages/rom-weaver-wasm/README.md) for browser OPFS usage.
+See [`packages/rom-weaver-react/src/wasm/README.md`](packages/rom-weaver-react/src/wasm/README.md) for browser OPFS usage.
 
 Browser compatibility checks:
 
@@ -95,7 +94,7 @@ Xcode Simulator Safari, and WebKit verification steps.
 
 ## WASM Package Surface
 
-`packages/rom-weaver-wasm` exposes:
+The wasm layer (`packages/rom-weaver-react/src/wasm`) exposes:
 
 - Browser OPFS WASI runner (`run` and `runJson`)
 - single `/work` OPFS mount wiring for browser workers

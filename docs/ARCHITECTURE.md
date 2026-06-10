@@ -17,8 +17,8 @@ the WASM build over a JSON event protocol.
                 └───────────────┘  └──────────┬───────────┘
                                               │ JSON events over stdio
                                    ┌──────────▼───────────┐
-                                   │   rom-weaver-wasm    │ OPFS WASI runner,
-                                   │  (npm, browser-only) │ thread pool, worker client
+                                   │ react src/wasm layer │ OPFS WASI runner,
+                                   │    (browser-only)    │ thread pool, worker client
                                    └──────────┬───────────┘
                                    ┌──────────▼───────────┐
                                    │  rom-weaver-react    │ workflows, forms, PWA
@@ -39,8 +39,8 @@ the WASM build over a JSON event protocol.
 | `crates/rom-weaver-libarchive(-sys)` | libarchive FFI bindings (vendored under `vendor/libarchive`) used for zip/7z/tar/rar reads. |
 | `crates/rom-weaver-app` | Command orchestration shared by every frontend: argument structs, selection/auto-extract resolution, trim/header-fix pipelines, patch command flows. |
 | `crates/rom-weaver-cli` | Thin binary: clap parsing, progress/JSON reporters, native `main` and wasm `_start` entry. |
-| `tools/rom-weaver-typegen` | ts-rs codegen from Rust types to `packages/rom-weaver-wasm/src/generated/`. |
-| `packages/rom-weaver-wasm` | Browser npm package: OPFS WASI runner (`run`/`runJson`), mounts, thread pool, worker client, generated types. |
+| `tools/rom-weaver-typegen` | ts-rs codegen from Rust types to `packages/rom-weaver-react/src/wasm/generated/`. |
+| `packages/rom-weaver-react/src/wasm` | Browser wasm layer (same npm package): OPFS WASI runner (`run`/`runJson`), mounts, thread pool, worker client, generated types. |
 | `packages/rom-weaver-react` | Webapp: workflow controllers, runtime adapters, React forms, workers, PWA shell. |
 | `vendor/` | Vendored/forked deps (`nod` for RVZ, `libarchive`, `chd`, `qbsdiff`, `akv`). `nod` is a git submodule pointing at a fork — push changes to the fork remote, not upstream. |
 | `scripts/` | WASM build orchestration (`build-wasm-cli.sh`, `wasm/with-wasi-env.sh`), benches, worktree setup. |
@@ -98,7 +98,7 @@ Patterns that matter when touching this code:
   only compute on workers. Gated by `ROM_WEAVER_CONTAINER_MAIN_THREAD_READER`
   (see `rom-weaver-containers/src/constants.rs`).
 - **Browser thread budgets.** "auto" is resolved on the JS side
-  (`packages/rom-weaver-wasm/src/workers/browser-thread-budget.ts` and the
+  (`packages/rom-weaver-react/src/wasm/workers/browser-thread-budget.ts` and the
   React `toThreadBudget` path) before it reaches wasm — the wasm fallback is a
   fixed 4 threads, so passing "auto" through literally caps throughput.
 - **Byte-identical parity.** Compression outputs are validated against
@@ -113,7 +113,7 @@ more depth.
 - **Type generation.** `cargo run -p rom-weaver-typegen -- --write` (or
   `npm run typegen`) emits `rom-weaver-rust-types.d.ts`,
   `rom-weaver-format-metadata.ts`, and `rom-weaver-command-types.ts` into
-  `packages/rom-weaver-wasm/src/generated/`. CI runs `--check`; any change to
+  `packages/rom-weaver-react/src/wasm/generated/`. CI runs `--check`; any change to
   a `#[derive(TS)]` type or format registry metadata requires regenerating and
   committing. The generated format metadata is the single source for codec
   pickers and format tables in the webapp — do not hand-maintain duplicates.
@@ -133,13 +133,14 @@ more depth.
 cargo build (workspace)                     # native CLI
 cargo run -p rom-weaver-typegen -- --write  # regen TS types when Rust types change
 scripts/build-wasm-cli.sh                   # WASI SDK build → wasm-opt → brotli
-                                            #   → sync into packages/rom-weaver-wasm
+                                            #   → sync into packages/rom-weaver-react/src/wasm
 npm --prefix packages/rom-weaver-react run dev|build
 ```
 
 The WASM build needs a WASI SDK (v33+, auto-detected; see
 `scripts/wasm/with-wasi-env.sh`). Generated wasm artifacts in
-`packages/rom-weaver-wasm` are gitignored; the generated *TypeScript* files are
+`packages/rom-weaver-react/src/wasm` are gitignored; the generated *TypeScript*
+files are
 committed and drift-checked.
 
 ## Testing
@@ -148,7 +149,7 @@ committed and drift-checked.
 | --- | --- | --- |
 | Rust unit | `crates/*/tests/unit/`, inline `#[test]` | Per-format parsers, registry, I/O, threads (~800 tests). |
 | CLI smoke | `crates/rom-weaver-cli/tests/cli_smoke/` | End-to-end CLI runs against synthesized fixtures, per command family. Shared helpers in `shared.rs`. |
-| WASM node | `packages/rom-weaver-wasm/tests/` | Worker client, OPFS protocols, format metadata (vitest, node). |
+| WASM node | `packages/rom-weaver-react/tests/wasm/` | Worker client, OPFS protocols, format metadata (vitest, node). |
 | Browser | `packages/rom-weaver-react/tests/browser/` | Playwright + vitest integration tests of the real worker/OPFS/wasm stack, including mobile-Safari-specific cases. |
 
 CI (`.github/workflows/chd-rust-backend.yml`) runs fmt, clippy `-D warnings`,
