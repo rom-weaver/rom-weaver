@@ -79,6 +79,47 @@ const nextVirtualInputPathSuffix = new Map<string, number>();
 // virtual-Blob path. See the trade-off note at the use site in createBrowserOpfsSourceRef.
 const STAGE_INPUT_TO_OPFS_MAX_BYTES = 400 * 1024 * 1024;
 
+// Reference-counted registry of inputs already staged into OPFS this session, keyed by a content
+// signature (mount + normalized name + size + a head/tail byte fingerprint). Re-staging an identical
+// source — e.g. re-uploading the same archive to pick a different entry — reuses the existing staged
+// file instead of writing a second copy under a "-N" suffix, so the input keeps its name and we skip
+// the re-stage I/O. The staged file lives until the last reference releases. A same-named file with
+// different bytes produces a different fingerprint, misses here, and still lands on a fresh suffixed
+// path (see allocateVirtualInputPath). The fingerprint samples the head and tail rather than hashing
+// the whole input, so the residual false-reuse case (same name + size + sampled regions, differing
+// only in the middle) is astronomically unlikely for real archives and never seen in practice.
+type StagedInputEntry = {
+  allocatedPath: string;
+  refCount: number;
+  result: Promise<{ size?: number; stagedPath: string }>;
+};
+const stagedInputsByContentKey = new Map<string, StagedInputEntry>();
+
+const STAGED_INPUT_KEY_SEPARATOR = String.fromCharCode(0x00);
+const STAGED_INPUT_FINGERPRINT_SAMPLE_BYTES = 64 * 1024;
+
+// FNV-1a over a byte sample. Cheap (a few KiB read), and only used to tell same-named inputs apart, so
+// reuse never hands one input the bytes of another.
+const hashStageSampleBytes = (bytes: Uint8Array, seed: number) => {
+  let hash = seed >>> 0;
+  for (const byte of bytes) hash = Math.imul(hash ^ byte, 0x01000193) >>> 0;
+  return hash >>> 0;
+};
+
+const fingerprintStageSource = async (source: Blob) => {
+  const size = source.size;
+  const headEnd = Math.min(size, STAGED_INPUT_FINGERPRINT_SAMPLE_BYTES);
+  let hash = hashStageSampleBytes(new Uint8Array(await source.slice(0, headEnd).arrayBuffer()), 0x811c9dc5);
+  if (size > STAGED_INPUT_FINGERPRINT_SAMPLE_BYTES * 2) {
+    const tail = new Uint8Array(await source.slice(size - STAGED_INPUT_FINGERPRINT_SAMPLE_BYTES, size).arrayBuffer());
+    hash = hashStageSampleBytes(tail, hash);
+  }
+  return hash.toString(16);
+};
+
+const createStagedInputContentKey = (mountPoint: string, fileName: string, size: number, fingerprint: string) =>
+  [mountPoint, fileName, size, fingerprint].join(STAGED_INPUT_KEY_SEPARATOR);
+
 const getBrowserSourceTraceKind = (source: unknown) => {
   if (typeof File !== "undefined" && source instanceof File) return "file";
   if (typeof Blob !== "undefined" && source instanceof Blob) return "blob";
@@ -151,6 +192,60 @@ const allocateVirtualInputPath = (mountPoint: string, fileName: string) => {
 
 const releaseVirtualInputPath = (filePath: string) => {
   allocatedVirtualInputPaths.delete(filePath);
+};
+
+const reuseStagedInput = async (
+  contentKey: string,
+  fileName: string,
+  trace: BrowserOpfsSourceTraceContext | undefined,
+) => {
+  const entry = stagedInputsByContentKey.get(contentKey);
+  if (!entry) return null;
+  // Reserve our reference before awaiting the in-flight stage so an overlapping release can't tear the
+  // entry down to zero and delete the staged file while we wait on it.
+  entry.refCount += 1;
+  const result = await entry.result.then(
+    (value) => value,
+    () => null,
+  );
+  if (result && stagedInputsByContentKey.get(contentKey) === entry) {
+    emitBrowserSourceRefTrace(trace, "reused staged input", {
+      fileName,
+      filePath: result.stagedPath,
+      refCount: entry.refCount,
+      size: result.size,
+    });
+    return result;
+  }
+  // The stage this entry tracked failed, or it was torn down while we awaited — undo the reservation
+  // and let the caller fall through to a fresh stage.
+  entry.refCount -= 1;
+  return null;
+};
+
+const releaseStagedInput = async (contentKey: string, trace: BrowserOpfsSourceTraceContext | undefined) => {
+  const entry = stagedInputsByContentKey.get(contentKey);
+  if (!entry) return;
+  entry.refCount -= 1;
+  if (entry.refCount > 0) return;
+  // Drop the registry entry before the async OPFS removal so a concurrent re-stage misses the registry
+  // and allocates a fresh suffixed path instead of reusing a file mid-teardown. The allocated path
+  // stays reserved until removal completes, so the fresh stage can't reclaim the same path either.
+  stagedInputsByContentKey.delete(contentKey);
+  const resolved = await entry.result.then(
+    (value) => value,
+    () => null,
+  );
+  const stagedPath = resolved?.stagedPath ?? entry.allocatedPath;
+  const cleanedUp = await requestBrowserOpfsStorage({ action: "cleanup", filePaths: [stagedPath] }).then(
+    (value) => value.success,
+    () => false,
+  );
+  releaseVirtualInputPath(entry.allocatedPath);
+  emitBrowserSourceRefTrace(trace, "released staged input", {
+    filePath: stagedPath,
+    success: cleanedUp,
+  });
 };
 
 const createVirtualInputPath = (options: BrowserOpfsSourceRefOptions, fileName: string) => {
@@ -242,6 +337,35 @@ const createBrowserOpfsSourceRef = async (
   }
 
   const virtualFileName = normalizeVirtualFileName(fileName || fallbackFileName, fallbackFileName || "input.bin");
+  const stageBytes = typeof virtualSize === "number" && Number.isFinite(virtualSize) ? virtualSize : virtualSource.size;
+
+  // Before allocating a fresh path, reuse an identical input already staged this session (same mount +
+  // name + size + content fingerprint). Re-uploading the same archive to pick another entry then keeps
+  // its original name and skips the re-stage instead of landing on a "-N" suffix. Only OPFS-staged
+  // inputs are shared; the large-input virtual-Blob path below stays per-instance.
+  const stagedContentKey =
+    stageBytes <= STAGE_INPUT_TO_OPFS_MAX_BYTES
+      ? createStagedInputContentKey(
+          String(options.mountPoint || WORKER_OPFS_MOUNTPOINT).replace(TRAILING_SLASHES_REGEX, ""),
+          virtualFileName,
+          stageBytes,
+          await fingerprintStageSource(virtualSource),
+        )
+      : null;
+  if (stagedContentKey) {
+    const reused = await reuseStagedInput(stagedContentKey, virtualFileName, options.trace);
+    if (reused) {
+      return {
+        cleanup: async () => releaseStagedInput(stagedContentKey, options.trace),
+        fileName: virtualFileName,
+        filePath: reused.stagedPath,
+        kind: "path",
+        size: reused.size ?? stageBytes,
+        storageKind: "opfs",
+      };
+    }
+  }
+
   const virtualPath = createVirtualInputPath(options, virtualFileName);
 
   // Trade-off: small inputs are copied into OPFS up front; large inputs stay on the virtual-Blob path.
@@ -259,47 +383,49 @@ const createBrowserOpfsSourceRef = async (
   // threshold: above it a full staged copy would cost too much I/O and OPFS storage for large discs,
   // and the per-read contention is a smaller share of a long-running job, so the zero-copy virtual-Blob
   // path wins there. Staging failures fall back to the virtual-Blob path so input handling stays robust.
-  const stageBytes = typeof virtualSize === "number" && Number.isFinite(virtualSize) ? virtualSize : virtualSource.size;
-  if (stageBytes <= STAGE_INPUT_TO_OPFS_MAX_BYTES) {
-    const staged = await requestBrowserOpfsStorage({
+  if (stagedContentKey) {
+    // Register the in-flight stage before awaiting it so a concurrent re-stage of the same input
+    // reuses this one copy instead of writing its own. The promise rejects on a failed stage, which
+    // reuseStagedInput treats as "no reusable copy" so the waiter falls through to its own attempt.
+    const stagePromise = requestBrowserOpfsStorage({
       action: "stage",
       file: virtualSource,
       fileName: virtualFileName,
       filePath: virtualPath,
       mountPoint: options.mountPoint,
-    }).catch((error: unknown) => {
-      emitBrowserSourceRefTrace(options.trace, "input OPFS staging threw, using virtual blob", {
-        error: error instanceof Error ? error.message : String(error),
-        filePath: virtualPath,
-      });
-      return null;
+    }).then((staged) => {
+      if (!staged?.success) throw new Error(staged?.error?.message || "Browser OPFS input staging failed");
+      return { size: staged.size ?? stageBytes, stagedPath: staged.filePath ?? virtualPath };
     });
-    if (staged?.success) {
-      const stagedPath = staged.filePath ?? virtualPath;
+    stagedInputsByContentKey.set(stagedContentKey, { allocatedPath: virtualPath, refCount: 1, result: stagePromise });
+    const staged = await stagePromise.then(
+      (value) => value,
+      (error: unknown) => {
+        emitBrowserSourceRefTrace(options.trace, "input OPFS staging failed, using virtual blob", {
+          error: error instanceof Error ? error.message : String(error),
+          filePath: virtualPath,
+        });
+        return null;
+      },
+    );
+    if (staged) {
       emitBrowserSourceRefTrace(options.trace, "staged input to OPFS", {
         fileName: virtualFileName,
-        filePath: stagedPath,
-        size: staged.size ?? stageBytes,
+        filePath: staged.stagedPath,
+        size: staged.size,
       });
       return {
-        cleanup: async () => {
-          await requestBrowserOpfsStorage({ action: "cleanup", filePaths: [stagedPath] }).catch(() => undefined);
-          releaseVirtualInputPath(virtualPath);
-        },
+        cleanup: async () => releaseStagedInput(stagedContentKey, options.trace),
         fileName: virtualFileName,
-        filePath: stagedPath,
+        filePath: staged.stagedPath,
         kind: "path",
-        size: staged.size ?? stageBytes,
+        size: staged.size,
         storageKind: "opfs",
       };
     }
-    if (staged) {
-      emitBrowserSourceRefTrace(options.trace, "input OPFS staging failed, using virtual blob", {
-        error: staged.error?.message,
-        filePath: virtualPath,
-      });
-    }
-    // Drop any partial OPFS file so it can't shadow the virtual registration below.
+    // Staging failed: drop the registry entry and any partial OPFS file so it can't shadow the virtual
+    // registration below. virtualPath stays allocated for the virtual-Blob fallback.
+    stagedInputsByContentKey.delete(stagedContentKey);
     await requestBrowserOpfsStorage({ action: "cleanup", filePaths: [virtualPath] }).catch(() => undefined);
   }
 
