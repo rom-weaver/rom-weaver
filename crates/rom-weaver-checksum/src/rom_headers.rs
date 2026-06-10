@@ -4,34 +4,34 @@
 //! prepended to the real data. This module identifies those headers from a byte
 //! prefix or file size so callers can strip or re-attach them. It is pure data +
 //! signature matching; the file/IO-driven detection workflow that uses these
-//! types lives in `header_detection_and_finalize`.
+//! types lives in `rom-weaver-app`'s `header_detection_and_finalize`.
 
-pub(crate) const ROM_HEADER_BYTES: usize = 512;
-pub(crate) const ROM_HEADER_SCAN_BYTES: usize = 0x8000;
-pub(crate) const A78_HEADER_MAGIC: [u8; 9] = *b"ATARI7800";
-pub(crate) const LNX_HEADER_MAGIC: [u8; 4] = *b"LYNX";
-pub(crate) const INES_HEADER_MAGIC: [u8; 4] = *b"NES\x1A";
-pub(crate) const FDS_HEADER_MAGIC: [u8; 3] = *b"FDS";
-pub(crate) const SMS_TMR_SEGA_MAGIC: [u8; 8] = *b"TMR SEGA";
-pub(crate) const NGP_COPYRIGHT_MAGIC: [u8; 16] = *b"COPYRIGHT BY SNK";
-pub(crate) const GBA_HEADER_MAGIC: [u8; 4] = [0x24, 0xFF, 0xAE, 0x51];
-pub(crate) const N64_BIG_ENDIAN_MAGIC: [u8; 4] = [0x80, 0x37, 0x12, 0x40];
-pub(crate) const N64_LITTLE_ENDIAN_MAGIC: [u8; 4] = [0x40, 0x12, 0x37, 0x80];
-pub(crate) const N64_BYTE_SWAPPED_MAGIC: [u8; 4] = [0x37, 0x80, 0x40, 0x12];
-pub(crate) const SNES_COPIER_HEADER_MODULUS: u64 = 1024;
-pub(crate) const PCE_COPIER_HEADER_MODULUS: u64 = 8192;
+pub const ROM_HEADER_BYTES: usize = 512;
+pub const ROM_HEADER_SCAN_BYTES: usize = 0x8000;
+pub const A78_HEADER_MAGIC: [u8; 9] = *b"ATARI7800";
+pub const LNX_HEADER_MAGIC: [u8; 4] = *b"LYNX";
+pub const INES_HEADER_MAGIC: [u8; 4] = *b"NES\x1A";
+pub const FDS_HEADER_MAGIC: [u8; 3] = *b"FDS";
+pub const SMS_TMR_SEGA_MAGIC: [u8; 8] = *b"TMR SEGA";
+pub const NGP_COPYRIGHT_MAGIC: [u8; 16] = *b"COPYRIGHT BY SNK";
+pub const GBA_HEADER_MAGIC: [u8; 4] = [0x24, 0xFF, 0xAE, 0x51];
+pub const N64_BIG_ENDIAN_MAGIC: [u8; 4] = [0x80, 0x37, 0x12, 0x40];
+pub const N64_LITTLE_ENDIAN_MAGIC: [u8; 4] = [0x40, 0x12, 0x37, 0x80];
+pub const N64_BYTE_SWAPPED_MAGIC: [u8; 4] = [0x37, 0x80, 0x40, 0x12];
+pub const SNES_COPIER_HEADER_MODULUS: u64 = 1024;
+pub const PCE_COPIER_HEADER_MODULUS: u64 = 8192;
 const SMC_GAME_DOCTOR_1_MAGIC: [u8; 16] = [
     0x00, 0x01, 0x4D, 0x45, 0x20, 0x44, 0x4F, 0x43, 0x54, 0x4F, 0x52, 0x20, 0x53, 0x46, 0x20, 0x33,
 ];
 const SMC_GAME_DOCTOR_2_MAGIC: [u8; 16] = *b"GAME DOCTOR SF 3";
-pub(crate) const GAME_BOY_NINTENDO_LOGO: [u8; 48] = [
+pub const GAME_BOY_NINTENDO_LOGO: [u8; 48] = [
     0xCE, 0xED, 0x66, 0x66, 0xCC, 0x0D, 0x00, 0x0B, 0x03, 0x73, 0x00, 0x83, 0x00, 0x0C, 0x00, 0x0D,
     0x00, 0x08, 0x11, 0x1F, 0x88, 0x89, 0x00, 0x0E, 0xDC, 0xCC, 0x6E, 0xE6, 0xDD, 0xDD, 0xD9, 0x99,
     0xBB, 0xBB, 0x67, 0x63, 0x6E, 0x0E, 0xEC, 0xCC, 0xDD, 0xDC, 0x99, 0x9F, 0xBB, 0xB9, 0x33, 0x3E,
 ];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum KnownRomHeader {
+pub enum KnownRomHeader {
     A78,
     Lnx,
     Nes,
@@ -52,7 +52,7 @@ pub(crate) enum KnownRomHeader {
 }
 
 impl KnownRomHeader {
-    pub(crate) const ALL: [Self; 17] = [
+    pub const ALL: [Self; 17] = [
         Self::A78,
         Self::Lnx,
         Self::Nes,
@@ -94,7 +94,7 @@ impl KnownRomHeader {
         }
     }
 
-    pub(crate) const fn headered_extension(self) -> &'static str {
+    pub const fn headered_extension(self) -> &'static str {
         match self {
             Self::A78 => ".a78",
             Self::Lnx => ".lnx",
@@ -114,7 +114,7 @@ impl KnownRomHeader {
         }
     }
 
-    pub(crate) const fn headerless_extension(self) -> &'static str {
+    pub const fn headerless_extension(self) -> &'static str {
         match self {
             Self::Lnx => ".lyx",
             Self::SmcZero | Self::SmcGameDoctor1 | Self::SmcGameDoctor2 => ".sfc",
@@ -132,7 +132,7 @@ impl KnownRomHeader {
         }
     }
 
-    pub(crate) const fn data_offset_bytes(self) -> Option<usize> {
+    pub const fn data_offset_bytes(self) -> Option<usize> {
         match self {
             Self::A78 => Some(128),
             Self::Lnx => Some(64),
@@ -175,7 +175,7 @@ impl KnownRomHeader {
         }
     }
 
-    pub(crate) fn matches_extension(self, extension_with_dot: &str) -> bool {
+    pub fn matches_extension(self, extension_with_dot: &str) -> bool {
         if self
             .headered_extension()
             .eq_ignore_ascii_case(extension_with_dot)
@@ -192,7 +192,7 @@ impl KnownRomHeader {
         }
     }
 
-    pub(crate) fn signature_matches(self, bytes: &[u8]) -> bool {
+    pub fn signature_matches(self, bytes: &[u8]) -> bool {
         if bytes.len() < self.scan_bytes_required() {
             return false;
         }
@@ -229,23 +229,23 @@ impl KnownRomHeader {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) struct KnownRomHeaderMatch {
-    pub(crate) header: KnownRomHeader,
-    pub(crate) stripped_bytes: Option<usize>,
+pub struct KnownRomHeaderMatch {
+    pub header: KnownRomHeader,
+    pub stripped_bytes: Option<usize>,
 }
 
 impl KnownRomHeaderMatch {
-    pub(crate) const fn profile_name(self) -> &'static str {
+    pub const fn profile_name(self) -> &'static str {
         self.header.profile_name()
     }
 
-    pub(crate) const fn stripped_bytes(self) -> Option<usize> {
+    pub const fn stripped_bytes(self) -> Option<usize> {
         self.stripped_bytes
     }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct StripHeaderResult {
-    pub(crate) header_bytes: Vec<u8>,
-    pub(crate) matched_header: Option<KnownRomHeaderMatch>,
+pub struct StripHeaderResult {
+    pub header_bytes: Vec<u8>,
+    pub matched_header: Option<KnownRomHeaderMatch>,
 }

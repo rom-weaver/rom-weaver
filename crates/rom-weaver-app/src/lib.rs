@@ -12,7 +12,17 @@ use std::{
 #[cfg(not(target_arch = "wasm32"))]
 use clap::{ArgAction, Args, Subcommand, ValueEnum};
 use rom_weaver_checksum::checksum_reader_values_with_progress;
-use rom_weaver_checksum::{NativeChecksumEngine, checksum_file_values, supported_algorithms};
+use rom_weaver_checksum::rom_headers::{
+    A78_HEADER_MAGIC, FDS_HEADER_MAGIC, GAME_BOY_NINTENDO_LOGO, GBA_HEADER_MAGIC,
+    INES_HEADER_MAGIC, KnownRomHeader, KnownRomHeaderMatch, LNX_HEADER_MAGIC, N64_BIG_ENDIAN_MAGIC,
+    N64_BYTE_SWAPPED_MAGIC, N64_LITTLE_ENDIAN_MAGIC, NGP_COPYRIGHT_MAGIC,
+    PCE_COPIER_HEADER_MODULUS, ROM_HEADER_BYTES, ROM_HEADER_SCAN_BYTES, SMS_TMR_SEGA_MAGIC,
+    SNES_COPIER_HEADER_MODULUS, StripHeaderResult,
+};
+use rom_weaver_checksum::{
+    ChecksumProgress, NativeChecksumEngine, StreamingVariantChecksums, VariantOutput, VariantRow,
+    checksum_file_values, overlay_checksums, supported_algorithms,
+};
 use rom_weaver_containers::{
     CompressFormatRecommendation, ContainerRegistry, extract_only_create_validation_message,
 };
@@ -25,14 +35,6 @@ use rom_weaver_core::{
     SelectionMatcher, SelectionPrompter, ThreadBudget, ThreadCapability, ThreadExecution,
     XdeltaSecondaryMode, is_patch_filter_candidate_name, is_rom_filter_candidate_name,
     normalize_archive_name, should_ignore_common_container_file,
-};
-mod rom_headers;
-use rom_headers::{
-    A78_HEADER_MAGIC, FDS_HEADER_MAGIC, GAME_BOY_NINTENDO_LOGO, GBA_HEADER_MAGIC,
-    INES_HEADER_MAGIC, KnownRomHeader, KnownRomHeaderMatch, LNX_HEADER_MAGIC, N64_BIG_ENDIAN_MAGIC,
-    N64_BYTE_SWAPPED_MAGIC, N64_LITTLE_ENDIAN_MAGIC, NGP_COPYRIGHT_MAGIC,
-    PCE_COPIER_HEADER_MODULUS, ROM_HEADER_BYTES, ROM_HEADER_SCAN_BYTES, SMS_TMR_SEGA_MAGIC,
-    SNES_COPIER_HEADER_MODULUS, StripHeaderResult,
 };
 // The selection-input parser moved to core; the app keeps a thin wrapper only so the existing unit
 // test in `tests.rs` can exercise it through `CliApp`.
@@ -694,11 +696,38 @@ enum HeaderRepairStatus {
     Repaired,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum N64ByteOrder {
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(not(target_arch = "wasm32"), derive(ValueEnum))]
+#[cfg_attr(feature = "typescript-types", derive(TS))]
+#[serde(rename_all = "kebab-case")]
+pub enum N64ByteOrder {
     BigEndian,
     LittleEndian,
     ByteSwapped,
+}
+
+impl N64ByteOrder {
+    const fn id(self) -> &'static str {
+        match self {
+            Self::BigEndian => "big-endian",
+            Self::LittleEndian => "little-endian",
+            Self::ByteSwapped => "byte-swapped",
+        }
+    }
+
+    const fn label(self) -> &'static str {
+        match self {
+            Self::BigEndian => "big-endian",
+            Self::LittleEndian => "little-endian",
+            Self::ByteSwapped => "byte-swapped",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct N64ByteOrderTransform {
+    from: N64ByteOrder,
+    to: N64ByteOrder,
 }
 
 #[path = "commands_and_selection.rs"]
@@ -710,6 +739,9 @@ use source_resolution::*;
 
 #[path = "checksum_streaming.rs"]
 mod checksum_streaming;
+
+#[path = "checksum_variants.rs"]
+mod checksum_variants;
 
 #[path = "selection_resolution.rs"]
 mod selection_resolution;

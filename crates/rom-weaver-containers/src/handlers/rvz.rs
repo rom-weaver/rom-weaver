@@ -332,6 +332,7 @@ impl ContainerHandlerOperations for RvzContainerHandler {
                 vec![ExtractedFileChecksum {
                     path: plan.output_path,
                     values,
+                    variants: Vec::new(),
                 }],
             ),
             None => report,

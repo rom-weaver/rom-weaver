@@ -12,7 +12,6 @@ use std::{
 };
 
 use rayon::prelude::*;
-use rom_weaver_checksum::StreamingChecksum;
 use rom_weaver_core::{
     ArchiveEntryKindFilter, ContainerByteProgress, ContainerCreateRequest, ContainerExtractRequest,
     ContainerListEntry, OperationContext, OperationFamily, OperationReport, ProbeConfidence,
@@ -36,8 +35,9 @@ use crate::{
     attach_extraction_details,
     constants::{LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES, PARALLEL_COORDINATOR_STACK_SIZE_BYTES},
     extract_support::{
-        ContainerProgressContext, ExtractedFileChecksum, attach_extract_checksum_details,
-        create_extract_checksum, emit_container_step_progress, ensure_extract_output_available,
+        ContainerProgressContext, ExtractHasher, ExtractedFileChecksum,
+        attach_extract_checksum_details, emit_container_step_progress,
+        ensure_extract_output_available,
     },
 };
 
@@ -707,6 +707,7 @@ enum LibarchiveExtractOutput {
         index: usize,
         archive_name: String,
         output_path: PathBuf,
+        logical_bytes: Option<u64>,
     },
     FileData {
         index: usize,
@@ -721,7 +722,7 @@ enum LibarchiveExtractOutput {
 
 struct LibarchiveOpenExtractOutput {
     archive_name: String,
-    checksum: Option<StreamingChecksum>,
+    hasher: ExtractHasher,
     output_path: PathBuf,
     writer: BufWriter<File>,
 }
@@ -865,64 +866,36 @@ where
                             &task.output_path,
                             overwrite,
                         )?);
-                        let mut checksum = create_extract_checksum(context)?;
+                        let mut hasher =
+                            ExtractHasher::new(context, task.logical_bytes, &task.output_path)?;
                         let mut copied = 0u64;
-                        if checksum.is_some() {
-                            loop {
-                                let mut buffer = vec![0u8; LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES];
-                                let read = reader.read(&mut buffer).map_err(|error| {
-                                    RomWeaverError::Validation(format!(
-                                        "{format_name} extract failed while reading entry {} (`{}`): {error}",
-                                        task.index, task.archive_name
-                                    ))
-                                })?;
-                                if read == 0 {
-                                    break;
-                                }
-                                output.write_all(&buffer[..read]).map_err(|error| {
-                                    RomWeaverError::Validation(format!(
-                                        "{format_name} extract failed while writing entry {} (`{}`): {error}",
-                                        task.index, task.archive_name
-                                    ))
-                                })?;
-                                buffer.truncate(read);
-                                if let Some(checksum) = checksum.as_mut() {
-                                    checksum.update_owned(buffer)?;
-                                }
-                                let read_u64 = read as u64;
-                                copied = copied.saturating_add(read_u64);
-                                on_bytes_written(read_u64);
+                        let mut buffer = vec![0u8; LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES];
+                        loop {
+                            let read = reader.read(&mut buffer).map_err(|error| {
+                                RomWeaverError::Validation(format!(
+                                    "{format_name} extract failed while reading entry {} (`{}`): {error}",
+                                    task.index, task.archive_name
+                                ))
+                            })?;
+                            if read == 0 {
+                                break;
                             }
-                        } else {
-                            let mut buffer = vec![0u8; LIBARCHIVE_EXTRACT_IO_BUFFER_BYTES];
-                            loop {
-                                let read = reader.read(&mut buffer).map_err(|error| {
-                                    RomWeaverError::Validation(format!(
-                                        "{format_name} extract failed while reading entry {} (`{}`): {error}",
-                                        task.index, task.archive_name
-                                    ))
-                                })?;
-                                if read == 0 {
-                                    break;
-                                }
-                                output.write_all(&buffer[..read]).map_err(|error| {
-                                    RomWeaverError::Validation(format!(
-                                        "{format_name} extract failed while writing entry {} (`{}`): {error}",
-                                        task.index, task.archive_name
-                                    ))
-                                })?;
-                                let read_u64 = read as u64;
-                                copied = copied.saturating_add(read_u64);
-                                on_bytes_written(read_u64);
-                            }
+                            output.write_all(&buffer[..read]).map_err(|error| {
+                                RomWeaverError::Validation(format!(
+                                    "{format_name} extract failed while writing entry {} (`{}`): {error}",
+                                    task.index, task.archive_name
+                                ))
+                            })?;
+                            hasher.update(&buffer[..read])?;
+                            let read_u64 = read as u64;
+                            copied = copied.saturating_add(read_u64);
+                            on_bytes_written(read_u64);
                         }
                         output.flush()?;
+                        drop(output);
                         written_bytes = written_bytes.saturating_add(copied);
-                        if let Some(checksum) = checksum {
-                            output_checksums.push(ExtractedFileChecksum {
-                                path: task.output_path.clone(),
-                                values: checksum.finalize()?,
-                            });
+                        if let Some(entry) = hasher.finish(&task.output_path)? {
+                            output_checksums.push(entry);
                         }
                     }
                 }
@@ -1009,6 +982,7 @@ fn extract_libarchive_task_chunk_to_sender(
                                 index: task.index,
                                 archive_name: task.archive_name.clone(),
                                 output_path: task.output_path.clone(),
+                                logical_bytes: task.logical_bytes,
                             },
                             format_name,
                         )?;
@@ -1212,6 +1186,7 @@ pub(crate) fn extract_regular_archive_with_libarchive(
                             index,
                             archive_name,
                             output_path,
+                            logical_bytes,
                         } => {
                             if let Some(parent) = output_path.parent() {
                                 fs::create_dir_all(parent)?;
@@ -1223,9 +1198,11 @@ pub(crate) fn extract_regular_archive_with_libarchive(
                                     &output_path,
                                     request.overwrite,
                                 )?);
+                                let hasher =
+                                    ExtractHasher::new(context, logical_bytes, &output_path)?;
                                 e.insert(LibarchiveOpenExtractOutput {
                                     archive_name,
-                                    checksum: create_extract_checksum(context)?,
+                                    hasher,
                                     output_path,
                                     writer,
                                 });
@@ -1252,9 +1229,7 @@ pub(crate) fn extract_regular_archive_with_libarchive(
                                 ))
                             })?;
                             let delta = bytes.len() as u64;
-                            if let Some(checksum) = output.checksum.as_mut() {
-                                checksum.update_owned(bytes)?;
-                            }
+                            output.hasher.update(&bytes)?;
                             written_bytes = written_bytes.saturating_add(delta);
                             if let Some(total_bytes) = total_file_bytes {
                                 copied_bytes = copied_bytes.saturating_add(delta).min(total_bytes);
@@ -1289,11 +1264,15 @@ pub(crate) fn extract_regular_archive_with_libarchive(
                                     output.archive_name
                                 ))
                             })?;
-                            if let Some(checksum) = output.checksum {
-                                output_checksums.push(ExtractedFileChecksum {
-                                    path: output.output_path,
-                                    values: checksum.finalize()?,
-                                });
+                            let LibarchiveOpenExtractOutput {
+                                hasher,
+                                output_path,
+                                writer,
+                                ..
+                            } = output;
+                            drop(writer);
+                            if let Some(entry) = hasher.finish(&output_path)? {
+                                output_checksums.push(entry);
                             }
                             if total_file_bytes.is_none() {
                                 completed = completed.saturating_add(1);

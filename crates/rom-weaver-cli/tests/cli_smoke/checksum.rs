@@ -1142,6 +1142,109 @@ fn checksum_broken_header_checksums_include_fix_header_variant() {
 }
 
 #[test]
+fn extract_checksum_variants_match_checksum_command() {
+    let temp = setup_temp_dir();
+
+    // remove-header (NES signature) + two fix-header families (GBA tiny prefix,
+    // Genesis whole-file buffer) cover the variant transforms exercised inline
+    // during extract.
+    let nes_payload = (0..4096)
+        .map(|index| ((index * 17) % 251) as u8)
+        .collect::<Vec<_>>();
+    fs::write(temp.child("headered.nes").path(), with_nes_header(&nes_payload))
+        .expect("nes fixture");
+
+    let mut broken_gba = build_test_gba_rom(0x4000);
+    broken_gba[0x1BD] ^= 0x7F;
+    fs::write(temp.child("broken.gba").path(), &broken_gba).expect("gba fixture");
+
+    let mut broken_genesis = vec![0_u8; 0x260];
+    broken_genesis[0x100..0x104].copy_from_slice(b"SEGA");
+    broken_genesis[0x200..0x203].copy_from_slice(&[0x12, 0x34, 0x56]);
+    fs::write(temp.child("broken.md").path(), &broken_genesis).expect("genesis fixture");
+
+    for (name, expected_variant) in [
+        ("headered.nes", "remove-header"),
+        ("broken.gba", "fix-header"),
+        ("broken.md", "fix-header"),
+    ] {
+        // Variants from the standalone checksum command on the plain file.
+        // `--no-trim-fix` keeps it hashing the full file like extract does
+        // (extract has no trim step), so the variant sets are comparable.
+        let checksum_output = Command::cargo_bin("rom-weaver")
+            .expect("binary")
+            .args([
+                "checksum",
+                temp.child(name).path().to_str().expect("path"),
+                "--algo",
+                "crc32",
+                "--algo",
+                "sha1",
+                "--no-trim-fix",
+                "--json",
+            ])
+            .assert()
+            .code(0)
+            .get_output()
+            .stdout
+            .clone();
+        let checksum_json = parse_single_json_line(&checksum_output);
+        let expected_variants = checksum_json["details"]["checksum_variants"]
+            .as_array()
+            .unwrap_or_else(|| panic!("checksum command variants for {name}: {checksum_json}"))
+            .clone();
+        assert!(
+            expected_variants
+                .iter()
+                .any(|row| row["id"] == expected_variant),
+            "checksum command missing `{expected_variant}` variant for {name}: {checksum_json}"
+        );
+
+        // Same file zipped, then extracted with inline checksums.
+        let archive = temp.child(format!("{name}.zip"));
+        Command::cargo_bin("rom-weaver")
+            .expect("binary")
+            .args([
+                "compress",
+                temp.child(name).path().to_str().expect("path"),
+                "--format",
+                "zip",
+                "--output",
+                archive.path().to_str().expect("path"),
+                "--json",
+            ])
+            .assert()
+            .code(0);
+
+        let out_dir = temp.child(format!("out-{name}"));
+        let events = run_json_events(
+            &[
+                "extract",
+                archive.path().to_str().expect("path"),
+                "--out-dir",
+                out_dir.path().to_str().expect("path"),
+                "--checksum",
+                "crc32",
+                "--checksum",
+                "sha1",
+                "--json",
+            ],
+            0,
+        );
+        let extract_json = events.last().expect("extract terminal event");
+        let emitted = emitted_file_entry(extract_json, name);
+        let emitted_variants = emitted["checksum_variants"]
+            .as_array()
+            .unwrap_or_else(|| panic!("extract emitted variants for {name}: {extract_json}"));
+
+        assert_eq!(
+            emitted_variants, &expected_variants,
+            "extract variant parity mismatch for {name}"
+        );
+    }
+}
+
+#[test]
 fn checksum_n64_byte_order_variants_cover_all_target_orders() {
     let temp = setup_temp_dir();
     let z64 = [

@@ -9,7 +9,9 @@ use std::{
 };
 
 use rayon::prelude::*;
-use rom_weaver_checksum::StreamingChecksum;
+use rom_weaver_checksum::{
+    StreamingChecksum, StreamingVariantChecksums, VariantOutput, VariantRow, overlay_checksums,
+};
 use rom_weaver_core::{
     ContainerByteProgress, OperationContext, OperationFamily, OperationReport, OperationStatus,
     OrderedChunkWriter, OrderedStreamingMessages, ProgressEvent, Result, RomWeaverError,
@@ -149,12 +151,105 @@ pub(crate) fn copy_reader_with_progress<R: Read, W: Write>(
 pub(crate) struct ExtractedFileChecksum {
     pub(crate) path: PathBuf,
     pub(crate) values: BTreeMap<String, String>,
+    /// Checksum variants (raw, remove-header, fix-header, n64 byte order) when
+    /// computed inline during extract; empty for disc-image / unknown-size paths.
+    pub(crate) variants: Vec<VariantRow>,
 }
 
 pub(crate) fn create_extract_checksum(
     context: &OperationContext,
 ) -> Result<Option<StreamingChecksum>> {
     StreamingChecksum::new_with_context(context.extract_checksum_algorithms(), context)
+}
+
+/// Inline extract hasher that folds output bytes into either a plain checksum or
+/// the full streaming variant engine (when the output's total length is known),
+/// so archive extracts emit the same `checksum_variants` as the `checksum`
+/// command without a second read of the output.
+pub(crate) enum ExtractHasher {
+    None,
+    Plain(StreamingChecksum),
+    Variants {
+        engine: StreamingVariantChecksums,
+        algorithms: Vec<String>,
+    },
+}
+
+impl ExtractHasher {
+    /// Build a hasher for one extracted file. With a known `total_len` and a
+    /// requested checksum algorithm set, computes variants; otherwise falls back
+    /// to a plain checksum (or nothing when no algorithms were requested).
+    pub(crate) fn new(
+        context: &OperationContext,
+        total_len: Option<u64>,
+        output_path: &Path,
+    ) -> Result<Self> {
+        let algorithms = context.extract_checksum_algorithms();
+        if algorithms.is_empty() {
+            return Ok(Self::None);
+        }
+        let Some(total_len) = total_len else {
+            return Ok(match create_extract_checksum(context)? {
+                Some(checksum) => Self::Plain(checksum),
+                None => Self::None,
+            });
+        };
+        let name_hint = output_path.file_name().and_then(|name| name.to_str());
+        let engine = StreamingVariantChecksums::new(algorithms, total_len, name_hint)?;
+        Ok(Self::Variants {
+            engine,
+            algorithms: algorithms.to_vec(),
+        })
+    }
+
+    pub(crate) fn update(&mut self, bytes: &[u8]) -> Result<()> {
+        match self {
+            Self::None => Ok(()),
+            Self::Plain(checksum) => checksum.update(bytes),
+            Self::Variants { engine, .. } => engine.update(bytes),
+        }
+    }
+
+    /// Finalize, returning the per-file checksum entry (and variants). A deferred
+    /// `fix-header` (repair dependency over the in-memory cap) is completed with
+    /// one extra read of the just-written output.
+    pub(crate) fn finish(self, output_path: &Path) -> Result<Option<ExtractedFileChecksum>> {
+        match self {
+            Self::None => Ok(None),
+            Self::Plain(checksum) => Ok(Some(ExtractedFileChecksum {
+                path: output_path.to_path_buf(),
+                values: checksum.finalize()?,
+                variants: Vec::new(),
+            })),
+            Self::Variants { engine, algorithms } => {
+                let VariantOutput {
+                    mut rows,
+                    deferred_fix_header,
+                } = engine.finalize()?;
+                if let Some(deferred) = deferred_fix_header {
+                    let mut file = File::open(output_path)?;
+                    let checksums = overlay_checksums(&mut file, &algorithms, &deferred.patches)?;
+                    rows.push(VariantRow {
+                        id: deferred.id,
+                        label: deferred.label,
+                        checksums,
+                        apply_compatibility: deferred.apply_compatibility,
+                        transforms: deferred.transforms,
+                    });
+                }
+                let values = rows
+                    .iter()
+                    .find(|row| row.id == "raw")
+                    .map(|row| row.checksums.clone())
+                    .unwrap_or_default();
+                Ok(Some(ExtractedFileChecksum {
+                    path: output_path.to_path_buf(),
+                    values,
+                    variants: rows,
+                }))
+            }
+        }
+    }
 }
 
 pub(crate) fn attach_extract_checksum_details(
@@ -171,7 +266,9 @@ pub(crate) fn attach_extract_checksum_details(
     };
     let emitted = checksums
         .into_iter()
-        .filter_map(|entry| build_extract_checksum_emitted_file_detail(&entry.path, entry.values))
+        .filter_map(|entry| {
+            build_extract_checksum_emitted_file_detail(&entry.path, entry.values, entry.variants)
+        })
         .collect::<Vec<_>>();
     if !emitted.is_empty() {
         details.insert("emitted_files".to_string(), Value::Array(emitted));
@@ -183,6 +280,7 @@ pub(crate) fn attach_extract_checksum_details(
 fn build_extract_checksum_emitted_file_detail(
     path: &Path,
     checksums: BTreeMap<String, String>,
+    variants: Vec<VariantRow>,
 ) -> Option<Value> {
     if checksums.is_empty() {
         return None;
@@ -201,6 +299,21 @@ fn build_extract_checksum_emitted_file_detail(
     entry.insert("file_name".to_string(), json!(file_name));
     entry.insert("size_bytes".to_string(), json!(metadata.len()));
     entry.insert("checksums".to_string(), json!(checksums));
+    if !variants.is_empty() {
+        let variant_rows = variants
+            .into_iter()
+            .map(|row| {
+                json!({
+                    "id": row.id,
+                    "label": row.label,
+                    "checksums": row.checksums,
+                    "applyCompatibility": row.apply_compatibility,
+                    "transforms": row.transforms,
+                })
+            })
+            .collect::<Vec<_>>();
+        entry.insert("checksum_variants".to_string(), Value::Array(variant_rows));
+    }
     Some(Value::Object(entry))
 }
 
@@ -347,6 +460,7 @@ impl<'a> ExtractChunkWriter<'a> {
             checksums.push(ExtractedFileChecksum {
                 path: output_path.to_path_buf(),
                 values: checksum.finalize()?,
+                variants: Vec::new(),
             });
         }
         Ok(checksums)
