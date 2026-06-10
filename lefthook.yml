@@ -8,16 +8,16 @@ pre-commit:
     # React-only commits and vice versa; CI runs the full suite unconditionally.
     rust-format:
       glob: "*.rs"
-      run: cargo fmt --check
+      run: mise run fmt
     rust-clippy:
       glob: "*.{rs,toml,lock}"
-      run: cargo clippy --workspace --all-targets -- -D warnings
+      run: mise run clippy
     rust-typegen:
       glob: "*.rs"
-      run: cargo run -p rom-weaver-typegen -- --check
+      run: mise run typegen-check
     wasm-threaded-check:
       glob: "*.{rs,toml,lock}"
-      run: 'RUSTFLAGS="${RUSTFLAGS:-} -D warnings" scripts/wasm/with-wasi-env.sh cargo check -p rom-weaver-containers --target wasm32-wasip1-threads --lib'
+      run: 'RUSTFLAGS="${RUSTFLAGS:-} -D warnings" mise run wasm-check'
     react-lint:
       glob: "packages/rom-weaver-react/**"
       run: npm --prefix packages/rom-weaver-react run lint:code
@@ -34,4 +34,4 @@ pre-commit:
       run: git diff --cached --check
     thread-guard-regressions:
       glob: "*.rs"
-      run: scripts/check-thread-guards.sh
+      run: mise run thread-guards

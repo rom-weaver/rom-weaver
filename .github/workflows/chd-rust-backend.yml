@@ -23,9 +23,13 @@ jobs:
           submodules: recursive
 
       - name: Install system dependencies
+        # brotli has no pinnable mise binary; cmake/ninja/pkg-config build the
+        # vendored C deps. node, wasm-opt, and ripgrep come from mise; the WASI SDK
+        # is downloaded below (pinning it via mise would shadow clang on PATH and
+        # break the libarchive-sys bindgen).
         run: |
           sudo apt-get update
-          sudo apt-get install --yes brotli cmake ninja-build pkg-config ripgrep
+          sudo apt-get install --yes brotli cmake ninja-build pkg-config
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -36,6 +40,11 @@ jobs:
       - name: Cache cargo artifacts
         uses: Swatinem/rust-cache@v2
 
+      - name: Install mise (node, wasm-opt, ripgrep)
+        uses: jdx/mise-action@v2
+        with:
+          install: true
+
       - name: Install WASI SDK
         run: |
           curl --fail --location --show-error \
@@ -45,15 +54,15 @@ jobs:
           tar --extract --gzip --file "$RUNNER_TEMP/wasi-sdk.tar.gz" --directory "$RUNNER_TEMP"
           echo "WASI_SDK_PATH=$RUNNER_TEMP/wasi-sdk-${WASI_SDK_VERSION}.0-x86_64-linux" >> "$GITHUB_ENV"
 
-      - name: Install Node.js
-        uses: actions/setup-node@v4
+      # Node comes from mise (.mise.toml [tools] node = "26.2.0"); cache npm downloads
+      # since we no longer use setup-node's built-in cache.
+      - name: Cache npm downloads
+        uses: actions/cache@v4
         with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            packages/rom-weaver-react/package-lock.json
-            packages/rom-weaver-wasm/package-lock.json
+          path: ~/.npm
+          key: npm-${{ runner.os }}-${{ hashFiles('package-lock.json', 'packages/rom-weaver-react/package-lock.json', 'packages/rom-weaver-wasm/package-lock.json') }}
+          restore-keys: |
+            npm-${{ runner.os }}-
 
       - name: Install package dependencies
         run: |
@@ -64,16 +73,16 @@ jobs:
         run: npm --prefix packages/rom-weaver-react exec playwright install --with-deps chromium
 
       - name: Rust format
-        run: cargo fmt --check
+        run: mise run fmt
 
       - name: Rust clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: mise run clippy
 
       - name: Rust typegen
-        run: cargo run -p rom-weaver-typegen -- --check
+        run: mise run typegen-check
 
       - name: WASM threaded check
-        run: RUSTFLAGS="${RUSTFLAGS:-} -D warnings" scripts/wasm/with-wasi-env.sh cargo check -p rom-weaver-containers --target wasm32-wasip1-threads --lib
+        run: RUSTFLAGS="${RUSTFLAGS:-} -D warnings" mise run wasm-check
 
       - name: Whitespace
         env:
@@ -87,13 +96,13 @@ jobs:
           fi
 
       - name: Thread guard regressions
-        run: scripts/check-thread-guards.sh
+        run: mise run thread-guards
 
       - name: Rust tests
-        run: cargo test --workspace
+        run: mise run test-rust
 
       - name: WASM build
-        run: scripts/build-wasm-cli.sh
+        run: mise run build-wasm
 
       - name: rom-weaver-wasm checks
         run: |

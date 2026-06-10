@@ -4,13 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "npm --prefix packages/rom-weaver-react run dev --",
+    "dev": "mise run dev",
     "prepare": "lefthook install",
     "hooks:install": "lefthook install",
     "hooks:run": "lefthook run pre-commit --force",
     "hooks:validate": "lefthook validate",
-    "typegen": "cargo run -p rom-weaver-typegen -- --write",
-    "typegen:check": "cargo run -p rom-weaver-typegen -- --check",
+    "typegen": "mise run typegen",
+    "typegen:check": "mise run typegen-check",
     "version": "node scripts/sync-version.mjs"
   },
   "devDependencies": {
