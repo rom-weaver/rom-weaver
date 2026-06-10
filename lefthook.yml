@@ -1,23 +1,37 @@
 pre-commit:
-  parallel: false
+  # Run independent checks concurrently. The cargo commands share one target
+  # dir and serialize on its build lock, but the npm checks overlap with them.
+  parallel: true
   commands:
+    # `glob` only gates whether a command runs (no `{staged_files}` template, so
+    # each command still runs workspace-wide). Rust/wasm checks are skipped on
+    # React-only commits and vice versa; CI runs the full suite unconditionally.
     rust-format:
+      glob: "*.rs"
       run: cargo fmt --check
     rust-clippy:
+      glob: "*.{rs,toml,lock}"
       run: cargo clippy --workspace --all-targets -- -D warnings
     rust-typegen:
+      glob: "*.rs"
       run: cargo run -p rom-weaver-typegen -- --check
     wasm-threaded-check:
+      glob: "*.{rs,toml,lock}"
       run: 'RUSTFLAGS="${RUSTFLAGS:-} -D warnings" scripts/wasm/with-wasi-env.sh cargo check -p rom-weaver-containers --target wasm32-wasip1-threads --lib'
     react-lint:
+      glob: "packages/rom-weaver-react/**"
       run: npm --prefix packages/rom-weaver-react run lint:code
     react-types:
+      glob: "packages/rom-weaver-react/**"
       run: npm --prefix packages/rom-weaver-react run lint:types
     wasm-lint:
+      glob: "packages/rom-weaver-wasm/**"
       run: npm --prefix packages/rom-weaver-wasm run lint:code
     wasm-types:
+      glob: "packages/rom-weaver-wasm/**"
       run: npm --prefix packages/rom-weaver-wasm run check:types
     whitespace:
       run: git diff --cached --check
     thread-guard-regressions:
+      glob: "*.rs"
       run: scripts/check-thread-guards.sh
