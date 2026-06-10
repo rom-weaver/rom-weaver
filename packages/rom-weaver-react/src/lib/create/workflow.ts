@@ -24,6 +24,7 @@ import {
 import { requireOutputName } from "../output/output-name-validation.ts";
 import { createPatchFileFromPublicOutput } from "../runtime/public-output-bin-file.ts";
 import { createWorkflowTracer } from "../workflow/workflow-tracing.ts";
+import { embedSourceCrc32InPatchName } from "./patch-checksum-name.ts";
 
 const ROM_SPECIFIC_INPUT_EXTENSION_REGEX = createRomSpecificExtensionRegex(ROM_SPECIFIC_DECOMPRESSION_INPUT_EXTENSIONS);
 const FILE_QUERY_OR_HASH_REGEX = /[?#].*$/;
@@ -171,10 +172,22 @@ const runCreateWorkflow = async (
     );
     const requestedFileName = getCreateOutputName(options) || defaultPatchFileName;
     const compression = getArchiveOutputCompression(getCreateCompression(options), "create patch");
-    const rawPatchFileName =
+    const basePatchFileName =
       compression !== "none" && deps.hasArchiveFileName(requestedFileName, compression)
         ? defaultPatchFileName
         : requestedFileName;
+    // Mirror the Rust `patch-create --checksum-name`: embed the source crc32 into
+    // the patch file name so checksumless formats round trip a "right ROM?" guard
+    // back into apply/validate. For compressed output this names the inner patch
+    // entry, leaving the archive name as requested.
+    const rawPatchFileName = embedSourceCrc32InPatchName(basePatchFileName, input.originalCrc32);
+    if (rawPatchFileName !== basePatchFileName) {
+      traceWorkflowStage(options, "stage.start", "checksum-name", "output", {
+        crc32: input.originalCrc32,
+        outputName: rawPatchFileName,
+        requestedName: basePatchFileName,
+      });
+    }
     const result = await traceWorkflowStageBlock(
       options,
       "create",

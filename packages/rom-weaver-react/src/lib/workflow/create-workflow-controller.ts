@@ -507,6 +507,7 @@ class CreateWorkflowController<TSource, TDestination> extends WorkflowController
         },
       },
       original: (preparedOriginal || original.source) as never,
+      originalCrc32: original.state.checksums?.crc32,
       selectedModifiedEntryName: preparedModified ? undefined : modified.selectedArchiveEntry,
       selectedOriginalEntryName: preparedOriginal ? undefined : original.selectedArchiveEntry,
     };

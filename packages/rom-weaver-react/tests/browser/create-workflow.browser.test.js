@@ -94,7 +94,7 @@ test("create workflow extracts archived original and modified inputs before patc
 
     const result = await workflow.run();
     expect(result.type).toBe("ips");
-    expect(result.output.fileName).toBe("change.ips");
+    expect(result.output.fileName).toBe(`change [crc32:${ORIGINAL_CHECKSUMS.crc32}].ips`);
     expect(result.sizeSummary?.rawSize).toBe(result.output.size);
     await result.output.dispose();
 
@@ -147,7 +147,7 @@ test("create workflow supports raw and zip output compression", async () => {
     expect(rawWorkflow.getOriginal()?.checksumTimeMs).toEqual(expect.any(Number));
     expect(rawWorkflow.getModified()?.checksumTimeMs).toEqual(expect.any(Number));
     const rawResult = await rawWorkflow.run();
-    expect(rawResult.output.fileName).toBe("change.ips");
+    expect(rawResult.output.fileName).toBe(`change [crc32:${ORIGINAL_CHECKSUMS.crc32}].ips`);
     expect(rawResult.sizeSummary?.rawSize).toBe(rawResult.output.size);
     await rawResult.output.dispose();
   } finally {
@@ -257,7 +257,7 @@ test("create workflow defaults output names to the modified source", async () =>
     await rawWorkflow.setOriginal(original);
     await rawWorkflow.setModified(modified);
     const rawResult = await rawWorkflow.run();
-    expect(rawResult.output.fileName).toBe("modified.ips");
+    expect(rawResult.output.fileName).toBe(`modified [crc32:${ORIGINAL_CHECKSUMS.crc32}].ips`);
     await rawResult.output.dispose();
   } finally {
     await rawWorkflow.dispose();

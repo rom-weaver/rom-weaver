@@ -106,6 +106,9 @@ type CreatePatchInput = {
   modified: SourceRef;
   selectedModifiedEntryName?: string;
   selectedOriginalEntryName?: string;
+  /** crc32 of the resolved original source, embedded into the patch output name
+   * (`[crc32:<hex>]`) so it round trips back into apply/validate. */
+  originalCrc32?: string;
   options?: CreateWorkflowOptions;
 };
 
