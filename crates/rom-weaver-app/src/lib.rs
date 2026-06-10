@@ -730,8 +730,20 @@ struct N64ByteOrderTransform {
     to: N64ByteOrder,
 }
 
-#[path = "commands_and_selection.rs"]
-mod commands_and_selection;
+#[path = "command_dispatch.rs"]
+mod command_dispatch;
+
+#[path = "probe_command.rs"]
+mod probe_command;
+
+#[path = "list_command.rs"]
+mod list_command;
+
+#[path = "extract_command.rs"]
+mod extract_command;
+
+#[path = "checksum_command.rs"]
+mod checksum_command;
 
 #[path = "source_resolution.rs"]
 mod source_resolution;
