@@ -46,9 +46,12 @@ function CandidateSelectionDialog({
   const selectableCount = displayItems.filter(({ candidate }) => candidate.selectable).length;
   const items: SelectionItem[] = displayItems.map(({ candidate, sizeLabel, warningLabel }) => {
     const primaryLabel = candidate.type === "file" ? candidate.fileName : candidate.label;
-    const breadcrumbLabel = candidate.breadcrumbs?.join(" › ") || "";
+    const breadcrumbLabel = (candidate.breadcrumbs?.join(" › ") || "").trim();
+    // A breadcrumb that repeats the row name or the dialog title adds no context.
     const uniqueBreadcrumbLabel =
-      breadcrumbLabel.trim() && breadcrumbLabel.trim() !== primaryLabel.trim() ? breadcrumbLabel : "";
+      breadcrumbLabel && breadcrumbLabel !== primaryLabel.trim() && breadcrumbLabel !== request.sourceName.trim()
+        ? breadcrumbLabel
+        : "";
     return {
       breadcrumb: uniqueBreadcrumbLabel || undefined,
       id: candidate.id,

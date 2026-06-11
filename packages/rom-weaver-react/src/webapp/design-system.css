@@ -585,11 +585,13 @@
 .rw-modal .selmain .selname .fnm { flex: none; }
 .rw-modal .selpath { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--rw-mono); font-size: 0.72rem; color: var(--rw-ink-mut); }
 .rw-modal .selcheck input[type="checkbox"] { flex: none; width: 16px; height: 16px; margin: 0; accent-color: var(--rw-accent); }
+.rw-modal .selcheck:has(input:checked) { border-color: color-mix(in oklab, var(--rw-accent) 55%, var(--rw-line)); background: color-mix(in oklab, var(--rw-accent) 8%, var(--rw-inset)); }
+.rw-modal .selcheck:has(input:checked):hover { background: color-mix(in oklab, var(--rw-accent) 12%, var(--rw-panel-2)); }
 .rw-modal .seltoolbar { display: flex; align-items: center; justify-content: space-between; gap: 9px; margin-bottom: 9px; }
 .rw-modal .seltoolbar .selall { height: 28px; padding: 0 12px; }
 .rw-modal .selcount { font-size: 0.78rem; color: var(--rw-ink-mut); }
 .rw-modal .selfoot { display: flex; justify-content: flex-end; margin-top: 12px; }
-.rw-modal .selfoot .selconfirm:disabled { opacity: .5; cursor: not-allowed; }
+.rw-modal .selfoot .selconfirm:disabled { cursor: not-allowed; background: var(--rw-inset); color: var(--rw-ink-mut); border: 1px solid var(--rw-line); }
 
 /* settings modal */
 .rw-modal .setcols { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; align-items: start; }

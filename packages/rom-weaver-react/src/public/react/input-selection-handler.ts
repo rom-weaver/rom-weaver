@@ -1,10 +1,25 @@
 import { useEffect, useRef } from "react";
 import { createLogger } from "../../lib/logging.ts";
+import { getPathBaseName } from "../../lib/path-utils.ts";
 import type { SelectionCandidate } from "../../types/selection.ts";
 import { setInputSelectionHandler } from "../../workers/rom-weaver/rom-weaver-runner.ts";
 import type { CandidateSelectionChoice, CandidateSelectionPrompt } from "./public-types.ts";
 
 const logger = createLogger("input-selection-handler");
+
+const HEADING_BACKTICK_PATH_REGEX = /`([^`]+)`/;
+
+/**
+ * Host prompt headings are CLI sentences with the source path in backticks
+ * (e.g. "extract input payload selection for `/work/a.7z` is ambiguous. …").
+ * The dialog title should be just the file name; the dialog supplies its own
+ * instruction subtitle.
+ */
+const getSelectionSourceName = (heading: string): string => {
+  const backtickedPath = heading.match(HEADING_BACKTICK_PATH_REGEX)?.[1];
+  if (!backtickedPath) return heading;
+  return getPathBaseName(backtickedPath, heading);
+};
 
 type SelectCandidateFile = (request: CandidateSelectionPrompt) => Promise<CandidateSelectionChoice>;
 
@@ -46,15 +61,17 @@ const useInputSelectionHandler = (selectFile: SelectCandidateFile) => {
         return -1;
       }
       const candidates = createHostSelectionCandidates(rawCandidates);
+      const sourceName = getSelectionSourceName(heading);
       logger.trace("prompting user to select an entry to extract", {
         candidateCount: candidates.length,
         heading,
+        sourceName,
       });
       try {
         const choice = await selectFileRef.current({
           candidates,
           role: "input",
-          sourceName: heading,
+          sourceName,
           warnings: [],
         });
         const selectedIndex = candidates.findIndex((candidate) => candidate.id === choice?.id);
