@@ -1,6 +1,5 @@
 import type { ChecksumRomProbe } from "../../types/checksum.ts";
-import type { WorkflowProgress } from "../../types/progress.ts";
-import type { SelectedInputInfo, TrimResult } from "../../types/public.ts";
+import type { TrimResult } from "../../types/public.ts";
 import type { SelectionCandidate } from "../../types/selection.ts";
 import type { CompressionFormat, CreateSettings } from "../../types/settings.ts";
 import type {
@@ -12,24 +11,14 @@ import type { WorkflowOptions, WorkflowWarning } from "../../types/workflow-cont
 import type { CreateWorkflowOptions, TrimInput } from "../../types/workflow-runtime.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import { getCompressionOutputExtension, isCompressionFormat } from "../compression/container-format-registry.ts";
-import { RomWeaverError, throwIfAborted, withAbortSignal } from "../errors.ts";
+import { RomWeaverError, withAbortSignal } from "../errors.ts";
 import { getFileNameWithoutExtension } from "../input/path-utils.ts";
 import { wrapPublicOutput } from "../output/index.ts";
 import { runTrimWorkflow, trimWorkflowDeps } from "../trim/workflow.ts";
-import {
-  cloneCandidate,
-  cloneValue,
-  cloneWarning,
-  createWorkflowId,
-  createWorkflowProgress,
-  getPreparationProgressStage,
-  isRecord,
-} from "./controller-utils.ts";
-import { type SharedRomStagedSource, StagedRomSourceController } from "./staged-rom-source.ts";
-import { WorkflowController } from "./workflow-controller.ts";
-import { traceWorkflowControllerEvent } from "./workflow-tracing.ts";
+import { BaseWorkflowController, type SourceValidator } from "./base-workflow-controller.ts";
+import { cloneCandidate, cloneValue, cloneWarning, getPreparationProgressStage, isRecord } from "./controller-utils.ts";
+import type { SharedRomStagedSource, StagedRomSourceController } from "./staged-rom-source.ts";
 
-type SourceValidator<TSource> = (sources: TSource | TSource[] | undefined) => void;
 type SourceStatus = TrimWorkflowSourceState["status"];
 type SourceRole = "input";
 type InternalSourceState = {
@@ -89,18 +78,8 @@ const getFileNameExtension = (fileName: string) => {
   return match ? match[0].slice(1) : "";
 };
 
-class TrimWorkflowController<TSource, TDestination> extends WorkflowController<{ progress: WorkflowProgress }> {
-  readonly id: string;
-  protected readonly runtime: WorkflowRuntime;
-  protected readonly validateSources?: SourceValidator<TSource>;
-  private readonly abortController = new AbortController();
-  private readonly constructorSignal?: AbortSignal;
-  private readonly selectFile?: WorkflowOptions<CreateSettings>["selectFile"];
+class TrimWorkflowController<TSource, TDestination> extends BaseWorkflowController<TSource, CreateSettings> {
   private readonly inputStages: StagedRomSourceController<TSource, InternalSourceState>;
-  private disposed = false;
-  private activeMutation: string | null = null;
-  private progressSequence = 0;
-  private settings: Partial<CreateSettings>;
   private outputFormat: CompressionFormat = "none";
   private outputExtension = "";
   private outputName = "";
@@ -112,35 +91,11 @@ class TrimWorkflowController<TSource, TDestination> extends WorkflowController<{
     options: WorkflowOptions<CreateSettings> = {},
     validateSources?: SourceValidator<TSource>,
   ) {
-    super();
-    this.runtime = runtime;
-    this.validateSources = validateSources;
-    this.id = options.id || createWorkflowId();
-    this.settings = cloneValue(options.settings || {});
-    this.constructorSignal = options.signal;
-    this.selectFile = options.selectFile;
-    this.inputStages = new StagedRomSourceController<TSource, InternalSourceState>({
-      clearRequestsWhenSinglePatchableAsset: true,
-      emitProgress: (event) => this.emitProgress(event),
+    super("trim", runtime, options, validateSources);
+    this.inputStages = this.createStagedController<InternalSourceState>({
       getExecutionOptions: () => this.createExecutionOptions(),
-      getPreparedFileName: (asset, fallback) => asset?.fileName || fallback,
       getSourceId: (_role, index) => `${TRIM_INPUT_ROLE}-${index + 1}`,
-      id: this.id,
       releasePreparedOnSelection: "always",
-      runtime: this.runtime,
-      selectFile: this.selectFile,
-      trace: (message, details = {}) =>
-        traceWorkflowControllerEvent(
-          {
-            logLevel: this.settings.logging?.level,
-            onLog: this.settings.logging?.sink,
-            workflow: "trim",
-            workflowId: this.id,
-          },
-          message,
-          details,
-        ),
-      workflow: "trim",
     });
     const configuredCompression = this.settings.output?.compression;
     if (isCompressionFormat(configuredCompression)) {
@@ -152,8 +107,6 @@ class TrimWorkflowController<TSource, TDestination> extends WorkflowController<{
     } else {
       this.outputName = this.buildAutomaticOutputName();
     }
-    if (options.signal?.aborted) this.abortController.abort(options.signal.reason);
-    else options.signal?.addEventListener("abort", () => this.abort(options.signal?.reason), { once: true });
   }
 
   getInput(): TrimWorkflowSourceState | null {
@@ -232,10 +185,6 @@ class TrimWorkflowController<TSource, TDestination> extends WorkflowController<{
     });
   }
 
-  abort(reason?: unknown): void {
-    if (!this.abortController.signal.aborted) this.abortController.abort(reason);
-  }
-
   async dispose(): Promise<void> {
     if (this.disposed) return;
     this.abort();
@@ -244,52 +193,8 @@ class TrimWorkflowController<TSource, TDestination> extends WorkflowController<{
     this.disposed = true;
   }
 
-  protected traceTriggerEvent(event: "progress", payload: WorkflowProgress, listenerCount: number): void {
-    traceWorkflowControllerEvent(
-      {
-        logLevel: this.settings.logging?.level,
-        onLog: this.settings.logging?.sink,
-        workflow: "trim",
-        workflowId: this.id,
-      },
-      "trigger",
-      {
-        event,
-        listenerCount,
-        payload,
-      },
-    );
-  }
-
-  private emitProgress(event: {
-    current?: number;
-    details?: Record<string, unknown>;
-    hasProgress?: boolean;
-    id: string;
-    label: string;
-    percent?: number | null;
-    role: WorkflowProgress["role"];
-    stage: WorkflowProgress["stage"];
-    total?: number;
-  }) {
-    this.trigger("progress", createWorkflowProgress(++this.progressSequence, { ...event, workflow: "trim" }));
-  }
-
-  private async mutate<TValue>(operation: string, callback: () => Promise<TValue>): Promise<TValue> {
-    if (this.disposed) throw new RomWeaverError("WORKFLOW_DISPOSED", "Workflow has been disposed");
-    throwIfAborted(this.abortController.signal);
-    throwIfAborted(this.constructorSignal);
-    if (this.activeMutation) {
-      throw new RomWeaverError("WORKFLOW_BUSY", "Workflow is already running another operation", {
-        details: { activeOperation: this.activeMutation, operation },
-      });
-    }
-    this.activeMutation = operation;
-    try {
-      return await callback();
-    } finally {
-      this.activeMutation = null;
-    }
+  private mutate<TValue>(operation: string, callback: () => Promise<TValue>): Promise<TValue> {
+    return this.runExclusiveMutation(operation, callback);
   }
 
   private async releaseInputStage() {
@@ -386,32 +291,6 @@ class TrimWorkflowController<TSource, TDestination> extends WorkflowController<{
       selectedSourceEntryName: preparedSource ? undefined : stage.selectedArchiveEntry,
       source: (preparedSource || stage.source) as never,
     };
-  }
-
-  private toSelectedInputInfo(source: StagedSource<TSource>): SelectedInputInfo {
-    const selected = source.state.selectedCandidateId
-      ? source.state.candidates.find((candidate) => candidate.id === source.state.selectedCandidateId)
-      : undefined;
-    return {
-      fileName: source.state.fileName || "input",
-      id: source.state.id,
-      kind: selected?.type === "file" ? selected.kind : "rom",
-      selectedCandidateId: source.state.selectedCandidateId,
-      selectedCandidateType: selected?.type,
-      size: source.state.size,
-    };
-  }
-
-  private pushWarning(
-    stage: StagedSource<TSource>,
-    error: Error & { code?: string; details?: Record<string, unknown> },
-  ) {
-    stage.state.warnings.push({
-      code: error.code,
-      details: error.details,
-      message: error.message,
-      role: stage.state.role,
-    });
   }
 }
 

@@ -1,7 +1,6 @@
 import type { ChecksumVariant } from "../../types/checksum.ts";
 import type { CreateWorkflowParentCompression, CreateWorkflowSourceState } from "../../types/create-workflow.ts";
-import type { WorkflowProgress } from "../../types/progress.ts";
-import type { CreateResult, SelectedInputInfo } from "../../types/public.ts";
+import type { CreateResult } from "../../types/public.ts";
 import type { SelectionCandidate } from "../../types/selection.ts";
 import type { CreateSettings, PatchFormat } from "../../types/settings.ts";
 import type { WorkflowOptions, WorkflowWarning } from "../../types/workflow-controller.ts";
@@ -15,23 +14,12 @@ import {
   normalizeCreatePatchFormat,
 } from "../create/patch-format-limits.ts";
 import { createWorkflowDeps, runCreateWorkflow } from "../create/workflow.ts";
-import { RomWeaverError, throwIfAborted, withAbortSignal } from "../errors.ts";
+import { RomWeaverError, withAbortSignal } from "../errors.ts";
 import { getFileNameWithoutExtension } from "../input/path-utils.ts";
 import { wrapPublicOutput } from "../output/index.ts";
-import {
-  cloneCandidate,
-  cloneValue,
-  cloneWarning,
-  createWorkflowId,
-  createWorkflowProgress,
-  getPreparationProgressStage,
-  isRecord,
-} from "./controller-utils.ts";
-import {
-  type SharedRomSourceSession,
-  type SharedRomStagedSource,
-  StagedRomSourceController,
-} from "./staged-rom-source.ts";
+import { BaseWorkflowController, type SourceValidator } from "./base-workflow-controller.ts";
+import { cloneCandidate, cloneValue, cloneWarning, getPreparationProgressStage, isRecord } from "./controller-utils.ts";
+import type { SharedRomSourceSession, SharedRomStagedSource, StagedRomSourceController } from "./staged-rom-source.ts";
 import {
   calculateStandardInputChecksumsForFile,
   cloneChecksumVariants,
@@ -45,10 +33,7 @@ import {
   isChecksummableInputAsset,
   type StandardWorkflowChecksums,
 } from "./staged-source-checksums.ts";
-import { WorkflowController } from "./workflow-controller.ts";
-import { traceWorkflowControllerEvent } from "./workflow-tracing.ts";
 
-type SourceValidator<TSource> = (sources: TSource | TSource[] | undefined) => void;
 type SourceRole = "modified" | "original";
 type SourceStatus = CreateWorkflowSourceState["status"];
 type ParentCompression = CreateWorkflowParentCompression;
@@ -100,19 +85,8 @@ const cloneSourceState = (state: InternalSourceState | null | undefined) =>
       } satisfies CreateWorkflowSourceState)
     : null;
 
-class CreateWorkflowController<TSource, TDestination> extends WorkflowController<{ progress: WorkflowProgress }> {
-  readonly id: string;
-  protected readonly runtime: WorkflowRuntime;
-  protected readonly validateSources?: SourceValidator<TSource>;
-  private readonly abortController = new AbortController();
-  private readonly constructorSignal?: AbortSignal;
-  private readonly selectFile?: WorkflowOptions<CreateSettings>["selectFile"];
+class CreateWorkflowController<TSource, TDestination> extends BaseWorkflowController<TSource, CreateSettings> {
   private readonly sourceStages: StagedRomSourceController<TSource, InternalSourceState>;
-  private disposed = false;
-  private activeMutation: string | null = null;
-  private mutationQueue: Promise<void> | null = null;
-  private progressSequence = 0;
-  private settings: Partial<CreateSettings>;
   private patchType?: PatchFormat | string;
   private outputName = "";
   private manualOutputName = false;
@@ -124,36 +98,11 @@ class CreateWorkflowController<TSource, TDestination> extends WorkflowController
     options: WorkflowOptions<CreateSettings> = {},
     validateSources?: SourceValidator<TSource>,
   ) {
-    super();
-    this.runtime = runtime;
-    this.validateSources = validateSources;
-    this.id = options.id || createWorkflowId();
-    this.settings = cloneValue(options.settings || {});
-    this.constructorSignal = options.signal;
-    this.selectFile = options.selectFile;
-    this.sourceStages = new StagedRomSourceController<TSource, InternalSourceState>({
-      clearRequestsWhenSinglePatchableAsset: true,
-      emitProgress: (event) => this.emitProgress(event),
+    super("create", runtime, options, validateSources);
+    this.sourceStages = this.createStagedController<InternalSourceState>({
       getExecutionOptions: () => this.createExecutionOptions(),
-      getPreparedFileName: (asset, fallback) => asset?.fileName || fallback,
       getSessionId: (role) => role,
       getSourceId: (role, index) => `${role}-${index + 1}`,
-      id: this.id,
-      releasePreparedOnSelection: "when-empty",
-      runtime: this.runtime,
-      selectFile: this.selectFile,
-      trace: (message, details = {}) =>
-        traceWorkflowControllerEvent(
-          {
-            logLevel: this.settings.logging?.level,
-            onLog: this.settings.logging?.sink,
-            workflow: "create",
-            workflowId: this.id,
-          },
-          message,
-          details,
-        ),
-      workflow: "create",
     });
     this.patchType = this.settings.format;
     if (typeof this.settings.output?.outputName === "string") {
@@ -161,8 +110,6 @@ class CreateWorkflowController<TSource, TDestination> extends WorkflowController
       this.outputName = this.settings.output.outputName;
     }
     if (!this.manualOutputName) this.outputName = this.buildAutomaticOutputName();
-    if (options.signal?.aborted) this.abortController.abort(options.signal.reason);
-    else options.signal?.addEventListener("abort", () => this.abort(options.signal?.reason), { once: true });
   }
 
   getOriginal(): CreateWorkflowSourceState | null {
@@ -263,10 +210,6 @@ class CreateWorkflowController<TSource, TDestination> extends WorkflowController
     });
   }
 
-  abort(reason?: unknown): void {
-    if (!this.abortController.signal.aborted) this.abortController.abort(reason);
-  }
-
   async dispose(): Promise<void> {
     if (this.disposed) return;
     this.abort();
@@ -278,61 +221,8 @@ class CreateWorkflowController<TSource, TDestination> extends WorkflowController
     this.disposed = true;
   }
 
-  protected traceTriggerEvent(event: "progress", payload: WorkflowProgress, listenerCount: number): void {
-    traceWorkflowControllerEvent(
-      {
-        logLevel: this.settings.logging?.level,
-        onLog: this.settings.logging?.sink,
-        workflow: "create",
-        workflowId: this.id,
-      },
-      "trigger",
-      {
-        event,
-        listenerCount,
-        payload,
-      },
-    );
-  }
-
-  private emitProgress(event: {
-    current?: number;
-    details?: Record<string, unknown>;
-    hasProgress?: boolean;
-    id: string;
-    label: string;
-    percent?: number | null;
-    role: WorkflowProgress["role"];
-    stage: WorkflowProgress["stage"];
-    total?: number;
-    workflow: WorkflowProgress["workflow"];
-  }) {
-    this.trigger("progress", createWorkflowProgress(++this.progressSequence, event));
-  }
-
-  private async mutate<TValue>(operation: string, callback: () => Promise<TValue>): Promise<TValue> {
-    const execute = async () => {
-      if (this.disposed) throw new RomWeaverError("WORKFLOW_DISPOSED", "Workflow has been disposed");
-      throwIfAborted(this.abortController.signal);
-      throwIfAborted(this.constructorSignal);
-      this.activeMutation = operation;
-      try {
-        return await callback();
-      } finally {
-        this.activeMutation = null;
-      }
-    };
-    const previousMutation = this.mutationQueue;
-    const run = previousMutation ? previousMutation.catch(() => undefined).then(execute) : execute();
-    const queued = run.then(
-      () => undefined,
-      () => undefined,
-    );
-    this.mutationQueue = queued;
-    queued.finally(() => {
-      if (this.mutationQueue === queued) this.mutationQueue = null;
-    });
-    return run;
+  private mutate<TValue>(operation: string, callback: () => Promise<TValue>): Promise<TValue> {
+    return this.runQueuedMutation(operation, callback);
   }
 
   private async setSource(operation: string, role: SourceRole, source: TSource | TSource[]): Promise<void> {
@@ -525,32 +415,6 @@ class CreateWorkflowController<TSource, TDestination> extends WorkflowController
       selectedModifiedEntryName: preparedModified ? undefined : modified.selectedArchiveEntry,
       selectedOriginalEntryName: preparedOriginal ? undefined : original.selectedArchiveEntry,
     };
-  }
-
-  private toSelectedInputInfo(source: StagedSource<TSource>, fallback: string): SelectedInputInfo {
-    const selected = source.state.selectedCandidateId
-      ? source.state.candidates.find((candidate) => candidate.id === source.state.selectedCandidateId)
-      : undefined;
-    return {
-      fileName: source.state.fileName || fallback,
-      id: source.state.id,
-      kind: selected?.type === "file" ? selected.kind : "rom",
-      selectedCandidateId: source.state.selectedCandidateId,
-      selectedCandidateType: selected?.type,
-      size: source.state.size,
-    };
-  }
-
-  private pushWarning(
-    stage: StagedSource<TSource>,
-    error: Error & { code?: string; details?: Record<string, unknown> },
-  ) {
-    stage.state.warnings.push({
-      code: error.code,
-      details: error.details,
-      message: error.message,
-      role: stage.state.role,
-    });
   }
 }
 

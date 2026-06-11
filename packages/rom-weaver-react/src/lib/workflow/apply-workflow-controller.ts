@@ -1,16 +1,15 @@
 import type { ApplyWorkflowInputState, ApplyWorkflowPatchState } from "../../types/apply-workflow.ts";
-import type { WorkflowProgress } from "../../types/progress.ts";
 import type { ApplyResult } from "../../types/public.ts";
 import type { CandidateSelectionRequest, SelectionCandidate } from "../../types/selection.ts";
 import type { ApplySettings, CompressionFormat } from "../../types/settings.ts";
-import type { WorkflowOptions, WorkflowWarning } from "../../types/workflow-controller.ts";
+import type { WorkflowOptions } from "../../types/workflow-controller.ts";
 import type { ApplyWorkflowOptions, PatchInput } from "../../types/workflow-runtime.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
 import type { ParsedPatchLike, PatchFileInstance } from "../../workers/protocol/patch-engine.ts";
 import { getPatchProbeRequirements } from "../apply/patch-apply-service.ts";
 import { patchWorkflowDeps, runApplyWorkflow } from "../apply/workflow.ts";
 import { isCompressionFormat } from "../compression/container-format-registry.ts";
-import { RomWeaverError, throwIfAborted, toRomWeaverError, withAbortSignal } from "../errors.ts";
+import { RomWeaverError, toRomWeaverError, withAbortSignal } from "../errors.ts";
 import { getPatchFileBlob, getPatchFileBytes } from "../input/binary-service.ts";
 import type { InputAsset, InputParentCompression } from "../input/input-assets.ts";
 import {
@@ -63,41 +62,22 @@ import type {
   SourceValidator,
   StagedSource,
 } from "./apply-workflow-state.ts";
-import {
-  cloneCandidate,
-  cloneValue,
-  createWorkflowId,
-  createWorkflowProgress,
-  getSourceFileName,
-  getSourceSize,
-  isRecord,
-} from "./controller-utils.ts";
-import { StagedRomSourceController } from "./staged-rom-source.ts";
+import { BaseWorkflowController } from "./base-workflow-controller.ts";
+import { cloneCandidate, cloneValue, getSourceFileName, getSourceSize, isRecord } from "./controller-utils.ts";
+import type { StagedRomSourceController } from "./staged-rom-source.ts";
 import { cloneChecksumRomProbe } from "./staged-source-checksums.ts";
-import { WorkflowController } from "./workflow-controller.ts";
-import { traceWorkflowControllerEvent } from "./workflow-tracing.ts";
 
 /** Side-channel chain attached to a fanned-out leaf patch File so a re-stage (which sees only the
  * raw patch, not its parent archive) can still render the archive-nesting "extract section". */
 type NestedPatchSourceMetadata = { __nestedParentCompressions?: InputParentCompression[] };
 
-class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<{ progress: WorkflowProgress }> {
-  readonly id: string;
-  protected readonly runtime: WorkflowRuntime;
-  protected readonly validateSources?: SourceValidator<TSource>;
-  private readonly constructorSignal?: AbortSignal;
-  private readonly selectFile?: WorkflowOptions<ApplySettings>["selectFile"];
+class ApplyWorkflowController<TSource, TDestination> extends BaseWorkflowController<TSource, ApplySettings> {
   private readonly inputStages: StagedRomSourceController<TSource, InternalSourceState>;
-  private abortController = new AbortController();
-  private disposed = false;
-  private progressSequence = 0;
   private nextCandidateSequence = 0;
   private nextInputSequence = 0;
   private nextPatchSequence = 0;
   private outputState: ApplyOutputState;
-  private settings: Partial<ApplySettings>;
   private inputSession?: InputSession<TSource>;
-  private mutationQueue: Promise<void> | null = null;
   private patches: Array<StagedSource<TSource>> = [];
   private inputs: TSource[] = [];
 
@@ -106,30 +86,14 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
     options: WorkflowOptions<ApplySettings> = {},
     validateSources?: SourceValidator<TSource>,
   ) {
-    super();
-    this.runtime = runtime;
-    this.validateSources = validateSources;
-    this.id = options.id || createWorkflowId();
-    this.settings = cloneValue(options.settings || {});
+    super("apply", runtime, options, validateSources);
     this.outputState = createApplyOutputState(this.settings);
-    this.constructorSignal = options.signal;
-    this.selectFile = options.selectFile;
-    this.inputStages = new StagedRomSourceController<TSource, InternalSourceState>({
-      clearRequestsWhenSinglePatchableAsset: true,
-      emitProgress: (event) => this.emitProgress(event),
+    this.inputStages = this.createStagedController<InternalSourceState>({
       getExecutionOptions: () => this.createExecutionOptions(),
       getPreparedFileName: getPreparedAssetFileName,
       getSessionId: () => "input-session",
       getSourceId: () => `input-${++this.nextInputSequence}`,
-      id: this.id,
-      releasePreparedOnSelection: "when-empty",
-      runtime: this.runtime,
-      selectFile: this.selectFile,
-      trace: (message, details) => this.trace(message, details),
-      workflow: "apply",
     });
-    if (options.signal?.aborted) this.abortController.abort(options.signal.reason);
-    else options.signal?.addEventListener("abort", () => this.abort(options.signal?.reason), { once: true });
   }
 
   getInput(): ApplyWorkflowInputState | null {
@@ -496,10 +460,6 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
     });
   }
 
-  abort(reason?: unknown): void {
-    if (!this.abortController.signal.aborted) this.abortController.abort(reason);
-  }
-
   async dispose(): Promise<void> {
     if (this.disposed) return;
     this.abort();
@@ -508,36 +468,6 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
     this.patches = [];
     this.clearListeners();
     this.disposed = true;
-  }
-
-  protected traceTriggerEvent(event: "progress", payload: WorkflowProgress, listenerCount: number): void {
-    traceWorkflowControllerEvent(
-      {
-        logLevel: this.settings.logging?.level,
-        onLog: this.settings.logging?.sink,
-        workflow: "apply",
-        workflowId: this.id,
-      },
-      "trigger",
-      {
-        event,
-        listenerCount,
-        payload,
-      },
-    );
-  }
-
-  private trace(message: string, details: Record<string, unknown> = {}): void {
-    traceWorkflowControllerEvent(
-      {
-        logLevel: this.settings.logging?.level,
-        onLog: this.settings.logging?.sink,
-        workflow: "apply",
-        workflowId: this.id,
-      },
-      message,
-      details,
-    );
   }
 
   private preloadRuntimeCapability(capability: "checksum" | "compression" | "patch"): void {
@@ -563,56 +493,8 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
       });
   }
 
-  private emitProgress(event: {
-    current?: number;
-    details?: Record<string, unknown>;
-    hasProgress?: boolean;
-    id: string;
-    label: string;
-    percent?: number | null;
-    role: WorkflowProgress["role"];
-    stage: WorkflowProgress["stage"];
-    total?: number;
-    workflow: WorkflowProgress["workflow"];
-  }) {
-    this.trigger("progress", createWorkflowProgress(++this.progressSequence, event));
-  }
-
-  private async mutate<TValue>(_operation: string, callback: () => Promise<TValue>): Promise<TValue> {
-    const execute = async () => {
-      this.assertCanStartOperation();
-      const operationSignal = this.abortController.signal;
-      try {
-        return await callback();
-      } catch (error) {
-        throw toRomWeaverError(error);
-      } finally {
-        this.rearmAbortController(operationSignal);
-      }
-    };
-    const previousMutation = this.mutationQueue;
-    const run = previousMutation ? previousMutation.catch(() => undefined).then(execute) : execute();
-    const queued = run.then(
-      () => undefined,
-      () => undefined,
-    );
-    this.mutationQueue = queued;
-    queued.finally(() => {
-      if (this.mutationQueue === queued) this.mutationQueue = null;
-    });
-    return run;
-  }
-
-  private assertCanStartOperation(): void {
-    if (this.disposed) throw new RomWeaverError("WORKFLOW_DISPOSED", "Workflow has been disposed");
-    throwIfAborted(this.abortController.signal);
-    throwIfAborted(this.constructorSignal);
-  }
-
-  private rearmAbortController(operationSignal: AbortSignal): void {
-    if (!operationSignal.aborted || this.abortController.signal !== operationSignal) return;
-    if (this.disposed || this.constructorSignal?.aborted) return;
-    this.abortController = new AbortController();
+  private mutate<TValue>(operation: string, callback: () => Promise<TValue>): Promise<TValue> {
+    return this.runQueuedMutation(operation, callback, { rearmAbort: true, wrapErrors: true });
   }
 
   private createInitialSource(
@@ -1110,19 +992,6 @@ class ApplyWorkflowController<TSource, TDestination> extends WorkflowController<
       preparedInputAssets: this.getPreparedInputAssets(),
       preparedPatchFiles: this.patches.map((patch) => patch.preparedPatchFile).filter(Boolean) as PatchFileInstance[],
     };
-  }
-
-  private pushWarning(
-    stage: StagedSource<TSource>,
-    error: Error & { code?: string; details?: Record<string, unknown> },
-  ) {
-    const warning: WorkflowWarning = {
-      code: error.code,
-      details: error.details,
-      message: error.message,
-      role: stage.state.role,
-    };
-    stage.state.warnings.push(warning);
   }
 
   private getRuntimeSourcesForStage(stage?: StagedSource<TSource>): unknown[] {
