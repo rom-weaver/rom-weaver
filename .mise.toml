@@ -59,8 +59,11 @@ CXXFLAGS_wasm32_wasip1_threads = "-matomics -mbulk-memory -msimd128"
 # sccache: cache rustc invocations across builds and worktrees (install separately, see [tools] note).
 # CARGO_INCREMENTAL=0 because sccache caches at the rustc level; cargo's own incremental artifacts
 # are incompatible with it and would silently bypass the cache.
+# SCCACHE_CACHE_SIZE: default is 10 GiB which fills quickly across worktrees; 35 GiB keeps hit
+# rates high (the file-based config is not picked up by sccache 0.15.0 on macOS).
 RUSTC_WRAPPER = "sccache"
 CARGO_INCREMENTAL = "0"
+SCCACHE_CACHE_SIZE = "35G"
 
 # --- Tasks ----------------------------------------------------------------
 
