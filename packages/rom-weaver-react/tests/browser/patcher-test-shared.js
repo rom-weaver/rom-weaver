@@ -185,6 +185,20 @@ export const clickCandidateSelectionOption = async (label) => {
   expect(state?.kind, state && "errorText" in state ? state.errorText : "").not.toBe("error");
   if (state?.kind === "selected") return;
   if (!getCandidateSelectionList()) return;
+  // An ambiguous multi-entry archive (e.g. multiple distinct ROM payloads) renders as a
+  // multi-select checklist. Pick the single requested entry by ticking its checkbox and confirming;
+  // the result is still one chosen input. A genuinely single-select prompt renders the tree instead.
+  const checklistRow = Array.from(document.querySelectorAll(".rw-modal.select-modal .seltree .selcheck")).find(
+    (entry) => entry.textContent?.includes(label),
+  );
+  if (checklistRow) {
+    const checkbox = checklistRow.querySelector("input[type='checkbox']");
+    if (checkbox && !checkbox.checked) checkbox.click();
+    const confirm = document.querySelector(".rw-modal.select-modal .selconfirm");
+    if (!confirm) throw new Error("Missing candidate selection confirm button");
+    confirm.click();
+    return;
+  }
   const button = Array.from(
     document.querySelectorAll(
       ".rw-modal.select-modal .seltree button, .rw-modal.select-modal .seltree [role='button']",

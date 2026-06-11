@@ -46,6 +46,17 @@ const selectCandidateIfPrompted = async (label) => {
   });
   expect(selectionState).not.toBeNull();
   if (selectionState === "selected") return;
+  // An ambiguous multi-entry archive renders as a multi-select checklist: tick the requested entry's
+  // checkbox and confirm. A genuinely single-select prompt renders a clickable tree option instead.
+  const checklistRow = Array.from(document.querySelectorAll(".rw-modal.select-modal .seltree .selcheck")).find(
+    (entry) => entry.textContent?.includes(label),
+  );
+  if (checklistRow) {
+    const checkbox = checklistRow.querySelector("input[type='checkbox']");
+    if (checkbox && !checkbox.checked) checkbox.click();
+    document.querySelector(".rw-modal.select-modal .selconfirm")?.click();
+    return;
+  }
   await page.getByRole("button", { name: new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i") }).click();
 };
 
