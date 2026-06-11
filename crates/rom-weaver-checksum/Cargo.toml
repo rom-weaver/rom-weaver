@@ -19,5 +19,11 @@ sha1.workspace = true
 sha2.workspace = true
 tracing.workspace = true
 
+[features]
+# ROM identification (per-system pack reader + platform probe). Off by default:
+# filename parsing covers the common case; enable for content-based identify /
+# dump verification (native embeds the packs; see scripts/build-hasheous-identify-index.mjs).
+identify = []
+
 [dev-dependencies]
 proptest = "1.6.0"
