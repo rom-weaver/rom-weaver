@@ -71,6 +71,7 @@ type NavigatorConcurrencyInput = { hardwareConcurrency?: number } | null | undef
 type CompressionSource = {
   fileName?: string;
   name?: string;
+  size?: number;
   _archiveEntryName?: string;
   _chdSourceFileName?: string;
   _rvzSourceFileName?: string;
@@ -254,6 +255,17 @@ const OutputCompressionManager = (() => {
     hasUnambiguousRomSpecificCompressionInputExtension(RVZ_COMPRESSION_INPUT_EXTENSIONS, _getExtension(source));
   const _isUnambiguousZ3dsCompressionInput = (source: CompressionSource | null | undefined) =>
     hasUnambiguousRomSpecificCompressionInputExtension(Z3DS_COMPRESSION_INPUT_EXTENSIONS, _getExtension(source));
+  // `.bin` doubles as bare console dumps (Genesis etc.), so extension alone
+  // can't justify a CHD default. CD sectors are 2352 bytes raw / 2048 cooked;
+  // a .bin with a known size that isn't sector-aligned is not a disc image.
+  // Unknown sizes keep the extension-based resolution.
+  const _isLikelyDiscImageSource = (source: CompressionSource | null | undefined) => {
+    const extension = String(_getExtension(source) ?? "").toLowerCase();
+    if (extension !== "bin") return true;
+    const size = typeof source?.size === "number" && Number.isFinite(source.size) ? source.size : null;
+    if (size === null || size <= 0) return true;
+    return size % 2352 === 0 || size % 2048 === 0;
+  };
   const _resolveOutputCompression = (
     source: CompressionSource | null | undefined,
     options?: OutputCompressionOptions,
@@ -266,8 +278,8 @@ const OutputCompressionManager = (() => {
     if (_hasZ3dsSourceMetadata(source)) return OUTPUT_COMPRESSION.Z3DS;
     if (_isUnambiguousZ3dsCompressionInput(source)) return OUTPUT_COMPRESSION.Z3DS;
     if (_isZ3dsSource(source)) return OUTPUT_COMPRESSION.Z3DS;
-    if (_isUnambiguousChdCompressionInput(source)) return OUTPUT_COMPRESSION.CHD;
-    if (_isChdSource(source)) return OUTPUT_COMPRESSION.CHD;
+    if (_isUnambiguousChdCompressionInput(source) && _isLikelyDiscImageSource(source)) return OUTPUT_COMPRESSION.CHD;
+    if (_isChdSource(source) && _isLikelyDiscImageSource(source)) return OUTPUT_COMPRESSION.CHD;
     if (_isUnambiguousRvzCompressionInput(source)) return OUTPUT_COMPRESSION.RVZ;
     if (_isRvzSource(source)) return OUTPUT_COMPRESSION.RVZ;
     return OUTPUT_COMPRESSION.SEVEN_ZIP;

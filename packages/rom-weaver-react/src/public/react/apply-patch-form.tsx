@@ -87,6 +87,7 @@ const getApplyOutputCompression = (
   return resolveAutomaticCompressionFormat({
     parentCompressions: input?.parentCompressions,
     sourceFileName: sourceName,
+    sourceSize: input?.size ?? getBinarySourceSize(snapshot.inputs[0]),
   });
 };
 

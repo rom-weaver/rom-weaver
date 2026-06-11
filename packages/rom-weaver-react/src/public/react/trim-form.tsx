@@ -291,6 +291,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     fallback: defaultArchiveFormat,
     parentCompressions: sourceState?.parentCompressions,
     sourceFileName: resolvedSourceFileName,
+    sourceSize: sourceState?.size,
   });
   const automaticSpecialOutputFormat =
     allowsDefaultCompressionSpecial(defaultCompressionMode) &&

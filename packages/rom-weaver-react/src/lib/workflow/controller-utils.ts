@@ -46,7 +46,9 @@ const getSourceFileName = (source: unknown, fallback: string): string => {
 
 const getSourceSize = (source: unknown): number | undefined => {
   if (typeof Blob !== "undefined" && source instanceof Blob) return source.size;
-  if (isRecord(source) && "source" in source) return getSourceSize(source.source);
+  if (!isRecord(source)) return undefined;
+  if (typeof source.size === "number" && Number.isFinite(source.size)) return source.size;
+  if ("source" in source) return getSourceSize(source.source);
   return undefined;
 };
 

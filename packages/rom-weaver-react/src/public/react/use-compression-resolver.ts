@@ -5,7 +5,7 @@ import {
 } from "../../lib/compression/container-format-registry.ts";
 import OutputCompressionManager from "../../lib/compression/output-compression-manager.ts";
 import type { CompressionFormat } from "../../types/settings.ts";
-import { getBinarySourceFileName } from "./input-session-helpers.ts";
+import { getBinarySourceFileName, getBinarySourceSize } from "./input-session-helpers.ts";
 import { createOutputOptions } from "./output-view-model.ts";
 import type { ApplyPatchFormSettings, BinarySource } from "./patcher-form.ts";
 import type { RomInputRowState } from "./patcher-ui-state.ts";
@@ -51,15 +51,18 @@ const resolveCompressionState = ({
     OutputCompressionManager.supportsOutputCompression(z3dsLabelSource, activeCompression)
       ? activeCompression
       : "none";
+  const resolvedSourceSize = romInputs[0]?.size ?? getBinarySourceSize(effectiveInputs[0]);
   const autoResolvedCompression = resolveAutomaticCompressionFormat({
     fallback: "zip",
     parentCompressions: romInputs[0]?.archivePathEntries,
     sourceFileName: String(romInputs[0]?.info?.fileName || getBinarySourceFileName(effectiveInputs[0], "")),
+    sourceSize: resolvedSourceSize,
   });
   const defaultResolvedCompression = resolveAutomaticCompressionFormat({
     fallback: defaultArchiveCompression,
     parentCompressions: romInputs[0]?.archivePathEntries,
     sourceFileName: String(romInputs[0]?.info?.fileName || getBinarySourceFileName(effectiveInputs[0], "")),
+    sourceSize: resolvedSourceSize,
   });
   const automaticSpecialCompression = OutputCompressionManager.resolveOutputCompression(z3dsLabelSource, {
     compressionFormat: "auto",
@@ -114,9 +117,13 @@ const useCompressionResolver = ({
     const baseSource = effectiveInputs[0];
     if (!selectedInputFileName) return baseSource;
     if (baseSource && typeof baseSource === "object") {
+      // Spreading a File drops its prototype getters (size included), so the
+      // byte size is carried over explicitly for disc-image heuristics.
+      const baseSize = romInputs[0]?.size ?? getBinarySourceSize(baseSource);
       return {
         ...(baseSource as unknown as Record<string, unknown>),
         ...(chdMode ? { _chdMode: chdMode } : {}),
+        ...(typeof baseSize === "number" && Number.isFinite(baseSize) ? { size: baseSize } : {}),
         fileName: selectedInputFileName,
         name: selectedInputFileName,
       } as unknown as BinarySource;

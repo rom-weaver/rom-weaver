@@ -379,21 +379,42 @@ const getCompressionFormatForFileExtension = (
   )?.format;
 };
 
+// `.bin` is ambiguous: CD images (bin/cue) should auto-resolve to chd, but
+// bare console ROM dumps use the same extension. CD sectors are 2352 bytes
+// raw or 2048 cooked, so a .bin whose size is not sector-aligned is not a
+// disc image. An unknown size keeps the extension-based resolution.
+const AMBIGUOUS_DISC_IMAGE_EXTENSIONS: readonly string[] = ["bin"];
+const CD_SECTOR_SIZES: readonly number[] = [2352, 2048];
+
+const isLikelyDiscImageSize = (size: number | null | undefined): boolean => {
+  if (typeof size !== "number" || !Number.isFinite(size) || size <= 0) return true;
+  return CD_SECTOR_SIZES.some((sectorSize) => size % sectorSize === 0);
+};
+
 const resolveAutomaticCompressionFormat = ({
   fallback = "7z",
   parentCompressions,
   parentKind,
   sourceFileName,
+  sourceSize,
 }: {
   fallback?: CompressionFormat;
   parentCompressions?: readonly CompressionParentKindEntry[] | null;
   parentKind?: string | null;
   sourceFileName?: string;
-}): CompressionFormat =>
-  getCompressionFormatForParentCompressions(parentCompressions) ||
-  getCompressionFormatForParentKind(parentKind) ||
-  getCompressionFormatForFileExtension(getSourceFileExtension(sourceFileName)) ||
-  fallback;
+  sourceSize?: number | null;
+}): CompressionFormat => {
+  const parentFormat =
+    getCompressionFormatForParentCompressions(parentCompressions) || getCompressionFormatForParentKind(parentKind);
+  if (parentFormat) return parentFormat;
+  const extension = normalizeExtension(getSourceFileExtension(sourceFileName));
+  const extensionFormat = getCompressionFormatForFileExtension(extension);
+  if (!extensionFormat) return fallback;
+  if (extension && AMBIGUOUS_DISC_IMAGE_EXTENSIONS.includes(extension) && !isLikelyDiscImageSize(sourceSize)) {
+    return fallback;
+  }
+  return extensionFormat;
+};
 
 export type {
   ArchiveCompressionFormat,

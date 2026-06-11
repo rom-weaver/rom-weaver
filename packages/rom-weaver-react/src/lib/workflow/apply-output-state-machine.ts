@@ -9,7 +9,7 @@ import { appendFileNameExtension, getFileNameWithoutExtension, stripFileNameQuer
 import { buildPatchedOutputBaseName } from "../output/output-name-composition.ts";
 import { getFileNameExtension } from "../path-utils.ts";
 import type { InputSession } from "./apply-workflow-state.ts";
-import { getSourceFileName } from "./controller-utils.ts";
+import { getSourceFileName, getSourceSize } from "./controller-utils.ts";
 
 type ApplyOutputState = {
   manualOutputFormat: boolean;
@@ -32,6 +32,7 @@ const resolveAutomaticFormat = (
   return resolveAutomaticCompressionFormat({
     parentCompressions: input?.view?.parentCompressions,
     sourceFileName: stripFileNameQuery(sourceName),
+    sourceSize: getSourceSize(input?.sources[0]),
   });
 };
 
