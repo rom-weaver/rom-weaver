@@ -9,7 +9,7 @@
   --rw-accent:    #d9690f;
   --rw-accent-ink:#1c1206;
   --rw-ctl: 40px;
-  --rw-sec-pad: 20px;   /* section horizontal padding = control gutter (card edges align here) */
+  --rw-sec-pad: 14px;   /* section horizontal padding (card edges align here) */
   --rw-card-indent: 9px; /* card border(1) + padding(8): content sits here, headings align to it */
   --rw-mono: "Inter Tight", "Segoe UI", sans-serif;
   --rw-sans: "Inter Tight", "Segoe UI", sans-serif;
@@ -208,21 +208,7 @@
   border: 1px solid var(--rw-line); border-radius: 6px; background: var(--rw-inset);
   transition: transform .22s ease;
 }
-.rw-app .file::before, .rw-app .file::after { content: ""; position: absolute; top: -1px; bottom: -1px; width: 1px; z-index: 0; pointer-events: none;
-  background-image: repeating-linear-gradient(to bottom, var(--rw-line-strong) 0 3px, transparent 3px 6px); background-size: 1px 6px; }
-.rw-app .file::before { left: calc(var(--rw-sec-pad) / -2 - 1px); }
-.rw-app .file::after { right: calc(var(--rw-sec-pad) / -2 - 1px); }
-.rw-app .file.patch::before { top: calc(0.95rem - 1px); bottom: calc(0.95rem - 1px); }
-/* patches drop the right dashed rail (by the remove icon); a single patch has no drag
-   handle, so it drops its left rail too — the left rail only frames a present handle */
-.rw-app .file.patch::after { content: none; }
-.rw-app .file.patch:not(:has(.phandle))::before { content: none; }
-/* ROM inputs carry only the delete button (right gutter) — no dashed rails, no index badge */
-.rw-app .file:not(.patch)::before, .rw-app .file:not(.patch)::after { content: none; }
-.rw-app .file:has(.rm:hover)::before, .rw-app .file:has(.rm:hover)::after { background-image: repeating-linear-gradient(to bottom, var(--rw-bad) 0 3px, transparent 3px 6px); }
-.rw-app .file:has(.fidx:hover)::before, .rw-app .file:has(.fidx:hover)::after,
-.rw-app .file:has(.phandle:hover:not(:disabled))::before, .rw-app .file:has(.phandle:focus-visible)::before { background-image: repeating-linear-gradient(to bottom, var(--rw-accent) 0 3px, transparent 3px 6px); }
-.rw-app .fidx { position: absolute; top: 50%; left: calc(var(--rw-sec-pad) / -2 - 1px); transform: translate(-50%, -50%); z-index: 2; padding: 3px 0; font: 600 0.74rem/1 var(--rw-mono); color: var(--rw-ink-mut); background: var(--rw-panel); }
+.rw-app .fidx { flex: none; align-self: center; padding: 3px 2px; font: 600 0.74rem/1 var(--rw-mono); color: var(--rw-ink-mut); }
 .rw-app .file.bad .fidx { color: var(--rw-bad); }
 .rw-app .ptgt { margin-left: 6px; font: 600 0.724138rem/1 var(--rw-mono); color: var(--rw-ink-mut); padding: 2px 6px; border: 1px solid var(--rw-line-strong); border-radius: 4px; white-space: nowrap; }
 .rw-app .ptgt.bad { color: var(--rw-bad); border-color: color-mix(in oklab, var(--rw-bad) 45%, var(--rw-line)); }
@@ -245,19 +231,21 @@
 .rw-app .file.patch:has(.phandle:hover:not(:disabled)),
 .rw-app .file.patch:has(.phandle:focus-visible) { border-color: color-mix(in oklab, var(--rw-accent) 50%, var(--rw-line)); }
 .rw-app .file:has(.rm:hover) { border-color: color-mix(in oklab, var(--rw-bad) 50%, var(--rw-line)); }
-.rw-app .file-name { min-width: 0; align-self: start; }
+.rw-app .file-name { min-width: 0; align-self: start; display: flex; align-items: flex-start; gap: 8px; }
+.rw-app .file-name-main { flex: 1 1 auto; min-width: 0; }
 .rw-app .nmline { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .rw-app .nmline .nm { font-weight: 600; word-break: break-word; }
 .rw-app .tag { font-family: var(--rw-mono); font-size: 0.724138rem; letter-spacing: .03em; text-transform: uppercase; color: var(--rw-ink-soft); padding: 2px 6px; border: 1px solid var(--rw-line-strong); border-radius: 4px; white-space: nowrap; }
 .rw-app .statedot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
 .rw-app .statedot.ok { background: var(--rw-ok); } .rw-app .statedot.bad { background: var(--rw-bad); }
 
-/* patch drag handle: grip glyph pinned in the left gutter rail */
-.rw-app .phandle { position: absolute; top: -1px; bottom: -1px; left: calc(var(--rw-sec-pad) / -2 - 1px); transform: translateX(-50%); z-index: 2;
-  appearance: none; border: 0; padding: 3px 1px; background: var(--rw-panel); color: var(--rw-ink-soft);
+/* patch drag handle: grip glyph leading the name row; stretches the full row
+   height so the grab area stays generous */
+.rw-app .phandle { flex: none; align-self: stretch; margin: -4px 0 -4px -4px;
+  appearance: none; border: 0; padding: 4px 5px; background: transparent; color: var(--rw-ink-soft);
   display: flex; align-items: center; justify-content: center;
   cursor: grab; touch-action: none; transition: color .12s; }
-.rw-app .phandle-grip { width: 0.85rem; height: 0.85rem; transition: opacity .12s; }
+.rw-app .phandle-grip { width: 1.05rem; height: 1.05rem; transition: opacity .12s; }
 .rw-app .phandle:hover:not(:disabled), .rw-app .phandle:focus-visible { color: var(--rw-accent); }
 .rw-app .phandle:focus-visible { outline: 1px solid var(--rw-accent); outline-offset: 1px; border-radius: 3px; }
 .rw-app .phandle:disabled { cursor: default; color: var(--rw-ink-mut); }
@@ -272,9 +260,9 @@
 .rw-app .file.rw-shifting { transition: transform .16s cubic-bezier(.2,.7,.3,1); }
 @media (prefers-reduced-motion: reduce) { .rw-app .file.rw-shifting { transition: none; } }
 .rw-app .fidx:hover { color: var(--rw-accent); }
-.rw-app .rm { position: absolute; top: 50%; right: calc(var(--rw-sec-pad) / -2 - 1px); transform: translate(50%, -50%); z-index: 2; appearance: none; border: 0; background: var(--rw-panel); color: var(--rw-ink-soft); padding: 3px 0; cursor: pointer; display: flex; align-items: center; justify-content: center; line-height: 0; flex: none; }
-.rw-app .rm:hover { color: var(--rw-bad); }
-.rw-app .rm svg { display: block; width: 0.85rem; height: 0.85rem; }
+.rw-app .rm { position: relative; flex: none; margin: -2px -2px 0 auto; width: 32px; height: 32px; appearance: none; border: 0; border-radius: 6px; background: transparent; color: var(--rw-ink-soft); padding: 0; cursor: pointer; display: grid; place-items: center; line-height: 0; }
+.rw-app .rm:hover { color: var(--rw-bad); background: color-mix(in oklab, var(--rw-bad) 10%, transparent); }
+.rw-app .rm svg { display: block; width: 1.05rem; height: 1.05rem; }
 
 /* recognized name + extraction tree */
 .rw-app .gamename { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 0.965517rem; font-weight: 600; color: var(--rw-ink); min-width: 0; overflow-wrap: anywhere; }
@@ -675,7 +663,7 @@
 
 /* responsive */
 @media (max-width: 600px) {
-  :root { --rw-ctl: 44px; --rw-sec-pad: 18px; }
+  :root { --rw-ctl: 44px; --rw-sec-pad: 12px; }
   .rw-app .app { padding-left: 10px; padding-right: 10px; }
   .rw-app .panel { margin-left: -10px; margin-right: -10px; border-left: 0; border-right: 0; border-radius: 0; }
   .rw-modal .setcols { grid-template-columns: 1fr; }
@@ -723,7 +711,7 @@
   .rw-modal .selmain { flex-direction: column; align-items: stretch; gap: 2px; }
   .rw-modal .selmain .fnm { white-space: normal; word-break: break-all; overflow: visible; }
   .rw-modal .selmeta { gap: 9px; font-size: 0.74rem; }
-  .rw-app .phandle-grip { width: 0.72rem; height: 0.72rem; }
+  .rw-app .phandle-grip { width: 0.95rem; height: 0.95rem; }
   .rw-app .foot { flex-wrap: nowrap; gap: 7px; font-size: 0.62rem; white-space: nowrap; }
   .rw-app .foot .mono { font-size: 0.6rem; }
   .rw-app .foot .donate { padding: 3px 8px; gap: 4px; }

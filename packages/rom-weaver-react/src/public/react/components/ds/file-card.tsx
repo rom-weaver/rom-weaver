@@ -3,19 +3,19 @@ import Trash2 from "lucide-react/dist/esm/icons/trash-2.js";
 import type { CSSProperties, ReactNode, Ref } from "react";
 
 /**
- * Resolved-file card for every workflow's input rows. The left gutter rail
- * carries identity: a static index badge for ROM inputs, or a drag handle
- * (supplied as `handle`) for reorderable patches. The right gutter rail carries
- * the remove button. Both rails sit in the negative section padding so they cost
- * no content width. The name area and collapsible sections (extraction tree,
- * checksums, fixes) are supplied as children.
+ * Resolved-file card for every workflow's input rows. The name row leads with
+ * identity — a static index badge for ROM inputs, or a drag handle (supplied
+ * as `handle`) for reorderable patches — and ends with the remove button, so
+ * every control sits inside the card with a full-size touch target. The name
+ * area and collapsible sections (extraction tree, checksums, fixes) are
+ * supplied as children.
  */
 
 const join = (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(" ");
 
 type FileState = "ok" | "bad";
 
-/** Clear/remove button pinned to the card's right gutter rail. */
+/** Clear/remove button at the trailing edge of the card's name row. */
 const RemoveButton = ({ onClick, label }: { onClick: () => void; label: string }) => (
   <button aria-label={label} className="rm" onClick={onClick} title={label} type="button">
     <Trash2 aria-hidden="true" />
@@ -72,14 +72,20 @@ const FileCard = ({
   children?: ReactNode;
 }) => (
   <div className={join("file", state, inputMatch && "im", patch && "patch", className)} ref={rootRef} style={style}>
-    {hideName ? null : (
+    {hideName ? (
+      onRemove ? (
+        <RemoveButton label={removeLabel} onClick={onRemove} />
+      ) : null
+    ) : (
       <div className="file-name">
         {handle ?? (typeof index === "number" ? <span className="fidx">{index}</span> : null)}
-        {name}
-        {target}
+        <div className="file-name-main">
+          {name}
+          {target}
+        </div>
+        {onRemove ? <RemoveButton label={removeLabel} onClick={onRemove} /> : null}
       </div>
     )}
-    {onRemove ? <RemoveButton label={removeLabel} onClick={onRemove} /> : null}
     {children}
   </div>
 );
