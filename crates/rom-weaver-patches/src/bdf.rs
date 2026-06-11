@@ -68,14 +68,23 @@ impl BdfPatchHandler {
         let planned_execution = context.plan_threads(thread_capability.clone());
         let (execution, writes) = if planned_execution.used_parallelism {
             let (execution, pool) = context.build_pool(thread_capability)?;
-            let source_reader = Arc::new(SharedBlockCacheReader::open(
-                &request.input,
-                DEFAULT_BLOCK_CACHE_SIZE_BYTES,
-                DEFAULT_BLOCK_CACHE_MAX_BLOCKS,
-            )?);
+            // In wasm/OPFS, spawned worker threads cannot open the source file
+            // (Safari returns os error 44). Read the source on the main thread
+            // into a shared buffer and serve workers in-memory slices; the
+            // parallel diff application is unchanged. Native default keeps the
+            // lazy disk-backed reader (no whole-source buffering).
+            let source = if crate::patches_reads_source_on_main_thread() {
+                ParallelBsdiffSource::Memory(Arc::from(fs::read(&request.input)?))
+            } else {
+                ParallelBsdiffSource::Disk(Arc::new(SharedBlockCacheReader::open(
+                    &request.input,
+                    DEFAULT_BLOCK_CACHE_SIZE_BYTES,
+                    DEFAULT_BLOCK_CACHE_MAX_BLOCKS,
+                )?))
+            };
             let writes = prepare_bsdiff_writes_parallel(
                 &plan.writes,
-                &source_reader,
+                &source,
                 source_len,
                 &plan.delta_payload,
                 &plan.extra_payload,
@@ -501,9 +510,41 @@ fn collect_bsdiff_write_plans(
     Ok((writes, delta_offset, extra_offset, output_offset))
 }
 
+/// Source bytes for the parallel BSDIFF40 apply path. `Disk` reads lazily from
+/// the file on whatever thread calls it (native default); `Memory` serves slices
+/// from a buffer read on the main thread (wasm/OPFS, where workers cannot open
+/// the source — see the apply path).
+enum ParallelBsdiffSource {
+    Disk(Arc<SharedBlockCacheReader>),
+    Memory(Arc<[u8]>),
+}
+
+impl ParallelBsdiffSource {
+    fn read_exact_at(&self, offset: u64, output: &mut [u8]) -> Result<()> {
+        match self {
+            Self::Disk(reader) => reader.read_exact_at(offset, output),
+            Self::Memory(bytes) => {
+                let start = usize::try_from(offset).map_err(|_| {
+                    RomWeaverError::Validation(
+                        "BSDIFF40 source offset exceeded addressable memory".into(),
+                    )
+                })?;
+                let end = start.checked_add(output.len()).ok_or_else(|| {
+                    RomWeaverError::Validation("BSDIFF40 source range overflowed".into())
+                })?;
+                let slice = bytes.get(start..end).ok_or_else(|| {
+                    RomWeaverError::Validation("BSDIFF40 source range exceeded input bounds".into())
+                })?;
+                output.copy_from_slice(slice);
+                Ok(())
+            }
+        }
+    }
+}
+
 fn prepare_bsdiff_writes_parallel(
     plans: &[BsdiffWritePlan],
-    source: &Arc<SharedBlockCacheReader>,
+    source: &ParallelBsdiffSource,
     source_len: usize,
     delta_payload: &[u8],
     extra_payload: &[u8],
@@ -653,7 +694,7 @@ fn prepare_bsdiff_write(
 }
 
 fn add_source_overlap_shared(
-    source: &SharedBlockCacheReader,
+    source: &ParallelBsdiffSource,
     source_len: usize,
     source_offset: i128,
     data: &mut [u8],
