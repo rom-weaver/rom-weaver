@@ -72,7 +72,7 @@ pub struct OperationContext {
     /// stacked worker threads across sequential/nested extracts and exhausted the browser's fixed
     /// wasi worker pool, stalling with 30s spawn timeouts; reusing one pool keeps the live thread
     /// count bounded while still giving each (serially processed) extract the whole pool.
-    operation_pool: Arc<Mutex<Option<SharedThreadPool>>>,
+    operation_pool: Arc<Mutex<Option<(SharedThreadPool, ThreadExecution)>>>,
 }
 
 impl OperationContext {
@@ -205,19 +205,33 @@ impl OperationContext {
         // The returned `execution` still reflects this caller's negotiated capability (it drives
         // whether/how the handler parallelizes and progress reporting), but the pool itself is the
         // shared operation pool so nested/sequential extracts reuse one fixed set of worker threads.
-        let pool = self.operation_pool()?;
+        let (pool, pool_execution) = self.operation_pool()?;
+        // If the shared pool itself degraded to single-thread (e.g. the OS refused to build a
+        // multi-thread pool), every operation drawing on it genuinely runs serially — so propagate
+        // that fallback into this caller's reported execution instead of advertising parallelism it
+        // never got.
+        let mut execution = execution;
+        if pool_execution.thread_fallback && execution.used_parallelism {
+            let reason = pool_execution
+                .thread_fallback_reason
+                .clone()
+                .unwrap_or_else(|| "shared operation pool fell back to single-thread".to_string());
+            execution.apply_pool_fallback(reason);
+        }
         Ok((execution, pool))
     }
 
     /// Lazily build (once) and return the operation-scoped worker pool, sized to the full thread
-    /// budget so every extract that reuses it can draw on all available threads.
-    fn operation_pool(&self) -> Result<SharedThreadPool> {
+    /// budget so every extract that reuses it can draw on all available threads. The cached
+    /// `ThreadExecution` records the pool's actual size after any build fallback so callers can
+    /// reconcile their reported execution against what the shared pool can really deliver.
+    fn operation_pool(&self) -> Result<(SharedThreadPool, ThreadExecution)> {
         let mut guard = self
             .operation_pool
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        if let Some(pool) = guard.as_ref() {
-            return Ok(pool.clone());
+        if let Some((pool, execution)) = guard.as_ref() {
+            return Ok((pool.clone(), execution.clone()));
         }
         let full = self.plan_threads(ThreadCapability::parallel(None));
         trace!(
@@ -225,8 +239,8 @@ impl OperationContext {
             used_parallelism = full.used_parallelism,
             "building shared operation pool"
         );
-        let (_, pool) = SharedThreadPool::with_execution_fallback(full)?;
-        *guard = Some(pool.clone());
-        Ok(pool)
+        let (execution, pool) = SharedThreadPool::with_execution_fallback(full)?;
+        *guard = Some((pool.clone(), execution.clone()));
+        Ok((pool, execution))
     }
 }
