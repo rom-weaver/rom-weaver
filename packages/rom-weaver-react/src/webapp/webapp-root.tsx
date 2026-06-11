@@ -12,6 +12,7 @@ import { ApplyPatchForm, CreatePatchForm, RomWeaverSettingsProvider, TrimPatchFo
 import { APP_BUILD_VERSION } from "./build-version.ts";
 import { Banner, Footer, Topbar } from "./components/shell.tsx";
 import { ProcessingWakeLockNotice } from "./components/wake-lock-notice.tsx";
+import { createLogger } from "./logging.ts";
 import { getSettingsUiState } from "./settings/settings-state.ts";
 import type { WebappRootProps } from "./webapp-root-types.ts";
 import { SettingsPanel } from "./webapp-settings";
@@ -22,6 +23,37 @@ const WORKFLOW_TABS = [
   { icon: <Scissors aria-hidden="true" />, id: "trim", label: "Trim" },
 ];
 const ROOT_LOGO_URL = "./logo.webp";
+
+const logger = createLogger("webapp-root");
+
+// Dismissing the update banner is remembered per running build: the same
+// pending update never re-prompts on reload, while an actual update changes
+// APP_BUILD_VERSION and re-arms the banner for the next one.
+const UPDATE_DISMISSED_STORAGE_KEY = "rom-weaver-update-dismissed-build";
+
+const readUpdateDismissed = () => {
+  if (typeof localStorage === "undefined") return false;
+  try {
+    return localStorage.getItem(UPDATE_DISMISSED_STORAGE_KEY) === APP_BUILD_VERSION;
+  } catch (error) {
+    logger.trace("Unable to read update banner dismissal", {
+      message: error instanceof Error ? error.message : String(error || ""),
+    });
+    return false;
+  }
+};
+
+const writeUpdateDismissed = () => {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(UPDATE_DISMISSED_STORAGE_KEY, APP_BUILD_VERSION);
+    logger.debug("Update banner dismissed", { build: APP_BUILD_VERSION });
+  } catch (error) {
+    logger.trace("Unable to persist update banner dismissal", {
+      message: error instanceof Error ? error.message : String(error || ""),
+    });
+  }
+};
 
 type WebappRootPageDrop = {
   drop: PageFileDrop;
@@ -41,7 +73,7 @@ const isInsideLocalDropZone = (target: EventTarget | null) =>
 type WorkflowView = WebappRootProps["state"]["currentView"];
 
 function WebappRoot({ state, serviceWorkerCache, pageUpdate, confirmationDialog, actions }: WebappRootProps) {
-  const [updateDismissed, setUpdateDismissed] = useState(false);
+  const [updateDismissed, setUpdateDismissed] = useState(readUpdateDismissed);
   // Workflow forms keep their local state (staged files, validated patches,
   // finished outputs) in component state, so unmounting on tab switch would
   // silently discard the user's work. Each form mounts on first visit and then
@@ -137,7 +169,13 @@ function WebappRoot({ state, serviceWorkerCache, pageUpdate, confirmationDialog,
             tabs={WORKFLOW_TABS}
           />
           {pageUpdate.ready && !updateDismissed ? (
-            <Banner onDismiss={() => setUpdateDismissed(true)} onReload={actions.onReloadUpdate}>
+            <Banner
+              onDismiss={() => {
+                setUpdateDismissed(true);
+                writeUpdateDismissed();
+              }}
+              onReload={actions.onReloadUpdate}
+            >
               {pageUpdate.title}
             </Banner>
           ) : null}
