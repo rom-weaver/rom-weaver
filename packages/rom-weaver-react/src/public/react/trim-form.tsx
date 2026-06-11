@@ -93,24 +93,18 @@ const getTrimOutputExtension = (sourceFileName: string, outputFormat: string, se
   return outputFormat || getSourceExtension(sourceFileName);
 };
 
-const getDefaultTrimOutputName = (sourceFileName: string, outputFormat: string, settings?: TrimPatchFormSettings) => {
-  const sourceBaseName = getFileNameStem(sourceFileName) || "trimmed";
-  const baseName = appendTrimmedMarker(sourceBaseName);
-  return `${baseName}.${getTrimOutputExtension(sourceFileName, outputFormat, settings)}`;
-};
+// The filename field holds the stem only — the format selector owns the
+// extension, which resolveTrimExecutionOutputName appends at run time.
+const getDefaultTrimOutputName = (sourceFileName: string) =>
+  appendTrimmedMarker(getFileNameStem(sourceFileName) || "trimmed");
 
-const ensureTrimmedOutputName = (
-  outputName: string,
-  outputFormat: string,
-  sourceFileName: string,
-  settings?: TrimPatchFormSettings,
-) => {
+const ensureTrimmedOutputName = (outputName: string, sourceFileName: string) => {
   const normalizedOutputName = outputName.trim();
   if (!normalizedOutputName) return normalizedOutputName;
   const outputBaseName = getFileNameStem(normalizedOutputName).toLowerCase();
   const sourceBaseName = getFileNameStem(sourceFileName).toLowerCase();
   if (outputBaseName && outputBaseName === sourceBaseName) {
-    return getDefaultTrimOutputName(sourceFileName, outputFormat, settings);
+    return getDefaultTrimOutputName(sourceFileName);
   }
   return normalizedOutputName;
 };
@@ -308,16 +302,9 @@ function TrimPatchForm(props: TrimPatchFormProps) {
     automaticSpecialOutputFormat || (automaticDefaultFormat === "none" ? rawOutputFormat : automaticDefaultFormat);
   const resolvedOutputFormat = configuredOutputFormat || automaticOutputFormat;
   const configuredOutputName = getCreateSettingsOutputName(props.settings || props.defaultSettings || providerSettings);
-  const generatedOutputName =
-    configuredOutputName ||
-    (source ? getDefaultTrimOutputName(resolvedSourceFileName, resolvedOutputFormat, settings) : "");
+  const generatedOutputName = configuredOutputName || (source ? getDefaultTrimOutputName(resolvedSourceFileName) : "");
   const rawResolvedOutputName = outputName.trim() || generatedOutputName;
-  const resolvedOutputName = ensureTrimmedOutputName(
-    rawResolvedOutputName,
-    resolvedOutputFormat,
-    resolvedSourceFileName,
-    settings,
-  );
+  const resolvedOutputName = ensureTrimmedOutputName(rawResolvedOutputName, resolvedSourceFileName);
   const executionOutputName = resolveTrimExecutionOutputName(
     resolvedOutputName,
     resolvedOutputFormat,
@@ -972,14 +959,13 @@ function TrimPatchForm(props: TrimPatchFormProps) {
         </>
       ) : null}
       <ConfirmDialog
-        body={`Trimming is permanent — it removes trailing padding from ${sourceFileName} and can't be undone.`}
+        body={`The trimmed copy of ${sourceFileName} is saved as a new download — your original file is not changed. Keep the original: some patches and tools need the untrimmed ROM, and restored padding may not be byte-identical.`}
         cancelLabel="Cancel"
         confirmLabel="Trim ROM"
-        danger
         onCancel={() => setConfirmOpen(false)}
         onConfirm={onConfirmTrim}
         open={confirmOpen}
-        title="Trim ROM permanently?"
+        title="Trim this ROM?"
       />
       {candidateSelectionDialog}
     </main>

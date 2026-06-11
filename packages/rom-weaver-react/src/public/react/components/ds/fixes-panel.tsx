@@ -28,7 +28,7 @@ const getRomTypeSummary = (romInfoText: string | undefined) =>
     ?.trim() || "";
 
 const getTrimSummary = (trim: TrimFixDetails | null | undefined) =>
-  trim ? (trim.detected ? "trim detected" : "trim not detected") : "trim not checked";
+  trim ? (trim.detected ? "trimmable padding found" : "no trimmable padding") : "padding not analyzed";
 
 const getFixesSummary = ({
   headerSummary,
@@ -44,8 +44,8 @@ const getFixesSummary = ({
 };
 
 const getTrimFixLabel = (trim: TrimFixDetails | null | undefined) => {
-  if (!trim) return "Not checked";
-  if (!trim?.detected) return "Not detected";
+  if (!trim) return "Not analyzed";
+  if (!trim?.detected) return "No trimmable padding";
   const details = [
     typeof trim.trimmedInputBytes === "number" ? formatByteSize(trim.trimmedInputBytes) : "",
     trim.mode ? `mode ${trim.mode}` : "",
