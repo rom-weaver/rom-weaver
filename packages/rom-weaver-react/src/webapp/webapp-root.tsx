@@ -38,8 +38,15 @@ const isFileDragTransfer = (dataTransfer: DataTransfer | null) =>
 const isInsideLocalDropZone = (target: EventTarget | null) =>
   target instanceof Element && !!target.closest(".rw-app .drop");
 
+type WorkflowView = WebappRootProps["state"]["currentView"];
+
 function WebappRoot({ state, serviceWorkerCache, pageUpdate, confirmationDialog, actions }: WebappRootProps) {
   const [updateDismissed, setUpdateDismissed] = useState(false);
+  // Workflow forms keep their local state (staged files, validated patches,
+  // finished outputs) in component state, so unmounting on tab switch would
+  // silently discard the user's work. Each form mounts on first visit and then
+  // stays mounted but hidden, which preserves state across tab switches.
+  const [visitedViews, setVisitedViews] = useState<readonly WorkflowView[]>([state.currentView]);
   const [pageDrop, setPageDrop] = useState<WebappRootPageDrop | null>(null);
   const [pageDragging, setPageDragging] = useState(false);
   const pageDropIdRef = useRef(0);
@@ -48,6 +55,11 @@ function WebappRoot({ state, serviceWorkerCache, pageUpdate, confirmationDialog,
     void preloadBrowserRuntime({ workerThreads });
   }, [workerThreads]);
   const activePageDrop = pageDrop?.view === state.currentView ? pageDrop.drop : null;
+
+  useEffect(() => {
+    setVisitedViews((previous) => (previous.includes(state.currentView) ? previous : [...previous, state.currentView]));
+  }, [state.currentView]);
+  const isViewMounted = (view: WorkflowView) => state.currentView === view || visitedViews.includes(view);
 
   // Arm the dropzones while a file is dragged anywhere over the page. `dragover`
   // fires continuously, so a short debounce clears the flag once it stops (drag
@@ -130,31 +142,37 @@ function WebappRoot({ state, serviceWorkerCache, pageUpdate, confirmationDialog,
             </Banner>
           ) : null}
           <ProcessingWakeLockNotice active={false} />
-          {state.currentView === "patcher" ? (
-            <ApplyPatchForm
-              onInputsChange={actions.onPatcherInputsChange}
-              onPatchesChange={actions.onPatcherPatchesChange}
-              onSettingsChange={actions.onPatcherSettingsChange}
-              pageDrop={activePageDrop}
-              startup={state.startup}
-            />
+          {isViewMounted("patcher") ? (
+            <div hidden={state.currentView !== "patcher"}>
+              <ApplyPatchForm
+                onInputsChange={actions.onPatcherInputsChange}
+                onPatchesChange={actions.onPatcherPatchesChange}
+                onSettingsChange={actions.onPatcherSettingsChange}
+                pageDrop={activePageDrop}
+                startup={state.startup}
+              />
+            </div>
           ) : null}
-          {state.currentView === "creator" ? (
-            <CreatePatchForm
-              onModifiedChange={actions.onCreatorModifiedChange}
-              onOriginalChange={actions.onCreatorOriginalChange}
-              onPatchTypeChange={actions.onCreatorPatchTypeChange}
-              onSettingsChange={actions.onCreatorSettingsChange}
-              pageDrop={activePageDrop}
-            />
+          {isViewMounted("creator") ? (
+            <div hidden={state.currentView !== "creator"}>
+              <CreatePatchForm
+                onModifiedChange={actions.onCreatorModifiedChange}
+                onOriginalChange={actions.onCreatorOriginalChange}
+                onPatchTypeChange={actions.onCreatorPatchTypeChange}
+                onSettingsChange={actions.onCreatorSettingsChange}
+                pageDrop={activePageDrop}
+              />
+            </div>
           ) : null}
-          {state.currentView === "trim" ? (
-            <TrimPatchForm
-              onOutputFormatChange={actions.onTrimOutputFormatChange}
-              onSettingsChange={actions.onTrimSettingsChange}
-              onSourceChange={actions.onTrimSourceChange}
-              pageDrop={activePageDrop}
-            />
+          {isViewMounted("trim") ? (
+            <div hidden={state.currentView !== "trim"}>
+              <TrimPatchForm
+                onOutputFormatChange={actions.onTrimOutputFormatChange}
+                onSettingsChange={actions.onTrimSettingsChange}
+                onSourceChange={actions.onTrimSourceChange}
+                pageDrop={activePageDrop}
+              />
+            </div>
           ) : null}
           <Footer
             cacheVersion={serviceWorkerCache.label}
