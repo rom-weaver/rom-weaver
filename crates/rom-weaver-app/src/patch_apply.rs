@@ -965,8 +965,11 @@ impl CliApp {
             let transformed_path = context
                 .temp_paths()
                 .next_path("patch-apply-input-n64-byte-order", Some("bin"));
-            match Self::rewrite_n64_byte_order_to_temp(&apply_input, &transformed_path, target_order)
-            {
+            match Self::rewrite_n64_byte_order_to_temp(
+                &apply_input,
+                &transformed_path,
+                target_order,
+            ) {
                 Ok(Some(transform)) => {
                     self.emit_running(
                         OperationLabel {
