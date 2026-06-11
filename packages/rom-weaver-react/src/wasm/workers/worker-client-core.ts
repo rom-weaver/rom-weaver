@@ -17,10 +17,11 @@ import type {
   RomWeaverWorkerStreamMessage,
 } from "./worker-protocol.ts";
 import {
-  SELECT_REQUEST_CANCEL_INDEX,
+  SELECT_REQUEST_CANCEL_COUNT,
+  SELECT_REQUEST_COUNT_INDEX,
+  SELECT_REQUEST_HEADER_LENGTH,
   SELECT_REQUEST_READY,
   SELECT_REQUEST_READY_INDEX,
-  SELECT_REQUEST_RESULT_INDEX,
 } from "./worker-protocol.ts";
 
 type WorkerStreamHandlers<TEvent = RomWeaverRunJsonEvent, TTraceEvent = unknown> = Pick<
@@ -62,8 +63,8 @@ export class RomWeaverWorkerClientCore {
   protected _nextRequestId: number;
   protected _pending: Map<number, PendingRequest>;
   protected _disposed: boolean;
-  protected _onSelect?: (request: string) => Promise<number> | number;
-  protected _openSelectResponders: Set<(index: number) => void>;
+  protected _onSelect?: (request: string) => Promise<number[]> | number[];
+  protected _openSelectResponders: Set<(indices: number[]) => void>;
 
   constructor(worker: Worker, transport: WorkerTransport) {
     this.worker = worker;
@@ -86,10 +87,12 @@ export class RomWeaverWorkerClientCore {
 
   /**
    * Register the interactive selection handler invoked when the worker requests a candidate pick.
-   * It receives the JSON request (`{heading, candidates:[{value,label}]}`) and returns the chosen
-   * 0-based index (or a negative value / rejection to cancel). Without a handler, prompts cancel.
+   * It receives the JSON request (`{mode, heading, candidates:[{value,label,size}]}`) and returns
+   * the chosen 0-based indices (an empty array or rejection cancels). Single-select prompts resolve
+   * to a one-element array; multi-select prompts may return several. Without a handler, prompts
+   * cancel.
    */
-  setSelectionHandler(handler?: (request: string) => Promise<number> | number) {
+  setSelectionHandler(handler?: (request: string) => Promise<number[]> | number[]) {
     this._onSelect = handler;
   }
 
@@ -220,17 +223,25 @@ export class RomWeaverWorkerClientCore {
         pending?.resolve(message.result);
         return;
       case "selectRequest": {
-        // The runner worker is blocked on `control` waiting for the chosen index; resolve via the
+        // The runner worker is blocked on `control` waiting for the chosen indices; resolve via the
         // registered selection handler (or cancel) and wake it with Atomics.notify.
         const control = new Int32Array(message.control as ArrayBufferLike);
-        const respond = (index: number) => {
+        // The payload region holds at most one index per candidate; its length bounds what we write.
+        const payloadCapacity = Math.max(0, control.length - SELECT_REQUEST_HEADER_LENGTH);
+        const respond = (indices: number[]) => {
           if (!this._openSelectResponders.delete(respond)) return;
-          const resolvedIndex = Number.isInteger(index) ? index : SELECT_REQUEST_CANCEL_INDEX;
+          const valid = Array.isArray(indices) ? indices.filter((index) => Number.isInteger(index) && index >= 0) : [];
+          const count = Math.min(valid.length, payloadCapacity);
+          for (let slot = 0; slot < count; slot += 1) {
+            Atomics.store(control, SELECT_REQUEST_HEADER_LENGTH + slot, valid[slot] as number);
+          }
+          // An empty selection is a cancel — there is no valid "selected nothing" outcome.
+          const resolvedCount = count > 0 ? count : SELECT_REQUEST_CANCEL_COUNT;
           emitPendingTrace(
             pending,
-            `[worker-client] selectRequest responding requestId=${requestId} selectedIndex=${resolvedIndex}${resolvedIndex < 0 ? " (cancelled)" : ""}`,
+            `[worker-client] selectRequest responding requestId=${requestId} count=${resolvedCount}${resolvedCount < 0 ? " (cancelled)" : ` [${valid.slice(0, count).join(",")}]`}`,
           );
-          Atomics.store(control, SELECT_REQUEST_RESULT_INDEX, resolvedIndex);
+          Atomics.store(control, SELECT_REQUEST_COUNT_INDEX, resolvedCount);
           Atomics.store(control, SELECT_REQUEST_READY_INDEX, SELECT_REQUEST_READY);
           Atomics.notify(control, SELECT_REQUEST_READY_INDEX);
         };
@@ -244,18 +255,18 @@ export class RomWeaverWorkerClientCore {
           `[worker-client] selectRequest received requestId=${requestId} ${summarizeSelectRequest(message.request)} handler=${typeof handler === "function" ? "present" : "missing"}`,
         );
         if (typeof handler !== "function") {
-          respond(SELECT_REQUEST_CANCEL_INDEX);
+          respond([]);
           return;
         }
         Promise.resolve()
           .then(() => handler(message.request))
-          .then((index) => respond(typeof index === "number" ? index : SELECT_REQUEST_CANCEL_INDEX))
+          .then((indices) => respond(Array.isArray(indices) ? indices : []))
           .catch(() => {
             emitPendingTrace(
               pending,
               `[worker-client] selectRequest handler rejected requestId=${requestId} — cancelling`,
             );
-            respond(SELECT_REQUEST_CANCEL_INDEX);
+            respond([]);
           });
         return;
       }
@@ -310,7 +321,7 @@ export class RomWeaverWorkerClientCore {
     this._detachListeners();
     // Release any worker thread still blocked on an unanswered selection prompt before rejecting
     // its run, so the wedged synchronous wait cannot outlive the client.
-    for (const respond of [...this._openSelectResponders]) respond(SELECT_REQUEST_CANCEL_INDEX);
+    for (const respond of [...this._openSelectResponders]) respond([]);
     this._rejectAllPending(new Error(reason));
   }
 
@@ -540,8 +551,9 @@ function summarizeSelectRequest(request: unknown): string {
   try {
     const parsed = JSON.parse(request) as TraceRecord;
     const heading = typeof parsed?.heading === "string" ? parsed.heading : "";
+    const mode = typeof parsed?.mode === "string" ? parsed.mode : "single";
     const candidateCount = Array.isArray(parsed?.candidates) ? parsed.candidates.length : 0;
-    return `heading="${heading}" candidates=${candidateCount}`;
+    return `mode=${mode} heading="${heading}" candidates=${candidateCount}`;
   } catch {
     return `request=unparsable bytes=${request.length}`;
   }

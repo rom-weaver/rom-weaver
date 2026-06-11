@@ -29,7 +29,9 @@ export type BrowserOpfsRunOptions = RomWeaverBrowserOpfsRunOptions &
     __streamRequestId?: number;
     onStderrLine?: LineHandler;
     onStdoutLine?: LineHandler;
-    hostSelect?: (request: string) => number;
+    // Resolve a mid-run selection request to the chosen 0-based indices (empty == cancel). Single-
+    // select prompts use the first index; multi-select prompts use all of them.
+    hostSelect?: (request: string) => number[];
     preopenOutputPaths?: string[];
     threadScratchFilePoolSize?: number;
   };

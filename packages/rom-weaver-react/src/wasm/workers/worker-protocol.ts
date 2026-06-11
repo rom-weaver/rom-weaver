@@ -122,8 +122,11 @@ export interface RomWeaverWorkerErrorMessage {
 
 /**
  * Mid-run interactive selection request. The runner worker posts this when the wasm app needs the
- * user to pick a candidate, then blocks on `control` (a SharedArrayBuffer-backed Int32Array) until
- * the main thread writes the chosen index at slot 1 and sets slot 0 to 1 with `Atomics.notify`.
+ * user to pick one or more candidates, then blocks on `control` (a SharedArrayBuffer-backed
+ * Int32Array) until the main thread writes the result and wakes it with `Atomics.notify`. The same
+ * message serves single- and multi-select prompts; the embedded `request` JSON carries a
+ * `mode: "single" | "many"` discriminant that the UI routes on. `request` is the UTF-8 JSON the
+ * wasm prompter emitted (`{mode, heading, candidates:[{value,label,size}]}`).
  */
 export interface RomWeaverWorkerSelectRequestMessage {
   type: "selectRequest";
@@ -134,17 +137,29 @@ export interface RomWeaverWorkerSelectRequestMessage {
 
 /**
  * Layout of the `control` Int32Array backing a {@link RomWeaverWorkerSelectRequestMessage} handshake.
- * Slot 0 is the readiness flag the runner worker blocks on; slot 1 carries the chosen index. The
- * runner stores {@link SELECT_REQUEST_PENDING} then waits; the main thread writes the index and sets
- * the flag to {@link SELECT_REQUEST_READY} before `Atomics.notify`.
+ * It is a 2-slot header followed by a variable-length payload region of selected indices:
+ *
+ * ```
+ *   slot 0                       : readiness flag (PENDING -> READY)
+ *   slot 1                       : selected count (>= 0), or SELECT_REQUEST_CANCEL_COUNT (-1) to cancel
+ *   slots 2 .. 2 + count         : the chosen 0-based indices (only `count` slots are meaningful)
+ * ```
+ *
+ * The runner sizes the buffer to {@link SELECT_REQUEST_HEADER_LENGTH} + (candidate count) so a
+ * multi-select reply can carry at most one index per candidate. It stores
+ * {@link SELECT_REQUEST_PENDING} at the flag and {@link SELECT_REQUEST_CANCEL_COUNT} at the count,
+ * then waits. The main thread writes the indices into the payload region (which begins at
+ * {@link SELECT_REQUEST_HEADER_LENGTH}), sets the count, flips the flag to
+ * {@link SELECT_REQUEST_READY}, and calls `Atomics.notify`. Single-select prompts use the same
+ * protocol with a count of 1 (or cancel).
  */
-export const SELECT_REQUEST_CONTROL_LENGTH = 2;
+export const SELECT_REQUEST_HEADER_LENGTH = 2;
 export const SELECT_REQUEST_READY_INDEX = 0;
-export const SELECT_REQUEST_RESULT_INDEX = 1;
+export const SELECT_REQUEST_COUNT_INDEX = 1;
 export const SELECT_REQUEST_PENDING = 0;
 export const SELECT_REQUEST_READY = 1;
-/** Sentinel result index meaning "no selection" — cancelled or no handler registered. */
-export const SELECT_REQUEST_CANCEL_INDEX = -1;
+/** Sentinel count meaning "no selection" — cancelled or no handler registered. */
+export const SELECT_REQUEST_CANCEL_COUNT = -1;
 
 export type RomWeaverWorkerResponse =
   | RomWeaverWorkerReadyMessage

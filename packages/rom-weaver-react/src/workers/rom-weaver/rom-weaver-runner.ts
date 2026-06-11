@@ -242,9 +242,10 @@ const createBrowserRunnerInitOptions = (
   };
 };
 
-/** Resolves a mid-run candidate selection request `{heading, candidates:[{value,label}]}` to a
- * 0-based index (or a negative value to cancel). Runs on the main thread. */
-type InputSelectionHandler = (request: string) => number | Promise<number>;
+/** Resolves a mid-run candidate selection request `{mode, heading, candidates:[{value,label}]}` to
+ * the chosen 0-based indices (an empty array cancels). Single-select prompts resolve to one index;
+ * multi-select prompts may resolve to several. Runs on the main thread. */
+type InputSelectionHandler = (request: string) => number[] | Promise<number[]>;
 
 let inputSelectionHandler: InputSelectionHandler | undefined;
 
@@ -263,6 +264,7 @@ const summarizeInputSelectionRequest = (request: string): Record<string, unknown
     return {
       candidateCount: Array.isArray(parsed?.candidates) ? parsed.candidates.length : 0,
       heading: typeof parsed?.heading === "string" ? parsed.heading : "",
+      mode: typeof parsed?.mode === "string" ? parsed.mode : "single",
     };
   } catch {
     return { requestBytes: request.length, unparsable: true };
@@ -274,7 +276,7 @@ const resolveInputSelection: InputSelectionHandler = (request) => {
     logger.trace("input selection requested but no handler registered — cancelling", {
       requestBytes: typeof request === "string" ? request.length : 0,
     });
-    return -1;
+    return [];
   }
   logger.trace("forwarding input selection request to UI handler", summarizeInputSelectionRequest(request));
   return inputSelectionHandler(request);

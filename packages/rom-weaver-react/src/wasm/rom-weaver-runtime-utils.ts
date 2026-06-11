@@ -7,13 +7,14 @@ import type {
 } from "./rom-weaver-types.d.ts";
 
 /**
- * Host selection callback. The wasm app calls `rom_weaver_host_select(requestPtr, requestLen)` with
- * a UTF-8 JSON request (`{heading, candidates:[{value,label}]}`) and expects the chosen 0-based
- * index back, or a negative value to cancel. The runner supplies an implementation that blocks the
- * worker until the UI resolves the pick; when no handler is registered it returns -1 (cancel),
- * matching the historical non-interactive behavior.
+ * Host selection callback. The wasm app calls a host-select import with a UTF-8 JSON request
+ * (`{mode, heading, candidates:[{value,label,size}]}`) and the host resolves it to the chosen
+ * 0-based indices. A single-select prompt uses the first index; a multi-select prompt uses all of
+ * them. An empty array means cancel. The runner supplies an implementation that blocks the worker
+ * until the UI resolves the pick; when no handler is registered it returns `[]` (cancel), matching
+ * the historical non-interactive behavior.
  */
-type HostSelectCallback = (request: string) => number;
+type HostSelectCallback = (request: string) => number[];
 
 type WasmEnvImports = {
   __archive_write_program_allocate: () => number;
@@ -24,6 +25,12 @@ type WasmEnvImports = {
   __cxa_allocate_exception: () => number;
   __cxa_throw: (pointer: unknown, typeInfo: unknown) => never;
   rom_weaver_host_select: (requestPtr: number, requestLen: number) => number;
+  rom_weaver_host_select_many: (
+    requestPtr: number,
+    requestLen: number,
+    outIndicesPtr: number,
+    outCapacity: number,
+  ) => number;
   memory?: WebAssembly.Memory;
 };
 
@@ -46,6 +53,40 @@ export function createWasmEnvImports(memory?: WebAssembly.Memory, hostSelect?: H
       return new TextDecoder().decode(bytes);
     } catch {
       return null;
+    }
+  };
+  // Resolve a host-select request to the chosen 0-based indices, normalizing whatever the callback
+  // returns into a clean integer list (empty == cancel). Shared by the single- and multi-select
+  // imports so the two stay in lockstep.
+  const resolveHostSelection = (requestPtr: number, requestLen: number): number[] => {
+    if (typeof hostSelect !== "function") return [];
+    const request = readHostSelectRequest(requestPtr, requestLen);
+    if (request === null) return [];
+    try {
+      const selected = hostSelect(request);
+      if (!Array.isArray(selected)) return [];
+      return selected.filter((index) => Number.isInteger(index) && index >= 0);
+    } catch {
+      return [];
+    }
+  };
+  // Write the chosen indices into the wasm-owned `u32` output buffer, bounded by its capacity, and
+  // return the count written. The buffer view is taken fresh after the (blocking) host call so a
+  // concurrent `memory.grow` on another thread cannot leave us writing through a detached buffer.
+  const writeHostSelectionIndices = (outIndicesPtr: number, outCapacity: number, indices: number[]): number => {
+    const activeMemory = imports.memory;
+    if (!(activeMemory instanceof WebAssembly.Memory) || outCapacity <= 0 || indices.length === 0) {
+      return 0;
+    }
+    try {
+      const count = Math.min(indices.length, outCapacity);
+      const view = new Uint32Array(activeMemory.buffer, outIndicesPtr, outCapacity);
+      for (let slot = 0; slot < count; slot += 1) {
+        view[slot] = indices[slot] as number;
+      }
+      return count;
+    } catch {
+      return 0;
     }
   };
   const imports: WasmEnvImports = {
@@ -74,15 +115,14 @@ export function createWasmEnvImports(memory?: WebAssembly.Memory, hostSelect?: H
       throw new Error(`rom-weaver wasm raised a C++ exception (pointer=${pointer}, type=${typeInfo})`);
     },
     rom_weaver_host_select(requestPtr, requestLen) {
-      if (typeof hostSelect !== "function") return SELECT_CANCELLED;
-      const request = readHostSelectRequest(requestPtr, requestLen);
-      if (request === null) return SELECT_CANCELLED;
-      try {
-        const selected = hostSelect(request);
-        return Number.isInteger(selected) ? selected : SELECT_CANCELLED;
-      } catch {
-        return SELECT_CANCELLED;
-      }
+      const indices = resolveHostSelection(requestPtr, requestLen);
+      // Single-select uses the first chosen index; an empty result (cancel / no handler) is -1.
+      return indices.length > 0 ? (indices[0] as number) : SELECT_CANCELLED;
+    },
+    rom_weaver_host_select_many(requestPtr, requestLen, outIndicesPtr, outCapacity) {
+      const indices = resolveHostSelection(requestPtr, requestLen);
+      // An empty result means cancel; the wasm side treats a written count of 0 as cancelled.
+      return writeHostSelectionIndices(outIndicesPtr, outCapacity, indices);
     },
   };
 

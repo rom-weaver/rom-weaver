@@ -25,7 +25,11 @@ type SelectCandidateFile = (request: CandidateSelectionPrompt) => Promise<Candid
 
 const parseHostSelectionRequest = (
   requestJson: string,
-): { heading?: string; candidates?: Array<{ label?: string; value?: string; size?: number | null }> } | null => {
+): {
+  heading?: string;
+  mode?: string;
+  candidates?: Array<{ label?: string; value?: string; size?: number | null }>;
+} | null => {
   try {
     const parsed = JSON.parse(requestJson);
     return typeof parsed === "object" && parsed !== null ? parsed : null;
@@ -56,45 +60,53 @@ const useInputSelectionHandler = (selectFile: SelectCandidateFile) => {
       const parsed = parseHostSelectionRequest(requestJson);
       const rawCandidates = Array.isArray(parsed?.candidates) ? parsed.candidates : [];
       const heading = String(parsed?.heading || "Select an entry");
+      const multiSelect = parsed?.mode === "many";
       if (!rawCandidates.length) {
-        logger.trace("selection prompt skipped — no candidates in request", { heading });
-        return -1;
+        logger.trace("selection prompt skipped — no candidates in request", { heading, multiSelect });
+        return [];
       }
       const candidates = createHostSelectionCandidates(rawCandidates);
       const sourceName = getSelectionSourceName(heading);
-      logger.trace("prompting user to select an entry to extract", {
+      const indexOfId = (id: string | undefined): number => candidates.findIndex((candidate) => candidate.id === id);
+      logger.trace("prompting user to select entries to extract", {
         candidateCount: candidates.length,
         heading,
+        multiSelect,
         sourceName,
       });
       try {
         const choice = await selectFileRef.current({
           candidates,
+          multiSelect,
           role: "input",
           sourceName,
           warnings: [],
         });
-        const selectedIndex = candidates.findIndex((candidate) => candidate.id === choice?.id);
-        if (selectedIndex < 0) {
+        // Multi-select choices carry the full ordered set in `ids`; single-select uses `id`.
+        const chosenIds = multiSelect && Array.isArray(choice?.ids) ? choice.ids : [choice?.id];
+        const selectedIndexes = chosenIds.map((id) => indexOfId(id)).filter((index) => index >= 0);
+        if (!selectedIndexes.length) {
           logger.trace("user dismissed selection prompt without a valid choice — cancelling", {
             choiceId: choice?.id ?? null,
             heading,
+            multiSelect,
           });
-          return -1;
+          return [];
         }
-        const selectedCandidate = candidates[selectedIndex];
-        logger.trace("user selected an entry to extract", {
+        logger.trace("user selected entries to extract", {
           heading,
-          name: selectedCandidate?.type === "file" ? selectedCandidate.fileName : selectedCandidate?.id,
-          selectedIndex,
+          multiSelect,
+          selectedCount: selectedIndexes.length,
+          selectedIndexes,
         });
-        return selectedIndex;
+        return selectedIndexes;
       } catch (error) {
         logger.trace("selection prompt rejected — cancelling", {
           error: error instanceof Error ? error.message : String(error),
           heading,
+          multiSelect,
         });
-        return -1;
+        return [];
       }
     });
     return () => setInputSelectionHandler(undefined);

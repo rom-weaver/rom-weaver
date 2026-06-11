@@ -15,11 +15,11 @@ import type {
   RomWeaverWorkerRunJsonOptions,
 } from "./worker-protocol.ts";
 import {
-  SELECT_REQUEST_CANCEL_INDEX,
-  SELECT_REQUEST_CONTROL_LENGTH,
+  SELECT_REQUEST_CANCEL_COUNT,
+  SELECT_REQUEST_COUNT_INDEX,
+  SELECT_REQUEST_HEADER_LENGTH,
   SELECT_REQUEST_PENDING,
   SELECT_REQUEST_READY_INDEX,
-  SELECT_REQUEST_RESULT_INDEX,
 } from "./worker-protocol.ts";
 
 type RunnerWorkerInitResult = {
@@ -115,33 +115,46 @@ export function createRunnerWorkerMessageQueue({ postMessage, initRunner }: Runn
         const runOptions: RunnerWorkerRunOptions = {
           ...(message.options ?? {}),
           // Synchronous host selection callback. The wasm app calls this (on this worker thread)
-          // when it needs the user to pick a candidate; it blocks the worker on a SharedArrayBuffer
-          // while the main thread resolves the choice via the worker client's selection handler.
-          // Returns the chosen 0-based index, or -1 to cancel (also on timeout / no handler).
-          hostSelect(request: string): number {
+          // when it needs the user to pick one or more candidates; it blocks the worker on a
+          // SharedArrayBuffer while the main thread resolves the choice via the worker client's
+          // selection handler. Returns the chosen 0-based indices, or [] to cancel (also on no
+          // handler). Single-select prompts resolve to a one-element array.
+          hostSelect(request: string): number[] {
+            const candidateCount = readSelectRequestCandidateCount(request);
             postTraceLine(
               requestId,
-              `[runner-worker] hostSelect prompting user to pick an entry ${summarizeSelectRequest(request)}`,
+              `[runner-worker] hostSelect prompting user to pick entries ${summarizeSelectRequest(request)}`,
             );
+            // Size the control buffer to hold the header plus one index slot per candidate, the
+            // upper bound on a multi-select reply.
             const control = new Int32Array(
-              new SharedArrayBuffer(SELECT_REQUEST_CONTROL_LENGTH * Int32Array.BYTES_PER_ELEMENT),
+              new SharedArrayBuffer((SELECT_REQUEST_HEADER_LENGTH + candidateCount) * Int32Array.BYTES_PER_ELEMENT),
             );
             Atomics.store(control, SELECT_REQUEST_READY_INDEX, SELECT_REQUEST_PENDING);
-            Atomics.store(control, SELECT_REQUEST_RESULT_INDEX, SELECT_REQUEST_CANCEL_INDEX);
+            Atomics.store(control, SELECT_REQUEST_COUNT_INDEX, SELECT_REQUEST_CANCEL_COUNT);
             postMessage({ control: control.buffer, request, requestId, type: "selectRequest" });
             postTraceLine(
               requestId,
               "[runner-worker] hostSelect posted selectRequest, blocking worker until the user responds",
             );
             // No timeout — block until the main thread resolves the selection. The user may take an
-            // arbitrarily long time to pick (or dismiss, which resolves to the cancel index).
+            // arbitrarily long time to pick (or dismiss, which resolves to the cancel count).
             Atomics.wait(control, SELECT_REQUEST_READY_INDEX, SELECT_REQUEST_PENDING);
-            const selectedIndex = Atomics.load(control, SELECT_REQUEST_RESULT_INDEX);
+            const count = Atomics.load(control, SELECT_REQUEST_COUNT_INDEX);
+            if (count <= 0) {
+              postTraceLine(requestId, "[runner-worker] hostSelect woke cancelled (count<=0)");
+              return [];
+            }
+            const usableCount = Math.min(count, candidateCount);
+            const indices: number[] = [];
+            for (let slot = 0; slot < usableCount; slot += 1) {
+              indices.push(Atomics.load(control, SELECT_REQUEST_HEADER_LENGTH + slot));
+            }
             postTraceLine(
               requestId,
-              `[runner-worker] hostSelect woke with selectedIndex=${selectedIndex}${selectedIndex < 0 ? " (cancelled)" : ""}`,
+              `[runner-worker] hostSelect woke with ${indices.length} selected index(es) [${indices.join(",")}]`,
             );
-            return selectedIndex;
+            return indices;
           },
           onEvent(event: RomWeaverRunJsonEvent) {
             postMessage({ event, requestId, type: "event" });
@@ -224,10 +237,22 @@ function summarizeSelectRequest(request: unknown) {
   try {
     const parsed = JSON.parse(request);
     const heading = typeof parsed?.heading === "string" ? parsed.heading : "";
+    const mode = typeof parsed?.mode === "string" ? parsed.mode : "single";
     const candidateCount = Array.isArray(parsed?.candidates) ? parsed.candidates.length : 0;
-    return `heading="${heading}" candidates=${candidateCount}`;
+    return `mode=${mode} heading="${heading}" candidates=${candidateCount}`;
   } catch {
     return `request=unparsable bytes=${request.length}`;
+  }
+}
+
+/** Count the candidates in a selection request JSON; used to size the control buffer's index
+ * payload region. Unparsable requests report 0, which still leaves room for the header/cancel. */
+function readSelectRequestCandidateCount(request: string): number {
+  try {
+    const parsed = JSON.parse(request);
+    return Array.isArray(parsed?.candidates) ? parsed.candidates.length : 0;
+  } catch {
+    return 0;
   }
 }
 
