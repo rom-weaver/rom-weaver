@@ -729,3 +729,36 @@
 @media (max-width: 350px) {
   .rw-app .wordmark .wm-text { display: none; }
 }
+
+/* ── touch ergonomics ──
+   On coarse pointers every interactive control needs a ~44px hit area
+   (Apple HIG / Material). Larger controls grow for real; visually-small
+   controls (trash, copy) keep their icon size and extend an invisible
+   centered hit box instead, so card layouts don't change. This block must
+   stay last so it wins over the narrow-width rules above. */
+@media (pointer: coarse) {
+  .rw-app .tab { min-height: 44px; }
+  .rw-app .iconbtn, .rw-app .topbar .iconbtn { width: 42px; height: 42px; }
+  /* Keep rows visually compact: small controls grow an invisible centered
+     hit box instead of a bigger icon, so layouts don't change. */
+  .rw-app .ck .copy, .rw-app .cks.cue .cks-summary .copy { position: relative; opacity: 1; }
+  .rw-app .ck .copy::before, .rw-app .cks.cue .cks-summary .copy::before { content: ""; position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; transform: translate(-50%, -50%); }
+  /* Grow the summary tap height without changing layout: the padding is
+     cancelled by an equal negative margin, so collapsed sections keep their
+     visual height while the hit box gains ~12px. */
+  .rw-app .cks-summary { padding-block: 6px; margin-block: -6px; }
+  .rw-app .info > summary { position: relative; }
+  .rw-app .info > summary::before { content: ""; position: absolute; left: 50%; top: 50%; width: 40px; height: 40px; transform: translate(-50%, -50%); }
+  .rw-app .notice .notice-x { width: 40px; height: 40px; }
+  .rw-app .progress-cancel { flex: 0 0 40px; width: 40px; height: 40px; }
+  .rw-app .rm::before { content: ""; position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; transform: translate(-50%, -50%); }
+  .rw-app .phandle { padding: 0 8px; }
+  /* Modal header actions (settings Reset/Save) match the 42px close iconbtn. */
+  .rw-modal .modal-head .btn { height: 42px; min-width: 42px; }
+  .rw-modal .seltoolbar .selall { position: relative; }
+  .rw-modal .seltoolbar .selall::before { content: ""; position: absolute; left: 50%; top: 50%; width: max(100%, 44px); height: 44px; transform: translate(-50%, -50%); }
+  .rw-modal .selfoot .selconfirm { min-height: 44px; }
+  .rw-modal .setchecks .opt { min-height: 36px; }
+  /* Range thumbs keep their size; the input's hit box grows via cancelled padding. */
+  .rw-modal .srange input[type=range] { padding-block: 10px; margin-block: -10px; }
+}
