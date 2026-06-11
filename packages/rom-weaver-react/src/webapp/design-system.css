@@ -522,11 +522,11 @@
 .rw-app .run:hover { filter: brightness(1.07); } .rw-app .run:active { transform: translateY(1px); }
 .rw-app .run svg { width: 16px; height: 16px; }
 .rw-app .run .apply-button-icon { width: 19px; height: 19px; }
-.rw-app .run.dl { min-height: 52px; height: auto; text-transform: none; letter-spacing: 0; gap: 9px; padding: 0 18px; background: #ed812f; color: #1b1208; font-size: 1.034483rem; font-weight: 800; box-shadow: inset 0 -1px 0 rgba(0,0,0,.16); }
+.rw-app .run.dl { min-height: 52px; height: auto; text-transform: none; letter-spacing: 0; gap: 4px 9px; flex-wrap: wrap; padding: 8px 18px; background: #ed812f; color: #1b1208; font-size: 1.034483rem; font-weight: 800; box-shadow: inset 0 -1px 0 rgba(0,0,0,.16); }
 .rw-app .run.dl:hover { filter: brightness(1.04); }
 .rw-app .run.dl svg { width: 20px; height: 20px; stroke-width: 2.35; flex: none; }
-.rw-app .run.dl .dl-name { font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rw-app .run.dl .dl-sz { font-weight: 800; opacity: .7; flex: none; }
+.rw-app .run.dl .dl-name { font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.rw-app .run.dl .dl-sz { font-weight: 800; opacity: .7; min-width: 0; }
 .rw-app .run.dl .dl-fmt { font-weight: 900; font-family: var(--rw-sans); white-space: nowrap; }
 .rw-app .run:disabled { cursor: not-allowed; filter: none; background: var(--rw-inset); color: var(--rw-ink-mut); border: 1px solid var(--rw-line); }
 

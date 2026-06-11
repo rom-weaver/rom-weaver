@@ -82,8 +82,20 @@ const formatElapsedTiming = (elapsedMs: number | null) => {
   return formatTiming(createTiming(elapsedMs));
 };
 
+// Percentages computed against tiny inputs explode into noise (a 13 B input
+// reads as 1415.4%), so the ratio is suppressed until the input is large
+// enough for the percentage to mean something.
+const MIN_COMPRESSION_RATIO_INPUT_BYTES = 100 * 1024;
+
 const formatDownloadCompressionRatio = (inputBytes: number | null, outputBytes: number | null) => {
-  if (!(typeof inputBytes === "number" && inputBytes > 0 && typeof outputBytes === "number" && outputBytes >= 0))
+  if (
+    !(
+      typeof inputBytes === "number" &&
+      inputBytes >= MIN_COMPRESSION_RATIO_INPUT_BYTES &&
+      typeof outputBytes === "number" &&
+      outputBytes >= 0
+    )
+  )
     return "";
   return formatPercentFixed((outputBytes / inputBytes) * 100);
 };

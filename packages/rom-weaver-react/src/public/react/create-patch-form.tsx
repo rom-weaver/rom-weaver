@@ -78,6 +78,10 @@ const getFileExtensionLabel = (fileName: string) => {
   return extension || fileName;
 };
 
+// Below this raw size a percentage is noise (tiny patches read as 44522%),
+// so the ratio is suppressed and the byte size stands on its own.
+const MIN_COMPRESSION_RATIO_RAW_BYTES = 100 * 1024;
+
 const getCompressionRatioLabel = (
   compression: "7z" | "none" | "zip",
   outputSize?: number | null,
@@ -89,7 +93,7 @@ const getCompressionRatioLabel = (
     !Number.isFinite(outputSize) ||
     typeof rawSize !== "number" ||
     !Number.isFinite(rawSize) ||
-    rawSize <= 0
+    rawSize < MIN_COMPRESSION_RATIO_RAW_BYTES
   ) {
     return undefined;
   }
@@ -110,7 +114,7 @@ const getCompletedDownloadMeta = ({
   size?: number | null;
 }) => ({
   format: `.${patchType || getFileExtensionLabel(fileName).replace(/^\./, "") || "patch"}`,
-  name: compression === "none" ? undefined : getFileExtensionLabel(fileName),
+  name: fileName || undefined,
   ratio: getCompressionRatioLabel(compression, size, rawSize),
   size: typeof size === "number" && Number.isFinite(size) ? formatByteSize(size) : undefined,
 });

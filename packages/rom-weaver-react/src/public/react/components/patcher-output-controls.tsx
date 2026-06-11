@@ -115,7 +115,12 @@ function PatcherPrimaryAction({ controller }: { controller: OutputController }) 
       <RunButton
         disabled={state.applyButton.disabled}
         download={{
-          format: state.downloadSummary?.format ? `Patched ${state.downloadSummary.format}` : "Patched",
+          format: state.pendingDownloadFileName
+            ? "Patched"
+            : state.downloadSummary?.format
+              ? `Patched ${state.downloadSummary.format}`
+              : "Patched",
+          name: state.pendingDownloadFileName || undefined,
           size:
             state.downloadSummary?.size && state.downloadSummary?.ratio
               ? `${state.downloadSummary.size} (${state.downloadSummary.ratio})`
