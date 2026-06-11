@@ -447,3 +447,7 @@ use cd_sector_ecc::CD_SYNC_HEADER;
 use create_pipeline::CompressedCreateParams;
 use hunk_compression::ChdCompressionScratch;
 use read_session::ChdReadSession;
+
+#[cfg(test)]
+#[path = "../../tests/unit/chd.rs"]
+mod chd_tests;
