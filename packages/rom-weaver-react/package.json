@@ -32,6 +32,7 @@
     "prepare:dist": "node ./scripts/sync-dist.mjs",
     "test": "npm run test:browser",
     "test:browser": "vitest --config ./vitest.browser.config.mjs run",
+    "test:browser:parallel": "node scripts/run-browser-tests.mjs",
     "test:browser:chromium": "ROM_WEAVER_BROWSER=chromium vitest --config ./vitest.browser.config.mjs run",
     "test:browser:wasm": "vitest --config ./vitest.wasm.browser.config.mjs run",
     "test:browser:wasm:bench": "ROM_WEAVER_WASM_BENCH=1 vitest --config ./vitest.wasm.browser.config.mjs bench",
