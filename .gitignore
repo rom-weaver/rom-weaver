@@ -7,6 +7,9 @@
 
 # Generated wasm artifacts
 /dist/wasm/
+
+# Coverage reports
+/dist/coverage/
 /packages/rom-weaver-react/src/wasm/rom-weaver-app.wasm
 /packages/rom-weaver-react/src/wasm/rom-weaver-app.wasm.br
 /packages/rom-weaver-react/src/wasm/rom-weaver-app-threaded.wasm

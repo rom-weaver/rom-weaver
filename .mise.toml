@@ -193,6 +193,22 @@ run = "cargo run -p rom-weaver-typegen -- --check"
 description = "Run the Rust workspace test suite"
 run = "cargo test --workspace"
 
+[tasks.coverage-rust]
+description = "Run the Rust workspace tests under llvm-cov and emit HTML + lcov coverage"
+# Requires cargo-llvm-cov + the llvm-tools-preview component. llvm-cov recompiles
+# the workspace with instrumentation into its own target subdir, so this does not
+# reuse the normal `cargo test` artifacts — run it on demand, not in the gate.
+# Collect once with --no-report, then emit both formats from the same profdata.
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+out_dir="{{ config_root }}/dist/coverage/rust"
+mkdir -p "$out_dir"
+cargo llvm-cov --workspace --no-report
+cargo llvm-cov report --html --output-dir "$out_dir"
+cargo llvm-cov report --lcov --output-path "$out_dir/lcov.info"
+'''
+
 [tasks.thread-guards]
 description = "Fail on threaded-WASM suppression regressions"
 run = "{{ config_root }}/scripts/check-thread-guards.sh"
