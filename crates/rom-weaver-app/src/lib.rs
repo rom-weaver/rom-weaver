@@ -779,6 +779,19 @@ mod probe_details;
 #[path = "header_detection_and_finalize.rs"]
 mod header_detection_and_finalize;
 
+#[path = "header_repair_byte_io.rs"]
+mod header_repair_byte_io;
+pub(crate) use header_repair_byte_io::{
+    read_exact_at, read_vec_at, remove_prefix_in_place, sum_range_with_zeroed, sum_sega_words,
+    write_all_at,
+};
+
+#[path = "header_repair_n64.rs"]
+mod header_repair_n64;
+
+#[path = "header_repair_systems.rs"]
+mod header_repair_systems;
+
 #[path = "header_repair.rs"]
 mod header_repair;
 

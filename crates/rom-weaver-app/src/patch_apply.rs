@@ -69,65 +69,21 @@ impl CliApp {
             })
             .with_ppf_undo_aware(ppf_undo_aware);
         let probe_threads = Some(context.plan_threads(ThreadCapability::single_threaded()));
-        let compression_options = match Self::parse_patch_apply_compression_options(
+        let ParsedPatchApplyInputs {
+            compression_options,
+            cached_input_checksums,
+            mut expected_input_checksums,
+            expected_output_checksums,
+        } = match Self::parse_patch_apply_inputs(
+            &checksum_cache,
+            &validate_with_checksums,
+            &validate_with_output_checksums,
             no_compress,
             compress_format,
             compress_codec,
             compress_level,
         ) {
-            Ok(options) => options,
-            Err(error) => {
-                return self.finish(
-                    "patch-apply",
-                    OperationReport::failed(
-                        OperationFamily::Patch,
-                        None,
-                        "validate",
-                        error.to_string(),
-                        probe_threads.clone(),
-                    ),
-                );
-            }
-        };
-        let cached_input_checksums =
-            match Self::parse_patch_apply_checksum_values(&checksum_cache, "--checksum-cache") {
-                Ok(values) => values,
-                Err(error) => {
-                    return self.finish(
-                        "patch-apply",
-                        OperationReport::failed(
-                            OperationFamily::Patch,
-                            None,
-                            "validate",
-                            error.to_string(),
-                            probe_threads.clone(),
-                        ),
-                    );
-                }
-            };
-        let mut expected_input_checksums = match Self::parse_patch_apply_checksum_values(
-            &validate_with_checksums,
-            "--validate-with-checksum",
-        ) {
-            Ok(values) => values,
-            Err(error) => {
-                return self.finish(
-                    "patch-apply",
-                    OperationReport::failed(
-                        OperationFamily::Patch,
-                        None,
-                        "validate",
-                        error.to_string(),
-                        probe_threads.clone(),
-                    ),
-                );
-            }
-        };
-        let expected_output_checksums = match Self::parse_patch_apply_checksum_values(
-            &validate_with_output_checksums,
-            "--validate-output-checksum",
-        ) {
-            Ok(values) => values,
+            Ok(parsed) => parsed,
             Err(error) => {
                 return self.finish(
                     "patch-apply",
@@ -327,128 +283,30 @@ impl CliApp {
                 );
             }
 
-            let mut stripped_header = None;
-            let mut stripped_header_match = None;
-            let mut restore_n64_order = None;
             let mut checksum_verification_labels = Vec::new();
-            let apply_input = if strip_header {
-                self.emit_running(
-                    OperationLabel {
-                        command: "patch-apply",
-                        family: OperationFamily::Patch,
-                        format: None,
-                    },
-                    "prepare",
-                    "stripping ROM header before patch apply",
-                    None,
-                    None,
-                );
-                let stripped_path = context
-                    .temp_paths()
-                    .next_path("patch-apply-input-noheader", Some("bin"));
-                match Self::strip_header_to_temp(&resolved_input, &stripped_path) {
-                    Ok(result) => {
-                        stripped_header = Some(result.header_bytes);
-                        stripped_header_match = result.matched_header;
-                        temp_paths.push(stripped_path.clone());
-                        stripped_path
-                    }
-                    Err(error) => {
-                        return OperationReport::failed(
-                            OperationFamily::Patch,
-                            None,
-                            "compat",
-                            error.to_string(),
-                            Some(context.plan_threads(ThreadCapability::single_threaded())),
-                        );
-                    }
+            let PreparedApplyInput {
+                apply_input,
+                stripped_header,
+                stripped_header_match,
+                restore_n64_order,
+            } = match self.prepare_patch_apply_input(
+                &resolved_input,
+                strip_header,
+                n64_byte_order,
+                repair_checksum,
+                &context,
+                &mut temp_paths,
+            ) {
+                Ok(prepared) => prepared,
+                Err(error) => {
+                    return OperationReport::failed(
+                        OperationFamily::Patch,
+                        None,
+                        "compat",
+                        error.to_string(),
+                        Some(context.plan_threads(ThreadCapability::single_threaded())),
+                    );
                 }
-            } else {
-                resolved_input.clone()
-            };
-            let apply_input = if let Some(target_order) = n64_byte_order {
-                let transformed_path = context
-                    .temp_paths()
-                    .next_path("patch-apply-input-n64-byte-order", Some("bin"));
-                match Self::rewrite_n64_byte_order_to_temp(
-                    &apply_input,
-                    &transformed_path,
-                    target_order,
-                ) {
-                    Ok(Some(transform)) => {
-                        self.emit_running(
-                            OperationLabel {
-                                command: "patch-apply",
-                                family: OperationFamily::Patch,
-                                format: None,
-                            },
-                            "compat",
-                            format!(
-                                "transforming N64 input byte order to {}",
-                                target_order.label()
-                            ),
-                            None,
-                            Some(context.plan_threads(ThreadCapability::single_threaded())),
-                        );
-                        restore_n64_order = Some(transform);
-                        temp_paths.push(transformed_path.clone());
-                        transformed_path
-                    }
-                    Ok(None) => apply_input,
-                    Err(error) => {
-                        return OperationReport::failed(
-                            OperationFamily::Patch,
-                            None,
-                            "compat",
-                            error.to_string(),
-                            Some(context.plan_threads(ThreadCapability::single_threaded())),
-                        );
-                    }
-                }
-            } else {
-                apply_input
-            };
-            let apply_input = if repair_checksum {
-                let normalized_path = context
-                    .temp_paths()
-                    .next_path("patch-apply-input-z64", Some("bin"));
-                match Self::normalize_n64_to_big_endian_to_temp(&apply_input, &normalized_path) {
-                    Ok(Some(order)) => {
-                        self.emit_running(
-                            OperationLabel {
-                                command: "patch-apply",
-                                family: OperationFamily::Patch,
-                                format: None,
-                            },
-                            "compat",
-                            "normalizing N64 byte order for header repair",
-                            None,
-                            Some(context.plan_threads(ThreadCapability::single_threaded())),
-                        );
-                        if restore_n64_order.is_none() {
-                            restore_n64_order = Some(N64ByteOrderTransform {
-                                from: N64ByteOrder::BigEndian,
-                                to: order,
-                            });
-                        } else if let Some(transform) = restore_n64_order.as_mut() {
-                            transform.from = N64ByteOrder::BigEndian;
-                        }
-                        temp_paths.push(normalized_path.clone());
-                        normalized_path
-                    }
-                    Ok(None) => apply_input,
-                    Err(error) => {
-                        return OperationReport::failed(
-                            OperationFamily::Patch,
-                            None,
-                            "compat",
-                            error.to_string(),
-                            Some(context.plan_threads(ThreadCapability::single_threaded())),
-                        );
-                    }
-                }
-            } else {
-                apply_input
             };
             if let Some(expected_size) = expected_input_size {
                 match Self::validate_patch_input_size(&apply_input, Some(expected_size), None) {
@@ -998,5 +856,181 @@ impl CliApp {
 
         Self::cleanup_temp_paths(temp_paths);
         self.finish("patch-apply", report)
+    }
+}
+
+/// Parsed-and-validated patch-apply inputs: the compression options and the
+/// three checksum maps (cache, expected-input, expected-output).
+struct ParsedPatchApplyInputs {
+    compression_options: PatchApplyCompressionOptions,
+    cached_input_checksums: BTreeMap<String, String>,
+    expected_input_checksums: BTreeMap<String, String>,
+    expected_output_checksums: BTreeMap<String, String>,
+}
+
+/// The patch-apply input after the optional pre-apply compatibility transforms
+/// (header strip, N64 byte-order rewrite, N64 normalize-for-repair), plus the
+/// state needed to reverse/finalize them on the output.
+struct PreparedApplyInput {
+    apply_input: PathBuf,
+    stripped_header: Option<Vec<u8>>,
+    stripped_header_match: Option<KnownRomHeaderMatch>,
+    restore_n64_order: Option<N64ByteOrderTransform>,
+}
+
+impl CliApp {
+    /// Parse the compression options and the three checksum maps. Parse errors
+    /// surface as [`RomWeaverError`]; the caller wraps them into a
+    /// `validate`-stage report. Consumes the owned compress-* args (no later
+    /// use).
+    fn parse_patch_apply_inputs(
+        checksum_cache: &[String],
+        validate_with_checksums: &[String],
+        validate_with_output_checksums: &[String],
+        no_compress: bool,
+        compress_format: Option<String>,
+        compress_codec: Vec<String>,
+        compress_level: CompressionLevelProfile,
+    ) -> Result<ParsedPatchApplyInputs> {
+        let compression_options = Self::parse_patch_apply_compression_options(
+            no_compress,
+            compress_format,
+            compress_codec,
+            compress_level,
+        )?;
+        let cached_input_checksums =
+            Self::parse_patch_apply_checksum_values(checksum_cache, "--checksum-cache")?;
+        let expected_input_checksums = Self::parse_patch_apply_checksum_values(
+            validate_with_checksums,
+            "--validate-with-checksum",
+        )?;
+        let expected_output_checksums = Self::parse_patch_apply_checksum_values(
+            validate_with_output_checksums,
+            "--validate-output-checksum",
+        )?;
+        Ok(ParsedPatchApplyInputs {
+            compression_options,
+            cached_input_checksums,
+            expected_input_checksums,
+            expected_output_checksums,
+        })
+    }
+
+    /// Apply the optional pre-apply compatibility transforms to `resolved_input`
+    /// (strip ROM header, rewrite N64 byte order, normalize N64 to big-endian
+    /// for checksum repair), pushing any temp files into `temp_paths`. Returns
+    /// the prepared input plus the state needed to finalize the output; failures
+    /// surface as [`RomWeaverError`] for the caller to wrap into a `compat`
+    /// report.
+    fn prepare_patch_apply_input(
+        &self,
+        resolved_input: &Path,
+        strip_header: bool,
+        n64_byte_order: Option<N64ByteOrder>,
+        repair_checksum: bool,
+        context: &OperationContext,
+        temp_paths: &mut Vec<PathBuf>,
+    ) -> Result<PreparedApplyInput> {
+        let mut stripped_header = None;
+        let mut stripped_header_match = None;
+        let mut restore_n64_order = None;
+        let apply_input = if strip_header {
+            self.emit_running(
+                OperationLabel {
+                    command: "patch-apply",
+                    family: OperationFamily::Patch,
+                    format: None,
+                },
+                "prepare",
+                "stripping ROM header before patch apply",
+                None,
+                None,
+            );
+            let stripped_path = context
+                .temp_paths()
+                .next_path("patch-apply-input-noheader", Some("bin"));
+            match Self::strip_header_to_temp(resolved_input, &stripped_path) {
+                Ok(result) => {
+                    stripped_header = Some(result.header_bytes);
+                    stripped_header_match = result.matched_header;
+                    temp_paths.push(stripped_path.clone());
+                    stripped_path
+                }
+                Err(error) => return Err(error),
+            }
+        } else {
+            resolved_input.to_path_buf()
+        };
+        let apply_input = if let Some(target_order) = n64_byte_order {
+            let transformed_path = context
+                .temp_paths()
+                .next_path("patch-apply-input-n64-byte-order", Some("bin"));
+            match Self::rewrite_n64_byte_order_to_temp(&apply_input, &transformed_path, target_order)
+            {
+                Ok(Some(transform)) => {
+                    self.emit_running(
+                        OperationLabel {
+                            command: "patch-apply",
+                            family: OperationFamily::Patch,
+                            format: None,
+                        },
+                        "compat",
+                        format!(
+                            "transforming N64 input byte order to {}",
+                            target_order.label()
+                        ),
+                        None,
+                        Some(context.plan_threads(ThreadCapability::single_threaded())),
+                    );
+                    restore_n64_order = Some(transform);
+                    temp_paths.push(transformed_path.clone());
+                    transformed_path
+                }
+                Ok(None) => apply_input,
+                Err(error) => return Err(error),
+            }
+        } else {
+            apply_input
+        };
+        let apply_input = if repair_checksum {
+            let normalized_path = context
+                .temp_paths()
+                .next_path("patch-apply-input-z64", Some("bin"));
+            match Self::normalize_n64_to_big_endian_to_temp(&apply_input, &normalized_path) {
+                Ok(Some(order)) => {
+                    self.emit_running(
+                        OperationLabel {
+                            command: "patch-apply",
+                            family: OperationFamily::Patch,
+                            format: None,
+                        },
+                        "compat",
+                        "normalizing N64 byte order for header repair",
+                        None,
+                        Some(context.plan_threads(ThreadCapability::single_threaded())),
+                    );
+                    if restore_n64_order.is_none() {
+                        restore_n64_order = Some(N64ByteOrderTransform {
+                            from: N64ByteOrder::BigEndian,
+                            to: order,
+                        });
+                    } else if let Some(transform) = restore_n64_order.as_mut() {
+                        transform.from = N64ByteOrder::BigEndian;
+                    }
+                    temp_paths.push(normalized_path.clone());
+                    normalized_path
+                }
+                Ok(None) => apply_input,
+                Err(error) => return Err(error),
+            }
+        } else {
+            apply_input
+        };
+        Ok(PreparedApplyInput {
+            apply_input,
+            stripped_header,
+            stripped_header_match,
+            restore_n64_order,
+        })
     }
 }
