@@ -351,6 +351,7 @@ impl CliApp {
             ignore_common_files: !no_ignore,
             overwrite: true,
             parent: None,
+            containing_archive: None,
         };
         handler.extract(&request, context)?;
         let selected_names = selections.into_iter().collect::<BTreeSet<_>>();

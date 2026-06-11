@@ -79,6 +79,7 @@ impl CliApp {
             ignore_common_files,
             overwrite,
             parent: None,
+            containing_archive: None,
         };
         match handler.extract(&request, context) {
             Ok(report) => Ok(report),
@@ -112,6 +113,7 @@ impl CliApp {
                     ignore_common_files,
                     overwrite,
                     parent: None,
+                    containing_archive: None,
                 };
                 handler.extract(&retry_request, context)
             }

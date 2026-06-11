@@ -169,9 +169,11 @@ impl CliApp {
                 split_bin: false,
                 ignore_common_files,
                 overwrite,
+                // A nested source is never a parented CHD here, so it has no parent CHD.
+                parent: None,
                 // This source is a run-local intermediate (written while descending `root_source`),
                 // so flag its provenance: in the browser the handler must read it on the main thread.
-                parent: Some(root_source.clone()),
+                containing_archive: Some(root_source.clone()),
             };
             let format_name = handler.descriptor().name;
             let step_threads = Some(context.plan_threads(handler.capabilities().extract_threads));

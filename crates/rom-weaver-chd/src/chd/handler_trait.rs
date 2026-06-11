@@ -189,6 +189,9 @@ impl ContainerHandlerOperations for ChdContainerHandler {
         context: &OperationContext,
     ) -> Result<OperationReport> {
         let execution = context.plan_threads(ThreadCapability::parallel(None));
+        // `request.parent` is strictly the parent CHD for a differential source. Run-local
+        // provenance lives on `request.containing_archive`, so a non-parented CHD nested inside an
+        // archive no longer mistakes its container for a parent CHD.
         let chd = ChdReadSession::open(&request.source, request.parent.as_deref())?;
         let media_kind = chd.media_kind();
         if request.split_bin && media_kind != ChdMediaKind::CdRom {

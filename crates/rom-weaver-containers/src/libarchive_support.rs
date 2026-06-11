@@ -1069,7 +1069,7 @@ pub(crate) fn extract_regular_archive_with_libarchive(
         &request.selections,
         request.kind_filter,
         request.ignore_common_files,
-        request.parent.is_some(),
+        request.containing_archive.is_some(),
         format_name,
     )?;
     let total_tasks = tasks.len();

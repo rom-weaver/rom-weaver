@@ -179,12 +179,18 @@ pub struct ContainerExtractRequest {
     pub split_bin: bool,
     pub ignore_common_files: bool,
     pub overwrite: bool,
-    /// The containing archive this source was extracted from, when it is a nested-archive
-    /// intermediate written during this run (top-level inputs leave this `None`). Beyond tracing
-    /// provenance, handlers use `parent.is_some()` to know the source is run-local: in the browser
-    /// only the main runner thread can open such a file, so a parallel extract must read it on the
-    /// main thread and hand the bytes to workers (a top-level input is already synced to workers).
+    /// Parent CHD for a differential (parented) CHD source. Only meaningful to the CHD handler,
+    /// which fails if the source declares a parent linkage and this is `None`. Top-level and
+    /// nested non-parented sources leave this `None`. Do NOT use this to flag run-local provenance —
+    /// that is `containing_archive` (conflating the two made nested CHDs try to open their
+    /// containing archive as a parent CHD).
     pub parent: Option<PathBuf>,
+    /// The containing archive this source was extracted from, when it is a nested-archive
+    /// intermediate written during this run (top-level inputs leave this `None`). Handlers use
+    /// `containing_archive.is_some()` to know the source is run-local: in the browser only the main
+    /// runner thread can open such a file, so a parallel extract must read it on the main thread and
+    /// hand the bytes to workers (a top-level input is already synced to workers).
+    pub containing_archive: Option<PathBuf>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -564,6 +570,7 @@ impl ContainerHandlerOperations for TracingContainerHandler {
             out_dir = %request.out_dir.display(),
             selections = request.selections.len(),
             parent = ?request.parent.as_ref().map(|path| path.display().to_string()),
+            containing_archive = ?request.containing_archive.as_ref().map(|path| path.display().to_string()),
             "container extract start"
         );
         let result = self.inner.extract(request, context);
