@@ -61,7 +61,10 @@ pub(crate) const IN_MEMORY_APPLY_LIMIT_BYTES: u64 = 256 * 1024 * 1024;
 /// before buffering is removed entirely.
 pub(crate) fn in_memory_apply_limit_bytes() -> u64 {
     match std::env::var("ROM_WEAVER_PATCH_IN_MEMORY_LIMIT") {
-        Ok(value) => value.trim().parse::<u64>().unwrap_or(IN_MEMORY_APPLY_LIMIT_BYTES),
+        Ok(value) => value
+            .trim()
+            .parse::<u64>()
+            .unwrap_or(IN_MEMORY_APPLY_LIMIT_BYTES),
         Err(_) => IN_MEMORY_APPLY_LIMIT_BYTES,
     }
 }

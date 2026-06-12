@@ -98,7 +98,8 @@ impl PatchHandler for BpsPatchHandler {
         output.set_len(patch.target_size)?;
         let thread_capability = bps_apply_thread_capability(&patch.actions);
         let has_target_copy = patch_contains_target_copy(&patch.actions);
-        let execution = if crate::can_apply_in_memory_on_apply(patch.source_size, patch.target_size) {
+        let execution = if crate::can_apply_in_memory_on_apply(patch.source_size, patch.target_size)
+        {
             let mut execution = context.plan_threads(thread_capability.clone());
             let target_size = patch.target_size as usize;
             let mut source_bytes = Vec::with_capacity(patch.source_size as usize);

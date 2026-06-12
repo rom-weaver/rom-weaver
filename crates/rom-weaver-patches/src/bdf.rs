@@ -176,7 +176,8 @@ impl PatchHandler for BdfPatchHandler {
         let target_len_usize = usize::try_from(target_len).map_err(|_| {
             RomWeaverError::Validation("BSDIFF40 target exceeded addressable memory".into())
         })?;
-        let (mut execution, pool) = context.build_pool(qbsdiff_thread_capability(target_len_usize))?;
+        let (mut execution, pool) =
+            context.build_pool(qbsdiff_thread_capability(target_len_usize))?;
 
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
