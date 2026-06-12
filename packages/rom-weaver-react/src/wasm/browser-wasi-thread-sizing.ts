@@ -15,7 +15,16 @@ export function resolveBrowserThreadPoolSizeFromRequest(request: RomWeaverRunReq
 export function resolveBrowserThreadPoolSizeFromCount(requestedThreadCount: number | null): number {
   if (requestedThreadCount === null || requestedThreadCount <= 1) return 0;
   const requested = Math.min(Math.max(1, requestedThreadCount), MAX_BROWSER_THREAD_POOL_SIZE);
-  return Math.min(requested + BROWSER_THREAD_POOL_HEADROOM, MAX_BROWSER_THREAD_POOL_SIZE);
+  // Two distinct thread waves can be live at once. The Rust shared operation pool is a rayon pool
+  // sized to the full budget (~`requested`), and rayon keeps its workers parked for the whole
+  // operation — they permanently occupy that many pooled wasi workers. On top of that, container
+  // decoders (e.g. CHD) spawn a transient `std::thread::scope` decode wave that needs *additional*
+  // pooled workers concurrently. The pooled-worker spawn is synchronous and cannot grow the pool
+  // on demand, so if the transient wave can't find a free worker it deadlocks waiting on a
+  // permanently-parked rayon worker. Reserve a full second wave (min `BROWSER_THREAD_POOL_HEADROOM`)
+  // of headroom so the parked operation pool and the transient decode scope always fit together.
+  const headroom = Math.max(BROWSER_THREAD_POOL_HEADROOM, requested);
+  return Math.min(requested + headroom, MAX_BROWSER_THREAD_POOL_SIZE);
 }
 
 export function parseRequestedThreadCount(request: RomWeaverRunInput): number | null {
