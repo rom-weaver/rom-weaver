@@ -176,13 +176,24 @@ impl PatchHandler for BdfPatchHandler {
         let target_len_usize = usize::try_from(target_len).map_err(|_| {
             RomWeaverError::Validation("BSDIFF40 target exceeded addressable memory".into())
         })?;
-        let (execution, pool) = context.build_pool(qbsdiff_thread_capability(target_len_usize))?;
+        let (mut execution, pool) = context.build_pool(qbsdiff_thread_capability(target_len_usize))?;
 
         if let Some(parent) = request.output.parent() {
             fs::create_dir_all(parent)?;
         }
 
-        pool.install(|| create_qbsdiff_patch(request, context, execution.effective_threads))?;
+        // create_qbsdiff_patch reads the source AND writes the patch inside the
+        // closure; pool.install runs that on a worker thread, which cannot open OPFS
+        // files in wasm (os error 44). Run it serially on the main thread there
+        // (qbsdiff is deterministic, so the patch still round-trips). Native keeps
+        // the parallel suffix sort.
+        if crate::patches_reads_source_on_main_thread() {
+            create_qbsdiff_patch(request, context, 1)?;
+            execution.effective_threads = 1;
+            execution.used_parallelism = false;
+        } else {
+            pool.install(|| create_qbsdiff_patch(request, context, execution.effective_threads))?;
+        }
         let patch_len = fs::metadata(&request.output)?.len();
 
         Ok(crate::patch_success_report(
