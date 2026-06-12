@@ -21,7 +21,7 @@ type InputPreparationMetrics = {
 type InputAsset = {
   id: string;
   fileName: string;
-  kind: "rom" | "cue" | "track";
+  kind: "rom" | "cue" | "gdi" | "track";
   size: number;
   checksums?: Record<string, string>;
   checksumVariants?: ChecksumVariant[];
@@ -33,6 +33,7 @@ type InputAsset = {
   patchable: boolean;
   disc?: {
     cueText?: string;
+    gdiText?: string;
     trackNumber?: number;
     mode?: string;
     splitBinAvailable?: boolean;
@@ -74,16 +75,38 @@ const makeCueAsset = (
   size: file.fileSize,
 });
 
+// A GD-ROM ships a `.gdi` sheet instead of (or alongside) a `.cue`. It is a
+// non-patchable disc sidecar like the cue, so it groups with its tracks and is
+// excluded from checksums, but its text lives in `disc.gdiText` so the UI renders
+// it in a separate GDI panel rather than the CUE panel.
+const makeGdiAsset = (
+  id: string,
+  fileName: string,
+  file: PatchFileInstance,
+  groupId: string,
+  gdiText: string,
+): InputAsset => ({
+  disc: { gdiText },
+  file,
+  fileName,
+  groupId,
+  id,
+  kind: "gdi",
+  patchable: false,
+  size: file.fileSize,
+});
+
 const makeTrackAsset = (
   id: string,
   fileName: string,
   file: PatchFileInstance,
   groupId: string,
   reference: { trackNumber?: number; mode?: string; patchable?: boolean },
-  disc: { cueText?: string; splitBinAvailable?: boolean } = {},
+  disc: { cueText?: string; gdiText?: string; splitBinAvailable?: boolean } = {},
 ): InputAsset => ({
   disc: {
     cueText: disc.cueText,
+    gdiText: disc.gdiText,
     mode: reference.mode,
     splitBinAvailable: disc.splitBinAvailable,
     trackNumber: reference.trackNumber,
@@ -163,6 +186,7 @@ export {
   attachInputPreparationMetrics,
   getInputPreparationMetrics,
   makeCueAsset,
+  makeGdiAsset,
   makeInputCandidateGroup,
   makeInputId,
   makeMissingReferenceWarnings,

@@ -54,7 +54,8 @@ const getPatchFilePrecomputedChecksums = (
   return out;
 };
 
-const isChecksummableInputAsset = (asset: InputAsset) => asset.kind !== "cue";
+// Disc sheets (cue/gdi) are sidecars, not ROM data — never checksum them.
+const isChecksummableInputAsset = (asset: InputAsset) => asset.kind !== "cue" && asset.kind !== "gdi";
 
 const getInputAssetChecksums = (asset: InputAsset | undefined): StandardWorkflowChecksums | undefined => {
   if (!asset) return undefined;

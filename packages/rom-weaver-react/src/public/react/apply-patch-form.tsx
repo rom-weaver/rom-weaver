@@ -37,7 +37,7 @@ import {
   toBrowserPublicBinarySource,
   toReactProgressEvent,
 } from "./workflow-adapters.ts";
-import { createReactWorkflowId, formatChecksumTiming, formatElapsedMs } from "./workflow-form-utils.ts";
+import { createReactWorkflowId, formatChecksumTiming } from "./workflow-form-utils.ts";
 
 type ApplyWorkflowSessionInput = {
   inputs: BinarySource[];
@@ -413,12 +413,13 @@ const toStagedInputInfos = (input: ApplyWorkflowInputState | null, originals: Bi
       cueText: resolved.cueText,
       decompressionTimeMs: resolved.decompressionTimeMs,
       fileName: stagedFileName,
+      gdiText: resolved.gdiText,
       groupId: resolved.groupId,
       id: resolved.id,
       kind: resolved.kind,
       order: resolved.order ?? index,
       parentCompressions: resolved.parentCompressions,
-      patchable: resolved.patchable ?? resolved.kind !== "cue",
+      patchable: resolved.patchable ?? (resolved.kind !== "cue" && resolved.kind !== "gdi"),
       romProbe: resolved.romProbe || input.romProbe,
       size: resolved.size,
       sourceSize: resolved.sourceSize,

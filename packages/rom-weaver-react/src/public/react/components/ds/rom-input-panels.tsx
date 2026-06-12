@@ -3,7 +3,13 @@ import { getDiscKind, getDiscKindLabel } from "../../../../lib/input/rom-specifi
 import type { ChecksumVariant } from "../../../../types/checksum.ts";
 import { CuePanel } from "./cue-panel.tsx";
 import { FixesPanel, type FixesPanelProps } from "./fixes-panel.tsx";
-import { type SourceInfoChecksums, SourceInfoList, type SourceInfoProgress } from "./source-info-list.tsx";
+import {
+  type DiscTrackPanelInfo,
+  DiscTracksPanel,
+  type SourceInfoChecksums,
+  SourceInfoList,
+  type SourceInfoProgress,
+} from "./source-info-list.tsx";
 
 type RomInputInfoPanelProps = {
   bytes?: number;
@@ -21,7 +27,14 @@ type RomInputInfoPanelProps = {
 type RomInputPanelsProps = {
   fixes?: Omit<FixesPanelProps, "label">;
   info?: RomInputInfoPanelProps;
+  /**
+   * Per-track checksums for a multi-track disc. When present, the disc's tracks
+   * are listed under one "Tracks" section instead of the single `info` panel.
+   */
+  tracks?: DiscTrackPanelInfo[];
   cue?: { cueText: string };
+  /** A GD-ROM `.gdi` sheet shown as its own section, separate from the cue. */
+  gdi?: { gdiText: string };
   showFixes?: boolean;
   showInfo?: boolean;
   showCue?: boolean;
@@ -30,7 +43,9 @@ type RomInputPanelsProps = {
 const RomInputPanels = ({
   fixes = {},
   info = {},
+  tracks,
   cue,
+  gdi,
   showFixes = true,
   showInfo = true,
   showCue = true,
@@ -38,11 +53,18 @@ const RomInputPanels = ({
   // Derive the disc type from the cue sheet so it appears in the source Info
   // panel; an explicit info.discType (e.g. from a non-cue source) wins.
   const discType = info.discType ?? getDiscKindLabel(getDiscKind({ cueText: cue?.cueText })) ?? undefined;
+  const isDisc = Array.isArray(tracks) && tracks.length > 0;
+  const renderInfo = () => {
+    if (isDisc) return <DiscTracksPanel tracks={tracks} />;
+    if (showInfo) return <SourceInfoList {...info} discType={discType} />;
+    return null;
+  };
   return (
     <>
-      {showFixes ? <FixesPanel {...fixes} /> : null}
-      {showInfo ? <SourceInfoList {...info} discType={discType} /> : null}
+      {showFixes && !isDisc ? <FixesPanel {...fixes} /> : null}
+      {renderInfo()}
       {showCue && cue?.cueText ? <CuePanel cueText={cue.cueText} /> : null}
+      {showCue && gdi?.gdiText ? <CuePanel cueText={gdi.gdiText} label="GDI" sublabel="gd-rom sheet" /> : null}
     </>
   );
 };

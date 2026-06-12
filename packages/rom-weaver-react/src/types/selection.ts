@@ -1,4 +1,4 @@
-type CandidateKind = "cue" | "disc" | "patch" | "rom" | "track" | "unknown";
+type CandidateKind = "cue" | "disc" | "gdi" | "patch" | "rom" | "track" | "unknown";
 
 type CandidateGroupKind = "chd-output-mode" | "cue-disc" | "multi-file-input";
 

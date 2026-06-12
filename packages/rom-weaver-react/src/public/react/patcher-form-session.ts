@@ -687,6 +687,7 @@ const useLocalApplyPatchFormSession = ({
           chdMode: info.chdMode ?? patch.chdMode ?? existing.chdMode,
           cueText: info.cueText ?? patch.cueText ?? existing.cueText,
           decompressionTimeMs: info.decompressionTimeMs ?? patch.decompressionTimeMs ?? existing.decompressionTimeMs,
+          gdiText: info.gdiText ?? patch.gdiText ?? existing.gdiText,
           groupId: info.groupId ?? patch.groupId ?? existing.groupId,
           id: rowId,
           info: {

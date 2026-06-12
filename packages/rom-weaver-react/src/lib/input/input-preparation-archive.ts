@@ -1,10 +1,6 @@
 import { DEFAULT_VFS_ROOT } from "../../storage/vfs/path.ts";
 import { isVfsFileRef } from "../../storage/vfs/source-ref.ts";
-import type {
-  CandidateSelectionRequest,
-  SelectionFileCandidate,
-  SelectionGroupCandidate,
-} from "../../types/selection.ts";
+import type { CandidateSelectionRequest, SelectionFileCandidate } from "../../types/selection.ts";
 import type { SourceObject, SourceRef } from "../../types/source.ts";
 import type { ApplyWorkflowOptions, CreateWorkflowOptions, PublicOutput } from "../../types/workflow-runtime.ts";
 import type { WorkflowRuntime } from "../../types/workflow-runtime-adapter.ts";
@@ -14,7 +10,12 @@ import { RomWeaverError } from "../errors.ts";
 import { getPathBaseName } from "../path-utils.ts";
 import { reportProgress } from "../progress/progress-reporting.ts";
 import { createPatchFileFromPublicOutput } from "../runtime/public-output-bin-file.ts";
-import { findArchiveEntryByFileName, isCueEntryFileName, parseCueFileReferences } from "./archive.ts";
+import {
+  findArchiveEntryByFileName,
+  isCueEntryFileName,
+  isGdiEntryFileName,
+  parseCueFileReferences,
+} from "./archive.ts";
 import type { PatchFileInstance } from "./binary-service.ts";
 import {
   attachPatchFileCleanup,
@@ -34,6 +35,7 @@ import {
   type InputAsset,
   type InputParentCompression,
   makeCueAsset,
+  makeGdiAsset,
   makeInputId,
   makeRomAsset,
   makeTrackAsset,
@@ -162,15 +164,13 @@ const getSyntheticCueTrackEntries = (entries: ArchiveEntryLike[], cueFileName: s
     (entry) =>
       entry.archiveEntryType === "track" &&
       !isCueEntryFileName(entry.filename) &&
+      !isGdiEntryFileName(entry.filename) &&
       (!getDirectoryPath(cueFileName) || getDirectoryPath(entry.filename) === getDirectoryPath(cueFileName)),
   );
 
 const isCompressionEntryFileName = (fileName: string) => classifyPatcherInput({ fileName }).kind === "compression";
 
 const isBinEntryFileName = (fileName: string) => /\.bin$/i.test(getBaseFileName(fileName));
-
-const encodeChdSplitSelection = (entryName: string, splitBin: boolean) =>
-  `${splitBin ? CHD_SPLIT_SELECTION_PREFIX : CHD_MERGED_SELECTION_PREFIX}${entryName}`;
 
 const parseChdSplitSelection = (
   entryName: string | undefined,
@@ -185,13 +185,13 @@ const parseChdSplitSelection = (
   return { selectedEntryName: value || undefined };
 };
 
-const getChdCueEntryName = (entries: ArchiveEntryLike[]) =>
-  entries.find((entry) => isCueEntryFileName(entry.filename))?.filename || "";
+// A CHD disc lists its sheet as a `.cue` (CD-ROM) or `.gdi` (GD-ROM); both mark a
+// multi-track disc that should auto-resolve to whole-disc split-bin extraction
+// instead of prompting per track.
+const getChdDiscSheetEntryName = (entries: ArchiveEntryLike[]) =>
+  entries.find((entry) => isCueEntryFileName(entry.filename) || isGdiEntryFileName(entry.filename))?.filename || "";
 
 const getChdBinEntries = (entries: ArchiveEntryLike[]) => entries.filter((entry) => isBinEntryFileName(entry.filename));
-
-const formatChdEntryListLabel = (entries: ArchiveEntryLike[]) =>
-  entries.map((entry) => getBaseFileName(entry.filename)).join(" + ");
 
 const filterNestedContainerEntries = (entries: ArchiveEntryLike[]) =>
   entries.filter((entry) => typeof entry.filename === "string" && isCompressionEntryFileName(entry.filename));
@@ -495,29 +495,6 @@ const listCompressionEntryResult = async (
   return { ...result, chdMode, entries };
 };
 
-const makeChdOutputModeCandidate = ({
-  cueEntryName,
-  entries,
-  id,
-  label,
-  splitBin,
-}: {
-  cueEntryName: string;
-  entries: ArchiveEntryLike[];
-  id: string;
-  label: string;
-  splitBin: boolean;
-}): SelectionGroupCandidate => ({
-  candidateIds: [],
-  id,
-  kind: "chd-output-mode",
-  label: `${label}: ${formatChdEntryListLabel(entries)}`,
-  path: encodeChdSplitSelection(cueEntryName, splitBin),
-  selectable: true,
-  type: "group",
-  warnings: [],
-});
-
 const resolveChdSplitBinSelection = async ({
   archiveFile,
   compressionFormat,
@@ -525,7 +502,6 @@ const resolveChdSplitBinSelection = async ({
   options,
   runtime,
   selectedEntryName,
-  sourceIndex,
 }: {
   archiveFile: PatchFileInstance;
   compressionFormat: string;
@@ -533,7 +509,6 @@ const resolveChdSplitBinSelection = async ({
   options: InputPreparationOptions;
   runtime: InputPreparationRuntimeLike;
   selectedEntryName?: string;
-  sourceIndex: number;
 }): Promise<{ selectedEntryName?: string; chdMode?: ChdCodecMode; chdSplitBin?: boolean }> => {
   const parsedSelection = parseChdSplitSelection(selectedEntryName);
   if (parsedSelection.chdSplitBin !== undefined) return { ...parsedSelection, chdMode: "cd" };
@@ -554,35 +529,14 @@ const resolveChdSplitBinSelection = async ({
   const splitEntries = splitResult.entries;
   const mergedBinEntries = getChdBinEntries(mergedEntries);
   const splitBinEntries = getChdBinEntries(splitEntries);
-  const cueEntryName = getChdCueEntryName(mergedEntries) || getChdCueEntryName(splitEntries);
+  const cueEntryName = getChdDiscSheetEntryName(mergedEntries) || getChdDiscSheetEntryName(splitEntries);
   if (!(cueEntryName && mergedBinEntries.length === 1 && splitBinEntries.length > 1))
     return { ...parsedSelection, ...(chdMode ? { chdMode } : {}) };
 
-  const request = {
-    candidates: [
-      makeChdOutputModeCandidate({
-        cueEntryName,
-        entries: mergedBinEntries,
-        id: makeInputId(sourceIndex, `${cueEntryName}-merged-bin`, normalizeArchiveEntryName),
-        label: "Merged BIN",
-        splitBin: false,
-      }),
-      makeChdOutputModeCandidate({
-        cueEntryName,
-        entries: splitBinEntries,
-        id: makeInputId(sourceIndex, `${cueEntryName}-split-bin`, normalizeArchiveEntryName),
-        label: "Split BIN tracks",
-        splitBin: true,
-      }),
-    ],
-    role: "input" as const,
-    sourceName: archiveFile.fileName || "CHD input",
-    warnings: [],
-  };
-  options.onCandidatesFound(request);
-  throw new RomWeaverError("AMBIGUOUS_SELECTION", `${request.sourceName} requires CHD output selection`, {
-    details: { request },
-  });
+  // A multi-track CD/GD disc is one logical ROM. Default to per-track split bins
+  // — so each track gets its own checksums and can be patch-targeted, matching
+  // how loose bin+cue discs are handled — instead of prompting Merged vs Split.
+  return { chdMode: chdMode || "cd", chdSplitBin: true };
 };
 
 const extractCompressionEntries = async (
@@ -915,9 +869,16 @@ const probeCompressionRomEntriesForSource = async (
   const referencedTrackNames = new Set<string>();
   for (const entry of romEntries) {
     const cueFileName = String(entry.filename || "");
-    if (!isCueEntryFileName(cueFileName)) continue;
+    const sheetIsCue = isCueEntryFileName(cueFileName);
+    const sheetIsGdi = isGdiEntryFileName(cueFileName);
+    // A CHD CD/GD-ROM lists a `.cue`/`.gdi` sheet plus per-track `.bin`s; both
+    // describe one disc, so group the tracks under the sheet (a GD-ROM `.gdi`
+    // gets a synthetic disc group exactly like a `.cue`).
+    if (!(sheetIsCue || sheetIsGdi)) continue;
     const syntheticTrackEntries =
-      entry.archiveEntryType === "cue" ? getSyntheticCueTrackEntries(entries, cueFileName) : [];
+      entry.archiveEntryType === "cue" || entry.archiveEntryType === "gdi"
+        ? getSyntheticCueTrackEntries(entries, cueFileName)
+        : [];
     if (syntheticTrackEntries.length) {
       const references = syntheticTrackEntries.map((trackEntry, index) => ({
         fileName: trackEntry.filename,
@@ -937,6 +898,9 @@ const probeCompressionRomEntriesForSource = async (
       });
       continue;
     }
+    // Only `.cue` text is read+parsed for references; a `.gdi` without synthetic
+    // track entries is left for standalone handling rather than mis-parsed.
+    if (!sheetIsCue) continue;
     try {
       const cueText = decodeUtf8(
         await extractArchiveEntryBytes(archiveFile, cueFileName, options, runtime, undefined, {
@@ -972,11 +936,29 @@ const probeCompressionRomEntriesForSource = async (
       });
     }
   }
+  // A single disc can ship both a `.cue` and a `.gdi` describing the same tracks
+  // (e.g. a GD-ROM with a low-density CUE alongside its GDI). Each sheet builds its
+  // own group above, so collapse sheets covering an identical track set into one
+  // disc group — otherwise the disc reads as two competing candidates and prompts.
+  const trackSetKey = (group: CompressionRomCueGroup) => JSON.stringify([...group.trackFileNames].sort());
+  const dedupedCueGroups: CompressionRomCueGroup[] = [];
+  const seenTrackSets = new Set<string>();
+  for (const group of cueGroups) {
+    const key = trackSetKey(group);
+    if (key && seenTrackSets.has(key)) continue;
+    if (key) seenTrackSets.add(key);
+    dedupedCueGroups.push(group);
+  }
   const standaloneEntries = romEntries.filter(
-    (entry) => !(isCueEntryFileName(entry.filename) || referencedTrackNames.has(entry.filename)),
+    (entry) =>
+      !(
+        isCueEntryFileName(entry.filename) ||
+        isGdiEntryFileName(entry.filename) ||
+        referencedTrackNames.has(entry.filename)
+      ),
   );
   return {
-    cueGroups,
+    cueGroups: dedupedCueGroups,
     directRomEntries,
     nestedCompressionEntries,
     referencedTrackNames,
@@ -1211,7 +1193,6 @@ const resolveArchiveInputFileByDescent = async (
     options,
     runtime,
     selectedEntryName: selectedArchiveEntry,
-    sourceIndex,
   });
   const selectedEntries = normalizeSelectedEntryNames(
     chdSelection.selectedEntryName ? [chdSelection.selectedEntryName] : [],
@@ -1300,7 +1281,6 @@ const resolveArchiveInputAssetsByDescent = async (
     options,
     runtime,
     selectedEntryName: selectedInputEntryName,
-    sourceIndex,
   });
   const selectedEntries = normalizeSelectedEntryNames(
     chdSelection.selectedEntryName ? [chdSelection.selectedEntryName] : [],
@@ -1370,7 +1350,9 @@ const resolveArchiveInputAssetsByDescent = async (
   const files = await Promise.all(
     outputs.map(async (output, index) => {
       const fileName = getBaseFileName(output.fileName || `payload-${index + 1}.bin`);
-      const shouldMaterializeForSyncRead = isCueEntryFileName(fileName);
+      // Sheet sidecars (cue/gdi) are read as text below, so materialize their bytes
+      // for synchronous read; tracks stay path-backed.
+      const shouldMaterializeForSyncRead = isCueEntryFileName(fileName) || isGdiEntryFileName(fileName);
       const file = await createPatchFileFromPublicOutput(output, fileName, {
         materializeBlob: shouldMaterializeForSyncRead,
         preferExternalFilePath: !shouldMaterializeForSyncRead,
@@ -1386,25 +1368,36 @@ const resolveArchiveInputAssetsByDescent = async (
     outputNames: files.map((file) => file.fileName),
     sourceIndex,
   });
+  // A CD ships a `.cue`, a GD-ROM a `.gdi`, and some discs carry both; either (or
+  // both) sheet marks a single multi-track disc whose tracks group under it. The
+  // sheets are non-patchable sidecars carried alongside their tracks.
   const cueFile = files.find((file) => isCueEntryFileName(file.fileName));
+  const gdiFile = files.find((file) => isGdiEntryFileName(file.fileName));
+  const sheetFiles = files.filter((file) => file === cueFile || file === gdiFile);
+  const trackFiles = files.filter((file) => !sheetFiles.includes(file));
   let assets: InputAsset[];
-  if (cueFile && files.length > 1) {
-    const cueText = decodeUtf8(getPatchFileBytes(cueFile));
-    const groupId = makeInputId(sourceIndex, cueFile.fileName, normalizeArchiveEntryName, "-group");
-    const splitBinAvailable = isChdSplitBinCue(archiveFile, cueText);
-    assets = files
-      .filter((file) => file !== cueFile)
-      .map((trackFile) =>
-        makeTrackAsset(
-          makeInputId(sourceIndex, trackFile.fileName, normalizeArchiveEntryName),
-          trackFile.fileName,
-          trackFile,
-          groupId,
-          { patchable: true },
-          { cueText, splitBinAvailable },
-        ),
-      );
-    assets.push(makeCueAsset(`${groupId}-cue`, cueFile.fileName, cueFile, groupId, cueText));
+  if (sheetFiles.length && trackFiles.length) {
+    const cueText = cueFile ? decodeUtf8(getPatchFileBytes(cueFile)) : undefined;
+    const gdiText = gdiFile ? decodeUtf8(getPatchFileBytes(gdiFile)) : undefined;
+    const primarySheet = cueFile ?? (gdiFile as PatchFileInstance);
+    const groupId = makeInputId(sourceIndex, primarySheet.fileName, normalizeArchiveEntryName, "-group");
+    const splitBinAvailable = cueText ? isChdSplitBinCue(archiveFile, cueText) : true;
+    assets = trackFiles.map((trackFile) =>
+      makeTrackAsset(
+        makeInputId(sourceIndex, trackFile.fileName, normalizeArchiveEntryName),
+        trackFile.fileName,
+        trackFile,
+        groupId,
+        { patchable: true },
+        { cueText, gdiText, splitBinAvailable },
+      ),
+    );
+    if (cueFile && cueText !== undefined) {
+      assets.push(makeCueAsset(`${groupId}-cue`, cueFile.fileName, cueFile, groupId, cueText));
+    }
+    if (gdiFile && gdiText !== undefined) {
+      assets.push(makeGdiAsset(`${groupId}-gdi`, gdiFile.fileName, gdiFile, groupId, gdiText));
+    }
   } else {
     assets = files.map((file) =>
       makeRomAsset(makeInputId(sourceIndex, file.fileName, normalizeArchiveEntryName), file),

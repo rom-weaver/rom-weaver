@@ -19,7 +19,7 @@ type ApplyWorkflowParentCompression = {
 type ApplyWorkflowResolvedInput = {
   id: string;
   fileName?: string;
-  kind?: "rom" | "cue" | "track";
+  kind?: "rom" | "cue" | "gdi" | "track";
   patchable?: boolean;
   checksums?: ApplyWorkflowChecksums;
   checksumVariants?: ChecksumVariant[];
@@ -35,6 +35,7 @@ type ApplyWorkflowResolvedInput = {
   chdMode?: string;
   splitBinAvailable?: boolean;
   cueText?: string;
+  gdiText?: string;
   decompressionTimeMs?: number;
   wasDecompressed?: boolean;
 };

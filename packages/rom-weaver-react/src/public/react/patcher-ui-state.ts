@@ -86,6 +86,7 @@ type RomInputRowState = InputUiState & {
   chdMode?: string;
   splitBinAvailable?: boolean;
   cueText?: string;
+  gdiText?: string;
   decompressionTimeMs?: number;
   wasDecompressed?: boolean;
 };
@@ -432,6 +433,7 @@ const normalizePatcherUiState = (
       cueText: typeof rowInput.cueText === "string" ? rowInput.cueText : undefined,
       decompressionTimeMs: typeof rowInput.decompressionTimeMs === "number" ? rowInput.decompressionTimeMs : undefined,
       disabled: !!rowInput.disabled,
+      gdiText: typeof rowInput.gdiText === "string" ? rowInput.gdiText : undefined,
       groupId: typeof rowInput.groupId === "string" ? rowInput.groupId : "",
       id: typeof rowInput.id === "string" ? rowInput.id : `rom-input-${index + 1}`,
       info,

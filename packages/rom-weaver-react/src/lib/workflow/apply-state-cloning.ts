@@ -161,6 +161,7 @@ const cloneResolvedInputAssetState = (
     cueText: asset.disc?.cueText ?? asset.file._chdCueText,
     decompressionTimeMs: getAssetDecompressionTimeMs(asset),
     fileName: asset.fileName,
+    gdiText: asset.disc?.gdiText,
     groupId: asset.groupId,
     id: asset.id,
     kind: asset.kind,
@@ -181,10 +182,11 @@ const cloneResolvedInputStatesForStage = <TSource>(
   stage: StagedSource<TSource>,
   selectedStage: boolean,
 ): ApplyWorkflowResolvedInput[] => {
-  // The cue is not shown as its own row; its text rides on the sibling bin/track rows via
-  // `cueText`. Output generation still reads `preparedInputAssets` directly, so the cue asset
-  // stays available there. Filter the cue out of the UI-facing resolved inputs only.
-  const assets = (stage.preparedInputAssets || []).filter((asset) => asset.kind !== "cue");
+  // Disc sheets (cue/gdi) are not shown as their own rows; their text rides on the sibling
+  // bin/track rows via `cueText`/`gdiText`. Output generation still reads `preparedInputAssets`
+  // directly, so the sheet assets stay available there. Filter sheets out of the UI-facing
+  // resolved inputs only.
+  const assets = (stage.preparedInputAssets || []).filter((asset) => asset.kind !== "cue" && asset.kind !== "gdi");
   if (!assets.length) return [cloneResolvedInputState(stage.state, stage.parentCompressions, selectedStage)];
   const primaryAsset = getPrimaryInputAsset(assets);
   return assets.map((asset, index) =>

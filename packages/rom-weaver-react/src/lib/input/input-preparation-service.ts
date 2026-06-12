@@ -11,7 +11,7 @@ import type { PatchFileInstance } from "../../workers/protocol/patch-engine.ts";
 import { ROM_SPECIFIC_DECOMPRESSION_INPUT_EXTENSIONS } from "../compression/rom-specific-format-support.ts";
 import { emitTraceLog } from "../logging.ts";
 import { getFileNameExtension, replaceFileNameExtension } from "../path-utils.ts";
-import { isCueEntryFileName, parseCueFileReferences } from "./archive.ts";
+import { isCueEntryFileName, isGdiEntryFileName, parseCueFileReferences, parseGdiFileReferences } from "./archive.ts";
 import { getArchiveType } from "./archive-type-utils.ts";
 import { getArchiveMagicType, MAGIC_SIGNATURES } from "./archive-utils.ts";
 import {
@@ -503,6 +503,22 @@ const prepareMultipleDirectInputAssets = async (
     const cueText = decodeUtf8(getPatchFileBytes(cueFile));
     const references = parseCueFileReferences(cueText);
     const groupId = makeInputId(cueIndex, cueFile.fileName, normalizeArchiveEntryName, "-group");
+    // A redump GD-ROM dump ships a `.gdi` alongside the `.cue` for the same
+    // disc. Find a sibling `.gdi` that references the same tracks so it rides on
+    // the disc (its own GDI section) instead of becoming a separate ROM.
+    const cueBinNames = new Set(references.map((reference) => getBaseFileName(reference.fileName).toLowerCase()));
+    let gdiFile: PatchFileInstance | undefined;
+    let gdiText: string | undefined;
+    for (const file of files) {
+      if (!file || used.has(file) || !isGdiEntryFileName(file.fileName)) continue;
+      const text = decodeUtf8(getPatchFileBytes(file));
+      const gdiRefs = parseGdiFileReferences(text).map((name) => getBaseFileName(name).toLowerCase());
+      if (gdiRefs.length > 0 && gdiRefs.every((name) => cueBinNames.has(name))) {
+        gdiFile = file;
+        gdiText = text;
+        break;
+      }
+    }
     const missingReferences: string[] = [];
     const trackAssets: InputAsset[] = [];
     for (const reference of references) {
@@ -521,7 +537,7 @@ const prepareMultipleDirectInputAssets = async (
           trackFile,
           groupId,
           reference,
-          { cueText },
+          { cueText, gdiText },
         ),
       );
     }
@@ -542,6 +558,10 @@ const prepareMultipleDirectInputAssets = async (
       throw new Error(`CUE file references missing file(s): ${missingReferences.join(", ")}`);
     used.add(cueFile);
     assets.push(makeCueAsset(`${groupId}-cue`, cueFile.fileName, cueFile, groupId, cueText), ...trackAssets);
+    if (gdiFile) {
+      used.add(gdiFile);
+      assets.push(makeCueAsset(`${groupId}-gdi`, gdiFile.fileName, gdiFile, groupId, gdiText ?? ""));
+    }
   }
   files.forEach((file, index) => {
     if (!used.has(file)) assets.push(makeRomAsset(makeInputId(index, file.fileName, normalizeArchiveEntryName), file));

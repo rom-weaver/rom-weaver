@@ -16,17 +16,27 @@ const CUE_FILE_ENTRY_REGEX = /^\s*FILE\s+"([^"]+)"/im;
 
 const getCueSublabel = (cueText: string): string => CUE_FILE_ENTRY_REGEX.exec(cueText)?.[1] || "cue sheet";
 
-const CuePanel = ({ cueText, defaultOpen }: { cueText: string; defaultOpen?: boolean }) => {
+const CuePanel = ({
+  cueText,
+  defaultOpen,
+  label = "CUE",
+  sublabel,
+}: {
+  cueText: string;
+  defaultOpen?: boolean;
+  label?: string;
+  sublabel?: string;
+}) => {
   const { copied, copy } = useClipboardCopy(cueText);
   if (!cueText) return null;
   return (
     <details className="cks cue rw-cue-section" open={defaultOpen}>
       <summary className="cks-summary">
         <ChevronRight aria-hidden="true" className="chev" />
-        <span className="lab">CUE</span>
-        <span className="sublab">{getCueSublabel(cueText)}</span>
+        <span className="lab">{label}</span>
+        <span className="sublab">{sublabel ?? getCueSublabel(cueText)}</span>
         <button
-          aria-label="Copy CUE sheet"
+          aria-label={`Copy ${label} sheet`}
           className={join("copy", "rw-cue-copy", copied && "copied")}
           onClick={(event) => {
             // Keep the click from toggling the surrounding <details>.
@@ -34,7 +44,7 @@ const CuePanel = ({ cueText, defaultOpen }: { cueText: string; defaultOpen?: boo
             event.stopPropagation();
             copy();
           }}
-          title="Copy CUE"
+          title={`Copy ${label}`}
           type="button"
         >
           {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}

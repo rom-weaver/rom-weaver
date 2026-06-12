@@ -7,7 +7,7 @@ import { Notice } from "./components/ds/feedback.tsx";
 import { InfoPopover } from "./components/ds/layout.tsx";
 import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
 import { WorkflowOutputStep } from "./components/ds/workflow-output-step.tsx";
-import { WorkflowRomInputStep } from "./components/ds/workflow-rom-input-step.tsx";
+import { WorkflowRomInputStep, type WorkflowRomInputStepItem } from "./components/ds/workflow-rom-input-step.tsx";
 import { PatcherPrimaryAction } from "./components/patcher-output-controls.tsx";
 import { getFileInputAcceptAttributes } from "./file-input-accept";
 import { ARCHIVE_INPUT_HINT, PATCH_INPUT_HINT, ROM_INPUT_HINT } from "./input-helper-text.ts";
@@ -98,6 +98,183 @@ const buildRomVerificationStates = (patches: PatchStackItemState[], romInputs: R
   return states;
 };
 
+/** Dependencies threaded into the ROM-row renderers. */
+type RomRowDeps = {
+  romInputs: RomInputRowState[];
+  alterHeaderChecked: boolean;
+  verificationStates: Map<string, "bad" | "ok">;
+  ui: PatcherUiController;
+};
+
+/**
+ * Multi-track CD/GD discs arrive as several rows (the cue/gdi sheet plus one
+ * row per .bin track) sharing a `groupId`. Collapse each such group into one
+ * "disc" entry; rows without a groupId (and lone groups) render individually.
+ */
+type RomInputGroup =
+  | { kind: "single"; row: RomInputRowState; index: number }
+  | { kind: "disc"; rows: Array<{ row: RomInputRowState; index: number }> };
+
+const groupRomInputs = (rows: RomInputRowState[]): RomInputGroup[] => {
+  const groups: RomInputGroup[] = [];
+  const discPositions = new Map<string, number>();
+  rows.forEach((row, index) => {
+    const groupId = row.groupId;
+    if (!groupId) {
+      groups.push({ index, kind: "single", row });
+      return;
+    }
+    const position = discPositions.get(groupId);
+    const existing = position === undefined ? undefined : groups[position];
+    if (existing && existing.kind === "disc") {
+      existing.rows.push({ index, row });
+      return;
+    }
+    discPositions.set(groupId, groups.length);
+    groups.push({ kind: "disc", rows: [{ index, row }] });
+  });
+  // A "disc" of a single row is not a disc — render it as a normal row.
+  return groups.map((group) => {
+    if (group.kind === "disc" && group.rows.length === 1) {
+      const only = group.rows[0];
+      if (only) return { index: only.index, kind: "single", row: only.row };
+    }
+    return group;
+  });
+};
+
+/** Render a single (non-disc) ROM input row. */
+const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomRowDeps): WorkflowRomInputStepItem => {
+  const { romInputs, alterHeaderChecked, verificationStates, ui } = deps;
+  const state = verificationStates.get(romInput.id);
+  const rowProgress = romInput.progress && romInput.info.validationPhase !== "checksum" ? romInput.progress : null;
+  if (rowProgress) {
+    return {
+      id: romInput.id,
+      progress: {
+        cancelLabel: romInputs.length > 1 ? "Cancel ROM input staging" : "Cancel ROM staging",
+        id: `rom-weaver-progress-rom-${index}`,
+        onCancel: () => {
+          if (romInputs.length === 1 && ui.clearRomInput) ui.clearRomInput();
+          else ui.removeRomInput?.(romInput.id);
+        },
+        ...toWorkflowFileProgressProps(rowProgress)!,
+      },
+    };
+  }
+  const checksumProgress = romInput.progress && romInput.info.validationPhase === "checksum" ? romInput.progress : null;
+  return {
+    card: {
+      extract: {
+        fileName: romInput.info.fileName,
+        fileSize: romInput.size ?? romInput.sourceSize,
+        legacyFileClassName: "rom-weaver-input-stack-file",
+        parentCompressions: romInput.archivePathEntries,
+        timing: TIMING_LABEL(romInput.decompressionTimeMs),
+      },
+      onRemove: () => {
+        if (romInputs.length === 1 && ui.clearRomInput) ui.clearRomInput();
+        else ui.removeRomInput?.(romInput.id);
+      },
+      panels: {
+        fixes: {
+          headerSummary: alterHeaderChecked ? "header will be fixed" : "header unchanged",
+          headerValue: getHeaderFixLabel(alterHeaderChecked),
+          lead: romInput.info.romInfo ? <p className="pdesc">{romInput.info.romInfo}</p> : undefined,
+          romInfoText: romInput.info.romInfo,
+          trim: romInput.info.romProbe?.trim,
+        },
+        info: {
+          bytes: romInput.size ?? romInput.sourceSize,
+          checksums: { crc32: romInput.info.crc32, md5: romInput.info.md5, sha1: romInput.info.sha1 },
+          checksumVariants: romInput.info.checksumVariants,
+          lead:
+            !checksumProgress && romInput.info.romInfo ? <p className="pdesc">{romInput.info.romInfo}</p> : undefined,
+          onToggle: () => ui.toggleRomInputChecksums?.(romInput.id),
+          open: romInput.info.checksumsExpanded,
+          progress: toWorkflowChecksumProgressProps(checksumProgress),
+          timing: CHECKSUM_TIMING_LABEL(romInput.info.checksumTiming),
+        },
+        ...(romInput.cueText ? { cue: { cueText: romInput.cueText } } : {}),
+      },
+      removeLabel: romInputs.length > 1 ? "Remove ROM input" : "Clear ROM input",
+      state,
+    },
+    id: romInput.id,
+  };
+};
+
+/**
+ * The disc display name. The cue is not a row of its own (its text rides on the
+ * track rows), so derive the title from a track filename by dropping the
+ * extension and a trailing "(Track N)" suffix — e.g. "Game (Track 1).bin" →
+ * "Game".
+ */
+const discDisplayName = (fileName: string): string => {
+  const withoutExt = fileName.replace(/\.[^.]+$/, "");
+  return withoutExt.replace(/\s*\(track\s*\d+\)\s*$/i, "") || withoutExt || fileName;
+};
+
+/** Render a multi-track disc as one card with per-track checksums + cue view. */
+const renderDiscGroup = (
+  rows: Array<{ row: RomInputRowState; index: number }>,
+  deps: RomRowDeps,
+): WorkflowRomInputStepItem => {
+  const { romInputs, verificationStates, ui } = deps;
+  const groupRows = rows.map((entry) => entry.row);
+  const cueRow = groupRows.find((row) => row.kind === "cue");
+  const trackRows = groupRows.filter((row) => row.kind !== "cue" && row.kind !== "gdi");
+  const groupId = groupRows[0]?.groupId || cueRow?.id || "disc";
+  const cueText = groupRows.find((row) => Boolean(row.cueText))?.cueText;
+  const gdiText = groupRows.find((row) => Boolean(row.gdiText))?.gdiText;
+  const totalBytes = trackRows.reduce((sum, row) => sum + (row.size ?? row.sourceSize ?? 0), 0);
+  const firstTrackName = trackRows[0]?.info.fileName;
+  const discName = cueRow?.info.fileName ?? (firstTrackName ? discDisplayName(firstTrackName) : "Disc");
+  // Any verified-bad track marks the disc bad; otherwise ok once any track verifies.
+  let state: "bad" | "ok" | undefined;
+  for (const row of groupRows) {
+    const verdict = verificationStates.get(row.id);
+    if (verdict === "bad") {
+      state = "bad";
+      break;
+    }
+    if (verdict === "ok") state = "ok";
+  }
+  const removeDisc = () => {
+    if (romInputs.length === rows.length && ui.clearRomInput) ui.clearRomInput();
+    else for (const row of groupRows) ui.removeRomInput?.(row.id);
+  };
+  const tracks = trackRows.map((row) => {
+    const checksumProgress = row.progress && row.info.validationPhase === "checksum" ? row.progress : null;
+    return {
+      bytes: row.size ?? row.sourceSize,
+      checksums: { crc32: row.info.crc32, md5: row.info.md5, sha1: row.info.sha1 },
+      id: row.id,
+      label: row.info.fileName,
+      progress: toWorkflowChecksumProgressProps(checksumProgress),
+      timing: CHECKSUM_TIMING_LABEL(row.info.checksumTiming),
+    };
+  });
+  return {
+    card: {
+      extract: {
+        fileName: discName,
+        fileSize: totalBytes || undefined,
+        legacyFileClassName: "rom-weaver-input-stack-file",
+      },
+      onRemove: removeDisc,
+      panels: {
+        tracks,
+        ...(cueText ? { cue: { cueText } } : {}),
+        ...(gdiText ? { gdi: { gdiText } } : {}),
+      },
+      removeLabel: "Remove disc",
+      state,
+    },
+    id: groupId,
+  };
+};
+
 function ApplyWorkflowFormView({
   controllers,
   startup = { message: "", status: "ready" },
@@ -136,6 +313,12 @@ function ApplyWorkflowFormView({
   const romInputs: RomInputRowState[] = uiState.romInputs;
   const patches = patchState.items;
   const romVerificationStates = buildRomVerificationStates(patches, romInputs);
+  const romRowDeps: RomRowDeps = {
+    alterHeaderChecked: uiState.romInfo.alterHeaderChecked,
+    romInputs,
+    ui: uiController,
+    verificationStates: romVerificationStates,
+  };
   const compressHeaderFormat = getOutputCompressionFormatLabel(outputState.compressionFormat, outputState.options);
   const compressionTypeOptions = createCompressionTypeOptions(outputState.options, "none");
 
@@ -194,72 +377,11 @@ function ApplyWorkflowFormView({
                 </ul>
               </InfoPopover>
             }
-            items={romInputs.map((romInput, index) => {
-              const state = romVerificationStates.get(romInput.id);
-              const rowProgress =
-                romInput.progress && romInput.info.validationPhase !== "checksum" ? romInput.progress : null;
-              if (rowProgress) {
-                return {
-                  id: romInput.id,
-                  progress: {
-                    cancelLabel: romInputs.length > 1 ? "Cancel ROM input staging" : "Cancel ROM staging",
-                    id: `rom-weaver-progress-rom-${index}`,
-                    onCancel: () => {
-                      if (romInputs.length === 1 && uiController.clearRomInput) uiController.clearRomInput();
-                      else uiController.removeRomInput?.(romInput.id);
-                    },
-                    ...toWorkflowFileProgressProps(rowProgress)!,
-                  },
-                };
-              }
-              const checksumProgress =
-                romInput.progress && romInput.info.validationPhase === "checksum" ? romInput.progress : null;
-              return {
-                card: {
-                  extract: {
-                    fileName: romInput.info.fileName,
-                    fileSize: romInput.size ?? romInput.sourceSize,
-                    legacyFileClassName: "rom-weaver-input-stack-file",
-                    parentCompressions: romInput.archivePathEntries,
-                    timing: TIMING_LABEL(romInput.decompressionTimeMs),
-                  },
-                  onRemove: () => {
-                    if (romInputs.length === 1 && uiController.clearRomInput) uiController.clearRomInput();
-                    else uiController.removeRomInput?.(romInput.id);
-                  },
-                  panels: {
-                    fixes: {
-                      headerSummary: uiState.romInfo.alterHeaderChecked ? "header will be fixed" : "header unchanged",
-                      headerValue: getHeaderFixLabel(uiState.romInfo.alterHeaderChecked),
-                      lead: romInput.info.romInfo ? <p className="pdesc">{romInput.info.romInfo}</p> : undefined,
-                      romInfoText: romInput.info.romInfo,
-                      trim: romInput.info.romProbe?.trim,
-                    },
-                    info: {
-                      bytes: romInput.size ?? romInput.sourceSize,
-                      checksums: {
-                        crc32: romInput.info.crc32,
-                        md5: romInput.info.md5,
-                        sha1: romInput.info.sha1,
-                      },
-                      checksumVariants: romInput.info.checksumVariants,
-                      lead:
-                        !checksumProgress && romInput.info.romInfo ? (
-                          <p className="pdesc">{romInput.info.romInfo}</p>
-                        ) : undefined,
-                      onToggle: () => uiController.toggleRomInputChecksums?.(romInput.id),
-                      open: romInput.info.checksumsExpanded,
-                      progress: toWorkflowChecksumProgressProps(checksumProgress),
-                      timing: CHECKSUM_TIMING_LABEL(romInput.info.checksumTiming),
-                    },
-                    ...(romInput.cueText ? { cue: { cueText: romInput.cueText } } : {}),
-                  },
-                  removeLabel: romInputs.length > 1 ? "Remove ROM input" : "Clear ROM input",
-                  state,
-                },
-                id: romInput.id,
-              };
-            })}
+            items={groupRomInputs(romInputs).map((group) =>
+              group.kind === "disc"
+                ? renderDiscGroup(group.rows, romRowDeps)
+                : renderRomInputRow(group.row, group.index, romRowDeps),
+            )}
             listId="rom-weaver-list-input-stack"
             notice={
               <>

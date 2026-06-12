@@ -28,6 +28,7 @@ import {
   getPathDerivedFileName,
   getPathDirectory,
   isCueEntryName,
+  isGdiEntryName,
   joinPath,
   normalizeEntryPath,
   normalizeRomSpecificEntryNameForSource,
@@ -79,10 +80,12 @@ const annotateChdListEntries = <
     const currentType = String(entry.archiveEntryType || "")
       .trim()
       .toLowerCase();
-    if (currentType === "cue" || currentType === "track") return entry;
+    if (currentType === "cue" || currentType === "gdi" || currentType === "track") return entry;
     const entryName = getListedOutputEntryName(entry);
     if (!entryName) return entry;
-    const archiveEntryType = isCueEntryName(entryName) ? "cue" : "track";
+    let archiveEntryType = "track";
+    if (isCueEntryName(entryName)) archiveEntryType = "cue";
+    else if (isGdiEntryName(entryName)) archiveEntryType = "gdi";
     return {
       ...entry,
       archiveEntryType,

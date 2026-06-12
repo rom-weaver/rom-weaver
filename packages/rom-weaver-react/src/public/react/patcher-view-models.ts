@@ -139,7 +139,7 @@ const buildStackViewState = ({
     const key = getPatchKey(patch);
     const patchInfo = patchInfoByKey[key];
     const targetOptions = romInputs
-      .filter((input) => input.patchable !== false && input.kind !== "cue")
+      .filter((input) => input.patchable !== false && input.kind !== "cue" && input.kind !== "gdi")
       .map((input) => ({
         label: input.info.fileName || `Input ${input.order + 1}`,
         value: input.id,

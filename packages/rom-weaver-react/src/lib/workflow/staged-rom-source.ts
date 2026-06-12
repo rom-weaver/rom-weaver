@@ -10,7 +10,7 @@ import {
   prepareMultipleDirectInputAssets,
 } from "../input/input-preparation-service.ts";
 import { getBaseFileName } from "../input/path-utils.ts";
-import { selectionToArchiveEntry } from "../input/selection.ts";
+import { resolveAutomaticSelection, selectionToArchiveEntry } from "../input/selection.ts";
 import {
   cloneCandidate,
   cloneWarning,
@@ -225,10 +225,14 @@ class StagedRomSourceController<TSource, TState extends SharedRomSourceState> {
       }
       for (const request of requests) this.addCandidateRequest(view, request);
       if (!view.state.candidates.length) this.addDirectCandidate(view, 0, view.state.id);
-      const selectable = view.state.candidates.filter((candidate) => candidate.selectable);
-      if (selectable.length === 1) {
-        view.state.selectedCandidateId = selectable[0]?.id;
-        view.selectedArchiveEntry = view.internalCandidates.get(selectable[0]?.id || "")?.archiveEntry;
+      // A cohesive multi-track disc (one selectable "cue-disc" group whose tracks
+      // are parented to it) auto-resolves to the whole disc — no prompt. The
+      // prompt only returns when there is genuine ambiguity (e.g. an unrelated
+      // extra ROM alongside the disc).
+      const automatic = resolveAutomaticSelection(this.createSelectionRequest(view.state));
+      if (automatic) {
+        view.state.selectedCandidateId = automatic.id;
+        view.selectedArchiveEntry = view.internalCandidates.get(automatic.id)?.archiveEntry;
       } else {
         view.state.status = "needsSelection";
       }
@@ -261,9 +265,11 @@ class StagedRomSourceController<TSource, TState extends SharedRomSourceState> {
     }
     view.preparedInputAssets = stages.flatMap((stage) => stage.preparedInputAssets || []);
     view.state.sourceSize = stages.reduce((total, stage) => total + (stage.state.sourceSize || 0), 0) || undefined;
-    const selectable = view.state.candidates.filter((candidate) => candidate.selectable);
-    if (selectable.length === 1) {
-      view.state.selectedCandidateId = selectable[0]?.id;
+    // Same disc auto-resolution as the direct-asset path: a cohesive disc group
+    // is staged whole; only genuine ambiguity falls back to a prompt.
+    const automatic = resolveAutomaticSelection(this.createSelectionRequest(view.state));
+    if (automatic) {
+      view.state.selectedCandidateId = automatic.id;
       view.state.status = "ready";
     } else {
       view.state.status = "needsSelection";
