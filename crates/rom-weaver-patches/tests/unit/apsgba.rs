@@ -63,8 +63,9 @@ fn create_and_apply_round_trip() {
         )
         .expect("apply");
     let apply_execution = apply_report.thread_execution.expect("thread execution");
-    assert_eq!(apply_execution.effective_threads, 1);
-    assert!(!apply_execution.used_parallelism);
+    // apply streams by default; this multi-record patch parallelizes
+    assert!(apply_execution.used_parallelism);
+    assert!(apply_execution.effective_threads > 1);
 
     assert_eq!(fs::read(output_path).expect("output"), target);
 }
@@ -109,6 +110,7 @@ fn apply_is_deterministic_across_thread_budgets() {
         )
         .expect("parallel apply");
 
+    // single-thread budget stays serial; the parallel budget now streams in parallel
     assert!(
         !single_report
             .thread_execution
@@ -116,7 +118,7 @@ fn apply_is_deterministic_across_thread_budgets() {
             .used_parallelism
     );
     assert!(
-        !parallel_report
+        parallel_report
             .thread_execution
             .expect("parallel execution")
             .used_parallelism

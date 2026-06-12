@@ -29,6 +29,10 @@ use crate::varint::push_varint;
 const BPS_MAGIC: &[u8; 4] = b"BPS1";
 const BPS_FOOTER_SIZE: usize = 12;
 const COPY_BUFFER_SIZE: usize = 32 * 1024;
+/// Heap buffer for the serial streaming apply's source-copy loop. Sized above the
+/// ~2 MiB OPFS write-staging threshold so wasm/OPFS does bulk reads/writes instead
+/// of many small ones (the default serial path on wasm); native is unaffected.
+const APPLY_STREAM_BUFFER_SIZE: usize = 4 * 1024 * 1024;
 const BPS_NO_OFFSET: u32 = u32::MAX;
 const BPS_MIN_COPY_LENGTH: usize = 4;
 const BPS_CREATE_INDEX_TAIL_BYTES: usize = 256;
@@ -94,7 +98,7 @@ impl PatchHandler for BpsPatchHandler {
         output.set_len(patch.target_size)?;
         let thread_capability = bps_apply_thread_capability(&patch.actions);
         let has_target_copy = patch_contains_target_copy(&patch.actions);
-        let execution = if crate::can_apply_in_memory(patch.source_size, patch.target_size) {
+        let execution = if crate::can_apply_in_memory_on_apply(patch.source_size, patch.target_size) {
             let mut execution = context.plan_threads(thread_capability.clone());
             let target_size = patch.target_size as usize;
             let mut source_bytes = Vec::with_capacity(patch.source_size as usize);
@@ -116,7 +120,10 @@ impl PatchHandler for BpsPatchHandler {
             let (mut execution, prepared) = run_with_optional_pool(
                 context,
                 thread_capability,
-                !has_target_copy,
+                // The parallel path reads the source from worker threads, which cannot
+                // open OPFS files in wasm (os error 44); fall back to the serial path
+                // that reads the source on the main thread there. Native keeps parallel.
+                !has_target_copy && !crate::patches_reads_source_on_main_thread(),
                 |pool| {
                     prepare_bps_writes_parallel(
                         &patch,
@@ -140,7 +147,9 @@ impl PatchHandler for BpsPatchHandler {
                 },
             )?;
             if let Some(prepared) = prepared {
-                apply_prepared_bps_writes(&mut output, &prepared)?;
+                let mut progress =
+                    BpsApplyProgress::new(context, self.descriptor.name, patch.target_size);
+                apply_prepared_bps_writes(&mut output, &prepared, &mut progress)?;
             }
             if execution.used_parallelism && has_target_copy {
                 execution.apply_pool_fallback(
@@ -546,7 +555,9 @@ fn apply_patch_actions(
     let mut progress = BpsApplyProgress::new(context, format_name, patch.target_size);
     let mut source_pos = 0u64;
     let mut output_pos = 0u64;
-    let mut copy_buffer = [0u8; COPY_BUFFER_SIZE];
+    // Heap-allocated (4 MiB would overflow a wasm thread stack as an array) and sized
+    // for bulk OPFS I/O in the wasm serial path.
+    let mut copy_buffer = vec![0u8; APPLY_STREAM_BUFFER_SIZE];
 
     for action in &patch.actions {
         context.cancel().check()?;
@@ -1720,7 +1731,11 @@ fn read_parallel_bps_source_range(
     shared_source.read_exact_at(source_offset, output)
 }
 
-fn apply_prepared_bps_writes(output: &mut File, writes: &[PreparedBpsWrite]) -> Result<()> {
+fn apply_prepared_bps_writes(
+    output: &mut File,
+    writes: &[PreparedBpsWrite],
+    progress: &mut BpsApplyProgress<'_>,
+) -> Result<()> {
     // Writes are in ascending, contiguous output_offset order (no gaps) so seeks are only
     // needed when a write's offset diverges from the current file position (defensive).
     let mut writer = BufWriter::with_capacity(COPY_BUFFER_SIZE, output);
@@ -1735,6 +1750,9 @@ fn apply_prepared_bps_writes(output: &mut File, writes: &[PreparedBpsWrite]) -> 
         }
         writer.write_all(&write.data)?;
         current_pos += write.data.len() as u64;
+        // The ordered write phase is sequential, so cumulative output position is a
+        // monotonic progress signal; report mirrors the in-memory/sequential paths.
+        progress.report(current_pos);
     }
     writer.flush()?;
     Ok(())

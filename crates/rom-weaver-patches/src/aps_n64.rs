@@ -102,7 +102,7 @@ impl PatchHandler for ApsN64PatchHandler {
         }
         let input_size = fs::metadata(&request.input)?.len();
         let thread_capability = parallel_per_record_capability(patch.records.len());
-        let execution = if crate::can_apply_in_memory(input_size, patch.output_size) {
+        let execution = if crate::can_apply_in_memory_on_apply(input_size, patch.output_size) {
             let mut execution = context.plan_threads(thread_capability.clone());
             let mut output_bytes = fs::read(&request.input)?;
             output_bytes.resize(patch.output_size as usize, 0);

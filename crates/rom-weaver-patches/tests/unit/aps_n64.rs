@@ -100,8 +100,9 @@ fn apply_supports_simple_and_rle_records() {
         )
         .expect("apply");
     let execution = report.thread_execution.expect("thread execution");
-    assert_eq!(execution.effective_threads, 1);
-    assert!(!execution.used_parallelism);
+    // apply streams by default; this multi-record patch parallelizes
+    assert!(execution.used_parallelism);
+    assert!(execution.effective_threads > 1);
 
     assert_eq!(fs::read(output_path).expect("output"), b"aXYdZZZhij");
 }
@@ -212,8 +213,9 @@ fn create_and_apply_round_trip_for_n64_source() {
         )
         .expect("apply");
     let execution = report.thread_execution.expect("thread execution");
-    assert_eq!(execution.effective_threads, 1);
-    assert!(!execution.used_parallelism);
+    // apply streams by default; this multi-record patch parallelizes
+    assert!(execution.used_parallelism);
+    assert!(execution.effective_threads > 1);
 
     assert_eq!(fs::read(output_path).expect("output"), modified);
 }
@@ -271,6 +273,7 @@ fn apply_with_overlapping_records_is_deterministic_across_thread_budgets() {
         )
         .expect("parallel apply");
 
+    // single-thread budget stays serial; the parallel budget now streams in parallel
     assert!(
         !single_report
             .thread_execution
@@ -278,7 +281,7 @@ fn apply_with_overlapping_records_is_deterministic_across_thread_budgets() {
             .used_parallelism
     );
     assert!(
-        !parallel_report
+        parallel_report
             .thread_execution
             .expect("parallel execution")
             .used_parallelism

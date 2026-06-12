@@ -144,8 +144,9 @@ fn apply_is_deterministic_across_thread_budgets() {
         .thread_execution
         .expect("parallel execution");
     assert!(capabilities.threaded_output);
+    // apply streams by default: single-thread budget serial, parallel budget parallel
     assert!(!single_execution.used_parallelism);
-    assert!(!parallel_execution.used_parallelism);
+    assert!(parallel_execution.used_parallelism);
 
     assert_eq!(
         fs::read(output_single).expect("single"),

@@ -56,7 +56,7 @@ impl PatPatchHandler {
         let thread_capability = parallel_per_record_capability(grouped_records.len());
         let planned_execution = context.plan_threads(thread_capability.clone());
 
-        let (execution, writes) = if crate::can_apply_in_memory(output_len, output_len) {
+        let (execution, writes) = if crate::can_apply_in_memory_on_apply(output_len, output_len) {
             let output_len_usize = usize::try_from(output_len).map_err(|_| {
                 RomWeaverError::Validation(format!(
                     "input `{}` is too large to process in memory",

@@ -81,6 +81,19 @@ pub(crate) fn can_apply_in_memory(a: u64, b: u64) -> bool {
     a <= limit && b <= limit
 }
 
+/// Apply-path gate. Streaming is the DEFAULT for apply (bounded memory, OPFS-safe,
+/// and no slower at scale), so this returns `false` unless the in-memory fast path
+/// is explicitly opted back in by raising `ROM_WEAVER_PATCH_IN_MEMORY_LIMIT` above
+/// the input/output sizes (useful for small-input latency or A/B benchmarks). The
+/// create path keeps its own [`can_apply_in_memory`] threshold and is unaffected.
+pub(crate) fn can_apply_in_memory_on_apply(a: u64, b: u64) -> bool {
+    let limit = match std::env::var("ROM_WEAVER_PATCH_IN_MEMORY_LIMIT") {
+        Ok(value) => value.trim().parse::<u64>().unwrap_or(0),
+        Err(_) => 0,
+    };
+    a <= limit && b <= limit
+}
+
 /// On wasm32, spawned worker threads cannot open OPFS-backed files (Safari iOS
 /// returns os error 44). I/O must happen on the main runner thread; workers receive
 /// in-memory byte slices. Native: the same path is exercised via the env var for tests.

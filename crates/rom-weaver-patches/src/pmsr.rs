@@ -86,7 +86,7 @@ impl PatchHandler for PmsrPatchHandler {
         }
         let thread_capability = parallel_per_record_capability(patch.records.len());
         let records_non_overlapping = pmsr_records_are_non_overlapping(&patch, output_len)?;
-        let execution = if crate::can_apply_in_memory(source_len, output_len) {
+        let execution = if crate::can_apply_in_memory_on_apply(source_len, output_len) {
             let mut execution = context.plan_threads(thread_capability.clone());
             let mut output_bytes = fs::read(&request.input)?;
             output_bytes.resize(output_len as usize, 0);
