@@ -55,6 +55,17 @@ use ups::UpsPatchHandler;
 
 pub(crate) const IN_MEMORY_APPLY_LIMIT_BYTES: u64 = 256 * 1024 * 1024;
 
+/// Effective in-memory apply/buffer cap. Defaults to [`IN_MEMORY_APPLY_LIMIT_BYTES`]
+/// but is overridable via `ROM_WEAVER_PATCH_IN_MEMORY_LIMIT` (in bytes) so the
+/// streaming path can be forced on smaller inputs for regression/benchmark runs
+/// before buffering is removed entirely.
+pub(crate) fn in_memory_apply_limit_bytes() -> u64 {
+    match std::env::var("ROM_WEAVER_PATCH_IN_MEMORY_LIMIT") {
+        Ok(value) => value.trim().parse::<u64>().unwrap_or(IN_MEMORY_APPLY_LIMIT_BYTES),
+        Err(_) => IN_MEMORY_APPLY_LIMIT_BYTES,
+    }
+}
+
 /// The original/modified file pair (with cached lengths) that a parallel/streaming patch-create
 /// pipeline diffs. Groups the four values that otherwise thread through every create helper.
 #[derive(Clone, Copy)]
@@ -66,7 +77,8 @@ pub(crate) struct PatchCreateSources<'a> {
 }
 
 pub(crate) fn can_apply_in_memory(a: u64, b: u64) -> bool {
-    a <= IN_MEMORY_APPLY_LIMIT_BYTES && b <= IN_MEMORY_APPLY_LIMIT_BYTES
+    let limit = in_memory_apply_limit_bytes();
+    a <= limit && b <= limit
 }
 
 /// On wasm32, spawned worker threads cannot open OPFS-backed files (Safari iOS
@@ -88,7 +100,7 @@ pub(crate) fn patches_reads_source_on_main_thread() -> bool {
 /// original+modified length for diff formats, or the single scanned file length for whole-file
 /// formats. Centralizes the gate + cap so future read-on-main changes are one edit, not several.
 pub(crate) fn create_exceeds_main_thread_cap(scan_len: u64) -> bool {
-    patches_reads_source_on_main_thread() && scan_len > IN_MEMORY_APPLY_LIMIT_BYTES
+    patches_reads_source_on_main_thread() && scan_len > in_memory_apply_limit_bytes()
 }
 
 /// Reads a chunk of bytes from both `original_path` and `modified_path` on the calling
