@@ -52,17 +52,15 @@ const EXPECTED_COMPRESS_SKIPS = {
 };
 const EXPECTED_PATCH_CREATE_SKIPS = COMMAND_PATHS_DEFAULTS.expected_patch_create_skips;
 const WASM_PATCH_CREATE_SKIPS = {
-  aps: "wasm benchmark limitation: aps patch-create currently fails in browser worker runtime",
-  bdf: "wasm benchmark limitation: bdf patch-create currently fails in browser worker runtime",
-  dldi: "wasm benchmark limitation: dldi patch-create currently fails in browser worker runtime",
+  // dldi create needs a real DLDI-format input; the random source/modified bench
+  // fixtures have no patchable DLDI slot (this is a fixture limitation, not the
+  // os-error-44 worker-read bug, which is fixed).
+  dldi: "wasm benchmark limitation: dldi patch-create needs a DLDI-format fixture",
 };
-const WASM_PATCH_APPLY_SKIPS = {
-  apsgba: "wasm benchmark limitation: apsgba patch-apply currently fails in browser worker runtime",
-  dps: "wasm benchmark limitation: dps patch-apply currently fails in browser worker runtime",
-  mod: "wasm benchmark limitation: mod patch-apply currently fails in browser worker runtime",
-  pat: "wasm benchmark limitation: pat patch-apply currently fails in browser worker runtime",
-  ppf: "wasm benchmark limitation: ppf patch-apply currently fails in browser worker runtime",
-};
+// apsgba/dps/mod/pat/ppf apply and aps/bdf create previously failed with os error 44
+// (worker threads opening OPFS source). Those reads are now gated to the main thread
+// in wasm, and all are browser-verified, so they no longer need skipping.
+const WASM_PATCH_APPLY_SKIPS = {};
 const WASM_RUNTIME_DEFAULT = "default";
 const DISC_COMPRESS_INPUT_FORMATS = new Set(COMMAND_PATHS_DEFAULTS.disc_compress_input_formats);
 const ROM_WEAVER_COMPRESS_CODEC_BY_FORMAT = COMMAND_PATHS_DEFAULTS.compress_codec_by_format;
