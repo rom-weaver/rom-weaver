@@ -221,7 +221,10 @@ impl PatchHandler for ApsGbaPatchHandler {
         let (execution, created) = run_with_optional_pool(
             context,
             thread_capability,
-            true,
+            // Parallel create reads the source from worker threads, which cannot open
+            // OPFS files in wasm (os error 44); use the serial main-thread streaming
+            // create there. Native keeps parallel.
+            !crate::patches_reads_source_on_main_thread(),
             |pool| {
                 create_apsgba_patch_parallel(
                     &request.original,
