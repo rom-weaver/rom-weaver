@@ -105,17 +105,29 @@ const serializeLogValue = (value: unknown, depth = 0, seen = new WeakSet<object>
   return output;
 };
 
+const recordListeners = new Set<(record: ConsoleLogRecord) => void>();
+
+/** Notify on every captured console record (the in-app log viewer taps this). */
+const subscribeConsoleLogRecords = (listener: (record: ConsoleLogRecord) => void) => {
+  recordListeners.add(listener);
+  return () => {
+    recordListeners.delete(listener);
+  };
+};
+
 const captureRecord = (level: ConsoleLogLevel, source: ConsoleLogSource, args: unknown[]) => {
-  records.push({
+  const record: ConsoleLogRecord = {
     args: args.map((arg) => serializeLogValue(arg)),
     elapsedMs: elapsedMs(),
     id: nextRecordId,
     level,
     source,
     timestamp: nowIso(),
-  });
+  };
+  records.push(record);
   nextRecordId += 1;
   if (records.length > MAX_LOG_RECORDS) records.splice(0, records.length - MAX_LOG_RECORDS);
+  for (const listener of recordListeners) listener(record);
 };
 
 const installConsoleHooks = () => {
@@ -245,3 +257,4 @@ window.ROM_WEAVER_CONSOLE_LOGS = {
 };
 
 export type { ConsoleLogRecord, ConsoleLogReport, ConsoleLogReportMetadata };
+export { subscribeConsoleLogRecords };
