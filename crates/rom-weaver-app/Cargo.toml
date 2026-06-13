@@ -13,6 +13,8 @@ rom-weaver-checksum = { path = "../rom-weaver-checksum" }
 rom-weaver-codecs = { path = "../rom-weaver-codecs" }
 rom-weaver-containers = { path = "../rom-weaver-containers" }
 rom-weaver-core = { path = "../rom-weaver-core" }
+rom-weaver-dcp = { path = "../rom-weaver-dcp" }
+rom-weaver-gdrom = { path = "../rom-weaver-gdrom" }
 rom-weaver-libarchive = { workspace = true, default-features = false }
 rom-weaver-patches = { path = "../rom-weaver-patches" }
 serde.workspace = true

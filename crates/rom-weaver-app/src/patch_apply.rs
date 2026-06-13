@@ -33,6 +33,17 @@ impl CliApp {
             threads = %args.threads,
             "starting patch-apply command"
         );
+        // A `.dcp` (Universal Dreamcast Patcher) patch rebuilds a GD-ROM data
+        // track's filesystem rather than patching bytes, so it follows a
+        // dedicated path.
+        if args.patches.iter().any(|patch| {
+            patch
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("dcp"))
+        }) {
+            return self.run_dcp_apply(args);
+        }
         let PatchApplyCommand {
             input,
             select,

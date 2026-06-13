@@ -1,0 +1,332 @@
+//! `patch apply` support for Universal Dreamcast Patcher (`.dcp`) patches.
+//!
+//! A `.dcp` is not a byte-stream patch: it rebuilds a GD-ROM data track's
+//! ISO9660 filesystem. This path therefore diverges from the normal per-track
+//! apply. It requires a disc-sheet (`.cue`/`.gdi`) input, finds the GD-ROM
+//! high-density data track, rebuilds it with `rom-weaver-dcp`, reassembles the
+//! full disc via the shared disc staging, and emits the result (compressed to
+//! CHD by default, or written beside the output sheet with `--no-compress`).
+
+use std::fs::{self, File};
+use std::io::{BufReader, BufWriter};
+
+use rom_weaver_dcp::rebuild_track_to_writer;
+use rom_weaver_gdrom::{GD_HIGH_DENSITY_START_LBA, GdRomFs, IsoTimestamp};
+
+use super::*;
+
+impl CliApp {
+    /// Run `patch apply` for a `.dcp` patch. Invoked from
+    /// [`Self::run_patch_apply`] when the patch list is a single `.dcp`.
+    pub(super) fn run_dcp_apply(&self, args: PatchApplyCommand) -> AppRunOutcome {
+        let context = self.context(args.threads);
+        let single = Some(context.plan_threads(ThreadCapability::single_threaded()));
+        let fail = |stage: &str, message: String| {
+            OperationReport::failed(OperationFamily::Patch, None, stage, message, single.clone())
+        };
+
+        // A `.dcp` rebuilds the whole data track, so the byte-level header /
+        // checksum transforms and chaining do not apply.
+        if args.patches.len() != 1 {
+            return self.finish(
+                "patch-apply",
+                fail(
+                    "validate",
+                    "a .dcp patch must be applied on its own (no patch chaining)".to_string(),
+                ),
+            );
+        }
+        if args.strip_header
+            || args.add_header
+            || args.repair_checksum
+            || args.n64_byte_order.is_some()
+        {
+            return self.finish(
+                "patch-apply",
+                fail(
+                    "validate",
+                    "a .dcp patch cannot be combined with --strip-header, --add-header, --repair-checksum, or --n64-byte-order".to_string(),
+                ),
+            );
+        }
+
+        let dcp_path = args.patches[0].clone();
+        if let Some(report) = self.require_existing_path(
+            "patch-apply",
+            OperationFamily::Patch,
+            None,
+            &args.input,
+            single.clone(),
+        ) {
+            return self.finish("patch-apply", report);
+        }
+        if let Some(report) = self.require_existing_path(
+            "patch-apply",
+            OperationFamily::Patch,
+            None,
+            &dcp_path,
+            single.clone(),
+        ) {
+            return self.finish("patch-apply", report);
+        }
+
+        let compression_options = match Self::parse_patch_apply_compression_options(
+            args.no_compress,
+            args.compress_format.clone(),
+            args.compress_codec.clone(),
+            args.compress_level,
+        ) {
+            Ok(options) => options,
+            Err(error) => return self.finish("patch-apply", fail("validate", error.to_string())),
+        };
+
+        let disc = match self.build_dcp_disc_context(&args.input) {
+            Ok(Some(disc)) => disc,
+            Ok(None) => {
+                return self.finish(
+                    "patch-apply",
+                    fail(
+                        "validate",
+                        "a .dcp patch requires a disc-sheet (.cue/.gdi) input".to_string(),
+                    ),
+                );
+            }
+            Err(error) => return self.finish("patch-apply", fail("prepare", error.to_string())),
+        };
+
+        let report = self.rebuild_and_emit_dcp(
+            &args,
+            &dcp_path,
+            &disc,
+            &compression_options,
+            &context,
+            single.clone(),
+        );
+        self.finish("patch-apply", report)
+    }
+
+    /// Rebuild the data track from the `.dcp`, reassemble the disc, and emit it.
+    fn rebuild_and_emit_dcp(
+        &self,
+        args: &PatchApplyCommand,
+        dcp_path: &Path,
+        disc: &super::patch_apply_disc::DiscContext,
+        compression_options: &PatchApplyCompressionOptions,
+        context: &OperationContext,
+        single: Option<ThreadExecution>,
+    ) -> OperationReport {
+        let fail = |stage: &str, message: String| {
+            OperationReport::failed(OperationFamily::Patch, None, stage, message, single.clone())
+        };
+
+        self.emit_running(
+            OperationLabel {
+                command: "patch-apply",
+                family: OperationFamily::Patch,
+                format: Some("dcp"),
+            },
+            "apply",
+            "rebuilding GD-ROM data track from .dcp".to_string(),
+            Some(0.0),
+            single.clone(),
+        );
+
+        // Rebuild the data track.
+        let mut source = match File::open(&disc.target_file)
+            .map_err(RomWeaverError::from)
+            .and_then(|file| GdRomFs::open(BufReader::new(file), GD_HIGH_DENSITY_START_LBA))
+        {
+            Ok(fs) => fs,
+            Err(error) => return fail("prepare", error.to_string()),
+        };
+        let mut dcp_reader = match File::open(dcp_path) {
+            Ok(file) => BufReader::new(file),
+            Err(error) => return fail("prepare", error.to_string()),
+        };
+
+        // Stream the rebuilt track straight to a temp file for staging — the
+        // cooked image and raw track are never fully held in memory.
+        let mut temp_paths: Vec<PathBuf> = Vec::new();
+        let rebuilt_path = context
+            .temp_paths()
+            .next_path("dcp-rebuilt-track", Some("bin"));
+        if let Some(parent) = rebuilt_path.parent()
+            && let Err(error) = fs::create_dir_all(parent)
+        {
+            return fail("apply", error.to_string());
+        }
+        let rebuilt = {
+            let track_file = match File::create(&rebuilt_path) {
+                Ok(file) => file,
+                Err(error) => return fail("apply", error.to_string()),
+            };
+            let mut sink = BufWriter::new(track_file);
+            let summary = match rebuild_track_to_writer(
+                &mut dcp_reader,
+                &mut source,
+                IsoTimestamp::default(),
+                &mut sink,
+            ) {
+                Ok(summary) => summary,
+                Err(error) => {
+                    Self::cleanup_paths(std::slice::from_ref(&rebuilt_path));
+                    return fail("apply", error.to_string());
+                }
+            };
+            if let Err(error) = sink.flush() {
+                return fail("apply", error.to_string());
+            }
+            summary
+        };
+        temp_paths.push(rebuilt_path.clone());
+
+        // Reassemble the full disc with the rebuilt track in place of the data
+        // track.
+        let staged_sheet =
+            match self.stage_disc_directory(disc, &rebuilt_path, context, &mut temp_paths) {
+                Ok(path) => path,
+                Err(error) => {
+                    Self::cleanup_paths(&temp_paths);
+                    return fail("prepare", error.to_string());
+                }
+            };
+
+        let boot_note = if rebuilt.boot_sector_replaced {
+            "; IP.BIN boot sector replaced"
+        } else {
+            ""
+        };
+        let mut label = format!(
+            "rebuilt GD-ROM data track from .dcp ({} files){boot_note}",
+            rebuilt.file_count
+        );
+        for warning in &disc.warnings {
+            label = format!("{label}; {warning}");
+        }
+
+        // Emit: compress (default) or write the disc beside the output sheet.
+        let report = if compression_options.enabled {
+            self.compress_dcp_disc(
+                &args.output,
+                &args.input,
+                &staged_sheet,
+                compression_options,
+                context,
+                &mut label,
+                single.clone(),
+            )
+        } else {
+            match self.write_disc_output(disc, &staged_sheet, &args.output) {
+                Ok(note) => {
+                    label = format!("{label}; {note}");
+                    OperationReport::succeeded(
+                        OperationFamily::Patch,
+                        Some("dcp".to_string()),
+                        "apply",
+                        label,
+                        Some(100.0),
+                        single.clone(),
+                    )
+                }
+                Err(error) => fail("compat", error.to_string()),
+            }
+        };
+
+        Self::cleanup_paths(&temp_paths);
+        report
+    }
+
+    /// Compress the staged disc to the requested container (CHD by default).
+    #[allow(clippy::too_many_arguments)]
+    fn compress_dcp_disc(
+        &self,
+        output: &Path,
+        extension_source: &Path,
+        staged_sheet: &Path,
+        compression_options: &PatchApplyCompressionOptions,
+        context: &OperationContext,
+        label: &mut String,
+        single: Option<ThreadExecution>,
+    ) -> OperationReport {
+        let fail = |stage: &str, message: String| {
+            OperationReport::failed(OperationFamily::Patch, None, stage, message, single.clone())
+        };
+        let plan = match self.resolve_patch_apply_compression_plan(
+            output,
+            extension_source,
+            compression_options,
+        ) {
+            Ok(plan) => plan,
+            Err(error) => return fail("compress", error.to_string()),
+        };
+        let Some(handler) = self.containers.find_by_name(&plan.format) else {
+            return fail(
+                "compress",
+                "requested output format is not registered".to_string(),
+            );
+        };
+        let codec_label = plan.codec.as_deref().unwrap_or("default").to_string();
+        let compress_threads = Some(context.plan_threads(handler.capabilities().create_threads));
+        self.emit_running(
+            OperationLabel {
+                command: "patch-apply",
+                family: OperationFamily::Patch,
+                format: Some(plan.format.as_str()),
+            },
+            "compress",
+            format!(
+                "compressing rebuilt disc as {} (codec={codec_label})",
+                plan.format
+            ),
+            Some(0.0),
+            compress_threads,
+        );
+        let request = ContainerCreateRequest {
+            inputs: vec![staged_sheet.to_path_buf()],
+            output: plan.output_path.clone(),
+            format: plan.format.clone(),
+            codec: plan.codec.clone(),
+            level: plan.level,
+            parent: None,
+        };
+        let compress_report = handler.create(&request, context).unwrap_or_else(|error| {
+            OperationReport::failed(
+                OperationFamily::Container,
+                Some(handler.descriptor().name.to_string()),
+                "create",
+                error.to_string(),
+                single.clone(),
+            )
+        });
+        if compress_report.status != OperationStatus::Succeeded {
+            return fail(
+                "compress",
+                format!("rebuilt disc compression failed: {}", compress_report.label),
+            );
+        }
+        *label = format!(
+            "{label}; rebuilt disc compressed as {} (codec={codec_label}, path=`{}`)",
+            plan.format,
+            plan.output_path.display()
+        );
+        OperationReport::succeeded(
+            OperationFamily::Patch,
+            Some(plan.format.clone()),
+            "compress",
+            label.clone(),
+            Some(100.0),
+            compress_report.thread_execution,
+        )
+    }
+
+    /// Best-effort removal of staged temp files/dirs.
+    fn cleanup_paths(paths: &[PathBuf]) {
+        for path in paths {
+            if path.is_dir() {
+                let _ = fs::remove_dir_all(path);
+            } else {
+                let _ = fs::remove_file(path);
+            }
+        }
+    }
+}

@@ -103,6 +103,89 @@ impl CliApp {
         }))
     }
 
+    /// Build a disc context for a `.dcp` apply: enumerate the disc's tracks and
+    /// auto-select the GD-ROM high-density data track (the one whose ISO9660
+    /// filesystem the patch rebuilds) as the target, without requiring
+    /// `--target`. Returns `Ok(None)` when `input` is not a disc sheet.
+    pub(super) fn build_dcp_disc_context(&self, input: &Path) -> Result<Option<DiscContext>> {
+        let Some(kind) = detect_disc_sheet(input) else {
+            return Ok(None);
+        };
+        trace!(input = %input.display(), ?kind, "resolving .dcp disc input");
+
+        let mut sheet_paths = vec![input.to_path_buf()];
+        let mut referenced_names = enumerate_disc_sheet_refs(input)?.referenced_files;
+        if kind == DiscSheetKind::Cue
+            && let Some(gdi) = sibling_gdi_path(input)
+        {
+            for name in enumerate_disc_sheet_refs(&gdi)?.referenced_files {
+                if !referenced_names
+                    .iter()
+                    .any(|existing| existing.eq_ignore_ascii_case(&name))
+                {
+                    referenced_names.push(name);
+                }
+            }
+            sheet_paths.push(gdi);
+        }
+
+        let sheet_dir = input.parent().unwrap_or_else(|| Path::new("."));
+        let mut files = Vec::with_capacity(referenced_names.len());
+        for name in &referenced_names {
+            let path = sheet_dir.join(name);
+            if !path.is_file() {
+                return Err(RomWeaverError::Validation(format!(
+                    "disc sheet `{}` references `{name}`, which was not found next to it",
+                    input.display()
+                )));
+            }
+            files.push(DiscFile {
+                name: name.clone(),
+                path,
+            });
+        }
+
+        let target_index = self.select_dcp_data_track(input, &files)?;
+        let target_file = files[target_index].path.clone();
+        trace!(target = %target_file.display(), "selected GD-ROM data track for .dcp rebuild");
+        let warnings = self.confirm_disc_grouping(input, sheet_dir, &files)?;
+
+        Ok(Some(DiscContext {
+            sheet_paths,
+            files,
+            target_file,
+            warnings,
+        }))
+    }
+
+    /// Choose the GD-ROM high-density data track from a disc's files: the
+    /// largest track whose bytes parse as an ISO9660 filesystem at the GD high
+    /// density start LBA. That is the track a `.dcp` rebuilds.
+    fn select_dcp_data_track(&self, input: &Path, files: &[DiscFile]) -> Result<usize> {
+        let mut order: Vec<usize> = (0..files.len()).collect();
+        order.sort_by_key(|&i| {
+            std::cmp::Reverse(fs::metadata(&files[i].path).map(|m| m.len()).unwrap_or(0))
+        });
+        for &index in &order {
+            let file = match fs::File::open(&files[index].path) {
+                Ok(file) => file,
+                Err(_) => continue,
+            };
+            if rom_weaver_gdrom::GdRomFs::open(
+                std::io::BufReader::new(file),
+                rom_weaver_gdrom::GD_HIGH_DENSITY_START_LBA,
+            )
+            .is_ok()
+            {
+                return Ok(index);
+            }
+        }
+        Err(RomWeaverError::Validation(format!(
+            "disc `{}` has no GD-ROM data track (ISO9660 filesystem) for a .dcp patch",
+            input.display()
+        )))
+    }
+
     /// Resolve `--target` to exactly one track index. With no `--target`, a
     /// single-track disc is targeted implicitly; a multi-track disc requires an
     /// explicit `--target`. A glob must match exactly one track.

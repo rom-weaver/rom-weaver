@@ -92,7 +92,7 @@ pub enum PatchCommands {
         not(target_arch = "wasm32"),
         command(
             about = "Apply one or more ROM patch files to an input in sequence",
-            long_about = "Apply one or more ROM patch files to an input in sequence.\n\nSupported patch apply formats:\nIPS, IPS32, SOLID, BPS, UPS, VCDIFF, xdelta, GDIFF, HDiffPatch/HPatchZ, APS (N64), APSGBA, RUP, PPF, PAT/FFP, EBP, BDF/BSDIFF40, BSP, MOD/PMSR, DLDI, DPS.\n\nCaveats:\n- NINJA1 headers are recognized but apply is unsupported.\n- PDS is explicitly unsupported.\n- HDiffPatch directory patches (HDIFF19) are unsupported; only single-file .hdiff/.hpatchz is supported."
+            long_about = "Apply one or more ROM patch files to an input in sequence.\n\nSupported patch apply formats:\nIPS, IPS32, SOLID, BPS, UPS, VCDIFF, xdelta, GDIFF, HDiffPatch/HPatchZ, APS (N64), APSGBA, RUP, PPF, PAT/FFP, EBP, BDF/BSDIFF40, BSP, MOD/PMSR, DLDI, DPS, DCP (Dreamcast).\n\nCaveats:\n- NINJA1 headers are recognized but apply is unsupported.\n- PDS is explicitly unsupported.\n- HDiffPatch directory patches (HDIFF19) are unsupported; only single-file .hdiff/.hpatchz is supported.\n- DCP (Universal Dreamcast Patcher) requires a disc-sheet input (.cue/.gdi); it rebuilds the GD-ROM data track's filesystem and reassembles the full disc (compressed to CHD by default). It cannot be chained with other patches or combined with header/checksum transforms."
         )
     )]
     Apply(PatchApplyCommand),
@@ -915,6 +915,7 @@ use extract_progress::*;
 mod compress_trim_batch;
 
 mod patch_apply;
+mod patch_apply_dcp;
 mod patch_apply_disc;
 #[path = "patch_commands.rs"]
 mod patch_commands;
