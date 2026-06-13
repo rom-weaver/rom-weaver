@@ -188,6 +188,46 @@ The WASM build needs a WASI SDK (v33+, auto-detected; see
 files are
 committed and drift-checked.
 
+## Webapp UI — the loom workbench
+
+The React webapp's presentation layer is the "loom workbench" design ported
+from `prototype/` (charcoal chassis, cartridge-orange thread accent, cream
+hash readouts, sage verification).
+
+- **Stylesheet.** One hand-written semantic sheet,
+  `packages/rom-weaver-react/src/webapp/design-system.css`: design tokens on
+  `:root[data-theme="dark"|"light"]` (`--thread`, `--plate`, `--seam`,
+  `--ink-*`, …), component rules scoped under `.rw-app`, webapp-only
+  adaptations (React modal framework, codec combobox, platform ergonomics) at
+  the end of the file. No utility classes, no CSS-in-JS, no Tailwind.
+- **Shell.** `src/webapp/components/shell.tsx` (masthead, mode rail with the
+  sliding thumb, reveal banners, selvage status strip),
+  `components/log-dialog.tsx` (native `<dialog>` trace inspector over
+  `src/webapp/log-store.ts`, which chains a capturing sink onto the logger).
+  The selvage state comes from `src/lib/activity-store.ts`, which the workflow
+  forms publish to (idle/running/done/failed + the active stage line).
+- **Primitives.** `src/public/react/components/ds/` — the collapsible drawer
+  (`drawer.tsx`, the `.cks` grid-rows pattern; replaces `<details>`), file
+  cards, checksum rows (the whole row is the copy control), the weave meter +
+  recessed progress panels, the 0x01 INPUTS hero/add-row drop zone, and the
+  `needs-input` directives that point empty sections back to 0x01.
+- **Steps.** Every workflow renders numbered loom stages: `0x01 Inputs`,
+  then per-mode sections (apply: ROM/Patches/Apply; create:
+  Original/Modified/Patch; trim: ROM/Trim).
+- **Theming.** `<html data-theme>` via `src/webapp/theme.ts`; the toggle plays
+  the circle-wipe view transition and updates `<meta name="theme-color">`.
+- **Localization.** UI chrome strings live in the `ui.*` namespace of
+  `src/presentation/localization/catalog.ts` (en/es/de) and are consumed via
+  `useUiLocalizer()` (settings `language` → `createBrowserLocalizer`).
+  Plural ids end in `.one`/`.other` and resolve via `Localizer.messageCount`.
+- **Test hooks.** Browser tests rely on the `rom-weaver-*` element ids and a
+  few structural classes (`.card`/`.file`, `.ck`/`.ck-k`/`.ck-v`,
+  `.meter`/`.track`, `.outopts .cks-head`, `.rw-modal.select-modal .seltree`);
+  keep them when touching the markup.
+
+The static prototype under `prototype/` remains the design reference (and the
+axe-core a11y sweep harness); the app no longer shares code with it.
+
 ## Testing
 
 | Layer | Where | What |
