@@ -350,9 +350,14 @@ const useInputStaging = (context: InputStagingContext) => {
             sourceId,
             stage: details.stage,
           });
+          // Surface a clean "Extracting <name>" label for the extraction stage
+          // (the runtime emits an internal VFS path like "preparing extraction
+          // for `/work/x.chd`"); leave read/checksum stage labels untouched.
+          const extractLabel =
+            info.fileName && /extract/i.test(String(event.label || "")) ? `Extracting ${info.fileName}` : undefined;
           mergeRomInput(info, {
             ...getChecksumProgressInfoPatch(details),
-            progress: toInputProgress(event),
+            progress: toInputProgress(extractLabel ? { ...event, label: extractLabel } : event),
           });
         },
         onState: (info) => {

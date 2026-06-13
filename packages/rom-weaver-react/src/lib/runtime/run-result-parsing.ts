@@ -3,6 +3,7 @@ import type { CompressionListResult } from "../../types/workflow-runtime.ts";
 import type { RomWeaverRunJsonResult as BaseRomWeaverRunJsonResult, RomWeaverRunJsonEvent } from "../../wasm/index.ts";
 import {
   getRomWeaverRunEventDetails,
+  getRomWeaverRunEventEffectiveThreads,
   getRomWeaverRunEventElapsedMs,
   getRomWeaverRunEventLabel,
   getRomWeaverRunEventPercent,
@@ -220,12 +221,25 @@ const getChdMediaKindFromList = (result: RomWeaverRunJsonResult): string | undef
   return mediaKind || undefined;
 };
 
+// The Rust ProgressEvent carries effective_threads as a sibling of `details`.
+// Fold it into the details object so the presentation layer can surface the
+// thread count in the bottom-left of the progress indicator (as the prototype
+// did) without threading a dedicated field through every runtime call site.
+const withEffectiveThreads = (details: RuntimeValue, event: RomWeaverRunJsonEvent): RuntimeValue => {
+  const effectiveThreads = getRomWeaverRunEventEffectiveThreads(event);
+  if (typeof effectiveThreads !== "number" || !Number.isFinite(effectiveThreads) || effectiveThreads <= 0) {
+    return details === null || details === undefined ? undefined : details;
+  }
+  const baseDetails = asRecord(details) || {};
+  return { ...baseDetails, effective_threads: effectiveThreads } as RuntimeValue;
+};
+
 const toSimpleProgress = (event: RomWeaverRunJsonEvent): SimpleRuntimeProgress | null => {
   if (!isLiveProgressEvent(event)) return null;
   const label = getRomWeaverRunEventLabel(event);
-  const details = getRomWeaverRunEventDetails(event) as RuntimeValue;
+  const details = withEffectiveThreads(getRomWeaverRunEventDetails(event) as RuntimeValue, event);
   return {
-    details: details === null || details === undefined ? undefined : details,
+    details,
     label: label ? label : undefined,
     message: undefined,
     percent: clampPercent(getRomWeaverRunEventPercent(event)),

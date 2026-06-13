@@ -489,13 +489,19 @@ const runApplyWorkflow = async (
               (entry): entry is string => !!entry,
             );
             const ppfUndoAware = patchIndices.some((patchIndex) => patchOptions[patchIndex]?.ppfUndo === true);
+            // Descriptive "Applying <patch> to <rom>" label (vs the worker's generic one).
+            const targetName = asset.fileName || "ROM";
+            const patchNames = selectedPatches.map((entry) => entry.patchFileName).filter(Boolean);
+            const patchLabel =
+              patchNames.length === 1 ? patchNames[0] : `${patchNames.length || assetPatches.length} patches`;
+            const applyLabel = `Applying ${patchLabel} to ${targetName}`;
             const workerOutput = (await applyPatchInRuntime({
               input: toWorkerSourceRef(asset.file, asset.fileName || "input.bin"),
               logLevel: getApplyLogLevel(options),
               onLog: options.onLog,
               onProgress: (progress) =>
                 deps.reportProgress(options, {
-                  label: typeof progress.label === "string" && progress.label ? progress.label : "Applying patch...",
+                  label: applyLabel,
                   percent:
                     typeof progress.percent === "number" && Number.isFinite(progress.percent) ? progress.percent : null,
                   stage: "apply",

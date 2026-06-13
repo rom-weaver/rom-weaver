@@ -1,6 +1,7 @@
 import {
-  createCompressionProgressLabelFromEvent,
+  createCompressionProgressLabel,
   getProgressEventPercent,
+  getProgressEventThreadCount,
   isCompressionWriteTelemetryProgress,
 } from "../../presentation/workflow-presentation.ts";
 import { isVfsFileRef } from "../../storage/vfs/source-ref.ts";
@@ -66,6 +67,7 @@ const getArchiveProgressReporter =
   (progress: SharedProgressEventLike) => {
     if (isCompressionWriteTelemetryProgress(progress)) return;
     const formatLabel = compression === "zip" ? "ZIP" : "7z";
+    const outputName = getOutputName(options);
     const progressDetails =
       progress.details && typeof progress.details === "object" && !Array.isArray(progress.details)
         ? (progress.details as Record<string, JsonValue>)
@@ -77,11 +79,11 @@ const getArchiveProgressReporter =
         runtimeStage: progressDetails.runtimeStage || progress.stage,
         stage: "compress",
       },
-      label: createCompressionProgressLabelFromEvent({
-        fallbackLabel: `Compressing to ${formatLabel}`,
+      label: createCompressionProgressLabel({
         formatLabel,
-        progress,
-        threads: getWorkerThreads(options),
+        label: outputName ? `Compressing ${outputName} to ${formatLabel}` : `Compressing to ${formatLabel}`,
+        // actual threads the runtime reported using (not the requested budget)
+        threads: getProgressEventThreadCount(progress),
       }),
       percent: getProgressEventPercent(progress),
       stage: "output",

@@ -91,7 +91,8 @@ function ProgressActionButton({
             />
           </div>
           <div className="sub mono">
-            <span>{progressLabelParts?.threadsText || ""}</span>
+            <span>{progressLabelParts?.threadsText || progress.threadsText || ""}</span>
+            {progress.throughputText ? <span className="run-rate">{progress.throughputText}</span> : null}
             <span className="run-pct">{progressLabelParts?.percentText || "—"}</span>
           </div>
         </div>

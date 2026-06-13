@@ -6,6 +6,7 @@ type RomWeaverRuntimeProgressPercent = RomWeaverProgressEvent["percent"];
 type RomWeaverRuntimeProgressDetails = RomWeaverProgressEvent["details"];
 type RomWeaverRuntimeProgressFormat = RomWeaverProgressEvent["format"];
 type RomWeaverRuntimeProgressElapsedMs = RomWeaverProgressEvent["elapsed_ms"];
+type RomWeaverRuntimeProgressEffectiveThreads = RomWeaverProgressEvent["effective_threads"];
 
 const RUNNING_PROGRESS_STATUS: RomWeaverRuntimeProgressStatus = "running";
 const FAILED_PROGRESS_STATUS: RomWeaverRuntimeProgressStatus = "failed";
@@ -26,6 +27,9 @@ const getRomWeaverRunEventFormat = (event: RomWeaverRunJsonEvent): RomWeaverRunt
 const getRomWeaverRunEventElapsedMs = (event: RomWeaverRunJsonEvent): RomWeaverRuntimeProgressElapsedMs =>
   event.elapsed_ms;
 
+const getRomWeaverRunEventEffectiveThreads = (event: RomWeaverRunJsonEvent): RomWeaverRuntimeProgressEffectiveThreads =>
+  event.effective_threads;
+
 const isRomWeaverFailedRunEvent = (event: RomWeaverRunJsonEvent): boolean =>
   getRomWeaverRunEventStatus(event) === FAILED_PROGRESS_STATUS;
 
@@ -37,6 +41,7 @@ const isRomWeaverTerminalRunEvent = (event: RomWeaverRunJsonEvent): boolean =>
 
 export {
   getRomWeaverRunEventDetails,
+  getRomWeaverRunEventEffectiveThreads,
   getRomWeaverRunEventElapsedMs,
   getRomWeaverRunEventFormat,
   getRomWeaverRunEventLabel,

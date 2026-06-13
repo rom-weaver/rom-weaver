@@ -1,7 +1,7 @@
 import {
   createCompressionProgressLabel,
   getProgressEventPercent,
-  getRawProgressLabel,
+  getProgressEventThreadCount,
 } from "../../presentation/workflow-presentation.ts";
 import { isVfsFileRef } from "../../storage/vfs/source-ref.ts";
 import type { JsonValue, ProgressEvent as SharedProgressEvent } from "../../types/runtime.ts";
@@ -175,10 +175,22 @@ const createRuntimeRomSpecificOutputFiles = async (
 
   const inputFileName = outputPlan.inputFileName || patchedRom.fileName || "patched.bin";
   const source = createRuntimeSourceFromPatchFile(patchedRom, inputFileName);
+  const formatLabel = compression.toUpperCase();
   const runtimeOptions = {
     logLevel: getLogLevel(options),
     onLog: options?.onLog,
-    onProgress: (progress: ProgressEvent) => reportProgress(options, progress),
+    // Surface a descriptive "Compressing <name> to <format>" label (with the
+    // thread count) rather than the runtime's generic per-stage label.
+    onProgress: (progress: ProgressEvent) =>
+      reportProgress(options, {
+        ...progress,
+        label: createCompressionProgressLabel({
+          formatLabel,
+          label: `Compressing ${inputFileName} to ${formatLabel}`,
+          // actual threads the runtime reported using (not the requested budget)
+          threads: getProgressEventThreadCount(progress),
+        }),
+      }),
     signal: options?.signal,
     workerThreads: getWorkerThreads(options),
   };
@@ -575,14 +587,12 @@ const buildSessionOutputFiles = async (
         onProgress: (progress: SharedProgressEvent) =>
           reportProgress(options, {
             details: progress as RuntimeValue as JsonValue,
-            label: getRawProgressLabel(
-              progress,
-              createCompressionProgressLabel({
-                fallbackLabel: `Compressing ${cueOutput.asset.fileName} to CHD`,
-                formatLabel: "CHD",
-                threads: getWorkerThreads(options),
-              }),
-            ),
+            label: createCompressionProgressLabel({
+              formatLabel: "CHD",
+              label: `Compressing ${cueOutput.asset.fileName} to CHD`,
+              // actual threads the runtime reported using (not the requested budget)
+              threads: getProgressEventThreadCount(progress),
+            }),
             percent: getProgressEventPercent(progress),
             stage: "output",
           }),

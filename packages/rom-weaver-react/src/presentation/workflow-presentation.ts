@@ -26,6 +26,8 @@ type ProgressViewModelOptions = {
   timing?: TimingLike | number | null;
   timingText?: WorkflowScalar;
   separator?: WorkflowScalar;
+  threads?: string | number | null | undefined;
+  throughputText?: string;
 };
 
 type WorkflowPresentationEventOptions = ProgressViewModelOptions & {
@@ -186,6 +188,56 @@ const normalizeTimingInput = (timing: TimingLike | number): TimingLike => {
   return timing.elapsedMs === undefined ? createTiming(Number(timing)) : timing;
 };
 
+const normalizeProgressThreadCount = (threads: string | number | null | undefined): number | null => {
+  const parsed = typeof threads === "number" ? threads : parseInt(String(threads || ""), 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return Math.floor(parsed);
+};
+
+const formatProgressThreadCount = (threads: string | number | null | undefined): string => {
+  const normalized = normalizeProgressThreadCount(threads);
+  return normalized ? `${normalized} ${normalized === 1 ? "thread" : "threads"}` : "";
+};
+
+const getProgressEventThreadCount = (progress: WorkflowValue | object | null | undefined): string | number | null => {
+  if (!isRecord(progress)) return null;
+  const details = isRecord(progress.details) ? progress.details : {};
+  const compression = isRecord(details.compression) ? details.compression : {};
+  const extraction = isRecord(details.extraction) ? details.extraction : {};
+  return (
+    getNumericValue(progress.effective_threads) ??
+    getNumericValue(progress.effectiveThreads) ??
+    getNumericValue(details.effective_threads) ??
+    getNumericValue(details.effectiveThreads) ??
+    getNumericValue(compression.effective_threads) ??
+    getNumericValue(compression.effectiveThreads) ??
+    getNumericValue(extraction.effective_threads) ??
+    getNumericValue(extraction.effectiveThreads) ??
+    null
+  );
+};
+
+// Build a "<written> / <total> · <rate>/s" throughput readout from whatever
+// byte telemetry the event carries (compressed bytes written, loaded/total,
+// elapsed). Each part is optional; returns "" when no byte counter is present.
+const getProgressEventThroughput = (progress: WorkflowValue | object | null | undefined): string => {
+  if (!isRecord(progress)) return "";
+  const details = isRecord(progress.details) ? progress.details : {};
+  const written =
+    getCompressedBytesWritten(progress) ??
+    normalizeByteCount(getNumericValue(details.bytesWritten)) ??
+    normalizeByteCount(getNumericValue(progress.loaded)) ??
+    normalizeByteCount(getNumericValue(details.loaded));
+  if (written === null) return "";
+  const total =
+    normalizeByteCount(getNumericValue(progress.total)) ?? normalizeByteCount(getNumericValue(details.total));
+  const elapsedRaw = getNumericValue(progress.elapsed_ms) ?? getNumericValue(details.elapsed_ms);
+  const elapsedMs = typeof elapsedRaw === "number" ? elapsedRaw : Number(elapsedRaw);
+  const sizePart = total === null ? formatByteSize(written) : `${formatByteSize(written)} / ${formatByteSize(total)}`;
+  const rate = Number.isFinite(elapsedMs) && elapsedMs > 0 ? (written / elapsedMs) * 1000 : null;
+  return rate ? `${sizePart} · ${formatByteSize(rate)}/s` : sizePart;
+};
+
 const createProgressViewModel = ({
   stage,
   label,
@@ -198,6 +250,8 @@ const createProgressViewModel = ({
   timing,
   timingText,
   separator,
+  threads,
+  throughputText,
 }: ProgressViewModelOptions = {}) => {
   const hasProgress =
     progressEnabled === false ? false : percent !== undefined || loaded !== undefined || total !== undefined;
@@ -231,6 +285,8 @@ const createProgressViewModel = ({
     }),
     percent: normalizedPercent,
     stage: typeof stage === "string" ? stage : "",
+    threadsText: formatProgressThreadCount(threads),
+    throughputText: typeof throughputText === "string" ? throughputText : "",
     timingText: resolvedTimingText,
     visualPercent: normalizedVisualPercent,
   };
@@ -254,6 +310,8 @@ const createProgressViewModelFromEvent = (
     percent: hasEventProgress ? eventPercent : options.percent,
     separator: getScalarValue(source.separator) ?? options.separator,
     stage: getScalarValue(source.stage) ?? options.stage,
+    threads: getProgressEventThreadCount(source) ?? options.threads,
+    throughputText: getProgressEventThroughput(source) || options.throughputText,
     timing: (source.timing as TimingLike | number | null | undefined) ?? options.timing,
     timingText: getScalarValue(source.timingText) ?? options.timingText,
     visualPercent: hasEventProgress ? eventVisualPercent : options.visualPercent,
@@ -334,35 +392,6 @@ const createWorkflowPresentationEvent = ({
     percent: progress.percent,
     stage: progress.stage,
   };
-};
-
-const normalizeProgressThreadCount = (threads: string | number | null | undefined): number | null => {
-  const parsed = typeof threads === "number" ? threads : parseInt(String(threads || ""), 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) return null;
-  return Math.floor(parsed);
-};
-
-const formatProgressThreadCount = (threads: string | number | null | undefined): string => {
-  const normalized = normalizeProgressThreadCount(threads);
-  return normalized ? `${normalized} ${normalized === 1 ? "thread" : "threads"}` : "";
-};
-
-const getProgressEventThreadCount = (progress: WorkflowValue | object | null | undefined): string | number | null => {
-  if (!isRecord(progress)) return null;
-  const details = isRecord(progress.details) ? progress.details : {};
-  const compression = isRecord(details.compression) ? details.compression : {};
-  const extraction = isRecord(details.extraction) ? details.extraction : {};
-  return (
-    getNumericValue(progress.effective_threads) ??
-    getNumericValue(progress.effectiveThreads) ??
-    getNumericValue(details.effective_threads) ??
-    getNumericValue(details.effectiveThreads) ??
-    getNumericValue(compression.effective_threads) ??
-    getNumericValue(compression.effectiveThreads) ??
-    getNumericValue(extraction.effective_threads) ??
-    getNumericValue(extraction.effectiveThreads) ??
-    null
-  );
 };
 
 const stripProgressEllipsis = (label: string): string =>
@@ -601,6 +630,7 @@ export {
   formatProgressThreadCount,
   formatStageTimingSummary,
   getProgressEventPercent,
+  getProgressEventThreadCount,
   getProgressEventVisualPercent,
   getRawProgressLabel,
   isCompressionWriteTelemetryProgress,
