@@ -17,8 +17,18 @@ const DrawerReadout = ({ children, muted, time }: { children: ReactNode; muted?:
 );
 
 /** Pass/fail mark riding beside the readout chips (bare icon, not a pill). */
-const DrawerMark = ({ ok, title, children }: { ok: boolean; title?: string; children: ReactNode }) => (
-  <span className={join("rb-mark", ok ? "ok" : "bad")} title={title}>
+const DrawerMark = ({
+  ok,
+  title,
+  className,
+  children,
+}: {
+  ok: boolean;
+  title?: string;
+  className?: string;
+  children: ReactNode;
+}) => (
+  <span className={join("rb-mark", ok ? "ok" : "bad", className)} title={title}>
     {children}
   </span>
 );

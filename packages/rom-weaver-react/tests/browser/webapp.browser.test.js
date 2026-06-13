@@ -172,7 +172,7 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
   mountWebappRoot();
 
   // The unified drop surface is the only input now; its label flips once the workflow has files.
-  const romInput = page.getByLabelText(/Drop ROMs or patches/i);
+  const romInput = page.getByLabelText(/Drop a ROM or patches/i);
 
   await expect.element(romInput).toBeInTheDocument();
 
@@ -194,7 +194,7 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
     .poll(() => document.querySelector("#rom-weaver-list-input-stack")?.textContent || "")
     .not.toContain("game.bin");
 
-  await page.getByLabelText(/Drop ROMs or patches/i).upload(await loadFixtureFile(MULTI_ROM_ZIP, "application/zip"));
+  await page.getByLabelText(/Drop a ROM or patches/i).upload(await loadFixtureFile(MULTI_ROM_ZIP, "application/zip"));
 
   await selectCandidateIfPrompted("game.bin");
 

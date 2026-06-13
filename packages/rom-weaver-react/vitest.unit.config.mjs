@@ -8,6 +8,6 @@ import baseConfig from "./vitest.config.base.mjs";
 export default mergeConfig(baseConfig, {
   test: {
     environment: "node",
-    include: ["tests/unit/**/*.test.ts"],
+    include: ["tests/unit/**/*.test.{ts,tsx}"],
   },
 });

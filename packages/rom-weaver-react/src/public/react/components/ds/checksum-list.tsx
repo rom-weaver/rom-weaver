@@ -78,7 +78,11 @@ const ChecksumList = ({
           {sublabel ? <DrawerReadout muted>{sublabel}</DrawerReadout> : null}
           {timing ? <DrawerReadout time>{timing}</DrawerReadout> : null}
           {match ? (
-            <DrawerMark ok={match.ok} title={match.ok ? "Verified" : "Verification failed"}>
+            <DrawerMark
+              className={match.ok ? "cks-match" : "cks-match bad"}
+              ok={match.ok}
+              title={match.ok ? "Verified" : "Verification failed"}
+            >
               {match.ok ? <Check aria-hidden="true" /> : <X aria-hidden="true" />}
               {match.label ? <span className="sr-only">{match.label}</span> : null}
             </DrawerMark>

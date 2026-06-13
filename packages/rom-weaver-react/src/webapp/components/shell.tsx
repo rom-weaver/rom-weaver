@@ -108,7 +108,14 @@ const ModeRail = ({
 
   return (
     <nav aria-label="Workflow mode" className="modes">
-      <div aria-orientation="horizontal" className="mode-rail" onKeyDown={handleKeyDown} ref={railRef} role="tablist">
+      <div
+        aria-label="Workflow"
+        aria-orientation="horizontal"
+        className="mode-rail"
+        onKeyDown={handleKeyDown}
+        ref={railRef}
+        role="tablist"
+      >
         <span aria-hidden="true" className="mode-thumb" ref={thumbRef} />
         {tabs.map((tab) => (
           <button

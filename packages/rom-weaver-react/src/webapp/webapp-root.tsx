@@ -180,12 +180,13 @@ function WebappRoot({ state, serviceWorkerCache, pageUpdate, confirmationDialog,
     };
   }, [confirmationDialog.open, state.currentView, state.settingsDialogOpen]);
 
+  // Optional access: harness tests mount the root with partial session state.
   const sessionHasInput =
-    state.patcherSession.romFilePresent ||
-    state.patcherSession.patchCount > 0 ||
-    state.creatorSession.originalFilePresent ||
-    state.creatorSession.modifiedFilePresent ||
-    state.trimSession.sourceFilePresent;
+    !!state.patcherSession?.romFilePresent ||
+    (state.patcherSession?.patchCount ?? 0) > 0 ||
+    !!state.creatorSession?.originalFilePresent ||
+    !!state.creatorSession?.modifiedFilePresent ||
+    !!state.trimSession?.sourceFilePresent;
   const selvageState: SelvageState = activity.state === "idle" && sessionHasInput ? "ready" : activity.state;
 
   const workflowPanel = (view: WorkflowView, form: React.ReactNode) =>
