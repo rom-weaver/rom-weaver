@@ -79,6 +79,7 @@ function CandidateSelectionDialog({
       {multiSelect ? (
         <SelectionCheckList
           items={items}
+          onCancel={onCancel}
           onSubmit={onSelectMany}
           submitLabel={(count) => (count === 1 ? "Add 1 patch" : `Add ${count} patches`)}
         />

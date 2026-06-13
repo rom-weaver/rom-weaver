@@ -19,31 +19,39 @@ type SelectionItem = {
   selectable: boolean;
 };
 
+/* The prototype picker row: crumb + name get the full row width (long names
+   wrap instead of forcing the dialog wider than the screen) and tag/size ride
+   a meta line underneath. */
 const SelectionRowBody = ({ item }: { item: SelectionItem }) => (
-  <div className="selmain">
-    <span className="selname">
-      <span className="fnm">{item.name}</span>
-      {item.breadcrumb ? <span className="selpath">{item.breadcrumb}</span> : null}
-    </span>
-    <span className="selmeta">
-      {item.matches ? <span className="matches">matches patch</span> : null}
-      {item.note ? <span className="seldim">{item.note}</span> : null}
-      {item.sizeLabel ? <span className="selsize">{item.sizeLabel}</span> : null}
-    </span>
-  </div>
+  <span className="pick-main">
+    {item.breadcrumb ? <span className="pick-crumb mono">{item.breadcrumb} ›</span> : null}
+    <span className="pick-name mono">{item.name}</span>
+    {item.matches || item.note || item.sizeLabel ? (
+      <span className="pick-meta">
+        {item.matches ? <span className="tag fmt matches">matches patch</span> : null}
+        {item.note ? <span className="pick-note">{item.note}</span> : null}
+        {item.sizeLabel ? <span className="pick-size mono">{item.sizeLabel}</span> : null}
+      </span>
+    ) : null}
+  </span>
 );
 
 const SelectionTree = ({ items, onSelect }: { items: SelectionItem[]; onSelect: (id: string) => void }) => (
   // Selectable entries are real buttons (native keyboard + focus); the rest are
   // inert dimmed rows.
-  <div className="seltree">
+  <div className="seltree picklist">
     {items.map((item) =>
       item.selectable ? (
-        <button className={join("selnode", "selrow")} key={item.id} onClick={() => onSelect(item.id)} type="button">
+        <button
+          className={join("selnode", "selrow", "pick-row")}
+          key={item.id}
+          onClick={() => onSelect(item.id)}
+          type="button"
+        >
           <SelectionRowBody item={item} />
         </button>
       ) : (
-        <div className={join("selnode", "selrow", "off")} key={item.id}>
+        <div className={join("selnode", "selrow", "pick-row", "skip", "off")} key={item.id}>
           <SelectionRowBody item={item} />
         </div>
       ),
@@ -58,10 +66,12 @@ const SelectionTree = ({ items, onSelect }: { items: SelectionItem[]; onSelect: 
  */
 const SelectionCheckList = ({
   items,
+  onCancel,
   onSubmit,
   submitLabel,
 }: {
   items: SelectionItem[];
+  onCancel?: () => void;
   onSubmit: (ids: string[]) => void;
   submitLabel?: (count: number) => string;
 }) => {
@@ -85,21 +95,33 @@ const SelectionCheckList = ({
           </span>
         </div>
       ) : null}
-      <div className="seltree">
+      <div className="seltree picklist">
         {items.map((item) =>
           item.selectable ? (
-            <label className={join("selnode", "selrow", "selcheck")} key={item.id}>
-              <input checked={selectedIds.includes(item.id)} onChange={() => toggle(item.id)} type="checkbox" />
+            // The highlighted row IS the selection state — the checkbox stays
+            // real but visually hidden (.pick-input) for keyboard + SR.
+            <label className={join("selnode", "selrow", "selcheck", "pick-row")} key={item.id}>
+              <input
+                checked={selectedIds.includes(item.id)}
+                className="pick-input"
+                onChange={() => toggle(item.id)}
+                type="checkbox"
+              />
               <SelectionRowBody item={item} />
             </label>
           ) : (
-            <div className={join("selnode", "selrow", "off")} key={item.id}>
+            <div className={join("selnode", "selrow", "pick-row", "skip", "off")} key={item.id}>
               <SelectionRowBody item={item} />
             </div>
           ),
         )}
       </div>
       <div className="selfoot">
+        {onCancel ? (
+          <button className="btn ghost" onClick={onCancel} type="button">
+            Cancel
+          </button>
+        ) : null}
         <button
           className="btn primary selconfirm"
           disabled={!selectedIds.length}

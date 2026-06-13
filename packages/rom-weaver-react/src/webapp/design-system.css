@@ -1532,7 +1532,10 @@ html.vt-theme [style*="view-transition-name"], html.vt-flat [style*="view-transi
 .rw-modal { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 16px; }
 .rw-modal-backdrop { position: absolute; inset: 0; background: var(--scrim); backdrop-filter: blur(3px); }
 .rw-modal-card {
-  position: relative; width: min(640px, 100%); max-height: min(82dvh, 760px);
+  /* max-width in viewport units — the grid track grows to the card's
+     max-content, so a `100%` cap alone can't stop a long unbroken file name
+     pushing the card past the screen edge */
+  position: relative; width: min(640px, 100%); max-width: calc(100vw - 32px); max-height: min(82dvh, 760px);
   display: flex; flex-direction: column;
   background: var(--plate); border: 1px solid var(--seam-strong); border-radius: var(--r-l);
   box-shadow: var(--overlay-shadow); overflow: clip;
@@ -1540,7 +1543,7 @@ html.vt-theme [style*="view-transition-name"], html.vt-flat [style*="view-transi
 }
 @starting-style { .rw-modal-card { transform: translateY(10px) scale(.97); opacity: 0; } }
 .rw-modal .modal-head { display: flex; align-items: center; gap: 10px; padding: 13px 16px; border-block-end: 1px solid var(--seam-soft); flex: none; }
-.rw-modal .modal-title { margin: 0; font-size: .95rem; font-weight: 700; letter-spacing: .01em; min-width: 0; }
+.rw-modal .modal-title { margin: 0; font-size: .95rem; font-weight: 700; letter-spacing: .01em; min-width: 0; overflow-wrap: anywhere; }
 .rw-modal .modal-sub { font-size: .78rem; color: var(--ink-3); margin-top: 2px; }
 .rw-app .mh-sp { flex: 1 1 auto; }
 .rw-modal .modal-head .btn { height: 30px; padding-inline: 12px; font-size: .76rem; }
@@ -1571,30 +1574,15 @@ html.vt-theme [style*="view-transition-name"], html.vt-flat [style*="view-transi
    the loom picker language: the row IS the selection state (left bar +
    weight), with the real checkbox rendered as the shared switch. */
 .rw-app .seltree { display: flex; flex-direction: column; gap: 6px; }
-.rw-app .selnode { appearance: none; width: 100%; text-align: start; font: inherit; color: inherit; position: relative; display: flex; align-items: flex-start; gap: 10px; padding: 9px 11px; border-radius: var(--r-m); border: 1px solid transparent; min-width: 0; }
-.rw-app .selrow { cursor: pointer; background: var(--plate-2); border-color: var(--seam); transition: background .15s, border-color .15s; }
-.rw-app .selrow:hover { border-color: color-mix(in oklab, var(--thread) 40%, var(--seam)); }
-.rw-app .selrow.off { cursor: not-allowed; opacity: .55; }
-.rw-app .selrow.off:hover { border-color: var(--seam); }
-.rw-app .selmain { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 9px; }
-.rw-app .selmain .fnm { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .84rem; font-weight: 600; color: var(--ink); }
-.rw-app .selmeta { flex: none; display: inline-flex; align-items: baseline; gap: 9px; }
-.rw-app .selmeta .matches { flex: none; }
-.rw-app .selmeta .seldim { flex: none; color: var(--ink-4); font-size: .74rem; }
-.rw-app .selsize { flex: none; font-size: .76rem; color: var(--ink-3); }
-.rw-app .sficon { width: 15px; height: 15px; flex: none; color: var(--ink-4); align-self: flex-start; margin-top: 1px; }
-.rw-app .selmain .selname { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.rw-app .selmain .selname .fnm { flex: none; }
-.rw-app .selpath { min-width: 0; overflow-wrap: anywhere; font-size: .68rem; color: var(--ink-3); }
-.rw-app .selnode::before { content: ""; position: absolute; inset-block: -1px; inset-inline-start: -1px; width: 4px; border-start-start-radius: var(--r-m); border-end-start-radius: var(--r-m); background: transparent; transition: background .15s; }
-.rw-app .selcheck:has(input:checked) { border-color: var(--thread); background: color-mix(in oklab, var(--thread) 7%, var(--plate-2)); }
-.rw-app .selcheck:has(input:checked)::before { background: var(--thread); }
-.rw-app .selcheck:has(input:checked) .fnm { font-weight: 750; }
-.rw-app .selcheck input[type="checkbox"] { --sw-w: 30px; --sw-h: 18px; --sw-thumb: 12px; --sw-pad: 2px; --sw-travel: 12px; }
+/* rows reuse the .pick-row picker language; selnode only resets the button so
+   button rows render identically to label rows */
+.rw-app .selnode { appearance: none; width: 100%; text-align: start; font: inherit; color: inherit; min-width: 0; }
+.rw-app .pick-row.off:hover { border-color: var(--seam); }
+.rw-app .pick-row .pick-note { min-width: 0; font-size: .74rem; color: var(--ink-4); overflow-wrap: anywhere; }
 .rw-app .seltoolbar { display: flex; align-items: center; justify-content: space-between; gap: 9px; margin-bottom: 9px; }
 .rw-app .seltoolbar .selall { height: 28px; padding-inline: 12px; font-size: .76rem; }
 .rw-app .selcount { font-size: .76rem; color: var(--ink-3); }
-.rw-app .selfoot { display: flex; justify-content: flex-end; margin-top: 12px; }
+.rw-app .selfoot { display: flex; justify-content: flex-end; gap: 9px; margin-top: 12px; }
 .rw-app .matches { color: var(--verified); }
 .rw-app .nomatch { color: var(--fault); }
 @media (forced-colors: active) {
