@@ -18,6 +18,15 @@ pub(super) const DELTA_INST_COMP: u8 = 0x02;
 pub(super) const DELTA_ADDR_COMP: u8 = 0x04;
 pub(super) const DELTA_KNOWN_MASK: u8 = DELTA_DATA_COMP | DELTA_INST_COMP | DELTA_ADDR_COMP;
 pub(super) const NATIVE_CHUNK_SIZE: usize = 64 * 1024;
+
+/// Output buffer for the windowed VCDIFF apply paths. Each window's decoded target is often only
+/// ~16 KiB, so writing it straight to the file costs one `write` syscall per window — tens of
+/// thousands for a large patch (measured: ~27k writes → ~270 on a 443 MiB apply). Buffering
+/// coalesces those into far fewer, larger writes: a large win for native syscall count, and it
+/// improves browser read-cache locality by dropping the per-window seek. (Browser write *time* is
+/// bandwidth-bound on the data copy, so larger buffers don't help there — 1 MiB matched 4 MiB on
+/// wall time at a quarter of the memory.)
+pub(super) const APPLY_OUTPUT_BUFFER_BYTES: usize = 1024 * 1024;
 pub(super) const XDELTA_SECONDARY_MIN_INPUT: usize = 10;
 pub(super) const XDELTA_SECONDARY_MIN_SAVINGS: usize = 2;
 pub(super) const XDELTA_DJW_SECONDARY_ID: u8 = 1;
@@ -307,7 +316,8 @@ impl PatchHandler for VcdiffPatchHandler {
 
         decoded.sort_by_key(|window| (window.output_offset, window.index));
 
-        let mut output = File::create(&request.output)?;
+        let mut output =
+            BufWriter::with_capacity(APPLY_OUTPUT_BUFFER_BYTES, File::create(&request.output)?);
         let mut expected_offset = 0u64;
         for window in decoded {
             if window.output_offset != expected_offset {
@@ -322,6 +332,7 @@ impl PatchHandler for VcdiffPatchHandler {
             expected_offset = checked_add(expected_offset, window.len, "assembled output size")?;
             let _ = fs::remove_file(&window.temp_path);
         }
+        output.flush()?;
 
         let checksum_suffix = if validate_checksums {
             String::new()
@@ -997,12 +1008,15 @@ pub(super) fn apply_windows_with_xdelta_lzma_sections(
 
     let mut input_reader = BufReader::new(File::open(input_path)?);
     let mut patch_reader = BufReader::new(File::open(patch_path)?);
-    let mut output = OpenOptions::new()
-        .create(true)
-        .truncate(true)
-        .read(true)
-        .write(true)
-        .open(output_path)?;
+    let mut output = BufWriter::with_capacity(
+        APPLY_OUTPUT_BUFFER_BYTES,
+        OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .read(true)
+            .write(true)
+            .open(output_path)?,
+    );
     let mut assembled_output_size = 0u64;
     let mut lzma_decoders = XdeltaLzmaSectionDecoders::new();
 
@@ -1023,13 +1037,23 @@ pub(super) fn apply_windows_with_xdelta_lzma_sections(
                 input_len,
                 "source",
             )?,
-            Some(WindowSourceKind::Target) => read_source_segment(
-                &mut output,
-                window.source_segment_position,
-                window.source_segment_size,
-                assembled_output_size,
-                "target",
-            )?,
+            Some(WindowSourceKind::Target) => {
+                // The output file doubles as a copy source for target-referencing windows. Flush
+                // buffered writes so the requested span is on disk, read it, then restore the
+                // append cursor for the next write.
+                output.flush()?;
+                let segment = read_source_segment(
+                    output.get_mut(),
+                    window.source_segment_position,
+                    window.source_segment_size,
+                    assembled_output_size,
+                    "target",
+                )?;
+                output
+                    .get_mut()
+                    .seek(SeekFrom::Start(assembled_output_size))?;
+                segment
+            }
         };
 
         let target = decode_window_with_xdelta_lzma_sections(
@@ -1039,7 +1063,6 @@ pub(super) fn apply_windows_with_xdelta_lzma_sections(
             &source,
             validate_checksums,
         )?;
-        output.seek(SeekFrom::Start(assembled_output_size))?;
         output.write_all(&target)?;
         assembled_output_size = checked_add(
             assembled_output_size,
@@ -1048,6 +1071,7 @@ pub(super) fn apply_windows_with_xdelta_lzma_sections(
         )?;
     }
 
+    output.flush()?;
     Ok(())
 }
 
@@ -1064,12 +1088,15 @@ pub(super) fn apply_windows_with_target_sources(
     }
 
     let mut input_reader = BufReader::new(File::open(input_path)?);
-    let mut output = OpenOptions::new()
-        .create(true)
-        .truncate(true)
-        .read(true)
-        .write(true)
-        .open(output_path)?;
+    let mut output = BufWriter::with_capacity(
+        APPLY_OUTPUT_BUFFER_BYTES,
+        OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .read(true)
+            .write(true)
+            .open(output_path)?,
+    );
     let mut assembled_output_size = 0u64;
 
     for window in &patch.windows {
@@ -1089,13 +1116,23 @@ pub(super) fn apply_windows_with_target_sources(
                 input_len,
                 "source",
             )?,
-            Some(WindowSourceKind::Target) => read_source_segment(
-                &mut output,
-                window.source_segment_position,
-                window.source_segment_size,
-                assembled_output_size,
-                "target",
-            )?,
+            Some(WindowSourceKind::Target) => {
+                // The output file doubles as a copy source for target-referencing windows. Flush
+                // buffered writes so the requested span is on disk, read it, then restore the
+                // append cursor for the next write.
+                output.flush()?;
+                let segment = read_source_segment(
+                    output.get_mut(),
+                    window.source_segment_position,
+                    window.source_segment_size,
+                    assembled_output_size,
+                    "target",
+                )?;
+                output
+                    .get_mut()
+                    .seek(SeekFrom::Start(assembled_output_size))?;
+                segment
+            }
         };
 
         let mut patch_reader = BufReader::new(File::open(patch_path)?);
@@ -1106,7 +1143,6 @@ pub(super) fn apply_windows_with_target_sources(
             &source,
             validate_checksums,
         )?;
-        output.seek(SeekFrom::Start(assembled_output_size))?;
         output.write_all(&target)?;
         assembled_output_size = checked_add(
             assembled_output_size,
@@ -1115,6 +1151,7 @@ pub(super) fn apply_windows_with_target_sources(
         )?;
     }
 
+    output.flush()?;
     Ok(())
 }
 
