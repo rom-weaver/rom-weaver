@@ -14,7 +14,7 @@ import {
   getGeneratedCompressionCodecLevelMin,
 } from "../../lib/compression/compression-metadata.ts";
 import { getBrowserLocaleCandidates, negotiateLocale } from "../../presentation/localization/index.ts";
-import { getSettingsLabel } from "../../presentation/settings.ts";
+import { getSettingsLabel, getUiSettingsLabel } from "../../presentation/settings.ts";
 import { LOG_LEVELS } from "../../types/logging.ts";
 import { ROM_WEAVER_CREATE_CONTAINER_FORMATS } from "../../wasm/generated/rom-weaver-format-metadata.ts";
 import { getDefaultWebappDevToolsEnabled, getDefaultWebappLogLevel } from "../development-defaults.ts";
@@ -235,7 +235,7 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     id: "settings-chd-createcd-codecs",
     key: "chdCreateCdCodecs",
     kind: "text",
-    label: getSettingsLabel("chdCreateCdCodecs"),
+    label: getUiSettingsLabel("chdCd"),
     labelDataLocalize: "CD Codecs",
     placeholder: codecDefaultPlaceholderText("chdCreateCdCodecs"),
     suggestion: `Valid values: ${codecValuesText("chdCreateCdCodecs")}. Optional levels: ${codecLevelRangeText("chdCreateCdCodecs")}`,
@@ -250,7 +250,7 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     id: "settings-chd-createdvd-codecs",
     key: "chdCreateDvdCodecs",
     kind: "text",
-    label: getSettingsLabel("chdCreateDvdCodecs"),
+    label: getUiSettingsLabel("chdDvd"),
     labelDataLocalize: "DVD Codecs",
     placeholder: codecDefaultPlaceholderText("chdCreateDvdCodecs"),
     suggestion: `Valid values: ${codecValuesText("chdCreateDvdCodecs")}. Optional levels: ${codecLevelRangeText("chdCreateDvdCodecs")}`,
@@ -399,7 +399,7 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     id: "settings-rvz-block-size",
     key: "rvzBlockSize",
     kind: "number",
-    label: getSettingsLabel("rvzBlockSize"),
+    label: getUiSettingsLabel("rvzBlockSize"),
     labelDataLocalize: "RVZ block size",
     max: 2147483647,
     min: 1,
@@ -415,7 +415,7 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     id: "settings-rvz-codec",
     key: "rvzCodec",
     kind: "text",
-    label: "RVZ codec",
+    label: getUiSettingsLabel("rvzCodec"),
     labelDataLocalize: "RVZ codec",
     placeholder: `${COMPRESSION_DEFAULTS.rvzCodec}:${getCodecMaxLevel(COMPRESSION_DEFAULTS.rvzCodec, ZSTD_CODEC_MAX_LEVEL)}`,
     suggestion: `Default: ${COMPRESSION_DEFAULTS.rvzCodec}. Optional level: ${COMPRESSION_DEFAULTS.rvzCodec}[:${codecLevelRange(
@@ -467,7 +467,7 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     id: "settings-7z-codec",
     key: "sevenZipCodec",
     kind: "text",
-    label: getSettingsLabel("sevenZipCodec"),
+    label: getUiSettingsLabel("sevenZipCodec"),
     labelDataLocalize: "7z codec",
     placeholder: `${COMPRESSION_DEFAULTS.sevenZipCodec}:${getCodecMaxLevel(
       COMPRESSION_DEFAULTS.sevenZipCodec,
@@ -557,7 +557,7 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
     id: "settings-zip-codec",
     key: "zipCodec",
     kind: "text",
-    label: getSettingsLabel("zipCodec"),
+    label: getUiSettingsLabel("zipCodec"),
     labelDataLocalize: "ZIP codec",
     placeholder: `${ZIP_ZSTD_CODEC}:${getCodecMaxLevel(ZIP_ZSTD_CODEC, ZSTD_CODEC_MAX_LEVEL)}`,
     suggestion: `Default: ${COMPRESSION_DEFAULTS.zipCodec}. Valid values: ${codecValuesText("zipCodec")}. Optional levels: ${codecLevelRangeText(

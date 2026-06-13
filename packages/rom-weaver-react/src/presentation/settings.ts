@@ -26,4 +26,9 @@ const SETTINGS_MESSAGE_KEYS = [
 const getSettingsLabel = (key: string, localizer: Localizer = createLocalizer()): string =>
   localizer.message(`settings.${key}` as MessageId);
 
-export { getSettingsLabel, SETTINGS_MESSAGE_KEYS };
+// Short, section-aware label used inside the grouped settings panel where the
+// section header (e.g. "Codecs"/"RVZ") already supplies the redundant context.
+const getUiSettingsLabel = (key: string, localizer: Localizer = createLocalizer()): string =>
+  localizer.message(`ui.settings.${key}` as MessageId);
+
+export { getSettingsLabel, getUiSettingsLabel, SETTINGS_MESSAGE_KEYS };
