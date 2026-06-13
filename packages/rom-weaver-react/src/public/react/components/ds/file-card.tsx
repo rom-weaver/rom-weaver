@@ -73,7 +73,11 @@ const FileCard = ({
   target?: ReactNode;
   children?: ReactNode;
 }) => (
-  <div className={join("card", state, inputMatch && "im", patch && "grabbable", className)} ref={rootRef} style={style}>
+  <div
+    className={join("card file", state, inputMatch && "im", patch && "grabbable patch", className)}
+    ref={rootRef}
+    style={style}
+  >
     {hideName ? (
       onRemove ? (
         <RemoveButton label={removeLabel} onClick={onRemove} />

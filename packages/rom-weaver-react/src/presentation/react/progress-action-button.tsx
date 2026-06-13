@@ -84,8 +84,11 @@ function ProgressActionButton({
           <div className="lab">
             <span className="what run-stage-label">{progressLabelParts?.taskText || progress.message}</span>
           </div>
-          <div aria-hidden="true" className={join("meter live", isIndeterminate && "indet")}>
-            <div className="fill run-fill" style={{ width: isIndeterminate ? undefined : `${determinatePercent}%` }} />
+          <div aria-hidden="true" className={join("meter track live", isIndeterminate && "indet")}>
+            <div
+              className="fill bar run-fill"
+              style={{ width: isIndeterminate ? undefined : `${determinatePercent}%` }}
+            />
           </div>
           <div className="sub mono">
             <span>{progressLabelParts?.threadsText || ""}</span>

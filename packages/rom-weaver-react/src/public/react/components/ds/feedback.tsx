@@ -60,8 +60,8 @@ const ProgressTrack = ({
     typeof percent === "number" && Number.isFinite(percent) ? `${Math.max(0, Math.min(100, percent))}%` : undefined;
   const isIndeterminate = indeterminate || width === undefined;
   return (
-    <div aria-hidden="true" className={join("meter live", isIndeterminate && "indet", className)}>
-      <div className="fill" style={isIndeterminate ? undefined : { width }} />
+    <div aria-hidden="true" className={join("meter track live", isIndeterminate && "indet", className)}>
+      <div className="fill bar" style={isIndeterminate ? undefined : { width }} />
     </div>
   );
 };

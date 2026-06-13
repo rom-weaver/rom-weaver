@@ -37,10 +37,10 @@ test("direct CUE plus BIN upload shows the cue sheet on the bin row", async () =
   const getRows = () => getInputStackRows();
   const getRow = (fileName) => getRows().find((row) => row.textContent?.includes(fileName));
   const getChecksumValue = (row, label) => {
-    const entry = Array.from(row?.querySelectorAll("dl.ck") || []).find(
-      (checksum) => checksum.querySelector("dt")?.textContent?.trim().toLowerCase() === label.toLowerCase(),
+    const entry = Array.from(row?.querySelectorAll(".ck") || []).find(
+      (checksum) => checksum.querySelector(".ck-k")?.textContent?.trim().toLowerCase() === label.toLowerCase(),
     );
-    return entry?.querySelector("dd")?.textContent?.trim() || "";
+    return entry?.querySelector(".ck-v")?.textContent?.trim() || "";
   };
   const getChecksums = (row) => ({
     crc32: getChecksumValue(row, "CRC32"),

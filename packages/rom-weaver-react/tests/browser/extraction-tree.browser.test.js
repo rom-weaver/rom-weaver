@@ -39,7 +39,9 @@ test("extraction tree omits ratio for CUE sidecar outputs", async () => {
     }),
   );
 
-  await expect.poll(() => document.querySelector(".ext-size")?.textContent || "").toBe("1.0 KB \u2192 100 B");
+  await expect
+    .poll(() => document.querySelector(".extract-d .rb:not(.time)")?.textContent || "")
+    .toBe("1.0 KB \u2192 100 B");
 });
 
 test("extraction tree keeps ratio for ROM extraction outputs", async () => {
@@ -52,7 +54,9 @@ test("extraction tree keeps ratio for ROM extraction outputs", async () => {
     }),
   );
 
-  await expect.poll(() => document.querySelector(".ext-size")?.textContent || "").toBe("1.0 KB \u2192 100 B (1000%)");
+  await expect
+    .poll(() => document.querySelector(".extract-d .rb:not(.time)")?.textContent || "")
+    .toBe("1.0 KB \u2192 100 B (1000%)");
 });
 
 test("extraction tree keeps extract metadata for prepared single-level inputs", async () => {
@@ -64,9 +68,9 @@ test("extraction tree keeps extract metadata for prepared single-level inputs", 
   );
 
   await expect.poll(() => document.querySelector(".extract-d .lab")?.textContent || "").toBe("Extract");
-  expect(document.querySelector(".extract-d .ext-size")?.textContent || "").toBe("4.1 KB");
-  expect(document.querySelector(".extract-d .tm")?.textContent || "").toContain("1.2 s");
-  expect(document.querySelector(".extract-d .cks-rows .fn")?.textContent || "").toBe("game.iso");
+  expect(document.querySelector(".extract-d .rb:not(.time)")?.textContent || "").toBe("4.1 KB");
+  expect(document.querySelector(".extract-d .rb.time")?.textContent || "").toContain("1.2 s");
+  expect(document.querySelector(".extract-d .tree-name")?.textContent || "").toBe("game.iso");
 });
 
 test("extraction tree stays compact for raw single-file inputs", async () => {
@@ -76,6 +80,6 @@ test("extraction tree stays compact for raw single-file inputs", async () => {
     }),
   );
 
-  await expect.poll(() => document.querySelector(".chain .fn")?.textContent || "").toBe("game.bin");
+  await expect.poll(() => document.querySelector(".nmline .nm")?.textContent || "").toBe("game.bin");
   expect(document.querySelector(".extract-d")).toBeNull();
 });
