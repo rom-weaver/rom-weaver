@@ -285,12 +285,13 @@ test("ROM info panel shows checksum variant rows", async () => {
     ),
   );
 
-  // Variants render as a "Variants" section per label ("Remove header") with its own
-  // BYTES/CRC32/MD5/SHA-1 value table; the raw variant is folded into the main checksums.
+  // Variants render as labeled sub-groups ("Remove header") inside the single
+  // "Checks" drawer with their own BYTES/CRC32/MD5/SHA-1 value table; the raw
+  // variant is folded into the main checksums.
   const inputRow = await waitForState(() => {
     const row = getInputStackRows()[0];
     if (!(row instanceof HTMLElement)) return null;
-    return row.textContent?.includes("Variants") && row.textContent.includes("Remove header") ? row : null;
+    return row.textContent?.includes("Checks") && row.textContent.includes("Remove header") ? row : null;
   }, 30000);
   expect(inputRow.textContent).toContain("Remove header");
   expect(inputRow.textContent).toContain("12345678");
@@ -314,9 +315,12 @@ test("patch stack mentions when patch validation passed", async () => {
     ),
   );
 
+  // Dry-run validation renders the prototype's verdict block (Dry-run group
+  // with a pass/fail line) instead of a raw message row.
   const validation = await waitForState(() => {
     const element = document.querySelector("#rom-weaver-list-patch-stack .file.ok");
     return element instanceof HTMLElement ? element : null;
   }, 30000);
-  expect(validation.textContent).toMatch(/patch validation passed/i);
+  expect(validation.querySelector(".dryrun .dryrun-verdict.ok")).toBeInstanceOf(HTMLElement);
+  expect(validation.textContent).toMatch(/scratch output re-hash matches/i);
 });

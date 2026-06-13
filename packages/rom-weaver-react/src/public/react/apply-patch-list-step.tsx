@@ -1,5 +1,7 @@
+import Check from "lucide-react/dist/esm/icons/check.js";
 import Crosshair from "lucide-react/dist/esm/icons/crosshair.js";
 import GripVertical from "lucide-react/dist/esm/icons/grip-vertical.js";
+import X from "lucide-react/dist/esm/icons/x.js";
 import { createTiming, formatTiming } from "../../lib/progress/timing.ts";
 import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import { ChecksumList, ChecksumRow } from "./components/ds/checksum-list.tsx";
@@ -12,6 +14,7 @@ import { useListReorder } from "./components/ds/use-list-reorder.ts";
 import type { PatcherStackController, PatcherUiController } from "./patcher-form.ts";
 import type { PatchStackItemState } from "./patcher-presentation.ts";
 import type { NoticeState, PatcherUiState } from "./patcher-ui-state.ts";
+import { useUiLocalizer } from "./settings-context.tsx";
 import { toWorkflowFileProgressProps } from "./workflow-run-hooks.ts";
 
 const TIMING_LABEL = (ms?: number) =>
@@ -46,9 +49,16 @@ const SectionNotice = ({ onDismiss, state }: { onDismiss?: () => void; state: No
 const getPatchVerificationRows = (item: PatchStackItemState) => {
   const inputRows: Array<{ label: string; value: string }> = [];
   const outputRows: Array<{ label: string; value: string }> = [];
+  let dryRun = false;
   for (const entry of item.validationValues) {
     const separatorIndex = entry.indexOf("=");
     if (separatorIndex === -1) {
+      // "dry-run apply" marks scratch-copy validation — rendered as the
+      // prototype's dry-run verdict block, not a checksum row.
+      if (/dry-?run/i.test(entry)) {
+        dryRun = true;
+        continue;
+      }
       inputRows.push({ label: "VALIDATION", value: entry });
       continue;
     }
@@ -61,24 +71,27 @@ const getPatchVerificationRows = (item: PatchStackItemState) => {
     }
     outputRows.push({ label: PATCH_OUTPUT_VERIFICATION_LABELS[rawLabel] || rawLabel.toUpperCase(), value });
   }
-  return { inputRows, outputRows };
+  return { dryRun, inputRows, outputRows };
 };
 
-/** One Verify drawer per patch, with INPUT / OUTPUT sub-groups — the loom
- * prototype's verification language (a single section, grouped rows). */
+/** One Checks drawer per patch, with INPUT / OUTPUT / DRY-RUN sub-groups — the
+ * loom prototype's verification language (a single section, grouped rows; the
+ * dry-run reports a verdict block, not a checksum row). */
 const PatchInfo = ({ item }: { item: PatchStackItemState }) => {
-  const { inputRows, outputRows } = getPatchVerificationRows(item);
+  const localizer = useUiLocalizer();
+  const { dryRun, inputRows, outputRows } = getPatchVerificationRows(item);
   const hasInputDetails = !!(inputRows.length || item.validationMessage);
   const hasOutputDetails = outputRows.length > 0;
-  if (!(hasInputDetails || hasOutputDetails)) return null;
+  if (!(hasInputDetails || hasOutputDetails || dryRun)) return null;
   const bad = item.validationState === "invalid";
+  // The dry-run verdict line already says pass/fail — only surface the raw
+  // validation message alongside it when it carries failure detail.
+  const showMessage = !!item.validationMessage && (!dryRun || bad);
   return (
     <ChecksumList
-      defaultOpen={inputRows.length > 0 || hasOutputDetails}
-      label="Verify"
-      lead={
-        item.validationMessage ? <p className={bad ? "pdesc bad" : "pdesc"}>{item.validationMessage}</p> : undefined
-      }
+      defaultOpen={inputRows.length > 0 || hasOutputDetails || dryRun}
+      label="Checks"
+      lead={showMessage ? <p className={bad ? "pdesc bad" : "pdesc"}>{item.validationMessage}</p> : undefined}
       match={
         item.validationState === "invalid"
           ? { label: null, ok: false }
@@ -86,12 +99,12 @@ const PatchInfo = ({ item }: { item: PatchStackItemState }) => {
             ? { label: null, ok: true }
             : undefined
       }
-      timing={CHECKSUM_TIMING_LABEL(item.checksumTiming, "Verify")}
+      timing={CHECKSUM_TIMING_LABEL(item.checksumTiming, "Checks")}
     >
       {inputRows.length ? (
         <div className="ck-group ckgrp">
           <div className="ck-group-head">
-            <span>Input</span>
+            <span>{localizer.message("ui.verify.input")}</span>
           </div>
           {inputRows.map((row) => (
             <ChecksumRow key={`input:${row.label}:${row.value}`} label={row.label} value={row.value} />
@@ -101,18 +114,32 @@ const PatchInfo = ({ item }: { item: PatchStackItemState }) => {
       {hasOutputDetails ? (
         <div className="ck-group ckgrp">
           <div className="ck-group-head">
-            <span>Output</span>
+            <span>{localizer.message("ui.verify.output")}</span>
           </div>
           {outputRows.map((row) => (
             <ChecksumRow key={`output:${row.label}:${row.value}`} label={row.label} value={row.value} />
           ))}
         </div>
       ) : null}
+      {dryRun ? (
+        <div className="ck-group ckgrp">
+          <div className="ck-group-head">
+            <span>{localizer.message("ui.verify.dryRun")}</span>
+          </div>
+          <div className="dryrun">
+            <span className="dryrun-desc">{localizer.message("ui.verify.dryRunDesc")}</span>
+            <span className={bad ? "dryrun-verdict bad" : "dryrun-verdict ok"}>
+              {bad ? <X aria-hidden="true" /> : <Check aria-hidden="true" />}
+              <span>{localizer.message(bad ? "ui.verify.dryRunFail" : "ui.verify.dryRunPass")}</span>
+            </span>
+          </div>
+        </div>
+      ) : null}
     </ChecksumList>
   );
 };
 
-const CHECKSUM_HINT = "Paste a CRC32, MD5, or SHA1 hex digest";
+const CHECKSUM_HINT = "CRC32, MD5, or SHA-1";
 
 const PatchOptions = ({
   index,

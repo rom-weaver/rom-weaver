@@ -31,11 +31,14 @@ const getVariantBytes = (variant: ChecksumVariant, sourceBytes: number | undefin
   return String(Math.max(0, Math.floor(sourceBytes) - stripped));
 };
 
-const VariantInfoList = ({ bytes, variants }: { bytes?: number; variants?: ChecksumVariant[] }) => {
+/* Checksum variants (headerless, auto-trimmed…) render as labeled sub-groups
+   inside the same Checks drawer as the raw checksums — the prototype's single
+   "Checks" section, not a separate drawer. */
+const VariantGroups = ({ bytes, variants }: { bytes?: number; variants?: ChecksumVariant[] }) => {
   const rows = (variants || []).filter((variant) => variant.id !== "raw");
   if (!rows.length) return null;
   return (
-    <ChecksumList defaultOpen={false} label="Variants">
+    <>
       {rows.map((variant) => {
         const byteValue = getVariantBytes(variant, bytes);
         return (
@@ -50,7 +53,7 @@ const VariantInfoList = ({ bytes, variants }: { bytes?: number; variants?: Check
           </div>
         );
       })}
-    </ChecksumList>
+    </>
   );
 };
 
@@ -60,7 +63,7 @@ const SourceInfoList = ({
   checksumVariants,
   defaultOpen = false,
   discType,
-  label = "Info",
+  label = "Checks",
   lead,
   onToggle,
   open,
@@ -72,7 +75,7 @@ const SourceInfoList = ({
   checksumVariants?: ChecksumVariant[];
   defaultOpen?: boolean;
   discType?: string;
-  /** Section heading; defaults to "Info". Disc cards pass the track filename. */
+  /** Section heading; defaults to "Checks". Disc cards pass the track filename. */
   label?: string;
   lead?: ReactNode;
   onToggle?: (open: boolean) => void;
@@ -84,23 +87,21 @@ const SourceInfoList = ({
   if (!(hasBytes || checksums || discType || lead || progress)) return null;
   const byteValue = hasBytes ? String(Math.floor(bytes as number)) : "";
   return (
-    <>
-      <ChecksumList
-        defaultOpen={defaultOpen}
-        label={label}
-        lead={progress ? <FileProgress {...progress} /> : lead}
-        onToggle={onToggle}
-        open={open}
-        timing={timing}
-      >
-        {discType ? <ChecksumRow copyValue={discType} label="DISC" value={discType} /> : null}
-        <ChecksumRow copyValue={byteValue} label="BYTES" value={byteValue} />
-        <ChecksumRow label="CRC32" value={checksums?.crc32 || ""} />
-        <ChecksumRow label="MD5" value={checksums?.md5 || ""} />
-        <ChecksumRow label="SHA-1" value={checksums?.sha1 || ""} />
-      </ChecksumList>
-      <VariantInfoList bytes={bytes} variants={checksumVariants} />
-    </>
+    <ChecksumList
+      defaultOpen={defaultOpen}
+      label={label}
+      lead={progress ? <FileProgress {...progress} /> : lead}
+      onToggle={onToggle}
+      open={open}
+      timing={timing}
+    >
+      {discType ? <ChecksumRow copyValue={discType} label="DISC" value={discType} /> : null}
+      <ChecksumRow copyValue={byteValue} label="BYTES" value={byteValue} />
+      <ChecksumRow label="CRC32" value={checksums?.crc32 || ""} />
+      <ChecksumRow label="MD5" value={checksums?.md5 || ""} />
+      <ChecksumRow label="SHA-1" value={checksums?.sha1 || ""} />
+      <VariantGroups bytes={bytes} variants={checksumVariants} />
+    </ChecksumList>
   );
 };
 
