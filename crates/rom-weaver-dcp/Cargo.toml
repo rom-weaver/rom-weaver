@@ -1,0 +1,13 @@
+[package]
+name = "rom-weaver-dcp"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+version.workspace = true
+
+[dependencies]
+miniz_oxide.workspace = true
+rom-weaver-core = { path = "../rom-weaver-core" }
+rom-weaver-gdrom = { path = "../rom-weaver-gdrom" }
+rom-weaver-xdelta = { path = "../rom-weaver-xdelta" }
+tracing.workspace = true

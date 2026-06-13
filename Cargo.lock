@@ -1649,6 +1649,8 @@ dependencies = [
  "rom-weaver-codecs",
  "rom-weaver-containers",
  "rom-weaver-core",
+ "rom-weaver-dcp",
+ "rom-weaver-gdrom",
  "rom-weaver-libarchive",
  "rom-weaver-patches",
  "serde",
@@ -1764,6 +1766,25 @@ dependencies = [
  "thiserror",
  "tracing",
  "ts-rs",
+]
+
+[[package]]
+name = "rom-weaver-dcp"
+version = "0.1.0"
+dependencies = [
+ "miniz_oxide",
+ "rom-weaver-core",
+ "rom-weaver-gdrom",
+ "rom-weaver-xdelta",
+ "tracing",
+]
+
+[[package]]
+name = "rom-weaver-gdrom"
+version = "0.1.0"
+dependencies = [
+ "rom-weaver-core",
+ "tracing",
 ]
 
 [[package]]
