@@ -31,6 +31,9 @@ type ExtractPanelProps = {
   decompressionTimeMs?: number;
   fileName: string;
   fileSize?: number;
+  /** Folder path within the source archive (e.g. "patches › v1.2"), shown as a
+   * muted prefix on the name line. The archive itself is intentionally omitted. */
+  folderPath?: string;
   legacyArchiveClassName?: string;
   legacyFileClassName?: string;
   parentCompressions?: ExtractionParentLevel[];
@@ -183,6 +186,7 @@ const LegacyExtractionLabel = ({
 const ExtractName = ({
   fileName,
   fileSize,
+  folderPath,
   legacyArchiveClassName = "rom-weaver-patch-stack-archive",
   legacyFileClassName,
   parentCompressions,
@@ -201,7 +205,8 @@ const ExtractName = ({
       {/* assistive tech (and text-based assertions) get the full filename;
           the visible face drops the extension — the format badge carries it */}
       <span className="sr-only">{fileName}</span>
-      <span aria-hidden="true" className="nm" title={fileName}>
+      <span aria-hidden="true" className="nm" title={folderPath ? `${folderPath} › ${fileName}` : fileName}>
+        {folderPath ? <span className="nm-folder">{folderPath} › </span> : null}
         {getDisplayName(fileName)}
       </span>
     </div>

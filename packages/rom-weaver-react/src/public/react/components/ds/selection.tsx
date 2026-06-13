@@ -15,6 +15,8 @@ type SelectionItem = {
   note?: ReactNode;
   /** Archive-nesting path of the entry (e.g. "B_disc1.zip"), rendered as a sub-line for context. */
   breadcrumb?: string;
+  /** Full source archive the entry came from, rendered as a sub-heading under the name. */
+  subheading?: string;
   matches?: boolean;
   selectable: boolean;
 };
@@ -26,6 +28,7 @@ const SelectionRowBody = ({ item }: { item: SelectionItem }) => (
   <span className="pick-main">
     {item.breadcrumb ? <span className="pick-crumb mono">{item.breadcrumb} ›</span> : null}
     <span className="pick-name mono">{item.name}</span>
+    {item.subheading ? <span className="pick-archive mono">{item.subheading}</span> : null}
     {item.matches || item.note || item.sizeLabel ? (
       <span className="pick-meta">
         {item.matches ? <span className="tag fmt matches">matches patch</span> : null}

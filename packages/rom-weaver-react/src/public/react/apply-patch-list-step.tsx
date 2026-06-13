@@ -416,6 +416,16 @@ const ApplyPatchListStep = ({
                 <ExtractName
                   fileName={item.fileName}
                   fileSize={item.fileSize}
+                  // The first archive-path entry is the source archive itself
+                  // (shown in the Extract drawer / picker); the rest is the
+                  // folder path within it, surfaced inline on the name.
+                  folderPath={
+                    (item.archivePathEntries || [])
+                      .slice(1)
+                      .map((entry) => entry.fileName)
+                      .filter(Boolean)
+                      .join(" › ") || undefined
+                  }
                   legacyFileClassName="rom-weaver-patch-stack-file"
                   parentCompressions={item.archivePathEntries}
                 />
