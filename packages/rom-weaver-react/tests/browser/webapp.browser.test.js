@@ -202,18 +202,12 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
   await expect.element(page.getByText(CRC32_TEXT_REGEX)).toBeInTheDocument();
 });
 
-test("WebappRoot shows dev tools copy logs on desktop and Eruda only on mobile", async () => {
-  mountWebappRoot();
-  await expect.element(page.getByRole("button", { name: "Mobile dev tools" })).not.toBeInTheDocument();
-  await expect.element(page.getByRole("button", { name: "Copy console logs" })).not.toBeInTheDocument();
-
-  setMobileDevToolsViewport(false);
-  mountWebappRoot({ settings: { ...getDefaultSettings(), devTools: true } });
-  await expect.element(page.getByRole("button", { name: "Copy console logs" })).toBeInTheDocument();
-  await expect.element(page.getByRole("button", { name: "Mobile dev tools" })).not.toBeInTheDocument();
-
+test("WebappRoot keeps diagnostics out of the masthead — the Log dialog owns them", async () => {
+  // Even with dev tools enabled, the header stays theme / log / settings; the
+  // console-copy and Eruda toggles were folded into the Log dialog surface.
   setMobileDevToolsViewport(true);
   mountWebappRoot({ settings: { ...getDefaultSettings(), devTools: true } });
-  await expect.element(page.getByRole("button", { name: "Copy console logs" })).toBeInTheDocument();
-  await expect.element(page.getByRole("button", { name: "Mobile dev tools" })).toBeInTheDocument();
+  await expect.element(page.getByRole("button", { name: "Log" })).toBeInTheDocument();
+  await expect.element(page.getByRole("button", { name: "Copy console logs" })).not.toBeInTheDocument();
+  await expect.element(page.getByRole("button", { name: "Mobile dev tools" })).not.toBeInTheDocument();
 });

@@ -18,7 +18,7 @@ import {
   shouldWarnBeforeUnload,
 } from "./unload-guard.ts";
 import { createWebappRootController, readWorkflowViewFromHash } from "./webapp-controller.ts";
-import { WebappRoot } from "./webapp-root.tsx";
+import { selectViewWithTransition, WebappRoot } from "./webapp-root.tsx";
 import { type ConfirmationDialogState, createEmptyConfirmationDialogState } from "./webapp-root-types.ts";
 
 // Webapp controller invariants now live across `settings-state` and `webapp-controller`:
@@ -354,7 +354,8 @@ if (typeof window !== "undefined" && typeof window.addEventListener === "functio
   // Hash router: respond to deep links, manual hash edits, and history navigation.
   window.addEventListener("hashchange", () => {
     const view = readWorkflowViewFromHash();
-    if (view && view !== webappController.getState().currentView) webappController.selectView(view);
+    if (view && view !== webappController.getState().currentView)
+      selectViewWithTransition(() => webappController.selectView(view));
   });
 }
 

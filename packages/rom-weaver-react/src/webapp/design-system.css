@@ -1686,3 +1686,13 @@ html.vt-theme [style*="view-transition-name"], html.vt-flat [style*="view-transi
 @media (prefers-reduced-motion: reduce) {
   .rw-app .meter.indet .fill { animation: none; transform: none; width: 100%; opacity: .55; }
 }
+
+/* hero format pills: compact on phones so the full row fits one line instead
+   of stranding the last format on its own wrap line */
+@media (max-width: 560px) {
+  .rw-app .drop.hero .formats { gap: 4px; }
+  .rw-app .drop.hero .fmt { font-size: .6rem; padding: 2px 5px; letter-spacing: .02em; }
+}
+@media (max-width: 380px) {
+  .rw-app .drop.hero .fmt { font-size: .56rem; padding: 2px 4px; }
+}

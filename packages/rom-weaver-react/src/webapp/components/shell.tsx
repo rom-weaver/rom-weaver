@@ -1,9 +1,7 @@
-import ClipboardList from "lucide-react/dist/esm/icons/clipboard-list.js";
 import Moon from "lucide-react/dist/esm/icons/moon.js";
 import ScrollText from "lucide-react/dist/esm/icons/scroll-text.js";
 import Settings from "lucide-react/dist/esm/icons/settings.js";
 import Sun from "lucide-react/dist/esm/icons/sun.js";
-import Terminal from "lucide-react/dist/esm/icons/terminal.js";
 import X from "lucide-react/dist/esm/icons/x.js";
 import type { ReactNode } from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -23,32 +21,6 @@ const logger = createLogger("shell");
 const join = (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(" ");
 
 type WorkflowTab = { id: string; label: string; icon: ReactNode };
-const MOBILE_DEVTOOLS_STATE_EVENT = "rom-weaver:mobile-devtools-state";
-const MOBILE_DEVTOOLS_MEDIA_QUERY = "(pointer: coarse), (max-width: 767px)";
-
-const readMobileDevToolsOpen = () => typeof window !== "undefined" && window.ROM_WEAVER_ERUDA_PANEL_OPEN === true;
-const readMobileDevToolsAvailable = () =>
-  typeof window !== "undefined" &&
-  typeof window.matchMedia === "function" &&
-  window.matchMedia(MOBILE_DEVTOOLS_MEDIA_QUERY).matches;
-
-const useMobileDevToolsAvailable = () => {
-  const [available, setAvailable] = useState(readMobileDevToolsAvailable);
-  useEffect(() => {
-    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return undefined;
-    const media = window.matchMedia(MOBILE_DEVTOOLS_MEDIA_QUERY);
-    const syncAvailable = () => setAvailable(media.matches);
-    syncAvailable();
-    if (typeof media.addEventListener === "function") {
-      media.addEventListener("change", syncAvailable);
-      return () => media.removeEventListener("change", syncAvailable);
-    }
-    media.addListener?.(syncAvailable);
-    return () => media.removeListener?.(syncAvailable);
-  }, []);
-  return available;
-};
-
 const supportsAnchoredThumb = () =>
   typeof CSS !== "undefined" && typeof CSS.supports === "function" && CSS.supports("anchor-name", "--rw-tab");
 
@@ -178,79 +150,22 @@ const ThemeToggle = ({ localizer }: { localizer: Localizer }) => {
   );
 };
 
-const ConsoleLogCopyButton = ({ onCopyConsoleLogs }: { onCopyConsoleLogs: () => Promise<void | string> }) => {
-  const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
-  const label =
-    state === "copied" ? "Console logs copied" : state === "failed" ? "Copy console logs failed" : "Copy console logs";
-  return (
-    <button
-      aria-label={label}
-      className={join("tool console-copy-toggle", state !== "idle" && state)}
-      onClick={() => {
-        void onCopyConsoleLogs()
-          .then(() => {
-            setState("copied");
-            window.setTimeout(() => setState("idle"), 1800);
-          })
-          .catch((error) => {
-            logger.error("Failed to copy console logs", { error });
-            setState("failed");
-            window.setTimeout(() => setState("idle"), 2400);
-          });
-      }}
-      title={label}
-      type="button"
-    >
-      <ClipboardList aria-hidden="true" />
-    </button>
-  );
-};
-
-const MobileDevToolsButton = ({ onToggleMobileDevTools }: { onToggleMobileDevTools: () => void }) => {
-  const [open, setOpen] = useState(readMobileDevToolsOpen);
-  useEffect(() => {
-    const syncOpenState = () => setOpen(readMobileDevToolsOpen());
-    syncOpenState();
-    window.addEventListener(MOBILE_DEVTOOLS_STATE_EVENT, syncOpenState);
-    return () => window.removeEventListener(MOBILE_DEVTOOLS_STATE_EVENT, syncOpenState);
-  }, []);
-  return (
-    <button
-      aria-label="Mobile dev tools"
-      aria-pressed={open ? "true" : "false"}
-      className="tool mobile-devtools-toggle"
-      onClick={onToggleMobileDevTools}
-      title="Mobile dev tools"
-      type="button"
-    >
-      <Terminal aria-hidden="true" />
-    </button>
-  );
-};
-
 const Masthead = ({
-  devToolsEnabled,
   logoSrc,
   tabs,
   currentTab,
-  onCopyConsoleLogs,
   onSelectTab,
-  onToggleMobileDevTools,
   onOpenLog,
   onOpenSettings,
 }: {
-  devToolsEnabled: boolean;
   logoSrc?: string;
   tabs: WorkflowTab[];
   currentTab: string;
-  onCopyConsoleLogs: () => Promise<void | string>;
   onSelectTab: (id: string) => void;
-  onToggleMobileDevTools: () => void;
   onOpenLog: () => void;
   onOpenSettings: () => void;
 }) => {
   const localizer = useUiLocalizer();
-  const mobileDevToolsAvailable = useMobileDevToolsAvailable();
   const logLabel = localizer.message("ui.tools.log");
   const settingsLabel = localizer.message("ui.settings.title");
   return (
@@ -265,10 +180,6 @@ const Masthead = ({
       <ModeRail current={currentTab} onSelect={onSelectTab} tabs={tabs} />
       <div className="masthead-tools">
         <ThemeToggle localizer={localizer} />
-        {devToolsEnabled ? <ConsoleLogCopyButton onCopyConsoleLogs={onCopyConsoleLogs} /> : null}
-        {devToolsEnabled && mobileDevToolsAvailable ? (
-          <MobileDevToolsButton onToggleMobileDevTools={onToggleMobileDevTools} />
-        ) : null}
         <button
           aria-haspopup="dialog"
           aria-label={logLabel}

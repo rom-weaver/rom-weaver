@@ -102,6 +102,19 @@ const prefersReducedMotion = () =>
   typeof window.matchMedia === "function" &&
   window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+/* Re-showing a hidden panel restarts its CSS entry animations (display:none
+   resets them) — lock every entry-animatable element inline BEFORE the
+   suppression class comes off, exactly like the prototype, so a tab switch
+   never replays card-in/panel-in as a flicker. Fresh elements from later
+   re-renders still animate in. */
+const lockEntryAnimations = () => {
+  for (const element of document.querySelectorAll<HTMLElement>(
+    ".workflow-body, .card, .notice, .result, .prog-panel, .fault",
+  )) {
+    element.style.animation = "none";
+  }
+};
+
 /* Mode switches crossfade flat (vt-flat suppresses per-element morph names —
    panels have no real continuity across modes). The controller renders
    synchronously (flushSync), so the update lands inside the transition. */
@@ -109,12 +122,17 @@ const selectViewWithTransition = (select: () => void) => {
   const root = document.documentElement;
   if (typeof document.startViewTransition !== "function" || prefersReducedMotion()) {
     select();
+    lockEntryAnimations();
     return;
   }
   root.classList.add("vt-flat", "vt-quiet");
   const transition = document.startViewTransition(select);
   transition.ready.catch(() => undefined);
-  const clear = () => root.classList.remove("vt-flat", "vt-quiet");
+  const clear = () => {
+    // lock first — removing vt-quiet would otherwise start the suppressed animations
+    lockEntryAnimations();
+    root.classList.remove("vt-flat", "vt-quiet");
+  };
   transition.finished.then(clear, clear);
 };
 
@@ -273,15 +291,12 @@ function WebappRoot({ state, serviceWorkerCache, pageUpdate, confirmationDialog,
         <div className="app">
           <Masthead
             currentTab={state.currentView}
-            devToolsEnabled={state.settings.devTools === true}
             logoSrc={ROOT_LOGO_URL}
-            onCopyConsoleLogs={actions.onCopyConsoleLogs}
             onOpenLog={() => setLogOpen(true)}
             onOpenSettings={actions.onOpenSettings}
             onSelectTab={(id) =>
               selectViewWithTransition(() => actions.onSelectView(id as WebappRootProps["state"]["currentView"]))
             }
-            onToggleMobileDevTools={actions.onToggleMobileDevTools}
             tabs={WORKFLOW_TABS}
           />
           <UpdateBanner
@@ -375,4 +390,4 @@ function WebappRoot({ state, serviceWorkerCache, pageUpdate, confirmationDialog,
   );
 }
 
-export { WebappRoot };
+export { selectViewWithTransition, WebappRoot };

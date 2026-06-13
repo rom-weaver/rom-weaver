@@ -23,12 +23,9 @@ const TABS = [
 
 const mastheadProps = {
   currentTab: "patcher",
-  devToolsEnabled: false,
-  onCopyConsoleLogs: () => Promise.resolve(),
   onOpenLog: () => undefined,
   onOpenSettings: () => undefined,
   onSelectTab: () => undefined,
-  onToggleMobileDevTools: () => undefined,
   tabs: TABS,
 };
 
@@ -50,9 +47,10 @@ describe("Masthead", () => {
     expect(container.querySelectorAll(".masthead-tools .tool").length).toBe(3);
   });
 
-  it("shows the console-copy tool only when dev tools are enabled", () => {
-    const { container } = render(withSettings(<Masthead {...mastheadProps} devToolsEnabled />));
-    expect(container.querySelector(".console-copy-toggle")).toBeTruthy();
+  it("keeps the tool rail to theme / log / settings — diagnostics live in the Log dialog", () => {
+    const { container } = render(withSettings(<Masthead {...mastheadProps} />));
+    expect(container.querySelector(".console-copy-toggle")).toBeNull();
+    expect(container.querySelector(".mobile-devtools-toggle")).toBeNull();
   });
 });
 
