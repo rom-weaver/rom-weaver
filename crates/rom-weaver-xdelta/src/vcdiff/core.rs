@@ -1118,6 +1118,110 @@ pub(super) fn apply_windows_with_target_sources(
     Ok(())
 }
 
+/// Apply a VCDIFF/xdelta patch held entirely in memory against an in-memory
+/// `source`, returning the reconstructed target bytes.
+///
+/// This is the byte-slice counterpart to [`VcdiffPatchHandler::apply`], for
+/// callers (such as the `.dcp` apply pipeline) that patch many small files in
+/// memory rather than on disk. It supports the patch shapes stock xdelta3
+/// produces with `flags=0`: source- and target-referencing windows with no
+/// secondary compression. Patches that use xdelta3's LZMA secondary sections or
+/// a custom code table must go through the file-based handler and are rejected
+/// here with a clear error. Source-window checksums are always validated.
+pub fn apply_patch_bytes(source: &[u8], patch_bytes: &[u8]) -> Result<Vec<u8>> {
+    let patch = parse_patch(&mut std::io::Cursor::new(patch_bytes))?;
+    if patch.custom_code_table.is_some() {
+        return Err(RomWeaverError::Validation(
+            "native VCDIFF backend does not support custom code tables".into(),
+        ));
+    }
+    if patch.secondary_compressor_id == Some(XDELTA_LZMA_SECONDARY_ID)
+        && patch_bytes_use_xdelta_lzma_sections(&patch, patch_bytes)?
+    {
+        return Err(RomWeaverError::Validation(
+            "xdelta LZMA secondary-compressed patches must be applied via the file-based handler"
+                .into(),
+        ));
+    }
+
+    let source_len = source.len() as u64;
+    let mut output: Vec<u8> = Vec::new();
+    for window in &patch.windows {
+        if window.output_offset != output.len() as u64 {
+            return Err(RomWeaverError::Validation(format!(
+                "window output offset mismatch: expected {}, got {}",
+                output.len(),
+                window.output_offset
+            )));
+        }
+        let segment = match window.source_kind {
+            None => Vec::new(),
+            Some(WindowSourceKind::Source) => read_source_segment(
+                &mut std::io::Cursor::new(source),
+                window.source_segment_position,
+                window.source_segment_size,
+                source_len,
+                "source",
+            )?,
+            Some(WindowSourceKind::Target) => read_source_segment(
+                &mut std::io::Cursor::new(&output),
+                window.source_segment_position,
+                window.source_segment_size,
+                output.len() as u64,
+                "target",
+            )?,
+        };
+        let target = decode_window_with_native_engine(
+            &mut std::io::Cursor::new(patch_bytes),
+            window,
+            patch.secondary_compressor_id,
+            &segment,
+            true,
+        )?;
+        output.extend_from_slice(&target);
+    }
+    Ok(output)
+}
+
+/// The decoded output (target) size of a VCDIFF/xdelta patch, read from the
+/// window headers without decoding any data. Lets callers plan output layout
+/// before applying — e.g. the `.dcp` rebuild sizes each patched file up front.
+pub fn vcdiff_output_size(patch_bytes: &[u8]) -> Result<u64> {
+    let patch = parse_patch(&mut std::io::Cursor::new(patch_bytes))?;
+    patch.target_size()
+}
+
+/// In-memory counterpart to [`patch_uses_xdelta_lzma_sections`]: detect whether
+/// any compressed window section carries an xdelta3 LZMA stream header.
+fn patch_bytes_use_xdelta_lzma_sections(patch: &ParsedPatch, patch_bytes: &[u8]) -> Result<bool> {
+    for window in &patch.windows {
+        for (compressed, start, len) in [
+            (
+                window.delta_indicator & DELTA_DATA_COMP != 0,
+                window.data_start,
+                window.data_len,
+            ),
+            (
+                window.delta_indicator & DELTA_INST_COMP != 0,
+                window.inst_start,
+                window.inst_len,
+            ),
+            (
+                window.delta_indicator & DELTA_ADDR_COMP != 0,
+                window.addr_start,
+                window.addr_len,
+            ),
+        ] {
+            if !compressed {
+                continue;
+            }
+            let section = read_section(&mut std::io::Cursor::new(patch_bytes), start, len)?;
+            return Ok(xdelta_lzma_section_has_stream_header(&section));
+        }
+    }
+    Ok(false)
+}
+
 pub(super) fn is_xdelta_descriptor(descriptor: &FormatDescriptor) -> bool {
     descriptor.name.eq_ignore_ascii_case("xdelta")
 }

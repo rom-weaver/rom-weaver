@@ -656,6 +656,40 @@ fn create_vcdiff_patch_round_trips() {
 }
 
 #[test]
+fn apply_patch_bytes_round_trips_in_memory() {
+    let input = b"hello old world, this is the source payload";
+    let expected = b"hello new world, this is the modified payload!";
+
+    let temp = create_temp_dir();
+    let input_path = temp.join("input.bin");
+    let modified_path = temp.join("modified.bin");
+    let patch_path = temp.join("update.vcdiff");
+    fs::write(&input_path, input).expect("write input");
+    fs::write(&modified_path, expected).expect("write modified");
+
+    let handler = VcdiffPatchHandler::new(&crate::VCDIFF);
+    handler
+        .create(
+            &PatchCreateRequest {
+                original: input_path,
+                modified: modified_path,
+                output: patch_path.clone(),
+                format: "VCDIFF".into(),
+            },
+            &test_context(),
+        )
+        .expect("create vcdiff patch");
+
+    let patch_bytes = fs::read(&patch_path).expect("read patch");
+    let target = crate::apply_patch_bytes(input, &patch_bytes).expect("apply in memory");
+    assert_eq!(target, expected);
+
+    // A wrong source must not silently produce the target (source checksum).
+    let wrong = crate::apply_patch_bytes(b"completely different source bytes here", &patch_bytes);
+    assert!(wrong.is_err() || wrong.unwrap() != expected);
+}
+
+#[test]
 fn create_xdelta_patch_defaults_to_lzma_secondary_when_it_is_smaller() {
     let (input, expected) = generated_secondary_source_and_target();
 

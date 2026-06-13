@@ -51,8 +51,8 @@ const XDELTA: rom_weaver_core::FormatDescriptor = rom_weaver_core::FormatDescrip
 
 #[path = "vcdiff/core.rs"]
 mod core;
-pub use self::core::VcdiffPatchHandler;
 use self::core::*;
+pub use self::core::{VcdiffPatchHandler, apply_patch_bytes, vcdiff_output_size};
 
 #[path = "vcdiff/xdelta_secondary.rs"]
 mod xdelta_secondary;
