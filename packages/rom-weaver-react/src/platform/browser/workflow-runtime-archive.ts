@@ -338,7 +338,7 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
             splitBin: outputPlan.chdSplitBinEligible && workflowInput.options?.chdSplitBin === true,
             workerThreads: workflowInput.options?.workerThreads,
           },
-          forwardArchiveProgress("input", workflowInput.options?.onProgress),
+          forwardArchiveProgress("input", workflowInput.options?.onProgress, `Extracting ${archive.fileName}...`),
           workflowInput.options?.onLog,
         );
         const normalizedFormat = String(workflowInput.format || "")
@@ -417,7 +417,7 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
                 sourcePath: archive.filePath,
                 workerThreads: workflowInput.options?.workerThreads,
               },
-              forwardArchiveProgress("input", workflowInput.options?.onProgress),
+              forwardArchiveProgress("input", workflowInput.options?.onProgress, `Extracting ${entryName}...`),
               workflowInput.options?.onLog,
             );
           const requiredBytes = null;
@@ -506,7 +506,7 @@ const createBrowserArchiveRuntime = (workerIo: RuntimeWorkerIo): Partial<Workflo
           signal: workflowInput.options?.signal,
           sourcePath: archive.filePath,
         },
-        forwardArchiveProgress("input", workflowInput.options?.onProgress),
+        forwardArchiveProgress("input", workflowInput.options?.onProgress, `Reading ${archive.fileName}...`),
         workflowInput.options?.onLog,
       );
     } finally {

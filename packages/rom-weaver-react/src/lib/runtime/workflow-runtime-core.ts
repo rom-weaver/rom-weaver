@@ -571,7 +571,11 @@ const createSharedCompressionRuntime = (
       logLevel: request.options?.logLevel,
       mode: request.romSpecific?.chd?.mode,
       onLog: request.options?.onLog,
-      onProgress: forwardRomSpecificProgress("output", request.options?.onProgress),
+      onProgress: forwardRomSpecificProgress(
+        "output",
+        request.options?.onProgress,
+        `Compressing ${request.fileName} to CHD`,
+      ),
       outputName: request.outputName,
       source: request.source,
       sourceMode: request.romSpecific?.chd?.sourceMode,
@@ -585,7 +589,11 @@ const createSharedCompressionRuntime = (
       logLevel: request.options?.logLevel,
       mode: request.romSpecific?.rvz?.mode,
       onLog: request.options?.onLog,
-      onProgress: forwardRomSpecificProgress("output", request.options?.onProgress),
+      onProgress: forwardRomSpecificProgress(
+        "output",
+        request.options?.onProgress,
+        `Compressing ${request.fileName} to RVZ`,
+      ),
       outputName: request.outputName,
       scrub: request.romSpecific?.rvz?.scrub,
       source: request.source,
@@ -601,7 +609,11 @@ const createSharedCompressionRuntime = (
         string | number | boolean | Uint8Array | null | undefined
       > | null,
       onLog: request.options?.onLog,
-      onProgress: forwardRomSpecificProgress("output", request.options?.onProgress),
+      onProgress: forwardRomSpecificProgress(
+        "output",
+        request.options?.onProgress,
+        `Compressing ${request.fileName} to Z3DS`,
+      ),
       outputName: request.outputName,
       source: request.source,
       sourceFileName: request.romSpecific?.z3ds?.sourceFileName,
@@ -639,29 +651,33 @@ const createSharedCompressionRuntime = (
   const getRomSpecificListInput = (
     registration: RomSpecificCompressionFormatRegistration,
     request: RomSpecificListRequest,
-  ): RomSpecificListInput => ({
-    fileName: getSourceFileName(request.source, registration.fallbackFileName),
-    logLevel: request.options?.logLevel,
-    mode: undefined,
-    onLog: request.options?.onLog,
-    onProgress: forwardRomSpecificProgress("input", request.options?.onProgress),
-    source: request.source,
-    splitBin: typeof request.options?.chdSplitBin === "boolean" ? request.options.chdSplitBin : undefined,
-    threads: request.options?.workerThreads,
-  });
+  ): RomSpecificListInput => {
+    const fileName = getSourceFileName(request.source, registration.fallbackFileName);
+    return {
+      fileName,
+      logLevel: request.options?.logLevel,
+      mode: undefined,
+      onLog: request.options?.onLog,
+      onProgress: forwardRomSpecificProgress("input", request.options?.onProgress, `Reading ${fileName}...`),
+      source: request.source,
+      splitBin: typeof request.options?.chdSplitBin === "boolean" ? request.options.chdSplitBin : undefined,
+      threads: request.options?.workerThreads,
+    };
+  };
   const extractChd = async (request: RomSpecificExtractRequest) => {
     const registration = getRomSpecificCompressionFormatRegistration("chd");
     if (!registration) throw new Error("CHD compression extraction is unavailable");
     const selectedEntries = request.entries.filter((entryName) => typeof entryName === "string" && entryName);
     const cueEntryName = selectedEntries.find((entryName) => CUE_FILE_REGEX.test(entryName));
     const trackEntryName = selectedEntries.find((entryName) => !CUE_FILE_REGEX.test(entryName));
+    const sourceFileName = getSourceFileName(request.source, registration.fallbackFileName);
     const extracted = requireOutput(
       (await extractRomSpecificOutput(registration, {
-        fileName: getSourceFileName(request.source, registration.fallbackFileName),
+        fileName: sourceFileName,
         logLevel: request.options?.logLevel,
         mode: cueEntryName ? "cd" : undefined,
         onLog: request.options?.onLog,
-        onProgress: forwardRomSpecificProgress("input", request.options?.onProgress),
+        onProgress: forwardRomSpecificProgress("input", request.options?.onProgress, `Extracting ${sourceFileName}...`),
         outputName: trackEntryName || request.outputName,
         source: request.source,
         splitBin: typeof request.options?.chdSplitBin === "boolean" ? request.options.chdSplitBin : undefined,
@@ -705,13 +721,18 @@ const createSharedCompressionRuntime = (
   ) => {
     if (request.entries.length !== 1)
       throw new Error(`${registration.label} compression extraction requires exactly one synthetic output entry`);
+    const sourceFileName = getSourceFileName(request.source, registration.fallbackFileName);
     return createCompressionExtractResult([
       requireOutput(
         (await extractRomSpecificOutput(registration, {
-          fileName: getSourceFileName(request.source, registration.fallbackFileName),
+          fileName: sourceFileName,
           logLevel: request.options?.logLevel,
           onLog: request.options?.onLog,
-          onProgress: forwardRomSpecificProgress("input", request.options?.onProgress),
+          onProgress: forwardRomSpecificProgress(
+            "input",
+            request.options?.onProgress,
+            `Extracting ${sourceFileName}...`,
+          ),
           outputName: request.entries[0] || request.outputName,
           source: request.source,
           threads: request.options?.workerThreads,

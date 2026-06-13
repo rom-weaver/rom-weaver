@@ -155,6 +155,8 @@ const getInputDecompressionStartLabel = (file: PatchFileInstance, options: Input
   if (options?.input?.containerInputsEnabled === false) return null;
   const classification = getCompressionClassification(file);
   if (classification.kind !== "compression") return null;
+  const fileName = stripFileNameQuery(file.fileName || "");
+  if (fileName) return `Extracting ${fileName}...`;
   if (classification.compressionFormat === "chd") return "Preparing CHD extraction...";
   if (classification.compressionFormat === "rvz") return "Preparing RVZ extraction...";
   if (classification.compressionFormat === "z3ds") return "Preparing Z3DS extraction...";

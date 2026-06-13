@@ -22,10 +22,16 @@ const forwardCreatePatchProgress =
     });
   };
 
-const forwardRomSpecificProgress = (stage: "input" | "output", onProgress?: (progress: ProgressEvent) => void) => {
+const forwardRomSpecificProgress = (
+  stage: "input" | "output",
+  onProgress?: (progress: ProgressEvent) => void,
+  /** Contextual fallback (e.g. "Extracting game.rvz...") shown when the runtime event carries no label. */
+  fallbackLabel?: string,
+) => {
   if (!onProgress) return undefined;
   return (progress: RuntimeProgress) => {
-    const label = progress.label || (stage === "input" ? "Extracting disc image..." : "Creating disc image...");
+    const label =
+      progress.label || fallbackLabel || (stage === "input" ? "Extracting disc image..." : "Creating disc image...");
     if (typeof progress.percent !== "number" || !Number.isFinite(progress.percent)) {
       onProgress({
         ...progress,
@@ -45,10 +51,16 @@ const forwardRomSpecificProgress = (stage: "input" | "output", onProgress?: (pro
   };
 };
 
-const forwardArchiveProgress = (stage: "input" | "output", onProgress?: (progress: ProgressEvent) => void) => {
+const forwardArchiveProgress = (
+  stage: "input" | "output",
+  onProgress?: (progress: ProgressEvent) => void,
+  /** Contextual fallback (e.g. "Extracting game.zip...") shown when the runtime event carries no label. */
+  fallbackLabel?: string,
+) => {
   let sawIntermediate = false;
   return (progress: RuntimeProgress) => {
-    const label = progress.label || (stage === "input" ? "Extracting archive entry..." : "Creating archive...");
+    const label =
+      progress.label || fallbackLabel || (stage === "input" ? "Extracting archive entry..." : "Creating archive...");
     const details = isRecord(progress.details)
       ? {
           ...progress.details,

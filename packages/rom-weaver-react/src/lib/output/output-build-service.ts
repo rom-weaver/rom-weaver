@@ -578,7 +578,7 @@ const buildSessionOutputFiles = async (
             label: getRawProgressLabel(
               progress,
               createCompressionProgressLabel({
-                fallbackLabel: "Compressing to CHD",
+                fallbackLabel: `Compressing ${cueOutput.asset.fileName} to CHD`,
                 formatLabel: "CHD",
                 threads: getWorkerThreads(options),
               }),
