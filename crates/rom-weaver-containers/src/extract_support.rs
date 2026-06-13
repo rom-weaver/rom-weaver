@@ -484,6 +484,10 @@ where
     let (sender, receiver) = mpsc::sync_channel::<TChunk>(max_in_flight_items.max(1));
     let mut write_result = Ok(());
 
+    // `par_iter` fans the decode across the full pool (the configured compute-worker budget). The
+    // two coordination threads — the rayon driver below (it calls `pool.install` and parks, holding
+    // no pool slot) and the consuming thread that drains the channel and writes/reorders chunks —
+    // run on top of those workers, not subtracted from them.
     thread::scope(|scope| -> Result<()> {
         let producer = thread::Builder::new()
             .name("rom-weaver-decode".to_string())

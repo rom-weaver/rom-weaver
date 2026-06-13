@@ -1161,6 +1161,11 @@ pub(crate) fn extract_regular_archive_with_libarchive(
 
         let mut output_checksums = Vec::new();
         let written_bytes = if execution.used_parallelism {
+            // `effective_threads` is the compute-worker budget. The two coordination threads — the
+            // rayon driver below (it calls `pool.install` and parks, so it holds no pool slot) and
+            // the consuming thread that drains the channel and hashes every extracted byte — run on
+            // top of these workers, not subtracted from them, so a configured budget of N decodes
+            // with N workers.
             let worker_count = execution.effective_threads.max(1);
             let chunk_size = tasks.len().div_ceil(worker_count).max(1);
             let (sender, receiver) = mpsc::sync_channel::<LibarchiveExtractOutput>(

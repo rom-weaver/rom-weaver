@@ -136,6 +136,10 @@ where
         return Ok(());
     }
 
+    // `effective_threads` is the compute-worker budget: spawn that many workers and let the calling
+    // thread (which reads source data and collects/hashes results — e.g. CHD create folds the raw
+    // SHA-1 here) coordinate on top. The coordinator is intentionally not subtracted from the
+    // worker count, so a configured budget of N runs N parallel compressors.
     let worker_count = effective_threads.max(1).min(total);
     let inflight = bounded_items_for_threads(worker_count).max(1);
     let (work_tx, work_rx) = mpsc::sync_channel::<(usize, TWork)>(inflight);
