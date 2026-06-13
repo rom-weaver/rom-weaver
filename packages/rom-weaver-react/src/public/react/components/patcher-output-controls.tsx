@@ -32,17 +32,27 @@ function PatcherPrimaryAction({
     // the name already fills the output field above; the full name stays on
     // the accessible label.
     const extension = (state.pendingDownloadFileName.match(/\.([^.]+)$/)?.[1] || "").toLowerCase();
-    const kind = state.downloadSummary?.format || extension || "file";
+    const summary = state.downloadSummary;
+    const kind = summary?.format || extension || "file";
+    // Show the size as a "from → to" transition (matching the extract badges)
+    // when the input size is known and differs from the output; otherwise the
+    // output size alone. The compression ratio trails in parentheses.
+    const sizeTransition =
+      summary?.fromSize && summary.size && summary.fromSize !== summary.size
+        ? `${summary.fromSize} → ${summary.size}`
+        : summary?.size;
+    const sizeText = sizeTransition
+      ? summary?.ratio
+        ? `${sizeTransition} (${summary.ratio})`
+        : sizeTransition
+      : undefined;
     return (
       <RunButton
         ariaLabel={`Download ${state.pendingDownloadFileName}`}
         disabled={state.applyButton.disabled}
         download={{
           format: `Patched ${kind}`,
-          size:
-            state.downloadSummary?.size && state.downloadSummary?.ratio
-              ? `${state.downloadSummary.size} (${state.downloadSummary.ratio})`
-              : state.downloadSummary?.size || undefined,
+          size: sizeText,
           total: totalTime,
         }}
         icon={<Download aria-hidden="true" />}

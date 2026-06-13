@@ -243,6 +243,7 @@ const buildOutputViewState = ({
   downloadSummary: hasPendingDownload
     ? {
         format: selectedOutputOptionLabel || displayedCompression?.toUpperCase() || undefined,
+        fromSize: completedSizeSummary.inputLabel || undefined,
         ratio:
           formatDownloadCompressionRatio(completedSizeSummary.inputBytes, completedSizeSummary.outputBytes) ||
           undefined,
