@@ -287,7 +287,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
 /* a touch more air above each section so straddling controls (the create-mode
    swap hinge) have room to breathe */
 .rw-app .step-head { display: flex; align-items: baseline; gap: 10px; padding: 16px var(--pad) 2px; position: relative; }
-.rw-app .step-num { font-size: .72rem; font-weight: 650; color: var(--thread-text); letter-spacing: .06em; transition: color .3s; }
+.rw-app .step-num { font-size: .9rem; font-weight: 650; color: var(--thread-text); letter-spacing: .06em; transition: color .3s; }
 .rw-app .step.is-woven .step-num { color: var(--thread-text); }
 .rw-app .step.is-fault .step-num { color: var(--fault); }
 /* section titles speak in the same voice as the card names and drawer headers
@@ -486,6 +486,8 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   font-size: clamp(.8rem, 1.1vw + .55rem, 1.06rem);
 }
+/* in-archive folder path prefix on the name line — quieter than the file itself */
+.rw-app .nm .nm-folder { font-weight: 500; color: var(--ink-3); }
 /* the file size rides the name line, pushed to its right edge */
 /* file/track sizes render as recessed readout chips (same language as the drawer
    header badges), cream text so a size reads as its own data point */
@@ -1088,6 +1090,8 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
    slot shows a — placeholder, styled identically so the layout + colour match */
 .rw-app .prog-panel .sub { align-items: baseline; }
 .rw-app .prog-panel .sub .run-pct { font-size: .92rem; font-weight: 650; color: var(--thread-text); font-variant-numeric: tabular-nums; }
+/* write-throughput readout (size / total · rate) — sits between threads and percent */
+.rw-app .prog .sub .run-rate { margin-inline: auto; color: var(--ink-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 /* ═══ result ═══ */
 /* the result is its own card within the output section, matching the form */
@@ -1299,6 +1303,7 @@ html.vt-theme .mode-rail .mode { view-transition-name: none !important; }
    only way to tell two same-named candidates apart */
 .rw-app .pick-row .pick-crumb { font-size: .68rem; color: var(--ink-3); overflow-wrap: anywhere; }
 .rw-app .pick-row .pick-name { min-width: 0; font-size: .84rem; font-weight: 600; overflow-wrap: anywhere; }
+.rw-app .pick-row .pick-archive { min-width: 0; font-size: .68rem; color: var(--ink-3); overflow-wrap: anywhere; }
 .rw-app .pick-row .pick-meta { display: inline-flex; align-items: center; gap: 8px; margin-block-start: 3px; }
 .rw-app .pick-row .pick-size { flex: none; font-size: .76rem; color: var(--ink-3); }
 
@@ -1551,6 +1556,9 @@ html.vt-theme [style*="view-transition-name"], html.vt-flat [style*="view-transi
 .rw-modal .sellead { padding: 0 0 11px; font-size: .9rem; color: var(--ink-2); }
 /* settings is the longest dialog — let it use most of the viewport height */
 .rw-modal.settings-modal .rw-modal-card { width: min(820px, 100%); max-height: min(94dvh, 1020px); }
+/* the archive/candidate picker can list long nested paths — let it use the
+   full available width (the viewport-minus-padding cap still applies) */
+.rw-modal.select-modal .rw-modal-card { width: 100%; }
 @media (min-width: 720px) {
   .rw-modal.settings-modal .modal-body { columns: 2; column-gap: 11px; }
   .rw-modal.settings-modal .modal-body .setcols { display: contents; }
