@@ -64,46 +64,51 @@ const getPatchVerificationRows = (item: PatchStackItemState) => {
   return { inputRows, outputRows };
 };
 
+/** One Verify drawer per patch, with INPUT / OUTPUT sub-groups — the loom
+ * prototype's verification language (a single section, grouped rows). */
 const PatchInfo = ({ item }: { item: PatchStackItemState }) => {
   const { inputRows, outputRows } = getPatchVerificationRows(item);
   const hasInputDetails = !!(inputRows.length || item.validationMessage);
   const hasOutputDetails = outputRows.length > 0;
-  const hasDetails = hasInputDetails || hasOutputDetails;
-  if (!hasDetails) return null;
+  if (!(hasInputDetails || hasOutputDetails)) return null;
   const bad = item.validationState === "invalid";
-  const hasInputVerificationInfo = inputRows.length > 0;
-  const hasOutputVerificationInfo = outputRows.length > 0;
   return (
-    <>
-      {hasInputDetails ? (
-        <ChecksumList
-          defaultOpen={hasInputVerificationInfo}
-          label="Input Check"
-          lead={
-            item.validationMessage ? <p className={bad ? "pdesc bad" : "pdesc"}>{item.validationMessage}</p> : undefined
-          }
-          match={
-            item.validationState === "invalid"
-              ? { label: null, ok: false }
-              : item.validationState === "valid"
-                ? { label: null, ok: true }
-                : undefined
-          }
-          timing={CHECKSUM_TIMING_LABEL(item.checksumTiming, "Verify")}
-        >
+    <ChecksumList
+      defaultOpen={inputRows.length > 0 || hasOutputDetails}
+      label="Verify"
+      lead={
+        item.validationMessage ? <p className={bad ? "pdesc bad" : "pdesc"}>{item.validationMessage}</p> : undefined
+      }
+      match={
+        item.validationState === "invalid"
+          ? { label: null, ok: false }
+          : item.validationState === "valid"
+            ? { label: null, ok: true }
+            : undefined
+      }
+      timing={CHECKSUM_TIMING_LABEL(item.checksumTiming, "Verify")}
+    >
+      {inputRows.length ? (
+        <div className="ck-group ckgrp">
+          <div className="ck-group-head">
+            <span>Input</span>
+          </div>
           {inputRows.map((row) => (
             <ChecksumRow key={`input:${row.label}:${row.value}`} label={row.label} value={row.value} />
           ))}
-        </ChecksumList>
+        </div>
       ) : null}
       {hasOutputDetails ? (
-        <ChecksumList defaultOpen={hasOutputVerificationInfo} label="Output Check">
+        <div className="ck-group ckgrp">
+          <div className="ck-group-head">
+            <span>Output</span>
+          </div>
           {outputRows.map((row) => (
             <ChecksumRow key={`output:${row.label}:${row.value}`} label={row.label} value={row.value} />
           ))}
-        </ChecksumList>
+        </div>
       ) : null}
-    </>
+    </ChecksumList>
   );
 };
 

@@ -56,12 +56,16 @@ const ProgressTrack = ({
   indeterminate?: boolean;
   className?: string;
 }) => {
-  const width =
-    typeof percent === "number" && Number.isFinite(percent) ? `${Math.max(0, Math.min(100, percent))}%` : undefined;
-  const isIndeterminate = indeterminate || width === undefined;
+  const clamped = typeof percent === "number" && Number.isFinite(percent) ? Math.max(0, Math.min(100, percent)) : null;
+  const isIndeterminate = indeterminate || clamped === null;
+  // The fill scales instead of resizing: progress ticks arrive per frame
+  // during extraction, and animating width forces layout every tick.
   return (
     <div aria-hidden="true" className={join("meter track live", isIndeterminate && "indet", className)}>
-      <div className="fill bar" style={isIndeterminate ? undefined : { width }} />
+      <div
+        className="fill bar"
+        style={isIndeterminate ? undefined : { transform: `scaleX(${(clamped ?? 0) / 100})` }}
+      />
     </div>
   );
 };

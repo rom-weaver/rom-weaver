@@ -59,10 +59,11 @@ const RomInputPanels = ({
     if (showInfo) return <SourceInfoList {...info} discType={discType} />;
     return null;
   };
+  // Prototype drawer order: checks/tracks lead, then options, then the sheets.
   return (
     <>
-      {showFixes && !isDisc ? <FixesPanel {...fixes} /> : null}
       {renderInfo()}
+      {showFixes && !isDisc ? <FixesPanel {...fixes} /> : null}
       {showCue && cue?.cueText ? <CuePanel cueText={cue.cueText} /> : null}
       {showCue && gdi?.gdiText ? <CuePanel cueText={gdi.gdiText} label="GDI" sublabel="gd-rom sheet" /> : null}
     </>

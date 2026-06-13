@@ -1658,3 +1658,13 @@ html.vt-theme [style*="view-transition-name"], html.vt-flat [style*="view-transi
    ellipsize instead of pushing the selvage wider than the viewport */
 .rw-app .selvage .sv-meta { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .rw-app .selvage .sv-threads, .rw-app .selvage .sv-cache { flex: none; }
+
+/* ── progress performance ──
+   React drives the fill with transform: scaleX (per-frame width changes force
+   layout; a scale is composited). The fill spans the full track and scales
+   from the inline start. Indeterminate keeps the prototype's width bounce. */
+.rw-app .meter:not(.indet) .fill { width: 100%; transform-origin: 0 50%; transform: scaleX(0); transition: transform .4s var(--ease); }
+.rw-app .meter.live:not(.indet) .fill { transition: none; }
+/* cards and progress panels are self-contained — per-tick re-renders inside
+   one panel must not invalidate layout/paint for the rest of the bench */
+.rw-app .card, .rw-app .prog-panel { contain: layout paint style; }

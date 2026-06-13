@@ -87,7 +87,7 @@ function ProgressActionButton({
           <div aria-hidden="true" className={join("meter track live", isIndeterminate && "indet")}>
             <div
               className="fill bar run-fill"
-              style={{ width: isIndeterminate ? undefined : `${determinatePercent}%` }}
+              style={isIndeterminate ? undefined : { transform: `scaleX(${determinatePercent / 100})` }}
             />
           </div>
           <div className="sub mono">

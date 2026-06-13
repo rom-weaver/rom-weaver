@@ -81,6 +81,43 @@ const resolveWorkerThreads = (workerThreads: unknown): number => {
   return typeof navigator !== "undefined" && navigator.hardwareConcurrency ? navigator.hardwareConcurrency : 0;
 };
 
+/* Entry animations (card-in / panel-in / …) must play once per mount, never
+   when a hidden tab is re-shown (display:none -> block restarts CSS
+   animations). Lock each as it finishes, exactly like the prototype. */
+const ENTRY_ANIMATIONS = new Set(["card-in", "panel-in", "drop-in", "chip-in", "fault-in", "trace-in"]);
+
+const useEntryAnimationLock = () => {
+  useEffect(() => {
+    const lock = (event: AnimationEvent) => {
+      if (ENTRY_ANIMATIONS.has(event.animationName) && event.target instanceof HTMLElement)
+        event.target.style.animation = "none";
+    };
+    document.addEventListener("animationend", lock);
+    return () => document.removeEventListener("animationend", lock);
+  }, []);
+};
+
+const prefersReducedMotion = () =>
+  typeof window !== "undefined" &&
+  typeof window.matchMedia === "function" &&
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* Mode switches crossfade flat (vt-flat suppresses per-element morph names —
+   panels have no real continuity across modes). The controller renders
+   synchronously (flushSync), so the update lands inside the transition. */
+const selectViewWithTransition = (select: () => void) => {
+  const root = document.documentElement;
+  if (typeof document.startViewTransition !== "function" || prefersReducedMotion()) {
+    select();
+    return;
+  }
+  root.classList.add("vt-flat", "vt-quiet");
+  const transition = document.startViewTransition(select);
+  transition.ready.catch(() => undefined);
+  const clear = () => root.classList.remove("vt-flat", "vt-quiet");
+  transition.finished.then(clear, clear);
+};
+
 const DropVeil = () => {
   const localizer = useUiLocalizer();
   return (
@@ -96,7 +133,42 @@ const DropVeil = () => {
   );
 };
 
+/**
+ * Activity-store subscribers live OUTSIDE the root component: the stage line
+ * updates on every progress tick, and re-rendering the whole workbench per
+ * tick makes the weave animations stutter during extraction.
+ */
+const ActivityWakeLockNotice = () => {
+  const activity = useSyncExternalStore(subscribeWorkbenchActivity, getWorkbenchActivity, getWorkbenchActivity);
+  return <ProcessingWakeLockNotice active={activity.state === "running"} />;
+};
+
+const ActivitySelvage = ({
+  cacheLabel,
+  sessionHasInput,
+  threads,
+}: {
+  cacheLabel?: string;
+  sessionHasInput: boolean;
+  threads?: number;
+}) => {
+  const activity = useSyncExternalStore(subscribeWorkbenchActivity, getWorkbenchActivity, getWorkbenchActivity);
+  const selvageState: SelvageState = activity.state === "idle" && sessionHasInput ? "ready" : activity.state;
+  return (
+    <Selvage
+      cacheLabel={cacheLabel}
+      donateHref="https://www.paypal.me/marcrobledo/5"
+      githubHref="https://github.com/marcrobledo/rom-weaver/"
+      stage={activity.stage}
+      state={selvageState}
+      threads={threads}
+      version={APP_BUILD_VERSION}
+    />
+  );
+};
+
 function WebappRoot({ state, serviceWorkerCache, pageUpdate, confirmationDialog, actions }: WebappRootProps) {
+  useEntryAnimationLock();
   const [updateDismissed, setUpdateDismissed] = useState(readUpdateDismissed);
   const [logOpen, setLogOpen] = useState(false);
   // Workflow forms keep their local state (staged files, validated patches,
@@ -107,7 +179,6 @@ function WebappRoot({ state, serviceWorkerCache, pageUpdate, confirmationDialog,
   const [pageDrop, setPageDrop] = useState<WebappRootPageDrop | null>(null);
   const [pageDragging, setPageDragging] = useState(false);
   const pageDropIdRef = useRef(0);
-  const activity = useSyncExternalStore(subscribeWorkbenchActivity, getWorkbenchActivity, getWorkbenchActivity);
   const workerThreads = state.settings.workerThreads;
   useEffect(() => {
     void preloadBrowserRuntime({ workerThreads });
@@ -181,13 +252,13 @@ function WebappRoot({ state, serviceWorkerCache, pageUpdate, confirmationDialog,
   }, [confirmationDialog.open, state.currentView, state.settingsDialogOpen]);
 
   // Optional access: harness tests mount the root with partial session state.
+  // Optional access: harness tests mount the root with partial session state.
   const sessionHasInput =
     !!state.patcherSession?.romFilePresent ||
     (state.patcherSession?.patchCount ?? 0) > 0 ||
     !!state.creatorSession?.originalFilePresent ||
     !!state.creatorSession?.modifiedFilePresent ||
     !!state.trimSession?.sourceFilePresent;
-  const selvageState: SelvageState = activity.state === "idle" && sessionHasInput ? "ready" : activity.state;
 
   const workflowPanel = (view: WorkflowView, form: React.ReactNode) =>
     isViewMounted(view) ? (
@@ -207,7 +278,9 @@ function WebappRoot({ state, serviceWorkerCache, pageUpdate, confirmationDialog,
             onCopyConsoleLogs={actions.onCopyConsoleLogs}
             onOpenLog={() => setLogOpen(true)}
             onOpenSettings={actions.onOpenSettings}
-            onSelectTab={(id) => actions.onSelectView(id as WebappRootProps["state"]["currentView"])}
+            onSelectTab={(id) =>
+              selectViewWithTransition(() => actions.onSelectView(id as WebappRootProps["state"]["currentView"]))
+            }
             onToggleMobileDevTools={actions.onToggleMobileDevTools}
             tabs={WORKFLOW_TABS}
           />
@@ -220,7 +293,7 @@ function WebappRoot({ state, serviceWorkerCache, pageUpdate, confirmationDialog,
             open={pageUpdate.ready && !updateDismissed}
             title={pageUpdate.title}
           />
-          <ProcessingWakeLockNotice active={activity.state === "running"} />
+          <ActivityWakeLockNotice />
           <main className="workbench">
             {workflowPanel(
               "patcher",
@@ -254,14 +327,10 @@ function WebappRoot({ state, serviceWorkerCache, pageUpdate, confirmationDialog,
             <DropVeil />
           </main>
         </div>
-        <Selvage
+        <ActivitySelvage
           cacheLabel={serviceWorkerCache.label}
-          donateHref="https://www.paypal.me/marcrobledo/5"
-          githubHref="https://github.com/marcrobledo/rom-weaver/"
-          stage={activity.stage}
-          state={selvageState}
+          sessionHasInput={sessionHasInput}
           threads={resolveWorkerThreads(workerThreads)}
-          version={APP_BUILD_VERSION}
         />
         <LogDialog onClose={() => setLogOpen(false)} open={logOpen} />
         <Modal

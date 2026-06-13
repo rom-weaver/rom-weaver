@@ -20,7 +20,7 @@ describe("ProgressTrack", () => {
     const { container } = render(<ProgressTrack percent={42} />);
     const meter = container.querySelector(".meter.track");
     expect(meter?.classList.contains("indet")).toBe(false);
-    expect((container.querySelector(".fill.bar") as HTMLElement).style.width).toBe("42%");
+    expect((container.querySelector(".fill.bar") as HTMLElement).style.transform).toBe("scaleX(0.42)");
   });
 
   it("falls back to indeterminate without a usable percent", () => {

@@ -31,9 +31,9 @@ const WorkflowRomInputStepRow = ({ item }: { item: WorkflowRomInputStepItem }) =
   // the card's drawers, below the header at full card width.
   return (
     <FileCard {...cardProps} name={<ExtractName {...extract} />}>
-      <ExtractDrawer {...extract} />
       {panels ? <RomInputPanels {...panels} /> : null}
       {children}
+      <ExtractDrawer {...extract} />
     </FileCard>
   );
 };

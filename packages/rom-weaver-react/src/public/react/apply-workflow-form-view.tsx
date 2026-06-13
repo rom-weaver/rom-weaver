@@ -1,6 +1,7 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { setWorkbenchActivity } from "../../lib/activity-store.ts";
 import { createTiming, formatTiming } from "../../lib/progress/timing.ts";
+import { formatByteSize } from "../../presentation/workflow-presentation.ts";
 import { probeApplyArchiveHasRom } from "./apply-archive-probe.ts";
 import { ApplyPatchListStep } from "./apply-patch-list-step.tsx";
 import { buildOutputCompressionPanel, getOutputCompressionFormatLabel } from "./components/ds/compress-panel.tsx";
@@ -167,15 +168,17 @@ const renderRomInputRow = (romInput: RomInputRowState, index: number, deps: RomR
     };
   }
   const checksumProgress = romInput.progress && romInput.info.validationPhase === "checksum" ? romInput.progress : null;
+  const romBytes = romInput.size ?? romInput.sourceSize;
   return {
     card: {
       extract: {
         fileName: romInput.info.fileName,
-        fileSize: romInput.size ?? romInput.sourceSize,
+        fileSize: romBytes,
         legacyFileClassName: "rom-weaver-input-stack-file",
         parentCompressions: romInput.archivePathEntries,
         timing: TIMING_LABEL(romInput.decompressionTimeMs),
       },
+      meta: typeof romBytes === "number" ? <span className="fsize mono">{formatByteSize(romBytes)}</span> : undefined,
       onRemove: () => {
         if (romInputs.length === 1 && ui.clearRomInput) ui.clearRomInput();
         else ui.removeRomInput?.(romInput.id);
@@ -266,6 +269,7 @@ const renderDiscGroup = (
         fileSize: totalBytes || undefined,
         legacyFileClassName: "rom-weaver-input-stack-file",
       },
+      meta: totalBytes ? <span className="fsize mono">{formatByteSize(totalBytes)}</span> : undefined,
       onRemove: removeDisc,
       panels: {
         tracks,
