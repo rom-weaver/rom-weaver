@@ -1,14 +1,13 @@
 import type { ReactNode } from "react";
 import { createLogger } from "../../../../lib/logging.ts";
-import { DropZone } from "./layout.tsx";
+import { DropZone, StepSection } from "./layout.tsx";
 
 /**
- * The single combined drop surface shared by every workflow tab. A thin wrapper
- * over the {@link DropZone} primitive that always accepts multiple files, traces
- * what it receives, and composes the per-category hints into one minimal line
- * ("roms (…), patches (…), or archives (…)"). The patch hint is omitted on
- * ROM-only tabs (Create/Trim) by simply not passing `patchHint`. Routing is
- * decided by the per-tab caller (see `unified-drop-routing.ts`).
+ * The 0x01 INPUTS step — the single combined drop surface shared by every
+ * workflow tab. A hero drop target while the form is empty, shrinking to the
+ * compact add-row once files are staged. Always accepts multiple files,
+ * traces what it receives, and composes the per-category hints into one line.
+ * Routing is decided by the per-tab caller (see `unified-drop-routing.ts`).
  */
 
 const logger = createLogger("unified-drop-zone");
@@ -28,10 +27,27 @@ type UnifiedDropZoneProps = {
   accept?: string;
   id?: string;
   inputId?: string;
+  /** Format pills under the hero label (empty state only). */
+  formats?: readonly string[];
+  /** Step header info popover. */
+  info?: ReactNode;
+  /** Step number/title; the inputs step is 0x01 in every workflow. */
+  num?: string;
+  title?: ReactNode;
   onFiles: (files: File[]) => void;
 };
 
-const UnifiedDropZone = ({ archiveHint, onFiles, patchHint, romHint, ...dropZoneProps }: UnifiedDropZoneProps) => {
+const UnifiedDropZone = ({
+  archiveHint,
+  formats,
+  info,
+  num = "0x01",
+  onFiles,
+  patchHint,
+  romHint,
+  title = "Inputs",
+  ...dropZoneProps
+}: UnifiedDropZoneProps) => {
   const emit = (files: File[]) => {
     logger.trace("unified drop zone received files", {
       count: files.length,
@@ -40,16 +56,17 @@ const UnifiedDropZone = ({ archiveHint, onFiles, patchHint, romHint, ...dropZone
     onFiles(files);
   };
   const hint = joinHintParts([romHint, patchHint, archiveHint].filter((part): part is string => !!part));
-  // Wrap in a headerless section so the surface lines up with the form's other
-  // step bodies (same horizontal inset) instead of spanning the full panel
-  // width. The `--hero` modifier (empty state) keeps generous breathing room;
-  // otherwise the section hugs the slim inline bar. First child = no top border.
   return (
-    <div className={dropZoneProps.big ? "step unified-drop-step unified-drop-step--hero" : "step unified-drop-step"}>
-      <div className="step-body">
-        <DropZone {...dropZoneProps} hint={hint} multiple onFiles={emit} />
-      </div>
-    </div>
+    <StepSection
+      className={
+        dropZoneProps.big ? "is-input is-empty unified-drop-step unified-drop-step--hero" : "is-input unified-drop-step"
+      }
+      info={info}
+      num={num}
+      title={title}
+    >
+      <DropZone {...dropZoneProps} bare formats={formats} hint={hint} multiple onFiles={emit} />
+    </StepSection>
   );
 };
 

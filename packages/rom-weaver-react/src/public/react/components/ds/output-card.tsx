@@ -1,9 +1,10 @@
-import ChevronRight from "lucide-react/dist/esm/icons/chevron-right.js";
+import SlidersHorizontal from "lucide-react/dist/esm/icons/sliders-horizontal.js";
 import type { ReactNode } from "react";
+import { Drawer, DrawerReadout } from "./drawer.tsx";
 
 /**
  * Output section: the filename field grouped with a format selector, an
- * optional collapsible "Options" panel (codec/level/archive overrides), and a
+ * optional collapsible "Options" drawer (codec/level/archive overrides), and a
  * caller-supplied action (run button or inline progress). Shared by apply,
  * create, and trim outputs.
  */
@@ -36,9 +37,8 @@ type OutputCardProps = {
   disabled?: boolean;
   action?: ReactNode;
 };
-const HEADER_SUMMARY_SEPARATOR = " · ";
 
-/** One labeled control row inside the output options panel. */
+/** One labeled control field inside the output options grid. */
 const OutputField = ({
   label,
   labelInfo,
@@ -48,8 +48,8 @@ const OutputField = ({
   labelInfo?: ReactNode;
   children: ReactNode;
 }) => (
-  <div className="ofield">
-    <span className="ofld-lbl">
+  <div className="ofld ofield">
+    <span className="ofld-l ofld-lbl">
       <span className="ofld-text">{label}</span>
       {labelInfo}
     </span>
@@ -72,61 +72,62 @@ const OutputCard = ({
   disabled,
   action,
 }: OutputCardProps) => (
-  <div className="outcard">
-    <div className="fname-group">
-      <textarea
-        aria-label={fileNameLabel}
-        className="input mono"
-        disabled={disabled}
-        id={fileNameId}
-        onChange={(event) => onFileNameChange(event.currentTarget.value)}
-        placeholder={fileNamePlaceholder}
-        rows={1}
-        spellCheck={false}
-        value={fileName}
-      />
-      <span className="sep" />
-      <select
-        aria-label={formatLabel}
-        className="select"
-        disabled={disabled}
-        id={formatId}
-        onChange={(event) => onFormatChange(event.currentTarget.value)}
-        value={format}
-      >
-        {formatOptions.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
+  <div className="card outcard">
+    <div className="outbar">
+      <div className="fname fname-group">
+        <textarea
+          aria-label={fileNameLabel}
+          className="input mono outname"
+          disabled={disabled}
+          id={fileNameId}
+          onChange={(event) => onFileNameChange(event.currentTarget.value)}
+          onKeyDown={(event) => {
+            // The output name is a textarea only so it can grow — a filename
+            // must never contain a newline.
+            if (event.key === "Enter") event.preventDefault();
+          }}
+          placeholder={fileNamePlaceholder}
+          rows={1}
+          spellCheck={false}
+          value={fileName}
+        />
+        <span className="sep" />
+        <select
+          aria-label={formatLabel}
+          className="select mono"
+          disabled={disabled}
+          id={formatId}
+          onChange={(event) => onFormatChange(event.currentTarget.value)}
+          value={format}
+        >
+          {formatOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </div>
     </div>
     {compress ? (
-      <details className="outopts">
-        <summary>
-          <ChevronRight aria-hidden="true" className="chev" />
-          <span className="lab">Options</span>
-          {compress.format ? <span className="sumv">{compress.format}</span> : null}
-          {compress.format && compress.summary ? <span className="sumv">·</span> : null}
-          {compress.summary ? (
-            <span className="sumv">
-              {typeof compress.summary === "string"
-                ? compress.summary.replaceAll(" · ", HEADER_SUMMARY_SEPARATOR)
-                : compress.summary}
-            </span>
-          ) : null}
-          {compress.timing ? (
-            <span className="tm">
-              <span className="t">{compress.timing}</span>
-            </span>
-          ) : null}
-        </summary>
-        <div className="outopts-body">
+      <Drawer
+        bodyClassName="optsbody"
+        className="optsblock outopts"
+        label="Options"
+        labelIcon={<SlidersHorizontal aria-hidden="true" className="tune" />}
+        readouts={
+          <>
+            {compress.format ? <DrawerReadout>{compress.format}</DrawerReadout> : null}
+            {compress.summary ? <DrawerReadout>{compress.summary}</DrawerReadout> : null}
+            {compress.timing ? <DrawerReadout time>{compress.timing}</DrawerReadout> : null}
+          </>
+        }
+      >
+        <div className="optsgrid">
           {compress.formatOptions?.length && compress.onFormatChange ? (
             <OutputField label={compress.formatLabel || "Type"} labelInfo={compress.formatInfo}>
               <select
                 aria-label={compress.formatLabel || "Type"}
-                className="select"
+                className="select mono"
                 disabled={disabled}
                 id={compress.formatId}
                 onChange={(event) => compress.onFormatChange?.(event.currentTarget.value)}
@@ -142,7 +143,7 @@ const OutputCard = ({
           ) : null}
           {compress.children}
         </div>
-      </details>
+      </Drawer>
     ) : null}
     {action}
   </div>

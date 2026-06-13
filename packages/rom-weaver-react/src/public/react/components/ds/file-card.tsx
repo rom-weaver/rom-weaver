@@ -1,41 +1,40 @@
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down.js";
-import Trash2 from "lucide-react/dist/esm/icons/trash-2.js";
+import Crosshair from "lucide-react/dist/esm/icons/crosshair.js";
+import X from "lucide-react/dist/esm/icons/x.js";
 import type { CSSProperties, ReactNode, Ref } from "react";
 
 /**
- * Resolved-file card for every workflow's input rows. The name row leads with
- * identity — a static index badge for ROM inputs, or a drag handle (supplied
- * as `handle`) for reorderable patches — and ends with the remove button, so
- * every control sits inside the card with a full-size touch target. The name
- * area and collapsible sections (extraction tree, checksums, fixes) are
- * supplied as children.
+ * Loom file card for every workflow's input rows. The header is two columns:
+ * the name (with its size·type sub-line) on the left and the action buttons
+ * (drag handle / remove) on the right; the collapsible drawers (extraction
+ * tree, checksums, options) follow as children. Verdict borders (ok / warn /
+ * bad) belong to patches; ROM cards keep the plain seam border.
  */
 
 const join = (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(" ");
 
-type FileState = "ok" | "bad";
+type FileState = "ok" | "bad" | "warn";
 
-/** Clear/remove button at the trailing edge of the card's name row. */
+/** Clear/remove button in the card's action column. */
 const RemoveButton = ({ onClick, label }: { onClick: () => void; label: string }) => (
   <button aria-label={label} className="rm" onClick={onClick} title={label} type="button">
-    <Trash2 aria-hidden="true" />
+    <X aria-hidden="true" />
   </button>
 );
 
-/** "Apply patch to" target selector pill shown beneath a patch's name. */
+/** "Apply patch to" target group shown on a patch's meta line. */
 const FileTargetPill = ({ label, bad, onClick }: { label: ReactNode; bad?: boolean; onClick?: () => void }) => (
-  <div className={join("ptgt-row", bad && "bad")}>
-    <button
-      aria-label="Apply patch to"
-      className={join("ptgt-sel", bad && "bad")}
-      disabled={!onClick}
-      onClick={onClick}
-      type="button"
-    >
-      <span className="ptgt-name">{label}</span>
-      <ChevronDown aria-hidden="true" className="ptgt-chev" />
-    </button>
-  </div>
+  <span className={join("target-grp", bad && "bad")}>
+    <Crosshair aria-hidden="true" />
+    {onClick ? (
+      <button aria-label="Apply patch to" className="meta-target-select mono ptgt-sel" onClick={onClick} type="button">
+        <span className="ptgt-name">{label}</span>
+        <ChevronDown aria-hidden="true" className="ptgt-chev" />
+      </button>
+    ) : (
+      <span className="meta-target-static mono">{label}</span>
+    )}
+  </span>
 );
 
 const FileCard = ({
@@ -51,6 +50,7 @@ const FileCard = ({
   className,
   style,
   name,
+  meta,
   target,
   children,
 }: {
@@ -60,30 +60,42 @@ const FileCard = ({
   hideName?: boolean;
   onRemove?: () => void;
   removeLabel?: string;
-  /** Mark this as a patch row (adjusts gutter-rail extents). */
+  /** Mark this as a patch row (reorderable unit). */
   patch?: boolean;
-  /** Left-rail drag handle for reorderable rows; takes precedence over the index badge. */
+  /** Drag handle button for reorderable rows, rendered in the action column. */
   handle?: ReactNode;
   rootRef?: Ref<HTMLDivElement>;
   className?: string;
   style?: CSSProperties;
   name: ReactNode;
+  /** size · format sub-line under the name (`.card-meta` content). */
+  meta?: ReactNode;
   target?: ReactNode;
   children?: ReactNode;
 }) => (
-  <div className={join("file", state, inputMatch && "im", patch && "patch", className)} ref={rootRef} style={style}>
+  <div className={join("card", state, inputMatch && "im", patch && "grabbable", className)} ref={rootRef} style={style}>
     {hideName ? (
       onRemove ? (
         <RemoveButton label={removeLabel} onClick={onRemove} />
       ) : null
     ) : (
-      <div className="file-name">
-        {handle ?? (typeof index === "number" ? <span className="fidx">{index}</span> : null)}
-        <div className="file-name-main">
+      <div className="card-top">
+        <div className="card-name">
+          {typeof index === "number" ? <span className="sr-only">{index}</span> : null}
           {name}
-          {target}
+          {meta || target ? (
+            <span className="card-meta">
+              {target}
+              {meta}
+            </span>
+          ) : null}
         </div>
-        {onRemove ? <RemoveButton label={removeLabel} onClick={onRemove} /> : null}
+        <div className="card-actions">
+          <div className="card-btns">
+            {handle}
+            {onRemove ? <RemoveButton label={removeLabel} onClick={onRemove} /> : null}
+          </div>
+        </div>
       </div>
     )}
     {children}

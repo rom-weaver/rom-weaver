@@ -1,13 +1,13 @@
-import ChevronRight from "lucide-react/dist/esm/icons/chevron-right.js";
 import { getBaseFileName } from "../../../../lib/input/path-utils.ts";
 import { createTiming, formatTiming } from "../../../../lib/progress/timing.ts";
 import { formatByteSize } from "../../../../presentation/workflow-presentation.ts";
+import { Drawer, DrawerReadout } from "./drawer.tsx";
 
 /**
- * Nested-extraction view. When a ROM/patch came from one or more archives, the
- * final extracted file is shown on its own line and the full archive chain (with
- * sizes, ratio, and timings) lives in a collapsible section. A single,
- * non-nested file renders just its name. Shared by every workflow's file card.
+ * Nested-extraction view. The extracted file leads as the card's name line;
+ * when it came out of one or more archives, the full chain (sizes + timings)
+ * lives in a collapsible Extract drawer rendered as the loom tree. Shared by
+ * every workflow's file card.
  */
 
 const join = (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(" ");
@@ -70,23 +70,15 @@ const buildExtractionLevels = (
   return levels;
 };
 
-const Size = ({ label, rawBytes }: { label?: string; rawBytes?: string }) =>
-  label ? (
-    <span className="szv" title={rawBytes}>
-      {label}
-    </span>
-  ) : null;
-
-const Level = ({ level, depth, last }: { level: ExtractionLevel; depth: number; last: boolean }) => (
-  <div className={join("lvl", `d${depth}`, last && "last")}>
-    {depth > 0 ? <span className="tw">&#9492;</span> : null}
-    <span className="fn">{level.name}</span>
-    <span className="ldr" />
-    <span className="m">
-      <span className="msz">
-        <Size label={level.sizeLabel} rawBytes={level.rawBytes} />
+const TreeRow = ({ level, depth }: { level: ExtractionLevel; depth: number }) => (
+  <div className={join("tree-row", `d${depth}`)}>
+    {depth > 0 ? <span aria-hidden="true" className="tree-elbow" /> : null}
+    <span className="tree-name">{level.name}</span>
+    <span className="tree-meta">
+      <span className="tree-size" title={level.rawBytes}>
+        {level.sizeLabel || ""}
       </span>
-      <span className="mt">{level.timing}</span>
+      <span className="tree-time">{level.timing || ""}</span>
     </span>
   </div>
 );
@@ -105,17 +97,15 @@ const ExtractionTree = ({ levels, timing }: { levels: ExtractionLevel[]; timing?
   const last = levels[levels.length - 1];
   if (!last) return null;
 
+  const nameLine = (
+    <div className="nmline">
+      <span className="nm">{last.name}</span>
+    </div>
+  );
+
   // Raw, non-extracted inputs stay compact. Prepared single-level inputs still
   // show the extract summary so timing and metadata remain visible.
-  if (levels.length === 1 && !timing) {
-    return (
-      <div className="chain">
-        <div className="lvl d0 last">
-          <span className="fn">{last.name}</span>
-        </div>
-      </div>
-    );
-  }
+  if (levels.length === 1 && !timing) return nameLine;
 
   const first = levels[0];
   const sizeText =
@@ -127,26 +117,24 @@ const ExtractionTree = ({ levels, timing }: { levels: ExtractionLevel[]; timing?
 
   return (
     <>
-      <div className="chain">
-        <div className="lvl d0 last">
-          <span className="fn">{last.name}</span>
+      {nameLine}
+      <Drawer
+        bodyClassName="taskbody"
+        className="extract-d"
+        label="Extract"
+        readouts={
+          <>
+            {sizeText ? <DrawerReadout>{sizeText}</DrawerReadout> : null}
+            {timing ? <DrawerReadout time>{timing}</DrawerReadout> : null}
+          </>
+        }
+      >
+        <div className="tree mono">
+          {levels.map((level, index) => (
+            <TreeRow depth={index} key={`${index}:${level.name}`} level={level} />
+          ))}
         </div>
-      </div>
-      <details className="cks extract-d">
-        <summary className="cks-summary">
-          <ChevronRight aria-hidden="true" className="chev" />
-          <span className="lab">Extract</span>
-          {sizeText ? <span className="ext-size">{sizeText}</span> : null}
-          <span className="tm">{timing ? <span className="t">{timing}</span> : null}</span>
-        </summary>
-        <div className="cks-rows">
-          <div className="chain">
-            {levels.map((level, index) => (
-              <Level depth={index} key={`${index}:${level.name}`} last={index === levels.length - 1} level={level} />
-            ))}
-          </div>
-        </div>
-      </details>
+      </Drawer>
     </>
   );
 };
@@ -184,15 +172,14 @@ const LegacyExtractionLabel = ({
   );
 };
 
-const ExtractPanel = ({
-  decompressionTimeMs,
+/** The card name line (plus the legacy sr-only metadata span tests read). */
+const ExtractName = ({
   fileName,
   fileSize,
   legacyArchiveClassName = "rom-weaver-patch-stack-archive",
   legacyFileClassName,
   parentCompressions,
-  timing,
-}: ExtractPanelProps) => (
+}: Omit<ExtractPanelProps, "decompressionTimeMs" | "timing">) => (
   <>
     {legacyFileClassName ? (
       <LegacyExtractionLabel
@@ -203,18 +190,81 @@ const ExtractPanel = ({
         size={fileSize}
       />
     ) : null}
-    <ExtractionTree
-      levels={buildExtractionLevels(fileName, fileSize, parentCompressions)}
-      timing={timing ?? formatExtractionElapsedMs(decompressionTimeMs)}
+    <div className="nmline">
+      <span className="nm">{getBaseFileName(fileName) || fileName}</span>
+    </div>
+  </>
+);
+
+/** Just the Extract drawer (no name line) — for cards that render the name separately. */
+const ExtractDrawer = ({ decompressionTimeMs, fileName, fileSize, parentCompressions, timing }: ExtractPanelProps) => {
+  const levels = buildExtractionLevels(fileName, fileSize, parentCompressions);
+  const resolvedTiming = timing ?? formatExtractionElapsedMs(decompressionTimeMs);
+  if (levels.length <= 1 && !resolvedTiming) return null;
+  const first = levels[0];
+  const last = levels[levels.length - 1];
+  if (!last) return null;
+  const sizeText =
+    levels.length === 1
+      ? (last.sizeLabel ?? "")
+      : first?.sizeLabel && last.sizeLabel
+        ? `${first.sizeLabel} → ${last.sizeLabel}${formatRatio(first, last)}`
+        : "";
+  return (
+    <Drawer
+      bodyClassName="taskbody"
+      className="extract-d"
+      label="Extract"
+      readouts={
+        <>
+          {sizeText ? <DrawerReadout>{sizeText}</DrawerReadout> : null}
+          {resolvedTiming ? <DrawerReadout time>{resolvedTiming}</DrawerReadout> : null}
+        </>
+      }
+    >
+      <div className="tree mono">
+        {levels.map((level, index) => (
+          <TreeRow depth={index} key={`${index}:${level.name}`} level={level} />
+        ))}
+      </div>
+    </Drawer>
+  );
+};
+
+const ExtractPanel = ({
+  decompressionTimeMs,
+  fileName,
+  fileSize,
+  legacyArchiveClassName = "rom-weaver-patch-stack-archive",
+  legacyFileClassName,
+  parentCompressions,
+  timing,
+}: ExtractPanelProps) => (
+  <>
+    <ExtractName
+      fileName={fileName}
+      fileSize={fileSize}
+      legacyArchiveClassName={legacyArchiveClassName}
+      legacyFileClassName={legacyFileClassName}
+      parentCompressions={parentCompressions}
+    />
+    <ExtractDrawer
+      decompressionTimeMs={decompressionTimeMs}
+      fileName={fileName}
+      fileSize={fileSize}
+      parentCompressions={parentCompressions}
+      timing={timing}
     />
   </>
 );
 
 export {
   buildExtractionLevels,
+  ExtractDrawer,
   type ExtractionLevel,
   type ExtractionParentLevel,
   ExtractionTree,
+  ExtractName,
   ExtractPanel,
   type ExtractPanelProps,
 };

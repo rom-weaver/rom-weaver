@@ -81,7 +81,7 @@ const Modal = ({
         </div>
         {headerActions ? <span className="mh-sp" /> : null}
         {headerActions}
-        <button aria-label="Close" className="iconbtn" onClick={onClose} type="button">
+        <button aria-label="Close" className="dlg-x" onClick={onClose} type="button">
           <X aria-hidden="true" />
         </button>
       </div>

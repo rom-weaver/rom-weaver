@@ -4,10 +4,9 @@ import X from "lucide-react/dist/esm/icons/x.js";
 import type { ReactNode } from "react";
 
 /**
- * Design-system feedback primitives (notices, progress bars, the run/download
- * button). Pure presentational components used by every workflow so progress
- * and status rendering is never duplicated. Styling comes from the semantic
- * classes in design-system.css.
+ * Loom feedback primitives: notices, the weave meter, the recessed progress
+ * panels, and the run/download button. Pure presentational components used by
+ * every workflow so progress and status rendering is never duplicated.
  */
 
 const join = (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(" ");
@@ -33,9 +32,9 @@ const Notice = ({
   return (
     <div className={join("notice", level, className)} id={id} role={level === "error" ? "alert" : "status"}>
       <Icon aria-hidden="true" />
-      <span className="notice-copy">{children}</span>
+      <span className="body notice-copy">{children}</span>
       {onDismiss ? (
-        <button aria-label={dismissLabel} className="notice-x" onClick={onDismiss} title={dismissLabel} type="button">
+        <button aria-label={dismissLabel} className="x notice-x" onClick={onDismiss} title={dismissLabel} type="button">
           <X aria-hidden="true" />
         </button>
       ) : null}
@@ -44,8 +43,9 @@ const Notice = ({
 };
 
 /**
- * Thin progress track + bar. Determinate when `percent` is a number,
- * indeterminate when `indeterminate` is set (a sliver slides across).
+ * The weave meter: a recessed track whose fill carries the moving weave sheen
+ * while live. Determinate when `percent` is a number, indeterminate otherwise
+ * (a sliver bounces across).
  */
 const ProgressTrack = ({
   percent,
@@ -58,18 +58,17 @@ const ProgressTrack = ({
 }) => {
   const width =
     typeof percent === "number" && Number.isFinite(percent) ? `${Math.max(0, Math.min(100, percent))}%` : undefined;
-  // No usable percent → animate (indeterminate sliver) rather than fall back to the static default bar width.
   const isIndeterminate = indeterminate || width === undefined;
   return (
-    <div className={join("track", isIndeterminate && "indet", className)}>
-      <div className="bar" style={isIndeterminate ? undefined : { width }} />
+    <div aria-hidden="true" className={join("meter live", isIndeterminate && "indet", className)}>
+      <div className="fill" style={isIndeterminate ? undefined : { width }} />
     </div>
   );
 };
 
 /**
- * Labeled progress line: a caption + value above a {@link ProgressTrack}.
- * `value` is the trailing readout (e.g. "64%" or "working").
+ * Labeled progress: the stage label above the meter, with the percentage (or
+ * status word) as the accented readout at the panel's right edge.
  */
 const InlineProgress = ({
   label,
@@ -89,37 +88,74 @@ const InlineProgress = ({
   id?: string;
   onCancel?: () => void;
   cancelLabel?: string;
-}) => (
-  <div className={join("iprog-wrap", onCancel && "cancelable")} id={id}>
-    <div className={join("iprog", tight && "tight")}>
+}) => {
+  const progress = (
+    <div className={join("prog", tight && "tight")}>
       <div className="lab">
-        <span>{label}</span>
-        {value ? <span className="v">{value}</span> : null}
+        <span className="what">{label}</span>
       </div>
       <ProgressTrack indeterminate={indeterminate} percent={percent} />
+      <div className="sub mono">
+        <span />
+        <span className="run-pct">{value ?? ""}</span>
+      </div>
     </div>
-    {onCancel ? (
-      <button aria-label={cancelLabel} className="progress-cancel" onClick={onCancel} title={cancelLabel} type="button">
-        <X aria-hidden="true" />
-      </button>
-    ) : null}
-  </div>
-);
+  );
+  if (!onCancel) {
+    return (
+      <div className="iprog-wrap" id={id}>
+        {progress}
+      </div>
+    );
+  }
+  return (
+    <div className="prog-panel runprog" id={id}>
+      {progress}
+      <div className="prog-actions">
+        <button aria-label={cancelLabel} className="cancel" onClick={onCancel} title={cancelLabel} type="button">
+          <X aria-hidden="true" />
+        </button>
+      </div>
+    </div>
+  );
+};
 
 type FileProgressProps = Parameters<typeof InlineProgress>[0];
 
-/** {@link InlineProgress} wrapped in a contained card, for in-row file work. */
-const FileProgress = (props: FileProgressProps) => (
-  <div className="fileprog">
-    <InlineProgress {...props} />
+/** {@link InlineProgress} in the bordered, recessed instrument panel, for in-row file work. */
+const FileProgress = ({ onCancel, cancelLabel = "Cancel operation", id, ...progress }: FileProgressProps) => (
+  <div aria-busy="true" className="prog-panel fileprog" id={id}>
+    <div className="prog">
+      <div className="lab">
+        <span className="what">{progress.label}</span>
+      </div>
+      <ProgressTrack indeterminate={progress.indeterminate} percent={progress.percent} />
+      <div className="sub mono">
+        <span />
+        <span className="run-pct">{progress.value ?? "—"}</span>
+      </div>
+    </div>
+    {onCancel ? (
+      <div className="prog-actions">
+        <button
+          aria-label={cancelLabel}
+          className="cancel stage-cancel"
+          onClick={onCancel}
+          title={cancelLabel}
+          type="button"
+        >
+          <X aria-hidden="true" />
+        </button>
+      </div>
+    ) : null}
   </div>
 );
 
 type DownloadMeta = { format?: string; name?: string; ratio?: string; savedSize?: string; size?: string };
 
 /**
- * The primary action button. Renders the uppercase action by default, or a
- * normal-case download summary (format · size) when `download` is provided.
+ * The primary action button. Renders the uppercase action by default, or the
+ * download summary (kind · size · detail) when `download` is provided.
  */
 const RunButton = ({
   onClick,
@@ -138,16 +174,22 @@ const RunButton = ({
   id?: string;
   type?: "button" | "submit";
 }) => (
-  <button className={join("run", download && "dl")} disabled={disabled} id={id} onClick={onClick} type={type}>
+  <button
+    className={join("btn primary run", download && "download-btn dl")}
+    disabled={disabled}
+    id={id}
+    onClick={onClick}
+    type={type}
+  >
     {icon}
     {download ? (
       <>
         <span className="sr-only">Download </span>
-        {download.format ? <span className="dl-fmt">{download.format}</span> : null}
-        {download.name ? <span className="dl-name">{download.name}</span> : null}
+        {download.format ? <span className="dl-kind mono dl-fmt">{download.format}</span> : null}
+        {download.name ? <span className="dl-delta mono dl-name">{download.name}</span> : null}
         {download.size ? (
-          <span className="dl-sz">
-            &middot; {download.size}
+          <span className="dl-size mono dl-sz">
+            {download.size}
             {download.savedSize ? <> &middot; saved {download.savedSize}</> : null}
             {download.ratio ? <> &middot; {download.ratio}</> : null}
           </span>

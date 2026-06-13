@@ -1621,3 +1621,18 @@ html.vt-theme [style*="view-transition-name"], html.vt-flat [style*="view-transi
 /* trace lines render as buttons (keyboard-copyable) — strip the UA chrome so
    they read as the prototype's plain rows */
 .rw-app .tracelog .ln { appearance: none; display: flex; width: max-content; min-width: 100%; border-inline: 0; border-block-start: 0; background: transparent; color: inherit; font: inherit; text-align: start; padding-inline: 0; }
+
+/* error-level notice (the loom prototype only needed warn; the app surfaces
+   runtime errors through the same notice shape) */
+.rw-app .notice.error { color: var(--ink); background: color-mix(in oklab, var(--fault) 9%, var(--plate-2)); border: 1px solid color-mix(in oklab, var(--fault) 40%, var(--seam)); }
+.rw-app .notice.error svg, .rw-app .notice.error b { color: var(--fault); }
+
+/* confirmation dialog body (React modal card) */
+.rw-modal .confirm-card { width: min(440px, 100%); padding: 16px; }
+.rw-modal .confirm-card .c-title { display: flex; align-items: center; gap: 9px; font-size: .95rem; font-weight: 700; color: var(--ink); }
+.rw-modal .confirm-card .c-title svg { width: 19px; height: 19px; color: var(--care); flex: none; }
+.rw-modal .confirm-card .c-body { margin: 10px 0 16px; font-size: .9rem; line-height: 1.55; color: var(--ink-2); }
+.rw-modal .confirm-card .c-actions { display: flex; align-items: center; justify-content: flex-end; gap: 9px; }
+
+/* checksum rows render as real buttons (whole row = the copy control) */
+.rw-app button.ck { appearance: none; text-align: start; width: 100%; font: inherit; }

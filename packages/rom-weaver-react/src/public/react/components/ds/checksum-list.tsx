@@ -1,19 +1,20 @@
 import Check from "lucide-react/dist/esm/icons/check.js";
-import ChevronRight from "lucide-react/dist/esm/icons/chevron-right.js";
 import Copy from "lucide-react/dist/esm/icons/copy.js";
 import X from "lucide-react/dist/esm/icons/x.js";
 import type { ReactNode } from "react";
+import { Drawer, DrawerMark, DrawerReadout } from "./drawer.tsx";
 import { useClipboardCopy } from "./use-clipboard-copy.ts";
 
 /**
- * Collapsible checksum / patch-info section. Rows copy to the clipboard on
- * click with a brief confirmation. Shared by ROM inputs, patch info, and
- * create-output verification so the copy behaviour lives in one place.
+ * Checksum drawer + rows in the loom readout language. The whole row IS the
+ * copy control (role=button), with the copy glyph as decoration — no nested
+ * interactive elements. Shared by ROM inputs, patch info, and create-output
+ * verification so the copy behaviour lives in one place.
  */
 
 const join = (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(" ");
 
-/** A single label/value checksum row. Clicking anywhere copies `copyValue`. */
+/** A single label/value checksum row. Click (or Enter/Space) copies `copyValue`. */
 const ChecksumRow = ({
   label,
   value,
@@ -29,22 +30,18 @@ const ChecksumRow = ({
   const { copied, copy } = useClipboardCopy(text);
 
   return (
-    <dl className={join("ck", bad && "bad")} onClick={copy}>
-      <dt>{label}</dt>
-      <dd>{value}</dd>
-      <button
-        aria-label={`Copy ${typeof label === "string" ? label : "value"}`}
-        className={join("copy", copied && "copied")}
-        onClick={(event) => {
-          event.stopPropagation();
-          copy();
-        }}
-        title="Copy"
-        type="button"
-      >
+    <button
+      aria-label={`Copy ${typeof label === "string" ? label : "value"}`}
+      className={join("ck mono", bad && "bad")}
+      onClick={copy}
+      type="button"
+    >
+      <span className="ck-k">{label}</span>
+      <span className="ck-v">{value}</span>
+      <span aria-hidden="true" className={join("copy", copied && "copied")}>
         {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
-      </button>
-    </dl>
+      </span>
+    </button>
   );
 };
 
@@ -69,47 +66,30 @@ const ChecksumList = ({
   onToggle?: (open: boolean) => void;
   lead?: ReactNode;
   children: ReactNode;
-}) => {
-  const controlledOpen = open ?? defaultOpen;
-  const hasSummaryMeta = !!(timing || match);
-  return (
-    <details
-      className="cks"
-      // `toggle` fires whenever the `open` attribute changes — including when React
-      // re-asserts the controlled value. Only forward genuine changes so a controlled
-      // `open` + state-toggling handler can't feed back into an open/close oscillation.
-      onToggle={
-        onToggle
-          ? (event) => {
-              if (event.currentTarget.open !== controlledOpen) onToggle(event.currentTarget.open);
-            }
-          : undefined
-      }
-      open={controlledOpen}
-    >
-      <summary className="cks-summary">
-        <ChevronRight aria-hidden="true" className="chev" />
-        <span className="lab">{label}</span>
-        {sublabel ? <span className="sublab">{sublabel}</span> : null}
-        {hasSummaryMeta ? (
-          <span className="tm">
-            {timing ? <span className="t">{timing}</span> : null}
-            {match ? (
-              <span
-                className={join("cks-match", !match.ok && "bad")}
-                title={match.ok ? "Verified" : "Verification failed"}
-              >
-                {match.ok ? <Check aria-hidden="true" /> : <X aria-hidden="true" />}
-                {match.label ? <span>{match.label}</span> : null}
-              </span>
-            ) : null}
-          </span>
-        ) : null}
-      </summary>
-      {lead}
-      <div className="cks-rows">{children}</div>
-    </details>
-  );
-};
+}) => (
+  <Drawer
+    defaultOpen={defaultOpen}
+    label={label}
+    onToggle={onToggle}
+    open={open}
+    readouts={
+      sublabel || timing || match ? (
+        <>
+          {sublabel ? <DrawerReadout muted>{sublabel}</DrawerReadout> : null}
+          {timing ? <DrawerReadout time>{timing}</DrawerReadout> : null}
+          {match ? (
+            <DrawerMark ok={match.ok} title={match.ok ? "Verified" : "Verification failed"}>
+              {match.ok ? <Check aria-hidden="true" /> : <X aria-hidden="true" />}
+              {match.label ? <span className="sr-only">{match.label}</span> : null}
+            </DrawerMark>
+          ) : null}
+        </>
+      ) : undefined
+    }
+  >
+    {lead}
+    {children}
+  </Drawer>
+);
 
 export { ChecksumList, ChecksumRow };

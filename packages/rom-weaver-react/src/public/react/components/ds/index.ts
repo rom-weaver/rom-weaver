@@ -11,7 +11,15 @@ export {
   getOutputCompressionFormatLabel,
   type OutputCompressionPanelConfig,
 } from "./compress-panel.tsx";
-export { type ExtractionLevel, ExtractionTree, ExtractPanel, type ExtractPanelProps } from "./extraction-tree.tsx";
+export { Drawer, DrawerMark, DrawerReadout } from "./drawer.tsx";
+export {
+  ExtractDrawer,
+  type ExtractionLevel,
+  ExtractionTree,
+  ExtractName,
+  ExtractPanel,
+  type ExtractPanelProps,
+} from "./extraction-tree.tsx";
 export {
   type DownloadMeta,
   FileProgress,
@@ -24,7 +32,7 @@ export {
 } from "./feedback.tsx";
 export { FileCard, type FileState, FileTargetPill, RemoveButton } from "./file-card.tsx";
 export { FixesPanel, type FixesPanelProps, type TrimFixDetails } from "./fixes-panel.tsx";
-export { DropZone, InfoPopover, StepSection } from "./layout.tsx";
+export { DropZone, InfoPopover, NeedsInput, StepSection } from "./layout.tsx";
 export { ConfirmDialog, Modal, ModalShell } from "./modal.tsx";
 export {
   type FormatOption,
