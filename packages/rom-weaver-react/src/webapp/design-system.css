@@ -1696,3 +1696,20 @@ html.vt-theme [style*="view-transition-name"], html.vt-flat [style*="view-transi
 @media (max-width: 380px) {
   .rw-app .drop.hero .fmt { font-size: .56rem; padding: 2px 4px; }
 }
+
+/* ── form plate ──
+   Each workflow form sits on a mounted plate: the loom bench's seam-bordered
+   panel lifted off the chassis (borders-only depth, like cards and dialogs).
+   The drop veil shares the same rounded frame; phones go edge-to-edge. */
+.rw-app .panel.workflow {
+  border: 1px solid var(--seam);
+  border-radius: var(--r-l);
+  background: var(--plate);
+  margin-block-start: 6px;
+}
+/* steps inherit the plate's rounding so hover/tint states don't poke corners */
+.rw-app .panel.workflow .step:first-child { border-start-start-radius: inherit; border-start-end-radius: inherit; }
+.rw-app .panel.workflow .step:last-child { border-end-start-radius: inherit; border-end-end-radius: inherit; padding-block-end: 4px; }
+@media (max-width: 560px) {
+  .rw-app .panel.workflow { margin-inline: -8px; border-inline: 0; border-radius: 0; }
+}

@@ -198,7 +198,10 @@ const ExtractName = ({
       />
     ) : null}
     <div className="nmline">
-      <span className="nm" title={fileName}>
+      {/* assistive tech (and text-based assertions) get the full filename;
+          the visible face drops the extension — the format badge carries it */}
+      <span className="sr-only">{fileName}</span>
+      <span aria-hidden="true" className="nm" title={fileName}>
         {getDisplayName(fileName)}
       </span>
     </div>

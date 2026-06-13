@@ -7,6 +7,7 @@ import { getWorkbenchActivity, subscribeWorkbenchActivity } from "../lib/activit
 import { readDataTransferFiles } from "../lib/input/dropped-files.ts";
 import { preloadBrowserRuntime } from "../platform/browser/browser-api.ts";
 import { ApplyBandaidIcon } from "../public/react/components/apply-bandaid-icon.tsx";
+import { runFlatViewTransition } from "../public/react/components/ds/flat-transition.ts";
 import { ConfirmDialog, Modal } from "../public/react/components/ds/index.ts";
 import type { PageFileDrop } from "../public/react/index.tsx";
 import { ApplyPatchForm, CreatePatchForm, RomWeaverSettingsProvider, TrimPatchForm } from "../public/react/index.tsx";
@@ -102,39 +103,9 @@ const prefersReducedMotion = () =>
   typeof window.matchMedia === "function" &&
   window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-/* Re-showing a hidden panel restarts its CSS entry animations (display:none
-   resets them) — lock every entry-animatable element inline BEFORE the
-   suppression class comes off, exactly like the prototype, so a tab switch
-   never replays card-in/panel-in as a flicker. Fresh elements from later
-   re-renders still animate in. */
-const lockEntryAnimations = () => {
-  for (const element of document.querySelectorAll<HTMLElement>(
-    ".workflow-body, .card, .notice, .result, .prog-panel, .fault",
-  )) {
-    element.style.animation = "none";
-  }
-};
-
-/* Mode switches crossfade flat (vt-flat suppresses per-element morph names —
-   panels have no real continuity across modes). The controller renders
-   synchronously (flushSync), so the update lands inside the transition. */
-const selectViewWithTransition = (select: () => void) => {
-  const root = document.documentElement;
-  if (typeof document.startViewTransition !== "function" || prefersReducedMotion()) {
-    select();
-    lockEntryAnimations();
-    return;
-  }
-  root.classList.add("vt-flat", "vt-quiet");
-  const transition = document.startViewTransition(select);
-  transition.ready.catch(() => undefined);
-  const clear = () => {
-    // lock first — removing vt-quiet would otherwise start the suppressed animations
-    lockEntryAnimations();
-    root.classList.remove("vt-flat", "vt-quiet");
-  };
-  transition.finished.then(clear, clear);
-};
+/* Mode switches crossfade flat — shared with the forms' empty-bench
+   transition so all layout swaps use one mechanism. */
+const selectViewWithTransition = (select: () => void) => runFlatViewTransition(select);
 
 const DropVeil = () => {
   const localizer = useUiLocalizer();

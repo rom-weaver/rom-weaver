@@ -28,16 +28,17 @@ function PatcherPrimaryAction({
 }) {
   const state = useSyncExternalStore(controller.subscribe, controller.getState, controller.getState);
   if (state.pendingDownloadFileName && !state.applyButton.progress && !state.applyButton.loading) {
+    // The button shows the output FORMAT (the loom dl-kind), not the filename —
+    // the name already fills the output field above; the full name stays on
+    // the accessible label.
+    const extension = (state.pendingDownloadFileName.match(/\.([^.]+)$/)?.[1] || "").toLowerCase();
+    const kind = state.downloadSummary?.format || extension || "file";
     return (
       <RunButton
+        ariaLabel={`Download ${state.pendingDownloadFileName}`}
         disabled={state.applyButton.disabled}
         download={{
-          format: state.pendingDownloadFileName
-            ? "Patched"
-            : state.downloadSummary?.format
-              ? `Patched ${state.downloadSummary.format}`
-              : "Patched",
-          name: state.pendingDownloadFileName || undefined,
+          format: `Patched ${kind}`,
           size:
             state.downloadSummary?.size && state.downloadSummary?.ratio
               ? `${state.downloadSummary.size} (${state.downloadSummary.ratio})`

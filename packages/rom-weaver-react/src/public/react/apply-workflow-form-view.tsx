@@ -7,6 +7,7 @@ import { probeApplyArchiveHasRom } from "./apply-archive-probe.ts";
 import { ApplyPatchListStep } from "./apply-patch-list-step.tsx";
 import { buildOutputCompressionPanel, getOutputCompressionFormatLabel } from "./components/ds/compress-panel.tsx";
 import { Notice } from "./components/ds/feedback.tsx";
+import { useFlatTransitionFlag } from "./components/ds/flat-transition.ts";
 import { InfoPopover, NeedsInput, StepSection } from "./components/ds/layout.tsx";
 import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
 import { WorkflowOutputStep } from "./components/ds/workflow-output-step.tsx";
@@ -384,7 +385,9 @@ function ApplyWorkflowFormView({
       if (patchFiles.length) uiController.providePatchInputFiles?.(patchFiles);
     });
   };
-  const workflowEmpty = romInputs.length === 0 && patches.length === 0;
+  // The empty bench fills (or clears) inside a flat crossfade — the 0x01 hero
+  // shrinking into the add-row otherwise snaps.
+  const workflowEmpty = useFlatTransitionFlag(romInputs.length === 0 && patches.length === 0);
   // "Needs input" directives forward to the 0x01 unified picker.
   const openUnifiedPicker = () => document.getElementById("rom-weaver-input-file-unified")?.click();
 

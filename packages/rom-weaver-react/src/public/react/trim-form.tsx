@@ -24,6 +24,7 @@ import type { TrimWorkflowSourceState } from "../../types/trim-workflow.ts";
 import { useCandidateSelection } from "./candidate-selection.tsx";
 import { buildOutputCompressionPanel, getOutputCompressionFormatLabel } from "./components/ds/compress-panel.tsx";
 import { Notice } from "./components/ds/feedback.tsx";
+import { useFlatTransitionFlag } from "./components/ds/flat-transition.ts";
 import { InfoPopover, NeedsInput, StepSection } from "./components/ds/layout.tsx";
 import { ConfirmDialog } from "./components/ds/modal.tsx";
 import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
@@ -799,6 +800,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
 
   // "Needs input" directive forwards to the 0x01 unified picker.
   const openUnifiedPicker = () => document.getElementById("trim-builder-input-file-unified")?.click();
+  const trimSourceEmpty = useFlatTransitionFlag(!source);
   // The selvage status strip mirrors this workflow's job state.
   useEffect(() => {
     if (busy || trimQueued) setWorkbenchActivity({ state: "running" });
@@ -811,7 +813,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
       <UnifiedDropZone
         accept={getFileInputAcceptAttributes().unifiedRom}
         archiveHint={`archives (${ARCHIVE_INPUT_HINT})`}
-        big={!source}
+        big={trimSourceEmpty}
         disabled={uploadDisabled}
         formats={TRIM_HERO_FORMATS}
         id="trim-builder-row-unified-drop"
@@ -820,14 +822,14 @@ function TrimPatchForm(props: TrimPatchFormProps) {
         onFiles={handleUnifiedDrop}
         romHint={`roms (${TRIM_INPUT_HINT})`}
       />
-      {source ? null : (
+      {trimSourceEmpty ? (
         <StepSection num="0x02" title="ROM">
           <NeedsInput onClick={openUnifiedPicker}>
             Add a ROM in <b className="hexref mono">0x01</b> above
           </NeedsInput>
         </StepSection>
-      )}
-      {source ? (
+      ) : null}
+      {trimSourceEmpty ? null : (
         <>
           <WorkflowRomInputStep
             id="trim-builder-row-source"
@@ -886,7 +888,7 @@ function TrimPatchForm(props: TrimPatchFormProps) {
             title="ROM"
           />
         </>
-      ) : null}
+      )}
       <WorkflowOutputStep
         action={
           <OutputRunAction

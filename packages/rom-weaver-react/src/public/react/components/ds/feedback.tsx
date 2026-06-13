@@ -175,6 +175,7 @@ const RunButton = ({
   icon,
   children,
   download,
+  ariaLabel,
   id,
   type = "button",
 }: {
@@ -183,10 +184,13 @@ const RunButton = ({
   icon?: ReactNode;
   children?: ReactNode;
   download?: DownloadMeta;
+  /** Accessible label (e.g. the full output filename behind a format-only face). */
+  ariaLabel?: string;
   id?: string;
   type?: "button" | "submit";
 }) => (
   <button
+    aria-label={ariaLabel}
     className={join("btn primary run", download && "download-btn dl")}
     disabled={disabled}
     id={id}

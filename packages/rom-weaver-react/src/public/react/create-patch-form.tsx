@@ -21,6 +21,7 @@ import type { CreateWorkflowSourceState } from "../../types/create-workflow.ts";
 import { useCandidateSelection } from "./candidate-selection.tsx";
 import { buildOutputCompressionPanel, getOutputCompressionFormatLabel } from "./components/ds/compress-panel.tsx";
 import { Notice } from "./components/ds/feedback.tsx";
+import { useFlatTransitionFlag } from "./components/ds/flat-transition.ts";
 import { InfoPopover, NeedsInput, StepSection } from "./components/ds/layout.tsx";
 import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
 import { OutputRunAction, WorkflowOutputStep } from "./components/ds/workflow-output-step.tsx";
@@ -114,8 +115,8 @@ const getCompletedDownloadMeta = ({
   rawSize?: number | null;
   size?: number | null;
 }) => ({
-  format: `.${patchType || getFileExtensionLabel(fileName).replace(/^\./, "") || "patch"}`,
-  name: fileName || undefined,
+  // format-only face — the filename already fills the output field above
+  format: `Patch .${patchType || getFileExtensionLabel(fileName).replace(/^\./, "") || "patch"}`,
   ratio: getCompressionRatioLabel(compression, size, rawSize),
   size: typeof size === "number" && Number.isFinite(size) ? formatByteSize(size) : undefined,
 });
@@ -982,7 +983,7 @@ function CreatePatchForm(props: CreatePatchFormProps) {
   };
 
   const createFileInputAccept = getFileInputAcceptAttributes();
-  const createSourcesEmpty = !(original || modified);
+  const createSourcesEmpty = useFlatTransitionFlag(!(original || modified));
   // "Needs input" directives forward to the 0x01 unified picker.
   const openUnifiedPicker = () => document.getElementById("patch-builder-input-file-unified")?.click();
   // The selvage status strip mirrors this workflow's job state.
