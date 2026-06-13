@@ -31,7 +31,7 @@ import { UnifiedDropZone } from "./components/ds/unified-drop-zone.tsx";
 import { OutputRunAction, WorkflowOutputStep } from "./components/ds/workflow-output-step.tsx";
 import { WorkflowRomInputStep } from "./components/ds/workflow-rom-input-step.tsx";
 import { buildCompressPanel } from "./compress-options.ts";
-import { ARCHIVE_FILE_EXTENSIONS, ROM_FILE_EXTENSIONS } from "./file-classification.ts";
+import { ARCHIVE_FILE_EXTENSIONS } from "./file-classification.ts";
 import { getFileInputAcceptAttributes } from "./file-input-accept";
 import { ARCHIVE_INPUT_HINT, TRIM_INPUT_HINT } from "./input-helper-text.ts";
 import { useInputSelectionHandler } from "./input-selection-handler.ts";
@@ -68,9 +68,13 @@ import {
 /** Format pills under the 0x01 hero — mirrors TrimInputKind (tail trims, xiso, GC/Wii scrub). */
 const TRIM_HERO_FORMATS = ["nds", "dsi", "gba", "3ds", "xiso", "iso", "gcm", "wbfs", "rvz"] as const;
 
-/** Full registry support, listed in the 0x01 info popover. */
+/** Trim-eligible formats only (Rust `TrimInputKind::from_path` + rvz-scrub
+ * candidates), listed in the 0x01 info popover — not the full ROM registry. */
 const TRIM_SUPPORTED_FILES = [
-  { extensions: ROM_FILE_EXTENSIONS, label: "ROMs" },
+  {
+    extensions: ["nds", "dsi", "srl", "gba", "3ds", "xiso", "xiso.iso", "iso", "gcm", "wbfs", "rvz"],
+    label: "Trimmable ROMs",
+  },
   { extensions: ARCHIVE_FILE_EXTENSIONS, label: "Archives & containers" },
 ] as const;
 
