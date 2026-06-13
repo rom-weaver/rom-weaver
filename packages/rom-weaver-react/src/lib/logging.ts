@@ -208,6 +208,10 @@ const configureLogger = (options: { level?: LogLevel | string | null; sink?: Log
   if ("sink" in options) globalLogSink = options.sink || null;
 };
 
+/** The console sink used when no custom sink is configured. Exported so a
+ * capturing sink (the in-app log viewer) can chain to it. */
+const getConsoleLogSink = (): LogSink => getDefaultConsoleSink();
+
 const getLoggerLevel = (): LogLevel => globalLogLevel;
 
 const formatLogRecord = (record: LogRecord): string =>
@@ -220,6 +224,7 @@ export {
   createLogger,
   emitTraceLog,
   formatLogRecord,
+  getConsoleLogSink,
   getLoggerLevel,
   isTraceLogEnabled,
   normalizeLogLevel,

@@ -1,21 +1,21 @@
 import ClipboardList from "lucide-react/dist/esm/icons/clipboard-list.js";
-import Github from "lucide-react/dist/esm/icons/github.js";
-import Heart from "lucide-react/dist/esm/icons/heart.js";
 import Moon from "lucide-react/dist/esm/icons/moon.js";
-import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw.js";
+import ScrollText from "lucide-react/dist/esm/icons/scroll-text.js";
 import Settings from "lucide-react/dist/esm/icons/settings.js";
 import Sun from "lucide-react/dist/esm/icons/sun.js";
 import Terminal from "lucide-react/dist/esm/icons/terminal.js";
 import X from "lucide-react/dist/esm/icons/x.js";
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { Localizer } from "../../presentation/localization/index.ts";
+import { useUiLocalizer } from "../../public/react/settings-context.tsx";
 import { createLogger } from "../logging.ts";
 import { useTheme } from "../theme.ts";
 
 /**
- * App-shell primitives: the top bar (wordmark, workflow tabs, theme toggle,
- * settings), the workflow tab list, the footer, and the update/wake-lock
- * banner. Composed by the redesigned webapp root.
+ * Loom workbench app-shell primitives: the masthead (brand, workflow mode
+ * rail, tool buttons), the reveal banners (update / wake-lock), and the
+ * selvage status strip. Composed by the webapp root.
  */
 
 const logger = createLogger("shell");
@@ -49,7 +49,15 @@ const useMobileDevToolsAvailable = () => {
   return available;
 };
 
-const WorkflowTabs = ({
+const supportsAnchoredThumb = () =>
+  typeof CSS !== "undefined" && typeof CSS.supports === "function" && CSS.supports("anchor-name", "--rw-tab");
+
+/**
+ * Workflow mode rail: tabs with a sliding thumb. Where CSS anchor positioning
+ * exists the thumb pins itself to the selected tab; otherwise a layout-effect
+ * measure positions it (and re-positions on resize / font swap).
+ */
+const ModeRail = ({
   tabs,
   current,
   onSelect,
@@ -57,35 +65,108 @@ const WorkflowTabs = ({
   tabs: WorkflowTab[];
   current: string;
   onSelect: (id: string) => void;
-}) => (
-  <div aria-label="Workflow" className="tabs" role="tablist">
-    {tabs.map((tab) => (
-      <button
-        aria-selected={tab.id === current}
-        className="tab"
-        key={tab.id}
-        onClick={() => onSelect(tab.id)}
-        role="tab"
-        type="button"
-      >
-        {tab.icon}
-        {tab.label}
-      </button>
-    ))}
-  </div>
-);
+}) => {
+  const railRef = useRef<HTMLDivElement | null>(null);
+  const thumbRef = useRef<HTMLSpanElement | null>(null);
+  const measuredOnceRef = useRef(false);
 
-const ThemeToggle = () => {
-  const { theme, toggleTheme } = useTheme();
+  useLayoutEffect(() => {
+    if (supportsAnchoredThumb()) return undefined;
+    const rail = railRef.current;
+    const thumb = thumbRef.current;
+    if (!(rail && thumb)) return undefined;
+    const position = (animate: boolean) => {
+      const selected = rail.querySelector<HTMLButtonElement>('.mode[aria-selected="true"]');
+      if (!selected) return;
+      if (!animate) thumb.style.transition = "none";
+      thumb.style.left = `${selected.offsetLeft}px`;
+      thumb.style.width = `${selected.offsetWidth}px`;
+      if (!animate) requestAnimationFrame(() => thumb.style.removeProperty("transition"));
+    };
+    position(measuredOnceRef.current);
+    measuredOnceRef.current = true;
+    const reposition = () => position(false);
+    window.addEventListener("resize", reposition);
+    document.fonts?.ready?.then(reposition).catch(() => undefined);
+    return () => window.removeEventListener("resize", reposition);
+  }, []);
+
+  const handleKeyDown = (event: React.KeyboardEvent) => {
+    const order = tabs.map((tab) => tab.id);
+    const currentIndex = order.indexOf(current);
+    let next = -1;
+    if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (currentIndex + 1) % order.length;
+    if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = (currentIndex + order.length - 1) % order.length;
+    if (event.key === "Home") next = 0;
+    if (event.key === "End") next = order.length - 1;
+    const nextId = next >= 0 ? order[next] : undefined;
+    if (nextId === undefined) return;
+    event.preventDefault();
+    onSelect(nextId);
+    railRef.current?.querySelector<HTMLButtonElement>(`.mode[data-mode="${nextId}"]`)?.focus();
+  };
+
   return (
-    <button
-      aria-label="Toggle light / dark theme"
-      className="iconbtn theme-toggle"
-      onClick={toggleTheme}
-      title="Toggle light / dark"
-      type="button"
-    >
-      {theme === "dark" ? <Sun aria-hidden="true" /> : <Moon aria-hidden="true" />}
+    <nav aria-label="Workflow mode" className="modes">
+      <div aria-orientation="horizontal" className="mode-rail" onKeyDown={handleKeyDown} ref={railRef} role="tablist">
+        <span aria-hidden="true" className="mode-thumb" ref={thumbRef} />
+        {tabs.map((tab) => (
+          <button
+            aria-selected={tab.id === current}
+            className="mode"
+            data-mode={tab.id}
+            key={tab.id}
+            onClick={() => onSelect(tab.id)}
+            role="tab"
+            tabIndex={tab.id === current ? 0 : -1}
+            type="button"
+          >
+            {tab.icon}
+            <span>{tab.label}</span>
+          </button>
+        ))}
+      </div>
+    </nav>
+  );
+};
+
+const reducedMotion = () =>
+  typeof window !== "undefined" &&
+  typeof window.matchMedia === "function" &&
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/**
+ * Theme toggle with the loom circle-wipe: the new theme clip-reveals from the
+ * button via a view transition. The wipe itself is the CSS `theme-wipe`
+ * keyframe; this only feeds the origin custom properties and flips the theme.
+ */
+const ThemeToggle = ({ localizer }: { localizer: Localizer }) => {
+  const { theme, toggleTheme } = useTheme();
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const label = localizer.message(theme === "dark" ? "ui.theme.toLight" : "ui.theme.toDark");
+  const handleClick = () => {
+    const root = document.documentElement;
+    if (typeof document.startViewTransition !== "function" || reducedMotion()) {
+      toggleTheme();
+      return;
+    }
+    const rect = buttonRef.current?.getBoundingClientRect();
+    const cx = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
+    const cy = rect ? rect.top + rect.height / 2 : 0;
+    const radius = Math.hypot(Math.max(cx, window.innerWidth - cx), Math.max(cy, window.innerHeight - cy));
+    root.style.setProperty("--wipe-x", `${cx}px`);
+    root.style.setProperty("--wipe-y", `${cy}px`);
+    root.style.setProperty("--wipe-r", `${radius}px`);
+    root.classList.add("vt-theme");
+    const transition = document.startViewTransition(() => toggleTheme());
+    transition.ready.catch(() => undefined);
+    const clear = () => root.classList.remove("vt-theme");
+    transition.finished.then(clear, clear);
+  };
+  return (
+    <button aria-label={label} className="tool" onClick={handleClick} ref={buttonRef} title={label} type="button">
+      <Moon aria-hidden="true" className="ico-moon" />
+      <Sun aria-hidden="true" className="ico-sun" />
     </button>
   );
 };
@@ -97,7 +178,7 @@ const ConsoleLogCopyButton = ({ onCopyConsoleLogs }: { onCopyConsoleLogs: () => 
   return (
     <button
       aria-label={label}
-      className={join("iconbtn console-copy-toggle", state !== "idle" && state)}
+      className={join("tool console-copy-toggle", state !== "idle" && state)}
       onClick={() => {
         void onCopyConsoleLogs()
           .then(() => {
@@ -130,7 +211,7 @@ const MobileDevToolsButton = ({ onToggleMobileDevTools }: { onToggleMobileDevToo
     <button
       aria-label="Mobile dev tools"
       aria-pressed={open ? "true" : "false"}
-      className="iconbtn mobile-devtools-toggle"
+      className="tool mobile-devtools-toggle"
       onClick={onToggleMobileDevTools}
       title="Mobile dev tools"
       type="button"
@@ -140,7 +221,7 @@ const MobileDevToolsButton = ({ onToggleMobileDevTools }: { onToggleMobileDevToo
   );
 };
 
-const Topbar = ({
+const Masthead = ({
   devToolsEnabled,
   logoSrc,
   tabs,
@@ -148,6 +229,7 @@ const Topbar = ({
   onCopyConsoleLogs,
   onSelectTab,
   onToggleMobileDevTools,
+  onOpenLog,
   onOpenSettings,
 }: {
   devToolsEnabled: boolean;
@@ -157,92 +239,184 @@ const Topbar = ({
   onCopyConsoleLogs: () => Promise<void | string>;
   onSelectTab: (id: string) => void;
   onToggleMobileDevTools: () => void;
+  onOpenLog: () => void;
   onOpenSettings: () => void;
 }) => {
+  const localizer = useUiLocalizer();
   const mobileDevToolsAvailable = useMobileDevToolsAvailable();
+  const logLabel = localizer.message("ui.tools.log");
+  const settingsLabel = localizer.message("ui.settings.title");
   return (
-    <header className="topbar">
-      <span className="wordmark">
-        {logoSrc ? <img alt="" className="logo" src={logoSrc} /> : null}
-        <span className="wm-text">
-          rom<span className="hy">-</span>
+    <header className="masthead">
+      <span className="brand">
+        {logoSrc ? <img alt="" className="brand-mark" height={44} src={logoSrc} width={44} /> : null}
+        <h1 className="brand-word">
+          rom<span className="brand-hy">–</span>
           <b>weaver</b>
-        </span>
+        </h1>
       </span>
-      <WorkflowTabs current={currentTab} onSelect={onSelectTab} tabs={tabs} />
-      <span className="spacer" />
-      <ThemeToggle />
-      {devToolsEnabled ? <ConsoleLogCopyButton onCopyConsoleLogs={onCopyConsoleLogs} /> : null}
-      {devToolsEnabled && mobileDevToolsAvailable ? (
-        <MobileDevToolsButton onToggleMobileDevTools={onToggleMobileDevTools} />
-      ) : null}
-      <button aria-label="Settings" className="iconbtn" onClick={onOpenSettings} title="Settings" type="button">
-        <Settings aria-hidden="true" />
-      </button>
+      <ModeRail current={currentTab} onSelect={onSelectTab} tabs={tabs} />
+      <div className="masthead-tools">
+        <ThemeToggle localizer={localizer} />
+        {devToolsEnabled ? <ConsoleLogCopyButton onCopyConsoleLogs={onCopyConsoleLogs} /> : null}
+        {devToolsEnabled && mobileDevToolsAvailable ? (
+          <MobileDevToolsButton onToggleMobileDevTools={onToggleMobileDevTools} />
+        ) : null}
+        <button
+          aria-haspopup="dialog"
+          aria-label={logLabel}
+          className="tool"
+          onClick={onOpenLog}
+          title={logLabel}
+          type="button"
+        >
+          <ScrollText aria-hidden="true" />
+        </button>
+        <button
+          aria-haspopup="dialog"
+          aria-label={settingsLabel}
+          className="tool"
+          onClick={onOpenSettings}
+          title={settingsLabel}
+          type="button"
+        >
+          <Settings aria-hidden="true" />
+        </button>
+      </div>
     </header>
   );
 };
 
-/** Update-available / wake-lock notice bar. `onReload` shows the reload action; `warn` styles it amber. */
-const Banner = ({
-  warn,
-  icon,
-  children,
-  onReload,
-  onDismiss,
-}: {
-  warn?: boolean;
-  icon?: ReactNode;
-  children: ReactNode;
-  onReload?: () => void;
-  onDismiss?: () => void;
-}) => (
-  <div className={join("updbar", warn && "warn")} role="status">
-    {onReload ? (
-      <button aria-label="Reload" className="u-btn" onClick={onReload} title="Reload" type="button">
-        <RefreshCw aria-hidden="true" />
-      </button>
-    ) : (
-      icon
-    )}
-    <span className="u-text">{children}</span>
-    {onDismiss ? (
-      <button aria-label="Dismiss" className="u-x" onClick={onDismiss} type="button">
-        <X aria-hidden="true" />
-      </button>
-    ) : null}
+/** CSS-only slide reveal wrapper (banners). JS only flips hidden + is-open. */
+const Reveal = ({ open, children }: { open: boolean; children: ReactNode }) => (
+  <div className={join("reveal", open && "is-open")} hidden={!open}>
+    {children}
   </div>
 );
 
-const Footer = ({
+const BannerDismissButton = ({ label, onDismiss }: { label: string; onDismiss: () => void }) => (
+  <button aria-label={label} className="banner-x" onClick={onDismiss} title={label} type="button">
+    <X aria-hidden="true" />
+  </button>
+);
+
+/** Update-ready banner inside a {@link Reveal}. */
+const UpdateBanner = ({
+  open,
+  title,
+  onReload,
+  onDismiss,
+}: {
+  open: boolean;
+  title: string;
+  onReload: () => void;
+  onDismiss: () => void;
+}) => {
+  const localizer = useUiLocalizer();
+  return (
+    <Reveal open={open}>
+      <div className="updates" role="status">
+        <span aria-hidden="true" className="updates-pulse" />
+        <span className="updates-text">
+          <b>{localizer.message("ui.update.ready")}</b> <span className="updates-ver mono">{title}</span>
+        </span>
+        <button className="btn slim primary" onClick={onReload} type="button">
+          {localizer.message("ui.update.reload")}
+        </button>
+        <BannerDismissButton label={localizer.message("ui.common.dismiss")} onDismiss={onDismiss} />
+      </div>
+    </Reveal>
+  );
+};
+
+/** Wake-lock caution banner inside a {@link Reveal}. */
+const WakeLockBanner = ({
+  open,
+  children,
+  onDismiss,
+}: {
+  open: boolean;
+  children: ReactNode;
+  onDismiss?: () => void;
+}) => {
+  const localizer = useUiLocalizer();
+  return (
+    <Reveal open={open}>
+      <div className="wakelock" role="status">
+        <svg aria-hidden="true" viewBox="0 0 24 24">
+          <path d="M12 3a6 6 0 0 1 6 6c0 2.2-1.2 3.4-2.2 4.6-.8 1-1.3 1.7-1.3 2.9h-5c0-1.2-.5-1.9-1.3-2.9C7.2 12.4 6 11.2 6 9a6 6 0 0 1 6-6Z" />
+          <path d="M10 20h4m-3.4 2.5h2.8" />
+        </svg>
+        <span className="wakelock-text">{children}</span>
+        {onDismiss ? (
+          <BannerDismissButton label={localizer.message("ui.common.dismiss")} onDismiss={onDismiss} />
+        ) : null}
+      </div>
+    </Reveal>
+  );
+};
+
+type SelvageState = "done" | "failed" | "idle" | "ready" | "running" | "staging";
+
+/** Edge-to-edge status strip at the very bottom of the page. */
+const Selvage = ({
+  state,
+  stage,
   version,
-  cacheVersion,
-  docsHref,
+  cacheLabel,
+  threads,
   githubHref,
   donateHref,
 }: {
+  state: SelvageState;
+  stage?: string;
   version?: string;
-  cacheVersion?: string;
-  docsHref?: string;
+  cacheLabel?: string;
+  threads?: number;
   githubHref?: string;
   donateHref?: string;
-}) => (
-  <footer className="foot">
-    {version ? <span className="mono">{version}</span> : null}
-    {cacheVersion ? <span className="mono">{cacheVersion}</span> : null}
-    {docsHref ? <a href={docsHref}>Docs</a> : null}
-    {githubHref ? (
-      <a href={githubHref} rel="noreferrer" target="_blank">
-        <Github aria-hidden="true" className="inline-block h-[1em] w-[1em] align-[-0.15em]" /> GitHub
-      </a>
-    ) : null}
-    {donateHref ? (
-      <a className="donate" href={donateHref} rel="noreferrer" target="_blank">
-        <Heart aria-hidden="true" />
-        Donate
-      </a>
-    ) : null}
-  </footer>
-);
+}) => {
+  const localizer = useUiLocalizer();
+  const stateClass = state === "idle" || state === "staging" ? "" : state;
+  return (
+    <footer className="selvage">
+      <span className={join("sv-state", stateClass)}>
+        <span aria-hidden="true" className="sv-dot" />
+        <span className="mono">{localizer.message(`ui.status.${state}`)}</span>
+      </span>
+      <span aria-live="polite" className="sv-stage mono">
+        {stage || ""}
+      </span>
+      <span className="sv-spacer" />
+      {version ? <span className="sv-meta mono">{version}</span> : null}
+      {cacheLabel ? <span className="sv-meta mono sv-cache">{cacheLabel}</span> : null}
+      {threads ? (
+        <span className="sv-meta mono sv-threads">
+          {threads} {localizer.message("ui.env.threads")}
+        </span>
+      ) : null}
+      {githubHref ? (
+        <a className="sv-link" href={githubHref} rel="noreferrer" target="_blank">
+          GitHub
+        </a>
+      ) : null}
+      {donateHref ? (
+        <a className="sv-link donate" href={donateHref} rel="noreferrer" target="_blank">
+          ♥ <span>{localizer.message("ui.footer.donate")}</span>
+        </a>
+      ) : null}
+    </footer>
+  );
+};
 
-export { Banner, Footer, ThemeToggle, Topbar, type WorkflowTab, WorkflowTabs };
+export {
+  Masthead,
+  ModeRail,
+  Reveal,
+  Selvage,
+  type SelvageState,
+  ThemeToggle,
+  UpdateBanner,
+  WakeLockBanner,
+  type WorkflowTab,
+};
