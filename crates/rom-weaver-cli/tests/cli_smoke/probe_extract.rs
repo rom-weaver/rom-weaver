@@ -934,20 +934,16 @@ fn extract_ignores_common_sidecars_unless_no_ignore() {
         .code(0);
 
     let default_out = temp.child("default-out");
-    let default_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let default_output = command_stdout(
+        &[
             "extract",
             archive.path().to_str().expect("path"),
             "--out-dir",
             default_out.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
     let default_json = parse_single_json_line(&default_output);
     assert_eq!(default_json["command"], "extract");
     assert_eq!(default_json["status"], "succeeded");

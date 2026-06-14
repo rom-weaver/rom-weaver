@@ -92,6 +92,18 @@ pub(crate) fn run_single_json_event(args: &[&str], expected_code: i32) -> Value 
     parse_single_json_line(&command_stdout(args, expected_code))
 }
 
+/// Assert the standard patch-family JSON envelope quad emitted by every
+/// `patch` subcommand terminal event: `command`, `family == "patch"`,
+/// `format`, and `status`. This is the exact four-line
+/// `assert_eq!(json["command"], ...)` / `["family"]` / `["format"]` /
+/// `["status"]` block that recurs throughout the patch smoke tests.
+pub(crate) fn assert_patch_envelope(json: &Value, command: &str, format: &str, status: &str) {
+    assert_eq!(json["command"], command);
+    assert_eq!(json["family"], "patch");
+    assert_eq!(json["format"], format);
+    assert_eq!(json["status"], status);
+}
+
 pub(crate) fn assert_patch_apply_running_progress(events: &[Value], terminal: &Value) {
     if terminal["command"] != "patch-apply" || terminal["status"] != "succeeded" {
         return;

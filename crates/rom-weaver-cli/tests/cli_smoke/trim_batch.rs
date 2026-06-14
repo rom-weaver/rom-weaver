@@ -8,20 +8,16 @@ fn trim_reports_percent_100_in_json() {
     let rom = build_test_nds_rom(0x00, 0x3000, 0x3000, 0x5000, false);
     fs::write(source.path(), &rom).expect("fixture");
 
-    let trim_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let trim_output = command_stdout(
+        &[
             "trim",
             source.path().to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let terminal = parse_json_lines(&trim_output)
         .into_iter()
@@ -41,14 +37,10 @@ fn trim_nds_preserves_download_play_certificate_boundary() {
     let rom = build_test_nds_rom(0x00, 0x3200, 0x3200, 0x6000, true);
     fs::write(source.path(), &rom).expect("fixture");
 
-    let trim_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args(["trim", source.path().to_str().expect("path"), "--json"])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+    let trim_output = command_stdout(
+        &["trim", source.path().to_str().expect("path"), "--json"],
+        0,
+    );
 
     let terminal = parse_single_json_line(&trim_output);
     assert_eq!(terminal["command"], "trim");
@@ -75,20 +67,16 @@ fn trim_dsi_uses_ntr_twl_size_boundary() {
     let rom = build_test_nds_rom(0x02, 0x2800, 0x3A00, 0x7000, false);
     fs::write(source.path(), &rom).expect("fixture");
 
-    let trim_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let trim_output = command_stdout(
+        &[
             "trim",
             source.path().to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let terminal = parse_single_json_line(&trim_output);
     assert_eq!(terminal["command"], "trim");
@@ -119,20 +107,16 @@ fn assert_trim_fixture_parity_and_determinism(
     fs::copy(&source_fixture, source.path()).expect("copy input fixture");
     let expected = fs::read(expected_fixture).expect("expected trimmed fixture");
 
-    let first_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let first_output = command_stdout(
+        &[
             "trim",
             source.path().to_str().expect("path"),
             "--output",
             output_a.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let first_terminal = parse_single_json_line(&first_output);
     assert_eq!(first_terminal["command"], "trim");
@@ -150,20 +134,16 @@ fn assert_trim_fixture_parity_and_determinism(
     let first_trimmed = fs::read(output_a.path()).expect("first trimmed output");
     assert_eq!(first_trimmed, expected);
 
-    let second_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let second_output = command_stdout(
+        &[
             "trim",
             source.path().to_str().expect("path"),
             "--output",
             output_b.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let second_terminal = parse_single_json_line(&second_output);
     assert_eq!(second_terminal["command"], "trim");
@@ -194,14 +174,10 @@ fn trim_rejects_invalid_header_crc() {
     rom[0x15E] ^= 0x01;
     fs::write(source.path(), &rom).expect("fixture");
 
-    let trim_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args(["trim", source.path().to_str().expect("path"), "--json"])
-        .assert()
-        .code(1)
-        .get_output()
-        .stdout
-        .clone();
+    let trim_output = command_stdout(
+        &["trim", source.path().to_str().expect("path"), "--json"],
+        1,
+    );
 
     let terminal = parse_single_json_line(&trim_output);
     assert_eq!(terminal["command"], "trim");
@@ -232,21 +208,17 @@ fn trim_supports_batch_inputs_with_custom_extension() {
     )
     .expect("fixture");
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "trim",
             source_a.path().to_str().expect("path"),
             source_b.path().to_str().expect("path"),
             "--extension",
             "tokyo.nds",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let terminal = parse_single_json_line(&output);
     assert_eq!(terminal["command"], "trim");
@@ -281,14 +253,7 @@ fn trim_recursively_scans_directories_by_default() {
     .expect("fixture");
     fs::write(root.child("readme.txt").path(), b"ignore me").expect("fixture");
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args(["trim", root.path().to_str().expect("path"), "--json"])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+    let output = command_stdout(&["trim", root.path().to_str().expect("path"), "--json"], 0);
 
     let terminal = parse_single_json_line(&output);
     assert_eq!(terminal["command"], "trim");
@@ -319,19 +284,15 @@ fn trim_no_recursive_only_processes_top_level() {
     )
     .expect("fixture");
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "trim",
             root.path().to_str().expect("path"),
             "--no-recursive",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let terminal = parse_single_json_line(&output);
     assert_eq!(terminal["command"], "trim");
@@ -352,19 +313,15 @@ fn trim_dry_run_does_not_write_outputs() {
     )
     .expect("fixture");
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "trim",
             source.path().to_str().expect("path"),
             "--dry-run",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let terminal = parse_single_json_line(&output);
     assert_eq!(terminal["command"], "trim");
@@ -388,19 +345,15 @@ fn trim_simulate_alias_does_not_write_outputs() {
     )
     .expect("fixture");
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "trim",
             source.path().to_str().expect("path"),
             "--simulate",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let terminal = parse_single_json_line(&output);
     assert_eq!(terminal["command"], "trim");
@@ -433,19 +386,15 @@ fn trim_xiso_simulate_does_not_write_outputs() {
         .expect("append xiso padding");
     source_file.flush().expect("flush xiso padding");
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "trim",
             source.path().to_str().expect("path"),
             "--simulate",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let terminal = parse_single_json_line(&output);
     assert_eq!(terminal["command"], "trim");
@@ -485,19 +434,15 @@ fn trim_wbfs_simulate_does_not_write_outputs() {
     }
     output.flush().expect("flush wbfs");
 
-    let trim_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let trim_output = command_stdout(
+        &[
             "trim",
             source_wbfs.path().to_str().expect("path"),
             "--simulate",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let terminal = parse_single_json_line(&trim_output);
     assert_eq!(terminal["command"], "trim");
@@ -517,19 +462,15 @@ fn trim_short_inplace_flag_trims_source_file() {
     fs::write(source.path(), &rom).expect("fixture");
     let original_len = fs::metadata(source.path()).expect("metadata").len();
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "trim",
             source.path().to_str().expect("path"),
             "-i",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let terminal = parse_single_json_line(&output);
     assert_eq!(terminal["command"], "trim");
@@ -551,14 +492,10 @@ fn trim_gba_uses_zero_padding_boundary() {
     let source = temp.child("sample.gba");
     fs::write(source.path(), build_test_padded_rom(0x3456, 0x4000, 0x00)).expect("fixture");
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args(["trim", source.path().to_str().expect("path"), "--json"])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+    let output = command_stdout(
+        &["trim", source.path().to_str().expect("path"), "--json"],
+        0,
+    );
 
     let terminal = parse_single_json_line(&output);
     assert_eq!(terminal["command"], "trim");
@@ -578,14 +515,10 @@ fn trim_gba_detects_ff_padding_boundary() {
     // Real GBA carts pad with 0xFF; trim must auto-detect and remove it just like 0x00 padding.
     fs::write(source.path(), build_test_padded_rom(0x3456, 0x4000, 0xFF)).expect("fixture");
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args(["trim", source.path().to_str().expect("path"), "--json"])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+    let output = command_stdout(
+        &["trim", source.path().to_str().expect("path"), "--json"],
+        0,
+    );
 
     let terminal = parse_single_json_line(&output);
     assert_eq!(terminal["status"], "succeeded");
@@ -603,14 +536,10 @@ fn trim_3ds_uses_ff_padding_boundary() {
     let source = temp.child("sample.3ds");
     fs::write(source.path(), build_test_padded_rom(0x4567, 0x8000, 0xFF)).expect("fixture");
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args(["trim", source.path().to_str().expect("path"), "--json"])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+    let output = command_stdout(
+        &["trim", source.path().to_str().expect("path"), "--json"],
+        0,
+    );
 
     let terminal = parse_single_json_line(&output);
     assert_eq!(terminal["command"], "trim");
@@ -644,20 +573,16 @@ fn trim_xiso_rebuilds_and_warns_irreversible() {
     let original_len = fs::metadata(source.path()).expect("source metadata").len();
     let output = temp.child("trimmed.xiso");
 
-    let trim_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let trim_output = command_stdout(
+        &[
             "trim",
             source.path().to_str().expect("path"),
             "--output",
             output.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let terminal = parse_single_json_line(&trim_output);
     assert_eq!(terminal["command"], "trim");
@@ -705,19 +630,15 @@ fn trim_xiso_revert_is_rejected() {
     let source = temp.child("source.iso");
     write_xiso_fixture_from_directory(source_tree.path(), source.path());
 
-    let trim_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let trim_output = command_stdout(
+        &[
             "trim",
             source.path().to_str().expect("path"),
             "--revert",
             "--json",
-        ])
-        .assert()
-        .code(1)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        1,
+    );
 
     let terminal = parse_single_json_line(&trim_output);
     assert_eq!(terminal["command"], "trim");
@@ -760,14 +681,10 @@ fn trim_wbfs_uses_rvz_scrub_output() {
     }
     output.flush().expect("flush wbfs");
 
-    let trim_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args(["trim", source_wbfs.path().to_str().expect("path"), "--json"])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+    let trim_output = command_stdout(
+        &["trim", source_wbfs.path().to_str().expect("path"), "--json"],
+        0,
+    );
 
     let terminal = parse_single_json_line(&trim_output);
     assert_eq!(terminal["command"], "trim");
@@ -784,20 +701,16 @@ fn trim_wbfs_uses_rvz_scrub_output() {
     assert!(trimmed.exists(), "expected trimmed rvz output");
 
     let extract_dir = temp.child("extract");
-    let extract_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let extract_output = command_stdout(
+        &[
             "extract",
             trimmed.to_str().expect("path"),
             "--out-dir",
             extract_dir.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let extract_terminal = parse_single_json_line(&extract_output);
     assert_eq!(extract_terminal["command"], "extract");
@@ -838,19 +751,15 @@ fn trim_wbfs_revert_is_rejected_for_rvz_scrub() {
     }
     output.flush().expect("flush wbfs");
 
-    let trim_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let trim_output = command_stdout(
+        &[
             "trim",
             source_wbfs.path().to_str().expect("path"),
             "--revert",
             "--json",
-        ])
-        .assert()
-        .code(1)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        1,
+    );
 
     let terminal = parse_single_json_line(&trim_output);
     assert_eq!(terminal["command"], "trim");
@@ -869,33 +778,25 @@ fn trim_revert_restores_gba_to_next_power_of_two() {
     let source = temp.child("sample.gba");
     fs::write(source.path(), build_test_padded_rom(0x3456, 0x4000, 0x00)).expect("fixture");
 
-    let trim_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args(["trim", source.path().to_str().expect("path"), "--json"])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+    let trim_output = command_stdout(
+        &["trim", source.path().to_str().expect("path"), "--json"],
+        0,
+    );
     let trim_terminal = parse_single_json_line(&trim_output);
     assert_eq!(trim_terminal["status"], "succeeded");
 
     let trimmed = source.path().with_extension("trim.gba");
     assert_eq!(fs::read(&trimmed).expect("trimmed gba").len(), 0x3456);
 
-    let revert_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let revert_output = command_stdout(
+        &[
             "trim",
             trimmed.to_str().expect("path"),
             "--revert",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let revert_terminal = parse_single_json_line(&revert_output);
     assert_eq!(revert_terminal["command"], "trim");
@@ -932,19 +833,15 @@ fn trim_revert_restores_3ds_to_next_power_of_two() {
     let trimmed = source.path().with_extension("trim.3ds");
     assert_eq!(fs::read(&trimmed).expect("trimmed 3ds").len(), 0x4567);
 
-    let revert_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let revert_output = command_stdout(
+        &[
             "trim",
             trimmed.to_str().expect("path"),
             "--untrim",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let revert_terminal = parse_single_json_line(&revert_output);
     assert_eq!(revert_terminal["command"], "trim");
@@ -986,20 +883,16 @@ fn trim_revert_restores_nds_to_power_of_two() {
 
     assert_eq!(fs::read(source.path()).expect("trimmed nds").len(), 0x3000);
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "trim",
             source.path().to_str().expect("path"),
             "--revert",
             "-i",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let terminal = parse_single_json_line(&output);
     assert_eq!(terminal["command"], "trim");
@@ -1025,14 +918,10 @@ fn trim_skips_non_nds_inputs() {
     let source = temp.child("notes.txt");
     fs::write(source.path(), b"not an nds file").expect("fixture");
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args(["trim", source.path().to_str().expect("path"), "--json"])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+    let output = command_stdout(
+        &["trim", source.path().to_str().expect("path"), "--json"],
+        0,
+    );
 
     let terminal = parse_single_json_line(&output);
     assert_eq!(terminal["command"], "trim");
@@ -1069,14 +958,10 @@ fn trim_extracts_rom_from_zip_and_writes_side_by_side() {
     // Drop the loose ROM so the archive is the only trim input.
     fs::remove_file(rom_path.path()).expect("remove loose rom");
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args(["trim", archive.path().to_str().expect("path"), "--json"])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+    let output = command_stdout(
+        &["trim", archive.path().to_str().expect("path"), "--json"],
+        0,
+    );
 
     let terminal = parse_single_json_line(&output);
     assert_eq!(terminal["command"], "trim");
@@ -1170,19 +1055,15 @@ fn trim_in_place_rom_only_archive_repacks() {
         .code(0);
     fs::remove_file(rom_path.path()).expect("remove loose rom");
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "trim",
             "--in-place",
             archive.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let terminal = parse_single_json_line(&output);
     assert_eq!(terminal["status"], "succeeded");

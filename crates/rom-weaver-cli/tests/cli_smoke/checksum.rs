@@ -28,21 +28,17 @@ fn assert_no_checksum_variants(json: &Value) {
 }
 
 fn checksum_value_no_trim_fix(path: &std::path::Path, algorithm: &str) -> String {
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "checksum",
             path.to_str().expect("path"),
             "--algo",
             algorithm,
             "--no-trim-fix",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let json = parse_single_json_line(&output);
     let label = json["label"].as_str().expect("label");
@@ -112,9 +108,8 @@ fn checksum_reports_auto_thread_mode() {
         .write_str("placeholder")
         .expect("fixture");
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "checksum",
             temp.child("sample.bin").path().to_str().expect("path"),
             "--algo",
@@ -124,12 +119,9 @@ fn checksum_reports_auto_thread_mode() {
             "--threads",
             "auto",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let json = parse_single_json_line(&output);
     assert_eq!(json["command"], "checksum");
@@ -170,9 +162,8 @@ fn checksum_supports_sha256_blake3_and_crc32c() {
         .write_str("hello world")
         .expect("fixture");
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "checksum",
             temp.child("sample.bin").path().to_str().expect("path"),
             "--algo",
@@ -182,12 +173,9 @@ fn checksum_supports_sha256_blake3_and_crc32c() {
             "--algo",
             "crc32c",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let json = parse_single_json_line(&output);
     assert_eq!(json["command"], "checksum");
@@ -243,20 +231,16 @@ fn checksum_auto_extract_resolves_nested_container_payload() {
         .code(0);
 
     let expected = checksum_value(temp.child("game.bin").path(), "sha1");
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "checksum",
             outer.path().to_str().expect("path"),
             "--algo",
             "sha1",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let json = parse_single_json_line(&output);
     assert_eq!(json["command"], "checksum");
@@ -307,20 +291,16 @@ fn checksum_no_extract_hashes_container_bytes() {
 
     let expected_payload = checksum_value(temp.child("game.bin").path(), "sha1");
 
-    let auto_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let auto_output = command_stdout(
+        &[
             "checksum",
             outer.path().to_str().expect("path"),
             "--algo",
             "sha1",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
     let auto_label = parse_single_json_line(&auto_output)["label"]
         .as_str()
         .expect("label")
@@ -329,21 +309,17 @@ fn checksum_no_extract_hashes_container_bytes() {
         .expect("auto digest")
         .to_string();
 
-    let raw_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let raw_output = command_stdout(
+        &[
             "checksum",
             outer.path().to_str().expect("path"),
             "--algo",
             "sha1",
             "--no-extract",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
     let raw_label = parse_single_json_line(&raw_output)["label"]
         .as_str()
         .expect("label")
@@ -368,20 +344,16 @@ fn checksum_auto_extract_stream_container_uses_streamed_hashing() {
     write_gzip_fixture(temp.child("game.bin").path(), compressed.path());
 
     let expected_payload = checksum_value(temp.child("game.bin").path(), "sha1");
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "checksum",
             compressed.path().to_str().expect("path"),
             "--algo",
             "sha1",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let json = parse_single_json_line(&output);
     assert_eq!(json["command"], "checksum");
@@ -420,20 +392,16 @@ fn checksum_stream_container_falls_back_when_nested_extract_is_required() {
     write_gzip_fixture(inner.path(), outer.path());
 
     let expected = checksum_value(temp.child("game.bin").path(), "sha1");
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "checksum",
             outer.path().to_str().expect("path"),
             "--algo",
             "sha1",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let json = parse_single_json_line(&output);
     assert_eq!(json["command"], "checksum");
@@ -460,20 +428,16 @@ fn checksum_auto_extract_tar_stream_uses_streamed_hashing() {
     );
 
     let expected_payload = checksum_value(temp.child("game.bin").path(), "sha1");
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "checksum",
             archive.path().to_str().expect("path"),
             "--algo",
             "sha1",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let json = parse_single_json_line(&output);
     assert_eq!(json["command"], "checksum");
@@ -504,21 +468,17 @@ fn checksum_tar_stream_rom_filter_selects_rom_payload() {
     );
 
     let expected_payload = checksum_value(temp.child("game.bin").path(), "sha1");
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "checksum",
             archive.path().to_str().expect("path"),
             "--algo",
             "sha1",
             "--rom-filter",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let json = parse_single_json_line(&output);
     assert_eq!(json["command"], "checksum");
@@ -556,20 +516,16 @@ fn checksum_tar_stream_falls_back_when_nested_extract_is_required() {
     write_tar_gz_fixture(&[(inner.path(), "inner.zip")], archive.path());
 
     let expected = checksum_value(temp.child("game.bin").path(), "sha1");
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "checksum",
             archive.path().to_str().expect("path"),
             "--algo",
             "sha1",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let json = parse_single_json_line(&output);
     assert_eq!(json["command"], "checksum");
@@ -603,20 +559,16 @@ fn checksum_auto_extract_ambiguity_requires_select() {
         .assert()
         .code(0);
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "checksum",
             archive.path().to_str().expect("path"),
             "--algo",
             "sha1",
             "--json",
-        ])
-        .assert()
-        .code(1)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        1,
+    );
     let json = parse_single_json_line(&output);
     let label = json["label"].as_str().expect("label");
     assert_eq!(json["status"], "failed");
@@ -635,20 +587,16 @@ fn checksum_auto_extract_pbp_multi_disc_requires_select() {
     let source = temp.child("multi.pbp");
     fs::write(source.path(), pbp).expect("pbp fixture");
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "checksum",
             source.path().to_str().expect("path"),
             "--algo",
             "sha1",
             "--json",
-        ])
-        .assert()
-        .code(1)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        1,
+    );
 
     let json = parse_single_json_line(&output);
     assert_eq!(json["command"], "checksum");
@@ -696,20 +644,16 @@ fn checksum_auto_extract_ignores_sidecars_unless_no_ignore() {
         .code(0);
 
     let expected = checksum_value(temp.child("game.bin").path(), "sha1");
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "checksum",
             archive.path().to_str().expect("path"),
             "--algo",
             "sha1",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
     let label = parse_single_json_line(&output)["label"]
         .as_str()
         .expect("label")
@@ -719,21 +663,17 @@ fn checksum_auto_extract_ignores_sidecars_unless_no_ignore() {
         .to_string();
     assert_eq!(digest, expected);
 
-    let no_ignore_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let no_ignore_output = command_stdout(
+        &[
             "checksum",
             archive.path().to_str().expect("path"),
             "--algo",
             "sha1",
             "--no-ignore",
             "--json",
-        ])
-        .assert()
-        .code(1)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        1,
+    );
     let no_ignore_json = parse_single_json_line(&no_ignore_output);
     let no_ignore_label = no_ignore_json["label"].as_str().expect("label");
     assert_eq!(no_ignore_json["status"], "failed");
@@ -780,20 +720,16 @@ fn checksum_select_patterns_apply_at_each_recursion_depth() {
         .assert()
         .code(0);
 
-    let failed_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let failed_output = command_stdout(
+        &[
             "checksum",
             outer.path().to_str().expect("path"),
             "--algo",
             "sha1",
             "--json",
-        ])
-        .assert()
-        .code(1)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        1,
+    );
     let failed_json = parse_single_json_line(&failed_output);
     assert!(
         failed_json["label"]
@@ -802,9 +738,8 @@ fn checksum_select_patterns_apply_at_each_recursion_depth() {
             .contains("ambiguous")
     );
 
-    let selected_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let selected_output = command_stdout(
+        &[
             "checksum",
             outer.path().to_str().expect("path"),
             "--algo",
@@ -812,12 +747,9 @@ fn checksum_select_patterns_apply_at_each_recursion_depth() {
             "--select",
             "*.bin",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
     let selected_json = parse_single_json_line(&selected_output);
     let selected_label = selected_json["label"].as_str().expect("label");
     let selected_digest = label_digest_value(selected_label, "sha1")
@@ -834,20 +766,16 @@ fn checksum_xiso_does_not_auto_extract_payload() {
     let xiso = temp.child("disc.xiso");
     write_xiso_fixture_from_directory(source_tree.path(), xiso.path());
 
-    let auto_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let auto_output = command_stdout(
+        &[
             "checksum",
             xiso.path().to_str().expect("path"),
             "--algo",
             "sha1",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
     let auto_label = parse_single_json_line(&auto_output)["label"]
         .as_str()
         .expect("label")
@@ -856,21 +784,17 @@ fn checksum_xiso_does_not_auto_extract_payload() {
         .expect("auto digest")
         .to_string();
 
-    let raw_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let raw_output = command_stdout(
+        &[
             "checksum",
             xiso.path().to_str().expect("path"),
             "--algo",
             "sha1",
             "--no-extract",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
     let raw_label = parse_single_json_line(&raw_output)["label"]
         .as_str()
         .expect("label")
@@ -889,9 +813,8 @@ fn checksum_json_includes_primary_checksums_and_raw_variant_by_default() {
     let temp = setup_temp_dir();
     fs::write(temp.child("sample.bin").path(), b"plain checksum payload").expect("fixture");
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "checksum",
             temp.child("sample.bin").path().to_str().expect("path"),
             "--algo",
@@ -901,12 +824,9 @@ fn checksum_json_includes_primary_checksums_and_raw_variant_by_default() {
             "--algo",
             "sha1",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let json = parse_single_json_line(&output);
     assert_eq!(json["status"], "succeeded");
@@ -959,21 +879,17 @@ fn checksum_headered_roms_include_remove_header_variant() {
 
     for (name, bytes, stripped_bytes) in cases {
         fs::write(temp.child(name).path(), bytes).expect("headered fixture");
-        let output = Command::cargo_bin("rom-weaver")
-            .expect("binary")
-            .args([
+        let output = command_stdout(
+            &[
                 "checksum",
                 temp.child(name).path().to_str().expect("path"),
                 "--algo",
                 "sha1",
                 "--no-trim-fix",
                 "--json",
-            ])
-            .assert()
-            .code(0)
-            .get_output()
-            .stdout
-            .clone();
+            ],
+            0,
+        );
 
         let json = parse_single_json_line(&output);
         assert_eq!(json["status"], "succeeded");
@@ -1010,14 +926,7 @@ fn checksum_legacy_range_skips_variants() {
         let mut args = vec!["checksum", headered_path, "--algo", "sha1"];
         args.extend(extra_args);
         args.push("--json");
-        let output = Command::cargo_bin("rom-weaver")
-            .expect("binary")
-            .args(args)
-            .assert()
-            .code(0)
-            .get_output()
-            .stdout
-            .clone();
+        let output = command_stdout(&args, 0);
 
         let json = parse_single_json_line(&output);
         assert_eq!(json["status"], "succeeded");
@@ -1051,20 +960,16 @@ fn checksum_auto_extract_payload_gets_variants_after_resolution() {
         .assert()
         .code(0);
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "checksum",
             archive.path().to_str().expect("path"),
             "--algo",
             "sha1",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let json = parse_single_json_line(&output);
     assert_eq!(json["status"], "succeeded");
@@ -1119,21 +1024,17 @@ fn checksum_broken_header_checksums_include_fix_header_variant() {
         ("broken.z64", "repaired.z64", "n64"),
     ] {
         let expected_sha1 = checksum_value_no_trim_fix(temp.child(repaired_name).path(), "sha1");
-        let output = Command::cargo_bin("rom-weaver")
-            .expect("binary")
-            .args([
+        let output = command_stdout(
+            &[
                 "checksum",
                 temp.child(name).path().to_str().expect("path"),
                 "--algo",
                 "sha1",
                 "--no-trim-fix",
                 "--json",
-            ])
-            .assert()
-            .code(0)
-            .get_output()
-            .stdout
-            .clone();
+            ],
+            0,
+        );
 
         let json = parse_single_json_line(&output);
         assert_eq!(json["status"], "succeeded");
@@ -1186,9 +1087,8 @@ fn extract_checksum_variants_match_checksum_command() {
         // Variants from the standalone checksum command on the plain file.
         // `--no-trim-fix` keeps it hashing the full file like extract does
         // (extract has no trim step), so the variant sets are comparable.
-        let checksum_output = Command::cargo_bin("rom-weaver")
-            .expect("binary")
-            .args([
+        let checksum_output = command_stdout(
+            &[
                 "checksum",
                 temp.child(name).path().to_str().expect("path"),
                 "--algo",
@@ -1197,12 +1097,9 @@ fn extract_checksum_variants_match_checksum_command() {
                 "sha1",
                 "--no-trim-fix",
                 "--json",
-            ])
-            .assert()
-            .code(0)
-            .get_output()
-            .stdout
-            .clone();
+            ],
+            0,
+        );
         let checksum_json = parse_single_json_line(&checksum_output);
         let expected_variants = checksum_json["details"]["checksum_variants"]
             .as_array()
@@ -1278,20 +1175,16 @@ fn checksum_n64_byte_order_variants_cover_all_target_orders() {
         ("game.n64", "little-endian"),
         ("game.v64", "byte-swapped"),
     ] {
-        let output = Command::cargo_bin("rom-weaver")
-            .expect("binary")
-            .args([
+        let output = command_stdout(
+            &[
                 "checksum",
                 temp.child(name).path().to_str().expect("path"),
                 "--algo",
                 "sha1",
                 "--json",
-            ])
-            .assert()
-            .code(0)
-            .get_output()
-            .stdout
-            .clone();
+            ],
+            0,
+        );
 
         let json = parse_single_json_line(&output);
         assert_eq!(json["status"], "succeeded");
@@ -1326,9 +1219,8 @@ fn checksum_auto_trim_fix_nds_matches_explicitly_trimmed_output() {
     fs::write(source.path(), &rom).expect("fixture");
     fs::write(trimmed.path(), &rom[..0x3200 + 0x88]).expect("trimmed fixture");
 
-    let trimmed_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let trimmed_output = command_stdout(
+        &[
             "checksum",
             source.path().to_str().expect("path"),
             "--algo",
@@ -1336,16 +1228,12 @@ fn checksum_auto_trim_fix_nds_matches_explicitly_trimmed_output() {
             "--algo",
             "sha1",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
-    let explicit_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let explicit_output = command_stdout(
+        &[
             "checksum",
             trimmed.path().to_str().expect("path"),
             "--algo",
@@ -1353,12 +1241,9 @@ fn checksum_auto_trim_fix_nds_matches_explicitly_trimmed_output() {
             "--algo",
             "sha1",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let trimmed_json = parse_single_json_line(&trimmed_output);
     let explicit_json = parse_single_json_line(&explicit_output);
@@ -1388,36 +1273,28 @@ fn checksum_no_trim_fix_disables_trimmed_boundary_fix() {
     let rom = build_test_nds_rom(0x00, 0x3200, 0x3200, 0x6000, true);
     fs::write(source.path(), &rom).expect("fixture");
 
-    let auto_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let auto_output = command_stdout(
+        &[
             "checksum",
             source.path().to_str().expect("path"),
             "--algo",
             "crc32",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
-    let no_fix_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let no_fix_output = command_stdout(
+        &[
             "checksum",
             source.path().to_str().expect("path"),
             "--algo",
             "crc32",
             "--no-trim-fix",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let auto_json = parse_single_json_line(&auto_output);
     let no_fix_json = parse_single_json_line(&no_fix_output);
@@ -1439,36 +1316,28 @@ fn checksum_auto_trim_fix_ignores_non_trim_eligible_extensions() {
     let temp = setup_temp_dir();
     fs::write(temp.child("sample.bin").path(), b"hello").expect("fixture");
 
-    let auto_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let auto_output = command_stdout(
+        &[
             "checksum",
             temp.child("sample.bin").path().to_str().expect("path"),
             "--algo",
             "crc32",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
-    let no_fix_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let no_fix_output = command_stdout(
+        &[
             "checksum",
             temp.child("sample.bin").path().to_str().expect("path"),
             "--algo",
             "crc32",
             "--no-trim-fix",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let auto_json = parse_single_json_line(&auto_output);
     let no_fix_json = parse_single_json_line(&no_fix_output);
@@ -1494,20 +1363,16 @@ fn checksum_game_boy_rom_has_only_raw_variant() {
     let rom = build_test_game_boy_rom(0x4000);
     fs::write(temp.child("game.gb").path(), &rom).expect("gb fixture");
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "checksum",
             temp.child("game.gb").path().to_str().expect("path"),
             "--algo",
             "sha1",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let json = parse_single_json_line(&output);
     assert_eq!(json["status"], "succeeded");

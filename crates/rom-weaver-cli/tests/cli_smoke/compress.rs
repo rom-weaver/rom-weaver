@@ -8,9 +8,8 @@ fn compress_routes_through_registered_container_format() {
         .expect("fixture");
     let output_path = temp.child("out.zip");
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "compress",
             temp.child("file.bin").path().to_str().expect("path"),
             "--format",
@@ -18,12 +17,9 @@ fn compress_routes_through_registered_container_format() {
             "--output",
             output_path.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let json = parse_single_json_line(&output);
     assert_eq!(json["command"], "compress");
@@ -58,9 +54,8 @@ fn assert_compress_extract_only_rejection(format: &str, output_name: &str) {
     fs::write(temp.child("source.bin").path(), b"payload").expect("fixture");
     let output_path = temp.child(output_name);
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "compress",
             temp.child("source.bin").path().to_str().expect("path"),
             "--format",
@@ -68,12 +63,9 @@ fn assert_compress_extract_only_rejection(format: &str, output_name: &str) {
             "--output",
             output_path.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(1)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        1,
+    );
 
     let json = parse_single_json_line(&output);
     assert_eq!(json["command"], "compress");
@@ -107,9 +99,8 @@ fn compress_wbfs_rejects_create_but_extract_round_trips() {
     write_wbfs_fixture_from_iso(iso_path.path(), wbfs_path.path());
 
     let out_dir = temp.child("extract");
-    let extract_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let extract_output = command_stdout(
+        &[
             "extract",
             wbfs_path.path().to_str().expect("path"),
             "--out-dir",
@@ -117,12 +108,9 @@ fn compress_wbfs_rejects_create_but_extract_round_trips() {
             "--threads",
             "8",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let extract_events = parse_json_lines(&extract_output);
     assert_running_percent_event(&extract_events, "extract", "wbfs");
@@ -157,9 +145,8 @@ fn compress_wia_rejects_create_but_extract_round_trips() {
     write_wia_fixture_from_iso(iso_path.path(), wia_path.path());
 
     let out_dir = temp.child("extract");
-    let extract_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let extract_output = command_stdout(
+        &[
             "extract",
             wia_path.path().to_str().expect("path"),
             "--out-dir",
@@ -167,12 +154,9 @@ fn compress_wia_rejects_create_but_extract_round_trips() {
             "--threads",
             "8",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let extract_events = parse_json_lines(&extract_output);
     assert_running_percent_event(&extract_events, "extract", "wia");
@@ -206,20 +190,16 @@ fn extract_nfs_invalid_source_emits_running_progress() {
     fs::write(temp.child("disc.nfs").path(), b"not-a-real-nfs").expect("fixture");
     let out_dir = temp.child("extract");
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "extract",
             temp.child("disc.nfs").path().to_str().expect("path"),
             "--out-dir",
             out_dir.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(1)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        1,
+    );
 
     let events = parse_json_lines(&output);
     assert_running_event(&events, "extract", "nfs");
@@ -236,20 +216,16 @@ fn extract_tgc_invalid_source_emits_running_progress() {
     fs::write(temp.child("disc.tgc").path(), b"not-a-real-tgc").expect("fixture");
     let out_dir = temp.child("extract");
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "extract",
             temp.child("disc.tgc").path().to_str().expect("path"),
             "--out-dir",
             out_dir.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(1)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        1,
+    );
 
     let events = parse_json_lines(&output);
     assert_running_event(&events, "extract", "tgc");
@@ -266,20 +242,16 @@ fn extract_xiso_invalid_source_emits_running_progress() {
     fs::write(temp.child("disc.xiso").path(), b"not-a-real-xiso").expect("fixture");
     let out_dir = temp.child("extract");
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "extract",
             temp.child("disc.xiso").path().to_str().expect("path"),
             "--out-dir",
             out_dir.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(1)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        1,
+    );
 
     let events = parse_json_lines(&output);
     assert_running_event(&events, "extract", "xiso");
@@ -302,9 +274,8 @@ fn compress_rejects_unregistered_output_format() {
     let source = temp.child("source.bin");
     fs::write(source.path(), [0_u8; 16]).expect("fixture");
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "compress",
             source.path().to_str().expect("path"),
             "--format",
@@ -312,12 +283,9 @@ fn compress_rejects_unregistered_output_format() {
             "--output",
             temp.child("out.bin").path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(1)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        1,
+    );
 
     let json = parse_single_json_line(&output);
     assert_eq!(json["command"], "compress");
@@ -341,20 +309,16 @@ fn compress_without_format_infers_7z_from_output_extension() {
     fs::write(source_path.path(), payload).expect("fixture");
     let output_path = temp.child("out.7z");
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "compress",
             source_path.path().to_str().expect("path"),
             "--output",
             output_path.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let json = parse_single_json_line(&output);
     assert_eq!(json["command"], "compress");
@@ -370,20 +334,16 @@ fn compress_without_format_infers_zip_from_output_extension() {
     fs::write(temp.child("source.bin").path(), b"payload").expect("fixture");
     let output_path = temp.child("out.zip");
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "compress",
             temp.child("source.bin").path().to_str().expect("path"),
             "--output",
             output_path.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let json = parse_single_json_line(&output);
     assert_eq!(json["command"], "compress");
@@ -402,20 +362,16 @@ fn compress_without_format_infers_rvz_from_output_extension_for_iso_inputs() {
     .expect("fixture");
     let output_path = temp.child("out.rvz");
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "compress",
             temp.child("source.iso").path().to_str().expect("path"),
             "--output",
             output_path.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let json = parse_single_json_line(&output);
     assert_eq!(json["command"], "compress");
@@ -434,20 +390,16 @@ fn compress_without_format_infers_rvz_from_output_extension_for_wbfs_inputs() {
     write_wbfs_fixture_from_iso(source_iso.path(), source_wbfs.path());
     let output_path = temp.child("out.rvz");
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "compress",
             source_wbfs.path().to_str().expect("path"),
             "--output",
             output_path.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let json = parse_single_json_line(&output);
     assert_eq!(json["command"], "compress");
@@ -466,20 +418,16 @@ fn compress_without_format_infers_rvz_from_output_extension_for_wia_inputs() {
     write_wia_fixture_from_iso(source_iso.path(), source_wia.path());
     let output_path = temp.child("out.rvz");
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "compress",
             source_wia.path().to_str().expect("path"),
             "--output",
             output_path.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let json = parse_single_json_line(&output);
     assert_eq!(json["command"], "compress");
@@ -496,9 +444,8 @@ fn compress_format_flag_overrides_mismatched_extension_with_warning() {
     // Name the output `.zip` but force 7z: the flag wins and the misleading name is warned about.
     let output_path = temp.child("out.zip");
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "compress",
             temp.child("source.bin").path().to_str().expect("path"),
             "--format",
@@ -506,12 +453,9 @@ fn compress_format_flag_overrides_mismatched_extension_with_warning() {
             "--output",
             output_path.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let json = parse_single_json_line(&output);
     assert_eq!(json["command"], "compress");
@@ -530,20 +474,16 @@ fn compress_without_format_rejects_extensionless_output() {
     fs::write(temp.child("source.bin").path(), b"payload").expect("fixture");
     let output_path = temp.child("out");
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "compress",
             temp.child("source.bin").path().to_str().expect("path"),
             "--output",
             output_path.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(1)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        1,
+    );
 
     let json = parse_single_json_line(&output);
     assert_eq!(json["command"], "compress");
@@ -563,20 +503,16 @@ fn compress_without_format_rejects_extract_only_output_extension() {
     fs::write(temp.child("source.bin").path(), b"payload").expect("fixture");
     let output_path = temp.child("out.cso");
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "compress",
             temp.child("source.bin").path().to_str().expect("path"),
             "--output",
             output_path.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(1)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        1,
+    );
 
     let json = parse_single_json_line(&output);
     assert_eq!(json["command"], "compress");
@@ -601,9 +537,8 @@ fn compress_rejects_auto_format_keyword() {
     let output_path = temp.child("out.rvz");
 
     // `auto` is no longer a supported format; it resolves to no registered handler.
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "compress",
             temp.child("source.iso").path().to_str().expect("path"),
             "--format",
@@ -611,12 +546,9 @@ fn compress_rejects_auto_format_keyword() {
             "--output",
             output_path.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(1)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        1,
+    );
 
     let json = parse_single_json_line(&output);
     assert_eq!(json["command"], "compress");
@@ -636,20 +568,16 @@ fn compress_without_format_rejects_unsupported_output_extension() {
     fs::write(temp.child("source-a.bin").path(), b"a").expect("fixture");
 
     // `.auto` matches no registered container; with no --format this is an error.
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "compress",
             temp.child("source-a.bin").path().to_str().expect("path"),
             "--output",
             temp.child("out.auto").path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(1)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        1,
+    );
 
     let json = parse_single_json_line(&output);
     assert_eq!(json["command"], "compress");
@@ -665,9 +593,8 @@ fn compress_rejects_wua_output_format() {
     let temp = setup_temp_dir();
     fs::write(temp.child("source.bin").path(), [1_u8; 64]).expect("fixture");
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "compress",
             temp.child("source.bin").path().to_str().expect("path"),
             "--format",
@@ -675,12 +602,9 @@ fn compress_rejects_wua_output_format() {
             "--output",
             temp.child("out.wua").path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(1)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        1,
+    );
 
     let json = parse_single_json_line(&output);
     assert_eq!(json["command"], "compress");
@@ -702,9 +626,8 @@ fn compress_rejects_invalid_codec_level_value() {
         .write_str("payload")
         .expect("fixture");
 
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "compress",
             temp.child("file.bin").path().to_str().expect("path"),
             "--format",
@@ -714,12 +637,9 @@ fn compress_rejects_invalid_codec_level_value() {
             "--codec",
             "deflate:fast",
             "--json",
-        ])
-        .assert()
-        .code(1)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        1,
+    );
 
     let json = parse_single_json_line(&output);
     assert_eq!(json["command"], "compress");
@@ -751,9 +671,8 @@ fn compress_accepts_global_level_profiles_for_creatable_archives() {
             fs::write(temp.child("payload.bin").path(), vec![0x41; 16 * 1024]).expect("fixture");
             let output_path = temp.child(format!("out-{profile}.{extension}"));
 
-            let output = Command::cargo_bin("rom-weaver")
-                .expect("binary")
-                .args([
+            let output = command_stdout(
+                &[
                     "compress",
                     temp.child("payload.bin").path().to_str().expect("path"),
                     "--format",
@@ -765,12 +684,9 @@ fn compress_accepts_global_level_profiles_for_creatable_archives() {
                     "--level",
                     profile,
                     "--json",
-                ])
-                .assert()
-                .code(0)
-                .get_output()
-                .stdout
-                .clone();
+                ],
+                0,
+            );
 
             let json = parse_single_json_line(&output);
             assert_eq!(json["command"], "compress");
@@ -879,19 +795,15 @@ fn run_archive_round_trip(format: &str, archive_name: &str, codec: Option<&str>)
     assert_eq!(compress_json["format"], format);
     assert_eq!(compress_json["status"], "succeeded");
 
-    let probe_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let probe_output = command_stdout(
+        &[
             "probe",
             archive.path().to_str().expect("path"),
             "--no-extract",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
     let probe_json = parse_single_json_line(&probe_output);
     assert_eq!(probe_json["command"], "probe");
     assert_eq!(probe_json["family"], "container");
@@ -899,9 +811,8 @@ fn run_archive_round_trip(format: &str, archive_name: &str, codec: Option<&str>)
     assert_eq!(probe_json["status"], "succeeded");
 
     let out_dir = temp.child("extract");
-    let extract_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let extract_output = command_stdout(
+        &[
             "extract",
             archive.path().to_str().expect("path"),
             "--select",
@@ -911,12 +822,9 @@ fn run_archive_round_trip(format: &str, archive_name: &str, codec: Option<&str>)
             "--threads",
             "8",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let extract_events = parse_json_lines(&extract_output);
     assert_running_percent_event(&extract_events, "extract", format);
@@ -962,9 +870,8 @@ fn extract_zst_reports_parallel_decode_threads() {
     fs::write(archive.path(), compressed).expect("write zst fixture");
 
     let out_dir = temp.child("extract");
-    let output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let output = command_stdout(
+        &[
             "extract",
             archive.path().to_str().expect("path"),
             "--select",
@@ -974,12 +881,9 @@ fn extract_zst_reports_parallel_decode_threads() {
             "--threads",
             "8",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let events = parse_json_lines(&output);
     assert_running_percent_event(&events, "extract", "zst");
@@ -1008,9 +912,8 @@ fn zip_emits_incremental_running_progress_beyond_placeholders() {
     }
 
     let archive = temp.child("sample.zip");
-    let compress_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let compress_output = command_stdout(
+        &[
             "compress",
             input_dir.path().to_str().expect("path"),
             "--format",
@@ -1018,12 +921,9 @@ fn zip_emits_incremental_running_progress_beyond_placeholders() {
             "--output",
             archive.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
     let compress_events = parse_json_lines(&compress_output);
     assert!(
         compress_events.iter().any(|event| {
@@ -1049,20 +949,16 @@ fn zip_emits_incremental_running_progress_beyond_placeholders() {
     }));
 
     let out_dir = temp.child("extract");
-    let extract_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let extract_output = command_stdout(
+        &[
             "extract",
             archive.path().to_str().expect("path"),
             "--out-dir",
             out_dir.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
     let extract_events = parse_json_lines(&extract_output);
     assert_running_percent_event_in_range(&extract_events, "extract", "zip", 1.0, 95.0);
 }
@@ -1102,9 +998,8 @@ fn seven_z_lzma2_threaded_single_chunk_emits_codec_progress() {
     fs::write(input.path(), &payload).expect("fixture");
 
     let archive = temp.child("sample.7z");
-    let compress_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let compress_output = command_stdout(
+        &[
             "compress",
             input.path().to_str().expect("path"),
             "--format",
@@ -1116,12 +1011,9 @@ fn seven_z_lzma2_threaded_single_chunk_emits_codec_progress() {
             "--threads",
             "10",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
     let compress_events = parse_json_lines(&compress_output);
     assert_no_compressed_write_progress(&compress_events, "7z");
     assert_no_finalizing_percent(&compress_events, "7z");
@@ -1174,9 +1066,8 @@ fn seven_z_lzma2_single_thread_emits_running_codec_progress() {
     }
 
     let archive = temp.child("sample.7z");
-    let compress_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let compress_output = command_stdout(
+        &[
             "compress",
             input_dir.path().to_str().expect("path"),
             "--format",
@@ -1190,12 +1081,9 @@ fn seven_z_lzma2_single_thread_emits_running_codec_progress() {
             "--level",
             "low",
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
     let compress_events = parse_json_lines(&compress_output);
     assert_no_compressed_write_progress(&compress_events, "7z");
     assert_no_finalizing_percent(&compress_events, "7z");
@@ -1220,20 +1108,16 @@ fn seven_z_lzma2_single_thread_emits_running_codec_progress() {
     );
 
     let out_dir = temp.child("extract");
-    let extract_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let extract_output = command_stdout(
+        &[
             "extract",
             archive.path().to_str().expect("path"),
             "--out-dir",
             out_dir.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
     let extract_events = parse_json_lines(&extract_output);
     assert_running_percent_event_in_range(&extract_events, "extract", "7z", 1.0, 95.0);
 }
@@ -1294,20 +1178,16 @@ fn extract_recursively_handles_nested_containers() {
         .code(0);
 
     let out_dir = temp.child("extract");
-    let extract_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let extract_output = command_stdout(
+        &[
             "extract",
             seven_z_path.path().to_str().expect("path"),
             "--out-dir",
             out_dir.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let extract_json = parse_single_json_line(&extract_output);
     assert_eq!(extract_json["command"], "extract");
@@ -1477,20 +1357,16 @@ fn extract_nested_scan_ignores_existing_output_archives() {
         .assert()
         .code(0);
 
-    let extract_output = Command::cargo_bin("rom-weaver")
-        .expect("binary")
-        .args([
+    let extract_output = command_stdout(
+        &[
             "extract",
             fresh_archive.path().to_str().expect("path"),
             "--out-dir",
             out_dir.path().to_str().expect("path"),
             "--json",
-        ])
-        .assert()
-        .code(0)
-        .get_output()
-        .stdout
-        .clone();
+        ],
+        0,
+    );
 
     let extract_json = parse_single_json_line(&extract_output);
     assert_eq!(extract_json["command"], "extract");
