@@ -1,3 +1,4 @@
+import { whenOpfsCleanupSettled } from "../../storage/browser/opfs-cleanup-gate.ts";
 import type {
   RomWeaverBrowserOpfsOptions,
   RomWeaverBrowserOpfsRunOptions,
@@ -59,6 +60,7 @@ export class BrowserRomWeaverWorkerClient extends RomWeaverWorkerClientCore {
     commandOrRequest: RomWeaverRunInput,
     options: RomWeaverBrowserOpfsRunOptions = {},
   ): Promise<RomWeaverRunResult> {
+    await whenOpfsCleanupSettled();
     return super.run(commandOrRequest, options);
   }
 
@@ -66,6 +68,7 @@ export class BrowserRomWeaverWorkerClient extends RomWeaverWorkerClientCore {
     commandOrRequest: RomWeaverRunInput,
     options: RomWeaverRunJsonOptions<TEvent, TTraceEvent> & RomWeaverBrowserOpfsRunOptions = {},
   ): Promise<RomWeaverRunJsonResult<TEvent, TTraceEvent>> {
+    await whenOpfsCleanupSettled();
     return super.runJson(commandOrRequest, options);
   }
 

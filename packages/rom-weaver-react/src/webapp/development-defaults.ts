@@ -11,7 +11,4 @@ const isReactWebappDevelopmentMode = (environment: WebappEnvironment = import.me
 const getDefaultWebappLogLevel = (environment?: WebappEnvironment): LogLevel =>
   isReactWebappDevelopmentMode(environment) ? "trace" : "warn";
 
-const getDefaultWebappDevToolsEnabled = (environment?: WebappEnvironment): boolean =>
-  isReactWebappDevelopmentMode(environment);
-
-export { getDefaultWebappDevToolsEnabled, getDefaultWebappLogLevel };
+export { getDefaultWebappLogLevel };

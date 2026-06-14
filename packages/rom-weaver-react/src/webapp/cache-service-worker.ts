@@ -45,7 +45,15 @@ setCacheNameDetails({
 const PRECACHE_NAME = cacheNames.precache;
 const RUNTIME_CACHE_NAME = cacheNames.runtime;
 const SW_LOG_PREFIX = "[rom-weaver-sw]";
+// In-memory COEP mode. Volatile: resets to the credentialless default whenever the worker thread is
+// terminated and respawned (notably on mobile Safari). The durable copy below survives that so a page
+// that already degraded to require-corp keeps isolating after a respawn instead of silently falling back.
 let coepCredentialless = true;
+// Synthetic cache entry that persists the discovered COEP mode across worker restarts.
+const COEP_MODE_URL = new URL("/__rom-weaver-coep-mode__", self.location.origin).href;
+const COEP_MODE_REQUIRE_CORP = "require-corp";
+const COEP_MODE_CREDENTIALLESS = "credentialless";
+let coepModeHydrated = false;
 
 const logServiceWorker = (message: string, details?: Record<string, unknown>) => {
   if (details) console.info(SW_LOG_PREFIX, message, details);
@@ -55,6 +63,42 @@ const logServiceWorker = (message: string, details?: Record<string, unknown>) =>
 const formatError = (error: unknown) => {
   if (error instanceof Error) return `${error.name}: ${error.message}`;
   return String(error);
+};
+
+// Lazily load the persisted COEP mode into the in-memory flag. Only the first call after a (re)spawn
+// touches CacheStorage; later calls return the cached flag, so this is cheap to call per request.
+const ensureCoepModeHydrated = async (): Promise<boolean> => {
+  if (coepModeHydrated) return coepCredentialless;
+  coepModeHydrated = true;
+  try {
+    const cache = await caches.open(RUNTIME_CACHE_NAME);
+    const stored = await cache.match(COEP_MODE_URL);
+    if (stored) {
+      coepCredentialless = (await stored.text()) !== COEP_MODE_REQUIRE_CORP;
+      logServiceWorker("hydrated persisted COEP mode", { coepCredentialless });
+    }
+  } catch (err) {
+    logServiceWorker("COEP mode hydration failed", { error: formatError(err) });
+  }
+  return coepCredentialless;
+};
+
+// Update both the in-memory flag and the durable copy so the choice survives a worker restart.
+const persistCoepMode = async (credentialless: boolean): Promise<void> => {
+  coepCredentialless = credentialless;
+  coepModeHydrated = true;
+  try {
+    const cache = await caches.open(RUNTIME_CACHE_NAME);
+    await cache.put(
+      COEP_MODE_URL,
+      new Response(credentialless ? COEP_MODE_CREDENTIALLESS : COEP_MODE_REQUIRE_CORP, {
+        headers: { "content-type": "text/plain" },
+      }),
+    );
+    logServiceWorker("persisted COEP mode", { coepCredentialless: credentialless });
+  } catch (err) {
+    logServiceWorker("COEP mode persist failed", { credentialless, error: formatError(err) });
+  }
 };
 
 const isSameOriginRequest = (url: URL) => url.origin === self.location.origin;
@@ -84,19 +128,22 @@ const shouldUseNetworkFirst = (request: Request, url: URL) => {
   return isHtmlRequest(request, url) || isManifestRequest(request, url) || isDevSourceRequest(request, url);
 };
 
-const getCrossOriginIsolationHeaders = (sourceHeaders: HeadersInit = {}) => {
+const getCrossOriginIsolationHeaders = (sourceHeaders: HeadersInit = {}, credentialless = coepCredentialless) => {
   const headers = new Headers(sourceHeaders);
   headers.set(COI_HEADER_COOP, "same-origin");
-  headers.set(COI_HEADER_COEP, coepCredentialless ? "credentialless" : "require-corp");
-  if (coepCredentialless) headers.delete(COI_HEADER_CORP);
+  headers.set(COI_HEADER_COEP, credentialless ? "credentialless" : "require-corp");
+  if (credentialless) headers.delete(COI_HEADER_CORP);
   else headers.set(COI_HEADER_CORP, "cross-origin");
   return headers;
 };
 
-const withCrossOriginIsolationHeaders = (response: Response | undefined | null) => {
+const withCrossOriginIsolationHeaders = (
+  response: Response | undefined | null,
+  credentialless = coepCredentialless,
+) => {
   if (!response || response.status === 0) return response ?? undefined;
   return new Response(response.body, {
-    headers: getCrossOriginIsolationHeaders(response.headers),
+    headers: getCrossOriginIsolationHeaders(response.headers, credentialless),
     status: response.status,
     statusText: response.statusText,
   });
@@ -104,18 +151,20 @@ const withCrossOriginIsolationHeaders = (response: Response | undefined | null) 
 
 const crossOriginIsolationPrecachePlugin: WorkboxPlugin = {
   async handlerWillRespond({ response }) {
-    return withCrossOriginIsolationHeaders(response) || response;
+    const credentialless = await ensureCoepModeHydrated();
+    return withCrossOriginIsolationHeaders(response, credentialless) || response;
   },
 };
 
-const toCredentiallessNoCorsRequest = (request: Request) => {
-  if (!coepCredentialless || request.mode !== "no-cors") return request;
+const toCredentiallessNoCorsRequest = (request: Request, credentialless = coepCredentialless) => {
+  if (!credentialless || request.mode !== "no-cors") return request;
   return new Request(request, { credentials: "omit" });
 };
 
 const fetchAndUpdateCache = async (request: Request): Promise<Response> => {
-  const fetchedResponse = await fetch(toCredentiallessNoCorsRequest(request));
-  const response = withCrossOriginIsolationHeaders(fetchedResponse) || fetchedResponse;
+  const credentialless = await ensureCoepModeHydrated();
+  const fetchedResponse = await fetch(toCredentiallessNoCorsRequest(request, credentialless));
+  const response = withCrossOriginIsolationHeaders(fetchedResponse, credentialless) || fetchedResponse;
   if (response.ok) {
     const cache = await caches.open(RUNTIME_CACHE_NAME);
     await cache.put(request, response.clone());
@@ -124,15 +173,16 @@ const fetchAndUpdateCache = async (request: Request): Promise<Response> => {
 };
 
 const matchCachedResponse = async (request: Request, url: URL) => {
+  const credentialless = await ensureCoepModeHydrated();
   const cachedResponse = await caches.match(request);
-  if (cachedResponse) return withCrossOriginIsolationHeaders(cachedResponse) || cachedResponse;
+  if (cachedResponse) return withCrossOriginIsolationHeaders(cachedResponse, credentialless) || cachedResponse;
   if (isManifestRequest(request, url)) {
     const manifest = await matchPrecache("manifest.json");
-    return withCrossOriginIsolationHeaders(manifest) || manifest;
+    return withCrossOriginIsolationHeaders(manifest, credentialless) || manifest;
   }
   if (isHtmlRequest(request, url)) {
     const html = (await matchPrecache("index.html")) || (await matchPrecache("/"));
-    return withCrossOriginIsolationHeaders(html) || html;
+    return withCrossOriginIsolationHeaders(html, credentialless) || html;
   }
   return undefined;
 };
@@ -193,6 +243,9 @@ self.addEventListener("activate", (event) => {
         return Promise.all(cachesToDelete.map((cacheName) => caches.delete(cacheName)));
       })
       .then(() => self.clients.claim())
+      // Restore the persisted COEP mode so a respawned worker keeps serving require-corp if a prior
+      // session already degraded to it, instead of resetting to the credentialless default.
+      .then(() => ensureCoepModeHydrated())
       .then(() => {
         logServiceWorker("activate event; clients claimed", {
           coepCredentialless,
@@ -213,10 +266,10 @@ self.addEventListener("message", (event) => {
   }
 
   if (event.data.action === COI_COEP_CREDENTIALLESS_ACTION) {
-    coepCredentialless = event.data.value !== false;
-    logServiceWorker("message received; updated COEP mode", {
-      coepCredentialless,
-    });
+    const credentialless = event.data.value !== false;
+    logServiceWorker("message received; updating COEP mode", { coepCredentialless: credentialless });
+    // Persist durably (and keep the worker alive until written) so the choice survives a restart.
+    event.waitUntil(persistCoepMode(credentialless));
     return;
   }
 

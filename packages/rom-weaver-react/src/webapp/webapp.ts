@@ -4,11 +4,13 @@ import { createElement } from "react";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { getBrowserStorageEstimateState } from "../storage/browser/browser-storage-estimate.ts";
+import { beginOpfsCleanupGate, markOpfsCleanupSettled } from "../storage/browser/opfs-cleanup-gate.ts";
 import { markRomWeaverRunnerStale } from "../workers/rom-weaver/rom-weaver-runner.ts";
 import { installLogStore } from "./log-store.ts";
 import { configureLogger, createLogger } from "./logging.ts";
 import { createEmptyVitePageUpdateState, createVitePageUpdateState, getPageUpdateState } from "./page-update-state.ts";
 import { createPwaServiceWorkerClient } from "./pwa/pwa-service-worker-client.ts";
+import { createServiceWorkerBootGate } from "./pwa/service-worker-boot-gate.ts";
 import { LOCAL_STORAGE_SETTINGS_ID } from "./settings/settings-state.ts";
 import { clearOpfsOnPageLoad } from "./site-data-cleanup.ts";
 import {
@@ -22,11 +24,7 @@ import { selectViewWithTransition, WebappRoot } from "./webapp-root.tsx";
 import { type ConfirmationDialogState, createEmptyConfirmationDialogState } from "./webapp-root-types.ts";
 
 // Webapp controller invariants now live across `settings-state` and `webapp-controller`:
-// devTools: false
-// loadedSettings.devTools
 // localStorage.setItem(LOCAL_STORAGE_SETTINGS_ID, JSON.stringify(settings))
-// ROM_WEAVER_ERUDA_LOADER.setEnabled(settings.devTools)
-// window.ROM_WEAVER_ERUDA_LOADER.setEnabled(settings.devTools)
 // SETTINGS_VALID_CHD_CREATECD_CODECS = ['cdzs', 'cdlz', 'cdzl', 'cdfl']
 // validCodecs.indexOf(codec) === -1
 // rawDraft.compressionProfile
@@ -38,6 +36,12 @@ const SERVICE_WORKER_ENABLED = __SERVICE_WORKER_ENABLED__;
 const SERVICE_WORKER_CACHE_PREFIX = "precache-rom-weaver-";
 const SERVICE_WORKER_CACHE_VERSION_TIMEOUT_MS = 1500;
 const SERVICE_WORKER_UPDATE_INTERVAL_MS = __SERVICE_WORKER_UPDATE_INTERVAL_MS__;
+// Once controlled but still not isolated this long, the gate reloads to retry the COOP/COEP handshake.
+const SERVICE_WORKER_BOOT_GATE_STUCK_RELOAD_MS = 2000;
+// Absolute backstop before booting un-isolated (covers a worker that never installs).
+const SERVICE_WORKER_BOOT_GATE_TIMEOUT_MS = 10000;
+// Cap on gate-initiated reloads so a browser that can never isolate is not stuck reloading.
+const SERVICE_WORKER_BOOT_GATE_MAX_RELOADS = 3;
 
 type RuntimeScalar = string | number | boolean | null | undefined;
 type RuntimeValue =
@@ -55,8 +59,6 @@ type RuntimeValue =
 type RuntimeSettings = Record<string, RuntimeValue> & {
   language?: RuntimeScalar;
   allowDropFiles?: RuntimeScalar;
-  devTools?: RuntimeScalar;
-  mobileDevTools?: RuntimeScalar;
   ondropfiles?: (...args: RuntimeValue[]) => RuntimeValue;
   oninitialize?: (runtime?: RuntimeValue) => void;
 };
@@ -78,6 +80,18 @@ let confirmationDialogState = createEmptyConfirmationDialogState();
 let renderWebappRootIfReady = () => undefined;
 let resolvePendingConfirmation: ((accepted: boolean) => void) | null = null;
 let vitePageUpdateState = createEmptyVitePageUpdateState();
+// Suppresses the first render until cross-origin isolation settles so the un-isolated first document
+// never flashes before the service worker reloads the page. Decided synchronously at construction.
+const serviceWorkerBootGate = createServiceWorkerBootGate({
+  logger,
+  maxReloads: SERVICE_WORKER_BOOT_GATE_MAX_RELOADS,
+  navigator: typeof navigator === "undefined" ? undefined : navigator,
+  serviceWorkerEnabled: SERVICE_WORKER_ENABLED,
+  sessionStorage: typeof sessionStorage === "undefined" ? undefined : sessionStorage,
+  stuckReloadMs: SERVICE_WORKER_BOOT_GATE_STUCK_RELOAD_MS,
+  timeoutMs: SERVICE_WORKER_BOOT_GATE_TIMEOUT_MS,
+  window: typeof window === "undefined" ? undefined : window,
+});
 const VITE_PAGE_RELOAD_TIMEOUT_MS = 20;
 const VITE_RELOAD_PATTERN = /\blocation\.reload\s*\(/;
 
@@ -161,8 +175,6 @@ const applySettingsToRuntime = (settings: RuntimeSettings) => {
     logLevel: settings.logLevel,
     workerThreads: settings.workerThreads,
   });
-  if (window.ROM_WEAVER_ERUDA_LOADER && typeof window.ROM_WEAVER_ERUDA_LOADER.setEnabled === "function")
-    window.ROM_WEAVER_ERUDA_LOADER.setEnabled(settings.devTools ?? settings.mobileDevTools);
 };
 
 const webappController = createWebappRootController({
@@ -264,6 +276,9 @@ import.meta.hot?.on("vite:beforeFullReload", (payload) => {
 });
 
 const renderWebappRoot = (): undefined => {
+  // Suppress all renders (including reactive ones from the service worker state machine) while the boot
+  // gate is closed, so the un-isolated first document stays on the static background until the SW reload.
+  if (serviceWorkerBootGate.isGated()) return undefined;
   if (!appRoot) {
     const appRootElement = document.getElementById("webapp-root");
     if (appRootElement) appRoot = createRoot(appRootElement);
@@ -294,11 +309,6 @@ const renderWebappRoot = (): undefined => {
             })();
           },
           onConfirmConfirmation: () => closeConfirmationDialog(true),
-          onCopyConsoleLogs: () => {
-            const copyLogs = window.ROM_WEAVER_CONSOLE_LOGS?.copy;
-            if (typeof copyLogs !== "function") return Promise.reject(new Error("Console log capture is unavailable"));
-            return copyLogs();
-          },
           onCreatorModifiedChange: (file) => webappController.setCreatorModifiedState(file),
           onCreatorOriginalChange: (file) => webappController.setCreatorOriginalState(file),
           onCreatorPatchTypeChange: (patchType) => webappController.setCreatorPatchType(patchType),
@@ -320,9 +330,6 @@ const renderWebappRoot = (): undefined => {
             webappController.saveDraftSettings();
           },
           onSelectView: (view) => webappController.selectView(view),
-          onToggleMobileDevTools: () => {
-            window.ROM_WEAVER_ERUDA_LOADER?.toggle?.();
-          },
           onTrimOutputFormatChange: (format) => webappController.setTrimOutputFormat(format),
           onTrimSettingsChange: (settings) => webappController.setTrimSettingsState(settings),
           onTrimSourceChange: (file) => webappController.setTrimSourceState(file),
@@ -374,25 +381,37 @@ const initializeWebapp = () => {
   if (typeof configuredOnInitialize === "function") configuredOnInitialize();
 };
 
-const initializeWebappAfterOpfsCleanup = () => {
+const bootWebappWithBackgroundCleanup = () => {
+  // Render the interactive shell immediately, then wipe leftover OPFS and read the storage estimate
+  // in the background. The cleanup gate (opened here, closed when the wipe settles) holds wasm runs
+  // and input staging until the wipe finishes, so a write can't land in a directory the recursive
+  // delete is still walking — the same guarantee the old wipe-then-render order gave, without the
+  // first paint waiting on it.
+  beginOpfsCleanupGate();
+  initializeWebapp();
   void clearOpfsOnPageLoad()
-    .then(() => getBrowserStorageEstimateState())
-    .then(
-      (storage) => {
-        logger.debug("Browser storage initialized", { storage });
-        initializeWebapp();
-      },
-      (error) => {
-        logger.debug("Browser storage initialization skipped", {
-          message: error instanceof Error ? error.message : String(error || ""),
-        });
-        initializeWebapp();
-      },
-    );
+    .then((result) => {
+      logger.debug("OPFS cleanup on page load complete", { result });
+    })
+    .finally(() => {
+      markOpfsCleanupSettled();
+    });
+  void getBrowserStorageEstimateState().then(
+    (storage) => {
+      logger.debug("Browser storage initialized", { storage });
+    },
+    (error) => {
+      logger.debug("Browser storage estimate skipped", {
+        message: error instanceof Error ? error.message : String(error || ""),
+      });
+    },
+  );
 };
 
+const startWebappBoot = () => serviceWorkerBootGate.start(bootWebappWithBackgroundCleanup);
+
 if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", initializeWebappAfterOpfsCleanup, { once: true });
+  document.addEventListener("DOMContentLoaded", startWebappBoot, { once: true });
 } else {
-  initializeWebappAfterOpfsCleanup();
+  startWebappBoot();
 }

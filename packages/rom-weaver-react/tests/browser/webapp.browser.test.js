@@ -16,7 +16,6 @@ const POSIX_DIRECTORY_PREFIX_REGEX = /^.*\//;
 const MULTI_ROM_ZIP = "tests/fixtures/archives/multi-rom.zip";
 const ONE_ROM_ZIP = "tests/fixtures/archives/one-rom.zip";
 const CRC32_TEXT_REGEX = /^[0-9a-f]{8}$/i;
-const originalMatchMedia = window.matchMedia;
 
 const fileNameFromPath = (filePath) => filePath.replace(POSIX_DIRECTORY_PREFIX_REGEX, "");
 
@@ -72,7 +71,6 @@ const createNoopActions = () => ({
   onCancelConfirmation: () => undefined,
   onCloseSettings: () => undefined,
   onConfirmConfirmation: () => undefined,
-  onCopyConsoleLogs: () => Promise.resolve(),
   onCreatorModifiedChange: () => undefined,
   onCreatorOriginalChange: () => undefined,
   onCreatorPatchTypeChange: () => undefined,
@@ -86,7 +84,6 @@ const createNoopActions = () => ({
   onRestoreDefaults: () => undefined,
   onSaveClose: () => undefined,
   onSelectView: () => undefined,
-  onToggleMobileDevTools: () => undefined,
 });
 
 const createServiceWorkerCacheState = () => ({
@@ -96,25 +93,6 @@ const createServiceWorkerCacheState = () => ({
   updateReady: false,
   updateTitle: "",
 });
-
-const createMatchMediaResult = (query, matches) => ({
-  addEventListener: () => undefined,
-  addListener: () => undefined,
-  dispatchEvent: () => false,
-  matches,
-  media: query,
-  onchange: null,
-  removeEventListener: () => undefined,
-  removeListener: () => undefined,
-});
-
-const setMobileDevToolsViewport = (matches) => {
-  window.matchMedia = (query) => {
-    if (query.includes("pointer: coarse") || query.includes("max-width: 767px"))
-      return createMatchMediaResult(query, matches);
-    return originalMatchMedia ? originalMatchMedia.call(window, query) : createMatchMediaResult(query, false);
-  };
-};
 
 const createWebappState = (settings = getDefaultSettings()) => ({
   creatorSession: createEmptyCreatorSessionState(),
@@ -164,10 +142,6 @@ beforeEach(() => {
   document.body.replaceChildren(rootElement);
 });
 
-afterEach(() => {
-  window.matchMedia = originalMatchMedia;
-});
-
 test("WebappRoot mounts the full workflow shell and stages archive inputs", async () => {
   mountWebappRoot();
 
@@ -203,10 +177,9 @@ test("WebappRoot mounts the full workflow shell and stages archive inputs", asyn
 });
 
 test("WebappRoot keeps diagnostics out of the masthead — the Log dialog owns them", async () => {
-  // Even with dev tools enabled, the header stays theme / log / settings; the
-  // console-copy and Eruda toggles were folded into the Log dialog surface.
-  setMobileDevToolsViewport(true);
-  mountWebappRoot({ settings: { ...getDefaultSettings(), devTools: true } });
+  // The header stays theme / log / settings; the console-copy and mobile dev
+  // tools toggles were folded into the Log dialog surface.
+  mountWebappRoot();
   await expect.element(page.getByRole("button", { name: "Log" })).toBeInTheDocument();
   await expect.element(page.getByRole("button", { name: "Copy console logs" })).not.toBeInTheDocument();
   await expect.element(page.getByRole("button", { name: "Mobile dev tools" })).not.toBeInTheDocument();

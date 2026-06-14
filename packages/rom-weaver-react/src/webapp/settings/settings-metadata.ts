@@ -17,7 +17,7 @@ import { getBrowserLocaleCandidates, negotiateLocale } from "../../presentation/
 import { getSettingsLabel, getUiSettingsLabel } from "../../presentation/settings.ts";
 import { LOG_LEVELS } from "../../types/logging.ts";
 import { ROM_WEAVER_CREATE_CONTAINER_FORMATS } from "../../wasm/generated/rom-weaver-format-metadata.ts";
-import { getDefaultWebappDevToolsEnabled, getDefaultWebappLogLevel } from "../development-defaults.ts";
+import { getDefaultWebappLogLevel } from "../development-defaults.ts";
 import {
   COMPRESSION_PROFILES,
   canUseThreadedWasm,
@@ -51,7 +51,6 @@ type SettingsState = {
   zipCodec: string;
   zipLevel: number | "";
   workerThreads: number | "auto";
-  devTools: boolean;
 };
 
 type NumericDraftValue = number | "" | string;
@@ -174,7 +173,6 @@ const SETTINGS_FIELD_ORDER = [
   "zipCodec",
   "zipLevel",
   "workerThreads",
-  "devTools",
 ] as const satisfies readonly SettingsFieldKey[];
 
 const SETTINGS_LEVEL_OVERRIDE_FIELDS = [
@@ -313,15 +311,6 @@ const SETTINGS_FIELD_METADATA: { [K in SettingsFieldKey]: SettingsFieldMetadata<
       ".zip or ROM specific is the default: ZIP for archive output, or ROM-specific compression such as Z3DS, CHD, RVZ, etc. when available.",
     validationLabel: "Container Preference",
     validValues: ["7z/special", "zip/special", "special only", "7z only", "zip only", "none"],
-  },
-  devTools: {
-    defaultValue: getDefaultWebappDevToolsEnabled,
-    id: "settings-dev-tools",
-    key: "devTools",
-    kind: "checkbox",
-    label: getSettingsLabel("devTools"),
-    labelDataLocalize: "Enable dev tools",
-    layout: "large",
   },
   fixChecksum: {
     defaultValue: false,

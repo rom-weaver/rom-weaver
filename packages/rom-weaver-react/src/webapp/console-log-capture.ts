@@ -26,7 +26,6 @@ type ConsoleLogReport = {
   runtime: {
     atomicsWaitAsync: string;
     crossOriginIsolated: boolean;
-    erudaEnabled: boolean;
     isSecureContext: boolean;
     language: string;
     logCount: number;
@@ -163,7 +162,6 @@ const getReport = (): ConsoleLogReport => ({
   runtime: {
     atomicsWaitAsync: typeof Atomics === "undefined" ? "undefined" : typeof Atomics.waitAsync,
     crossOriginIsolated: typeof crossOriginIsolated === "boolean" ? crossOriginIsolated : false,
-    erudaEnabled: window.ROM_WEAVER_ERUDA_ENABLED === true,
     isSecureContext: typeof isSecureContext === "boolean" ? isSecureContext : false,
     language: typeof navigator === "undefined" ? "" : navigator.language,
     logCount: records.length,

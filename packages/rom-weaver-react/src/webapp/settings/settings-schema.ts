@@ -44,7 +44,7 @@ const SETTINGS_STORAGE_VERSION = 5;
 
 type RuntimeSharedSettings = Omit<
   SettingsState,
-  "devTools" | "rvzCompressionLevel" | "z3dsCompressionLevel" | "sevenZipLevel" | "zipLevel"
+  "rvzCompressionLevel" | "z3dsCompressionLevel" | "sevenZipLevel" | "zipLevel"
 > & {
   rvzCompressionLevel: number;
   z3dsCompressionLevel: number | "default";
@@ -73,7 +73,7 @@ type CodecListOptions = NonNullable<Parameters<typeof normalizeCodecList>[1]>;
 const storedStringSchema = v.string();
 const storedBooleanSchema = v.boolean();
 const storedStringOrNumberSchema = v.union([v.string(), v.number()]);
-const BOOLEAN_SETTINGS_FIELDS = ["fixChecksum", "rvzScrub", "devTools"] as const satisfies readonly SettingsFieldKey[];
+const BOOLEAN_SETTINGS_FIELDS = ["fixChecksum", "rvzScrub"] as const satisfies readonly SettingsFieldKey[];
 const HIDDEN_DEFAULT_SETTINGS_FIELDS = [
   "compressionFormat",
   "chdOutputMode",
@@ -416,7 +416,6 @@ const readGroupedStoredSettings = (source: Record<string, unknown>): Record<stri
     chdCreateDvdCodecs: compression.chdCreateDvdCodecs,
     compressionProfile: compression.profile,
     defaultCompression: commonSettings.defaultCompression,
-    devTools: commonSettings.devTools ?? commonSettings.mobileDevTools,
     fixChecksum: patch.fixChecksum,
     language: commonSettings.language,
     logLevel: commonSettings.logLevel,
@@ -548,9 +547,6 @@ const loadSettings = (storage?: StorageLike): SettingsState => {
         workerThreads,
         resolveWorkerThreadsNumericFallback(settings.workerThreads),
       );
-
-    const devTools = readStoredField(storedBooleanSchema, loadedSettings.devTools);
-    if (devTools !== undefined) settings.devTools = devTools;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     resetStoredSettings(storageObject, message);
@@ -582,7 +578,7 @@ const serializeSettingsForStorage = (source?: SettingsState | null): string | nu
       (storedSettings.common as Record<string, unknown>)[fieldKey] = value;
       return;
     }
-    if (fieldKey === "language" || fieldKey === "logLevel" || fieldKey === "devTools") {
+    if (fieldKey === "language" || fieldKey === "logLevel") {
       (storedSettings.common as Record<string, unknown>)[fieldKey] = value;
       return;
     }
