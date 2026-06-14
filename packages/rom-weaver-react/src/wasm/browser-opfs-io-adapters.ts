@@ -12,6 +12,7 @@ import {
   VIRTUAL_FILE_STATE_REQUESTED,
   VIRTUAL_FILE_STATUS_OK,
 } from "./browser-virtual-file-protocol.ts";
+import { formatErrorForTrace } from "./workers/worker-trace-format.ts";
 
 const RANDOM_ACCESS_READ_CACHE_BLOCK_BYTES = 1024 * 1024;
 const RANDOM_ACCESS_READ_CACHE_BLOCK_COUNT = 4;
@@ -782,17 +783,6 @@ function waitForAtomicsStateChange(
     if (result === "timed-out" && monotonicNowMs() >= deadline) return "timed-out";
   }
   return "changed";
-}
-
-function formatErrorForTrace(error: unknown): string {
-  if (error instanceof Error) return `${error.name}:${truncateForTrace(error.message)}`;
-  return truncateForTrace(String(error));
-}
-
-function truncateForTrace(value: unknown, maxLength = 180): string {
-  const text = String(value ?? "");
-  if (text.length <= maxLength) return text;
-  return `${text.slice(0, maxLength - 1)}...`;
 }
 
 // Test-only: lets benches/tests drive the OPFS random-access read/write path (read cache +

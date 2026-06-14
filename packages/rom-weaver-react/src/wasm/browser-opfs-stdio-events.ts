@@ -6,6 +6,14 @@ import {
   randomAccessFileIoStatsHaveData,
 } from "./browser-opfs-io-adapters.ts";
 import type { LineHandler, TraceLine } from "./browser-opfs-runtime-types.ts";
+import { basenameForTrace } from "./workers/worker-trace-format.ts";
+
+export {
+  basenameForTrace,
+  formatCommandForTrace,
+  formatErrorForTrace,
+  truncateForTrace,
+} from "./workers/worker-trace-format.ts";
 
 type RandomAccessFileIoStats = ReturnType<typeof createRandomAccessFileIoStats>;
 
@@ -140,41 +148,6 @@ function summarizeVirtualFileEntries(value: ReadonlyArray<unknown>, readSource: 
 export function formatArgsForTrace(args: unknown): string {
   if (!Array.isArray(args) || args.length === 0) return "[]";
   return JSON.stringify(args.map((value: unknown) => basenameForTrace(value)));
-}
-
-export function formatCommandForTrace(command: unknown): string {
-  if (!command || typeof command !== "object") return "unknown";
-  try {
-    return truncateForTrace(JSON.stringify(toTraceValue(command)));
-  } catch {
-    return String((command as { type?: unknown }).type ?? "unknown");
-  }
-}
-
-function toTraceValue(value: unknown): unknown {
-  if (typeof value === "string") return basenameForTrace(value);
-  if (Array.isArray(value)) return value.map((entry: unknown) => toTraceValue(entry));
-  if (!value || typeof value !== "object") return value;
-  const out: Record<string, unknown> = {};
-  for (const [key, entry] of Object.entries(value)) out[key] = toTraceValue(entry);
-  return out;
-}
-
-export function basenameForTrace(value: unknown): string {
-  const text = String(value ?? "");
-  if (!text.includes("/")) return text;
-  return text.slice(text.lastIndexOf("/") + 1) || text;
-}
-
-export function formatErrorForTrace(error: unknown): string {
-  if (error instanceof Error) return `${error.name}:${truncateForTrace(error.message)}`;
-  return truncateForTrace(String(error));
-}
-
-export function truncateForTrace(value: unknown, maxLength = 180): string {
-  const text = String(value ?? "");
-  if (text.length <= maxLength) return text;
-  return `${text.slice(0, maxLength - 1)}...`;
 }
 
 export function installDirectWasiFileIoImports(wasi: DirectIoWasi | null | undefined, trace?: TraceLine | null): void {

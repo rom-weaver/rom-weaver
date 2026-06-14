@@ -14,6 +14,7 @@ import type {
   ThreadWorkerShellReadyReply,
   ThreadWorkerThreadStartMessage,
 } from "../browser-wasi-thread-pool.ts";
+import { formatErrorForTrace } from "./worker-trace-format.ts";
 
 /** Stream-routing fields shared by every command-style worker message. */
 interface ThreadWorkerStreamSource {
@@ -34,7 +35,9 @@ self.addEventListener("message", (event) => {
   const payload: ThreadWorkerMessage = event.data ?? {};
   const payloadMode = payload.mode;
   if (payload.mode === "pool-shell") {
-    self.postMessage({ type: "shell-ready" } satisfies ThreadWorkerShellReadyReply);
+    self.postMessage({
+      type: "shell-ready",
+    } satisfies ThreadWorkerShellReadyReply);
     return;
   }
   if (payload.mode === "pool-command") {
@@ -56,7 +59,10 @@ self.addEventListener("message", (event) => {
     shellBusy = true;
     void runPoolWorker(payload)
       .then(() => {
-        self.postMessage({ commandId: payload.commandId, type: "command-done" } satisfies ThreadWorkerCommandDoneReply);
+        self.postMessage({
+          commandId: payload.commandId,
+          type: "command-done",
+        } satisfies ThreadWorkerCommandDoneReply);
       })
       .catch((error) => {
         self.postMessage({
@@ -171,7 +177,10 @@ async function runPoolWorker(payload: ThreadWorkerPoolCommandMessage) {
   const poolStream = createStreamPublisher(payload, null);
   await __primeRomWeaverBrowserThreadRuntime(payload.runtime, poolStream?.traceLine);
   poolStream?.traceLine(`[wasi-thread-worker] pool worker ready command=${payload.commandId ?? "standalone"}`);
-  self.postMessage({ commandId: payload.commandId, type: "ready" } satisfies ThreadWorkerReadyReply);
+  self.postMessage({
+    commandId: payload.commandId,
+    type: "ready",
+  } satisfies ThreadWorkerReadyReply);
 
   try {
     while (true) {
@@ -326,15 +335,4 @@ function isErrorLike(value: unknown): value is {
   stack?: unknown;
 } {
   return Boolean(value) && (typeof value === "object" || typeof value === "function");
-}
-
-function formatErrorForTrace(error: unknown): string {
-  if (error instanceof Error) return `${error.name}:${truncateForTrace(error.message)}`;
-  return truncateForTrace(String(error));
-}
-
-function truncateForTrace(value: unknown, maxLength = 180): string {
-  const text = String(value ?? "");
-  if (text.length <= maxLength) return text;
-  return `${text.slice(0, maxLength - 1)}...`;
 }

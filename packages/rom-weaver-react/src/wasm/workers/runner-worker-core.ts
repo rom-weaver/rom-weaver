@@ -21,6 +21,13 @@ import {
   SELECT_REQUEST_PENDING,
   SELECT_REQUEST_READY_INDEX,
 } from "./worker-protocol.ts";
+import {
+  formatCommandForTrace,
+  formatErrorForTrace,
+  summarizeRunResult,
+  summarizeSelectRequest,
+  summarizeVirtualFiles,
+} from "./worker-trace-format.ts";
 
 type RunnerWorkerInitResult = {
   mode: "browser-opfs";
@@ -132,7 +139,12 @@ export function createRunnerWorkerMessageQueue({ postMessage, initRunner }: Runn
             );
             Atomics.store(control, SELECT_REQUEST_READY_INDEX, SELECT_REQUEST_PENDING);
             Atomics.store(control, SELECT_REQUEST_COUNT_INDEX, SELECT_REQUEST_CANCEL_COUNT);
-            postMessage({ control: control.buffer, request, requestId, type: "selectRequest" });
+            postMessage({
+              control: control.buffer,
+              request,
+              requestId,
+              type: "selectRequest",
+            });
             postTraceLine(
               requestId,
               "[runner-worker] hostSelect posted selectRequest, blocking worker until the user responds",
@@ -166,7 +178,11 @@ export function createRunnerWorkerMessageQueue({ postMessage, initRunner }: Runn
             postMessage({ event, requestId, type: "traceEvent" });
           },
           onTraceNonJsonLine(line: string) {
-            postMessage({ line: String(line), requestId, type: "traceNonJsonLine" });
+            postMessage({
+              line: String(line),
+              requestId,
+              type: "traceNonJsonLine",
+            });
           },
         };
         const request = message.request;
@@ -232,19 +248,6 @@ function readRequestId(message: unknown): number | null {
   return (message as { requestId?: number }).requestId ?? null;
 }
 
-function summarizeSelectRequest(request: unknown) {
-  if (typeof request !== "string") return "request=invalid";
-  try {
-    const parsed = JSON.parse(request);
-    const heading = typeof parsed?.heading === "string" ? parsed.heading : "";
-    const mode = typeof parsed?.mode === "string" ? parsed.mode : "single";
-    const candidateCount = Array.isArray(parsed?.candidates) ? parsed.candidates.length : 0;
-    return `mode=${mode} heading="${heading}" candidates=${candidateCount}`;
-  } catch {
-    return `request=unparsable bytes=${request.length}`;
-  }
-}
-
 /** Count the candidates in a selection request JSON; used to size the control buffer's index
  * payload region. Unparsable requests report 0, which still leaves room for the header/cancel. */
 function readSelectRequestCandidateCount(request: string): number {
@@ -291,91 +294,10 @@ function summarizeRunRequest(message: unknown) {
   ].join(" ");
 }
 
-function summarizeRunResult(result: unknown) {
-  if (!result || typeof result !== "object") return "result=unknown";
-  const record = result as UnknownRecord;
-  const parts: string[] = [];
-  if (Object.hasOwn(record, "ok")) parts.push(`ok=${Boolean(record.ok)}`);
-  if (Object.hasOwn(record, "exitCode")) parts.push(`exitCode=${String(record.exitCode)}`);
-  if (Array.isArray(record.events)) parts.push(`events=${record.events.length}`);
-  if (Array.isArray(record.nonJsonLines)) parts.push(`nonJsonLines=${record.nonJsonLines.length}`);
-  if (Array.isArray(record.traceEvents)) parts.push(`traceEvents=${record.traceEvents.length}`);
-  if (Array.isArray(record.traceNonJsonLines)) {
-    parts.push(`traceNonJsonLines=${record.traceNonJsonLines.length}`);
-  }
-  return parts.length > 0 ? parts.join(" ") : "result=object";
-}
-
-function summarizeVirtualFiles(value: unknown): string {
-  if (!Array.isArray(value) || value.length === 0) return "count=0";
-  let proxyCount = 0;
-  let directCount = 0;
-  let totalBytes = 0;
-  for (const entry of value) {
-    const record = entry && typeof entry === "object" ? (entry as UnknownRecord) : {};
-    const source = record.source ?? record.file ?? record.blob ?? record.bytes ?? record.data ?? record.proxy;
-    const proxy = record.proxy ?? (isTraceVirtualFileProxy(source) ? source : null);
-    if (isTraceVirtualFileProxy(proxy)) {
-      proxyCount += 1;
-      totalBytes += Number(proxy.size) || 0;
-      continue;
-    }
-    directCount += 1;
-    const sourceRecord = source && typeof source === "object" ? (source as UnknownRecord) : {};
-    totalBytes += Number(sourceRecord.size ?? sourceRecord.byteLength ?? 0) || 0;
-  }
-  return `count=${value.length},proxy=${proxyCount},direct=${directCount},bytes=${totalBytes}`;
-}
-
-function isTraceVirtualFileProxy(value: unknown): value is { id: string; size: unknown; slots: unknown[] } {
-  return Boolean(
-    value &&
-      typeof value === "object" &&
-      typeof (value as UnknownRecord).id === "string" &&
-      Array.isArray((value as UnknownRecord).slots) &&
-      Number.isFinite(Number((value as UnknownRecord).size)),
-  );
-}
-
-function formatCommandForTrace(command: unknown): string {
-  if (!command || typeof command !== "object") return "unknown";
-  try {
-    return truncateForTrace(JSON.stringify(toTraceValue(command)));
-  } catch {
-    return String((command as UnknownRecord).type ?? "unknown");
-  }
-}
-
 function readPayloadCommand(payload: unknown): unknown {
   if (!payload || typeof payload !== "object") return null;
   const record = payload as UnknownRecord;
   return record.command && typeof record.command === "object" ? record.command : record;
-}
-
-function toTraceValue(value: unknown): unknown {
-  if (typeof value === "string") return basenameForTrace(value);
-  if (Array.isArray(value)) return value.map((entry) => toTraceValue(entry));
-  if (!value || typeof value !== "object") return value;
-  const out: UnknownRecord = {};
-  for (const [key, entry] of Object.entries(value)) out[key] = toTraceValue(entry);
-  return out;
-}
-
-function basenameForTrace(value: unknown): string {
-  const text = String(value ?? "");
-  if (!text.includes("/")) return text;
-  return text.slice(text.lastIndexOf("/") + 1) || text;
-}
-
-function formatErrorForTrace(error: unknown): string {
-  if (error instanceof Error) return `${error.name}:${truncateForTrace(error.message)}`;
-  return truncateForTrace(String(error));
-}
-
-function truncateForTrace(value: unknown, maxLength = 180): string {
-  const text = String(value ?? "");
-  if (text.length <= maxLength) return text;
-  return `${text.slice(0, maxLength - 1)}...`;
 }
 
 function serializeError(error: unknown, requestMessage: unknown): RomWeaverWorkerSerializedError {
