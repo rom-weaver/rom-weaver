@@ -2,8 +2,27 @@
 //! human-readable report labels (and the byuu parse `details` JSON) byte-identical across the
 //! formats that previously duplicated the same string assembly inline.
 
-use rom_weaver_core::{FormatDescriptor, OperationReport};
+use rom_weaver_core::{FormatDescriptor, OperationReport, ThreadExecution};
 use serde_json::json;
+
+/// Build the create success report shared by record-based patch formats:
+/// `"created <name> patch with <n> record(s)"`. Formats that append warning
+/// labels or extra fields assemble their own report.
+pub(crate) fn patch_create_report(
+    descriptor: &'static FormatDescriptor,
+    record_count: usize,
+    execution: ThreadExecution,
+) -> OperationReport {
+    crate::patch_success_report(
+        descriptor,
+        "create",
+        format!(
+            "created {} patch with {record_count} record(s)",
+            descriptor.name
+        ),
+        Some(execution),
+    )
+}
 
 /// Append each warning to `label` as `"; warning=<text>"`, returning the combined label. The
 /// warning texts themselves stay format-specific; only the join shape is shared.

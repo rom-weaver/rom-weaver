@@ -109,8 +109,7 @@ impl PatchHandler for PmsrPatchHandler {
             output_bytes.resize(output_len as usize, 0);
             apply_pmsr_records_in_memory(output_len, &patch.records, &mut output_bytes)?;
             fs::write(&request.output, &output_bytes)?;
-            execution.effective_threads = 1;
-            execution.used_parallelism = false;
+            execution.force_serial();
             execution
         } else {
             fs::copy(&request.input, &request.output)?;
@@ -231,14 +230,10 @@ impl PatchHandler for PmsrPatchHandler {
         }
         fs::write(&request.output, patch.bytes)?;
 
-        Ok(crate::patch_success_report(
+        Ok(crate::shared::labels::patch_create_report(
             self.descriptor,
-            "create",
-            format!(
-                "created {} patch with {} record(s)",
-                self.descriptor.name, patch.record_count
-            ),
-            Some(execution),
+            patch.record_count,
+            execution,
         ))
     }
 
@@ -698,16 +693,13 @@ fn create_pmsr_patch_parallel(
         )));
     }
 
-    if crate::patches_reads_source_on_main_thread() {
-        let combined = original_len.saturating_add(modified_len);
-        if combined > crate::IN_MEMORY_APPLY_LIMIT_BYTES {
-            info!(
-                original_len,
-                modified_len,
-                "PMSR create: combined size exceeds in-memory limit; falling back to serial path"
-            );
-            return create_pmsr_patch_streaming(original_path, modified_path);
-        }
+    if crate::create_exceeds_main_thread_cap(original_len.saturating_add(modified_len)) {
+        info!(
+            original_len,
+            modified_len,
+            "PMSR create: combined size exceeds in-memory limit; falling back to serial path"
+        );
+        return create_pmsr_patch_streaming(original_path, modified_path);
     }
 
     let chunk_count = pmsr_create_chunk_count(modified_len)?;

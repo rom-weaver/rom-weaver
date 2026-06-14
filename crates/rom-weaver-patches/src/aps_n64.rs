@@ -122,8 +122,7 @@ impl PatchHandler for ApsN64PatchHandler {
             output_bytes.resize(patch.output_size as usize, 0);
             apply_aps_records_in_memory(patch.output_size, &patch.records, &mut output_bytes)?;
             fs::write(&request.output, &output_bytes)?;
-            execution.effective_threads = 1;
-            execution.used_parallelism = false;
+            execution.force_serial();
             execution
         } else {
             fs::copy(&request.input, &request.output)?;
@@ -244,14 +243,10 @@ impl PatchHandler for ApsN64PatchHandler {
         }
         fs::write(&request.output, created.bytes)?;
 
-        Ok(crate::patch_success_report(
+        Ok(crate::shared::labels::patch_create_report(
             self.descriptor,
-            "create",
-            format!(
-                "created {} patch with {} record(s)",
-                self.descriptor.name, created.record_count
-            ),
-            Some(execution),
+            created.record_count,
+            execution,
         ))
     }
 
@@ -927,22 +922,19 @@ fn create_aps_patch_parallel(
     })?;
     let chunk_count = aps_create_chunk_count(modified_len_usize)?;
 
-    if crate::patches_reads_source_on_main_thread() {
-        let combined = original_len.saturating_add(modified_len);
-        if combined > crate::IN_MEMORY_APPLY_LIMIT_BYTES {
-            info!(
-                original_len,
-                modified_len,
-                "APS create: combined size exceeds in-memory limit; falling back to serial path"
-            );
-            return create_aps_patch_from_files(
-                original_path,
-                original_len,
-                modified_path,
-                modified_len,
-                context,
-            );
-        }
+    if crate::create_exceeds_main_thread_cap(original_len.saturating_add(modified_len)) {
+        info!(
+            original_len,
+            modified_len,
+            "APS create: combined size exceeds in-memory limit; falling back to serial path"
+        );
+        return create_aps_patch_from_files(
+            original_path,
+            original_len,
+            modified_path,
+            modified_len,
+            context,
+        );
     }
 
     trace!(

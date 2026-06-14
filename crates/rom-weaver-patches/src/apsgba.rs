@@ -117,8 +117,7 @@ impl PatchHandler for ApsGbaPatchHandler {
                 validate_checksums,
             )?;
             fs::write(&request.output, &output_bytes)?;
-            execution.effective_threads = 1;
-            execution.used_parallelism = false;
+            execution.force_serial();
             execution
         } else {
             fs::copy(&request.input, &request.output)?;
@@ -275,14 +274,10 @@ impl PatchHandler for ApsGbaPatchHandler {
         }
         output.flush()?;
 
-        Ok(crate::patch_success_report(
+        Ok(crate::shared::labels::patch_create_report(
             self.descriptor,
-            "create",
-            format!(
-                "created {} patch with {} record(s)",
-                self.descriptor.name, created.record_count
-            ),
-            Some(execution),
+            created.record_count,
+            execution,
         ))
     }
 

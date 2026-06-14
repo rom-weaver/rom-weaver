@@ -338,6 +338,14 @@ impl ThreadExecution {
         self.thread_fallback = true;
         self.thread_fallback_reason = Some(reason.into());
     }
+
+    /// Downgrade a planned execution to single-threaded *without* marking it a
+    /// fallback — used by in-memory apply paths that buffer the whole output and
+    /// apply on the calling thread regardless of the planned parallelism.
+    pub fn force_serial(&mut self) {
+        self.effective_threads = 1;
+        self.used_parallelism = false;
+    }
 }
 
 #[derive(Clone)]

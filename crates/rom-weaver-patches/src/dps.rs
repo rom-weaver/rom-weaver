@@ -932,17 +932,14 @@ fn collect_dps_records_parallel(
     }
 
     let chunk_size = CREATE_THREAD_SCAN_CHUNK_BYTES as u64;
-    if crate::patches_reads_source_on_main_thread() {
-        let combined = source_len.saturating_add(target_len);
-        if combined > crate::IN_MEMORY_APPLY_LIMIT_BYTES {
-            info!(
-                source_len,
-                target_len,
-                "DPS create: combined size exceeds in-memory limit; falling back to serial path"
-            );
-            let records = create_dps_records_streaming(source_path, target_path)?;
-            return Ok(records);
-        }
+    if crate::create_exceeds_main_thread_cap(source_len.saturating_add(target_len)) {
+        info!(
+            source_len,
+            target_len,
+            "DPS create: combined size exceeds in-memory limit; falling back to serial path"
+        );
+        let records = create_dps_records_streaming(source_path, target_path)?;
+        return Ok(records);
     }
 
     // Each chunk scan is wrapped in `Ok(...)` so the shared fail-fast collect

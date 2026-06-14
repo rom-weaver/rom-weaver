@@ -138,8 +138,7 @@ impl PatchHandler for BpsPatchHandler {
             )?;
             output.seek(SeekFrom::Start(0))?;
             output.write_all(&output_bytes)?;
-            execution.effective_threads = 1;
-            execution.used_parallelism = false;
+            execution.force_serial();
             execution
         } else {
             let (mut execution, prepared) = run_with_optional_pool(
@@ -239,14 +238,10 @@ impl PatchHandler for BpsPatchHandler {
             "bps create complete"
         );
 
-        Ok(crate::patch_success_report(
+        Ok(crate::shared::labels::patch_create_report(
             self.descriptor,
-            "create",
-            format!(
-                "created {} patch with {} record(s)",
-                self.descriptor.name, created.action_count
-            ),
-            Some(execution),
+            created.action_count,
+            execution,
         ))
     }
 

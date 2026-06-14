@@ -148,8 +148,7 @@ impl PatchHandler for PpfPatchHandler {
             output_bytes.resize(ppf_output_len as usize, 0);
             apply_records_in_memory(&parsed.records, &mut output_bytes)?;
             fs::write(&request.output, &output_bytes)?;
-            execution.effective_threads = 1;
-            execution.used_parallelism = false;
+            execution.force_serial();
             execution
         } else {
             fs::copy(&request.input, &request.output)?;

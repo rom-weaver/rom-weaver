@@ -196,14 +196,10 @@ impl PatchHandler for UpsPatchHandler {
         }
         fs::write(&request.output, created.bytes)?;
 
-        Ok(crate::patch_success_report(
+        Ok(crate::shared::labels::patch_create_report(
             self.descriptor,
-            "create",
-            format!(
-                "created {} patch with {} record(s)",
-                self.descriptor.name, created.record_count
-            ),
-            Some(execution),
+            created.record_count,
+            execution,
         ))
     }
 

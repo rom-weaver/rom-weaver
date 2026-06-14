@@ -213,8 +213,7 @@ impl PatchHandler for BdfPatchHandler {
                 "bdf create: read-on-main, running qbsdiff serially on main thread"
             );
             create_qbsdiff_patch(request, context, 1)?;
-            execution.effective_threads = 1;
-            execution.used_parallelism = false;
+            execution.force_serial();
         } else {
             trace!(
                 format = self.descriptor.name,

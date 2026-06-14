@@ -268,14 +268,10 @@ impl PatchHandler for RupPatchHandler {
         )?;
         fs::write(&request.output, &created.bytes)?;
 
-        Ok(crate::patch_success_report(
+        Ok(crate::shared::labels::patch_create_report(
             self.descriptor,
-            "create",
-            format!(
-                "created {} patch with {} record(s)",
-                self.descriptor.name, created.record_count
-            ),
-            Some(execution),
+            created.record_count,
+            execution,
         ))
     }
 
@@ -1750,22 +1746,19 @@ fn collect_rup_records_parallel(
         return Ok(Vec::new());
     }
 
-    if crate::patches_reads_source_on_main_thread() {
-        let combined = source_size.saturating_add(target_size);
-        if combined > crate::IN_MEMORY_APPLY_LIMIT_BYTES {
-            info!(
-                source_size,
-                target_size,
-                "RUP create: combined size exceeds in-memory limit; falling back to serial path"
-            );
-            return create_rup_patch_streaming(source_path, target_path)
-                .map(|p| {
-                    // Extract records from the created patch by re-parsing
-                    parse_rup_bytes(&p.bytes)
-                        .map(|parsed| parsed.files.into_iter().flat_map(|f| f.records).collect())
-                })
-                .and_then(|r| r);
-        }
+    if crate::create_exceeds_main_thread_cap(source_size.saturating_add(target_size)) {
+        info!(
+            source_size,
+            target_size,
+            "RUP create: combined size exceeds in-memory limit; falling back to serial path"
+        );
+        return create_rup_patch_streaming(source_path, target_path)
+            .map(|p| {
+                // Extract records from the created patch by re-parsing
+                parse_rup_bytes(&p.bytes)
+                    .map(|parsed| parsed.files.into_iter().flat_map(|f| f.records).collect())
+            })
+            .and_then(|r| r);
     }
 
     let chunk_size = CREATE_THREAD_SCAN_CHUNK_BYTES as u64;
@@ -2159,6 +2152,40 @@ fn civil_from_days(days_since_epoch: i64) -> (i32, u32, u32) {
     (year, month, day)
 }
 
+/// Decode a RUP (NINJA2) length-prefixed VLV: a 1-byte length (0..=8) followed by
+/// that many little-endian value bytes. Shared by the streaming and slice parsers.
+fn read_rup_vlv(mut read_u8: impl FnMut() -> Result<u8>) -> Result<u64> {
+    let encoded_len = usize::from(read_u8()?);
+    if encoded_len > 8 {
+        return Err(RomWeaverError::Validation(
+            "RUP VLV length exceeded 64-bit range".into(),
+        ));
+    }
+
+    let mut value = 0u64;
+    for index in 0..encoded_len {
+        let byte = u64::from(read_u8()?);
+        let shift = (index * 8) as u32;
+        value |= byte << shift;
+    }
+
+    Ok(value)
+}
+
+/// Decode a NUL-terminated fixed-length RUP string field (bytes from the first
+/// NUL onward are dropped; each remaining byte maps to a `char`).
+fn rup_fixed_string(bytes: impl AsRef<[u8]>) -> String {
+    let bytes = bytes.as_ref();
+    let trimmed_len = bytes
+        .iter()
+        .position(|byte| *byte == 0)
+        .unwrap_or(bytes.len());
+    bytes[..trimmed_len]
+        .iter()
+        .map(|byte| char::from(*byte))
+        .collect()
+}
+
 struct RupFileParser<R> {
     reader: R,
     file_len: u64,
@@ -2202,33 +2229,11 @@ impl<R: Read> RupFileParser<R> {
     }
 
     fn read_vlv(&mut self) -> Result<u64> {
-        let encoded_len = usize::from(self.read_u8()?);
-        if encoded_len > 8 {
-            return Err(RomWeaverError::Validation(
-                "RUP VLV length exceeded 64-bit range".into(),
-            ));
-        }
-
-        let mut value = 0u64;
-        for index in 0..encoded_len {
-            let byte = u64::from(self.read_u8()?);
-            let shift = (index * 8) as u32;
-            value |= byte << shift;
-        }
-
-        Ok(value)
+        read_rup_vlv(|| self.read_u8())
     }
 
     fn read_fixed_string(&mut self, len: usize) -> Result<String> {
-        let bytes = self.read_exact(len)?;
-        let trimmed_len = bytes
-            .iter()
-            .position(|byte| *byte == 0)
-            .unwrap_or(bytes.len());
-        Ok(bytes[..trimmed_len]
-            .iter()
-            .map(|byte| char::from(*byte))
-            .collect())
+        Ok(rup_fixed_string(self.read_exact(len)?))
     }
 
     fn read_u128_md5(&mut self) -> Result<[u8; 16]> {
@@ -2274,33 +2279,11 @@ impl<'a> RupParser<'a> {
     }
 
     fn read_vlv(&mut self) -> Result<u64> {
-        let encoded_len = usize::from(self.read_u8()?);
-        if encoded_len > 8 {
-            return Err(RomWeaverError::Validation(
-                "RUP VLV length exceeded 64-bit range".into(),
-            ));
-        }
-
-        let mut value = 0u64;
-        for index in 0..encoded_len {
-            let byte = u64::from(self.read_u8()?);
-            let shift = (index * 8) as u32;
-            value |= byte << shift;
-        }
-
-        Ok(value)
+        read_rup_vlv(|| self.read_u8())
     }
 
     fn read_fixed_string(&mut self, len: usize) -> Result<String> {
-        let bytes = self.read_exact(len)?;
-        let trimmed_len = bytes
-            .iter()
-            .position(|byte| *byte == 0)
-            .unwrap_or(bytes.len());
-        Ok(bytes[..trimmed_len]
-            .iter()
-            .map(|byte| char::from(*byte))
-            .collect())
+        Ok(rup_fixed_string(self.read_exact(len)?))
     }
 
     fn read_u128_md5(&mut self) -> Result<[u8; 16]> {
