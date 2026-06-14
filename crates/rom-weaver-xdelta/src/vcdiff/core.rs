@@ -2143,28 +2143,14 @@ pub(super) fn varint_len(mut value: u64) -> usize {
     len
 }
 
-pub(super) fn write_varint_raw<W: Write>(writer: &mut W, mut value: u64) -> Result<()> {
-    if value == 0 {
-        writer.write_all(&[0])?;
-        return Ok(());
-    }
-
-    let mut stack = [0u8; 10];
+pub(super) fn write_varint_raw<W: Write>(writer: &mut W, value: u64) -> Result<()> {
+    let mut encoded = [0u8; 10];
     let mut len = 0usize;
-    while value > 0 {
-        stack[len] = (value % 128) as u8;
+    encode_base128(value, |byte| {
+        encoded[len] = byte;
         len += 1;
-        value /= 128;
-    }
-
-    for index in (0..len).rev() {
-        let is_last = index == 0;
-        writer.write_all(&[if is_last {
-            stack[index]
-        } else {
-            stack[index] | 0x80
-        }])?;
-    }
+    });
+    writer.write_all(&encoded[..len])?;
     Ok(())
 }
 

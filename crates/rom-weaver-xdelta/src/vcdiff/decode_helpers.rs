@@ -103,25 +103,23 @@ pub(super) fn read_be_u32<R: Read>(reader: &mut R) -> Result<u32> {
 }
 
 pub(super) fn read_varint<R: Read>(reader: &mut R) -> Result<(u64, usize)> {
-    let mut value = 0u64;
     let mut count = 0usize;
-    loop {
-        let byte = read_u8(reader)?;
-        count += 1;
-        value = value
-            .checked_mul(128)
-            .and_then(|current| current.checked_add(u64::from(byte & 0x7F)))
-            .ok_or_else(|| RomWeaverError::Validation("base-128 integer overflowed u64".into()))?;
-        if byte & 0x80 == 0 {
-            break;
+    let mut read_error = None;
+    let value = decode_base128(|| match read_u8(reader) {
+        Ok(byte) => {
+            count += 1;
+            Some(byte)
         }
-        if count >= 10 {
-            return Err(RomWeaverError::Validation(
-                "base-128 integer exceeds the supported length".into(),
-            ));
+        Err(error) => {
+            read_error = Some(error);
+            None
         }
+    });
+    // Preserve the original I/O error (e.g. EOF) over the generic length error.
+    if let Some(error) = read_error {
+        return Err(error);
     }
-    Ok((value, count))
+    Ok((value?, count))
 }
 
 pub(super) fn checked_add(lhs: u64, rhs: u64, label: &str) -> Result<u64> {

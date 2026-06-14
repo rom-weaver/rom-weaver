@@ -681,41 +681,19 @@ pub(super) fn window_win_indicator(window: &WindowIndex) -> u8 {
     win_indicator
 }
 
-pub(super) fn encode_varint_raw(bytes: &mut Vec<u8>, mut value: u64) {
-    if value == 0 {
-        bytes.push(0);
-        return;
-    }
-
-    let mut stack = Vec::new();
-    while value > 0 {
-        stack.push((value % 128) as u8);
-        value /= 128;
-    }
-
-    for (index, digit) in stack.iter().rev().enumerate() {
-        let is_last = index + 1 == stack.len();
-        bytes.push(if is_last { *digit } else { *digit | 0x80 });
-    }
+pub(super) fn encode_varint_raw(bytes: &mut Vec<u8>, value: u64) {
+    encode_base128(value, |byte| bytes.push(byte));
 }
 
 pub(super) fn decode_varint_raw(bytes: &[u8]) -> Result<(u64, usize)> {
-    let mut value = 0u64;
-    for (index, byte) in bytes.iter().copied().enumerate() {
-        value = value
-            .checked_mul(128)
-            .and_then(|current| current.checked_add(u64::from(byte & 0x7F)))
-            .ok_or_else(|| RomWeaverError::Validation("base-128 integer overflowed u64".into()))?;
-        if byte & 0x80 == 0 {
-            return Ok((value, index + 1));
-        }
-        if index >= 9 {
-            break;
-        }
-    }
-    Err(RomWeaverError::Validation(
-        "base-128 integer exceeds the supported length".into(),
-    ))
+    let mut iter = bytes.iter().copied();
+    let mut count = 0usize;
+    let value = decode_base128(|| {
+        iter.next().inspect(|_| {
+            count += 1;
+        })
+    })?;
+    Ok((value, count))
 }
 
 pub(super) fn decode_window_with_native_engine<R: Read + Seek>(

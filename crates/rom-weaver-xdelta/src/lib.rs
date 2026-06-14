@@ -49,6 +49,10 @@ const XDELTA: rom_weaver_core::FormatDescriptor = rom_weaver_core::FormatDescrip
     extensions: &[".xdelta"],
 };
 
+#[path = "vcdiff/varint.rs"]
+mod varint;
+use self::varint::*;
+
 #[path = "vcdiff/core.rs"]
 mod core;
 use self::core::*;
