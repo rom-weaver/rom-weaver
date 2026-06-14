@@ -22,5 +22,8 @@ mod rvz_z3ds;
 #[path = "cli_smoke/patch.rs"]
 mod patch;
 
+#[path = "cli_smoke/patch_disc.rs"]
+mod patch_disc;
+
 #[path = "cli_smoke/cheats.rs"]
 mod cheats;
