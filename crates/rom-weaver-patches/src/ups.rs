@@ -525,23 +525,25 @@ fn prepare_ups_write(
         ));
     }
 
-    let mut source_bytes = vec![0u8; change.xor_bytes.len()];
+    // Single buffer: start zeroed, read source bytes into the readable prefix, then XOR the
+    // change in place. Bytes past `readable` stay zero, so `0 ^ xor` matches the previous
+    // two-buffer formulation byte-for-byte while skipping one allocation + zero-fill.
+    let mut data = vec![0u8; change.xor_bytes.len()];
     if change.offset < source_len {
         let readable = usize::try_from((source_len - change.offset).min(change_len))
             .map_err(|_| RomWeaverError::Validation("UPS source range exceeded usize".into()))?;
         if readable > 0 {
-            source.read_exact_at(change.offset, &mut source_bytes[..readable])?;
+            source.read_exact_at(change.offset, &mut data[..readable])?;
         }
     }
 
-    let mut patched = vec![0u8; change.xor_bytes.len()];
-    for (index, byte) in patched.iter_mut().enumerate() {
-        *byte = source_bytes[index] ^ change.xor_bytes[index];
+    for (byte, xor) in data.iter_mut().zip(change.xor_bytes.iter()) {
+        *byte ^= *xor;
     }
 
     Ok(PreparedWrite {
         offset: change.offset,
-        data: patched,
+        data,
     })
 }
 
