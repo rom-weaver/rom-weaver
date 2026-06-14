@@ -77,10 +77,10 @@ impl CliApp {
         if let Some(pwd) = std::env::var_os("PWD").map(PathBuf::from)
             && pwd.is_absolute()
         {
-            return pwd.join("rom-weaver");
+            return pwd.join("rom-weaver-out");
         }
 
-        PathBuf::from("rom-weaver")
+        PathBuf::from("rom-weaver-out")
     }
 
     pub(super) fn runtime_process_id() -> u32 {

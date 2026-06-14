@@ -2,7 +2,7 @@
 /node_modules/
 /.tmp/
 /.tmp-disc/
-/rom-weaver/
+/rom-weaver-out/
 .claude/
 **/__pycache__/
 
