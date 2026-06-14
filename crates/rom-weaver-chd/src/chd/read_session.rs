@@ -620,6 +620,33 @@ impl ChdReadSession {
         }
     }
 
+    /// Decode a single hunk into `hunk_buffer` (with `compressed_buffer` as scratch), using the
+    /// uniform "failed to decode/read hunk N of `path`" wording shared by every Rust decode path.
+    fn decode_hunk_into(
+        chd: &mut chd::Chd<BufReader<File>>,
+        hunk_index: u32,
+        source: &Path,
+        compressed_buffer: &mut Vec<u8>,
+        hunk_buffer: &mut [u8],
+    ) -> std::result::Result<(), String> {
+        let mut hunk = chd.hunk(hunk_index).map_err(|error| {
+            format!(
+                "failed to decode hunk {} of `{}`: {error}",
+                hunk_index,
+                source.display()
+            )
+        })?;
+        hunk.read_hunk_in(compressed_buffer, hunk_buffer)
+            .map_err(|error| {
+                format!(
+                    "failed to read hunk {} of `{}`: {error}",
+                    hunk_index,
+                    source.display()
+                )
+            })?;
+        Ok(())
+    }
+
     fn stream_with_rust<F>(
         source: &Path,
         parent_source: Option<&Path>,
@@ -651,21 +678,13 @@ impl ChdReadSession {
             if remaining == 0 {
                 break;
             }
-            let mut hunk = chd.hunk(hunk_index).map_err(|error| {
-                format!(
-                    "failed to decode hunk {} of `{}`: {error}",
-                    hunk_index,
-                    source.display()
-                )
-            })?;
-            hunk.read_hunk_in(&mut compressed_buffer, &mut hunk_buffer)
-                .map_err(|error| {
-                    format!(
-                        "failed to read hunk {} of `{}`: {error}",
-                        hunk_index,
-                        source.display()
-                    )
-                })?;
+            Self::decode_hunk_into(
+                &mut chd,
+                hunk_index,
+                source,
+                &mut compressed_buffer,
+                &mut hunk_buffer,
+            )?;
             let write_len = usize::try_from(remaining.min(hunk_buffer.len() as u64))
                 .map_err(|_| "decoded CHD chunk exceeded addressable memory".to_string())?;
             on_bytes(&hunk_buffer[..write_len]).map_err(|error| match error {
@@ -778,21 +797,13 @@ impl ChdReadSession {
                                     if offset >= logical_bytes {
                                         continue;
                                     }
-                                    let mut hunk = chd.hunk(hunk_index).map_err(|error| {
-                                        format!(
-                                            "failed to decode hunk {} of `{}`: {error}",
-                                            hunk_index,
-                                            source_path.display()
-                                        )
-                                    })?;
-                                    hunk.read_hunk_in(&mut compressed_buffer, &mut hunk_buffer)
-                                        .map_err(|error| {
-                                            format!(
-                                                "failed to read hunk {} of `{}`: {error}",
-                                                hunk_index,
-                                                source_path.display()
-                                            )
-                                        })?;
+                                    Self::decode_hunk_into(
+                                        &mut chd,
+                                        hunk_index,
+                                        source_path,
+                                        &mut compressed_buffer,
+                                        &mut hunk_buffer,
+                                    )?;
                                     let write_len = usize::try_from(
                                         logical_bytes
                                             .saturating_sub(offset)
@@ -896,21 +907,13 @@ impl ChdReadSession {
             if remaining == 0 {
                 break;
             }
-            let mut hunk = chd.hunk(hunk_index).map_err(|error| {
-                format!(
-                    "failed to decode hunk {} of `{}`: {error}",
-                    hunk_index,
-                    source.display()
-                )
-            })?;
-            hunk.read_hunk_in(&mut compressed_buffer, &mut hunk_buffer)
-                .map_err(|error| {
-                    format!(
-                        "failed to read hunk {} of `{}`: {error}",
-                        hunk_index,
-                        source.display()
-                    )
-                })?;
+            Self::decode_hunk_into(
+                &mut chd,
+                hunk_index,
+                source,
+                &mut compressed_buffer,
+                &mut hunk_buffer,
+            )?;
             let write_len = usize::try_from(remaining.min(hunk_buffer.len() as u64))
                 .map_err(|_| "decoded CHD chunk exceeded addressable memory".to_string())?;
             output
@@ -1067,21 +1070,13 @@ impl ChdReadSession {
                         let mut compressed_buffer = Vec::new();
 
                         for &hunk_index in chunk {
-                            let mut hunk = chd.hunk(hunk_index).map_err(|error| {
-                                format!(
-                                    "failed to decode hunk {} of `{}`: {error}",
-                                    hunk_index,
-                                    source_path.display()
-                                )
-                            })?;
-                            hunk.read_hunk_in(&mut compressed_buffer, &mut hunk_buffer)
-                                .map_err(|error| {
-                                    format!(
-                                        "failed to read hunk {} of `{}`: {error}",
-                                        hunk_index,
-                                        source_path.display()
-                                    )
-                                })?;
+                            Self::decode_hunk_into(
+                                &mut chd,
+                                hunk_index,
+                                source_path,
+                                &mut compressed_buffer,
+                                &mut hunk_buffer,
+                            )?;
 
                             let offset = u64::from(hunk_index).saturating_mul(hunk_bytes);
                             if offset >= logical_bytes {
