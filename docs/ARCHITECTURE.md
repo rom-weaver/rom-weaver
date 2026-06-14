@@ -240,7 +240,7 @@ axe-core a11y sweep harness); the app no longer shares code with it.
 | WASM node | `packages/rom-weaver-react/tests/wasm/` | Worker client, OPFS protocols, format metadata (vitest, node). |
 | Browser | `packages/rom-weaver-react/tests/browser/` | Playwright + vitest integration tests of the real worker/OPFS/wasm stack, including mobile-Safari-specific cases. |
 
-CI (`.github/workflows/chd-rust-backend.yml`) runs fmt, clippy `-D warnings`,
+CI (`.github/workflows/ci.yml`) runs fmt, clippy `-D warnings`,
 typegen drift check, wasm-target checks, the full Rust test suite, the wasm
 build, and both packages' lint/type/test/build. `lefthook.yml` mirrors the same
 checks pre-commit, scoped by changed paths.
